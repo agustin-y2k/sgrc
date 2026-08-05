@@ -391,7 +391,12 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResponse' }
         "401": { description: Credenciales inválidas }
-        "403": { description: Cuenta no aprobada }
+        "403":
+          description: |
+            Cuenta no aprobada. El cuerpo distingue el motivo —pendiente de aprobación,
+            rechazada o dada de baja— en vez de un genérico: para llegar hasta acá la
+            persona ya presentó la credencial correcta, así que decirle en qué estado
+            está su propia cuenta no revela nada. El frontend muestra ese texto tal cual.
 
   /api/auth/config:
     get:
