@@ -1,0 +1,37 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - errcheck
+    - gosimple
+    - bodyclose
+    - gofmt
+  # misspell queda afuera a propósito: asume inglés (en-US) y el código
+  # está comentado en español — sería puro ruido de falsos positivos.
+
+linters-settings:
+  errcheck:
+    # defer rows.Close() / resp.Body.Close() ya se revisan a mano en los
+    # repos Postgres — no vale la pena el ruido de chequear el error de
+    # un Close() en un defer de limpieza.
+    exclude-functions:
+      - (*database/sql.Rows).Close
+      - (*github.com/jackc/pgx/v5.Rows).Close
+
+issues:
+  exclude-dirs:
+    - migrations
+  exclude-rules:
+    # Los tests de integración usan testcontainers y aceptan cierto ruido
+    # (variables de contexto ignoradas en fakes, etc.) que no vale la pena
+    # perseguir con la misma vara que el código de producción.
+    - path: _test\.go
+      linters:
+        - errcheck

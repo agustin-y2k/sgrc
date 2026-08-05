@@ -1,0 +1,71 @@
+import { createBrowserRouter, RouterProvider } from "react-router"
+
+import { AppLayout } from "@/components/layout/AppLayout"
+import { AcademicoPage } from "@/features/academico/AcademicoPage"
+import { AprobacionPage } from "@/features/auth/AprobacionPage"
+import { CambiarPasswordPage } from "@/features/auth/CambiarPasswordPage"
+import { LoginPage } from "@/features/auth/LoginPage"
+import { RegistroPage } from "@/features/auth/RegistroPage"
+import { InventarioAdminPage } from "@/features/admin/InventarioAdminPage"
+import { ReportesPage } from "@/features/admin/ReportesPage"
+import { UsuariosPage } from "@/features/admin/UsuariosPage"
+import { CalendarioPCPage } from "@/features/calendario/CalendarioPCPage"
+import { DisponibilidadPage } from "@/features/disponibilidad/DisponibilidadPage"
+import { InicioPage } from "@/features/inicio/InicioPage"
+import { InventarioPage } from "@/features/inventory/InventarioPage"
+import { NotificacionesPage } from "@/features/notificaciones/NotificacionesPage"
+import { BloqueoEvaluacionPage } from "@/features/reservas/BloqueoEvaluacionPage"
+import { MisReservasPage } from "@/features/reservas/MisReservasPage"
+import { NuevaReservaPage } from "@/features/reservas/NuevaReservaPage"
+import { AdminRoute } from "@/routes/AdminRoute"
+import { PublicOnlyRoute, ProtectedRoute } from "@/routes/ProtectedRoute"
+
+const router = createBrowserRouter([
+  {
+    element: <PublicOnlyRoute />,
+    children: [
+      { path: "/login", element: <LoginPage /> },
+      { path: "/registro", element: <RegistroPage /> },
+    ],
+  },
+  {
+    element: <ProtectedRoute />,
+    children: [
+      {
+        element: <AppLayout />,
+        children: [
+          { index: true, element: <InicioPage /> },
+          { path: "/cambiar-password", element: <CambiarPasswordPage /> },
+          { path: "/notificaciones", element: <NotificacionesPage /> },
+          { path: "/reservas", element: <MisReservasPage /> },
+          { path: "/reservas/nueva", element: <NuevaReservaPage /> },
+          { path: "/inventario", element: <InventarioPage /> },
+          // RF-07.2: cualquier usuario autenticado, no solo Admins. Editar
+          // el horario propio está dentro de la página, condicionado al rol.
+          { path: "/disponibilidad", element: <DisponibilidadPage /> },
+          { path: "/inventario/pcs/:pcId/calendario", element: <CalendarioPCPage /> },
+          {
+            element: <AdminRoute />,
+            children: [
+              { path: "/admin/aprobacion", element: <AprobacionPage /> },
+              { path: "/admin/academico", element: <AcademicoPage /> },
+              { path: "/admin/usuarios", element: <UsuariosPage /> },
+              { path: "/admin/inventario", element: <InventarioAdminPage /> },
+              { path: "/admin/reportes", element: <ReportesPage /> },
+              {
+                path: "/admin/bloqueo-evaluacion",
+                element: <BloqueoEvaluacionPage />,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+])
+
+function App() {
+  return <RouterProvider router={router} />
+}
+
+export default App

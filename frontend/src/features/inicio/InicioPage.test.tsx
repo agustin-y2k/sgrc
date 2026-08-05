@@ -1,0 +1,159 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { render, screen } from "@testing-library/react"
+import { MemoryRouter } from "react-router"
+
+import * as adminApi from "@/features/admin/api"
+import { useAuth } from "@/features/auth/AuthContext"
+import type { Usuario } from "@/features/auth/types"
+import { InicioPage } from "@/features/inicio/InicioPage"
+import * as notificacionesApi from "@/features/notificaciones/api"
+import * as reservasApi from "@/features/reservas/api"
+import type { ReservaDetallada } from "@/features/reservas/types"
+import { paginada } from "@/test/respuestas"
+
+vi.mock("@/features/reservas/api")
+vi.mock("@/features/admin/api")
+vi.mock("@/features/notificaciones/api")
+vi.mock("@/features/auth/AuthContext")
+
+const DOCENTE: Usuario = {
+  id: "docente1",
+  nombre: "Ada",
+  apellido: "Lovelace",
+  email: "ada@test.com",
+  rol: "DOCENTE",
+  estado: "APROBADA",
+  fechaRegistro: "2026-01-01T00:00:00Z",
+  fechaAprobacion: null,
+  debeCambiarPassword: false,
+}
+
+const ADMIN: Usuario = { ...DOCENTE, id: "admin1", nombre: "Grace", rol: "ADMIN" }
+
+function mockUsuario(u: Usuario) {
+  vi.mocked(useAuth).mockReturnValue({
+    user: u,
+    isLoading: false,
+    errorDeSesion: null,
+    login: vi.fn(),
+    logout: vi.fn(),
+    refetchUser: vi.fn(),
+  })
+}
+
+/** Hoy, como lo arma la propia página (fecha local, no UTC). */
+function hoy(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
+function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
+  return {
+    id: "r1",
+    reservaGrupoId: "grupo1",
+    pcId: "pc1",
+    fecha: hoy(),
+    horaInicio: "14:00",
+    horaFin: "15:00",
+    estado: "CONFIRMADA",
+    tipo: "NORMAL",
+    pcIdentificador: 1,
+    carroNombre: "Carro 1",
+    materiaNombre: "Matemática",
+    cursoNombre: "5°A",
+    nombreDocenteSnapshot: "Ada Lovelace",
+    creadoPor: "docente1",
+    ...over,
+  } as ReservaDetallada
+}
+
+function renderInicio() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <InicioPage />
+      </MemoryRouter>
+    </QueryClientProvider>
+  )
+}
+
+describe("InicioPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(paginada([]))
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([]))
+    vi.mocked(adminApi.listarUsuarios).mockResolvedValue(paginada([]))
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("muestra las próximas reservas agrupadas en una sola línea por clase", async () => {
+    mockUsuario(DOCENTE)
+    // Dos PCs de la MISMA reserva: para el docente fue una sola clase.
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([reserva(), reserva({ id: "r2", pcId: "pc2", pcIdentificador: 2 })])
+    )
+    renderInicio()
+
+    expect(await screen.findByText(/Matemática/)).toBeInTheDocument()
+    expect(screen.getByText("2 PCs")).toBeInTheDocument()
+    expect(screen.getAllByText(/Matemática/)).toHaveLength(1)
+  })
+
+  it("cuenta como 'clase hoy' solo lo de hoy", async () => {
+    mockUsuario(DOCENTE)
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([
+        reserva(),
+        reserva({ id: "r9", reservaGrupoId: "grupo9", fecha: "2099-12-31" }),
+      ])
+    )
+    renderInicio()
+
+    // Una hoy, dos próximas en total.
+    expect(await screen.findByText("clase hoy")).toBeInTheDocument()
+    const hoyEnlace = screen.getByText("clase hoy").closest("a")
+    expect(hoyEnlace).toHaveTextContent("1")
+    const proximas = screen.getByText("próximas").closest("a")
+    expect(proximas).toHaveTextContent("2")
+  })
+
+  it("no cuenta las canceladas", async () => {
+    mockUsuario(DOCENTE)
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([reserva({ estado: "CANCELADA" })])
+    )
+    renderInicio()
+
+    expect(await screen.findByText(/No tenés reservas próximas/)).toBeInTheDocument()
+  })
+
+  it("a un docente no le pregunta por las cuentas pendientes", async () => {
+    mockUsuario(DOCENTE)
+    renderInicio()
+
+    expect(await screen.findByText(/No tenés reservas próximas/)).toBeInTheDocument()
+    // El endpoint es solo de Admin: pedirlo desde un docente sería un 403
+    // en cada carga del home.
+    expect(adminApi.listarUsuarios).not.toHaveBeenCalled()
+    expect(screen.queryByText("por aprobar")).not.toBeInTheDocument()
+  })
+
+  it("a un Admin le muestra cuántas cuentas esperan aprobación", async () => {
+    mockUsuario(ADMIN)
+    vi.mocked(adminApi.listarUsuarios).mockResolvedValue(
+      paginada([], { total: 3, pageSize: 50 })
+    )
+    renderInicio()
+
+    // findByText del número y no del rótulo: el rótulo ya está en pantalla
+    // mientras la consulta viaja, así que buscarlo a él pasa de largo y lee
+    // el contador todavía en cero.
+    const pendientes = (await screen.findByText("3")).closest("a")
+    expect(pendientes).toHaveTextContent("por aprobar")
+    expect(pendientes).toHaveAttribute("href", "/admin/aprobacion")
+  })
+})

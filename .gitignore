@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────
+# Secretos y datos de la institución
+# ─────────────────────────────────────────────────────────────────────
+
+# Configuración con secretos reales: la contraseña de Postgres, el secreto
+# que firma las sesiones y el token del túnel. El que se versiona es
+# .env.example, con valores de ejemplo.
+.env
+.env.*
+!.env.example
+
+# Volcados de la base: tienen los datos de la institución y los hashes de
+# contraseña de todas las cuentas. No salen del servidor.
+backup-sgrc-*.sql
+*.sql.gz
+*.dump
+
+# Certificados y llaves, por si alguna vez se generan dentro del repo.
+*.pem
+*.key
+*.crt
+
+# ─────────────────────────────────────────────────────────────────────
+# Artefactos de compilación
+# ─────────────────────────────────────────────────────────────────────
+
+/bin/
+sgrc-app
+
+# Cobertura de Go
+coverage.out
+coverage.html
+
+# ─────────────────────────────────────────────────────────────────────
+# Frontend
+# ─────────────────────────────────────────────────────────────────────
+
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/.vite/
+
+# ─────────────────────────────────────────────────────────────────────
+# Herramientas locales de cada quien
+# ─────────────────────────────────────────────────────────────────────
+#
+# Las carpetas ocultas son configuración personal: preferencias del editor y
+# de las utilidades de línea de comandos de cada máquina, con rutas absolutas
+# que no le sirven a nadie más y que ensucian los diffs de todo el equipo. Se
+# excluyen todas por regla —.vscode/, .idea/ y cualquier otra— en vez de ir
+# agregando una línea cada vez que alguien estrena una herramienta nueva.
+#
+# La excepción es .github/, que sí es del proyecto (plantillas de issues,
+# workflows de integración continua).
+.*/
+!.github/
+
+# Lo que los editores dejan FUERA de una carpeta oculta, que la regla de
+# arriba no alcanza. Los IDE de JetBrains (GoLand, IntelliJ) son el caso:
+# guardan la configuración en .idea/ pero además escriben un .iml por módulo
+# en la raíz del proyecto y compilan a out/.
+*.iml
+/out/
+
+# Editores de terminal
+*.swp
+*.swo
+*~
+
+# Logs sueltos de cualquier herramienta
+*.log
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini

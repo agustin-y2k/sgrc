@@ -1,0 +1,66 @@
+# Overlay de DESARROLLO. Se aplica explícitamente con -f, no solo:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# o, más corto, `make run`.
+#
+# Antes esto se llamaba docker-compose.override.yml, que Docker Compose
+# carga solo. Como el deploy hace `git pull` + `docker compose up` en el
+# servidor, el archivo llegaba y se aplicaba también en producción: el
+# Postgres de la escuela terminaba con el 5432 publicado al host, justo lo
+# contrario de lo que decía su propio comentario.
+services:
+  # La API al host para poder pegarle con curl y para el proxy de Vite
+  # (frontend/vite.config.ts apunta a localhost:8080).
+  sgrc-app:
+    ports:
+      - "8080:8080"
+
+  # La SPA compilada, servida por el mismo nginx que corre en el servidor.
+  #
+  # Sin esto, en local solo se podía probar el frontend con `npm run dev`
+  # (Vite en :5173, que proxea /api a localhost:8080). Eso alcanza para
+  # desarrollar, pero NO prueba lo que realmente se despliega: el build de
+  # producción, el nginx.conf y el ruteo same-origin — justamente las tres
+  # cosas que fallan en un primer deploy y que nadie ve hasta que ya está
+  # en el servidor.
+  #
+  # Con esto, http://localhost:8081 es el mismo camino que va a recorrer un
+  # docente detrás del túnel.
+  frontend:
+    ports:
+      - "8081:80"
+
+  # Postgres al host para inspeccionar la base con psql o un cliente gráfico.
+  postgres:
+    ports:
+      - "5432:5432"
+
+  # Datos con los que probar: un ciclo, un curso, una materia, un docente
+  # aprobado y un carro con PCs. Sin esto, un `docker compose down -v`
+  # seguido de `make run` deja el sistema levantado pero vacío — y sin PCs
+  # cargadas no se puede reservar nada.
+  #
+  # Vive SOLO en este overlay: en el servidor de la escuela no existe, y el
+  # script además se niega a correr contra algo que no sea local (crea un
+  # docente con una contraseña conocida).
+  #
+  # Espera a que la API esté `healthy`, no solo levantada: el script le pega
+  # por HTTP, así que necesita que ya esté atendiendo y conectada a la base.
+  # Es idempotente, así que correrlo en cada `make run` no duplica nada.
+  seed-datos:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      sgrc-app:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      API: http://sgrc-app:8080
+      ADMIN_EMAIL: ${SEED_ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD}
+    volumes:
+      - ./scripts:/scripts:ro
+    entrypoint: ["sh", "/scripts/sembrar-datos-de-prueba.sh"]
+    restart: "no"
+    networks:
+      - sgrc-net

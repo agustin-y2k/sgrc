@@ -1,0 +1,66 @@
+// Helpers de la vista semanal. Se trabaja con fechas "planas" (YYYY-MM-DD)
+// y horas "planas" (HH:MM) igual que el backend: las columnas de la base
+// son DATE y TIME sin zona, y representan la hora de pared de la escuela
+// (ver zonaHorariaDeLaEscuela en cmd/main.go). Meter Date con husos en el
+// medio solo agrega oportunidades de correr todo un día o unas horas.
+
+export const DIAS_HABILES = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+] as const
+
+/** YYYY-MM-DD de un Date, leído en hora local (no UTC). */
+export function aFechaISO(d: Date): string {
+  const mes = String(d.getMonth() + 1).padStart(2, "0")
+  const dia = String(d.getDate()).padStart(2, "0")
+  return `${d.getFullYear()}-${mes}-${dia}`
+}
+
+/** Parsea YYYY-MM-DD como fecha local (new Date("...") la leería como UTC). */
+export function desdeFechaISO(iso: string): Date {
+  const [anio, mes, dia] = iso.split("-").map(Number)
+  return new Date(anio, mes - 1, dia)
+}
+
+/**
+ * Lunes de la semana que contiene a `fecha`. El domingo se considera parte
+ * de la semana que termina, no de la que empieza — RF-07 no contempla
+ * domingo como día hábil y el calendario tampoco lo muestra.
+ */
+export function lunesDeLaSemana(fecha: Date): Date {
+  const d = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate())
+  const diaSemana = d.getDay() // 0 = domingo
+  const diasHastaElLunes = diaSemana === 0 ? -6 : 1 - diaSemana
+  d.setDate(d.getDate() + diasHastaElLunes)
+  return d
+}
+
+export function sumarDias(fecha: Date, dias: number): Date {
+  const d = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate())
+  d.setDate(d.getDate() + dias)
+  return d
+}
+
+/** Las seis fechas (lunes a sábado) de la semana de `fecha`. */
+export function fechasDeLaSemana(fecha: Date): string[] {
+  const lunes = lunesDeLaSemana(fecha)
+  return DIAS_HABILES.map((_, i) => aFechaISO(sumarDias(lunes, i)))
+}
+
+/** "HH:MM" → minutos desde medianoche. */
+export function aMinutos(hora: string): number {
+  const [h, m] = hora.split(":").map(Number)
+  return h * 60 + m
+}
+
+export function formatearRangoSemana(fecha: Date): string {
+  const lunes = lunesDeLaSemana(fecha)
+  const sabado = sumarDias(lunes, 5)
+  const fmt = (d: Date) =>
+    `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`
+  return `${fmt(lunes)} – ${fmt(sabado)}/${sabado.getFullYear()}`
+}

@@ -1,0 +1,202 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist Variable", sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-superficie: var(--superficie);
+  --color-control: var(--control);
+  --color-exito: var(--exito);
+  --color-exito-foreground: var(--exito-foreground);
+  --color-alerta: var(--alerta);
+  --color-alerta-foreground: var(--alerta-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Fondo apenas frío en vez de blanco puro: las tarjetas blancas se
+     despegan del fondo sin necesidad de sombras pesadas. */
+  --background: oklch(0.985 0.004 240);
+  --foreground: oklch(0.21 0.02 250);
+  --superficie: oklch(1 0 0);
+  /* Fondo de los <select> nativos. Tiene que ser opaco: ver la nota en
+     @layer base más abajo. Acá coincide con la superficie, así que un
+     desplegable se ve igual que el <Input> de al lado. */
+  --control: oklch(1 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.02 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.02 250);
+
+  /* Azul institucional. Era gris casi negro —el default de shadcn—, así
+     que ningún elemento se leía como "la acción principal": el botón de
+     confirmar una reserva pesaba lo mismo que el de volver. */
+  --primary: oklch(0.52 0.17 258);
+  --primary-foreground: oklch(0.99 0.005 250);
+
+  --secondary: oklch(0.96 0.008 250);
+  --secondary-foreground: oklch(0.32 0.03 255);
+  --muted: oklch(0.965 0.006 250);
+  --muted-foreground: oklch(0.52 0.02 255);
+  --accent: oklch(0.95 0.02 255);
+  --accent-foreground: oklch(0.38 0.08 258);
+  --destructive: oklch(0.58 0.21 27);
+
+  /* Estados del dominio. Los tres se usan en badges y avisos: una PC
+     disponible, una en mantenimiento y una fuera de servicio no son "gris,
+     gris y rojo" — son tres cosas distintas y se leen de un vistazo. */
+  --exito: oklch(0.62 0.15 155);
+  --exito-foreground: oklch(0.99 0.01 155);
+  --alerta: oklch(0.72 0.15 75);
+  --alerta-foreground: oklch(0.25 0.06 75);
+  --info: oklch(0.6 0.13 235);
+  --info-foreground: oklch(0.99 0.01 235);
+
+  --border: oklch(0.91 0.008 250);
+  --input: oklch(0.89 0.01 250);
+  --ring: oklch(0.52 0.17 258);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.19 0.015 255);
+  --foreground: oklch(0.97 0.005 250);
+  --superficie: oklch(0.24 0.018 255);
+  /* Apenas más claro que la tarjeta, para igualar de forma opaca el
+     `dark:bg-input/30` translúcido que usa <Input>. */
+  --control: oklch(0.28 0.018 255);
+  --card: oklch(0.24 0.018 255);
+  --card-foreground: oklch(0.97 0.005 250);
+  --popover: oklch(0.24 0.018 255);
+  --popover-foreground: oklch(0.97 0.005 250);
+
+  /* Más claro que en modo claro: sobre fondo oscuro, el mismo azul se
+     apaga y deja de leerse como acción. */
+  --primary: oklch(0.68 0.15 258);
+  --primary-foreground: oklch(0.18 0.03 258);
+
+  --secondary: oklch(0.3 0.02 255);
+  --secondary-foreground: oklch(0.97 0.005 250);
+  --muted: oklch(0.3 0.02 255);
+  --muted-foreground: oklch(0.72 0.015 250);
+  --accent: oklch(0.33 0.04 258);
+  --accent-foreground: oklch(0.93 0.02 255);
+  --destructive: oklch(0.68 0.19 25);
+
+  --exito: oklch(0.68 0.14 155);
+  --exito-foreground: oklch(0.16 0.04 155);
+  --alerta: oklch(0.78 0.14 75);
+  --alerta-foreground: oklch(0.2 0.05 75);
+  --info: oklch(0.68 0.12 235);
+  --info-foreground: oklch(0.16 0.04 235);
+
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.68 0.15 258);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+
+  /*
+    La lista que se abre al desplegar un <select> no la dibuja la página: la
+    dibuja el navegador, y para pintarla copia el `background-color` del
+    propio <select>. Con `bg-transparent` no hay color que copiar y el
+    navegador cae en su default —blanco— mientras que el texto de cada
+    opción sigue heredando el `color` de la página, que en oscuro es casi
+    blanco. De ahí el blanco sobre blanco: la hora o la materia se elegían a
+    ciegas.
+
+    No alcanza con `color-scheme: dark` (que ya se aplica en tema.ts): eso
+    arregla los controles que quedaron con su apariencia nativa, pero estos
+    <select> traen borde y radio propios, y con eso el navegador ya los
+    pinta como los pintamos nosotros. Por eso llevan `bg-control`, que es
+    opaco a propósito —un color translúcido se compone contra el blanco del
+    navegador y vuelve el problema, más gris pero igual de ilegible.
+
+    Las opciones se declaran igual acá, que es donde el navegador las busca;
+    ningún utilitario de Tailwind llega a un <option>.
+  */
+  option,
+  optgroup {
+    background-color: var(--control);
+    color: var(--foreground);
+  }
+}

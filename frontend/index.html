@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SGRC — Reserva de Computadoras Educativas</title>
+    <meta
+      name="description"
+      content="Gestión de inventario de equipos y reserva de PCs por curso y materia."
+    />
+    <!--
+      El tema se aplica ANTES de pintar nada. Si esto viviera en React, entre
+      que carga el bundle y corre el primer efecto habría un fogonazo blanco
+      en cada recarga para quien usa modo oscuro.
+
+      Duplica a propósito lo que hace src/lib/tema.ts: es el único lugar
+      donde correr JavaScript sirve de algo tan temprano. Si cambia la clave
+      "sgrc-tema" o la clase "dark", hay que tocar los dos lados.
+    -->
+    <script>
+      ;(function () {
+        try {
+          var elegido = localStorage.getItem("sgrc-tema")
+          var oscuro =
+            elegido === "oscuro" ||
+            (elegido !== "claro" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches)
+          document.documentElement.classList.toggle("dark", oscuro)
+          document.documentElement.style.colorScheme = oscuro ? "dark" : "light"
+        } catch (e) {
+          // Cookies bloqueadas o navegación privada: queda el tema claro.
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

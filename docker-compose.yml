@@ -1,0 +1,74 @@
+services:
+  sgrc-app:
+    build: .
+    mem_limit: 256m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    # Sin `ports`: en producción el único camino hasta la API es
+    # cloudflared → nginx, por la red interna. Publicarlo al host abría un
+    # atajo desde la LAN de la escuela que se saltea el túnel, y con él la
+    # posibilidad de falsificar CF-Connecting-IP (ver cmd/main.go).
+    # docker-compose.dev.yml lo expone para desarrollo.
+    networks:
+      - sgrc-net
+
+  # nginx sirve la SPA compilada y proxea /api hacia sgrc-app (ver
+  # frontend/nginx.conf). Es el único servicio que el túnel expone: todo
+  # entra por el mismo origen.
+  frontend:
+    build: ./frontend
+    mem_limit: 128m
+    # service_healthy y no el depends_on pelado: nginx arrancaba apenas el
+    # contenedor de la API existía, aunque todavía estuviera conectando a
+    # Postgres, así que los primeros requests a /api volvían 502. La
+    # condición solo aplica al arranque — si la base se cae después, el
+    # frontend ya está levantado y sigue sirviendo la SPA.
+    depends_on:
+      sgrc-app:
+        condition: service_healthy
+    networks:
+      - sgrc-net
+
+  postgres:
+    image: postgres:16-alpine
+    mem_limit: 512m
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sgrc-net
+
+  # El ingress del túnel se configura en el panel de Cloudflare (tunnel por
+  # token, no por config file) y tiene que apuntar a http://frontend:80 —
+  # NO a sgrc-app:8080, que ya no es el borde.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    env_file: .env
+    depends_on:
+      - frontend
+    networks:
+      - sgrc-net
+
+networks:
+  # Subred fija para poder nombrarla en TRUSTED_PROXIES: si Docker la
+  # asignara sola, cambiaría entre despliegues y Fiber dejaría de confiar en
+  # el proxy sin que nada lo avise.
+  sgrc-net:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  pgdata:

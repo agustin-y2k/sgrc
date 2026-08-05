@@ -1,0 +1,293 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+
+import * as inventoryApi from "@/features/inventory/api"
+import type { Carro, PC } from "@/features/inventory/types"
+import { BloqueoEvaluacionPage } from "@/features/reservas/BloqueoEvaluacionPage"
+import * as reservasApi from "@/features/reservas/api"
+import type { PCDisponible } from "@/features/reservas/types"
+import { ApiError } from "@/lib/api-client"
+import { diaLectivoEnDias } from "@/test/fechas"
+
+vi.mock("@/features/inventory/api")
+vi.mock("@/features/reservas/api")
+
+// Relativa a hoy: el input tiene min=hoy porque el backend rechaza bloquear
+// un horario que ya pasó (ver src/test/fechas.ts).
+const FECHA = diaLectivoEnDias(7)
+
+const CARRO: Carro = { id: "carro1", nombre: "Carro A" }
+
+function pc(over: Partial<PC> = {}): PC {
+  return {
+    id: "pc1",
+    carroId: "carro1",
+    identificador: 1,
+    numeroSerie: 1001,
+    freezado: false,
+    estado: "DISPONIBLE",
+    dadaDeBaja: false,
+    fechaAlta: "2026-01-01",
+    ...over,
+  }
+}
+
+function disponible(pcId: string, identificador: number): PCDisponible {
+  return {
+    pcId,
+    identificador,
+    carroId: "carro1",
+    carroNombre: "Carro A",
+    freezado: false,
+  }
+}
+
+function renderPagina() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <BloqueoEvaluacionPage />
+    </QueryClientProvider>
+  )
+}
+
+/** Completa fecha, horario y motivo, que es lo que habilita el botón. */
+async function completarFranja(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(await screen.findByLabelText("Fecha"), FECHA)
+  await user.selectOptions(screen.getByLabelText("Hora de inicio: hora"), "08")
+  await user.selectOptions(screen.getByLabelText("Hora de inicio: minutos"), "00")
+  await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "10")
+  await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
+  await user.type(screen.getByLabelText("Motivo"), "Aprender 2026")
+}
+
+describe("BloqueoEvaluacionPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(inventoryApi.listarCarros).mockResolvedValue({ data: [CARRO] })
+    vi.mocked(inventoryApi.listarPCsDeCarro).mockResolvedValue({
+      data: [pc(), pc({ id: "pc2", identificador: 2 })],
+    })
+    // Las dos libres: sin reservas que cancelar, salvo que un test diga otra cosa.
+    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({
+      data: [disponible("pc1", 1), disponible("pc2", 2)],
+    })
+    vi.mocked(reservasApi.bloquearParaEvaluacion).mockResolvedValue({
+      bloqueos: [],
+      reservasCanceladas: 0,
+      docentesNotificados: 0,
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("lista las PCs del inventario agrupadas por carro", async () => {
+    renderPagina()
+
+    expect(await screen.findByText("Carro A")).toBeInTheDocument()
+    expect(screen.getByLabelText("PC 1")).toBeInTheDocument()
+    expect(screen.getByLabelText("PC 2")).toBeInTheDocument()
+  })
+
+  /**
+   * El backend rechaza el bloqueo ENTERO si viene una PC que no está
+   * DISPONIBLE (ErrPCNoDisponible): no la saltea. Si la pantalla la
+   * dejara tildar, el Admin perdería toda la operación por una PC.
+   */
+  it("no deja elegir una PC que no está disponible", async () => {
+    vi.mocked(inventoryApi.listarPCsDeCarro).mockResolvedValue({
+      data: [pc(), pc({ id: "pc2", identificador: 2, estado: "FUERA_DE_SERVICIO" })],
+    })
+    renderPagina()
+
+    expect(await screen.findByLabelText("PC 2")).toBeDisabled()
+    expect(screen.getByLabelText("PC 1")).toBeEnabled()
+    expect(screen.getByText("Fuera de servicio")).toBeInTheDocument()
+  })
+
+  it("no muestra las PCs dadas de baja", async () => {
+    vi.mocked(inventoryApi.listarPCsDeCarro).mockResolvedValue({
+      data: [pc(), pc({ id: "pc2", identificador: 2, dadaDeBaja: true })],
+    })
+    renderPagina()
+
+    await screen.findByLabelText("PC 1")
+    expect(screen.queryByLabelText("PC 2")).not.toBeInTheDocument()
+  })
+
+  it("no consulta la ocupación hasta tener la franja completa", async () => {
+    renderPagina()
+
+    await screen.findByLabelText("PC 1")
+    expect(reservasApi.pcsDisponibles).not.toHaveBeenCalled()
+    expect(
+      screen.getByText(/Completá la fecha y el horario para ver cuáles ya tienen reserva/)
+    ).toBeInTheDocument()
+  })
+
+  /**
+   * Es el punto de la pantalla: el endpoint no simula nada, así que la
+   * única forma de saber qué se va a cancelar es cruzar el inventario
+   * contra las PCs libres en esa franja.
+   */
+  it("marca las PCs que ya tienen reserva en la franja elegida", async () => {
+    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({
+      data: [disponible("pc1", 1)],
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await completarFranja(user)
+
+    expect(await screen.findByText("Con reserva en esa franja")).toBeInTheDocument()
+  })
+
+  it("avisa cuántas reservas se van a cancelar antes de confirmar", async () => {
+    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({
+      data: [disponible("pc1", 1)],
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await completarFranja(user)
+    await user.click(await screen.findByLabelText("PC 2"))
+    await user.click(screen.getByRole("button", { name: "Revisar bloqueo" }))
+
+    expect(
+      await screen.findByText(/1 de esas PCs tienen una reserva en esa franja/)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/no se recuperan/)).toBeInTheDocument()
+  })
+
+  it("dice explícitamente cuando no hay ninguna reserva en juego", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await completarFranja(user)
+    await user.click(await screen.findByLabelText("PC 1"))
+    await user.click(screen.getByRole("button", { name: "Revisar bloqueo" }))
+
+    expect(
+      await screen.findByText(/Ninguna de las PCs elegidas tiene reservas/)
+    ).toBeInTheDocument()
+  })
+
+  // No se manda nada hasta el segundo botón: la cascada no se deshace.
+  it("no bloquea nada con solo apretar 'revisar'", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await completarFranja(user)
+    await user.click(await screen.findByLabelText("PC 1"))
+    await user.click(screen.getByRole("button", { name: "Revisar bloqueo" }))
+
+    await screen.findByRole("button", { name: "Confirmar bloqueo" })
+    expect(reservasApi.bloquearParaEvaluacion).not.toHaveBeenCalled()
+  })
+
+  it("bloquea las PCs elegidas al confirmar", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await completarFranja(user)
+    await user.click(await screen.findByLabelText("PC 1"))
+    await user.click(screen.getByLabelText("PC 2"))
+    await user.click(screen.getByRole("button", { name: "Revisar bloqueo" }))
+    await user.click(screen.getByRole("button", { name: "Confirmar bloqueo" }))
+
+    await waitFor(() => {
+      expect(reservasApi.bloquearParaEvaluacion).toHaveBeenCalledWith({
+        pcIds: ["pc1", "pc2"],
+        fecha: FECHA,
+        horaInicio: "08:00",
+        horaFin: "10:00",
+        motivo: "Aprender 2026",
+      })
+    })
+  })
+
+  /**
+   * El backend no valida el motivo: lo intercala tal cual en el aviso a
+   * cada docente, así que vacío deja "…evaluación estatal ()".
+   */
+  it("exige un motivo", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.type(await screen.findByLabelText("Fecha"), FECHA)
+    await user.selectOptions(screen.getByLabelText("Hora de inicio: hora"), "08")
+    await user.selectOptions(screen.getByLabelText("Hora de inicio: minutos"), "00")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "10")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
+    await user.click(screen.getByLabelText("PC 1"))
+
+    expect(screen.getByRole("button", { name: "Revisar bloqueo" })).toBeDisabled()
+
+    await user.type(screen.getByLabelText("Motivo"), "Aprender 2026")
+    expect(screen.getByRole("button", { name: "Revisar bloqueo" })).toBeEnabled()
+  })
+
+  it("no deja bloquear sin elegir ninguna PC", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await completarFranja(user)
+
+    expect(screen.getByRole("button", { name: "Revisar bloqueo" })).toBeDisabled()
+  })
+
+  it("avisa si la hora de fin no es posterior a la de inicio", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.selectOptions(await screen.findByLabelText("Hora de inicio: hora"), "10")
+    await user.selectOptions(screen.getByLabelText("Hora de inicio: minutos"), "00")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "09")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
+
+    expect(
+      screen.getByText("La hora de fin tiene que ser posterior a la de inicio.")
+    ).toBeInTheDocument()
+  })
+
+  it("informa cuántas reservas se cancelaron y a cuántos docentes se avisó", async () => {
+    vi.mocked(reservasApi.bloquearParaEvaluacion).mockResolvedValue({
+      bloqueos: [],
+      reservasCanceladas: 3,
+      docentesNotificados: 2,
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await completarFranja(user)
+    await user.click(await screen.findByLabelText("PC 1"))
+    await user.click(screen.getByRole("button", { name: "Revisar bloqueo" }))
+    await user.click(screen.getByRole("button", { name: "Confirmar bloqueo" }))
+
+    expect(
+      await screen.findByText(
+        /Se cancelaron 3 reserva\(s\) y se notificó a 2 docente\(s\)/
+      )
+    ).toBeInTheDocument()
+  })
+
+  it("muestra el error del backend", async () => {
+    vi.mocked(reservasApi.bloquearParaEvaluacion).mockRejectedValue(
+      new ApiError(409, "la PC no está disponible para reservar")
+    )
+    const user = userEvent.setup()
+    renderPagina()
+
+    await completarFranja(user)
+    await user.click(await screen.findByLabelText("PC 1"))
+    await user.click(screen.getByRole("button", { name: "Revisar bloqueo" }))
+    await user.click(screen.getByRole("button", { name: "Confirmar bloqueo" }))
+
+    expect(
+      await screen.findByText("la PC no está disponible para reservar")
+    ).toBeInTheDocument()
+  })
+})

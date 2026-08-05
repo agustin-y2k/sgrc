@@ -1,0 +1,359 @@
+// Package infrastructure implementa application.Repo contra PostgreSQL
+// real (pgx). Es la única capa de internal/auth que conoce SQL.
+package infrastructure
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ramiro/sgrc/internal/auth/application"
+	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/ramiro/sgrc/internal/shared/paginacion"
+)
+
+// textoOpcional convierte "" a NULL: la columna es nullable y guardar la
+// cadena vacía haría que "no lo declaró" y "lo dejó en blanco" se vean
+// distinto en la base sin serlo.
+func textoOpcional(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func textoDe(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+// codigoViolacionUnica es el código de error de Postgres para una
+// violación de constraint UNIQUE (email duplicado, en nuestro caso).
+// Ver https://www.postgresql.org/docs/current/errcodes-appendix.html
+const codigoViolacionUnica = "23505"
+
+// codigoTextoInvalido: SQLSTATE 22P02 — "invalid input syntax for type X".
+// Mismo chequeo que ya tienen academic/inventory/reservation — agregado
+// retroactivamente acá, ver la nota en application/errors.go.
+const codigoTextoInvalido = "22P02"
+
+// PostgresRepo implementa application.Repo. El compilador verifica esta
+// aserción en tiempo de build — si el contrato cambia y esta struct deja
+// de cumplirlo, el proyecto entero deja de compilar en vez de fallar
+// silenciosamente en runtime.
+var _ application.Repo = (*PostgresRepo)(nil)
+
+// consultor es el subconjunto de pgx que usan las consultas de este
+// paquete — lo satisfacen tanto *pgxpool.Pool como pgx.Tx, que es lo que
+// permite reusar los mismos métodos dentro y fuera de una transacción.
+type consultor interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+type PostgresRepo struct {
+	db consultor
+	// pool es nil cuando el repo ya está atado a una transacción.
+	pool *pgxpool.Pool
+}
+
+func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
+	return &PostgresRepo{db: pool, pool: pool}
+}
+
+// EnTransaccion corre fn dentro de una única transacción. Lo necesita el
+// guard del último Admin (RF-01.8): contar y después escribir en dos
+// statements sueltos deja una ventana donde dos pedidos concurrentes ven
+// el mismo conteo y ambos pasan la validación.
+func (r *PostgresRepo) EnTransaccion(ctx context.Context, fn func(application.Repo) error) error {
+	if r.pool == nil {
+		return fn(r)
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("iniciando transacción: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op si ya se hizo Commit
+
+	if err := fn(&PostgresRepo{db: tx}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func esViolacionUnica(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == codigoViolacionUnica
+}
+
+func esIDInvalido(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == codigoTextoInvalido
+}
+
+// codigoViolacionFK: SQLSTATE 23503 — "foreign_key_violation". Es lo que
+// Postgres devuelve cuando el request nombra un padre que no existe (un
+// carro, un ciclo, una PC, un usuario). Se traduce igual que 22P02: es un
+// error del cliente, no una falla del servidor.
+const codigoViolacionFK = "23503"
+
+func esViolacionFK(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == codigoViolacionFK
+}
+
+// errorDeFilas centraliza el chequeo de rows.Err() — pool.Query() no
+// siempre devuelve el error de sintaxis inmediatamente, a veces aparece
+// recién acá después del loop (mismo bug real que encontramos primero en
+// academic).
+func errorDeFilas(rows pgx.Rows) error {
+	err := rows.Err()
+	if err == nil {
+		return nil
+	}
+	if esIDInvalido(err) {
+		return application.ErrIDInvalido
+	}
+	return fmt.Errorf("iterando filas: %w", err)
+}
+
+const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por, curso_solicitado, materia_solicitada`
+
+// BuscarPorEmail compara contra lower(email) y no contra la columna pelada.
+//
+// application ya normaliza el email antes de llamar acá, y la migración 004
+// dejó todas las filas en minúsculas, así que un `email = $1` alcanzaría hoy.
+// Se usa lower() igual por dos razones: la comparación deja de depender de
+// que nadie inserte una fila a mano con otra capitalización, y es exactamente
+// la expresión del índice idx_usuario_email_lower, así que sigue resolviendo
+// por índice en vez de escanear la tabla.
+func (r *PostgresRepo) BuscarPorEmail(ctx context.Context, email string) (*domain.Usuario, error) {
+	row := r.db.QueryRow(ctx, `SELECT `+columnasUsuario+` FROM usuario WHERE lower(email) = lower($1)`, email)
+	return escanearUsuario(row)
+}
+
+func (r *PostgresRepo) BuscarPorID(ctx context.Context, id string) (*domain.Usuario, error) {
+	row := r.db.QueryRow(ctx, `SELECT `+columnasUsuario+` FROM usuario WHERE id = $1`, id)
+	return escanearUsuario(row)
+}
+
+// escanearUsuario centraliza el mapeo fila→entidad, incluyendo la
+// traducción de "no encontrado" al error de negocio que application/
+// espera (nunca dejar que pgx.ErrNoRows se filtre hacia arriba tal cual).
+// escanearUsuarioConTotal es escanearUsuario más la columna que agrega
+// COUNT(*) OVER() al listado paginado. Va aparte porque el Scan tiene que
+// seguir exactamente el orden de columnas del SELECT de cada consulta.
+func escanearUsuarioConTotal(row pgx.Row, total *int) (*domain.Usuario, error) {
+	var u domain.Usuario
+	var rolStr, estadoStr string
+
+	var curso, materia *string
+	err := row.Scan(
+		&u.ID, &u.Nombre, &u.Apellido, &u.Email, &u.PasswordHash,
+		&u.DebeCambiarPassword, &rolStr, &estadoStr, &u.FechaRegistro,
+		&u.FechaAprobacion, &u.AprobadoPor, &curso, &materia, total,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("escaneando usuario: %w", err)
+	}
+
+	rol, err := domain.ParseRol(rolStr)
+	if err != nil {
+		return nil, fmt.Errorf("rol inválido en la base para usuario %s: %w", u.ID, err)
+	}
+	estado, err := domain.ParseEstado(estadoStr)
+	if err != nil {
+		return nil, fmt.Errorf("estado inválido en la base para usuario %s: %w", u.ID, err)
+	}
+	u.Rol = rol
+	u.Estado = estado
+	u.CursoSolicitado = textoDe(curso)
+	u.MateriaSolicitada = textoDe(materia)
+
+	return &u, nil
+}
+
+func escanearUsuario(row pgx.Row) (*domain.Usuario, error) {
+	var u domain.Usuario
+	var rolStr, estadoStr string
+
+	var curso, materia *string
+	err := row.Scan(
+		&u.ID, &u.Nombre, &u.Apellido, &u.Email, &u.PasswordHash,
+		&u.DebeCambiarPassword, &rolStr, &estadoStr, &u.FechaRegistro,
+		&u.FechaAprobacion, &u.AprobadoPor, &curso, &materia,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, application.ErrUsuarioNoEncontrado
+		}
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("escaneando usuario: %w", err)
+	}
+
+	rol, err := domain.ParseRol(rolStr)
+	if err != nil {
+		return nil, fmt.Errorf("rol inválido en la base para usuario %s: %w", u.ID, err)
+	}
+	estado, err := domain.ParseEstado(estadoStr)
+	if err != nil {
+		return nil, fmt.Errorf("estado inválido en la base para usuario %s: %w", u.ID, err)
+	}
+	u.Rol = rol
+	u.Estado = estado
+	u.CursoSolicitado = textoDe(curso)
+	u.MateriaSolicitada = textoDe(materia)
+
+	return &u, nil
+}
+
+func (r *PostgresRepo) Crear(ctx context.Context, u *domain.Usuario) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO usuario (id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, curso_solicitado, materia_solicitada)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, u.ID, u.Nombre, u.Apellido, u.Email, u.PasswordHash, u.DebeCambiarPassword,
+		string(u.Rol), string(u.Estado), u.FechaRegistro,
+		textoOpcional(u.CursoSolicitado), textoOpcional(u.MateriaSolicitada))
+
+	if err != nil {
+		if esViolacionUnica(err) {
+			return application.ErrEmailYaRegistrado
+		}
+		if esViolacionFK(err) {
+			return application.ErrReferenciaInexistente
+		}
+		if esIDInvalido(err) {
+			return application.ErrIDInvalido
+		}
+		return fmt.Errorf("insertando usuario: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) Guardar(ctx context.Context, u *domain.Usuario) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE usuario SET
+			nombre = $2, apellido = $3, email = $4, password_hash = $5,
+			debe_cambiar_password = $6, rol = $7, estado = $8,
+			fecha_aprobacion = $9, aprobado_por = $10
+		WHERE id = $1
+	`, u.ID, u.Nombre, u.Apellido, u.Email, u.PasswordHash, u.DebeCambiarPassword,
+		string(u.Rol), string(u.Estado), u.FechaAprobacion, u.AprobadoPor)
+
+	if err != nil {
+		if esViolacionUnica(err) {
+			return application.ErrEmailYaRegistrado
+		}
+		if esIDInvalido(err) {
+			return application.ErrIDInvalido
+		}
+		return fmt.Errorf("actualizando usuario: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return application.ErrUsuarioNoEncontrado
+	}
+	return nil
+}
+
+// Listar devuelve usuarios filtrados por estado/rol (nil = sin ese
+// filtro). El WHERE se arma dinámicamente porque Postgres no tiene una
+// forma limpia de decir "este parámetro, si es NULL, ignora la condición"
+// sin ese patrón — la alternativa (COALESCE contra el parámetro) funciona
+// pero es menos legible para dos filtros opcionales nada más.
+func (r *PostgresRepo) Listar(ctx context.Context, filtroEstado *domain.Estado, filtroRol *domain.Rol, pagina paginacion.Pagina) ([]*domain.Usuario, int, error) {
+	desde := ` FROM usuario WHERE 1=1`
+	args := []any{}
+
+	if filtroEstado != nil {
+		args = append(args, string(*filtroEstado))
+		desde += fmt.Sprintf(" AND estado = $%d", len(args))
+	}
+	if filtroRol != nil {
+		args = append(args, string(*filtroRol))
+		desde += fmt.Sprintf(" AND rol = $%d", len(args))
+	}
+
+	// El desempate por id es lo que hace que la paginación sea estable:
+	// fecha_registro sola empata entre las cuentas sembradas en el mismo
+	// segundo, y ahí una misma persona puede aparecer en dos páginas.
+	query := `SELECT ` + columnasUsuario + `, COUNT(*) OVER() AS total` + desde +
+		" ORDER BY fecha_registro DESC, id"
+
+	argsPagina := append(append([]any{}, args...), pagina.Limit(), pagina.Offset())
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(argsPagina)-1, len(argsPagina))
+
+	rows, err := r.db.Query(ctx, query, argsPagina...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("listando usuarios: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []*domain.Usuario
+	total := 0
+	for rows.Next() {
+		u, err := escanearUsuarioConTotal(rows, &total)
+		if err != nil {
+			return nil, 0, fmt.Errorf("escaneando fila de la lista: %w", err)
+		}
+		resultado = append(resultado, u)
+	}
+	if err := errorDeFilas(rows); err != nil {
+		return nil, 0, err
+	}
+
+	// Una página más allá del final no deja ninguna fila de la que leer
+	// COUNT(*) OVER(), y el total en 0 haría que la pantalla dijera que no
+	// hay usuarios teniendo la primera página llena.
+	if len(resultado) == 0 && pagina.Offset() > 0 {
+		if err := r.db.QueryRow(ctx, "SELECT COUNT(*)"+desde, args...).Scan(&total); err != nil {
+			return nil, 0, fmt.Errorf("contando usuarios: %w", err)
+		}
+	}
+
+	return resultado, total, nil
+}
+
+// ContarAdminsAprobados bloquea las filas que cuenta (FOR UPDATE). Es lo
+// que hace cumplir RF-01.8 ("el sistema nunca permite que quede cero
+// ADMIN") ante pedidos concurrentes: sin el lock, dos bajas simultáneas
+// leen ambas "quedan 2", las dos pasan la validación, y el sistema termina
+// sin ningún Admin activo. Con el lock, la segunda transacción espera a
+// que la primera commitee y recién ahí cuenta — viendo ya el 1 que la hace
+// fallar. Solo tiene efecto real dentro de una transacción (ver
+// EnTransaccion), que es desde donde la llama transicionar().
+func (r *PostgresRepo) ContarAdminsAprobados(ctx context.Context) (int, error) {
+	var n int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM (
+			SELECT 1 FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA' FOR UPDATE
+		) AS admins_bloqueados
+	`).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("contando admins aprobados: %w", err)
+	}
+	return n, nil
+}
+
+func (r *PostgresRepo) Eliminar(ctx context.Context, id string) error {
+	tag, err := r.db.Exec(ctx, `DELETE FROM usuario WHERE id = $1`, id)
+	if err != nil {
+		if esIDInvalido(err) {
+			return application.ErrIDInvalido
+		}
+		return fmt.Errorf("eliminando usuario: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return application.ErrUsuarioNoEncontrado
+	}
+	return nil
+}

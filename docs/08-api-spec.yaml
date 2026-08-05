@@ -1,0 +1,1858 @@
+openapi: 3.0.3
+info:
+  title: SGRC — Sistema de Gestión y Reserva de Computadoras Educativas
+  version: "1.0.0"
+  description: |
+    API mono-institucional para gestión de inventario y reservas de equipos
+    informáticos. Monolito modular — un solo servicio, un solo dominio de datos.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://sgrc.tuinstitucion.edu.ar
+    description: Producción
+
+tags:
+  - name: auth
+    description: Autenticación y gestión de usuarios
+  - name: academic
+    description: Ciclos lectivos, cursos, materias, asignaciones de docentes
+  - name: inventory
+    description: Carros, PCs e incidencias
+  - name: reservations
+    description: Reservas simples, recurrentes y bloqueos
+  - name: notifications
+    description: Notificaciones internas
+  - name: reports
+    description: Reportes y estadísticas de uso
+  - name: availability
+    description: Horario de disponibilidad de Admins (informativo)
+
+# ─────────────────────────────────────────
+# COMPONENTES REUTILIZABLES
+# ─────────────────────────────────────────
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  # Paginación (internal/shared/paginacion). Solo la usan los tres listados
+  # que crecen con el uso: reservas, notificaciones y usuarios. Los demás
+  # —ciclos, cursos, materias, carros, PCs— están acotados por el propio
+  # dominio (los carga un Admin a mano) y se devuelven completos.
+  parameters:
+    page:
+      in: query
+      name: page
+      description: Número de página, 1-based. Un valor inválido devuelve 400.
+      schema: { type: integer, minimum: 1, default: 1 }
+    pageSize:
+      in: query
+      name: pageSize
+      description: |
+        Filas por página. El techo es 200: sin él, el parámetro no protegería
+        de nada. Un valor inválido devuelve 400.
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+  schemas:
+    # NOTA: la API NO devuelve un cuerpo JSON en los errores. El handler
+    # por defecto de Fiber v2 responde `c.Status(code).SendString(msg)`, así
+    # que el body de un 4xx/5xx es TEXTO PLANO (Content-Type: text/plain) y
+    # el texto ES el mensaje. Verificado contra el backend corriendo, no
+    # inferido del código. Este esquema se conserva solo como referencia de
+    # los mensajes posibles; ningún endpoint lo referencia.
+    ErrorResponse:
+      type: string
+      description: |
+        Mensaje de error en texto plano. Ejemplos reales:
+        "credenciales inválidas", "email ya registrado",
+        "una o más PCs ya tienen una reserva en ese horario".
+
+    PaginationMeta:
+      type: object
+      description: |
+        `total` es la cantidad de filas que matchean el filtro, NO las de esta
+        página: es lo único con lo que el cliente sabe si hay una siguiente.
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    # ── Auth ──
+    RegistroRequest:
+      type: object
+      required: [nombre, apellido, email, password]
+      properties:
+        nombre: { type: string, maxLength: 100 }
+        apellido: { type: string, maxLength: 100 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        cursoSolicitado:
+          type: string
+          maxLength: 100
+          description: |
+            Qué curso va a dictar. Texto libre y opcional: al registrarse la
+            persona no está autenticada, así que no puede elegir de una lista
+            —y lo que declara puede no existir todavía en el sistema—. Es lo
+            que el Admin lee al aprobarla para saber a qué asignarla
+            (RF-02.6), no una referencia.
+        materiaSolicitada:
+          type: string
+          maxLength: 100
+          description: Igual que cursoSolicitado, para la materia.
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string, description: "JWT — presente solo si la cuenta está APROBADA" }
+        debeCambiarPassword: { type: boolean, description: "Si es true, el frontend debe forzar la pantalla de cambio de contraseña antes de dejar operar el resto del sistema (RF-01.1/RF-01.6)" }
+
+    Usuario:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        apellido: { type: string }
+        email: { type: string }
+        rol: { type: string, enum: [ADMIN, DOCENTE] }
+        estado: { type: string, enum: [PENDIENTE, APROBADA, RECHAZADA, BAJA] }
+        fechaRegistro: { type: string, format: date-time }
+        fechaAprobacion: { type: string, format: date-time, nullable: true }
+        debeCambiarPassword: { type: boolean }
+        cursoSolicitado:
+          type: string
+          description: Lo que declaró al registrarse (RF-01.3). Ausente si no lo completó.
+        materiaSolicitada:
+          type: string
+          description: Ídem, para la materia.
+
+    # ── Academic ──
+    CicloLectivo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        anio: { type: integer }
+        activo: { type: boolean }
+        archivado: { type: boolean }
+
+    Curso:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        cicloLectivoId: { type: string, format: uuid }
+        nombre: { type: string, pattern: '^[1-6]°[A-Z]$', example: "1°A" }
+        activo: { type: boolean }
+        archivado: { type: boolean }
+        materias: { type: array, items: { $ref: '#/components/schemas/Materia' } }
+
+    Materia:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        cursoId: { type: string, format: uuid }
+        nombre: { type: string }
+        activo: { type: boolean }
+        archivado: { type: boolean }
+
+    DocenteMateria:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        usuarioId: { type: string, format: uuid }
+        nombre: { type: string }
+        apellido: { type: string }
+        rol: { type: string, enum: [TITULAR, SUPLENTE] }
+
+    # ── Inventory ──
+    Carro:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        descripcion: { type: string, nullable: true }
+        pcs: { type: array, items: { $ref: '#/components/schemas/PC' } }
+
+    PC:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        carroId: { type: string, format: uuid }
+        identificador: { type: integer, description: "Único dentro del carro, no globalmente — puede repetirse en otro carro", example: 27 }
+        numeroSerie: { type: integer, format: int64, description: "Número de serie de fábrica, único en toda la institución" }
+        freezado: { type: boolean, description: "Informativo: indica si tiene Deep Freeze instalado. Sin efecto funcional sobre reservas." }
+        cpu: { type: string, nullable: true }
+        ram: { type: string, nullable: true }
+        sistemaOperativo: { type: string, nullable: true }
+        softwareInstalado: { type: string, nullable: true }
+        estado: { type: string, enum: [DISPONIBLE, EN_MANTENIMIENTO, FUERA_DE_SERVICIO] }
+        dadaDeBaja: { type: boolean, description: "Soft delete: si es true, no aparece en listados activos ni puede reservarse" }
+        fechaBaja: { type: string, format: date-time, nullable: true }
+
+    Incidencia:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        pcId: { type: string, format: uuid }
+        reportadoPor: { type: string, format: uuid }
+        descripcion: { type: string }
+        gravedad: { type: string, enum: [LEVE, MODERADA, GRAVE] }
+        fecha: { type: string, format: date-time }
+        enviadoDGE: { type: boolean }
+        fechaEnvioDGE: { type: string, format: date-time, nullable: true }
+        estado: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_DGE, RESUELTA] }
+
+    # ── Reservations ──
+    ReservaRequest:
+      type: object
+      required: [pcIds, materiaId, fecha, horaInicio, horaFin]
+      properties:
+        pcIds: { type: array, items: { type: string, format: uuid }, minItems: 1, description: "Una o varias PCs elegidas de la lista de disponibles" }
+        materiaId: { type: string, format: uuid }
+        fecha: { type: string, format: date }
+        horaInicio: { type: string, pattern: '^\d{2}:\d{2}$', example: "10:00" }
+        horaFin: { type: string, pattern: '^\d{2}:\d{2}$', example: "11:30" }
+
+    ReservaRecurrenteRequest:
+      type: object
+      required: [pcIds, materiaId, diaSemana, horaInicio, horaFin, fechaInicio, fechaFin]
+      properties:
+        pcIds: { type: array, items: { type: string, format: uuid }, minItems: 1 }
+        materiaId: { type: string, format: uuid }
+        diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES] }
+        horaInicio: { type: string, example: "10:00" }
+        horaFin: { type: string, example: "11:30" }
+        fechaInicio: { type: string, format: date }
+        fechaFin: { type: string, format: date }
+
+    ReservaGrupo:
+      type: object
+      description: "La reserva tal como la ve el docente — una materia, fecha y horario, con una o varias PCs."
+      properties:
+        id: { type: string, format: uuid }
+        materiaId: { type: string, format: uuid }
+        materiaNombre: { type: string }
+        cursoNombre: { type: string }
+        creadoPor: { type: string, format: uuid }
+        nombreDocenteSnapshot: { type: string }
+        fecha: { type: string, format: date }
+        horaInicio: { type: string }
+        horaFin: { type: string }
+        estado: { type: string, enum: [CONFIRMADA, PARCIALMENTE_CANCELADA, CANCELADA, FINALIZADA] }
+        esRecurrente: { type: boolean }
+        reglaRecurrenciaId: { type: string, format: uuid, nullable: true }
+        creadaEn: { type: string, format: date-time }
+        reservas: { type: array, items: { $ref: '#/components/schemas/Reserva' }, description: "Detalle por PC" }
+
+    Reserva:
+      type: object
+      description: "Una PC puntual dentro de un ReservaGrupo (o una fila EVALUACION_ESTATAL suelta, sin grupo)."
+      properties:
+        id: { type: string, format: uuid }
+        reservaGrupoId: { type: string, format: uuid, nullable: true, description: "NULL solo para tipo EVALUACION_ESTATAL" }
+        pcId: { type: string, format: uuid }
+        pcIdentificador: { type: integer }
+        estado: { type: string, enum: [CONFIRMADA, CANCELADA, FINALIZADA] }
+        tipo: { type: string, enum: [NORMAL, EVALUACION_ESTATAL] }
+        motivoCancelacion: { type: string, nullable: true }
+        canceladaEn: { type: string, format: date-time, nullable: true }
+        creadaEn: { type: string, format: date-time }
+
+    ConflictoReserva:
+      type: object
+      properties:
+        pcId: { type: string, format: uuid }
+        pcIdentificador: { type: integer }
+        fecha: { type: string, format: date }
+        horaInicio: { type: string }
+        horaFin: { type: string }
+        nombreDocente: { type: string }
+        materiaNombre: { type: string }
+
+    BloqueoRequest:
+      type: object
+      required: [carroId, fecha, horaInicio, horaFin]
+      properties:
+        carroId: { type: string, format: uuid }
+        fecha: { type: string, format: date }
+        horaInicio: { type: string, example: "08:00" }
+        horaFin: { type: string, example: "18:00" }
+
+    CancelacionAjenaRequest:
+      type: object
+      required: [motivo]
+      properties:
+        motivo: { type: string, minLength: 10 }
+
+    # ── Notifications ──
+    Notificacion:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        mensaje: { type: string }
+        estado: { type: string, enum: [NO_LEIDA, LEIDA] }
+        reservaId: { type: string, format: uuid, nullable: true, description: "Apunta a la PC puntual (Reserva), no al grupo" }
+        creadaEn: { type: string, format: date-time }
+        tipo:
+          type: string
+          enum: [GENERAL, DOCENTE_PENDIENTE, RESERVA_CANCELADA]
+          description: |
+            De qué se trata el aviso, para que la interfaz pueda ofrecer la
+            acción que corresponde sin interpretar el texto del mensaje. Un
+            aviso de cancelación agrupa TODO lo que se le canceló a esa
+            persona en una misma operación: bloquear tres PCs de una clase
+            genera una notificación con las tres, no tres avisos.
+
+    # ── Availability ──
+    BloqueHorarioAdmin:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES] }
+        horaInicio: { type: string, example: "08:00" }
+        horaFin: { type: string, example: "12:00" }
+
+    ExcepcionHorarioAdmin:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fecha: { type: string, format: date }
+        tipo: { type: string, enum: [NO_DISPONIBLE, HORARIO_MODIFICADO] }
+        horaInicio: { type: string, nullable: true, example: "09:00" }
+        horaFin: { type: string, nullable: true, example: "11:00" }
+        motivo: { type: string, nullable: true }
+
+    AdminDisponibilidad:
+      type: object
+      properties:
+        usuarioId: { type: string, format: uuid }
+        nombre: { type: string }
+        apellido: { type: string }
+        disponibleAhora: { type: boolean }
+        excepcionHoy: { $ref: '#/components/schemas/ExcepcionHorarioAdmin', nullable: true }
+        horarioSemanal: { type: array, items: { $ref: '#/components/schemas/BloqueHorarioAdmin' } }
+
+# ─────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────
+paths:
+
+  # ══════════════════════════════
+  # AUTH
+  # ══════════════════════════════
+  /api/auth/registro:
+    post:
+      tags: [auth]
+      summary: Autorregistro de docente
+      description: |
+        Crea cuenta con rol DOCENTE y estado PENDIENTE hasta aprobación de un ADMIN.
+        Notifica a todos los usuarios con rol ADMIN y estado APROBADA (RF-05.6) para
+        que no dependan de revisar la lista manualmente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistroRequest' }
+      responses:
+        "201": { description: Cuenta creada, pendiente de aprobación. Todos los Admin son notificados. }
+        "409":
+          description: |
+            Email ya registrado. Si pertenece a una cuenta en estado BAJA, el mensaje
+            lo indica explícitamente (RF-01.3) en vez de un genérico "ya registrado",
+            para que quien vuelve entienda que es su propia cuenta vieja.
+
+  /api/auth/login:
+    post:
+      tags: [auth]
+      summary: Login
+      description: Devuelve JWT si la cuenta está APROBADA. Si está PENDIENTE o RECHAZADA, responde 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        "401": { description: Credenciales inválidas }
+        "403": { description: Cuenta no aprobada }
+
+  /api/auth/me:
+    get:
+      tags: [auth]
+      summary: Datos del usuario autenticado
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+
+  /api/auth/cambiar-password:
+    post:
+      tags: [auth]
+      summary: Cambiar mi propia contraseña
+      description: |
+        Disponible para cualquier usuario autenticado en cualquier momento (RF-01.7),
+        no solo cuando debeCambiarPassword=true. Si la cuenta tenía ese flag en true,
+        se limpia a false al cambiar exitosamente.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [passwordActual, passwordNueva]
+              properties:
+                passwordActual: { type: string }
+                passwordNueva: { type: string, minLength: 8 }
+      responses:
+        "200": { description: Contraseña actualizada }
+        "401": { description: passwordActual incorrecta }
+
+  /health:
+    get:
+      summary: Estado del servicio
+      description: |
+        Verifica que el proceso pueda llegar a Postgres, no solo que esté vivo:
+        antes respondía 200 con la base caída, así que el HEALTHCHECK del
+        contenedor daba por sano a un proceso que no podía atender ni un login.
+
+        Sin autenticación: lo consume el HEALTHCHECK del contenedor (el propio
+        binario, con `sgrc-app healthcheck` — ver cmd/healthcheck.go).
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok] }
+                  time: { type: string, format: date-time }
+        "503":
+          description: La base de datos no responde
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [degradado] }
+                  error: { type: string }
+                  time: { type: string, format: date-time }
+
+  /api/auth/usuarios:
+    get:
+      tags: [auth]
+      summary: Listar usuarios (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: estado
+          schema: { type: string, enum: [PENDIENTE, APROBADA, RECHAZADA, BAJA] }
+        - in: query
+          name: rol
+          schema: { type: string, enum: [ADMIN, DOCENTE] }
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Usuario' } }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        "400": { description: page o pageSize inválidos }
+
+  /api/auth/usuarios/{id}/estado:
+    patch:
+      tags: [auth]
+      summary: Aprobar, rechazar o dar de baja una cuenta (Admin)
+      description: |
+        Al pasar a BAJA, revisa las materias del docente: si alguna queda sin ningún
+        otro docente activo, cancela sus ReservaGrupo futuros; si conserva otro docente,
+        solo genera un aviso informativo a todos los Admin (RF-02.8). Nunca cancela
+        reservas de una materia que sigue teniendo otro docente asignado. Después de
+        esa revisión, elimina todos los vínculos DocenteMateria del docente dado de baja.
+        Rechaza con 409 si el usuario es el único ADMIN en estado APROBADA y el nuevo
+        estado no es APROBADA (RF-01.8) — el sistema nunca puede quedar sin ningún Admin.
+        Rechaza con 409 si el estado actual del usuario ya es BAJA — es terminal, no
+        se puede revertir (RF-02.9). Para volver a operar, la persona debe registrarse
+        de nuevo (RF-01.3).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [estado]
+              properties:
+                estado: { type: string, enum: [APROBADA, RECHAZADA, BAJA] }
+      responses:
+        "200":
+          description: Estado actualizado (con detalle de impacto si fue BAJA)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estado: { type: string, enum: [PENDIENTE, APROBADA, RECHAZADA, BAJA] }
+                  materiasRevisadas: { type: integer }
+                  materiasHuerfanas: { type: integer }
+                  reservasCanceladas: { type: integer }
+        "403": { description: Solo un Admin puede cambiar este estado }
+        "409": { description: No se puede dejar al sistema sin ningún Admin activo, o la cuenta ya está en BAJA (transición terminal) }
+
+  /api/auth/usuarios/{id}/reset-password:
+    post:
+      tags: [auth]
+      summary: Resetear la contraseña de un usuario a una temporal (Admin)
+      description: |
+        Recuperación de contraseña asistida por Admin (RF-01.6) — no hay flujo de email
+        de por medio. Marca debeCambiarPassword=true; el usuario debe cambiarla
+        (POST /api/auth/cambiar-password) antes de operar el resto del sistema.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Contraseña temporal generada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  passwordTemporal: { type: string, description: "Mostrar una sola vez al Admin; el usuario debe cambiarla al ingresar" }
+
+  /api/auth/usuarios/{id}:
+    delete:
+      tags: [auth]
+      summary: Eliminar definitivamente una cuenta en BAJA (Admin)
+      description: |
+        Solo permitido si el usuario está en estado BAJA (RF-01.9) — libera su email
+        para un nuevo registro (RF-02.9). Sus reservas, incidencias y notificaciones
+        no se eliminan: las FKs que las referencian usan ON DELETE SET NULL (conservan
+        nombre_docente_snapshot u otro texto ya guardado) salvo docente_materia y
+        notificacion.usuario_id, que sí se eliminan en cascada por no tener sentido sin
+        la cuenta (ver 07-modelo-datos.md).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Cuenta eliminada definitivamente }
+        "409": { description: Solo se puede eliminar una cuenta en estado BAJA }
+
+  /api/auth/admins:
+    post:
+      tags: [auth]
+      summary: Crear otro Admin (Admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistroRequest' }
+      responses:
+        "201": { description: Admin creado (aprobado automáticamente) }
+        "403": { description: Solo un Admin puede crear otro Admin }
+
+  # ══════════════════════════════
+  # ACADEMIC
+  # ══════════════════════════════
+  /api/academic/ciclos:
+    get:
+      tags: [academic]
+      summary: Listar ciclos lectivos
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: archivado
+          schema: { type: boolean }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/CicloLectivo' } }
+    post:
+      tags: [academic]
+      summary: Crear ciclo lectivo (Admin)
+      description: Solo puede existir un ciclo lectivo activo a la vez (RF-02.1).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [anio]
+              properties:
+                anio: { type: integer, example: 2025 }
+      responses:
+        "201": { description: Ciclo creado }
+        "409": { description: Ya existe ciclo para ese año, o ya hay un ciclo activo sin archivar }
+
+  /api/academic/ciclos/{id}/archivar:
+    post:
+      tags: [academic]
+      summary: Archivar ciclo y opcionalmente clonar al siguiente año (Admin)
+      description: |
+        Preserva curso/materia/docente_materia (archivado=true) para no recrearlos.
+        Antes de nada, calcula y guarda un snapshot histórico agregado (historico_uso_pc,
+        historico_uso_docente). Luego ELIMINA FÍSICAMENTE todos los ReservaGrupo, Reserva,
+        ReglaRecurrencia y ReglaRecurrenciaPc de las materias de ese ciclo. Incidencia no
+        se ve afectada (pertenece a la PC, no al ciclo lectivo).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clonarA: { type: integer, description: "Año destino del clon. Omitir si no se desea clonar.", example: 2026 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  archivado: { type: boolean }
+                  reservasEliminadas: { type: integer }
+                  nuevoCicloId: { type: string, format: uuid, nullable: true }
+                  cursosClonados: { type: integer }
+                  materiasClonadas: { type: integer }
+
+  /api/academic/ciclos/{cicloId}/cursos:
+    get:
+      tags: [academic]
+      summary: Listar cursos del ciclo
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: cicloId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Curso' } }
+    post:
+      tags: [academic]
+      summary: Crear curso en el ciclo (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: cicloId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              properties:
+                nombre: { type: string, pattern: '^[1-6]°[A-Z]$', example: "1°A" }
+      responses:
+        "201": { description: Curso creado }
+        "400": { description: "Nombre no cumple el patrón {año}°{división}, ej. 1°A" }
+
+  /api/academic/cursos/{id}:
+    patch:
+      tags: [academic]
+      summary: Editar nombre de un curso (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string, pattern: '^[1-6]°[A-Z]$', example: "1°A" }
+      responses:
+        "200": { description: Curso actualizado }
+        "400": { description: "Nombre no cumple el patrón {año}°{división}, ej. 1°A" }
+        "409": { description: Ya existe otro curso con ese nombre en el mismo ciclo lectivo }
+    delete:
+      tags: [academic]
+      summary: Eliminar un curso (Admin)
+      description: |
+        Solo permitido si ninguna de sus materias tiene reservas asociadas (RF-02.11).
+        Para un curso con historial, la única opción es archivar el ciclo completo.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Curso eliminado }
+        "409": { description: El curso tiene materias con reservas asociadas — no se puede eliminar }
+
+  /api/academic/cursos/{cursoId}/materias:
+    get:
+      tags: [academic]
+      summary: Listar materias del curso
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: cursoId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Materia' } }
+    post:
+      tags: [academic]
+      summary: Crear materia en el curso (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: cursoId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              properties:
+                nombre: { type: string, example: "Matemáticas" }
+      responses:
+        "201": { description: Materia creada }
+
+  /api/academic/materias/{id}:
+    patch:
+      tags: [academic]
+      summary: Editar nombre de una materia (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string, example: "Matemáticas" }
+      responses:
+        "200": { description: Materia actualizada }
+        "409": { description: Ya existe otra materia con ese nombre en el mismo curso }
+    delete:
+      tags: [academic]
+      summary: Eliminar una materia (Admin)
+      description: |
+        Solo permitido si no tiene reservas asociadas (RF-02.11). Con historial,
+        la única opción es archivar el ciclo completo.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Materia eliminada }
+        "409": { description: La materia tiene reservas asociadas — no se puede eliminar }
+
+  /api/academic/materias/{materiaId}/docentes:
+    get:
+      tags: [academic]
+      summary: Listar docentes asignados a la materia
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: materiaId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/DocenteMateria' } }
+    post:
+      tags: [academic]
+      summary: Asignar docente a materia (Admin)
+      description: Solo se puede asignar a un usuario en estado APROBADA (RF-02.6).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: materiaId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usuarioId, rol]
+              properties:
+                usuarioId: { type: string, format: uuid }
+                rol: { type: string, enum: [TITULAR, SUPLENTE] }
+      responses:
+        "201": { description: Docente asignado }
+        "404": { description: Usuario no encontrado }
+        "409": { description: El usuario no está en estado APROBADA }
+
+  /api/academic/materias/{materiaId}/docentes/{docenteMateriaId}:
+    delete:
+      tags: [academic]
+      summary: Remover docente de materia (Admin)
+      description: |
+        Sigue la misma política que la baja completa de un docente (RF-02.8/02.10):
+        si con esto la materia queda sin ningún otro docente ACTIVO, se cancelan sus
+        reservas futuras y se notifica a todos los Admin; si conserva otro docente,
+        no se cancela nada.
+
+        La cancelación ocurre ANTES de quitar la asignación: si falla, la asignación
+        se conserva y la operación se puede reintentar.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: materiaId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: docenteMateriaId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Asignación removida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reservasCanceladas:
+                    type: integer
+                    description: 0 si la materia conserva otro docente activo.
+                  reservasCanceladas: { type: integer }
+
+  # ══════════════════════════════
+  # INVENTORY
+  # ══════════════════════════════
+  /api/inventory/carros:
+    get:
+      tags: [inventory]
+      summary: Listar carros con sus PCs (cualquier usuario autenticado)
+      description: |
+        Visible para ADMIN y DOCENTE por igual — un docente necesita ver estado,
+        freezado y softwareInstalado (ej. versión de AutoCAD) de cada PC para elegir
+        cuáles reservar.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Carro' } }
+    post:
+      tags: [inventory]
+      summary: Crear carro (Admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              properties:
+                nombre: { type: string }
+                descripcion: { type: string }
+      responses:
+        "201": { description: Carro creado }
+
+  /api/inventory/carros/{id}:
+    patch:
+      tags: [inventory]
+      summary: Editar carro (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string }
+                descripcion: { type: string }
+      responses:
+        "200": { description: Carro actualizado }
+
+  /api/inventory/carros/{carroId}/pcs:
+    post:
+      tags: [inventory]
+      summary: Registrar PC en un carro (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: carroId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identificador, numeroSerie]
+              properties:
+                identificador: { type: integer, example: 27 }
+                numeroSerie: { type: integer, format: int64, description: "Número de serie de fábrica, único en toda la institución" }
+                freezado: { type: boolean, default: false, description: "Informativo: tiene Deep Freeze instalado" }
+                cpu: { type: string }
+                ram: { type: string }
+                sistemaOperativo: { type: string }
+                softwareInstalado: { type: string }
+      responses:
+        "201": { description: PC registrada }
+        "409": { description: Ya existe una PC con ese identificador en el carro, o el número de serie ya está registrado en otra PC }
+
+  /api/inventory/pcs/{id}:
+    patch:
+      tags: [inventory]
+      summary: Editar datos de una PC, incluyendo moverla de carro (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                carroId: { type: string, format: uuid, description: "Mueve la PC a otro carro (RF-03.10). El identificador debe seguir siendo único en el carro destino." }
+                identificador: { type: integer, description: "Único dentro del carro (el actual o el destino, si también se mueve)" }
+                numeroSerie: { type: integer, format: int64, description: "Único en toda la institución" }
+                freezado: { type: boolean }
+                cpu: { type: string }
+                ram: { type: string }
+                sistemaOperativo: { type: string }
+                softwareInstalado: { type: string }
+      responses:
+        "200": { description: PC actualizada }
+        "409": { description: Ya existe una PC con ese identificador en el carro destino, o el número de serie ya está registrado en otra PC }
+    delete:
+      tags: [inventory]
+      summary: Dar de baja una PC del inventario (Admin)
+      description: |
+        Soft delete: marca dada_de_baja=true y fecha_baja. No se borra la fila —
+        incidencia y reserva la referencian por FK y ese historial se conserva.
+        La PC deja de listarse como disponible y no puede reservarse.
+        Dispara la misma cascada de cancelación que el cambio de estado a
+        FUERA_DE_SERVICIO (RF-03.9): cancela sus reservas futuras y notifica a
+        los docentes afectados.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: PC dada de baja (con detalle de cascada si aplicó)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dadaDeBaja: { type: boolean }
+                  reservasCanceladas: { type: integer }
+                  docentesNotificados: { type: integer }
+
+  /api/inventory/pcs/{id}/estado:
+    patch:
+      tags: [inventory]
+      summary: Cambiar estado de una PC (Admin)
+      description: |
+        Al pasar a EN_MANTENIMIENTO o FUERA_DE_SERVICIO, cancela en cascada todas las
+        reservas CONFIRMADA futuras de esa PC y notifica a cada docente afectado (RF-03.6).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [estado]
+              properties:
+                estado: { type: string, enum: [DISPONIBLE, EN_MANTENIMIENTO, FUERA_DE_SERVICIO] }
+                motivo:
+                  type: string
+                  nullable: true
+                  description: "Opcional. Si se omite y el estado cancela reservas, se usa un mensaje por defecto."
+      responses:
+        "200":
+          description: Estado actualizado (con detalle de cascada si aplicó)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estado: { type: string, enum: [DISPONIBLE, EN_MANTENIMIENTO, FUERA_DE_SERVICIO] }
+                  reservasCanceladas: { type: integer }
+                  docentesNotificados: { type: integer }
+
+  /api/reservation/pcs/{pcId}/calendario:
+    get:
+      tags: [inventory]
+      summary: Calendario de disponibilidad de una PC (todos los usuarios autenticados)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: desde
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: hasta
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Reserva' }
+
+  /api/inventory/incidencias:
+    post:
+      tags: [inventory]
+      summary: Registrar incidencia sobre una PC
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pcId, descripcion, gravedad]
+              properties:
+                pcId: { type: string, format: uuid }
+                descripcion: { type: string }
+                gravedad: { type: string, enum: [LEVE, MODERADA, GRAVE] }
+      responses:
+        "201": { description: Incidencia registrada }
+
+  /api/inventory/incidencias/{id}:
+    patch:
+      tags: [inventory]
+      summary: Actualizar estado de incidencia (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                estado: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_DGE, RESUELTA] }
+                enviadoDGE: { type: boolean }
+                fechaEnvioDGE: { type: string, format: date-time }
+      responses:
+        "200": { description: Incidencia actualizada }
+
+  # ══════════════════════════════
+  # RESERVATIONS
+  # ══════════════════════════════
+  /api/reservation/pcs-disponibles:
+    get:
+      tags: [reservations]
+      summary: Listar PCs disponibles para tildar en un horario dado
+      description: |
+        Devuelve PCs de todos los carros por defecto — un docente puede combinar PCs
+        de carros distintos en la misma reserva (no hay restricción de "un solo carro
+        por ReservaGrupo"). El filtro carroId es opcional, para cuando el usuario
+        quiere ver solo las PCs de un carro puntual. Excluye PCs con dada_de_baja=true
+        o estado != DISPONIBLE.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: fecha
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: horaInicio
+          required: true
+          schema: { type: string, example: "10:00" }
+        - in: query
+          name: horaFin
+          required: true
+          schema: { type: string, example: "11:30" }
+        - in: query
+          name: carroId
+          schema: { type: string, format: uuid, description: "Opcional — filtra a un solo carro si se especifica" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PC' } }
+
+  /api/reservation/reservas:
+    get:
+      tags: [reservations]
+      summary: Listar reservas agrupadas (propias si Docente, todas si Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: desde
+          schema: { type: string, format: date }
+        - in: query
+          name: hasta
+          schema: { type: string, format: date }
+        - in: query
+          name: pcId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: materiaId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: estado
+          schema: { type: string, enum: [CONFIRMADA, PARCIALMENTE_CANCELADA, CANCELADA, FINALIZADA] }
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ReservaGrupo' } }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        "400": { description: page o pageSize inválidos }
+    post:
+      tags: [reservations]
+      summary: Crear reserva (una o varias PCs en un solo grupo)
+      description: |
+        Operación transaccional: si alguna PC del arreglo tiene solapamiento, no se
+        confirma ninguna — la respuesta 409 detalla qué PC(s) puntual(es) fallaron
+        para que el usuario las destilde y reintente con el resto.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReservaRequest' }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservaGrupo' }
+        "400":
+          description: |
+            Fecha o rango horario rechazados: sábado o domingo (la semana lectiva es
+            de lunes a viernes), un bloque que ya terminó, o una duración mayor a 8
+            horas (un turno completo).
+        "403": { description: Sin permiso para reservar en esa materia }
+        "409":
+          description: Una o más PCs elegidas tienen solapamiento — no se crea ninguna
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  conflictos: { type: array, items: { $ref: '#/components/schemas/ConflictoReserva' } }
+
+  /api/reservation/reservas/recurrentes:
+    post:
+      tags: [reservations]
+      summary: Crear reserva recurrente (una o varias PCs, valida todas las ocurrencias antes de crear)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReservaRecurrenteRequest' }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reglaRecurrenciaId: { type: string, format: uuid }
+                  fechasCreadas: { type: array, items: { type: string, format: date } }
+                  pcsPorFecha: { type: integer, description: "Cantidad de PCs incluidas en cada fecha" }
+        "409":
+          description: Una o más ocurrencias (fecha × PC) tienen solapamiento — no se crea ninguna
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  conflictos: { type: array, items: { $ref: '#/components/schemas/ConflictoReserva' } }
+
+  /api/reservation/grupos/{id}:
+    get:
+      tags: [reservations]
+      summary: Ver el detalle de un grupo de reserva (con el estado de cada PC)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservaGrupo' }
+
+  /api/reservation/grupos/{id}/cancelar:
+    post:
+      tags: [reservations]
+      summary: Cancelar un ReservaGrupo (RF-04.6)
+      description: |
+        `soloEsta: true` cancela únicamente esa fecha; `false` cancela esa y
+        todas las ocurrencias futuras de la misma regla de recurrencia.
+        Mismo criterio de motivo obligatorio que cancelar una Reserva ajena.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                motivo: { type: string }
+                soloEsta: { type: boolean, default: true }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reservasCanceladas: { type: integer }
+        "403": { description: No es tu reserva y no sos Admin }
+
+  /api/reservation/reservas/{id}/cancelar:
+    post:
+      tags: [reservations]
+      summary: Cancelar una Reserva de PC puntual
+      description: |
+        Un docente solo puede cancelar las suyas; un Admin, cualquiera.
+        RF-04.8: si la reserva es de otra persona el motivo es OBLIGATORIO
+        (se rechaza con 400 si viene vacío) — ese texto es el que recibe el
+        docente en la notificación (RF-05.1).
+
+        No es un DELETE a propósito: dentro de un ciclo lectivo activo las
+        reservas nunca se eliminan, se marcan CANCELADA (RF-04.9).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                motivo: { type: string }
+      responses:
+        "200": { description: Cancelada }
+        "400": { description: Falta el motivo al cancelar una reserva ajena }
+        "403": { description: No es tu reserva y no sos Admin }
+        "404": { description: No encontrada }
+
+  /api/reservation/reservas/{id}/cancelar:
+    post:
+      tags: [reservations]
+      summary: Cancelar manualmente una PC puntual ajena, con motivo (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid, description: "id de la Reserva puntual, no del grupo" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelacionAjenaRequest' }
+      responses:
+        "200": { description: PC puntual cancelada y docente notificado }
+
+  /api/reservation/bloqueos-evaluacion:
+    post:
+      tags: [reservations]
+      summary: Bloquear PCs de un carro para evaluación estatal, en un rango horario definido (Admin)
+      description: |
+        Cancela solo las Reserva puntuales en conflicto dentro del rango exacto — el
+        resto de una recurrencia u otras PCs del mismo grupo siguen vigentes. Los
+        grupos afectados pasan a PARCIALMENTE_CANCELADA o CANCELADA según corresponda.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BloqueoRequest' }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bloqueoIds: { type: array, items: { type: string, format: uuid } }
+                  reservasCanceladas: { type: integer, description: "PCs puntuales canceladas, no grupos completos" }
+                  docentesNotificados: { type: integer }
+        "400":
+          description: |
+            El bloque ya terminó. RF-04.7 NO tiene las otras dos restricciones de una
+            reserva normal: una evaluación estatal puede caer sábado o domingo y durar
+            lo que el Admin decida — es excepcional por naturaleza.
+
+  # ══════════════════════════════
+  # NOTIFICATIONS
+  # ══════════════════════════════
+  /api/notifications:
+    get:
+      tags: [notifications]
+      summary: Listar notificaciones del usuario autenticado
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: estado
+          schema: { type: string, enum: [NO_LEIDA, LEIDA] }
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Notificacion' } }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        "400": { description: page o pageSize inválidos }
+
+  /api/notifications/{id}/leida:
+    patch:
+      tags: [notifications]
+      summary: Marcar notificación como leída
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Notificación marcada como leída }
+
+  /api/notifications/leer-todas:
+    post:
+      tags: [notifications]
+      summary: Marcar todas las notificaciones como leídas
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Todas marcadas como leídas }
+
+  # ══════════════════════════════
+  # REPORTS
+  # ══════════════════════════════
+  /api/reporting/ciclos/{cicloId}/uso-pcs:
+    get:
+      tags: [reports]
+      summary: Reporte de uso por PC (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: desde
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: hasta
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: carroId
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        pcId: { type: string, format: uuid }
+                        identificador: { type: integer }
+                        carroNombre: { type: string }
+                        minutosReservados: { type: integer }
+                        cantidadReservas: { type: integer }
+
+  /api/reporting/ciclos/{cicloId}/uso-docentes:
+    get:
+      tags: [reports]
+      summary: Reporte de uso por docente (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: anioMes
+          required: true
+          schema: { type: string, example: "2025-08" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        usuarioId: { type: string, format: uuid }
+                        nombreDocente: { type: string }
+                        cantidadReservas: { type: integer }
+                        minutosTotales: { type: integer }
+
+  /api/reporting/historico/{anio}/uso-pcs:
+    get:
+      tags: [reports]
+      summary: Estadísticas de un ciclo lectivo ya archivado (Admin)
+      description: |
+        Lee de historico_uso_pc / historico_uso_docente — el único origen de datos
+        disponible para años archivados, ya que sus ReservaGrupo/Reserva se
+        eliminaron físicamente al archivar (ver RF-02.4).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: anio
+          required: true
+          schema: { type: integer, example: 2025 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usoPorPc:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        pcId: { type: string, format: uuid }
+                        identificadorSnapshot: { type: integer }
+                        carroNombreSnapshot: { type: string }
+                        minutosReservados: { type: integer }
+                        cantidadReservas: { type: integer }
+                  usoPorDocente:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        usuarioId: { type: string, format: uuid, nullable: true }
+                        nombreDocenteSnapshot: { type: string }
+                        cantidadReservas: { type: integer }
+                        minutosTotales: { type: integer }
+        "404": { description: No hay estadísticas archivadas para ese año }
+
+  /api/reporting/incidencias/pcs:
+    get:
+      tags: [reports]
+      summary: Reporte de incidencias por PC/carro (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: desde
+          schema: { type: string, format: date }
+        - in: query
+          name: hasta
+          schema: { type: string, format: date }
+        - in: query
+          name: carroId
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Incidencia' } }
+
+  # ══════════════════════════════
+  # AVAILABILITY
+  # ══════════════════════════════
+  /api/availability/admins:
+    get:
+      tags: [availability]
+      summary: Ver disponibilidad de todos los Admins (cualquier usuario autenticado)
+      description: |
+        Puramente informativo (RF-07.6) — no afecta ninguna otra funcionalidad.
+        disponibleAhora se calcula en el momento contra el horario semanal y la
+        excepción del día de hoy, si existe (la excepción siempre tiene prioridad).
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/AdminDisponibilidad' } }
+
+  /api/availability/mi-horario:
+    get:
+      tags: [availability]
+      summary: Ver mi propio horario semanal (Admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/BloqueHorarioAdmin' } }
+    post:
+      tags: [availability]
+      summary: Agregar un bloque a mi horario semanal (Admin)
+      description: Aplica de inmediato para todas las semanas futuras (RF-07.3) — no requiere ninguna acción de "propagar".
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [diaSemana, horaInicio, horaFin]
+              properties:
+                diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES] }
+                horaInicio: { type: string, example: "08:00" }
+                horaFin: { type: string, example: "12:00" }
+      responses:
+        "201": { description: Bloque agregado }
+
+  /api/availability/mi-horario/{id}:
+    patch:
+      tags: [availability]
+      summary: Editar un bloque de mi horario semanal (Admin)
+      description: El cambio aplica desde ahora para todas las semanas futuras — no versiona el pasado, porque no hay nada materializado que preservar.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES] }
+                horaInicio: { type: string }
+                horaFin: { type: string }
+      responses:
+        "200": { description: Bloque actualizado }
+    delete:
+      tags: [availability]
+      summary: Eliminar un bloque de mi horario semanal (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Bloque eliminado }
+
+  /api/availability/mi-excepcion:
+    post:
+      tags: [availability]
+      summary: Cargar una excepción puntual (horario distinto o ausencia) para una fecha (Admin)
+      description: |
+        No afecta el patrón semanal general — solo esa fecha puntual (RF-07.4).
+        Un usuario solo puede tener una excepción por fecha (UNIQUE usuario_id+fecha);
+        volver a postear para la misma fecha reemplaza la excepción anterior.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fecha, tipo]
+              properties:
+                fecha: { type: string, format: date }
+                tipo: { type: string, enum: [NO_DISPONIBLE, HORARIO_MODIFICADO] }
+                horaInicio: { type: string, description: "Requerido si tipo=HORARIO_MODIFICADO" }
+                horaFin: { type: string, description: "Requerido si tipo=HORARIO_MODIFICADO" }
+                motivo: { type: string }
+      responses:
+        "201": { description: Excepción cargada (o reemplazada si ya existía una para esa fecha) }
+        "400": { description: "horaInicio/horaFin faltantes para tipo=HORARIO_MODIFICADO, o presentes para tipo=NO_DISPONIBLE" }
+
+  /api/availability/no-disponible-ahora:
+    post:
+      tags: [availability]
+      summary: Marcarme como no disponible por el resto de hoy (Admin)
+      description: |
+        Atajo de un solo paso equivalente a cargar una excepción NO_DISPONIBLE para
+        la fecha de hoy (RF-07.5) — útil para "llegué tarde" o "hoy no puedo estar".
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Marcado como no disponible por hoy }
+
+  # ── Endpoints agregados tras la revisión completa ────────────────────
+  # (RF que el spec declaraba pero que no tenían implementación)
+
+  /api/inventory/carros/{carroId}/pcs:
+    post:
+      tags: [inventory]
+      summary: Registrar una PC en un carro (RF-03.2, Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: carroId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PC' }
+      responses:
+        "201": { description: Creada }
+        "409": { description: Identificador repetido en el carro o número de serie ya usado }
+    get:
+      tags: [inventory]
+      summary: Listar las PCs de un carro (RF-03.7, todos los usuarios autenticados)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: carroId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PC' }
+
+  /api/inventory/pcs/{pcId}/incidencias:
+    get:
+      tags: [inventory]
+      summary: Incidencias de una PC
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: pcId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Incidencia' }
+
+  /api/reporting/historico/{anio}/uso-docentes:
+    get:
+      tags: [reports]
+      summary: Histórico de uso por docente de un año archivado (RF-06.4, Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: anio
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK }
+
+  /api/reporting/incidencias/carros:
+    get:
+      tags: [reports]
+      summary: Incidencias agregadas por carro (RF-06.3, Admin)
+      description: |
+        No depende del ciclo lectivo: Incidencia nunca se elimina (sobrevive
+        al archivado, RF-02.4), así que se resuelve siempre en vivo.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: desde
+          schema: { type: string, format: date }
+        - in: query
+          name: hasta
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        carroId: { type: string, format: uuid }
+                        carroNombre: { type: string }
+                        total: { type: integer }
+                        abiertas: { type: integer }
+                        graves: { type: integer }
+
+  /api/notifications/leer-todas:
+    post:
+      tags: [notifications]
+      summary: Marcar como leídas todas las notificaciones propias (RF-05.7)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  marcadas: { type: integer }
+
+  /api/academic/mis-materias:
+    get:
+      tags: [academic]
+      summary: Materias en las que el usuario autenticado puede reservar (RF-04.1)
+      description: |
+        Un docente ve solo las materias a las que está asignado; un Admin ve
+        todas las no archivadas, porque RF-04.1 lo habilita a reservar para
+        cualquiera de ellas sin estar asignado.
+
+        Solo devuelve materias de ciclos y cursos NO archivados: "una materia
+        de un ciclo ya cerrado no admite reservas nuevas aunque el registro
+        se conserve".
+
+        Existe como una sola consulta a propósito: sin esto, para saber "en
+        qué materias puedo reservar" habría que recorrer ciclos → cursos →
+        materias → docentes desde el cliente.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        materiaId: { type: string, format: uuid }
+                        materiaNombre: { type: string }
+                        cursoId: { type: string, format: uuid }
+                        cursoNombre: { type: string }
+                        cicloId: { type: string, format: uuid }
+                        cicloAnio: { type: integer }
