@@ -32,6 +32,13 @@ type Service struct {
 	gestorMaterias     GestorMateriasDocente
 	canceladorReservas CanceladorReservasDeMateria
 
+	// verificadorGoogle es nil cuando el despliegue no configuró
+	// GOOGLE_CLIENT_ID. Es opcional a propósito: el sistema tiene que
+	// arrancar y funcionar igual sin ingreso con Google, que es como venía
+	// funcionando hasta ahora. Los dos casos de uso que lo necesitan
+	// chequean el nil y devuelven ErrLoginGoogleNoDisponible.
+	verificadorGoogle VerificadorGoogle
+
 	// Hash de descarte para igualar el costo del login con email
 	// inexistente. Ver consumirTiempoDeVerificacion.
 	hashDeDescarteUnaVez sync.Once
@@ -50,6 +57,7 @@ func NewService(
 	ahora func() time.Time,
 	gestorMaterias GestorMateriasDocente,
 	canceladorReservas CanceladorReservasDeMateria,
+	verificadorGoogle VerificadorGoogle,
 ) *Service {
 	return &Service{
 		repo:               repo,
@@ -62,6 +70,7 @@ func NewService(
 		ahora:              ahora,
 		gestorMaterias:     gestorMaterias,
 		canceladorReservas: canceladorReservas,
+		verificadorGoogle:  verificadorGoogle,
 	}
 }
 
@@ -85,9 +94,17 @@ func (s *Service) Registrar(ctx context.Context, nombre, apellido, email, passwo
 		return nil, err
 	}
 
-	// RF-05.6: notifica a todos los Admin — quién se suscribe a esto
-	// (internal/notification) todavía no existe, pero el evento ya
-	// sale bien formado desde acá.
+	s.avisarQueHayUnDocentePendiente(u)
+	return u, nil
+}
+
+// avisarQueHayUnDocentePendiente publica RF-05.6 — el aviso a todos los
+// Admin de que alguien se registró y está esperando aprobación.
+//
+// Sale igual se haya registrado con contraseña o con Google: para el Admin
+// que tiene que aprobarla, las dos son la misma cuenta pendiente, y cómo
+// entró esa persona no cambia nada de lo que él hace.
+func (s *Service) avisarQueHayUnDocentePendiente(u *domain.Usuario) {
 	s.bus.Publish(eventbus.Evento{
 		Tipo: "docente.registro.pendiente",
 		Payload: map[string]string{
@@ -97,8 +114,6 @@ func (s *Service) Registrar(ctx context.Context, nombre, apellido, email, passwo
 			"email":     u.Email,
 		},
 	})
-
-	return u, nil
 }
 
 // CrearAdmin implementa RF-01.4: un Admin crea otro Admin directamente,
@@ -204,6 +219,19 @@ func (s *Service) Login(ctx context.Context, email, password string) (*LoginResu
 		return nil, fmt.Errorf("buscando usuario: %w", err)
 	}
 
+	// Una cuenta creada con Google no tiene contraseña contra la cual
+	// verificar. Se responde exactamente igual que a un email inexistente
+	// —mismo error y mismo tiempo consumido— y no "esta cuenta entra con
+	// Google", que sería más amable pero convertiría este endpoint en un
+	// oráculo: cualquiera podría preguntarle, dirección por dirección,
+	// quién tiene cuenta en la escuela y con qué la abrió. La pantalla de
+	// login tiene el botón de Google al lado, que es donde esa persona
+	// encuentra la salida sin que haga falta decírselo acá.
+	if !u.PuedeIngresarConPassword() {
+		s.consumirTiempoDeVerificacion(password)
+		return nil, ErrCredencialesInvalidas
+	}
+
 	ok, err := s.verify(password, u.PasswordHash)
 	if err != nil {
 		return nil, fmt.Errorf("verificando password: %w", err)
@@ -222,6 +250,213 @@ func (s *Service) Login(ctx context.Context, email, password string) (*LoginResu
 	}
 
 	return &LoginResultado{Token: token, DebeCambiarPassword: u.DebeCambiarPassword}, nil
+}
+
+// LoginConGoogle implementa el ingreso con una cuenta de Google ya
+// existente en el sistema. NO crea nada: si no hay cuenta para ese email
+// devuelve ErrCuentaGoogleNoRegistrada, y es el frontend el que a partir
+// de ahí manda a la pantalla de registro.
+//
+// Que el registro sea un paso aparte no es ceremonia: al crear la cuenta
+// hay que preguntarle a la persona qué curso y qué materia va a dictar
+// (RF-01.3), y eso no viene en ningún token de Google. Sin ese paso el
+// Admin recibiría cuentas pendientes sin ningún dato para saber a qué
+// asignarlas, que es exactamente el problema que resolvió la migración
+// 006.
+func (s *Service) LoginConGoogle(ctx context.Context, idToken string) (*LoginResultado, error) {
+	identidad, err := s.identidadDeGoogle(ctx, idToken)
+	if err != nil {
+		return nil, err
+	}
+
+	u, err := s.cuentaParaIdentidadGoogle(ctx, identidad)
+	if err != nil {
+		return nil, err
+	}
+
+	// El chequeo de estado va DESPUÉS de vincular: una cuenta PENDIENTE que
+	// entra con Google por primera vez queda vinculada igual, así el día
+	// que el Admin la apruebe funciona sin que la persona tenga que repetir
+	// nada. Lo único que no se vincula es una cuenta en BAJA, que se
+	// rechaza antes (ver cuentaParaIdentidadGoogle).
+	if !u.EstaAprobado() {
+		return nil, ErrCuentaNoHabilitada
+	}
+
+	token, err := s.firmar(u)
+	if err != nil {
+		return nil, fmt.Errorf("firmando token: %w", err)
+	}
+	return &LoginResultado{Token: token, DebeCambiarPassword: u.DebeCambiarPassword}, nil
+}
+
+// cuentaParaIdentidadGoogle resuelve a qué usuario corresponde una
+// identidad de Google, vinculándola si hace falta.
+//
+// Busca primero por sub (el vínculo ya establecido) y recién después por
+// email. El orden importa: el email de una cuenta de Google puede cambiar,
+// el sub no, así que quien ya entró alguna vez sigue entrando a su misma
+// cuenta aunque Google le haya cambiado la dirección.
+//
+// Cuando aparece por email, se trata de un docente que ya tenía cuenta con
+// contraseña y ahora entra con Google: se le agrega el sub y conserva la
+// contraseña — las dos formas de ingreso conviven (ver
+// migrations/008_login_con_google.sql). Vincular por email es seguro
+// justamente porque identidadDeGoogle ya exigió email_verified: sin eso,
+// alguien podría poner la dirección de un docente en su propio perfil de
+// Google y quedarse con su cuenta.
+func (s *Service) cuentaParaIdentidadGoogle(ctx context.Context, identidad *IdentidadGoogle) (*domain.Usuario, error) {
+	u, err := s.repo.BuscarPorGoogleSub(ctx, identidad.Sub)
+	if err == nil {
+		return u, nil
+	}
+	if !errors.Is(err, ErrUsuarioNoEncontrado) {
+		return nil, fmt.Errorf("buscando cuenta por identificador de Google: %w", err)
+	}
+
+	u, err = s.repo.BuscarPorEmail(ctx, domain.NormalizarEmail(identidad.Email))
+	if err != nil {
+		if errors.Is(err, ErrUsuarioNoEncontrado) {
+			return nil, ErrCuentaGoogleNoRegistrada
+		}
+		return nil, fmt.Errorf("buscando cuenta por email: %w", err)
+	}
+
+	// Misma regla que en el registro común: una cuenta dada de baja no se
+	// reactiva por la puerta de atrás. RF-02.9 la hace terminal.
+	if u.Estado == domain.EstadoBaja {
+		return nil, ErrCuentaEnBaja
+	}
+
+	u.GoogleSub = identidad.Sub
+	if err := s.repo.Guardar(ctx, u); err != nil {
+		return nil, fmt.Errorf("vinculando la cuenta de Google: %w", err)
+	}
+	return u, nil
+}
+
+// RegistrarConGoogle crea una cuenta de docente a partir de un ID token de
+// Google. Queda PENDIENTE igual que el autorregistro con contraseña
+// (RF-01.3): entrar con Google prueba quién sos, no que la escuela te
+// conozca — sin la aprobación de un Admin, cualquiera con una casilla de
+// Gmail estaría adentro.
+//
+// nombre y apellido pueden venir vacíos: en ese caso se usan los del
+// token. Se aceptan del request porque los claims de Google son lo que la
+// persona puso en su cuenta personal, que no siempre es su nombre tal como
+// figura en la escuela, y porque given_name/family_name no son
+// obligatorios — hay cuentas donde vienen vacíos.
+func (s *Service) RegistrarConGoogle(ctx context.Context, idToken, nombre, apellido string, solicitud SolicitudDeAsignacion) (*domain.Usuario, error) {
+	identidad, err := s.identidadDeGoogle(ctx, idToken)
+	if err != nil {
+		return nil, err
+	}
+
+	nombre = primeroNoVacio(strings.TrimSpace(nombre), identidad.Nombre)
+	apellido = primeroNoVacio(strings.TrimSpace(apellido), identidad.Apellido)
+	email := domain.NormalizarEmail(identidad.Email)
+
+	if nombre == "" || apellido == "" || email == "" {
+		return nil, ErrDatosObligatorios
+	}
+	if err := domain.ValidarEmail(email); err != nil {
+		return nil, err
+	}
+
+	// Dos consultas y no una: alguien puede tener ya la cuenta vinculada
+	// (sub conocido) y volver a caer acá por un reintento del frontend, y
+	// también puede existir una cuenta con ese email pero sin vincular. Los
+	// dos casos son "ya tenés cuenta, andá a iniciar sesión", pero el
+	// segundo tiene que distinguir BAJA para dar el mensaje de RF-01.3.
+	if _, err := s.repo.BuscarPorGoogleSub(ctx, identidad.Sub); err == nil {
+		return nil, ErrEmailYaRegistrado
+	} else if !errors.Is(err, ErrUsuarioNoEncontrado) {
+		return nil, fmt.Errorf("buscando cuenta por identificador de Google: %w", err)
+	}
+
+	existente, err := s.repo.BuscarPorEmail(ctx, email)
+	if err != nil && !errors.Is(err, ErrUsuarioNoEncontrado) {
+		return nil, fmt.Errorf("buscando usuario existente: %w", err)
+	}
+	if existente != nil {
+		if existente.Estado == domain.EstadoBaja {
+			return nil, ErrCuentaEnBaja
+		}
+		// La cuenta existe con ese email pero sin vincular. No se vincula
+		// acá: vincular es lo que hace LoginConGoogle, y hacerlo también
+		// desde el registro dejaría dos caminos distintos para la misma
+		// escritura. El frontend ya llamó al login antes de llegar acá, así
+		// que en la práctica esto solo se alcanza con dos pestañas abiertas.
+		return nil, ErrEmailYaRegistrado
+	}
+
+	ahora := s.ahora()
+	u := &domain.Usuario{
+		ID:        s.nuevoID(),
+		Nombre:    nombre,
+		Apellido:  apellido,
+		Email:     email,
+		GoogleSub: identidad.Sub,
+		// Sin PasswordHash a propósito: no hay ninguna contraseña que la
+		// persona haya elegido, y poner una aleatoria que nadie conoce sería
+		// mentirle al esquema sobre lo que la cuenta puede hacer.
+		Rol:           domain.RolDocente,
+		Estado:        domain.EstadoPendiente,
+		FechaRegistro: ahora,
+
+		CursoSolicitado:   strings.TrimSpace(solicitud.Curso),
+		MateriaSolicitada: strings.TrimSpace(solicitud.Materia),
+	}
+
+	if err := s.repo.Crear(ctx, u); err != nil {
+		return nil, fmt.Errorf("creando usuario: %w", err)
+	}
+
+	s.avisarQueHayUnDocentePendiente(u)
+	return u, nil
+}
+
+// identidadDeGoogle centraliza lo que los dos casos de uso necesitan antes
+// de tocar la base: que el ingreso con Google esté configurado, que el
+// token sea creíble, y que Google confirme el email.
+func (s *Service) identidadDeGoogle(ctx context.Context, idToken string) (*IdentidadGoogle, error) {
+	if s.verificadorGoogle == nil {
+		return nil, ErrLoginGoogleNoDisponible
+	}
+	if strings.TrimSpace(idToken) == "" {
+		return nil, ErrTokenGoogleInvalido
+	}
+
+	identidad, err := s.verificadorGoogle.Verificar(ctx, idToken)
+	if err != nil {
+		// ErrDominioNoPermitido y ErrTokenGoogleInvalido ya son errores de
+		// negocio con su propio código HTTP: se dejan pasar tal cual. El
+		// resto (una falla de red buscando las claves de Google, por
+		// ejemplo) es un 500 legítimo y no hay que disfrazarlo de token
+		// inválido, o el problema se vuelve indepurable desde afuera.
+		if errors.Is(err, ErrDominioNoPermitido) || errors.Is(err, ErrTokenGoogleInvalido) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("verificando el token de Google: %w", err)
+	}
+
+	if !identidad.EmailVerificado {
+		return nil, ErrEmailNoVerificadoPorGoogle
+	}
+	if strings.TrimSpace(identidad.Sub) == "" || strings.TrimSpace(identidad.Email) == "" {
+		// Un token sin sub o sin email pasó la firma pero no sirve para
+		// identificar a nadie. No debería ocurrir con Google; si ocurre, es
+		// un token que no es lo que decimos que aceptamos.
+		return nil, ErrTokenGoogleInvalido
+	}
+	return identidad, nil
+}
+
+func primeroNoVacio(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return strings.TrimSpace(b)
 }
 
 // consumirTiempoDeVerificacion corre el mismo argon2id que haría un login
@@ -461,6 +696,14 @@ func (s *Service) CambiarPassword(ctx context.Context, usuarioID, passwordActual
 	u, err := s.repo.BuscarPorID(ctx, usuarioID)
 	if err != nil {
 		return "", err
+	}
+
+	// Una cuenta creada con Google no tiene contraseña actual que
+	// verificar. Acá sí se dice explícitamente (a diferencia del login):
+	// quien llega hasta este punto ya está autenticado y es dueño de la
+	// cuenta, así que no hay nada que revelarle sobre sí mismo.
+	if !u.PuedeIngresarConPassword() {
+		return "", ErrCuentaSinPassword
 	}
 
 	ok, err := s.verify(passwordActual, u.PasswordHash)

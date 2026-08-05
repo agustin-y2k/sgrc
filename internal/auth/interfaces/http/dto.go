@@ -27,6 +27,27 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+// googleLoginRequest lleva el ID token que el navegador recibió de Google.
+// Se llama "credential" porque es el nombre del campo con el que Google
+// Identity Services se lo entrega al frontend — mantener el mismo nombre
+// evita una traducción a mitad de camino que no aporta nada.
+type googleLoginRequest struct {
+	Credential string `json:"credential"`
+}
+
+// googleRegistroRequest es el login con Google más lo único que el token
+// no puede traer: qué va a dictar la persona (RF-01.3) y, si quiere
+// corregirlo, su nombre tal como figura en la escuela.
+type googleRegistroRequest struct {
+	Credential string `json:"credential"`
+	// Opcionales: vacíos, se usan los del token (given_name/family_name).
+	Nombre   string `json:"nombre,omitempty"`
+	Apellido string `json:"apellido,omitempty"`
+
+	CursoSolicitado   string `json:"cursoSolicitado,omitempty"`
+	MateriaSolicitada string `json:"materiaSolicitada,omitempty"`
+}
+
 type cambiarPasswordRequest struct {
 	PasswordActual string `json:"passwordActual"`
 	PasswordNueva  string `json:"passwordNueva"`
@@ -57,6 +78,20 @@ type loginResponse struct {
 	DebeCambiarPassword bool   `json:"debeCambiarPassword"`
 }
 
+// configPublicaResponse es lo que la pantalla de login necesita saber
+// antes de que haya alguien autenticado.
+//
+// El client ID de Google se sirve desde acá y no se compila dentro del
+// bundle (VITE_…) a propósito: el frontend se construye una sola vez
+// dentro de la imagen Docker, así que meterlo en el build obligaría a
+// reconstruir la imagen para cambiarlo. No es un secreto — viaja en cada
+// pedido a Google desde el navegador de todas formas.
+type configPublicaResponse struct {
+	// Vacío = este despliegue no tiene ingreso con Google configurado, y
+	// el frontend no muestra el botón.
+	GoogleClientID string `json:"googleClientId"`
+}
+
 type usuarioResponse struct {
 	ID                  string     `json:"id"`
 	Nombre              string     `json:"nombre"`
@@ -71,6 +106,17 @@ type usuarioResponse struct {
 	// pantalla de aprobación para saber a qué materia y curso asignarlo.
 	CursoSolicitado   string `json:"cursoSolicitado,omitempty"`
 	MateriaSolicitada string `json:"materiaSolicitada,omitempty"`
+
+	// Cómo puede entrar esta cuenta. Nunca se expone el google_sub en sí:
+	// alcanza con saber si el vínculo existe, y el identificador de la
+	// cuenta de Google de una persona no es asunto de nadie más.
+	//
+	// TienePassword es lo que le permite a la pantalla de perfil no
+	// ofrecerle "cambiar contraseña" a quien entra con Google y no tiene
+	// ninguna (el backend responde 409, pero es mejor no mostrar el
+	// formulario que explicar el error después).
+	TienePassword    bool `json:"tienePassword"`
+	VinculadaAGoogle bool `json:"vinculadaAGoogle"`
 }
 
 func toUsuarioResponse(u *domain.Usuario) usuarioResponse {
@@ -86,6 +132,8 @@ func toUsuarioResponse(u *domain.Usuario) usuarioResponse {
 		DebeCambiarPassword: u.DebeCambiarPassword,
 		CursoSolicitado:     u.CursoSolicitado,
 		MateriaSolicitada:   u.MateriaSolicitada,
+		TienePassword:       u.PuedeIngresarConPassword(),
+		VinculadaAGoogle:    u.PuedeIngresarConGoogle(),
 	}
 }
 

@@ -21,6 +21,9 @@ type Repo interface {
 
 	BuscarPorEmail(ctx context.Context, email string) (*domain.Usuario, error)
 	BuscarPorID(ctx context.Context, id string) (*domain.Usuario, error)
+	// BuscarPorGoogleSub busca por el identificador estable de la cuenta de
+	// Google. Devuelve ErrUsuarioNoEncontrado igual que las otras dos.
+	BuscarPorGoogleSub(ctx context.Context, sub string) (*domain.Usuario, error)
 	// Listar devuelve una página de usuarios filtrados por estado/rol (nil =
 	// sin ese filtro) y el total que matchean. Usado por GET
 	// /api/auth/usuarios (solo Admin).
@@ -41,6 +44,38 @@ type (
 	IDGenerator         func() string
 	GenerarTemporalFunc func() (string, error)
 )
+
+// IdentidadGoogle es lo que un ID token ya verificado afirma sobre quien
+// lo presenta. Es un tipo propio y no el JWT crudo a propósito: este
+// paquete no sabe nada de JWT ni de las claves públicas de Google — eso
+// vive entero en infrastructure/, del otro lado de VerificadorGoogle.
+type IdentidadGoogle struct {
+	// Sub es el identificador estable de la cuenta (claim `sub`). Es lo
+	// que se guarda en usuario.google_sub.
+	Sub string
+	// Email tal como lo declara Google, sin normalizar — normalizarlo es
+	// responsabilidad de este paquete, igual que con el registro común.
+	Email string
+	// EmailVerificado es el claim `email_verified`. Un token con esto en
+	// false no alcanza para vincular ni crear nada: sin él, cualquiera que
+	// pueda poner una dirección ajena en su perfil de Google entraría a la
+	// cuenta de otra persona.
+	EmailVerificado bool
+	// Nombre y Apellido salen de given_name / family_name. Pueden venir
+	// vacíos: no son claims obligatorios del estándar.
+	Nombre   string
+	Apellido string
+}
+
+// VerificadorGoogle valida un ID token contra las claves públicas de
+// Google y devuelve lo que el token afirma.
+//
+// La implementación real vive en infrastructure/. Que sea un puerto es lo
+// que permite testear todo el flujo de login/registro con Google sin
+// pegarle a Google ni firmar tokens de verdad en cada test.
+type VerificadorGoogle interface {
+	Verificar(ctx context.Context, idToken string) (*IdentidadGoogle, error)
+}
 
 // GestorMateriasDocente es el puerto hacia academic — necesario para la
 // cascada de RF-02.8 (dar de baja al docente). Nunca se importa

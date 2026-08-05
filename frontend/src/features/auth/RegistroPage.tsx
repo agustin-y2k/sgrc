@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-import { Link } from "react-router"
+import { Link, useLocation } from "react-router"
 import { z } from "zod"
 
 import { PantallaDeAcceso } from "@/components/layout/PantallaDeAcceso"
@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import * as authApi from "@/features/auth/api"
+import { BotonGoogle } from "@/features/auth/BotonGoogle"
+import { RegistroConGoogle } from "@/features/auth/RegistroConGoogle"
 import { getErrorMessage } from "@/lib/api-client"
 
 // Espeja RegistroRequest de internal/auth/interfaces/http/dto.go / docs/08-api-spec.yaml.
@@ -44,6 +46,18 @@ type RegistroValues = z.infer<typeof registroSchema>
 export function RegistroPage() {
   const [error, setError] = useState<string | null>(null)
   const [enviado, setEnviado] = useState(false)
+  const location = useLocation()
+
+  // La credencial puede llegar de dos lados: de la pantalla de login
+  // (alguien apretó "Iniciar sesión con Google" y todavía no tenía cuenta,
+  // ver LoginPage) o del botón de esta misma pantalla. En los dos casos el
+  // token ya está en la mano, así que no hay que volver a pedírselo a
+  // Google.
+  const credencialDelLogin = (location.state as { credencialDeGoogle?: string } | null)
+    ?.credencialDeGoogle
+  const [credencialDeGoogle, setCredencialDeGoogle] = useState<string | null>(
+    credencialDelLogin ?? null
+  )
 
   const form = useForm<RegistroValues>({
     resolver: zodResolver(registroSchema),
@@ -90,6 +104,17 @@ export function RegistroPage() {
             </Button>
           </CardContent>
         </Card>
+      </PantallaDeAcceso>
+    )
+  }
+
+  if (credencialDeGoogle) {
+    return (
+      <PantallaDeAcceso ancho="max-w-md">
+        <RegistroConGoogle
+          credencial={credencialDeGoogle}
+          onRegistrado={() => setEnviado(true)}
+        />
       </PantallaDeAcceso>
     )
   }
@@ -215,6 +240,10 @@ export function RegistroPage() {
               <Button type="submit" disabled={form.formState.isSubmitting}>
                 Crear cuenta
               </Button>
+              {/* Con Google no hace falta elegir contraseña: el token trae
+                  el nombre y el email ya verificados, y solo queda pedir
+                  qué va a dictar (RegistroConGoogle). */}
+              <BotonGoogle texto="signup_with" onCredential={setCredencialDeGoogle} />
               <p className="text-muted-foreground text-center text-sm">
                 ¿Ya tenés cuenta?{" "}
                 <Link to="/login" className="text-primary underline">

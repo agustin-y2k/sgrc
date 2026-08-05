@@ -36,6 +36,23 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 		middleware.RateLimitPorEmail(10, time.Minute),
 		h.Login)
 
+	// Ingreso con Google. Mismos límites que sus equivalentes con
+	// contraseña, y por la misma razón: son endpoints públicos.
+	//
+	// No llevan el límite por email (RateLimitPorEmail) porque acá no hay
+	// ninguno que leer — el email viaja firmado dentro del token, no en un
+	// campo del cuerpo. Tampoco hace falta: el límite por cuenta existe
+	// contra la prueba de contraseñas, y contra un token firmado por Google
+	// no hay nada que probar. Quien no tiene la cuenta no obtiene el token.
+	auth.Post("/google", middleware.RateLimit(30, time.Minute), h.LoginConGoogle)
+	auth.Post("/google/registro", middleware.RateLimit(5, time.Minute), h.RegistrarConGoogle)
+
+	// Sin rate limit: es una lectura de configuración estática que la
+	// pantalla de login hace una vez al abrirse, antes de que haya nadie
+	// autenticado. Limitarla rompería el login de una escuela entera detrás
+	// del mismo NAT sin proteger nada.
+	auth.Get("/config", h.Config)
+
 	// Requieren estar autenticado, cualquier rol.
 	//
 	// Estas dos son las únicas rutas de todo el sistema que aceptan un token

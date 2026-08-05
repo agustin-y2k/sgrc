@@ -55,6 +55,7 @@ describe("UsuariosPage", () => {
       errorDeSesion: null,
       login: vi.fn(),
       logout: vi.fn(),
+      loginConGoogle: vi.fn(),
       refetchUser: vi.fn(),
     })
     vi.mocked(adminApi.cambiarEstadoUsuario).mockResolvedValue(undefined)

@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/features/auth/AuthContext"
-import { getErrorMessage } from "@/lib/api-client"
+import { BotonGoogle } from "@/features/auth/BotonGoogle"
+import { ApiError, getErrorMessage } from "@/lib/api-client"
 
 const loginSchema = z.object({
   email: z.string().email("Ingresá un email válido"),
@@ -34,7 +35,7 @@ const loginSchema = z.object({
 type LoginValues = z.infer<typeof loginSchema>
 
 export function LoginPage() {
-  const { login } = useAuth()
+  const { login, loginConGoogle } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [error, setError] = useState<string | null>(null)
@@ -60,6 +61,27 @@ export function LoginPage() {
         replace: true,
       })
     } catch (err) {
+      setError(getErrorMessage(err))
+    }
+  }
+
+  // Google devolvió un token válido, pero eso todavía no dice si la persona
+  // tiene cuenta en el sistema. El 404 es la respuesta normal la primera
+  // vez: significa "el token está bien, la cuenta no existe", y de ahí se
+  // sigue al registro llevando el mismo token, para no hacer apretar el
+  // botón de Google dos veces.
+  async function onCredencialDeGoogle(credencial: string) {
+    setError(null)
+    try {
+      const { debeCambiarPassword } = await loginConGoogle(credencial)
+      navigate(debeCambiarPassword ? "/cambiar-password" : (destinoOriginal ?? "/"), {
+        replace: true,
+      })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        navigate("/registro", { state: { credencialDeGoogle: credencial } })
+        return
+      }
       setError(getErrorMessage(err))
     }
   }
@@ -119,6 +141,10 @@ export function LoginPage() {
               >
                 Iniciar sesión
               </Button>
+              {/* Va dentro del form pero después del botón: si el
+                  despliegue no tiene Google configurado, no se dibuja nada
+                  y el formulario queda exactamente como antes. */}
+              <BotonGoogle onCredential={onCredencialDeGoogle} />
               <p className="text-muted-foreground text-center text-sm">
                 ¿No tenés cuenta?{" "}
                 <Link to="/registro" className="text-primary underline">
