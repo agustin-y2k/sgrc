@@ -43,6 +43,7 @@ describe("AdminRoute", () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      loginConGoogle: vi.fn(),
       errorDeSesion: null,
       refetchUser: vi.fn(),
     })
@@ -57,6 +58,7 @@ describe("AdminRoute", () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      loginConGoogle: vi.fn(),
       errorDeSesion: null,
       refetchUser: vi.fn(),
     })

@@ -155,7 +155,30 @@ type Usuario struct {
 	// de intención para que el Admin sepa a qué asignarla, no un vínculo.
 	CursoSolicitado   string
 	MateriaSolicitada string
+
+	// GoogleSub es el claim `sub` del ID token de Google: el identificador
+	// estable de esa cuenta. Vacío en las cuentas que solo entran con
+	// contraseña.
+	//
+	// Se guarda el sub y no el email porque el email de una cuenta de
+	// Google puede cambiar y el sub no. El email sigue siendo la identidad
+	// dentro del sistema; el vínculo con Google cuelga del sub.
+	GoogleSub string
 }
+
+// PuedeIngresarConPassword indica si la cuenta tiene contraseña propia.
+//
+// Es falso en las cuentas creadas con Google, que no tienen ninguna: a
+// quien las verifica es Google. Sin este chequeo, el login local llamaría
+// a verify() contra un hash vacío —error de formato, o sea 500— y
+// CambiarPassword pediría "la contraseña actual" de algo que no existe.
+func (u *Usuario) PuedeIngresarConPassword() bool { return u.PasswordHash != "" }
+
+// PuedeIngresarConGoogle indica si la cuenta está vinculada a una cuenta
+// de Google. Una misma cuenta puede tener las dos formas de ingreso: un
+// docente que se registró con contraseña y después entra con Google
+// conserva las dos (ver migrations/008_login_con_google.sql).
+func (u *Usuario) PuedeIngresarConGoogle() bool { return u.GoogleSub != "" }
 
 // CambiarEstado aplica una transición si es válida, o devuelve
 // ErrTransicionInvalida si no. Es la única forma permitida de cambiar

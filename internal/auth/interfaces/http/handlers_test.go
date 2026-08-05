@@ -52,6 +52,18 @@ func (r *fakeRepo) BuscarPorID(ctx context.Context, id string) (*domain.Usuario,
 	return u, nil
 }
 
+func (r *fakeRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*domain.Usuario, error) {
+	if sub == "" {
+		return nil, application.ErrUsuarioNoEncontrado
+	}
+	for _, u := range r.usuarios {
+		if u.GoogleSub == sub {
+			return u, nil
+		}
+	}
+	return nil, application.ErrUsuarioNoEncontrado
+}
+
 func (r *fakeRepo) Listar(ctx context.Context, filtroEstado *domain.Estado, filtroRol *domain.Rol, pagina paginacion.Pagina) ([]*domain.Usuario, int, error) {
 	var resultado []*domain.Usuario
 	for _, id := range r.idsOrdenados() {
@@ -153,7 +165,14 @@ func (f *fakeCanceladorReservas) CancelarReservasFuturasDeMateria(ctx context.Co
 	return 0, nil
 }
 
+// nuevaAppDeTest arma la app sin ingreso con Google — que es el modo en el
+// que corre un despliegue sin GOOGLE_CLIENT_ID, y el que usaban todos los
+// tests que ya existían.
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
+	return nuevaAppDeTestConGoogle(repo, nil, "")
+}
+
+func nuevaAppDeTestConGoogle(repo *fakeRepo, verificador application.VerificadorGoogle, clientID string) *fiber.App {
 	contadorID = 0
 	svc := application.NewService(
 		repo,
@@ -166,8 +185,9 @@ func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 		func() time.Time { return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC) },
 		&fakeGestorMaterias{},
 		&fakeCanceladorReservas{},
+		verificador,
 	)
-	h := NewHandler(svc, fakeAuditor{})
+	h := NewHandler(svc, fakeAuditor{}, clientID)
 
 	app := fiber.New()
 	RegisterRoutes(app, h, registroDePrueba.Autenticacion(testSecret))

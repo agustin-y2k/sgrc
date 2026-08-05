@@ -34,6 +34,7 @@ describe("LoginPage", () => {
       isLoading: false,
       login,
       logout: vi.fn(),
+      loginConGoogle: vi.fn(),
       errorDeSesion: null,
       refetchUser: vi.fn(),
     })
@@ -55,6 +56,7 @@ describe("LoginPage", () => {
       isLoading: false,
       login,
       logout: vi.fn(),
+      loginConGoogle: vi.fn(),
       errorDeSesion: null,
       refetchUser: vi.fn(),
     })
@@ -76,6 +78,7 @@ describe("LoginPage", () => {
       isLoading: false,
       login,
       logout: vi.fn(),
+      loginConGoogle: vi.fn(),
       errorDeSesion: null,
       refetchUser: vi.fn(),
     })
@@ -96,6 +99,7 @@ describe("LoginPage", () => {
       isLoading: false,
       login,
       logout: vi.fn(),
+      loginConGoogle: vi.fn(),
       errorDeSesion: null,
       refetchUser: vi.fn(),
     })
@@ -116,6 +120,7 @@ describe("LoginPage", () => {
       isLoading: false,
       login,
       logout: vi.fn(),
+      loginConGoogle: vi.fn(),
       errorDeSesion: null,
       refetchUser: vi.fn(),
     })
@@ -136,6 +141,7 @@ describe("LoginPage", () => {
       isLoading: false,
       login,
       logout: vi.fn(),
+      loginConGoogle: vi.fn(),
       errorDeSesion: null,
       refetchUser: vi.fn(),
     })

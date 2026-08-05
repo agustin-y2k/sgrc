@@ -5,6 +5,7 @@
 - JWT firmados **`HS256`** (secreto simétrico) — un solo proceso firma y verifica, así que un secreto simétrico cumple la función sin la gestión de un par de claves asimétricas (ver `06-arquitectura.md` §7).
 - Access token: 1h (`JWT_ACCESS_TTL`). **No hay refresh token**: cuando el access expira se vuelve a iniciar sesión. Para una jornada escolar, renovar la sesión una vez al día es aceptable, y evita el segundo token con su propio almacenamiento, su rotación y su revocación.
 - Login en un solo paso, con email y contraseña.
+- **Ingreso con cuenta de Google (opcional).** Habilitado solo si el despliegue configura `GOOGLE_CLIENT_ID`; sin eso, los endpoints responden 503 y el frontend no dibuja el botón. Ver §1.1.
 - **Una baja tiene efecto inmediato.** El token sigue siendo la prueba de identidad, pero no alcanza por sí solo: cada request autenticado consulta el estado de la cuenta antes de dejar pasar. Si el usuario ya no existe, no está `APROBADA`, o cambió de rol, el request se rechaza aunque el token siga sin expirar.
 
   Antes esto era al revés y estaba documentado como una decisión consciente: el JWT era stateless y una cuenta dada de baja conservaba acceso de escritura hasta una hora. La ventana era real —se verificó con un token emitido antes de la baja escribiendo en la base después— y RF-02.8/02.9 tratan la baja como efectiva de inmediato, así que la decisión se revirtió.
@@ -14,6 +15,35 @@
 - **El secreto y la verificación de cuenta viajan juntos.** El middleware se construye con los dos a la vez y `RegisterRoutes` de cada paquete recibe ese valor, no el secreto pelado. Es deliberado: pasarlos por separado permitiría montar una ruta que valide la firma y se saltee el estado de la cuenta, que es exactamente el agujero que esto cierra.
 
 - **El login tarda lo mismo exista o no la cuenta.** Con un email inexistente se devolvía sin hashear nada, así que medir el tiempo de respuesta alcanzaba para enumerar quién tiene cuenta en la escuela — el mensaje de error era el mismo, pero el reloj no. Ahora ese camino corre un `argon2id` contra un hash de descarte que no le pertenece a nadie. El hash se calcula una sola vez por proceso: recalcularlo en cada intento habría igualado los tiempos, pero convertiría un endpoint sin autenticar en una forma de gastar 64 MB por request.
+
+## 1.1 Ingreso con cuenta de Google
+
+Se usa el **flujo de ID token**: el navegador obtiene de Google un JWT firmado, lo manda a `POST /api/auth/google`, y el backend lo verifica y emite el token de siempre. No hay redirects, no hay estado de sesión OAuth, y **no interviene ningún client secret** — el client ID es público. A partir de la respuesta, la sesión es idéntica a la de un login con contraseña: todo el RBAC de §3 sigue funcionando sin cambios porque el token que circula es el nuestro.
+
+**Qué se verifica en cada ID token** (`internal/auth/infrastructure/google_idtoken.go`):
+
+| Chequeo | Por qué |
+|---|---|
+| Firma RS256 contra las claves públicas vigentes de Google | Es lo que hace que el token no se pueda inventar |
+| Algoritmo fijado a `RS256` por lista blanca | Sin eso, un token con `alg: none` —o un HMAC firmado con la propia clave pública, que es pública— sería aceptado. Es la familia de bugs clásica de JWT |
+| `aud` igual a **nuestro** client ID | Google le firma ID tokens a cualquiera con una app registrada. Sin este chequeo, alguien podría presentar un token legítimo emitido para su propia aplicación y entrar como quien quisiera. Es el chequeo más importante de todos |
+| `iss` de Google y `exp` vigente | Un token sin `exp` no caduca nunca: se rechaza |
+| `email_verified` en `true` | Sin esa garantía, cualquiera que pueda escribir una dirección ajena en su perfil de Google entraría a la cuenta de esa persona |
+| Dominio del email en `GOOGLE_DOMINIOS_PERMITIDOS`, si está configurado | No es un control de acceso (la aprobación del Admin lo es): evita que el Admin tenga que revisar solicitudes de cualquier persona de internet |
+
+Las claves públicas se cachean respetando el `max-age` que declara Google, acotado entre 5 minutos y 12 horas: un cache demasiado largo dejaría todos los logins fallando después de una rotación de claves, y uno demasiado corto convertiría cada login en un pedido a Google. Un token con un `kid` desconocido provoca **un solo** refresco de claves y después se rechaza, para que un token basura no sea un amplificador de tráfico contra Google.
+
+**Una falla de red al buscar las claves no se reporta como token inválido.** Devuelve 500, no 401: culpar al usuario por un problema nuestro deja el incidente sin rastro de la causa.
+
+**Vincular por email es seguro solo porque antes se exigió `email_verified`.** Un docente que ya tenía cuenta con contraseña y entra con Google queda vinculado a su misma cuenta y **conserva la contraseña** — las dos formas de ingreso conviven (`migrations/008_login_con_google.sql`). Una cuenta en `BAJA` no se vincula: RF-02.9 la hace terminal y no se reactiva por la puerta de atrás.
+
+**Una cuenta creada con Google queda `PENDIENTE` igual que cualquier otra.** Tener una cuenta de Google válida prueba quién sos, no que la escuela te conozca.
+
+**El login con contraseña no revela que una cuenta entra con Google.** Una cuenta sin `password_hash` recibe exactamente el mismo error y consume exactamente el mismo tiempo que un email inexistente (mismo argumento que el párrafo anterior de §1). Decir "esta cuenta entra con Google" sería más amable, pero convertiría el endpoint en un oráculo de qué direcciones tienen cuenta en la escuela y con qué la abrieron. La pantalla de login tiene el botón de Google al lado, que es donde esa persona encuentra la salida.
+
+**Es lo único que carga código de un tercero.** La biblioteca de Google (`accounts.google.com/gsi/client`) no se puede empaquetar en el bundle: la URL es parte del contrato, porque el script se comunica con esa misma página, y el botón se dibuja en un iframe de ese origen. La CSP del HTML lo habilita explícitamente en `script-src`, `frame-src` y `connect-src` (ver §4) — si eso se quita, el botón deja de aparecer sin más síntoma que su ausencia.
+
+**`POST /api/auth/cambiar-password` sí lo dice explícitamente** (409): quien llega ahí ya está autenticado y es dueño de la cuenta, así que no hay nada que revelarle sobre sí mismo. Un Admin puede darle una contraseña con `reset-password` sin romper el vínculo con Google — es la forma de devolverle el acceso a alguien que perdió su cuenta de Google.
 
 ## 2. Estructura del JWT
 
@@ -64,14 +94,25 @@ base al verificar la cuenta (§1).
 | Control | Detalle |
 |---|---|
 | HTTPS | Cloudflare termina TLS; el túnel cifra hasta el servidor |
-| Rate limiting | `/api/auth/login`: 30/min por IP **y** 10/min por cuenta. `/api/auth/registro`: 5/min por IP |
+| Rate limiting | `/api/auth/login`: 30/min por IP **y** 10/min por cuenta. `/api/auth/registro`: 5/min por IP. `/api/auth/google`: 30/min por IP; `/api/auth/google/registro`: 5/min por IP |
 | IP real del cliente | `CF-Connecting-IP`, aceptado solo desde `TRUSTED_PROXIES` |
 | Password temporal | La API responde 403 mientras `debe_cambiar_password` siga en `true` |
-| Headers | `HSTS`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `CSP` restrictiva |
+| Headers | `HSTS`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `CSP` restrictiva. En **dos** lugares: el binario Go los pone en `/api` y nginx en el HTML y los assets (ver abajo) |
 | CORS | Solo dominio del frontend, sin wildcard |
 | Validación | Estricta en cada handler; nunca se confía en el frontend |
 | Secrets | `.env` fuera de git + Docker secrets. Secreto JWT nunca en el repo |
 | Permisos DB | Un usuario Postgres de aplicación con GRANT sobre `sgrc_db`, sin permisos de `SUPERUSER` |
+
+### Por qué la CSP está en dos lugares y no en uno
+
+Los headers de `internal/shared/middleware/security.go` los pone el binario Go, así que salen únicamente en las respuestas de `/api` — que son JSON, donde una CSP no restringe nada real. **El HTML de la SPA lo sirve nginx**, y durante un tiempo salió sin ninguna CSP: la política existía, pero justo en el único documento que un navegador puede ser engañado de ejecutar no se aplicaba.
+
+Eso lo cubre `frontend/nginx-seguridad.conf`, incluido desde los dos `location` que sirven contenido propio. No se ponen en el bloque `server` por dos razones: nginx deja de heredar los `add_header` en cuanto un bloque define uno propio (y `/assets/` define su `Cache-Control`), y las rutas proxeadas a `/api` quedarían con dos headers `Content-Security-Policy` distintos en la misma respuesta.
+
+Dos decisiones dentro de esa política merecen quedar escritas:
+
+- **`script-src` autoriza el script inline de `index.html` por su hash SHA-256, no con `'unsafe-inline'`.** Ese script aplica el tema antes de pintar; sin él vuelve el fogonazo blanco al recargar en modo oscuro. Un `'unsafe-inline'` habría sido más cómodo pero deja pasar cualquier script que una inyección logre meter en el HTML, que es exactamente lo que la CSP está para impedir. El costo del hash es que se desincroniza en silencio: si alguien edita el script y no actualiza la CSP, el navegador lo bloquea y el único síntoma es el fogonazo, que nadie asocia con un header. Por eso hay un test (`frontend/csp.test.ts`) que recalcula el hash y falla con el valor nuevo listo para pegar.
+- **`style-src` sí lleva `'unsafe-inline'`, y es deliberado.** La grilla del calendario posiciona cada bloque con `style={{top, height}}` y las barras de los reportes fijan su ancho igual; sin eso el calendario queda con todos los bloques apilados y sin alto. Una inyección de CSS es de otro orden de gravedad que una de script, que sí queda cerrada.
 
 ### Por qué el login se limita también por cuenta
 
