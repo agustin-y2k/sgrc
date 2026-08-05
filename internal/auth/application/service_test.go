@@ -1258,3 +1258,106 @@ func TestCrearAdmin_NoLlevaSolicitud(t *testing.T) {
 		t.Errorf("un Admin no declara curso ni materia: %+v", u)
 	}
 }
+
+// ── PromoverAAdmin ──────────────────────────────────────────────────────
+
+func TestPromoverAAdmin_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Email: "ada@escuela.edu.ar", Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	if err := svc.PromoverAAdmin(context.Background(), "u1"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if !repo.usuarios["u1"].EsAdmin() {
+		t.Error("la promoción no se persistió")
+	}
+}
+
+// Promover conserva todo lo demás de la cuenta. Un docente que pasa a
+// coordinar suele seguir dando clase: borrarle nada por una promoción le
+// cancelaría las clases que ya tiene tomadas.
+func TestPromoverAAdmin_NoTocaNadaMasDeLaCuenta(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Nombre: "Ada", Apellido: "Lovelace", Email: "ada@escuela.edu.ar",
+		PasswordHash: "hash:password123", GoogleSub: "112233",
+		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
+		CursoSolicitado: "5°A", MateriaSolicitada: "Programación",
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	if err := svc.PromoverAAdmin(context.Background(), "u1"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	u := repo.usuarios["u1"]
+	if u.Estado != domain.EstadoAprobada {
+		t.Errorf("el estado no debería cambiar: %s", u.Estado)
+	}
+	if u.PasswordHash != "hash:password123" || u.GoogleSub != "112233" {
+		t.Error("las formas de ingreso tienen que quedar intactas")
+	}
+	if u.Email != "ada@escuela.edu.ar" || u.Nombre != "Ada" {
+		t.Error("los datos personales tienen que quedar intactos")
+	}
+}
+
+func TestPromoverAAdmin_CuentaPendiente_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Rol: domain.RolDocente, Estado: domain.EstadoPendiente,
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	err := svc.PromoverAAdmin(context.Background(), "u1")
+
+	if !errors.Is(err, domain.ErrPromocionInvalida) {
+		t.Fatalf("esperaba ErrPromocionInvalida, hubo: %v", err)
+	}
+	if repo.usuarios["u1"].EsAdmin() {
+		t.Error("no debería haber promovido nada")
+	}
+}
+
+func TestPromoverAAdmin_YaEsAdmin_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	if err := svc.PromoverAAdmin(context.Background(), "u1"); !errors.Is(err, domain.ErrPromocionInvalida) {
+		t.Fatalf("esperaba ErrPromocionInvalida, hubo: %v", err)
+	}
+}
+
+func TestPromoverAAdmin_UsuarioInexistente(t *testing.T) {
+	svc := nuevoServicioDeTest(nuevoFakeRepo())
+
+	if err := svc.PromoverAAdmin(context.Background(), "no-existe"); !errors.Is(err, ErrUsuarioNoEncontrado) {
+		t.Fatalf("esperaba ErrUsuarioNoEncontrado, hubo: %v", err)
+	}
+}
+
+// Promover solo agrega Admins, nunca los saca, así que no puede dejar al
+// sistema sin ninguno (RF-01.8). Este test fija que no se le agregue por
+// error el guard del último Admin, que bloquearía promociones legítimas
+// cuando hay un solo Admin — justamente el caso en que más se necesita.
+func TestPromoverAAdmin_ConUnSoloAdminEnElSistema_Funciona(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["admin"] = &domain.Usuario{
+		ID: "admin", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
+	}
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	if err := svc.PromoverAAdmin(context.Background(), "u1"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+}

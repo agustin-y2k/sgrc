@@ -60,6 +60,7 @@ describe("UsuariosPage", () => {
     })
     vi.mocked(adminApi.cambiarEstadoUsuario).mockResolvedValue(undefined)
     vi.mocked(adminApi.eliminarUsuario).mockResolvedValue(undefined)
+    vi.mocked(adminApi.promoverAAdmin).mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -236,5 +237,71 @@ describe("UsuariosPage", () => {
     // page va siempre: cambiar el filtro además vuelve a la primera página,
     // porque la anterior puede caer más allá del final de la nueva colección.
     expect(adminApi.listarUsuarios).toHaveBeenLastCalledWith({ estado: "BAJA", page: 1 })
+  })
+
+  // ── Promover a admin ──────────────────────────────────────────────────
+
+  // Dar permisos de Admin no se puede deshacer desde el sistema, así que
+  // pide confirmación igual que una baja aunque no destruya nada.
+  it("promover pide confirmación y avisa que no se puede deshacer", async () => {
+    conUsuarios(usuario({ estado: "APROBADA" }))
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Promover a admin" }))
+
+    expect(adminApi.promoverAAdmin).not.toHaveBeenCalled()
+    expect(screen.getByText(/No se puede deshacer/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Confirmar" }))
+    expect(adminApi.promoverAAdmin).toHaveBeenCalledWith("u1")
+  })
+
+  it("se puede volver atrás sin promover", async () => {
+    conUsuarios(usuario({ estado: "APROBADA" }))
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Promover a admin" }))
+    await user.click(screen.getByRole("button", { name: "Volver" }))
+
+    expect(adminApi.promoverAAdmin).not.toHaveBeenCalled()
+  })
+
+  // El backend rechaza promover a quien ya es Admin: ofrecer un botón que
+  // siempre falla es peor que no ofrecerlo.
+  it("no ofrece promover a una cuenta que ya es ADMIN", async () => {
+    conUsuarios(usuario({ estado: "APROBADA", rol: "ADMIN" }))
+    renderPagina()
+    await screen.findByText(/Ada Lovelace/)
+
+    expect(
+      screen.queryByRole("button", { name: "Promover a admin" })
+    ).not.toBeInTheDocument()
+  })
+
+  // Promover una cuenta PENDIENTE sería aprobarla por la puerta de atrás.
+  it("no ofrece promover a una cuenta que no está aprobada", async () => {
+    conUsuarios(usuario({ estado: "PENDIENTE" }))
+    renderPagina()
+    await screen.findByText(/Ada Lovelace/)
+
+    expect(
+      screen.queryByRole("button", { name: "Promover a admin" })
+    ).not.toBeInTheDocument()
+  })
+
+  it("muestra el mensaje del backend si la promoción falla", async () => {
+    conUsuarios(usuario({ estado: "APROBADA" }))
+    vi.mocked(adminApi.promoverAAdmin).mockRejectedValue(
+      new ApiError(409, "no se puede promover esta cuenta a ADMIN: ya tiene rol ADMIN")
+    )
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Promover a admin" }))
+    await user.click(screen.getByRole("button", { name: "Confirmar" }))
+
+    expect(await screen.findByText(/ya tiene rol ADMIN/)).toBeInTheDocument()
   })
 })
