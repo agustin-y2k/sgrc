@@ -135,6 +135,17 @@ components:
         materiaSolicitada:
           type: string
           description: Ídem, para la materia.
+        tienePassword:
+          type: boolean
+          description: |
+            Si la cuenta puede ingresar con email y contraseña. Es false en las
+            creadas con Google, que no tienen ninguna: la pantalla de perfil usa esto
+            para no ofrecerles "cambiar contraseña" (que respondería 409).
+        vinculadaAGoogle:
+          type: boolean
+          description: |
+            Si la cuenta puede ingresar con Google. Las dos formas no son excluyentes.
+            Nunca se expone el identificador de la cuenta de Google en sí.
 
     # ── Academic ──
     CicloLectivo:
@@ -388,6 +399,110 @@ paths:
         "401": { description: Credenciales inválidas }
         "403": { description: Cuenta no aprobada }
 
+  /api/auth/config:
+    get:
+      tags: [auth]
+      summary: Configuración pública (sin autenticar)
+      description: |
+        Lo que la pantalla de login necesita saber antes de que haya sesión. Hoy es
+        solo el client ID de Google: vacío significa que este despliegue no tiene
+        GOOGLE_CLIENT_ID configurado y el frontend no dibuja el botón.
+
+        El client ID viaja acá y no compilado en el bundle porque el frontend se
+        construye una vez dentro de la imagen Docker; en el build habría que
+        reconstruir la imagen para cambiarlo. No es un secreto: el navegador se lo
+        manda a Google en cada pedido.
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [googleClientId]
+                properties:
+                  googleClientId: { type: string, example: "123-abc.apps.googleusercontent.com" }
+
+  /api/auth/google:
+    post:
+      tags: [auth]
+      summary: Ingreso con una cuenta de Google ya registrada
+      description: |
+        Recibe el ID token que Google le entregó al navegador, verifica su firma
+        contra las claves públicas de Google (RS256, `aud` = nuestro client ID,
+        `iss` de Google, `exp` vigente y `email_verified` en true) y devuelve el JWT
+        propio del sistema — el mismo que devuelve /api/auth/login.
+
+        No crea cuentas. Si el token es válido pero no hay ninguna cuenta con ese
+        email, responde **404**: eso no es un fallo sino el camino normal la primera
+        vez, y es lo que le indica al frontend que tiene que llevar a la persona a
+        POST /api/auth/google/registro con el mismo token.
+
+        Si existe una cuenta con ese email creada con contraseña, se le agrega el
+        vínculo con Google y conserva su contraseña: las dos formas de ingreso
+        conviven. Vincular por email es seguro solo porque antes se exigió
+        `email_verified`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [credential]
+              properties:
+                credential: { type: string, description: ID token emitido por Google }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        "400": { description: Cuerpo malformado }
+        "401": { description: El token de Google no es válido (firma, aud, exp o emisor) }
+        "403":
+          description: |
+            Google no confirmó el email (`email_verified` en false), el dominio no está
+            en GOOGLE_DOMINIOS_PERMITIDOS, o la cuenta existe pero no está APROBADA.
+        "404": { description: Token válido pero todavía no hay cuenta con ese email — seguir al registro }
+        "409": { description: El email pertenece a una cuenta en BAJA (RF-01.3) }
+        "503": { description: Este despliegue no tiene GOOGLE_CLIENT_ID configurado }
+
+  /api/auth/google/registro:
+    post:
+      tags: [auth]
+      summary: Autorregistro de docente con cuenta de Google
+      description: |
+        Igual que /api/auth/registro pero sin contraseña: la cuenta queda con rol
+        DOCENTE y estado PENDIENTE hasta que un ADMIN la apruebe, y notifica a todos
+        los Admin (RF-05.6). Tener una cuenta de Google válida prueba quién sos, no
+        que la escuela te conozca.
+
+        `nombre` y `apellido` son opcionales: vacíos, se usan los del token
+        (`given_name` / `family_name`). Se aceptan del request porque esos claims no
+        son obligatorios y porque el nombre de una cuenta personal no siempre es el
+        que figura en la escuela. El email NO se acepta del request: sale del token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [credential]
+              properties:
+                credential: { type: string }
+                nombre: { type: string, maxLength: 100 }
+                apellido: { type: string, maxLength: 100 }
+                cursoSolicitado: { type: string, maxLength: 100 }
+                materiaSolicitada: { type: string, maxLength: 100 }
+      responses:
+        "201": { description: Cuenta creada, pendiente de aprobación }
+        "400": { description: Cuerpo malformado, o falta el nombre tanto en el request como en el token }
+        "401": { description: El token de Google no es válido }
+        "403": { description: Email sin confirmar por Google, o dominio no habilitado }
+        "409":
+          description: |
+            Ya existe una cuenta para ese email o esa cuenta de Google. Si pertenece a
+            una cuenta en BAJA, el mensaje lo indica explícitamente (RF-01.3).
+        "503": { description: Este despliegue no tiene GOOGLE_CLIENT_ID configurado }
+
   /api/auth/me:
     get:
       tags: [auth]
@@ -407,6 +522,11 @@ paths:
         Disponible para cualquier usuario autenticado en cualquier momento (RF-01.7),
         no solo cuando debeCambiarPassword=true. Si la cuenta tenía ese flag en true,
         se limpia a false al cambiar exitosamente.
+
+        Una cuenta creada con Google no tiene contraseña actual que verificar ni nada
+        que cambiar: responde 409. Un Admin sí puede generarle una con
+        POST /api/auth/usuarios/{id}/reset-password, que es la forma de devolverle el
+        acceso a alguien que perdió su cuenta de Google; eso no rompe el vínculo.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -421,6 +541,7 @@ paths:
       responses:
         "200": { description: Contraseña actualizada }
         "401": { description: passwordActual incorrecta }
+        "409": { description: La cuenta ingresa con Google y no tiene contraseña }
 
   /health:
     get:

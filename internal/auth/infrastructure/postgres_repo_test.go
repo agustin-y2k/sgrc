@@ -574,7 +574,8 @@ func TestUltimoAdmin_DosBajasConcurrentes_NuncaQuedanCeroAdmins(t *testing.T) {
 		func(string, string) (bool, error) { return true, nil },
 		func(*domain.Usuario) (string, error) { return "token", nil },
 		NuevoID, func() (string, error) { return "temporal", nil },
-		time.Now, sinMaterias{}, sinCancelaciones{})
+		time.Now, sinMaterias{}, sinCancelaciones{},
+		nil) // este test es sobre la concurrencia del guard de Admins, no sobre Google
 
 	errores := make(chan error, 2)
 	var listos sync.WaitGroup

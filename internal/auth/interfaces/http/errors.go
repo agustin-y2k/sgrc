@@ -38,6 +38,32 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrEmailYaRegistrado):
 		return fiber.NewError(fiber.StatusConflict, "email ya registrado")
 
+	// ── Ingreso con Google ───────────────────────────────────────────
+	//
+	// El 404 es parte del contrato de POST /api/auth/google, no un fallo:
+	// significa "el token es bueno pero todavía no tenés cuenta", y es lo
+	// que el frontend usa para mandar a completar el registro.
+	case errors.Is(err, application.ErrCuentaGoogleNoRegistrada):
+		return fiber.NewError(fiber.StatusNotFound, err.Error())
+
+	case errors.Is(err, application.ErrTokenGoogleInvalido):
+		// Mensaje fijo, no err.Error(): el error envuelto lleva el detalle
+		// de qué chequeo falló (firma, aud, exp) y eso queda para el log
+		// del servidor, no para quien mandó el token.
+		return fiber.NewError(fiber.StatusUnauthorized, "el token de Google no es válido")
+
+	case errors.Is(err, application.ErrEmailNoVerificadoPorGoogle),
+		errors.Is(err, application.ErrDominioNoPermitido):
+		return fiber.NewError(fiber.StatusForbidden, err.Error())
+
+	case errors.Is(err, application.ErrLoginGoogleNoDisponible):
+		// 503 y no 400: el pedido está bien formado, es el sistema el que
+		// no tiene esta capacidad configurada.
+		return fiber.NewError(fiber.StatusServiceUnavailable, err.Error())
+
+	case errors.Is(err, application.ErrCuentaSinPassword):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
+
 	case errors.Is(err, application.ErrPasswordCorta),
 		errors.Is(err, application.ErrDatosObligatorios),
 		errors.Is(err, domain.ErrEmailInvalido):

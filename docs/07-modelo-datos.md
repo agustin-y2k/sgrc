@@ -18,7 +18,7 @@ erDiagram
     REGLA_RECURRENCIA ||--o{ RESERVA_GRUPO : materializa
     RESERVA_GRUPO ||--o{ RESERVA : contiene
 
-    USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string rol; string estado; timestamp fecha_registro; uuid aprobado_por; string curso_solicitado; string materia_solicitada }
+    USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; string rol; string estado; timestamp fecha_registro; uuid aprobado_por; string curso_solicitado; string materia_solicitada }
     CARRO { uuid id; string nombre; string descripcion }
     PC { uuid id; uuid carro_id; int identificador; bigint numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool dada_de_baja; timestamp fecha_alta }
     INCIDENCIA { uuid id; uuid pc_id; uuid reportado_por; string descripcion; string gravedad; timestamp fecha; bool enviado_dge; timestamp fecha_envio_dge; string estado }
@@ -55,7 +55,7 @@ El esquema distingue a propósito entre **instantes** y **hora de pared**, y con
 | nombre | VARCHAR(100) | NOT NULL |
 | apellido | VARCHAR(100) | NOT NULL |
 | email | VARCHAR(150) | UNIQUE, NOT NULL |
-| password_hash | VARCHAR(255) | NOT NULL |
+| password_hash | VARCHAR(255) | NULL desde la migración `008` — ver más abajo |
 | debe_cambiar_password | BOOLEAN | NOT NULL DEFAULT false |
 | rol | VARCHAR(10) | NOT NULL, CHECK IN ('ADMIN','DOCENTE') |
 | estado | VARCHAR(20) | NOT NULL DEFAULT 'PENDIENTE', CHECK IN ('PENDIENTE','APROBADA','RECHAZADA','BAJA') |
@@ -64,6 +64,8 @@ El esquema distingue a propósito entre **instantes** y **hora de pared**, y con
 | aprobado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | curso_solicitado | VARCHAR(100) | NULL — lo que declaró al registrarse (migración `006`) |
 | materia_solicitada | VARCHAR(100) | NULL — ídem |
+| google_sub | VARCHAR(255) | NULL, UNIQUE parcial — identidad de Google (migración `008`) |
+| | | CHECK `password_hash IS NOT NULL OR google_sub IS NOT NULL` |
 
 > `debe_cambiar_password`: se pone en `true` cuando un Admin resetea la contraseña de alguien (RF-01.6). El login sigue funcionando con la contraseña temporal, pero la respuesta incluye este flag para que el frontend fuerce la pantalla de cambio antes de dejar entrar al resto del sistema; al cambiarla exitosamente (`POST /api/auth/cambiar-password`), vuelve a `false`. Sin esta columna, "exigir cambio en el próximo login" (como decía `01-requisitos.md` RF-01.6) no tenía ningún mecanismo real que lo hiciera cumplir.
 
@@ -71,8 +73,15 @@ El esquema distingue a propósito entre **instantes** y **hora de pared**, y con
 
 > Se agrega el estado `BAJA`, distinto de `RECHAZADA`. `RECHAZADA` es para una solicitud de registro que nunca se aprobó; `BAJA` es para una cuenta que **estuvo** `APROBADA` y luego se dio de baja — la distinción importa para no mezclar "nunca llegó a entrar" con "entró y se fue" en reportes y auditoría. **`BAJA` es terminal: no hay transición de vuelta a `APROBADA`** (la API rechaza con 409 cualquier intento de cambiar el estado de una cuenta que ya está en `BAJA`). Si la persona vuelve a la institución, se registra como cuenta nueva — no se reactiva la vieja. Como `email` es `UNIQUE`, si quiere reusar el mismo email, el `ADMIN` debe primero eliminar (hard delete) la fila `usuario` en `BAJA`; el sistema no lo hace automáticamente para no perder la referencia de auditoría sin que un admin lo decida explícitamente. `aprobado_por` usa `SET NULL` porque si el usuario que aprobó a otro es eliminado más adelante, no tiene sentido bloquear ni arrastrar ese borrado — se pierde solo el dato de "quién aprobó", no la cuenta aprobada.
 
+> `google_sub` y `password_hash` son **independientes entre sí, pero no las dos vacías** (migración `008`). Una cuenta creada con Google no tiene contraseña —a quien la verifica es Google— y una cuenta con contraseña no tiene `google_sub`; pero un docente que se registró con contraseña y después entra con Google queda con las dos y no pierde la que tenía. Por eso son dos columnas nullable con un `CHECK` que exige al menos una, y no un enum `proveedor`: ese enum obligaría a elegir una sola forma de ingreso e inventar un tercer valor `AMBAS` que no significa nada distinto de "las dos columnas están llenas". El `CHECK` es la red que impide una fila por la que no se pueda entrar de ninguna manera.
+>
+> Se guarda el claim `sub` del ID token y no el email porque el email de una cuenta de Google **puede cambiar y el `sub` no**: quien ya entró alguna vez sigue entrando a su misma cuenta aunque Google le haya cambiado la dirección. El email sigue siendo la identidad dentro del sistema (es por donde el Admin reconoce a la persona); el vínculo con Google cuelga del `sub`.
+>
+> El índice único es **parcial** (`WHERE google_sub IS NOT NULL`). Un `UNIQUE` común también dejaría pasar cualquier cantidad de `NULL`, así que las dos formas funcionan; el parcial no indexa las filas de las cuentas con contraseña, que hoy son todas.
+
 ```sql
 CREATE INDEX idx_usuario_estado ON usuario(estado);
+CREATE UNIQUE INDEX idx_usuario_google_sub ON usuario (google_sub) WHERE google_sub IS NOT NULL;
 ```
 
 ### `ciclo_lectivo`

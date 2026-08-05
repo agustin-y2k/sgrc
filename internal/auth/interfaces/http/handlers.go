@@ -18,10 +18,14 @@ import (
 type Handler struct {
 	svc     *application.Service
 	auditor audit.Auditor
+	// googleClientID solo se usa para publicarlo en GET /api/auth/config,
+	// que es de donde el frontend lo lee para dibujar el botón de Google.
+	// Vacío = este despliegue no tiene el ingreso con Google configurado.
+	googleClientID string
 }
 
-func NewHandler(svc *application.Service, auditor audit.Auditor) *Handler {
-	return &Handler{svc: svc, auditor: auditor}
+func NewHandler(svc *application.Service, auditor audit.Auditor, googleClientID string) *Handler {
+	return &Handler{svc: svc, auditor: auditor, googleClientID: googleClientID}
 }
 
 // auditar registra una entrada de auditoría sin abortar la respuesta HTTP
@@ -82,6 +86,58 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		Token:               res.Token,
 		DebeCambiarPassword: res.DebeCambiarPassword,
 	})
+}
+
+// GET /api/auth/config — pública, sin autenticar.
+//
+// Es lo que la pantalla de login consulta antes de dibujarse para saber si
+// este despliegue tiene ingreso con Google. No expone nada sensible: el
+// client ID es público por definición (viaja al navegador en cada pedido
+// que este le hace a Google).
+func (h *Handler) Config(c *fiber.Ctx) error {
+	return c.JSON(configPublicaResponse{GoogleClientID: h.googleClientID})
+}
+
+// POST /api/auth/google — ingreso con una cuenta de Google ya registrada.
+//
+// Devuelve 404 cuando el token es válido pero no hay ninguna cuenta con
+// ese email. Eso no es un error del cliente: es el camino normal la
+// primera vez, y es lo que le indica al frontend que tiene que llevar a la
+// persona a completar el registro (POST /api/auth/google/registro).
+func (h *Handler) LoginConGoogle(c *fiber.Ctx) error {
+	var req googleLoginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+
+	res, err := h.svc.LoginConGoogle(c.UserContext(), req.Credential)
+	if err != nil {
+		return mapearError(err)
+	}
+
+	return c.JSON(loginResponse{
+		Token:               res.Token,
+		DebeCambiarPassword: res.DebeCambiarPassword,
+	})
+}
+
+// POST /api/auth/google/registro — autorregistro con cuenta de Google.
+//
+// Igual que el registro con contraseña: la cuenta queda PENDIENTE hasta
+// que un Admin la apruebe (RF-01.3). Tener una cuenta de Google válida
+// prueba quién sos, no que la escuela te conozca.
+func (h *Handler) RegistrarConGoogle(c *fiber.Ctx) error {
+	var req googleRegistroRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+
+	_, err := h.svc.RegistrarConGoogle(c.UserContext(), req.Credential, req.Nombre, req.Apellido,
+		application.SolicitudDeAsignacion{Curso: req.CursoSolicitado, Materia: req.MateriaSolicitada})
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.SendStatus(fiber.StatusCreated)
 }
 
 // GET /api/auth/me
