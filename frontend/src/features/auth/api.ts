@@ -2,7 +2,10 @@ import { apiFetch } from "@/lib/api-client"
 import type {
   CambiarEstadoRequest,
   CambiarPasswordRequest,
+  ConfigPublica,
   Estado,
+  GoogleLoginRequest,
+  GoogleRegistroRequest,
   ListarUsuariosResponse,
   LoginRequest,
   LoginResponse,
@@ -20,6 +23,39 @@ export function login(req: LoginRequest) {
 // Registrar) — la cuenta queda PENDIENTE, no hay nada que devolver todavía.
 export function registrar(req: RegistroRequest) {
   return apiFetch<void>("/api/auth/registro", { method: "POST", body: req })
+}
+
+/**
+ * Ingreso con una cuenta de Google ya registrada.
+ *
+ * Responde 404 cuando el token es válido pero todavía no hay cuenta con
+ * ese email. Eso NO es un fallo: es el camino normal la primera vez, y es
+ * lo que le dice a la pantalla que tiene que pedir curso y materia antes
+ * de crear nada (ver registrarConGoogle).
+ */
+export function loginConGoogle(credential: string) {
+  return apiFetch<LoginResponse>("/api/auth/google", {
+    method: "POST",
+    body: { credential } satisfies GoogleLoginRequest,
+  })
+}
+
+// 201 sin body, igual que el registro con contraseña: la cuenta queda
+// PENDIENTE hasta que un Admin la apruebe (RF-01.3).
+export function registrarConGoogle(req: GoogleRegistroRequest) {
+  return apiFetch<void>("/api/auth/google/registro", { method: "POST", body: req })
+}
+
+/**
+ * Configuración pública, sin sesión. Se consulta una vez al abrir el login
+ * para saber si hay que dibujar el botón de Google.
+ *
+ * El client ID viene del backend y no de una variable VITE_ porque el
+ * frontend se compila una sola vez dentro de la imagen Docker: en el build
+ * habría que reconstruir la imagen para cambiarlo.
+ */
+export function configPublica() {
+  return apiFetch<ConfigPublica>("/api/auth/config")
 }
 
 export function me() {

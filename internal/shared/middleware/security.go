@@ -12,8 +12,15 @@ import (
 
 // SecurityHeaders aplica los headers de seguridad exigidos por
 // docs/09-seguridad-rbac.md §4: HSTS, nosniff, X-Frame-Options DENY y una
-// CSP restrictiva (todo se sirve desde el propio origen — no hay assets ni
-// scripts de terceros).
+// CSP restrictiva.
+//
+// Esta CSP cubre solo las respuestas de /api, que son JSON — donde no hay
+// nada que una CSP pueda restringir. La que hace el trabajo real es la de
+// frontend/nginx-seguridad.conf, que acompaña al documento HTML: ahí está
+// el hash del script inline del tema y el permiso para el botón de Google.
+// Las dos son deliberadamente distintas y no hay que "unificarlas": si esta
+// se aplicara también al HTML, o aquella a /api, quedarían dos headers
+// Content-Security-Policy en la misma respuesta.
 //
 // helmet.New solo agrega HSTS cuando c.Protocol() == "https", pero en este
 // despliegue Cloudflare Tunnel termina el TLS y le habla al contenedor por

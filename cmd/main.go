@@ -295,6 +295,31 @@ func main() {
 	// nunca importa reservation directamente (ver cmd/wiring_adapters.go).
 	canceladorReservas := &authCanceladorReservasAdapter{reservationSvc: reservationSvc}
 
+	// Ingreso con Google (opcional). Sin GOOGLE_CLIENT_ID el sistema
+	// arranca igual y funciona como venía funcionando: el verificador queda
+	// nil, los dos endpoints de Google responden 503 y el frontend ni
+	// siquiera dibuja el botón (GET /api/auth/config devuelve el ID vacío).
+	//
+	// No se valida el formato del client ID —Google no promete uno estable—
+	// pero sí se avisa por log qué modo quedó activo: si alguien lo escribe
+	// mal en el .env, el síntoma sería "el botón no aparece" sin ninguna
+	// pista, y ese es exactamente el tipo de cosa que cuesta horas.
+	googleClientID := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID"))
+	var verificadorGoogle authapp.VerificadorGoogle
+	if googleClientID != "" {
+		dominios := authinfra.DominiosPermitidos(os.Getenv("GOOGLE_DOMINIOS_PERMITIDOS"))
+		verificadorGoogle = authinfra.NewVerificadorGoogle(googleClientID, dominios, ahora)
+		if len(dominios) > 0 {
+			log.Printf("ingreso con Google habilitado, restringido a los dominios: %s", strings.Join(dominios, ", "))
+		} else {
+			log.Print("ingreso con Google habilitado para cualquier cuenta de Google " +
+				"(las cuentas quedan PENDIENTE hasta que un Admin las apruebe; " +
+				"para limitar quién puede pedirlo, ver GOOGLE_DOMINIOS_PERMITIDOS en .env.example)")
+		}
+	} else {
+		log.Print("ingreso con Google deshabilitado: no hay GOOGLE_CLIENT_ID configurado (ver .env.example)")
+	}
+
 	authSvc := authapp.NewService(
 		authRepo,
 		bus,
@@ -306,8 +331,9 @@ func main() {
 		ahora,
 		gestorMaterias,
 		canceladorReservas,
+		verificadorGoogle,
 	)
-	authHandler := authhttp.NewHandler(authSvc, auditor)
+	authHandler := authhttp.NewHandler(authSvc, auditor, googleClientID)
 
 	// ── reporting ─────────────────────────────────────────────────
 	// Se arma ANTES que academic a propósito: academic necesita envolver
