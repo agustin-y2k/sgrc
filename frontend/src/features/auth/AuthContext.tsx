@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react"
 import * as authApi from "@/features/auth/api"
-import type { Usuario } from "@/features/auth/types"
+import type { LoginResponse, Usuario } from "@/features/auth/types"
 import { ApiError } from "@/lib/api-client"
 import { clearToken, getToken, setToken } from "@/lib/token-store"
 
@@ -22,6 +22,15 @@ type AuthContextValue = {
    */
   errorDeSesion: string | null
   login: (email: string, password: string) => Promise<{ debeCambiarPassword: boolean }>
+  /**
+   * Ingreso con el ID token que devolvió Google. Deja la sesión igual que
+   * `login`: el token que guardamos sigue siendo el nuestro, el de Google
+   * no vuelve a usarse después de este llamado.
+   *
+   * Propaga el ApiError 404 ("todavía no hay cuenta") sin tocarlo: quién
+   * llama decide si eso significa mandar a completar el registro.
+   */
+  loginConGoogle: (credential: string) => Promise<{ debeCambiarPassword: boolean }>
   logout: () => void
   refetchUser: () => Promise<void>
 }
@@ -76,9 +85,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadUser().catch(() => {})
   }, [loadUser])
 
-  const login = useCallback(
-    async (email: string, password: string) => {
-      const res = await authApi.login({ email, password })
+  // abrirSesion es lo que los dos caminos de ingreso (contraseña y Google)
+  // tienen en común: el backend devuelve el mismo LoginResponse en ambos,
+  // así que a partir de acá la sesión es idéntica.
+  const abrirSesion = useCallback(
+    async (res: LoginResponse) => {
       if (!res.token) {
         // El backend nunca devuelve 200 sin token — Login() en
         // internal/auth/application/service.go rechaza con 403 antes de
@@ -96,6 +107,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadUser]
   )
 
+  const login = useCallback(
+    async (email: string, password: string) =>
+      abrirSesion(await authApi.login({ email, password })),
+    [abrirSesion]
+  )
+
+  const loginConGoogle = useCallback(
+    async (credential: string) => abrirSesion(await authApi.loginConGoogle(credential)),
+    [abrirSesion]
+  )
+
   const logout = useCallback(() => {
     clearToken()
     setUser(null)
@@ -103,8 +125,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, isLoading, errorDeSesion, login, logout, refetchUser: loadUser }),
-    [user, isLoading, errorDeSesion, login, logout, loadUser]
+    () => ({
+      user,
+      isLoading,
+      errorDeSesion,
+      login,
+      loginConGoogle,
+      logout,
+      refetchUser: loadUser,
+    }),
+    [user, isLoading, errorDeSesion, login, loginConGoogle, logout, loadUser]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
