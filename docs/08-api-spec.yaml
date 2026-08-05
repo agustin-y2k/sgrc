@@ -298,12 +298,6 @@ components:
         horaInicio: { type: string, example: "08:00" }
         horaFin: { type: string, example: "18:00" }
 
-    CancelacionAjenaRequest:
-      type: object
-      required: [motivo]
-      properties:
-        motivo: { type: string, minLength: 10 }
-
     # ── Notifications ──
     Notificacion:
       type: object
@@ -502,6 +496,48 @@ paths:
             Ya existe una cuenta para ese email o esa cuenta de Google. Si pertenece a
             una cuenta en BAJA, el mensaje lo indica explícitamente (RF-01.3).
         "503": { description: Este despliegue no tiene GOOGLE_CLIENT_ID configurado }
+
+  /api/auth/usuarios/{id}/promover-a-admin:
+    post:
+      tags: [auth]
+      summary: Promover un docente a ADMIN
+      description: |
+        Le da rol ADMIN a un docente ya aprobado. Solo ADMIN.
+
+        **No existe la operación inversa**: el sistema no puede degradar un ADMIN a
+        docente. Por eso la ruta se llama "promover-a-admin" y no es un
+        `PATCH /rol`, que daría a entender que se puede volver atrás.
+
+        La cuenta tiene que estar en estado APROBADA. Promover una PENDIENTE sería
+        aprobarla por la puerta de atrás, salteándose el paso donde alguien mira quién
+        es esa persona (RF-01.3).
+
+        **No toca nada más de la cuenta**: conserva sus materias asignadas, sus
+        reservas y sus formas de ingreso (contraseña y/o Google). Un docente que pasa
+        a coordinar suele seguir dando clase, y el sistema no lo impide — academic
+        solo exige estado APROBADA para asignar a alguien a una materia, nunca miró
+        el rol, y reservar tampoco pide rol.
+
+        **Tiene efecto en el request siguiente**, sin volver a iniciar sesión: el
+        middleware lee el rol de la base en cada pedido y pisa el del token
+        (ver `09-seguridad-rbac.md` §1).
+
+        No hace falta el guard del último Admin (RF-01.8): esto solo agrega Admins,
+        nunca los saca.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Promovido. Queda registrado en auditoría quién lo hizo y a quién }
+        "403": { description: Quien lo pide no es ADMIN }
+        "404": { description: Usuario no encontrado }
+        "409":
+          description: |
+            La cuenta ya tiene rol ADMIN, o no está APROBADA. El mensaje distingue los
+            dos casos, que es lo que el Admin necesita para saber qué hacer.
 
   /api/auth/me:
     get:
@@ -1004,7 +1040,6 @@ paths:
                   reservasCanceladas:
                     type: integer
                     description: 0 si la materia conserva otro docente activo.
-                  reservasCanceladas: { type: integer }
 
   # ══════════════════════════════
   # INVENTORY
@@ -1065,9 +1100,28 @@ paths:
         "200": { description: Carro actualizado }
 
   /api/inventory/carros/{carroId}/pcs:
+    get:
+      tags: [inventory]
+      summary: Listar las PCs de un carro (RF-03.7, todos los usuarios autenticados)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: carroId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PC' }
     post:
       tags: [inventory]
-      summary: Registrar PC en un carro (Admin)
+      summary: Registrar una PC en un carro (RF-03.2, Admin)
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -1457,7 +1511,7 @@ paths:
         - in: path
           name: id
           required: true
-          schema: { type: string, format: uuid }
+          schema: { type: string, format: uuid, description: "id de la Reserva puntual, no del grupo" }
       requestBody:
         content:
           application/json:
@@ -1466,28 +1520,10 @@ paths:
               properties:
                 motivo: { type: string }
       responses:
-        "200": { description: Cancelada }
+        "200": { description: Cancelada. Si la canceló otra persona, el docente recibe la notificación con el motivo (RF-05.1) }
         "400": { description: Falta el motivo al cancelar una reserva ajena }
         "403": { description: No es tu reserva y no sos Admin }
         "404": { description: No encontrada }
-
-  /api/reservation/reservas/{id}/cancelar:
-    post:
-      tags: [reservations]
-      summary: Cancelar manualmente una PC puntual ajena, con motivo (Admin)
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid, description: "id de la Reserva puntual, no del grupo" }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/CancelacionAjenaRequest' }
-      responses:
-        "200": { description: PC puntual cancelada y docente notificado }
 
   /api/reservation/bloqueos-evaluacion:
     post:
@@ -1556,14 +1592,6 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200": { description: Notificación marcada como leída }
-
-  /api/notifications/leer-todas:
-    post:
-      tags: [notifications]
-      summary: Marcar todas las notificaciones como leídas
-      security: [{ bearerAuth: [] }]
-      responses:
-        "200": { description: Todas marcadas como leídas }
 
   # ══════════════════════════════
   # REPORTS
@@ -1822,44 +1850,6 @@ paths:
 
   # ── Endpoints agregados tras la revisión completa ────────────────────
   # (RF que el spec declaraba pero que no tenían implementación)
-
-  /api/inventory/carros/{carroId}/pcs:
-    post:
-      tags: [inventory]
-      summary: Registrar una PC en un carro (RF-03.2, Admin)
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - in: path
-          name: carroId
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/PC' }
-      responses:
-        "201": { description: Creada }
-        "409": { description: Identificador repetido en el carro o número de serie ya usado }
-    get:
-      tags: [inventory]
-      summary: Listar las PCs de un carro (RF-03.7, todos los usuarios autenticados)
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - in: path
-          name: carroId
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items: { $ref: '#/components/schemas/PC' }
 
   /api/inventory/pcs/{pcId}/incidencias:
     get:
