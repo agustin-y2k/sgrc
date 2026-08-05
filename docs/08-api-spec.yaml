@@ -503,6 +503,48 @@ paths:
             una cuenta en BAJA, el mensaje lo indica explícitamente (RF-01.3).
         "503": { description: Este despliegue no tiene GOOGLE_CLIENT_ID configurado }
 
+  /api/auth/usuarios/{id}/promover-a-admin:
+    post:
+      tags: [auth]
+      summary: Promover un docente a ADMIN
+      description: |
+        Le da rol ADMIN a un docente ya aprobado. Solo ADMIN.
+
+        **No existe la operación inversa**: el sistema no puede degradar un ADMIN a
+        docente. Por eso la ruta se llama "promover-a-admin" y no es un
+        `PATCH /rol`, que daría a entender que se puede volver atrás.
+
+        La cuenta tiene que estar en estado APROBADA. Promover una PENDIENTE sería
+        aprobarla por la puerta de atrás, salteándose el paso donde alguien mira quién
+        es esa persona (RF-01.3).
+
+        **No toca nada más de la cuenta**: conserva sus materias asignadas, sus
+        reservas y sus formas de ingreso (contraseña y/o Google). Un docente que pasa
+        a coordinar suele seguir dando clase, y el sistema no lo impide — academic
+        solo exige estado APROBADA para asignar a alguien a una materia, nunca miró
+        el rol, y reservar tampoco pide rol.
+
+        **Tiene efecto en el request siguiente**, sin volver a iniciar sesión: el
+        middleware lee el rol de la base en cada pedido y pisa el del token
+        (ver `09-seguridad-rbac.md` §1).
+
+        No hace falta el guard del último Admin (RF-01.8): esto solo agrega Admins,
+        nunca los saca.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Promovido. Queda registrado en auditoría quién lo hizo y a quién }
+        "403": { description: Quien lo pide no es ADMIN }
+        "404": { description: Usuario no encontrado }
+        "409":
+          description: |
+            La cuenta ya tiene rol ADMIN, o no está APROBADA. El mensaje distingue los
+            dos casos, que es lo que el Admin necesita para saber qué hacer.
+
   /api/auth/me:
     get:
       tags: [auth]

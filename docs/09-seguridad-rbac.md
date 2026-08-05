@@ -62,6 +62,7 @@ base al verificar la cuenta (§1).
 | Acción | Admin | Docente |
 |---|:---:|:---:|
 | Crear/aprobar otros Admins | ✅ | ❌ |
+| Promover un docente a Admin | ✅ | ❌ |
 | Crear/editar carros | ✅ | ❌ |
 | Registrar/editar PCs, dar de baja una PC | ✅ | ❌ |
 | Ver inventario (carros/PCs, incl. software instalado y freezado) | ✅ | ✅ |
@@ -102,6 +103,16 @@ base al verificar la cuenta (§1).
 | Validación | Estricta en cada handler; nunca se confía en el frontend |
 | Secrets | `.env` fuera de git + Docker secrets. Secreto JWT nunca en el repo |
 | Permisos DB | Un usuario Postgres de aplicación con GRANT sobre `sgrc_db`, sin permisos de `SUPERUSER` |
+
+### Por qué se puede promover pero no degradar
+
+Hay dos formas de que exista un Admin: que otro Admin lo cree directo (`POST /api/auth/admins`, RF-01.4) o que promueva a un docente ya aprobado (`POST /api/auth/usuarios/{id}/promover-a-admin`). Las dos las tiene que iniciar un Admin; ninguna es alcanzable desde afuera. El autorregistro —con contraseña o con Google— crea siempre rol DOCENTE, porque es un endpoint público sin autenticar y no puede ser una puerta por la que alguien se asigne un rol.
+
+**Degradar un Admin a docente no existe, y es una omisión deliberada.** No es simétrico con promover: habría que decidir qué pasa con el guard del último Admin (RF-01.8), qué materias pasaría a dictar alguien que no tiene ninguna asignada, y si un Admin puede degradar a otro —o a sí mismo— y dejar el sistema en manos de nadie. Mientras nadie lo necesite, no existir es más seguro que existir a medias. Para sacarle los permisos a alguien hoy está la baja (RF-02.8), que sí está pensada de punta a punta.
+
+Promover **solo agrega** Admins, así que no pasa por el guard del último Admin ni necesita transacción: no hay forma de que deje al sistema sin ninguno. Y no toca nada más de la cuenta —conserva materias, reservas y formas de ingreso— porque un docente que pasa a coordinar suele seguir dando clase: `ExisteYAprobado` de academic nunca miró el rol, y reservar tampoco lo pide.
+
+El cambio **tiene efecto en el request siguiente, sin volver a iniciar sesión**, por lo mismo que una baja es inmediata (§1): el middleware lee el rol de la base en cada pedido y pisa el del token. La contracara es que un token viejo no conserva el rol viejo, ni para bien ni para mal.
 
 ### Por qué la CSP está en dos lugares y no en uno
 

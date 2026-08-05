@@ -194,6 +194,40 @@ func (u *Usuario) CambiarEstado(nuevo Estado, ahora time.Time) error {
 	return nil
 }
 
+// ErrPromocionInvalida envuelve cualquier intento de promover una cuenta
+// que no está en condiciones. Incluye el motivo en el mensaje para que el
+// Admin sepa qué le falta a esa cuenta sin tener que adivinar.
+var ErrPromocionInvalida = errors.New("no se puede promover esta cuenta a ADMIN")
+
+// PromoverAAdmin convierte a un docente en Admin. Es la única forma
+// permitida de cambiar u.Rol — igual que con CambiarEstado, nunca asignarlo
+// directamente desde fuera de este paquete.
+//
+// Las dos condiciones no son burocracia:
+//
+//   - Tiene que estar APROBADA. Promover una cuenta PENDIENTE sería
+//     aprobarla por la puerta de atrás, salteándose el paso donde alguien
+//     mira quién es esa persona (RF-01.3). Y sobre una RECHAZADA o en BAJA
+//     no tiene ningún sentido: son estados terminales.
+//   - No puede ser Admin ya. No es un no-op silencioso a propósito: si el
+//     Admin apretó "promover" sobre alguien que ya lo era, se equivocó de
+//     fila, y decírselo es mejor que dejarlo creyendo que hizo algo.
+//
+// No hay operación inversa. Degradar un Admin a docente abre preguntas que
+// este sistema no tiene respondidas —qué pasa con el guard del último Admin
+// (RF-01.8), qué materias pasaría a dictar alguien que no tiene ninguna— y
+// mientras no haga falta, no existir es más seguro que existir a medias.
+func (u *Usuario) PromoverAAdmin() error {
+	if u.EsAdmin() {
+		return fmt.Errorf("%w: ya tiene rol ADMIN", ErrPromocionInvalida)
+	}
+	if !u.EstaAprobado() {
+		return fmt.Errorf("%w: primero hay que aprobar la cuenta (está en %s)", ErrPromocionInvalida, u.Estado)
+	}
+	u.Rol = RolAdmin
+	return nil
+}
+
 // EsAdmin / EsDocente / EstaAprobado son helpers de lectura — evitan
 // comparar u.Rol == domain.RolAdmin desperdigado por toda la aplicación.
 func (u *Usuario) EsAdmin() bool      { return u.Rol == RolAdmin }

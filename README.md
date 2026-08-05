@@ -38,7 +38,7 @@ SGRC resuelve los tres: **impide el solapamiento a nivel de base de datos** (no 
 |---|---|
 | **Inventario** | Carros, PCs, número de serie, procesador, memoria, software instalado y estado (disponible, en mantenimiento, fuera de servicio). |
 | **Ciclo lectivo** | Años, cursos, materias y qué docente dicta cada una. Al cerrar el año, el sistema guarda un resumen histórico permanente. |
-| **Aprobación de cuentas** | Un docente se registra solo —con email y contraseña, o con su cuenta de Google— pero no entra hasta que alguien lo aprueba. |
+| **Aprobación de cuentas** | Un docente se registra solo —con email y contraseña, o con su cuenta de Google— pero no entra hasta que alguien lo aprueba. Un docente aprobado también puede recibir permisos de Admin. |
 | **Bloqueo por evaluación** | Reserva las máquinas para una prueba estatal y cancela automáticamente lo que se pisa, notificando a cada docente afectado. |
 | **Reportes** | Uso por PC y por docente, incidencias por equipo y por carro, con porcentajes y descarga a CSV. |
 | **Auditoría** | Toda acción sensible queda registrada con quién, cuándo y desde qué dirección. |
