@@ -304,8 +304,13 @@ func TestLoginConGoogle_CuentaEnBaja_NoSeVincula(t *testing.T) {
 
 	_, err := svc.LoginConGoogle(context.Background(), "un-token")
 
-	if !errors.Is(err, ErrCuentaEnBaja) {
-		t.Fatalf("esperaba ErrCuentaEnBaja, hubo: %v", err)
+	// El error del INGRESO, no el del registro: acá la persona está
+	// intentando entrar, no crear una cuenta.
+	if !errors.Is(err, ErrIngresoCuentaEnBaja) {
+		t.Fatalf("esperaba ErrIngresoCuentaEnBaja, hubo: %v", err)
+	}
+	if errors.Is(err, ErrCuentaEnBaja) {
+		t.Error("ese es el mensaje del registro: le dice que pida eliminar la cuenta para poder registrarse de nuevo, que no es lo que preguntó")
 	}
 	if repo.usuarios["u1"].GoogleSub != "" {
 		t.Error("una cuenta en BAJA no debe quedar vinculada a nada")

@@ -27,7 +27,11 @@ func mapearError(err error) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "credenciales inválidas")
 
 	case errors.Is(err, application.ErrCuentaNoHabilitada):
-		return fiber.NewError(fiber.StatusForbidden, "cuenta no habilitada")
+		// Un solo case para los tres motivos (pendiente, rechazada, en baja)
+		// más el genérico: los tres matchean contra este paraguas por su
+		// método Is, y err.Error() ya trae el texto que corresponde a cada
+		// uno. Todos son 403 — cambia la explicación, no el veredicto.
+		return fiber.NewError(fiber.StatusForbidden, err.Error())
 
 	case errors.Is(err, application.ErrCuentaEnBaja):
 		// Mensaje específico de RF-01.3 — se conserva el texto completo,

@@ -8,8 +8,38 @@ import "errors"
 var (
 	ErrUsuarioNoEncontrado   = errors.New("usuario no encontrado")
 	ErrCredencialesInvalidas = errors.New("credenciales inválidas")
-	ErrCuentaNoHabilitada    = errors.New("cuenta no habilitada")
 	ErrEmailYaRegistrado     = errors.New("email ya registrado")
+
+	// ErrCuentaNoHabilitada es el paraguas de "la contraseña estaba bien
+	// pero esta cuenta no puede entrar". Los tres casos de abajo matchean
+	// contra él con errors.Is, así que sigue sirviendo para preguntar por la
+	// condición general sin enumerar estados.
+	ErrCuentaNoHabilitada = errors.New("cuenta no habilitada")
+
+	// Los tres motivos concretos por los que una cuenta existente no entra.
+	//
+	// Antes los tres devolvían "cuenta no habilitada" y listo. Quien se
+	// acababa de registrar y quien había sido rechazado leían exactamente lo
+	// mismo, y ninguno de los dos sabía si tenía que esperar, insistir o
+	// hablar con alguien.
+	//
+	// Distinguirlos acá no filtra nada: para llegar hasta este punto la
+	// persona ya presentó la credencial correcta —contraseña verificada o
+	// token de Google firmado—, así que ya probó que la cuenta es suya. Es
+	// distinto del email inexistente, donde el mensaje y hasta el tiempo de
+	// respuesta se mantienen indistinguibles a propósito (ver Login).
+	ErrIngresoCuentaPendiente = &errorDeCuenta{
+		"tu cuenta todavía está esperando la aprobación de un Admin — vas a poder entrar apenas la aprueben",
+	}
+	ErrIngresoCuentaRechazada = &errorDeCuenta{
+		"tu solicitud de cuenta fue rechazada; si creés que es un error, hablá con el equipo de administración de la escuela",
+	}
+	// Distinto de ErrCuentaEnBaja: aquel es el del registro ("no podés
+	// crear una cuenta con este email"), este es el del ingreso ("no podés
+	// entrar"). El mismo estado, dos momentos con dos salidas distintas.
+	ErrIngresoCuentaEnBaja = &errorDeCuenta{
+		"esta cuenta fue dada de baja y no se puede volver a habilitar",
+	}
 
 	// ErrCuentaEnBaja es el mensaje específico de RF-01.3 — distinto del
 	// genérico ErrEmailYaRegistrado, para que quien vuelve entienda que
@@ -82,5 +112,23 @@ var (
 	// más común de toda la API para cualquier ID válido-pero-inexistente.
 	ErrReferenciaInexistente = errors.New("alguno de los datos referenciados no existe")
 )
+
+// errorDeCuenta es un sentinel que además matchea contra
+// ErrCuentaNoHabilitada.
+//
+// Existe por una razón chica pero concreta: envolver con
+// fmt.Errorf("%w: …", ErrCuentaNoHabilitada) también haría funcionar el
+// errors.Is, pero arrastraría el texto genérico al frente del mensaje
+// ("cuenta no habilitada: tu cuenta todavía está…"), y ese mensaje es el
+// que la persona lee tal cual en la pantalla de login. Con el método Is
+// propio, el matcheo y el texto quedan independientes.
+type errorDeCuenta struct{ mensaje string }
+
+func (e *errorDeCuenta) Error() string { return e.mensaje }
+
+// Is hace que errors.Is(err, ErrCuentaNoHabilitada) siga siendo verdadero
+// para los tres motivos. La comparación por identidad que hace errors.Is
+// antes de llamar acá ya cubre el caso de preguntar por el motivo puntual.
+func (e *errorDeCuenta) Is(objetivo error) bool { return objetivo == ErrCuentaNoHabilitada }
 
 const minPasswordLen = 8
