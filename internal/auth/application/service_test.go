@@ -18,14 +18,15 @@ import (
 type fakeRepo struct {
 	usuarios map[string]*domain.Usuario // por ID
 
-	errBuscarPorEmail    error
-	errBuscarPorID       error
-	errCrear             error
-	errGuardar           error
-	errContarAdmins      error
-	errEliminar          error
-	errListar            error
-	adminsAprobadosCount int
+	errBuscarPorEmail     error
+	errBuscarPorID        error
+	errBuscarPorGoogleSub error
+	errCrear              error
+	errGuardar            error
+	errContarAdmins       error
+	errEliminar           error
+	errListar             error
+	adminsAprobadosCount  int
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -53,6 +54,23 @@ func (r *fakeRepo) BuscarPorID(ctx context.Context, id string) (*domain.Usuario,
 		return nil, ErrUsuarioNoEncontrado
 	}
 	return u, nil
+}
+
+func (r *fakeRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*domain.Usuario, error) {
+	if r.errBuscarPorGoogleSub != nil {
+		return nil, r.errBuscarPorGoogleSub
+	}
+	// Igual que el repo real: un sub vacío no empata con nadie, ni siquiera
+	// con las cuentas que no tienen ninguno.
+	if sub == "" {
+		return nil, ErrUsuarioNoEncontrado
+	}
+	for _, u := range r.usuarios {
+		if u.GoogleSub == sub {
+			return u, nil
+		}
+	}
+	return nil, ErrUsuarioNoEncontrado
 }
 
 // EnTransaccion imita el todo-o-nada de Postgres: copia el estado antes de
@@ -248,6 +266,7 @@ func nuevoServicioConCascada(repo Repo, gestorMaterias GestorMateriasDocente, ca
 		relojFijo(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)),
 		gestorMaterias,
 		cancelador,
+		nil, // sin ingreso con Google: los tests que lo usan arman el suyo
 	)
 }
 
@@ -266,6 +285,7 @@ func servicioConVerify(repo Repo, verify VerifyFunc) *Service {
 		relojFijo(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)),
 		nuevoFakeGestorMaterias(),
 		nuevoFakeCanceladorReservas(),
+		nil, // sin ingreso con Google: los tests que lo usan arman el suyo
 	)
 }
 
@@ -460,6 +480,7 @@ func TestLogin_ElHashDeDescarteSeCalculaUnaSolaVez(t *testing.T) {
 		relojFijo(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)),
 		nuevoFakeGestorMaterias(),
 		nuevoFakeCanceladorReservas(),
+		nil, // sin ingreso con Google: los tests que lo usan arman el suyo
 	)
 
 	for i := 0; i < 5; i++ {

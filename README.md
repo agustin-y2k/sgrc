@@ -38,7 +38,7 @@ SGRC resuelve los tres: **impide el solapamiento a nivel de base de datos** (no 
 |---|---|
 | **Inventario** | Carros, PCs, número de serie, procesador, memoria, software instalado y estado (disponible, en mantenimiento, fuera de servicio). |
 | **Ciclo lectivo** | Años, cursos, materias y qué docente dicta cada una. Al cerrar el año, el sistema guarda un resumen histórico permanente. |
-| **Aprobación de cuentas** | Un docente se registra solo, pero no entra hasta que alguien lo aprueba. |
+| **Aprobación de cuentas** | Un docente se registra solo —con email y contraseña, o con su cuenta de Google— pero no entra hasta que alguien lo aprueba. |
 | **Bloqueo por evaluación** | Reserva las máquinas para una prueba estatal y cancela automáticamente lo que se pisa, notificando a cada docente afectado. |
 | **Reportes** | Uso por PC y por docente, incidencias por equipo y por carro, con porcentajes y descarga a CSV. |
 | **Auditoría** | Toda acción sensible queda registrada con quién, cuándo y desde qué dirección. |
@@ -151,13 +151,15 @@ Si es tu primera vez en el repositorio y venís del lado técnico, leé `01` y `
 
 **Same-origin, sin CORS.** El navegador pide todo al mismo host: nginx sirve la interfaz y redirige `/api` al backend. Un hostname, un certificado, ninguna configuración de CORS que se rompa.
 
+**Entrar con Google es opcional y no cambia nada del resto.** Si se configura `GOOGLE_CLIENT_ID`, la pantalla de login suma el botón de Google; si no, ni siquiera se dibuja y el sistema funciona como siempre. En los dos casos el token que circula por la API es el nuestro: Google solo dice quién sos una vez, al entrar. Y una cuenta creada así queda igual de pendiente que cualquier otra — tener un Gmail prueba tu identidad, no que la escuela te conozca. Ver `GOOGLE_CLIENT_ID` en [`.env.example`](.env.example) para el paso a paso de la consola de Google.
+
 ---
 
 ## Stack
 
 - **Backend:** Go 1.23 con [Fiber](https://gofiber.io/) v2
 - **Base de datos:** PostgreSQL 16 (extensiones `pgcrypto` y `btree_gist`)
-- **Autenticación:** JWT HS256, contraseñas con `argon2id`
+- **Autenticación:** JWT HS256, contraseñas con `argon2id`, e ingreso opcional con cuenta de Google
 - **Frontend:** React 19 + TypeScript + Vite, Tailwind CSS, TanStack Query
 - **Infraestructura:** Docker Compose y Cloudflare Tunnel
 

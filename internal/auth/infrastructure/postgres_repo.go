@@ -125,7 +125,7 @@ func errorDeFilas(rows pgx.Rows) error {
 	return fmt.Errorf("iterando filas: %w", err)
 }
 
-const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por, curso_solicitado, materia_solicitada`
+const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por, curso_solicitado, materia_solicitada, google_sub`
 
 // BuscarPorEmail compara contra lower(email) y no contra la columna pelada.
 //
@@ -145,53 +145,84 @@ func (r *PostgresRepo) BuscarPorID(ctx context.Context, id string) (*domain.Usua
 	return escanearUsuario(row)
 }
 
+// BuscarPorGoogleSub resuelve el vínculo con una cuenta de Google. Filtra
+// por IS NOT NULL además de la igualdad: sin eso, un sub vacío (que no
+// debería llegar hasta acá, pero es una condición fácil de sostener desde
+// el SQL) empataría contra cualquier fila con google_sub NULL en algunos
+// planes, y es exactamente el tipo de coincidencia accidental que
+// terminaría dándole a alguien la cuenta de otro.
+func (r *PostgresRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*domain.Usuario, error) {
+	if sub == "" {
+		return nil, application.ErrUsuarioNoEncontrado
+	}
+	row := r.db.QueryRow(ctx,
+		`SELECT `+columnasUsuario+` FROM usuario WHERE google_sub IS NOT NULL AND google_sub = $1`, sub)
+	return escanearUsuario(row)
+}
+
+// filaUsuario son los destinos de un Scan sobre columnasUsuario, en ese
+// mismo orden.
+//
+// Existe porque las dos consultas que leen usuarios (una fila sola y el
+// listado paginado, que agrega COUNT(*) OVER()) tienen que escanear
+// exactamente las mismas columnas en el mismo orden. Antes eran dos Scan
+// escritos a mano, idénticos salvo el último destino: agregar una columna
+// significaba tocar los dos y acordarse de mantener el orden alineado en
+// ambos. Ahora la lista de destinos vive en un solo lugar, al lado de la
+// de columnas.
+type filaUsuario struct {
+	u                 domain.Usuario
+	rolStr, estadoStr string
+	// Las columnas nullable se escanean a *string y recién después se
+	// traducen a "" — pgx no puede escribir un NULL en un string pelado.
+	passwordHash, curso, materia, googleSub *string
+}
+
+func (f *filaUsuario) destinos() []any {
+	return []any{
+		&f.u.ID, &f.u.Nombre, &f.u.Apellido, &f.u.Email, &f.passwordHash,
+		&f.u.DebeCambiarPassword, &f.rolStr, &f.estadoStr, &f.u.FechaRegistro,
+		&f.u.FechaAprobacion, &f.u.AprobadoPor, &f.curso, &f.materia, &f.googleSub,
+	}
+}
+
+// usuario arma la entidad con lo escaneado, validando contra el dominio lo
+// que en la base es un VARCHAR suelto.
+func (f *filaUsuario) usuario() (*domain.Usuario, error) {
+	rol, err := domain.ParseRol(f.rolStr)
+	if err != nil {
+		return nil, fmt.Errorf("rol inválido en la base para usuario %s: %w", f.u.ID, err)
+	}
+	estado, err := domain.ParseEstado(f.estadoStr)
+	if err != nil {
+		return nil, fmt.Errorf("estado inválido en la base para usuario %s: %w", f.u.ID, err)
+	}
+	f.u.Rol = rol
+	f.u.Estado = estado
+	f.u.PasswordHash = textoDe(f.passwordHash)
+	f.u.CursoSolicitado = textoDe(f.curso)
+	f.u.MateriaSolicitada = textoDe(f.materia)
+	f.u.GoogleSub = textoDe(f.googleSub)
+
+	return &f.u, nil
+}
+
+// escanearUsuarioConTotal es escanearUsuario más la columna que agrega
+// COUNT(*) OVER() al listado paginado.
+func escanearUsuarioConTotal(row pgx.Row, total *int) (*domain.Usuario, error) {
+	var f filaUsuario
+	if err := row.Scan(append(f.destinos(), total)...); err != nil {
+		return nil, fmt.Errorf("escaneando usuario: %w", err)
+	}
+	return f.usuario()
+}
+
 // escanearUsuario centraliza el mapeo fila→entidad, incluyendo la
 // traducción de "no encontrado" al error de negocio que application/
 // espera (nunca dejar que pgx.ErrNoRows se filtre hacia arriba tal cual).
-// escanearUsuarioConTotal es escanearUsuario más la columna que agrega
-// COUNT(*) OVER() al listado paginado. Va aparte porque el Scan tiene que
-// seguir exactamente el orden de columnas del SELECT de cada consulta.
-func escanearUsuarioConTotal(row pgx.Row, total *int) (*domain.Usuario, error) {
-	var u domain.Usuario
-	var rolStr, estadoStr string
-
-	var curso, materia *string
-	err := row.Scan(
-		&u.ID, &u.Nombre, &u.Apellido, &u.Email, &u.PasswordHash,
-		&u.DebeCambiarPassword, &rolStr, &estadoStr, &u.FechaRegistro,
-		&u.FechaAprobacion, &u.AprobadoPor, &curso, &materia, total,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("escaneando usuario: %w", err)
-	}
-
-	rol, err := domain.ParseRol(rolStr)
-	if err != nil {
-		return nil, fmt.Errorf("rol inválido en la base para usuario %s: %w", u.ID, err)
-	}
-	estado, err := domain.ParseEstado(estadoStr)
-	if err != nil {
-		return nil, fmt.Errorf("estado inválido en la base para usuario %s: %w", u.ID, err)
-	}
-	u.Rol = rol
-	u.Estado = estado
-	u.CursoSolicitado = textoDe(curso)
-	u.MateriaSolicitada = textoDe(materia)
-
-	return &u, nil
-}
-
 func escanearUsuario(row pgx.Row) (*domain.Usuario, error) {
-	var u domain.Usuario
-	var rolStr, estadoStr string
-
-	var curso, materia *string
-	err := row.Scan(
-		&u.ID, &u.Nombre, &u.Apellido, &u.Email, &u.PasswordHash,
-		&u.DebeCambiarPassword, &rolStr, &estadoStr, &u.FechaRegistro,
-		&u.FechaAprobacion, &u.AprobadoPor, &curso, &materia,
-	)
-	if err != nil {
+	var f filaUsuario
+	if err := row.Scan(f.destinos()...); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, application.ErrUsuarioNoEncontrado
 		}
@@ -200,30 +231,17 @@ func escanearUsuario(row pgx.Row) (*domain.Usuario, error) {
 		}
 		return nil, fmt.Errorf("escaneando usuario: %w", err)
 	}
-
-	rol, err := domain.ParseRol(rolStr)
-	if err != nil {
-		return nil, fmt.Errorf("rol inválido en la base para usuario %s: %w", u.ID, err)
-	}
-	estado, err := domain.ParseEstado(estadoStr)
-	if err != nil {
-		return nil, fmt.Errorf("estado inválido en la base para usuario %s: %w", u.ID, err)
-	}
-	u.Rol = rol
-	u.Estado = estado
-	u.CursoSolicitado = textoDe(curso)
-	u.MateriaSolicitada = textoDe(materia)
-
-	return &u, nil
+	return f.usuario()
 }
 
 func (r *PostgresRepo) Crear(ctx context.Context, u *domain.Usuario) error {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO usuario (id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, curso_solicitado, materia_solicitada)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, u.ID, u.Nombre, u.Apellido, u.Email, u.PasswordHash, u.DebeCambiarPassword,
+		INSERT INTO usuario (id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, curso_solicitado, materia_solicitada, google_sub)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, u.ID, u.Nombre, u.Apellido, u.Email, textoOpcional(u.PasswordHash), u.DebeCambiarPassword,
 		string(u.Rol), string(u.Estado), u.FechaRegistro,
-		textoOpcional(u.CursoSolicitado), textoOpcional(u.MateriaSolicitada))
+		textoOpcional(u.CursoSolicitado), textoOpcional(u.MateriaSolicitada),
+		textoOpcional(u.GoogleSub))
 
 	if err != nil {
 		if esViolacionUnica(err) {
@@ -245,10 +263,11 @@ func (r *PostgresRepo) Guardar(ctx context.Context, u *domain.Usuario) error {
 		UPDATE usuario SET
 			nombre = $2, apellido = $3, email = $4, password_hash = $5,
 			debe_cambiar_password = $6, rol = $7, estado = $8,
-			fecha_aprobacion = $9, aprobado_por = $10
+			fecha_aprobacion = $9, aprobado_por = $10, google_sub = $11
 		WHERE id = $1
-	`, u.ID, u.Nombre, u.Apellido, u.Email, u.PasswordHash, u.DebeCambiarPassword,
-		string(u.Rol), string(u.Estado), u.FechaAprobacion, u.AprobadoPor)
+	`, u.ID, u.Nombre, u.Apellido, u.Email, textoOpcional(u.PasswordHash), u.DebeCambiarPassword,
+		string(u.Rol), string(u.Estado), u.FechaAprobacion, u.AprobadoPor,
+		textoOpcional(u.GoogleSub))
 
 	if err != nil {
 		if esViolacionUnica(err) {

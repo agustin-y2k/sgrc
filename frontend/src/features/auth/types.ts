@@ -19,6 +19,35 @@ export type Usuario = {
   /** Lo que declaró al registrarse (RF-01.3), para la pantalla de aprobación. */
   cursoSolicitado?: string
   materiaSolicitada?: string
+  /**
+   * Cómo puede entrar esta cuenta. Una creada con Google no tiene
+   * contraseña (`tienePassword: false`), y ofrecerle "cambiar contraseña"
+   * sería mandarla a un 409.
+   *
+   * Opcionales en el tipo porque las respuestas guardadas de antes de la
+   * migración 008 no las traen.
+   */
+  tienePassword?: boolean
+  vinculadaAGoogle?: boolean
+}
+
+/** GET /api/auth/config — lo que la pantalla de login necesita sin sesión. */
+export type ConfigPublica = {
+  /** Vacío = este despliegue no tiene ingreso con Google configurado. */
+  googleClientId: string
+}
+
+export type GoogleLoginRequest = {
+  /** El ID token que Google le entrega al navegador. */
+  credential: string
+}
+
+export type GoogleRegistroRequest = GoogleLoginRequest & {
+  /** Vacíos, el backend usa los del token (given_name / family_name). */
+  nombre?: string
+  apellido?: string
+  cursoSolicitado?: string
+  materiaSolicitada?: string
 }
 
 export type LoginRequest = {
