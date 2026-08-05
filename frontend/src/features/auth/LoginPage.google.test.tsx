@@ -122,14 +122,23 @@ describe("LoginPage — ingreso con Google", () => {
 
   it("con la cuenta pendiente de aprobación, muestra el mensaje del backend", async () => {
     mockAuth(
-      vi.fn<Ingreso>().mockRejectedValue(new ApiError(403, "cuenta no habilitada"))
+      vi
+        .fn<Ingreso>()
+        .mockRejectedValue(
+          new ApiError(
+            403,
+            "tu cuenta todavía está esperando la aprobación de un Admin — vas a poder entrar apenas la aprueben"
+          )
+        )
     )
     const user = userEvent.setup()
     renderLoginPage()
 
     await user.click(screen.getByRole("button", { name: "Entrar con Google" }))
 
-    expect(await screen.findByText("cuenta no habilitada")).toBeInTheDocument()
+    expect(
+      await screen.findByText(/esperando la aprobación de un Admin/)
+    ).toBeInTheDocument()
   })
 
   it("con el ingreso con Google no configurado, muestra el mensaje del backend", async () => {

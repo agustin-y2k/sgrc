@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -722,5 +723,52 @@ func TestHTTP_PromoverAAdmin_Inexistente_404(t *testing.T) {
 	resp, _ := app.Test(req)
 	if resp.StatusCode != fiber.StatusNotFound {
 		t.Fatalf("esperaba 404, obtuve %d", resp.StatusCode)
+	}
+}
+
+// ── El motivo llega hasta la pantalla ───────────────────────────────────
+
+// El frontend muestra el texto del backend tal cual (ver api-client.ts), así
+// que el mensaje que sale de acá es literalmente el que lee la persona.
+func TestHTTP_Login_ElMotivoLlegaEnElCuerpo(t *testing.T) {
+	casos := []struct {
+		estado     domain.Estado
+		contiene   string
+		noContiene string
+	}{
+		{domain.EstadoPendiente, "esperando la aprobación", "rechazada"},
+		{domain.EstadoRechazada, "rechazada", "esperando"},
+		{domain.EstadoBaja, "dada de baja", "esperando"},
+	}
+
+	for _, c := range casos {
+		repo := nuevoFakeRepo()
+		repo.usuarios["u1"] = &domain.Usuario{
+			ID: "u1", Email: "ada@x.com", PasswordHash: "hash:password123", Estado: c.estado,
+		}
+		app := nuevaAppDeTest(repo)
+
+		req := httptest.NewRequest("POST", "/api/auth/login",
+			jsonBody(loginRequest{Email: "ada@x.com", Password: "password123"}))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("error inesperado: %v", err)
+		}
+		if resp.StatusCode != fiber.StatusForbidden {
+			t.Errorf("estado %s: esperaba 403, obtuve %d", c.estado, resp.StatusCode)
+		}
+
+		cuerpo := make([]byte, 512)
+		n, _ := resp.Body.Read(cuerpo)
+		texto := string(cuerpo[:n])
+
+		if !strings.Contains(texto, c.contiene) {
+			t.Errorf("estado %s: el mensaje %q no explica el motivo", c.estado, texto)
+		}
+		if strings.Contains(texto, c.noContiene) {
+			t.Errorf("estado %s: el mensaje %q es el de otro estado", c.estado, texto)
+		}
 	}
 }
