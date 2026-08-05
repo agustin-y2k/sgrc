@@ -28,9 +28,21 @@ function EstadoDeCuenta({ estado }: { estado: Estado }) {
   return <EstadoBadge tono={TONO_CUENTA[estado]}>{ETIQUETA_ESTADO[estado]}</EstadoBadge>
 }
 
+// PROMOVER pide confirmación como las otras dos aunque no destruya nada:
+// el sistema no puede degradar un Admin a docente, así que dar permisos es
+// tan poco reversible como una baja.
 type Confirmacion = {
   usuario: Usuario
-  accion: "BAJA" | "ELIMINAR"
+  accion: "BAJA" | "ELIMINAR" | "PROMOVER"
+}
+
+const TEXTO_CONFIRMACION: Record<Confirmacion["accion"], (u: Usuario) => string> = {
+  BAJA: (u) =>
+    `Dar de baja a ${u.nombre} ${u.apellido} es permanente: no se puede reactivar la cuenta. Si sus materias quedan sin ningún otro docente, sus reservas futuras se cancelan.`,
+  ELIMINAR: (u) =>
+    `Eliminar la cuenta de ${u.nombre} ${u.apellido} la borra definitivamente y libera el email ${u.email} para un registro nuevo. Sus reservas e incidencias se conservan, pero pierden la referencia a la persona.`,
+  PROMOVER: (u) =>
+    `${u.nombre} ${u.apellido} va a pasar a tener permisos de Admin: aprobar cuentas, editar el inventario y el ciclo lectivo, y dar de baja a otros usuarios. No se puede deshacer desde el sistema. Conserva sus materias y sus reservas, y el cambio le aplica de inmediato, sin que tenga que volver a entrar.`,
 }
 
 // RF-01/RF-02: panel de usuarios. Las acciones irreversibles (dar de baja,
@@ -75,6 +87,14 @@ export function UsuariosPage() {
     },
   })
 
+  const promover = useMutation({
+    mutationFn: (id: string) => adminApi.promoverAAdmin(id),
+    onSuccess: async () => {
+      setConfirmando(null)
+      await invalidar()
+    },
+  })
+
   const resetear = useMutation({
     mutationFn: (u: Usuario) => adminApi.resetearPassword(u.id),
     onSuccess: (res, u) => {
@@ -88,7 +108,8 @@ export function UsuariosPage() {
   })
 
   const usuarios = data?.data ?? []
-  const errorActivo = error ?? cambiarEstado.error ?? eliminar.error ?? resetear.error
+  const errorActivo =
+    error ?? cambiarEstado.error ?? eliminar.error ?? resetear.error ?? promover.error
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -153,7 +174,8 @@ export function UsuariosPage() {
           const confirmandoEste = confirmando?.usuario.id === u.id
           const trabajando =
             (cambiarEstado.isPending && cambiarEstado.variables?.id === u.id) ||
-            (eliminar.isPending && eliminar.variables === u.id)
+            (eliminar.isPending && eliminar.variables === u.id) ||
+            (promover.isPending && promover.variables === u.id)
 
           return (
             <Card key={u.id}>
@@ -201,6 +223,21 @@ export function UsuariosPage() {
                         >
                           Resetear contraseña
                         </Button>
+                        {/* Solo sobre docentes: el backend rechaza promover
+                            a alguien que ya es Admin, y ofrecer un botón que
+                            siempre falla es peor que no ofrecerlo. */}
+                        {u.rol === "DOCENTE" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={trabajando}
+                            onClick={() =>
+                              setConfirmando({ usuario: u, accion: "PROMOVER" })
+                            }
+                          >
+                            Promover a admin
+                          </Button>
+                        )}
                         {/* Darse de baja a uno mismo dejaría al Admin fuera
                             del sistema en el acto; el backend además lo
                             rechaza si es el último (RF-01.8). */}
@@ -231,21 +268,34 @@ export function UsuariosPage() {
 
                 {confirmandoEste && confirmando && (
                   <div className="grid gap-3 rounded-md border p-3">
-                    <p className="text-destructive text-sm">
-                      {confirmando.accion === "BAJA"
-                        ? `Dar de baja a ${u.nombre} ${u.apellido} es permanente: no se puede reactivar la cuenta. Si sus materias quedan sin ningún otro docente, sus reservas futuras se cancelan.`
-                        : `Eliminar la cuenta de ${u.nombre} ${u.apellido} la borra definitivamente y libera el email ${u.email} para un registro nuevo. Sus reservas e incidencias se conservan, pero pierden la referencia a la persona.`}
+                    {/* Promover no destruye nada, así que no va en rojo: el
+                        rojo es para lo que borra. Pero sí pide confirmación,
+                        porque tampoco se puede deshacer. */}
+                    <p
+                      className={
+                        confirmando.accion === "PROMOVER"
+                          ? "text-sm"
+                          : "text-destructive text-sm"
+                      }
+                    >
+                      {TEXTO_CONFIRMACION[confirmando.accion](u)}
                     </p>
                     <div className="flex gap-2">
                       <Button
-                        variant="destructive"
+                        variant={
+                          confirmando.accion === "PROMOVER" ? "default" : "destructive"
+                        }
                         size="sm"
                         disabled={trabajando}
-                        onClick={() =>
-                          confirmando.accion === "BAJA"
-                            ? cambiarEstado.mutate({ id: u.id, estado: "BAJA" })
-                            : eliminar.mutate(u.id)
-                        }
+                        onClick={() => {
+                          if (confirmando.accion === "BAJA") {
+                            cambiarEstado.mutate({ id: u.id, estado: "BAJA" })
+                          } else if (confirmando.accion === "PROMOVER") {
+                            promover.mutate(u.id)
+                          } else {
+                            eliminar.mutate(u.id)
+                          }
+                        }}
                       >
                         Confirmar
                       </Button>

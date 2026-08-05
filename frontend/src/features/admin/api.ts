@@ -46,6 +46,20 @@ export function eliminarUsuario(id: string) {
   return apiFetch<void>(`/api/auth/usuarios/${id}`, { method: "DELETE" })
 }
 
+/**
+ * Le da rol ADMIN a un docente ya aprobado.
+ *
+ * **No hay operación inversa**: el sistema no puede degradar un Admin a
+ * docente. La ruta se llama "promover-a-admin" y no "cambiar rol"
+ * justamente para no dar a entender que se puede volver atrás.
+ *
+ * El cambio tiene efecto en el request siguiente, sin volver a iniciar
+ * sesión: el backend lee el rol de la base en cada pedido.
+ */
+export function promoverAAdmin(id: string) {
+  return apiFetch<void>(`/api/auth/usuarios/${id}/promover-a-admin`, { method: "POST" })
+}
+
 /** RF-01.4 — un Admin puede crear otros Admin (quedan auto-aprobados). */
 /** RF-01.4 — el Admin nuevo queda APROBADA, sin pasar por PENDIENTE. */
 export function crearAdmin(req: CrearAdminRequest) {
