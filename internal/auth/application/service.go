@@ -241,7 +241,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*LoginResu
 	}
 
 	if !u.EstaAprobado() {
-		return nil, ErrCuentaNoHabilitada
+		return nil, motivoPorElQueNoEntra(u.Estado)
 	}
 
 	token, err := s.firmar(u)
@@ -280,7 +280,7 @@ func (s *Service) LoginConGoogle(ctx context.Context, idToken string) (*LoginRes
 	// nada. Lo único que no se vincula es una cuenta en BAJA, que se
 	// rechaza antes (ver cuentaParaIdentidadGoogle).
 	if !u.EstaAprobado() {
-		return nil, ErrCuentaNoHabilitada
+		return nil, motivoPorElQueNoEntra(u.Estado)
 	}
 
 	token, err := s.firmar(u)
@@ -324,8 +324,13 @@ func (s *Service) cuentaParaIdentidadGoogle(ctx context.Context, identidad *Iden
 
 	// Misma regla que en el registro común: una cuenta dada de baja no se
 	// reactiva por la puerta de atrás. RF-02.9 la hace terminal.
+	//
+	// El mensaje es el del ingreso y no el del registro: acá la persona
+	// está intentando entrar, así que decirle "pedile a un Admin que la
+	// elimine para poder registrarte de nuevo" respondería una pregunta que
+	// no hizo.
 	if u.Estado == domain.EstadoBaja {
-		return nil, ErrCuentaEnBaja
+		return nil, ErrIngresoCuentaEnBaja
 	}
 
 	u.GoogleSub = identidad.Sub
@@ -457,6 +462,29 @@ func primeroNoVacio(a, b string) string {
 		return a
 	}
 	return strings.TrimSpace(b)
+}
+
+// motivoPorElQueNoEntra traduce el estado de una cuenta que no puede
+// ingresar al error que se lo explica a su dueño.
+//
+// Se llama solo después de haber verificado la credencial, así que decir el
+// motivo no le revela nada a nadie sobre una cuenta ajena.
+//
+// El default no debería alcanzarse —los cuatro estados están cubiertos y
+// APROBADA ni llega hasta acá— pero devolver el genérico es mejor que
+// devolver nil y dejar entrar a alguien por un estado nuevo que alguien
+// agregue mañana sin pasar por este switch.
+func motivoPorElQueNoEntra(estado domain.Estado) error {
+	switch estado {
+	case domain.EstadoPendiente:
+		return ErrIngresoCuentaPendiente
+	case domain.EstadoRechazada:
+		return ErrIngresoCuentaRechazada
+	case domain.EstadoBaja:
+		return ErrIngresoCuentaEnBaja
+	default:
+		return ErrCuentaNoHabilitada
+	}
 }
 
 // consumirTiempoDeVerificacion corre el mismo argon2id que haría un login
