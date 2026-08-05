@@ -1361,3 +1361,78 @@ func TestPromoverAAdmin_ConUnSoloAdminEnElSistema_Funciona(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 }
+
+// ── Por qué no entra: un mensaje por estado ─────────────────────────────
+
+// Antes los tres estados devolvían "cuenta no habilitada". Quien se acababa
+// de registrar y quien había sido rechazado leían lo mismo, y ninguno sabía
+// si tenía que esperar o hablar con alguien.
+func TestLogin_CadaEstadoExplicaSuMotivo(t *testing.T) {
+	casos := []struct {
+		estado   domain.Estado
+		esperado error
+	}{
+		{domain.EstadoPendiente, ErrIngresoCuentaPendiente},
+		{domain.EstadoRechazada, ErrIngresoCuentaRechazada},
+		{domain.EstadoBaja, ErrIngresoCuentaEnBaja},
+	}
+
+	for _, c := range casos {
+		repo := nuevoFakeRepo()
+		repo.usuarios["u1"] = &domain.Usuario{
+			ID: "u1", Email: "ada@escuela.edu.ar", PasswordHash: "hash:password123",
+			Rol: domain.RolDocente, Estado: c.estado,
+		}
+		svc := nuevoServicioDeTest(repo)
+
+		_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "password123")
+
+		if !errors.Is(err, c.esperado) {
+			t.Errorf("estado %s: esperaba %v, hubo %v", c.estado, c.esperado, err)
+		}
+		// El paraguas sigue matcheando: quien pregunte por la condición
+		// general no necesita enumerar estados.
+		if !errors.Is(err, ErrCuentaNoHabilitada) {
+			t.Errorf("estado %s: tendría que seguir matcheando ErrCuentaNoHabilitada", c.estado)
+		}
+	}
+}
+
+// Los tres mensajes tienen que ser distintos entre sí y no el genérico: si
+// alguno se olvidara, el síntoma sería un texto inútil en pantalla que
+// ningún test notaría.
+func TestLogin_LosTresMotivosDicenCosasDistintas(t *testing.T) {
+	mensajes := map[string]bool{}
+	for _, err := range []error{
+		ErrIngresoCuentaPendiente, ErrIngresoCuentaRechazada, ErrIngresoCuentaEnBaja,
+	} {
+		if err.Error() == ErrCuentaNoHabilitada.Error() {
+			t.Errorf("%v quedó con el texto genérico", err)
+		}
+		if mensajes[err.Error()] {
+			t.Errorf("mensaje repetido: %q", err.Error())
+		}
+		mensajes[err.Error()] = true
+	}
+}
+
+// Decir el motivo es seguro porque para llegar hasta ahí hay que haber
+// puesto la contraseña correcta. Con la contraseña equivocada, una cuenta
+// pendiente tiene que seguir siendo indistinguible de cualquier otra.
+func TestLogin_ConPasswordIncorrecta_NoRevelaElEstadoDeLaCuenta(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Email: "ada@escuela.edu.ar", PasswordHash: "hash:password123",
+		Rol: domain.RolDocente, Estado: domain.EstadoPendiente,
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "la-equivocada")
+
+	if !errors.Is(err, ErrCredencialesInvalidas) {
+		t.Fatalf("esperaba ErrCredencialesInvalidas, hubo: %v", err)
+	}
+	if errors.Is(err, ErrCuentaNoHabilitada) {
+		t.Error("con la contraseña mal no se puede filtrar en qué estado está la cuenta")
+	}
+}

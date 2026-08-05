@@ -14,6 +14,10 @@
 
 - **El secreto y la verificación de cuenta viajan juntos.** El middleware se construye con los dos a la vez y `RegisterRoutes` de cada paquete recibe ese valor, no el secreto pelado. Es deliberado: pasarlos por separado permitiría montar una ruta que valide la firma y se saltee el estado de la cuenta, que es exactamente el agujero que esto cierra.
 
+- **Qué se calla y qué se dice, y por qué no es lo mismo.** Antes de verificar la credencial, el sistema es deliberadamente opaco: un email inexistente y uno real con la contraseña equivocada devuelven el mismo error y consumen el mismo tiempo (ver el punto siguiente). **Después** de verificarla, deja de haber motivo para esconder nada: quien presentó la contraseña correcta —o un ID token de Google firmado— ya probó que la cuenta es suya, así que se le dice exactamente por qué no puede entrar: pendiente de aprobación, rechazada o dada de baja. Los tres son 403; lo que cambia es la explicación, no el veredicto.
+
+  Antes los tres devolvían "cuenta no habilitada". Quien se acababa de registrar y quien había sido rechazado leían lo mismo, y ninguno de los dos sabía si tenía que esperar, insistir o hablar con alguien.
+
 - **El login tarda lo mismo exista o no la cuenta.** Con un email inexistente se devolvía sin hashear nada, así que medir el tiempo de respuesta alcanzaba para enumerar quién tiene cuenta en la escuela — el mensaje de error era el mismo, pero el reloj no. Ahora ese camino corre un `argon2id` contra un hash de descarte que no le pertenece a nadie. El hash se calcula una sola vez por proceso: recalcularlo en cada intento habría igualado los tiempos, pero convertiría un endpoint sin autenticar en una forma de gastar 64 MB por request.
 
 ## 1.1 Ingreso con cuenta de Google
