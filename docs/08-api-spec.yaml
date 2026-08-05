@@ -298,12 +298,6 @@ components:
         horaInicio: { type: string, example: "08:00" }
         horaFin: { type: string, example: "18:00" }
 
-    CancelacionAjenaRequest:
-      type: object
-      required: [motivo]
-      properties:
-        motivo: { type: string, minLength: 10 }
-
     # ── Notifications ──
     Notificacion:
       type: object
@@ -1046,7 +1040,6 @@ paths:
                   reservasCanceladas:
                     type: integer
                     description: 0 si la materia conserva otro docente activo.
-                  reservasCanceladas: { type: integer }
 
   # ══════════════════════════════
   # INVENTORY
@@ -1107,9 +1100,28 @@ paths:
         "200": { description: Carro actualizado }
 
   /api/inventory/carros/{carroId}/pcs:
+    get:
+      tags: [inventory]
+      summary: Listar las PCs de un carro (RF-03.7, todos los usuarios autenticados)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: carroId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PC' }
     post:
       tags: [inventory]
-      summary: Registrar PC en un carro (Admin)
+      summary: Registrar una PC en un carro (RF-03.2, Admin)
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -1499,7 +1511,7 @@ paths:
         - in: path
           name: id
           required: true
-          schema: { type: string, format: uuid }
+          schema: { type: string, format: uuid, description: "id de la Reserva puntual, no del grupo" }
       requestBody:
         content:
           application/json:
@@ -1508,28 +1520,10 @@ paths:
               properties:
                 motivo: { type: string }
       responses:
-        "200": { description: Cancelada }
+        "200": { description: Cancelada. Si la canceló otra persona, el docente recibe la notificación con el motivo (RF-05.1) }
         "400": { description: Falta el motivo al cancelar una reserva ajena }
         "403": { description: No es tu reserva y no sos Admin }
         "404": { description: No encontrada }
-
-  /api/reservation/reservas/{id}/cancelar:
-    post:
-      tags: [reservations]
-      summary: Cancelar manualmente una PC puntual ajena, con motivo (Admin)
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid, description: "id de la Reserva puntual, no del grupo" }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/CancelacionAjenaRequest' }
-      responses:
-        "200": { description: PC puntual cancelada y docente notificado }
 
   /api/reservation/bloqueos-evaluacion:
     post:
@@ -1598,14 +1592,6 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200": { description: Notificación marcada como leída }
-
-  /api/notifications/leer-todas:
-    post:
-      tags: [notifications]
-      summary: Marcar todas las notificaciones como leídas
-      security: [{ bearerAuth: [] }]
-      responses:
-        "200": { description: Todas marcadas como leídas }
 
   # ══════════════════════════════
   # REPORTS
@@ -1864,44 +1850,6 @@ paths:
 
   # ── Endpoints agregados tras la revisión completa ────────────────────
   # (RF que el spec declaraba pero que no tenían implementación)
-
-  /api/inventory/carros/{carroId}/pcs:
-    post:
-      tags: [inventory]
-      summary: Registrar una PC en un carro (RF-03.2, Admin)
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - in: path
-          name: carroId
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/PC' }
-      responses:
-        "201": { description: Creada }
-        "409": { description: Identificador repetido en el carro o número de serie ya usado }
-    get:
-      tags: [inventory]
-      summary: Listar las PCs de un carro (RF-03.7, todos los usuarios autenticados)
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - in: path
-          name: carroId
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items: { $ref: '#/components/schemas/PC' }
 
   /api/inventory/pcs/{pcId}/incidencias:
     get:
