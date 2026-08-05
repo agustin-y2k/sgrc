@@ -641,3 +641,86 @@ func TestRutasProtegidas_TokenDeCuentaDadaDeBaja_401(t *testing.T) {
 		}
 	}
 }
+
+// ── Promover a Admin ────────────────────────────────────────────────────
+
+func TestHTTP_PromoverAAdmin_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Email: "ada@x.com", Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/usuarios/u1/promover-a-admin", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin-1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+	if !repo.usuarios["u1"].EsAdmin() {
+		t.Error("la promoción no se aplicó")
+	}
+}
+
+// Es la ruta más sensible del panel: dar permisos de Admin. Un docente no
+// puede promoverse a sí mismo ni a nadie.
+func TestHTTP_PromoverAAdmin_DocenteNoPuede_403(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Email: "ada@x.com", Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/usuarios/u1/promover-a-admin", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	}
+	if repo.usuarios["u1"].EsAdmin() {
+		t.Error("un docente no puede promoverse solo")
+	}
+}
+
+func TestHTTP_PromoverAAdmin_SinAutenticar_401(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	resp, _ := app.Test(httptest.NewRequest("POST", "/api/auth/usuarios/u1/promover-a-admin", nil))
+
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("esperaba 401, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_PromoverAAdmin_CuentaPendiente_409(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Email: "ada@x.com", Rol: domain.RolDocente, Estado: domain.EstadoPendiente,
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/usuarios/u1/promover-a-admin", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin-1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_PromoverAAdmin_Inexistente_404(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("POST", "/api/auth/usuarios/nadie/promover-a-admin", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin-1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("esperaba 404, obtuve %d", resp.StatusCode)
+	}
+}

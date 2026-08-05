@@ -75,6 +75,12 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrSoloDesdeBaja):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
+	case errors.Is(err, domain.ErrPromocionInvalida):
+		// Se conserva el mensaje completo: dice si la cuenta ya era Admin o
+		// si le falta la aprobación, que es justo lo que el Admin necesita
+		// para saber qué hacer.
+		return fiber.NewError(fiber.StatusConflict, err.Error())
+
 	case errors.Is(err, domain.ErrTransicionInvalida):
 		// Cubre, entre otros casos, el intento de cambiar el estado de
 		// una cuenta que ya está en BAJA (RF-02.9: es terminal).

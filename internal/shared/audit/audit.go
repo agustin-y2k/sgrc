@@ -15,6 +15,7 @@ const (
 	CuentaBaja                 = "CUENTA_BAJA"
 	CuentaEliminadaDefinitiva  = "CUENTA_ELIMINADA_DEFINITIVAMENTE"
 	AdminCreado                = "ADMIN_CREADO"
+	RolPromovidoAAdmin         = "ROL_PROMOVIDO_A_ADMIN"
 	PasswordReseteada          = "PASSWORD_RESETEADA"
 	DocenteRemovidoDeMateria   = "DOCENTE_REMOVIDO_DE_MATERIA"
 	ReservaCanceladaPorAdmin   = "RESERVA_CANCELADA_POR_ADMIN"

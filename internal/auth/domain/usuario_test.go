@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -278,5 +279,59 @@ func TestValidarEmail(t *testing.T) {
 		if err := ValidarEmail(e); !errors.Is(err, ErrEmailInvalido) {
 			t.Errorf("ValidarEmail(%q) debería rechazar con ErrEmailInvalido, dio: %v", e, err)
 		}
+	}
+}
+
+// ── PromoverAAdmin ─────────────────────────────────────────────────────
+
+func TestPromoverAAdmin_DocenteAprobado_OK(t *testing.T) {
+	u := &Usuario{Rol: RolDocente, Estado: EstadoAprobada}
+
+	if err := u.PromoverAAdmin(); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !u.EsAdmin() {
+		t.Errorf("esperaba rol ADMIN, quedó %s", u.Rol)
+	}
+}
+
+// Promover una cuenta PENDIENTE sería aprobarla por la puerta de atrás,
+// salteándose el paso donde alguien mira quién es esa persona (RF-01.3).
+func TestPromoverAAdmin_CuentaNoAprobada_Error(t *testing.T) {
+	for _, estado := range []Estado{EstadoPendiente, EstadoRechazada, EstadoBaja} {
+		u := &Usuario{Rol: RolDocente, Estado: estado}
+
+		err := u.PromoverAAdmin()
+
+		if !errors.Is(err, ErrPromocionInvalida) {
+			t.Errorf("estado %s: esperaba ErrPromocionInvalida, hubo %v", estado, err)
+		}
+		if u.EsAdmin() {
+			t.Errorf("estado %s: no debería haber cambiado el rol", estado)
+		}
+	}
+}
+
+// No es un no-op silencioso: si el Admin apretó "promover" sobre alguien
+// que ya lo era, se equivocó de fila y conviene decírselo.
+func TestPromoverAAdmin_YaEsAdmin_Error(t *testing.T) {
+	u := &Usuario{Rol: RolAdmin, Estado: EstadoAprobada}
+
+	if err := u.PromoverAAdmin(); !errors.Is(err, ErrPromocionInvalida) {
+		t.Fatalf("esperaba ErrPromocionInvalida, hubo %v", err)
+	}
+}
+
+// El mensaje tiene que distinguir los dos motivos: es lo que le dice al
+// Admin qué hacer a continuación.
+func TestPromoverAAdmin_ElMensajeDiceElMotivo(t *testing.T) {
+	yaAdmin := &Usuario{Rol: RolAdmin, Estado: EstadoAprobada}
+	pendiente := &Usuario{Rol: RolDocente, Estado: EstadoPendiente}
+
+	if err := yaAdmin.PromoverAAdmin(); !strings.Contains(err.Error(), "ya tiene rol ADMIN") {
+		t.Errorf("mensaje poco claro: %v", err)
+	}
+	if err := pendiente.PromoverAAdmin(); !strings.Contains(err.Error(), "aprobar") {
+		t.Errorf("mensaje poco claro: %v", err)
 	}
 }
