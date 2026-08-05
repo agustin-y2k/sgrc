@@ -736,6 +736,36 @@ func (s *Service) CambiarPassword(ctx context.Context, usuarioID, passwordActual
 	return token, nil
 }
 
+// PromoverAAdmin le da rol ADMIN a un docente ya aprobado. Solo lo puede
+// pedir un Admin (lo impone el RBAC de la ruta).
+//
+// No hace falta transacción ni el guard del último Admin (RF-01.8): esto
+// solo agrega Admins, nunca los saca, así que no hay forma de que deje al
+// sistema sin ninguno. Es la razón por la que no pasa por transicionar().
+//
+// Tampoco toca nada más de la cuenta, y eso es deliberado: conserva sus
+// materias asignadas y sus reservas. Un docente que pasa a coordinar suele
+// seguir dando clase, y el sistema no lo impide — academic solo exige que
+// el usuario esté APROBADA para asignarlo a una materia (nunca miró el
+// rol), y reservar tampoco pide rol. Borrarle las materias "porque ahora es
+// Admin" le cancelaría las clases que ya tiene tomadas por una promoción.
+//
+// El cambio tiene efecto en el request siguiente, sin volver a iniciar
+// sesión: el middleware lee el rol de la base en cada pedido y pisa el del
+// token (ver internal/shared/middleware/jwt.go).
+func (s *Service) PromoverAAdmin(ctx context.Context, usuarioID string) error {
+	u, err := s.repo.BuscarPorID(ctx, usuarioID)
+	if err != nil {
+		return err
+	}
+
+	if err := u.PromoverAAdmin(); err != nil {
+		return err
+	}
+
+	return s.repo.Guardar(ctx, u)
+}
+
 // EliminarDefinitivamente implementa RF-01.9: hard delete, solo permitido
 // desde estado BAJA.
 func (s *Service) EliminarDefinitivamente(ctx context.Context, usuarioID string) error {

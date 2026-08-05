@@ -264,6 +264,27 @@ func (h *Handler) ResetearPassword(c *fiber.Ctx) error {
 	return c.JSON(resetPasswordResponse{PasswordTemporal: temporal})
 }
 
+// POST /api/auth/usuarios/{id}/promover-a-admin (Admin)
+//
+// La ruta dice exactamente lo que hace y no un genérico "cambiar rol": no
+// existe la operación inversa (ver domain.Usuario.PromoverAAdmin), y un
+// PATCH /rol daría a entender que se puede volver atrás.
+func (h *Handler) PromoverAAdmin(c *fiber.Ctx) error {
+	id := c.Params("id")
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	if err := h.svc.PromoverAAdmin(c.UserContext(), id); err != nil {
+		return mapearError(err)
+	}
+	// Dar permisos de Admin es de lo más sensible que puede pasar en el
+	// sistema, y no se deshace: queda registrado quién lo hizo y a quién.
+	h.auditar(c, claims.UserID, audit.RolPromovidoAAdmin, "usuario", &id, nil)
+	return c.SendStatus(fiber.StatusOK)
+}
+
 // DELETE /api/auth/usuarios/{id} (Admin) — hard delete, solo desde BAJA
 func (h *Handler) EliminarDefinitivamente(c *fiber.Ctx) error {
 	id := c.Params("id")
