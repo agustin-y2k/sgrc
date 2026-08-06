@@ -857,15 +857,30 @@ func (s *Service) PromoverAAdmin(ctx context.Context, usuarioID string) error {
 	return s.repo.Guardar(ctx, u)
 }
 
-// EliminarDefinitivamente implementa RF-01.9: hard delete, solo permitido
-// desde estado BAJA.
+// EliminarDefinitivamente implementa RF-01.9: hard delete desde cualquiera
+// de los dos estados terminales, BAJA o RECHAZADA.
+//
+// Que RECHAZADA cuente es lo que hace que rechazar deje de ser una trampa.
+// RECHAZADA no transiciona a ningún lado (ver domain.PuedeTransicionarA), y
+// mientras eliminar exigió BAJA, una cuenta rechazada no se podía reactivar
+// NI eliminar: el email quedaba tomado para siempre. Un rechazo por error
+// —un mail mal tipeado, la persona equivocada— dejaba a un docente sin poder
+// registrarse nunca más con su propia dirección, y al Admin sin ninguna
+// herramienta salvo entrar a psql. RF-01.9 ya describía este camino ("o
+// rechazarla, si nunca se aprobó"); lo que faltaba era implementarlo.
+//
+// Lo que la condición sigue impidiendo es borrar una cuenta viva: APROBADA
+// hay que darla de baja primero (y ahí se dispara la cascada que cancela sus
+// reservas, ver DarDeBaja), y PENDIENTE hay que resolverla, porque borrar en
+// silencio a alguien que está esperando una respuesta es la forma de que
+// nadie se entere de que quedó afuera.
 func (s *Service) EliminarDefinitivamente(ctx context.Context, usuarioID string) error {
 	u, err := s.repo.BuscarPorID(ctx, usuarioID)
 	if err != nil {
 		return err
 	}
-	if u.Estado != domain.EstadoBaja {
-		return ErrSoloDesdeBaja
+	if u.Estado != domain.EstadoBaja && u.Estado != domain.EstadoRechazada {
+		return ErrSoloDesdeBajaORechazada
 	}
 	return s.repo.Eliminar(ctx, usuarioID)
 }
