@@ -80,7 +80,8 @@ describe("RegistroConGoogle", () => {
     const onRegistrado = renderRegistro()
     const user = userEvent.setup()
 
-    await user.type(screen.getByLabelText("Curso"), "5°A")
+    await user.selectOptions(screen.getByLabelText("Año"), "5")
+    await user.selectOptions(screen.getByLabelText("División"), "A")
     await user.type(screen.getByLabelText("Materia"), "Programación")
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 

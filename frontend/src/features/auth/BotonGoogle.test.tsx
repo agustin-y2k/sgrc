@@ -63,6 +63,50 @@ describe("BotonGoogle", () => {
     )
   })
 
+  // El iframe de Google no se puede tocar con CSS, así que lo único que
+  // hace que el botón no desentone son las opciones de renderButton. Se
+  // prueban acá porque son la diferencia entre un botón alineado con el
+  // resto del formulario y uno que parece pegado de otra pantalla.
+  it("pide el botón con el tema claro cuando la app está en claro", async () => {
+    document.documentElement.classList.remove("dark")
+    const { renderButton } = googleFalso()
+    vi.mocked(authApi.configPublica).mockResolvedValue({ googleClientId: "123-abc" })
+
+    render(<BotonGoogle onCredential={vi.fn()} />)
+
+    await waitFor(() => expect(renderButton).toHaveBeenCalled())
+    expect(renderButton.mock.calls[0][1]).toMatchObject({
+      theme: "outline",
+      logo_alignment: "left",
+    })
+  })
+
+  // En oscuro, el botón "outline" es una tarjeta blanca en medio de un
+  // formulario oscuro.
+  it("pide el botón oscuro cuando la app está en oscuro", async () => {
+    document.documentElement.classList.add("dark")
+    const { renderButton } = googleFalso()
+    vi.mocked(authApi.configPublica).mockResolvedValue({ googleClientId: "123-abc" })
+
+    render(<BotonGoogle onCredential={vi.fn()} />)
+
+    await waitFor(() => expect(renderButton).toHaveBeenCalled())
+    expect(renderButton.mock.calls[0][1]).toMatchObject({ theme: "filled_black" })
+    document.documentElement.classList.remove("dark")
+  })
+
+  // jsdom no hace layout, así que el ancho medido es 0. Sin medida hay que
+  // omitir `width`: mandarle 0 a Google dibuja un botón de ancho cero.
+  it("sin poder medir el ancho, no le manda width a Google", async () => {
+    const { renderButton } = googleFalso()
+    vi.mocked(authApi.configPublica).mockResolvedValue({ googleClientId: "123-abc" })
+
+    render(<BotonGoogle onCredential={vi.fn()} />)
+
+    await waitFor(() => expect(renderButton).toHaveBeenCalled())
+    expect(renderButton.mock.calls[0][1]).not.toHaveProperty("width")
+  })
+
   it("entrega el token que devuelve Google", async () => {
     const { initialize } = googleFalso()
     vi.mocked(authApi.configPublica).mockResolvedValue({ googleClientId: "123-abc" })
