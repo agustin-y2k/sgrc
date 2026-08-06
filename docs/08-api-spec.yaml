@@ -811,10 +811,14 @@ paths:
   /api/auth/usuarios/{id}:
     delete:
       tags: [auth]
-      summary: Eliminar definitivamente una cuenta en BAJA (Admin)
+      summary: Eliminar definitivamente una cuenta cerrada (Admin)
       description: |
-        Solo permitido si el usuario está en estado BAJA (RF-01.9) — libera su email
-        para un nuevo registro (RF-02.9). Sus reservas, incidencias y notificaciones
+        Solo permitido si el usuario está en uno de los dos estados terminales, BAJA
+        o RECHAZADA (RF-01.9) — libera su email para un nuevo registro (RF-02.9).
+        RECHAZADA cuenta porque no transiciona a ningún otro estado: sin esta salida,
+        un rechazo equivocado dejaba el email tomado de forma permanente. Una cuenta
+        APROBADA hay que darla de baja primero, y una PENDIENTE hay que resolverla.
+        Sus reservas, incidencias y notificaciones
         no se eliminan: las FKs que las referencian usan ON DELETE SET NULL (conservan
         nombre_docente_snapshot u otro texto ya guardado) salvo docente_materia y
         notificacion.usuario_id, que sí se eliminan en cascada por no tener sentido sin

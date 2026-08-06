@@ -253,7 +253,12 @@ export function UsuariosPage() {
                         )}
                       </>
                     )}
-                    {u.estado === "BAJA" && (
+                    {/* Los dos estados terminales (RF-01.9). RECHAZADA está
+                        acá porque es el único modo de deshacer un rechazo
+                        equivocado: esa cuenta no transiciona a ningún lado,
+                        así que sin eliminar, el email quedaría tomado para
+                        siempre. */}
+                    {(u.estado === "BAJA" || u.estado === "RECHAZADA") && (
                       <Button
                         variant="destructive"
                         size="sm"

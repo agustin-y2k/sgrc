@@ -956,23 +956,12 @@ func TestCambiarPassword_NuevaCorta_Error(t *testing.T) {
 
 // ── EliminarDefinitivamente ─────────────────────────────────────────────
 
-func TestEliminarDefinitivamente_DesdeBaja_OK(t *testing.T) {
-	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Estado: domain.EstadoBaja}
-	svc := nuevoServicioDeTest(repo)
-
-	err := svc.EliminarDefinitivamente(context.Background(), "u1")
-
-	if err != nil {
-		t.Fatalf("no debería fallar: %v", err)
-	}
-	if _, existe := repo.usuarios["u1"]; existe {
-		t.Error("el usuario debería haberse eliminado")
-	}
-}
-
-func TestEliminarDefinitivamente_NoEstaEnBaja_Rechazado(t *testing.T) {
-	casos := []domain.Estado{domain.EstadoPendiente, domain.EstadoAprobada, domain.EstadoRechazada}
+// Los dos estados terminales se pueden eliminar. RECHAZADA importa tanto
+// como BAJA: es el único camino que tiene un Admin para deshacer un rechazo
+// equivocado y liberar el email, porque RECHAZADA no transiciona a ningún
+// otro estado.
+func TestEliminarDefinitivamente_DesdeEstadoTerminal_OK(t *testing.T) {
+	casos := []domain.Estado{domain.EstadoBaja, domain.EstadoRechazada}
 	for _, estado := range casos {
 		repo := nuevoFakeRepo()
 		repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Estado: estado}
@@ -980,8 +969,29 @@ func TestEliminarDefinitivamente_NoEstaEnBaja_Rechazado(t *testing.T) {
 
 		err := svc.EliminarDefinitivamente(context.Background(), "u1")
 
-		if !errors.Is(err, ErrSoloDesdeBaja) {
-			t.Errorf("estado %s: esperaba ErrSoloDesdeBaja, obtuve %v", estado, err)
+		if err != nil {
+			t.Fatalf("estado %s: no debería fallar: %v", estado, err)
+		}
+		if _, existe := repo.usuarios["u1"]; existe {
+			t.Errorf("estado %s: el usuario debería haberse eliminado", estado)
+		}
+	}
+}
+
+// Una cuenta viva no se borra: APROBADA hay que darla de baja primero (para
+// que corra la cascada que cancela sus reservas) y PENDIENTE hay que
+// resolverla, no hacerla desaparecer mientras alguien espera respuesta.
+func TestEliminarDefinitivamente_CuentaNoCerrada_Rechazado(t *testing.T) {
+	casos := []domain.Estado{domain.EstadoPendiente, domain.EstadoAprobada}
+	for _, estado := range casos {
+		repo := nuevoFakeRepo()
+		repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Estado: estado}
+		svc := nuevoServicioDeTest(repo)
+
+		err := svc.EliminarDefinitivamente(context.Background(), "u1")
+
+		if !errors.Is(err, ErrSoloDesdeBajaORechazada) {
+			t.Errorf("estado %s: esperaba ErrSoloDesdeBajaORechazada, obtuve %v", estado, err)
 		}
 		if _, existe := repo.usuarios["u1"]; !existe {
 			t.Errorf("estado %s: no debería haberse eliminado", estado)

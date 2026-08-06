@@ -336,7 +336,7 @@ func (h *Handler) PromoverAAdmin(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
-// DELETE /api/auth/usuarios/{id} (Admin) — hard delete, solo desde BAJA
+// DELETE /api/auth/usuarios/{id} (Admin) — hard delete, solo desde BAJA o RECHAZADA
 func (h *Handler) EliminarDefinitivamente(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)
