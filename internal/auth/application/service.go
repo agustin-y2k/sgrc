@@ -1,6 +1,7 @@
 // Package application orquesta los casos de uso de RF-01 (usuarios y
-// autenticación) y las partes de RF-02 que no dependen todavía de
-// academic/reservation (ver el TODO en DarDeBaja).
+// autenticación) y la parte de RF-02 que le toca: aprobación de cuentas y
+// la cascada de DarDeBaja, que cruza a academic y a reservation por puertos
+// (ver ports.go) sin importar ninguno de los dos.
 package application
 
 import (

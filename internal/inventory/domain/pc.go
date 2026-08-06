@@ -103,8 +103,9 @@ func NuevaPC(id, carroID string, identificador int, numeroSerie int64, freezado 
 
 // CambiarEstado aplica una transición si es válida (ver
 // EstadoPC.PuedeTransicionarA). No dispara ninguna cascada de cancelación
-// de reservas acá — eso es una responsabilidad de application/ (necesita
-// el puerto hacia reservation, ver el TODO en application.Service).
+// de reservas acá — eso es responsabilidad de application/, que llega a
+// reservation por un puerto (ValidadorReservas); el dominio no conoce
+// infraestructura.
 func (p *PC) CambiarEstado(nuevo EstadoPC) error {
 	if !p.Estado.PuedeTransicionarA(nuevo) {
 		return fmt.Errorf("%w: de %s a %s", ErrTransicionEstadoPCInvalida, p.Estado, nuevo)
