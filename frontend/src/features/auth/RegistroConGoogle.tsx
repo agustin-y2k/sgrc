@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import * as authApi from "@/features/auth/api"
+import { SelectorDeCursoSolicitado } from "@/features/auth/SelectorDeCursoSolicitado"
 import { getErrorMessage } from "@/lib/api-client"
 import { datosDeLaCredencial } from "@/lib/google-identity"
 
@@ -154,9 +155,12 @@ export function RegistroConGoogle({
                   name="cursoSolicitado"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Curso</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ej.: 5°A" {...field} />
+                        <SelectorDeCursoSolicitado
+                          idPrefijo="registro-google-curso"
+                          value={field.value ?? ""}
+                          onChange={field.onChange}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
