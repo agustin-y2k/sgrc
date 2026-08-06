@@ -155,11 +155,15 @@ func (r *PostgresRepo) ListarCiclos(ctx context.Context, filtroArchivado *bool) 
 }
 
 // ArchivarCiclo marca el ciclo y todos sus cursos/materias como
-// archivados, en una sola transacción. No borra ninguna reserva todavía
-// (ver el TODO en application.Service.ArchivarYClonar) — cuando
-// reservation exista, ese paso se suma DENTRO de esta misma transacción,
-// antes del COMMIT, para que el snapshot histórico + borrado de reservas
-// y el archivado de la estructura académica sean atómicos entre sí.
+// archivados, en una sola transacción.
+//
+// No borra ninguna reserva, y eso NO es un paso que falte: el borrado vive
+// en application.Service.ArchivarYClonar, después de este método y fuera de
+// esta transacción. Cruza a reservation por un puerto, con su propia
+// transacción, así que meterlo acá adentro rompería el límite de dominio
+// (docs/06-arquitectura.md §3). El orden —snapshot, archivar, borrar— es lo
+// que hace recuperable un fallo a mitad de camino: si algo se cae antes del
+// borrado, las reservas siguen intactas y alcanza con reintentar.
 func (r *PostgresRepo) ArchivarCiclo(ctx context.Context, cicloID string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
