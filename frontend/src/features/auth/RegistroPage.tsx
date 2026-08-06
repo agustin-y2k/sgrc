@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input"
 import * as authApi from "@/features/auth/api"
 import { BotonGoogle } from "@/features/auth/BotonGoogle"
 import { RegistroConGoogle } from "@/features/auth/RegistroConGoogle"
+import { SelectorDeCursoSolicitado } from "@/features/auth/SelectorDeCursoSolicitado"
 import { getErrorMessage } from "@/lib/api-client"
 
 // Espeja RegistroRequest de internal/auth/interfaces/http/dto.go / docs/08-api-spec.yaml.
@@ -34,9 +35,14 @@ const registroSchema = z.object({
   apellido: z.string().min(1, "Requerido").max(100),
   email: z.string().email("Ingresá un email válido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
-  // RF-01.3 + RF-02.6: texto libre y opcional. Al registrarse la persona
-  // todavía no está autenticada, así que no puede elegir de una lista — y
-  // lo que va a dictar puede no existir todavía en el sistema.
+  // RF-01.3 + RF-02.6: los dos opcionales, y los dos siguen siendo texto
+  // libre en el contrato — el curso puede no existir todavía en el sistema,
+  // y quien se registra no está autenticado, así que no hay lista que
+  // consultar. Lo que cambia es cómo se completan: el curso se arma con dos
+  // desplegables (ver SelectorDeCursoSolicitado) para que llegue con el
+  // nombre canónico "5°A" en vez de las cinco formas de escribirlo a mano,
+  // y la materia sigue siendo un campo abierto, igual que cuando el Admin
+  // crea una (MateriasDeCurso).
   cursoSolicitado: z.string().max(100).optional(),
   materiaSolicitada: z.string().max(100).optional(),
 })
@@ -213,9 +219,12 @@ export function RegistroPage() {
                     name="cursoSolicitado"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Curso</FormLabel>
                         <FormControl>
-                          <Input placeholder="Ej.: 5°A" {...field} />
+                          <SelectorDeCursoSolicitado
+                            idPrefijo="registro-curso"
+                            value={field.value ?? ""}
+                            onChange={field.onChange}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

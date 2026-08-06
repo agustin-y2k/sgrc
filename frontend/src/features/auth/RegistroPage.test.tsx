@@ -74,7 +74,10 @@ describe("RegistroPage", () => {
     renderRegistroPage()
 
     await llenarFormulario(user)
-    await user.type(screen.getByLabelText("Curso"), "5°A")
+    // El curso se arma con los dos desplegables y viaja compuesto: el `°`
+    // lo pone el sistema, no el docente.
+    await user.selectOptions(screen.getByLabelText("Año"), "5")
+    await user.selectOptions(screen.getByLabelText("División"), "A")
     await user.type(screen.getByLabelText("Materia"), "Programación")
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 
