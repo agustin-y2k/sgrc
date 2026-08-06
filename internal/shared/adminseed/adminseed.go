@@ -29,12 +29,12 @@ const minPasswordLen = 8
 type Repo interface {
 	// ExisteAdminActivo: si hay al menos un ADMIN que pueda entrar hoy.
 	//
-	// El estado importa y antes no se miraba: se contaban los ADMIN sin
-	// filtrar, así que una base cuyo único Admin quedó en BAJA (o RECHAZADA)
-	// se veía como "ya tiene admin" y el seed no hacía nada. El sistema
-	// quedaba sin ningún acceso administrativo y sin forma de recuperarlo
-	// desde la aplicación: nadie podía aprobar cuentas, y el único camino
-	// era SQL a mano contra producción.
+	// El estado es parte de la pregunta, no un detalle: contando los ADMIN
+	// sin filtrar, una base cuyo único Admin quedó en BAJA (o RECHAZADA) se
+	// vería como "ya tiene admin" y el seed no haría nada. El sistema
+	// quedaría sin ningún acceso administrativo y sin forma de recuperarlo
+	// desde la aplicación —nadie puede aprobar cuentas— salvo SQL a mano
+	// contra producción.
 	ExisteAdminActivo(ctx context.Context) (bool, error)
 
 	// CrearAdmin siembra el Admin inicial. Solo se llama cuando no hay

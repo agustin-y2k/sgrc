@@ -484,8 +484,8 @@ func TestEditarIncidencia_NoExiste_Error(t *testing.T) {
 // La cascada de RF-03.8/03.9 no es atómica con el guardado de la PC (cruza a
 // reservation, que abre su propia transacción). Si falla el segundo paso, la
 // PC queda guardada en su nuevo estado y sus reservas siguen CONFIRMADA.
-// Antes el reintento rebotaba con 409 y no había forma de completarla desde
-// la API; estos tests cubren que ahora sí.
+// Estos tests cubren que el reintento la completa: sin eso rebotaría con un
+// 409 y no habría forma de terminarla desde la API.
 
 func TestCambiarEstadoPC_ReintentoConCascadaPendiente_LaCompleta(t *testing.T) {
 	repo := nuevoFakeRepo()

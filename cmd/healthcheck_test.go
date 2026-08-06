@@ -15,8 +15,8 @@ import (
 
 // ── /health ────────────────────────────────────────────────────────────
 
-// El caso que importa es el que antes no existía: con la base caída, /health
-// tiene que decirlo. Se arma un pool contra un puerto donde no hay nadie
+// El caso que importa: con la base caída, /health tiene que decirlo — un
+// healthcheck que no puede fallar no es un healthcheck. Se arma un pool contra un puerto donde no hay nadie
 // escuchando — pgxpool.New no conecta hasta el primer uso, así que el Ping
 // falla rápido con "connection refused" sin necesidad de un Postgres real.
 func TestHandlerHealth_SinBaseDeDatos_Responde503(t *testing.T) {

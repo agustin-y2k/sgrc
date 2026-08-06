@@ -129,8 +129,9 @@ func (s *Service) DisponibilidadDeTodosLosAdmins(ctx context.Context) ([]AdminDi
 	diaActual, horaActual := domain.DiaYHoraDe(ahora)
 	hoy := domain.FechaSolo(ahora)
 
-	// Dos consultas en total, no dos por Admin: el for de antes hacía 2N
-	// viajes a la base para armar una pantalla que mira cualquier docente.
+	// Dos consultas en total, no dos por Admin: resolverlo dentro del for
+	// serían 2N viajes a la base para armar una pantalla que mira cualquier
+	// docente.
 	ids := make([]string, len(admins))
 	for i, admin := range admins {
 		ids[i] = admin.ID

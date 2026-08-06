@@ -551,10 +551,10 @@ func TestHTTP_ListarReservas_UnDocenteSoloVeLasSuyas(t *testing.T) {
 	}
 }
 
-// El listado tiene que traer los nombres resueltos: antes devolvía pc_id y
-// materia_id como UUIDs, así que "Mis reservas" no podía decir de qué PC ni
-// de qué materia era cada tarjeta — una reserva de ocho PCs se veía como
-// ocho filas idénticas.
+// El listado tiene que traer los nombres resueltos y no los UUID de pc_id y
+// materia_id: con los UUID, "Mis reservas" no puede decir de qué PC ni de
+// qué materia es cada tarjeta, y una reserva de ocho PCs se ve como ocho
+// filas idénticas.
 func TestHTTP_ListarReservas_TraeNombresResueltos(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(repo, "r1", "pc1", "docente1")
@@ -645,8 +645,8 @@ func TestHTTP_ListarReservas_PaginaYTotal(t *testing.T) {
 	}
 }
 
-// Sin parámetros el endpoint sigue funcionando igual que antes para el
-// cliente, pero acotado: un cliente viejo no se trae el año entero.
+// Sin parámetros el endpoint responde igual para el cliente, pero acotado:
+// un cliente que no los mande no se trae el año entero.
 func TestHTTP_ListarReservas_SinParametros_UsaLaVentanaPorDefecto(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(repo, "r1", "pc1", "docente1")
