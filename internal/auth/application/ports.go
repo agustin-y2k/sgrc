@@ -32,6 +32,20 @@ type Repo interface {
 	Guardar(ctx context.Context, u *domain.Usuario) error
 	ContarAdminsAprobados(ctx context.Context) (int, error)
 	Eliminar(ctx context.Context, id string) error
+
+	// ── Recuperación de contraseña (migración 009) ──────────────────
+	//
+	// CrearCodigoRecuperacion invalida los códigos anteriores de esa
+	// persona y guarda el nuevo, de forma atómica. Las dos cosas van
+	// juntas a propósito: pedir un código tiene que dejar exactamente uno
+	// vigente, o quien pide varios seguidos multiplica sus intentos.
+	CrearCodigoRecuperacion(ctx context.Context, c *domain.CodigoRecuperacion) error
+	// BuscarCodigoVigenteDe devuelve el último código sin usar de esa
+	// persona, o ErrCodigoNoEncontrado si no tiene ninguno. Que esté sin
+	// usar no significa que sirva: vencimiento e intentos los evalúa el
+	// dominio.
+	BuscarCodigoVigenteDe(ctx context.Context, usuarioID string) (*domain.CodigoRecuperacion, error)
+	GuardarCodigoRecuperacion(ctx context.Context, c *domain.CodigoRecuperacion) error
 }
 
 // Estas funciones se inyectan (no se llaman directamente a paquetes
@@ -43,6 +57,9 @@ type (
 	TokenSigner         func(u *domain.Usuario) (string, error)
 	IDGenerator         func() string
 	GenerarTemporalFunc func() (string, error)
+	// GenerarCodigoFunc produce el código de recuperación que se manda por
+	// mail: dígitos, corto, para tipear a mano desde el celular.
+	GenerarCodigoFunc func() (string, error)
 )
 
 // IdentidadGoogle es lo que un ID token ya verificado afirma sobre quien

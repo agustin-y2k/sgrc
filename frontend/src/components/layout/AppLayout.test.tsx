@@ -40,6 +40,7 @@ function renderLayout(rol: "ADMIN" | "DOCENTE" = "DOCENTE") {
     logout: vi.fn(),
     loginConGoogle: vi.fn(),
     errorDeSesion: null,
+    motivoDeCierre: null,
     refetchUser: vi.fn(),
   })
 

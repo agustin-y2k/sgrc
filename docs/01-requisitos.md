@@ -43,8 +43,14 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 - RF-01.3: Un docente se autorregistra y queda con estado `PENDIENTE` hasta aprobación de un `ADMIN`. Al registrarse puede declarar **qué curso y qué materia va a dictar** (texto libre, opcional): es lo que el `ADMIN` mira al aprobarlo para saber a qué asignarlo (RF-02.6), y si eso todavía no existe, para saber que lo tiene que crear. No es una referencia a `Curso` ni a `Materia` — al registrarse la persona no está autenticada y no puede elegir de una lista. Si el email ya pertenece a una cuenta existente en estado `BAJA`, el sistema devuelve un mensaje específico ("este email pertenece a una cuenta dada de baja — pedile a un Admin que la elimine para poder registrarte de nuevo") en vez del genérico "email ya registrado", para que quien vuelve entienda que es su propia cuenta vieja y no un conflicto con otra persona.
 - RF-01.4: El primer `ADMIN` se crea por seed. Un `ADMIN` puede crear o aprobar otros `ADMIN`.
 - RF-01.5: Contraseñas con hash `argon2id`. JWT firmados con `HS256` (ver `06-arquitectura.md`).
-- RF-01.6: Recuperación de contraseña asistida por `ADMIN` (sin flujo de email, por la decisión de no tener notificaciones por email — ver §7 Fuera de alcance): un `ADMIN` puede resetear la contraseña de cualquier usuario a una temporal; el sistema marca `debe_cambiar_password = true` en esa cuenta (ver `07-modelo-datos.md`), y el usuario debe cambiarla antes de poder usar el resto del sistema.
+- RF-01.6: Recuperación de contraseña asistida por `ADMIN`: un `ADMIN` puede resetear la contraseña de cualquier usuario a una temporal; el sistema marca `debe_cambiar_password = true` en esa cuenta (ver `07-modelo-datos.md`), y el usuario debe cambiarla antes de poder usar el resto del sistema. Es el camino de **rescate**, no el habitual (ese es RF-01.10): sirve para quien no puede recibir el mail —email mal escrito al registrarse, casilla perdida— y es el único disponible en un despliegue sin correo configurado.
 - RF-01.7: Cualquier usuario autenticado puede cambiar su propia contraseña en cualquier momento (no solo cuando se lo exige un reseteo de Admin), indicando la contraseña actual y la nueva.
+- RF-01.11: **Cambiar una contraseña cierra las sesiones abiertas de esa cuenta**, por cualquiera de los tres caminos (RF-01.6, RF-01.7 y RF-01.10). Quien cambia su contraseña porque sospecha que entraron a su cuenta necesita que el acceso del otro se corte ahí, no cuando venza el token que ya tenía. La sesión desde la que se hace el cambio sobrevive; el resto vuelve a la pantalla de ingreso con el motivo explicado. Ver `09-seguridad-rbac.md` §1.
+- RF-01.10: **Recuperación de contraseña por autoservicio.** Quien olvidó su contraseña pide un código desde la pantalla de ingreso, le llega a su email, y con ese código elige una contraseña nueva — sin que ningún `ADMIN` intervenga ni vea nada. La contraseña de cada persona queda enteramente en sus manos.
+  - El código es de 6 dígitos, vence a los **15 minutos**, sirve **una sola vez**, admite **5 intentos** fallidos y pedir uno nuevo invalida el anterior. En la base se guarda hasheado con argon2, igual que una contraseña (ver `migrations/009`).
+  - Solo aplica al **ingreso local**. Una cuenta creada con Google no tiene contraseña propia: quien la verifica es Google. A esa persona le llega un correo explicándoselo, en vez de dejarla esperando un código que no existe.
+  - Pedir el código responde **siempre lo mismo**, exista o no la cuenta y esté o no aprobada. Es lo que evita que el formulario sirva para averiguar qué direcciones están registradas en la escuela (ver `09-seguridad-rbac.md` §4).
+  - Depende de que el despliegue tenga correo configurado (`SMTP_*`). Sin eso, el enlace no aparece en la pantalla de ingreso y la salida es RF-01.6.
 - RF-01.8: El sistema **nunca permite** que quede cero `ADMIN` en estado `APROBADA`: rechaza dar de baja, rechazar o degradar al último `ADMIN` activo (HTTP 409).
 - RF-01.9: `ADMIN` puede eliminar (hard delete) definitivamente una cuenta, pero **solo si está en estado `BAJA`** — no se puede eliminar una cuenta `PENDIENTE`, `APROBADA` o `RECHAZADA` directamente, primero hay que darla de baja (o rechazarla, si nunca se aprobó). El propósito principal es liberar el email para un nuevo registro (RF-02.9); las reservas, incidencias y notificaciones asociadas a esa cuenta no se eliminan, solo pierden la referencia al usuario (ver `07-modelo-datos.md`).
 
@@ -110,6 +116,11 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 - RF-05.5: Notificación a todos los `ADMIN` con el mismo criterio que RF-05.4 cuando se remueve a un docente de una materia puntual (sin baja completa) — ver RF-02.10.
 - RF-05.6: Notificación a **todos los usuarios con rol `ADMIN` y estado `APROBADA`** cuando un docente se autorregistra y queda `PENDIENTE` de aprobación (RF-01.3) — así no dependen de revisar manualmente la lista para enterarse de que hay una cuenta esperando.
 - RF-05.7: Estado `NO_LEIDA` / `LEIDA`. Visibles al ingresar al sistema.
+- RF-05.8: **Copias por email** de algunos de estos avisos, para que no dependan de que la persona tenga el sistema abierto. Son tres: a todos los `ADMIN` cuando alguien queda `PENDIENTE` (RF-05.6 — una cuenta que nadie mira es un docente que no puede trabajar); a la persona cuando le aprueban la cuenta (RF-02); y el código de RF-01.10.
+  - Es **opcional**: sin `SMTP_*` configurado el sistema funciona igual y los avisos internos siguen llegando a la campana.
+  - El email es una **copia de cortesía**, no la fuente de verdad. Si el envío falla se loguea y nada más: la notificación interna ya está escrita, así que no se pierde nada que la persona no pueda ver entrando. Por eso tampoco hay cola de reintentos.
+  - El envío ocurre **fuera del request**, en su propia goroutine: el bus de eventos publica de forma sincrónica, y abrir una conexión SMTP adentro dejaría a un docente esperando a Gmail para terminar de registrarse.
+  - No se avisa por mail cuando una cuenta se **rechaza**. Es una decisión de trato, no técnica: un rechazo se conversa, no se notifica.
 
 ### RF-06 — Reportes (`ADMIN`)
 - RF-06.1: Uso por PC (horas y cantidad de reservas), filtrable por rango de fechas, para el ciclo lectivo activo.
@@ -138,7 +149,7 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 
 ## 7. Fuera de alcance
 - Multi-tenancy / múltiples instituciones (si el proyecto llegara a usarse en más de una escuela, ver `06-arquitectura.md` §5 sobre los límites de dominio pensados para permitir esa extensión sin reescribir la lógica de negocio)
-- Notificaciones por email
+- El email como canal principal de notificación. Hay correo saliente (RF-05.8 y RF-01.10), pero acotado: sin digest, sin preferencias por usuario y sin cola con reintentos. Los avisos internos son la fuente de verdad y el correo es una copia de cortesía.
 - App móvil nativa
 - Billing/facturación
 - Gestión automatizada de calendario académico (feriados/días no hábiles)

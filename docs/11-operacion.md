@@ -95,6 +95,48 @@ dominio:
 > El `.env` no se comparte ni se publica: tiene la contraseña de la base y el
 > secreto de las sesiones.
 
+### 1.1.b Configurar el correo (opcional, pero conviene)
+
+Sin esto el sistema funciona igual: los avisos siguen llegando a la campana de
+notificaciones. Lo que **no** funciona es el "olvidé mi contraseña" — el
+enlace ni aparece en la pantalla de ingreso, y hay que resetear a mano desde
+`/admin/usuarios` cada vez que un docente se olvide la suya.
+
+Se usa el Gmail de la escuela, con una **contraseña de aplicación**, que no es
+la contraseña con la que se entra a Gmail:
+
+1. En la cuenta de la escuela, activá la verificación en dos pasos:
+   <https://myaccount.google.com/signinoptions/twosv>. Sin eso el paso
+   siguiente no existe.
+2. Entrá a <https://myaccount.google.com/apppasswords> y creá una. Google la
+   muestra como `abcd efgh ijkl mnop`; se puede pegar con los espacios.
+3. En el `.env`:
+
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=la-cuenta-de-la-escuela@gmail.com
+   SMTP_PASSWORD=abcd efgh ijkl mnop
+   SMTP_FROM=la-cuenta-de-la-escuela@gmail.com
+   SMTP_FROM_NAME=Nombre de la escuela
+   ```
+
+4. `make restart` y mirá el log: tiene que decir
+   `correo saliente habilitado vía smtp.gmail.com`.
+
+Es gratis y el límite es de ~500 destinatarios por día, de sobra. Lo que
+cambió en 2022 es que Gmail exige contraseña de aplicación, no que el SMTP
+haya dejado de ser gratuito.
+
+> **Ojo con dejarlo a medias.** Con `SMTP_HOST` puesto pero sin `SMTP_FROM`/
+> `SMTP_USER` o sin `SMTP_PASSWORD`, el proceso **no arranca** y dice qué
+> falta. Es deliberado: si arrancara, cada envío fallaría en silencio dentro
+> de una goroutine y el único síntoma sería "no me llegan los mails".
+
+Para probarlo de punta a punta sin tocar ninguna cuenta real: entrá a
+`/recuperar-password`, poné tu propio email y fijate si llega el código
+(revisá spam la primera vez).
+
 ### 1.2 Levantar todo
 
 ```bash
@@ -201,6 +243,7 @@ Qué buscar en el arranque de `sgrc-app`:
 zona horaria de la escuela: America/Argentina/Buenos_Aires (ahora: ...)
 conectado a sgrc_db
 admin inicial: cuenta ... lista            ← solo si hizo falta sembrarlo
+correo saliente habilitado vía smtp.gmail.com
 ```
 
 | Síntoma | Causa habitual |
@@ -210,6 +253,27 @@ admin inicial: cuenta ... lista            ← solo si hizo falta sembrarlo
 | `health: postgres no responde` repetido | Postgres no levantó; mirá sus logs |
 | `sgrc-app` en `unhealthy` | La API no llega a la base — casi siempre credenciales mal en el `.env` |
 | El navegador no carga nada | Revisá que el ingress del túnel apunte a `http://frontend:80` |
+| `configuración de correo inválida` y el proceso no arranca | El bloque `SMTP_*` quedó a medias (§1.1.b) |
+| No aparece "Olvidé mi contraseña" en el login | No hay correo configurado. El log lo dice al arrancar: `correo saliente deshabilitado` |
+
+### Cuando no llegan los mails
+
+El envío es de **mejor esfuerzo**: si falla, se loguea y el sistema sigue. Los
+avisos internos (la campana) llegan igual, así que no se pierde nada — pero
+conviene mirar el log:
+
+```bash
+docker compose logs sgrc-app | grep -i "correo\|email"
+```
+
+| Lo que dice el log | Qué significa |
+|---|---|
+| `email: SMTP no configurado, no se envía ...` | Falta el bloque `SMTP_*` (§1.1.b) |
+| `autenticando contra smtp.gmail.com: ... Username and Password not accepted` | La contraseña de aplicación está mal, o se usó la contraseña normal de Gmail |
+| `conectando a smtp.gmail.com:587: ... timeout` | El servidor no tiene salida al puerto 587 |
+| `el servidor ... no ofrece STARTTLS` | `SMTP_PORT` mal: tiene que ser 587, no 465 |
+| `destinatario rechazado` | La dirección de esa persona no existe. Corregila en su cuenta |
+| Nada en el log y tampoco llega | Revisá spam. Si es la primera vez, marcá el remitente como conocido |
 
 ---
 

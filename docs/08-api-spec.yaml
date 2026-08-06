@@ -403,9 +403,14 @@ paths:
       tags: [auth]
       summary: Configuración pública (sin autenticar)
       description: |
-        Lo que la pantalla de login necesita saber antes de que haya sesión. Hoy es
-        solo el client ID de Google: vacío significa que este despliegue no tiene
-        GOOGLE_CLIENT_ID configurado y el frontend no dibuja el botón.
+        Lo que la pantalla de login necesita saber antes de que haya sesión: qué
+        formas de ingreso ofrecer. Las dos son capacidades opcionales del
+        despliegue, y la pantalla no dibuja lo que el backend no puede hacer.
+
+        - googleClientId vacío = no hay GOOGLE_CLIENT_ID configurado, no se dibuja
+          el botón de Google.
+        - recuperacionPorEmail en false = no hay SMTP configurado, no se muestra
+          "olvidé mi contraseña" (los dos endpoints de /password/* responden 503).
 
         El client ID viaja acá y no compilado en el bundle porque el frontend se
         construye una vez dentro de la imagen Docker; en el build habría que
@@ -417,9 +422,98 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [googleClientId]
+                required: [googleClientId, recuperacionPorEmail]
                 properties:
                   googleClientId: { type: string, example: "123-abc.apps.googleusercontent.com" }
+                  recuperacionPorEmail: { type: boolean, example: true }
+
+  /api/auth/password/olvide:
+    post:
+      tags: [auth]
+      summary: Pedir un código para recuperar la contraseña (público)
+      description: |
+        Paso 1 de la recuperación por autoservicio. Genera un código de 6 dígitos,
+        lo guarda hasheado (argon2, igual que una contraseña) y lo manda al email
+        de la cuenta. Vence a los 15 minutos, sirve una sola vez y admite 5
+        intentos fallidos; pedir uno nuevo invalida el anterior.
+
+        **Responde 202 exista o no la cuenta**, y el cuerpo es siempre el mismo.
+        Es deliberado: cualquier diferencia observable —el mensaje, el código, o el
+        tiempo que tarda— convertiría este formulario en un padrón de las
+        direcciones registradas en la escuela. Por eso el código se genera y se
+        hashea ANTES de buscar la cuenta, para que los dos caminos tarden lo mismo.
+
+        Casos que NO reciben código, todos con la misma respuesta 202:
+        una cuenta inexistente; una que no está APROBADA (pendiente, rechazada o en
+        baja: no tiene a dónde entrar); y una creada con Google, que no tiene
+        contraseña propia — a esa sí le llega un correo, pero explicándole que entra
+        con el botón de Google. Sin ese correo el síntoma sería "pedí el código y
+        nunca llegó".
+
+        Rate limit: 5/min por IP y 3/min por email. El segundo es el que importa —
+        sin él, cambiar de red alcanza para inundar de correo la casilla de un
+        docente y quemarle la reputación al Gmail de la escuela.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "202":
+          description: Pedido aceptado (no dice si se mandó algo)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje: { type: string }
+        "400": { description: El email no tiene formato válido }
+        "429": { description: Demasiados pedidos }
+        "503": { description: No hay SMTP configurado en este despliegue }
+
+  /api/auth/password/restablecer:
+    post:
+      tags: [auth]
+      summary: Cambiar la contraseña con el código recibido por email (público)
+      description: |
+        Paso 2. Consume el código y deja la contraseña elegida por la persona, con
+        debeCambiarPassword en false (la eligió ella, no es una temporal).
+
+        No devuelve token: el cambio no inicia sesión. Quien lo hizo vuelve al login
+        y entra con la contraseña nueva, lo que de paso comprueba que la recuerda.
+
+        El email viaja de nuevo en el cuerpo, sin sesión intermedia del lado del
+        servidor: así el paso 2 funciona aunque el código se haya pedido desde la
+        computadora de la escuela y se lea en el celular.
+
+        Los 400 distinguen tres situaciones a propósito distinto grado: "vencido" y
+        "sin intentos" se dicen tal cual, porque le pasan a la persona legítima y
+        necesita saber que tiene que pedir otro código en vez de seguir tipeando.
+        Todo lo demás —email inexistente, cuenta sin código, código equivocado—
+        colapsa al mismo mensaje, por lo mismo que el endpoint anterior.
+
+        Queda auditado (PASSWORD_RECUPERADA_POR_EMAIL, con la IP): es la única
+        acción del catálogo cuyo actor no está autenticado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, codigo, passwordNueva]
+              properties:
+                email: { type: string, format: email }
+                codigo: { type: string, pattern: '^\d{6}$', example: "482913" }
+                passwordNueva: { type: string, minLength: 8 }
+      responses:
+        "204": { description: Contraseña cambiada }
+        "400": { description: Código inválido, vencido, sin intentos, o contraseña corta }
+        "429": { description: Demasiados intentos }
+        "503": { description: No hay SMTP configurado en este despliegue }
 
   /api/auth/google:
     post:
@@ -689,9 +783,15 @@ paths:
       tags: [auth]
       summary: Resetear la contraseña de un usuario a una temporal (Admin)
       description: |
-        Recuperación de contraseña asistida por Admin (RF-01.6) — no hay flujo de email
-        de por medio. Marca debeCambiarPassword=true; el usuario debe cambiarla
-        (POST /api/auth/cambiar-password) antes de operar el resto del sistema.
+        Recuperación asistida por Admin (RF-01.6). Marca debeCambiarPassword=true; el
+        usuario debe cambiarla (POST /api/auth/cambiar-password) antes de operar el
+        resto del sistema.
+
+        Es el camino de **rescate**, no el habitual: el habitual es que la persona lo
+        haga sola (POST /api/auth/password/olvide). Este sirve para quien no puede
+        recibir el mail —email mal escrito al registrarse, casilla de la escuela dada
+        de baja, acceso perdido— y es el único disponible en un despliegue sin SMTP
+        configurado. Sin él, esa persona no tendría forma de volver a entrar.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path

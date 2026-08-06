@@ -51,10 +51,10 @@ func esViolacionFK(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == codigoViolacionFK
 }
 
-// errorDeFilas centraliza el chequeo de rows.Err() — mismo bug real
-// encontrado en academic: pool.Query() no siempre devuelve el error de
-// sintaxis inmediatamente, a veces aparece recién en rows.Err() después
-// del loop, y ese valor nunca puede devolverse sin chequear.
+// errorDeFilas centraliza el chequeo de rows.Err(): pool.Query() no siempre
+// devuelve el error de sintaxis inmediatamente — a veces aparece recién en
+// rows.Err(), después del loop. Omitirlo hace que una consulta rota se vea
+// como un resultado vacío.
 func errorDeFilas(rows pgx.Rows) error {
 	err := rows.Err()
 	if err == nil {

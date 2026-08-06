@@ -12,12 +12,13 @@
 | `internal/academic` | Ciclos lectivos, cursos, materias, DocenteMateria, clonado |
 | `internal/inventory` | Carros, PCs, incidencias |
 | `internal/reservation` | Reservas, solapamiento, recurrencias, bloqueo, job de vencimiento |
-| `internal/notification` | Notificaciones internas |
+| `internal/notification` | Notificaciones internas y las copias por email de algunas de ellas (RF-05.8) |
 | `internal/reporting` | Estadísticas y reportes: queries agregadas directas para el ciclo activo + snapshot histórico permanente calculado al archivar |
 | `internal/availability` | Horario de disponibilidad de Admins (puramente informativo) — cálculo de "disponible ahora" |
 | `internal/shared/middleware` | JWT + verificación de cuenta, RBAC, rate limiting, headers de seguridad |
 | `internal/shared/eventbus` | Pub/sub in-process (ver §4) |
 | `internal/shared/security` | Hash y verificación de contraseñas (`argon2id`), en un solo lugar |
+| `internal/shared/email` | Envío por SMTP (`net/smtp`, texto plano). Está en `shared/` porque lo usan dos: `notification` para los avisos y `auth` —indirectamente, vía evento— para el código de recuperación |
 | `internal/shared/audit` | Escritura del `audit_log` (ver `09-seguridad-rbac.md` §5) |
 | `internal/shared/paginacion` | Ventana de resultados y `meta` de los listados paginados |
 | `internal/shared/adminseed` | Decisión de "sembrar el primer Admin si hace falta", sin dependencias externas |
@@ -35,7 +36,7 @@ sgrc/
 │   ├── notification/{...}
 │   ├── reporting/{...}
 │   ├── availability/{...}
-│   └── shared/{middleware, eventbus, security, audit, paginacion, adminseed, …}
+│   └── shared/{middleware, eventbus, security, email, audit, paginacion, adminseed, …}
 ├── migrations/
 ├── frontend/                 ← SPA React servida por nginx (ver README)
 ├── scripts/
@@ -97,6 +98,12 @@ type EventBus interface {
 ```
 
 `reservation` publica eventos como `reserva.cancelada`; `notification` y `reporting` se suscriben en el arranque (`main.go`). La entrega es en memoria — sin persistencia de mensajes ni garantías at-least-once, que no hacen falta con un solo proceso (si el proceso muere, todo se reinicia junto).
+
+**`Publish` corre en la goroutine de quien publica.** Eso no es un detalle: significa que un suscriptor lento se traduce directamente en un request HTTP lento. Por eso los handlers de `notification` no hacen su trabajo adentro del handler, sino que lo lanzan en su propia goroutine con un contexto y un timeout propios (el del request se cancela apenas se responde). Es lo que hace que registrar un docente no espere a que se abra una conexión SMTP contra Gmail, y lo que permite que cancelar una recurrencia de 40 fechas × 5 PCs no haga 200 `INSERT` en serie dentro del request. Un `sync.WaitGroup` en `main.go` registra las entregas en curso para que el apagado ordenado no se las lleve puestas.
+
+**Un mismo evento puede tener varios suscriptores, y se usa.** `docente.registro.pendiente` tiene dos: el que escribe el aviso interno y el que manda el mail (RF-05.8). Están registrados por separado a propósito — el aviso interno es la fuente de verdad y el correo una copia, así que un fallo de SMTP no puede impedir que el aviso se escriba. `Publish` además recupera el panic de cada handler por separado, así que uno roto no se lleva a los demás.
+
+**El payload lleva el dato, no solo el ID.** Los eventos de correo (`cuenta.aprobada`, `password.recuperacion.solicitada`) viajan con nombre y email adentro y no con un `usuarioId` a resolver: el suscriptor vive en `notification`, que no puede importar el `domain` de `auth` (§3), así que resolverlo del otro lado significaría o violar el límite o agregar otro puerto de lectura para algo que quien publica ya tenía en la mano.
 
 Se modela como pub/sub (en vez de que `reservation` llame directo a `notification.Notificar()`) porque preserva un patrón de event-driven design real y deja la puerta abierta a que la implementación pase a un message broker (NATS, Kafka) sin tocar quién publica o se suscribe, si en el futuro hace falta desacoplar procesos.
 

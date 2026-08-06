@@ -138,11 +138,12 @@ func disparaCascada(estado domain.EstadoPC) bool {
 // nunca falle a la mitad sino qué queda cuando falla — mismo razonamiento
 // que en auth.DarDeBaja.
 //
-// Antes lo que quedaba era irrecuperable: la PC guardada en su nuevo estado,
-// sus reservas todavía CONFIRMADA, los docentes sin aviso, y el reintento
-// rebotando con 409 ("de EN_MANTENIMIENTO a EN_MANTENIMIENTO", "la PC ya
-// está dada de baja") porque la máquina de estados rechaza repetir la
-// transición. La única salida era SQL a mano contra producción.
+// Sin esta distinción, lo que queda tras un fallo a mitad de camino es
+// irrecuperable: la PC guardada en su nuevo estado, sus reservas todavía
+// CONFIRMADA, los docentes sin aviso, y el reintento rebotando con 409 ("de
+// EN_MANTENIMIENTO a EN_MANTENIMIENTO", "la PC ya está dada de baja")
+// porque la máquina de estados rechaza repetir la transición. La única
+// salida sería SQL a mano contra producción.
 func (s *Service) cascadaPendiente(ctx context.Context, pcID string) (bool, error) {
 	pendiente, err := s.validadorReservas.TieneReservasFuturas(ctx, pcID)
 	if err != nil {

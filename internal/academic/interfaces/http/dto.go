@@ -117,8 +117,9 @@ type materiaReservableResponse struct {
 }
 
 // removerDocenteResponse: RF-02.8 — quitar al único docente de una materia
-// cancela sus reservas futuras en cascada. Antes el endpoint devolvía 200
-// vacío y el Admin no se enteraba de que había cancelado clases.
+// cancela sus reservas futuras en cascada. El conteo va en la respuesta
+// para que el Admin se entere de que acaba de cancelar clases; con un 200
+// vacío la cascada sería invisible.
 type removerDocenteResponse struct {
 	ReservasCanceladas int `json:"reservasCanceladas"`
 }

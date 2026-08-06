@@ -8,17 +8,29 @@
 - **Ingreso con cuenta de Google (opcional).** Habilitado solo si el despliegue configura `GOOGLE_CLIENT_ID`; sin eso, los endpoints responden 503 y el frontend no dibuja el botón. Ver §1.1.
 - **Una baja tiene efecto inmediato.** El token sigue siendo la prueba de identidad, pero no alcanza por sí solo: cada request autenticado consulta el estado de la cuenta antes de dejar pasar. Si el usuario ya no existe, no está `APROBADA`, o cambió de rol, el request se rechaza aunque el token siga sin expirar.
 
-  Antes esto era al revés y estaba documentado como una decisión consciente: el JWT era stateless y una cuenta dada de baja conservaba acceso de escritura hasta una hora. La ventana era real —se verificó con un token emitido antes de la baja escribiendo en la base después— y RF-02.8/02.9 tratan la baja como efectiva de inmediato, así que la decisión se revirtió.
+  Un JWT estrictamente stateless sería más barato, pero le dejaría a una cuenta dada de baja hasta una hora de acceso **de escritura**, y RF-02.8/02.9 tratan la baja como efectiva de inmediato. La ventana no es teórica: un token emitido antes de la baja escribe en la base después, mientras no expire.
 
   El costo es una consulta por PK por request autenticado, irrelevante a esta escala. Ante un error de base **falla cerrado** (503, no "pasá igual"), y el rol que vale es el de la base, no el del token: no hay forma de conservar permisos viejos guardándose un token.
+
+- **Cambiar la contraseña cierra las sesiones abiertas** (RF-01.11). El punto anterior verifica el *estado* de la cuenta, que no cambia al cambiar una contraseña; sin algo más, la sesión de quien hubiera entrado con la contraseña vieja sobreviviría hasta que expire su token — hasta una hora. Eso vaciaría de sentido al caso que motiva cambiarla: alguien sospecha que entraron a su cuenta y quiere cortar ese acceso ya.
+
+  Cada cuenta lleva un contador (`usuario.version_sesion`, migración `010`) que viaja dentro del token como el claim `vs`. El middleware lo compara contra el de la fila en el mismo request en el que ya consulta el estado, así que **no cuesta ninguna consulta extra**. Cambiar la contraseña incrementa el contador y todo token anterior deja de valer en el request siguiente. Los tres caminos lo hacen: el cambio voluntario (RF-01.7), el reset asistido por un Admin (RF-01.6) y la recuperación por autoservicio (RF-01.10).
+
+  El orden importa y está escrito en el código: en `CambiarPassword` se incrementa **antes** de firmar el token nuevo. Al revés, quien acaba de cambiar su contraseña recibiría un token con la versión vieja y quedaría afuera por su propio cambio exitoso.
+
+  Es un entero y no una marca de tiempo ("invalidar todo lo emitido antes de X"). `iat` en un JWT tiene resolución de **segundos**, así que comparado contra un `now()` con microsegundos el token recién firmado se rechaza a sí mismo; redondear al segundo lo arregla pero deja una ventana en la que las sesiones abiertas en ese mismo segundo sobreviven. Con un contador no hay nada que redondear.
+
+  El `DEFAULT 0` de la columna coincide con el claim ausente, así que **aplicar la migración no desloguea a nadie**: los tokens vigentes siguen valiendo hasta expirar, y recién el primer cambio de contraseña de cada cuenta invalida los suyos.
+
+  Dar de baja o rechazar una cuenta **no** toca el contador: eso lo resuelve el chequeo de estado, y mezclar las dos cosas daría dos formas de expresar lo mismo.
 
 - **El secreto y la verificación de cuenta viajan juntos.** El middleware se construye con los dos a la vez y `RegisterRoutes` de cada paquete recibe ese valor, no el secreto pelado. Es deliberado: pasarlos por separado permitiría montar una ruta que valide la firma y se saltee el estado de la cuenta, que es exactamente el agujero que esto cierra.
 
 - **Qué se calla y qué se dice, y por qué no es lo mismo.** Antes de verificar la credencial, el sistema es deliberadamente opaco: un email inexistente y uno real con la contraseña equivocada devuelven el mismo error y consumen el mismo tiempo (ver el punto siguiente). **Después** de verificarla, deja de haber motivo para esconder nada: quien presentó la contraseña correcta —o un ID token de Google firmado— ya probó que la cuenta es suya, así que se le dice exactamente por qué no puede entrar: pendiente de aprobación, rechazada o dada de baja. Los tres son 403; lo que cambia es la explicación, no el veredicto.
 
-  Antes los tres devolvían "cuenta no habilitada". Quien se acababa de registrar y quien había sido rechazado leían lo mismo, y ninguno de los dos sabía si tenía que esperar, insistir o hablar con alguien.
+  Un "cuenta no habilitada" genérico para los tres haría que quien se acaba de registrar y quien fue rechazado leyeran lo mismo, sin saber si tienen que esperar, insistir o hablar con alguien.
 
-- **El login tarda lo mismo exista o no la cuenta.** Con un email inexistente se devolvía sin hashear nada, así que medir el tiempo de respuesta alcanzaba para enumerar quién tiene cuenta en la escuela — el mensaje de error era el mismo, pero el reloj no. Ahora ese camino corre un `argon2id` contra un hash de descarte que no le pertenece a nadie. El hash se calcula una sola vez por proceso: recalcularlo en cada intento habría igualado los tiempos, pero convertiría un endpoint sin autenticar en una forma de gastar 64 MB por request.
+- **El login tarda lo mismo exista o no la cuenta.** Devolver sin hashear nada cuando el email no existe deja el mensaje de error igual pero no el reloj, y medir el tiempo de respuesta alcanza para enumerar quién tiene cuenta en la escuela. Por eso ese camino corre un `argon2id` contra un hash de descarte que no le pertenece a nadie. El hash se calcula una sola vez por proceso: recalcularlo en cada intento habría igualado los tiempos, pero convertiría un endpoint sin autenticar en una forma de gastar 64 MB por request.
 
 ## 1.1 Ingreso con cuenta de Google
 
@@ -52,14 +64,18 @@ Las claves públicas se cachean respetando el `max-age` que declara Google, acot
 ## 2. Estructura del JWT
 
 ```json
-{ "sub": "userId", "rol": "ADMIN|DOCENTE", "nombre": "...", "apellido": "...", "dcp": true, "exp": ... }
+{ "sub": "userId", "rol": "ADMIN|DOCENTE", "nombre": "...", "apellido": "...", "dcp": true, "vs": 3, "exp": ... }
 ```
 
 `dcp` (`debe_cambiar_password`) viaja en el token para poder exigir el cambio
-sin consultar la base en cada request. Solo aparece cuando es `true`. Los
-demás campos son para mostrar el nombre en la interfaz sin pedir el perfil;
-**ninguno se usa para autorizar**: el rol que decide es el que sale de la
-base al verificar la cuenta (§1).
+sin consultar la base en cada request. Solo aparece cuando es `true`.
+
+`vs` (versión de sesión) es lo que permite **cerrar las sesiones abiertas**
+al cambiar una contraseña — ver §1. Solo aparece cuando no es 0.
+
+Los demás campos son para mostrar el nombre en la interfaz sin pedir el
+perfil; **ninguno se usa para autorizar**: el rol que decide es el que sale
+de la base al verificar la cuenta (§1).
 
 ## 3. Matriz RBAC
 
@@ -99,9 +115,10 @@ base al verificar la cuenta (§1).
 | Control | Detalle |
 |---|---|
 | HTTPS | Cloudflare termina TLS; el túnel cifra hasta el servidor |
-| Rate limiting | `/api/auth/login`: 30/min por IP **y** 10/min por cuenta. `/api/auth/registro`: 5/min por IP. `/api/auth/google`: 30/min por IP; `/api/auth/google/registro`: 5/min por IP |
+| Rate limiting | `/api/auth/login`: 30/min por IP **y** 10/min por cuenta. `/api/auth/registro`: 5/min por IP. `/api/auth/google`: 30/min por IP; `/api/auth/google/registro`: 5/min por IP. `/api/auth/password/olvide`: 5/min por IP y **3/min por email**; `/api/auth/password/restablecer`: 10/min por IP y por email |
 | IP real del cliente | `CF-Connecting-IP`, aceptado solo desde `TRUSTED_PROXIES` |
 | Password temporal | La API responde 403 mientras `debe_cambiar_password` siga en `true` |
+| Revocación de sesiones | Cambiar la contraseña invalida los tokens ya emitidos de esa cuenta (`usuario.version_sesion` vs. el claim `vs`) |
 | Headers | `HSTS`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `CSP` restrictiva. En **dos** lugares: el binario Go los pone en `/api` y nginx en el HTML y los assets (ver abajo) |
 | CORS | Solo dominio del frontend, sin wildcard |
 | Validación | Estricta en cada handler; nunca se confía en el frontend |
@@ -120,9 +137,9 @@ El cambio **tiene efecto en el request siguiente, sin volver a iniciar sesión**
 
 ### Por qué la CSP está en dos lugares y no en uno
 
-Los headers de `internal/shared/middleware/security.go` los pone el binario Go, así que salen únicamente en las respuestas de `/api` — que son JSON, donde una CSP no restringe nada real. **El HTML de la SPA lo sirve nginx**, y durante un tiempo salió sin ninguna CSP: la política existía, pero justo en el único documento que un navegador puede ser engañado de ejecutar no se aplicaba.
+Los headers de `internal/shared/middleware/security.go` los pone el binario Go, así que salen únicamente en las respuestas de `/api` — que son JSON, donde una CSP no restringe nada real. **El HTML de la SPA lo sirve nginx**, y es justamente el único documento que un navegador puede ser engañado de ejecutar: una CSP que viviera solo del lado de Go no lo cubriría.
 
-Eso lo cubre `frontend/nginx-seguridad.conf`, incluido desde los dos `location` que sirven contenido propio. No se ponen en el bloque `server` por dos razones: nginx deja de heredar los `add_header` en cuanto un bloque define uno propio (y `/assets/` define su `Cache-Control`), y las rutas proxeadas a `/api` quedarían con dos headers `Content-Security-Policy` distintos en la misma respuesta.
+Eso lo resuelve `frontend/nginx-seguridad.conf`, incluido desde los dos `location` que sirven contenido propio. No se ponen en el bloque `server` por dos razones: nginx deja de heredar los `add_header` en cuanto un bloque define uno propio (y `/assets/` define su `Cache-Control`), y las rutas proxeadas a `/api` quedarían con dos headers `Content-Security-Policy` distintos en la misma respuesta.
 
 Dos decisiones dentro de esa política merecen quedar escritas:
 
@@ -134,6 +151,29 @@ Dos decisiones dentro de esa política merecen quedar escritas:
 Limitar solo por IP falla en las dos direcciones. Los docentes que entran desde el wifi de la escuela salen todos por la misma IP NAT y se consumen la cuota entre ellos; y quien prueba contraseñas contra una cuenta puntual esquiva el límite cambiando de red. La cuenta atacada es lo único constante, así que se limita por las dos cosas a la vez.
 
 Las ventanas son por minuto y no por segundo: `5 req/s` son 18.000 intentos por hora, que no frena a nadie.
+
+### Por qué la recuperación de contraseña no dice nunca si un email existe
+
+`POST /api/auth/password/olvide` responde **202 con el mismo cuerpo pase lo que pase**: exista la cuenta o no, esté aprobada o no, tenga contraseña o entre con Google. La pantalla tampoco lo desmiente — pasa al paso del código en todos los casos.
+
+Es la única forma de que el formulario no sea un padrón. Es un endpoint público, sin autenticar y sin captcha: si distinguiera "te mandamos el código" de "ese email no existe", cualquiera podría ir probando direcciones y quedarse con la lista de los docentes de la escuela, que después sirve para phishing dirigido con el nombre real de la institución.
+
+Por el mismo motivo el **tiempo de respuesta** también tiene que ser indistinguible, y eso obligó a una decisión que se lee rara en el código: el código de recuperación se genera y se **hashea con argon2 antes de buscar la cuenta**, aunque quizás no haya a quién mandárselo. El hash cuesta cientos de milisegundos, mucho más que todo el resto de la operación; calculándolo recién después de encontrar la cuenta, un email registrado tardaría notoriamente más que uno inexistente y medir esa diferencia desde afuera es trivial. Es la misma idea que `consumirTiempoDeVerificacion` en el login (§1), aplicada del lado de la escritura.
+
+Lo que **sí** se distingue, y a propósito, son dos errores del segundo paso: "el código venció" y "se agotaron los intentos". Los dos le pasan a la persona legítima, que ya demostró tener acceso a la casilla, y necesita saber que tiene que pedir otro código en vez de seguir tipeando el mismo. Todo lo demás —email inexistente, cuenta sin código pendiente, código equivocado— colapsa al mismo mensaje.
+
+### Por qué seis dígitos alcanzan
+
+Un millón de combinaciones no es mucho por sí solo. Lo que hace seguro al código es lo que lo rodea, y las cuatro cosas hacen falta juntas:
+
+- **15 minutos de vigencia.** Acota la ventana de cualquier ataque y la de un código olvidado en una casilla abierta en la sala de profesores.
+- **5 intentos por código.** Al quinto fallo el código se quema y hay que pedir otro. La probabilidad de acertar a ciegas queda en 5 en 1.000.000.
+- **Un solo código vigente por persona.** Pedir uno nuevo invalida el anterior, en el mismo statement que inserta el nuevo (un CTE, ver `postgres_repo_recuperacion.go`). Sin esto el tope de intentos sería esquivable pidiendo veinte códigos y probando cinco veces con cada uno.
+- **Rate limit por email, no solo por IP.** El límite por IP no frena a quien cambia de red, y acá hay algo más que adivinar códigos: pedir el código manda un mail a una casilla ajena, así que sin tope por cuenta el formulario es un botón para inundar de correo a un docente — y para quemarle la reputación al Gmail de la escuela, que tiene su propio límite diario.
+
+Además el código se guarda **hasheado con argon2**, igual que una contraseña. Si la base se filtrara (un backup, un dump de soporte), un código en claro sería una cuenta abierta hasta que expire.
+
+Dos cosas más que valen para el correo en sí. El mail del código es el **único del sistema sin enlace al sistema**: es también el único que contiene una credencial, y "código + botón para entrar" es exactamente la forma de un phishing — acostumbrar a los docentes a apretar un link dentro de un mail con un código es entrenarlos para el día que llegue uno falso. Y el handler que lo procesa es el único que **no loguea el payload** cuando el tipo del evento no es el esperado: un `%+v` dejaría el código en claro escrito en los logs del contenedor.
 
 ### Por qué hace falta `TRUSTED_PROXIES`
 
@@ -163,6 +203,8 @@ CREATE TABLE audit_log (
 CREATE INDEX idx_audit_usuario ON audit_log(usuario_id, creado_en DESC);
 ```
 
-Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `PASSWORD_RESETEADA`, `DOCENTE_REMOVIDO_DE_MATERIA`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_EVALUACION_CREADO`, `PC_ESTADO_CAMBIADO`, `PC_DADA_DE_BAJA`, `PC_MOVIDA_DE_CARRO`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`.
+Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `PASSWORD_RESETEADA`, `PASSWORD_RECUPERADA_POR_EMAIL`, `DOCENTE_REMOVIDO_DE_MATERIA`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_EVALUACION_CREADO`, `PC_ESTADO_CAMBIADO`, `PC_DADA_DE_BAJA`, `PC_MOVIDA_DE_CARRO`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`.
 
 > `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS` tiene su propio nombre (en vez de un `CICLO_ARCHIVADO` genérico) porque implica un borrado físico de datos — vale la pena que quede explícito en el log qué admin lo disparó y cuántas filas se eliminaron (`detalle` puede guardar el conteo).
+
+> `PASSWORD_RECUPERADA_POR_EMAIL` es la **única acción del catálogo cuyo actor no está autenticado**: en RF-01.10 la persona prueba ser dueña de la cuenta con el código que le llegó al mail, no con un token. En esa fila `usuario_id` es la propia cuenta (no un Admin que actuó sobre ella), y lo que la hace útil es `ip_origen` — es lo que permite reconstruir qué pasó si alguien reporta que él no cambió su contraseña. Los intentos fallidos no se auditan: viven en `codigo_recuperacion.intentos`, que es donde tienen efecto.

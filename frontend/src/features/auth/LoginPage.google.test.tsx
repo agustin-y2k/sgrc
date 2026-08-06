@@ -58,6 +58,7 @@ function mockAuth(loginConGoogle: Ingreso) {
     loginConGoogle,
     logout: vi.fn(),
     errorDeSesion: null,
+    motivoDeCierre: null,
     refetchUser: vi.fn(),
   })
 }

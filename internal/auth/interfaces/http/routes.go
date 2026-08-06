@@ -47,6 +47,30 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	auth.Post("/google", middleware.RateLimit(30, time.Minute), h.LoginConGoogle)
 	auth.Post("/google/registro", middleware.RateLimit(5, time.Minute), h.RegistrarConGoogle)
 
+	// Recuperación de contraseña por autoservicio. Públicas: quien olvidó
+	// la contraseña no puede autenticarse, ese es todo el punto.
+	//
+	// Los límites son los más bajos de la API, y los dos son necesarios por
+	// motivos distintos:
+	//
+	//   - pedir el código manda un mail a una casilla ajena. Sin tope, el
+	//     formulario es un botón para inundar de correo a cualquier docente
+	//     —y para quemarle la reputación al Gmail de la escuela, que tiene
+	//     su propio límite diario—. Va también por email además de por IP,
+	//     porque si no cambiar de red basta para seguir.
+	//   - restablecer es donde se prueban códigos. El tope por código (5
+	//     intentos, ver domain.CodigoRecuperacion) ya frena la fuerza bruta
+	//     contra UNA cuenta; el límite por IP frena probar un código fijo
+	//     contra muchas cuentas distintas, que el otro no ve.
+	auth.Post("/password/olvide",
+		middleware.RateLimit(5, time.Minute),
+		middleware.RateLimitPorEmail(3, time.Minute),
+		h.OlvidePassword)
+	auth.Post("/password/restablecer",
+		middleware.RateLimit(10, time.Minute),
+		middleware.RateLimitPorEmail(10, time.Minute),
+		h.RestablecerPassword)
+
 	// Sin rate limit: es una lectura de configuración estática que la
 	// pantalla de login hace una vez al abrirse, antes de que haya nadie
 	// autenticado. Limitarla rompería el login de una escuela entera detrás

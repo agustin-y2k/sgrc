@@ -27,10 +27,42 @@ type fakeRepo struct {
 	errEliminar           error
 	errListar             error
 	adminsAprobadosCount  int
+
+	// Códigos de recuperación, indexados por usuario. Solo se guarda el
+	// último sin usar: es exactamente el invariante que sostiene
+	// CrearCodigoRecuperacion en Postgres (pedir uno nuevo invalida el
+	// anterior), y tenerlo acá evita que un test pase contra el fake
+	// apoyándose en algo que la implementación real no permite.
+	codigos          map[string]*domain.CodigoRecuperacion
+	errGuardarCodigo error
 }
 
 func nuevoFakeRepo() *fakeRepo {
-	return &fakeRepo{usuarios: make(map[string]*domain.Usuario)}
+	return &fakeRepo{
+		usuarios: make(map[string]*domain.Usuario),
+		codigos:  make(map[string]*domain.CodigoRecuperacion),
+	}
+}
+
+func (r *fakeRepo) CrearCodigoRecuperacion(ctx context.Context, c *domain.CodigoRecuperacion) error {
+	r.codigos[c.UsuarioID] = c
+	return nil
+}
+
+func (r *fakeRepo) BuscarCodigoVigenteDe(ctx context.Context, usuarioID string) (*domain.CodigoRecuperacion, error) {
+	c, ok := r.codigos[usuarioID]
+	if !ok || c.UsadoEn != nil {
+		return nil, ErrCodigoNoEncontrado
+	}
+	return c, nil
+}
+
+func (r *fakeRepo) GuardarCodigoRecuperacion(ctx context.Context, c *domain.CodigoRecuperacion) error {
+	if r.errGuardarCodigo != nil {
+		return r.errGuardarCodigo
+	}
+	r.codigos[c.UsuarioID] = c
+	return nil
 }
 
 func (r *fakeRepo) BuscarPorEmail(ctx context.Context, email string) (*domain.Usuario, error) {
@@ -176,6 +208,7 @@ func verifyFalso(password, hash string) (bool, error) {
 }
 func firmarFalso(u *domain.Usuario) (string, error) { return "token-de-" + u.ID, nil }
 func temporalFalso() (string, error)                { return "temporal123", nil }
+func codigoFalso() (string, error)                  { return "123456", nil }
 
 func relojFijo(t time.Time) func() time.Time {
 	return func() time.Time { return t }
@@ -263,10 +296,34 @@ func nuevoServicioConCascada(repo Repo, gestorMaterias GestorMateriasDocente, ca
 		firmarFalso,
 		idSecuencial,
 		temporalFalso,
+		codigoFalso,
 		relojFijo(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)),
 		gestorMaterias,
 		cancelador,
-		nil, // sin ingreso con Google: los tests que lo usan arman el suyo
+		nil,  // sin ingreso con Google: los tests que lo usan arman el suyo
+		true, // con correo: es lo que habilita la recuperación por autoservicio
+	)
+}
+
+// servicioConFirmador permite espiar con qué usuario —y por lo tanto con
+// qué VersionSesion— se firma el token. Es lo que hace falta para verificar
+// que InvalidarSesiones corre ANTES de firmar (ver service_sesiones_test.go).
+func servicioConFirmador(repo Repo, firmar TokenSigner) *Service {
+	contadorID = 0
+	return NewService(
+		repo,
+		eventbus.NewInMemoryEventBus(),
+		hashFalso,
+		verifyFalso,
+		firmar,
+		idSecuencial,
+		temporalFalso,
+		codigoFalso,
+		relojFijo(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)),
+		nuevoFakeGestorMaterias(),
+		nuevoFakeCanceladorReservas(),
+		nil,
+		true,
 	)
 }
 
@@ -282,10 +339,12 @@ func servicioConVerify(repo Repo, verify VerifyFunc) *Service {
 		firmarFalso,
 		idSecuencial,
 		temporalFalso,
+		codigoFalso,
 		relojFijo(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)),
 		nuevoFakeGestorMaterias(),
 		nuevoFakeCanceladorReservas(),
-		nil, // sin ingreso con Google: los tests que lo usan arman el suyo
+		nil,  // sin ingreso con Google: los tests que lo usan arman el suyo
+		true, // con correo: es lo que habilita la recuperación por autoservicio
 	)
 }
 
@@ -477,10 +536,12 @@ func TestLogin_ElHashDeDescarteSeCalculaUnaSolaVez(t *testing.T) {
 		firmarFalso,
 		idSecuencial,
 		temporalFalso,
+		codigoFalso,
 		relojFijo(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)),
 		nuevoFakeGestorMaterias(),
 		nuevoFakeCanceladorReservas(),
-		nil, // sin ingreso con Google: los tests que lo usan arman el suyo
+		nil,  // sin ingreso con Google: los tests que lo usan arman el suyo
+		true, // con correo: es lo que habilita la recuperación por autoservicio
 	)
 
 	for i := 0; i < 5; i++ {
@@ -1198,8 +1259,8 @@ func TestRegistrar_EmailSinFormato_Rechazado(t *testing.T) {
 	}
 }
 
-// Antes esto era un fmt.Errorf sin sentinel: mapearError lo mandaba al 500
-// genérico en vez de decir qué faltaba.
+// Tiene que llegar como sentinel: un fmt.Errorf suelto cae en el 500
+// genérico de mapearError en vez de decir qué faltaba.
 func TestRegistrar_NombreVacio_ErrorDeDatosObligatorios(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
@@ -1364,9 +1425,9 @@ func TestPromoverAAdmin_ConUnSoloAdminEnElSistema_Funciona(t *testing.T) {
 
 // ── Por qué no entra: un mensaje por estado ─────────────────────────────
 
-// Antes los tres estados devolvían "cuenta no habilitada". Quien se acababa
-// de registrar y quien había sido rechazado leían lo mismo, y ninguno sabía
-// si tenía que esperar o hablar con alguien.
+// Cada estado explica su motivo: con un "cuenta no habilitada" genérico,
+// quien se acaba de registrar y quien fue rechazado leen lo mismo y ninguno
+// sabe si tiene que esperar o hablar con alguien.
 func TestLogin_CadaEstadoExplicaSuMotivo(t *testing.T) {
 	casos := []struct {
 		estado   domain.Estado

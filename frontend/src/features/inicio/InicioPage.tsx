@@ -14,11 +14,10 @@ import type { GrupoDeReservas } from "@/features/reservas/types"
 /**
  * La primera pantalla después de iniciar sesión.
  *
- * Antes era un párrafo que decía "desde Inventario podés ver los carros":
- * una pantalla que no hace nada, justo donde cae todo el mundo todos los
- * días. Ahora responde las dos preguntas con las que alguien entra —"¿qué
- * tengo hoy?" y "¿hay algo esperándome?"— y ofrece el atajo a lo que venía
- * a hacer.
+ * Es donde cae todo el mundo todos los días, así que responde las dos
+ * preguntas con las que alguien entra —"¿qué tengo hoy?" y "¿hay algo
+ * esperándome?"— y ofrece el atajo a lo que venía a hacer, en vez de un
+ * párrafo que explique dónde queda cada sección.
  *
  * Cada tarjeta lleva a una pantalla que ya existe. Nada de esto es una
  * función nueva del sistema: es un índice de lo que ya hay.

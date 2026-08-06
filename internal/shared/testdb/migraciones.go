@@ -3,12 +3,11 @@
 // Package testdb da a los tests de integración de cada paquete una única
 // forma de construir el esquema.
 //
-// Antes cada archivo de test leía "migrations/001_init.sql" a mano. Eso
-// funcionó mientras hubo una sola migración, pero al agregar la segunda los
-// siete harnesses habrían seguido probando contra un esquema viejo — los
-// tests pasarían en verde mientras producción corre otra cosa, que es la
-// peor forma de fallar. Leer el directorio completo hace que agregar una
-// migración no requiera acordarse de tocar nada más.
+// Lee el directorio completo en vez de nombrar los archivos, para que
+// agregar una migración no requiera acordarse de tocar los siete harnesses
+// de integración. Si alguno quedara apuntando a un esquema viejo, sus tests
+// pasarían en verde mientras producción corre otra cosa — la peor forma de
+// fallar.
 package testdb
 
 import (
