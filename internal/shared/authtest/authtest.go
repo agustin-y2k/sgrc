@@ -31,21 +31,33 @@ import (
 type Registro struct {
 	roles       map[string]string
 	dadosDeBaja map[string]bool
+	// versiones hace de columna usuario.version_sesion (migración 010).
+	// Ausente = 0, que es lo mismo que dice el DEFAULT de la columna.
+	versiones map[string]int
 }
 
 func Nuevo() *Registro {
-	return &Registro{roles: map[string]string{}, dadosDeBaja: map[string]bool{}}
+	return &Registro{
+		roles:       map[string]string{},
+		dadosDeBaja: map[string]bool{},
+		versiones:   map[string]int{},
+	}
 }
 
 // Token firma un JWT válido para ese usuario y deja registrado su rol.
 // Reusa exactamente el mismo formato que produce
 // auth/infrastructure.JWTFirmador, para que los tests ejerciten el
 // middleware real y no una imitación.
+//
+// El token sale con la versión de sesión que la cuenta tenga en ESE
+// momento, igual que el firmador real: un token emitido antes de un
+// InvalidarSesiones queda viejo, y uno emitido después, no.
 func (r *Registro) Token(secret []byte, id, rol string) string {
 	r.roles[id] = rol
 	claims := &middleware.Claims{
-		UserID: id,
-		Rol:    rol,
+		UserID:        id,
+		Rol:           rol,
+		VersionSesion: r.versiones[id],
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		},
@@ -62,16 +74,27 @@ func (r *Registro) DarDeBaja(id string) {
 	r.dadosDeBaja[id] = true
 }
 
+// InvalidarSesiones simula lo que hace un cambio de contraseña: incrementa
+// la versión de la cuenta, así que todo token emitido antes deja de valer.
+// La cuenta sigue APROBADA — es lo que distingue este caso del de arriba.
+func (r *Registro) InvalidarSesiones(id string) {
+	r.versiones[id]++
+}
+
 // Autenticacion devuelve la pieza que se le pasa a RegisterRoutes.
 func (r *Registro) Autenticacion(secret []byte) middleware.Autenticacion {
 	return middleware.Autenticacion{
 		Secret: secret,
-		Vigente: func(_ context.Context, usuarioID string) (bool, string, error) {
+		Vigente: func(_ context.Context, usuarioID string) (middleware.EstadoDeCuenta, error) {
 			if r.dadosDeBaja[usuarioID] {
-				return false, "", nil
+				return middleware.EstadoDeCuenta{}, nil
 			}
 			rol, existe := r.roles[usuarioID]
-			return existe, rol, nil
+			return middleware.EstadoDeCuenta{
+				Vigente:       existe,
+				Rol:           rol,
+				VersionSesion: r.versiones[usuarioID],
+			}, nil
 		},
 	}
 }

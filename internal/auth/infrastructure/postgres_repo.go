@@ -110,10 +110,10 @@ func esViolacionFK(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == codigoViolacionFK
 }
 
-// errorDeFilas centraliza el chequeo de rows.Err() — pool.Query() no
-// siempre devuelve el error de sintaxis inmediatamente, a veces aparece
-// recién acá después del loop (mismo bug real que encontramos primero en
-// academic).
+// errorDeFilas centraliza el chequeo de rows.Err(): pool.Query() no siempre
+// devuelve el error de sintaxis inmediatamente — a veces aparece recién acá,
+// después del loop. Omitirlo hace que una consulta rota se vea como un
+// resultado vacío.
 func errorDeFilas(rows pgx.Rows) error {
 	err := rows.Err()
 	if err == nil {
@@ -125,7 +125,7 @@ func errorDeFilas(rows pgx.Rows) error {
 	return fmt.Errorf("iterando filas: %w", err)
 }
 
-const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por, curso_solicitado, materia_solicitada, google_sub`
+const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por, curso_solicitado, materia_solicitada, google_sub, version_sesion`
 
 // BuscarPorEmail compara contra lower(email) y no contra la columna pelada.
 //
@@ -165,11 +165,10 @@ func (r *PostgresRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*dom
 //
 // Existe porque las dos consultas que leen usuarios (una fila sola y el
 // listado paginado, que agrega COUNT(*) OVER()) tienen que escanear
-// exactamente las mismas columnas en el mismo orden. Antes eran dos Scan
-// escritos a mano, idénticos salvo el último destino: agregar una columna
-// significaba tocar los dos y acordarse de mantener el orden alineado en
-// ambos. Ahora la lista de destinos vive en un solo lugar, al lado de la
-// de columnas.
+// exactamente las mismas columnas en el mismo orden. Con dos Scan escritos
+// a mano —idénticos salvo el último destino— agregar una columna obligaría
+// a tocar los dos y a mantener el orden alineado entre ambos; acá la lista
+// de destinos vive en un solo lugar, al lado de la de columnas.
 type filaUsuario struct {
 	u                 domain.Usuario
 	rolStr, estadoStr string
@@ -183,6 +182,7 @@ func (f *filaUsuario) destinos() []any {
 		&f.u.ID, &f.u.Nombre, &f.u.Apellido, &f.u.Email, &f.passwordHash,
 		&f.u.DebeCambiarPassword, &f.rolStr, &f.estadoStr, &f.u.FechaRegistro,
 		&f.u.FechaAprobacion, &f.u.AprobadoPor, &f.curso, &f.materia, &f.googleSub,
+		&f.u.VersionSesion,
 	}
 }
 
@@ -263,11 +263,12 @@ func (r *PostgresRepo) Guardar(ctx context.Context, u *domain.Usuario) error {
 		UPDATE usuario SET
 			nombre = $2, apellido = $3, email = $4, password_hash = $5,
 			debe_cambiar_password = $6, rol = $7, estado = $8,
-			fecha_aprobacion = $9, aprobado_por = $10, google_sub = $11
+			fecha_aprobacion = $9, aprobado_por = $10, google_sub = $11,
+			version_sesion = $12
 		WHERE id = $1
 	`, u.ID, u.Nombre, u.Apellido, u.Email, textoOpcional(u.PasswordHash), u.DebeCambiarPassword,
 		string(u.Rol), string(u.Estado), u.FechaAprobacion, u.AprobadoPor,
-		textoOpcional(u.GoogleSub))
+		textoOpcional(u.GoogleSub), u.VersionSesion)
 
 	if err != nil {
 		if esViolacionUnica(err) {

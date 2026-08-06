@@ -107,10 +107,10 @@ func NormalizarEmail(email string) string {
 
 // ValidarEmail acepta lo que razonablemente es una dirección de correo.
 //
-// Antes el único chequeo era `email == ""`, así que "no-es-un-email" entraba
-// a la tabla como una cuenta más — y como el sistema no manda mails, nada
-// lo desmentía después: la fila quedaba ahí, sin forma de contactar a esa
-// persona y ocupando un lugar en el listado de pendientes.
+// Con un chequeo de `email == ""` a secas, "no-es-un-email" entra a la
+// tabla como una cuenta más y nada lo desmiente después: la fila queda ahí,
+// sin forma de contactar a esa persona y ocupando un lugar en el listado de
+// pendientes.
 //
 // Se exige un punto en el dominio además de lo que pide mail.ParseAddress:
 // "docente@escuela" es válido para el RFC pero en la práctica siempre es un
@@ -164,7 +164,29 @@ type Usuario struct {
 	// Google puede cambiar y el sub no. El email sigue siendo la identidad
 	// dentro del sistema; el vínculo con Google cuelga del sub.
 	GoogleSub string
+
+	// VersionSesion es el contador que permite echar a las sesiones
+	// abiertas cuando la contraseña cambia (ver InvalidarSesiones y
+	// migrations/010). Viaja dentro del JWT y el middleware lo compara
+	// contra el de la fila en cada request.
+	VersionSesion int
 }
+
+// InvalidarSesiones hace que todos los tokens ya emitidos para esta cuenta
+// dejen de valer a partir del request siguiente (RF-01.11).
+//
+// Es la única forma permitida de tocar VersionSesion desde fuera de este
+// paquete, igual que CambiarEstado con el estado: siendo un método, un grep
+// encuentra todos los lugares donde una sesión se corta.
+//
+// La llaman los tres caminos por los que cambia una contraseña (RF-01.6,
+// RF-01.7 y RF-01.10), por el caso que le da sentido: quien sospecha que
+// entraron a su cuenta la cambia para cortar el acceso del otro, no para
+// que siga adentro hasta que se le venza el token.
+//
+// Quien además emite un token nuevo tiene que hacerlo DESPUÉS de esto, o el
+// token que entrega nace inválido.
+func (u *Usuario) InvalidarSesiones() { u.VersionSesion++ }
 
 // PuedeIngresarConPassword indica si la cuenta tiene contraseña propia.
 //

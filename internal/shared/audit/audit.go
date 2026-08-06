@@ -10,13 +10,19 @@ import "context"
 
 // Acciones auditadas — mismo catálogo que docs/09-seguridad-rbac.md §5.
 const (
-	CuentaAprobada             = "CUENTA_APROBADA"
-	CuentaRechazada            = "CUENTA_RECHAZADA"
-	CuentaBaja                 = "CUENTA_BAJA"
-	CuentaEliminadaDefinitiva  = "CUENTA_ELIMINADA_DEFINITIVAMENTE"
-	AdminCreado                = "ADMIN_CREADO"
-	RolPromovidoAAdmin         = "ROL_PROMOVIDO_A_ADMIN"
-	PasswordReseteada          = "PASSWORD_RESETEADA"
+	CuentaAprobada            = "CUENTA_APROBADA"
+	CuentaRechazada           = "CUENTA_RECHAZADA"
+	CuentaBaja                = "CUENTA_BAJA"
+	CuentaEliminadaDefinitiva = "CUENTA_ELIMINADA_DEFINITIVAMENTE"
+	AdminCreado               = "ADMIN_CREADO"
+	RolPromovidoAAdmin        = "ROL_PROMOVIDO_A_ADMIN"
+	PasswordReseteada         = "PASSWORD_RESETEADA"
+	// PasswordRecuperadaPorEmail es la única acción de este catálogo cuyo
+	// actor NO está autenticado: la persona probó ser dueña de la cuenta
+	// con el código que le llegó al mail, no con un token. Por eso se
+	// audita —quedan la cuenta y la IP desde la que se hizo—, que es lo que
+	// permite reconstruir qué pasó si alguien reporta que no fue él.
+	PasswordRecuperadaPorEmail = "PASSWORD_RECUPERADA_POR_EMAIL"
 	DocenteRemovidoDeMateria   = "DOCENTE_REMOVIDO_DE_MATERIA"
 	ReservaCanceladaPorAdmin   = "RESERVA_CANCELADA_POR_ADMIN"
 	BloqueoEvaluacionCreado    = "BLOQUEO_EVALUACION_CREADO"

@@ -23,19 +23,38 @@ func NewListadorAdminsPostgres(pool *pgxpool.Pool) *ListadorAdminsPostgres {
 }
 
 func (l *ListadorAdminsPostgres) IDsDeAdminsAprobados(ctx context.Context) ([]string, error) {
-	rows, err := l.pool.Query(ctx, `SELECT id FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA'`)
+	return l.columnaDeAdminsAprobados(ctx, "id")
+}
+
+// EmailsDeAdminsAprobados es la misma consulta con otra columna: a quién le
+// llega la copia por correo del aviso.
+func (l *ListadorAdminsPostgres) EmailsDeAdminsAprobados(ctx context.Context) ([]string, error) {
+	return l.columnaDeAdminsAprobados(ctx, "email")
+}
+
+// columnaDeAdminsAprobados evita duplicar la consulta y, sobre todo, evita
+// que las dos versiones del filtro se separen con el tiempo: si mañana
+// cambia qué cuenta como "Admin activo", tiene que cambiar para el aviso
+// interno y para el correo a la vez.
+//
+// La columna se interpola en el SQL, que en general es la forma de meter
+// una inyección. Acá no puede: el argumento nunca viene de un request, son
+// dos literales escritos arriba en este mismo archivo.
+func (l *ListadorAdminsPostgres) columnaDeAdminsAprobados(ctx context.Context, columna string) ([]string, error) {
+	rows, err := l.pool.Query(ctx,
+		`SELECT `+columna+` FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA'`)
 	if err != nil {
 		return nil, fmt.Errorf("listando admins aprobados: %w", err)
 	}
 	defer rows.Close()
 
-	var ids []string
+	var valores []string
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("escaneando id de admin: %w", err)
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, fmt.Errorf("escaneando %s de admin: %w", columna, err)
 		}
-		ids = append(ids, id)
+		valores = append(valores, v)
 	}
-	return ids, errorDeFilas(rows)
+	return valores, errorDeFilas(rows)
 }

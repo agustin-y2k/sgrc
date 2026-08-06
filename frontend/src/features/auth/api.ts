@@ -9,8 +9,10 @@ import type {
   ListarUsuariosResponse,
   LoginRequest,
   LoginResponse,
+  OlvidePasswordRequest,
   RegistroRequest,
   ResetPasswordResponse,
+  RestablecerPasswordRequest,
   Rol,
   Usuario,
 } from "@/features/auth/types"
@@ -70,6 +72,36 @@ export function me() {
  */
 export function cambiarPassword(req: CambiarPasswordRequest) {
   return apiFetch<{ token: string }>("/api/auth/cambiar-password", {
+    method: "POST",
+    body: req,
+  })
+}
+
+/**
+ * Paso 1 de la recuperación: pedir que llegue un código al email.
+ *
+ * Responde 202 SIEMPRE que el email tenga forma válida, exista o no la
+ * cuenta. No hay forma —ni la tiene que haber— de distinguir desde acá si
+ * se mandó algo: eso es lo que evita que el formulario sirva para averiguar
+ * qué direcciones están registradas en la escuela. La pantalla muestra
+ * siempre el mismo mensaje.
+ */
+export function olvidePassword(req: OlvidePasswordRequest) {
+  return apiFetch<{ mensaje: string }>("/api/auth/password/olvide", {
+    method: "POST",
+    body: req,
+  })
+}
+
+/**
+ * Paso 2: cambiar la contraseña con el código.
+ *
+ * 204 sin body y sin token: el cambio no inicia sesión. Quien lo hizo
+ * vuelve al login y entra con la contraseña que acaba de elegir, que de
+ * paso comprueba que la recuerda.
+ */
+export function restablecerPassword(req: RestablecerPasswordRequest) {
+  return apiFetch<void>("/api/auth/password/restablecer", {
     method: "POST",
     body: req,
   })

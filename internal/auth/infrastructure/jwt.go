@@ -31,6 +31,11 @@ func (f *JWTFirmador) Firmar(u *domain.Usuario) (string, error) {
 		Nombre:              u.Nombre,
 		Apellido:            u.Apellido,
 		DebeCambiarPassword: u.DebeCambiarPassword,
+		// La versión de sesión se toma del usuario tal como está en este
+		// momento. Quien invalida las sesiones y además emite un token
+		// nuevo (CambiarPassword) tiene que llamar a InvalidarSesiones
+		// ANTES de firmar, o el token que entrega nace inválido.
+		VersionSesion: u.VersionSesion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(f.ttl)),
 		},

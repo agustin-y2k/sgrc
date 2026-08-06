@@ -22,6 +22,34 @@ type ApiFetchOptions = Omit<RequestInit, "body"> & {
   body?: unknown
 }
 
+/**
+ * Qué hacer cuando el backend rechaza el token que mandamos.
+ *
+ * Puede pasar en cualquier request, no solo al arrancar la aplicación: la
+ * cuenta se dio de baja (RF-02.8) o alguien cambió su contraseña y eso
+ * cerró las sesiones abiertas (RF-01.11). Sin este enganche ese 401 sería
+ * un error cualquiera —cartel rojo en la pantalla de turno, la aplicación
+ * todavía convencida de que hay sesión— y cada acción siguiente fallaría
+ * igual sin que nada llevara al login.
+ *
+ * Vive acá porque es el único lugar por el que pasan TODOS los requests. Se
+ * registra con un callback en vez de importar el contexto para que este
+ * módulo siga sin saber nada de React ni de rutas.
+ */
+type ManejadorDeSesionRechazada = (mensaje: string) => void
+
+let alRechazarLaSesion: ManejadorDeSesionRechazada | null = null
+
+/** Devuelve la función para desregistrarse (útil en el cleanup de un efecto). */
+export function registrarManejadorDeSesionRechazada(
+  manejador: ManejadorDeSesionRechazada
+): () => void {
+  alRechazarLaSesion = manejador
+  return () => {
+    if (alRechazarLaSesion === manejador) alRechazarLaSesion = null
+  }
+}
+
 async function parseErrorMessage(response: Response): Promise<string> {
   const text = await response.text()
   return text.trim() || response.statusText || "error inesperado"
@@ -45,7 +73,13 @@ export async function apiFetch<T>(
   })
 
   if (!response.ok) {
-    throw new ApiError(response.status, await parseErrorMessage(response))
+    const error = new ApiError(response.status, await parseErrorMessage(response))
+    // Solo si HABÍA token: el 401 del login son credenciales equivocadas,
+    // no una sesión rechazada, y cerrar sesión ahí no tendría sentido.
+    if (response.status === 401 && token) {
+      alRechazarLaSesion?.(error.message)
+    }
+    throw error
   }
 
   // Varios endpoints responden con c.SendStatus() y sin body JSON (ej.

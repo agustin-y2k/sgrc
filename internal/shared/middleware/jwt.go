@@ -24,21 +24,41 @@ type Claims struct {
 	// congelado en el token, CambiarPassword devuelve uno nuevo: si no,
 	// quien acaba de cambiarla seguiría bloqueado hasta que expire.
 	DebeCambiarPassword bool `json:"dcp,omitempty"`
+	// VersionSesion es la versión que tenía la cuenta al emitirse este
+	// token. Si no coincide con la de la fila, el token es de antes del
+	// último cambio de contraseña y no vale más (RF-01.11, migración 010).
+	//
+	// `omitempty` deja el claim afuera cuando vale 0, que es el valor de
+	// toda cuenta que nunca cambió su contraseña y el DEFAULT de la columna.
+	VersionSesion int `json:"vs,omitempty"`
 	jwt.RegisteredClaims
 }
 
-// CuentaVigente responde si la cuenta sigue habilitada para operar, y con
-// qué rol, en ESTE momento — no cuando se emitió el token.
+// EstadoDeCuenta es lo que el middleware necesita de la base para decidir si
+// un token sigue valiendo. Es un struct y no tres retornos sueltos porque
+// los tres salen de la misma fila: cuando haya un cuarto, la firma no
+// cambia.
+type EstadoDeCuenta struct {
+	// Vigente es false para una cuenta en PENDIENTE/RECHAZADA/BAJA y para
+	// un usuario que ya no existe (RF-01.9): en los dos casos el token no
+	// debe seguir sirviendo.
+	Vigente bool
+	// Rol de AHORA, no el del momento del login.
+	Rol string
+	// VersionSesion actual. Un token con otra versión se emitió antes del
+	// último cambio de contraseña.
+	VersionSesion int
+}
+
+// CuentaVigente responde si la cuenta sigue habilitada para operar, con qué
+// rol y con qué versión de sesión, en ESTE momento — no cuando se emitió el
+// token.
 //
 // Es un puerto hacia auth: middleware/ no puede importar internal/auth (ver
 // docs/06-arquitectura.md §3), así que la implementación concreta vive en
 // auth/infrastructure y se inyecta desde cmd/main.go, igual que los demás
 // validadores que cruzan paquetes.
-//
-// Devuelve vigente=false tanto para una cuenta en PENDIENTE/RECHAZADA/BAJA
-// como para un usuario que ya no existe (RF-01.9, hard delete): en los dos
-// casos el token no debe seguir sirviendo.
-type CuentaVigente func(ctx context.Context, usuarioID string) (vigente bool, rol string, err error)
+type CuentaVigente func(ctx context.Context, usuarioID string) (EstadoDeCuenta, error)
 
 // Autenticacion agrupa lo que hace falta para autenticar un request: el
 // secreto con el que se verifica la firma, y la consulta que dice si la
@@ -60,9 +80,9 @@ type Autenticacion struct {
 // Que la exigencia de RF-01.6 esté acá adentro y no en un middleware
 // separado es deliberado: así una ruta nueva queda protegida por omisión y
 // las únicas dos que se saltean la regla tienen que pedirlo explícitamente
-// con RequeridaPermitiendoPasswordVencida. Antes esto solo lo verificaba
-// <ProtectedRoute> en el navegador, así que el token que devolvía el login
-// con contraseña temporal servía contra toda la API.
+// con RequeridaPermitiendoPasswordVencida. Verificarlo solo en el navegador
+// (<ProtectedRoute>) no alcanza: el token que devuelve el login con
+// contraseña temporal serviría contra toda la API.
 func (a Autenticacion) Requerida() fiber.Handler {
 	validar := a.validador()
 	return func(c *fiber.Ctx) error {
@@ -140,19 +160,34 @@ func (a Autenticacion) validador() func(*fiber.Ctx) error {
 		// ESCRIBIENDO por hasta JWT_ACCESS_TTL. Es una lectura por PK en
 		// cada request autenticado — el precio de que "dar de baja" quiera
 		// decir lo que dice.
-		vigente, rolActual, err := a.Vigente(c.UserContext(), claims.UserID)
+		cuenta, err := a.Vigente(c.UserContext(), claims.UserID)
 		if err != nil {
 			// Fallar cerrado: si no podemos confirmar que la cuenta sigue
 			// habilitada, no la dejamos pasar.
 			return fiber.NewError(fiber.StatusServiceUnavailable,
 				"no se pudo verificar la sesión, probá de nuevo en unos segundos")
 		}
-		if !vigente {
+		if !cuenta.Vigente {
 			return fiber.NewError(fiber.StatusUnauthorized, "la sesión ya no es válida")
 		}
+
+		// Un token emitido antes del último cambio de contraseña no vale
+		// más, aunque la firma sea buena y la cuenta esté habilitada
+		// (RF-01.11). Es lo que hace que cambiar la contraseña corte el
+		// acceso de quien haya entrado con la vieja, en vez de dejarlo
+		// adentro hasta que se le venza el token.
+		//
+		// El mensaje explica qué pasó: quien cambió su contraseña en otro
+		// dispositivo tiene que entender que esta sesión cayó por eso y no
+		// por una falla.
+		if claims.VersionSesion != cuenta.VersionSesion {
+			return fiber.NewError(fiber.StatusUnauthorized,
+				"tu sesión se cerró porque la contraseña de esta cuenta cambió; volvé a entrar")
+		}
+
 		// El rol de la base gana sobre el del token: el RBAC de cada ruta
 		// decide con el valor de ahora, no con el del momento del login.
-		claims.Rol = rolActual
+		claims.Rol = cuenta.Rol
 
 		c.Locals("claims", claims)
 		return nil

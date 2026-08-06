@@ -35,6 +35,31 @@ export type Usuario = {
 export type ConfigPublica = {
   /** Vacío = este despliegue no tiene ingreso con Google configurado. */
   googleClientId: string
+  /**
+   * false = no hay SMTP configurado, así que el sistema no puede mandar el
+   * código y el login no muestra "olvidé mi contraseña". Opcional en el
+   * tipo por la misma razón que `tienePassword`: una respuesta cacheada de
+   * antes de esta versión no lo trae.
+   */
+  recuperacionPorEmail?: boolean
+}
+
+/** POST /api/auth/password/olvide — paso 1 de la recuperación. */
+export type OlvidePasswordRequest = {
+  email: string
+}
+
+/**
+ * POST /api/auth/password/restablecer — paso 2.
+ *
+ * El email va de nuevo y no queda en una sesión intermedia: así el paso 2
+ * funciona aunque la persona haya pedido el código en la computadora de la
+ * escuela y lo lea en el celular.
+ */
+export type RestablecerPasswordRequest = {
+  email: string
+  codigo: string
+  passwordNueva: string
 }
 
 export type GoogleLoginRequest = {

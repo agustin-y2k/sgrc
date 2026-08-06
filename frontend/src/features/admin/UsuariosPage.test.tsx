@@ -53,6 +53,7 @@ describe("UsuariosPage", () => {
       user: ADMIN,
       isLoading: false,
       errorDeSesion: null,
+      motivoDeCierre: null,
       login: vi.fn(),
       logout: vi.fn(),
       loginConGoogle: vi.fn(),

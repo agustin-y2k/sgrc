@@ -49,6 +49,7 @@ import (
 	reservationinfra "github.com/ramiro/sgrc/internal/reservation/infrastructure"
 	reservationhttp "github.com/ramiro/sgrc/internal/reservation/interfaces/http"
 	"github.com/ramiro/sgrc/internal/shared/audit"
+	"github.com/ramiro/sgrc/internal/shared/email"
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
 	"github.com/ramiro/sgrc/internal/shared/middleware"
 	"github.com/ramiro/sgrc/internal/shared/security"
@@ -213,6 +214,29 @@ func main() {
 	// mensaje que diga qué corregir.
 	frontendOrigin := origenDelFrontend()
 
+	// ── Correo saliente (opcional) ─────────────────────────────────
+	// Se resuelve junto al origen del frontend y por lo mismo: es config, y
+	// una config de correo a medias no se detecta más tarde. Con SMTP_HOST
+	// puesto y SMTP_FROM vacío el proceso arrancaría bien y cada envío
+	// fallaría dentro de una goroutine cuyo error solo se loguea — el modo
+	// de falla que nadie mira.
+	//
+	// Sin SMTP_HOST los avisos siguen llegando a la campana de
+	// notificaciones y lo único fuera de servicio es la recuperación por
+	// autoservicio (RF-01.10), para la que existe el rescate de RF-01.6.
+	enviadorDeEmail, err := email.DesdeEntorno(os.Getenv, ahora)
+	if err != nil {
+		log.Fatalf("configuración de correo inválida: %v (ver SMTP_* en .env.example)", err)
+	}
+	_, correoHabilitado := enviadorDeEmail.(*email.EnviadorSMTP)
+	if correoHabilitado {
+		log.Printf("correo saliente habilitado vía %s", os.Getenv("SMTP_HOST"))
+	} else {
+		log.Print("correo saliente deshabilitado: no hay SMTP_HOST configurado (ver .env.example). " +
+			"La recuperación de contraseña por autoservicio queda fuera de servicio; " +
+			"un Admin puede resetear contraseñas igual que antes")
+	}
+
 	// ── Base de datos ──────────────────────────────────────────────
 	dsn := buildDSN()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -295,8 +319,8 @@ func main() {
 	// nunca importa reservation directamente (ver cmd/wiring_adapters.go).
 	canceladorReservas := &authCanceladorReservasAdapter{reservationSvc: reservationSvc}
 
-	// Ingreso con Google (opcional). Sin GOOGLE_CLIENT_ID el sistema
-	// arranca igual y funciona como venía funcionando: el verificador queda
+	// Ingreso con Google (opcional). Sin GOOGLE_CLIENT_ID el sistema arranca
+	// igual y se entra solo con email y contraseña: el verificador queda
 	// nil, los dos endpoints de Google responden 503 y el frontend ni
 	// siquiera dibuja el botón (GET /api/auth/config devuelve el ID vacío).
 	//
@@ -320,6 +344,9 @@ func main() {
 		log.Print("ingreso con Google deshabilitado: no hay GOOGLE_CLIENT_ID configurado (ver .env.example)")
 	}
 
+	// correoHabilitado (resuelto arriba, con el resto de la config) es lo
+	// que hace que los dos endpoints de recuperación respondan 503 en vez de
+	// aceptar un pedido cuyo mail no va a salir nunca.
 	authSvc := authapp.NewService(
 		authRepo,
 		bus,
@@ -328,10 +355,12 @@ func main() {
 		firmador.Firmar,
 		authinfra.NuevoID,
 		authinfra.GenerarPasswordTemporal,
+		authinfra.GenerarCodigoRecuperacion,
 		ahora,
 		gestorMaterias,
 		canceladorReservas,
 		verificadorGoogle,
+		correoHabilitado,
 	)
 	authHandler := authhttp.NewHandler(authSvc, auditor, googleClientID)
 
@@ -411,6 +440,18 @@ func main() {
 	// disparar el último request atendido.
 	var notificacionesPendientes sync.WaitGroup
 	notificationapp.RegisterEventHandlersConEspera(bus, notificationSvc, &notificacionesPendientes)
+
+	// Las copias por correo son suscriptores APARTE de los avisos internos,
+	// aunque escuchen algunos de los mismos eventos: el aviso interno es la
+	// fuente de verdad y el mail una cortesía, así que si el envío falla o
+	// tarda, el aviso ya se escribió.
+	//
+	// Se registran incluso sin SMTP: el enviador deshabilitado deja una
+	// línea en el log por cada mail que no se mandó, que es lo que hace
+	// falta para diagnosticar "no me llega nada".
+	mensajero := notificationapp.NewMensajero(enviadorDeEmail, listadorAdmins, frontendOrigin)
+	notificationapp.RegisterEmailHandlersConEspera(bus, mensajero, &notificacionesPendientes)
+
 	notificationHandler := notificationhttp.NewHandler(notificationSvc)
 
 	// ── availability ─────────────────────────────────────────────
@@ -500,11 +541,11 @@ func main() {
 
 	// ── Apagado ordenado ───────────────────────────────────────────
 	// Listen bloquea, así que va a su propia goroutine y main se queda
-	// esperando la señal. Antes esto era `log.Fatal(app.Listen(...))`: en
-	// cada despliegue el proceso moría de golpe, cortando los requests en
-	// vuelo (una reserva a medio commitear se veía como un error de red del
-	// lado del docente) y descartando las notificaciones que todavía
-	// estaban en sus goroutines.
+	// esperando la señal. Con un `log.Fatal(app.Listen(...))` el proceso
+	// moriría de golpe en cada despliegue, cortando los requests en vuelo
+	// —una reserva a medio commitear se ve como un error de red del lado del
+	// docente— y descartando las notificaciones que todavía estén en sus
+	// goroutines.
 	erroresDelServidor := make(chan error, 1)
 	go func() {
 		// ErrServerClosed es la salida normal de Shutdown, no una falla.

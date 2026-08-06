@@ -45,6 +45,7 @@ describe("AdminRoute", () => {
       logout: vi.fn(),
       loginConGoogle: vi.fn(),
       errorDeSesion: null,
+      motivoDeCierre: null,
       refetchUser: vi.fn(),
     })
     renderAdminRoute()
@@ -60,6 +61,7 @@ describe("AdminRoute", () => {
       logout: vi.fn(),
       loginConGoogle: vi.fn(),
       errorDeSesion: null,
+      motivoDeCierre: null,
       refetchUser: vi.fn(),
     })
     renderAdminRoute()
