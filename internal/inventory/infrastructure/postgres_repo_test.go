@@ -277,9 +277,8 @@ func TestPostgresRepo_GuardarIncidencia_MarcarEnviadaDGE(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_IDConFormatoInvalido_ErrorControlado — mismo bug real
-// encontrado y corregido en academic: un ID sin formato UUID debe mapear
-// a application.ErrIDInvalido (400), nunca un 500 crudo de Postgres.
+// Un ID sin formato UUID tiene que mapear a application.ErrIDInvalido
+// (400), nunca a un 500 crudo de Postgres: es un error del cliente.
 func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

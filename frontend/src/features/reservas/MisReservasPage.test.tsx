@@ -31,6 +31,7 @@ function mockUsuario(u: Usuario) {
     user: u,
     isLoading: false,
     errorDeSesion: null,
+    motivoDeCierre: null,
     login: vi.fn(),
     logout: vi.fn(),
     loginConGoogle: vi.fn(),
@@ -114,8 +115,8 @@ describe("MisReservasPage", () => {
   })
 
   // El glosario define ReservaGrupo como "la reserva tal como la percibe el
-  // docente". Antes la API devolvía una fila por PC sin identificarla, así
-  // que una reserva de varias PCs se veía como N tarjetas idénticas.
+  // docente": sin agrupar, una reserva de varias PCs se ve como N tarjetas
+  // idénticas.
   describe("agrupación por reserva", () => {
     const tresPCs = [
       reserva({ id: "r1", pcId: "pc1", pcIdentificador: 3 }),
@@ -259,9 +260,9 @@ describe("MisReservasPage", () => {
       expect(reservasApi.cancelarGrupo).toHaveBeenCalledWith("grupo1", "", false)
     })
 
-    // El alcance de la serie solo tiene sentido si la reserva es recurrente.
-    // Antes se usaba reservaGrupoId como proxy, que tienen TODAS las
-    // reservas normales, así que la opción aparecía siempre.
+    // El alcance de la serie solo tiene sentido si la reserva es
+    // recurrente. No sirve usar reservaGrupoId como proxy: lo tienen TODAS
+    // las reservas, así que la opción aparecería siempre.
     it("una reserva puntual no ofrece el alcance de la serie", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([reserva({ reglaRecurrenciaId: undefined })])

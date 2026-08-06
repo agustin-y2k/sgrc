@@ -7,6 +7,7 @@ erDiagram
     USUARIO ||--o{ DOCENTE_MATERIA : asignado
     USUARIO ||--o{ RESERVA_GRUPO : crea
     USUARIO ||--o{ NOTIFICACION : recibe
+    USUARIO ||--o{ CODIGO_RECUPERACION : pide
     CARRO ||--o{ PC : contiene
     PC ||--o{ INCIDENCIA : registra
     PC ||--o{ RESERVA : recibe
@@ -18,7 +19,7 @@ erDiagram
     REGLA_RECURRENCIA ||--o{ RESERVA_GRUPO : materializa
     RESERVA_GRUPO ||--o{ RESERVA : contiene
 
-    USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; string rol; string estado; timestamp fecha_registro; uuid aprobado_por; string curso_solicitado; string materia_solicitada }
+    USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; string rol; string estado; timestamp fecha_registro; uuid aprobado_por; string curso_solicitado; string materia_solicitada; int version_sesion }
     CARRO { uuid id; string nombre; string descripcion }
     PC { uuid id; uuid carro_id; int identificador; bigint numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool dada_de_baja; timestamp fecha_alta }
     INCIDENCIA { uuid id; uuid pc_id; uuid reportado_por; string descripcion; string gravedad; timestamp fecha; bool enviado_dge; timestamp fecha_envio_dge; string estado }
@@ -30,6 +31,7 @@ erDiagram
     RESERVA_GRUPO { uuid id; uuid materia_id; uuid creado_por; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; uuid regla_recurrencia_id; timestamp creada_en }
     RESERVA { uuid id; uuid reserva_grupo_id; uuid pc_id; string estado; string tipo; timestamp creada_en; uuid cancelado_por; string motivo_cancelacion; timestamp cancelada_en }
     NOTIFICACION { uuid id; uuid usuario_id; uuid reserva_id; string mensaje; string estado; timestamp creada_en; timestamp leida_en }
+    CODIGO_RECUPERACION { uuid id; uuid usuario_id; string codigo_hash; timestamp creado_en; timestamp expira_en; timestamp usado_en; int intentos }
 ```
 
 > **Reservas agrupadas por PC:** un docente no reserva una PC por vez como operaciones independientes — selecciona varias PCs de una lista (como tildar casillas) hasta completar la cantidad que necesita para su clase, en una sola operación. Eso exige separar "la reserva que hace el docente" (`RESERVA_GRUPO`: una materia, una fecha, un horario) de "cada PC dentro de esa reserva" (`RESERVA`: una fila por PC). Cancelaciones en cascada (evaluación estatal, PC fuera de servicio) actúan sobre filas `RESERVA` individuales — nunca sobre todo el grupo salvo que termine afectando a todas sus PCs.
@@ -65,9 +67,14 @@ El esquema distingue a propósito entre **instantes** y **hora de pared**, y con
 | curso_solicitado | VARCHAR(100) | NULL — lo que declaró al registrarse (migración `006`) |
 | materia_solicitada | VARCHAR(100) | NULL — ídem |
 | google_sub | VARCHAR(255) | NULL, UNIQUE parcial — identidad de Google (migración `008`) |
+| version_sesion | INTEGER | NOT NULL DEFAULT 0 — revocación de sesiones (migración `010`) |
 | | | CHECK `password_hash IS NOT NULL OR google_sub IS NOT NULL` |
 
 > `debe_cambiar_password`: se pone en `true` cuando un Admin resetea la contraseña de alguien (RF-01.6). El login sigue funcionando con la contraseña temporal, pero la respuesta incluye este flag para que el frontend fuerce la pantalla de cambio antes de dejar entrar al resto del sistema; al cambiarla exitosamente (`POST /api/auth/cambiar-password`), vuelve a `false`. Sin esta columna, "exigir cambio en el próximo login" (como decía `01-requisitos.md` RF-01.6) no tenía ningún mecanismo real que lo hiciera cumplir.
+
+> `version_sesion` (migración `010`) es lo que permite **cerrar las sesiones abiertas** al cambiar una contraseña (RF-01.11). El número viaja dentro del JWT y el middleware lo compara contra el de la fila en cada request — en la misma consulta que ya hacía para verificar el estado, así que no agrega ninguna. Cambiar la contraseña lo incrementa y todo token anterior deja de valer.
+>
+> Es un entero y no un timestamp ("invalidar lo emitido antes de X") porque `iat` en un JWT tiene resolución de segundos: comparado contra un `now()` con microsegundos, el token que el propio cambio acaba de emitir se rechazaría a sí mismo, y redondear al segundo deja una ventana en la que las sesiones abiertas en ese mismo segundo sobreviven. El `DEFAULT 0` coincide con el claim ausente, así que aplicar la migración no desloguea a nadie.
 
 > `curso_solicitado` y `materia_solicitada` son **texto libre, no FKs** (migración `006`): al registrarse la persona todavía no está autenticada, así que no puede elegir de una lista, y lo que declara puede no existir todavía en el sistema — de hecho el Admin quizás lo tenga que crear al aprobarla (RF-02.6). Es una declaración de intención para que el Admin sepa a qué asignarla, no un vínculo.
 
@@ -197,7 +204,7 @@ CREATE INDEX idx_incidencia_pc ON incidencia(pc_id);
 ### `regla_recurrencia`
 Representa el **patrón** temporal (materia + día de semana + horario + rango de fechas). No guarda las PCs: la relación con las PCs vive en los `reserva_grupo` que la regla materializa, uno por ocurrencia.
 
-`dia_semana` solo admite `LUNES` a `VIERNES` — la semana lectiva de la escuela (ver `01-requisitos.md` RF-04). Lo sostiene un `CHECK` en la base desde la migración `005`: antes era una regla que vivía solo en el enum de Go, así que cualquier `INSERT` que no pasara por la aplicación entraba igual.
+`dia_semana` solo admite `LUNES` a `VIERNES` — la semana lectiva de la escuela (ver `01-requisitos.md` RF-04). Lo sostiene un `CHECK` en la base (migración `005`) y no solo el enum de Go: sin él, cualquier `INSERT` que no pase por la aplicación entra igual.
 
 | Campo | Tipo | Restricciones |
 |---|---|---|
@@ -323,6 +330,35 @@ CREATE INDEX idx_notif_usuario_estado ON notificacion(usuario_id, estado);
 > `reserva_id` sigue apuntando a la fila `reserva` (PC puntual), no a `reserva_grupo` — así la notificación puede ser específica ("tu reserva de la PC-07 del 12/08 10:00 fue cancelada") aunque el resto del grupo siga confirmado.
 >
 > **`ON DELETE SET NULL` en `reserva_id` es necesario, no cosmético:** cuando se archiva un ciclo lectivo, sus `reserva` se eliminan físicamente (ver §3), pero las notificaciones ya enviadas sobre esas reservas no deberían desaparecer ni romperse — `mensaje` ya tiene el texto completo guardado, así que la notificación sigue siendo legible aunque `reserva_id` quede en `NULL`. Sin este `ON DELETE SET NULL` (o un `CASCADE`), el `DELETE` de `reserva` fallaría por violación de FK.
+
+### `codigo_recuperacion`
+Códigos de un solo uso para recuperar una contraseña olvidada (RF-01.10, migración `009`).
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| usuario_id | UUID | FK → usuario.id **ON DELETE CASCADE**, NOT NULL |
+| codigo_hash | VARCHAR(255) | NOT NULL |
+| creado_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+| expira_en | TIMESTAMPTZ | NOT NULL |
+| usado_en | TIMESTAMPTZ | NULL |
+| intentos | INTEGER | NOT NULL DEFAULT 0 |
+
+```sql
+CREATE INDEX idx_codigo_recuperacion_vigente
+    ON codigo_recuperacion (usuario_id, creado_en DESC)
+    WHERE usado_en IS NULL;
+```
+
+> **Es una tabla aparte y no dos columnas en `usuario`** por dos razones. El ciclo de vida no tiene nada que ver: una fila acá vive quince minutos, la de `usuario` vive años. Y los intentos fallidos se escriben en cada prueba de código — meter ese `UPDATE` sobre la fila de usuario haría que cada intento de recuperación tocara la fila que usa todo el resto del sistema.
+>
+> **`codigo_hash` guarda el hash, nunca el código.** Son seis dígitos: si la base se filtrara (un backup, un dump de soporte), un código en claro sería una cuenta abierta hasta que expire. Se usa el mismo argon2 que las contraseñas.
+>
+> **`usado_en` cubre los dos finales posibles**: el código se consumió bien, o se quemó al agotar los cinco intentos. En los dos casos dejó de existir para el sistema, y una sola columna evita tener que preguntar por dos.
+>
+> Las filas viejas **no se borran**: quedan como registro de que esa persona pidió un código, que es justo lo que hay que poder mirar si alguien reporta algo raro. El índice es parcial (`WHERE usado_en IS NULL`) porque la única consulta en caliente es "¿tiene un código sin usar?", y las filas viejas —que con el tiempo son todas— no hace falta indexarlas. Si algún día molestaran, se limpian con un `DELETE` por `creado_en`; a esta escala no hace falta un job.
+>
+> `ON DELETE CASCADE` por lo mismo que en `notificacion`: sin la cuenta, el código no le sirve a nadie.
 
 ### `horario_admin`
 Patrón semanal recurrente de presencia en el laboratorio — puramente informativo (RF-07), no afecta permisos ni reservas.

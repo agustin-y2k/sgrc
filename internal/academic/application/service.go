@@ -98,15 +98,14 @@ type ResultadoArchivado struct {
 // es que ningún fallo destruya datos: si (1) o (2) fallan, todavía no se
 // borró nada; si falla (3), el ciclo queda archivado con sus reservas
 // intactas y basta con reintentar el archivado para completar la limpieza.
-// Con el borrado en el medio —como estaba antes— un fallo al archivar
-// dejaba el año entero de reservas borrado y el ciclo sin archivar, sin
-// vuelta atrás posible.
+// Con el borrado en el medio, un fallo al archivar dejaría el año entero de
+// reservas borrado y el ciclo sin archivar, sin vuelta atrás posible.
 //
-// Ese reintento tiene que funcionar de verdad, y hasta ahora no funcionaba:
-// moría en ErrCicloYaArchivado antes de llegar al borrado, así que el único
-// camino para completar la limpieza era SQL a mano contra producción. Los
-// dos cambios que lo hacen posible son el reintento explícito de abajo y el
-// ON CONFLICT DO NOTHING del snapshot (ver reporting/infrastructure).
+// Ese reintento tiene que funcionar de verdad: sin el reintento explícito
+// de abajo moriría en ErrCicloYaArchivado sin llegar al borrado, y sin el
+// ON CONFLICT DO NOTHING del snapshot (ver reporting/infrastructure)
+// chocaría contra las filas que la corrida anterior ya escribió. El único
+// camino para completar la limpieza sería SQL a mano contra producción.
 func (s *Service) ArchivarYClonar(ctx context.Context, cicloID string, clonarAAnio *int) (*ResultadoArchivado, error) {
 	ciclo, err := s.repo.BuscarCicloPorID(ctx, cicloID)
 	if err != nil {
@@ -285,13 +284,11 @@ func (s *Service) AsignarDocente(ctx context.Context, materiaID, usuarioID strin
 // queda sin ningún docente activo, cancela sus reservas futuras (RF-02.8) y
 // avisa a los Admin.
 //
-// Antes era un passthrough al repo. auth.DarDeBaja hacía todo este trabajo
-// —detectar materias huérfanas, cancelar, notificar— pero quitar la
-// asignación directamente llegaba al MISMO estado por otro camino y sin
-// ninguna de esas consecuencias: la materia quedaba sin nadie a cargo, con
-// reservas futuras vivas a nombre de un docente que ya no la tiene asignada
-// y que por lo tanto tampoco podía cancelarlas él (RF-04.1 le exige estar
-// asignado).
+// No puede ser un passthrough al repo. Este camino llega al MISMO estado
+// que auth.DarDeBaja —una materia sin docente a cargo— así que necesita las
+// mismas consecuencias: sin ellas quedan reservas futuras vivas a nombre de
+// un docente que ya no tiene la materia asignada y que por eso tampoco
+// puede cancelarlas él (RF-04.1 le exige estar asignado).
 //
 // El orden —cancelar ANTES de borrar el vínculo— es el mismo de
 // auth.DarDeBaja y por la misma razón: la cascada cruza a reservation por un

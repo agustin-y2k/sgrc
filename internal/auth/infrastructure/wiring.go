@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
+	"github.com/ramiro/sgrc/internal/auth/domain"
 )
 
 // NuevoID genera un UUID nuevo para una fila de usuario — se llama antes
@@ -48,6 +50,43 @@ func GenerarPasswordTemporal() (string, error) {
 			continue // descartado, no sesga la distribución
 		}
 		resultado[i] = alfabetoPasswordTemporal[int(buf[0])%alfabetoLen]
+		i++
+	}
+	return string(resultado), nil
+}
+
+// GenerarCodigoRecuperacion produce el código de un solo uso que se manda
+// por mail para recuperar una contraseña olvidada.
+//
+// Son dígitos y no el alfabeto de arriba porque el recorrido es distinto:
+// la temporal se la dicta un Admin y la persona la usa una vez; el código
+// lo lee del celular, cambia de aplicación y lo tipea. Con solo dígitos el
+// teclado numérico aparece solo, no hay mayúsculas que confundir, y no
+// existe la duda de si esa "l" era una ele o un uno.
+//
+// Seis dígitos son un millón de combinaciones, poco por sí solo — lo que lo
+// hace seguro es el resto: quince minutos de vigencia, cinco intentos, un
+// solo código vigente por persona y rate limit en el endpoint (ver
+// domain.CodigoRecuperacion y migrations/009).
+func GenerarCodigoRecuperacion() (string, error) {
+	const digitos = "0123456789"
+	longitud := domain.LongitudCodigoRecuperacion
+
+	// 250 es el mayor múltiplo de 10 que entra en un byte: los valores 250
+	// a 255 se descartan para que los diez dígitos queden equiprobables.
+	// Mismo criterio que GenerarPasswordTemporal.
+	const maxValido = byte(250)
+
+	resultado := make([]byte, longitud)
+	buf := make([]byte, 1)
+	for i := 0; i < longitud; {
+		if _, err := rand.Read(buf); err != nil {
+			return "", fmt.Errorf("generando código de recuperación: %w", err)
+		}
+		if buf[0] >= maxValido {
+			continue
+		}
+		resultado[i] = digitos[int(buf[0])%len(digitos)]
 		i++
 	}
 	return string(resultado), nil

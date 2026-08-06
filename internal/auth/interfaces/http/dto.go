@@ -60,6 +60,27 @@ type cambiarPasswordResponse struct {
 	Token string `json:"token"`
 }
 
+// ── Recuperación de contraseña por autoservicio ─────────────────────────
+
+// olvidePasswordRequest es el primer paso: solo la dirección a la que
+// mandar el código.
+type olvidePasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// restablecerPasswordRequest es el segundo: el código que llegó al mail
+// más la contraseña elegida.
+//
+// El email viaja de nuevo y no en una sesión intermedia a propósito: sin
+// estado del lado del servidor, el paso 2 funciona aunque la persona haya
+// cerrado la pestaña, cambiado de dispositivo o pedido el código desde la
+// computadora de la escuela y lo lea en el celular.
+type restablecerPasswordRequest struct {
+	Email         string `json:"email"`
+	Codigo        string `json:"codigo"`
+	PasswordNueva string `json:"passwordNueva"`
+}
+
 type cambiarEstadoRequest struct {
 	Estado string `json:"estado"` // APROBADA | RECHAZADA | BAJA
 }
@@ -90,6 +111,13 @@ type configPublicaResponse struct {
 	// Vacío = este despliegue no tiene ingreso con Google configurado, y
 	// el frontend no muestra el botón.
 	GoogleClientID string `json:"googleClientId"`
+
+	// false = no hay SMTP configurado, así que el sistema no puede mandar
+	// el código de recuperación a ningún lado y la pantalla de login no
+	// muestra el enlace "olvidé mi contraseña". Mismo criterio que el botón
+	// de Google: no ofrecer lo que este despliegue no puede hacer. La
+	// salida en ese caso es que un Admin resetee la contraseña (RF-01.6).
+	RecuperacionPorEmail bool `json:"recuperacionPorEmail"`
 }
 
 type usuarioResponse struct {

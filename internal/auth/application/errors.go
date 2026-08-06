@@ -18,10 +18,9 @@ var (
 
 	// Los tres motivos concretos por los que una cuenta existente no entra.
 	//
-	// Antes los tres devolvían "cuenta no habilitada" y listo. Quien se
-	// acababa de registrar y quien había sido rechazado leían exactamente lo
-	// mismo, y ninguno de los dos sabía si tenía que esperar, insistir o
-	// hablar con alguien.
+	// Un "cuenta no habilitada" genérico para los tres haría que quien se
+	// acaba de registrar y quien fue rechazado leyeran exactamente lo mismo,
+	// sin saber si tienen que esperar, insistir o hablar con alguien.
 	//
 	// Distinguirlos acá no filtra nada: para llegar hasta este punto la
 	// persona ya presentó la credencial correcta —contraseña verificada o
@@ -48,10 +47,10 @@ var (
 
 	ErrPasswordCorta = errors.New("la contraseña debe tener al menos 8 caracteres")
 
-	// ErrDatosObligatorios: nombre/apellido/email vacíos. Antes esto era un
-	// fmt.Errorf suelto, sin sentinel, así que mapearError lo mandaba al 500
-	// genérico: registrarse con el nombre vacío devolvía "error interno" en
-	// vez de decir qué faltaba.
+	// ErrDatosObligatorios: nombre/apellido/email vacíos. Es un sentinel y
+	// no un fmt.Errorf suelto porque mapearError manda al 500 genérico todo
+	// lo que no reconoce: registrarse con el nombre vacío respondería "error
+	// interno" en vez de decir qué falta.
 	ErrDatosObligatorios = errors.New("nombre, apellido y email son obligatorios")
 
 	// ErrUltimoAdmin: RF-01.8 — el sistema nunca puede quedar sin ningún Admin.
@@ -60,12 +59,9 @@ var (
 	// ErrSoloDesdeBaja: RF-01.9 — el hard delete solo aplica a cuentas en BAJA.
 	ErrSoloDesdeBaja = errors.New("solo se puede eliminar definitivamente una cuenta en estado BAJA")
 
-	// ErrIDInvalido: mismo criterio que en academic/inventory/reservation
-	// — un ID sin formato UUID válido se mapea a 400, no a 500. auth se
-	// armó antes de que este bug apareciera por primera vez (en
-	// academic); este sentinel se agregó retroactivamente al revisar
-	// auth/infrastructure para la cascada de DarDeBaja y notar que le
-	// faltaba el mismo chequeo que ya tienen todos los demás paquetes.
+	// ErrIDInvalido: mismo criterio que en academic/inventory/reservation —
+	// un ID sin formato UUID válido se mapea a 400 y no a 500, porque es un
+	// error del cliente y no una falla del servidor.
 	ErrIDInvalido = errors.New("el ID indicado no tiene un formato válido")
 
 	// ── Ingreso con Google ───────────────────────────────────────────
@@ -104,6 +100,35 @@ var (
 	// que entra solo con Google. No tiene contraseña actual que verificar
 	// ni nada que cambiar.
 	ErrCuentaSinPassword = errors.New("esta cuenta ingresa con Google y no tiene contraseña; pedile a un Admin que te genere una si querés entrar también con email y contraseña")
+
+	// ── Recuperación de contraseña por autoservicio ──────────────────
+	//
+	// ErrCodigoNoEncontrado lo devuelve el repositorio cuando la persona no
+	// tiene ningún código sin usar. Nunca sale hacia el cliente tal cual:
+	// el servicio lo traduce al mismo mensaje que un código equivocado.
+	ErrCodigoNoEncontrado = errors.New("no hay ningún código de recuperación pendiente")
+
+	// ErrCodigoRecuperacionInvalido es lo ÚNICO que ve quien manda un
+	// código que no sirve, sin importar si el email no existe, si la
+	// persona nunca pidió un código o si el código es de otra cuenta.
+	// Distinguirlos convertiría este endpoint en un detector de qué
+	// direcciones están registradas.
+	ErrCodigoRecuperacionInvalido = errors.New("el código no es válido o ya venció; pedí uno nuevo")
+
+	// ErrCodigoRecuperacionVencido y ErrCodigoRecuperacionSinIntentos sí se
+	// distinguen: le pasan a la persona legítima, que ya demostró tener
+	// acceso a la casilla, y necesita saber que tiene que pedir otro código
+	// en vez de seguir tipeando el mismo.
+	ErrCodigoRecuperacionVencido = errors.New("el código venció; pedí uno nuevo")
+
+	ErrCodigoRecuperacionSinIntentos = errors.New("se agotaron los intentos para ese código; pedí uno nuevo")
+
+	// ErrRecuperacionNoDisponible: no hay SMTP configurado, así que el
+	// sistema no puede mandar el código a ningún lado. Igual que con
+	// Google, no es un error del cliente sino una capacidad que este
+	// despliegue no tiene: se mapea a 503. La salida es el reset asistido
+	// por un Admin (RF-01.6).
+	ErrRecuperacionNoDisponible = errors.New("la recuperación de contraseña por email no está configurada en este sistema; pedile a un Admin que te resetee la contraseña")
 
 	// ErrReferenciaInexistente: SQLSTATE 23503 (foreign_key_violation) — el
 	// request nombró un padre que no existe (un carro, un ciclo, una PC, un

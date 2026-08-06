@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/ramiro/sgrc/internal/shared/middleware"
 )
 
 // VerificadorCuentaVigente resuelve middleware.CuentaVigente contra la tabla
@@ -36,28 +37,33 @@ func NewVerificadorCuentaVigente(pool *pgxpool.Pool) *VerificadorCuentaVigente {
 // es un UUID (token viejo de otra base, o manipulado), o el estado no es
 // APROBADA (PENDIENTE / RECHAZADA / BAJA). Ninguno es una falla del
 // sistema; los tres significan lo mismo para quien pregunta.
-func (v *VerificadorCuentaVigente) Vigente(ctx context.Context, usuarioID string) (bool, string, error) {
+func (v *VerificadorCuentaVigente) Vigente(ctx context.Context, usuarioID string) (middleware.EstadoDeCuenta, error) {
 	var rolStr, estadoStr string
+	var versionSesion int
 	err := v.pool.QueryRow(ctx,
-		`SELECT rol, estado FROM usuario WHERE id = $1`, usuarioID,
-	).Scan(&rolStr, &estadoStr)
+		`SELECT rol, estado, version_sesion FROM usuario WHERE id = $1`, usuarioID,
+	).Scan(&rolStr, &estadoStr, &versionSesion)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || esIDInvalido(err) {
-			return false, "", nil
+			return middleware.EstadoDeCuenta{}, nil
 		}
-		return false, "", fmt.Errorf("verificando cuenta vigente: %w", err)
+		return middleware.EstadoDeCuenta{}, fmt.Errorf("verificando cuenta vigente: %w", err)
 	}
 
 	// Un rol o estado que no parsea es dato corrupto en la base, no una
 	// cuenta habilitada: se niega el acceso en vez de asumir un default.
 	rol, err := domain.ParseRol(rolStr)
 	if err != nil {
-		return false, "", fmt.Errorf("rol inválido en la base para usuario %s: %w", usuarioID, err)
+		return middleware.EstadoDeCuenta{}, fmt.Errorf("rol inválido en la base para usuario %s: %w", usuarioID, err)
 	}
 	estado, err := domain.ParseEstado(estadoStr)
 	if err != nil {
-		return false, "", fmt.Errorf("estado inválido en la base para usuario %s: %w", usuarioID, err)
+		return middleware.EstadoDeCuenta{}, fmt.Errorf("estado inválido en la base para usuario %s: %w", usuarioID, err)
 	}
 
-	return estado == domain.EstadoAprobada, string(rol), nil
+	return middleware.EstadoDeCuenta{
+		Vigente:       estado == domain.EstadoAprobada,
+		Rol:           string(rol),
+		VersionSesion: versionSesion,
+	}, nil
 }

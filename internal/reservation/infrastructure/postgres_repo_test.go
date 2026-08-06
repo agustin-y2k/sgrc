@@ -383,8 +383,9 @@ func TestPostgresRepo_GuardarReserva_Cancelar(t *testing.T) {
 
 // TestPostgresRepo_ReservaVencida_ApareceEnElListado confirma que la
 // comparación fecha+hora_fin funciona igual que la de la constraint
-// EXCLUDE (aritmética date+time, no texto — ver el bug real que
-// encontramos en la migración original).
+// EXCLUDE: aritmética date+time, no comparación de texto. Comparar como
+// texto da resultados distintos y el listado dejaría de coincidir con lo
+// que la constraint considera solapado.
 func TestPostgresRepo_ReservaVencida_ApareceEnElListado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

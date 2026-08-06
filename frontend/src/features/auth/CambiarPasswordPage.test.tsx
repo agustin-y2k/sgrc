@@ -42,6 +42,7 @@ describe("CambiarPasswordPage", () => {
       logout: vi.fn(),
       loginConGoogle: vi.fn(),
       errorDeSesion: null,
+      motivoDeCierre: null,
       refetchUser: vi.fn(),
     })
   })
@@ -85,6 +86,7 @@ describe("CambiarPasswordPage", () => {
       logout: vi.fn(),
       loginConGoogle: vi.fn(),
       errorDeSesion: null,
+      motivoDeCierre: null,
       refetchUser,
     })
     vi.mocked(authApi.cambiarPassword).mockResolvedValue({ token: "token-nuevo" })

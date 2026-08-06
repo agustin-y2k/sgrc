@@ -9,7 +9,7 @@ import {
 } from "react"
 import * as authApi from "@/features/auth/api"
 import type { LoginResponse, Usuario } from "@/features/auth/types"
-import { ApiError } from "@/lib/api-client"
+import { ApiError, registrarManejadorDeSesionRechazada } from "@/lib/api-client"
 import { clearToken, getToken, setToken } from "@/lib/token-store"
 
 type AuthContextValue = {
@@ -21,6 +21,13 @@ type AuthContextValue = {
    * operación se puede reintentar — ver <ProtectedRoute>.
    */
   errorDeSesion: string | null
+  /**
+   * Por qué se cerró la sesión, cuando la cerró el backend y no la persona.
+   * Lo muestra la pantalla de login: sin esto, quien cambió su contraseña
+   * en otro dispositivo vuelve al login sin ninguna explicación de por qué
+   * lo echaron.
+   */
+  motivoDeCierre: string | null
   login: (email: string, password: string) => Promise<{ debeCambiarPassword: boolean }>
   /**
    * Ingreso con el ID token que devolvió Google. Deja la sesión igual que
@@ -41,6 +48,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Usuario | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorDeSesion, setErrorDeSesion] = useState<string | null>(null)
+  const [motivoDeCierre, setMotivoDeCierre] = useState<string | null>(null)
+
+  // El backend puede rechazar el token en cualquier request, no solo en el
+  // GET /me del arranque: la cuenta se dio de baja (RF-02.8), o alguien
+  // cambió su contraseña y eso cerró las sesiones abiertas (RF-01.11).
+  useEffect(() => {
+    return registrarManejadorDeSesionRechazada((mensaje) => {
+      clearToken()
+      setUser(null)
+      // errorDeSesion se limpia a propósito: eso es "no pude verificar la
+      // sesión, reintentá", y acá el backend sí contestó. <ProtectedRoute>
+      // manda al login cuando no hay usuario ni error de red.
+      setErrorDeSesion(null)
+      setMotivoDeCierre(mensaje)
+    })
+  }, [])
 
   // Al bootear, si hay un token guardado, valida que siga siendo válido
   // contra el backend (no hay lista de revocación local — GET /me es la
@@ -98,9 +121,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("login sin token en la respuesta")
       }
       setToken(res.token)
+      // El motivo del cierre anterior deja de tener sentido apenas se entra
+      // de nuevo: si no, el cartel "tu sesión se cerró porque…" quedaría
+      // colgado en el login después de un ingreso exitoso.
+      setMotivoDeCierre(null)
       // Si loadUser falla acá, el error se propaga hasta LoginPage y se le
-      // muestra al usuario — antes el login parecía exitoso pero lo dejaba
-      // de vuelta en /login sin decir por qué.
+      // muestra al usuario: tragarlo haría que el login pareciera exitoso y
+      // dejara a la persona de vuelta en /login sin decir por qué.
       await loadUser()
       return { debeCambiarPassword: res.debeCambiarPassword }
     },
@@ -122,6 +149,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearToken()
     setUser(null)
     setErrorDeSesion(null)
+    // Salir por decisión propia no necesita explicación en el login.
+    setMotivoDeCierre(null)
   }, [])
 
   const value = useMemo(
@@ -129,12 +158,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isLoading,
       errorDeSesion,
+      motivoDeCierre,
       login,
       loginConGoogle,
       logout,
       refetchUser: loadUser,
     }),
-    [user, isLoading, errorDeSesion, login, loginConGoogle, logout, loadUser]
+    [
+      user,
+      isLoading,
+      errorDeSesion,
+      motivoDeCierre,
+      login,
+      loginConGoogle,
+      logout,
+      loadUser,
+    ]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

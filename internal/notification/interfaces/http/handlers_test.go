@@ -87,6 +87,10 @@ func (f *fakeListadorAdmins) IDsDeAdminsAprobados(ctx context.Context) ([]string
 	return nil, nil
 }
 
+func (f *fakeListadorAdmins) EmailsDeAdminsAprobados(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
 var contadorID int
 
 func idSecuencial() string {

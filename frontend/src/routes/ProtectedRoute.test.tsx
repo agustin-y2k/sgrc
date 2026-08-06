@@ -27,6 +27,7 @@ function mockAuth(overrides: Partial<ReturnType<typeof useAuth>>) {
     logout: vi.fn(),
     loginConGoogle: vi.fn(),
     errorDeSesion: null,
+    motivoDeCierre: null,
     refetchUser: vi.fn(),
     ...overrides,
   })

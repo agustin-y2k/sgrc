@@ -37,8 +37,8 @@ func tokenValido(t *testing.T, secret []byte, exp time.Time) string {
 // el rol que se le indique. Es el equivalente en memoria de la consulta que
 // auth/infrastructure hace contra la tabla usuario.
 func cuentaVigenteFalsa(rol string) CuentaVigente {
-	return func(context.Context, string) (bool, string, error) {
-		return true, rol, nil
+	return func(context.Context, string) (EstadoDeCuenta, error) {
+		return EstadoDeCuenta{Vigente: true, Rol: rol}, nil
 	}
 }
 
@@ -218,8 +218,9 @@ func tokenConPasswordVencida(t *testing.T, secret []byte) string {
 	return signed
 }
 
-// Antes esto solo lo verificaba <ProtectedRoute> en el navegador: el token
-// que devolvía el login con contraseña temporal servía contra toda la API.
+// Verificarlo solo en el navegador (<ProtectedRoute>) no alcanzaría: el
+// token que devuelve el login con contraseña temporal serviría contra toda
+// la API.
 func TestJWTAuth_PasswordTemporalSinCambiar_403(t *testing.T) {
 	app := appConProteccion(testSecret)
 
@@ -306,8 +307,8 @@ func TestRequerida_CuentaDadaDeBaja_401(t *testing.T) {
 	// estaba aprobada. Lo que cambió es el estado en la base.
 	aut := Autenticacion{
 		Secret: testSecret,
-		Vigente: func(context.Context, string) (bool, string, error) {
-			return false, "", nil
+		Vigente: func(context.Context, string) (EstadoDeCuenta, error) {
+			return EstadoDeCuenta{}, nil
 		},
 	}
 	app := appConAutenticacion(aut)
@@ -354,8 +355,8 @@ func TestRequerida_ErrorAlVerificarLaCuenta_FallaCerrado(t *testing.T) {
 	// habilitada. Ante la duda no se deja pasar: 503, no 200.
 	aut := Autenticacion{
 		Secret: testSecret,
-		Vigente: func(context.Context, string) (bool, string, error) {
-			return false, "", errors.New("postgres no responde")
+		Vigente: func(context.Context, string) (EstadoDeCuenta, error) {
+			return EstadoDeCuenta{}, errors.New("postgres no responde")
 		},
 	}
 	app := appConAutenticacion(aut)
@@ -378,8 +379,8 @@ func TestRequeridaPermitiendoPasswordVencida_CuentaDadaDeBaja_401(t *testing.T) 
 	// alguien dado de baja.
 	aut := Autenticacion{
 		Secret: testSecret,
-		Vigente: func(context.Context, string) (bool, string, error) {
-			return false, "", nil
+		Vigente: func(context.Context, string) (EstadoDeCuenta, error) {
+			return EstadoDeCuenta{}, nil
 		},
 	}
 	app := fiber.New()

@@ -95,8 +95,10 @@ func (r *fakeRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioI
 // ── fakeListadorAdmins ──────────────────────────────────────────────────
 
 type fakeListadorAdmins struct {
-	adminIDs []string
-	err      error
+	adminIDs     []string
+	adminEmails  []string
+	err          error
+	errorEnEmail error
 }
 
 func (f *fakeListadorAdmins) IDsDeAdminsAprobados(ctx context.Context) ([]string, error) {
@@ -104,6 +106,13 @@ func (f *fakeListadorAdmins) IDsDeAdminsAprobados(ctx context.Context) ([]string
 		return nil, f.err
 	}
 	return f.adminIDs, nil
+}
+
+func (f *fakeListadorAdmins) EmailsDeAdminsAprobados(ctx context.Context) ([]string, error) {
+	if f.errorEnEmail != nil {
+		return nil, f.errorEnEmail
+	}
+	return f.adminEmails, nil
 }
 
 var contadorID int
