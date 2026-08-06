@@ -92,7 +92,7 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrUltimoAdmin):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, application.ErrSoloDesdeBaja):
+	case errors.Is(err, application.ErrSoloDesdeBajaORechazada):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrPromocionInvalida):

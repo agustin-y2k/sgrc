@@ -41,7 +41,7 @@ export function resetearPassword(id: string) {
   )
 }
 
-/** RF-01.9 — hard delete, solo permitido desde BAJA. Libera el email. */
+/** RF-01.9 — hard delete, permitido desde BAJA o RECHAZADA. Libera el email. */
 export function eliminarUsuario(id: string) {
   return apiFetch<void>(`/api/auth/usuarios/${id}`, { method: "DELETE" })
 }
