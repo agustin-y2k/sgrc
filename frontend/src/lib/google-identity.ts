@@ -11,7 +11,7 @@
 const URL_SCRIPT = "https://accounts.google.com/gsi/client"
 
 /** Lo poquito que usamos de la API de Google, tipado a mano. */
-type GoogleIdentity = {
+export type GoogleIdentity = {
   accounts: {
     id: {
       initialize: (config: {
@@ -33,6 +33,11 @@ type GoogleIdentity = {
           shape?: "rectangular" | "pill"
           width?: number
           locale?: string
+          // Con el logo a la izquierda y el texto centrado en el resto, el
+          // botón se lee como los demás de la pantalla. El default
+          // ("center") pega logo y texto en el medio y, en un botón ancho,
+          // deja dos huecos que lo hacen ver suelto.
+          logo_alignment?: "left" | "center"
         }
       ) => void
     }
