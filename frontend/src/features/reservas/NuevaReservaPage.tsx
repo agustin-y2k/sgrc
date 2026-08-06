@@ -113,12 +113,12 @@ export function NuevaReservaPage() {
   /**
    * Lo que todavía falta para poder confirmar, dicho en palabras.
    *
-   * Antes esto era un booleano que apagaba el botón y nada más. En un
-   * formulario de siete campos, un botón gris no dice cuál de los siete es
-   * el que falta: la persona lo mira, mira el formulario y no tiene forma
-   * de saber qué corregir. Algunos errores sí se explicaban abajo del campo
-   * (el fin de semana, la duración) pero los más comunes —no elegí materia,
-   * no tildé ninguna PC— no aparecían en ninguna parte.
+   * Un booleano que apague el botón y nada más no alcanza: en un formulario
+   * de siete campos, un botón gris no dice cuál de los siete es el que
+   * falta, y la persona no tiene forma de saber qué corregir. Algunos
+   * errores se explican abajo del campo (el fin de semana, la duración),
+   * pero los más comunes —no elegí materia, no tildé ninguna PC— no tienen
+   * dónde aparecer.
    *
    * Los que ya tienen su propio mensaje al lado del campo no se repiten
    * acá: alcanza con que el botón siga apagado mientras ese texto en rojo

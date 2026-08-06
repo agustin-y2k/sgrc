@@ -121,8 +121,8 @@ type reservaDetalladaResponse struct {
 	CursoNombre     string `json:"cursoNombre,omitempty"`
 	// Presente solo si la reserva es parte de una serie recurrente. De esto
 	// depende que tenga sentido ofrecer "cancelar esta y las siguientes"
-	// (RF-04.6) — antes el frontend usaba reservaGrupoId como proxy, que
-	// tienen TODAS las reservas normales, así que ofrecía la opción siempre.
+	// (RF-04.6). No sirve usar reservaGrupoId como proxy: lo tienen TODAS
+	// las reservas, así que la opción aparecería siempre.
 	ReglaRecurrenciaID *string `json:"reglaRecurrenciaId,omitempty"`
 }
 

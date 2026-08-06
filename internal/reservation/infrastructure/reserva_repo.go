@@ -292,11 +292,11 @@ func (r *PostgresRepo) ListarGruposFuturosDeRegla(ctx context.Context, reglaID s
 //  1. reserva_grupo — las Reserva hijas se van solas por el ON DELETE
 //     CASCADE de reserva.reserva_grupo_id (docs/07-modelo-datos.md).
 //  2. regla_recurrencia de las materias del ciclo. RF-02.4 las nombra
-//     explícitamente y antes no se borraban nunca: quedaban huérfanas para
-//     siempre, apuntando a materias archivadas.
+//     explícitamente: sin este paso quedan huérfanas para siempre,
+//     apuntando a materias archivadas.
 //  3. Los bloqueos por evaluación estatal del año del ciclo. No tienen
 //     materia (RF-04.7), así que la subconsulta de arriba no los alcanza y
-//     se acumulaban ciclo tras ciclo. Se los ubica por año de la fecha,
+//     se acumularían ciclo tras ciclo. Se los ubica por año de la fecha,
 //     que es lo único que los ata a un ciclo lectivo.
 func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, cicloID string) (int, int, error) {
 	gruposDelCiclo := `

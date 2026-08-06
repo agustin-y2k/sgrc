@@ -89,9 +89,10 @@ func (r *PostgresRepo) ListarBloquesDeUsuario(ctx context.Context, usuarioID str
 	return resultado, errorDeFilas(rows)
 }
 
-// ListarBloquesDeUsuarios resuelve en una sola consulta lo que antes eran N
-// (ver el puerto). El ORDER BY repite el de la versión individual para que
-// el horario de cada Admin salga en el mismo orden por las dos vías.
+// ListarBloquesDeUsuarios trae los bloques de varios Admin en una sola
+// consulta, en vez de una por Admin (ver el puerto). El ORDER BY repite el
+// de la versión individual para que el horario de cada uno salga en el
+// mismo orden por las dos vías.
 func (r *PostgresRepo) ListarBloquesDeUsuarios(ctx context.Context, usuarioIDs []string) (map[string][]*domain.BloqueHorario, error) {
 	resultado := make(map[string][]*domain.BloqueHorario, len(usuarioIDs))
 	if len(usuarioIDs) == 0 {
