@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -28,15 +29,23 @@ type Service struct {
 	firmar             TokenSigner
 	nuevoID            IDGenerator
 	generarTemporal    GenerarTemporalFunc
+	generarCodigo      GenerarCodigoFunc
 	ahora              func() time.Time
 	gestorMaterias     GestorMateriasDocente
 	canceladorReservas CanceladorReservasDeMateria
 
+	// correoHabilitado dice si el despliegue configuró SMTP. La
+	// recuperación de contraseña por autoservicio depende enteramente de
+	// poder mandar un mail, así que sin correo sus dos endpoints responden
+	// 503 en vez de aceptar un pedido que no va a llegar a ningún lado (ver
+	// service_recuperacion.go). El resto del sistema funciona igual.
+	correoHabilitado bool
+
 	// verificadorGoogle es nil cuando el despliegue no configuró
 	// GOOGLE_CLIENT_ID. Es opcional a propósito: el sistema tiene que
-	// arrancar y funcionar igual sin ingreso con Google, que es como venía
-	// funcionando hasta ahora. Los dos casos de uso que lo necesitan
-	// chequean el nil y devuelven ErrLoginGoogleNoDisponible.
+	// arrancar y funcionar igual sin ingreso con Google. Los dos casos de
+	// uso que lo necesitan chequean el nil y devuelven
+	// ErrLoginGoogleNoDisponible.
 	verificadorGoogle VerificadorGoogle
 
 	// Hash de descarte para igualar el costo del login con email
@@ -54,10 +63,12 @@ func NewService(
 	firmar TokenSigner,
 	nuevoID IDGenerator,
 	generarTemporal GenerarTemporalFunc,
+	generarCodigo GenerarCodigoFunc,
 	ahora func() time.Time,
 	gestorMaterias GestorMateriasDocente,
 	canceladorReservas CanceladorReservasDeMateria,
 	verificadorGoogle VerificadorGoogle,
+	correoHabilitado bool,
 ) *Service {
 	return &Service{
 		repo:               repo,
@@ -67,12 +78,20 @@ func NewService(
 		firmar:             firmar,
 		nuevoID:            nuevoID,
 		generarTemporal:    generarTemporal,
+		generarCodigo:      generarCodigo,
 		ahora:              ahora,
 		gestorMaterias:     gestorMaterias,
 		canceladorReservas: canceladorReservas,
 		verificadorGoogle:  verificadorGoogle,
+		correoHabilitado:   correoHabilitado,
 	}
 }
+
+// RecuperacionPorEmailDisponible es lo que GET /api/auth/config le informa
+// al frontend para decidir si dibuja el enlace "olvidé mi contraseña".
+// Mismo criterio que el botón de Google: la pantalla no ofrece algo que
+// este despliegue no puede hacer.
+func (s *Service) RecuperacionPorEmailDisponible() bool { return s.correoHabilitado }
 
 // SolicitudDeAsignacion es lo que el docente declara al registrarse: qué
 // curso y qué materia va a dictar. Los dos son opcionales — quien no lo
@@ -517,7 +536,41 @@ func (s *Service) Aprobar(ctx context.Context, usuarioID string) error {
 		return err
 	}
 	s.avisarQueYaNoEstaPendiente(usuarioID)
+	s.avisarALaPersonaQueLaAprobaron(ctx, usuarioID)
 	return nil
+}
+
+// avisarALaPersonaQueLaAprobaron publica el evento con el que se le manda
+// un mail al docente contándole que ya puede entrar.
+//
+// Es un evento propio y no un dato dentro de `cuenta.pendiente.resuelta`:
+// ese se publica igual al aprobar que al rechazar —su trabajo es cerrarle
+// el aviso al Admin, y las dos cosas lo cierran— así que colgarle el correo
+// de aprobación le mandaría el mail también a quien fue rechazado.
+//
+// La lectura extra de la fila es a propósito: transicionar corre dentro de
+// una transacción y no devuelve el usuario, y el mail necesita el nombre y
+// el email. Es una consulta más en una acción manual de un Admin que ocurre
+// unas pocas veces por año.
+//
+// Si esa lectura falla, la aprobación NO se deshace: ya está commiteada y
+// es lo que importa. Se pierde el correo, que es una cortesía — la persona
+// se entera igual cuando intenta entrar, porque el login ya le decía que
+// estaba pendiente.
+func (s *Service) avisarALaPersonaQueLaAprobaron(ctx context.Context, usuarioID string) {
+	u, err := s.repo.BuscarPorID(ctx, usuarioID)
+	if err != nil {
+		log.Printf("auth: cuenta %s aprobada, pero no se pudo leer para avisarle por mail: %v", usuarioID, err)
+		return
+	}
+	s.bus.Publish(eventbus.Evento{
+		Tipo: "cuenta.aprobada",
+		Payload: eventbus.CuentaAprobada{
+			UsuarioID: u.ID,
+			Email:     u.Email,
+			Nombre:    u.Nombre,
+		},
+	})
 }
 
 // Rechazar implementa la mitad "rechazar" de RF-02.
@@ -706,6 +759,10 @@ func (s *Service) ResetearPassword(ctx context.Context, usuarioID string) (strin
 
 	u.PasswordHash = hash
 	u.DebeCambiarPassword = true
+	// RF-01.11: el caso que motiva un reset asistido es alguien que perdió
+	// el control de su cuenta, así que dejar viva la sesión de quien entró
+	// con la contraseña vieja haría que el reset no sirva de nada.
+	u.InvalidarSesiones()
 	if err := s.repo.Guardar(ctx, u); err != nil {
 		return "", err
 	}
@@ -753,6 +810,11 @@ func (s *Service) CambiarPassword(ctx context.Context, usuarioID, passwordActual
 
 	u.PasswordHash = hash
 	u.DebeCambiarPassword = false
+	// El orden importa: invalidar ANTES de firmar. Al revés, el token que se
+	// le entrega a quien acaba de cambiar la contraseña llevaría la versión
+	// vieja y lo dejaría afuera en el request siguiente — echado por su
+	// propio cambio exitoso (RF-01.11).
+	u.InvalidarSesiones()
 	if err := s.repo.Guardar(ctx, u); err != nil {
 		return "", err
 	}

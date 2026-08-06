@@ -62,12 +62,16 @@ func RegisterEventHandlersConEspera(bus eventbus.EventBus, svc *Service, pendien
 	registrarHandlers(bus, svc, Asincrona, pendientes)
 }
 
-func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincrona, pendientes *sync.WaitGroup) {
-	// entregar ejecuta el trabajo de notificación con su propio contexto
-	// acotado, en la goroutine que corresponda según el modo.
-	entregar := func(descripcion string, trabajo func(context.Context) error) {
+// entrega ejecuta el trabajo con su propio contexto acotado, en la
+// goroutine que corresponda según el modo. Es lo que usan tanto los avisos
+// internos como las copias por correo (ver correos.go), con timeouts
+// distintos: escribir una fila no tarda lo mismo que hablar con Gmail.
+type entrega func(descripcion string, trabajo func(context.Context) error)
+
+func nuevaEntrega(modo EntregaAsincrona, pendientes *sync.WaitGroup, timeout time.Duration) entrega {
+	return func(descripcion string, trabajo func(context.Context) error) {
 		correr := func() {
-			ctx, cancelar := context.WithTimeout(context.Background(), timeoutNotificacion)
+			ctx, cancelar := context.WithTimeout(context.Background(), timeout)
 			defer cancelar()
 			if err := trabajo(ctx); err != nil {
 				log.Printf("notification: error notificando %s: %v", descripcion, err)
@@ -88,6 +92,10 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 			correr()
 		}()
 	}
+}
+
+func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincrona, pendientes *sync.WaitGroup) {
+	entregar := nuevaEntrega(modo, pendientes, timeoutNotificacion)
 
 	// RF-05.6: docente nuevo pendiente de aprobación.
 	bus.Subscribe("docente.registro.pendiente", func(e eventbus.Evento) {
@@ -201,10 +209,10 @@ const maxPCsEnElMensaje = 8
 // mensajeDeCancelacion arma UNA frase para todo lo que se le canceló a un
 // docente de una sola vez.
 //
-// Antes se publicaba un evento por Reserva, así que bloquear tres PCs de una
-// misma reserva para una evaluación le dejaba tres avisos idénticos en la
-// campana. El docente vive eso como una sola cosa —"me sacaron la clase"— y
-// lo que necesita saber es qué PCs, no cuántas filas se actualizaron.
+// Con un evento por Reserva, bloquear tres PCs de una misma reserva para
+// una evaluación dejaría tres avisos idénticos en la campana. El docente
+// vive eso como una sola cosa —"me sacaron la clase"— y lo que necesita
+// saber es qué PCs, no cuántas filas se actualizaron.
 //
 // El prefijo vive SOLO acá. Quien publica manda la razón pelada ("acto
 // escolar", "la PC 3 pasó a FUERA_DE_SERVICIO"): si además armara la frase

@@ -52,10 +52,12 @@ func nuevoServicioConGoogle(repo Repo, verificador VerificadorGoogle) *Service {
 		firmarFalso,
 		idSecuencial,
 		temporalFalso,
+		codigoFalso,
 		relojFijo(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)),
 		nuevoFakeGestorMaterias(),
 		nuevoFakeCanceladorReservas(),
 		verificador,
+		true, // con correo: es lo que habilita la recuperación por autoservicio
 	)
 }
 

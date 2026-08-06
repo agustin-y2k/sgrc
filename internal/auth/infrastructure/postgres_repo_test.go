@@ -469,12 +469,9 @@ func TestPostgresRepo_Listar_ConAmbosFiltrosCombinados(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_IDConFormatoInvalido_ErrorControlado — mismo bug real
-// encontrado y corregido en academic/inventory/reservation, agregado acá
-// retroactivamente: un ID sin formato UUID debe mapear a
-// application.ErrIDInvalido (400), nunca un 500 crudo de Postgres. auth
-// se armó antes de que este bug apareciera por primera vez, así que le
-// faltaba este chequeo hasta ahora.
+// Un ID sin formato UUID tiene que mapear a application.ErrIDInvalido
+// (400), nunca a un 500 crudo de Postgres: es un error del cliente. Mismo
+// chequeo que en academic, inventory y reservation.
 func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -574,8 +571,10 @@ func TestUltimoAdmin_DosBajasConcurrentes_NuncaQuedanCeroAdmins(t *testing.T) {
 		func(string, string) (bool, error) { return true, nil },
 		func(*domain.Usuario) (string, error) { return "token", nil },
 		NuevoID, func() (string, error) { return "temporal", nil },
+		GenerarCodigoRecuperacion,
 		time.Now, sinMaterias{}, sinCancelaciones{},
-		nil) // este test es sobre la concurrencia del guard de Admins, no sobre Google
+		nil,   // este test es sobre la concurrencia del guard de Admins, no sobre Google
+		false) // ni sobre la recuperación por email
 
 	errores := make(chan error, 2)
 	var listos sync.WaitGroup

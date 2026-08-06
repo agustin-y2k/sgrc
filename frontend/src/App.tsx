@@ -5,6 +5,7 @@ import { AcademicoPage } from "@/features/academico/AcademicoPage"
 import { AprobacionPage } from "@/features/auth/AprobacionPage"
 import { CambiarPasswordPage } from "@/features/auth/CambiarPasswordPage"
 import { LoginPage } from "@/features/auth/LoginPage"
+import { RecuperarPasswordPage } from "@/features/auth/RecuperarPasswordPage"
 import { RegistroPage } from "@/features/auth/RegistroPage"
 import { InventarioAdminPage } from "@/features/admin/InventarioAdminPage"
 import { ReportesPage } from "@/features/admin/ReportesPage"
@@ -26,6 +27,10 @@ const router = createBrowserRouter([
     children: [
       { path: "/login", element: <LoginPage /> },
       { path: "/registro", element: <RegistroPage /> },
+      // Pública y dentro de PublicOnlyRoute: quien olvidó la contraseña no
+      // tiene sesión, y quien sí la tiene no necesita esta pantalla (para
+      // cambiarla teniendo sesión está /cambiar-password).
+      { path: "/recuperar-password", element: <RecuperarPasswordPage /> },
     ],
   },
   {

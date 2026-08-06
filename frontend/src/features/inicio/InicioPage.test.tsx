@@ -35,6 +35,7 @@ function mockUsuario(u: Usuario) {
     user: u,
     isLoading: false,
     errorDeSesion: null,
+    motivoDeCierre: null,
     login: vi.fn(),
     logout: vi.fn(),
     loginConGoogle: vi.fn(),

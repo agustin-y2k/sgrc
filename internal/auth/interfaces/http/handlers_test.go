@@ -32,9 +32,33 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 
 type fakeRepo struct {
 	usuarios map[string]*domain.Usuario
+	codigos  map[string]*domain.CodigoRecuperacion
 }
 
-func nuevoFakeRepo() *fakeRepo { return &fakeRepo{usuarios: make(map[string]*domain.Usuario)} }
+func nuevoFakeRepo() *fakeRepo {
+	return &fakeRepo{
+		usuarios: make(map[string]*domain.Usuario),
+		codigos:  make(map[string]*domain.CodigoRecuperacion),
+	}
+}
+
+func (r *fakeRepo) CrearCodigoRecuperacion(ctx context.Context, c *domain.CodigoRecuperacion) error {
+	r.codigos[c.UsuarioID] = c
+	return nil
+}
+
+func (r *fakeRepo) BuscarCodigoVigenteDe(ctx context.Context, usuarioID string) (*domain.CodigoRecuperacion, error) {
+	c, ok := r.codigos[usuarioID]
+	if !ok || c.UsadoEn != nil {
+		return nil, application.ErrCodigoNoEncontrado
+	}
+	return c, nil
+}
+
+func (r *fakeRepo) GuardarCodigoRecuperacion(ctx context.Context, c *domain.CodigoRecuperacion) error {
+	r.codigos[c.UsuarioID] = c
+	return nil
+}
 
 func (r *fakeRepo) BuscarPorEmail(ctx context.Context, email string) (*domain.Usuario, error) {
 	for _, u := range r.usuarios {
@@ -136,6 +160,7 @@ func verifyFalso(password, hash string) (bool, error) {
 }
 func firmarFalso(u *domain.Usuario) (string, error) { return "token-de-" + u.ID, nil }
 func temporalFalso() (string, error)                { return "temporal123", nil }
+func codigoFalso() (string, error)                  { return "123456", nil }
 
 var contadorID int
 
@@ -183,10 +208,12 @@ func nuevaAppDeTestConGoogle(repo *fakeRepo, verificador application.Verificador
 		firmarFalso,
 		idSecuencial,
 		temporalFalso,
+		codigoFalso,
 		func() time.Time { return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC) },
 		&fakeGestorMaterias{},
 		&fakeCanceladorReservas{},
 		verificador,
+		true, // con correo: habilita la recuperación por autoservicio
 	)
 	h := NewHandler(svc, fakeAuditor{}, clientID)
 

@@ -95,7 +95,58 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 // client ID es público por definición (viaja al navegador en cada pedido
 // que este le hace a Google).
 func (h *Handler) Config(c *fiber.Ctx) error {
-	return c.JSON(configPublicaResponse{GoogleClientID: h.googleClientID})
+	return c.JSON(configPublicaResponse{
+		GoogleClientID:       h.googleClientID,
+		RecuperacionPorEmail: h.svc.RecuperacionPorEmailDisponible(),
+	})
+}
+
+// POST /api/auth/password/olvide — paso 1 de la recuperación.
+//
+// Responde 202 SIEMPRE que el pedido esté bien formado, exista o no la
+// cuenta. No es pereza: es lo único que evita que este formulario sirva
+// para averiguar qué direcciones están registradas en la escuela. El cuerpo
+// tampoco dice si se mandó algo — el mensaje es el mismo para todos.
+//
+// El 202 (y no 200) describe lo que realmente pasó: el pedido se aceptó, el
+// correo sale por fuera del request (ver application/service_recuperacion.go).
+func (h *Handler) OlvidePassword(c *fiber.Ctx) error {
+	var req olvidePasswordRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+
+	if err := h.svc.SolicitarRecuperacionDePassword(c.UserContext(), req.Email); err != nil {
+		return mapearError(err)
+	}
+
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+		"mensaje": "Si ese email corresponde a una cuenta habilitada, te va a llegar un código en unos minutos. " +
+			"Revisá también la carpeta de spam.",
+	})
+}
+
+// POST /api/auth/password/restablecer — paso 2 de la recuperación.
+func (h *Handler) RestablecerPassword(c *fiber.Ctx) error {
+	var req restablecerPasswordRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+
+	usuarioID, err := h.svc.RestablecerPasswordConCodigo(c.UserContext(), req.Email, req.Codigo, req.PasswordNueva)
+	if err != nil {
+		return mapearError(err)
+	}
+
+	// El actor es la propia cuenta: acá no hay ningún Admin ni ningún token,
+	// la persona probó ser el dueño con el código que le llegó al mail. Lo
+	// que hace útil el registro es la IP.
+	h.auditar(c, usuarioID, audit.PasswordRecuperadaPorEmail, "usuario", &usuarioID, nil)
+
+	// Sin token: el cambio de contraseña no inicia sesión. Quien lo hizo
+	// vuelve al login y entra con la contraseña que acaba de elegir — y así
+	// se comprueba de paso que la recuerda.
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // POST /api/auth/google — ingreso con una cuenta de Google ya registrada.

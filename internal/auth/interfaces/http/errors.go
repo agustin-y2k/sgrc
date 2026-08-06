@@ -68,6 +68,22 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrCuentaSinPassword):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
+	// ── Recuperación de contraseña ───────────────────────────────────
+	//
+	// Los tres van a 400 y no a 401/404: no son un problema de
+	// autenticación (no hay sesión que autenticar) ni un recurso que falte,
+	// es un dato del formulario que no sirve. El 404 sería además lo único
+	// del sistema capaz de confirmar que un email existe.
+	case errors.Is(err, application.ErrCodigoRecuperacionInvalido),
+		errors.Is(err, application.ErrCodigoRecuperacionVencido),
+		errors.Is(err, application.ErrCodigoRecuperacionSinIntentos):
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+
+	case errors.Is(err, application.ErrRecuperacionNoDisponible):
+		// 503, igual que el ingreso con Google sin configurar: el pedido
+		// está bien formado, es el despliegue el que no tiene correo.
+		return fiber.NewError(fiber.StatusServiceUnavailable, err.Error())
+
 	case errors.Is(err, application.ErrPasswordCorta),
 		errors.Is(err, application.ErrDatosObligatorios),
 		errors.Is(err, domain.ErrEmailInvalido):
