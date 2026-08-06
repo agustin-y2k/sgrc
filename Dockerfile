@@ -1,5 +1,6 @@
 # Build estático — sin CGO para poder correr sobre scratch (ver docs/06-arquitectura.md §7)
 FROM golang:1.23-alpine AS build
+RUN apk add --no-cache ca-certificates
 WORKDIR /src
 COPY go.mod go.sum* ./
 RUN go mod download
@@ -7,6 +8,25 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/sgrc-app ./cmd
 
 FROM scratch
+# Los certificados raíz. En scratch no hay ninguno, y Go los lee del disco:
+# sin este archivo TODO handshake TLS saliente falla con "x509: certificate
+# signed by unknown authority". Rompe las dos únicas cosas que salen a
+# internet, y las dos fallan de formas que no se parecen entre sí:
+#
+#   - El ingreso con Google no puede traer el JWKS con las claves públicas
+#     (ver infrastructure/google_idtoken.go). Es una falla de red, no un
+#     token inválido, así que el handler la devuelve como 500 "error
+#     interno" y desde el navegador parece un bug del login.
+#   - El STARTTLS contra smtp.gmail.com no negocia (ver shared/email). El
+#     envío corre en una goroutine del bus, donde el error solo se loguea:
+#     el alta del usuario se completa y el mail no sale nunca.
+#
+# La zona horaria tiene el mismo problema (en scratch tampoco hay
+# /usr/share/zoneinfo) y está resuelto de otra forma: cmd/main.go importa
+# time/tzdata y la embebe en el binario. Para las CAs no conviene el
+# equivalente (x509.SystemCertPool con las de Go), porque congelaría el
+# almacén de confianza en la fecha del build.
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/sgrc-app /sgrc-app
 
 # El proceso corría como root. No hay nada acá que necesite privilegios —
