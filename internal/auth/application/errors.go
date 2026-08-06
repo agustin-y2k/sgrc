@@ -56,8 +56,12 @@ var (
 	// ErrUltimoAdmin: RF-01.8 — el sistema nunca puede quedar sin ningún Admin.
 	ErrUltimoAdmin = errors.New("no se puede dejar al sistema sin ningún admin activo")
 
-	// ErrSoloDesdeBaja: RF-01.9 — el hard delete solo aplica a cuentas en BAJA.
-	ErrSoloDesdeBaja = errors.New("solo se puede eliminar definitivamente una cuenta en estado BAJA")
+	// ErrSoloDesdeBajaORechazada: RF-01.9 — el hard delete solo aplica a
+	// cuentas ya cerradas, que son las dos terminales de la máquina de
+	// estados: BAJA (llegó a estar aprobada y se cerró) y RECHAZADA (nunca
+	// se aprobó). Lo que se exige es que la cuenta no esté en uso ni
+	// esperando una decisión, no que haya pasado por BAJA en particular.
+	ErrSoloDesdeBajaORechazada = errors.New("solo se puede eliminar definitivamente una cuenta en estado BAJA o RECHAZADA")
 
 	// ErrIDInvalido: mismo criterio que en academic/inventory/reservation —
 	// un ID sin formato UUID válido se mapea a 400 y no a 500, porque es un

@@ -98,16 +98,34 @@ describe("UsuariosPage", () => {
     expect(adminApi.cambiarEstadoUsuario).toHaveBeenCalledWith("u1", "BAJA")
   })
 
-  // RF-01.9: eliminar es hard delete y solo se permite desde BAJA.
-  it("solo ofrece eliminar definitivamente a una cuenta en BAJA", async () => {
-    conUsuarios(usuario({ estado: "APROBADA" }))
-    renderPagina()
-    await screen.findByText(/Ada Lovelace/)
+  // RF-01.9: eliminar es hard delete y solo se permite sobre una cuenta ya
+  // cerrada — los dos estados terminales, BAJA y RECHAZADA.
+  it.each(["PENDIENTE", "APROBADA"] as const)(
+    "no ofrece eliminar definitivamente a una cuenta en %s",
+    async (estado) => {
+      conUsuarios(usuario({ estado }))
+      renderPagina()
+      await screen.findByText(/Ada Lovelace/)
 
-    expect(
-      screen.queryByRole("button", { name: "Eliminar definitivamente" })
-    ).not.toBeInTheDocument()
-  })
+      expect(
+        screen.queryByRole("button", { name: "Eliminar definitivamente" })
+      ).not.toBeInTheDocument()
+    }
+  )
+
+  // RECHAZADA tiene que ofrecerlo: es la única salida para un rechazo
+  // equivocado, porque esa cuenta no transiciona a ningún otro estado.
+  it.each(["BAJA", "RECHAZADA"] as const)(
+    "ofrece eliminar definitivamente a una cuenta en %s",
+    async (estado) => {
+      conUsuarios(usuario({ estado }))
+      renderPagina()
+
+      expect(
+        await screen.findByRole("button", { name: "Eliminar definitivamente" })
+      ).toBeInTheDocument()
+    }
+  )
 
   it("eliminar pide confirmación y explica que libera el email", async () => {
     conUsuarios(usuario({ estado: "BAJA" }))

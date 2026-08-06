@@ -83,10 +83,11 @@ describe("AprobacionPage", () => {
     expect(authApi.cambiarEstado).toHaveBeenCalledWith("1", { estado: "APROBADA" })
   })
 
-  // Rechazar es irreversible (RECHAZADA es terminal y la cuenta tampoco se
-  // puede eliminar después — eliminar solo se permite desde BAJA, RF-01.9),
-  // así que un solo click no debe alcanzar.
-  it("Rechazar NO dispara el PATCH hasta confirmar, y avisa que es permanente", async () => {
+  // Rechazar no se deshace (RECHAZADA es terminal y no transiciona a ningún
+  // lado), así que un solo click no debe alcanzar. La salida que sí existe
+  // —eliminar la cuenta para liberar el email, RF-01.9— se nombra en el
+  // mismo aviso.
+  it("Rechazar NO dispara el PATCH hasta confirmar, y avisa que no se deshace", async () => {
     vi.mocked(authApi.listarUsuarios).mockResolvedValue(pendientesMock)
     vi.mocked(authApi.cambiarEstado).mockResolvedValue(undefined)
     const user = userEvent.setup()
@@ -96,7 +97,8 @@ describe("AprobacionPage", () => {
     await user.click(screen.getByRole("button", { name: "Rechazar" }))
 
     expect(authApi.cambiarEstado).not.toHaveBeenCalled()
-    expect(screen.getByText(/es permanente/)).toBeInTheDocument()
+    expect(screen.getByText(/no se puede deshacer/)).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Usuarios" })).toBeInTheDocument()
   })
 
   it("Rechazar confirmado dispara PATCH estado=RECHAZADA con el id correcto", async () => {

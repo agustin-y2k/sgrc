@@ -103,17 +103,23 @@ export function AprobacionPage() {
                     </p>
                   </div>
                 )}
-                {/* Rechazar es irreversible: RECHAZADA es un estado terminal
-                    (ver PuedeTransicionarA en internal/auth/domain/usuario.go)
-                    y la cuenta tampoco se puede eliminar para liberar el email
-                    — eliminar solo se permite desde BAJA (RF-01.9). Por eso
-                    pide confirmación explícita y lo dice. */}
+                {/* Rechazar no se deshace: RECHAZADA es un estado terminal y
+                    no transiciona a ningún lado (ver PuedeTransicionarA en
+                    internal/auth/domain/usuario.go). Lo que sí se puede es
+                    eliminar la cuenta desde el panel de usuarios (RF-01.9), y
+                    la confirmación lo dice: sin esa salida, un rechazo por
+                    error dejaba el email tomado para siempre. */}
                 {pidiendoConfirmacion ? (
                   <div className="grid gap-3">
                     <p className="text-destructive text-sm">
-                      Rechazar a {u.nombre} {u.apellido} es permanente: la cuenta no se
-                      puede reactivar ni eliminar después, y esa persona no va a poder
-                      volver a registrarse con {u.email}.
+                      Rechazar a {u.nombre} {u.apellido} no se puede deshacer: la cuenta
+                      no se reactiva, y con ella rechazada esa persona no va a poder
+                      volver a registrarse con {u.email}. Si fue un error, eliminá la
+                      cuenta desde{" "}
+                      <Link to="/admin/usuarios" className="underline">
+                        Usuarios
+                      </Link>{" "}
+                      para liberar el email.
                     </p>
                     <div className="flex gap-2">
                       <Button
