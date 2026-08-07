@@ -157,7 +157,7 @@ while [ "$i" -le "$CANTIDAD_PCS" ]; do
   # El identificador es único dentro del carro: si la PC ya está, el
   # backend responde 409 y se sigue con la siguiente.
   api POST "/api/inventory/carros/$CARRO/pcs" \
-    "{\"identificador\":$i,\"numeroSerie\":$((1000 + i)),\"freezado\":true,\"cpu\":\"i5\",\"ram\":\"8GB\",\"sistemaOperativo\":\"Windows 10\",\"softwareInstalado\":\"AutoCAD 2027, Office\"}" >/dev/null || true
+    "{\"identificador\":$i,\"numeroSerie\":\"5CD100${i}ABC\",\"freezado\":true,\"cpu\":\"i5\",\"ram\":\"8GB\",\"sistemaOperativo\":\"Windows 10\",\"softwareInstalado\":\"AutoCAD 2027, Office\"}" >/dev/null || true
   i=$((i + 1))
 done
 

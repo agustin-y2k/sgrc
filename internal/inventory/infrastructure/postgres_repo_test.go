@@ -97,7 +97,7 @@ func TestPostgresRepo_CrearPC_OK(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc, err := domain.NuevaPC(NuevoID(), carro.ID, 27, 123456789, true, time.Now().UTC().Truncate(time.Microsecond))
+	pc, err := domain.NuevaPC(NuevoID(), carro.ID, 27, "5CD1234ABC", true, time.Now().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -123,8 +123,8 @@ func TestPostgresRepo_IdentificadorRepetidoEnMismoCarro_Error(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc1, _ := domain.NuevaPC(NuevoID(), carro.ID, 27, 111, false, time.Now())
-	pc2, _ := domain.NuevaPC(NuevoID(), carro.ID, 27, 222, false, time.Now()) // mismo identificador, mismo carro
+	pc1, _ := domain.NuevaPC(NuevoID(), carro.ID, 27, "SERIE-111", false, time.Now())
+	pc2, _ := domain.NuevaPC(NuevoID(), carro.ID, 27, "SERIE-222", false, time.Now()) // mismo identificador, mismo carro
 
 	if err := repo.CrearPC(ctx, pc1); err != nil {
 		t.Fatalf("la primera no debería fallar: %v", err)
@@ -144,8 +144,8 @@ func TestPostgresRepo_MismoIdentificadorOtroCarro_OK(t *testing.T) {
 
 	carro1 := crearCarroDeTest(t, repo, "Carro 1")
 	carro2 := crearCarroDeTest(t, repo, "Carro 2")
-	pc1, _ := domain.NuevaPC(NuevoID(), carro1.ID, 27, 111, false, time.Now())
-	pc2, _ := domain.NuevaPC(NuevoID(), carro2.ID, 27, 222, false, time.Now())
+	pc1, _ := domain.NuevaPC(NuevoID(), carro1.ID, 27, "SERIE-111", false, time.Now())
+	pc2, _ := domain.NuevaPC(NuevoID(), carro2.ID, 27, "SERIE-222", false, time.Now())
 
 	if err := repo.CrearPC(ctx, pc1); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -162,8 +162,8 @@ func TestPostgresRepo_NumeroSerieDuplicado_Error(t *testing.T) {
 
 	carro1 := crearCarroDeTest(t, repo, "Carro 1")
 	carro2 := crearCarroDeTest(t, repo, "Carro 2")
-	pc1, _ := domain.NuevaPC(NuevoID(), carro1.ID, 1, 999888777, false, time.Now())
-	pc2, _ := domain.NuevaPC(NuevoID(), carro2.ID, 1, 999888777, false, time.Now()) // mismo numero_serie, distinto carro
+	pc1, _ := domain.NuevaPC(NuevoID(), carro1.ID, 1, "SERIE-999888777", false, time.Now())
+	pc2, _ := domain.NuevaPC(NuevoID(), carro2.ID, 1, "SERIE-999888777", false, time.Now()) // mismo numero_serie, distinto carro
 
 	if err := repo.CrearPC(ctx, pc1); err != nil {
 		t.Fatalf("la primera no debería fallar: %v", err)
@@ -180,7 +180,7 @@ func TestPostgresRepo_GuardarPC_ActualizaEstado(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, 1, false, time.Now())
+	pc, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, "SERIE-UNICA", false, time.Now())
 	if err := repo.CrearPC(ctx, pc); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -207,8 +207,8 @@ func TestPostgresRepo_ListarPCsPorCarro(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc1, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, 111, false, time.Now())
-	pc2, _ := domain.NuevaPC(NuevoID(), carro.ID, 2, 222, false, time.Now())
+	pc1, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, "SERIE-111", false, time.Now())
+	pc2, _ := domain.NuevaPC(NuevoID(), carro.ID, 2, "SERIE-222", false, time.Now())
 	repo.CrearPC(ctx, pc1)
 	repo.CrearPC(ctx, pc2)
 
@@ -227,7 +227,7 @@ func TestPostgresRepo_Incidencia_CrearYListar(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, 1, false, time.Now())
+	pc, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, "SERIE-UNICA", false, time.Now())
 	if err := repo.CrearPC(ctx, pc); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestPostgresRepo_GuardarIncidencia_MarcarEnviadaDGE(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, 1, false, time.Now())
+	pc, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, "SERIE-UNICA", false, time.Now())
 	repo.CrearPC(ctx, pc)
 
 	inc, _ := domain.NuevaIncidencia(NuevoID(), pc.ID, "", "Falla", domain.GravedadGrave, time.Now().UTC().Truncate(time.Microsecond))
@@ -294,7 +294,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 		{"ListarPCsPorCarro", func() error { _, err := repo.ListarPCsPorCarro(ctx, "CARRO_ID"); return err }},
 		{"ListarIncidenciasPorPC", func() error { _, err := repo.ListarIncidenciasPorPC(ctx, "PC_ID"); return err }},
 		{"CrearPC_CarroInvalido", func() error {
-			pc, _ := domain.NuevaPC(NuevoID(), "CARRO_ID", 1, 1, false, time.Now())
+			pc, _ := domain.NuevaPC(NuevoID(), "CARRO_ID", 1, "SERIE-UNICA", false, time.Now())
 			return repo.CrearPC(ctx, pc)
 		}},
 	}

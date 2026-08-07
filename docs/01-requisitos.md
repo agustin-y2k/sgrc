@@ -70,7 +70,7 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 
 ### RF-03 — Inventario
 - RF-03.1: `ADMIN` crea y edita carros (nombre, descripción).
-- RF-03.2: `ADMIN` registra PCs en un carro con: identificador (número entero, único dentro del carro — puede repetirse en carros distintos, ej. "PC 27" existe en el Carro 1 y en el Carro 2), número de serie (entero largo, único en toda la institución, es el de fábrica), `freezado` (boolean, informativo), CPU, RAM, SO, software instalado (texto libre — incluye, por ejemplo, versión de AutoCAD u otro software específico instalado).
+- RF-03.2: `ADMIN` registra PCs en un carro con: identificador (número entero, único dentro del carro — puede repetirse en carros distintos, ej. "PC 27" existe en el Carro 1 y en el Carro 2), número de serie (texto alfanumérico de hasta 50 caracteres, único en toda la institución, es el de fábrica: casi siempre lleva letras, ej. `5CD1234ABC`. Se guarda en mayúsculas y sin espacios al borde, para que la misma máquina no entre dos veces con distinta caja), `freezado` (boolean, informativo), CPU, RAM, SO, software instalado (texto libre — incluye, por ejemplo, versión de AutoCAD u otro software específico instalado).
 - RF-03.3: Estado de PC: `DISPONIBLE`, `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO`. PCs no disponibles no pueden reservarse.
 - RF-03.4: `ADMIN` edita los datos de una PC (identificador, número de serie, freezado, CPU, RAM, SO, software instalado) y puede darla de baja del inventario (soft delete: deja de listarse como disponible para reservar, pero su historial de incidencias y reservas pasadas se conserva).
 - RF-03.5: `ADMIN` registra y gestiona incidencias. Docentes solo pueden reportarlas.

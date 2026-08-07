@@ -212,7 +212,7 @@ func TestHTTP_CrearPC_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/pcs",
-		jsonBody(crearPCRequest{Identificador: 27, NumeroSerie: 123456}))
+		jsonBody(crearPCRequest{Identificador: 27, NumeroSerie: "5CD1234ABC"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -225,11 +225,53 @@ func TestHTTP_CrearPC_OK(t *testing.T) {
 	}
 }
 
+// El número de serie es texto: sin esto, cargar la primera PC con el código
+// que dice la etiqueta era imposible (ver migración 011). La respuesta trae
+// la forma canónica, que puede no ser lo que se tipeó.
+func TestHTTP_CrearPC_NumeroSerieAlfanumerico_SeNormaliza(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/pcs",
+		jsonBody(crearPCRequest{Identificador: 27, NumeroSerie: " pf2k9l3m "}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("esperaba 201, obtuve %d", resp.StatusCode)
+	}
+
+	var creada pcResponse
+	if err := json.NewDecoder(resp.Body).Decode(&creada); err != nil {
+		t.Fatalf("no se pudo leer la respuesta: %v", err)
+	}
+	if creada.NumeroSerie != "PF2K9L3M" {
+		t.Errorf("esperaba la forma canónica PF2K9L3M, obtuve %q", creada.NumeroSerie)
+	}
+}
+
+func TestHTTP_CrearPC_NumeroSerieVacio_400(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/pcs",
+		jsonBody(crearPCRequest{Identificador: 27, NumeroSerie: "   "}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+}
+
 func TestHTTP_CrearPC_IdentificadorInvalido_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/pcs",
-		jsonBody(crearPCRequest{Identificador: -1, NumeroSerie: 123456}))
+		jsonBody(crearPCRequest{Identificador: -1, NumeroSerie: "5CD1234ABC"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 

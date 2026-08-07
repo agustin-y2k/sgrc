@@ -25,7 +25,7 @@ classDiagram
         +UUID id
         +UUID carroId
         +int identificador
-        +long numeroSerie
+        +string numeroSerie
         +boolean freezado
         +string cpu
         +string ram

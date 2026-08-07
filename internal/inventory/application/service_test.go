@@ -210,7 +210,7 @@ func TestEditarCarro_NoExiste_Error(t *testing.T) {
 func TestCrearPC_OK(t *testing.T) {
 	svc := servicioSimple(nuevoFakeRepo())
 
-	pc, err := svc.CrearPC(context.Background(), "c1", 27, 123456, true, "i5", "8GB", "Windows 11", "Office")
+	pc, err := svc.CrearPC(context.Background(), "c1", 27, "5CD1234ABC", true, "i5", "8GB", "Windows 11", "Office")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -224,12 +224,12 @@ func TestCrearPC_IdentificadorDuplicadoEnMismoCarro_Error(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := servicioSimple(repo)
 
-	_, err := svc.CrearPC(context.Background(), "c1", 27, 111, false, "", "", "", "")
+	_, err := svc.CrearPC(context.Background(), "c1", 27, "SERIE-111", false, "", "", "", "")
 	if err != nil {
 		t.Fatalf("la primera no debería fallar: %v", err)
 	}
 
-	_, err = svc.CrearPC(context.Background(), "c1", 27, 222, false, "", "", "", "")
+	_, err = svc.CrearPC(context.Background(), "c1", 27, "SERIE-222", false, "", "", "", "")
 	if !errors.Is(err, ErrIdentificadorDuplicado) {
 		t.Fatalf("esperaba ErrIdentificadorDuplicado, obtuve %v", err)
 	}
@@ -240,8 +240,8 @@ func TestCrearPC_MismoIdentificadorOtroCarro_OK(t *testing.T) {
 	// carros distintos sin problema.
 	svc := servicioSimple(nuevoFakeRepo())
 
-	_, err1 := svc.CrearPC(context.Background(), "c1", 27, 111, false, "", "", "", "")
-	_, err2 := svc.CrearPC(context.Background(), "c2", 27, 222, false, "", "", "", "")
+	_, err1 := svc.CrearPC(context.Background(), "c1", 27, "SERIE-111", false, "", "", "", "")
+	_, err2 := svc.CrearPC(context.Background(), "c2", 27, "SERIE-222", false, "", "", "", "")
 
 	if err1 != nil || err2 != nil {
 		t.Fatalf("ninguna debería fallar: err1=%v err2=%v", err1, err2)
