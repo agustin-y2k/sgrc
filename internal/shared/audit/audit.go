@@ -16,6 +16,7 @@ const (
 	CuentaEliminadaDefinitiva = "CUENTA_ELIMINADA_DEFINITIVAMENTE"
 	AdminCreado               = "ADMIN_CREADO"
 	RolPromovidoAAdmin        = "ROL_PROMOVIDO_A_ADMIN"
+	RolDegradadoADocente      = "ROL_DEGRADADO_A_DOCENTE"
 	PasswordReseteada         = "PASSWORD_RESETEADA"
 	// PasswordRecuperadaPorEmail es la única acción de este catálogo cuyo
 	// actor NO está autenticado: la persona probó ser dueña de la cuenta

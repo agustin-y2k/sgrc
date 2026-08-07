@@ -95,10 +95,14 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrSoloDesdeBajaORechazada):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, domain.ErrPromocionInvalida):
-		// Se conserva el mensaje completo: dice si la cuenta ya era Admin o
-		// si le falta la aprobación, que es justo lo que el Admin necesita
-		// para saber qué hacer.
+	case errors.Is(err, application.ErrAutoDegradacion):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
+
+	case errors.Is(err, domain.ErrPromocionInvalida),
+		errors.Is(err, domain.ErrDegradacionInvalida):
+		// Se conserva el mensaje completo: dice si la cuenta ya tenía ese
+		// rol o si le falta la aprobación, que es justo lo que el Admin
+		// necesita para saber qué hacer.
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrTransicionInvalida):
