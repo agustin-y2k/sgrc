@@ -56,6 +56,12 @@ var (
 	// ErrUltimoAdmin: RF-01.8 — el sistema nunca puede quedar sin ningún Admin.
 	ErrUltimoAdmin = errors.New("no se puede dejar al sistema sin ningún admin activo")
 
+	// ErrAutoDegradacion: quitarse los permisos de Admin a uno mismo. No es
+	// una condición de la cuenta sino de quién pide el cambio, por eso vive
+	// acá y no en el dominio — el usuario no sabe quién lo está editando
+	// (ver Service.DegradarADocente).
+	ErrAutoDegradacion = errors.New("no podés quitarte a vos mismo los permisos de Admin — pedíselo a otro Admin")
+
 	// ErrSoloDesdeBajaORechazada: RF-01.9 — el hard delete solo aplica a
 	// cuentas ya cerradas, que son las dos terminales de la máquina de
 	// estados: BAJA (llegó a estar aprobada y se cerró) y RECHAZADA (nunca

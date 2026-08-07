@@ -235,10 +235,7 @@ var ErrPromocionInvalida = errors.New("no se puede promover esta cuenta a ADMIN"
 //     Admin apretó "promover" sobre alguien que ya lo era, se equivocó de
 //     fila, y decírselo es mejor que dejarlo creyendo que hizo algo.
 //
-// No hay operación inversa. Degradar un Admin a docente abre preguntas que
-// este sistema no tiene respondidas —qué pasa con el guard del último Admin
-// (RF-01.8), qué materias pasaría a dictar alguien que no tiene ninguna— y
-// mientras no haga falta, no existir es más seguro que existir a medias.
+// La operación inversa es DegradarADocente, más abajo.
 func (u *Usuario) PromoverAAdmin() error {
 	if u.EsAdmin() {
 		return fmt.Errorf("%w: ya tiene rol ADMIN", ErrPromocionInvalida)
@@ -247,6 +244,42 @@ func (u *Usuario) PromoverAAdmin() error {
 		return fmt.Errorf("%w: primero hay que aprobar la cuenta (está en %s)", ErrPromocionInvalida, u.Estado)
 	}
 	u.Rol = RolAdmin
+	return nil
+}
+
+// ErrDegradacionInvalida envuelve cualquier intento de quitarle el rol
+// ADMIN a una cuenta que no está en condiciones, con el motivo adentro.
+var ErrDegradacionInvalida = errors.New("no se puede quitar el rol ADMIN de esta cuenta")
+
+// DegradarADocente es la inversa de PromoverAAdmin: le saca los permisos de
+// Admin a alguien y lo deja como docente. Junto con PromoverAAdmin son las
+// dos únicas formas permitidas de cambiar u.Rol.
+//
+// Las dos condiciones son el espejo de las de promover:
+//
+//   - Tiene que ser Admin. Sobre un docente no hay nada que quitar, y
+//     decirlo es mejor que un no-op silencioso: quien apretó el botón se
+//     equivocó de fila.
+//   - Tiene que estar APROBADA. En una cuenta RECHAZADA o en BAJA el rol ya
+//     no habilita nada —esos estados no entran al sistema—, así que
+//     cambiarlo sería tocar el historial de una cuenta cerrada sin efecto
+//     ninguno.
+//
+// Lo que este método NO puede ver es si es el último Admin del sistema
+// (RF-01.8): eso se cuenta contra la base y vive en application, igual que
+// para la baja. Degradar al único Admin dejaría al sistema sin nadie que
+// pueda aprobar cuentas ni volver a promover a nadie — sin salida.
+//
+// No toca nada más de la cuenta, por la misma razón que promover: conserva
+// sus materias y sus reservas. Quien deja de coordinar sigue dando clase.
+func (u *Usuario) DegradarADocente() error {
+	if u.EsDocente() {
+		return fmt.Errorf("%w: ya tiene rol DOCENTE", ErrDegradacionInvalida)
+	}
+	if !u.EstaAprobado() {
+		return fmt.Errorf("%w: la cuenta está en %s y el rol ya no le habilita nada", ErrDegradacionInvalida, u.Estado)
+	}
+	u.Rol = RolDocente
 	return nil
 }
 

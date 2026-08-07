@@ -1433,6 +1433,140 @@ func TestPromoverAAdmin_ConUnSoloAdminEnElSistema_Funciona(t *testing.T) {
 	}
 }
 
+// ── DegradarADocente ────────────────────────────────────────────────────
+
+// Dos Admins: sacarle los permisos a uno deja al otro, así que procede.
+func repoConDosAdmins() *fakeRepo {
+	repo := nuevoFakeRepo()
+	repo.usuarios["quien-pide"] = &domain.Usuario{
+		ID: "quien-pide", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
+	}
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Email: "ada@escuela.edu.ar", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
+	}
+	return repo
+}
+
+func TestDegradarADocente_OK(t *testing.T) {
+	repo := repoConDosAdmins()
+	svc := nuevoServicioDeTest(repo)
+
+	if err := svc.DegradarADocente(context.Background(), "u1", "quien-pide"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if !repo.usuarios["u1"].EsDocente() {
+		t.Error("la degradación no se persistió")
+	}
+}
+
+// Espejo de TestPromoverAAdmin_NoTocaNadaMasDeLaCuenta: quien deja de
+// coordinar sigue dando clase, así que conserva materias y forma de
+// ingreso. Es la diferencia con darle de baja la cuenta, que era la única
+// forma que había de sacar a un Admin.
+func TestDegradarADocente_NoTocaNadaMasDeLaCuenta(t *testing.T) {
+	repo := repoConDosAdmins()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Nombre: "Ada", Apellido: "Lovelace", Email: "ada@escuela.edu.ar",
+		PasswordHash: "hash:password123", GoogleSub: "112233",
+		Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
+		CursoSolicitado: "5°A", MateriaSolicitada: "Programación",
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	if err := svc.DegradarADocente(context.Background(), "u1", "quien-pide"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	u := repo.usuarios["u1"]
+	if u.Estado != domain.EstadoAprobada {
+		t.Errorf("el estado no debería cambiar: %s", u.Estado)
+	}
+	if u.PasswordHash != "hash:password123" || u.GoogleSub != "112233" {
+		t.Error("las formas de ingreso tienen que quedar intactas")
+	}
+	if u.CursoSolicitado != "5°A" || u.MateriaSolicitada != "Programación" {
+		t.Error("no se le quitan las materias por dejar de ser Admin")
+	}
+}
+
+// RF-01.8. Este es el caso que hace falta que exista el guard: sin él,
+// degradar al único Admin deja al sistema sin nadie que pueda aprobar
+// cuentas ni volver a promover a nadie, y sin salida.
+func TestDegradarADocente_UltimoAdmin_Rechazado(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["unico"] = &domain.Usuario{
+		ID: "unico", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	err := svc.DegradarADocente(context.Background(), "unico", "otro-admin-que-no-existe-mas")
+
+	if !errors.Is(err, ErrUltimoAdmin) {
+		t.Fatalf("esperaba ErrUltimoAdmin, hubo: %v", err)
+	}
+	if !repo.usuarios["unico"].EsAdmin() {
+		t.Error("el rol no debería haber cambiado si se rechazó por ser el último admin")
+	}
+}
+
+// Quien se degrada a sí mismo pierde en el acto la pantalla desde la que lo
+// hizo, y depende de otro Admin para volver atrás.
+func TestDegradarADocente_ASiMismo_Rechazado(t *testing.T) {
+	repo := repoConDosAdmins()
+	svc := nuevoServicioDeTest(repo)
+
+	err := svc.DegradarADocente(context.Background(), "u1", "u1")
+
+	if !errors.Is(err, ErrAutoDegradacion) {
+		t.Fatalf("esperaba ErrAutoDegradacion, hubo: %v", err)
+	}
+	if !repo.usuarios["u1"].EsAdmin() {
+		t.Error("el rol no debería haber cambiado")
+	}
+}
+
+// Un docente no tiene permisos que quitarle: el motivo que se devuelve es
+// el del dominio y no el del guard, que sería engañoso.
+func TestDegradarADocente_YaEsDocente_Error(t *testing.T) {
+	repo := repoConDosAdmins()
+	repo.usuarios["u1"].Rol = domain.RolDocente
+	svc := nuevoServicioDeTest(repo)
+
+	err := svc.DegradarADocente(context.Background(), "u1", "quien-pide")
+
+	if !errors.Is(err, domain.ErrDegradacionInvalida) {
+		t.Fatalf("esperaba ErrDegradacionInvalida, hubo: %v", err)
+	}
+}
+
+// Una cuenta en BAJA no se cuenta como Admin activo, así que el guard no
+// aplica: lo que rechaza es el dominio, y el mensaje tiene que hablar del
+// estado y no del último Admin.
+func TestDegradarADocente_CuentaNoAprobada_ErrorDelDominio(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Rol: domain.RolAdmin, Estado: domain.EstadoBaja,
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	err := svc.DegradarADocente(context.Background(), "u1", "quien-pide")
+
+	if !errors.Is(err, domain.ErrDegradacionInvalida) {
+		t.Fatalf("esperaba ErrDegradacionInvalida, hubo: %v", err)
+	}
+}
+
+func TestDegradarADocente_UsuarioInexistente(t *testing.T) {
+	svc := nuevoServicioDeTest(nuevoFakeRepo())
+
+	err := svc.DegradarADocente(context.Background(), "no-existe", "quien-pide")
+
+	if !errors.Is(err, ErrUsuarioNoEncontrado) {
+		t.Fatalf("esperaba ErrUsuarioNoEncontrado, hubo: %v", err)
+	}
+}
+
 // ── Por qué no entra: un mensaje por estado ─────────────────────────────
 
 // Cada estado explica su motivo: con un "cuenta no habilitada" genérico,

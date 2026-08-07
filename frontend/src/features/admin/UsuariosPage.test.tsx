@@ -62,6 +62,7 @@ describe("UsuariosPage", () => {
     vi.mocked(adminApi.cambiarEstadoUsuario).mockResolvedValue(undefined)
     vi.mocked(adminApi.eliminarUsuario).mockResolvedValue(undefined)
     vi.mocked(adminApi.promoverAAdmin).mockResolvedValue(undefined)
+    vi.mocked(adminApi.degradarADocente).mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -260,9 +261,10 @@ describe("UsuariosPage", () => {
 
   // ── Promover a admin ──────────────────────────────────────────────────
 
-  // Dar permisos de Admin no se puede deshacer desde el sistema, así que
-  // pide confirmación igual que una baja aunque no destruya nada.
-  it("promover pide confirmación y avisa que no se puede deshacer", async () => {
+  // Dar permisos de Admin cambia quién puede tocar el inventario, el ciclo
+  // lectivo y las cuentas de los demás, así que pide confirmación igual que
+  // una baja aunque no destruya nada.
+  it("promover pide confirmación y explica qué permisos da", async () => {
     conUsuarios(usuario({ estado: "APROBADA" }))
     const user = userEvent.setup()
     renderPagina()
@@ -270,7 +272,7 @@ describe("UsuariosPage", () => {
     await user.click(await screen.findByRole("button", { name: "Promover a admin" }))
 
     expect(adminApi.promoverAAdmin).not.toHaveBeenCalled()
-    expect(screen.getByText(/No se puede deshacer/)).toBeInTheDocument()
+    expect(screen.getByText(/aprobar cuentas/)).toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "Confirmar" }))
     expect(adminApi.promoverAAdmin).toHaveBeenCalledWith("u1")
@@ -285,6 +287,81 @@ describe("UsuariosPage", () => {
     await user.click(screen.getByRole("button", { name: "Volver" }))
 
     expect(adminApi.promoverAAdmin).not.toHaveBeenCalled()
+  })
+
+  // ── Quitar permisos de admin ──────────────────────────────────────────
+
+  it("quitar permisos pide confirmación y aclara que la cuenta sigue abierta", async () => {
+    conUsuarios(usuario({ estado: "APROBADA", rol: "ADMIN" }))
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Quitar permisos de admin" })
+    )
+
+    expect(adminApi.degradarADocente).not.toHaveBeenCalled()
+    expect(screen.getByText(/La cuenta sigue abierta/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Confirmar" }))
+    expect(adminApi.degradarADocente).toHaveBeenCalledWith("u1")
+  })
+
+  it("se puede volver atrás sin quitar los permisos", async () => {
+    conUsuarios(usuario({ estado: "APROBADA", rol: "ADMIN" }))
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Quitar permisos de admin" })
+    )
+    await user.click(screen.getByRole("button", { name: "Volver" }))
+
+    expect(adminApi.degradarADocente).not.toHaveBeenCalled()
+  })
+
+  // Quien se quitara los permisos perdería en el acto esta misma pantalla y
+  // dependería de otro Admin para volver atrás. El backend lo rechaza; acá
+  // ni siquiera se ofrece.
+  it("no ofrece quitarse los permisos a uno mismo", async () => {
+    conUsuarios(usuario({ id: "admin1", estado: "APROBADA", rol: "ADMIN" }))
+    renderPagina()
+    await screen.findByText(/\(vos\)/)
+
+    expect(
+      screen.queryByRole("button", { name: "Quitar permisos de admin" })
+    ).not.toBeInTheDocument()
+  })
+
+  // Sobre un docente no hay permisos que quitar.
+  it("no ofrece quitar permisos a un docente", async () => {
+    conUsuarios(usuario({ estado: "APROBADA" }))
+    renderPagina()
+    await screen.findByText(/Ada Lovelace/)
+
+    expect(
+      screen.queryByRole("button", { name: "Quitar permisos de admin" })
+    ).not.toBeInTheDocument()
+  })
+
+  // RF-01.8 lo decide el backend, que es el único que puede contar cuántos
+  // Admins activos quedan: la pantalla muestra el motivo que llega.
+  it("muestra el motivo cuando el backend rechaza dejar al sistema sin Admins", async () => {
+    conUsuarios(usuario({ estado: "APROBADA", rol: "ADMIN" }))
+    vi.mocked(adminApi.degradarADocente).mockRejectedValue(
+      new ApiError(409, "no se puede dejar al sistema sin ningún admin activo")
+    )
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Quitar permisos de admin" })
+    )
+    await user.click(screen.getByRole("button", { name: "Confirmar" }))
+
+    expect(
+      await screen.findByText("no se puede dejar al sistema sin ningún admin activo")
+    ).toBeInTheDocument()
   })
 
   // El backend rechaza promover a quien ya es Admin: ofrecer un botón que

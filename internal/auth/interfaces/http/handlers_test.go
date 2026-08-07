@@ -753,6 +753,120 @@ func TestHTTP_PromoverAAdmin_Inexistente_404(t *testing.T) {
 	}
 }
 
+// ── Degradar a docente ──────────────────────────────────────────────────
+
+// Dos Admins aprobados: sacarle los permisos a "u1" deja al que pide.
+func repoConDosAdminsHTTP() *fakeRepo {
+	repo := nuevoFakeRepo()
+	repo.usuarios["admin-1"] = &domain.Usuario{
+		ID: "admin-1", Email: "jefe@x.com", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
+	}
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Email: "ada@x.com", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
+	}
+	return repo
+}
+
+func TestHTTP_DegradarADocente_OK(t *testing.T) {
+	repo := repoConDosAdminsHTTP()
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/usuarios/u1/degradar-a-docente", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin-1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+	if !repo.usuarios["u1"].EsDocente() {
+		t.Error("la degradación no se aplicó")
+	}
+}
+
+// La inversa de la ruta más sensible del panel es igual de sensible: un
+// docente no puede sacarle los permisos a ningún Admin.
+func TestHTTP_DegradarADocente_DocenteNoPuede_403(t *testing.T) {
+	repo := repoConDosAdminsHTTP()
+	repo.usuarios["docente"] = &domain.Usuario{
+		ID: "docente", Email: "d@x.com", Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/usuarios/u1/degradar-a-docente", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	}
+	if !repo.usuarios["u1"].EsAdmin() {
+		t.Error("un docente no puede degradar a un Admin")
+	}
+}
+
+func TestHTTP_DegradarADocente_SinAutenticar_401(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	resp, _ := app.Test(httptest.NewRequest("POST", "/api/auth/usuarios/u1/degradar-a-docente", nil))
+
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("esperaba 401, obtuve %d", resp.StatusCode)
+	}
+}
+
+// RF-01.8 desde la ruta: con un solo Admin, la respuesta es 409 y no un 500.
+func TestHTTP_DegradarADocente_UltimoAdmin_409(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["admin-1"] = &domain.Usuario{
+		ID: "admin-1", Email: "jefe@x.com", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/usuarios/admin-1/degradar-a-docente", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("otro", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
+	}
+	if !repo.usuarios["admin-1"].EsAdmin() {
+		t.Error("el sistema no puede quedarse sin ningún Admin")
+	}
+}
+
+// El ID del token es el que decide: aunque la ruta y el rol estén bien,
+// quitarse los permisos a uno mismo se rechaza.
+func TestHTTP_DegradarADocente_ASiMismo_409(t *testing.T) {
+	repo := repoConDosAdminsHTTP()
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/usuarios/admin-1/degradar-a-docente", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin-1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
+	}
+	if !repo.usuarios["admin-1"].EsAdmin() {
+		t.Error("nadie se degrada a sí mismo")
+	}
+}
+
+func TestHTTP_DegradarADocente_Inexistente_404(t *testing.T) {
+	app := nuevaAppDeTest(repoConDosAdminsHTTP())
+
+	req := httptest.NewRequest("POST", "/api/auth/usuarios/nadie/degradar-a-docente", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin-1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("esperaba 404, obtuve %d", resp.StatusCode)
+	}
+}
+
 // ── El motivo llega hasta la pantalla ───────────────────────────────────
 
 // El frontend muestra el texto del backend tal cual (ver api-client.ts), así

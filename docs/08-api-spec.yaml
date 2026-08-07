@@ -603,9 +603,9 @@ paths:
       description: |
         Le da rol ADMIN a un docente ya aprobado. Solo ADMIN.
 
-        **No existe la operación inversa**: el sistema no puede degradar un ADMIN a
-        docente. Por eso la ruta se llama "promover-a-admin" y no es un
-        `PATCH /rol`, que daría a entender que se puede volver atrás.
+        La operación inversa es `POST /api/auth/usuarios/{id}/degradar-a-docente`.
+        Son dos rutas que dicen lo que hacen y no un `PATCH /rol` genérico: cada una
+        tiene sus propias condiciones y su propia entrada de auditoría.
 
         La cuenta tiene que estar en estado APROBADA. Promover una PENDIENTE sería
         aprobarla por la puerta de atrás, salteándose el paso donde alguien mira quién
@@ -637,6 +637,52 @@ paths:
           description: |
             La cuenta ya tiene rol ADMIN, o no está APROBADA. El mensaje distingue los
             dos casos, que es lo que el Admin necesita para saber qué hacer.
+
+  /api/auth/usuarios/{id}/degradar-a-docente:
+    post:
+      tags: [auth]
+      summary: Quitarle el rol ADMIN a un Admin
+      description: |
+        La inversa de promover: le saca los permisos de Admin y lo deja como docente,
+        **sin cerrarle la cuenta**. Solo ADMIN.
+
+        Existe porque, sin ella, la única forma de sacar a un Admin era darle de baja
+        la cuenta entera —perdiendo sus materias y cancelándole las reservas— por un
+        cambio que era solo de permisos.
+
+        La cuenta tiene que estar en estado APROBADA: en una RECHAZADA o en BAJA el rol
+        ya no habilita nada, porque esos estados no entran al sistema.
+
+        **Dos frenos que promover no necesita**, porque esta sí puede reducir la
+        cantidad de Admins:
+
+        - El guard del último Admin (RF-01.8), dentro de la misma transacción que la
+          escritura: nunca puede quedar el sistema sin ningún Admin activo.
+        - Nadie se degrada a sí mismo: perdería en el acto las pantallas desde las que
+          lo pidió y dependería de otro Admin para volver atrás.
+
+        **No toca nada más de la cuenta**: conserva materias, reservas y formas de
+        ingreso. Lo único que deja de figurar es su horario de atención, porque la
+        lista de Admins se arma filtrando por rol — si lo vuelven a promover, reaparece
+        con el horario que ya tenía cargado.
+
+        **Tiene efecto en el request siguiente**, sin volver a iniciar sesión, igual
+        que promover.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Degradado. Queda registrado en auditoría quién lo hizo y a quién }
+        "403": { description: Quien lo pide no es ADMIN }
+        "404": { description: Usuario no encontrado }
+        "409":
+          description: |
+            La cuenta ya es DOCENTE, no está APROBADA, es el último Admin activo
+            (RF-01.8), o es la de quien está pidiendo el cambio. El mensaje distingue
+            los cuatro casos.
 
   /api/auth/me:
     get:
