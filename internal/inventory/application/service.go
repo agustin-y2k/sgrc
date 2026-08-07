@@ -59,7 +59,7 @@ func (s *Service) ListarCarros(ctx context.Context) ([]*domain.Carro, error) {
 
 // ── PC ──────────────────────────────────────────────────────────────────
 
-func (s *Service) CrearPC(ctx context.Context, carroID string, identificador int, numeroSerie int64, freezado bool, cpu, ram, sistemaOperativo, softwareInstalado string) (*domain.PC, error) {
+func (s *Service) CrearPC(ctx context.Context, carroID string, identificador int, numeroSerie string, freezado bool, cpu, ram, sistemaOperativo, softwareInstalado string) (*domain.PC, error) {
 	pc, err := domain.NuevaPC(s.nuevoID(), carroID, identificador, numeroSerie, freezado, s.ahora())
 	if err != nil {
 		return nil, err

@@ -27,6 +27,7 @@ func mapearError(err error) error {
 	case errors.Is(err, domain.ErrNombreCarroVacio),
 		errors.Is(err, domain.ErrIdentificadorInvalido),
 		errors.Is(err, domain.ErrNumeroSerieInvalido),
+		errors.Is(err, domain.ErrNumeroSerieLargo),
 		errors.Is(err, domain.ErrDescripcionVacia),
 		errors.Is(err, domain.ErrEstadoPCInvalido),
 		errors.Is(err, domain.ErrGravedadInvalida),

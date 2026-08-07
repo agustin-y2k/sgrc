@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -50,20 +51,42 @@ func (e EstadoPC) PuedeTransicionarA(nuevo EstadoPC) bool {
 
 var ErrTransicionEstadoPCInvalida = errors.New("transición de estado de PC inválida")
 
-// ErrIdentificadorInvalido / ErrNumeroSerieInvalido: ambos deben ser
-// positivos — no tiene sentido un identificador o número de serie
-// negativo o cero.
+// MaxLargoNumeroSerie es el tope del VARCHAR(50) de la migración 011. Se
+// valida acá además de en la base para que el error salga como un 400 con
+// explicación y no como un 500 de Postgres.
+const MaxLargoNumeroSerie = 50
+
 var (
+	// El identificador sí es un entero positivo: es la etiqueta "PC 1",
+	// "PC 2" que se le pone al equipo dentro de su carro, y la elige la
+	// escuela.
 	ErrIdentificadorInvalido = errors.New("el identificador de la PC debe ser un entero positivo")
-	ErrNumeroSerieInvalido   = errors.New("el número de serie debe ser un entero positivo")
-	ErrPCYaDadaDeBaja        = errors.New("la PC ya está dada de baja")
+	// El número de serie NO es un número, aunque se llame así: es el código
+	// de fábrica de la etiqueta y casi siempre trae letras ("5CD1234ABC").
+	// Hasta la migración 011 la columna era BIGINT, y la primera PC que
+	// alguien cargaba con el código real no entraba.
+	ErrNumeroSerieInvalido = errors.New("el número de serie no puede estar vacío")
+	ErrNumeroSerieLargo    = fmt.Errorf("el número de serie no puede tener más de %d caracteres", MaxLargoNumeroSerie)
+	ErrPCYaDadaDeBaja      = errors.New("la PC ya está dada de baja")
 )
+
+// NormalizarNumeroSerie devuelve la forma canónica: sin espacios al borde y
+// en mayúsculas. Es la misma decisión que NormalizarEmail en auth y por el
+// mismo motivo — sin una forma única, "5cd1234abc" y "5CD1234ABC" son dos
+// filas distintas para el UNIQUE, o sea la misma máquina cargada dos veces.
+//
+// Mayúsculas y no minúsculas porque es como vienen impresas las etiquetas:
+// la forma canónica coincide con lo que se lee en el equipo.
+func NormalizarNumeroSerie(s string) string {
+	return strings.ToUpper(strings.TrimSpace(s))
+}
 
 // PC es el equipo individual dentro de un Carro.
 //
 // Identificador es único solo dentro de su Carro (no globalmente) — "PC 27"
 // puede existir en el Carro 1 y en el Carro 2 sin conflicto. NumeroSerie sí
-// es único en toda la institución (es el de fábrica).
+// es único en toda la institución (es el de fábrica), y es texto: el nombre
+// engaña, pero el código de la etiqueta lleva letras.
 //
 // Freezado es puramente informativo (Deep Freeze instalado) — no afecta
 // ningún flujo de reservas ni de negocio.
@@ -71,7 +94,7 @@ type PC struct {
 	ID                string
 	CarroID           string
 	Identificador     int
-	NumeroSerie       int64
+	NumeroSerie       string
 	Freezado          bool
 	CPU               string
 	RAM               string
@@ -83,18 +106,25 @@ type PC struct {
 	FechaAlta         time.Time
 }
 
-func NuevaPC(id, carroID string, identificador int, numeroSerie int64, freezado bool, fechaAlta time.Time) (*PC, error) {
+func NuevaPC(id, carroID string, identificador int, numeroSerie string, freezado bool, fechaAlta time.Time) (*PC, error) {
 	if identificador <= 0 {
 		return nil, ErrIdentificadorInvalido
 	}
-	if numeroSerie <= 0 {
+	// Normalizar antes de validar: si no, un número de serie de puros
+	// espacios pasaría el "no vacío" y llegaría a la base a chocar contra
+	// el CHECK de la 011, que responde 500 en vez de explicar qué falta.
+	serie := NormalizarNumeroSerie(numeroSerie)
+	if serie == "" {
 		return nil, ErrNumeroSerieInvalido
+	}
+	if len(serie) > MaxLargoNumeroSerie {
+		return nil, ErrNumeroSerieLargo
 	}
 	return &PC{
 		ID:            id,
 		CarroID:       carroID,
 		Identificador: identificador,
-		NumeroSerie:   numeroSerie,
+		NumeroSerie:   serie,
 		Freezado:      freezado,
 		Estado:        EstadoDisponible,
 		FechaAlta:     fechaAlta,

@@ -88,7 +88,7 @@ export function crearPC(
   carroId: string,
   req: {
     identificador: number
-    numeroSerie: number
+    numeroSerie: string
     freezado: boolean
     cpu?: string
     ram?: string

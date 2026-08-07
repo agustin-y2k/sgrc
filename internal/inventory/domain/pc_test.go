@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -67,7 +68,7 @@ func TestFueraDeServicio_EsTerminal(t *testing.T) {
 }
 
 func TestNuevaPC_OK(t *testing.T) {
-	pc, err := NuevaPC("id1", "carro1", 27, 123456789, true, time.Now())
+	pc, err := NuevaPC("id1", "carro1", 27, "5CD1234ABC", true, time.Now())
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -79,25 +80,67 @@ func TestNuevaPC_OK(t *testing.T) {
 func TestNuevaPC_IdentificadorInvalido_Error(t *testing.T) {
 	casos := []int{0, -1, -100}
 	for _, id := range casos {
-		_, err := NuevaPC("id1", "carro1", id, 123456789, false, time.Now())
+		_, err := NuevaPC("id1", "carro1", id, "5CD1234ABC", false, time.Now())
 		if !errors.Is(err, ErrIdentificadorInvalido) {
 			t.Errorf("identificador %d: esperaba ErrIdentificadorInvalido, obtuve %v", id, err)
 		}
 	}
 }
 
-func TestNuevaPC_NumeroSerieInvalido_Error(t *testing.T) {
-	casos := []int64{0, -1}
+// El número de serie es texto porque el de fábrica trae letras. Este es el
+// caso que no entraba cuando la columna era BIGINT (ver migración 011), y
+// es el primero que se prueba al cargar el inventario.
+func TestNuevaPC_NumeroSerieConLetras_OK(t *testing.T) {
+	pc, err := NuevaPC("id1", "carro1", 1, "5CD1234ABC", false, time.Now())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if pc.NumeroSerie != "5CD1234ABC" {
+		t.Errorf("número de serie incorrecto: %q", pc.NumeroSerie)
+	}
+}
+
+// Se guarda la forma canónica y no lo que se tipeó: sin eso, la misma
+// máquina cargada dos veces con distinta caja son dos filas para el UNIQUE.
+func TestNuevaPC_NormalizaElNumeroDeSerie(t *testing.T) {
+	pc, err := NuevaPC("id1", "carro1", 1, "  5cd1234abc  ", false, time.Now())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if pc.NumeroSerie != "5CD1234ABC" {
+		t.Errorf("esperaba la forma canónica en mayúsculas y sin espacios, obtuve %q", pc.NumeroSerie)
+	}
+}
+
+func TestNuevaPC_NumeroSerieVacio_Error(t *testing.T) {
+	// El de puros espacios importa aparte: normalizado queda vacío, y sin
+	// normalizar ANTES de validar pasaría el chequeo y explotaría contra el
+	// CHECK de la base con un 500.
+	casos := []string{"", "   ", "\t\n"}
 	for _, ns := range casos {
 		_, err := NuevaPC("id1", "carro1", 1, ns, false, time.Now())
 		if !errors.Is(err, ErrNumeroSerieInvalido) {
-			t.Errorf("numeroSerie %d: esperaba ErrNumeroSerieInvalido, obtuve %v", ns, err)
+			t.Errorf("numeroSerie %q: esperaba ErrNumeroSerieInvalido, obtuve %v", ns, err)
 		}
 	}
 }
 
+func TestNuevaPC_NumeroSerieDemasiadoLargo_Error(t *testing.T) {
+	largo := strings.Repeat("A", MaxLargoNumeroSerie+1)
+
+	_, err := NuevaPC("id1", "carro1", 1, largo, false, time.Now())
+
+	if !errors.Is(err, ErrNumeroSerieLargo) {
+		t.Fatalf("esperaba ErrNumeroSerieLargo, obtuve %v", err)
+	}
+	// El tope exacto sí entra: es el VARCHAR(50) de la migración 011.
+	if _, err := NuevaPC("id1", "carro1", 1, strings.Repeat("A", MaxLargoNumeroSerie), false, time.Now()); err != nil {
+		t.Fatalf("el largo máximo debería entrar: %v", err)
+	}
+}
+
 func TestCambiarEstadoPC_TransicionValida_OK(t *testing.T) {
-	pc, _ := NuevaPC("id1", "carro1", 1, 1, false, time.Now())
+	pc, _ := NuevaPC("id1", "carro1", 1, "5CD1234ABC", false, time.Now())
 
 	err := pc.CambiarEstado(EstadoEnMantenimiento)
 
@@ -110,7 +153,7 @@ func TestCambiarEstadoPC_TransicionValida_OK(t *testing.T) {
 }
 
 func TestCambiarEstadoPC_DesdeFueraDeServicio_Rechazado(t *testing.T) {
-	pc, _ := NuevaPC("id1", "carro1", 1, 1, false, time.Now())
+	pc, _ := NuevaPC("id1", "carro1", 1, "5CD1234ABC", false, time.Now())
 	pc.Estado = EstadoFueraDeServicio
 
 	err := pc.CambiarEstado(EstadoDisponible)
@@ -124,7 +167,7 @@ func TestCambiarEstadoPC_DesdeFueraDeServicio_Rechazado(t *testing.T) {
 }
 
 func TestDarDeBaja_OK(t *testing.T) {
-	pc, _ := NuevaPC("id1", "carro1", 1, 1, false, time.Now())
+	pc, _ := NuevaPC("id1", "carro1", 1, "5CD1234ABC", false, time.Now())
 	ahora := time.Now()
 
 	err := pc.DarDeBaja(ahora)
@@ -141,7 +184,7 @@ func TestDarDeBaja_OK(t *testing.T) {
 }
 
 func TestDarDeBaja_DosVeces_Error(t *testing.T) {
-	pc, _ := NuevaPC("id1", "carro1", 1, 1, false, time.Now())
+	pc, _ := NuevaPC("id1", "carro1", 1, "5CD1234ABC", false, time.Now())
 	_ = pc.DarDeBaja(time.Now())
 
 	err := pc.DarDeBaja(time.Now())
@@ -152,7 +195,7 @@ func TestDarDeBaja_DosVeces_Error(t *testing.T) {
 }
 
 func TestMoverACarro_OK(t *testing.T) {
-	pc, _ := NuevaPC("id1", "carro1", 1, 1, false, time.Now())
+	pc, _ := NuevaPC("id1", "carro1", 1, "5CD1234ABC", false, time.Now())
 
 	pc.MoverACarro("carro2")
 
