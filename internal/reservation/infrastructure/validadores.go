@@ -73,6 +73,25 @@ func (v *ValidadorPCPostgres) PCDisponibleParaReservar(ctx context.Context, pcID
 	return estado == "DISPONIBLE" && !dadaDeBaja, nil
 }
 
+// PCEstaEnInventario: existe y no está dada de baja, sin mirar el estado.
+// Ver el comentario del puerto: entregar no es lo mismo que reservar.
+func (v *ValidadorPCPostgres) PCEstaEnInventario(ctx context.Context, pcID string) (bool, error) {
+	var dadaDeBaja bool
+	err := v.pool.QueryRow(ctx,
+		`SELECT dada_de_baja FROM pc WHERE id = $1`, pcID,
+	).Scan(&dadaDeBaja)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		if esIDInvalido(err) {
+			return false, application.ErrIDInvalido
+		}
+		return false, fmt.Errorf("verificando si la PC está en el inventario: %w", err)
+	}
+	return !dadaDeBaja, nil
+}
+
 // IdentificadoresDePCs: el número visible de cada PC, para los avisos de
 // cancelación. Una sola consulta con = ANY en vez de una por PC — un
 // bloqueo por evaluación sobre un carro entero puede tocar treinta.

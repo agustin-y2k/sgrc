@@ -48,6 +48,22 @@ var (
 	// explicación. Cancelar una reserva propia no lo exige.
 	ErrMotivoObligatorio = errors.New("el motivo es obligatorio para cancelar una reserva ajena")
 
+	// ── Préstamos ───────────────────────────────────────────────────
+
+	ErrPrestamoNoEncontrado = errors.New("no se encontró ese registro de entrega")
+
+	// ErrPCYaPrestada: el índice único parcial de la migración 013 impide
+	// dos préstamos abiertos sobre la misma PC. Es la garantía que el papel
+	// no puede dar — entregar dos veces la misma máquina porque dos Admin
+	// la anotaron a la vez no lo detecta nadie hasta que aparece un docente
+	// sin computadora.
+	ErrPCYaPrestada = errors.New("esa computadora ya figura entregada y todavía no volvió")
+
+	// ErrPCDadaDeBaja: no se entrega una máquina que salió del inventario.
+	// Las EN_MANTENIMIENTO y FUERA_DE_SERVICIO sí se pueden entregar: llevar
+	// una PC rota al técnico es justamente un préstamo.
+	ErrPCDadaDeBaja = errors.New("esa computadora está dada de baja del inventario")
+
 	ErrIDInvalido = errors.New("el ID indicado no tiene un formato válido")
 
 	// ErrReferenciaInexistente: SQLSTATE 23503 (foreign_key_violation) — el

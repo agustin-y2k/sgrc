@@ -264,6 +264,73 @@ components:
         quedanDias: { type: integer, minimum: 0, description: "\"Quedan 12 días\" → hoy + 12. Es lo que muestra la propia máquina. No acepta negativos: para una ya vencida, usar venceEl." }
         venceEl: { type: string, format: date, description: "La fecha de vencimiento, tal cual." }
 
+    Prestamo:
+      type: object
+      description: |
+        La custodia física de una PC: quién la tiene ahora (RF-08).
+
+        NO es una reserva. La reserva es el derecho a usar una PC en una
+        franja; el préstamo es dónde está la máquina. Existen por separado:
+        hay reservas que nadie retiró, préstamos sin reserva detrás, y
+        préstamos que sobreviven a su reserva.
+      properties:
+        id: { type: string, format: uuid }
+        pcId: { type: string, format: uuid }
+        reservaId: { type: string, format: uuid, nullable: true, description: "Ausente = préstamo espontáneo, sin reserva detrás" }
+        entregadoAUsuarioId: { type: string, format: uuid, nullable: true, description: "Solo si esa persona tiene cuenta en el sistema" }
+        entregadoANombre: { type: string, maxLength: 200, description: "Va siempre, aunque haya cuenta: es un snapshot, para que el registro siga diciendo quién se llevó la máquina si esa cuenta se elimina" }
+        motivo: { type: string, nullable: true }
+        devolucionEstimada:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Ausente = no se pactó hora. A esa máquina no se le reclama nada:
+            "vengo en un rato" es una respuesta válida, y una hora inventada
+            solo generaría reclamos falsos.
+        entregadoPor: { type: string, format: uuid, nullable: true }
+        entregadoEn: { type: string, format: date-time }
+        devueltoEn: { type: string, format: date-time, nullable: true, description: "Ausente = la máquina todavía está afuera" }
+        recibidoPor: { type: string, format: uuid, nullable: true }
+        observaciones: { type: string, nullable: true, description: "Lo que se anota al recibir: \"volvió sin el cargador\"" }
+        abierto: { type: boolean, description: "Derivado: devueltoEn ausente" }
+        demorado: { type: boolean, description: "Derivado. Un préstamo sin hora pactada NUNCA está demorado" }
+        minutosDeDemora: { type: integer, description: "Derivado. 0 si no está demorado" }
+        pcIdentificador: { type: integer, description: "Solo en los listados" }
+        carroNombre: { type: string }
+        materiaNombre: { type: string, nullable: true, description: "Solo en préstamos que salieron contra una reserva" }
+
+    ResultadoEntrega:
+      type: object
+      description: |
+        Qué salió y qué no. `noEntregadas` no es un error del request: el lote
+        se procesó, y el código de cada rechazo permite ofrecer la acción que
+        corresponde ("ver quién la tiene" no es lo mismo que "revisá el
+        inventario").
+      properties:
+        entregadas:
+          type: array
+          items: { $ref: '#/components/schemas/Prestamo' }
+        noEntregadas:
+          type: array
+          items:
+            type: object
+            properties:
+              pcId: { type: string, format: uuid }
+              razon: { type: string, enum: [YA_ENTREGADA, FUERA_DEL_INVENTARIO, RESERVA_CANCELADA, SIN_DESTINATARIO], description: "SIN_DESTINATARIO: la reserva no tiene docente (bloqueo por evaluación). Se resuelve mandando nombreAlternativo." }
+              detalle: { type: string }
+        avisos:
+          type: array
+          description: "Reservas próximas de las máquinas entregadas. Solo en las entregas espontáneas: en las que salen contra una reserva, la reserva ES el permiso."
+          items:
+            type: object
+            properties:
+              pcId: { type: string, format: uuid }
+              fecha: { type: string, format: date }
+              horaInicio: { type: string, example: "10:00" }
+              horaFin: { type: string, example: "11:00" }
+              docente: { type: string }
+
     Incidencia:
       type: object
       properties:
@@ -1519,6 +1586,194 @@ paths:
                 fechaEnvioDGE: { type: string, format: date-time }
       responses:
         "200": { description: Incidencia actualizada }
+
+  /api/reservation/prestamos:
+    get:
+      tags: [reservation]
+      summary: Qué computadoras están afuera del laboratorio (Admin)
+      description: |
+        Los préstamos sin devolver, ordenados por hora de devolución: lo que
+        debía haber vuelto hace más tiempo va primero, y lo que no tiene hora
+        pactada al final.
+
+        Solo Admin, incluida esta lectura. Que un docente pudiera consultar y
+        marcarse entregas convertiría el registro en una declaración en vez
+        de en una constancia.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Listado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Prestamo' }
+    post:
+      tags: [reservation]
+      summary: Entregar computadoras sin reserva detrás (Admin)
+      description: |
+        El préstamo espontáneo: "necesito una compu para hacer un trámite".
+
+        Quien la recibe NO necesita tener cuenta —secretaría, preceptoría, un
+        alumno—, así que `nombre` es obligatorio y `usuarioId` opcional.
+
+        Si alguna PC ya está afuera, se informa en `noEntregadas` y el resto
+        sale igual: el Admin tiene las otras máquinas en la mano, y hacerlo
+        empezar de nuevo por una sola sería peor.
+
+        `avisos` trae las reservas próximas de las máquinas entregadas. No
+        impidió nada: el sistema no sabe cuánto va a durar un trámite.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pcIds, nombre]
+              properties:
+                pcIds:
+                  type: array
+                  minItems: 1
+                  items: { type: string, format: uuid }
+                nombre: { type: string, maxLength: 200, example: "Marta (secretaría)" }
+                usuarioId: { type: string, format: uuid }
+                motivo: { type: string, example: "trámite" }
+                devolucionEstimada: { type: string, format: date-time, description: "Opcional. Sin ella no se le reclama la devolución." }
+      responses:
+        "201":
+          description: Lote procesado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResultadoEntrega' }
+        "400": { description: Sin PCs o sin nombre }
+
+  /api/reservation/prestamos/por-reserva:
+    post:
+      tags: [reservation]
+      summary: Entregar las computadoras de una reserva (Admin)
+      description: |
+        Se mandan las Reserva puntuales (una por PC), no el grupo: el retiro
+        es máquina por máquina, porque el docente puede llevarse tres de las
+        cinco que reservó — y las otras dos siguen disponibles para otro.
+
+        La hora en que deben volver sale del fin de la reserva; no se manda.
+
+        Responde 200 aunque alguna PC no haya salido; qué pasó con cada una
+        está en `noEntregadas`. Un 409 obligaría a la pantalla a deshacer las
+        que sí se entregaron, que ya están en manos del docente.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reservaIds]
+              properties:
+                reservaIds:
+                  type: array
+                  minItems: 1
+                  items: { type: string, format: uuid }
+                nombreAlternativo:
+                  type: string
+                  maxLength: 200
+                  example: "Juan (alumno de 5°A)"
+                  description: |
+                    Quién vino a buscarlas, si no fue el docente de la
+                    reserva. En ese caso el préstamo NO queda atado a la
+                    cuenta del docente: los avisos de devolución le llegarían
+                    a quien no tiene la máquina.
+      responses:
+        "200":
+          description: Lote procesado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResultadoEntrega' }
+        "400": { description: Sin reservas indicadas }
+        "404": { description: Alguna de las reservas no existe }
+
+  /api/reservation/prestamos/recibir:
+    post:
+      tags: [reservation]
+      summary: Registrar que las computadoras volvieron (Admin)
+      description: |
+        Devolver tres de cuatro no necesita nada especial: la cuarta sigue
+        figurando afuera.
+
+        Recibir dos veces la misma máquina no corta nada —pasa con dos Admin
+        en el mostrador o un doble clic— y se informa en `noRecibidos`: lo
+        que el Admin quería, que la máquina figure adentro, ya pasó.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prestamoIds]
+              properties:
+                prestamoIds:
+                  type: array
+                  minItems: 1
+                  items: { type: string, format: uuid }
+                observaciones:
+                  type: string
+                  example: "volvió sin el cargador"
+                  description: |
+                    Se guarda en TODAS las del lote. Si es sobre una sola
+                    máquina, conviene recibirla aparte: atarla a cinco filas
+                    diría de las otras cuatro algo que no pasó.
+      responses:
+        "200":
+          description: Lote procesado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recibidos:
+                    type: array
+                    items: { $ref: '#/components/schemas/Prestamo' }
+                  noRecibidos:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        prestamoId: { type: string, format: uuid }
+                        detalle: { type: string }
+        "400": { description: Sin préstamos indicados }
+        "404": { description: Alguno de los préstamos no existe }
+
+  /api/reservation/pcs/{pcId}/prestamos:
+    get:
+      tags: [reservation]
+      summary: Historial de entregas de una computadora (Admin)
+      description: |
+        De lo más reciente a lo más viejo. Sobrevive al archivado del ciclo
+        lectivo: al borrarse las reservas (RF-02.4) el préstamo queda sin
+        reserva asociada, pero el registro de quién se llevó la máquina vale
+        por sí mismo.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: pcId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Listado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Prestamo' }
 
   /api/inventory/licencias:
     get:

@@ -303,6 +303,20 @@ Para ver cuáles se aplicaron hay que mirar la base; el proyecto no lleva una
 tabla de versiones de esquema (a esta escala, la lista de archivos y el
 orden alcanzan).
 
+### Entregas y devoluciones
+
+La **013** agrega `prestamo` (RF-08). No toca datos existentes ni puede
+abortar: crea una tabla vacía.
+
+No hay ningún proceso de fondo asociado todavía: esta entrega solo registra
+lo que hoy se anota en papel. Los avisos por no retirar a tiempo y por no
+devolver son una segunda etapa.
+
+Si al entregar aparece "esa computadora ya figura entregada y todavía no
+volvió", no es un error del sistema: es el índice único haciendo su trabajo.
+La máquina figura afuera, y lo que corresponde es recibirla primero — o
+averiguar quién la tiene, que la pantalla de entregas lo dice.
+
 ### Aviso de licencias de software
 
 La **012** agrega `licencia_software` (RF-03.11 a RF-03.14). No toca datos

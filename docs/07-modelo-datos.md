@@ -11,6 +11,8 @@ erDiagram
     CARRO ||--o{ PC : contiene
     PC ||--o{ INCIDENCIA : registra
     PC ||--o{ LICENCIA_SOFTWARE : tiene
+    PC ||--o{ PRESTAMO : sale_en
+    RESERVA ||--o{ PRESTAMO : origina
     PC ||--o{ RESERVA : recibe
     CICLO_LECTIVO ||--o{ CURSO : contiene
     CURSO ||--o{ MATERIA : contiene
@@ -32,6 +34,7 @@ erDiagram
     REGLA_RECURRENCIA { uuid id; uuid materia_id; uuid creado_por; string dia_semana; time hora_inicio; time hora_fin; date fecha_inicio; date fecha_fin }
     RESERVA_GRUPO { uuid id; uuid materia_id; uuid creado_por; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; uuid regla_recurrencia_id; timestamp creada_en }
     RESERVA { uuid id; uuid reserva_grupo_id; uuid pc_id; string estado; string tipo; timestamp creada_en; uuid cancelado_por; string motivo_cancelacion; timestamp cancelada_en }
+    PRESTAMO { uuid id; uuid pc_id; uuid reserva_id; uuid entregado_a_usuario_id; string entregado_a_nombre; string motivo; timestamp devolucion_estimada; uuid entregado_por; timestamp entregado_en; timestamp devuelto_en; uuid recibido_por; string observaciones }
     NOTIFICACION { uuid id; uuid usuario_id; uuid reserva_id; string mensaje; string estado; timestamp creada_en; timestamp leida_en }
     CODIGO_RECUPERACION { uuid id; uuid usuario_id; string codigo_hash; timestamp creado_en; timestamp expira_en; timestamp usado_en; int intentos }
 ```
@@ -347,6 +350,40 @@ CREATE INDEX idx_reserva_creado_por ON reserva(creado_por);
 ```
 
 > **Por qué `EVALUACION_ESTATAL` no lleva `materia_id` ni `reserva_grupo_id`:** un bloqueo de evaluación no es la reserva de un docente para dar clase — es un bloqueo administrativo sobre PCs concretas en un rango horario. No tiene sentido forzarlo a pertenecer a una materia.
+
+### `prestamo`
+La custodia física de una PC: quién la tiene ahora — migración `013`. Ver RF-08.
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| pc_id | UUID | FK → pc.id, NOT NULL |
+| reserva_id | UUID | FK → reserva.id **ON DELETE SET NULL**, NULL = préstamo espontáneo |
+| entregado_a_usuario_id | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
+| entregado_a_nombre | VARCHAR(200) | NOT NULL, CHECK no vacío y sin espacios al borde |
+| motivo | TEXT | NULL |
+| devolucion_estimada | TIMESTAMPTZ | NULL = no se pactó hora |
+| entregado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
+| entregado_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+| devuelto_en | TIMESTAMPTZ | **NULL = la máquina sigue afuera** |
+| recibido_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
+| observaciones | TEXT | NULL |
+
+```sql
+CREATE UNIQUE INDEX ux_prestamo_abierto ON prestamo(pc_id) WHERE devuelto_en IS NULL;
+CREATE INDEX idx_prestamo_abiertos ON prestamo(entregado_en) WHERE devuelto_en IS NULL;
+CREATE INDEX idx_prestamo_pc ON prestamo(pc_id, entregado_en DESC);
+```
+
+> **`prestamo` no es `reserva`, y esa es la razón de que exista la tabla.** La reserva es el derecho a usar una PC en una franja; el préstamo es dónde está la máquina. Existen por separado: hay reservas que nadie vino a buscar, préstamos sin reserva (alguien pide una PC para un trámite) y préstamos que sobreviven a su reserva (la clase terminó y las máquinas no volvieron).
+
+> **El índice único parcial es la garantía que el papel no puede dar:** una PC no puede tener dos préstamos abiertos. Es parcial (`WHERE devuelto_en IS NULL`) para conservar igual el historial completo — la misma máquina prestada cien veces son cien filas, pero como mucho una abierta.
+
+> **No hay ninguna columna en `pc` que diga "prestada".** El estado se deriva de si existe un préstamo abierto, por la misma razón que el contador de licencias no se guarda: lo que se duplica se desincroniza, y eso es exactamente lo que le pasa al papel cuando alguien devuelve una máquina y nadie tacha el renglón.
+
+> **`entregado_a_nombre` va siempre, aunque haya `entregado_a_usuario_id`.** Es un snapshot, igual que `reserva_grupo.nombre_docente_snapshot`: si la cuenta se elimina definitivamente (RF-01.9), el registro tiene que seguir diciendo quién se llevó la máquina. Y el usuario es opcional porque quien pide una PC para un trámite puede no tener cuenta.
+
+> **`reserva_id` en `SET NULL` y no `CASCADE`:** al archivar un ciclo lectivo se borran físicamente sus reservas (§3), y el registro de que alguien se llevó una máquina el 12 de agosto vale por sí mismo aunque la reserva que lo originó ya no exista. Mismo criterio que `notificacion.reserva_id`.
 
 ### `notificacion`
 | Campo | Tipo | Restricciones |

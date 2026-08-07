@@ -37,4 +37,18 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// RF-04.2: la lista de PCs libres en una franja, de la que el docente
 	// tilda las que necesita.
 	reservation.Get("/pcs-disponibles", autenticado, h.ListarPCsDisponibles)
+
+	// RF-08: entregas y devoluciones. Todo solo Admin — quien entrega y
+	// recibe las máquinas es quien hoy escribe el papel. Que un docente
+	// pudiera marcarse la entrega a sí mismo convertiría el registro en una
+	// declaración en vez de en una constancia.
+	//
+	// /prestamos/por-reserva y /prestamos/recibir van antes que nada que
+	// pueda parecerles un parámetro; hoy no hay ninguna ruta /prestamos/:id,
+	// pero el orden deja el camino despejado si mañana la hay.
+	reservation.Get("/prestamos", autenticado, soloAdmin, h.ListarPrestamosAbiertos)
+	reservation.Post("/prestamos/por-reserva", autenticado, soloAdmin, h.EntregarPorReserva)
+	reservation.Post("/prestamos/recibir", autenticado, soloAdmin, h.RecibirPCs)
+	reservation.Post("/prestamos", autenticado, soloAdmin, h.EntregarSuelta)
+	reservation.Get("/pcs/:pcId/prestamos", autenticado, soloAdmin, h.HistorialDePrestamosDePC)
 }
