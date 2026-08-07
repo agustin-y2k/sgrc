@@ -317,9 +317,9 @@ func (h *Handler) ResetearPassword(c *fiber.Ctx) error {
 
 // POST /api/auth/usuarios/{id}/promover-a-admin (Admin)
 //
-// La ruta dice exactamente lo que hace y no un genérico "cambiar rol": no
-// existe la operación inversa (ver domain.Usuario.PromoverAAdmin), y un
-// PATCH /rol daría a entender que se puede volver atrás.
+// Son dos rutas que dicen lo que hacen —esta y degradar-a-docente— y no un
+// PATCH /rol genérico: cada una tiene sus propias condiciones y su propia
+// entrada de auditoría, y ninguna es "escribir un campo".
 func (h *Handler) PromoverAAdmin(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)
@@ -331,8 +331,29 @@ func (h *Handler) PromoverAAdmin(c *fiber.Ctx) error {
 		return mapearError(err)
 	}
 	// Dar permisos de Admin es de lo más sensible que puede pasar en el
-	// sistema, y no se deshace: queda registrado quién lo hizo y a quién.
+	// sistema: queda registrado quién lo hizo y a quién.
 	h.auditar(c, claims.UserID, audit.RolPromovidoAAdmin, "usuario", &id, nil)
+	return c.SendStatus(fiber.StatusOK)
+}
+
+// POST /api/auth/usuarios/{id}/degradar-a-docente (Admin)
+//
+// El ID del solicitante va al servicio porque nadie puede degradarse a sí
+// mismo (ver Service.DegradarADocente): es la única regla de esta operación
+// que depende de quién la pide y no del estado de la cuenta afectada.
+func (h *Handler) DegradarADocente(c *fiber.Ctx) error {
+	id := c.Params("id")
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	if err := h.svc.DegradarADocente(c.UserContext(), id, claims.UserID); err != nil {
+		return mapearError(err)
+	}
+	// Igual que promover: quitar permisos también cambia quién puede hacer
+	// qué, así que queda registrado quién lo hizo y sobre quién.
+	h.auditar(c, claims.UserID, audit.RolDegradadoADocente, "usuario", &id, nil)
 	return c.SendStatus(fiber.StatusOK)
 }
 

@@ -335,3 +335,77 @@ func TestPromoverAAdmin_ElMensajeDiceElMotivo(t *testing.T) {
 		t.Errorf("mensaje poco claro: %v", err)
 	}
 }
+
+// ── DegradarADocente ───────────────────────────────────────────────────
+
+func TestDegradarADocente_AdminAprobado_OK(t *testing.T) {
+	u := &Usuario{Rol: RolAdmin, Estado: EstadoAprobada}
+
+	if err := u.DegradarADocente(); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !u.EsDocente() {
+		t.Errorf("esperaba rol DOCENTE, quedó %s", u.Rol)
+	}
+}
+
+// Ida y vuelta: promover y degradar son inversas exactas sobre el rol y no
+// dejan rastro en el resto de la cuenta.
+func TestDegradarADocente_DeshaceLaPromocion(t *testing.T) {
+	u := &Usuario{
+		Nombre: "Ada", Email: "ada@escuela.edu.ar", PasswordHash: "hash",
+		Rol: RolDocente, Estado: EstadoAprobada,
+		CursoSolicitado: "5°A", MateriaSolicitada: "Programación",
+	}
+	antes := *u
+
+	if err := u.PromoverAAdmin(); err != nil {
+		t.Fatalf("promover no debería fallar: %v", err)
+	}
+	if err := u.DegradarADocente(); err != nil {
+		t.Fatalf("degradar no debería fallar: %v", err)
+	}
+
+	if *u != antes {
+		t.Errorf("la cuenta tendría que haber quedado igual que al principio:\nantes: %+v\nahora: %+v", antes, *u)
+	}
+}
+
+// Sobre un docente no hay nada que quitar. Mismo criterio que promover a
+// alguien que ya es Admin: decirlo, y no un no-op silencioso.
+func TestDegradarADocente_YaEsDocente_Error(t *testing.T) {
+	u := &Usuario{Rol: RolDocente, Estado: EstadoAprobada}
+
+	if err := u.DegradarADocente(); !errors.Is(err, ErrDegradacionInvalida) {
+		t.Fatalf("esperaba ErrDegradacionInvalida, hubo %v", err)
+	}
+}
+
+// En una cuenta cerrada o pendiente el rol no habilita nada: cambiarlo
+// sería tocar el historial sin ningún efecto.
+func TestDegradarADocente_CuentaNoAprobada_Error(t *testing.T) {
+	for _, estado := range []Estado{EstadoPendiente, EstadoRechazada, EstadoBaja} {
+		u := &Usuario{Rol: RolAdmin, Estado: estado}
+
+		err := u.DegradarADocente()
+
+		if !errors.Is(err, ErrDegradacionInvalida) {
+			t.Errorf("estado %s: esperaba ErrDegradacionInvalida, hubo %v", estado, err)
+		}
+		if !u.EsAdmin() {
+			t.Errorf("estado %s: no debería haber cambiado el rol", estado)
+		}
+	}
+}
+
+func TestDegradarADocente_ElMensajeDiceElMotivo(t *testing.T) {
+	yaDocente := &Usuario{Rol: RolDocente, Estado: EstadoAprobada}
+	enBaja := &Usuario{Rol: RolAdmin, Estado: EstadoBaja}
+
+	if err := yaDocente.DegradarADocente(); !strings.Contains(err.Error(), "ya tiene rol DOCENTE") {
+		t.Errorf("mensaje poco claro: %v", err)
+	}
+	if err := enBaja.DegradarADocente(); !strings.Contains(err.Error(), string(EstadoBaja)) {
+		t.Errorf("mensaje poco claro: %v", err)
+	}
+}

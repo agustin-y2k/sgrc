@@ -614,6 +614,78 @@ func TestUltimoAdmin_DosBajasConcurrentes_NuncaQuedanCeroAdmins(t *testing.T) {
 	}
 }
 
+// Degradar es el otro camino que reduce la cantidad de Admins, y no
+// compite solo consigo mismo: una baja y una degradación simultáneas sobre
+// los dos últimos Admins tienen que verse entre sí. Si cada una contara por
+// su lado, ambas leerían "quedan 2", ambas pasarían, y el sistema quedaría
+// sin nadie que pueda aprobar cuentas ni volver a promover a nadie.
+func TestUltimoAdmin_BajaYDegradacionConcurrentes_NuncaQuedanCeroAdmins(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	admin1 := usuarioDeTest("admin1@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
+	admin2 := usuarioDeTest("admin2@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
+	if err := repo.Crear(ctx, admin1); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Crear(ctx, admin2); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := application.NewService(repo, eventbus.NewInMemoryEventBus(),
+		func(string) (string, error) { return "hash", nil },
+		func(string, string) (bool, error) { return true, nil },
+		func(*domain.Usuario) (string, error) { return "token", nil },
+		NuevoID, func() (string, error) { return "temporal", nil },
+		GenerarCodigoRecuperacion,
+		time.Now, sinMaterias{}, sinCancelaciones{},
+		nil,
+		false)
+
+	errores := make(chan error, 2)
+	var listos sync.WaitGroup
+	listos.Add(2)
+	arrancar := make(chan struct{})
+
+	go func() {
+		listos.Done()
+		<-arrancar
+		errores <- svc.DarDeBaja(context.Background(), admin1.ID)
+	}()
+	go func() {
+		listos.Done()
+		<-arrancar
+		// El tercer ID es de quien pide: solo importa para la regla de que
+		// nadie se degrada a sí mismo, que acá no es lo que se prueba.
+		errores <- svc.DegradarADocente(context.Background(), admin2.ID, "otro-admin")
+	}()
+	listos.Wait()
+	close(arrancar)
+
+	err1, err2 := <-errores, <-errores
+
+	exitos := 0
+	for _, err := range []error{err1, err2} {
+		if err == nil {
+			exitos++
+		} else if !errors.Is(err, application.ErrUltimoAdmin) {
+			t.Fatalf("error inesperado (se esperaba ErrUltimoAdmin): %v", err)
+		}
+	}
+	if exitos != 1 {
+		t.Errorf("exactamente una de las dos debía prosperar, prosperaron %d", exitos)
+	}
+
+	quedan, err := repo.ContarAdminsAprobados(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quedan < 1 {
+		t.Errorf("RF-01.8 violado: quedaron %d Admins activos", quedan)
+	}
+}
+
 type sinMaterias struct{}
 
 func (sinMaterias) MateriasDeDocente(context.Context, string) ([]string, error) { return nil, nil }

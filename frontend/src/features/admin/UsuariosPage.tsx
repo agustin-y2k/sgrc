@@ -28,12 +28,13 @@ function EstadoDeCuenta({ estado }: { estado: Estado }) {
   return <EstadoBadge tono={TONO_CUENTA[estado]}>{ETIQUETA_ESTADO[estado]}</EstadoBadge>
 }
 
-// PROMOVER pide confirmación como las otras dos aunque no destruya nada:
-// el sistema no puede degradar un Admin a docente, así que dar permisos es
-// tan poco reversible como una baja.
+// PROMOVER y DEGRADAR piden confirmación como las otras dos aunque no
+// destruyan nada: cambian quién puede tocar el inventario, el ciclo lectivo
+// y las cuentas de los demás. Son reversibles entre sí, pero no por quien
+// las sufre.
 type Confirmacion = {
   usuario: Usuario
-  accion: "BAJA" | "ELIMINAR" | "PROMOVER"
+  accion: "BAJA" | "ELIMINAR" | "PROMOVER" | "DEGRADAR"
 }
 
 const TEXTO_CONFIRMACION: Record<Confirmacion["accion"], (u: Usuario) => string> = {
@@ -42,8 +43,13 @@ const TEXTO_CONFIRMACION: Record<Confirmacion["accion"], (u: Usuario) => string>
   ELIMINAR: (u) =>
     `Eliminar la cuenta de ${u.nombre} ${u.apellido} la borra definitivamente y libera el email ${u.email} para un registro nuevo. Sus reservas e incidencias se conservan, pero pierden la referencia a la persona.`,
   PROMOVER: (u) =>
-    `${u.nombre} ${u.apellido} va a pasar a tener permisos de Admin: aprobar cuentas, editar el inventario y el ciclo lectivo, y dar de baja a otros usuarios. No se puede deshacer desde el sistema. Conserva sus materias y sus reservas, y el cambio le aplica de inmediato, sin que tenga que volver a entrar.`,
+    `${u.nombre} ${u.apellido} va a pasar a tener permisos de Admin: aprobar cuentas, editar el inventario y el ciclo lectivo, y dar de baja a otros usuarios. Conserva sus materias y sus reservas, y el cambio le aplica de inmediato, sin que tenga que volver a entrar.`,
+  DEGRADAR: (u) =>
+    `${u.nombre} ${u.apellido} deja de tener permisos de Admin y queda como docente. La cuenta sigue abierta: conserva sus materias, sus reservas y su forma de ingreso — lo único que pierde son las pantallas de administración, y deja de figurar en la lista de Admins con su horario de atención. Cualquier Admin puede volver a promoverlo.`,
 }
+
+const esCambioDeRol = (accion: Confirmacion["accion"]) =>
+  accion === "PROMOVER" || accion === "DEGRADAR"
 
 // RF-01/RF-02: panel de usuarios. Las acciones irreversibles (dar de baja,
 // eliminar) piden confirmación explícita y explican la consecuencia — la
@@ -95,6 +101,14 @@ export function UsuariosPage() {
     },
   })
 
+  const degradar = useMutation({
+    mutationFn: (id: string) => adminApi.degradarADocente(id),
+    onSuccess: async () => {
+      setConfirmando(null)
+      await invalidar()
+    },
+  })
+
   const resetear = useMutation({
     mutationFn: (u: Usuario) => adminApi.resetearPassword(u.id),
     onSuccess: (res, u) => {
@@ -109,7 +123,12 @@ export function UsuariosPage() {
 
   const usuarios = data?.data ?? []
   const errorActivo =
-    error ?? cambiarEstado.error ?? eliminar.error ?? resetear.error ?? promover.error
+    error ??
+    cambiarEstado.error ??
+    eliminar.error ??
+    resetear.error ??
+    promover.error ??
+    degradar.error
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -175,7 +194,8 @@ export function UsuariosPage() {
           const trabajando =
             (cambiarEstado.isPending && cambiarEstado.variables?.id === u.id) ||
             (eliminar.isPending && eliminar.variables === u.id) ||
-            (promover.isPending && promover.variables === u.id)
+            (promover.isPending && promover.variables === u.id) ||
+            (degradar.isPending && degradar.variables === u.id)
 
           return (
             <Card key={u.id}>
@@ -238,6 +258,23 @@ export function UsuariosPage() {
                             Promover a admin
                           </Button>
                         )}
+                        {/* La inversa, y con la misma restricción de la
+                            baja: sobre uno mismo no se ofrece. Quien se
+                            quitara los permisos perdería en el acto esta
+                            pantalla y dependería de otro Admin para volver
+                            atrás (el backend lo rechaza igual). */}
+                        {u.rol === "ADMIN" && !esUnoMismo && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={trabajando}
+                            onClick={() =>
+                              setConfirmando({ usuario: u, accion: "DEGRADAR" })
+                            }
+                          >
+                            Quitar permisos de admin
+                          </Button>
+                        )}
                         {/* Darse de baja a uno mismo dejaría al Admin fuera
                             del sistema en el acto; el backend además lo
                             rechaza si es el último (RF-01.8). */}
@@ -273,12 +310,13 @@ export function UsuariosPage() {
 
                 {confirmandoEste && confirmando && (
                   <div className="grid gap-3 rounded-md border p-3">
-                    {/* Promover no destruye nada, así que no va en rojo: el
-                        rojo es para lo que borra. Pero sí pide confirmación,
-                        porque tampoco se puede deshacer. */}
+                    {/* Los dos cambios de rol no destruyen nada, así que no
+                        van en rojo: el rojo es para lo que borra. Pero sí
+                        piden confirmación, porque cambian quién puede tocar
+                        el sistema y quien los sufre no puede deshacerlos. */}
                     <p
                       className={
-                        confirmando.accion === "PROMOVER"
+                        esCambioDeRol(confirmando.accion)
                           ? "text-sm"
                           : "text-destructive text-sm"
                       }
@@ -288,7 +326,7 @@ export function UsuariosPage() {
                     <div className="flex gap-2">
                       <Button
                         variant={
-                          confirmando.accion === "PROMOVER" ? "default" : "destructive"
+                          esCambioDeRol(confirmando.accion) ? "default" : "destructive"
                         }
                         size="sm"
                         disabled={trabajando}
@@ -297,6 +335,8 @@ export function UsuariosPage() {
                             cambiarEstado.mutate({ id: u.id, estado: "BAJA" })
                           } else if (confirmando.accion === "PROMOVER") {
                             promover.mutate(u.id)
+                          } else if (confirmando.accion === "DEGRADAR") {
+                            degradar.mutate(u.id)
                           } else {
                             eliminar.mutate(u.id)
                           }

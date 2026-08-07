@@ -95,6 +95,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	auth.Patch("/usuarios/:id/estado", autenticado, soloAdmin, h.CambiarEstado)
 	auth.Post("/usuarios/:id/reset-password", autenticado, soloAdmin, h.ResetearPassword)
 	auth.Post("/usuarios/:id/promover-a-admin", autenticado, soloAdmin, h.PromoverAAdmin)
+	auth.Post("/usuarios/:id/degradar-a-docente", autenticado, soloAdmin, h.DegradarADocente)
 	auth.Delete("/usuarios/:id", autenticado, soloAdmin, h.EliminarDefinitivamente)
 	auth.Post("/admins", autenticado, soloAdmin, h.CrearAdmin)
 }
