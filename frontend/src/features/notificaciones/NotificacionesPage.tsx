@@ -155,6 +155,11 @@ export function NotificacionesPage() {
                       <Link to="/reservas">Ver mis reservas</Link>
                     </Button>
                   )}
+                  {n.tipo === "LICENCIA_POR_VENCER" && (
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/admin/licencias">Ver licencias</Link>
+                    </Button>
+                  )}
                   {n.estado === "NO_LEIDA" && (
                     <Button
                       variant="outline"

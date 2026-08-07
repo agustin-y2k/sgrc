@@ -209,6 +209,61 @@ components:
         dadaDeBaja: { type: boolean, description: "Soft delete: si es true, no aparece en listados activos ni puede reservarse" }
         fechaBaja: { type: string, format: date-time, nullable: true }
 
+    Licencia:
+      type: object
+      description: |
+        Licencia de software con vencimiento periódico, instalada en una PC
+        puntual (RF-03.11). Hay una por (PC, software): el mismo AutoCAD en las
+        ocho PCs de un carro son ocho licencias, cada una con su contador — el
+        caso a cubrir es que una quede sin renovar mientras las demás sí.
+      properties:
+        id: { type: string, format: uuid }
+        pcId: { type: string, format: uuid }
+        nombre: { type: string, maxLength: 100, example: "AutoCAD 2027", description: "Se guarda sin espacios al borde, respetando mayúsculas. Único por PC ignorando la caja." }
+        diasDuracion: { type: integer, minimum: 1, maximum: 3650, description: "Cuánto dura una renovación. Es el paso del botón Renovar, no una propiedad inmutable: puede cambiar de 30 a 60." }
+        diasAviso: { type: integer, minimum: 0, maximum: 365, default: 1, description: "Con cuánta antelación avisar. 0 = avisar recién el día que vence." }
+        fechaVencimiento:
+          type: string
+          format: date
+          nullable: true
+          description: |
+            AUSENTE significa "todavía no se verificó contra la máquina", NO
+            "no vence nunca". Esas licencias no disparan ningún aviso y se
+            listan primero.
+        ultimaRenovacion:
+          type: string
+          format: date
+          nullable: true
+          description: |
+            Cuándo se renovó de verdad, que puede no ser cuándo se cargó.
+            Ausente si el vencimiento se fijó por quedanDias o venceEl:
+            deducirla sería inventar un dato.
+        vencimientoFijadoPor: { type: string, format: uuid, nullable: true, description: "Quién escribió el vencimiento en el sistema" }
+        vencimientoFijadoEn: { type: string, format: date-time, nullable: true }
+        diasRestantes:
+          type: integer
+          nullable: true
+          description: |
+            DERIVADO, no está en la base: fechaVencimiento menos hoy. Negativo
+            = venció hace esos días. Ausente si no hay fecha. Viaja resuelto
+            para que la pantalla, el correo y el job digan lo mismo.
+        estado: { type: string, enum: [SIN_FECHA, VENCIDA, POR_VENCER, VIGENTE], description: "Derivado. POR_VENCER depende del diasAviso de esa licencia, no de un umbral fijo." }
+        pcIdentificador: { type: integer, description: "Solo en el listado general" }
+        carroId: { type: string, format: uuid }
+        carroNombre: { type: string }
+        pcDadaDeBaja: { type: boolean }
+
+    VencimientoDeclarado:
+      type: object
+      description: |
+        Las tres formas de decir cuándo vence. Se manda UNA sola: dos darían
+        fechas distintas y elegir cuál gana sería decidir por el Admin (400).
+        Ninguna = "todavía no sé", que es un estado válido.
+      properties:
+        renovadaEl: { type: string, format: date, description: "\"La renové el martes\" → esa fecha + diasDuracion. Puede ser pasada: es el caso del olvido." }
+        quedanDias: { type: integer, minimum: 0, description: "\"Quedan 12 días\" → hoy + 12. Es lo que muestra la propia máquina. No acepta negativos: para una ya vencida, usar venceEl." }
+        venceEl: { type: string, format: date, description: "La fecha de vencimiento, tal cual." }
+
     Incidencia:
       type: object
       properties:
@@ -1464,6 +1519,206 @@ paths:
                 fechaEnvioDGE: { type: string, format: date-time }
       responses:
         "200": { description: Incidencia actualizada }
+
+  /api/inventory/licencias:
+    get:
+      tags: [inventory]
+      summary: Listar todas las licencias de software con su ubicación (Admin)
+      description: |
+        Solo Admin, incluida la lectura: el docente elige PC por
+        `softwareInstalado`, que ya ve en la pantalla de reserva.
+
+        Sin paginar, como el resto de los listados acotados por el dominio
+        (ciclos, cursos, carros): la cantidad la limita el inventario, no el uso.
+
+        Vienen ordenadas para la pantalla: primero las que no tienen fecha
+        —hay que ir a mirar la máquina—, después de la más vencida a la que
+        más le falta.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Listado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Licencia' }
+    post:
+      tags: [inventory]
+      summary: Cargar la misma licencia en varias PCs (Admin)
+      description: |
+        Alta masiva: el caso real es "AutoCAD, 30 días, en estas ocho máquinas",
+        de uno o de varios carros.
+
+        Una PC que ya tiene esa licencia se **saltea y se informa**, no aborta
+        el lote. Eso hace que el request sea REINTENTABLE: si algo falla en la
+        PC número seis, volver a mandarlo completa lo que falta sin duplicar lo
+        que ya entró. Por eso responde 201 aunque haya salteado algunas — un
+        409 obligaría a la pantalla a deshacer lo que sí se creó.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - type: object
+                  required: [pcIds, nombre, diasDuracion]
+                  properties:
+                    pcIds:
+                      type: array
+                      minItems: 1
+                      items: { type: string, format: uuid }
+                    nombre: { type: string, maxLength: 100, example: "AutoCAD 2027" }
+                    diasDuracion: { type: integer, minimum: 1, maximum: 3650, example: 30 }
+                    diasAviso: { type: integer, minimum: 0, maximum: 365, default: 1 }
+                - $ref: '#/components/schemas/VencimientoDeclarado'
+      responses:
+        "201":
+          description: Lote procesado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  creadas:
+                    type: array
+                    items: { $ref: '#/components/schemas/Licencia' }
+                  pcsQueYaLaTenian:
+                    type: array
+                    items: { type: string, format: uuid }
+                    description: "No es un error: marcar las diez PCs del carro cuando ocho ya estaban cargadas tiene que funcionar."
+        "400": { description: Sin PCs, nombre o días inválidos, o vencimiento declarado de más de una forma }
+
+  /api/inventory/licencias/renovar:
+    post:
+      tags: [inventory]
+      summary: Renovar varias licencias de una vez (Admin)
+      description: |
+        Es POST sobre un sub-recurso y no PATCH sobre cada licencia porque
+        renovar ocho máquinas es UNA acción: partirla en ocho requests dejaría
+        la pantalla con cuatro renovadas y cuatro no si se corta la conexión.
+
+        Las que todavía no tienen vencimiento cargado NO se renuevan: se
+        informan en `sinFechaPrevia`. Renovar mueve un contador que ya existe;
+        cargar la fecha por primera vez se hace con el PATCH, donde hay que
+        decir CÓMO se sabe. Sin esa guarda, "Renovar" sería la forma fácil de
+        sacarse de encima una licencia sin verificar poniéndole días que nadie
+        confirmó.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [licenciaIds]
+              properties:
+                licenciaIds:
+                  type: array
+                  minItems: 1
+                  items: { type: string, format: uuid }
+                renovadaEl:
+                  type: string
+                  format: date
+                  description: |
+                    Ausente = hoy, el caso normal. Con fecha, es el del olvido:
+                    se renovaron el martes y se cargan el jueves. El contador
+                    arranca en la fecha real, no en la de la carga.
+      responses:
+        "200":
+          description: Lote procesado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  renovadas:
+                    type: array
+                    items: { $ref: '#/components/schemas/Licencia' }
+                  sinFechaPrevia:
+                    type: array
+                    items: { type: string, format: uuid }
+        "400": { description: Sin licencias indicadas }
+        "404": { description: Alguna de las licencias no existe }
+
+  /api/inventory/licencias/{id}:
+    patch:
+      tags: [inventory]
+      summary: Editar una licencia, incluido su vencimiento (Admin)
+      description: |
+        El "editar el contador en cualquier momento" de RF-03.13: corregir una
+        fecha que quedó mal, cambiar la duración de 30 a 60 días, o cargar por
+        primera vez el vencimiento de una licencia dada de alta sin él.
+
+        Cambiar `diasDuracion` **no mueve** el vencimiento vigente: la licencia
+        instalada hoy se compró con las condiciones viejas y sigue venciendo
+        cuando vencía; lo que cambia es cuánto durará la próxima renovación.
+        Para recalcularlo ahora hay que mandar además `renovadaEl` con la
+        última renovación conocida — explícito, no como efecto colateral.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              allOf:
+                - type: object
+                  properties:
+                    nombre: { type: string, maxLength: 100 }
+                    diasDuracion: { type: integer, minimum: 1, maximum: 3650 }
+                    diasAviso: { type: integer, minimum: 0, maximum: 365 }
+                - $ref: '#/components/schemas/VencimientoDeclarado'
+      responses:
+        "200": { description: Licencia actualizada }
+        "400": { description: Datos inválidos, o vencimiento declarado de más de una forma }
+        "404": { description: La licencia no existe }
+        "409": { description: Esa PC ya tiene otra licencia con ese nombre }
+    delete:
+      tags: [inventory]
+      summary: Quitar una licencia (Admin)
+      description: |
+        Borrado real, no baja lógica: de una licencia no cuelga nada —ni
+        reservas, ni incidencias, ni historial— así que conservarla solo
+        dejaría ruido en la pantalla.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Licencia eliminada }
+        "404": { description: La licencia no existe }
+
+  /api/inventory/pcs/{pcId}/licencias:
+    get:
+      tags: [inventory]
+      summary: Licencias de una PC puntual (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: pcId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Listado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Licencia' }
 
   # ══════════════════════════════
   # RESERVATIONS

@@ -10,6 +10,7 @@ erDiagram
     USUARIO ||--o{ CODIGO_RECUPERACION : pide
     CARRO ||--o{ PC : contiene
     PC ||--o{ INCIDENCIA : registra
+    PC ||--o{ LICENCIA_SOFTWARE : tiene
     PC ||--o{ RESERVA : recibe
     CICLO_LECTIVO ||--o{ CURSO : contiene
     CURSO ||--o{ MATERIA : contiene
@@ -23,6 +24,7 @@ erDiagram
     CARRO { uuid id; string nombre; string descripcion }
     PC { uuid id; uuid carro_id; int identificador; string numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool dada_de_baja; timestamp fecha_alta }
     INCIDENCIA { uuid id; uuid pc_id; uuid reportado_por; string descripcion; string gravedad; timestamp fecha; bool enviado_dge; timestamp fecha_envio_dge; string estado }
+    LICENCIA_SOFTWARE { uuid id; uuid pc_id; string nombre; int dias_duracion; int dias_aviso; date fecha_vencimiento; date ultima_renovacion; uuid vencimiento_fijado_por; timestamp vencimiento_fijado_en; date avisado_previo_para; date avisado_vencimiento_para; timestamp creada_en }
     CICLO_LECTIVO { uuid id; int anio; bool activo; bool archivado }
     CURSO { uuid id; uuid ciclo_lectivo_id; string nombre; bool activo; bool archivado }
     MATERIA { uuid id; uuid curso_id; string nombre; bool activo; bool archivado }
@@ -201,6 +203,42 @@ CREATE INDEX idx_pc_carro_estado ON pc(carro_id, estado);
 CREATE INDEX idx_incidencia_pc ON incidencia(pc_id);
 ```
 
+### `licencia_software`
+Licencias de software con vencimiento periódico, una por (PC, software) — migración `012`. Ver RF-03.11 a RF-03.14.
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| pc_id | UUID | FK → pc.id **ON DELETE CASCADE**, NOT NULL |
+| nombre | VARCHAR(100) | NOT NULL, CHECK no vacío y sin espacios al borde |
+| dias_duracion | INTEGER | NOT NULL, CHECK entre 1 y 3650 |
+| dias_aviso | INTEGER | NOT NULL DEFAULT 1, CHECK entre 0 y 365 |
+| fecha_vencimiento | DATE | **NULL** = a verificar |
+| ultima_renovacion | DATE | NULL |
+| vencimiento_fijado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
+| vencimiento_fijado_en | TIMESTAMPTZ | NULL |
+| avisado_previo_para | DATE | NULL |
+| avisado_vencimiento_para | DATE | NULL |
+| creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+
+```sql
+CREATE UNIQUE INDEX ux_licencia_pc_nombre ON licencia_software (pc_id, lower(nombre));
+CREATE INDEX idx_licencia_vencimiento ON licencia_software (fecha_vencimiento)
+    WHERE fecha_vencimiento IS NOT NULL;
+```
+
+> **No hay ninguna columna con "los días que faltan".** El contador es `fecha_vencimiento - hoy`, calculado al leer (RF-03.12). Guardarlo obligaría a un job que lo decremente todos los días, y bastaría con que el servidor estuviera apagado uno para que quedara mal para siempre.
+
+> **`fecha_vencimiento` NULL significa "todavía no se verificó", no "no vence nunca".** Es el estado real de una licencia cargada antes de poder sentarse delante de la máquina. Con la columna `NOT NULL`, la única salida sería inventar una fecha — y la tentación es "se renovó hoy", que falla en la dirección peligrosa: si en realidad vencía en tres días, el sistema regala treinta de silencio justo cuando tendría que avisar.
+
+> **Las dos marcas de aviso guardan una FECHA, no un booleano:** la fecha de vencimiento para la que ya salió cada aviso. Eso hace idempotente al barrido sin estado extra ni resets — al renovar cambia `fecha_vencimiento`, las marcas dejan de coincidir solas y el ciclo nuevo vuelve a avisar. Reiniciar el contenedor diez veces en un día manda un mail.
+
+> **`vencimiento_fijado_en` no es `ultima_renovacion`.** La primera es cuándo se escribió en el sistema; la segunda, cuándo se renovó de verdad. La diferencia es el caso que motivó la funcionalidad: "la renové el martes y lo cargué el jueves". `ultima_renovacion` queda `NULL` cuando el vencimiento se fijó por otro camino (por los días que faltan, o escribiendo la fecha), porque deducirla sería inventar un dato.
+
+> **La unicidad es un índice funcional sobre `lower(nombre)`, no una columna normalizada** como el email de la migración `004`: acá el nombre se muestra en pantalla y en los correos, y pasarlo todo a minúsculas dejaría "autocad 2027" a la vista.
+
+> **`vencimiento_fijado_por` en `SET NULL`** por la misma razón que `regla_recurrencia.creado_por`: sin política de borrado, eliminar definitivamente a un usuario (RF-01.9) muere con un 500 arrastrado por esta FK.
+
 ### `regla_recurrencia`
 Representa el **patrón** temporal (materia + día de semana + horario + rango de fechas). No guarda las PCs: la relación con las PCs vive en los `reserva_grupo` que la regla materializa, uno por ocurrencia.
 
@@ -317,6 +355,7 @@ CREATE INDEX idx_reserva_creado_por ON reserva(creado_por);
 | usuario_id | UUID | FK → usuario.id **ON DELETE CASCADE**, NOT NULL |
 | reserva_id | UUID | FK → reserva.id **ON DELETE SET NULL**, NULL |
 | mensaje | TEXT | NOT NULL |
+| tipo | VARCHAR(30) | NOT NULL DEFAULT 'GENERAL', CHECK IN ('GENERAL','DOCENTE_PENDIENTE','RESERVA_CANCELADA','LICENCIA_POR_VENCER') |
 | estado | VARCHAR(10) | NOT NULL DEFAULT 'NO_LEIDA', CHECK IN ('NO_LEIDA','LEIDA') |
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 | leida_en | TIMESTAMPTZ | NULL |

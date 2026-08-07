@@ -17,13 +17,19 @@ type fakeRepo struct {
 	carros      map[string]*domain.Carro
 	pcs         map[string]*domain.PC
 	incidencias map[string]*domain.Incidencia
+	licencias   map[string]*domain.LicenciaSoftware
+	// errAlCrearLicenciaEnPC fuerza un fallo que NO es un duplicado, para
+	// probar que el lote corta ahí en vez de seguir como si nada.
+	errAlCrearLicenciaEnPC map[string]error
 }
 
 func nuevoFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		carros:      make(map[string]*domain.Carro),
-		pcs:         make(map[string]*domain.PC),
-		incidencias: make(map[string]*domain.Incidencia),
+		carros:                 make(map[string]*domain.Carro),
+		pcs:                    make(map[string]*domain.PC),
+		incidencias:            make(map[string]*domain.Incidencia),
+		licencias:              make(map[string]*domain.LicenciaSoftware),
+		errAlCrearLicenciaEnPC: make(map[string]error),
 	}
 }
 
@@ -106,6 +112,101 @@ func (r *fakeRepo) ListarIncidenciasPorPC(ctx context.Context, pcID string) ([]*
 		}
 	}
 	return resultado, nil
+}
+
+func (r *fakeRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
+	if err := r.errAlCrearLicenciaEnPC[l.PCID]; err != nil {
+		return err
+	}
+	// Mismo criterio que el índice funcional de la migración 012: única por
+	// PC sin distinguir mayúsculas.
+	for _, existente := range r.licencias {
+		if existente.PCID == l.PCID && strings.EqualFold(existente.Nombre, l.Nombre) {
+			return ErrLicenciaDuplicada
+		}
+	}
+	r.licencias[l.ID] = l
+	return nil
+}
+
+func (r *fakeRepo) BuscarLicenciaPorID(ctx context.Context, id string) (*domain.LicenciaSoftware, error) {
+	l, ok := r.licencias[id]
+	if !ok {
+		return nil, ErrLicenciaNoEncontrada
+	}
+	return l, nil
+}
+
+func (r *fakeRepo) GuardarLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
+	if _, ok := r.licencias[l.ID]; !ok {
+		return ErrLicenciaNoEncontrada
+	}
+	r.licencias[l.ID] = l
+	return nil
+}
+
+func (r *fakeRepo) BorrarLicencia(ctx context.Context, id string) error {
+	if _, ok := r.licencias[id]; !ok {
+		return ErrLicenciaNoEncontrada
+	}
+	delete(r.licencias, id)
+	return nil
+}
+
+func (r *fakeRepo) ListarLicenciasPorPC(ctx context.Context, pcID string) ([]*domain.LicenciaSoftware, error) {
+	var resultado []*domain.LicenciaSoftware
+	for _, l := range r.licencias {
+		if l.PCID == pcID {
+			resultado = append(resultado, l)
+		}
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) ListarLicencias(ctx context.Context) ([]*LicenciaConUbicacion, error) {
+	var resultado []*LicenciaConUbicacion
+	for _, l := range r.licencias {
+		resultado = append(resultado, r.conUbicacion(l))
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) ListarCandidatasAAviso(ctx context.Context, hoy time.Time) ([]*LicenciaConUbicacion, error) {
+	// El fake no reproduce el filtro grueso del SQL —eso se verifica contra
+	// Postgres real en infrastructure— pero sí lo único que cambiaría el
+	// resultado de un aviso: las PCs dadas de baja no cuentan.
+	var resultado []*LicenciaConUbicacion
+	for _, l := range r.licencias {
+		u := r.conUbicacion(l)
+		if u.PCDadaDeBaja {
+			continue
+		}
+		resultado = append(resultado, u)
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) MarcarAvisosEnviados(ctx context.Context, l *domain.LicenciaSoftware) error {
+	guardada, ok := r.licencias[l.ID]
+	if !ok {
+		return ErrLicenciaNoEncontrada
+	}
+	guardada.AvisadoPrevioPara = l.AvisadoPrevioPara
+	guardada.AvisadoVencimientoPara = l.AvisadoVencimientoPara
+	return nil
+}
+
+func (r *fakeRepo) conUbicacion(l *domain.LicenciaSoftware) *LicenciaConUbicacion {
+	u := &LicenciaConUbicacion{Licencia: l}
+	if pc, ok := r.pcs[l.PCID]; ok {
+		u.PCIdentificador = pc.Identificador
+		u.PCDadaDeBaja = pc.DadaDeBaja
+		u.CarroID = pc.CarroID
+		if carro, ok := r.carros[pc.CarroID]; ok {
+			u.CarroNombre = carro.Nombre
+		}
+	}
+	return u
 }
 
 // ── fakeValidadorReservas ───────────────────────────────────────────────

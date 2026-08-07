@@ -176,6 +176,26 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		})
 	})
 
+	// RF-05.9: hay licencias de software por vencer o ya vencidas. Lo
+	// dispara el barrido de inventory, no un request: es el único aviso del
+	// sistema que nace de un reloj y no de que alguien haya hecho algo.
+	bus.Subscribe("licencia.por-vencer", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.AvisoDeLicencias)
+		if !ok {
+			log.Printf("notification: payload inesperado para licencia.por-vencer: %+v", e.Payload)
+			return
+		}
+		if payload.Total() == 0 {
+			return
+		}
+		mensaje := mensajeDeLicencias(payload)
+		entregar("licencia.por-vencer", func(ctx context.Context) error {
+			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoLicenciaPorVencer,
+				domain.Referencias{})
+			return err
+		})
+	})
+
 	// RF-05.1/05.2/05.3: una reserva puntual se canceló (manual,
 	// evaluación estatal, o cambio de estado de PC) — el mismo evento
 	// cubre los tres casos, el motivo ya viene armado desde reservation.
