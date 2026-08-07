@@ -16,7 +16,7 @@ function pc(over: Partial<PC> = {}): PC {
     id: "pc1",
     carroId: "c1",
     identificador: 1,
-    numeroSerie: 12345,
+    numeroSerie: "5CD1234ABC",
     freezado: false,
     estado: "DISPONIBLE",
     dadaDeBaja: false,
@@ -185,13 +185,15 @@ describe("InventarioAdminPage", () => {
     await abrirCarro(user)
 
     await user.type(await screen.findByLabelText("Identificador"), "7")
-    await user.type(screen.getByLabelText("Número de serie"), "998877")
+    // Con letras: es como son los de fábrica, y exigirle dígitos era lo que
+    // impedía cargar una PC con el dato real de la etiqueta.
+    await user.type(screen.getByLabelText("Número de serie"), "PF2K9L3M")
     await user.type(screen.getByLabelText("Software instalado"), "AutoCAD 2027")
     await user.click(screen.getByRole("button", { name: "Agregar PC" }))
 
     expect(adminApi.crearPC).toHaveBeenCalledWith("c1", {
       identificador: 7,
-      numeroSerie: 998877,
+      numeroSerie: "PF2K9L3M",
       freezado: false,
       cpu: undefined,
       ram: undefined,
@@ -200,19 +202,34 @@ describe("InventarioAdminPage", () => {
     })
   })
 
-  // Los dos son enteros (RF-03.2). Sin este chequeo, Number("abc") manda
-  // NaN y el backend responde un 400 que no explica cuál de los dos campos
-  // está mal.
+  // El identificador SÍ es entero: es el número pintado en la máquina, lo
+  // elige la escuela. Sin este chequeo, Number("siete") manda NaN y el
+  // backend responde un 400 que no dice cuál de los dos campos está mal.
   it("no deja agregar una PC con identificador no numérico", async () => {
     const user = userEvent.setup()
     renderPagina()
     await abrirCarro(user)
 
     await user.type(await screen.findByLabelText("Identificador"), "siete")
-    await user.type(screen.getByLabelText("Número de serie"), "998877")
+    await user.type(screen.getByLabelText("Número de serie"), "PF2K9L3M")
 
-    expect(screen.getByText(/números enteros/)).toBeInTheDocument()
+    expect(screen.getByText(/número entero/)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Agregar PC" })).toBeDisabled()
+  })
+
+  // Y el número de serie NO: la regla vale en la otra dirección, y esta es
+  // la que rompía. Un identificador válido con una serie alfanumérica tiene
+  // que dejar habilitado el botón.
+  it("acepta un número de serie con letras", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await abrirCarro(user)
+
+    await user.type(await screen.findByLabelText("Identificador"), "7")
+    await user.type(screen.getByLabelText("Número de serie"), "5CD1234ABC")
+
+    expect(screen.queryByText(/número entero/)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Agregar PC" })).toBeEnabled()
   })
 
   // ── Edición de PCs (RF-03.4 / RF-03.10) ──────────────────────────────

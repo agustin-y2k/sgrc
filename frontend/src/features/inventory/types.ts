@@ -14,7 +14,7 @@ export type PC = {
   id: string
   carroId: string
   identificador: number
-  numeroSerie: number
+  numeroSerie: string
   freezado: boolean
   cpu?: string
   ram?: string

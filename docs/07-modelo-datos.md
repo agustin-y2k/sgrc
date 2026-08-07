@@ -21,7 +21,7 @@ erDiagram
 
     USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; string rol; string estado; timestamp fecha_registro; uuid aprobado_por; string curso_solicitado; string materia_solicitada; int version_sesion }
     CARRO { uuid id; string nombre; string descripcion }
-    PC { uuid id; uuid carro_id; int identificador; bigint numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool dada_de_baja; timestamp fecha_alta }
+    PC { uuid id; uuid carro_id; int identificador; string numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool dada_de_baja; timestamp fecha_alta }
     INCIDENCIA { uuid id; uuid pc_id; uuid reportado_por; string descripcion; string gravedad; timestamp fecha; bool enviado_dge; timestamp fecha_envio_dge; string estado }
     CICLO_LECTIVO { uuid id; int anio; bool activo; bool archivado }
     CURSO { uuid id; uuid ciclo_lectivo_id; string nombre; bool activo; bool archivado }
@@ -154,7 +154,7 @@ CREATE INDEX idx_materia_curso ON materia(curso_id);
 | id | UUID | PK |
 | carro_id | UUID | FK → carro.id, NOT NULL |
 | identificador | INTEGER | NOT NULL |
-| numero_serie | BIGINT | UNIQUE, NOT NULL |
+| numero_serie | VARCHAR(50) | UNIQUE, NOT NULL, CHECK no vacío y en forma canónica |
 | freezado | BOOLEAN | NOT NULL DEFAULT false |
 | cpu | VARCHAR(100) | NULL |
 | ram | VARCHAR(20) | NULL |
@@ -166,7 +166,7 @@ CREATE INDEX idx_materia_curso ON materia(curso_id);
 | fecha_alta | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 | | | UNIQUE (carro_id, identificador) |
 
-> `identificador` es un número entero (ej: "PC 27"), único **dentro de su carro** — puede repetirse entre carros distintos (el Carro 1 y el Carro 2 pueden tener cada uno una "PC 27"; lo que las distingue es la combinación carro+identificador). `numero_serie` es distinto: es el número de serie real de fábrica, entero largo, **único en toda la tabla** sin importar el carro — dos PCs nunca pueden compartir uno.
+> `identificador` es un número entero (ej: "PC 27"), único **dentro de su carro** — puede repetirse entre carros distintos (el Carro 1 y el Carro 2 pueden tener cada uno una "PC 27"; lo que las distingue es la combinación carro+identificador). `numero_serie` es distinto: es el de fábrica, **único en toda la tabla** sin importar el carro — dos PCs nunca pueden compartir uno. Y a pesar del nombre **es texto**, porque los códigos de fábrica llevan letras (`5CD1234ABC`); era `BIGINT` hasta la migración 011, y eso hacía imposible cargar una PC con el número que dice su etiqueta. Se guarda normalizado (mayúsculas, sin espacios al borde) y la base lo exige con un CHECK: sin forma canónica, la misma máquina cargada dos veces con distinta caja son dos filas para el UNIQUE.
 >
 > `freezado`: indica si la PC tiene Deep Freeze (u otro software equivalente) instalado. Es **metadata informativa** para el admin/técnico — no restringe reservas ni ningún otro flujo. Se muestra a **todos los usuarios autenticados** (no solo Admin): un docente necesita saber, por ejemplo, qué PCs tienen AutoCAD 2007 vs AutoCAD 2027 antes de elegir cuáles reservar — ese dato vive en `software_instalado` (texto libre), y `software_instalado` + `freezado` + `estado` son visibles al listar PCs para cualquier rol.
 >

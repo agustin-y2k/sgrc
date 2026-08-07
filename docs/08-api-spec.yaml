@@ -199,7 +199,7 @@ components:
         id: { type: string, format: uuid }
         carroId: { type: string, format: uuid }
         identificador: { type: integer, description: "Único dentro del carro, no globalmente — puede repetirse en otro carro", example: 27 }
-        numeroSerie: { type: integer, format: int64, description: "Número de serie de fábrica, único en toda la institución" }
+        numeroSerie: { type: string, maxLength: 50, example: "5CD1234ABC", description: "Número de serie de fábrica, único en toda la institución. Alfanumérico: se guarda en mayúsculas y sin espacios al borde, así que la respuesta puede diferir de lo enviado" }
         freezado: { type: boolean, description: "Informativo: indica si tiene Deep Freeze instalado. Sin efecto funcional sobre reservas." }
         cpu: { type: string, nullable: true }
         ram: { type: string, nullable: true }
@@ -1292,7 +1292,7 @@ paths:
               required: [identificador, numeroSerie]
               properties:
                 identificador: { type: integer, example: 27 }
-                numeroSerie: { type: integer, format: int64, description: "Número de serie de fábrica, único en toda la institución" }
+                numeroSerie: { type: string, maxLength: 50, example: "5CD1234ABC", description: "Número de serie de fábrica, único en toda la institución. Alfanumérico: se guarda en mayúsculas y sin espacios al borde, así que la respuesta puede diferir de lo enviado" }
                 freezado: { type: boolean, default: false, description: "Informativo: tiene Deep Freeze instalado" }
                 cpu: { type: string }
                 ram: { type: string }
@@ -1320,7 +1320,7 @@ paths:
               properties:
                 carroId: { type: string, format: uuid, description: "Mueve la PC a otro carro (RF-03.10). El identificador debe seguir siendo único en el carro destino." }
                 identificador: { type: integer, description: "Único dentro del carro (el actual o el destino, si también se mueve)" }
-                numeroSerie: { type: integer, format: int64, description: "Único en toda la institución" }
+                numeroSerie: { type: string, maxLength: 50, example: "5CD1234ABC", description: "Único en toda la institución" }
                 freezado: { type: boolean }
                 cpu: { type: string }
                 ram: { type: string }
