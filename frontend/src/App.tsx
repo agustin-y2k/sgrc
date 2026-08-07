@@ -7,6 +7,7 @@ import { CambiarPasswordPage } from "@/features/auth/CambiarPasswordPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { RecuperarPasswordPage } from "@/features/auth/RecuperarPasswordPage"
 import { RegistroPage } from "@/features/auth/RegistroPage"
+import { EntregasPage } from "@/features/admin/EntregasPage"
 import { InventarioAdminPage } from "@/features/admin/InventarioAdminPage"
 import { LicenciasPage } from "@/features/admin/LicenciasPage"
 import { ReportesPage } from "@/features/admin/ReportesPage"
@@ -58,6 +59,7 @@ const router = createBrowserRouter([
               { path: "/admin/usuarios", element: <UsuariosPage /> },
               { path: "/admin/inventario", element: <InventarioAdminPage /> },
               { path: "/admin/licencias", element: <LicenciasPage /> },
+              { path: "/admin/entregas", element: <EntregasPage /> },
               { path: "/admin/reportes", element: <ReportesPage /> },
               {
                 path: "/admin/bloqueo-evaluacion",

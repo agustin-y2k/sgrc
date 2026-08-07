@@ -155,9 +155,16 @@ func (r *PostgresRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoI
 // anticipado de solapamiento como para el bloqueo por evaluación (RF-04.7) y
 // la cascada de cancelación de inventory/academic.
 func (r *PostgresRepo) ListarReservasFuturasDePC(ctx context.Context, pcID string, desde time.Time) ([]*domain.Reserva, error) {
+	// ORDER BY: quien llama puede necesitar LA PRÓXIMA, no una cualquiera.
+	// Sin él, el aviso de "esta PC tiene una reserva encima" que sale al
+	// entregarla suelta podía nombrar la reserva de la semana siguiente en
+	// vez de la de dentro de una hora, que es la única que le importa a
+	// quien está en el mostrador. Las cascadas de cancelación no dependen
+	// del orden, así que esto no les cambia nada.
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
 		WHERE pc_id = $1 AND `+condicionNoTerminada("$2", "$3")+` AND estado = 'CONFIRMADA'
+		ORDER BY fecha, hora_inicio
 	`, pcID, desde, desde)
 	if err != nil {
 		if esIDInvalido(err) {

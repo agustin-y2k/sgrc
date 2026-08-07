@@ -256,3 +256,91 @@ export type ResultadoBloqueoEvaluacion = {
   reservasCanceladas: number
   docentesNotificados: number
 }
+
+// ── Entregas y devoluciones (RF-08) ───────────────────────────────────
+//
+// Espeja internal/reservation/interfaces/http/dto_prestamos.go.
+//
+// Un `Prestamo` NO es una reserva, y la diferencia es la razón de ser de
+// todo esto: la reserva es el derecho a usar una PC en una franja, el
+// préstamo es dónde está la máquina ahora. Existen por separado —hay
+// reservas que nadie vino a buscar y préstamos sin reserva detrás— y por eso
+// son dos cosas distintas también acá.
+
+export type Prestamo = {
+  id: string
+  pcId: string
+  /** Ausente = préstamo espontáneo, sin reserva detrás. */
+  reservaId?: string
+
+  entregadoAUsuarioId?: string
+  entregadoANombre: string
+  motivo?: string
+
+  /** ISO 8601. Ausente = no se pactó hora; no se le reclama nada. */
+  devolucionEstimada?: string
+  entregadoPor?: string
+  entregadoEn: string
+  /** Ausente = la máquina todavía está afuera. */
+  devueltoEn?: string
+  recibidoPor?: string
+  observaciones?: string
+
+  /**
+   * Derivados: los calcula el backend contra su propio reloj. Vienen
+   * resueltos por la misma razón que el contador de las licencias — si los
+   * calculara el navegador, un reloj corrido mostraría una demora distinta
+   * de la que el sistema va a reclamar.
+   */
+  abierto: boolean
+  demorado: boolean
+  minutosDeDemora?: number
+
+  /** Ubicación. Solo viene en los listados. */
+  pcIdentificador?: number
+  carroNombre?: string
+  /** Solo en préstamos que salieron contra una reserva. */
+  materiaNombre?: string
+}
+
+/**
+ * Por qué una PC del lote no salió. El código permite ofrecer la acción que
+ * corresponde: "ver quién la tiene" no es lo mismo que "revisá el
+ * inventario".
+ */
+export type RazonNoEntregada =
+  | "YA_ENTREGADA"
+  | "FUERA_DEL_INVENTARIO"
+  | "RESERVA_CANCELADA"
+  /** La reserva no dice a nombre de quién: es un bloqueo por evaluación. */
+  | "SIN_DESTINATARIO"
+
+export type PCNoEntregada = {
+  pcId: string
+  razon: RazonNoEntregada
+  detalle: string
+}
+
+/**
+ * Aviso de que una máquina recién entregada tiene una reserva encima. No
+ * impidió nada: es información para que el Admin decida. El sistema no sabe
+ * cuánto va a durar un trámite.
+ */
+export type ReservaProxima = {
+  pcId: string
+  fecha: string
+  horaInicio: string
+  horaFin: string
+  docente?: string
+}
+
+export type ResultadoEntrega = {
+  entregadas: Prestamo[]
+  noEntregadas?: PCNoEntregada[]
+  avisos?: ReservaProxima[]
+}
+
+export type ResultadoDevolucion = {
+  recibidos: Prestamo[]
+  noRecibidos?: { prestamoId: string; detalle: string }[]
+}

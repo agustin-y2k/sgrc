@@ -155,6 +155,23 @@ flowchart LR
   5. Admin puede dar de baja una PC del inventario (soft delete: deja de listarse y de poder reservarse, pero su historial de incidencias y reservas pasadas se conserva).
 - **Visibilidad:** el listado de carros/PCs (incluyendo `software_instalado` y `freezado`) es visible para **cualquier usuario autenticado**, no solo Admin — un docente lo necesita para elegir bien qué PCs reservar (ej: cuáles tienen la versión de AutoCAD que su clase requiere).
 
+### UC: Entregar y recibir computadoras
+- **Actor:** Admin
+- **Motivo:** hoy esto se anota en un papel. El papel no puede impedir que la misma máquina figure entregada dos veces, ni avisar que alguien devolvió y nadie tachó el renglón.
+- **Flujo (contra una reserva):**
+  1. Admin ve las reservas del día que todavía no se retiraron.
+  2. Marca las PCs que entrega —pueden ser algunas, no necesariamente todas— y confirma. La hora en que deben volver sale del fin de la reserva.
+  3. Si las vino a buscar otra persona (un alumno, un colega), lo anota.
+  4. Cuando vuelven, Admin las recibe. Puede recibir varias juntas o de a una, y anotar observaciones ("volvió sin el cargador").
+- **Flujo (espontáneo):** alguien pide una computadora en el momento para un trámite. Admin elige la máquina, escribe a quién y para qué, y opcionalmente cuándo la devuelve. Si esa PC tiene una reserva próxima, el sistema lo avisa pero no lo impide.
+- **Reglas que no son obvias:**
+  - **Una PC no puede tener dos entregas abiertas** (garantía de la base, no del código de pantalla).
+  - **Dónde está cada máquina se deriva**, no se guarda: no hay estado "prestada" en la PC.
+  - **Quien recibe la computadora no necesita tener cuenta**: el nombre se escribe a mano, porque quien viene a hacer un trámite muchas veces no es un docente.
+  - **Sin hora de devolución no se reclama nada**: "vengo en un rato" es una respuesta válida.
+  - **Se puede entregar una PC en mantenimiento** (llevarla al técnico es un préstamo); no una dada de baja.
+- **Visibilidad:** solo Admin, incluidas las lecturas. Que un docente pudiera marcarse la entrega a sí mismo convertiría el registro en una declaración en vez de en una constancia.
+
 ### UC: Llevar el vencimiento de las licencias de software
 - **Actor:** Admin (y el reloj: el aviso no lo dispara nadie)
 - **Motivo:** una PC del carro tiene AutoCAD con licencia que vence cada 30 días. Cuando vence, el programa deja de abrir. Sin contador, el Admin se entera el día que un docente no puede dar la clase.

@@ -18,19 +18,25 @@ import (
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
-	grupos   map[string]*domain.ReservaGrupo
-	reservas map[string]*domain.Reserva
-	reglas   map[string]*domain.ReglaRecurrencia
+	grupos    map[string]*domain.ReservaGrupo
+	reservas  map[string]*domain.Reserva
+	reglas    map[string]*domain.ReglaRecurrencia
+	prestamos map[string]*domain.Prestamo
 
 	errCrearReserva error
 	pcsDisponibles  []PCDisponible
+	// pcsDadasDeBaja imita lo único que el servicio le pregunta a
+	// inventory antes de entregar una máquina.
+	pcsDadasDeBaja map[string]bool
 }
 
 func nuevoFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		grupos:   make(map[string]*domain.ReservaGrupo),
-		reservas: make(map[string]*domain.Reserva),
-		reglas:   make(map[string]*domain.ReglaRecurrencia),
+		grupos:         make(map[string]*domain.ReservaGrupo),
+		reservas:       make(map[string]*domain.Reserva),
+		reglas:         make(map[string]*domain.ReglaRecurrencia),
+		prestamos:      make(map[string]*domain.Prestamo),
+		pcsDadasDeBaja: make(map[string]bool),
 	}
 }
 
@@ -53,14 +59,99 @@ func (r *fakeRepo) EnTransaccion(ctx context.Context, fn func(Repo) error) error
 		copia := *v
 		reglasAntes[k] = &copia
 	}
+	prestamosAntes := make(map[string]*domain.Prestamo, len(r.prestamos))
+	for k, v := range r.prestamos {
+		copia := *v
+		prestamosAntes[k] = &copia
+	}
 
 	if err := fn(r); err != nil {
 		r.grupos = gruposAntes
 		r.reservas = reservasAntes
 		r.reglas = reglasAntes
+		r.prestamos = prestamosAntes
 		return err
 	}
 	return nil
+}
+
+// ── Préstamos ───────────────────────────────────────────────────────────
+
+// CrearPrestamo reproduce el índice único parcial de la migración 013: una
+// PC no puede tener dos préstamos abiertos. Sin eso el fake daría verde en
+// el escenario que la base real rechaza.
+func (r *fakeRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) error {
+	for _, existente := range r.prestamos {
+		if existente.PCID == p.PCID && existente.EstaAbierto() {
+			return ErrPCYaPrestada
+		}
+	}
+	copia := *p
+	r.prestamos[p.ID] = &copia
+	return nil
+}
+
+func (r *fakeRepo) BuscarPrestamoPorID(ctx context.Context, id string) (*domain.Prestamo, error) {
+	p, ok := r.prestamos[id]
+	if !ok {
+		return nil, ErrPrestamoNoEncontrado
+	}
+	copia := *p
+	return &copia, nil
+}
+
+func (r *fakeRepo) GuardarPrestamo(ctx context.Context, p *domain.Prestamo) error {
+	if _, ok := r.prestamos[p.ID]; !ok {
+		return ErrPrestamoNoEncontrado
+	}
+	copia := *p
+	r.prestamos[p.ID] = &copia
+	return nil
+}
+
+func (r *fakeRepo) BuscarPrestamoAbiertoDePC(ctx context.Context, pcID string) (*domain.Prestamo, error) {
+	for _, p := range r.prestamos {
+		if p.PCID == pcID && p.EstaAbierto() {
+			copia := *p
+			return &copia, nil
+		}
+	}
+	return nil, ErrPrestamoNoEncontrado
+}
+
+func (r *fakeRepo) ListarPrestamosAbiertos(ctx context.Context) ([]*PrestamoDetallado, error) {
+	var resultado []*PrestamoDetallado
+	for _, p := range r.prestamosEnOrden() {
+		if p.EstaAbierto() {
+			resultado = append(resultado, &PrestamoDetallado{Prestamo: p})
+		}
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) ListarPrestamosDePC(ctx context.Context, pcID string, limite int) ([]*PrestamoDetallado, error) {
+	var resultado []*PrestamoDetallado
+	for _, p := range r.prestamosEnOrden() {
+		if p.PCID == pcID && len(resultado) < limite {
+			resultado = append(resultado, &PrestamoDetallado{Prestamo: p})
+		}
+	}
+	return resultado, nil
+}
+
+// prestamosEnOrden da un recorrido estable: iterar un map en Go es aleatorio
+// y haría que un test que compara listas falle una vez cada tanto.
+func (r *fakeRepo) prestamosEnOrden() []*domain.Prestamo {
+	ids := make([]string, 0, len(r.prestamos))
+	for id := range r.prestamos {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	resultado := make([]*domain.Prestamo, 0, len(ids))
+	for _, id := range ids {
+		resultado = append(resultado, r.prestamos[id])
+	}
+	return resultado
 }
 
 func (r *fakeRepo) ListarReservas(ctx context.Context, f FiltroReservas) ([]ReservaDetallada, int, error) {
@@ -185,6 +276,15 @@ func (r *fakeRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoID st
 	}
 	return resultado, nil
 }
+
+// ListarReservasFuturasDePC devuelve ORDENADO por fecha y hora, como el repo
+// real: quien llama puede necesitar LA PRÓXIMA, no una cualquiera. Iterar el
+// map sin ordenar daba un resultado distinto en cada corrida y escondía esa
+// dependencia.
+//
+// El filtro temporal (que la reserva no haya terminado) NO se reproduce acá
+// —lo verifica el test de infrastructure contra Postgres—, así que los tests
+// de este paquete usan fechas futuras a propósito.
 func (r *fakeRepo) ListarReservasFuturasDePC(ctx context.Context, pcID string, desde time.Time) ([]*domain.Reserva, error) {
 	var resultado []*domain.Reserva
 	for _, res := range r.reservas {
@@ -192,6 +292,12 @@ func (r *fakeRepo) ListarReservasFuturasDePC(ctx context.Context, pcID string, d
 			resultado = append(resultado, res)
 		}
 	}
+	sort.Slice(resultado, func(i, j int) bool {
+		if !resultado[i].Fecha.Equal(resultado[j].Fecha) {
+			return resultado[i].Fecha.Before(resultado[j].Fecha)
+		}
+		return resultado[i].HoraInicio < resultado[j].HoraInicio
+	})
 	return resultado, nil
 }
 func (r *fakeRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID string, desde time.Time) ([]*domain.Reserva, error) {
@@ -254,10 +360,19 @@ func (f *fakeValidadorMateria) DocenteEstaAsignado(ctx context.Context, materiaI
 type fakeValidadorPC struct {
 	disponible         bool
 	errIdentificadores error
+	// fueraDelInventario: PCs dadas de baja. Es lo único que distingue
+	// "no se puede reservar" de "no se puede ni entregar".
+	fueraDelInventario map[string]bool
 }
 
 func (f *fakeValidadorPC) PCDisponibleParaReservar(ctx context.Context, pcID string) (bool, error) {
 	return f.disponible, nil
+}
+
+// PCEstaEnInventario es más laxo: una PC en mantenimiento no se puede
+// reservar pero sí se le puede entregar al técnico.
+func (f *fakeValidadorPC) PCEstaEnInventario(ctx context.Context, pcID string) (bool, error) {
+	return !f.fueraDelInventario[pcID], nil
 }
 
 // IdentificadoresDePCs: en los tests las PCs se llaman "pc1", "pc2"… así que

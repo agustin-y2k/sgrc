@@ -54,6 +54,24 @@ classDiagram
         +renovar(fecha, por, ahora)
     }
 
+    class Prestamo {
+        +UUID id
+        +UUID pcId
+        +UUID reservaId
+        +UUID entregadoAUsuarioId
+        +string entregadoANombre
+        +string motivo
+        +DateTime devolucionEstimada
+        +UUID entregadoPor
+        +DateTime entregadoEn
+        +DateTime devueltoEn
+        +UUID recibidoPor
+        +string observaciones
+        +estaAbierto() bool
+        +demorado(ahora) bool
+        +devolver(quien, obs, ahora)
+    }
+
     class Incidencia {
         +UUID id
         +UUID pcId
@@ -185,6 +203,8 @@ classDiagram
     Carro "1" --> "N" PC
     PC "1" --> "N" Incidencia
     PC "1" --> "N" LicenciaSoftware
+    PC "1" --> "N" Prestamo
+    Reserva "1" --> "N" Prestamo
     PC "1" --> "N" Reserva
     CicloLectivo "1" --> "N" Curso
     Curso "1" --> "N" Materia
@@ -231,6 +251,7 @@ classDiagram
 - **`HistoricoUsoPC` / `HistoricoUsoDocente`**: snapshot agregado permanente, calculado una sola vez al archivar un ciclo (no sincronizado continuamente). Es la única fuente de estadísticas para años ya cerrados, porque el detalle de sus reservas ya no existe.
 - **`PC.dadaDeBaja` / `PC.fechaBaja`**: "eliminar" una PC desde la UI es en realidad un soft delete — se oculta de listados activos y no puede reservarse, pero conserva su historial de incidencias y reservas pasadas (mientras esas reservas no se hayan borrado por archivado de su materia).
 - **`HorarioAdmin` es un patrón recurrente simple, sin versionar**: a diferencia de `ReglaRecurrencia` (que materializa una fila por ocurrencia porque cada una puede reservarse/cancelarse individualmente), acá no hace falta — es solo información para calcular "¿está disponible ahora?" en el momento de la consulta. Editar un bloque cambia el patrón para todas las semanas futuras de inmediato.
+- **`Prestamo` no es `Reserva`**: la reserva es el derecho a usar una PC en una franja, el préstamo es quién tiene la máquina *ahora*. Existen por separado —reservas que nadie retiró, préstamos sin reserva, préstamos que sobreviven a su reserva—, y por eso tampoco hay un estado "prestada" en `PC`: se deriva de si hay un préstamo con `devueltoEn` en `null`. Lo que se guarda por duplicado se desincroniza, que es el defecto del papel que esto reemplaza.
 - **`LicenciaSoftware` no guarda "los días que faltan"**: `diasRestantes()` los calcula contra la fecha de hoy cada vez (RF-03.12). Un contador guardado necesitaría que alguien lo decremente todos los días, y bastaría un día de servidor apagado para dejarlo mal para siempre. Por lo mismo, `fechaVencimiento` en `null` significa "todavía no se verificó contra la máquina" y **no** "no vence nunca": es un estado legítimo, no un dato faltante que haya que completar con una fecha inventada.
 - **`avisadoPrevioPara` / `avisadoVencimientoPara` guardan una fecha, no un booleano**: la fecha de vencimiento para la que ya salió cada aviso. Es lo que hace idempotente al barrido sin resetear nada — al renovar cambia `fechaVencimiento`, las marcas dejan de coincidir solas, y el ciclo nuevo vuelve a avisar.
 - **`HorarioAdminExcepcion`**: cubre tanto una excepción planificada (horario distinto un día puntual) como el botón rápido "marcarme no disponible ahora" (que es, puertas adentro, la misma fila con `tipo=NO_DISPONIBLE` y `fecha=hoy`). Si existe una excepción para la fecha consultada, siempre pisa al patrón semanal de `HorarioAdmin`.

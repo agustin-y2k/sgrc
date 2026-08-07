@@ -148,6 +148,26 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 - RF-07.5: Un `ADMIN` puede marcarse manualmente como **"no disponible ahora"** en cualquier momento, incluso dentro de su horario habitual (ej: llegó tarde, está ausente ese día) — técnicamente es una excepción puntual para la fecha de hoy (RF-07.4), pero expuesta como una acción rápida de un solo paso.
 - RF-07.6: Esta disponibilidad es **puramente informativa**: no restringe ni habilita ninguna otra funcionalidad del sistema — aprobar cuentas, reservar, cancelar, etc. funcionan exactamente igual sin importar si el Admin figura disponible o no en ese momento.
 
+### RF-08 — Entregas y devoluciones de PCs (`ADMIN`)
+
+> Reemplaza el papel en el que hoy los Admin anotan qué computadoras se lleva cada docente y cuáles devuelve.
+>
+> **La distinción que lo sostiene todo:** una **reserva** es el derecho a usar una PC en una franja; un **préstamo** es quién tiene la máquina *ahora*. No son lo mismo, y los tres casos de la escuela lo demuestran: hay reservas que nadie vino a buscar, hay préstamos sin reserva detrás (alguien pide una PC para un trámite), y hay préstamos que sobreviven a su reserva (la clase terminó y las máquinas no volvieron).
+
+- RF-08.1: `ADMIN` registra la **entrega** de una o varias PCs, con o sin reserva detrás. Queda anotado a quién, quién la entregó y cuándo. La persona que se la lleva **no necesita tener cuenta** en el sistema: puede ser secretaría, preceptoría o un alumno, que es justo quien viene a pedir una máquina para un trámite. El nombre se guarda siempre, aunque además haya cuenta — es un snapshot, para que el registro siga diciendo quién se la llevó si esa cuenta se elimina (RF-01.9).
+- RF-08.2: Una PC **no puede tener dos entregas abiertas a la vez**. Es la garantía que el papel no puede dar: que dos Admin anoten la misma máquina, o que nadie vea que ya estaba afuera, no lo detecta nadie hasta que aparece un docente sin computadora.
+- RF-08.3: **"¿Dónde está la PC 3?" se deriva, no se guarda.** No hay ninguna columna en `pc` que diga "prestada": el estado sale de si existe una entrega sin devolver. Por eso no puede desincronizarse, que es exactamente lo que le pasa al papel cuando alguien devuelve una máquina y nadie tacha el renglón.
+- RF-08.4: La entrega es **máquina por máquina**, no de a reserva completa: el docente puede llevarse tres de las cinco que reservó, y las otras dos siguen disponibles para otro. Al entregar contra una reserva, la hora en que deben volver sale del fin de esa reserva — no se pide.
+- RF-08.5: Puede registrarse que **se las llevó otra persona** (el docente manda a un alumno o a un colega). En ese caso el aviso de devolución no queda atado al docente de la reserva, porque no es quien tiene la máquina.
+- RF-08.6: En una entrega **espontánea** la hora de devolución es **opcional**: "vengo en un rato" es una respuesta honesta, y una hora inventada solo generaría reclamos falsos. Sin ella, a esa máquina no se le reclama nada. Si la PC entregada tiene una reserva próxima, el sistema **avisa pero no impide** — no sabe cuánto va a durar un trámite, así que la decisión es del Admin.
+- RF-08.7: `ADMIN` registra la **devolución**, con observaciones libres ("volvió sin el cargador"). Devolver tres de cuatro no necesita nada especial: la cuarta simplemente sigue figurando afuera. Recibir dos veces la misma máquina **no es un error que corte nada** —pasa con dos Admin en el mostrador o un doble clic— y se informa.
+- RF-08.8: Se conserva el **historial de entregas de cada PC**, que sobrevive al archivado del ciclo lectivo: al borrarse las reservas (RF-02.4) el préstamo queda sin reserva asociada, pero el registro de quién se llevó la máquina vale por sí mismo.
+- RF-08.9: Todo esto es **solo `ADMIN`**, incluidas las lecturas. Que un docente pudiera marcarse la entrega a sí mismo convertiría el registro en una declaración en vez de en una constancia, que es justo lo que hace confiable al papel.
+
+> **Un bloqueo por evaluación estatal (RF-04.7) no tiene docente**, así que no puede entregarse sin decir a nombre de quién: se informa por PC —no corta el lote— y con un nombre escrito a mano sí se entrega. Alguien tiene que retirar las máquinas de una mesa de examen.
+
+> **Se puede entregar una PC en `EN_MANTENIMIENTO` o `FUERA_DE_SERVICIO`**, a diferencia de reservarla: llevarle una máquina rota al técnico es justamente un préstamo, y prohibirlo obligaría a sacarla del inventario para poder anotarlo. Lo único que se rechaza es entregar una PC **dada de baja**.
+
 ## 6. Requerimientos no funcionales
 | ID | Requerimiento |
 |---|---|
