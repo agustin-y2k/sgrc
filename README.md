@@ -37,6 +37,7 @@ SGRC resuelve los tres: **impide el solapamiento a nivel de base de datos** (no 
 | | |
 |---|---|
 | **Inventario** | Carros, PCs, número de serie, procesador, memoria, software instalado y estado (disponible, en mantenimiento, fuera de servicio). |
+| **Licencias de software** | Qué programas con vencimiento hay en cada PC y cuántos días le quedan a cada uno. El día antes de que venza —y el día que vence— llega un mail a todos los administradores. Si la licencia se renovó otro día, o si hay que corregir la fecha, se edita en cualquier momento. |
 | **Ciclo lectivo** | Años, cursos, materias y qué docente dicta cada una. Al cerrar el año, el sistema guarda un resumen histórico permanente. |
 | **Aprobación de cuentas** | Un docente se registra solo —con email y contraseña, o con su cuenta de Google— pero no entra hasta que alguien lo aprueba. Un docente aprobado también puede recibir permisos de Admin, y perderlos sin que se le cierre la cuenta. |
 | **Bloqueo por evaluación** | Reserva las máquinas para una prueba estatal y cancela automáticamente lo que se pisa, notificando a cada docente afectado. |

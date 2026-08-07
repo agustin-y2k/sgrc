@@ -58,3 +58,99 @@ export type Incidencia = {
 
 // Los listados del backend responden { data: [...] }.
 export type RespuestaLista<T> = { data: T[] }
+
+/**
+ * RF-03.11 — una licencia de software con vencimiento periódico, instalada
+ * en una PC puntual.
+ *
+ * Hay una fila por (PC, software): el mismo AutoCAD en las ocho PCs de un
+ * carro son ocho licencias. Se modeló así porque el caso a cubrir es
+ * justamente el desfasaje —una máquina que quedó sin renovar mientras las
+ * demás sí—, y por eso el alta y la renovación son masivas en la pantalla.
+ *
+ * A diferencia de `PC.softwareInstalado`, que es texto libre y lo ve el
+ * docente al elegir qué reservar, esto es solo de Admin. Los dos conviven:
+ * uno describe qué hay en la máquina, el otro lleva el vencimiento.
+ */
+export type EstadoLicencia = "SIN_FECHA" | "VENCIDA" | "POR_VENCER" | "VIGENTE"
+
+export type Licencia = {
+  id: string
+  pcId: string
+  nombre: string
+  /** Cuánto dura una renovación. Es el paso del botón "Renovar". */
+  diasDuracion: number
+  /** Con cuánta antelación avisar. 0 = avisar recién el día que vence. */
+  diasAviso: number
+
+  /**
+   * Ausente significa "a verificar", NO "no vence nunca". Es el estado de
+   * una licencia cargada antes de haberse podido sentar delante de la
+   * máquina; el job de avisos las ignora y la pantalla las pone primero.
+   */
+  fechaVencimiento?: string
+  /**
+   * Cuándo se renovó de verdad, que puede no ser cuándo se cargó. Queda
+   * ausente si el vencimiento se fijó por otro camino (por los días que
+   * faltan, o escribiendo la fecha): deducirla sería inventar un dato.
+   */
+  ultimaRenovacion?: string
+
+  /** Quién y cuándo lo escribió en el sistema. */
+  vencimientoFijadoPor?: string
+  vencimientoFijadoEn?: string
+
+  /**
+   * Derivados: no están en la base, los calcula el backend contra el día de
+   * hoy. Vienen resueltos para que la pantalla, el correo y el job digan lo
+   * mismo — si el navegador los calculara, un reloj corrido mostraría un día
+   * distinto del que dispara el aviso.
+   *
+   * `diasRestantes` negativo = venció hace esos días. Ausente = sin fecha.
+   */
+  diasRestantes?: number
+  estado: EstadoLicencia
+
+  /** Ubicación. Solo viene en el listado general, no en el de una PC. */
+  pcIdentificador?: number
+  carroId?: string
+  carroNombre?: string
+  pcDadaDeBaja?: boolean
+}
+
+/**
+ * Las tres formas de declarar el vencimiento. Se manda UNA sola: el backend
+ * rechaza con 400 si vienen dos, porque darían fechas distintas y elegir
+ * cuál gana sería decidir por el Admin.
+ *
+ * Ninguna de las tres = "todavía no sé", que es un estado válido.
+ */
+export type VencimientoDeclarado = {
+  /** "La renové el martes" → esa fecha + diasDuracion. */
+  renovadaEl?: string
+  /** "Quedan 12 días" → hoy + 12. Es lo que muestra la máquina. */
+  quedanDias?: number
+  /** "Vence el 3 de septiembre" → esa fecha, tal cual. */
+  venceEl?: string
+}
+
+/**
+ * `pcsQueYaLaTenian` no es un error: marcar las diez PCs del carro cuando
+ * ocho ya estaban cargadas tiene que funcionar. Por eso el alta responde
+ * 201 aunque haya salteado algunas.
+ */
+export type AltaMasivaLicencias = {
+  creadas: Licencia[]
+  pcsQueYaLaTenian?: string[]
+}
+
+/**
+ * `sinFechaPrevia` son las que no se pudieron renovar porque todavía no
+ * tienen vencimiento cargado: renovar mueve un contador que ya existe, y
+ * cargar la fecha por primera vez se hace editando la licencia, donde hay
+ * que decir cómo se sabe.
+ */
+export type RenovacionLicencias = {
+  renovadas: Licencia[]
+  sinFechaPrevia?: string[]
+}

@@ -92,6 +92,29 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
+	// ── Aviso a los Admin: licencias por vencer (RF-05.9) ───────────
+	//
+	// El único correo del sistema que no lo dispara una persona sino el
+	// reloj. Por eso importa más que los otros que no se repita: nadie
+	// tiene el contexto de "yo hice algo, este mail es por eso", así que un
+	// duplicado diario se lee como que el sistema está roto. La
+	// idempotencia la garantizan las marcas de cada licencia, del lado de
+	// inventory.
+	bus.Subscribe("licencia.por-vencer", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.AvisoDeLicencias)
+		if !ok {
+			log.Printf("correo: payload inesperado para licencia.por-vencer: %+v", e.Payload)
+			return
+		}
+		if payload.Total() == 0 {
+			return
+		}
+		asunto, cuerpo := m.textoDeLicencias(payload)
+		enviar("por mail las licencias por vencer", func(ctx context.Context) error {
+			return m.enviarATodosLosAdmins(ctx, asunto, cuerpo)
+		})
+	})
+
 	// ── Aviso a la persona: le aprobaron la cuenta ──────────────────
 	bus.Subscribe("cuenta.aprobada", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.CuentaAprobada)

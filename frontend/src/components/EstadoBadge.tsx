@@ -71,3 +71,18 @@ export const TONO_INCIDENCIA: Record<string, Tono> = {
   ENVIADA_DGE: "info",
   RESUELTA: "exito",
 }
+
+/**
+ * RF-03.11 — estado de una licencia de software.
+ *
+ * SIN_FECHA va en `info` y no en `neutro` a propósito: no es un estado
+ * pasivo del que no haya nada que decir, es una tarea pendiente —hay que ir
+ * hasta la máquina a mirar cuántos días le quedan— y en la lista aparece
+ * arriba de todo.
+ */
+export const TONO_LICENCIA: Record<string, Tono> = {
+  SIN_FECHA: "info",
+  VENCIDA: "peligro",
+  POR_VENCER: "alerta",
+  VIGENTE: "exito",
+}

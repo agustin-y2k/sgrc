@@ -303,6 +303,30 @@ Para ver cuáles se aplicaron hay que mirar la base; el proyecto no lleva una
 tabla de versiones de esquema (a esta escala, la lista de archivos y el
 orden alcanzan).
 
+### Aviso de licencias de software
+
+La **012** agrega `licencia_software` (RF-03.11 a RF-03.14). No toca datos
+existentes ni puede abortar: crea una tabla vacía y amplía el `CHECK` de
+`notificacion.tipo`.
+
+El aviso corre dentro del mismo proceso, sin cron ni nada que instalar. Sale
+a partir de `LICENCIAS_HORA_AVISO` (0-23, hora de la escuela; por defecto
+`7`). Es un "no antes de", no un horario exacto: el barrido pasa cada hora y
+la primera pasada después de esa hora manda el mail; las siguientes no
+encuentran nada porque cada licencia queda marcada con la fecha de
+vencimiento para la que ya avisó.
+
+**Reiniciar el contenedor no duplica avisos**, y tampoco hace falta que el
+servidor esté prendido justo el día del vencimiento: el barrido busca "ya
+entró en su ventana de aviso", no "vence exactamente hoy", así que un día
+apagado hace que el aviso salga tarde en vez de no salir nunca.
+
+Si los mails no llegan pero la campana sí, el problema es SMTP, no las
+licencias: son dos suscriptores independientes del mismo evento. En el log
+del contenedor se ve `job de aviso de licencias: N licencias por vencer o
+vencidas` cada vez que hay algo, y el fallo de envío queda como
+`notification: error notificando por mail las licencias por vencer`.
+
 ---
 
 ## 6. Copia de seguridad

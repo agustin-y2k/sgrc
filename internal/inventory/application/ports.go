@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"time"
 
 	"github.com/ramiro/sgrc/internal/inventory/domain"
 )
@@ -22,6 +23,43 @@ type Repo interface {
 	BuscarIncidenciaPorID(ctx context.Context, id string) (*domain.Incidencia, error)
 	GuardarIncidencia(ctx context.Context, i *domain.Incidencia) error
 	ListarIncidenciasPorPC(ctx context.Context, pcID string) ([]*domain.Incidencia, error)
+
+	CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error
+	BuscarLicenciaPorID(ctx context.Context, id string) (*domain.LicenciaSoftware, error)
+	GuardarLicencia(ctx context.Context, l *domain.LicenciaSoftware) error
+	BorrarLicencia(ctx context.Context, id string) error
+	ListarLicenciasPorPC(ctx context.Context, pcID string) ([]*domain.LicenciaSoftware, error)
+	// ListarLicencias devuelve todas las del sistema con su ubicación. Sin
+	// paginar a propósito: la cantidad está acotada por el inventario
+	// (PCs × un puñado de programas), igual que ciclos, cursos y carros.
+	ListarLicencias(ctx context.Context) ([]*LicenciaConUbicacion, error)
+
+	// ListarCandidatasAAviso trae las que PODRÍAN necesitar aviso hoy: con
+	// fecha cargada, de una PC que no esté dada de baja, ya dentro de su
+	// ventana de antelación, y con alguna marca de aviso sin poner.
+	//
+	// Es un filtro grueso a propósito. Quién necesita aviso de verdad lo
+	// decide el dominio (CorrespondeAvisoPrevio / CorrespondeAvisoDeVencimiento):
+	// si esa regla viviera también en el WHERE, habría dos versiones de la
+	// misma condición que alguien va a cambiar en un solo lado.
+	ListarCandidatasAAviso(ctx context.Context, hoy time.Time) ([]*LicenciaConUbicacion, error)
+	// MarcarAvisosEnviados persiste las dos marcas de una licencia. Es un
+	// UPDATE acotado a esas columnas y no un GuardarLicencia completo para
+	// que el job no pueda pisar una renovación que un Admin haya guardado
+	// entre la lectura y el envío del correo.
+	MarcarAvisosEnviados(ctx context.Context, l *domain.LicenciaSoftware) error
+}
+
+// LicenciaConUbicacion es una licencia más lo mínimo para saber DÓNDE está
+// instalada. La pantalla y el correo necesitan las dos cosas siempre —
+// "AutoCAD vence mañana" no sirve sin "en la PC 3 del Carro 1"—, así que
+// se resuelve con un JOIN en vez de dejar que quien llama busque cada PC.
+type LicenciaConUbicacion struct {
+	Licencia        *domain.LicenciaSoftware
+	PCIdentificador int
+	PCDadaDeBaja    bool
+	CarroID         string
+	CarroNombre     string
 }
 
 // ValidadorReservas es el puerto hacia reservation — todavía no existe ese

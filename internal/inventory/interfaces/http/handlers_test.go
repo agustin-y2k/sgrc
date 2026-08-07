@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ type fakeRepo struct {
 	carros      map[string]*domain.Carro
 	pcs         map[string]*domain.PC
 	incidencias map[string]*domain.Incidencia
+	licencias   map[string]*domain.LicenciaSoftware
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -36,6 +38,7 @@ func nuevoFakeRepo() *fakeRepo {
 		carros:      make(map[string]*domain.Carro),
 		pcs:         make(map[string]*domain.PC),
 		incidencias: make(map[string]*domain.Incidencia),
+		licencias:   make(map[string]*domain.LicenciaSoftware),
 	}
 }
 
@@ -108,6 +111,71 @@ func (r *fakeRepo) ListarIncidenciasPorPC(ctx context.Context, pcID string) ([]*
 		}
 	}
 	return resultado, nil
+}
+
+func (r *fakeRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
+	for _, existente := range r.licencias {
+		if existente.PCID == l.PCID && strings.EqualFold(existente.Nombre, l.Nombre) {
+			return application.ErrLicenciaDuplicada
+		}
+	}
+	r.licencias[l.ID] = l
+	return nil
+}
+func (r *fakeRepo) BuscarLicenciaPorID(ctx context.Context, id string) (*domain.LicenciaSoftware, error) {
+	l, ok := r.licencias[id]
+	if !ok {
+		return nil, application.ErrLicenciaNoEncontrada
+	}
+	return l, nil
+}
+func (r *fakeRepo) GuardarLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
+	if _, ok := r.licencias[l.ID]; !ok {
+		return application.ErrLicenciaNoEncontrada
+	}
+	r.licencias[l.ID] = l
+	return nil
+}
+func (r *fakeRepo) BorrarLicencia(ctx context.Context, id string) error {
+	if _, ok := r.licencias[id]; !ok {
+		return application.ErrLicenciaNoEncontrada
+	}
+	delete(r.licencias, id)
+	return nil
+}
+func (r *fakeRepo) ListarLicenciasPorPC(ctx context.Context, pcID string) ([]*domain.LicenciaSoftware, error) {
+	var resultado []*domain.LicenciaSoftware
+	for _, l := range r.licencias {
+		if l.PCID == pcID {
+			resultado = append(resultado, l)
+		}
+	}
+	return resultado, nil
+}
+func (r *fakeRepo) ListarLicencias(ctx context.Context) ([]*application.LicenciaConUbicacion, error) {
+	var resultado []*application.LicenciaConUbicacion
+	for _, l := range r.licencias {
+		resultado = append(resultado, r.conUbicacion(l))
+	}
+	return resultado, nil
+}
+func (r *fakeRepo) ListarCandidatasAAviso(ctx context.Context, hoy time.Time) ([]*application.LicenciaConUbicacion, error) {
+	return nil, nil
+}
+func (r *fakeRepo) MarcarAvisosEnviados(ctx context.Context, l *domain.LicenciaSoftware) error {
+	return nil
+}
+func (r *fakeRepo) conUbicacion(l *domain.LicenciaSoftware) *application.LicenciaConUbicacion {
+	u := &application.LicenciaConUbicacion{Licencia: l}
+	if pc, ok := r.pcs[l.PCID]; ok {
+		u.PCIdentificador = pc.Identificador
+		u.PCDadaDeBaja = pc.DadaDeBaja
+		u.CarroID = pc.CarroID
+		if carro, ok := r.carros[pc.CarroID]; ok {
+			u.CarroNombre = carro.Nombre
+		}
+	}
+	return u
 }
 
 type fakeValidadorReservas struct{}
