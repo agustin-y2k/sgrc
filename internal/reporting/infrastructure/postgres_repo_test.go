@@ -4,6 +4,7 @@ package infrastructure
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -109,7 +110,7 @@ func crearCarroYPCDeTest(t *testing.T, pool *pgxpool.Pool, identificador int) (p
 	ctx := context.Background()
 	carroID := NuevoID()
 	pcID = NuevoID()
-	numeroSerie := time.Now().UnixNano() % 1000000000
+	numeroSerie := fmt.Sprintf("SERIE-%d", time.Now().UnixNano())
 
 	// El nombre del carro es UNIQUE: se deriva del id para que un mismo
 	// test pueda crear más de un carro (ej. incidencias en dos PCs).

@@ -24,7 +24,7 @@ function pc(over: Partial<PC> = {}): PC {
     id: "pc1",
     carroId: "carro1",
     identificador: 1,
-    numeroSerie: 1001,
+    numeroSerie: "SERIE-1001",
     freezado: false,
     estado: "DISPONIBLE",
     dadaDeBaja: false,

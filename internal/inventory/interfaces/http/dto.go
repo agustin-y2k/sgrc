@@ -23,7 +23,7 @@ type editarCarroRequest struct {
 
 type crearPCRequest struct {
 	Identificador     int    `json:"identificador"`
-	NumeroSerie       int64  `json:"numeroSerie"`
+	NumeroSerie       string `json:"numeroSerie"`
 	Freezado          bool   `json:"freezado"`
 	CPU               string `json:"cpu"`
 	RAM               string `json:"ram"`
@@ -72,7 +72,7 @@ type pcResponse struct {
 	ID                string     `json:"id"`
 	CarroID           string     `json:"carroId"`
 	Identificador     int        `json:"identificador"`
-	NumeroSerie       int64      `json:"numeroSerie"`
+	NumeroSerie       string     `json:"numeroSerie"`
 	Freezado          bool       `json:"freezado"`
 	CPU               string     `json:"cpu,omitempty"`
 	RAM               string     `json:"ram,omitempty"`

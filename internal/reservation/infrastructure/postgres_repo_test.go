@@ -4,6 +4,7 @@ package infrastructure
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -125,7 +126,7 @@ func crearPCDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	if _, err := pool.Exec(ctx, `INSERT INTO carro (id, nombre) VALUES ($1, $2)`, carroID, "Carro-"+carroID[:8]); err != nil {
 		t.Fatalf("no se pudo crear carro de prueba: %v", err)
 	}
-	numeroSerie := time.Now().UnixNano() % 1000000000
+	numeroSerie := fmt.Sprintf("SERIE-%d", time.Now().UnixNano())
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO pc (id, carro_id, identificador, numero_serie, estado) VALUES ($1, $2, 1, $3, 'DISPONIBLE')`,
 		pcID, carroID, numeroSerie,

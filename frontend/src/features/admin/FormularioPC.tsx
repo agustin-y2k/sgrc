@@ -128,7 +128,10 @@ export function AltaDePC({ carroId }: { carroId: string }) {
     mutationFn: () =>
       adminApi.crearPC(carroId, {
         identificador: Number(campos.identificador),
-        numeroSerie: Number(campos.numeroSerie),
+        // El backend lo normaliza igual (a mayúsculas y sin espacios al
+        // borde, ver domain.NormalizarNumeroSerie); acá se manda tal cual
+        // se tipeó y la respuesta trae la forma canónica.
+        numeroSerie: campos.numeroSerie.trim(),
         freezado: campos.freezado,
         cpu: opcional(campos.cpu),
         ram: opcional(campos.ram),
@@ -142,10 +145,17 @@ export function AltaDePC({ carroId }: { carroId: string }) {
   })
 
   // El identificador es único dentro del carro y el número de serie en toda
-  // la institución (RF-03.2): los dos son enteros y el backend rechaza el
-  // duplicado, así que acá solo se chequea que estén y sean números.
+  // la institución (RF-03.2). El backend rechaza el duplicado, así que acá
+  // solo se chequea la forma.
+  //
+  // Y son dos formas distintas, aunque los dos campos se llamen "número":
+  // el identificador es el que la escuela pinta en la máquina —"PC 1",
+  // "PC 2"— y sí es un entero. El número de serie es el código de fábrica
+  // de la etiqueta, y casi siempre trae letras ("5CD1234ABC"): exigirle
+  // dígitos era lo que hacía imposible cargar la primera PC con el dato
+  // real (ver migración 011).
   const identificadorValido = /^\d+$/.test(campos.identificador.trim())
-  const serieValida = /^\d+$/.test(campos.numeroSerie.trim())
+  const serieValida = campos.numeroSerie.trim() !== ""
 
   return (
     <form
@@ -176,24 +186,27 @@ export function AltaDePC({ carroId }: { carroId: string }) {
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor={`alta-${carroId}-serie`}>Número de serie</Label>
+          {/* Sin inputMode="numeric": en un teléfono eso abre el teclado
+              numérico, y el código de fábrica lleva letras. */}
           <Input
             id={`alta-${carroId}-serie`}
-            inputMode="numeric"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
             value={campos.numeroSerie}
             onChange={(e) => setCampos({ ...campos, numeroSerie: e.target.value })}
-            placeholder="El de fábrica"
+            placeholder="El de la etiqueta, ej. 5CD1234ABC"
           />
         </div>
       </div>
 
       <CamposComunes idPrefijo={`alta-${carroId}`} valor={campos} onChange={setCampos} />
 
-      {(campos.identificador !== "" || campos.numeroSerie !== "") &&
-        (!identificadorValido || !serieValida) && (
-          <p className="text-destructive text-sm">
-            El identificador y el número de serie son números enteros.
-          </p>
-        )}
+      {campos.identificador !== "" && !identificadorValido && (
+        <p className="text-destructive text-sm">
+          El identificador es un número entero: es el que está pintado en la máquina.
+        </p>
+      )}
 
       <div>
         <Button
