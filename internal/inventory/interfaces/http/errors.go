@@ -13,11 +13,16 @@ func mapearError(err error) error {
 	switch {
 	case errors.Is(err, application.ErrCarroNoEncontrado),
 		errors.Is(err, application.ErrPCNoEncontrada),
-		errors.Is(err, application.ErrIncidenciaNoEncontrada):
+		errors.Is(err, application.ErrIncidenciaNoEncontrada),
+		errors.Is(err, application.ErrLicenciaNoEncontrada):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 
 	case errors.Is(err, application.ErrIdentificadorDuplicado),
-		errors.Is(err, application.ErrNumeroSerieDuplicado):
+		errors.Is(err, application.ErrNumeroSerieDuplicado),
+		// El alta masiva saltea los duplicados y los informa en el cuerpo;
+		// esto solo salta al RENOMBRAR una licencia al nombre de otra que
+		// esa misma PC ya tiene.
+		errors.Is(err, application.ErrLicenciaDuplicada):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrTransicionEstadoPCInvalida),
@@ -33,7 +38,15 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrGravedadInvalida),
 		errors.Is(err, domain.ErrEstadoIncidenciaInvalido),
 		errors.Is(err, application.ErrIDInvalido),
-		errors.Is(err, application.ErrReferenciaInexistente):
+		errors.Is(err, application.ErrReferenciaInexistente),
+		errors.Is(err, domain.ErrNombreLicenciaVacio),
+		errors.Is(err, domain.ErrNombreLicenciaLargo),
+		errors.Is(err, domain.ErrDiasDuracionInvalido),
+		errors.Is(err, domain.ErrDiasAvisoInvalido),
+		errors.Is(err, domain.ErrDiasRestantesInvalido),
+		errors.Is(err, application.ErrSinPCs),
+		errors.Is(err, application.ErrSinLicencias),
+		errors.Is(err, application.ErrVencimientoAmbiguo):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 
 	default:

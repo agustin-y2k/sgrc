@@ -9,7 +9,11 @@ export type EstadoNotificacion = "NO_LEIDA" | "LEIDA"
  * corresponde sin interpretar el texto del mensaje: el mensaje está escrito
  * para una persona y cambiar su redacción no debería romper un botón.
  */
-export type TipoNotificacion = "GENERAL" | "DOCENTE_PENDIENTE" | "RESERVA_CANCELADA"
+export type TipoNotificacion =
+  | "GENERAL"
+  | "DOCENTE_PENDIENTE"
+  | "RESERVA_CANCELADA"
+  | "LICENCIA_POR_VENCER"
 
 export type Notificacion = {
   id: string

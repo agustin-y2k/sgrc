@@ -371,3 +371,52 @@ func TestRegisterEventHandlers_CuentaResuelta_NoTocaLosAvisosDeOtros(t *testing.
 		t.Errorf("esperaba cerrar solo uno: %d leídas, %d sin leer", leidas, sinLeer)
 	}
 }
+
+// RF-05.9: el único aviso del sistema que nace de un reloj y no de que
+// alguien haya hecho algo.
+func TestRegisterEventHandlers_LicenciaPorVencer_NotificaATodosLosAdmins(t *testing.T) {
+	repo := nuevoFakeRepo()
+	listador := &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2"}}
+	svc := nuevoServicioDeTest(repo, listador)
+	bus := eventbus.NewInMemoryEventBus()
+	RegisterEventHandlersSincronos(bus, svc)
+
+	bus.Publish(eventbus.Evento{
+		Tipo: "licencia.por-vencer",
+		Payload: eventbus.AvisoDeLicencias{
+			PorVencer: []eventbus.LicenciaPorVencer{{
+				Nombre: "AutoCAD 2027", PCIdentificador: 3, CarroNombre: "Carro 1",
+				FechaVencimiento: time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC),
+				DiasRestantes:    1,
+			}},
+		},
+	})
+
+	esperarNotificaciones(t, repo, 2)
+	for _, n := range repo.notificaciones {
+		// El tipo es lo que le da a la pantalla el botón hacia la lista de
+		// licencias, sin tener que adivinar leyendo el mensaje.
+		if n.Tipo != domain.TipoLicenciaPorVencer {
+			t.Errorf("tipo = %q, esperaba %q", n.Tipo, domain.TipoLicenciaPorVencer)
+		}
+		if !strings.Contains(n.Mensaje, "AutoCAD 2027") {
+			t.Errorf("el mensaje no dice de qué licencia habla: %q", n.Mensaje)
+		}
+	}
+}
+
+// Un aviso vacío no puede dejar un "0 licencias necesitan atención" en la
+// campana de cada Admin.
+func TestRegisterEventHandlers_LicenciaPorVencer_AvisoVacioNoNotifica(t *testing.T) {
+	repo := nuevoFakeRepo()
+	listador := &fakeListadorAdmins{adminIDs: []string{"admin1"}}
+	svc := nuevoServicioDeTest(repo, listador)
+	bus := eventbus.NewInMemoryEventBus()
+	RegisterEventHandlersSincronos(bus, svc)
+
+	bus.Publish(eventbus.Evento{Tipo: "licencia.por-vencer", Payload: eventbus.AvisoDeLicencias{}})
+
+	if len(repo.notificaciones) != 0 {
+		t.Errorf("no debería crear notificaciones, creó %d", len(repo.notificaciones))
+	}
+}

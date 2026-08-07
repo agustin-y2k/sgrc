@@ -37,6 +37,23 @@ classDiagram
         +DateTime fechaAlta
     }
 
+    class LicenciaSoftware {
+        +UUID id
+        +UUID pcId
+        +string nombre
+        +int diasDuracion
+        +int diasAviso
+        +Date fechaVencimiento
+        +Date ultimaRenovacion
+        +UUID vencimientoFijadoPor
+        +DateTime vencimientoFijadoEn
+        +Date avisadoPrevioPara
+        +Date avisadoVencimientoPara
+        +diasRestantes(hoy) int
+        +estado(hoy) EstadoLicencia
+        +renovar(fecha, por, ahora)
+    }
+
     class Incidencia {
         +UUID id
         +UUID pcId
@@ -122,6 +139,7 @@ classDiagram
         +UUID usuarioId
         +UUID reservaId
         +string mensaje
+        +TipoNotif tipo
         +EstadoNotif estado
         +DateTime creadaEn
         +DateTime leidaEn
@@ -166,6 +184,7 @@ classDiagram
 
     Carro "1" --> "N" PC
     PC "1" --> "N" Incidencia
+    PC "1" --> "N" LicenciaSoftware
     PC "1" --> "N" Reserva
     CicloLectivo "1" --> "N" Curso
     Curso "1" --> "N" Materia
@@ -195,6 +214,8 @@ classDiagram
 | `Gravedad` | `LEVE`, `MODERADA`, `GRAVE` |
 | `EstadoIncidencia` | `ABIERTA`, `EN_REPARACION`, `ENVIADA_DGE`, `RESUELTA` |
 | `EstadoNotif` | `NO_LEIDA`, `LEIDA` |
+| `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `LICENCIA_POR_VENCER` |
+| `EstadoLicencia` | `SIN_FECHA`, `VENCIDA`, `POR_VENCER`, `VIGENTE` — **derivado**, nunca una columna: se calcula contra la fecha de hoy |
 | `DiaSemana` | `LUNES`…`VIERNES` (la semana lectiva es de lunes a viernes) |
 | `TipoExcepcionHorario` | `NO_DISPONIBLE`, `HORARIO_MODIFICADO` |
 
@@ -210,4 +231,6 @@ classDiagram
 - **`HistoricoUsoPC` / `HistoricoUsoDocente`**: snapshot agregado permanente, calculado una sola vez al archivar un ciclo (no sincronizado continuamente). Es la única fuente de estadísticas para años ya cerrados, porque el detalle de sus reservas ya no existe.
 - **`PC.dadaDeBaja` / `PC.fechaBaja`**: "eliminar" una PC desde la UI es en realidad un soft delete — se oculta de listados activos y no puede reservarse, pero conserva su historial de incidencias y reservas pasadas (mientras esas reservas no se hayan borrado por archivado de su materia).
 - **`HorarioAdmin` es un patrón recurrente simple, sin versionar**: a diferencia de `ReglaRecurrencia` (que materializa una fila por ocurrencia porque cada una puede reservarse/cancelarse individualmente), acá no hace falta — es solo información para calcular "¿está disponible ahora?" en el momento de la consulta. Editar un bloque cambia el patrón para todas las semanas futuras de inmediato.
+- **`LicenciaSoftware` no guarda "los días que faltan"**: `diasRestantes()` los calcula contra la fecha de hoy cada vez (RF-03.12). Un contador guardado necesitaría que alguien lo decremente todos los días, y bastaría un día de servidor apagado para dejarlo mal para siempre. Por lo mismo, `fechaVencimiento` en `null` significa "todavía no se verificó contra la máquina" y **no** "no vence nunca": es un estado legítimo, no un dato faltante que haya que completar con una fecha inventada.
+- **`avisadoPrevioPara` / `avisadoVencimientoPara` guardan una fecha, no un booleano**: la fecha de vencimiento para la que ya salió cada aviso. Es lo que hace idempotente al barrido sin resetear nada — al renovar cambia `fechaVencimiento`, las marcas dejan de coincidir solas, y el ciclo nuevo vuelve a avisar.
 - **`HorarioAdminExcepcion`**: cubre tanto una excepción planificada (horario distinto un día puntual) como el botón rápido "marcarme no disponible ahora" (que es, puertas adentro, la misma fila con `tipo=NO_DISPONIBLE` y `fecha=hoy`). Si existe una excepción para la fecha consultada, siempre pisa al patrón semanal de `HorarioAdmin`.

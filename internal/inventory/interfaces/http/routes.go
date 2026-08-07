@@ -33,4 +33,19 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	inventory.Post("/incidencias", autenticado, h.CrearIncidencia)
 	inventory.Get("/pcs/:pcId/incidencias", autenticado, h.ListarIncidenciasPorPC)
 	inventory.Patch("/incidencias/:id", autenticado, soloAdmin, h.EditarIncidencia)
+
+	// Licencias de software (RF-03.11 a RF-03.14). Todas solo Admin,
+	// incluidas las lecturas: el docente elige PC por software_instalado,
+	// que ya ve en la pantalla de reserva; cuándo vence una licencia es
+	// trabajo administrativo y no le sirve para decidir nada.
+	//
+	// /licencias/renovar va antes que /licencias/:id por costumbre, aunque
+	// acá no haría falta: son métodos distintos (POST contra PATCH) y Fiber
+	// no las puede confundir.
+	inventory.Get("/licencias", autenticado, soloAdmin, h.ListarLicencias)
+	inventory.Post("/licencias", autenticado, soloAdmin, h.CrearLicencias)
+	inventory.Post("/licencias/renovar", autenticado, soloAdmin, h.RenovarLicencias)
+	inventory.Patch("/licencias/:id", autenticado, soloAdmin, h.EditarLicencia)
+	inventory.Delete("/licencias/:id", autenticado, soloAdmin, h.BorrarLicencia)
+	inventory.Get("/pcs/:pcId/licencias", autenticado, soloAdmin, h.ListarLicenciasPorPC)
 }

@@ -37,6 +37,44 @@ type CancelacionesDeUsuario struct {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// Licencias de software
+// ══════════════════════════════════════════════════════════════════
+
+// LicenciaPorVencer es una licencia que necesita que alguien haga algo.
+//
+// Viaja con el nombre de la PC y del carro ya resueltos, no con sus UUID:
+// el aviso lo lee una persona que tiene que ir hasta una máquina, y "PC 3
+// del Carro 1" es lo que le sirve para encontrarla.
+type LicenciaPorVencer struct {
+	LicenciaID       string
+	Nombre           string
+	PCIdentificador  int
+	CarroNombre      string
+	FechaVencimiento time.Time
+	// DiasRestantes negativo significa que ya venció hace esos días.
+	DiasRestantes int
+}
+
+// AvisoDeLicencias es TODO lo que encontró una barrida del job, en un solo
+// evento.
+//
+// Uno y no un evento por licencia: bloquear el mismo AutoCAD en las ocho
+// PCs de un carro daría ocho mails idénticos que nadie lee: es la misma
+// lección que ya dejó CancelacionesDeUsuario. Los dos grupos van separados
+// porque no piden lo mismo —una todavía se puede renovar a tiempo y la otra
+// ya dejó de funcionar— y el correo los lista bajo títulos distintos.
+type AvisoDeLicencias struct {
+	PorVencer []LicenciaPorVencer
+	Vencidas  []LicenciaPorVencer
+}
+
+// Total es la cantidad de licencias del aviso, para los textos que empiezan
+// contándolas.
+func (a AvisoDeLicencias) Total() int {
+	return len(a.PorVencer) + len(a.Vencidas)
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Correo
 // ══════════════════════════════════════════════════════════════════
 // Los tres payloads de abajo existen porque el envío de correo no puede

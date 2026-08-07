@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -177,6 +178,30 @@ func zonaHorariaDeLaEscuela() *time.Location {
 		log.Fatalf("APP_TIMEZONE inválida (%q): %v", nombre, err)
 	}
 	return loc
+}
+
+// horaAvisoLicenciasPorDefecto son las 7 de la mañana: el aviso está en la
+// casilla antes de que alguien llegue a la escuela, y no en mitad de la
+// noche.
+const horaAvisoLicenciasPorDefecto = 7
+
+// horaAvisoLicencias es la hora (0-23, hora de la escuela) a partir de la
+// cual el job de licencias puede mandar el aviso del día.
+//
+// Es una hora y no un horario exacto porque el job no necesita precisión:
+// las marcas de cada licencia hacen que el aviso salga una sola vez, así
+// que esto es "no antes de", no "a las".
+func horaAvisoLicencias() int {
+	crudo := strings.TrimSpace(os.Getenv("LICENCIAS_HORA_AVISO"))
+	if crudo == "" {
+		return horaAvisoLicenciasPorDefecto
+	}
+	hora, err := strconv.Atoi(crudo)
+	if err != nil || hora < 0 || hora > 23 {
+		log.Fatalf("LICENCIAS_HORA_AVISO (%q) tiene que ser un número entero de 0 a 23 "+
+			"(la hora, en la zona de la escuela, a partir de la cual sale el aviso de licencias por vencer)", crudo)
+	}
+	return hora
 }
 
 // puertoHTTP es el puerto en el que escucha la API. Lo comparten el
@@ -419,6 +444,12 @@ func main() {
 	)
 	inventoryHandler := inventoryhttp.NewHandler(inventorySvc, auditor)
 
+	// El avisador de licencias es un tipo aparte del Service porque no lo
+	// dispara un request sino un reloj (ver el job más abajo). Se arma acá,
+	// junto al resto de inventory, pero el ticker que lo llama vive con los
+	// demás jobs.
+	avisadorDeLicencias := inventoryapp.NewAvisadorDeLicencias(inventoryRepo, bus, ahora)
+
 	// ── notification ─────────────────────────────────────────────
 	// Se arma DESPUÉS de auth y reservation a propósito: sus suscriptores
 	// (RegisterEventHandlers) necesitan estar registrados en el bus antes
@@ -494,6 +525,43 @@ func main() {
 				}
 				if n > 0 {
 					log.Printf("job de vencimiento: %d reservas finalizadas", n)
+				}
+			}
+		}
+	}()
+
+	// ── Job de aviso de licencias de software (RF-03.14) ────────────
+	// Cada hora, pero solo actúa a partir de horaAvisoLicencias: un mail a
+	// las 00:05 se lee a la mañana igual, pero llega con cara de que algo
+	// se rompió de madrugada.
+	//
+	// No hace falta que dispare exactamente una vez por día. La
+	// idempotencia la dan las dos marcas de cada licencia (ver
+	// inventory/domain/licencia.go): la primera barrida después de esa hora
+	// manda el aviso y las siguientes no encuentran nada. Eso es lo que
+	// permite que sea un ticker pelado y no un cron, y que un reinicio del
+	// contenedor no duplique nada.
+	horaDeAviso := horaAvisoLicencias()
+	jobTerminado.Add(1)
+	go func() {
+		defer jobTerminado.Done()
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if ahora().Hour() < horaDeAviso {
+					continue
+				}
+				n, err := avisadorDeLicencias.Barrer(ctx)
+				if err != nil {
+					log.Printf("job de aviso de licencias: %v", err)
+					continue
+				}
+				if n > 0 {
+					log.Printf("job de aviso de licencias: %d licencias por vencer o vencidas", n)
 				}
 			}
 		}

@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import * as adminApi from "@/features/admin/api"
 import { AltaDePC, EdicionDePC } from "@/features/admin/FormularioPC"
 import { IncidenciasDePC } from "@/features/admin/IncidenciasDePC"
+import { LicenciasDePC } from "@/features/admin/LicenciasDePC"
 import * as inventoryApi from "@/features/inventory/api"
 import type { Carro, EstadoPC, PC } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
@@ -41,6 +42,7 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
   const [dandoDeBaja, setDandoDeBaja] = useState<PC | null>(null)
   const [editando, setEditando] = useState<string | null>(null)
   const [viendoIncidencias, setViendoIncidencias] = useState<string | null>(null)
+  const [viendoLicencias, setViendoLicencias] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ["pcs", carroId],
@@ -91,6 +93,7 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
         const bajandoEsta = dandoDeBaja?.id === pc.id
         const editandoEsta = editando === pc.id
         const incidenciasAbiertas = viendoIncidencias === pc.id
+        const licenciasAbiertas = viendoLicencias === pc.id
 
         return (
           <div key={pc.id} className="grid gap-2 rounded-md border p-3">
@@ -140,6 +143,14 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
                     }
                   >
                     Incidencias
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-expanded={licenciasAbiertas}
+                    onClick={() => setViendoLicencias(licenciasAbiertas ? null : pc.id)}
+                  >
+                    Licencias
                   </Button>
                   <Button
                     variant="destructive"
@@ -202,6 +213,8 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
             )}
 
             {incidenciasAbiertas && <IncidenciasDePC pcId={pc.id} />}
+
+            {licenciasAbiertas && <LicenciasDePC pcId={pc.id} />}
 
             {bajandoEsta && (
               <div className="grid gap-2 rounded-md border p-3">

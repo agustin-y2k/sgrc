@@ -51,6 +51,9 @@ const ENLACES_ADMIN: Enlace[] = [
   // antes que inventario y reportes.
   { a: "/admin/academico", texto: "Académico" },
   { a: "/admin/inventario", texto: "Gestión del inventario" },
+  // Al lado del inventario: es la misma máquina mirada por otro lado — qué
+  // software con vencimiento tiene y cuándo hay que renovarlo.
+  { a: "/admin/licencias", texto: "Licencias" },
   { a: "/admin/reportes", texto: "Reportes" },
   // RF-04.7. Último: es lo que menos se usa y lo que más rompe si se entra
   // sin querer.
