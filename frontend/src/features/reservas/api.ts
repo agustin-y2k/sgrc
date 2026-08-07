@@ -6,9 +6,12 @@ import type {
   CrearReservaRequest,
   MateriaReservable,
   PCDisponible,
+  Prestamo,
   Reserva,
   ReservaDetallada,
   ResultadoBloqueoEvaluacion,
+  ResultadoDevolucion,
+  ResultadoEntrega,
 } from "@/features/reservas/types"
 
 type RespuestaLista<T> = { data: T[] }
@@ -38,12 +41,20 @@ export function listarReservas(filtros?: {
   hasta?: string
   incluirCanceladas?: boolean
   page?: number
+  /**
+   * El backend pagina de a 50 si no se pide nada, con un techo de 200. Un
+   * día con ocho clases de ocho máquinas son 64 reservas, así que la
+   * pantalla de entregas tiene que pedir el máximo: con el default se
+   * quedaba sin ver las últimas, y sin ningún aviso de que faltaban.
+   */
+  pageSize?: number
 }) {
   const params = new URLSearchParams()
   if (filtros?.desde) params.set("desde", filtros.desde)
   if (filtros?.hasta) params.set("hasta", filtros.hasta)
   if (filtros?.incluirCanceladas) params.set("incluirCanceladas", "true")
   if (filtros?.page && filtros.page > 1) params.set("page", String(filtros.page))
+  if (filtros?.pageSize) params.set("pageSize", String(filtros.pageSize))
   const query = params.toString()
   return apiFetch<RespuestaPaginada<ReservaDetallada>>(
     `/api/reservation/reservas${query ? `?${query}` : ""}`
@@ -96,4 +107,66 @@ export function cancelarGrupo(grupoId: string, motivo: string, soloEsta: boolean
     `/api/reservation/grupos/${grupoId}/cancelar`,
     { method: "POST", body: { motivo, soloEsta } }
   )
+}
+
+// ── Entregas y devoluciones (RF-08) ───────────────────────────────────
+//
+// Todo solo Admin: quien entrega y recibe las máquinas es quien hoy escribe
+// el papel que esto reemplaza.
+
+/** Qué hay afuera ahora mismo. Lo más atrasado viene primero. */
+export function listarPrestamosAbiertos() {
+  return apiFetch<RespuestaLista<Prestamo>>("/api/reservation/prestamos")
+}
+
+/** El historial de entregas de una máquina, de lo más reciente a lo más viejo. */
+export function historialDePrestamosDePC(pcId: string) {
+  return apiFetch<RespuestaLista<Prestamo>>(`/api/reservation/pcs/${pcId}/prestamos`)
+}
+
+/**
+ * Entregar las máquinas de una reserva. Se mandan las reservas puntuales
+ * (una por PC), no el grupo: el docente puede llevarse tres de las cinco.
+ *
+ * La hora de devolución no se manda — sale del fin de la reserva.
+ *
+ * Responde 200 aunque alguna PC no haya salido; qué pasó con cada una está
+ * en `noEntregadas`.
+ */
+export function entregarPorReserva(req: {
+  reservaIds: string[]
+  /** Quién vino a buscarlas, si no fue el docente de la reserva. */
+  nombreAlternativo?: string
+}) {
+  return apiFetch<ResultadoEntrega>("/api/reservation/prestamos/por-reserva", {
+    method: "POST",
+    body: req,
+  })
+}
+
+/** Entrega espontánea, sin reserva detrás: "necesito una compu para un trámite". */
+export function entregarSuelta(req: {
+  pcIds: string[]
+  nombre: string
+  usuarioId?: string
+  motivo?: string
+  /** ISO 8601. Opcional: "vengo en un rato" es una respuesta válida. */
+  devolucionEstimada?: string
+}) {
+  return apiFetch<ResultadoEntrega>("/api/reservation/prestamos", {
+    method: "POST",
+    body: req,
+  })
+}
+
+/**
+ * Las máquinas volvieron. `observaciones` vale para todo el lote, así que si
+ * hay algo puntual que anotar sobre una —"volvió sin el cargador"— conviene
+ * recibir esa sola.
+ */
+export function recibirPCs(req: { prestamoIds: string[]; observaciones?: string }) {
+  return apiFetch<ResultadoDevolucion>("/api/reservation/prestamos/recibir", {
+    method: "POST",
+    body: req,
+  })
 }

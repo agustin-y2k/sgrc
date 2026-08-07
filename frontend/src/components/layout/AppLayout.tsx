@@ -50,6 +50,9 @@ const ENLACES_ADMIN: Enlace[] = [
   // Ciclos, cursos y materias: de esto depende todo lo demás, así que va
   // antes que inventario y reportes.
   { a: "/admin/academico", texto: "Académico" },
+  // Entregas va primero del grupo de inventario: es lo único de acá que
+  // se usa varias veces por día, en el mostrador y con gente esperando.
+  { a: "/admin/entregas", texto: "Entregas" },
   { a: "/admin/inventario", texto: "Gestión del inventario" },
   // Al lado del inventario: es la misma máquina mirada por otro lado — qué
   // software con vencimiento tiene y cuándo hay que renovarlo.

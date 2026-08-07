@@ -62,6 +62,27 @@ type Repo interface {
 	// hora que el proceso esté caído. Ver FinalizarVencidas.
 	ListarReservasConfirmadasVencidas(ctx context.Context, ahora time.Time, limite int) ([]*domain.Reserva, error)
 
+	// ── Préstamos (custodia física de una PC) ───────────────────────
+	//
+	// Viven en este paquete y no en inventory porque casi todas sus reglas
+	// son sobre reservas: contra qué reserva se entregó, si volvió antes de
+	// que empiece la siguiente, quién es el próximo que la tiene reservada.
+	CrearPrestamo(ctx context.Context, p *domain.Prestamo) error
+	BuscarPrestamoPorID(ctx context.Context, id string) (*domain.Prestamo, error)
+	GuardarPrestamo(ctx context.Context, p *domain.Prestamo) error
+	// BuscarPrestamoAbiertoDePC devuelve el préstamo sin devolver de esa PC,
+	// o ErrPrestamoNoEncontrado si la máquina está en el laboratorio. Es la
+	// forma de responder "¿dónde está la PC 3?" — no hay ninguna columna en
+	// `pc` que lo diga, justamente para que no pueda desincronizarse.
+	BuscarPrestamoAbiertoDePC(ctx context.Context, pcID string) (*domain.Prestamo, error)
+	// ListarPrestamosAbiertos es "qué hay afuera ahora mismo": la pantalla
+	// que reemplaza al papel. Vienen ordenados por hora de devolución, así
+	// que lo más atrasado queda arriba.
+	ListarPrestamosAbiertos(ctx context.Context) ([]*PrestamoDetallado, error)
+	// ListarPrestamosDePC es el historial de una máquina, de lo más reciente
+	// a lo más viejo.
+	ListarPrestamosDePC(ctx context.Context, pcID string, limite int) ([]*PrestamoDetallado, error)
+
 	// ListarReservas devuelve las reservas que matcheen el filtro, con los
 	// nombres de PC, carro, materia y curso ya resueltos. Es lo que
 	// necesita un docente para ver sus propias reservas: sin esto la única
@@ -176,6 +197,16 @@ type ValidadorMateria interface {
 type ValidadorPC interface {
 	PCDisponibleParaReservar(ctx context.Context, pcID string) (bool, error)
 
+	// PCEstaEnInventario es más laxo que PCDisponibleParaReservar: solo
+	// exige que la PC exista y no esté dada de baja, sin mirar su estado.
+	//
+	// Es lo que corresponde para ENTREGAR una máquina, que no es lo mismo
+	// que reservarla: llevarle al técnico una PC en mantenimiento es
+	// justamente un préstamo, y prohibirlo obligaría a sacarla del sistema
+	// para poder anotarlo. Lo que sí se rechaza es entregar una que ya no
+	// está en el inventario.
+	PCEstaEnInventario(ctx context.Context, pcID string) (bool, error)
+
 	// IdentificadoresDePCs traduce los UUID de PC al número visible que la
 	// gente reconoce ("PC 7"), para poder decir en un aviso cuáles se
 	// cancelaron. Los que no existan simplemente no aparecen en el mapa.
@@ -198,3 +229,21 @@ type ObtenedorNombreDocente interface {
 }
 
 type IDGenerator func() string
+
+// PrestamoDetallado es un Prestamo con lo mínimo para saber de qué máquina
+// habla y de dónde salió, resuelto por JOIN — mismo criterio que
+// ReservaDetallada.
+//
+// La ubicación va siempre: un renglón que dice "entregada a Ana Pérez" sin
+// decir qué computadora no sirve para nada, y es exactamente lo que el papel
+// sí anota.
+type PrestamoDetallado struct {
+	Prestamo        *domain.Prestamo
+	PCIdentificador int
+	CarroNombre     string
+	// MateriaNombre solo en los préstamos que salieron contra una reserva.
+	// Nil en los espontáneos —no hay materia— y también en los que la
+	// tenían pero cuya reserva ya se borró al archivar el ciclo lectivo
+	// (RF-02.4): el préstamo sobrevive, la reserva no.
+	MateriaNombre *string
+}

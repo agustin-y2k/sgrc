@@ -31,11 +31,93 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 type fakeRepo struct {
 	grupos         map[string]*domain.ReservaGrupo
 	reservas       map[string]*domain.Reserva
+	prestamos      map[string]*domain.Prestamo
 	pcsDisponibles []application.PCDisponible
 }
 
 func nuevoFakeRepo() *fakeRepo {
-	return &fakeRepo{grupos: make(map[string]*domain.ReservaGrupo), reservas: make(map[string]*domain.Reserva)}
+	return &fakeRepo{
+		grupos:    make(map[string]*domain.ReservaGrupo),
+		reservas:  make(map[string]*domain.Reserva),
+		prestamos: make(map[string]*domain.Prestamo),
+	}
+}
+
+// ── Préstamos ───────────────────────────────────────────────────────────
+//
+// Reproduce el índice único parcial de la 013 —una PC no puede tener dos
+// préstamos abiertos— porque de eso depende un código de respuesta (409).
+
+func (r *fakeRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) error {
+	for _, existente := range r.prestamos {
+		if existente.PCID == p.PCID && existente.EstaAbierto() {
+			return application.ErrPCYaPrestada
+		}
+	}
+	copia := *p
+	r.prestamos[p.ID] = &copia
+	return nil
+}
+
+func (r *fakeRepo) BuscarPrestamoPorID(ctx context.Context, id string) (*domain.Prestamo, error) {
+	p, ok := r.prestamos[id]
+	if !ok {
+		return nil, application.ErrPrestamoNoEncontrado
+	}
+	copia := *p
+	return &copia, nil
+}
+
+func (r *fakeRepo) GuardarPrestamo(ctx context.Context, p *domain.Prestamo) error {
+	if _, ok := r.prestamos[p.ID]; !ok {
+		return application.ErrPrestamoNoEncontrado
+	}
+	copia := *p
+	r.prestamos[p.ID] = &copia
+	return nil
+}
+
+func (r *fakeRepo) BuscarPrestamoAbiertoDePC(ctx context.Context, pcID string) (*domain.Prestamo, error) {
+	for _, p := range r.prestamos {
+		if p.PCID == pcID && p.EstaAbierto() {
+			copia := *p
+			return &copia, nil
+		}
+	}
+	return nil, application.ErrPrestamoNoEncontrado
+}
+
+func (r *fakeRepo) ListarPrestamosAbiertos(ctx context.Context) ([]*application.PrestamoDetallado, error) {
+	var resultado []*application.PrestamoDetallado
+	for _, p := range r.prestamosEnOrden() {
+		if p.EstaAbierto() {
+			resultado = append(resultado, &application.PrestamoDetallado{Prestamo: p, PCIdentificador: 1, CarroNombre: "Carro 1"})
+		}
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) ListarPrestamosDePC(ctx context.Context, pcID string, limite int) ([]*application.PrestamoDetallado, error) {
+	var resultado []*application.PrestamoDetallado
+	for _, p := range r.prestamosEnOrden() {
+		if p.PCID == pcID && len(resultado) < limite {
+			resultado = append(resultado, &application.PrestamoDetallado{Prestamo: p, PCIdentificador: 1, CarroNombre: "Carro 1"})
+		}
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) prestamosEnOrden() []*domain.Prestamo {
+	ids := make([]string, 0, len(r.prestamos))
+	for id := range r.prestamos {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	resultado := make([]*domain.Prestamo, 0, len(ids))
+	for _, id := range ids {
+		resultado = append(resultado, r.prestamos[id])
+	}
+	return resultado
 }
 
 // Estos tests verifican el contrato HTTP (códigos, permisos, parseo), no
@@ -196,10 +278,19 @@ func (f *fakeValidadorMateria) DocenteEstaAsignado(ctx context.Context, materiaI
 type fakeValidadorPC struct {
 	disponible         bool
 	errIdentificadores error
+	// fueraDelInventario: PCs dadas de baja. Es lo único que distingue
+	// "no se puede reservar" de "no se puede ni entregar".
+	fueraDelInventario map[string]bool
 }
 
 func (f *fakeValidadorPC) PCDisponibleParaReservar(ctx context.Context, pcID string) (bool, error) {
 	return f.disponible, nil
+}
+
+// PCEstaEnInventario es más laxo: una PC en mantenimiento no se puede
+// reservar pero sí se le puede entregar al técnico.
+func (f *fakeValidadorPC) PCEstaEnInventario(ctx context.Context, pcID string) (bool, error) {
+	return !f.fueraDelInventario[pcID], nil
 }
 
 // IdentificadoresDePCs: en los tests las PCs se llaman "pc1", "pc2"… así que
@@ -227,9 +318,13 @@ func (f *fakeObtenedorNombre) NombreCompletoDe(ctx context.Context, usuarioID st
 
 var contadorID int
 
+// idSecuencial devuelve un ID DISTINTO por llamada. Devolvía siempre
+// "id-generado", lo cual daba igual mientras cada test creara una sola
+// entidad — pero las entregas son en lote, y con el ID repetido las cinco
+// máquinas de una reserva terminaban siendo una sola fila en el fake.
 func idSecuencial() string {
 	contadorID++
-	return "id-generado"
+	return fmt.Sprintf("id-%d", contadorID)
 }
 
 var testSecret = []byte("un-secreto-de-test-bastante-largo")
