@@ -199,6 +199,19 @@ func horaDePared(fecha time.Time, hora time.Duration) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Add(hora)
 }
 
+// InstanteDePared convierte una fecha de calendario más una hora de pared
+// en el instante real, en la zona indicada.
+//
+// Hace falta porque `fecha` es un DATE y `hora_fin` un TIME: juntos
+// significan "las 9 de la mañana de la escuela", no un momento absoluto.
+// Para guardar ese momento en una columna TIMESTAMPTZ —la hora en que una
+// máquina debería volver— hay que resolverlo contra una zona, y la que
+// corresponde es la de la institución (APP_TIMEZONE), no la del servidor.
+func InstanteDePared(fecha time.Time, hora time.Duration, loc *time.Location) time.Time {
+	y, m, d := fecha.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, loc).Add(hora)
+}
+
 func horaDelDia(t time.Time) time.Duration {
 	return time.Duration(t.Hour())*time.Hour +
 		time.Duration(t.Minute())*time.Minute +

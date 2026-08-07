@@ -1044,6 +1044,10 @@ func (validadorPCOK) PCDisponibleParaReservar(context.Context, string) (bool, er
 	return true, nil
 }
 
+func (validadorPCOK) PCEstaEnInventario(context.Context, string) (bool, error) {
+	return true, nil
+}
+
 // Estos tests no miran los avisos, así que alcanza con no romper el
 // contrato: el identificador real lo resuelve ValidadorPCPostgres, que tiene
 // su propio test contra la base.
