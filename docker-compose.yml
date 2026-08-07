@@ -41,11 +41,35 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d:ro
+    # El `-h 127.0.0.1` no es decorativo: sin él, `pg_isready` pregunta por
+    # el socket Unix, y la imagen oficial levanta ahí un servidor temporal
+    # mientras corre los scripts de docker-entrypoint-initdb.d. O sea que en
+    # el primer arranque —el único en que hay migraciones que aplicar— el
+    # healthcheck daba "sano" con la base todavía inicializándose.
+    #
+    # Lo que rompía es el arranque desde cero, y solo ese: sgrc-app tiene
+    # `depends_on: service_healthy`, así que salía a conectarse, se comía un
+    # "FATAL: the database system is starting up" (57P03) y moría con
+    # código 1. Compose entonces ni siquiera intentaba el frontend
+    # ("dependency failed to start"). Con el volumen ya inicializado no hay
+    # scripts que correr y el problema no aparece, así que se manifiesta
+    # exactamente una vez: en el estreno, cuando nadie tiene todavía
+    # criterio para saber si eso es normal.
+    #
+    # Por TCP no hay ambigüedad: el servidor temporal de la inicialización
+    # no escucha ahí (listen_addresses vacío), así que "acepta conexiones
+    # TCP" y "terminó de inicializar" pasan a ser lo mismo.
+    #
+    # start_period cubre lo otro: aplicar las migraciones lleva su tiempo, y
+    # sin él esos fallos legítimos consumen los 5 reintentos y el contenedor
+    # queda marcado unhealthy para siempre. Durante el período de gracia los
+    # fallos no cuentan.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 60s
     networks:
       - sgrc-net
 
