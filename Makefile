@@ -84,6 +84,17 @@ ps:
 # ON_ERROR_STOP hace que psql devuelva un código de salida distinto de cero
 # si la migración aborta; sin eso, una migración que se corta a propósito
 # (porque encontró datos que la regla nueva dejaría afuera) parecía exitosa.
+#
+# El usuario y la base salen del ENTORNO DEL CONTENEDOR de Postgres, que ya
+# los tiene (el compose se los pasa por `environment:`). Antes esta receta
+# hacía `. ./.env`, o sea ejecutaba el archivo como un script de shell, y
+# eso se rompe con cualquier valor que lleve espacios y no esté entrecomillado
+# — que es exactamente la forma en que Google entrega las contraseñas de
+# aplicación para SMTP ("abcd efgh ijkl mnop"). El resultado era un
+# `qdnm: not found` mientras se intentaba aplicar una migración: un error que
+# no menciona ni el .env ni la línea culpable. Compose parsea ese archivo con
+# sus propias reglas y tolera los espacios, así que el sistema arrancaba
+# perfecto y solo fallaban estos dos comandos.
 migrate:
 ifndef ARCHIVO
 	@echo "Falta indicar el archivo. Uso:"
@@ -93,8 +104,8 @@ ifndef ARCHIVO
 	@ls -1 migrations/*.sql | sed 's/^/  /'
 	@exit 1
 else
-	@set -a && . ./.env && set +a && \
-	docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" < $(ARCHIVO)
+	@docker compose exec -T postgres sh -c \
+		'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < $(ARCHIVO)
 	@echo "Aplicada: $(ARCHIVO)"
 endif
 
@@ -102,8 +113,8 @@ endif
 # se vuelven a compilar, los datos no. Conviene correrlo antes de actualizar
 # y antes de aplicar una migración.
 backup:
-	@set -a && . ./.env && set +a && \
-	docker compose exec -T postgres pg_dump -U "$$POSTGRES_USER" "$$POSTGRES_DB" > backup-sgrc-$$(date +%F).sql
+	@docker compose exec -T postgres sh -c \
+		'pg_dump -U "$$POSTGRES_USER" "$$POSTGRES_DB"' > backup-sgrc-$$(date +%F).sql
 	@echo "Backup en backup-sgrc-$$(date +%F).sql"
 
 # ── Datos iniciales ───────────────────────────────────────────────────
