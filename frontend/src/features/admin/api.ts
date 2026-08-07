@@ -5,7 +5,16 @@ import type {
   ListarUsuariosResponse,
   Rol,
 } from "@/features/auth/types"
-import type { Carro, Incidencia, PC, RespuestaLista } from "@/features/inventory/types"
+import type {
+  AltaMasivaLicencias,
+  Carro,
+  Incidencia,
+  Licencia,
+  PC,
+  RenovacionLicencias,
+  RespuestaLista,
+  VencimientoDeclarado,
+} from "@/features/inventory/types"
 import type {
   HistoricoUsoDocente,
   HistoricoUsoPC,
@@ -206,4 +215,73 @@ export function listarCiclos() {
   return apiFetch<
     RespuestaLista<{ id: string; anio: number; activo: boolean; archivado: boolean }>
   >("/api/academic/ciclos")
+}
+
+// ── Licencias de software (RF-03.11 a RF-03.14) ───────────────────────
+//
+// Todo solo-Admin, incluidas las lecturas: el docente elige PC por
+// `softwareInstalado`, que ya ve en la pantalla de reserva; cuándo vence
+// una licencia es trabajo administrativo.
+
+export function listarLicencias() {
+  return apiFetch<RespuestaLista<Licencia>>("/api/inventory/licencias")
+}
+
+export function listarLicenciasDePC(pcId: string) {
+  return apiFetch<RespuestaLista<Licencia>>(`/api/inventory/pcs/${pcId}/licencias`)
+}
+
+/**
+ * Alta de la MISMA licencia en varias PCs de una vez: el caso real es
+ * "AutoCAD, 30 días, en estas ocho máquinas".
+ *
+ * Responde 201 aunque alguna PC ya la tuviera; cuáles se saltearon viene en
+ * `pcsQueYaLaTenian`. Eso hace que reintentar el mismo request sea seguro:
+ * completa lo que falta sin duplicar lo que ya entró.
+ */
+export function crearLicencias(req: {
+  pcIds: string[]
+  nombre: string
+  diasDuracion: number
+  diasAviso?: number
+} & VencimientoDeclarado) {
+  return apiFetch<AltaMasivaLicencias>("/api/inventory/licencias", {
+    method: "POST",
+    body: req,
+  })
+}
+
+/**
+ * `renovadaEl` ausente significa "hoy", que es el botón que se aprieta el
+ * 99% de las veces. Con fecha es el caso del olvido: se renovó el martes y
+ * se carga el jueves.
+ */
+export function renovarLicencias(req: { licenciaIds: string[]; renovadaEl?: string }) {
+  return apiFetch<RenovacionLicencias>("/api/inventory/licencias/renovar", {
+    method: "POST",
+    body: req,
+  })
+}
+
+/**
+ * El "editar el contador en cualquier momento": corregir la fecha, cambiar
+ * la duración de 30 a 60 días, o cargar el vencimiento de una licencia que
+ * se dio de alta sin él.
+ *
+ * Cambiar `diasDuracion` NO mueve el vencimiento vigente — eso se pide
+ * aparte, mandando además `renovadaEl` con la última renovación conocida.
+ */
+export function editarLicencia(
+  id: string,
+  req: {
+    nombre?: string
+    diasDuracion?: number
+    diasAviso?: number
+  } & VencimientoDeclarado
+) {
+  return apiFetch<void>(`/api/inventory/licencias/${id}`, { method: "PATCH", body: req })
+}
+
+export function borrarLicencia(id: string) {
+  return apiFetch<void>(`/api/inventory/licencias/${id}`, { method: "DELETE" })
 }

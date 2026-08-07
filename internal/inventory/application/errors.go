@@ -6,6 +6,12 @@ var (
 	ErrCarroNoEncontrado      = errors.New("carro no encontrado")
 	ErrPCNoEncontrada         = errors.New("PC no encontrada")
 	ErrIncidenciaNoEncontrada = errors.New("incidencia no encontrada")
+	ErrLicenciaNoEncontrada   = errors.New("licencia no encontrada")
+
+	// ErrLicenciaDuplicada: UNIQUE(pc_id, lower(nombre)) — esa PC ya tiene
+	// una licencia de ese software. Dos filas del mismo programa en la
+	// misma máquina serían dos contadores que se contradicen.
+	ErrLicenciaDuplicada = errors.New("esa PC ya tiene cargada una licencia de ese software")
 
 	// ErrIdentificadorDuplicado: UNIQUE(carro_id, identificador) — "PC 27"
 	// ya existe en ese carro puntual (puede repetirse en otro carro).

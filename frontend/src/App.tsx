@@ -8,6 +8,7 @@ import { LoginPage } from "@/features/auth/LoginPage"
 import { RecuperarPasswordPage } from "@/features/auth/RecuperarPasswordPage"
 import { RegistroPage } from "@/features/auth/RegistroPage"
 import { InventarioAdminPage } from "@/features/admin/InventarioAdminPage"
+import { LicenciasPage } from "@/features/admin/LicenciasPage"
 import { ReportesPage } from "@/features/admin/ReportesPage"
 import { UsuariosPage } from "@/features/admin/UsuariosPage"
 import { CalendarioPCPage } from "@/features/calendario/CalendarioPCPage"
@@ -56,6 +57,7 @@ const router = createBrowserRouter([
               { path: "/admin/academico", element: <AcademicoPage /> },
               { path: "/admin/usuarios", element: <UsuariosPage /> },
               { path: "/admin/inventario", element: <InventarioAdminPage /> },
+              { path: "/admin/licencias", element: <LicenciasPage /> },
               { path: "/admin/reportes", element: <ReportesPage /> },
               {
                 path: "/admin/bloqueo-evaluacion",

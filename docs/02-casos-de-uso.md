@@ -155,6 +155,23 @@ flowchart LR
   5. Admin puede dar de baja una PC del inventario (soft delete: deja de listarse y de poder reservarse, pero su historial de incidencias y reservas pasadas se conserva).
 - **Visibilidad:** el listado de carros/PCs (incluyendo `software_instalado` y `freezado`) es visible para **cualquier usuario autenticado**, no solo Admin — un docente lo necesita para elegir bien qué PCs reservar (ej: cuáles tienen la versión de AutoCAD que su clase requiere).
 
+### UC: Llevar el vencimiento de las licencias de software
+- **Actor:** Admin (y el reloj: el aviso no lo dispara nadie)
+- **Motivo:** una PC del carro tiene AutoCAD con licencia que vence cada 30 días. Cuando vence, el programa deja de abrir. Sin contador, el Admin se entera el día que un docente no puede dar la clase.
+- **Flujo:**
+  1. Admin carga una licencia (software, días que dura la renovación, días de anticipación del aviso) **sobre varias PCs de una vez** — el mismo AutoCAD está en las ocho máquinas del carro, y pueden ser de carros distintos. Se crea una licencia por PC, cada una con su propio contador.
+  2. Al declarar el vencimiento elige **cómo lo sabe**: la fecha en que se renovó, los días que le quedan según la propia máquina, o la fecha de vencimiento. También puede **no declararlo**: la licencia queda "a verificar" hasta que alguien se siente delante del equipo.
+  3. La pantalla muestra los días que faltan, primero las que no tienen fecha y después de la más vencida a la que más le falta.
+  4. Al renovar, Admin aprieta *Renovar* (o marca varias y las renueva juntas). Si la renovación fue otro día —"la renové el martes y lo cargo el jueves"— indica esa fecha y el contador arranca ahí, no hoy.
+  5. Cualquier Admin puede **corregir el contador en cualquier momento**: cambiar la fecha, o cambiar los días de duración cuando pasan de 30 a 60.
+  6. Un barrido periódico avisa a **todos los Admin** —campana y correo— con la anticipación configurada y el día que vence. Después se calla.
+- **Reglas que no son obvias:**
+  - **Los días que faltan no se guardan**, se calculan (RF-03.12): un servidor apagado no descuadra el contador.
+  - **Una licencia sin fecha no avisa nada**, y no se puede "renovar": renovar corre un contador que ya existe, y cargar la fecha por primera vez exige decir cómo se sabe. Sin esa distinción, el botón *Renovar* sería la forma cómoda de sacarse de encima el aviso poniéndole treinta días que nadie confirmó.
+  - **Cambiar los días de duración no mueve el vencimiento vigente** (aplica a la próxima renovación); recalcularlo es una acción aparte.
+  - Queda registrado **quién fijó el vencimiento y cuándo lo cargó**, que no es lo mismo que cuándo se renovó — es lo que responde "¿esto ya lo hizo alguien?" sin tener que preguntar.
+- **Visibilidad:** solo Admin, a diferencia del inventario. El docente elige PC por `software_instalado`, que sigue siendo texto libre y visible para todos; el vencimiento es trabajo administrativo y no le sirve para decidir nada.
+
 ### UC: Resetear contraseña de un usuario
 - **Actor:** Admin
 - **Flujo:**
