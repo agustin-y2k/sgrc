@@ -94,8 +94,13 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
 
         return (
           <div key={pc.id} className="grid gap-2 rounded-md border p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
+            {/* Misma razón que en la cabecera del carro: identificador y
+                número de serie arriba, la fila de botones abajo. Acá son
+                cinco, así que en un teléfono se envuelven igual — pero
+                empiezan siempre en el mismo borde izquierdo y no donde
+                termine el texto de arriba. */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
                 <p className="font-medium">
                   PC {pc.identificador}{" "}
                   <Badge
@@ -104,13 +109,13 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
                     {ETIQUETA_ESTADO[pc.estado]}
                   </Badge>
                 </p>
-                <p className="text-muted-foreground text-sm">
+                <p className="text-muted-foreground text-sm break-words">
                   N° serie {pc.numeroSerie}
                   {pc.softwareInstalado && ` · ${pc.softwareInstalado}`}
                 </p>
               </div>
               {!cambiandoEsta && !bajandoEsta && !editandoEsta && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex shrink-0 flex-wrap gap-2">
                   {(["DISPONIBLE", "EN_MANTENIMIENTO", "FUERA_DE_SERVICIO"] as EstadoPC[])
                     .filter((e) => e !== pc.estado)
                     .map((e) => (
@@ -389,10 +394,19 @@ export function InventarioAdminPage() {
           return (
             <Card key={carro.id}>
               <CardHeader>
-                <CardTitle className="flex flex-wrap items-center justify-between gap-2">
-                  <span>{carro.nombre}</span>
+                {/* Nombre arriba y botones abajo en el teléfono, y recién
+                    en la misma línea cuando hay ancho. Con `flex-wrap` los
+                    dos en la misma fila, un nombre largo —"Carro EDUTEC"—
+                    empujaba los botones a la línea siguiente y, por el
+                    `justify-between`, los dejaba pegados a la derecha: cada
+                    tarjeta ponía "Editar carro" en un lugar distinto según
+                    cuánto medía su nombre. `min-w-0` + `break-words` es lo
+                    que impide que un nombre sin espacios desborde la
+                    tarjeta en vez de cortarse. */}
+                <CardTitle className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <span className="min-w-0 break-words">{carro.nombre}</span>
                   {!editandoCarro && (
-                    <span className="flex gap-2">
+                    <span className="flex shrink-0 flex-wrap gap-2">
                       <Button
                         variant="outline"
                         size="sm"

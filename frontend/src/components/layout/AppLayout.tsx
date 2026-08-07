@@ -315,10 +315,17 @@ export function AppLayout() {
             {/* En el teléfono el grupo va desplegado bajo un título en vez
                 de detrás de otro clic: el menú ya es una lista vertical que
                 se recorre con el pulgar, y meter un desplegable adentro de
-                un desplegable agrega un paso sin ahorrar nada de espacio. */}
+                un desplegable agrega un paso sin ahorrar nada de espacio.
+
+                El título necesita la línea y el aire de arriba: en una
+                columna de renglones todos iguales, versalitas grises a la
+                misma altura y con la misma sangría que los enlaces se leen
+                como un ítem más que no responde al toque. La regla dice
+                "acá empieza otra cosa" antes de que nadie intente
+                tocarlo. */}
             {esAdmin && (
               <>
-                <p className="text-muted-foreground mt-2 px-2.5 text-xs font-semibold tracking-wide uppercase">
+                <p className="text-muted-foreground border-border mt-3 border-t px-2.5 pt-3 pb-1 text-xs font-semibold tracking-wide uppercase">
                   Administración
                 </p>
                 {ENLACES_ADMIN.map((e) => (
