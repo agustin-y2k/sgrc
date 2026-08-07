@@ -49,15 +49,23 @@ export function eliminarUsuario(id: string) {
 /**
  * Le da rol ADMIN a un docente ya aprobado.
  *
- * **No hay operación inversa**: el sistema no puede degradar un Admin a
- * docente. La ruta se llama "promover-a-admin" y no "cambiar rol"
- * justamente para no dar a entender que se puede volver atrás.
- *
  * El cambio tiene efecto en el request siguiente, sin volver a iniciar
  * sesión: el backend lee el rol de la base en cada pedido.
  */
 export function promoverAAdmin(id: string) {
   return apiFetch<void>(`/api/auth/usuarios/${id}/promover-a-admin`, { method: "POST" })
+}
+
+/**
+ * La inversa: le quita el rol ADMIN a un Admin y lo deja como docente, sin
+ * cerrarle la cuenta. Conserva materias y reservas.
+ *
+ * El backend rechaza dos casos con 409 y el mensaje ya explica cuál es, así
+ * que alcanza con mostrarlo: degradar al último Admin activo (RF-01.8) y
+ * degradarse a uno mismo.
+ */
+export function degradarADocente(id: string) {
+  return apiFetch<void>(`/api/auth/usuarios/${id}/degradar-a-docente`, { method: "POST" })
 }
 
 /** RF-01.4 — un Admin puede crear otros Admin (quedan auto-aprobados). */

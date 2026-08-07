@@ -83,6 +83,7 @@ de la base al verificar la cuenta (§1).
 |---|:---:|:---:|
 | Crear/aprobar otros Admins | ✅ | ❌ |
 | Promover un docente a Admin | ✅ | ❌ |
+| Quitarle el rol Admin a otro Admin | ✅ | ❌ |
 | Crear/editar carros | ✅ | ❌ |
 | Registrar/editar PCs, dar de baja una PC | ✅ | ❌ |
 | Ver inventario (carros/PCs, incl. software instalado y freezado) | ✅ | ✅ |
@@ -125,13 +126,20 @@ de la base al verificar la cuenta (§1).
 | Secrets | `.env` fuera de git + Docker secrets. Secreto JWT nunca en el repo |
 | Permisos DB | Un usuario Postgres de aplicación con GRANT sobre `sgrc_db`, sin permisos de `SUPERUSER` |
 
-### Por qué se puede promover pero no degradar
+### Cómo se dan y cómo se quitan los permisos de Admin
 
 Hay dos formas de que exista un Admin: que otro Admin lo cree directo (`POST /api/auth/admins`, RF-01.4) o que promueva a un docente ya aprobado (`POST /api/auth/usuarios/{id}/promover-a-admin`). Las dos las tiene que iniciar un Admin; ninguna es alcanzable desde afuera. El autorregistro —con contraseña o con Google— crea siempre rol DOCENTE, porque es un endpoint público sin autenticar y no puede ser una puerta por la que alguien se asigne un rol.
 
-**Degradar un Admin a docente no existe, y es una omisión deliberada.** No es simétrico con promover: habría que decidir qué pasa con el guard del último Admin (RF-01.8), qué materias pasaría a dictar alguien que no tiene ninguna asignada, y si un Admin puede degradar a otro —o a sí mismo— y dejar el sistema en manos de nadie. Mientras nadie lo necesite, no existir es más seguro que existir a medias. Para sacarle los permisos a alguien hoy está la baja (RF-02.8), que sí está pensada de punta a punta.
-
 Promover **solo agrega** Admins, así que no pasa por el guard del último Admin ni necesita transacción: no hay forma de que deje al sistema sin ninguno. Y no toca nada más de la cuenta —conserva materias, reservas y formas de ingreso— porque un docente que pasa a coordinar suele seguir dando clase: `ExisteYAprobado` de academic nunca miró el rol, y reservar tampoco lo pide.
+
+La inversa es `POST /api/auth/usuarios/{id}/degradar-a-docente`: le quita los permisos y lo deja como docente, **sin cerrarle la cuenta**. Hasta que existió, la única forma de sacar a un Admin era darle de baja la cuenta entera —perdiendo sus materias y cancelándole las reservas— por un cambio que era solo de permisos. Son dos rutas que dicen lo que hacen y no un `PATCH /rol`: cada una tiene sus propias condiciones y su propia entrada de auditoría.
+
+Degradar sí puede reducir la cantidad de Admins, así que le corresponden dos frenos que promover no necesita:
+
+- **El guard del último Admin (RF-01.8)**, el mismo de la baja y por lo tanto dentro de la misma transacción: contar y escribir tienen que ser atómicos o dos pedidos concurrentes —una baja y una degradación, por ejemplo— leen ambos "quedan 2", pasan los dos, y el sistema se queda sin nadie que pueda aprobar cuentas ni volver a promover a nadie.
+- **Nadie se degrada a sí mismo.** No es por el guard, que ya cubre el caso del último: es que quien apretara el botón perdería en el acto las pantallas desde las que lo apretó, y para volver atrás dependería de otro Admin. El precio de prohibirlo es nulo, porque si no hubiera otro Admin el guard lo rechazaría igual.
+
+Lo que degradar **no** toca es el resto de la cuenta, por lo mismo que promover: conserva materias, reservas y formas de ingreso. Lo único que deja de figurar es su horario de atención, porque la lista de Admins se arma filtrando por rol — y si más adelante lo vuelven a promover, reaparece con el horario que ya tenía cargado.
 
 El cambio **tiene efecto en el request siguiente, sin volver a iniciar sesión**, por lo mismo que una baja es inmediata (§1): el middleware lee el rol de la base en cada pedido y pisa el del token. La contracara es que un token viejo no conserva el rol viejo, ni para bien ni para mal.
 
@@ -203,7 +211,7 @@ CREATE TABLE audit_log (
 CREATE INDEX idx_audit_usuario ON audit_log(usuario_id, creado_en DESC);
 ```
 
-Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `PASSWORD_RESETEADA`, `PASSWORD_RECUPERADA_POR_EMAIL`, `DOCENTE_REMOVIDO_DE_MATERIA`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_EVALUACION_CREADO`, `PC_ESTADO_CAMBIADO`, `PC_DADA_DE_BAJA`, `PC_MOVIDA_DE_CARRO`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`.
+Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `ROL_DEGRADADO_A_DOCENTE`, `PASSWORD_RESETEADA`, `PASSWORD_RECUPERADA_POR_EMAIL`, `DOCENTE_REMOVIDO_DE_MATERIA`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_EVALUACION_CREADO`, `PC_ESTADO_CAMBIADO`, `PC_DADA_DE_BAJA`, `PC_MOVIDA_DE_CARRO`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`.
 
 > `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS` tiene su propio nombre (en vez de un `CICLO_ARCHIVADO` genérico) porque implica un borrado físico de datos — vale la pena que quede explícito en el log qué admin lo disparó y cuántas filas se eliminaron (`detalle` puede guardar el conteo).
 

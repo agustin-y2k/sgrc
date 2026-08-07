@@ -857,6 +857,68 @@ func (s *Service) PromoverAAdmin(ctx context.Context, usuarioID string) error {
 	return s.repo.Guardar(ctx, u)
 }
 
+// DegradarADocente es la inversa de PromoverAAdmin: le saca los permisos de
+// Admin a alguien que sigue siendo docente de la escuela, sin cerrarle la
+// cuenta. Hasta que existió, la única forma de sacar a un Admin era darle
+// de baja la cuenta entera —perdiendo sus materias y cancelándole las
+// reservas— por un cambio que era solo de permisos.
+//
+// A diferencia de promover, esta sí necesita transacción: es la única
+// operación además de la baja que puede reducir la cantidad de Admins, así
+// que le corresponde el mismo guard de RF-01.8. Y por la misma razón que
+// allá, contar y escribir tienen que ser atómicos: con dos pedidos
+// concurrentes, ambos leerían "quedan 2", ambos pasarían, y el sistema se
+// quedaría sin ningún Admin —sin nadie que pueda aprobar cuentas ni volver
+// a promover a nadie—.
+//
+// Nadie puede degradarse a sí mismo. No es por el guard (que ya cubre el
+// caso del último), sino porque el resultado sería que quien apretó el
+// botón pierde en el acto las pantallas desde las que lo apretó, incluida
+// la de usuarios: para volver atrás dependería de otro Admin. Un cambio
+// sobre uno mismo que solo otro puede deshacer es una trampa, y el precio
+// de prohibirlo es nulo —siempre hay otro Admin a quien pedírselo, porque
+// si no lo hubiera el guard lo rechazaría igual—.
+//
+// Conserva materias y reservas (ver domain.DegradarADocente). Lo que sí
+// deja de figurar es su horario de atención: la lista de Admins se arma
+// filtrando por rol (ver availability), así que sale de esa pantalla sin
+// que haya que borrarle nada — y si más adelante lo vuelven a promover,
+// vuelve a aparecer con el horario que ya tenía cargado.
+//
+// El cambio tiene efecto en el request siguiente, sin volver a iniciar
+// sesión: igual que promover, el middleware lee el rol de la base en cada
+// pedido y pisa el del token.
+func (s *Service) DegradarADocente(ctx context.Context, usuarioID, solicitanteID string) error {
+	if usuarioID == solicitanteID {
+		return ErrAutoDegradacion
+	}
+
+	return s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		u, err := repo.BuscarPorID(ctx, usuarioID)
+		if err != nil {
+			return err
+		}
+
+		// Contar antes de tocar nada, igual que en transicionar(): el
+		// guard mira cuántos Admins activos hay, y esta cuenta todavía es
+		// uno de ellos. La condición de arriba es la misma que hace que el
+		// conteo la incluya —si no la cumple, no es un Admin activo y el
+		// motivo correcto lo da el dominio, que es más preciso que "sería
+		// el último".
+		if u.EsAdmin() && u.EstaAprobado() {
+			if err := s.verificarNoEsUltimoAdmin(ctx, repo); err != nil {
+				return err
+			}
+		}
+
+		if err := u.DegradarADocente(); err != nil {
+			return err
+		}
+
+		return repo.Guardar(ctx, u)
+	})
+}
+
 // EliminarDefinitivamente implementa RF-01.9: hard delete desde cualquiera
 // de los dos estados terminales, BAJA o RECHAZADA.
 //
