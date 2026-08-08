@@ -36,10 +36,41 @@ func (s *Service) AgregarBloque(ctx context.Context, usuarioID string, dia domai
 	if err != nil {
 		return nil, err
 	}
+	if err := s.verificarSinSolape(ctx, b); err != nil {
+		return nil, err
+	}
 	if err := s.repo.CrearBloque(ctx, b); err != nil {
 		return nil, fmt.Errorf("creando bloque de horario: %w", err)
 	}
 	return b, nil
+}
+
+// verificarSinSolape rechaza un bloque que pise a otro del mismo día.
+//
+// La base no puede garantizarlo sola —haría falta una constraint EXCLUDE con
+// btree_gist sobre un rango de TIME, que es bastante maquinaria para algo
+// puramente informativo—, así que la regla vive acá. Es una lectura por
+// usuario: son unos pocos bloques por persona.
+//
+// El error nombra el bloque que estorba. Decir "se pisa con otro" y no cuál
+// obliga a mirar la lista y compararlos a mano, que es justo lo que la
+// pantalla no ayuda a hacer cuando hay renglones parecidos.
+func (s *Service) verificarSinSolape(ctx context.Context, b *domain.BloqueHorario) error {
+	existentes, err := s.repo.ListarBloquesDeUsuario(ctx, b.UsuarioID)
+	if err != nil {
+		return fmt.Errorf("verificando si el horario se pisa con otro: %w", err)
+	}
+	if choca := b.PrimeroQueSeSolapa(existentes); choca != nil {
+		return fmt.Errorf("%w: %s de %s a %s", domain.ErrBloqueSolapado,
+			choca.DiaSemana, formatearHora(choca.HoraInicio), formatearHora(choca.HoraFin))
+	}
+	return nil
+}
+
+// formatearHora pasa una duración desde medianoche a "08:30", que es como la
+// persona escribió el horario y como lo ve en pantalla.
+func formatearHora(d time.Duration) string {
+	return fmt.Sprintf("%02d:%02d", int(d.Hours()), int(d.Minutes())%60)
 }
 
 // EditarBloque acepta campos opcionales (PATCH parcial) y revalida el
@@ -68,6 +99,12 @@ func (s *Service) EditarBloque(ctx context.Context, id, usuarioID string, dia *d
 
 	actualizado, err := domain.NuevoBloqueHorario(actual.ID, actual.UsuarioID, nuevoDia, nuevoInicio, nuevoFin)
 	if err != nil {
+		return nil, err
+	}
+	// Editar también puede crear un solape: mover el fin de las 12 a las 15
+	// pisa el bloque de la tarde. PrimeroQueSeSolapa se ignora a sí mismo por
+	// ID, así que guardar sin mover nada no choca con su propia versión.
+	if err := s.verificarSinSolape(ctx, actualizado); err != nil {
 		return nil, err
 	}
 	if err := s.repo.GuardarBloque(ctx, actualizado); err != nil {

@@ -14,6 +14,11 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrBloqueNoEncontrado):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 
+	// 409 y no 400: el bloque en sí está bien formado, lo que no se puede es
+	// convivir con otro que ya existe.
+	case errors.Is(err, domain.ErrBloqueSolapado):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
+
 	case errors.Is(err, application.ErrIDInvalido),
 		errors.Is(err, domain.ErrRangoHorarioInvalido),
 		errors.Is(err, domain.ErrDiaSemanaInvalido),

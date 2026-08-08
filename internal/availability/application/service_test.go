@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -163,6 +164,107 @@ func TestAgregarBloque_OK(t *testing.T) {
 	}
 	if len(repo.bloques) != 1 {
 		t.Errorf("esperaba 1 bloque persistido, hay %d", len(repo.bloques))
+	}
+}
+
+// Nada impedía cargar "lunes 8 a 12" y "lunes 10 a 14": el cálculo de
+// disponibilidad daba igual, pero el Admin veía dos renglones pisados en su
+// horario y ninguna forma de saber cuál sobraba.
+func TestAgregarBloque_Solapado_SeRechaza(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	if _, err := svc.AgregarBloque(ctx, "admin1", domain.Lunes, 8*time.Hour, 12*time.Hour); err != nil {
+		t.Fatalf("el primero tiene que entrar: %v", err)
+	}
+
+	_, err := svc.AgregarBloque(ctx, "admin1", domain.Lunes, 10*time.Hour, 14*time.Hour)
+
+	if !errors.Is(err, domain.ErrBloqueSolapado) {
+		t.Fatalf("esperaba ErrBloqueSolapado, obtuve %v", err)
+	}
+	// El mensaje nombra el bloque que estorba: sin eso hay que mirar la lista
+	// y compararlos a mano.
+	if !strings.Contains(err.Error(), "08:00") || !strings.Contains(err.Error(), "12:00") {
+		t.Errorf("el error tiene que decir cuál es el bloque que se pisa: %v", err)
+	}
+	if len(repo.bloques) != 1 {
+		t.Errorf("no debería haber persistido el segundo, hay %d", len(repo.bloques))
+	}
+}
+
+// El caso que NO hay que rechazar, y es el más común: mañana y tarde de
+// corrido. Con rangos cerrados en vez de semiabiertos se prohibiría.
+func TestAgregarBloque_PegadoAlAnteriorEntra(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	if _, err := svc.AgregarBloque(ctx, "admin1", domain.Lunes, 8*time.Hour, 12*time.Hour); err != nil {
+		t.Fatalf("el primero tiene que entrar: %v", err)
+	}
+
+	if _, err := svc.AgregarBloque(ctx, "admin1", domain.Lunes, 12*time.Hour, 18*time.Hour); err != nil {
+		t.Fatalf("dos bloques que se tocan en el borde no se pisan: %v", err)
+	}
+	if len(repo.bloques) != 2 {
+		t.Errorf("esperaba 2 bloques, hay %d", len(repo.bloques))
+	}
+}
+
+// El horario de OTRO Admin no estorba: cada uno tiene el suyo.
+func TestAgregarBloque_ElHorarioDeOtroAdminNoEstorba(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	if _, err := svc.AgregarBloque(ctx, "admin1", domain.Lunes, 8*time.Hour, 12*time.Hour); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if _, err := svc.AgregarBloque(ctx, "admin2", domain.Lunes, 8*time.Hour, 12*time.Hour); err != nil {
+		t.Fatalf("el bloque de otro Admin no tiene que estorbar: %v", err)
+	}
+}
+
+// Guardar un bloque sin moverlo no puede chocar contra su propia versión.
+func TestEditarBloque_SinMoverloNoChocaConsigoMismo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	b, err := svc.AgregarBloque(ctx, "admin1", domain.Lunes, 8*time.Hour, 12*time.Hour)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	nuevoFin := 13 * time.Hour
+	if _, err := svc.EditarBloque(ctx, b.ID, "admin1", nil, nil, &nuevoFin); err != nil {
+		t.Fatalf("estirar el propio bloque no puede chocar consigo mismo: %v", err)
+	}
+}
+
+// Pero editar SÍ puede crear un solape: mover el fin de las 12 a las 15 pisa
+// el bloque de la tarde.
+func TestEditarBloque_SiPisaOtroSeRechaza(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	manana, err := svc.AgregarBloque(ctx, "admin1", domain.Lunes, 8*time.Hour, 12*time.Hour)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if _, err := svc.AgregarBloque(ctx, "admin1", domain.Lunes, 14*time.Hour, 18*time.Hour); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	nuevoFin := 15 * time.Hour
+	_, err = svc.EditarBloque(ctx, manana.ID, "admin1", nil, nil, &nuevoFin)
+
+	if !errors.Is(err, domain.ErrBloqueSolapado) {
+		t.Fatalf("esperaba ErrBloqueSolapado, obtuve %v", err)
 	}
 }
 
