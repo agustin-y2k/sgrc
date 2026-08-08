@@ -8,6 +8,18 @@ var (
 	ErrIncidenciaNoEncontrada = errors.New("incidencia no encontrada")
 	ErrLicenciaNoEncontrada   = errors.New("licencia no encontrada")
 
+	// ErrEquipoPrestado: no se da de baja algo que está afuera del
+	// laboratorio. La salida es marcar primero que volvió — incluso si en
+	// realidad se perdió, porque ahí la observación de la devolución es el
+	// lugar donde eso queda escrito.
+	//
+	// La alternativa era cerrar el préstamo solo, y se descartó: `devuelto_en`
+	// significa que el equipo volvió, y ponerlo porque se dio de baja sería
+	// escribir en el registro algo que no pasó. Bloquear no inventa nada y
+	// deja la decisión —y la explicación— en manos de quien está en el
+	// mostrador.
+	ErrEquipoPrestado = errors.New("ese equipo está prestado: marcá primero que volvió")
+
 	// ErrLicenciaDuplicada: UNIQUE(equipo_id, lower(nombre)) — esa PC ya tiene
 	// una licencia de ese software. Dos filas del mismo programa en la
 	// misma máquina serían dos contadores que se contradicen.

@@ -14,12 +14,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import * as adminApi from "@/features/admin/api"
+import { AvisoDeCascada } from "@/features/admin/AvisoDeCascada"
 import { AltaDeEquipo, EdicionDeEquipo } from "@/features/admin/FormularioEquipo"
 import { IncidenciasDeEquipo } from "@/features/admin/IncidenciasDeEquipo"
 import { LicenciasDeEquipo } from "@/features/admin/LicenciasDeEquipo"
 import { OtrosEquipos } from "@/features/admin/OtrosEquipos"
 import { PrestamosDeEquipo } from "@/features/admin/PrestamosDeEquipo"
 import * as inventoryApi from "@/features/inventory/api"
+import type { ResultadoCascada } from "@/features/admin/types"
 import type { Carro, EstadoEquipo, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
@@ -54,19 +56,26 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
 
   const invalidar = () => queryClient.invalidateQueries({ queryKey: ["equipos", carroId] })
 
+  // Las dos operaciones cancelan reservas de otros docentes, así que las dos
+  // tienen que decir cuántas. Se avisa DESPUÉS y con el número real: antes de
+  // apretar solo se puede advertir que va a pasar, no cuánto.
+  const [cascada, setCascada] = useState<ResultadoCascada | null>(null)
+
   const cambiarEstado = useMutation({
     mutationFn: ({ equipo, nuevoEstado, motivo }: CambioEstado) =>
       adminApi.cambiarEstadoEquipo(equipo.id, nuevoEstado, motivo.trim() || undefined),
-    onSuccess: async () => {
+    onSuccess: async (resultado) => {
       setCambiando(null)
+      setCascada(resultado)
       await invalidar()
     },
   })
 
   const darDeBaja = useMutation({
     mutationFn: (equipo: Equipo) => adminApi.darDeBajaEquipo(equipo.id),
-    onSuccess: async () => {
+    onSuccess: async (resultado) => {
       setDandoDeBaja(null)
+      setCascada(resultado)
       await invalidar()
     },
   })
@@ -83,6 +92,8 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
           <AlertDescription>{getErrorMessage(error)}</AlertDescription>
         </Alert>
       )}
+
+      <AvisoDeCascada resultado={cascada} />
 
       {equipos.length === 0 && (
         <p className="text-muted-foreground text-sm">

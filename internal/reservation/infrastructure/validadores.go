@@ -76,6 +76,54 @@ func (v *ValidadorEquipoPostgres) EquipoDisponibleParaReservar(ctx context.Conte
 	return estado == "DISPONIBLE" && !dadoDeBaja && reservable, nil
 }
 
+// EquiposNoReservables es la versión de lote de la de arriba, en una sola
+// consulta. La base devuelve los que SÍ se pueden reservar y acá se restan:
+// lo que falta en el resultado no se puede, y eso cubre de paso los IDs que
+// no existen sin una segunda consulta.
+func (v *ValidadorEquipoPostgres) EquiposNoReservables(ctx context.Context, equipoIDs []string) ([]string, error) {
+	if len(equipoIDs) == 0 {
+		return nil, nil
+	}
+
+	rows, err := v.pool.Query(ctx, `
+		SELECT id FROM equipo
+		WHERE id = ANY($1)
+		  AND estado = 'DISPONIBLE'
+		  AND dado_de_baja = false
+		  AND reservable = true
+	`, equipoIDs)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("verificando disponibilidad de los equipos: %w", err)
+	}
+	defer rows.Close()
+
+	reservables := make(map[string]bool, len(equipoIDs))
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("escaneando equipo reservable: %w", err)
+		}
+		reservables[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("recorriendo equipos reservables: %w", err)
+	}
+
+	// Se recorre la lista PEDIDA y no el mapa para conservar el orden en que
+	// llegaron: el mensaje de error nombra máquinas, y que salgan en otro
+	// orden que en la pantalla obliga a buscarlas de a una.
+	var noReservables []string
+	for _, id := range equipoIDs {
+		if !reservables[id] {
+			noReservables = append(noReservables, id)
+		}
+	}
+	return noReservables, nil
+}
+
 // EquipoEstaEnInventario: existe y no está dada de baja, sin mirar el estado.
 // Ver el comentario del puerto: entregar no es lo mismo que reservar.
 func (v *ValidadorEquipoPostgres) EquipoEstaEnInventario(ctx context.Context, equipoID string) (bool, error) {

@@ -14,6 +14,7 @@ import (
 	"github.com/ramiro/sgrc/internal/reservation/domain"
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
 	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"strings"
 )
 
 type Service struct {
@@ -147,11 +148,36 @@ func (s *Service) etiquetasDeLosEquipos(ctx context.Context, grupos map[destinat
 	return etiquetas
 }
 
+// MaxEquiposPorOperacion es el tope de equipos que puede llevar un solo
+// pedido —reservar, reservar en serie, bloquear para evaluación, entregar—.
+//
+// Doscientos no sale de ninguna regla de la escuela: sale de que el número
+// tiene que estar MUY por encima de cualquier uso real y aun así ser finito.
+// El inventario acá son sesenta y pico de equipos y el pedido más grande que
+// existe es bloquear un carro entero, así que nadie lo va a rozar; lo que
+// frena es un cliente pidiendo diez mil, que sin tope se traduce en diez mil
+// filas en una transacción.
+const MaxEquiposPorOperacion = 200
+
+// verificarCantidadDeEquipos aplica las dos cotas del lote: que haya al
+// menos uno y que no sean absurdos. Va primero en cada caso de uso, antes de
+// cualquier consulta: validar el tamaño después de haber ido a la base por
+// cada elemento sería llegar tarde.
+func verificarCantidadDeEquipos(equipoIDs []string) error {
+	if len(equipoIDs) == 0 {
+		return ErrSinEquipos
+	}
+	if len(equipoIDs) > MaxEquiposPorOperacion {
+		return ErrDemasiadosEquipos
+	}
+	return nil
+}
+
 // CrearReserva implementa RF-04.1: un docente reserva una o más PCs para
 // su materia, en una fecha y horario puntual.
 func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string, esAdmin bool, fecha time.Time, horaInicio, horaFin time.Duration, equipoIDs []string) (*domain.ReservaGrupo, []*domain.Reserva, error) {
-	if len(equipoIDs) == 0 {
-		return nil, nil, ErrSinEquipos
+	if err := verificarCantidadDeEquipos(equipoIDs); err != nil {
+		return nil, nil, err
 	}
 
 	if !domain.EsDiaLectivo(fecha) {
@@ -166,14 +192,8 @@ func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string,
 		return nil, nil, err
 	}
 
-	for _, equipoID := range equipoIDs {
-		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, equipoID)
-		if err != nil {
-			return nil, nil, fmt.Errorf("validando PC %s: %w", equipoID, err)
-		}
-		if !disponible {
-			return nil, nil, ErrEquipoNoDisponible
-		}
+	if err := s.verificarEquiposReservables(ctx, equipoIDs); err != nil {
+		return nil, nil, err
 	}
 
 	if err := s.verificarSinSolapamiento(ctx, equipoIDs, fecha, horaInicio, horaFin); err != nil {
@@ -228,6 +248,40 @@ func (s *Service) verificarPuedeReservar(ctx context.Context, materiaID, usuario
 		return ErrDocenteNoAsignado
 	}
 	return nil
+}
+
+// verificarEquiposReservables valida de una sola vez que todo lo pedido se
+// pueda reservar, y nombra lo que no.
+//
+// Antes era un bucle con una consulta por equipo. Con ocho máquinas daba
+// igual; con un bloqueo por evaluación sobre un carro entero eran 64 idas a
+// la base antes de escribir una sola fila, y eso lo dispara el uso normal.
+func (s *Service) verificarEquiposReservables(ctx context.Context, equipoIDs []string) error {
+	noReservables, err := s.validadorEquipo.EquiposNoReservables(ctx, equipoIDs)
+	if err != nil {
+		return fmt.Errorf("validando los equipos pedidos: %w", err)
+	}
+	if len(noReservables) == 0 {
+		return nil
+	}
+
+	// Se nombra cuáles fallaron: con "alguno no se puede" el docente tiene
+	// que adivinar a cuál destildar. Si no se pueden resolver las etiquetas,
+	// sale el error genérico — quedarse sin aviso sería peor.
+	etiquetas, errEtiquetas := s.validadorEquipo.EtiquetasDeEquipos(ctx, noReservables)
+	if errEtiquetas != nil {
+		return ErrEquipoNoDisponible
+	}
+	nombres := make([]string, 0, len(noReservables))
+	for _, id := range noReservables {
+		if etiqueta, hay := etiquetas[id]; hay {
+			nombres = append(nombres, etiqueta)
+		}
+	}
+	if len(nombres) == 0 {
+		return ErrEquipoNoDisponible
+	}
+	return fmt.Errorf("%w: %s", ErrEquipoNoDisponible, strings.Join(nombres, ", "))
 }
 
 // materializarGrupo crea un ReservaGrupo + una Reserva por cada PC — lo
@@ -465,22 +519,16 @@ const maxOcurrenciasRecurrencia = 45
 // está ocupada ese día puntual por otra cosa), toda la operación se aborta
 // sin dejar reglas ni grupos a medio crear.
 func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuarioID string, esAdmin bool, diaSemana domain.DiaSemana, horaInicio, horaFin time.Duration, fechaInicio, fechaFin time.Time, equipoIDs []string) (*ResultadoRecurrencia, error) {
-	if len(equipoIDs) == 0 {
-		return nil, ErrSinEquipos
+	if err := verificarCantidadDeEquipos(equipoIDs); err != nil {
+		return nil, err
 	}
 
 	if err := s.verificarPuedeReservar(ctx, materiaID, usuarioID, esAdmin); err != nil {
 		return nil, err
 	}
 
-	for _, equipoID := range equipoIDs {
-		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, equipoID)
-		if err != nil {
-			return nil, fmt.Errorf("validando PC %s: %w", equipoID, err)
-		}
-		if !disponible {
-			return nil, ErrEquipoNoDisponible
-		}
+	if err := s.verificarEquiposReservables(ctx, equipoIDs); err != nil {
+		return nil, err
 	}
 
 	regla, err := domain.NuevaReglaRecurrencia(s.nuevoID(), materiaID, usuarioID, diaSemana, horaInicio, horaFin, fechaInicio, fechaFin)
@@ -634,8 +682,8 @@ type ResultadoBloqueoEvaluacion struct {
 // evaluaciones no deberían solaparse en la práctica, y si pasara, no es
 // este método el que debe resolverlo).
 func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, motivoBloqueo string) (*ResultadoBloqueoEvaluacion, error) {
-	if len(equipoIDs) == 0 {
-		return nil, ErrSinEquipos
+	if err := verificarCantidadDeEquipos(equipoIDs); err != nil {
+		return nil, err
 	}
 
 	ahora := s.ahora()
@@ -654,14 +702,8 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string
 		return nil, domain.ErrReservaEnElPasado
 	}
 
-	for _, equipoID := range equipoIDs {
-		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, equipoID)
-		if err != nil {
-			return nil, fmt.Errorf("validando PC %s: %w", equipoID, err)
-		}
-		if !disponible {
-			return nil, ErrEquipoNoDisponible
-		}
+	if err := s.verificarEquiposReservables(ctx, equipoIDs); err != nil {
+		return nil, err
 	}
 
 	docentesAfectados := map[string]bool{}

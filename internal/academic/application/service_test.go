@@ -440,6 +440,88 @@ func TestArchivarYClonar_CicloYaArchivado_Error(t *testing.T) {
 	}
 }
 
+// El caso que tenía consecuencias de verdad: el Admin pide clonar a un año
+// que ya existe. Antes fallaba DESPUÉS de borrar el año viejo, así que
+// devolvía un 409 con las reservas ya destruidas y sin forma de completar el
+// clonado desde la interfaz.
+func TestArchivarYClonar_AnioDestinoOcupado_FallaSinTocarNada(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: true}
+	repo.ciclos["c2"] = &domain.CicloLectivo{ID: "c2", Anio: 2026, Activo: false}
+	archivador := &fakeArchivadorHistorico{}
+	svc := nuevoServicioConArchivador(repo, &fakeValidadorUsuario{valido: true}, &fakeValidadorReservas{}, archivador)
+
+	anio2026 := 2026
+	_, err := svc.ArchivarYClonar(context.Background(), "c1", &anio2026)
+
+	if !errors.Is(err, ErrCicloYaTieneAnio) {
+		t.Fatalf("esperaba ErrCicloYaTieneAnio, obtuve %v", err)
+	}
+	// Lo que importa no es el error, es que no se haya destruido nada.
+	if repo.ciclos["c1"].Archivado {
+		t.Error("el ciclo viejo NO tiene que quedar archivado si el clonado no puede hacerse")
+	}
+	if len(archivador.pasos) != 0 {
+		t.Errorf("no se tendría que haber tocado nada, pero corrió: %v", archivador.pasos)
+	}
+}
+
+// Un año fuera de rango tiene el mismo problema: se validaba al final.
+func TestArchivarYClonar_AnioInvalido_FallaSinTocarNada(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: true}
+	archivador := &fakeArchivadorHistorico{}
+	svc := nuevoServicioConArchivador(repo, &fakeValidadorUsuario{valido: true}, &fakeValidadorReservas{}, archivador)
+
+	disparatado := 99999
+	_, err := svc.ArchivarYClonar(context.Background(), "c1", &disparatado)
+
+	if !errors.Is(err, domain.ErrAnioInvalido) {
+		t.Fatalf("esperaba ErrAnioInvalido, obtuve %v", err)
+	}
+	if repo.ciclos["c1"].Archivado || len(archivador.pasos) != 0 {
+		t.Error("no se tendría que haber tocado nada")
+	}
+}
+
+// Si el clonado falla por algo transitorio, el archivado ya se consumó. El
+// reintento tiene que poder terminarlo: sin esto, el Admin quedaba cargando
+// a mano los cursos y materias del año nuevo.
+func TestArchivarYClonar_ReintentoCompletaElClonadoPendiente(t *testing.T) {
+	repo := nuevoFakeRepo()
+	// Como quedó tras un primer intento que archivó y borró, pero no clonó.
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: false, Archivado: true}
+	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", CicloLectivoID: "c1", Nombre: "1°A", Activo: true}
+	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "curso1", Nombre: "Matemáticas", Activo: true}
+	// Sin limpieza pendiente: el borrado del intento anterior sí terminó.
+	svc := nuevoServicioConArchivador(repo, &fakeValidadorUsuario{valido: true},
+		&fakeValidadorReservas{}, &fakeArchivadorHistorico{})
+
+	anio2026 := 2026
+	res, err := svc.ArchivarYClonar(context.Background(), "c1", &anio2026)
+
+	if err != nil {
+		t.Fatalf("el reintento tiene que completar el clonado: %v", err)
+	}
+	if res.NuevoCicloID == nil || res.CursosClonados != 1 || res.MateriasClonadas != 1 {
+		t.Errorf("esperaba el clonado completo, obtuve %+v", res)
+	}
+}
+
+// Y sin clonado pendiente, archivar dos veces sigue siendo un error: el
+// reintento habilita terminar lo que faltó, no repetir la operación.
+func TestArchivarYClonar_YaArchivadoSinNadaPendiente_SigueSiendoError(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: false, Archivado: true}
+	svc := servicioSimple(repo)
+
+	_, err := svc.ArchivarYClonar(context.Background(), "c1", nil)
+
+	if !errors.Is(err, domain.ErrCicloYaArchivado) {
+		t.Fatalf("esperaba ErrCicloYaArchivado, obtuve %v", err)
+	}
+}
+
 func TestArchivarYClonar_CicloInexistente_Error(t *testing.T) {
 	svc := servicioSimple(nuevoFakeRepo())
 

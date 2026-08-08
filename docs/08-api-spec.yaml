@@ -71,6 +71,16 @@ components:
         "credenciales inválidas", "email ya registrado",
         "uno o más equipos ya tienen una reserva en ese horario".
 
+    ResultadoCascada:
+      type: object
+      description: |
+        Lo que dejó una operación que saca un equipo de circulación (RF-03.8 y
+        RF-03.9). Cero en ambos campos es lo normal: significa que no había
+        ninguna reserva futura que cancelar.
+      properties:
+        reservasCanceladas: { type: integer }
+        docentesNotificados: { type: integer }
+
     PaginationMeta:
       type: object
       description: |
@@ -1055,9 +1065,18 @@ paths:
       description: |
         Preserva curso/materia/docente_materia (archivado=true) para no recrearlos.
         Antes de nada, calcula y guarda un snapshot histórico agregado (historico_uso_equipo,
-        historico_uso_docente). Luego ELIMINA FÍSICAMENTE todos los ReservaGrupo, Reserva,
-        ReglaRecurrencia y ReglaRecurrenciaPc de las materias de ese ciclo. Incidencia no
-        se ve afectada (pertenece a la PC, no al ciclo lectivo).
+        historico_uso_docente). Luego ELIMINA FÍSICAMENTE todos los ReservaGrupo, Reserva
+        y ReglaRecurrencia de las materias de ese ciclo, más los bloqueos por evaluación
+        estatal de ese año. Incidencia no se ve afectada (pertenece al equipo, no al ciclo).
+
+        **Si se pide `clonarA`, el año destino se verifica ANTES de archivar**: que sea un
+        año válido y que no exista ya un ciclo con ese año. El borrado es irreversible, así
+        que un año repetido devuelve 409 con el ciclo viejo intacto — no después de haberlo
+        destruido.
+
+        La operación es reintentable: si un intento anterior quedó a medias (reservas sin
+        borrar, o el clonado sin hacer), volver a llamar completa lo que faltó en vez de
+        rechazar por "ya archivado".
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -1079,10 +1098,16 @@ paths:
                 type: object
                 properties:
                   archivado: { type: boolean }
-                  reservasEliminadas: { type: integer }
                   nuevoCicloId: { type: string, format: uuid, nullable: true }
                   cursosClonados: { type: integer }
                   materiasClonadas: { type: integer }
+        "409":
+          description: |
+            El ciclo ya estaba archivado y no quedaba nada pendiente, o el año
+            destino del clon ya tiene un ciclo. En los dos casos no se tocó nada.
+          content:
+            text/plain:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/academic/ciclos/{cicloId}/cursos:
     get:
@@ -1474,6 +1499,13 @@ paths:
     patch:
       tags: [inventory]
       summary: Editar datos de un equipo, incluyendo moverlo de carro (Admin)
+      description: |
+        Sirve para los dos tipos de equipo, pero no todos los campos aplican a
+        los dos: `carroId` y los de hardware son de una computadora de carro;
+        `tipo`, `nombre` y `reservable` (RF-03.18) son de un equipo suelto.
+
+        Quitar `reservable` NO cancela nada: el equipo deja de ofrecerse al
+        armar una reserva, pero las que ya existen siguen en pie.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -1505,10 +1537,15 @@ paths:
       description: |
         Soft delete: marca dado_de_baja=true y fecha_baja. No se borra la fila —
         incidencia y reserva la referencian por FK y ese historial se conserva.
-        La PC deja de listarse como disponible y no puede reservarse.
+        El equipo deja de listarse como disponible y no puede reservarse.
         Dispara la misma cascada de cancelación que el cambio de estado a
         FUERA_DE_SERVICIO (RF-03.9): cancela sus reservas futuras y notifica a
         los docentes afectados.
+
+        **Un equipo prestado no se puede dar de baja**: devuelve 409. Dejaría el
+        préstamo abierto sin ninguna pantalla desde donde cerrarlo. Hay que
+        marcar primero que volvió. Cambiar el ESTADO sí se permite estando
+        prestado — llevarle una máquina al técnico es justamente un préstamo.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -1517,15 +1554,15 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
-          description: PC dada de baja (con detalle de cascada si aplicó)
+          description: Equipo dado de baja, con el detalle de la cascada
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  dadoDeBaja: { type: boolean }
-                  reservasCanceladas: { type: integer }
-                  docentesNotificados: { type: integer }
+              schema: { $ref: '#/components/schemas/ResultadoCascada' }
+        "409":
+          description: El equipo ya estaba dado de baja, o está prestado y todavía no volvió
+          content:
+            text/plain:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/inventory/equipos/{id}/estado:
     patch:
@@ -1555,15 +1592,10 @@ paths:
                   description: "Opcional. Si se omite y el estado cancela reservas, se usa un mensaje por defecto."
       responses:
         "200":
-          description: Estado actualizado (con detalle de cascada si aplicó)
+          description: Estado actualizado, con el detalle de la cascada
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  estado: { type: string, enum: [DISPONIBLE, EN_MANTENIMIENTO, FUERA_DE_SERVICIO] }
-                  reservasCanceladas: { type: integer }
-                  docentesNotificados: { type: integer }
+              schema: { $ref: '#/components/schemas/ResultadoCascada' }
 
   /api/reservation/equipos/{equipoId}/calendario:
     get:

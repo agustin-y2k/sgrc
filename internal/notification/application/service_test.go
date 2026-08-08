@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,10 @@ import (
 type fakeRepo struct {
 	notificaciones map[string]*domain.Notificacion
 	errCrear       error
+	// errCrearPara falla solo para ese usuario, para poder probar el fallo
+	// PARCIAL: errCrear falla siempre y no distingue "se cayó la base" de
+	// "un destinatario dio problema", que es justo lo que hay que separar.
+	errCrearPara map[string]error
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -25,6 +30,9 @@ func nuevoFakeRepo() *fakeRepo {
 func (r *fakeRepo) Crear(ctx context.Context, n *domain.Notificacion) error {
 	if r.errCrear != nil {
 		return r.errCrear
+	}
+	if err, hay := r.errCrearPara[n.UsuarioID]; hay {
+		return err
 	}
 	r.notificaciones[n.ID] = n
 	return nil
@@ -184,6 +192,46 @@ func TestNotificarATodosLosAdmins_OK(t *testing.T) {
 	if len(repo.notificaciones) != 3 {
 		t.Errorf("esperaba 3 notificaciones en el repo, hay %d", len(repo.notificaciones))
 	}
+}
+
+// Un Admin que falla no puede dejar sin aviso a los que siguen: si se corta
+// en el primero, el tercero nunca se entera de que hay una cuenta esperando
+// aprobación o una máquina que no volvió. Mismo criterio que el envío de
+// correos, que ya lo hacía así.
+func TestNotificarATodosLosAdmins_UnoFalla_LosDemasIgualSeEnteran(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.errCrearPara = map[string]error{"admin2": errors.New("cuenta borrada recién")}
+	listador := &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2", "admin3"}}
+	svc := nuevoServicioDeTest(repo, listador)
+
+	creadas, err := svc.NotificarATodosLosAdmins(context.Background(), "mensaje", domain.TipoGeneral, domain.Referencias{})
+
+	// El error se devuelve igual: queda constancia de a quién no se le pudo.
+	if err == nil {
+		t.Fatal("esperaba que informara el fallo parcial")
+	}
+	if !strings.Contains(err.Error(), "admin2") {
+		t.Errorf("el error tiene que decir a quién no se pudo: %v", err)
+	}
+	if creadas != 2 {
+		t.Errorf("esperaba 2 notificaciones creadas, obtuve %d", creadas)
+	}
+	// Lo que importa: admin3 va DESPUÉS del que falló y tiene que estar.
+	if !notificoA(repo, "admin3") {
+		t.Error("admin3 se quedó sin el aviso por un fallo de admin2")
+	}
+	if !notificoA(repo, "admin1") {
+		t.Error("admin1 tendría que haber recibido el aviso")
+	}
+}
+
+func notificoA(repo *fakeRepo, usuarioID string) bool {
+	for _, n := range repo.notificaciones {
+		if n.UsuarioID == usuarioID {
+			return true
+		}
+	}
+	return false
 }
 
 func TestNotificarATodosLosAdmins_SinAdmins_NoCreaNada(t *testing.T) {

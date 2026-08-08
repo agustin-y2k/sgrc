@@ -234,6 +234,14 @@ type fakeValidadorReservas struct {
 	// que quedó a medias.
 	tieneFuturas    bool
 	errTieneFuturas error
+	// prestado: el equipo está afuera del laboratorio. Da de baja no puede
+	// pisar eso.
+	prestado    bool
+	errPrestado error
+}
+
+func (f *fakeValidadorReservas) EstaPrestado(ctx context.Context, equipoID string) (bool, error) {
+	return f.prestado, f.errPrestado
 }
 
 func (f *fakeValidadorReservas) CancelarReservasFuturasDeEquipo(ctx context.Context, equipoID, motivo string) (int, int, error) {
@@ -538,6 +546,49 @@ func TestCambiarEstadoEquipo_ErrorEnCascada_SePropaga(t *testing.T) {
 }
 
 // ── DarDeBajaEquipo ─────────────────────────────────────────────────────
+
+// Dar de baja algo que está afuera dejaba el préstamo abierto para siempre:
+// el equipo desaparecía del inventario pero seguía figurando en "lo que falta
+// volver", y desde ninguna pantalla se podía cerrar —la lista de equipos a
+// recibir sale del inventario—.
+func TestDarDeBajaEquipo_PrestadoNoSePuedeDarDeBaja(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["eq1"] = &domain.Equipo{ID: "eq1", Identificador: 27, Estado: domain.EstadoDisponible}
+	validador := &fakeValidadorReservas{prestado: true}
+	svc := nuevoServicioDeTest(repo, validador)
+
+	_, err := svc.DarDeBajaEquipo(context.Background(), "eq1")
+
+	if !errors.Is(err, ErrEquipoPrestado) {
+		t.Fatalf("esperaba ErrEquipoPrestado, obtuve %v", err)
+	}
+	if repo.equipos["eq1"].DadoDeBaja {
+		t.Error("no tenía que quedar dado de baja")
+	}
+	if validador.llamado {
+		t.Error("tampoco tenía que cancelar reservas: la baja no ocurrió")
+	}
+}
+
+// El reintento de una cascada pendiente NO se bloquea: ahí el equipo ya está
+// de baja y lo único que falta es terminar de cancelar sus reservas. Si lo
+// prestaron antes de darlo de baja, bloquear acá dejaría la cascada a medias
+// para siempre.
+func TestDarDeBajaEquipo_YaDeBajaConCascadaPendiente_NoLoFrenaElPrestamo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["eq1"] = &domain.Equipo{ID: "eq1", Identificador: 27, DadoDeBaja: true}
+	validador := &fakeValidadorReservas{prestado: true, tieneFuturas: true, canceladas: 2}
+	svc := nuevoServicioDeTest(repo, validador)
+
+	res, err := svc.DarDeBajaEquipo(context.Background(), "eq1")
+
+	if err != nil {
+		t.Fatalf("el reintento tiene que poder completarse: %v", err)
+	}
+	if res.ReservasCanceladas != 2 {
+		t.Errorf("esperaba que terminara la cascada, obtuve %+v", res)
+	}
+}
 
 func TestDarDeBajaEquipo_DisparaLaMismaCascada(t *testing.T) {
 	repo := nuevoFakeRepo()
