@@ -171,3 +171,64 @@ func TestFechaSolo_DescartaLaHora(t *testing.T) {
 		t.Errorf("FechaSolo alteró la fecha: %v", solo)
 	}
 }
+
+// ── Solapamiento entre bloques ──────────────────────────────────────────
+
+func TestSeSolapaCon(t *testing.T) {
+	bloque := func(dia DiaSemana, desde, hasta time.Duration) *BloqueHorario {
+		return &BloqueHorario{DiaSemana: dia, HoraInicio: desde, HoraFin: hasta}
+	}
+	h := func(n int) time.Duration { return time.Duration(n) * time.Hour }
+
+	casos := []struct {
+		nombre   string
+		a, b     *BloqueHorario
+		esperado bool
+	}{
+		{"se pisan por el medio", bloque(Lunes, h(8), h(12)), bloque(Lunes, h(10), h(14)), true},
+		{"uno contiene al otro", bloque(Lunes, h(8), h(18)), bloque(Lunes, h(10), h(12)), true},
+		{"idénticos", bloque(Lunes, h(8), h(12)), bloque(Lunes, h(8), h(12)), true},
+		// El caso que NO hay que rechazar: mañana y tarde de corrido es lo
+		// más común que carga un Admin, y con rangos cerrados se prohibiría.
+		{"se tocan en el borde", bloque(Lunes, h(8), h(12)), bloque(Lunes, h(12), h(18)), false},
+		{"separados el mismo día", bloque(Lunes, h(8), h(10)), bloque(Lunes, h(14), h(18)), false},
+		{"mismo horario, día distinto", bloque(Lunes, h(8), h(12)), bloque(Martes, h(8), h(12)), false},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			if got := c.a.SeSolapaCon(c.b); got != c.esperado {
+				t.Errorf("a.SeSolapaCon(b) = %v, esperaba %v", got, c.esperado)
+			}
+			// La relación es simétrica: da igual cuál se pregunta.
+			if got := c.b.SeSolapaCon(c.a); got != c.esperado {
+				t.Errorf("b.SeSolapaCon(a) = %v, esperaba %v — no es simétrico", got, c.esperado)
+			}
+		})
+	}
+}
+
+// Editar un bloque sin moverlo no puede chocar contra su propia versión
+// guardada: sin ignorarse por ID, guardar dos veces lo mismo daría error.
+func TestPrimeroQueSeSolapa_SeIgnoraASiMismo(t *testing.T) {
+	guardado := &BloqueHorario{ID: "b1", DiaSemana: Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour}
+	mismoEditado := &BloqueHorario{ID: "b1", DiaSemana: Lunes, HoraInicio: 8 * time.Hour, HoraFin: 13 * time.Hour}
+
+	if choca := mismoEditado.PrimeroQueSeSolapa([]*BloqueHorario{guardado}); choca != nil {
+		t.Errorf("no debería chocar consigo mismo, chocó con %+v", choca)
+	}
+}
+
+func TestPrimeroQueSeSolapa_DevuelveElQueEstorba(t *testing.T) {
+	manana := &BloqueHorario{ID: "b1", DiaSemana: Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour}
+	tarde := &BloqueHorario{ID: "b2", DiaSemana: Lunes, HoraInicio: 14 * time.Hour, HoraFin: 18 * time.Hour}
+	nuevo := &BloqueHorario{ID: "b3", DiaSemana: Lunes, HoraInicio: 16 * time.Hour, HoraFin: 20 * time.Hour}
+
+	choca := nuevo.PrimeroQueSeSolapa([]*BloqueHorario{manana, tarde})
+	if choca == nil {
+		t.Fatal("esperaba que chocara con el de la tarde")
+	}
+	if choca.ID != "b2" {
+		t.Errorf("esperaba el bloque de la tarde, obtuve %s", choca.ID)
+	}
+}

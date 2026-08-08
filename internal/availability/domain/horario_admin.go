@@ -75,6 +75,15 @@ func FechaSolo(t time.Time) time.Time {
 
 var ErrRangoHorarioInvalido = errors.New("la hora de fin debe ser posterior a la hora de inicio")
 
+// ErrBloqueSolapado: dos bloques del mismo día que se pisan.
+//
+// Se rechaza en vez de fusionarlos con el que ya estaba. Fusionar sería casi
+// siempre lo que la persona quiso —extender su horario— pero significa que
+// apretar "agregar" modifica un renglón que ya existía, y esto no tiene
+// deshacer. Rechazar es predecible: el mensaje dice cuál es el bloque que
+// estorba y quien lo cargó decide si lo edita o lo borra.
+var ErrBloqueSolapado = errors.New("ese horario se pisa con otro bloque del mismo día")
+
 // BloqueHorario es un tramo del patrón semanal recurrente de presencia de
 // un Admin en el laboratorio (RF-07.1) — puramente informativo, sin efecto
 // sobre permisos ni reservas.
@@ -102,4 +111,33 @@ func NuevoBloqueHorario(id, usuarioID string, diaSemana DiaSemana, horaInicio, h
 // docs/07-modelo-datos.md).
 func (b *BloqueHorario) Cubre(dia DiaSemana, horaActual time.Duration) bool {
 	return b.DiaSemana == dia && horaActual >= b.HoraInicio && horaActual < b.HoraFin
+}
+
+// SeSolapaCon dice si dos bloques del mismo día pisan aunque sea un minuto.
+//
+// Rangos semiabiertos, igual que Cubre: dos bloques que se tocan en el borde
+// —uno termina 12:00 y el otro empieza 12:00— NO se solapan. Es el caso más
+// común de todos, el Admin que está a la mañana y a la tarde de corrido, y
+// rechazarlo sería absurdo.
+func (b *BloqueHorario) SeSolapaCon(otro *BloqueHorario) bool {
+	if b.DiaSemana != otro.DiaSemana {
+		return false
+	}
+	return b.HoraInicio < otro.HoraFin && otro.HoraInicio < b.HoraFin
+}
+
+// PrimeroQueSeSolapa devuelve el bloque de la lista que pisa a este, o nil.
+//
+// Se ignora a sí mismo por ID, para que editar un bloque sin moverlo no
+// choque contra su propia versión guardada.
+func (b *BloqueHorario) PrimeroQueSeSolapa(otros []*BloqueHorario) *BloqueHorario {
+	for _, otro := range otros {
+		if otro.ID == b.ID {
+			continue
+		}
+		if b.SeSolapaCon(otro) {
+			return otro
+		}
+	}
+	return nil
 }

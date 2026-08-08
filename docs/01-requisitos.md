@@ -169,6 +169,7 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 - RF-07.4: Un `ADMIN` puede cargar una **excepción puntual** para una fecha concreta (un horario distinto ese día, o ausencia total) sin alterar su patrón semanal general — útil para un día particular distinto a lo habitual.
 - RF-07.5: Un `ADMIN` puede marcarse manualmente como **"no disponible ahora"** en cualquier momento, incluso dentro de su horario habitual (ej: llegó tarde, está ausente ese día) — técnicamente es una excepción puntual para la fecha de hoy (RF-07.4), pero expuesta como una acción rápida de un solo paso.
 - RF-07.6: Esta disponibilidad es **puramente informativa**: no restringe ni habilita ninguna otra funcionalidad del sistema — aprobar cuentas, reservar, cancelar, etc. funcionan exactamente igual sin importar si el Admin figura disponible o no en ese momento.
+- RF-07.7: Dos bloques del mismo `ADMIN` **no pueden pisarse** en el mismo día. Se rechaza el que se agrega, nombrando el que estorba; no se fusionan solos, porque apretar "agregar" y que el sistema modifique un renglón que ya existía sorprende y esto no tiene deshacer. Dos bloques que se **tocan en el borde** —uno termina 12:00 y el otro empieza 12:00— no se pisan: es el caso más común, el que está a la mañana y a la tarde. La regla vive en el servicio y no en la base: garantizarlo con una constraint pediría `btree_gist` sobre un rango de `TIME`, que es mucha maquinaria para algo puramente informativo (RF-07.6).
 
 ### RF-08 — Entregas y devoluciones de PCs (`ADMIN`)
 

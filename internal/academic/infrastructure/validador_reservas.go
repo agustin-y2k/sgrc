@@ -50,17 +50,29 @@ func (v *ValidadorReservasPostgres) TieneReservasCurso(ctx context.Context, curs
 	return existe, nil
 }
 
-// TieneReservasDeCiclo cubre las dos cosas que el archivado borra y que
+// TieneReservasDeCiclo cubre las TRES cosas que el archivado borra y que
 // pueden quedar colgadas si falla a mitad de camino: los reserva_grupo de
-// las materias del ciclo, y los bloqueos por evaluación estatal, que no
-// tienen materia y se atan al ciclo por el año de su fecha (mismo criterio
-// que EliminarReservasYGruposDeCiclo en reservation/infrastructure).
+// las materias del ciclo, las regla_recurrencia de esas materias, y los
+// bloqueos por evaluación estatal, que no tienen materia y se atan al ciclo
+// por el año de su fecha (mismo criterio que EliminarReservasYGruposDeCiclo
+// en reservation/infrastructure).
+//
+// Las reglas faltaban acá y el borrado sí las tocaba. Con eso, un fallo justo
+// entre borrar los grupos y borrar las reglas dejaba filas que el reintento
+// ya no veía —decía que no faltaba nada— y quedaban para siempre. No hacían
+// daño, porque ningún job las lee, pero el archivado prometía completar la
+// limpieza y no la completaba.
 func (v *ValidadorReservasPostgres) TieneReservasDeCiclo(ctx context.Context, cicloID string) (bool, error) {
 	var existe bool
 	err := v.pool.QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM reserva_grupo rg
 			JOIN materia m ON m.id = rg.materia_id
+			JOIN curso c ON c.id = m.curso_id
+			WHERE c.ciclo_lectivo_id = $1
+		) OR EXISTS(
+			SELECT 1 FROM regla_recurrencia rr
+			JOIN materia m ON m.id = rr.materia_id
 			JOIN curso c ON c.id = m.curso_id
 			WHERE c.ciclo_lectivo_id = $1
 		) OR EXISTS(
