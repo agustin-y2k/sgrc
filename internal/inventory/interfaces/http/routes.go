@@ -39,6 +39,8 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 
 	// Incidencia
 	inventory.Post("/incidencias", autenticado, h.CrearIncidencia)
+	// Antes de /incidencias/:id, que si no se traga la palabra "categorias".
+	inventory.Get("/incidencias/categorias", autenticado, h.ListarCategoriasDeFalla)
 	inventory.Get("/equipos/:equipoId/incidencias", autenticado, h.ListarIncidenciasPorEquipo)
 	inventory.Patch("/incidencias/:id", autenticado, soloAdmin, h.EditarIncidencia)
 

@@ -126,3 +126,23 @@ func (s *Service) ArchivarSnapshotDeCiclo(ctx context.Context, cicloID string, a
 
 	return nil
 }
+
+// ── Estado del parque de equipos (RF-06.5) ──────────────────────────────
+
+// EstadoDelInventario y EquiposFueraDeCirculacion no reciben rango de fechas
+// a propósito: describen la situación de AHORA, no lo que pasó en un período.
+// Filtrarlas por fecha daría un número que no significa nada — "cuántas
+// estaban rotas en marzo" no se puede responder con el estado actual.
+func (s *Service) EstadoDelInventario(ctx context.Context) ([]domain.EstadoDelInventario, error) {
+	return s.repo.EstadoDelInventario(ctx)
+}
+
+func (s *Service) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.EquipoFueraDeCirculacion, error) {
+	return s.repo.EquiposFueraDeCirculacion(ctx)
+}
+
+// ReporteIncidenciasPorCategoria SÍ acepta fechas: acá la pregunta es qué se
+// rompió en un período, y eso permite comparar un año contra otro.
+func (s *Service) ReporteIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error) {
+	return s.repo.CalcularIncidenciasPorCategoria(ctx, desde, hasta)
+}

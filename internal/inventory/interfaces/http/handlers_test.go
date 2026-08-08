@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -122,6 +123,20 @@ func (r *fakeRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID stri
 			resultado = append(resultado, i)
 		}
 	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) CategoriasDeFallaUsadas(ctx context.Context) ([]string, error) {
+	vistas := map[string]bool{}
+	var resultado []string
+	for _, i := range r.incidencias {
+		if i.Categoria == "" || vistas[strings.ToLower(i.Categoria)] {
+			continue
+		}
+		vistas[strings.ToLower(i.Categoria)] = true
+		resultado = append(resultado, i.Categoria)
+	}
+	sort.Strings(resultado)
 	return resultado, nil
 }
 

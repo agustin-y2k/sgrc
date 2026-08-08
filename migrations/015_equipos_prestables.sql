@@ -1,10 +1,9 @@
 -- SGRC — No todo lo que se presta es una computadora de un carro
 --
--- La escuela presta dos cargadores, dos notebooks de otro modelo y un
--- proyector. De todo eso, solo el proyector podría llegar a reservarse; el
--- resto sale siempre de forma espontánea. Y la lista es distinta en cada
--- escuela: otra tiene proyector pero quizá ni cargadores ni notebooks
--- sueltas.
+-- Una institución también presta proyectores, cargadores, notebooks de otro
+-- modelo. Parte de eso se planifica con anticipación —un proyector para una
+-- clase— y parte se pide en el momento. Qué hay en esa lista cambia de una
+-- institución a otra, así que el sistema no puede traerla decidida.
 --
 -- ══════════════════════════════════════════════════════════════════
 -- Por qué acá y no en una tabla nueva
@@ -27,10 +26,9 @@
 -- ══════════════════════════════════════════════════════════════════
 -- La tabla sigue llamándose `pc`, y es una deuda
 -- ══════════════════════════════════════════════════════════════════
--- Un proyector en una tabla llamada `pc` es una mentira, la segunda del
--- modelo después de `carro` —que en realidad es un laboratorio fijo, ver
--- docs/01-requisitos.md—. Se decidió a propósito: mezclar el renombre con
--- este cambio de comportamiento daría un diff imposible de revisar.
+-- Un proyector en una tabla llamada `pc` es una mentira. Se decidió a
+-- propósito: mezclar el renombre con este cambio de comportamiento daría un
+-- diff imposible de revisar.
 --
 -- La deuda quedó saldada en la 016, que renombra la tabla a `equipo`. Esta
 -- migración se deja tal como se aplicó: es el registro de lo que pasó.

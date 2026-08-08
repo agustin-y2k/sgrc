@@ -1,10 +1,9 @@
 -- SGRC — La tabla `pc` pasa a llamarse `equipo`
 --
 -- Es una deuda que se contrajo a propósito en la 015 y que se paga acá, en su
--- propio archivo. Desde aquella migración esta tabla guarda un proyector, dos
--- cargadores y dos notebooks sueltas además de las computadoras de los
--- carros: llamarla `pc` era la segunda mentira del modelo, después de `carro`
--- —que en realidad es un laboratorio fijo, ver docs/01-requisitos.md—.
+-- propio archivo. Desde aquella migración esta tabla también guarda lo que se
+-- presta y no es una computadora de un carro —proyectores, cargadores,
+-- notebooks sueltas—, así que llamarla `pc` era una mentira.
 --
 -- Se separó del cambio de comportamiento porque mezclarlos daba un diff
 -- imposible de revisar: allá había reglas nuevas que discutir, acá no hay
@@ -28,9 +27,11 @@
 -- ══════════════════════════════════════════════════════════════════
 -- Qué NO se toca
 -- ══════════════════════════════════════════════════════════════════
--- `carro` se queda como está. Es la otra imprecisión del modelo y merece su
--- propia discusión: no es solo un nombre, porque uno de los "carros" es un
--- laboratorio fijo que no se mueve a ninguna parte.
+-- `carro` se queda como está, y no por deuda: es el nombre correcto. Un carro
+-- es un mueble metálico con ruedas y zócalos numerados donde las
+-- notebooks se guardan y se cargan. El `identificador` de cada equipo es
+-- justamente el número de su zócalo, y por eso se repite entre carros y es
+-- único dentro de uno solo.
 --
 -- Las migraciones anteriores tampoco se tocan: son el registro de lo que
 -- pasó, y reescribirlas para que digan `equipo` haría que una base creada

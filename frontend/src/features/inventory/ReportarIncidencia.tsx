@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -29,12 +29,25 @@ const GRAVEDADES: { valor: GravedadIncidencia; etiqueta: string; ayuda: string }
 export function ReportarIncidencia({ equipo, onListo }: { equipo: Equipo; onListo: () => void }) {
   const queryClient = useQueryClient()
   const [descripcion, setDescripcion] = useState("")
+  const [categoria, setCategoria] = useState("")
   const [gravedad, setGravedad] = useState<GravedadIncidencia>("MODERADA")
+
+  // Las categorías ya cargadas, para sugerirlas. Si la consulta falla no se
+  // interrumpe nada: se puede reportar igual, solo sin sugerencias.
+  const { data: categorias } = useQuery({
+    queryKey: ["categorias-de-falla"],
+    queryFn: inventoryApi.listarCategoriasDeFalla,
+  })
   const [reportada, setReportada] = useState(false)
 
   const reportar = useMutation({
     mutationFn: () =>
-      inventoryApi.reportarIncidencia({ equipoId: equipo.id, descripcion, gravedad }),
+      inventoryApi.reportarIncidencia({
+        equipoId: equipo.id,
+        descripcion,
+        categoria: categoria.trim() || undefined,
+        gravedad,
+      }),
     onSuccess: async () => {
       setReportada(true)
       await queryClient.invalidateQueries({ queryKey: ["incidencias", equipo.id] })
@@ -81,6 +94,31 @@ export function ReportarIncidencia({ equipo, onListo }: { equipo: Equipo; onList
           onChange={(e) => setDescripcion(e.target.value)}
           placeholder="Ej.: no arranca, la pantalla parpadea, no tiene teclado"
         />
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label htmlFor={`categoria-${equipo.id}`}>¿Qué es lo que falla?</Label>
+        <Input
+          id={`categoria-${equipo.id}`}
+          value={categoria}
+          onChange={(e) => setCategoria(e.target.value)}
+          placeholder="Ej.: batería, pantalla, teclado"
+          list="categorias-de-falla"
+        />
+        {/* Texto libre con sugerencias, no una lista cerrada: cada
+            institución rompe cosas distintas. Las sugerencias son lo que
+            hace que las escrituras converjan sin obligar a nadie. */}
+        {(categorias?.data?.length ?? 0) > 0 && (
+          <datalist id="categorias-de-falla">
+            {categorias?.data.map((c: string) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        )}
+        <p className="text-muted-foreground text-xs">
+          Dejalo vacío si todavía no se sabe. Sirve para saber después cuántas
+          máquinas tienen el mismo problema.
+        </p>
       </div>
 
       <div className="grid gap-1.5">

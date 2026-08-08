@@ -1,3 +1,5 @@
+import type { EstadoEquipo } from "@/features/inventory/types"
+
 // Espeja los DTOs de internal/reporting.
 //
 // `Incidencia` NO está acá: es un concepto de inventario y la reportan los
@@ -139,4 +141,44 @@ export function formatearPorcentaje(valor: number): string {
 export type ResultadoCascada = {
   reservasCanceladas: number
   docentesNotificados: number
+}
+
+/**
+ * RF-06.5 — el estado del parque de equipos HOY, no en un período.
+ *
+ * `total` excluye los dados de baja: el porcentaje que importa es sobre lo
+ * que la institución todavía tiene.
+ */
+export type EstadoDelInventario = {
+  /** Vacíos en la fila de los equipos que no están en ningún carro. */
+  carroId?: string
+  carroNombre?: string
+  disponibles: number
+  enMantenimiento: number
+  fueraDeServicio: number
+  total: number
+}
+
+/**
+ * Una máquina que hoy no se puede reservar, con lo último que se sabe de por
+ * qué. Los tres últimos campos pueden faltar: se puede sacar algo de
+ * circulación sin haber reportado ninguna falla, y ese hueco es un dato.
+ */
+export type EquipoFueraDeCirculacion = {
+  equipoId: string
+  etiqueta: string
+  carroNombre?: string
+  estado: EstadoEquipo
+  categoria?: string
+  ultimaFalla?: string
+  estadoIncidencia?: string
+}
+
+/** Qué se rompe: cuántas fallas de cada tipo y cuántas máquinas alcanzó. */
+export type ResumenPorCategoriaDeFalla = {
+  /** Vacía en la fila de las que nadie pudo diagnosticar. */
+  categoria?: string
+  total: number
+  abiertas: number
+  equiposAlcanzados: number
 }

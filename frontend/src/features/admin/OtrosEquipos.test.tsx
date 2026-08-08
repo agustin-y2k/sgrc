@@ -66,9 +66,9 @@ describe("OtrosEquipos", () => {
   })
 
   /**
-   * La distinción que importa: el proyector se puede planificar, el cargador
-   * se pide en el momento. Sin marcarla, un docente vería dos cargadores
-   * entre las máquinas libres cada vez que va a reservar.
+   * La distinción que importa: un proyector se puede planificar, un cargador
+   * se pide en el momento. Sin marcarla, todo lo que se presta al paso
+   * aparecería entre las máquinas libres cada vez que alguien va a reservar.
    */
   it("distingue lo reservable de lo que solo se presta", async () => {
     vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({

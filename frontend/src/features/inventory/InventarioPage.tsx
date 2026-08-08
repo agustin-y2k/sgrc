@@ -23,17 +23,13 @@ import {
 } from "@/components/ui/table"
 import * as inventoryApi from "@/features/inventory/api"
 import { ReportarIncidencia } from "@/features/inventory/ReportarIncidencia"
+import { ETIQUETA_ESTADO_EQUIPO } from "@/features/inventory/types"
 import type { EstadoEquipo, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
-const ETIQUETA_ESTADO: Record<EstadoEquipo, string> = {
-  DISPONIBLE: "Disponible",
-  EN_MANTENIMIENTO: "En mantenimiento",
-  FUERA_DE_SERVICIO: "Fuera de servicio",
-}
 
 function EstadoDeEquipo({ estado }: { estado: EstadoEquipo }) {
-  return <EstadoBadge tono={TONO_PC[estado]}>{ETIQUETA_ESTADO[estado]}</EstadoBadge>
+  return <EstadoBadge tono={TONO_PC[estado]}>{ETIQUETA_ESTADO_EQUIPO[estado]}</EstadoBadge>
 }
 
 function EquiposDelCarro({ carroId }: { carroId: string }) {
