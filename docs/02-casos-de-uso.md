@@ -21,7 +21,7 @@ flowchart LR
         UC_Mostrador[Atender el mostrador]
         UC_Entregar[Entregar y recibir equipos]
         UC_Incidencia[Registrar incidencia]
-        UC_CambioEstadoPC[Cambiar estado de PC]
+        UC_CambioEstadoEquipo[Cambiar estado de un equipo]
         UC_Calendario[Ver calendario de PC]
         UC_Reservar[Reservar PCs - una o varias]
         UC_ReservarRec[Reservar PCs recurrente]
@@ -34,7 +34,7 @@ flowchart LR
     end
 
     ADM --> UC_Ciclo & UC_CursoMat & UC_Clonar & UC_AsigDoc & UC_AprobarDoc & UC_BajaDoc
-    ADM --> UC_Inventario & UC_CambioEstadoPC & UC_Reservar & UC_ReservarRec & UC_Cancelar & UC_Bloquear & UC_Reportes
+    ADM --> UC_Inventario & UC_CambioEstadoEquipo & UC_Reservar & UC_ReservarRec & UC_Cancelar & UC_Bloquear & UC_Reportes
     ADM --> UC_Horario & UC_VerDisp
     ADM --> UC_OtrosEquipos & UC_Licencias & UC_Mostrador & UC_Entregar
 
@@ -50,7 +50,7 @@ flowchart LR
     UC_ReservarRec -.include.-> UC_ValidSolap
     UC_ReservarRec -.include.-> UC_MaterializarOcurrencias[Materializar ocurrencias x PCs]
     UC_Bloquear -.include.-> UC_CancelPuntual[Cancelar PCs en conflicto + notificar]
-    UC_CambioEstadoPC -.include.-> UC_CancelPuntual
+    UC_CambioEstadoEquipo -.include.-> UC_CancelPuntual
     UC_BajaDoc -.include.-> UC_RevisarReservas[Revisar reservas huérfanas]
     UC_Cancelar -.extend.-> UC_OpcionRecur[¿Esta fecha / Esta y siguientes?]
     UC_Mostrador -.include.-> UC_Entregar
@@ -98,7 +98,7 @@ flowchart LR
   4. Genera notificación interna para cada docente afectado, detallando qué PCs puntuales se cancelaron.
   5. Crea filas `Reserva` tipo `EVALUACION_ESTATAL` (sin `materia_id` ni `reserva_grupo_id`) sobre todas las PCs del carro para ese rango.
 
-### UC: Cambiar estado de PC individual (con cancelación en cascada)
+### UC: Cambiar estado de un equipo (con cancelación en cascada)
 - **Actor:** Admin
 - **Precondición:** La PC tiene `Reserva` `CONFIRMADA` futuras.
 - **Flujo:**
@@ -108,6 +108,7 @@ flowchart LR
   4. Genera notificación interna para cada docente afectado, detallando que fue esa PC puntual (no necesariamente toda su reserva).
 - **Diferencia con el bloqueo de evaluación (RF-04.7):** acá el alcance es una sola PC, la duración es indefinida (no un rango horario acotado), y el motivo es opcional.
 - **Al volver la PC a `DISPONIBLE`:** las reservas canceladas no se restauran automáticamente — quien las necesite debe volver a reservar.
+- **Al terminar, la pantalla dice cuántas reservas se cancelaron y a cuántos docentes se avisó** (RF-03.19). Antes de confirmar solo se puede advertir que va a pasar; el número real recién se sabe después, y sin él quien apretó el botón no distingue entre haber cancelado una clase o veinte. Con cero no se muestra nada.
 
 ### UC: Archivar y clonar ciclo lectivo
 - **Actor:** Admin
@@ -118,6 +119,7 @@ flowchart LR
   4. Sistema ofrece clonar estructura al nuevo ciclo (año+1): crea `curso` + `materia` nuevos (sin `archivado`). No clona: `DocenteMateria`.
   5. Admin puede ajustar la estructura clonada antes de activar el nuevo ciclo.
 - **Por qué se conserva la estructura académica pero no las reservas:** recrear "1°A" + "Matemáticas" + "el titular es Fulano" cada año es el trabajo tedioso que la clonación evita. Las reservas puntuales de un año que ya terminó no tienen valor operativo — solo estadístico, y ese valor queda cubierto por el snapshot histórico.
+- **El clonado se valida antes de empezar**: si el año destino ya existe o no es un año válido, la operación rebota sin archivar ni borrar nada. El archivado es irreversible y el clonado es el único paso que puede fallar por algo que el Admin tipeó, así que se comprueba primero. Si igual queda a medias, reintentar el archivado completa el clonado.
 
 ### UC: Aprobar cuenta de docente
 - **Actor:** Admin
@@ -167,7 +169,7 @@ flowchart LR
   1. Admin crea un carro (nombre, descripción) y lo edita cuando lo necesite.
   2. Admin registra PCs dentro de un carro (identificador, `freezado`, CPU, RAM, SO, software instalado — incluyendo detalle como versión de AutoCAD).
   3. Admin edita los datos de una PC en cualquier momento.
-  4. Admin cambia la disponibilidad de una PC (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` — ver cascada de cancelación más arriba).
+  4. Admin cambia la disponibilidad de un equipo (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` — ver cascada de cancelación más arriba).
   5. Admin puede dar de baja una PC del inventario (soft delete: deja de listarse y de poder reservarse, pero su historial de incidencias y reservas pasadas se conserva).
   6. Lo que se presta y **no está en ningún carro** —un proyector, cargadores— se carga aparte; ver el UC siguiente.
 - **Visibilidad:** el listado de carros/PCs (incluyendo `software_instalado` y `freezado`) es visible para **cualquier usuario autenticado**, no solo Admin — un docente lo necesita para elegir bien qué PCs reservar (ej: cuáles tienen la versión de AutoCAD que su clase requiere).
@@ -180,10 +182,13 @@ flowchart LR
   2. Carga el equipo con **qué es** (tipo, texto libre con sugerencias de los ya cargados) y **cómo lo llaman** (nombre, obligatorio).
   3. Decide si **se puede reservar con anticipación**. Por defecto no.
   4. Desde ese momento el equipo se entrega, se recibe y se reclama en las mismas pantallas que las computadoras.
+  5. Puede **editarlo** después —corregir el nombre, cambiar si se reserva— o **darlo de baja** si se rompió o se perdió.
 - **Reglas que no son obvias:**
   - No tienen identificador ni número de serie: "PC 3" no significa nada para un cargador, y un cargador puede no traer serie de fábrica. El **nombre** es lo único que los distingue, y es **único** entre ellos sin distinguir mayúsculas — dos filas llamadas "Cargador" serían indistinguibles justo donde hay que elegir cuál se está prestando.
   - El tipo es **texto libre y no una lista cerrada**: otra escuela tiene proyector pero quizá no cargadores, y agregar "impresora 3D" no puede pedir tocar el sistema. El formulario sugiere los tipos ya usados para no terminar con "PROYECTOR" y "Proyector" como dos cosas distintas.
   - Lo **no reservable no aparece** en la lista de equipos libres al reservar. Sin esa marca, los dos cargadores serían ruido cada vez que un docente arma una reserva, y la primera vez que alguien reserve un cargador sin querer habría que explicarlo.
+  - **Quitar la marca de reservable no cancela nada**: el equipo deja de ofrecerse al armar una reserva, pero las que ya existen siguen en pie. Alguien contaba con el proyector esa hora, y cancelárselo sin avisar por un cambio de configuración sería peor que dejarlo.
+  - **Dar de baja algo que está prestado deja el préstamo abierto**: el equipo sale del inventario pero sigue en la lista de lo que falta volver. La pantalla lo advierte antes de confirmar, que es cuando todavía se puede marcar la devolución primero.
   - Puertas adentro **son la misma entidad que las PCs**, y eso no es un detalle de implementación: es lo que hace que el proyector quede prestable, reclamable, liberable y —si es reservable— reservable, sin una línea nueva en ninguno de esos flujos. La tabla se llamó `pc` mientras tanto, y la 016 saldó ese renombre; ver el encabezado de las dos migraciones.
 
 ### UC: Atender el mostrador (pantalla de inicio del Admin)

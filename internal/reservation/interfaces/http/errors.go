@@ -29,6 +29,7 @@ func mapearError(err error) error {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, application.ErrSinEquipos),
+		errors.Is(err, application.ErrDemasiadosEquipos),
 		errors.Is(err, application.ErrMotivoObligatorio),
 		errors.Is(err, application.ErrDemasiadasOcurrencias),
 		errors.Is(err, application.ErrSinOcurrencias),

@@ -1045,6 +1045,10 @@ func (validadorEquipoOK) EquipoDisponibleParaReservar(context.Context, string) (
 	return true, nil
 }
 
+func (validadorEquipoOK) EquiposNoReservables(context.Context, []string) ([]string, error) {
+	return nil, nil
+}
+
 func (validadorEquipoOK) EquipoEstaEnInventario(context.Context, string) (bool, error) {
 	return true, nil
 }

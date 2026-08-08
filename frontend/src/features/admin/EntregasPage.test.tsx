@@ -340,4 +340,34 @@ describe("EntregasPage", () => {
       await screen.findByText("No hay ninguna computadora entregada.")
     ).toBeInTheDocument()
   })
+
+  /**
+   * Entregar contra una reserva ya liberada es legítimo —el docente llegó
+   * tarde y el equipo seguía ahí— pero en ese rato otro pudo reservarlo. Sin
+   * mostrar el aviso que manda el backend, el Admin se lo entrega al primero
+   * y el segundo se encuentra con que no está.
+   */
+  it("avisa si el equipo que se entrega tiene una reserva de otro encima", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.entregarPorReserva).mockResolvedValue({
+      entregadas: [],
+      avisos: [
+        {
+          equipoId: "pc1",
+          fecha: "2026-08-11",
+          horaInicio: "10:00",
+          horaFin: "11:00",
+          docente: "Grace Hopper",
+        },
+      ],
+    })
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Marcar todas" }))
+    await user.click(screen.getByRole("button", { name: /Entregar 1 computadora/ }))
+
+    expect(await screen.findByText(/Grace Hopper/)).toBeInTheDocument()
+    expect(screen.getByText(/tiene reserva/)).toBeInTheDocument()
+  })
 })

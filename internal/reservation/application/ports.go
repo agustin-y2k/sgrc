@@ -243,6 +243,21 @@ type ValidadorMateria interface {
 type ValidadorEquipo interface {
 	EquipoDisponibleParaReservar(ctx context.Context, equipoID string) (bool, error)
 
+	// EquiposNoReservables responde lo mismo que EquipoDisponibleParaReservar
+	// pero para una lista, en UNA consulta: devuelve cuáles de los pedidos no
+	// se pueden reservar (no existen, no están disponibles, están dados de
+	// baja o no son reservables). Lista vacía = están todos bien.
+	//
+	// Existe porque reservar es una operación de LOTE: un docente tilda ocho
+	// máquinas y un bloqueo por evaluación puede tomar un carro entero.
+	// Preguntando de a una, un bloqueo de 64 equipos son 64 consultas antes
+	// de escribir la primera fila — y eso lo dispara el uso normal, no un
+	// abuso.
+	//
+	// Devuelve los que fallan y no un bool para poder decir CUÁLES: con un
+	// "alguno no se puede" el docente tiene que adivinar a cuál destildar.
+	EquiposNoReservables(ctx context.Context, equipoIDs []string) ([]string, error)
+
 	// EquipoEstaEnInventario es más laxo que EquipoDisponibleParaReservar: solo
 	// exige que la PC exista y no esté dada de baja, sin mirar su estado.
 	//

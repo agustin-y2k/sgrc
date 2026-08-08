@@ -126,3 +126,17 @@ export function proporcion(parte: number, total: number): number {
 export function formatearPorcentaje(valor: number): string {
   return `${valor.toLocaleString("es-AR", { maximumFractionDigits: 1 })}%`
 }
+
+/**
+ * Lo que devuelven las dos operaciones que sacan un equipo de circulación
+ * (RF-03.8 y RF-03.9): cuántas reservas futuras se cancelaron en cascada y a
+ * cuántos docentes se avisó.
+ *
+ * No es un detalle: dar de baja un proyector reservado para la semana que
+ * viene cancela clases ajenas, y quien aprieta el botón tiene que enterarse
+ * de que pasó.
+ */
+export type ResultadoCascada = {
+  reservasCanceladas: number
+  docentesNotificados: number
+}

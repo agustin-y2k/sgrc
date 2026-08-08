@@ -86,6 +86,7 @@ describe("InicioPage", () => {
     vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(paginada([]))
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([]))
     vi.mocked(adminApi.listarUsuarios).mockResolvedValue(paginada([]))
+    vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({ data: [] })
   })
 
   afterEach(() => {
@@ -157,5 +158,52 @@ describe("InicioPage", () => {
     const pendientes = (await screen.findByText("3")).closest("a")
     expect(pendientes).toHaveTextContent("por aprobar")
     expect(pendientes).toHaveAttribute("href", "/admin/aprobacion")
+  })
+
+  /**
+   * El fallo más caro de esta pantalla no es quedarse en blanco: es afirmar
+   * que no hay nada. Un Admin que lee "0 afuera" cierra el laboratorio con
+   * las computadoras todavía prestadas.
+   */
+  describe("cuando una consulta falla", () => {
+    it("no muestra cero: muestra que no pudo preguntar", async () => {
+      mockUsuario(ADMIN)
+      vi.mocked(reservasApi.listarPrestamosAbiertos).mockRejectedValue(
+        new Error("se cayó la red")
+      )
+      renderInicio()
+
+      expect(await screen.findByText(/lo que ves acá puede estar incompleto/i)).toBeInTheDocument()
+
+      const afuera = screen.getByText("afuera").closest("a")
+      expect(afuera).toHaveTextContent("—")
+      expect(afuera).not.toHaveTextContent("0")
+    })
+
+    it("el aviso no aparece cuando todo respondió bien", async () => {
+      mockUsuario(ADMIN)
+      renderInicio()
+
+      await screen.findByText("afuera")
+      expect(
+        screen.queryByText(/lo que ves acá puede estar incompleto/i)
+      ).not.toBeInTheDocument()
+    })
+
+    // Que falle lo del mostrador no puede llevarse puesto el resto: las
+    // reservas se consultan aparte y su número sigue siendo confiable.
+    it("los demás indicadores siguen mostrando lo suyo", async () => {
+      mockUsuario(ADMIN)
+      vi.mocked(reservasApi.listarPrestamosAbiertos).mockRejectedValue(
+        new Error("se cayó la red")
+      )
+      vi.mocked(adminApi.listarUsuarios).mockResolvedValue(
+        paginada([], { total: 3, pageSize: 50 })
+      )
+      renderInicio()
+
+      const pendientes = (await screen.findByText("3")).closest("a")
+      expect(pendientes).toHaveTextContent("por aprobar")
+    })
   })
 })

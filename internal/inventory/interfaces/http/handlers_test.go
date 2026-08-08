@@ -200,6 +200,10 @@ func (f *fakeValidadorReservas) TieneReservasFuturas(ctx context.Context, equipo
 	return false, nil
 }
 
+func (f *fakeValidadorReservas) EstaPrestado(ctx context.Context, equipoID string) (bool, error) {
+	return false, nil
+}
+
 var contadorID int
 
 func idSecuencial() string {

@@ -39,6 +39,10 @@ func (a *inventoryValidadorReservasAdapter) TieneReservasFuturas(ctx context.Con
 	return a.reservationSvc.TieneReservasFuturasDeEquipo(ctx, equipoID)
 }
 
+func (a *inventoryValidadorReservasAdapter) EstaPrestado(ctx context.Context, equipoID string) (bool, error) {
+	return a.reservationSvc.EstaPrestado(ctx, equipoID)
+}
+
 // authCanceladorReservasAdapter satisface
 // auth/application.CanceladorReservasDeMateria envolviendo
 // reservation/application.Service — auth/ nunca importa reservation/
