@@ -265,7 +265,7 @@ func TestPostgresRepo_Eliminar_ConReglaRecurrenteEHistorico_OK(t *testing.T) {
 		t.Fatalf("no debería fallar creando: %v", err)
 	}
 
-	cicloID, cursoID, materiaID, pcID, carroID := NuevoID(), NuevoID(), NuevoID(), NuevoID(), NuevoID()
+	cicloID, cursoID, materiaID, equipoID, carroID := NuevoID(), NuevoID(), NuevoID(), NuevoID(), NuevoID()
 	sembrar := []struct {
 		sql  string
 		args []any
@@ -274,7 +274,7 @@ func TestPostgresRepo_Eliminar_ConReglaRecurrenteEHistorico_OK(t *testing.T) {
 		{`INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, '1°A')`, []any{cursoID, cicloID}},
 		{`INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, 'Matemáticas')`, []any{materiaID, cursoID}},
 		{`INSERT INTO carro (id, nombre) VALUES ($1, 'Carro de prueba')`, []any{carroID}},
-		{`INSERT INTO pc (id, carro_id, identificador, numero_serie) VALUES ($1, $2, 1, 'SERIE-12345')`, []any{pcID, carroID}},
+		{`INSERT INTO equipo (id, carro_id, identificador, numero_serie) VALUES ($1, $2, 1, 'SERIE-12345')`, []any{equipoID, carroID}},
 		{`INSERT INTO regla_recurrencia (id, materia_id, creado_por, dia_semana, hora_inicio, hora_fin, fecha_inicio, fecha_fin)
 		  VALUES ($1, $2, $3, 'LUNES', '08:00', '09:00', '2026-03-02', '2026-11-30')`, []any{NuevoID(), materiaID, u.ID}},
 		{`INSERT INTO historico_uso_docente (id, anio, usuario_id, nombre_docente_snapshot, cantidad_reservas, minutos_totales)

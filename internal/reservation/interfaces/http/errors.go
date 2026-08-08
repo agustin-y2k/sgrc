@@ -18,17 +18,17 @@ func mapearError(err error) error {
 
 	case errors.Is(err, application.ErrMateriaArchivada),
 		errors.Is(err, application.ErrDocenteNoAsignado),
-		errors.Is(err, application.ErrPCNoDisponible),
+		errors.Is(err, application.ErrEquipoNoDisponible),
 		errors.Is(err, application.ErrSolapamiento),
 		// Los lotes de entrega informan estos dos por PC en el cuerpo, sin
 		// fallar; acá solo llegan si alguna vez se pide una entrega de una
 		// sola máquina como operación atómica.
-		errors.Is(err, application.ErrPCYaPrestada),
-		errors.Is(err, application.ErrPCDadaDeBaja),
+		errors.Is(err, application.ErrEquipoYaPrestado),
+		errors.Is(err, application.ErrEquipoDadoDeBaja),
 		errors.Is(err, application.ErrReservaNoModificable):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, application.ErrSinPCs),
+	case errors.Is(err, application.ErrSinEquipos),
 		errors.Is(err, application.ErrMotivoObligatorio),
 		errors.Is(err, application.ErrDemasiadasOcurrencias),
 		errors.Is(err, application.ErrSinOcurrencias),

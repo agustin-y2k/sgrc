@@ -70,7 +70,7 @@ func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 }
 
 // ── Helpers para las FK que reservation necesita (ciclo→curso→materia,
-// carro→pc, usuario) — inserción directa por SQL, sin pasar por
+// carro→equipo, usuario) — inserción directa por SQL, sin pasar por
 // auth/academic/inventory a propósito (reservation no los importa).
 
 // contadorAnioDeTest asegura un año único por llamada a crearMateriaDeTest
@@ -118,23 +118,23 @@ func crearUsuarioDeTest(t *testing.T, pool *pgxpool.Pool, rol, estado string) st
 	return id
 }
 
-func crearPCDeTest(t *testing.T, pool *pgxpool.Pool) string {
+func crearEquipoDeCarroDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 	ctx := context.Background()
 	carroID := NuevoID()
-	pcID := NuevoID()
+	equipoID := NuevoID()
 
 	if _, err := pool.Exec(ctx, `INSERT INTO carro (id, nombre) VALUES ($1, $2)`, carroID, "Carro-"+carroID[:8]); err != nil {
 		t.Fatalf("no se pudo crear carro de prueba: %v", err)
 	}
 	numeroSerie := fmt.Sprintf("SERIE-%d", time.Now().UnixNano())
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO pc (id, carro_id, identificador, numero_serie, estado) VALUES ($1, $2, 1, $3, 'DISPONIBLE')`,
-		pcID, carroID, numeroSerie,
+		`INSERT INTO equipo (id, carro_id, identificador, numero_serie, estado) VALUES ($1, $2, 1, $3, 'DISPONIBLE')`,
+		equipoID, carroID, numeroSerie,
 	); err != nil {
 		t.Fatalf("no se pudo crear PC de prueba: %v", err)
 	}
-	return pcID
+	return equipoID
 }
 
 func nuevoReservaGrupoDeTest(materiaID string, fecha time.Time, horaInicio, horaFin time.Duration) *domain.ReservaGrupo {
@@ -167,14 +167,14 @@ func TestPostgresRepo_CrearYBuscarReserva_OK(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	g := nuevoReservaGrupoDeTest(materiaID, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("no debería fallar creando grupo: %v", err)
 	}
 
-	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada Lovelace", nil,
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace", nil,
 		g.Fecha, g.HoraInicio, g.HoraFin, time.Now().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
@@ -187,7 +187,7 @@ func TestPostgresRepo_CrearYBuscarReserva_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if encontrada.PCID != pcID || encontrada.Estado != domain.ReservaConfirmada {
+	if encontrada.EquipoID != equipoID || encontrada.Estado != domain.ReservaConfirmada {
 		t.Errorf("reserva encontrada no coincide: %+v", encontrada)
 	}
 }
@@ -204,7 +204,7 @@ func TestPostgresRepo_ListarReservas_PaginaYTotal(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	// Cinco días distintos sobre la misma PC: sin fechas distintas chocarían
@@ -215,7 +215,7 @@ func TestPostgresRepo_ListarReservas_PaginaYTotal(t *testing.T) {
 		if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 			t.Fatalf("creando grupo: %v", err)
 		}
-		res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada Lovelace", nil,
+		res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace", nil,
 			fecha, 8*time.Hour, 9*time.Hour, ahora)
 		if err != nil {
 			t.Fatalf("error de dominio inesperado: %v", err)
@@ -228,8 +228,8 @@ func TestPostgresRepo_ListarReservas_PaginaYTotal(t *testing.T) {
 	// Con un filtro puesto: es el caso donde el LIMIT/OFFSET tiene que ir
 	// DESPUÉS de los $n del WHERE.
 	filtro := application.FiltroReservas{
-		PCID:   &pcID,
-		Pagina: paginacion.Pagina{Numero: 1, Tamanio: 2},
+		EquipoID: &equipoID,
+		Pagina:   paginacion.Pagina{Numero: 1, Tamanio: 2},
 	}
 
 	primera, total, err := repo.ListarReservas(ctx, filtro)
@@ -281,20 +281,20 @@ func TestPostgresRepo_Solapamiento_ConstraintDeLaBase(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	g1 := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	repo.CrearReservaGrupo(context.Background(), g1)
-	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, pcID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
 	if err := repo.CrearReserva(context.Background(), res1); err != nil {
 		t.Fatalf("la primera reserva no debería fallar: %v", err)
 	}
 
 	g2 := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour+30*time.Minute, 9*time.Hour+30*time.Minute)
 	repo.CrearReservaGrupo(context.Background(), g2)
-	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, pcID, materiaID, "Ada", nil, fecha, 8*time.Hour+30*time.Minute, 9*time.Hour+30*time.Minute, ahora)
+	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour+30*time.Minute, 9*time.Hour+30*time.Minute, ahora)
 
 	err := repo.CrearReserva(context.Background(), res2)
 	if err != application.ErrSolapamiento {
@@ -306,13 +306,13 @@ func TestPostgresRepo_SinSolapamiento_HorariosDistintos_OK(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	g1 := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	repo.CrearReservaGrupo(context.Background(), g1)
-	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, pcID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
 	if err := repo.CrearReserva(context.Background(), res1); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -320,19 +320,19 @@ func TestPostgresRepo_SinSolapamiento_HorariosDistintos_OK(t *testing.T) {
 	// Horario consecutivo, sin solapar (9-10hs justo después de 8-9hs).
 	g2 := nuevoReservaGrupoDeTest(materiaID, fecha, 9*time.Hour, 10*time.Hour)
 	repo.CrearReservaGrupo(context.Background(), g2)
-	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, pcID, materiaID, "Ada", nil, fecha, 9*time.Hour, 10*time.Hour, ahora)
+	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, fecha, 9*time.Hour, 10*time.Hour, ahora)
 
 	if err := repo.CrearReserva(context.Background(), res2); err != nil {
 		t.Fatalf("horarios consecutivos sin solapar no deberían fallar: %v", err)
 	}
 }
 
-func TestPostgresRepo_SolapamientoEnPCsDistintas_OK(t *testing.T) {
+func TestPostgresRepo_SolapamientoEnEquiposDistintas_OK(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pc1 := crearPCDeTest(t, pool)
-	pc2 := crearPCDeTest(t, pool)
+	pc1 := crearEquipoDeCarroDeTest(t, pool)
+	pc2 := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
@@ -354,14 +354,14 @@ func TestPostgresRepo_GuardarReserva_Cancelar(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	adminID := crearUsuarioDeTest(t, pool, "ADMIN", "APROBADA")
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	repo.CrearReservaGrupo(context.Background(), g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
 	repo.CrearReserva(context.Background(), res)
 
 	if err := res.Cancelar(&adminID, "PC rota", ahora); err != nil {
@@ -392,12 +392,12 @@ func TestPostgresRepo_ReservaVencida_ApareceEnElListado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	ayer := time.Now().UTC().AddDate(0, 0, -1).Truncate(24 * time.Hour)
 	g := nuevoReservaGrupoDeTest(materiaID, ayer, 8*time.Hour, 9*time.Hour)
 	repo.CrearReservaGrupo(context.Background(), g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada", nil, ayer, 8*time.Hour, 9*time.Hour, time.Now().UTC())
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, ayer, 8*time.Hour, 9*time.Hour, time.Now().UTC())
 	repo.CrearReserva(context.Background(), res)
 
 	vencidas, err := repo.ListarReservasConfirmadasVencidas(context.Background(), time.Now().UTC(), 100)
@@ -420,12 +420,12 @@ func TestPostgresRepo_ReservaFutura_NoApareceComoVencida(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	manana := time.Now().UTC().AddDate(0, 0, 1).Truncate(24 * time.Hour)
 	g := nuevoReservaGrupoDeTest(materiaID, manana, 8*time.Hour, 9*time.Hour)
 	repo.CrearReservaGrupo(context.Background(), g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada", nil, manana, 8*time.Hour, 9*time.Hour, time.Now().UTC())
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, manana, 8*time.Hour, 9*time.Hour, time.Now().UTC())
 	repo.CrearReserva(context.Background(), res)
 
 	vencidas, err := repo.ListarReservasConfirmadasVencidas(context.Background(), time.Now().UTC(), 100)
@@ -444,8 +444,8 @@ func TestPostgresRepo_ListarReservasFuturasDeMateria(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
 	otraMateriaID := crearMateriaDeTest(t, pool)
-	pc1 := crearPCDeTest(t, pool)
-	pc2 := crearPCDeTest(t, pool)
+	pc1 := crearEquipoDeCarroDeTest(t, pool)
+	pc2 := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
@@ -555,12 +555,12 @@ func TestValidadorMateriaPostgres_NoAsignado_False(t *testing.T) {
 	}
 }
 
-func TestValidadorPCPostgres_Disponible_True(t *testing.T) {
+func TestValidadorEquipoPostgres_Disponible_True(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
-	validador := NewValidadorPCPostgres(pool)
-	disponible, err := validador.PCDisponibleParaReservar(context.Background(), pcID)
+	validador := NewValidadorEquipoPostgres(pool)
+	disponible, err := validador.EquipoDisponibleParaReservar(context.Background(), equipoID)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -570,13 +570,13 @@ func TestValidadorPCPostgres_Disponible_True(t *testing.T) {
 	}
 }
 
-func TestValidadorPCPostgres_EnMantenimiento_False(t *testing.T) {
+func TestValidadorEquipoPostgres_EnMantenimiento_False(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	pcID := crearPCDeTest(t, pool)
-	pool.Exec(context.Background(), `UPDATE pc SET estado = 'EN_MANTENIMIENTO' WHERE id = $1`, pcID)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	pool.Exec(context.Background(), `UPDATE equipo SET estado = 'EN_MANTENIMIENTO' WHERE id = $1`, equipoID)
 
-	validador := NewValidadorPCPostgres(pool)
-	disponible, err := validador.PCDisponibleParaReservar(context.Background(), pcID)
+	validador := NewValidadorEquipoPostgres(pool)
+	disponible, err := validador.EquipoDisponibleParaReservar(context.Background(), equipoID)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -586,13 +586,13 @@ func TestValidadorPCPostgres_EnMantenimiento_False(t *testing.T) {
 	}
 }
 
-func TestValidadorPCPostgres_DadaDeBaja_False(t *testing.T) {
+func TestValidadorEquipoPostgres_DadaDeBaja_False(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	pcID := crearPCDeTest(t, pool)
-	pool.Exec(context.Background(), `UPDATE pc SET dada_de_baja = true WHERE id = $1`, pcID)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	pool.Exec(context.Background(), `UPDATE equipo SET dado_de_baja = true WHERE id = $1`, equipoID)
 
-	validador := NewValidadorPCPostgres(pool)
-	disponible, err := validador.PCDisponibleParaReservar(context.Background(), pcID)
+	validador := NewValidadorEquipoPostgres(pool)
+	disponible, err := validador.EquipoDisponibleParaReservar(context.Background(), equipoID)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -602,11 +602,11 @@ func TestValidadorPCPostgres_DadaDeBaja_False(t *testing.T) {
 	}
 }
 
-func TestValidadorPCPostgres_NoExiste_FalseSinError(t *testing.T) {
+func TestValidadorEquipoPostgres_NoExiste_FalseSinError(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	validador := NewValidadorPCPostgres(pool)
+	validador := NewValidadorEquipoPostgres(pool)
 
-	disponible, err := validador.PCDisponibleParaReservar(context.Background(), NuevoID())
+	disponible, err := validador.EquipoDisponibleParaReservar(context.Background(), NuevoID())
 
 	if err != nil {
 		t.Fatalf("una PC inexistente no debería ser un error, solo false: %v", err)
@@ -633,7 +633,7 @@ func TestObtenedorNombrePostgres_OK(t *testing.T) {
 
 // ── Regresión: los validadores también deben mapear IDs con formato
 // inválido, no solo los repos. Bug real encontrado en la prueba manual
-// (un materiaId/pcId con placeholder sin reemplazar tiraba 500 en vez de
+// (un materiaId/equipoId con placeholder sin reemplazar tiraba 500 en vez de
 // 400, porque estos tres adaptadores no tenían el chequeo esIDInvalido
 // que sí tienen todos los demás métodos del repo).
 
@@ -648,11 +648,11 @@ func TestValidadorMateriaPostgres_IDInvalido_ErrorControlado(t *testing.T) {
 	}
 }
 
-func TestValidadorPCPostgres_IDInvalido_ErrorControlado(t *testing.T) {
+func TestValidadorEquipoPostgres_IDInvalido_ErrorControlado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	validador := NewValidadorPCPostgres(pool)
+	validador := NewValidadorEquipoPostgres(pool)
 
-	_, err := validador.PCDisponibleParaReservar(context.Background(), "PC_ID")
+	_, err := validador.EquipoDisponibleParaReservar(context.Background(), "PC_ID")
 
 	if err != application.ErrIDInvalido {
 		t.Fatalf("esperaba application.ErrIDInvalido, obtuve %v", err)
@@ -684,8 +684,8 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 		{"BuscarReservaGrupoPorID", func() error { _, err := repo.BuscarReservaGrupoPorID(ctx, "GRUPO_ID"); return err }},
 		{"BuscarReservaPorID", func() error { _, err := repo.BuscarReservaPorID(ctx, "RESERVA_ID"); return err }},
 		{"ListarReservasPorGrupo", func() error { _, err := repo.ListarReservasPorGrupo(ctx, "GRUPO_ID"); return err }},
-		{"ListarReservasFuturasDePC", func() error {
-			_, err := repo.ListarReservasFuturasDePC(ctx, "PC_ID", time.Now())
+		{"ListarReservasFuturasDeEquipo", func() error {
+			_, err := repo.ListarReservasFuturasDeEquipo(ctx, "PC_ID", time.Now())
 			return err
 		}},
 	}
@@ -700,27 +700,27 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 
 // ── Cascadas — probadas también end-to-end contra Postgres real ───────
 
-func TestPostgresRepo_CascadaService_CancelarReservasFuturasDePC(t *testing.T) {
+func TestPostgresRepo_CascadaService_CancelarReservasFuturasDeEquipo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Now().UTC().AddDate(0, 0, 7).Truncate(24 * time.Hour)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	repo.CrearReservaGrupo(context.Background(), g)
 	docenteID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada", &docenteID, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", &docenteID, fecha, 8*time.Hour, 9*time.Hour, ahora)
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
 	svc := application.NewService(repo,
-		NewValidadorMateriaPostgres(pool), NewValidadorPCPostgres(pool), NewObtenedorNombrePostgres(pool),
+		NewValidadorMateriaPostgres(pool), NewValidadorEquipoPostgres(pool), NewObtenedorNombrePostgres(pool),
 		NuevoID, func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
-	canceladas, notificados, err := svc.CancelarReservasFuturasDePC(context.Background(), pcID, "PC dada de baja")
+	canceladas, notificados, err := svc.CancelarReservasFuturasDeEquipo(context.Background(), equipoID, "PC dada de baja")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -742,19 +742,19 @@ func TestPostgresRepo_CascadaService_CancelarReservasFuturasDeMateria(t *testing
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Now().UTC().AddDate(0, 0, 7).Truncate(24 * time.Hour)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	repo.CrearReservaGrupo(context.Background(), g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
 	svc := application.NewService(repo,
-		NewValidadorMateriaPostgres(pool), NewValidadorPCPostgres(pool), NewObtenedorNombrePostgres(pool),
+		NewValidadorMateriaPostgres(pool), NewValidadorEquipoPostgres(pool), NewObtenedorNombrePostgres(pool),
 		NuevoID, func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	canceladas, err := svc.CancelarReservasFuturasDeMateria(context.Background(), materiaID, "Docente dado de baja")
@@ -800,8 +800,8 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo(t *testing.T) {
 		t.Fatalf("no se pudo crear materia de prueba: %v", err)
 	}
 
-	pc1 := crearPCDeTest(t, pool)
-	pc2 := crearPCDeTest(t, pool)
+	pc1 := crearEquipoDeCarroDeTest(t, pool)
+	pc2 := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
@@ -867,7 +867,7 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *tes
 	}
 
 	usuarioID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
-	pc := crearPCDeTest(t, pool)
+	equipo := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(anio, 3, 9, 0, 0, 0, 0, time.UTC)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
@@ -880,18 +880,18 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *tes
 	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	g.ReglaRecurrenciaID = &regla.ID
 	repo.CrearReservaGrupo(ctx, g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pc, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipo, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
 	repo.CrearReserva(ctx, res)
 
 	// Un bloqueo de evaluación del mismo año, en otra franja para no chocar
 	// con la constraint EXCLUDE.
-	bloqueo, _ := domain.NuevaReservaEvaluacion(NuevoID(), pc, nil, fecha, 14*time.Hour, 16*time.Hour, ahora)
+	bloqueo, _ := domain.NuevaReservaEvaluacion(NuevoID(), equipo, nil, fecha, 14*time.Hour, 16*time.Hour, ahora)
 	if err := repo.CrearReserva(ctx, bloqueo); err != nil {
 		t.Fatalf("no se pudo crear el bloqueo: %v", err)
 	}
 
 	// Un bloqueo de OTRO año — no debe tocarse.
-	bloqueoOtroAnio, _ := domain.NuevaReservaEvaluacion(NuevoID(), pc,
+	bloqueoOtroAnio, _ := domain.NuevaReservaEvaluacion(NuevoID(), equipo,
 		nil, time.Date(anio+1, 3, 9, 0, 0, 0, 0, time.UTC), 14*time.Hour, 16*time.Hour, ahora)
 	if err := repo.CrearReserva(ctx, bloqueoOtroAnio); err != nil {
 		t.Fatalf("no se pudo crear el bloqueo de otro año: %v", err)
@@ -939,17 +939,17 @@ func TestCrearReserva_ConflictoAMitadDelLote_NoDejaGrupoParcial(t *testing.T) {
 	ctx := context.Background()
 
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	docenteID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 	fecha := time.Date(2027, 5, 10, 0, 0, 0, 0, time.UTC)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	svc := application.NewService(repo,
-		validadorMateriaOK{}, validadorPCOK{}, nombreDocenteFijo{}, NuevoID,
+		validadorMateriaOK{}, validadorEquipoOK{}, nombreDocenteFijo{}, NuevoID,
 		func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	_, _, err := svc.CrearReserva(ctx, materiaID, docenteID, false, fecha,
-		14*time.Hour, 15*time.Hour, []string{pcID, pcID})
+		14*time.Hour, 15*time.Hour, []string{equipoID, equipoID})
 	if err == nil {
 		t.Fatalf("se esperaba un error de solapamiento")
 	}
@@ -978,12 +978,12 @@ func TestCrearReservaRecurrente_ConflictoEnUnaFecha_NoDejaReglaNiGrupos(t *testi
 	ctx := context.Background()
 
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	docenteID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	svc := application.NewService(repo,
-		validadorMateriaOK{}, validadorPCOK{}, nombreDocenteFijo{}, NuevoID,
+		validadorMateriaOK{}, validadorEquipoOK{}, nombreDocenteFijo{}, NuevoID,
 		func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	// Lunes 3, 10 y 17 de mayo de 2027. Se ocupa de antemano el del medio,
@@ -993,7 +993,7 @@ func TestCrearReservaRecurrente_ConflictoEnUnaFecha_NoDejaReglaNiGrupos(t *testi
 	if err := repo.CrearReservaGrupo(ctx, gPrevio); err != nil {
 		t.Fatal(err)
 	}
-	resPrevia, err := domain.NuevaReservaNormal(NuevoID(), gPrevio.ID, pcID, materiaID,
+	resPrevia, err := domain.NuevaReservaNormal(NuevoID(), gPrevio.ID, equipoID, materiaID,
 		"Otro Docente", nil, segundoLunes, 14*time.Hour, 15*time.Hour, ahora)
 	if err != nil {
 		t.Fatal(err)
@@ -1006,7 +1006,7 @@ func TestCrearReservaRecurrente_ConflictoEnUnaFecha_NoDejaReglaNiGrupos(t *testi
 		14*time.Hour, 15*time.Hour,
 		time.Date(2027, 5, 3, 0, 0, 0, 0, time.UTC),
 		time.Date(2027, 5, 17, 0, 0, 0, 0, time.UTC),
-		[]string{pcID})
+		[]string{equipoID})
 	if err == nil {
 		t.Fatalf("se esperaba un error de solapamiento en la segunda fecha")
 	}
@@ -1039,20 +1039,20 @@ func (validadorMateriaOK) MateriaAceptaReservas(context.Context, string) (bool, 
 	return true, nil
 }
 
-type validadorPCOK struct{}
+type validadorEquipoOK struct{}
 
-func (validadorPCOK) PCDisponibleParaReservar(context.Context, string) (bool, error) {
+func (validadorEquipoOK) EquipoDisponibleParaReservar(context.Context, string) (bool, error) {
 	return true, nil
 }
 
-func (validadorPCOK) PCEstaEnInventario(context.Context, string) (bool, error) {
+func (validadorEquipoOK) EquipoEstaEnInventario(context.Context, string) (bool, error) {
 	return true, nil
 }
 
 // Estos tests no miran los avisos, así que alcanza con no romper el
-// contrato: la etiqueta real la resuelve ValidadorPCPostgres, que tiene su
+// contrato: la etiqueta real la resuelve ValidadorEquipoPostgres, que tiene su
 // propio test contra la base.
-func (validadorPCOK) EtiquetasDeEquipos(context.Context, []string) (map[string]string, error) {
+func (validadorEquipoOK) EtiquetasDeEquipos(context.Context, []string) (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
@@ -1064,21 +1064,21 @@ func (nombreDocenteFijo) NombreCompletoDe(context.Context, string) (string, erro
 
 // ── RF-04.2: PCs disponibles en una franja ─────────────────────────────
 
-func TestListarPCsDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testing.T) {
+func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
 	materiaID := crearMateriaDeTest(t, pool)
-	libre := crearPCDeTest(t, pool)
-	ocupada := crearPCDeTest(t, pool)
-	enMantenimiento := crearPCDeTest(t, pool)
-	dadaDeBaja := crearPCDeTest(t, pool)
+	libre := crearEquipoDeCarroDeTest(t, pool)
+	ocupada := crearEquipoDeCarroDeTest(t, pool)
+	enMantenimiento := crearEquipoDeCarroDeTest(t, pool)
+	dadoDeBaja := crearEquipoDeCarroDeTest(t, pool)
 
-	if _, err := pool.Exec(ctx, `UPDATE pc SET estado='EN_MANTENIMIENTO' WHERE id=$1`, enMantenimiento); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE equipo SET estado='EN_MANTENIMIENTO' WHERE id=$1`, enMantenimiento); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE pc SET dada_de_baja=true WHERE id=$1`, dadaDeBaja); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE equipo SET dado_de_baja=true WHERE id=$1`, dadoDeBaja); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1099,9 +1099,9 @@ func TestListarPCsDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testing.T
 		t.Fatal(err)
 	}
 
-	contiene := func(pcs []application.PCDisponible, id string) bool {
-		for _, p := range pcs {
-			if p.PCID == id {
+	contiene := func(equipos []application.EquipoDisponible, id string) bool {
+		for _, p := range equipos {
+			if p.EquipoID == id {
 				return true
 			}
 		}
@@ -1109,7 +1109,7 @@ func TestListarPCsDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testing.T
 	}
 
 	// Franja que se superpone con la reserva existente.
-	disponibles, err := repo.ListarPCsDisponiblesEn(ctx, fecha, 10*time.Hour+30*time.Minute, 11*time.Hour+30*time.Minute)
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour+30*time.Minute, 11*time.Hour+30*time.Minute)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -1122,13 +1122,13 @@ func TestListarPCsDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testing.T
 	if contiene(disponibles, enMantenimiento) {
 		t.Error("una PC EN_MANTENIMIENTO no es reservable (RF-03.3)")
 	}
-	if contiene(disponibles, dadaDeBaja) {
+	if contiene(disponibles, dadoDeBaja) {
 		t.Error("una PC dada de baja no es reservable (RF-03.4)")
 	}
 
 	// Franja pegada al final de la reserva: hora_fin == hora_inicio NO
 	// solapa (mismo criterio que la constraint EXCLUDE).
-	pegada, err := repo.ListarPCsDisponiblesEn(ctx, fecha, 11*time.Hour, 12*time.Hour)
+	pegada, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 11*time.Hour, 12*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1220,7 +1220,7 @@ func TestPostgresRepo_ReservaEnCurso_NoSeFinalizaAntesDeTiempo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	// Clase de 11:00 a 12:00 (hora de la escuela). Son las 11:30: está en
 	// curso, falta media hora para que termine.
@@ -1229,7 +1229,7 @@ func TestPostgresRepo_ReservaEnCurso_NoSeFinalizaAntesDeTiempo(t *testing.T) {
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("no se pudo crear el grupo: %v", err)
 	}
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada", nil,
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
 		fecha, 11*time.Hour, 12*time.Hour, time.Now().UTC().Truncate(time.Microsecond))
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no se pudo crear la reserva: %v", err)
@@ -1250,11 +1250,11 @@ func TestPostgresRepo_ReservaEnCurso_NoSeFinalizaAntesDeTiempo(t *testing.T) {
 	}
 }
 
-func TestPostgresRepo_ReservasFuturasDePC_IncluyenLasDeHoy(t *testing.T) {
+func TestPostgresRepo_ReservasFuturasDeEquipo_IncluyenLasDeHoy(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	// Clase de hoy a la tarde. Son las 08:00 de la mañana: falta.
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
@@ -1262,7 +1262,7 @@ func TestPostgresRepo_ReservasFuturasDePC_IncluyenLasDeHoy(t *testing.T) {
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("no se pudo crear el grupo: %v", err)
 	}
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada", nil,
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
 		fecha, 14*time.Hour, 15*time.Hour, time.Now().UTC().Truncate(time.Microsecond))
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no se pudo crear la reserva: %v", err)
@@ -1270,7 +1270,7 @@ func TestPostgresRepo_ReservasFuturasDePC_IncluyenLasDeHoy(t *testing.T) {
 
 	ahora := time.Date(2026, 3, 9, 8, 0, 0, 0, zonaDeLaEscuela)
 
-	futuras, err := repo.ListarReservasFuturasDePC(context.Background(), pcID, ahora)
+	futuras, err := repo.ListarReservasFuturasDeEquipo(context.Background(), equipoID, ahora)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -1286,18 +1286,18 @@ func TestPostgresRepo_ReservasFuturasDePC_IncluyenLasDeHoy(t *testing.T) {
 	}
 }
 
-func TestPostgresRepo_ReservasFuturasDePC_ExcluyenLasQueYaTerminaronHoy(t *testing.T) {
+func TestPostgresRepo_ReservasFuturasDeEquipo_ExcluyenLasQueYaTerminaronHoy(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("no se pudo crear el grupo: %v", err)
 	}
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada", nil,
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
 		fecha, 8*time.Hour, 9*time.Hour, time.Now().UTC().Truncate(time.Microsecond))
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no se pudo crear la reserva: %v", err)
@@ -1306,7 +1306,7 @@ func TestPostgresRepo_ReservasFuturasDePC_ExcluyenLasQueYaTerminaronHoy(t *testi
 	// 14:00: la clase de 8 a 9 ya pasó, no tiene sentido "cancelarla".
 	ahora := time.Date(2026, 3, 9, 14, 0, 0, 0, zonaDeLaEscuela)
 
-	futuras, err := repo.ListarReservasFuturasDePC(context.Background(), pcID, ahora)
+	futuras, err := repo.ListarReservasFuturasDeEquipo(context.Background(), equipoID, ahora)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -1320,21 +1320,21 @@ func TestPostgresRepo_ReservasFuturasDePC_ExcluyenLasQueYaTerminaronHoy(t *testi
 // El aviso de cancelación nombra los equipos como los reconoce la gente
 // ("PC 7", "Proyector Epson"), no por su UUID: esa traducción es una
 // consulta y por eso se verifica contra la base, no con un fake.
-func TestValidadorPCPostgres_EtiquetasDeEquipos(t *testing.T) {
+func TestValidadorEquipoPostgres_EtiquetasDeEquipos(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	validador := NewValidadorPCPostgres(pool)
+	validador := NewValidadorEquipoPostgres(pool)
 	ctx := context.Background()
 
-	pc := crearPCDeTest(t, pool)
+	equipo := crearEquipoDeCarroDeTest(t, pool)
 	// Un equipo suelto: sin carro, sin número, con nombre (015).
 	proyector := NuevoID()
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO pc (id, tipo, nombre, reservable) VALUES ($1, 'PROYECTOR', 'Proyector Epson', true)`,
+		`INSERT INTO equipo (id, tipo, nombre, reservable) VALUES ($1, 'PROYECTOR', 'Proyector Epson', true)`,
 		proyector); err != nil {
 		t.Fatalf("no se pudo crear el equipo suelto: %v", err)
 	}
 
-	etiquetas, err := validador.EtiquetasDeEquipos(ctx, []string{pc, proyector})
+	etiquetas, err := validador.EtiquetasDeEquipos(ctx, []string{equipo, proyector})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -1344,8 +1344,8 @@ func TestValidadorPCPostgres_EtiquetasDeEquipos(t *testing.T) {
 	// Una PC de carro se nombra por su número; el proyector, por su nombre.
 	// Sin esto último el aviso diría "PC 0", que es lo que sale de formatear
 	// un identificador que no existe.
-	if !strings.HasPrefix(etiquetas[pc], "PC ") {
-		t.Errorf("una PC de carro se nombra por su número: %q", etiquetas[pc])
+	if !strings.HasPrefix(etiquetas[equipo], "PC ") {
+		t.Errorf("una PC de carro se nombra por su número: %q", etiquetas[equipo])
 	}
 	if etiquetas[proyector] != "Proyector Epson" {
 		t.Errorf("un equipo suelto se nombra por su nombre: %q", etiquetas[proyector])
@@ -1353,7 +1353,7 @@ func TestValidadorPCPostgres_EtiquetasDeEquipos(t *testing.T) {
 
 	// Un equipo que no existe simplemente no aparece: el aviso sale igual,
 	// sin nombrarlo, en vez de fallar.
-	conFantasma, err := validador.EtiquetasDeEquipos(ctx, []string{pc, "00000000-0000-0000-0000-000000000000"})
+	conFantasma, err := validador.EtiquetasDeEquipos(ctx, []string{equipo, "00000000-0000-0000-0000-000000000000"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -1366,14 +1366,14 @@ func TestValidadorPCPostgres_EtiquetasDeEquipos(t *testing.T) {
 // como el proyector. Sin carro, sin identificador y sin número de serie.
 func crearEquipoSueltoDeTest(t *testing.T, pool *pgxpool.Pool, nombre string) string {
 	t.Helper()
-	pcID := NuevoID()
+	equipoID := NuevoID()
 	if _, err := pool.Exec(context.Background(),
-		`INSERT INTO pc (id, tipo, nombre, reservable, estado) VALUES ($1, 'PROYECTOR', $2, true, 'DISPONIBLE')`,
-		pcID, nombre,
+		`INSERT INTO equipo (id, tipo, nombre, reservable, estado) VALUES ($1, 'PROYECTOR', $2, true, 'DISPONIBLE')`,
+		equipoID, nombre,
 	); err != nil {
 		t.Fatalf("no se pudo crear equipo suelto de prueba: %v", err)
 	}
-	return pcID
+	return equipoID
 }
 
 // El peor modo de falla de la 015: ListarReservas hacía INNER JOIN a carro,
@@ -1403,8 +1403,8 @@ func TestPostgresRepo_ListarReservas_TraeLasDeUnEquipoSinCarro(t *testing.T) {
 	}
 
 	filas, total, err := repo.ListarReservas(ctx, application.FiltroReservas{
-		PCID:   &equipoID,
-		Pagina: paginacion.Pagina{Numero: 1, Tamanio: 10},
+		EquipoID: &equipoID,
+		Pagina:   paginacion.Pagina{Numero: 1, Tamanio: 10},
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1417,20 +1417,20 @@ func TestPostgresRepo_ListarReservas_TraeLasDeUnEquipoSinCarro(t *testing.T) {
 	}
 	// Los dos campos viejos quedan vacíos, no en basura: una pantalla que
 	// arme el rótulo con ellos escribe "PC 0 · " y se nota en el acto.
-	if filas[0].PCIdentificador != 0 || filas[0].CarroNombre != "" {
+	if filas[0].Identificador != 0 || filas[0].CarroNombre != "" {
 		t.Errorf("esperaba identificador 0 y carro vacío, obtuve %d y %q",
-			filas[0].PCIdentificador, filas[0].CarroNombre)
+			filas[0].Identificador, filas[0].CarroNombre)
 	}
 }
 
 // Una PC de carro tiene que seguir trayendo las tres cosas: la etiqueta
 // nueva no reemplaza al identificador ni al carro, que otras pantallas usan.
-func TestPostgresRepo_ListarReservas_LaPCDeCarroSigueTrayendoTodo(t *testing.T) {
+func TestPostgresRepo_ListarReservas_LaEquipoDeCarroSigueTrayendoTodo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 
@@ -1438,15 +1438,15 @@ func TestPostgresRepo_ListarReservas_LaPCDeCarroSigueTrayendoTodo(t *testing.T) 
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatalf("creando grupo: %v", err)
 	}
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada Lovelace", nil,
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace", nil,
 		fecha, 8*time.Hour, 9*time.Hour, ahora)
 	if err := repo.CrearReserva(ctx, res); err != nil {
 		t.Fatalf("creando reserva: %v", err)
 	}
 
 	filas, _, err := repo.ListarReservas(ctx, application.FiltroReservas{
-		PCID:   &pcID,
-		Pagina: paginacion.Pagina{Numero: 1, Tamanio: 10},
+		EquipoID: &equipoID,
+		Pagina:   paginacion.Pagina{Numero: 1, Tamanio: 10},
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1454,8 +1454,8 @@ func TestPostgresRepo_ListarReservas_LaPCDeCarroSigueTrayendoTodo(t *testing.T) 
 	if len(filas) != 1 {
 		t.Fatalf("esperaba 1 fila, obtuve %d", len(filas))
 	}
-	if filas[0].Etiqueta != "PC 1" || filas[0].PCIdentificador != 1 || filas[0].CarroNombre == "" {
+	if filas[0].Etiqueta != "PC 1" || filas[0].Identificador != 1 || filas[0].CarroNombre == "" {
 		t.Errorf("esperaba PC 1 con carro, obtuve %q / %d / %q",
-			filas[0].Etiqueta, filas[0].PCIdentificador, filas[0].CarroNombre)
+			filas[0].Etiqueta, filas[0].Identificador, filas[0].CarroNombre)
 	}
 }

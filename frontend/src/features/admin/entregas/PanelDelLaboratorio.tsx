@@ -31,7 +31,7 @@ import { getErrorMessage } from "@/lib/api-client"
  * de inicio del Admin, porque son las preguntas que se hace todo el día y
  * que antes exigían entrar a otra sección para responder.
  *
- * "Entregada" o "sin retirar" no sale de la reserva: sale de cruzar sus PCs
+ * "Entregada" o "sin retirar" no sale de la reserva: sale de cruzar sus equipos
  * contra lo que está prestado ahora. La custodia es de la máquina, no de la
  * reserva — la misma computadora puede estar afuera por un préstamo suelto.
  */
@@ -97,9 +97,9 @@ function Clase({
   const [abriendoNombre, setAbriendoNombre] = useState(false)
 
   const sinRetirar = clase.reservas.filter(
-    (r) => r.estado === "CONFIRMADA" && !afuera.has(r.pcId)
+    (r) => r.estado === "CONFIRMADA" && !afuera.has(r.equipoId)
   )
-  const entregadas = clase.reservas.filter((r) => afuera.has(r.pcId))
+  const entregadas = clase.reservas.filter((r) => afuera.has(r.equipoId))
   const liberadas = clase.reservas.filter((r) => r.estado === "NO_RETIRADA")
 
   const entregar = useMutation({
@@ -210,7 +210,7 @@ export function PanelDelLaboratorio() {
   })
 
   const afuera = useMemo(
-    () => new Set((prestamos?.data ?? []).map((p) => p.pcId)),
+    () => new Set((prestamos?.data ?? []).map((p) => p.equipoId)),
     [prestamos]
   )
 

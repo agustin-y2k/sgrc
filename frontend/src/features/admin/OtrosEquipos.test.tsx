@@ -5,12 +5,12 @@ import userEvent from "@testing-library/user-event"
 import * as adminApi from "@/features/admin/api"
 import { OtrosEquipos } from "@/features/admin/OtrosEquipos"
 import * as inventoryApi from "@/features/inventory/api"
-import type { PC } from "@/features/inventory/types"
+import type { Equipo } from "@/features/inventory/types"
 
 vi.mock("@/features/admin/api")
 vi.mock("@/features/inventory/api")
 
-function equipo(over: Partial<PC> = {}): PC {
+function equipo(over: Partial<Equipo> = {}): Equipo {
   return {
     id: "eq1",
     etiqueta: "Proyector Epson",
@@ -19,7 +19,7 @@ function equipo(over: Partial<PC> = {}): PC {
     reservable: true,
     freezado: false,
     estado: "DISPONIBLE",
-    dadaDeBaja: false,
+    dadoDeBaja: false,
     fechaAlta: "2026-01-01T00:00:00Z",
     ...over,
   }
@@ -38,7 +38,7 @@ describe("OtrosEquipos", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [] })
-    vi.mocked(adminApi.crearEquipo).mockResolvedValue(equipo())
+    vi.mocked(adminApi.crearEquipoSuelto).mockResolvedValue(equipo())
   })
 
   it("muestra los equipos con y sin carro por igual", async () => {
@@ -88,7 +88,7 @@ describe("OtrosEquipos", () => {
     await user.click(screen.getByRole("checkbox", { name: /Se puede reservar/ }))
     await user.click(screen.getByRole("button", { name: "Agregar" }))
 
-    expect(adminApi.crearEquipo).toHaveBeenCalledWith({
+    expect(adminApi.crearEquipoSuelto).toHaveBeenCalledWith({
       tipo: "PROYECTOR",
       nombre: "Proyector Epson",
       reservable: true,
@@ -109,7 +109,7 @@ describe("OtrosEquipos", () => {
     await user.type(screen.getByLabelText("¿Cómo lo llaman?"), "Cargador 1")
     await user.click(screen.getByRole("button", { name: "Agregar" }))
 
-    expect(adminApi.crearEquipo).toHaveBeenCalledWith({
+    expect(adminApi.crearEquipoSuelto).toHaveBeenCalledWith({
       tipo: "CARGADOR",
       nombre: "Cargador 1",
       reservable: false,

@@ -88,12 +88,12 @@ func (m *Mensajero) textoDeRecordatorio(a eventbus.RecordatorioDeReserva) (asunt
 // Una PC de tu reserva no volvió
 // ══════════════════════════════════════════════════════════════════
 
-func mensajeDePCNoDisponible(a eventbus.PCNoDisponibleParaReserva) string {
+func mensajeDeEquipoNoDisponible(a eventbus.EquipoNoDisponibleParaReserva) string {
 	return fmt.Sprintf("%s de tu reserva de las %s no volvió al laboratorio todavía",
 		listaDeEquipos(a.Equipos), horaDelDia(a.HoraInicio))
 }
 
-func (m *Mensajero) textoDePCNoDisponible(a eventbus.PCNoDisponibleParaReserva) (asunto, cuerpo string) {
+func (m *Mensajero) textoDeEquipoNoDisponible(a eventbus.EquipoNoDisponibleParaReserva) (asunto, cuerpo string) {
 	asunto = "Una computadora de tu reserva puede no estar"
 
 	cuerpo = saludo(a.Nombre) +
@@ -223,21 +223,21 @@ func textoDeDemora(minutos int) string {
 // El corte de fin de jornada
 // ══════════════════════════════════════════════════════════════════
 
-func mensajeDeCierre(a eventbus.PCsSinDevolverAlCierre) string {
-	if len(a.PCs) == 1 {
-		p := a.PCs[0]
+func mensajeDeCierre(a eventbus.EquiposSinDevolverAlCierre) string {
+	if len(a.Equipos) == 1 {
+		p := a.Equipos[0]
 		return fmt.Sprintf("%s quedó fuera del laboratorio al cierre: la tiene %s",
 			p.Etiqueta, p.Quien)
 	}
-	return fmt.Sprintf("%d computadoras quedaron fuera del laboratorio al cierre", len(a.PCs))
+	return fmt.Sprintf("%d computadoras quedaron fuera del laboratorio al cierre", len(a.Equipos))
 }
 
-func (m *Mensajero) textoDeCierreParaAdmins(a eventbus.PCsSinDevolverAlCierre) (asunto, cuerpo string) {
+func (m *Mensajero) textoDeCierreParaAdmins(a eventbus.EquiposSinDevolverAlCierre) (asunto, cuerpo string) {
 	asunto = "Computadoras que quedaron afuera"
 
 	var sb strings.Builder
 	sb.WriteString("Al cerrar la jornada, estas computadoras siguen fuera del laboratorio:\n\n")
-	for _, p := range a.PCs {
+	for _, p := range a.Equipos {
 		fmt.Fprintf(&sb, "  - %s", p.Etiqueta)
 		if p.CarroNombre != "" {
 			fmt.Fprintf(&sb, " (%s)", p.CarroNombre)
@@ -258,7 +258,7 @@ func (m *Mensajero) textoDeCierreParaAdmins(a eventbus.PCsSinDevolverAlCierre) (
 	return asunto, cuerpo
 }
 
-func (m *Mensajero) textoDeCierreParaElProximo(p eventbus.PCSinDevolverAlCierre) (asunto, cuerpo string) {
+func (m *Mensajero) textoDeCierreParaElProximo(p eventbus.EquipoSinDevolverAlCierre) (asunto, cuerpo string) {
 	asunto = "Una computadora de tu reserva puede no estar"
 
 	cuerpo = saludo(p.ProximoNombre) +

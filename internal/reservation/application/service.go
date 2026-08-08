@@ -19,16 +19,16 @@ import (
 type Service struct {
 	repo             Repo
 	validadorMateria ValidadorMateria
-	validadorPC      ValidadorPC
+	validadorEquipo  ValidadorEquipo
 	obtenedorNombre  ObtenedorNombreDocente
 	nuevoID          IDGenerator
 	ahora            func() time.Time
 	bus              eventbus.EventBus
 }
 
-func NewService(repo Repo, validadorMateria ValidadorMateria, validadorPC ValidadorPC, obtenedorNombre ObtenedorNombreDocente, nuevoID IDGenerator, ahora func() time.Time, bus eventbus.EventBus) *Service {
+func NewService(repo Repo, validadorMateria ValidadorMateria, validadorEquipo ValidadorEquipo, obtenedorNombre ObtenedorNombreDocente, nuevoID IDGenerator, ahora func() time.Time, bus eventbus.EventBus) *Service {
 	return &Service{
-		repo: repo, validadorMateria: validadorMateria, validadorPC: validadorPC,
+		repo: repo, validadorMateria: validadorMateria, validadorEquipo: validadorEquipo,
 		obtenedorNombre: obtenedorNombre, nuevoID: nuevoID, ahora: ahora, bus: bus,
 	}
 }
@@ -61,7 +61,7 @@ type destinatario struct {
 // Emite UN evento por docente y motivo, no uno por Reserva. Bloquear tres
 // PCs de una misma clase para una evaluación le dejaba al docente tres
 // avisos idénticos en la campana: para él es una sola cosa —"me sacaron la
-// clase"— y lo que necesita saber es qué PCs, no cuántas filas se tocaron.
+// clase"— y lo que necesita saber es qué equipos, no cuántas filas se tocaron.
 // El armado de la frase vive en notification; acá solo se junta el dato.
 func (s *Service) publicarCancelaciones(ctx context.Context, pendientes []cancelacionPendiente) {
 	// El orden de los lotes sigue el de la primera cancelación de cada
@@ -101,7 +101,7 @@ func (s *Service) publicarCancelaciones(ctx context.Context, pendientes []cancel
 		for _, r := range reservas {
 			detalle = append(detalle, eventbus.ReservaCancelada{
 				ReservaID: r.ID,
-				Etiqueta:  etiquetas[r.PCID],
+				Etiqueta:  etiquetas[r.EquipoID],
 				Fecha:     r.Fecha,
 			})
 		}
@@ -129,17 +129,17 @@ func (s *Service) publicarCancelaciones(ctx context.Context, pendientes []cancel
 // peor de los dos errores.
 func (s *Service) etiquetasDeLosEquipos(ctx context.Context, grupos map[destinatario][]*domain.Reserva) map[string]string {
 	vistas := map[string]bool{}
-	var pcIDs []string
+	var equipoIDs []string
 	for _, reservas := range grupos {
 		for _, r := range reservas {
-			if !vistas[r.PCID] {
-				vistas[r.PCID] = true
-				pcIDs = append(pcIDs, r.PCID)
+			if !vistas[r.EquipoID] {
+				vistas[r.EquipoID] = true
+				equipoIDs = append(equipoIDs, r.EquipoID)
 			}
 		}
 	}
 
-	etiquetas, err := s.validadorPC.EtiquetasDeEquipos(ctx, pcIDs)
+	etiquetas, err := s.validadorEquipo.EtiquetasDeEquipos(ctx, equipoIDs)
 	if err != nil {
 		log.Printf("reservation: no se pudieron resolver las etiquetas de los equipos para el aviso: %v", err)
 		return map[string]string{}
@@ -149,9 +149,9 @@ func (s *Service) etiquetasDeLosEquipos(ctx context.Context, grupos map[destinat
 
 // CrearReserva implementa RF-04.1: un docente reserva una o más PCs para
 // su materia, en una fecha y horario puntual.
-func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string, esAdmin bool, fecha time.Time, horaInicio, horaFin time.Duration, pcIDs []string) (*domain.ReservaGrupo, []*domain.Reserva, error) {
-	if len(pcIDs) == 0 {
-		return nil, nil, ErrSinPCs
+func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string, esAdmin bool, fecha time.Time, horaInicio, horaFin time.Duration, equipoIDs []string) (*domain.ReservaGrupo, []*domain.Reserva, error) {
+	if len(equipoIDs) == 0 {
+		return nil, nil, ErrSinEquipos
 	}
 
 	if !domain.EsDiaLectivo(fecha) {
@@ -166,17 +166,17 @@ func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string,
 		return nil, nil, err
 	}
 
-	for _, pcID := range pcIDs {
-		disponible, err := s.validadorPC.PCDisponibleParaReservar(ctx, pcID)
+	for _, equipoID := range equipoIDs {
+		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, equipoID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("validando PC %s: %w", pcID, err)
+			return nil, nil, fmt.Errorf("validando PC %s: %w", equipoID, err)
 		}
 		if !disponible {
-			return nil, nil, ErrPCNoDisponible
+			return nil, nil, ErrEquipoNoDisponible
 		}
 	}
 
-	if err := s.verificarSinSolapamiento(ctx, pcIDs, fecha, horaInicio, horaFin); err != nil {
+	if err := s.verificarSinSolapamiento(ctx, equipoIDs, fecha, horaInicio, horaFin); err != nil {
 		return nil, nil, err
 	}
 
@@ -193,7 +193,7 @@ func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string,
 	var reservas []*domain.Reserva
 	err = s.repo.EnTransaccion(ctx, func(repo Repo) error {
 		var err error
-		grupo, reservas, err = s.materializarGrupo(ctx, repo, materiaID, &usuarioID, nombreDocente, fecha, horaInicio, horaFin, pcIDs, nil)
+		grupo, reservas, err = s.materializarGrupo(ctx, repo, materiaID, &usuarioID, nombreDocente, fecha, horaInicio, horaFin, equipoIDs, nil)
 		return err
 	})
 	if err != nil {
@@ -235,7 +235,7 @@ func (s *Service) verificarPuedeReservar(ctx context.Context, materiaID, usuario
 // llamada por cada fecha generada por ReglaRecurrencia.GenerarFechas).
 // Recibe el repo por parámetro (en vez de usar s.repo) para poder correr
 // dentro de la transacción que abre quien la llama.
-func (s *Service) materializarGrupo(ctx context.Context, repo Repo, materiaID string, usuarioID *string, nombreDocente string, fecha time.Time, horaInicio, horaFin time.Duration, pcIDs []string, reglaRecurrenciaID *string) (*domain.ReservaGrupo, []*domain.Reserva, error) {
+func (s *Service) materializarGrupo(ctx context.Context, repo Repo, materiaID string, usuarioID *string, nombreDocente string, fecha time.Time, horaInicio, horaFin time.Duration, equipoIDs []string, reglaRecurrenciaID *string) (*domain.ReservaGrupo, []*domain.Reserva, error) {
 	ahora := s.ahora()
 	grupo, err := domain.NuevoReservaGrupo(s.nuevoID(), materiaID, usuarioID, nombreDocente, fecha, horaInicio, horaFin, reglaRecurrenciaID, ahora)
 	if err != nil {
@@ -245,9 +245,9 @@ func (s *Service) materializarGrupo(ctx context.Context, repo Repo, materiaID st
 		return nil, nil, fmt.Errorf("creando reserva grupo: %w", err)
 	}
 
-	reservas := make([]*domain.Reserva, 0, len(pcIDs))
-	for _, pcID := range pcIDs {
-		r, err := domain.NuevaReservaNormal(s.nuevoID(), grupo.ID, pcID, materiaID, nombreDocente, usuarioID, fecha, horaInicio, horaFin, ahora)
+	reservas := make([]*domain.Reserva, 0, len(equipoIDs))
+	for _, equipoID := range equipoIDs {
+		r, err := domain.NuevaReservaNormal(s.nuevoID(), grupo.ID, equipoID, materiaID, nombreDocente, usuarioID, fecha, horaInicio, horaFin, ahora)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -255,7 +255,7 @@ func (s *Service) materializarGrupo(ctx context.Context, repo Repo, materiaID st
 			if errors.Is(err, ErrSolapamiento) {
 				return nil, nil, err
 			}
-			return nil, nil, fmt.Errorf("creando reserva de PC %s: %w", pcID, err)
+			return nil, nil, fmt.Errorf("creando reserva de PC %s: %w", equipoID, err)
 		}
 		reservas = append(reservas, r)
 	}
@@ -267,9 +267,9 @@ func (s *Service) materializarGrupo(ctx context.Context, repo Repo, materiaID st
 // error que esperar la constraint EXCLUDE de la base) — no reemplaza esa
 // constraint, que sigue siendo la garantía real ante condiciones de
 // carrera entre dos pedidos simultáneos.
-func (s *Service) verificarSinSolapamiento(ctx context.Context, pcIDs []string, fecha time.Time, horaInicio, horaFin time.Duration) error {
-	for _, pcID := range pcIDs {
-		futuras, err := s.repo.ListarReservasFuturasDePC(ctx, pcID, fecha)
+func (s *Service) verificarSinSolapamiento(ctx context.Context, equipoIDs []string, fecha time.Time, horaInicio, horaFin time.Duration) error {
+	for _, equipoID := range equipoIDs {
+		futuras, err := s.repo.ListarReservasFuturasDeEquipo(ctx, equipoID, fecha)
 		if err != nil {
 			return fmt.Errorf("verificando solapamiento: %w", err)
 		}
@@ -408,21 +408,21 @@ func (s *Service) ListarReservas(ctx context.Context, f FiltroReservas) ([]Reser
 	return s.repo.ListarReservas(ctx, f)
 }
 
-// CalendarioDePC implementa RF-04.4: cualquier usuario autenticado puede
+// CalendarioDeEquipo implementa RF-04.4: cualquier usuario autenticado puede
 // ver los bloques ocupados de una PC, con docente, materia y horario.
-func (s *Service) CalendarioDePC(ctx context.Context, pcID string, desde, hasta time.Time) ([]BloqueCalendario, error) {
+func (s *Service) CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) ([]BloqueCalendario, error) {
 	if hasta.Before(desde) {
 		return nil, domain.ErrRangoFechasInvalido
 	}
-	return s.repo.CalendarioDePC(ctx, pcID, desde, hasta)
+	return s.repo.CalendarioDeEquipo(ctx, equipoID, desde, hasta)
 }
 
-// ListarPCsDisponiblesEn implementa la selección de PCs de RF-04.2.
-func (s *Service) ListarPCsDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]PCDisponible, error) {
+// ListarEquiposDisponiblesEn implementa la selección de PCs de RF-04.2.
+func (s *Service) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoDisponible, error) {
 	if horaFin <= horaInicio {
 		return nil, domain.ErrRangoHorarioInvalido
 	}
-	return s.repo.ListarPCsDisponiblesEn(ctx, fecha, horaInicio, horaFin)
+	return s.repo.ListarEquiposDisponiblesEn(ctx, fecha, horaInicio, horaFin)
 }
 
 // ObtenerReservaGrupo es un passthrough directo al repo — mismo criterio
@@ -464,22 +464,22 @@ const maxOcurrenciasRecurrencia = 45
 // corren para CADA fecha generada — si una sola fecha falla (ej. una PC ya
 // está ocupada ese día puntual por otra cosa), toda la operación se aborta
 // sin dejar reglas ni grupos a medio crear.
-func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuarioID string, esAdmin bool, diaSemana domain.DiaSemana, horaInicio, horaFin time.Duration, fechaInicio, fechaFin time.Time, pcIDs []string) (*ResultadoRecurrencia, error) {
-	if len(pcIDs) == 0 {
-		return nil, ErrSinPCs
+func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuarioID string, esAdmin bool, diaSemana domain.DiaSemana, horaInicio, horaFin time.Duration, fechaInicio, fechaFin time.Time, equipoIDs []string) (*ResultadoRecurrencia, error) {
+	if len(equipoIDs) == 0 {
+		return nil, ErrSinEquipos
 	}
 
 	if err := s.verificarPuedeReservar(ctx, materiaID, usuarioID, esAdmin); err != nil {
 		return nil, err
 	}
 
-	for _, pcID := range pcIDs {
-		disponible, err := s.validadorPC.PCDisponibleParaReservar(ctx, pcID)
+	for _, equipoID := range equipoIDs {
+		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, equipoID)
 		if err != nil {
-			return nil, fmt.Errorf("validando PC %s: %w", pcID, err)
+			return nil, fmt.Errorf("validando PC %s: %w", equipoID, err)
 		}
 		if !disponible {
-			return nil, ErrPCNoDisponible
+			return nil, ErrEquipoNoDisponible
 		}
 	}
 
@@ -519,7 +519,7 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 	// Se verifica el solapamiento de TODAS las fechas antes de crear nada
 	// — así una falla en la fecha 5 de 10 no deja 4 grupos ya creados.
 	for _, fecha := range fechas {
-		if err := s.verificarSinSolapamiento(ctx, pcIDs, fecha, horaInicio, horaFin); err != nil {
+		if err := s.verificarSinSolapamiento(ctx, equipoIDs, fecha, horaInicio, horaFin); err != nil {
 			return nil, err
 		}
 	}
@@ -543,7 +543,7 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 		}
 
 		for _, fecha := range fechas {
-			grupo, _, err := s.materializarGrupo(ctx, repo, materiaID, &usuarioID, nombreDocente, fecha, horaInicio, horaFin, pcIDs, &regla.ID)
+			grupo, _, err := s.materializarGrupo(ctx, repo, materiaID, &usuarioID, nombreDocente, fecha, horaInicio, horaFin, equipoIDs, &regla.ID)
 			if err != nil {
 				return fmt.Errorf("materializando ocurrencia del %s: %w", fecha.Format("2006-01-02"), err)
 			}
@@ -633,9 +633,9 @@ type ResultadoBloqueoEvaluacion struct {
 // en cascada (nunca cancela otro bloqueo de evaluación existente — dos
 // evaluaciones no deberían solaparse en la práctica, y si pasara, no es
 // este método el que debe resolverlo).
-func (s *Service) BloquearParaEvaluacion(ctx context.Context, pcIDs []string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, motivoBloqueo string) (*ResultadoBloqueoEvaluacion, error) {
-	if len(pcIDs) == 0 {
-		return nil, ErrSinPCs
+func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, motivoBloqueo string) (*ResultadoBloqueoEvaluacion, error) {
+	if len(equipoIDs) == 0 {
+		return nil, ErrSinEquipos
 	}
 
 	ahora := s.ahora()
@@ -654,19 +654,19 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, pcIDs []string, cr
 		return nil, domain.ErrReservaEnElPasado
 	}
 
-	for _, pcID := range pcIDs {
-		disponible, err := s.validadorPC.PCDisponibleParaReservar(ctx, pcID)
+	for _, equipoID := range equipoIDs {
+		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, equipoID)
 		if err != nil {
-			return nil, fmt.Errorf("validando PC %s: %w", pcID, err)
+			return nil, fmt.Errorf("validando PC %s: %w", equipoID, err)
 		}
 		if !disponible {
-			return nil, ErrPCNoDisponible
+			return nil, ErrEquipoNoDisponible
 		}
 	}
 
 	docentesAfectados := map[string]bool{}
 	reservasCanceladas := 0
-	bloqueos := make([]*domain.Reserva, 0, len(pcIDs))
+	bloqueos := make([]*domain.Reserva, 0, len(equipoIDs))
 	var pendientes []cancelacionPendiente
 
 	// Todo el bloqueo es una sola transacción. Es especialmente importante
@@ -680,10 +680,10 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, pcIDs []string, cr
 		bloqueos = bloqueos[:0]
 		pendientes = nil
 
-		for _, pcID := range pcIDs {
-			futuras, err := repo.ListarReservasFuturasDePC(ctx, pcID, fecha)
+		for _, equipoID := range equipoIDs {
+			futuras, err := repo.ListarReservasFuturasDeEquipo(ctx, equipoID, fecha)
 			if err != nil {
-				return fmt.Errorf("listando reservas de la PC %s: %w", pcID, err)
+				return fmt.Errorf("listando reservas del equipo %s: %w", equipoID, err)
 			}
 
 			for _, r := range futuras {
@@ -717,7 +717,7 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, pcIDs []string, cr
 				}
 			}
 
-			bloqueo, err := domain.NuevaReservaEvaluacion(s.nuevoID(), pcID, creadoPor, fecha, horaInicio, horaFin, ahora)
+			bloqueo, err := domain.NuevaReservaEvaluacion(s.nuevoID(), equipoID, creadoPor, fecha, horaInicio, horaFin, ahora)
 			if err != nil {
 				return err
 			}
@@ -725,7 +725,7 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, pcIDs []string, cr
 				if errors.Is(err, ErrSolapamiento) {
 					return err
 				}
-				return fmt.Errorf("creando bloqueo de evaluación para PC %s: %w", pcID, err)
+				return fmt.Errorf("creando bloqueo de evaluación para el equipo %s: %w", equipoID, err)
 			}
 			bloqueos = append(bloqueos, bloqueo)
 		}
@@ -891,19 +891,19 @@ func (s *Service) finalizarGrupoSiCorresponde(ctx context.Context, repo Repo, gr
 // los puertos ValidadorReservas de inventory/auth, en vez de que esos
 // paquetes reimplementen la lógica por su cuenta.
 
-// CancelarReservasFuturasDePC implementa el lado "reservation" de la
+// CancelarReservasFuturasDeEquipo implementa el lado "reservation" de la
 // cascada que dispara inventory (RF-03.8/03.9: cambio de estado o baja de
 // una PC). Cancela toda Reserva CONFIRMADA de esa PC desde ahora en
 // adelante, y recalcula el estado de cada ReservaGrupo afectado.
-func (s *Service) CancelarReservasFuturasDePC(ctx context.Context, pcID, motivo string) (int, int, error) {
+func (s *Service) CancelarReservasFuturasDeEquipo(ctx context.Context, equipoID, motivo string) (int, int, error) {
 	ahora := s.ahora()
 	var canceladas, docentes int
 	var pendientes []cancelacionPendiente
 
 	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
-		futuras, err := repo.ListarReservasFuturasDePC(ctx, pcID, ahora)
+		futuras, err := repo.ListarReservasFuturasDeEquipo(ctx, equipoID, ahora)
 		if err != nil {
-			return fmt.Errorf("listando reservas futuras de la PC: %w", err)
+			return fmt.Errorf("listando reservas futuras del equipo: %w", err)
 		}
 		canceladas, docentes, pendientes, err = s.cancelarEnCascada(ctx, repo, futuras, motivo, ahora)
 		return err
@@ -916,7 +916,7 @@ func (s *Service) CancelarReservasFuturasDePC(ctx context.Context, pcID, motivo 
 	return canceladas, docentes, nil
 }
 
-// TieneReservasFuturasDePC responde si a esa PC todavía le quedan reservas
+// TieneReservasFuturasDeEquipo responde si a esa PC todavía le quedan reservas
 // CONFIRMADA sin terminar. Es el equivalente para inventory de lo que
 // TieneReservasDeCiclo es para academic: distingue dos situaciones que desde
 // afuera se ven igual —una PC que ya está fuera de servicio o dada de baja—
@@ -934,10 +934,10 @@ func (s *Service) CancelarReservasFuturasDePC(ctx context.Context, pcID, motivo 
 // no trivial en este paquete (fecha + hora_fin contra el instante actual,
 // ver condicionNoTerminada) y duplicarla en otro paquete es exactamente
 // cómo dos criterios terminan divergiendo.
-func (s *Service) TieneReservasFuturasDePC(ctx context.Context, pcID string) (bool, error) {
-	futuras, err := s.repo.ListarReservasFuturasDePC(ctx, pcID, s.ahora())
+func (s *Service) TieneReservasFuturasDeEquipo(ctx context.Context, equipoID string) (bool, error) {
+	futuras, err := s.repo.ListarReservasFuturasDeEquipo(ctx, equipoID, s.ahora())
 	if err != nil {
-		return false, fmt.Errorf("verificando reservas futuras de la PC: %w", err)
+		return false, fmt.Errorf("verificando reservas futuras del equipo: %w", err)
 	}
 	for _, r := range futuras {
 		if r.Estado == domain.ReservaConfirmada {
@@ -1028,7 +1028,7 @@ func (s *Service) EliminarReservasDeCiclo(ctx context.Context, cicloID string) (
 // nada, así que cambiarle la PC no significaría nada.
 var ErrReservaNoModificable = errors.New("esa reserva ya no está vigente")
 
-// CambiarPCDeReserva mueve una reserva a otra máquina sin partir la clase en
+// CambiarEquipoDeReserva mueve una reserva a otra máquina sin partir la clase en
 // dos (RF-08.14).
 //
 // Hace falta porque el barrido puede avisar que una PC no volvió, y hasta
@@ -1039,7 +1039,7 @@ var ErrReservaNoModificable = errors.New("esa reserva ya no está vigente")
 // Se apoya en la constraint EXCLUDE para el anti-solapamiento, igual que
 // crear: se valida antes para dar un mensaje mejor, pero la garantía real
 // ante dos pedidos simultáneos es la de la base.
-func (s *Service) CambiarPCDeReserva(ctx context.Context, reservaID, pcNuevoID string, quien string, esAdmin bool) (*domain.Reserva, error) {
+func (s *Service) CambiarEquipoDeReserva(ctx context.Context, reservaID, pcNuevoID string, quien string, esAdmin bool) (*domain.Reserva, error) {
 	var cambiada *domain.Reserva
 
 	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
@@ -1054,23 +1054,23 @@ func (s *Service) CambiarPCDeReserva(ctx context.Context, reservaID, pcNuevoID s
 		if !esAdmin && (r.CreadoPor == nil || *r.CreadoPor != quien) {
 			return ErrReservaAjena
 		}
-		if r.PCID == pcNuevoID {
+		if r.EquipoID == pcNuevoID {
 			cambiada = r
 			return nil // no hay nada que cambiar
 		}
 
-		disponible, err := s.validadorPC.PCDisponibleParaReservar(ctx, pcNuevoID)
+		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, pcNuevoID)
 		if err != nil {
-			return fmt.Errorf("verificando la PC nueva: %w", err)
+			return fmt.Errorf("verificando el equipo nuevo: %w", err)
 		}
 		if !disponible {
-			return ErrPCNoDisponible
+			return ErrEquipoNoDisponible
 		}
 		if err := s.verificarSinSolapamiento(ctx, []string{pcNuevoID}, r.Fecha, r.HoraInicio, r.HoraFin); err != nil {
 			return err
 		}
 
-		r.PCID = pcNuevoID
+		r.EquipoID = pcNuevoID
 		if err := repo.GuardarReserva(ctx, r); err != nil {
 			return err
 		}

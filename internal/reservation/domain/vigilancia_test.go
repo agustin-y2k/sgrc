@@ -103,12 +103,12 @@ func TestCorrespondeLiberar_GraciaConfigurable(t *testing.T) {
 	}
 }
 
-// TestCorrespondeAvisarPCNoDisponible_MaxDeteccionOInicioMenosUnaHora es la
+// TestCorrespondeAvisarEquipoNoDisponible_MaxDeteccionOInicioMenosUnaHora es la
 // regla que se definió para el docente siguiente. Lo que fija el test es la
 // mitad que vive en el dominio: la ventana. La otra mitad —que la máquina
 // siga demorada en ese momento— la pone el job, y es la que hace que el
 // aviso no salga nunca si la PC vuelve a tiempo.
-func TestCorrespondeAvisarPCNoDisponible_MaxDeteccionOInicioMenosUnaHora(t *testing.T) {
+func TestCorrespondeAvisarEquipoNoDisponible_MaxDeteccionOInicioMenosUnaHora(t *testing.T) {
 	casos := []struct {
 		nombre   string
 		ahora    time.Time
@@ -126,10 +126,10 @@ func TestCorrespondeAvisarPCNoDisponible_MaxDeteccionOInicioMenosUnaHora(t *test
 
 	for _, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
-			got := CorrespondeAvisarPCNoDisponible(diaDeClase, deOchoANue[0], deOchoANue[1],
+			got := CorrespondeAvisarEquipoNoDisponible(diaDeClase, deOchoANue[0], deOchoANue[1],
 				AntelacionDelRecordatorio, c.ahora)
 			if got != c.esperado {
-				t.Errorf("CorrespondeAvisarPCNoDisponible = %v, esperaba %v", got, c.esperado)
+				t.Errorf("CorrespondeAvisarEquipoNoDisponible = %v, esperaba %v", got, c.esperado)
 			}
 		})
 	}

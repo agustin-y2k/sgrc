@@ -21,9 +21,9 @@ import (
 // cuando una PC falla: el Admin tiene las otras cuatro en la mano, y hacerlo
 // empezar de nuevo por una sola sería peor que informarle cuál fue.
 
-// maxHistorialDePC acota el historial de entregas de una máquina. Es una
+// maxHistorialDeEquipo acota el historial de entregas de una máquina. Es una
 // pantalla para mirar los últimos movimientos, no un reporte.
-const maxHistorialDePC = 50
+const maxHistorialDeEquipo = 50
 
 // RazonNoEntregada es por qué una PC del lote quedó afuera. Va como código y
 // no como texto suelto para que la pantalla pueda decidir qué ofrecer —"ver
@@ -45,11 +45,11 @@ const (
 	NoEntregadaSinDestinatario RazonNoEntregada = "SIN_DESTINATARIO"
 )
 
-// PCNoEntregada explica por qué una PC del lote no salió.
-type PCNoEntregada struct {
-	PCID    string
-	Razon   RazonNoEntregada
-	Detalle string
+// EquipoNoEntregado explica por qué una PC del lote no salió.
+type EquipoNoEntregado struct {
+	EquipoID string
+	Razon    RazonNoEntregada
+	Detalle  string
 }
 
 // ReservaProxima avisa que una máquina que se acaba de entregar tiene una
@@ -58,17 +58,17 @@ type PCNoEntregada struct {
 // antes—. Decidir por él sería peor: el sistema no sabe cuánto va a durar un
 // trámite.
 type ReservaProxima struct {
-	PCID    string
-	Fecha   time.Time
-	Inicio  time.Duration
-	Fin     time.Duration
-	Docente string
+	EquipoID string
+	Fecha    time.Time
+	Inicio   time.Duration
+	Fin      time.Duration
+	Docente  string
 }
 
 // ResultadoEntrega es qué salió y qué no.
 type ResultadoEntrega struct {
 	Entregadas   []*domain.Prestamo
-	NoEntregadas []PCNoEntregada
+	NoEntregadas []EquipoNoEntregado
 	// Avisos solo se llena en las entregas espontáneas: en las que salen
 	// contra una reserva, la reserva ES el permiso.
 	Avisos []ReservaProxima
@@ -94,7 +94,7 @@ type EntregaPorReservaParams struct {
 // dato que ya está y que el Admin no tiene por qué volver a tipear.
 func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReservaParams) (*ResultadoEntrega, error) {
 	if len(params.ReservaIDs) == 0 {
-		return nil, ErrSinPCs
+		return nil, ErrSinEquipos
 	}
 
 	ahora := s.ahora()
@@ -109,10 +109,10 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 		}
 
 		if reserva.Estado == domain.ReservaCancelada {
-			resultado.NoEntregadas = append(resultado.NoEntregadas, PCNoEntregada{
-				PCID:    reserva.PCID,
-				Razon:   NoEntregadaReservaCancelada,
-				Detalle: "esa reserva está cancelada",
+			resultado.NoEntregadas = append(resultado.NoEntregadas, EquipoNoEntregado{
+				EquipoID: reserva.EquipoID,
+				Razon:    NoEntregadaReservaCancelada,
+				Detalle:  "esa reserva está cancelada",
 			})
 			continue
 		}
@@ -132,16 +132,16 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 		// entrega: alguien tiene que retirar las máquinas de una mesa de
 		// examen.
 		if nombre == "" {
-			resultado.NoEntregadas = append(resultado.NoEntregadas, PCNoEntregada{
-				PCID:    reserva.PCID,
-				Razon:   NoEntregadaSinDestinatario,
-				Detalle: "esa reserva no tiene docente (es un bloqueo por evaluación): escribí a nombre de quién se entrega",
+			resultado.NoEntregadas = append(resultado.NoEntregadas, EquipoNoEntregado{
+				EquipoID: reserva.EquipoID,
+				Razon:    NoEntregadaSinDestinatario,
+				Detalle:  "esa reserva no tiene docente (es un bloqueo por evaluación): escribí a nombre de quién se entrega",
 			})
 			continue
 		}
 
 		datos := domain.DatosDeEntrega{
-			PCID:               reserva.PCID,
+			EquipoID:           reserva.EquipoID,
 			ReservaID:          &reserva.ID,
 			UsuarioID:          reserva.CreadoPor,
 			Nombre:             nombre,
@@ -174,7 +174,7 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 // EntregaSueltaParams es el préstamo sin reserva detrás: "necesito una
 // compu para hacer un trámite".
 type EntregaSueltaParams struct {
-	PCIDs []string
+	EquipoIDs []string
 	// Nombre es obligatorio; UsuarioID solo si esa persona tiene cuenta.
 	// Quien viene a pedir una máquina para un trámite muchas veces no la
 	// tiene —secretaría, preceptoría, un alumno— y obligar a que la tenga
@@ -189,16 +189,16 @@ type EntregaSueltaParams struct {
 }
 
 func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams) (*ResultadoEntrega, error) {
-	if len(params.PCIDs) == 0 {
-		return nil, ErrSinPCs
+	if len(params.EquipoIDs) == 0 {
+		return nil, ErrSinEquipos
 	}
 
 	ahora := s.ahora()
 	resultado := &ResultadoEntrega{}
 
-	for _, pcID := range params.PCIDs {
+	for _, equipoID := range params.EquipoIDs {
 		datos := domain.DatosDeEntrega{
-			PCID:               pcID,
+			EquipoID:           equipoID,
 			UsuarioID:          params.UsuarioID,
 			Nombre:             params.Nombre,
 			Motivo:             params.Motivo,
@@ -216,7 +216,7 @@ func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams
 		}
 		resultado.Entregadas = append(resultado.Entregadas, prestamo)
 
-		if aviso := s.reservaProximaDe(ctx, pcID, ahora); aviso != nil {
+		if aviso := s.reservaProximaDe(ctx, equipoID, ahora); aviso != nil {
 			resultado.Avisos = append(resultado.Avisos, *aviso)
 		}
 	}
@@ -227,16 +227,16 @@ func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams
 // registrarEntrega es el paso común: validar que la máquina esté en el
 // inventario y crearla, traduciendo los dos rechazos esperables a una razón
 // que la pantalla pueda mostrar. Devuelve error solo ante fallas reales.
-func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntrega, ahora time.Time) (*domain.Prestamo, *PCNoEntregada, error) {
-	enInventario, err := s.validadorPC.PCEstaEnInventario(ctx, datos.PCID)
+func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntrega, ahora time.Time) (*domain.Prestamo, *EquipoNoEntregado, error) {
+	enInventario, err := s.validadorEquipo.EquipoEstaEnInventario(ctx, datos.EquipoID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("verificando la PC %s: %w", datos.PCID, err)
+		return nil, nil, fmt.Errorf("verificando el equipo %s: %w", datos.EquipoID, err)
 	}
 	if !enInventario {
-		return nil, &PCNoEntregada{
-			PCID:    datos.PCID,
-			Razon:   NoEntregadaFueraDelInventario,
-			Detalle: ErrPCDadaDeBaja.Error(),
+		return nil, &EquipoNoEntregado{
+			EquipoID: datos.EquipoID,
+			Razon:    NoEntregadaFueraDelInventario,
+			Detalle:  ErrEquipoDadoDeBaja.Error(),
 		}, nil
 	}
 
@@ -248,11 +248,11 @@ func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntr
 	}
 
 	if err := s.repo.CrearPrestamo(ctx, prestamo); err != nil {
-		if errors.Is(err, ErrPCYaPrestada) {
-			return nil, &PCNoEntregada{
-				PCID:    datos.PCID,
-				Razon:   NoEntregadaYaPrestada,
-				Detalle: ErrPCYaPrestada.Error(),
+		if errors.Is(err, ErrEquipoYaPrestado) {
+			return nil, &EquipoNoEntregado{
+				EquipoID: datos.EquipoID,
+				Razon:    NoEntregadaYaPrestada,
+				Detalle:  ErrEquipoYaPrestado.Error(),
 			}, nil
 		}
 		return nil, nil, err
@@ -263,17 +263,17 @@ func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntr
 // reservaProximaDe busca la primera reserva vigente de esa PC de acá en
 // adelante. Es informativo: si falla, la entrega ya se registró y no tiene
 // sentido tirarla abajo por no haber podido mostrar un aviso.
-func (s *Service) reservaProximaDe(ctx context.Context, pcID string, ahora time.Time) *ReservaProxima {
-	futuras, err := s.repo.ListarReservasFuturasDePC(ctx, pcID, ahora)
+func (s *Service) reservaProximaDe(ctx context.Context, equipoID string, ahora time.Time) *ReservaProxima {
+	futuras, err := s.repo.ListarReservasFuturasDeEquipo(ctx, equipoID, ahora)
 	if err != nil || len(futuras) == 0 {
 		return nil
 	}
 	proxima := futuras[0]
 	aviso := ReservaProxima{
-		PCID:   pcID,
-		Fecha:  proxima.Fecha,
-		Inicio: proxima.HoraInicio,
-		Fin:    proxima.HoraFin,
+		EquipoID: equipoID,
+		Fecha:    proxima.Fecha,
+		Inicio:   proxima.HoraInicio,
+		Fin:      proxima.HoraFin,
 	}
 	if proxima.NombreDocenteSnapshot != nil {
 		aviso.Docente = *proxima.NombreDocenteSnapshot
@@ -283,29 +283,29 @@ func (s *Service) reservaProximaDe(ctx context.Context, pcID string, ahora time.
 
 // ── Devolución ──────────────────────────────────────────────────────────
 
-// PCNoRecibida: la única razón posible es que ya figurara devuelta —dos
+// EquipoNoRecibido: la única razón posible es que ya figurara devuelta —dos
 // Admin en el mostrador, o un doble clic—. Se informa en vez de fallar,
 // porque el resultado que el Admin quería (que la máquina figure adentro)
 // ya está.
-type PCNoRecibida struct {
+type EquipoNoRecibido struct {
 	PrestamoID string
 	Detalle    string
 }
 
 type ResultadoDevolucion struct {
 	Recibidos   []*domain.Prestamo
-	NoRecibidos []PCNoRecibida
+	NoRecibidos []EquipoNoRecibido
 }
 
-// RecibirPCs marca la vuelta de una o varias máquinas.
+// RecibirEquipos marca la vuelta de una o varias máquinas.
 //
 // `observaciones` es una sola para todo el lote y normalmente va vacía. Si
 // hay algo puntual que anotar sobre una máquina —"volvió sin el cargador"—
 // se recibe esa sola: atarle una observación a cinco filas diría de las
 // otras cuatro algo que no pasó.
-func (s *Service) RecibirPCs(ctx context.Context, prestamoIDs []string, recibidoPor, observaciones string) (*ResultadoDevolucion, error) {
+func (s *Service) RecibirEquipos(ctx context.Context, prestamoIDs []string, recibidoPor, observaciones string) (*ResultadoDevolucion, error) {
 	if len(prestamoIDs) == 0 {
-		return nil, ErrSinPCs
+		return nil, ErrSinEquipos
 	}
 
 	ahora := s.ahora()
@@ -319,7 +319,7 @@ func (s *Service) RecibirPCs(ctx context.Context, prestamoIDs []string, recibido
 
 		if err := prestamo.Devolver(recibidoPor, observaciones, ahora); err != nil {
 			if errors.Is(err, domain.ErrPrestamoYaDevuelto) {
-				resultado.NoRecibidos = append(resultado.NoRecibidos, PCNoRecibida{
+				resultado.NoRecibidos = append(resultado.NoRecibidos, EquipoNoRecibido{
 					PrestamoID: id,
 					Detalle:    err.Error(),
 				})
@@ -343,10 +343,10 @@ func (s *Service) ListarPrestamosAbiertos(ctx context.Context) ([]*PrestamoDetal
 	return s.repo.ListarPrestamosAbiertos(ctx)
 }
 
-// HistorialDePC son los últimos movimientos de una máquina: quién se la
+// HistorialDeEquipo son los últimos movimientos de una máquina: quién se la
 // llevó, cuándo volvió, qué se anotó al recibirla.
-func (s *Service) HistorialDePC(ctx context.Context, pcID string) ([]*PrestamoDetallado, error) {
-	return s.repo.ListarPrestamosDePC(ctx, pcID, maxHistorialDePC)
+func (s *Service) HistorialDeEquipo(ctx context.Context, equipoID string) ([]*PrestamoDetallado, error) {
+	return s.repo.ListarPrestamosDeEquipo(ctx, equipoID, maxHistorialDeEquipo)
 }
 
 // Ahora expone el reloj del servicio para que la capa HTTP pueda calcular

@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router"
 
 import { NuevaReservaPage } from "@/features/reservas/NuevaReservaPage"
 import * as reservasApi from "@/features/reservas/api"
-import type { MateriaReservable, PCDisponible } from "@/features/reservas/types"
+import type { MateriaReservable, EquipoDisponible } from "@/features/reservas/types"
 import { ApiError } from "@/lib/api-client"
 import { diaLectivoEnDias } from "@/test/fechas"
 
@@ -28,9 +28,9 @@ const materias: MateriaReservable[] = [
   },
 ]
 
-const pcs: PCDisponible[] = [
+const equipos: EquipoDisponible[] = [
   {
-    pcId: "pc1",
+    equipoId: "pc1",
     identificador: 1,
     etiqueta: "PC 1",
     carroId: "car1",
@@ -39,7 +39,7 @@ const pcs: PCDisponible[] = [
     softwareInstalado: "AutoCAD 2027",
   },
   {
-    pcId: "pc2",
+    equipoId: "pc2",
     identificador: 7,
     etiqueta: "PC 7",
     carroId: "car2",
@@ -102,7 +102,7 @@ describe("NuevaReservaPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(reservasApi.misMaterias).mockResolvedValue({ data: materias })
-    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({ data: pcs })
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({ data: equipos })
     vi.mocked(reservasApi.crearReserva).mockResolvedValue({ grupo: {}, reservas: [] })
     vi.mocked(reservasApi.crearReservaRecurrente).mockResolvedValue({
       reglaId: "regla1",
@@ -116,15 +116,15 @@ describe("NuevaReservaPage", () => {
 
   // Pedir disponibilidad sin franja completa no tiene sentido y el backend
   // responde 400.
-  it("no consulta PCs hasta tener fecha y horario", async () => {
+  it("no consulta Equipos hasta tener fecha y horario", async () => {
     renderPagina()
     await screen.findByLabelText("Materia")
 
-    expect(reservasApi.pcsDisponibles).not.toHaveBeenCalled()
+    expect(reservasApi.equiposDisponibles).not.toHaveBeenCalled()
     expect(screen.getByText(/Elegí la fecha y el horario/)).toBeInTheDocument()
   })
 
-  it("con la franja completa muestra las PCs libres agrupadas por carro", async () => {
+  it("con la franja completa muestra los equipos libres agrupadas por carro", async () => {
     const user = userEvent.setup()
     renderPagina()
     await completarFranja(user)
@@ -136,22 +136,22 @@ describe("NuevaReservaPage", () => {
     expect(screen.getByText("Carro 2")).toBeInTheDocument()
     // RF-03.7: el software es el dato que define la elección.
     expect(screen.getByText("AutoCAD 2027")).toBeInTheDocument()
-    expect(reservasApi.pcsDisponibles).toHaveBeenCalledWith(FECHA, "08:00", "09:00")
+    expect(reservasApi.equiposDisponibles).toHaveBeenCalledWith(FECHA, "08:00", "09:00")
   })
 
   /**
    * El proyector (015) es reservable pero no está en ningún carro. Con el
-   * rótulo armado a partir del identificador se ofrecía como "PC undefined",
+   * rótulo armado a partir del identificador se ofrecía como "Equipo undefined",
    * y con `carroNombre` vacío caía bajo un título en blanco: el docente veía
    * una casilla sin saber qué estaba tildando.
    */
   it("ofrece lo que no está en ningún carro bajo su propio título", async () => {
     const user = userEvent.setup()
-    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
       data: [
-        ...pcs,
+        ...equipos,
         {
-          pcId: "eq1",
+          equipoId: "eq1",
           etiqueta: "Proyector Epson",
           tipo: "PROYECTOR",
           carroId: "",
@@ -170,8 +170,8 @@ describe("NuevaReservaPage", () => {
   })
 
   // RF-04.2: "la lista no está restringida a un solo carro, puede combinar
-  // PCs de carros distintos en la misma reserva".
-  it("permite combinar PCs de carros distintos en una sola reserva", async () => {
+  // Equipos de carros distintos en la misma reserva".
+  it("permite combinar equipos de carros distintos en una sola reserva", async () => {
     const user = userEvent.setup()
     renderPagina()
     await completarFranja(user)
@@ -185,11 +185,11 @@ describe("NuevaReservaPage", () => {
       fecha: FECHA,
       horaInicio: "08:00",
       horaFin: "09:00",
-      pcIds: ["pc1", "pc2"],
+      equipoIds: ["pc1", "pc2"],
     })
   })
 
-  it("no deja confirmar sin al menos una PC seleccionada", async () => {
+  it("no deja confirmar sin al menos un equipo seleccionado", async () => {
     const user = userEvent.setup()
     renderPagina()
     await completarFranja(user)
@@ -212,7 +212,7 @@ describe("NuevaReservaPage", () => {
   })
 
   // Espeja domain.MaxDuracionReserva: sin tope, un 00:00–23:59 bloqueaba la
-  // PC el día entero.
+  // Equipo el día entero.
   it("avisa si la reserva dura más que un turno completo", async () => {
     const user = userEvent.setup()
     renderPagina()
@@ -251,15 +251,15 @@ describe("NuevaReservaPage", () => {
       horaFin: "09:00",
       fechaInicio: FECHA,
       fechaFin: FECHA_FIN,
-      pcIds: ["pc1"],
+      equipoIds: ["pc1"],
     })
   })
 
-  // RF-04.3: el backend informa qué PCs puntuales están ocupadas; ese
+  // RF-04.3: el backend informa qué equipos puntuales están ocupados; ese
   // mensaje se muestra tal cual en vez de uno genérico.
   it("muestra el mensaje de solapamiento del backend", async () => {
     vi.mocked(reservasApi.crearReserva).mockRejectedValue(
-      new ApiError(409, "una o más PCs ya tienen una reserva en ese horario")
+      new ApiError(409, "una o más Equipos ya tienen una reserva en ese horario")
     )
     const user = userEvent.setup()
     renderPagina()
@@ -281,7 +281,7 @@ describe("NuevaReservaPage", () => {
     await screen.findByLabelText("Materia")
 
     expect(screen.getByText(/elegir la materia/)).toBeInTheDocument()
-    expect(screen.getByText(/tildar al menos una PC/)).toBeInTheDocument()
+    expect(screen.getByText(/tildar al menos un equipo/)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
   })
 
@@ -294,7 +294,7 @@ describe("NuevaReservaPage", () => {
     expect(screen.queryByText(/elegir la fecha/)).not.toBeInTheDocument()
     // Lo único que queda.
     expect(
-      screen.getByText(/Para confirmar falta tildar al menos una PC/)
+      screen.getByText(/Para confirmar falta tildar al menos un equipo/)
     ).toBeInTheDocument()
 
     await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
@@ -315,7 +315,7 @@ describe("NuevaReservaPage", () => {
 
     expect(await screen.findByText("Listado")).toBeInTheDocument()
     expect(
-      screen.getByText(/Reserva confirmada .*de 08:00 a 09:00, con 1 PC\./)
+      screen.getByText(/Reserva confirmada .*de 08:00 a 09:00, con 1 equipo\./)
     ).toBeInTheDocument()
   })
 

@@ -21,7 +21,7 @@ import {
   CamposDeVencimiento,
   desdeLicencia,
   LICENCIA_VACIA,
-  SelectorDePCs,
+  SelectorDeEquipos,
   VENCIMIENTO_VACIO,
   type CamposLicencia,
 } from "@/features/admin/FormularioLicencia"
@@ -36,7 +36,7 @@ const LICENCIAS_KEY = ["licencias"]
  * RF-03.11 a RF-03.14 — el contador de vencimiento de las licencias de
  * software.
  *
- * El problema que resuelve: una PC del carro tiene AutoCAD con licencia que
+ * El problema que resuelve: un equipo del carro tiene AutoCAD con licencia que
  * vence cada 30 días, y cuando vence deja de abrir. Sin esto, el Admin se
  * entera el día que un docente no puede dar la clase.
  *
@@ -271,48 +271,48 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
     queryFn: inventoryApi.listarCarros,
   })
 
-  // Una consulta por carro: hacen falta las PCs de TODOS para poder cargar
+  // Una consulta por carro: hacen falta los equipos de TODOS para poder cargar
   // la misma licencia en máquinas de carros distintos, que es uno de los
   // casos que el requerimiento nombra explícitamente.
-  const consultasDePCs = useQueries({
+  const consultasDeEquipos = useQueries({
     queries: (carros?.data ?? []).map((c) => ({
-      queryKey: ["pcs", c.id],
-      queryFn: () => inventoryApi.listarPCsDeCarro(c.id),
+      queryKey: ["equipos", c.id],
+      queryFn: () => inventoryApi.listarEquiposDeCarro(c.id),
     })),
   })
 
-  const pcs = useMemo(() => {
+  const equipos = useMemo(() => {
     const lista: { id: string; etiqueta: string; carroNombre: string }[] = []
     ;(carros?.data ?? []).forEach((carro, i) => {
-      const pcsDelCarro = consultasDePCs[i]?.data?.data ?? []
-      pcsDelCarro
-        .filter((pc) => !pc.dadaDeBaja)
-        .forEach((pc) =>
+      const equiposDelCarro = consultasDeEquipos[i]?.data?.data ?? []
+      equiposDelCarro
+        .filter((equipo) => !equipo.dadoDeBaja)
+        .forEach((equipo) =>
           lista.push({
-            id: pc.id,
-            etiqueta: pc.etiqueta,
+            id: equipo.id,
+            etiqueta: equipo.etiqueta,
             carroNombre: carro.nombre,
           })
         )
     })
     return lista
-  }, [carros, consultasDePCs])
+  }, [carros, consultasDeEquipos])
 
   const crear = useMutation({
     mutationFn: () =>
       adminApi.crearLicencias({
-        pcIds: [...seleccionadas],
+        equipoIds: [...seleccionadas],
         nombre: campos.nombre.trim(),
         diasDuracion: Number(campos.diasDuracion),
         diasAviso: Number(campos.diasAviso),
         ...aVencimientoDeclarado(campos.vencimiento),
       }),
     onSuccess: async (respuesta) => {
-      const yaEstaban = respuesta.pcsQueYaLaTenian?.length ?? 0
+      const yaEstaban = respuesta.equiposQueYaLaTenian?.length ?? 0
       setResumen(
         yaEstaban === 0
-          ? `Se cargó en ${respuesta.creadas.length} PC(s).`
-          : `Se cargó en ${respuesta.creadas.length} PC(s). ${yaEstaban} ya la tenían y se dejaron como estaban.`
+          ? `Se cargó en ${respuesta.creadas.length} Equipo(s).`
+          : `Se cargó en ${respuesta.creadas.length} Equipo(s). ${yaEstaban} ya la tenían y se dejaron como estaban.`
       )
       setCampos({ ...LICENCIA_VACIA, vencimiento: VENCIMIENTO_VACIO })
       setSeleccionadas(new Set())
@@ -333,7 +333,7 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
       <CardHeader>
         <CardTitle>Cargar una licencia</CardTitle>
         <CardDescription>
-          Se carga el mismo software en todas las PCs que elijas, de uno o varios carros.
+          Se carga el mismo software en todas los equipos que elijas, de uno o varios carros.
           Cada máquina lleva su propio contador: si alguna queda sin renovar, se ve.
         </CardDescription>
       </CardHeader>
@@ -352,8 +352,8 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
             onChange={setCampos}
             sugerencias={sugerencias}
           />
-          <SelectorDePCs
-            pcs={pcs}
+          <SelectorDeEquipos
+            equipos={equipos}
             seleccionadas={seleccionadas}
             onChange={setSeleccionadas}
           />
@@ -376,7 +376,7 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
 
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={crear.isPending || seleccionadas.size === 0}>
-              Cargar en {seleccionadas.size} PC(s)
+              Cargar en {seleccionadas.size} Equipo(s)
             </Button>
             <Button
               type="button"
@@ -477,7 +477,7 @@ export function LicenciasPage() {
   const licencias = data?.data ?? []
 
   // Los nombres ya cargados, para que el formulario los ofrezca y no se
-  // termine con "AutoCAD 2027" en una PC y "Autocad 2027" en otra: serían
+  // termine con "AutoCAD 2027" en un equipo y "Autocad 2027" en otra: serían
   // dos programas distintos en la lista, con dos contadores que nadie
   // relaciona.
   const sugerencias = useMemo(
@@ -500,7 +500,7 @@ export function LicenciasPage() {
     <div>
       <EncabezadoDePagina
         titulo="Licencias de software"
-        descripcion="Qué software con vencimiento hay en cada PC y cuántos días le quedan. El día antes de que venza —y el día que vence— les llega un mail a todos los administradores."
+        descripcion="Qué software con vencimiento hay en cada equipo y cuántos días le quedan. El día antes de que venza —y el día que vence— les llega un mail a todos los administradores."
         accion={<AltaDeLicencias sugerencias={sugerencias} />}
       />
 

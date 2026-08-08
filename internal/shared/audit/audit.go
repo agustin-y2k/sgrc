@@ -27,9 +27,14 @@ const (
 	DocenteRemovidoDeMateria   = "DOCENTE_REMOVIDO_DE_MATERIA"
 	ReservaCanceladaPorAdmin   = "RESERVA_CANCELADA_POR_ADMIN"
 	BloqueoEvaluacionCreado    = "BLOQUEO_EVALUACION_CREADO"
-	PCEstadoCambiado           = "PC_ESTADO_CAMBIADO"
-	PCDadaDeBaja               = "PC_DADA_DE_BAJA"
-	PCMovidaDeCarro            = "PC_MOVIDA_DE_CARRO"
+	// Las tres cadenas siguen diciendo PC aunque la entidad pase a llamarse
+	// equipo (016). La auditoría es un registro histórico: estos valores ya
+	// están escritos en filas de la base, y reescribirlos para que digan otra
+	// cosa es exactamente lo que un log de auditoría no debe permitir. Lo que
+	// se renombró es el identificador de Go, que sí es código.
+	EquipoEstadoCambiado       = "PC_ESTADO_CAMBIADO"
+	EquipoDadoDeBaja           = "PC_DADA_DE_BAJA"
+	EquipoMovidoDeCarro        = "PC_MOVIDA_DE_CARRO"
 	CursoEliminado             = "CURSO_ELIMINADO"
 	MateriaEliminada           = "MATERIA_ELIMINADA"
 	CicloArchivadoReservasElim = "CICLO_ARCHIVADO_RESERVAS_ELIMINADAS"

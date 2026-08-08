@@ -45,10 +45,10 @@ export function ReportesPage() {
   const cicloElegido =
     cicloId || listaCiclos.find((c) => c.activo)?.id || listaCiclos[0]?.id || ""
 
-  const usoPCs = useQuery({
-    queryKey: ["reporte", "uso-pcs", cicloElegido, desde, hasta],
+  const usoEquipos = useQuery({
+    queryKey: ["reporte", "uso-equipos", cicloElegido, desde, hasta],
     queryFn: () =>
-      adminApi.reporteUsoPCs(cicloElegido, desde || undefined, hasta || undefined),
+      adminApi.reporteUsoEquipos(cicloElegido, desde || undefined, hasta || undefined),
     enabled: cicloElegido !== "",
   })
 
@@ -59,10 +59,10 @@ export function ReportesPage() {
     enabled: cicloElegido !== "",
   })
 
-  const incidenciasPC = useQuery({
-    queryKey: ["reporte", "incidencias-pcs", desde, hasta],
+  const incidenciasEquipo = useQuery({
+    queryKey: ["reporte", "incidencias-equipos", desde, hasta],
     queryFn: () =>
-      adminApi.reporteIncidenciasPorPC(desde || undefined, hasta || undefined),
+      adminApi.reporteIncidenciasPorEquipo(desde || undefined, hasta || undefined),
   })
 
   const incidenciasCarro = useQuery({
@@ -72,7 +72,7 @@ export function ReportesPage() {
   })
 
   const errorActivo =
-    usoPCs.error ?? usoDocentes.error ?? incidenciasPC.error ?? incidenciasCarro.error
+    usoEquipos.error ?? usoDocentes.error ?? incidenciasEquipo.error ?? incidenciasCarro.error
 
   /**
    * Las cuatro tablas, ordenadas de mayor a menor y con sus totales.
@@ -85,11 +85,11 @@ export function ReportesPage() {
    * Los totales son el denominador que le faltaba a cada número: "18
    * reservas" no dice nada solo, "18 de 214" sí.
    */
-  const filasUsoPCs = [...(usoPCs.data?.data ?? [])].sort(
+  const filasUsoEquipos = [...(usoEquipos.data?.data ?? [])].sort(
     (a, b) => b.minutosReservados - a.minutosReservados
   )
-  const totalMinutosPCs = sumar(filasUsoPCs, (f) => f.minutosReservados)
-  const totalReservasPCs = sumar(filasUsoPCs, (f) => f.cantidadReservas)
+  const totalMinutosEquipos = sumar(filasUsoEquipos, (f) => f.minutosReservados)
+  const totalReservasEquipos = sumar(filasUsoEquipos, (f) => f.cantidadReservas)
 
   const filasUsoDocentes = [...(usoDocentes.data?.data ?? [])].sort(
     (a, b) => b.minutosReservados - a.minutosReservados
@@ -97,12 +97,12 @@ export function ReportesPage() {
   const totalMinutosDocentes = sumar(filasUsoDocentes, (f) => f.minutosReservados)
   const totalReservasDocentes = sumar(filasUsoDocentes, (f) => f.cantidadReservas)
 
-  const filasIncidenciasPC = [...(incidenciasPC.data?.data ?? [])].sort(
+  const filasIncidenciasEquipo = [...(incidenciasEquipo.data?.data ?? [])].sort(
     (a, b) => b.total - a.total
   )
-  const totalIncidenciasPC = sumar(filasIncidenciasPC, (f) => f.total)
-  const totalAbiertasPC = sumar(filasIncidenciasPC, (f) => f.abiertas)
-  const totalGravesPC = sumar(filasIncidenciasPC, (f) => f.graves)
+  const totalIncidenciasEquipo = sumar(filasIncidenciasEquipo, (f) => f.total)
+  const totalAbiertasEquipo = sumar(filasIncidenciasEquipo, (f) => f.abiertas)
+  const totalGravesEquipo = sumar(filasIncidenciasEquipo, (f) => f.graves)
 
   const filasIncidenciasCarro = [...(incidenciasCarro.data?.data ?? [])].sort(
     (a, b) => b.total - a.total
@@ -122,7 +122,7 @@ export function ReportesPage() {
     <div className="mx-auto max-w-4xl">
       <EncabezadoDePagina
         titulo="Reportes"
-        descripcion="Uso de las PCs y de las horas reservadas por docente, por ciclo lectivo."
+        descripcion="Uso de los equipos y de las horas reservadas por docente, por ciclo lectivo."
       />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
@@ -171,30 +171,30 @@ export function ReportesPage() {
       <div className="grid gap-4">
         {/* RF-06.1 */}
         <Seccion
-          titulo="Uso por PC"
+          titulo="Uso por Equipo"
           resumen={
-            filasUsoPCs.length > 0 &&
-            `${filasUsoPCs.length} ${filasUsoPCs.length === 1 ? "PC usada" : "PCs usadas"} · ${totalReservasPCs} reservas · ${formatearDuracion(totalMinutosPCs)} en total`
+            filasUsoEquipos.length > 0 &&
+            `${filasUsoEquipos.length} ${filasUsoEquipos.length === 1 ? "Equipo usada" : "Equipos usadas"} · ${totalReservasEquipos} reservas · ${formatearDuracion(totalMinutosEquipos)} en total`
           }
           alDescargar={
-            filasUsoPCs.length > 0
+            filasUsoEquipos.length > 0
               ? () =>
                   descargarCSV(`uso-por-pc_${sufijo}`, [
-                    ["PC", "Carro", "Reservas", "Minutos reservados", "% del total"],
-                    ...filasUsoPCs.map((u) => [
-                      `PC ${u.identificador}`,
+                    ["Equipo", "Carro", "Reservas", "Minutos reservados", "% del total"],
+                    ...filasUsoEquipos.map((u) => [
+                      u.etiqueta,
                       u.carroNombre,
                       u.cantidadReservas,
                       u.minutosReservados,
                       formatearPorcentaje(
-                        proporcion(u.minutosReservados, totalMinutosPCs)
+                        proporcion(u.minutosReservados, totalMinutosEquipos)
                       ),
                     ]),
                   ])
               : undefined
           }
         >
-          {filasUsoPCs.length === 0 ? (
+          {filasUsoEquipos.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               No hay reservas en ese ciclo y rango. Si el ciclo ya se archivó, sus
               reservas se borraron: el dato está más abajo, en el histórico por año.
@@ -203,7 +203,7 @@ export function ReportesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>PC</TableHead>
+                  <TableHead>Equipo</TableHead>
                   <TableHead>Carro</TableHead>
                   <TableHead className="text-right">Reservas</TableHead>
                   <TableHead className="text-right">Tiempo reservado</TableHead>
@@ -211,16 +211,16 @@ export function ReportesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filasUsoPCs.map((u) => (
-                  <TableRow key={u.pcId}>
-                    <TableCell className="font-medium">PC {u.identificador}</TableCell>
+                {filasUsoEquipos.map((u) => (
+                  <TableRow key={u.equipoId}>
+                    <TableCell className="font-medium">{u.etiqueta}</TableCell>
                     <TableCell>{u.carroNombre}</TableCell>
                     <TableCell className="text-right">{u.cantidadReservas}</TableCell>
                     <TableCell className="text-right">
                       {formatearDuracion(u.minutosReservados)}
                     </TableCell>
                     <TableCell>
-                      <Proporcion parte={u.minutosReservados} total={totalMinutosPCs} />
+                      <Proporcion parte={u.minutosReservados} total={totalMinutosEquipos} />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -292,33 +292,33 @@ export function ReportesPage() {
         <Seccion
           titulo="Incidencias por equipo"
           resumen={
-            filasIncidenciasPC.length > 0 && (
+            filasIncidenciasEquipo.length > 0 && (
               <>
-                {totalIncidenciasPC} incidencias en {filasIncidenciasPC.length}{" "}
-                {filasIncidenciasPC.length === 1 ? "equipo" : "equipos"} ·{" "}
-                {totalAbiertasPC} sin resolver
-                {totalGravesPC > 0 && ` · ${totalGravesPC} graves`}
+                {totalIncidenciasEquipo} incidencias en {filasIncidenciasEquipo.length}{" "}
+                {filasIncidenciasEquipo.length === 1 ? "equipo" : "equipos"} ·{" "}
+                {totalAbiertasEquipo} sin resolver
+                {totalGravesEquipo > 0 && ` · ${totalGravesEquipo} graves`}
               </>
             )
           }
           alDescargar={
-            filasIncidenciasPC.length > 0
+            filasIncidenciasEquipo.length > 0
               ? () =>
                   descargarCSV(`incidencias-por-equipo${rango}`, [
-                    ["PC", "Carro", "Total", "Abiertas", "Graves", "% del total"],
-                    ...filasIncidenciasPC.map((x) => [
-                      `PC ${x.identificador}`,
+                    ["Equipo", "Carro", "Total", "Abiertas", "Graves", "% del total"],
+                    ...filasIncidenciasEquipo.map((x) => [
+                      x.etiqueta,
                       x.carroNombre,
                       x.total,
                       x.abiertas,
                       x.graves,
-                      formatearPorcentaje(proporcion(x.total, totalIncidenciasPC)),
+                      formatearPorcentaje(proporcion(x.total, totalIncidenciasEquipo)),
                     ]),
                   ])
               : undefined
           }
         >
-          {filasIncidenciasPC.length === 0 ? (
+          {filasIncidenciasEquipo.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               No se registraron incidencias en ese rango.
             </p>
@@ -326,7 +326,7 @@ export function ReportesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>PC</TableHead>
+                  <TableHead>Equipo</TableHead>
                   <TableHead>Carro</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Abiertas</TableHead>
@@ -335,9 +335,9 @@ export function ReportesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filasIncidenciasPC.map((x) => (
-                  <TableRow key={x.pcId}>
-                    <TableCell className="font-medium">PC {x.identificador}</TableCell>
+                {filasIncidenciasEquipo.map((x) => (
+                  <TableRow key={x.equipoId}>
+                    <TableCell className="font-medium">{x.etiqueta}</TableCell>
                     <TableCell>{x.carroNombre}</TableCell>
                     <TableCell className="text-right">{x.total}</TableCell>
                     <TableCell className="text-right">{x.abiertas}</TableCell>
@@ -349,7 +349,7 @@ export function ReportesPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Proporcion parte={x.total} total={totalIncidenciasPC} />
+                      <Proporcion parte={x.total} total={totalIncidenciasEquipo} />
                     </TableCell>
                   </TableRow>
                 ))}

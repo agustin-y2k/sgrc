@@ -25,18 +25,18 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
   return {
     id: "res1",
     reservaGrupoId: "grupo1",
-    pcId: "pc1",
+    equipoId: "pc1",
     fecha: HOY,
     horaInicio: "08:00",
     horaFin: "09:00",
     estado: "CONFIRMADA",
     tipo: "NORMAL",
     nombreDocenteSnapshot: "Ada Lovelace",
-    pcIdentificador: 1,
+    identificador: 1,
     carroNombre: "Carro 1",
     materiaNombre: "Matemáticas",
     cursoNombre: "5°A",
-    etiqueta: `PC ${over.pcIdentificador ?? 1}`,
+    etiqueta: `PC ${over.identificador ?? 1}`,
     ...over,
   }
 }
@@ -44,14 +44,14 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
 function prestamo(over: Partial<Prestamo> = {}): Prestamo {
   return {
     id: "pr1",
-    pcId: "pc1",
+    equipoId: "pc1",
     entregadoANombre: "Ada Lovelace",
     entregadoEn: "2026-08-11T08:05:00Z",
     abierto: true,
     demorado: false,
-    pcIdentificador: 1,
+    identificador: 1,
     carroNombre: "Carro 1",
-    etiqueta: `PC ${over.pcIdentificador ?? 1}`,
+    etiqueta: `PC ${over.identificador ?? 1}`,
     ...over,
   }
 }
@@ -88,8 +88,8 @@ describe("PanelDelLaboratorio", () => {
         reserva({
           id: "res2",
           reservaGrupoId: "grupo2",
-          pcId: "pc2",
-          pcIdentificador: 2,
+          equipoId: "pc2",
+          identificador: 2,
           horaInicio: "10:00",
           horaFin: "11:00",
           materiaNombre: "Física",
@@ -110,11 +110,11 @@ describe("PanelDelLaboratorio", () => {
 
   /**
    * "Entregada" o "sin retirar" no sale de la reserva: sale de cruzar sus
-   * PCs contra lo que está prestado ahora. La custodia es de la máquina.
+   * Equipos contra lo que está prestado ahora. La custodia es de la máquina.
    */
   it("distingue las máquinas entregadas de las que siguen adentro", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
-      paginada([reserva(), reserva({ id: "res2", pcId: "pc2", pcIdentificador: 2 })])
+      paginada([reserva(), reserva({ id: "res2", equipoId: "pc2", identificador: 2 })])
     )
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
       data: [prestamo()],
@@ -140,7 +140,7 @@ describe("PanelDelLaboratorio", () => {
   it("entrega las máquinas de la clase en curso desde el panel", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
-      paginada([reserva(), reserva({ id: "res2", pcId: "pc2", pcIdentificador: 2 })])
+      paginada([reserva(), reserva({ id: "res2", equipoId: "pc2", identificador: 2 })])
     )
     renderPanel()
 
@@ -155,7 +155,7 @@ describe("PanelDelLaboratorio", () => {
   it("solo ofrece entregar las que todavía no salieron", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
-      paginada([reserva(), reserva({ id: "res2", pcId: "pc2", pcIdentificador: 2 })])
+      paginada([reserva(), reserva({ id: "res2", equipoId: "pc2", identificador: 2 })])
     )
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
       data: [prestamo()],

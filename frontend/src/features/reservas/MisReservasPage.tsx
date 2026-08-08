@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
 import * as reservasApi from "@/features/reservas/api"
 import { agruparReservas } from "@/features/reservas/types"
-import { CambiarPCDeReserva } from "@/features/reservas/CambiarPCDeReserva"
+import { CambiarEquipoDeReserva } from "@/features/reservas/CambiarEquipoDeReserva"
 import type { EstadoReserva, GrupoDeReservas } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 
@@ -49,7 +49,7 @@ function useConfirmacionDeLlegada(): string | null {
  * Identifica una tarjeta del listado. Un bloqueo por evaluación no tiene
  * grupo en la base, así que se lo identifica por la operación que lo creó
  * (ver claveDeAgrupacion en types.ts) — usar el id de su primera reserva
- * rompía apenas esa PC se cancelaba y la tarjeta pasaba a empezar por otra.
+ * rompía apenas ese equipo se cancelaba y la tarjeta pasaba a empezar por otra.
  */
 function claveDeTarjeta(grupo: GrupoDeReservas): string {
   if (grupo.grupoId) return grupo.grupoId
@@ -102,7 +102,7 @@ export function MisReservasPage() {
   const [incluirCanceladas, setIncluirCanceladas] = useState(false)
   const [pagina, setPagina] = useState(1)
   const [cancelando, setCancelando] = useState<Cancelacion | null>(null)
-  const [cambiandoPC, setCambiandoPC] = useState<string | null>(null)
+  const [cambiandoEquipo, setCambiandoEquipo] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: [...RESERVAS_KEY, { incluirCanceladas, pagina }],
@@ -110,11 +110,11 @@ export function MisReservasPage() {
   })
 
   const cancelar = useMutation({
-    // RF-04.6: la elección se aplica "a todas las PCs del grupo en esa
+    // RF-04.6: la elección se aplica "a todas los equipos del grupo en esa
     // fecha (o rango)", así que las dos ramas cancelan el grupo entero —
     // lo único que cambia es si además alcanza a las fechas siguientes.
     // Antes "solo esta fecha" llamaba a cancelarReserva y liberaba una
-    // sola PC, que no es lo que dice el requisito ni lo que sugiere el
+    // sola Equipo, que no es lo que dice el requisito ni lo que sugiere el
     // texto de la opción.
     mutationFn: async ({ grupo, soloEsta, motivo }: Cancelacion): Promise<void> => {
       if (grupo.grupoId) {
@@ -123,7 +123,7 @@ export function MisReservasPage() {
       }
       // Un bloqueo por evaluación son N filas `reserva` sueltas, sin grupo
       // que las una en la base. Se cancelan TODAS: la tarjeta representa la
-      // operación completa, y liberar solo una PC dejaría el aula a medio
+      // operación completa, y liberar solo un equipo dejaría el aula a medio
       // bloquear sin que nada lo diga. En serie y no en paralelo para que un
       // fallo a mitad de camino sea un error claro y no una carrera.
       for (const r of grupo.reservas.filter((x) => x.estado === "CONFIRMADA")) {
@@ -151,7 +151,7 @@ export function MisReservasPage() {
         descripcion={
           user?.rol === "ADMIN"
             ? "Todas las reservas del sistema y los bloqueos por evaluación."
-            : "Tus reservas. Cada tarjeta es una clase, con todas sus PCs adentro."
+            : "Tus reservas. Cada tarjeta es una clase, con todas sus equipos adentro."
         }
         accion={
           <Button asChild>
@@ -215,7 +215,7 @@ export function MisReservasPage() {
                     <p className="font-medium">
                       {grupo.materiaNombre
                         ? `${grupo.materiaNombre} — ${grupo.cursoNombre}`
-                        : `Bloqueo por evaluación · ${grupo.reservas.length} PC${grupo.reservas.length === 1 ? "" : "s"}`}
+                        : `Bloqueo por evaluación · ${grupo.reservas.length} equipo${grupo.reservas.length === 1 ? "" : "s"}`}
                     </p>
                     <p className="text-sm">
                       {/* Capitaliza la función y no la clase `capitalize`:
@@ -241,14 +241,14 @@ export function MisReservasPage() {
                     {estado === "CONFIRMADA" && !enCurso && (
                       <>
                         {/* Cambiar de máquina no tiene sentido en un bloqueo
-                            por evaluación: ahí las PCs se eligen a mano y no
+                            por evaluación: ahí los equipos se eligen a mano y no
                             hay un docente esperando una en particular. */}
                         {!grupo.esBloqueoEvaluacion && (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() =>
-                              setCambiandoPC(cambiandoPC === clave ? null : clave)
+                              setCambiandoEquipo(cambiandoEquipo === clave ? null : clave)
                             }
                           >
                             Cambiar computadora
@@ -268,8 +268,8 @@ export function MisReservasPage() {
                   </div>
                 </div>
 
-                {/* Las PCs de la reserva. Es lo que antes faltaba: sin esto
-                    una reserva de ocho PCs eran ocho tarjetas idénticas. */}
+                {/* Los equipos de la reserva. Es lo que antes faltaba: sin esto
+                    una reserva de ocho equipos eran ocho tarjetas idénticas. */}
                 <div className="flex flex-wrap gap-1.5">
                   {grupo.reservas.map((r) => (
                     <Badge
@@ -293,7 +293,7 @@ export function MisReservasPage() {
                   ))}
                 </div>
 
-                {/* RF-04.7 / RF-03.8: una cascada puede cancelar algunas PCs
+                {/* RF-04.7 / RF-03.8: una cascada puede cancelar algunas equipos
                     del grupo y dejar el resto en pie. El motivo de cada una
                     se muestra acá porque es la explicación de por qué la
                     reserva quedó incompleta. */}
@@ -305,16 +305,16 @@ export function MisReservasPage() {
                     </p>
                   ))}
 
-                {cambiandoPC === clave && (
-                  <CambiarPCDeReserva grupo={grupo} onListo={() => setCambiandoPC(null)} />
+                {cambiandoEquipo === clave && (
+                  <CambiarEquipoDeReserva grupo={grupo} onListo={() => setCambiandoEquipo(null)} />
                 )}
 
                 {enCurso && cancelando && (
                   <div className="grid gap-3 rounded-md border p-3">
                     <p className="text-sm">
                       {grupo.esBloqueoEvaluacion
-                        ? `Se libera${cancelables.length === 1 ? "" : "n"} ${cancelables.length} PC${cancelables.length === 1 ? "" : "s"} de este bloqueo. Vuelven a estar disponibles para reservar.`
-                        : `Se ${cancelables.length === 1 ? "cancela" : "cancelan"} las ${cancelables.length} PC${cancelables.length === 1 ? "" : "s"} de esta reserva.`}
+                        ? `Se libera${cancelables.length === 1 ? "" : "n"} ${cancelables.length} equipo${cancelables.length === 1 ? "" : "s"} de este bloqueo. Vuelven a estar disponibles para reservar.`
+                        : `Se ${cancelables.length === 1 ? "cancela" : "cancelan"} los ${cancelables.length} equipo${cancelables.length === 1 ? "" : "s"} de esta reserva.`}
                     </p>
 
                     {/* RF-04.6: elegir entre esta fecha o esta y las
@@ -396,7 +396,7 @@ export function MisReservasPage() {
         })}
       </div>
 
-      {/* El paginador cuenta reservas (una fila por PC), no las tarjetas
+      {/* El paginador cuenta reservas (una fila por Equipo), no las tarjetas
           agrupadas que se ven arriba: es lo que pagina el backend, y
           contarlo de otra forma daría un total que no cierra con las
           páginas. */}

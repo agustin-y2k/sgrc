@@ -13,22 +13,22 @@ import (
 // práctica una PC "fuera de servicio" se repara, la forma modelada de
 // volver a operarla es que un Admin la edite directamente (no es una
 // transición de estado, es una corrección de datos).
-type EstadoPC string
+type EstadoEquipo string
 
 const (
-	EstadoDisponible      EstadoPC = "DISPONIBLE"
-	EstadoEnMantenimiento EstadoPC = "EN_MANTENIMIENTO"
-	EstadoFueraDeServicio EstadoPC = "FUERA_DE_SERVICIO"
+	EstadoDisponible      EstadoEquipo = "DISPONIBLE"
+	EstadoEnMantenimiento EstadoEquipo = "EN_MANTENIMIENTO"
+	EstadoFueraDeServicio EstadoEquipo = "FUERA_DE_SERVICIO"
 )
 
-var ErrEstadoPCInvalido = errors.New("estado de PC inválido")
+var ErrEstadoEquipoInvalido = errors.New("estado de equipo inválido")
 
-func ParseEstadoPC(s string) (EstadoPC, error) {
-	switch EstadoPC(s) {
+func ParseEstadoEquipo(s string) (EstadoEquipo, error) {
+	switch EstadoEquipo(s) {
 	case EstadoDisponible, EstadoEnMantenimiento, EstadoFueraDeServicio:
-		return EstadoPC(s), nil
+		return EstadoEquipo(s), nil
 	default:
-		return "", fmt.Errorf("%w: %q", ErrEstadoPCInvalido, s)
+		return "", fmt.Errorf("%w: %q", ErrEstadoEquipoInvalido, s)
 	}
 }
 
@@ -36,7 +36,7 @@ func ParseEstadoPC(s string) (EstadoPC, error) {
 // (docs/05-diagramas-estado.md): DISPONIBLE y EN_MANTENIMIENTO se
 // alternan libremente entre sí y hacia FUERA_DE_SERVICIO; FUERA_DE_SERVICIO
 // es terminal.
-func (e EstadoPC) PuedeTransicionarA(nuevo EstadoPC) bool {
+func (e EstadoEquipo) PuedeTransicionarA(nuevo EstadoEquipo) bool {
 	switch e {
 	case EstadoDisponible:
 		return nuevo == EstadoEnMantenimiento || nuevo == EstadoFueraDeServicio
@@ -49,7 +49,7 @@ func (e EstadoPC) PuedeTransicionarA(nuevo EstadoPC) bool {
 	}
 }
 
-var ErrTransicionEstadoPCInvalida = errors.New("transición de estado de PC inválida")
+var ErrTransicionEstadoEquipoInvalida = errors.New("transición de estado de equipo inválida")
 
 // MaxLargoNumeroSerie es el tope del VARCHAR(50) de la migración 011. Se
 // valida acá además de en la base para que el error salga como un 400 con
@@ -60,14 +60,14 @@ var (
 	// El identificador sí es un entero positivo: es la etiqueta "PC 1",
 	// "PC 2" que se le pone al equipo dentro de su carro, y la elige la
 	// escuela.
-	ErrIdentificadorInvalido = errors.New("el identificador de la PC debe ser un entero positivo")
+	ErrIdentificadorInvalido = errors.New("el identificador del equipo debe ser un entero positivo")
 	// El número de serie NO es un número, aunque se llame así: es el código
 	// de fábrica de la etiqueta y casi siempre trae letras ("5CD1234ABC").
 	// Hasta la migración 011 la columna era BIGINT, y la primera PC que
 	// alguien cargaba con el código real no entraba.
 	ErrNumeroSerieInvalido = errors.New("el número de serie no puede estar vacío")
 	ErrNumeroSerieLargo    = fmt.Errorf("el número de serie no puede tener más de %d caracteres", MaxLargoNumeroSerie)
-	ErrPCYaDadaDeBaja      = errors.New("la PC ya está dada de baja")
+	ErrEquipoYaDadoDeBaja  = errors.New("el equipo ya está dado de baja")
 )
 
 // NormalizarNumeroSerie devuelve la forma canónica: sin espacios al borde y
@@ -81,16 +81,16 @@ func NormalizarNumeroSerie(s string) string {
 	return strings.ToUpper(strings.TrimSpace(s))
 }
 
-// PC es el equipo individual dentro de un Carro.
+// Equipo es el equipo individual dentro de un Carro.
 //
-// Identificador es único solo dentro de su Carro (no globalmente) — "PC 27"
+// Identificador es único solo dentro de su Carro (no globalmente) — "Equipo 27"
 // puede existir en el Carro 1 y en el Carro 2 sin conflicto. NumeroSerie sí
 // es único en toda la institución (es el de fábrica), y es texto: el nombre
 // engaña, pero el código de la etiqueta lleva letras.
 //
 // Freezado es puramente informativo (Deep Freeze instalado) — no afecta
 // ningún flujo de reservas ni de negocio.
-type PC struct {
+type Equipo struct {
 	ID string
 	// CarroID vacío = no está en ningún carro. Desde la 015 esto es
 	// legítimo: un proyector o un cargador no pertenecen a ninguno.
@@ -113,13 +113,13 @@ type PC struct {
 	RAM               string
 	SistemaOperativo  string
 	SoftwareInstalado string
-	Estado            EstadoPC
-	DadaDeBaja        bool
+	Estado            EstadoEquipo
+	DadoDeBaja        bool
 	FechaBaja         *time.Time
 	FechaAlta         time.Time
 }
 
-func NuevaPC(id, carroID string, identificador int, numeroSerie string, freezado bool, fechaAlta time.Time) (*PC, error) {
+func NuevoEquipoDeCarro(id, carroID string, identificador int, numeroSerie string, freezado bool, fechaAlta time.Time) (*Equipo, error) {
 	if identificador <= 0 {
 		return nil, ErrIdentificadorInvalido
 	}
@@ -133,7 +133,7 @@ func NuevaPC(id, carroID string, identificador int, numeroSerie string, freezado
 	if len(serie) > MaxLargoNumeroSerie {
 		return nil, ErrNumeroSerieLargo
 	}
-	return &PC{
+	return &Equipo{
 		ID:            id,
 		CarroID:       carroID,
 		Identificador: identificador,
@@ -147,13 +147,13 @@ func NuevaPC(id, carroID string, identificador int, numeroSerie string, freezado
 }
 
 // CambiarEstado aplica una transición si es válida (ver
-// EstadoPC.PuedeTransicionarA). No dispara ninguna cascada de cancelación
+// EstadoEquipo.PuedeTransicionarA). No dispara ninguna cascada de cancelación
 // de reservas acá — eso es responsabilidad de application/, que llega a
 // reservation por un puerto (ValidadorReservas); el dominio no conoce
 // infraestructura.
-func (p *PC) CambiarEstado(nuevo EstadoPC) error {
+func (p *Equipo) CambiarEstado(nuevo EstadoEquipo) error {
 	if !p.Estado.PuedeTransicionarA(nuevo) {
-		return fmt.Errorf("%w: de %s a %s", ErrTransicionEstadoPCInvalida, p.Estado, nuevo)
+		return fmt.Errorf("%w: de %s a %s", ErrTransicionEstadoEquipoInvalida, p.Estado, nuevo)
 	}
 	p.Estado = nuevo
 	return nil
@@ -161,11 +161,11 @@ func (p *PC) CambiarEstado(nuevo EstadoPC) error {
 
 // DarDeBaja marca la PC como dada de baja (soft delete, RF-03.4) — la fila
 // se conserva para no perder el historial de incidencias y reservas.
-func (p *PC) DarDeBaja(ahora time.Time) error {
-	if p.DadaDeBaja {
-		return ErrPCYaDadaDeBaja
+func (p *Equipo) DarDeBaja(ahora time.Time) error {
+	if p.DadoDeBaja {
+		return ErrEquipoYaDadoDeBaja
 	}
-	p.DadaDeBaja = true
+	p.DadoDeBaja = true
 	p.FechaBaja = &ahora
 	return nil
 }
@@ -174,7 +174,7 @@ func (p *PC) DarDeBaja(ahora time.Time) error {
 // unicidad del identificador en el carro destino se valida en
 // infrastructure (constraint UNIQUE(carro_id, identificador)), no acá —
 // el dominio no tiene visibilidad de qué otras PCs existen.
-func (p *PC) MoverACarro(nuevoCarroID string) {
+func (p *Equipo) MoverACarro(nuevoCarroID string) {
 	p.CarroID = nuevoCarroID
 }
 
@@ -238,7 +238,7 @@ func NombreDeEquipoValido(nombre string) (string, error) {
 	return nombre, nil
 }
 
-// NuevoEquipo crea algo prestable que NO está en un carro: un proyector, un
+// NuevoEquipoSuelto crea algo prestable que NO está en un carro: un proyector, un
 // cargador, una notebook suelta.
 //
 // No tiene identificador ni número de serie —"PC 3" no significa nada para
@@ -247,7 +247,7 @@ func NombreDeEquipoValido(nombre string) (string, error) {
 //
 // `reservable` separa el proyector de los cargadores: solo lo reservable
 // aparece en la lista de equipos libres cuando un docente va a reservar.
-func NuevoEquipo(id, tipo, nombre string, reservable bool, fechaAlta time.Time) (*PC, error) {
+func NuevoEquipoSuelto(id, tipo, nombre string, reservable bool, fechaAlta time.Time) (*Equipo, error) {
 	tipo, err := TipoDeEquipoValido(tipo)
 	if err != nil {
 		return nil, err
@@ -258,7 +258,7 @@ func NuevoEquipo(id, tipo, nombre string, reservable bool, fechaAlta time.Time) 
 		return nil, err
 	}
 
-	return &PC{
+	return &Equipo{
 		ID:         id,
 		Tipo:       tipo,
 		Nombre:     nombre,
@@ -270,7 +270,7 @@ func NuevoEquipo(id, tipo, nombre string, reservable bool, fechaAlta time.Time) 
 
 // EstaEnUnCarro distingue una computadora de laboratorio de un equipo
 // suelto. Es la condición que decide cómo se lo nombra y dónde se lo lista.
-func (p *PC) EstaEnUnCarro() bool {
+func (p *Equipo) EstaEnUnCarro() bool {
 	return p.CarroID != ""
 }
 
@@ -280,7 +280,7 @@ func (p *PC) EstaEnUnCarro() bool {
 // Vive en el dominio y no en cada pantalla porque si no, la misma máquina se
 // vería distinta según por dónde se la mire — y porque un proyector rotulado
 // "PC 0" es lo que sale de formatear un identificador que no existe.
-func (p *PC) Etiqueta() string {
+func (p *Equipo) Etiqueta() string {
 	if p.Nombre != "" {
 		return p.Nombre
 	}

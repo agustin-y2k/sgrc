@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
-import { CambiarPCDeReserva } from "@/features/reservas/CambiarPCDeReserva"
+import { CambiarEquipoDeReserva } from "@/features/reservas/CambiarEquipoDeReserva"
 import * as reservasApi from "@/features/reservas/api"
 import type { GrupoDeReservas, ReservaDetallada } from "@/features/reservas/types"
 
@@ -12,17 +12,17 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
   return {
     id: "res1",
     reservaGrupoId: "grupo1",
-    pcId: "pc1",
+    equipoId: "pc1",
     fecha: "2026-08-11",
     horaInicio: "08:00",
     horaFin: "09:00",
     estado: "CONFIRMADA",
     tipo: "NORMAL",
     nombreDocenteSnapshot: "Ada Lovelace",
-    pcIdentificador: 3,
+    identificador: 3,
     carroNombre: "Carro 1",
     materiaNombre: "Matemáticas",
-    etiqueta: `PC ${over.pcIdentificador ?? 3}`,
+    etiqueta: `PC ${over.identificador ?? 3}`,
     ...over,
   }
 }
@@ -46,19 +46,19 @@ function renderComponente(g: GrupoDeReservas = grupo([reserva()])) {
   const onListo = vi.fn()
   render(
     <QueryClientProvider client={queryClient}>
-      <CambiarPCDeReserva grupo={g} onListo={onListo} />
+      <CambiarEquipoDeReserva grupo={g} onListo={onListo} />
     </QueryClientProvider>
   )
   return { onListo }
 }
 
-describe("CambiarPCDeReserva", () => {
+describe("CambiarEquipoDeReserva", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
       data: [
         {
-          pcId: "pc9",
+          equipoId: "pc9",
           identificador: 9,
           etiqueta: "PC 9",
           carroId: "c1",
@@ -68,7 +68,7 @@ describe("CambiarPCDeReserva", () => {
         },
       ],
     })
-    vi.mocked(reservasApi.cambiarPCDeReserva).mockResolvedValue(reserva({ pcId: "pc9" }))
+    vi.mocked(reservasApi.cambiarEquipoDeReserva).mockResolvedValue(reserva({ equipoId: "pc9" }))
   })
 
   it("cambia la máquina sin tocar la clase", async () => {
@@ -79,7 +79,7 @@ describe("CambiarPCDeReserva", () => {
     await user.selectOptions(screen.getByLabelText("¿Por cuál?"), "pc9")
     await user.click(screen.getByRole("button", { name: "Cambiar" }))
 
-    expect(reservasApi.cambiarPCDeReserva).toHaveBeenCalledWith("res1", "pc9")
+    expect(reservasApi.cambiarEquipoDeReserva).toHaveBeenCalledWith("res1", "pc9")
     expect(onListo).toHaveBeenCalled()
   })
 
@@ -87,7 +87,7 @@ describe("CambiarPCDeReserva", () => {
     renderComponente()
 
     await screen.findByLabelText("¿Por cuál?")
-    expect(reservasApi.pcsDisponibles).toHaveBeenCalledWith("2026-08-11", "08:00", "09:00")
+    expect(reservasApi.equiposDisponibles).toHaveBeenCalledWith("2026-08-11", "08:00", "09:00")
   })
 
   /**
@@ -104,7 +104,7 @@ describe("CambiarPCDeReserva", () => {
   it("deja elegir cuál de las reservadas se cambia", async () => {
     const user = userEvent.setup()
     renderComponente(
-      grupo([reserva(), reserva({ id: "res2", pcId: "pc2", pcIdentificador: 4 })])
+      grupo([reserva(), reserva({ id: "res2", equipoId: "pc2", identificador: 4 })])
     )
 
     await user.selectOptions(screen.getByLabelText("¿Cuál cambiás?"), "res2")
@@ -112,14 +112,14 @@ describe("CambiarPCDeReserva", () => {
     await user.selectOptions(screen.getByLabelText("¿Por cuál?"), "pc9")
     await user.click(screen.getByRole("button", { name: "Cambiar" }))
 
-    expect(reservasApi.cambiarPCDeReserva).toHaveBeenCalledWith("res2", "pc9")
+    expect(reservasApi.cambiarEquipoDeReserva).toHaveBeenCalledWith("res2", "pc9")
   })
 
   it("no ofrece cambiar las que ya no están confirmadas", async () => {
     renderComponente(
       grupo([
         reserva(),
-        reserva({ id: "res2", pcId: "pc2", pcIdentificador: 4, estado: "NO_RETIRADA" }),
+        reserva({ id: "res2", equipoId: "pc2", identificador: 4, estado: "NO_RETIRADA" }),
       ])
     )
 
@@ -128,7 +128,7 @@ describe("CambiarPCDeReserva", () => {
   })
 
   it("avisa cuando no hay ninguna libre en ese horario", async () => {
-    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({ data: [] })
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({ data: [] })
     renderComponente()
 
     expect(

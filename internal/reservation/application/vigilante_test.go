@@ -40,7 +40,7 @@ func aLas(hora, minuto int) time.Time {
 	return time.Date(2026, time.August, 10, hora, minuto, 0, 0, time.UTC)
 }
 
-func repoConClase(t *testing.T, pcs ...string) *fakeRepo {
+func repoConClase(t *testing.T, equipos ...string) *fakeRepo {
 	t.Helper()
 	repo := nuevoFakeRepo()
 	repo.contactoDeUsuario[docenteAda] = [2]string{"Ada Lovelace", "ada@escuela.edu.ar"}
@@ -53,9 +53,9 @@ func repoConClase(t *testing.T, pcs ...string) *fakeRepo {
 	}
 	repo.grupos[grupo.ID] = grupo
 
-	for i, pcID := range pcs {
-		repo.identificadorDePC[pcID] = i + 1
-		r, err := domain.NuevaReservaNormal("res-"+pcID, grupoDeClase, pcID, "materia1",
+	for i, equipoID := range equipos {
+		repo.identificadorDeEquipo[equipoID] = i + 1
+		r, err := domain.NuevaReservaNormal("res-"+equipoID, grupoDeClase, equipoID, "materia1",
 			"Ada Lovelace", &creadoPor, aLas(0, 0), 8*time.Hour, 9*time.Hour,
 			aLas(0, 0).AddDate(0, 0, -1))
 		if err != nil {
@@ -183,7 +183,7 @@ func TestBarrer_LiberaALos40Minutos(t *testing.T) {
 func TestBarrer_NoLiberaLaQueSeLlevaron(t *testing.T) {
 	repo := repoConClase(t, "pc1", "pc2")
 	// Se llevó la primera.
-	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{PCID: "pc1", Nombre: "Ada"}, aLas(8, 5))
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Ada"}, aLas(8, 5))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -239,11 +239,11 @@ func TestBarrer_LiberarEsIdempotente(t *testing.T) {
 // ── La PC que no volvió ─────────────────────────────────────────────────
 
 // prestamoVencido deja una máquina afuera que tenía que haber vuelto.
-func prestamoVencido(t *testing.T, repo *fakeRepo, id, pcID string, debioVolverA time.Time) *domain.Prestamo {
+func prestamoVencido(t *testing.T, repo *fakeRepo, id, equipoID string, debioVolverA time.Time) *domain.Prestamo {
 	t.Helper()
 	usuario := "otro-docente"
 	p, err := domain.NuevoPrestamo(id, domain.DatosDeEntrega{
-		PCID: pcID, Nombre: "Otro Docente", UsuarioID: &usuario,
+		EquipoID: equipoID, Nombre: "Otro Docente", UsuarioID: &usuario,
 		DevolucionEstimada: &debioVolverA,
 	}, debioVolverA.Add(-time.Hour))
 	if err != nil {
@@ -267,14 +267,14 @@ func TestBarrer_LaAdvertenciaViajaDentroDelRecordatorio(t *testing.T) {
 	if resumen.Recordatorios != 1 {
 		t.Fatalf("esperaba el recordatorio: %+v", resumen)
 	}
-	if resumen.AvisosDePCFaltante != 0 {
+	if resumen.AvisosDeEquipoFaltante != 0 {
 		t.Errorf("la advertencia va adentro del recordatorio, no aparte: %+v", resumen)
 	}
 	aviso := bus.de("reserva.recordatorio")[0].Payload.(eventbus.RecordatorioDeReserva)
 	if len(aviso.EquiposSinDevolver) != 1 || aviso.EquiposSinDevolver[0] != "PC 1" {
 		t.Errorf("el recordatorio tiene que advertir de la PC 1: %+v", aviso.EquiposSinDevolver)
 	}
-	if len(bus.de("reserva.pc-no-disponible")) != 0 {
+	if len(bus.de("reserva.equipo-no-disponible")) != 0 {
 		t.Error("no tiene que salir un segundo correo")
 	}
 }
@@ -291,19 +291,19 @@ func TestBarrer_AvisoSueltoCuandoLaDemoraEsPosterior(t *testing.T) {
 
 	resumen := barrer(t, vigilanteALas(repo, bus, 7, 40))
 
-	if resumen.AvisosDePCFaltante != 1 {
+	if resumen.AvisosDeEquipoFaltante != 1 {
 		t.Fatalf("esperaba el aviso suelto: %+v", resumen)
 	}
-	aviso := bus.de("reserva.pc-no-disponible")[0].Payload.(eventbus.PCNoDisponibleParaReserva)
+	aviso := bus.de("reserva.equipo-no-disponible")[0].Payload.(eventbus.EquipoNoDisponibleParaReserva)
 	if len(aviso.Equipos) != 1 {
 		t.Errorf("el aviso tiene que nombrar el equipo: %+v", aviso)
 	}
 }
 
-// TestBarrer_SiLaPCVuelveATiempoNadieSeEntera es la razón por la que esto no
+// TestBarrer_SiElEquipoVuelveATiempoNadieSeEntera es la razón por la que esto no
 // bombardea: el caso más común es que alguien se demore quince minutos y
 // devuelva.
-func TestBarrer_SiLaPCVuelveATiempoNadieSeEntera(t *testing.T) {
+func TestBarrer_SiElEquipoVuelveATiempoNadieSeEntera(t *testing.T) {
 	repo := repoConClase(t, "pc1")
 	// La clase es a las 8; la máquina la tenía otro y debía volver a las
 	// 7:30, o sea que a las 7:00 —cuando sale el recordatorio— todavía no
@@ -324,12 +324,12 @@ func TestBarrer_SiLaPCVuelveATiempoNadieSeEntera(t *testing.T) {
 
 	resumen := barrer(t, vigilanteALas(repo, bus, 7, 45))
 
-	if resumen.AvisosDePCFaltante != 0 {
+	if resumen.AvisosDeEquipoFaltante != 0 {
 		t.Errorf("la máquina volvió: el docente no tiene que enterarse de nada")
 	}
 }
 
-func TestBarrer_ElAvisoDePCFaltanteSaleUnaSolaVez(t *testing.T) {
+func TestBarrer_ElAvisoDeEquipoFaltanteSaleUnaSolaVez(t *testing.T) {
 	repo := repoConClase(t, "pc1")
 	prestamoVencido(t, repo, "pr1", "pc1", aLas(6, 30))
 	bus := &busEspia{}
@@ -337,7 +337,7 @@ func TestBarrer_ElAvisoDePCFaltanteSaleUnaSolaVez(t *testing.T) {
 
 	barrer(t, v)
 	for i := 0; i < 5; i++ {
-		if r := barrer(t, v); r.AvisosDePCFaltante != 0 || r.Recordatorios != 0 {
+		if r := barrer(t, v); r.AvisosDeEquipoFaltante != 0 || r.Recordatorios != 0 {
 			t.Fatalf("corrida %d: volvió a avisar (%+v)", i+2, r)
 		}
 	}
@@ -347,7 +347,7 @@ func TestBarrer_ElAvisoDePCFaltanteSaleUnaSolaVez(t *testing.T) {
 
 func TestBarrer_ReclamaALosDiezMinutos(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.identificadorDePC["pc1"] = 7
+	repo.identificadorDeEquipo["pc1"] = 7
 	prestamoVencido(t, repo, "pr1", "pc1", aLas(9, 0))
 	bus := &busEspia{}
 
@@ -390,7 +390,7 @@ func TestBarrer_ElReclamoSaleUnaSolaVez(t *testing.T) {
 // válida. Esas máquinas aparecen recién en el corte de fin de jornada.
 func TestBarrer_SinHoraPactadaNoSeReclama(t *testing.T) {
 	repo := nuevoFakeRepo()
-	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{PCID: "pc1", Nombre: "Marta"}, aLas(9, 0))
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -406,8 +406,8 @@ func TestBarrer_SinHoraPactadaNoSeReclama(t *testing.T) {
 
 func TestBarrer_CorteDeJornada(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.identificadorDePC["pc1"] = 3
-	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{PCID: "pc1", Nombre: "Marta"}, aLas(9, 0))
+	repo.identificadorDeEquipo["pc1"] = 3
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -423,15 +423,15 @@ func TestBarrer_CorteDeJornada(t *testing.T) {
 	if resumen.AvisosDeCierre != 1 {
 		t.Fatalf("esperaba el corte: %+v", resumen)
 	}
-	aviso := bus.de("prestamo.sin-devolver.cierre")[0].Payload.(eventbus.PCsSinDevolverAlCierre)
-	if len(aviso.PCs) != 1 || aviso.PCs[0].Etiqueta != "PC 3" || aviso.PCs[0].Quien != "Marta" {
-		t.Errorf("datos del corte: %+v", aviso.PCs)
+	aviso := bus.de("prestamo.sin-devolver.cierre")[0].Payload.(eventbus.EquiposSinDevolverAlCierre)
+	if len(aviso.Equipos) != 1 || aviso.Equipos[0].Etiqueta != "PC 3" || aviso.Equipos[0].Quien != "Marta" {
+		t.Errorf("datos del corte: %+v", aviso.Equipos)
 	}
 }
 
 func TestBarrer_ElCorteSaleUnaVezPorDiaYSeRepiteAlSiguiente(t *testing.T) {
 	repo := nuevoFakeRepo()
-	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{PCID: "pc1", Nombre: "Marta"}, aLas(9, 0))
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -479,7 +479,7 @@ func TestBarrer_SinNadaQueHacerNoPublicaNada(t *testing.T) {
 // en curso.
 func TestBarrer_NoLiberaUnBloqueoPorEvaluacion(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.identificadorDePC["pc1"] = 1
+	repo.identificadorDeEquipo["pc1"] = 1
 	bloqueo, err := domain.NuevaReservaEvaluacion("bloq1", "pc1", nil,
 		aLas(0, 0), 8*time.Hour, 9*time.Hour, aLas(0, 0).AddDate(0, 0, -1))
 	if err != nil {

@@ -39,9 +39,9 @@ func avisadorDeTest(repo Repo, bus eventbus.EventBus) *AvisadorDeLicencias {
 	})
 }
 
-func licenciaEnPC(t *testing.T, repo *fakeRepo, id, pcID, nombre string, vencimiento *time.Time, diasAviso int) *domain.LicenciaSoftware {
+func licenciaEnEquipo(t *testing.T, repo *fakeRepo, id, equipoID, nombre string, vencimiento *time.Time, diasAviso int) *domain.LicenciaSoftware {
 	t.Helper()
-	l, err := domain.NuevaLicencia(id, pcID, nombre, 30, diasAviso, time.Now())
+	l, err := domain.NuevaLicencia(id, equipoID, nombre, 30, diasAviso, time.Now())
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -53,9 +53,9 @@ func licenciaEnPC(t *testing.T, repo *fakeRepo, id, pcID, nombre string, vencimi
 }
 
 func TestBarrer_LicenciaQueVenceManana(t *testing.T) {
-	repo := repoConCarroYPCs(1)
+	repo := repoConCarroYEquipos(1)
 	vence := dia(2026, time.August, 8)
-	licenciaEnPC(t, repo, "lic-1", "pc-1", "AutoCAD 2027", &vence, 1)
+	licenciaEnEquipo(t, repo, "lic-1", "equipo-1", "AutoCAD 2027", &vence, 1)
 	bus := &busEspia{}
 
 	n, err := avisadorDeTest(repo, bus).Barrer(context.Background())
@@ -76,8 +76,8 @@ func TestBarrer_LicenciaQueVenceManana(t *testing.T) {
 	}
 	// La ubicación viaja resuelta: el aviso lo lee alguien que tiene que ir
 	// hasta la máquina.
-	if l.PCIdentificador != 1 || l.CarroNombre != "Carro 1" {
-		t.Errorf("falta la ubicación: PC %d del carro %q", l.PCIdentificador, l.CarroNombre)
+	if l.Identificador != 1 || l.CarroNombre != "Carro 1" {
+		t.Errorf("falta la ubicación: PC %d del carro %q", l.Identificador, l.CarroNombre)
 	}
 }
 
@@ -85,9 +85,9 @@ func TestBarrer_LicenciaQueVenceManana(t *testing.T) {
 // idempotencia completa: el job corre cada hora y el contenedor se
 // reinicia, pero el mail sale uno solo.
 func TestBarrer_DosCorridasElMismoDiaAvisanUnaVez(t *testing.T) {
-	repo := repoConCarroYPCs(1)
+	repo := repoConCarroYEquipos(1)
 	vence := dia(2026, time.August, 8)
-	licenciaEnPC(t, repo, "lic-1", "pc-1", "AutoCAD 2027", &vence, 1)
+	licenciaEnEquipo(t, repo, "lic-1", "equipo-1", "AutoCAD 2027", &vence, 1)
 	bus := &busEspia{}
 	avisador := avisadorDeTest(repo, bus)
 	ctx := context.Background()
@@ -112,9 +112,9 @@ func TestBarrer_DosCorridasElMismoDiaAvisanUnaVez(t *testing.T) {
 }
 
 func TestBarrer_LicenciaVencidaVaAlGrupoDeVencidas(t *testing.T) {
-	repo := repoConCarroYPCs(1)
+	repo := repoConCarroYEquipos(1)
 	vencio := dia(2026, time.August, 4)
-	licenciaEnPC(t, repo, "lic-1", "pc-1", "AutoCAD 2027", &vencio, 1)
+	licenciaEnEquipo(t, repo, "lic-1", "equipo-1", "AutoCAD 2027", &vencio, 1)
 	bus := &busEspia{}
 
 	if _, err := avisadorDeTest(repo, bus).Barrer(context.Background()); err != nil {
@@ -130,15 +130,15 @@ func TestBarrer_LicenciaVencidaVaAlGrupoDeVencidas(t *testing.T) {
 	}
 }
 
-// TestBarrer_OchoPCsDelMismoCarroDanUnSoloAviso es la lección que el
+// TestBarrer_OchoEquiposDelMismoCarroDanUnSoloAviso es la lección que el
 // proyecto ya aprendió con las cancelaciones de reservas: un evento por
 // fila afectada llena la campana de avisos idénticos.
-func TestBarrer_OchoPCsDelMismoCarroDanUnSoloAviso(t *testing.T) {
-	repo := repoConCarroYPCs(8)
+func TestBarrer_OchoEquiposDelMismoCarroDanUnSoloAviso(t *testing.T) {
+	repo := repoConCarroYEquipos(8)
 	vence := dia(2026, time.August, 8)
 	for i := 1; i <= 8; i++ {
-		pcID := "pc-" + string(rune('0'+i))
-		licenciaEnPC(t, repo, "lic-"+string(rune('0'+i)), pcID, "AutoCAD 2027", &vence, 1)
+		equipoID := "equipo-" + string(rune('0'+i))
+		licenciaEnEquipo(t, repo, "lic-"+string(rune('0'+i)), equipoID, "AutoCAD 2027", &vence, 1)
 	}
 	bus := &busEspia{}
 
@@ -159,11 +159,11 @@ func TestBarrer_OchoPCsDelMismoCarroDanUnSoloAviso(t *testing.T) {
 }
 
 func TestBarrer_SinNadaQueAvisarNoPublica(t *testing.T) {
-	repo := repoConCarroYPCs(2)
+	repo := repoConCarroYEquipos(2)
 	lejos := dia(2026, time.December, 1)
-	licenciaEnPC(t, repo, "lic-1", "pc-1", "AutoCAD 2027", &lejos, 1)
+	licenciaEnEquipo(t, repo, "lic-1", "equipo-1", "AutoCAD 2027", &lejos, 1)
 	// Y una sin fecha: cargada pero todavía sin verificar contra la máquina.
-	licenciaEnPC(t, repo, "lic-2", "pc-2", "SolidWorks", nil, 1)
+	licenciaEnEquipo(t, repo, "lic-2", "equipo-2", "SolidWorks", nil, 1)
 	bus := &busEspia{}
 
 	n, err := avisadorDeTest(repo, bus).Barrer(context.Background())
@@ -183,8 +183,8 @@ func TestBarrer_SinNadaQueAvisarNoPublica(t *testing.T) {
 // silencioso a propósito. Si avisara, la única forma de callar el aviso
 // sería inventarle una fecha.
 func TestBarrer_UnaLicenciaSinFechaNoAvisaNunca(t *testing.T) {
-	repo := repoConCarroYPCs(1)
-	licenciaEnPC(t, repo, "lic-1", "pc-1", "AutoCAD 2027", nil, 365)
+	repo := repoConCarroYEquipos(1)
+	licenciaEnEquipo(t, repo, "lic-1", "equipo-1", "AutoCAD 2027", nil, 365)
 	bus := &busEspia{}
 
 	n, err := avisadorDeTest(repo, bus).Barrer(context.Background())
@@ -197,11 +197,11 @@ func TestBarrer_UnaLicenciaSinFechaNoAvisaNunca(t *testing.T) {
 	}
 }
 
-func TestBarrer_PCDadaDeBajaNoAvisa(t *testing.T) {
-	repo := repoConCarroYPCs(1)
-	repo.pcs["pc-1"].DadaDeBaja = true
+func TestBarrer_EquipoDadaDeBajaNoAvisa(t *testing.T) {
+	repo := repoConCarroYEquipos(1)
+	repo.equipos["equipo-1"].DadoDeBaja = true
 	vence := dia(2026, time.August, 8)
-	licenciaEnPC(t, repo, "lic-1", "pc-1", "AutoCAD 2027", &vence, 1)
+	licenciaEnEquipo(t, repo, "lic-1", "equipo-1", "AutoCAD 2027", &vence, 1)
 	bus := &busEspia{}
 
 	n, err := avisadorDeTest(repo, bus).Barrer(context.Background())
@@ -217,9 +217,9 @@ func TestBarrer_PCDadaDeBajaNoAvisa(t *testing.T) {
 // TestBarrer_RenovarReabreElAviso cierra el ciclo completo: aviso, el Admin
 // renueva, y el vencimiento nuevo vuelve a avisar a su tiempo.
 func TestBarrer_RenovarReabreElAviso(t *testing.T) {
-	repo := repoConCarroYPCs(1)
+	repo := repoConCarroYEquipos(1)
 	vence := dia(2026, time.August, 8)
-	l := licenciaEnPC(t, repo, "lic-1", "pc-1", "AutoCAD 2027", &vence, 1)
+	l := licenciaEnEquipo(t, repo, "lic-1", "equipo-1", "AutoCAD 2027", &vence, 1)
 	bus := &busEspia{}
 	ctx := context.Background()
 

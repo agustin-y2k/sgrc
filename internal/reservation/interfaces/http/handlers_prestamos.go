@@ -33,9 +33,9 @@ func (h *Handler) ListarPrestamosAbiertos(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/reservation/pcs/{pcId}/prestamos — el historial de una máquina.
-func (h *Handler) HistorialDePrestamosDePC(c *fiber.Ctx) error {
-	prestamos, err := h.svc.HistorialDePC(c.UserContext(), c.Params("pcId"))
+// GET /api/reservation/equipos/{equipoId}/prestamos — el historial de una máquina.
+func (h *Handler) HistorialDePrestamosDeEquipo(c *fiber.Ctx) error {
+	prestamos, err := h.svc.HistorialDeEquipo(c.UserContext(), c.Params("equipoId"))
 	if err != nil {
 		return mapearError(err)
 	}
@@ -89,7 +89,7 @@ func (h *Handler) EntregarSuelta(c *fiber.Ctx) error {
 	}
 
 	resultado, err := h.svc.EntregarSuelta(c.UserContext(), application.EntregaSueltaParams{
-		PCIDs:              req.PCIDs,
+		EquipoIDs:          req.EquipoIDs,
 		Nombre:             req.Nombre,
 		UsuarioID:          req.UsuarioID,
 		Motivo:             req.Motivo,
@@ -103,7 +103,7 @@ func (h *Handler) EntregarSuelta(c *fiber.Ctx) error {
 }
 
 // POST /api/reservation/prestamos/recibir — las máquinas volvieron.
-func (h *Handler) RecibirPCs(c *fiber.Ctx) error {
+func (h *Handler) RecibirEquipos(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
 		return err
@@ -114,7 +114,7 @@ func (h *Handler) RecibirPCs(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	resultado, err := h.svc.RecibirPCs(c.UserContext(), req.PrestamoIDs, claims.UserID, req.Observaciones)
+	resultado, err := h.svc.RecibirEquipos(c.UserContext(), req.PrestamoIDs, claims.UserID, req.Observaciones)
 	if err != nil {
 		return mapearError(err)
 	}

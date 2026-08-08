@@ -35,10 +35,11 @@ describe("ReportesPage", () => {
         { id: "c-activo", anio: 2026, activo: true, archivado: false },
       ],
     })
-    vi.mocked(adminApi.reporteUsoPCs).mockResolvedValue({
+    vi.mocked(adminApi.reporteUsoEquipos).mockResolvedValue({
       data: [
         {
-          pcId: "pc1",
+          equipoId: "pc1",
+          etiqueta: "PC 7",
           identificador: 7,
           carroNombre: "Carro 1",
           cantidadReservas: 3,
@@ -56,14 +57,15 @@ describe("ReportesPage", () => {
         },
       ],
     })
-    vi.mocked(adminApi.reporteIncidenciasPorPC).mockResolvedValue({ data: [] })
+    vi.mocked(adminApi.reporteIncidenciasPorEquipo).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.reporteIncidenciasPorCarro).mockResolvedValue({ data: [] })
-    vi.mocked(adminApi.historicoUsoPCs).mockResolvedValue({
+    vi.mocked(adminApi.historicoUsoEquipos).mockResolvedValue({
       data: [
         {
           id: "h1",
           anio: 2025,
-          pcId: "pc1",
+          equipoId: "pc1",
+          etiquetaSnapshot: "PC 4",
           identificadorSnapshot: 4,
           carroNombreSnapshot: "Carro viejo",
           minutosReservados: 300,
@@ -94,12 +96,12 @@ describe("ReportesPage", () => {
     renderPagina()
 
     expect(await screen.findByText("PC 7")).toBeInTheDocument()
-    expect(adminApi.reporteUsoPCs).toHaveBeenCalledWith("c-activo", undefined, undefined)
+    expect(adminApi.reporteUsoEquipos).toHaveBeenCalledWith("c-activo", undefined, undefined)
   })
 
   // El reporte devolvía solo UUIDs: sin identificador ni carro no se puede
   // leer quién es quién.
-  it("muestra identificador y carro, no el UUID de la PC", async () => {
+  it("muestra la etiqueta y el carro, no el UUID del equipo", async () => {
     renderPagina()
 
     expect(await screen.findByText("PC 7")).toBeInTheDocument()
@@ -111,7 +113,7 @@ describe("ReportesPage", () => {
     renderPagina()
 
     expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument()
-    expect(screen.getByText("2h 30min")).toBeInTheDocument() // 150 min de la PC
+    expect(screen.getByText("2h 30min")).toBeInTheDocument() // 150 min del equipo
     expect(screen.getByText("1h 30min")).toBeInTheDocument() // 90 min del docente
   })
 
@@ -123,7 +125,7 @@ describe("ReportesPage", () => {
 
     await user.type(screen.getByLabelText("Desde"), "2026-03-01")
 
-    expect(adminApi.reporteUsoPCs).toHaveBeenLastCalledWith(
+    expect(adminApi.reporteUsoEquipos).toHaveBeenLastCalledWith(
       "c-activo",
       "2026-03-01",
       undefined
@@ -137,7 +139,7 @@ describe("ReportesPage", () => {
 
     await user.selectOptions(screen.getByLabelText("Ciclo lectivo"), "c-viejo")
 
-    expect(adminApi.reporteUsoPCs).toHaveBeenLastCalledWith(
+    expect(adminApi.reporteUsoEquipos).toHaveBeenLastCalledWith(
       "c-viejo",
       undefined,
       undefined
@@ -150,14 +152,14 @@ describe("ReportesPage", () => {
     renderPagina()
     await screen.findByText("PC 7")
 
-    expect(adminApi.reporteIncidenciasPorPC).toHaveBeenCalledWith(undefined, undefined)
+    expect(adminApi.reporteIncidenciasPorEquipo).toHaveBeenCalledWith(undefined, undefined)
     expect(adminApi.reporteIncidenciasPorCarro).toHaveBeenCalledWith(undefined, undefined)
   })
 
   // Un ciclo archivado no tiene reservas (RF-02.4 las borra), así que el
   // vacío tiene que explicarse en vez de parecer un error.
   it("explica el vacío de un ciclo archivado", async () => {
-    vi.mocked(adminApi.reporteUsoPCs).mockResolvedValue({ data: [] })
+    vi.mocked(adminApi.reporteUsoEquipos).mockResolvedValue({ data: [] })
     renderPagina()
 
     expect(await screen.findByText(/en el histórico por año/)).toBeInTheDocument()
@@ -181,13 +183,13 @@ describe("ReportesPage", () => {
     renderPagina()
 
     await screen.findByLabelText("Año")
-    expect(adminApi.historicoUsoPCs).toHaveBeenCalledWith(2025)
+    expect(adminApi.historicoUsoEquipos).toHaveBeenCalledWith(2025)
     expect(adminApi.historicoUsoDocentes).toHaveBeenCalledWith(2025)
   })
 
-  // Los nombres son snapshots: la PC pudo mudarse de carro (RF-03.10) o
+  // Los nombres son snapshots: el equipo pudo mudarse de carro (RF-03.10) o
   // darse de baja, y el histórico tiene que seguir diciendo dónde estaba.
-  it("muestra el identificador y el carro que la PC tenía ese año", async () => {
+  it("muestra la etiqueta y el carro que el equipo tenía ese año", async () => {
     renderPagina()
 
     expect(await screen.findByText("PC 4")).toBeInTheDocument()
@@ -238,31 +240,33 @@ describe("ReportesPage", () => {
 
     await user.selectOptions(await screen.findByLabelText("Año"), "2024")
 
-    expect(adminApi.historicoUsoPCs).toHaveBeenLastCalledWith(2024)
+    expect(adminApi.historicoUsoEquipos).toHaveBeenLastCalledWith(2024)
   })
 
-  // Un absoluto suelto no se puede juzgar: "150 minutos" no dice si esa PC
+  // Un absoluto suelto no se puede juzgar: "150 minutos" no dice si ese equipo
   // se usó mucho o poco. El total de la tabla es el denominador que hace
   // legible cada fila.
   it("muestra el total de cada tabla como contexto de las filas", async () => {
     renderPagina()
 
-    expect(await screen.findByText(/1 PC usada/)).toBeInTheDocument()
+    expect(await screen.findByText(/1 Equipo usada/)).toBeInTheDocument()
     expect(screen.getByText(/2h 30min en total/)).toBeInTheDocument()
   })
 
   it("muestra qué parte del total representa cada fila", async () => {
-    vi.mocked(adminApi.reporteUsoPCs).mockResolvedValue({
+    vi.mocked(adminApi.reporteUsoEquipos).mockResolvedValue({
       data: [
         {
-          pcId: "pc1",
+          equipoId: "pc1",
+          etiqueta: "PC 7",
           identificador: 7,
           carroNombre: "Carro 1",
           cantidadReservas: 3,
           minutosReservados: 150,
         },
         {
-          pcId: "pc2",
+          equipoId: "pc2",
+          etiqueta: "PC 8",
           identificador: 8,
           carroNombre: "Carro 1",
           cantidadReservas: 1,
@@ -279,17 +283,19 @@ describe("ReportesPage", () => {
   // Lo que se busca en un reporte de uso es "cuál se usa más". Con las filas
   // en el orden en que las devolvió la base hay que leerlas todas.
   it("ordena las filas de mayor a menor uso", async () => {
-    vi.mocked(adminApi.reporteUsoPCs).mockResolvedValue({
+    vi.mocked(adminApi.reporteUsoEquipos).mockResolvedValue({
       data: [
         {
-          pcId: "pc1",
+          equipoId: "pc1",
+          etiqueta: "PC 7",
           identificador: 7,
           carroNombre: "Carro 1",
           cantidadReservas: 1,
           minutosReservados: 50,
         },
         {
-          pcId: "pc2",
+          equipoId: "pc2",
+          etiqueta: "PC 8",
           identificador: 8,
           carroNombre: "Carro 1",
           cantidadReservas: 3,
@@ -316,16 +322,16 @@ describe("ReportesPage", () => {
     // un componente aparte que dispara sus consultas un instante después.
     // Sin esperar el total, el test contaba solo las dos del ciclo activo.
     await waitFor(() => {
-      // Uso por PC, uso por docente y las dos del histórico. Las de
+      // Uso por Equipo, uso por docente y las dos del histórico. Las de
       // incidencias no aparecen: en este escenario vienen vacías.
       expect(screen.getAllByRole("button", { name: "Descargar CSV" })).toHaveLength(4)
     })
   })
 
   it("no ofrece descargar una tabla vacía", async () => {
-    vi.mocked(adminApi.reporteUsoPCs).mockResolvedValue({ data: [] })
+    vi.mocked(adminApi.reporteUsoEquipos).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.reporteUsoDocentes).mockResolvedValue({ data: [] })
-    vi.mocked(adminApi.historicoUsoPCs).mockResolvedValue({ data: [] })
+    vi.mocked(adminApi.historicoUsoEquipos).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.historicoUsoDocentes).mockResolvedValue({ data: [] })
     renderPagina()
 
@@ -347,6 +353,6 @@ describe("ReportesPage", () => {
       await screen.findByText(/Todavía no se archivó ningún ciclo/)
     ).toBeInTheDocument()
     expect(screen.queryByLabelText("Año")).not.toBeInTheDocument()
-    expect(adminApi.historicoUsoPCs).not.toHaveBeenCalled()
+    expect(adminApi.historicoUsoEquipos).not.toHaveBeenCalled()
   })
 })

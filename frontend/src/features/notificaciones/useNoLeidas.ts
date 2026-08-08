@@ -10,7 +10,7 @@ export const NOTIFICACIONES_KEY = ["notificaciones"]
  *
  * Se repregunta cada dos minutos porque las notificaciones no las genera
  * quien está mirando la pantalla: aparecen cuando un Admin cancela una
- * reserva o saca una PC de servicio, en cualquier momento. Sin refresco
+ * reserva o saca un equipo de servicio, en cualquier momento. Sin refresco
  * periódico, alguien con la pestaña abierta toda la mañana no se entera de
  * que le cancelaron la clase hasta que recarga.
  *
