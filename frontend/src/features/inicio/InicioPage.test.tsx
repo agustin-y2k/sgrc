@@ -53,13 +53,13 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
   return {
     id: "r1",
     reservaGrupoId: "grupo1",
-    pcId: "pc1",
+    equipoId: "pc1",
     fecha: hoy(),
     horaInicio: "14:00",
     horaFin: "15:00",
     estado: "CONFIRMADA",
     tipo: "NORMAL",
-    pcIdentificador: 1,
+    identificador: 1,
     carroNombre: "Carro 1",
     materiaNombre: "Matemática",
     cursoNombre: "5°A",
@@ -94,14 +94,14 @@ describe("InicioPage", () => {
 
   it("muestra las próximas reservas agrupadas en una sola línea por clase", async () => {
     mockUsuario(DOCENTE)
-    // Dos PCs de la MISMA reserva: para el docente fue una sola clase.
+    // Dos equipos de la MISMA reserva: para el docente fue una sola clase.
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
-      paginada([reserva(), reserva({ id: "r2", pcId: "pc2", pcIdentificador: 2 })])
+      paginada([reserva(), reserva({ id: "r2", equipoId: "pc2", identificador: 2 })])
     )
     renderInicio()
 
     expect(await screen.findByText(/Matemática/)).toBeInTheDocument()
-    expect(screen.getByText("2 PCs")).toBeInTheDocument()
+    expect(screen.getByText("2 equipos")).toBeInTheDocument()
     expect(screen.getAllByText(/Matemática/)).toHaveLength(1)
   })
 

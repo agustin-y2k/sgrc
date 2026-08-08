@@ -43,23 +43,23 @@ func (v *ValidadorMateriaPostgres) DocenteEstaAsignado(ctx context.Context, mate
 
 // ── ValidadorPC (puerto hacia inventory) ────────────────────────────────
 
-var _ application.ValidadorPC = (*ValidadorPCPostgres)(nil)
+var _ application.ValidadorEquipo = (*ValidadorEquipoPostgres)(nil)
 
-// ValidadorPCPostgres consulta la tabla pc directamente — a propósito NO
+// ValidadorEquipoPostgres consulta la tabla pc directamente — a propósito NO
 // importa internal/inventory.
-type ValidadorPCPostgres struct {
+type ValidadorEquipoPostgres struct {
 	pool *pgxpool.Pool
 }
 
-func NewValidadorPCPostgres(pool *pgxpool.Pool) *ValidadorPCPostgres {
-	return &ValidadorPCPostgres{pool: pool}
+func NewValidadorEquipoPostgres(pool *pgxpool.Pool) *ValidadorEquipoPostgres {
+	return &ValidadorEquipoPostgres{pool: pool}
 }
 
-func (v *ValidadorPCPostgres) PCDisponibleParaReservar(ctx context.Context, pcID string) (bool, error) {
+func (v *ValidadorEquipoPostgres) EquipoDisponibleParaReservar(ctx context.Context, equipoID string) (bool, error) {
 	var estado string
 	var dadaDeBaja, reservable bool
 	err := v.pool.QueryRow(ctx,
-		`SELECT estado, dada_de_baja, reservable FROM pc WHERE id = $1`, pcID,
+		`SELECT estado, dado_de_baja, reservable FROM equipo WHERE id = $1`, equipoID,
 	).Scan(&estado, &dadaDeBaja, &reservable)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -68,7 +68,7 @@ func (v *ValidadorPCPostgres) PCDisponibleParaReservar(ctx context.Context, pcID
 		if esIDInvalido(err) {
 			return false, application.ErrIDInvalido
 		}
-		return false, fmt.Errorf("verificando disponibilidad de PC: %w", err)
+		return false, fmt.Errorf("verificando disponibilidad del equipo: %w", err)
 	}
 	// `reservable` es la mitad que agrega la 015: la lista de disponibles ya
 	// lo filtra, pero un pedido armado a mano no pasa por esa lista, y sin
@@ -76,12 +76,12 @@ func (v *ValidadorPCPostgres) PCDisponibleParaReservar(ctx context.Context, pcID
 	return estado == "DISPONIBLE" && !dadaDeBaja && reservable, nil
 }
 
-// PCEstaEnInventario: existe y no está dada de baja, sin mirar el estado.
+// EquipoEstaEnInventario: existe y no está dada de baja, sin mirar el estado.
 // Ver el comentario del puerto: entregar no es lo mismo que reservar.
-func (v *ValidadorPCPostgres) PCEstaEnInventario(ctx context.Context, pcID string) (bool, error) {
+func (v *ValidadorEquipoPostgres) EquipoEstaEnInventario(ctx context.Context, equipoID string) (bool, error) {
 	var dadaDeBaja bool
 	err := v.pool.QueryRow(ctx,
-		`SELECT dada_de_baja FROM pc WHERE id = $1`, pcID,
+		`SELECT dado_de_baja FROM equipo WHERE id = $1`, equipoID,
 	).Scan(&dadaDeBaja)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -90,7 +90,7 @@ func (v *ValidadorPCPostgres) PCEstaEnInventario(ctx context.Context, pcID strin
 		if esIDInvalido(err) {
 			return false, application.ErrIDInvalido
 		}
-		return false, fmt.Errorf("verificando si la PC está en el inventario: %w", err)
+		return false, fmt.Errorf("verificando si el equipo está en el inventario: %w", err)
 	}
 	return !dadaDeBaja, nil
 }
@@ -98,17 +98,17 @@ func (v *ValidadorPCPostgres) PCEstaEnInventario(ctx context.Context, pcID strin
 // IdentificadoresDePCs: el número visible de cada PC, para los avisos de
 // cancelación. Una sola consulta con = ANY en vez de una por PC — un
 // bloqueo por evaluación sobre un carro entero puede tocar treinta.
-func (v *ValidadorPCPostgres) EtiquetasDeEquipos(ctx context.Context, pcIDs []string) (map[string]string, error) {
-	etiquetas := make(map[string]string, len(pcIDs))
-	if len(pcIDs) == 0 {
+func (v *ValidadorEquipoPostgres) EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error) {
+	etiquetas := make(map[string]string, len(equipoIDs))
+	if len(equipoIDs) == 0 {
 		return etiquetas, nil
 	}
 
 	// COALESCE en este orden: el nombre manda cuando existe (un proyector),
-	// y si no, el número. Es la misma regla que domain.PC.Etiqueta, resuelta
+	// y si no, el número. Es la misma regla que domain.Equipo.Etiqueta, resuelta
 	// en SQL para no traer la fila entera solo por el rótulo.
 	rows, err := v.pool.Query(ctx,
-		`SELECT id, COALESCE(nombre, 'PC ' || identificador) FROM pc WHERE id = ANY($1)`, pcIDs)
+		`SELECT id, COALESCE(nombre, 'PC ' || identificador) FROM equipo WHERE id = ANY($1)`, equipoIDs)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido

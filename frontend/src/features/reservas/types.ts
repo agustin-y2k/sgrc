@@ -79,7 +79,7 @@ export function excedeDuracionMaxima(horaInicio: string, horaFin: string): boole
 export type Reserva = {
   id: string
   reservaGrupoId?: string
-  pcId: string
+  equipoId: string
   materiaId?: string
   nombreDocenteSnapshot?: string
   /** YYYY-MM-DD */
@@ -98,7 +98,7 @@ export type Reserva = {
 /**
  * Una Reserva con los nombres que resuelve el JOIN de `GET
  * /api/reservation/reservas` (espeja reservaDetalladaResponse). Sin ellos
- * la pantalla solo tendría UUIDs y no podría decir de qué PC ni de qué
+ * la pantalla solo tendría UUIDs y no podría decir de qué Equipo ni de qué
  * materia es cada reserva.
  *
  * Es un tipo aparte y no campos opcionales de `Reserva` porque los otros
@@ -110,7 +110,7 @@ export type ReservaDetallada = Reserva & {
   /** Cómo se nombra el equipo: "PC 3" o "Proyector Epson". */
   etiqueta: string
   /** 0 en un equipo suelto; el carro, vacío. Lo que se muestra es `etiqueta`. */
-  pcIdentificador: number
+  identificador: number
   carroNombre: string
   /** Vacío en los bloqueos por evaluación estatal, que no tienen materia. */
   materiaNombre?: string
@@ -118,7 +118,7 @@ export type ReservaDetallada = Reserva & {
   /**
    * Presente solo si la reserva es parte de una serie recurrente. No
    * confundir con `reservaGrupoId`, que tienen TODAS las reservas normales
-   * (es el grupo de PCs de una misma fecha).
+   * (es el grupo de Equipos de una misma fecha).
    */
   reglaRecurrenciaId?: string
 }
@@ -127,8 +127,8 @@ export type ReservaDetallada = Reserva & {
  * Las Reserva de un mismo ReservaGrupo, juntas.
  *
  * El glosario define ReservaGrupo como "la reserva tal como la percibe el
- * docente": una materia, una fecha, un horario, con N PCs adentro. La API
- * devuelve las filas sueltas (una por PC), así que el agrupado se arma acá.
+ * docente": una materia, una fecha, un horario, con N equipos adentro. La API
+ * devuelve las filas sueltas (una por Equipo), así que el agrupado se arma acá.
  */
 export type GrupoDeReservas = {
   /** Ausente si la reserva no pertenece a ningún grupo. */
@@ -156,14 +156,14 @@ export type GrupoDeReservas = {
  * Una reserva normal trae su `reservaGrupoId`: es lo que el docente vivió
  * como "una reserva". Un bloqueo por evaluación NO tiene grupo en la base
  * —no pertenece a nadie ni a ninguna materia— pero para el Admin que lo
- * creó sí fue una sola operación: eligió varias PCs, una fecha y un
- * horario, y apretó confirmar una vez. Mostrarlo como una tarjeta por PC
- * hacía que bloquear ocho PCs se viera como ocho bloqueos distintos.
+ * creó sí fue una sola operación: eligió varias equipos, una fecha y un
+ * horario, y apretó confirmar una vez. Mostrarlo como una tarjeta por Equipo
+ * hacía que bloquear ocho equipos se viera como ocho bloqueos distintos.
  *
  * Se agrupa por quién lo creó, la fecha y el horario, que es exactamente lo
  * que define una operación de bloqueo. Dos bloqueos distintos con los mismos
  * tres datos se juntarían en una tarjeta, pero desde afuera son
- * indistinguibles: son las mismas PCs, el mismo día y la misma franja.
+ * indistinguibles: son las mismas Equipos, el mismo día y la misma franja.
  */
 function claveDeAgrupacion(r: ReservaDetallada): string {
   if (r.reservaGrupoId) return r.reservaGrupoId
@@ -176,7 +176,7 @@ function claveDeAgrupacion(r: ReservaDetallada): string {
 /**
  * Agrupa las filas `reserva` en lo que cada usuario percibe como "una
  * reserva" (ver claveDeAgrupacion), conservando el orden en que vinieron
- * (el backend ordena por fecha, hora e identificador de PC).
+ * (el backend ordena por fecha, hora e identificador de Equipo).
  */
 export function agruparReservas(reservas: ReservaDetallada[]): GrupoDeReservas[] {
   const grupos = new Map<string, GrupoDeReservas>()
@@ -216,9 +216,9 @@ export type MateriaReservable = {
   cicloAnio: number
 }
 
-/** RF-04.2: una PC libre en la franja consultada. */
-export type PCDisponible = {
-  pcId: string
+/** RF-04.2: un equipo libre en la franja consultada. */
+export type EquipoDisponible = {
+  equipoId: string
   /** 0 en un equipo suelto. Lo que se muestra es `etiqueta`. */
   identificador?: number
   /** "PC 3" o "Proyector Epson". */
@@ -235,7 +235,7 @@ export type CrearReservaRequest = {
   fecha: string
   horaInicio: string
   horaFin: string
-  pcIds: string[]
+  equipoIds: string[]
 }
 
 export type CrearReservaRecurrenteRequest = {
@@ -245,7 +245,7 @@ export type CrearReservaRecurrenteRequest = {
   horaFin: string
   fechaInicio: string
   fechaFin: string
-  pcIds: string[]
+  equipoIds: string[]
 }
 
 /**
@@ -257,7 +257,7 @@ export type CrearReservaRecurrenteRequest = {
  * estatal (…)".
  */
 export type BloquearEvaluacionRequest = {
-  pcIds: string[]
+  equipoIds: string[]
   fecha: string
   horaInicio: string
   horaFin: string
@@ -280,14 +280,14 @@ export type ResultadoBloqueoEvaluacion = {
 // Espeja internal/reservation/interfaces/http/dto_prestamos.go.
 //
 // Un `Prestamo` NO es una reserva, y la diferencia es la razón de ser de
-// todo esto: la reserva es el derecho a usar una PC en una franja, el
+// todo esto: la reserva es el derecho a usar un equipo en una franja, el
 // préstamo es dónde está la máquina ahora. Existen por separado —hay
 // reservas que nadie vino a buscar y préstamos sin reserva detrás— y por eso
 // son dos cosas distintas también acá.
 
 export type Prestamo = {
   id: string
-  pcId: string
+  equipoId: string
   /** Ausente = préstamo espontáneo, sin reserva detrás. */
   reservaId?: string
 
@@ -315,7 +315,7 @@ export type Prestamo = {
   minutosDeDemora?: number
 
   /** Ubicación. Solo viene en los listados. */
-  pcIdentificador?: number
+  identificador?: number
   /** "PC 3" o "Proyector Epson". La resuelve el backend. */
   etiqueta?: string
   carroNombre?: string
@@ -324,7 +324,7 @@ export type Prestamo = {
 }
 
 /**
- * Por qué una PC del lote no salió. El código permite ofrecer la acción que
+ * Por qué un equipo del lote no salió. El código permite ofrecer la acción que
  * corresponde: "ver quién la tiene" no es lo mismo que "revisá el
  * inventario".
  */
@@ -335,8 +335,8 @@ export type RazonNoEntregada =
   /** La reserva no dice a nombre de quién: es un bloqueo por evaluación. */
   | "SIN_DESTINATARIO"
 
-export type PCNoEntregada = {
-  pcId: string
+export type EquipoNoEntregada = {
+  equipoId: string
   razon: RazonNoEntregada
   detalle: string
 }
@@ -347,7 +347,7 @@ export type PCNoEntregada = {
  * cuánto va a durar un trámite.
  */
 export type ReservaProxima = {
-  pcId: string
+  equipoId: string
   fecha: string
   horaInicio: string
   horaFin: string
@@ -356,7 +356,7 @@ export type ReservaProxima = {
 
 export type ResultadoEntrega = {
   entregadas: Prestamo[]
-  noEntregadas?: PCNoEntregada[]
+  noEntregadas?: EquipoNoEntregada[]
   avisos?: ReservaProxima[]
 }
 

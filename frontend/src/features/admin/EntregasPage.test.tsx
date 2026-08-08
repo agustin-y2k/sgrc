@@ -14,14 +14,14 @@ vi.mock("@/features/inventory/api")
 function prestamo(over: Partial<Prestamo> = {}): Prestamo {
   return {
     id: "pr1",
-    pcId: "pc1",
+    equipoId: "pc1",
     entregadoANombre: "Ada Lovelace",
     entregadoEn: "2026-08-07T08:05:00Z",
     abierto: true,
     demorado: false,
-    pcIdentificador: 3,
+    identificador: 3,
     carroNombre: "Carro 1",
-    etiqueta: `PC ${over.pcIdentificador ?? 3}`,
+    etiqueta: `PC ${over.identificador ?? 3}`,
     ...over,
   }
 }
@@ -30,18 +30,18 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
   return {
     id: "res1",
     reservaGrupoId: "grupo1",
-    pcId: "pc1",
+    equipoId: "pc1",
     fecha: "2026-08-07",
     horaInicio: "08:00",
     horaFin: "09:00",
     estado: "CONFIRMADA",
     tipo: "NORMAL",
     nombreDocenteSnapshot: "Ada Lovelace",
-    pcIdentificador: 3,
+    identificador: 3,
     carroNombre: "Carro 1",
     materiaNombre: "Matemáticas",
     cursoNombre: "5°A",
-    etiqueta: `PC ${over.pcIdentificador ?? 3}`,
+    etiqueta: `PC ${over.identificador ?? 3}`,
     ...over,
   }
 }
@@ -62,12 +62,12 @@ describe("EntregasPage", () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([]))
     vi.mocked(reservasApi.entregarPorReserva).mockResolvedValue({ entregadas: [] })
     vi.mocked(reservasApi.entregarSuelta).mockResolvedValue({ entregadas: [] })
-    vi.mocked(reservasApi.recibirPCs).mockResolvedValue({ recibidos: [] })
+    vi.mocked(reservasApi.recibirEquipos).mockResolvedValue({ recibidos: [] })
     vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [] })
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
       data: [{ id: "c1", nombre: "Carro 1" }],
     })
-    vi.mocked(inventoryApi.listarPCsDeCarro).mockResolvedValue({
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
       data: [
         {
           id: "pc1",
@@ -137,7 +137,7 @@ describe("EntregasPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Recibir" }))
 
-    expect(reservasApi.recibirPCs).toHaveBeenCalledWith({
+    expect(reservasApi.recibirEquipos).toHaveBeenCalledWith({
       prestamoIds: ["pr1"],
       observaciones: undefined,
     })
@@ -146,7 +146,7 @@ describe("EntregasPage", () => {
   it("recibe varias juntas con una observación común", async () => {
     const user = userEvent.setup()
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
-      data: [prestamo(), prestamo({ id: "pr2", pcId: "pc2", pcIdentificador: 4 })],
+      data: [prestamo(), prestamo({ id: "pr2", equipoId: "pc2", identificador: 4 })],
     })
     renderPagina()
 
@@ -156,7 +156,7 @@ describe("EntregasPage", () => {
     await user.type(screen.getByLabelText(/Observaciones/), "faltó un cargador")
     await user.click(screen.getByRole("button", { name: "Recibir las 2 seleccionadas" }))
 
-    expect(reservasApi.recibirPCs).toHaveBeenCalledWith({
+    expect(reservasApi.recibirEquipos).toHaveBeenCalledWith({
       prestamoIds: ["pr1", "pr2"],
       observaciones: "faltó un cargador",
     })
@@ -171,7 +171,7 @@ describe("EntregasPage", () => {
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
       data: [prestamo()],
     })
-    vi.mocked(reservasApi.recibirPCs).mockResolvedValue({
+    vi.mocked(reservasApi.recibirEquipos).mockResolvedValue({
       recibidos: [],
       noRecibidos: [{ prestamoId: "pr1", detalle: "esa computadora ya figura devuelta" }],
     })
@@ -182,10 +182,10 @@ describe("EntregasPage", () => {
     expect(await screen.findByText(/1 ya figuraba\(n\) adentro/)).toBeInTheDocument()
   })
 
-  it("entrega las PCs de una reserva del día", async () => {
+  it("entrega los equipos de una reserva del día", async () => {
     const user = userEvent.setup()
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
-      paginada([reserva(), reserva({ id: "res2", pcId: "pc2", pcIdentificador: 4 })])
+      paginada([reserva(), reserva({ id: "res2", equipoId: "pc2", identificador: 4 })])
     )
     renderPagina()
 
@@ -206,7 +206,7 @@ describe("EntregasPage", () => {
   it("permite entregar solo algunas de la reserva", async () => {
     const user = userEvent.setup()
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
-      paginada([reserva(), reserva({ id: "res2", pcId: "pc2", pcIdentificador: 4 })])
+      paginada([reserva(), reserva({ id: "res2", equipoId: "pc2", identificador: 4 })])
     )
     renderPagina()
 
@@ -236,11 +236,11 @@ describe("EntregasPage", () => {
 
   /**
    * Una máquina ya entregada no se puede volver a entregar, y la pantalla
-   * no la ofrece: se cruza por pcId contra lo que está afuera.
+   * no la ofrece: se cruza por equipoId contra lo que está afuera.
    */
-  it("no ofrece para entregar una PC que ya está afuera", async () => {
+  it("no ofrece para entregar un equipo que ya está afuera", async () => {
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
-      data: [prestamo({ pcId: "pc1" })],
+      data: [prestamo({ equipoId: "pc1" })],
     })
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
     renderPagina()
@@ -261,7 +261,7 @@ describe("EntregasPage", () => {
     await user.click(screen.getByRole("button", { name: /^Entregar 1 computadora/ }))
 
     expect(reservasApi.entregarSuelta).toHaveBeenCalledWith({
-      pcIds: ["pc1"],
+      equipoIds: ["pc1"],
       nombre: "Marta (secretaría)",
       motivo: "trámite",
       devolucionEstimada: undefined,
@@ -272,13 +272,13 @@ describe("EntregasPage", () => {
    * El aviso de reserva próxima no impide la entrega: el sistema no sabe
    * cuánto va a durar un trámite, así que la decisión es del Admin.
    */
-  it("avisa si la PC entregada suelta tiene una reserva encima", async () => {
+  it("avisa si el equipo entregada suelta tiene una reserva encima", async () => {
     const user = userEvent.setup()
     vi.mocked(reservasApi.entregarSuelta).mockResolvedValue({
       entregadas: [prestamo()],
       avisos: [
         {
-          pcId: "pc1",
+          equipoId: "pc1",
           fecha: "2026-08-07",
           horaInicio: "10:00",
           horaFin: "11:00",
@@ -298,7 +298,7 @@ describe("EntregasPage", () => {
 
   /**
    * Un bloqueo por evaluación estatal no tiene docente: lo crea un Admin
-   * sobre PCs sueltas y no hay nadie esperando para retirarlas. Ofrecerlo
+   * sobre equipos sueltas y no hay nadie esperando para retirarlas. Ofrecerlo
    * para entregar terminaba en un 400 que además tumbaba el lote entero.
    */
   it("no ofrece los bloqueos por evaluación para entregar", async () => {

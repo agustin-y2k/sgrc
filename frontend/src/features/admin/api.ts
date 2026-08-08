@@ -10,18 +10,18 @@ import type {
   Carro,
   Incidencia,
   Licencia,
-  PC,
+  Equipo,
   RenovacionLicencias,
   RespuestaLista,
   VencimientoDeclarado,
 } from "@/features/inventory/types"
 import type {
   HistoricoUsoDocente,
-  HistoricoUsoPC,
+  HistoricoUsoEquipo,
   ResumenIncidenciasCarro,
-  ResumenIncidenciasPC,
+  ResumenIncidenciasEquipo,
   ResumenUsoDocente,
-  ResumenUsoPC,
+  ResumenUsoEquipo,
 } from "@/features/admin/types"
 
 // ── Usuarios (RF-01.x / RF-02.x) ──────────────────────────────────────
@@ -93,7 +93,7 @@ export function editarCarro(id: string, req: { nombre?: string; descripcion?: st
   return apiFetch<void>(`/api/inventory/carros/${id}`, { method: "PATCH", body: req })
 }
 
-export function crearPC(
+export function crearEquipoDeCarro(
   carroId: string,
   req: {
     identificador: number
@@ -105,7 +105,7 @@ export function crearPC(
     softwareInstalado?: string
   }
 ) {
-  return apiFetch<PC>(`/api/inventory/carros/${carroId}/pcs`, {
+  return apiFetch<Equipo>(`/api/inventory/carros/${carroId}/equipos`, {
     method: "POST",
     body: req,
   })
@@ -118,11 +118,15 @@ export function crearPC(
  * `reservable` separa el proyector de los cargadores: solo lo reservable
  * aparece en la lista de equipos libres cuando un docente va a reservar.
  */
-export function crearEquipo(req: { tipo: string; nombre: string; reservable: boolean }) {
-  return apiFetch<PC>("/api/inventory/equipos", { method: "POST", body: req })
+export function crearEquipoSuelto(req: {
+  tipo: string
+  nombre: string
+  reservable: boolean
+}) {
+  return apiFetch<Equipo>("/api/inventory/equipos/sueltos", { method: "POST", body: req })
 }
 
-export function editarPC(
+export function editarEquipo(
   id: string,
   req: {
     carroId?: string
@@ -136,24 +140,24 @@ export function editarPC(
     reservable?: boolean
   }
 ) {
-  return apiFetch<void>(`/api/inventory/pcs/${id}`, { method: "PATCH", body: req })
+  return apiFetch<void>(`/api/inventory/equipos/${id}`, { method: "PATCH", body: req })
 }
 
 /**
- * RF-03.8 — pasar una PC a EN_MANTENIMIENTO o FUERA_DE_SERVICIO cancela en
+ * RF-03.8 — pasar un equipo a EN_MANTENIMIENTO o FUERA_DE_SERVICIO cancela en
  * cascada sus reservas futuras. El motivo es opcional; si no se manda, el
  * backend arma uno por defecto para la notificación al docente.
  */
-export function cambiarEstadoPC(id: string, estado: PC["estado"], motivo?: string) {
-  return apiFetch<void>(`/api/inventory/pcs/${id}/estado`, {
+export function cambiarEstadoEquipo(id: string, estado: Equipo["estado"], motivo?: string) {
+  return apiFetch<void>(`/api/inventory/equipos/${id}/estado`, {
     method: "PATCH",
     body: { estado, motivo },
   })
 }
 
 /** RF-03.9 — dar de baja dispara la misma cascada que RF-03.8. */
-export function darDeBajaPC(id: string) {
-  return apiFetch<void>(`/api/inventory/pcs/${id}`, { method: "DELETE" })
+export function darDeBajaEquipo(id: string) {
+  return apiFetch<void>(`/api/inventory/equipos/${id}`, { method: "DELETE" })
 }
 
 // Listar y reportar incidencias viven en features/inventory/api.ts: las
@@ -178,10 +182,10 @@ function conRango(base: string, desde?: string, hasta?: string) {
   return query ? `${base}?${query}` : base
 }
 
-/** RF-06.1 — uso por PC del ciclo, filtrable por rango de fechas. */
-export function reporteUsoPCs(cicloId: string, desde?: string, hasta?: string) {
-  return apiFetch<RespuestaLista<ResumenUsoPC>>(
-    conRango(`/api/reporting/ciclos/${cicloId}/uso-pcs`, desde, hasta)
+/** RF-06.1 — uso por Equipo del ciclo, filtrable por rango de fechas. */
+export function reporteUsoEquipos(cicloId: string, desde?: string, hasta?: string) {
+  return apiFetch<RespuestaLista<ResumenUsoEquipo>>(
+    conRango(`/api/reporting/ciclos/${cicloId}/uso-equipos`, desde, hasta)
   )
 }
 
@@ -200,9 +204,9 @@ export function reporteUsoDocentes(cicloId: string, desde?: string, hasta?: stri
  * bajo el ID del ciclo — que puede no existir más. No admite filtro por
  * rango de fechas: los números ya vienen agregados.
  */
-export function historicoUsoPCs(anio: number) {
-  return apiFetch<RespuestaLista<HistoricoUsoPC>>(
-    `/api/reporting/historico/${anio}/uso-pcs`
+export function historicoUsoEquipos(anio: number) {
+  return apiFetch<RespuestaLista<HistoricoUsoEquipo>>(
+    `/api/reporting/historico/${anio}/uso-equipos`
   )
 }
 
@@ -213,9 +217,9 @@ export function historicoUsoDocentes(anio: number) {
 }
 
 /** RF-06.3 — no depende del ciclo: Incidencia sobrevive al archivado. */
-export function reporteIncidenciasPorPC(desde?: string, hasta?: string) {
-  return apiFetch<RespuestaLista<ResumenIncidenciasPC>>(
-    conRango("/api/reporting/incidencias/pcs", desde, hasta)
+export function reporteIncidenciasPorEquipo(desde?: string, hasta?: string) {
+  return apiFetch<RespuestaLista<ResumenIncidenciasEquipo>>(
+    conRango("/api/reporting/incidencias/equipos", desde, hasta)
   )
 }
 
@@ -233,7 +237,7 @@ export function listarCiclos() {
 
 // ── Licencias de software (RF-03.11 a RF-03.14) ───────────────────────
 //
-// Todo solo-Admin, incluidas las lecturas: el docente elige PC por
+// Todo solo-Admin, incluidas las lecturas: el docente elige Equipo por
 // `softwareInstalado`, que ya ve en la pantalla de reserva; cuándo vence
 // una licencia es trabajo administrativo.
 
@@ -241,20 +245,20 @@ export function listarLicencias() {
   return apiFetch<RespuestaLista<Licencia>>("/api/inventory/licencias")
 }
 
-export function listarLicenciasDePC(pcId: string) {
-  return apiFetch<RespuestaLista<Licencia>>(`/api/inventory/pcs/${pcId}/licencias`)
+export function listarLicenciasDeEquipo(equipoId: string) {
+  return apiFetch<RespuestaLista<Licencia>>(`/api/inventory/equipos/${equipoId}/licencias`)
 }
 
 /**
- * Alta de la MISMA licencia en varias PCs de una vez: el caso real es
+ * Alta de la MISMA licencia en varias equipos de una vez: el caso real es
  * "AutoCAD, 30 días, en estas ocho máquinas".
  *
- * Responde 201 aunque alguna PC ya la tuviera; cuáles se saltearon viene en
- * `pcsQueYaLaTenian`. Eso hace que reintentar el mismo request sea seguro:
+ * Responde 201 aunque algún equipo ya la tuviera; cuáles se saltearon viene en
+ * `equiposQueYaLaTenian`. Eso hace que reintentar el mismo request sea seguro:
  * completa lo que falta sin duplicar lo que ya entró.
  */
 export function crearLicencias(req: {
-  pcIds: string[]
+  equipoIds: string[]
   nombre: string
   diasDuracion: number
   diasAviso?: number

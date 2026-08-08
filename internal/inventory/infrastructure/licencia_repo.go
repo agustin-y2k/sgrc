@@ -12,7 +12,7 @@ import (
 	"github.com/ramiro/sgrc/internal/inventory/domain"
 )
 
-const columnasLicencia = `id, pc_id, nombre, dias_duracion, dias_aviso, fecha_vencimiento, ` +
+const columnasLicencia = `id, equipo_id, nombre, dias_duracion, dias_aviso, fecha_vencimiento, ` +
 	`ultima_renovacion, vencimiento_fijado_por, vencimiento_fijado_en, ` +
 	`avisado_previo_para, avisado_vencimiento_para, creada_en`
 
@@ -21,24 +21,24 @@ const columnasLicencia = `id, pc_id, nombre, dias_duracion, dias_aviso, fecha_ve
 //
 // Los COALESCE son por la 015: una notebook suelta con AutoCAD no tiene
 // carro ni identificador, y sin ellos el escaneo a string/int reventaba.
-const columnasLicenciaConUbicacion = `l.id, l.pc_id, l.nombre, l.dias_duracion, l.dias_aviso, l.fecha_vencimiento, ` +
+const columnasLicenciaConUbicacion = `l.id, l.equipo_id, l.nombre, l.dias_duracion, l.dias_aviso, l.fecha_vencimiento, ` +
 	`l.ultima_renovacion, l.vencimiento_fijado_por, l.vencimiento_fijado_en, ` +
 	`l.avisado_previo_para, l.avisado_vencimiento_para, l.creada_en, ` +
 	`COALESCE(p.nombre, 'PC ' || p.identificador), COALESCE(p.identificador, 0), ` +
-	`p.dada_de_baja, COALESCE(c.id::text, ''), COALESCE(c.nombre, '')`
+	`p.dado_de_baja, COALESCE(c.id::text, ''), COALESCE(c.nombre, '')`
 
 func (r *PostgresRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO licencia_software (
-			id, pc_id, nombre, dias_duracion, dias_aviso, fecha_vencimiento,
+			id, equipo_id, nombre, dias_duracion, dias_aviso, fecha_vencimiento,
 			ultima_renovacion, vencimiento_fijado_por, vencimiento_fijado_en,
 			avisado_previo_para, avisado_vencimiento_para, creada_en
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`, l.ID, l.PCID, l.Nombre, l.DiasDuracion, l.DiasAviso, l.FechaVencimiento,
+	`, l.ID, l.EquipoID, l.Nombre, l.DiasDuracion, l.DiasAviso, l.FechaVencimiento,
 		l.UltimaRenovacion, l.VencimientoFijadoPor, l.VencimientoFijadoEn,
 		l.AvisadoPrevioPara, l.AvisadoVencimientoPara, l.CreadaEn)
 	if err != nil {
-		// Acá el UNIQUE es uno solo (pc_id + lower(nombre)), así que a
+		// Acá el UNIQUE es uno solo (equipo_id + lower(nombre)), así que a
 		// diferencia de CrearPC no hay ambigüedad sobre cuál se violó.
 		if esViolacionUnica(err) {
 			return application.ErrLicenciaDuplicada
@@ -62,7 +62,7 @@ func (r *PostgresRepo) BuscarLicenciaPorID(ctx context.Context, id string) (*dom
 func escanearLicencia(row pgx.Row) (*domain.LicenciaSoftware, error) {
 	var l domain.LicenciaSoftware
 	err := row.Scan(
-		&l.ID, &l.PCID, &l.Nombre, &l.DiasDuracion, &l.DiasAviso, &l.FechaVencimiento,
+		&l.ID, &l.EquipoID, &l.Nombre, &l.DiasDuracion, &l.DiasAviso, &l.FechaVencimiento,
 		&l.UltimaRenovacion, &l.VencimientoFijadoPor, &l.VencimientoFijadoEn,
 		&l.AvisadoPrevioPara, &l.AvisadoVencimientoPara, &l.CreadaEn,
 	)
@@ -83,10 +83,10 @@ func escanearLicenciaConUbicacion(row pgx.Row) (*application.LicenciaConUbicacio
 	var u application.LicenciaConUbicacion
 
 	err := row.Scan(
-		&l.ID, &l.PCID, &l.Nombre, &l.DiasDuracion, &l.DiasAviso, &l.FechaVencimiento,
+		&l.ID, &l.EquipoID, &l.Nombre, &l.DiasDuracion, &l.DiasAviso, &l.FechaVencimiento,
 		&l.UltimaRenovacion, &l.VencimientoFijadoPor, &l.VencimientoFijadoEn,
 		&l.AvisadoPrevioPara, &l.AvisadoVencimientoPara, &l.CreadaEn,
-		&u.Etiqueta, &u.PCIdentificador, &u.PCDadaDeBaja, &u.CarroID, &u.CarroNombre,
+		&u.Etiqueta, &u.Identificador, &u.EquipoDadoDeBaja, &u.CarroID, &u.CarroNombre,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -168,14 +168,14 @@ func (r *PostgresRepo) BorrarLicencia(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *PostgresRepo) ListarLicenciasPorPC(ctx context.Context, pcID string) ([]*domain.LicenciaSoftware, error) {
+func (r *PostgresRepo) ListarLicenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.LicenciaSoftware, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT `+columnasLicencia+` FROM licencia_software WHERE pc_id = $1 ORDER BY nombre`, pcID)
+		`SELECT `+columnasLicencia+` FROM licencia_software WHERE equipo_id = $1 ORDER BY nombre`, equipoID)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
 		}
-		return nil, fmt.Errorf("listando licencias de la PC: %w", err)
+		return nil, fmt.Errorf("listando licencias del equipo: %w", err)
 	}
 	defer rows.Close()
 
@@ -209,7 +209,7 @@ func (r *PostgresRepo) ListarLicencias(ctx context.Context) ([]*application.Lice
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+columnasLicenciaConUbicacion+`
 		FROM licencia_software l
-		JOIN pc p ON p.id = l.pc_id
+		JOIN equipo p ON p.id = l.equipo_id
 		-- LEFT desde la 015: una notebook suelta puede tener AutoCAD igual
 		-- que las del carro, y con INNER JOIN su licencia no aparecía en la
 		-- pantalla — se vencía sin que nadie la viera.
@@ -254,13 +254,13 @@ func (r *PostgresRepo) ListarCandidatasAAviso(ctx context.Context, hoy time.Time
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+columnasLicenciaConUbicacion+`
 		FROM licencia_software l
-		JOIN pc p ON p.id = l.pc_id
+		JOIN equipo p ON p.id = l.equipo_id
 		-- LEFT por lo mismo que en ListarLicencias, y acá es peor: con INNER
 		-- JOIN la licencia de un equipo suelto no era candidata a aviso
 		-- NUNCA, así que el correo no salía y nadie se enteraba.
 		LEFT JOIN carro c ON c.id = p.carro_id
 		WHERE l.fecha_vencimiento IS NOT NULL
-		  AND p.dada_de_baja = false
+		  AND p.dado_de_baja = false
 		  AND l.fecha_vencimiento - l.dias_aviso <= $1
 		  AND (l.avisado_previo_para IS DISTINCT FROM l.fecha_vencimiento
 		       OR l.avisado_vencimiento_para IS DISTINCT FROM l.fecha_vencimiento)

@@ -113,7 +113,7 @@ flowchart LR
 - **Actor:** Admin
 - **Flujo:**
   1. Admin archiva ciclo actual: `curso` y `materia` de ese ciclo pasan a `archivado=true` (se preservan, para no recrearlos).
-  2. Antes de tocar las reservas, el sistema calcula un snapshot agregado (uso por PC, uso por docente de ese año) y lo guarda en `historico_uso_pc` / `historico_uso_docente` (permanentes).
+  2. Antes de tocar las reservas, el sistema calcula un snapshot agregado (uso por PC, uso por docente de ese año) y lo guarda en `historico_uso_equipo` / `historico_uso_docente` (permanentes).
   3. El sistema **elimina físicamente** todos los `ReservaGrupo`, `Reserva`, `ReglaRecurrencia` y `ReglaRecurrenciaPc` de las materias de ese ciclo. `Incidencia` no se toca (es de la PC, no del ciclo).
   4. Sistema ofrece clonar estructura al nuevo ciclo (año+1): crea `curso` + `materia` nuevos (sin `archivado`). No clona: `DocenteMateria`.
   5. Admin puede ajustar la estructura clonada antes de activar el nuevo ciclo.
@@ -184,7 +184,7 @@ flowchart LR
   - No tienen identificador ni número de serie: "PC 3" no significa nada para un cargador, y un cargador puede no traer serie de fábrica. El **nombre** es lo único que los distingue, y es **único** entre ellos sin distinguir mayúsculas — dos filas llamadas "Cargador" serían indistinguibles justo donde hay que elegir cuál se está prestando.
   - El tipo es **texto libre y no una lista cerrada**: otra escuela tiene proyector pero quizá no cargadores, y agregar "impresora 3D" no puede pedir tocar el sistema. El formulario sugiere los tipos ya usados para no terminar con "PROYECTOR" y "Proyector" como dos cosas distintas.
   - Lo **no reservable no aparece** en la lista de equipos libres al reservar. Sin esa marca, los dos cargadores serían ruido cada vez que un docente arma una reserva, y la primera vez que alguien reserve un cargador sin querer habría que explicarlo.
-  - Puertas adentro **son la misma entidad que las PCs**, y eso no es un detalle de implementación: es lo que hace que el proyector quede prestable, reclamable, liberable y —si es reservable— reservable, sin una línea nueva en ninguno de esos flujos. El costo asumido es que la tabla se sigue llamando `pc`; ver el encabezado de la migración 015.
+  - Puertas adentro **son la misma entidad que las PCs**, y eso no es un detalle de implementación: es lo que hace que el proyector quede prestable, reclamable, liberable y —si es reservable— reservable, sin una línea nueva en ninguno de esos flujos. La tabla se llamó `pc` mientras tanto, y la 016 saldó ese renombre; ver el encabezado de las dos migraciones.
 
 ### UC: Atender el mostrador (pantalla de inicio del Admin)
 - **Actor:** Admin

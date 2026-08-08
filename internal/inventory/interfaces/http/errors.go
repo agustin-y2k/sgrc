@@ -26,7 +26,7 @@ func mapearError(err error) error {
 		errors.Is(err, application.ErrNombreDeEquipoDuplicado):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, domain.ErrTransicionEstadoPCInvalida),
+	case errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida),
 		errors.Is(err, domain.ErrPCYaDadaDeBaja):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
@@ -39,7 +39,7 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrNombreEquipoVacio),
 		errors.Is(err, domain.ErrNombreEquipoLargo),
 		errors.Is(err, domain.ErrDescripcionVacia),
-		errors.Is(err, domain.ErrEstadoPCInvalido),
+		errors.Is(err, domain.ErrEstadoEquipoInvalido),
 		errors.Is(err, domain.ErrGravedadInvalida),
 		errors.Is(err, domain.ErrEstadoIncidenciaInvalido),
 		errors.Is(err, application.ErrIDInvalido),

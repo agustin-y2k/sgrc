@@ -7,15 +7,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import * as inventoryApi from "@/features/inventory/api"
-import type { GravedadIncidencia, PC } from "@/features/inventory/types"
+import type { GravedadIncidencia, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
 /**
  * RF-03.5 — reportar una falla. Lo puede hacer cualquier usuario
- * autenticado, no solo un Admin: el docente sentado frente a la PC es el
+ * autenticado, no solo un Admin: el docente sentado frente a el equipo es el
  * que ve que no anda.
  *
- * Reportar NO cambia el estado de la PC: sigue siendo reservable hasta que
+ * Reportar NO cambia el estado del equipo: sigue siendo reservable hasta que
  * un Admin decida sacarla de servicio (RF-03.8). Se dice en la pantalla
  * para que nadie asuma que reportar ya la bloqueó.
  */
@@ -26,7 +26,7 @@ const GRAVEDADES: { valor: GravedadIncidencia; etiqueta: string; ayuda: string }
   { valor: "GRAVE", etiqueta: "Grave", ayuda: "No se puede usar" },
 ]
 
-export function ReportarIncidencia({ pc, onListo }: { pc: PC; onListo: () => void }) {
+export function ReportarIncidencia({ equipo, onListo }: { equipo: Equipo; onListo: () => void }) {
   const queryClient = useQueryClient()
   const [descripcion, setDescripcion] = useState("")
   const [gravedad, setGravedad] = useState<GravedadIncidencia>("MODERADA")
@@ -34,10 +34,10 @@ export function ReportarIncidencia({ pc, onListo }: { pc: PC; onListo: () => voi
 
   const reportar = useMutation({
     mutationFn: () =>
-      inventoryApi.reportarIncidencia({ pcId: pc.id, descripcion, gravedad }),
+      inventoryApi.reportarIncidencia({ equipoId: equipo.id, descripcion, gravedad }),
     onSuccess: async () => {
       setReportada(true)
-      await queryClient.invalidateQueries({ queryKey: ["incidencias", pc.id] })
+      await queryClient.invalidateQueries({ queryKey: ["incidencias", equipo.id] })
     },
   })
 
@@ -45,7 +45,7 @@ export function ReportarIncidencia({ pc, onListo }: { pc: PC; onListo: () => voi
     return (
       <div className="grid gap-2 rounded-md border p-3">
         <p className="text-sm">
-          Listo: la falla de la PC {pc.identificador} quedó registrada. Un Admin la va a
+          Listo: la falla del equipo {equipo.identificador} quedó registrada. Un Admin la va a
           ver en el historial del equipo.
         </p>
         <div>
@@ -65,7 +65,7 @@ export function ReportarIncidencia({ pc, onListo }: { pc: PC; onListo: () => voi
         reportar.mutate()
       }}
     >
-      <p className="font-medium">Reportar un problema en la PC {pc.identificador}</p>
+      <p className="font-medium">Reportar un problema en el equipo {equipo.identificador}</p>
 
       {reportar.error && (
         <Alert variant="destructive">
@@ -74,9 +74,9 @@ export function ReportarIncidencia({ pc, onListo }: { pc: PC; onListo: () => voi
       )}
 
       <div className="grid gap-1.5">
-        <Label htmlFor={`descripcion-${pc.id}`}>¿Qué le pasa?</Label>
+        <Label htmlFor={`descripcion-${equipo.id}`}>¿Qué le pasa?</Label>
         <Input
-          id={`descripcion-${pc.id}`}
+          id={`descripcion-${equipo.id}`}
           value={descripcion}
           onChange={(e) => setDescripcion(e.target.value)}
           placeholder="Ej.: no arranca, la pantalla parpadea, no tiene teclado"
@@ -84,9 +84,9 @@ export function ReportarIncidencia({ pc, onListo }: { pc: PC; onListo: () => voi
       </div>
 
       <div className="grid gap-1.5">
-        <Label htmlFor={`gravedad-${pc.id}`}>Gravedad</Label>
+        <Label htmlFor={`gravedad-${equipo.id}`}>Gravedad</Label>
         <Select
-          id={`gravedad-${pc.id}`}
+          id={`gravedad-${equipo.id}`}
           value={gravedad}
           onChange={(e) => setGravedad(e.target.value as GravedadIncidencia)}
         >
@@ -99,7 +99,7 @@ export function ReportarIncidencia({ pc, onListo }: { pc: PC; onListo: () => voi
       </div>
 
       <p className="text-muted-foreground text-xs">
-        Reportarla no saca la PC de circulación: se sigue pudiendo reservar hasta que un
+        Reportarla no saca el equipo de circulación: se sigue pudiendo reservar hasta que un
         Admin la ponga en mantenimiento o fuera de servicio.
       </p>
 

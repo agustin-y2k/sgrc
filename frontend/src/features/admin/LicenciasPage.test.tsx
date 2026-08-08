@@ -14,17 +14,17 @@ vi.mock("@/features/inventory/api")
 function licencia(over: Partial<Licencia> = {}): Licencia {
   return {
     id: "lic1",
-    pcId: "pc1",
+    equipoId: "pc1",
     nombre: "AutoCAD 2027",
     diasDuracion: 30,
     diasAviso: 1,
     fechaVencimiento: "2026-09-03",
     diasRestantes: 7,
     estado: "VIGENTE",
-    pcIdentificador: 3,
+    identificador: 3,
     carroId: "c1",
     carroNombre: "Carro 1",
-    etiqueta: `PC ${over.pcIdentificador ?? 3}`,
+    etiqueta: `PC ${over.identificador ?? 3}`,
     ...over,
   }
 }
@@ -46,7 +46,7 @@ describe("LicenciasPage", () => {
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
       data: [{ id: "c1", nombre: "Carro 1" }],
     })
-    vi.mocked(inventoryApi.listarPCsDeCarro).mockResolvedValue({
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
       data: [
         {
           id: "pc1",
@@ -154,7 +154,7 @@ describe("LicenciasPage", () => {
   it("renueva varias de una vez", async () => {
     const user = userEvent.setup()
     vi.mocked(adminApi.listarLicencias).mockResolvedValue({
-      data: [licencia(), licencia({ id: "lic2", pcId: "pc2", pcIdentificador: 4 })],
+      data: [licencia(), licencia({ id: "lic2", equipoId: "pc2", identificador: 4 })],
     })
     renderPagina()
 
@@ -190,17 +190,17 @@ describe("LicenciasPage", () => {
     })
   })
 
-  it("carga la misma licencia en varias PCs de una vez", async () => {
+  it("carga la misma licencia en varias equipos de una vez", async () => {
     const user = userEvent.setup()
     renderPagina()
 
     await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
     await user.type(screen.getByLabelText("Software"), "SolidWorks")
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
-    await user.click(screen.getByRole("button", { name: /Cargar en 1 PC/ }))
+    await user.click(screen.getByRole("button", { name: /Cargar en 1 Equipo/ }))
 
     expect(adminApi.crearLicencias).toHaveBeenCalledWith({
-      pcIds: ["pc1"],
+      equipoIds: ["pc1"],
       nombre: "SolidWorks",
       diasDuracion: 30,
       diasAviso: 1,
@@ -217,7 +217,7 @@ describe("LicenciasPage", () => {
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
     await user.selectOptions(screen.getByLabelText("¿Cuándo vence?"), "quedan-dias")
     await user.type(screen.getByLabelText("Días que le quedan"), "12")
-    await user.click(screen.getByRole("button", { name: /Cargar en 1 PC/ }))
+    await user.click(screen.getByRole("button", { name: /Cargar en 1 Equipo/ }))
 
     expect(adminApi.crearLicencias).toHaveBeenCalledWith(
       expect.objectContaining({ quedanDias: 12 })
@@ -237,18 +237,18 @@ describe("LicenciasPage", () => {
     expect(screen.getByLabelText("¿Cuándo vence?")).toHaveValue("sin-fecha")
   })
 
-  it("informa cuáles PCs ya tenían la licencia, sin tratarlo como error", async () => {
+  it("informa cuáles equipos ya tenían la licencia, sin tratarlo como error", async () => {
     const user = userEvent.setup()
     vi.mocked(adminApi.crearLicencias).mockResolvedValue({
       creadas: [licencia()],
-      pcsQueYaLaTenian: ["pc9", "pc8"],
+      equiposQueYaLaTenian: ["pc9", "pc8"],
     })
     renderPagina()
 
     await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
     await user.type(screen.getByLabelText("Software"), "SolidWorks")
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
-    await user.click(screen.getByRole("button", { name: /Cargar en 1 PC/ }))
+    await user.click(screen.getByRole("button", { name: /Cargar en 1 Equipo/ }))
 
     expect(await screen.findByText(/2 ya la tenían/)).toBeInTheDocument()
   })

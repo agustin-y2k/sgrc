@@ -1,4 +1,4 @@
-// Espeja calendarioPCResponse de
+// Espeja calendarioEquipoResponse de
 // internal/reservation/interfaces/http/dto.go (RF-04.4).
 
 export type TipoBloque = "NORMAL" | "EVALUACION_ESTATAL"
@@ -19,8 +19,8 @@ export type BloqueCalendario = {
   cursoNombre?: string
 }
 
-export type CalendarioPC = {
-  pcId: string
+export type CalendarioEquipo = {
+  equipoId: string
   desde: string
   hasta: string
   bloques: BloqueCalendario[]

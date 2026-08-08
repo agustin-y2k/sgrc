@@ -16,7 +16,7 @@ stateDiagram-v2
     DADA_DE_BAJA --> [*]
 ```
 
-> `DADA_DE_BAJA` es independiente del campo `estado` (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO`) — es el flag `pc.dada_de_baja`, no un cuarto valor de ese enum. Se muestra acá junto al resto porque es, en la práctica, un estado terminal más del ciclo de vida de la PC.
+> `DADA_DE_BAJA` es independiente del campo `estado` (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO`) — es el flag `pc.dado_de_baja`, no un cuarto valor de ese enum. Se muestra acá junto al resto porque es, en la práctica, un estado terminal más del ciclo de vida de la PC.
 
 > Los tránsitos hacia `EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` son de duración **indefinida** y disparan cancelación en cascada de las reservas futuras de esa PC puntual (RF-03.6). El regreso a `DISPONIBLE` no restaura nada automáticamente.
 
@@ -98,9 +98,9 @@ son cosas distintas, ver RF-08 y `07-modelo-datos.md`.
 > **A nivel `ReservaGrupo` solo se marca si NINGUNA de sus PCs se retiró.** Si
 > el docente vino y se llevó tres de cinco, el grupo sigue `CONFIRMADA`: vino
 > a dar la clase, y lo que pasó con las otras dos se ve fila por fila.
-- PC en `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` o `dada_de_baja=true` rechaza nuevas reservas.
+- PC en `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` o `dado_de_baja=true` rechaza nuevas reservas.
 - `Reserva` `CANCELADA` o `FINALIZADA` es inmutable; lo mismo aplica a `ReservaGrupo`. Ambas se eliminan físicamente al archivar el ciclo lectivo de su materia (no antes).
 - Cursos y materias con `archivado=true` no aparecen en vistas activas; a diferencia de las reservas, ellos **sí** se preservan (nunca se eliminan) para no recrearlos el año siguiente.
 - Un usuario con `estado=PENDIENTE`, `RECHAZADA` o `BAJA` no puede operar en el sistema aunque intente autenticarse. `BAJA` es terminal — no hay reactivación.
 - Dar de baja a un docente (`APROBADA → BAJA`) solo cancela reservas si la materia queda sin ningún otro docente activo (ver RF-02.8).
-- Dar de baja a una PC (`dada_de_baja=true`) es un soft delete: la fila se conserva para no perder el historial de incidencias y reservas ya asociadas.
+- Dar de baja a una PC (`dado_de_baja=true`) es un soft delete: la fila se conserva para no perder el historial de incidencias y reservas ya asociadas.

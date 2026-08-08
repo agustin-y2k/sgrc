@@ -59,8 +59,8 @@ func (s *Service) ListarCarros(ctx context.Context) ([]*domain.Carro, error) {
 
 // ── PC ──────────────────────────────────────────────────────────────────
 
-func (s *Service) CrearPC(ctx context.Context, carroID string, identificador int, numeroSerie string, freezado bool, cpu, ram, sistemaOperativo, softwareInstalado string) (*domain.PC, error) {
-	pc, err := domain.NuevaPC(s.nuevoID(), carroID, identificador, numeroSerie, freezado, s.ahora())
+func (s *Service) CrearEquipoDeCarro(ctx context.Context, carroID string, identificador int, numeroSerie string, freezado bool, cpu, ram, sistemaOperativo, softwareInstalado string) (*domain.Equipo, error) {
+	pc, err := domain.NuevoEquipoDeCarro(s.nuevoID(), carroID, identificador, numeroSerie, freezado, s.ahora())
 	if err != nil {
 		return nil, err
 	}
@@ -69,15 +69,15 @@ func (s *Service) CrearPC(ctx context.Context, carroID string, identificador int
 	pc.SistemaOperativo = sistemaOperativo
 	pc.SoftwareInstalado = softwareInstalado
 
-	if err := s.repo.CrearPC(ctx, pc); err != nil {
+	if err := s.repo.CrearEquipo(ctx, pc); err != nil {
 		return nil, err
 	}
 	return pc, nil
 }
 
-// EditarPCParams agrupa los campos editables de una PC — todos punteros,
+// EditarEquipoParams agrupa los campos editables de una PC — todos punteros,
 // nil significa "no tocar ese campo" (RF-03.4, RF-03.10 para CarroID).
-type EditarPCParams struct {
+type EditarEquipoParams struct {
 	CarroID           *string
 	Freezado          *bool
 	CPU               *string
@@ -91,8 +91,8 @@ type EditarPCParams struct {
 	Reservable *bool
 }
 
-func (s *Service) EditarPC(ctx context.Context, pcID string, params EditarPCParams) error {
-	pc, err := s.repo.BuscarPCPorID(ctx, pcID)
+func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params EditarEquipoParams) error {
+	pc, err := s.repo.BuscarEquipoPorID(ctx, equipoID)
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func (s *Service) EditarPC(ctx context.Context, pcID string, params EditarPCPara
 		pc.Reservable = *params.Reservable
 	}
 
-	return s.repo.GuardarPC(ctx, pc)
+	return s.repo.GuardarEquipo(ctx, pc)
 }
 
 // ResultadoCascada es lo que el handler HTTP necesita para armar la
@@ -149,7 +149,7 @@ type ResultadoCascada struct {
 
 // disparaCascada dice si ese estado saca a la PC de circulación y, por lo
 // tanto, obliga a cancelar sus reservas futuras (RF-03.8).
-func disparaCascada(estado domain.EstadoPC) bool {
+func disparaCascada(estado domain.EstadoEquipo) bool {
 	return estado == domain.EstadoEnMantenimiento || estado == domain.EstadoFueraDeServicio
 }
 
@@ -166,13 +166,13 @@ func disparaCascada(estado domain.EstadoPC) bool {
 // Sin esta distinción, lo que queda tras un fallo a mitad de camino es
 // irrecuperable: la PC guardada en su nuevo estado, sus reservas todavía
 // CONFIRMADA, los docentes sin aviso, y el reintento rebotando con 409 ("de
-// EN_MANTENIMIENTO a EN_MANTENIMIENTO", "la PC ya está dada de baja")
+// EN_MANTENIMIENTO a EN_MANTENIMIENTO", "el equipo ya está dado de baja")
 // porque la máquina de estados rechaza repetir la transición. La única
 // salida sería SQL a mano contra producción.
-func (s *Service) cascadaPendiente(ctx context.Context, pcID string) (bool, error) {
-	pendiente, err := s.validadorReservas.TieneReservasFuturas(ctx, pcID)
+func (s *Service) cascadaPendiente(ctx context.Context, equipoID string) (bool, error) {
+	pendiente, err := s.validadorReservas.TieneReservasFuturas(ctx, equipoID)
 	if err != nil {
-		return false, fmt.Errorf("verificando si quedó una cascada pendiente sobre la PC: %w", err)
+		return false, fmt.Errorf("verificando si quedó una cascada pendiente sobre el equipo: %w", err)
 	}
 	return pendiente, nil
 }
@@ -181,14 +181,14 @@ func (s *Service) cascadaPendiente(ctx context.Context, pcID string) (bool, erro
 // SÍ se aplicó y que reintentar la misma operación completa lo que falta —
 // mismo criterio que el error de ArchivarYClonar en academic.
 func errCascada(err error) error {
-	return fmt.Errorf("la PC quedó guardada en su nuevo estado pero no se pudieron cancelar sus reservas futuras "+
+	return fmt.Errorf("el equipo quedó guardado en su nuevo estado pero no se pudieron cancelar sus reservas futuras "+
 		"(reintentar la misma operación completa la cascada): %w", err)
 }
 
-// CambiarEstadoPC implementa RF-03.8: al pasar a EN_MANTENIMIENTO o
+// CambiarEstadoEquipo implementa RF-03.8: al pasar a EN_MANTENIMIENTO o
 // FUERA_DE_SERVICIO, cancela en cascada las reservas futuras de esa PC.
-func (s *Service) CambiarEstadoPC(ctx context.Context, pcID string, nuevo domain.EstadoPC, motivo *string) (*ResultadoCascada, error) {
-	pc, err := s.repo.BuscarPCPorID(ctx, pcID)
+func (s *Service) CambiarEstadoEquipo(ctx context.Context, equipoID string, nuevo domain.EstadoEquipo, motivo *string) (*ResultadoCascada, error) {
+	pc, err := s.repo.BuscarEquipoPorID(ctx, equipoID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,21 +207,21 @@ func (s *Service) CambiarEstadoPC(ctx context.Context, pcID string, nuevo domain
 		if pc.Estado != nuevo || !disparaCascada(nuevo) {
 			return nil, errTransicion
 		}
-		pendiente, err := s.cascadaPendiente(ctx, pcID)
+		pendiente, err := s.cascadaPendiente(ctx, equipoID)
 		if err != nil {
 			return nil, err
 		}
 		if !pendiente {
 			return nil, errTransicion
 		}
-	} else if err := s.repo.GuardarPC(ctx, pc); err != nil {
+	} else if err := s.repo.GuardarEquipo(ctx, pc); err != nil {
 		return nil, err
 	}
 
 	resultado := &ResultadoCascada{}
 	if disparaCascada(nuevo) {
 		motivoTexto := motivoPorDefecto(pc, nuevo, motivo)
-		canceladas, notificados, err := s.validadorReservas.CancelarReservasFuturasDePC(ctx, pcID, motivoTexto)
+		canceladas, notificados, err := s.validadorReservas.CancelarReservasFuturasDePC(ctx, equipoID, motivoTexto)
 		if err != nil {
 			return nil, errCascada(err)
 		}
@@ -232,12 +232,12 @@ func (s *Service) CambiarEstadoPC(ctx context.Context, pcID string, nuevo domain
 	return resultado, nil
 }
 
-// DarDeBajaPC implementa RF-03.4/03.9: soft delete + misma cascada de
+// DarDeBajaEquipo implementa RF-03.4/03.9: soft delete + misma cascada de
 // cancelación que CambiarEstadoPC (RF-03.9 dice explícitamente que dar de
 // baja dispara la misma cascada que pasar a FUERA_DE_SERVICIO), incluido el
 // mismo reintento cuando la cascada quedó a medias.
-func (s *Service) DarDeBajaPC(ctx context.Context, pcID string) (*ResultadoCascada, error) {
-	pc, err := s.repo.BuscarPCPorID(ctx, pcID)
+func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*ResultadoCascada, error) {
+	pc, err := s.repo.BuscarEquipoPorID(ctx, equipoID)
 	if err != nil {
 		return nil, err
 	}
@@ -246,21 +246,21 @@ func (s *Service) DarDeBajaPC(ctx context.Context, pcID string) (*ResultadoCasca
 		if !errors.Is(errBaja, domain.ErrPCYaDadaDeBaja) {
 			return nil, errBaja
 		}
-		pendiente, err := s.cascadaPendiente(ctx, pcID)
+		pendiente, err := s.cascadaPendiente(ctx, equipoID)
 		if err != nil {
 			return nil, err
 		}
 		if !pendiente {
 			return nil, errBaja
 		}
-	} else if err := s.repo.GuardarPC(ctx, pc); err != nil {
+	} else if err := s.repo.GuardarEquipo(ctx, pc); err != nil {
 		return nil, err
 	}
 
 	// Minúscula y sin prefijo: esto se lee después de "Tu reserva fue
 	// cancelada: " (ver motivoPorDefecto).
 	motivo := fmt.Sprintf("la PC %d fue dada de baja del inventario", pc.Identificador)
-	canceladas, notificados, err := s.validadorReservas.CancelarReservasFuturasDePC(ctx, pcID, motivo)
+	canceladas, notificados, err := s.validadorReservas.CancelarReservasFuturasDePC(ctx, equipoID, motivo)
 	if err != nil {
 		return nil, errCascada(err)
 	}
@@ -273,15 +273,15 @@ func (s *Service) DarDeBajaPC(ctx context.Context, pcID string) (*ResultadoCasca
 // (ver internal/notification/application/subscribers.go). Nombra la PC
 // porque el docente recibe un aviso por cada una y sin el identificador no
 // puede saber cuál se le cayó (RF-05.3).
-func motivoPorDefecto(pc *domain.PC, nuevo domain.EstadoPC, motivo *string) string {
+func motivoPorDefecto(pc *domain.Equipo, nuevo domain.EstadoEquipo, motivo *string) string {
 	if motivo != nil && *motivo != "" {
 		return *motivo
 	}
 	return fmt.Sprintf("la PC %d pasó a %s", pc.Identificador, nuevo)
 }
 
-func (s *Service) ListarPCsPorCarro(ctx context.Context, carroID string) ([]*domain.PC, error) {
-	return s.repo.ListarPCsPorCarro(ctx, carroID)
+func (s *Service) ListarEquiposPorCarro(ctx context.Context, carroID string) ([]*domain.Equipo, error) {
+	return s.repo.ListarEquiposPorCarro(ctx, carroID)
 }
 
 // ── Equipos que no están en ningún carro (RF-03.15) ─────────────────────
@@ -292,25 +292,25 @@ func (s *Service) ListarPCsPorCarro(ctx context.Context, carroID string) ([]*dom
 // Se guarda en la misma entidad que las PCs a propósito (ver la migración
 // 015): con eso queda prestable, reclamable y —si `reservable` es true—
 // reservable, sin una línea nueva en ninguno de esos flujos.
-func (s *Service) CrearEquipo(ctx context.Context, tipo, nombre string, reservable bool) (*domain.PC, error) {
-	equipo, err := domain.NuevoEquipo(s.nuevoID(), tipo, nombre, reservable, s.ahora())
+func (s *Service) CrearEquipo(ctx context.Context, tipo, nombre string, reservable bool) (*domain.Equipo, error) {
+	equipo, err := domain.NuevoEquipoSuelto(s.nuevoID(), tipo, nombre, reservable, s.ahora())
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.CrearPC(ctx, equipo); err != nil {
+	if err := s.repo.CrearEquipo(ctx, equipo); err != nil {
 		return nil, err
 	}
 	return equipo, nil
 }
 
-func (s *Service) ListarEquiposSueltos(ctx context.Context) ([]*domain.PC, error) {
+func (s *Service) ListarEquiposSueltos(ctx context.Context) ([]*domain.Equipo, error) {
 	return s.repo.ListarEquiposSueltos(ctx)
 }
 
 // ── Incidencia ──────────────────────────────────────────────────────────
 
-func (s *Service) CrearIncidencia(ctx context.Context, pcID, reportadoPor, descripcion string, gravedad domain.Gravedad) (*domain.Incidencia, error) {
-	i, err := domain.NuevaIncidencia(s.nuevoID(), pcID, reportadoPor, descripcion, gravedad, s.ahora())
+func (s *Service) CrearIncidencia(ctx context.Context, equipoID, reportadoPor, descripcion string, gravedad domain.Gravedad) (*domain.Incidencia, error) {
+	i, err := domain.NuevaIncidencia(s.nuevoID(), equipoID, reportadoPor, descripcion, gravedad, s.ahora())
 	if err != nil {
 		return nil, err
 	}
@@ -341,6 +341,6 @@ func (s *Service) EditarIncidencia(ctx context.Context, incidenciaID string, par
 	return s.repo.GuardarIncidencia(ctx, i)
 }
 
-func (s *Service) ListarIncidenciasPorPC(ctx context.Context, pcID string) ([]*domain.Incidencia, error) {
-	return s.repo.ListarIncidenciasPorPC(ctx, pcID)
+func (s *Service) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error) {
+	return s.repo.ListarIncidenciasPorEquipo(ctx, equipoID)
 }

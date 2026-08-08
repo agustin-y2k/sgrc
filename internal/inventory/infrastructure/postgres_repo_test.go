@@ -92,24 +92,24 @@ func TestPostgresRepo_CrearCarroYBuscarPorID_OK(t *testing.T) {
 	}
 }
 
-func TestPostgresRepo_CrearPC_OK(t *testing.T) {
+func TestPostgresRepo_CrearEquipo_OK(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc, err := domain.NuevaPC(NuevoID(), carro.ID, 27, "5CD1234ABC", true, time.Now().UTC().Truncate(time.Microsecond))
+	equipo, err := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 27, "5CD1234ABC", true, time.Now().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
-	pc.CPU = "i5"
-	pc.SoftwareInstalado = "AutoCAD 2026"
+	equipo.CPU = "i5"
+	equipo.SoftwareInstalado = "AutoCAD 2026"
 
-	if err := repo.CrearPC(ctx, pc); err != nil {
+	if err := repo.CrearEquipo(ctx, equipo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	encontrada, err := repo.BuscarPCPorID(ctx, pc.ID)
+	encontrada, err := repo.BuscarEquipoPorID(ctx, equipo.ID)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -124,13 +124,13 @@ func TestPostgresRepo_IdentificadorRepetidoEnMismoCarro_Error(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc1, _ := domain.NuevaPC(NuevoID(), carro.ID, 27, "SERIE-111", false, time.Now())
-	pc2, _ := domain.NuevaPC(NuevoID(), carro.ID, 27, "SERIE-222", false, time.Now()) // mismo identificador, mismo carro
+	pc1, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 27, "SERIE-111", false, time.Now())
+	pc2, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 27, "SERIE-222", false, time.Now()) // mismo identificador, mismo carro
 
-	if err := repo.CrearPC(ctx, pc1); err != nil {
+	if err := repo.CrearEquipo(ctx, pc1); err != nil {
 		t.Fatalf("la primera no debería fallar: %v", err)
 	}
-	err := repo.CrearPC(ctx, pc2)
+	err := repo.CrearEquipo(ctx, pc2)
 	if err != application.ErrIdentificadorDuplicado {
 		t.Fatalf("esperaba ErrIdentificadorDuplicado, obtuve %v", err)
 	}
@@ -145,13 +145,13 @@ func TestPostgresRepo_MismoIdentificadorOtroCarro_OK(t *testing.T) {
 
 	carro1 := crearCarroDeTest(t, repo, "Carro 1")
 	carro2 := crearCarroDeTest(t, repo, "Carro 2")
-	pc1, _ := domain.NuevaPC(NuevoID(), carro1.ID, 27, "SERIE-111", false, time.Now())
-	pc2, _ := domain.NuevaPC(NuevoID(), carro2.ID, 27, "SERIE-222", false, time.Now())
+	pc1, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro1.ID, 27, "SERIE-111", false, time.Now())
+	pc2, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro2.ID, 27, "SERIE-222", false, time.Now())
 
-	if err := repo.CrearPC(ctx, pc1); err != nil {
+	if err := repo.CrearEquipo(ctx, pc1); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if err := repo.CrearPC(ctx, pc2); err != nil {
+	if err := repo.CrearEquipo(ctx, pc2); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 }
@@ -163,37 +163,37 @@ func TestPostgresRepo_NumeroSerieDuplicado_Error(t *testing.T) {
 
 	carro1 := crearCarroDeTest(t, repo, "Carro 1")
 	carro2 := crearCarroDeTest(t, repo, "Carro 2")
-	pc1, _ := domain.NuevaPC(NuevoID(), carro1.ID, 1, "SERIE-999888777", false, time.Now())
-	pc2, _ := domain.NuevaPC(NuevoID(), carro2.ID, 1, "SERIE-999888777", false, time.Now()) // mismo numero_serie, distinto carro
+	pc1, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro1.ID, 1, "SERIE-999888777", false, time.Now())
+	pc2, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro2.ID, 1, "SERIE-999888777", false, time.Now()) // mismo numero_serie, distinto carro
 
-	if err := repo.CrearPC(ctx, pc1); err != nil {
+	if err := repo.CrearEquipo(ctx, pc1); err != nil {
 		t.Fatalf("la primera no debería fallar: %v", err)
 	}
-	err := repo.CrearPC(ctx, pc2)
+	err := repo.CrearEquipo(ctx, pc2)
 	if err == nil {
 		t.Fatal("esperaba un error por número de serie duplicado (constraint global)")
 	}
 }
 
-func TestPostgresRepo_GuardarPC_ActualizaEstado(t *testing.T) {
+func TestPostgresRepo_GuardarEquipo_ActualizaEstado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, "SERIE-UNICA", false, time.Now())
-	if err := repo.CrearPC(ctx, pc); err != nil {
+	equipo, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 1, "SERIE-UNICA", false, time.Now())
+	if err := repo.CrearEquipo(ctx, equipo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	if err := pc.CambiarEstado(domain.EstadoEnMantenimiento); err != nil {
+	if err := equipo.CambiarEstado(domain.EstadoEnMantenimiento); err != nil {
 		t.Fatalf("transición de dominio inválida: %v", err)
 	}
-	if err := repo.GuardarPC(ctx, pc); err != nil {
+	if err := repo.GuardarEquipo(ctx, equipo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	recargada, err := repo.BuscarPCPorID(ctx, pc.ID)
+	recargada, err := repo.BuscarEquipoPorID(ctx, equipo.ID)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -202,23 +202,23 @@ func TestPostgresRepo_GuardarPC_ActualizaEstado(t *testing.T) {
 	}
 }
 
-func TestPostgresRepo_ListarPCsPorCarro(t *testing.T) {
+func TestPostgresRepo_ListarEquiposPorCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc1, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, "SERIE-111", false, time.Now())
-	pc2, _ := domain.NuevaPC(NuevoID(), carro.ID, 2, "SERIE-222", false, time.Now())
-	repo.CrearPC(ctx, pc1)
-	repo.CrearPC(ctx, pc2)
+	pc1, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 1, "SERIE-111", false, time.Now())
+	pc2, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 2, "SERIE-222", false, time.Now())
+	repo.CrearEquipo(ctx, pc1)
+	repo.CrearEquipo(ctx, pc2)
 
-	pcs, err := repo.ListarPCsPorCarro(ctx, carro.ID)
+	equipos, err := repo.ListarEquiposPorCarro(ctx, carro.ID)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if len(pcs) != 2 {
-		t.Fatalf("esperaba 2 PCs, obtuve %d", len(pcs))
+	if len(equipos) != 2 {
+		t.Fatalf("esperaba 2 PCs, obtuve %d", len(equipos))
 	}
 }
 
@@ -228,12 +228,12 @@ func TestPostgresRepo_Incidencia_CrearYListar(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, "SERIE-UNICA", false, time.Now())
-	if err := repo.CrearPC(ctx, pc); err != nil {
+	equipo, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 1, "SERIE-UNICA", false, time.Now())
+	if err := repo.CrearEquipo(ctx, equipo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	inc, err := domain.NuevaIncidencia(NuevoID(), pc.ID, "", "No enciende", domain.GravedadGrave, time.Now().UTC().Truncate(time.Microsecond))
+	inc, err := domain.NuevaIncidencia(NuevoID(), equipo.ID, "", "No enciende", domain.GravedadGrave, time.Now().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestPostgresRepo_Incidencia_CrearYListar(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	incidencias, err := repo.ListarIncidenciasPorPC(ctx, pc.ID)
+	incidencias, err := repo.ListarIncidenciasPorEquipo(ctx, equipo.ID)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -256,10 +256,10 @@ func TestPostgresRepo_GuardarIncidencia_MarcarEnviadaDGE(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc, _ := domain.NuevaPC(NuevoID(), carro.ID, 1, "SERIE-UNICA", false, time.Now())
-	repo.CrearPC(ctx, pc)
+	equipo, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 1, "SERIE-UNICA", false, time.Now())
+	repo.CrearEquipo(ctx, equipo)
 
-	inc, _ := domain.NuevaIncidencia(NuevoID(), pc.ID, "", "Falla", domain.GravedadGrave, time.Now().UTC().Truncate(time.Microsecond))
+	inc, _ := domain.NuevaIncidencia(NuevoID(), equipo.ID, "", "Falla", domain.GravedadGrave, time.Now().UTC().Truncate(time.Microsecond))
 	if err := repo.CrearIncidencia(ctx, inc); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -290,13 +290,13 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 		fn     func() error
 	}{
 		{"BuscarCarroPorID", func() error { _, err := repo.BuscarCarroPorID(ctx, "CARRO_ID"); return err }},
-		{"BuscarPCPorID", func() error { _, err := repo.BuscarPCPorID(ctx, "PC_ID"); return err }},
+		{"BuscarEquipoPorID", func() error { _, err := repo.BuscarEquipoPorID(ctx, "PC_ID"); return err }},
 		{"BuscarIncidenciaPorID", func() error { _, err := repo.BuscarIncidenciaPorID(ctx, "INCIDENCIA_ID"); return err }},
-		{"ListarPCsPorCarro", func() error { _, err := repo.ListarPCsPorCarro(ctx, "CARRO_ID"); return err }},
-		{"ListarIncidenciasPorPC", func() error { _, err := repo.ListarIncidenciasPorPC(ctx, "PC_ID"); return err }},
+		{"ListarEquiposPorCarro", func() error { _, err := repo.ListarEquiposPorCarro(ctx, "CARRO_ID"); return err }},
+		{"ListarIncidenciasPorEquipo", func() error { _, err := repo.ListarIncidenciasPorEquipo(ctx, "PC_ID"); return err }},
 		{"CrearPC_CarroInvalido", func() error {
-			pc, _ := domain.NuevaPC(NuevoID(), "CARRO_ID", 1, "SERIE-UNICA", false, time.Now())
-			return repo.CrearPC(ctx, pc)
+			equipo, _ := domain.NuevoEquipoDeCarro(NuevoID(), "CARRO_ID", 1, "SERIE-UNICA", false, time.Now())
+			return repo.CrearEquipo(ctx, equipo)
 		}},
 	}
 
@@ -310,13 +310,13 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 
 // ── Equipos sueltos (015) ───────────────────────────────────────────────
 
-func crearEquipoDeTest(t *testing.T, repo *PostgresRepo, tipo, nombre string, reservable bool) *domain.PC {
+func crearEquipoSueltoDeTest(t *testing.T, repo *PostgresRepo, tipo, nombre string, reservable bool) *domain.Equipo {
 	t.Helper()
-	eq, err := domain.NuevoEquipo(NuevoID(), tipo, nombre, reservable, time.Now().UTC().Truncate(time.Microsecond))
+	eq, err := domain.NuevoEquipoSuelto(NuevoID(), tipo, nombre, reservable, time.Now().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
-	if err := repo.CrearPC(context.Background(), eq); err != nil {
+	if err := repo.CrearEquipo(context.Background(), eq); err != nil {
 		t.Fatalf("no se pudo crear el equipo de prueba: %v", err)
 	}
 	return eq
@@ -331,9 +331,9 @@ func TestPostgresRepo_EquipoSuelto_GuardarYRecuperar(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	eq := crearEquipoDeTest(t, repo, "PROYECTOR", "Proyector Epson", true)
+	eq := crearEquipoSueltoDeTest(t, repo, "PROYECTOR", "Proyector Epson", true)
 
-	vuelto, err := repo.BuscarPCPorID(ctx, eq.ID)
+	vuelto, err := repo.BuscarEquipoPorID(ctx, eq.ID)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -351,15 +351,15 @@ func TestPostgresRepo_EquipoSuelto_GuardarYRecuperar(t *testing.T) {
 
 // Una PC de carro tiene que seguir volviendo igual que siempre: las columnas
 // nuevas no pueden ensuciarla ni el escaneo por punteros perder nada.
-func TestPostgresRepo_PCDeCarro_SigueSiendoPC(t *testing.T) {
+func TestPostgresRepo_EquipoDeCarro_SigueSiendoEquipo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc := crearPCDeTest(t, repo, carro.ID, 3, "SERIE-EQ-1")
+	equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, 3, "SERIE-EQ-1")
 
-	vuelto, err := repo.BuscarPCPorID(ctx, pc.ID)
+	vuelto, err := repo.BuscarEquipoPorID(ctx, equipo.ID)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -380,10 +380,10 @@ func TestPostgresRepo_EquipoSuelto_NombreDuplicado(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	crearEquipoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
+	crearEquipoSueltoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
 
-	otro, _ := domain.NuevoEquipo(NuevoID(), "CARGADOR", "CARGADOR 1", false, time.Now().UTC())
-	err := repo.CrearPC(ctx, otro)
+	otro, _ := domain.NuevoEquipoSuelto(NuevoID(), "CARGADOR", "CARGADOR 1", false, time.Now().UTC())
+	err := repo.CrearEquipo(ctx, otro)
 
 	if !errors.Is(err, application.ErrNombreDeEquipoDuplicado) {
 		t.Fatalf("esperaba ErrNombreDeEquipoDuplicado, obtuve %v", err)
@@ -398,16 +398,16 @@ func TestPostgresRepo_EquipoSuelto_NombreSeReusaTrasLaBaja(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	viejo := crearEquipoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
+	viejo := crearEquipoSueltoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
 	if err := viejo.DarDeBaja(time.Now().UTC()); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if err := repo.GuardarPC(ctx, viejo); err != nil {
+	if err := repo.GuardarEquipo(ctx, viejo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	nuevo, _ := domain.NuevoEquipo(NuevoID(), "CARGADOR", "Cargador 1", false, time.Now().UTC())
-	if err := repo.CrearPC(ctx, nuevo); err != nil {
+	nuevo, _ := domain.NuevoEquipoSuelto(NuevoID(), "CARGADOR", "Cargador 1", false, time.Now().UTC())
+	if err := repo.CrearEquipo(ctx, nuevo); err != nil {
 		t.Fatalf("el nombre de un equipo dado de baja debería poder reusarse: %v", err)
 	}
 }
@@ -421,9 +421,9 @@ func TestPostgresRepo_ListarEquiposSueltos_NoTraeLasDeCarro(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	crearPCDeTest(t, repo, carro.ID, 3, "SERIE-EQ-2")
-	crearEquipoDeTest(t, repo, "PROYECTOR", "Proyector Epson", true)
-	crearEquipoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
+	crearEquipoDeCarroDeTest(t, repo, carro.ID, 3, "SERIE-EQ-2")
+	crearEquipoSueltoDeTest(t, repo, "PROYECTOR", "Proyector Epson", true)
+	crearEquipoSueltoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
 
 	sueltos, err := repo.ListarEquiposSueltos(ctx)
 	if err != nil {

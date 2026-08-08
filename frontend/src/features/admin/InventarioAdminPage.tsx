@@ -14,49 +14,49 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import * as adminApi from "@/features/admin/api"
-import { AltaDePC, EdicionDePC } from "@/features/admin/FormularioPC"
-import { IncidenciasDePC } from "@/features/admin/IncidenciasDePC"
-import { LicenciasDePC } from "@/features/admin/LicenciasDePC"
+import { AltaDeEquipo, EdicionDeEquipo } from "@/features/admin/FormularioEquipo"
+import { IncidenciasDeEquipo } from "@/features/admin/IncidenciasDeEquipo"
+import { LicenciasDeEquipo } from "@/features/admin/LicenciasDeEquipo"
 import { OtrosEquipos } from "@/features/admin/OtrosEquipos"
-import { PrestamosDePC } from "@/features/admin/PrestamosDePC"
+import { PrestamosDeEquipo } from "@/features/admin/PrestamosDeEquipo"
 import * as inventoryApi from "@/features/inventory/api"
-import type { Carro, EstadoPC, PC } from "@/features/inventory/types"
+import type { Carro, EstadoEquipo, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 
 const CARROS_KEY = ["carros"]
 
-const ETIQUETA_ESTADO: Record<EstadoPC, string> = {
+const ETIQUETA_ESTADO: Record<EstadoEquipo, string> = {
   DISPONIBLE: "Disponible",
   EN_MANTENIMIENTO: "En mantenimiento",
   FUERA_DE_SERVICIO: "Fuera de servicio",
 }
 
 type CambioEstado = {
-  pc: PC
-  nuevoEstado: EstadoPC
+  equipo: Equipo
+  nuevoEstado: EstadoEquipo
   motivo: string
 }
 
-function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
+function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
   const queryClient = useQueryClient()
   const [cambiando, setCambiando] = useState<CambioEstado | null>(null)
-  const [dandoDeBaja, setDandoDeBaja] = useState<PC | null>(null)
+  const [dandoDeBaja, setDandoDeBaja] = useState<Equipo | null>(null)
   const [editando, setEditando] = useState<string | null>(null)
   const [viendoIncidencias, setViendoIncidencias] = useState<string | null>(null)
   const [viendoLicencias, setViendoLicencias] = useState<string | null>(null)
   const [viendoEntregas, setViendoEntregas] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ["pcs", carroId],
-    queryFn: () => inventoryApi.listarPCsDeCarro(carroId),
+    queryKey: ["equipos", carroId],
+    queryFn: () => inventoryApi.listarEquiposDeCarro(carroId),
   })
 
-  const invalidar = () => queryClient.invalidateQueries({ queryKey: ["pcs", carroId] })
+  const invalidar = () => queryClient.invalidateQueries({ queryKey: ["equipos", carroId] })
 
   const cambiarEstado = useMutation({
-    mutationFn: ({ pc, nuevoEstado, motivo }: CambioEstado) =>
-      adminApi.cambiarEstadoPC(pc.id, nuevoEstado, motivo.trim() || undefined),
+    mutationFn: ({ equipo, nuevoEstado, motivo }: CambioEstado) =>
+      adminApi.cambiarEstadoEquipo(equipo.id, nuevoEstado, motivo.trim() || undefined),
     onSuccess: async () => {
       setCambiando(null)
       await invalidar()
@@ -64,16 +64,16 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
   })
 
   const darDeBaja = useMutation({
-    mutationFn: (pc: PC) => adminApi.darDeBajaPC(pc.id),
+    mutationFn: (equipo: Equipo) => adminApi.darDeBajaEquipo(equipo.id),
     onSuccess: async () => {
       setDandoDeBaja(null)
       await invalidar()
     },
   })
 
-  if (isLoading) return <p className="text-muted-foreground text-sm">Cargando PCs…</p>
+  if (isLoading) return <p className="text-muted-foreground text-sm">Cargando equipos…</p>
 
-  const pcs = (data?.data ?? []).filter((pc) => !pc.dadaDeBaja)
+  const equipos = (data?.data ?? []).filter((equipo) => !equipo.dadaDeBaja)
   const error = cambiarEstado.error ?? darDeBaja.error
 
   return (
@@ -84,23 +84,23 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
         </Alert>
       )}
 
-      {pcs.length === 0 && (
+      {equipos.length === 0 && (
         <p className="text-muted-foreground text-sm">
-          Este carro no tiene PCs activas. Agregá la primera con el formulario de abajo:
-          sin PCs cargadas nadie puede reservar.
+          Este carro no tiene equipos activas. Agregá la primera con el formulario de abajo:
+          sin equipos cargadas nadie puede reservar.
         </p>
       )}
 
-      {pcs.map((pc) => {
-        const cambiandoEsta = cambiando?.pc.id === pc.id
-        const bajandoEsta = dandoDeBaja?.id === pc.id
-        const editandoEsta = editando === pc.id
-        const incidenciasAbiertas = viendoIncidencias === pc.id
-        const licenciasAbiertas = viendoLicencias === pc.id
-        const entregasAbiertas = viendoEntregas === pc.id
+      {equipos.map((equipo) => {
+        const cambiandoEsta = cambiando?.equipo.id === equipo.id
+        const bajandoEsta = dandoDeBaja?.id === equipo.id
+        const editandoEsta = editando === equipo.id
+        const incidenciasAbiertas = viendoIncidencias === equipo.id
+        const licenciasAbiertas = viendoLicencias === equipo.id
+        const entregasAbiertas = viendoEntregas === equipo.id
 
         return (
-          <div key={pc.id} className="grid gap-2 rounded-md border p-3">
+          <div key={equipo.id} className="grid gap-2 rounded-md border p-3">
             {/* Misma razón que en la cabecera del carro: identificador y
                 número de serie arriba, la fila de botones abajo. Acá son
                 cinco, así que en un teléfono se envuelven igual — pero
@@ -109,33 +109,33 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <p className="font-medium">
-                  PC {pc.identificador}{" "}
+                  {equipo.etiqueta}{" "}
                   <Badge
-                    variant={pc.estado === "DISPONIBLE" ? "secondary" : "destructive"}
+                    variant={equipo.estado === "DISPONIBLE" ? "secondary" : "destructive"}
                   >
-                    {ETIQUETA_ESTADO[pc.estado]}
+                    {ETIQUETA_ESTADO[equipo.estado]}
                   </Badge>
                 </p>
                 <p className="text-muted-foreground text-sm break-words">
-                  N° serie {pc.numeroSerie}
-                  {pc.softwareInstalado && ` · ${pc.softwareInstalado}`}
+                  N° serie {equipo.numeroSerie}
+                  {equipo.softwareInstalado && ` · ${equipo.softwareInstalado}`}
                 </p>
               </div>
               {!cambiandoEsta && !bajandoEsta && !editandoEsta && (
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  {(["DISPONIBLE", "EN_MANTENIMIENTO", "FUERA_DE_SERVICIO"] as EstadoPC[])
-                    .filter((e) => e !== pc.estado)
+                  {(["DISPONIBLE", "EN_MANTENIMIENTO", "FUERA_DE_SERVICIO"] as EstadoEquipo[])
+                    .filter((e) => e !== equipo.estado)
                     .map((e) => (
                       <Button
                         key={e}
                         variant="outline"
                         size="sm"
-                        onClick={() => setCambiando({ pc, nuevoEstado: e, motivo: "" })}
+                        onClick={() => setCambiando({ equipo, nuevoEstado: e, motivo: "" })}
                       >
                         → {ETIQUETA_ESTADO[e]}
                       </Button>
                     ))}
-                  <Button variant="outline" size="sm" onClick={() => setEditando(pc.id)}>
+                  <Button variant="outline" size="sm" onClick={() => setEditando(equipo.id)}>
                     Editar
                   </Button>
                   <Button
@@ -143,7 +143,7 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
                     size="sm"
                     aria-expanded={incidenciasAbiertas}
                     onClick={() =>
-                      setViendoIncidencias(incidenciasAbiertas ? null : pc.id)
+                      setViendoIncidencias(incidenciasAbiertas ? null : equipo.id)
                     }
                   >
                     Incidencias
@@ -152,7 +152,7 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
                     variant="outline"
                     size="sm"
                     aria-expanded={licenciasAbiertas}
-                    onClick={() => setViendoLicencias(licenciasAbiertas ? null : pc.id)}
+                    onClick={() => setViendoLicencias(licenciasAbiertas ? null : equipo.id)}
                   >
                     Licencias
                   </Button>
@@ -160,14 +160,14 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
                     variant="outline"
                     size="sm"
                     aria-expanded={entregasAbiertas}
-                    onClick={() => setViendoEntregas(entregasAbiertas ? null : pc.id)}
+                    onClick={() => setViendoEntregas(entregasAbiertas ? null : equipo.id)}
                   >
                     Entregas
                   </Button>
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => setDandoDeBaja(pc)}
+                    onClick={() => setDandoDeBaja(equipo)}
                   >
                     Dar de baja
                   </Button>
@@ -175,28 +175,28 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
               )}
             </div>
 
-            {/* RF-03.8: sacar una PC de DISPONIBLE cancela sus reservas
+            {/* RF-03.8: sacar un equipo de DISPONIBLE cancela sus reservas
                 futuras, y RF-03.8 aclara que al volver a DISPONIBLE NO se
                 restauran. Por eso se avisa antes, no después. */}
             {cambiandoEsta && cambiando && (
               <div className="grid gap-2 rounded-md border p-3">
                 {cambiando.nuevoEstado !== "DISPONIBLE" ? (
                   <p className="text-destructive text-sm">
-                    Pasar la PC {pc.identificador} a{" "}
+                    Pasar el equipo {equipo.identificador} a{" "}
                     {ETIQUETA_ESTADO[cambiando.nuevoEstado].toLowerCase()} cancela todas
                     sus reservas futuras y avisa a cada docente. Si más adelante vuelve a
                     estar disponible, esas reservas no se restauran solas.
                   </p>
                 ) : (
                   <p className="text-muted-foreground text-sm">
-                    La PC vuelve a estar disponible para reservar. Las reservas que se
+                    El equipo vuelve a estar disponible para reservar. Las reservas que se
                     cancelaron mientras no lo estaba no se recuperan.
                   </p>
                 )}
                 <div className="grid gap-1.5">
-                  <Label htmlFor={`motivo-${pc.id}`}>Motivo (opcional)</Label>
+                  <Label htmlFor={`motivo-${equipo.id}`}>Motivo (opcional)</Label>
                   <Input
-                    id={`motivo-${pc.id}`}
+                    id={`motivo-${equipo.id}`}
                     value={cambiando.motivo}
                     onChange={(e) =>
                       setCambiando({ ...cambiando, motivo: e.target.value })
@@ -221,19 +221,19 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
             )}
 
             {editandoEsta && (
-              <EdicionDePC pc={pc} carros={carros} onListo={() => setEditando(null)} />
+              <EdicionDeEquipo equipo={equipo} carros={carros} onListo={() => setEditando(null)} />
             )}
 
-            {incidenciasAbiertas && <IncidenciasDePC pcId={pc.id} />}
+            {incidenciasAbiertas && <IncidenciasDeEquipo equipoId={equipo.id} />}
 
-            {licenciasAbiertas && <LicenciasDePC pcId={pc.id} />}
+            {licenciasAbiertas && <LicenciasDeEquipo equipoId={equipo.id} />}
 
-            {entregasAbiertas && <PrestamosDePC pcId={pc.id} />}
+            {entregasAbiertas && <PrestamosDeEquipo equipoId={equipo.id} />}
 
             {bajandoEsta && (
               <div className="grid gap-2 rounded-md border p-3">
                 <p className="text-destructive text-sm">
-                  Dar de baja la PC {pc.identificador} la saca del inventario y cancela
+                  Dar de baja el equipo {equipo.identificador} la saca del inventario y cancela
                   sus reservas futuras. Su historial de incidencias se conserva.
                 </p>
                 <div className="flex gap-2">
@@ -241,7 +241,7 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
                     size="sm"
                     variant="destructive"
                     disabled={darDeBaja.isPending}
-                    onClick={() => darDeBaja.mutate(pc)}
+                    onClick={() => darDeBaja.mutate(equipo)}
                   >
                     Confirmar baja
                   </Button>
@@ -259,10 +259,10 @@ function PCsAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
         )
       })}
 
-      {/* Mientras se edita una PC no se muestra: los dos formularios tienen
+      {/* Mientras se edita un equipo no se muestra: los dos formularios tienen
           los mismos campos, y verlos juntos no deja saber cuál se está
           completando. */}
-      {editando === null && <AltaDePC carroId={carroId} />}
+      {editando === null && <AltaDeEquipo carroId={carroId} />}
     </div>
   )
 }
@@ -330,8 +330,8 @@ function EdicionDeCarro({ carro, onListo }: { carro: Carro; onListo: () => void 
   )
 }
 
-// RF-03: carros, PCs e incidencias. Es la pantalla desde la que se arma el
-// inventario de cero — sin PCs cargadas acá, nadie puede reservar nada.
+// RF-03: carros, equipos e incidencias. Es la pantalla desde la que se arma el
+// inventario de cero — sin equipos cargadas acá, nadie puede reservar nada.
 export function InventarioAdminPage() {
   const queryClient = useQueryClient()
   const [carroAbierto, setCarroAbierto] = useState<string | null>(null)
@@ -363,7 +363,7 @@ export function InventarioAdminPage() {
     <div className="mx-auto max-w-4xl">
       <EncabezadoDePagina
         titulo="Gestión del inventario"
-        descripcion="Alta y edición de carros y PCs, y seguimiento de las incidencias reportadas."
+        descripcion="Alta y edición de carros y equipos, y seguimiento de las incidencias reportadas."
       />
 
       {(error || crearCarro.error) && (
@@ -455,7 +455,7 @@ export function InventarioAdminPage() {
                         aria-expanded={abierto}
                         onClick={() => setCarroAbierto(abierto ? null : carro.id)}
                       >
-                        {abierto ? "Ocultar PCs" : "Gestionar PCs"}
+                        {abierto ? "Ocultar equipos" : "Gestionar equipos"}
                       </Button>
                     </span>
                   )}
@@ -469,7 +469,7 @@ export function InventarioAdminPage() {
               </CardHeader>
               {abierto && (
                 <CardContent>
-                  <PCsAdmin carroId={carro.id} carros={carros} />
+                  <EquiposAdmin carroId={carro.id} carros={carros} />
                 </CardContent>
               )}
             </Card>

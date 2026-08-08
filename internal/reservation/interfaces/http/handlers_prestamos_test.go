@@ -35,7 +35,7 @@ func TestHTTP_EntregarSuelta(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", entregarSueltaRequest{
-		PCIDs: []string{"pc1"}, Nombre: "Marta (secretaría)", Motivo: "trámite",
+		EquipoIDs: []string{"pc1"}, Nombre: "Marta (secretaría)", Motivo: "trámite",
 	}, "ADMIN")
 
 	if codigo != fiber.StatusCreated {
@@ -62,7 +62,7 @@ func TestHTTP_EntregarSuelta_SinNombre(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	codigo, _ := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", entregarSueltaRequest{
-		PCIDs: []string{"pc1"}, Nombre: "   ",
+		EquipoIDs: []string{"pc1"}, Nombre: "   ",
 	}, "ADMIN")
 
 	if codigo != fiber.StatusBadRequest {
@@ -73,10 +73,10 @@ func TestHTTP_EntregarSuelta_SinNombre(t *testing.T) {
 // TestHTTP_EntregarSuelta_PCYaAfuera: 201 con el detalle en el cuerpo, no
 // 409. El lote se procesó; un conflicto obligaría a la pantalla a deshacer
 // las máquinas que sí se entregaron.
-func TestHTTP_EntregarSuelta_PCYaAfuera(t *testing.T) {
+func TestHTTP_EntregarSuelta_EquipoYaAfuera(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
-	req := entregarSueltaRequest{PCIDs: []string{"pc1"}, Nombre: "Ada"}
+	req := entregarSueltaRequest{EquipoIDs: []string{"pc1"}, Nombre: "Ada"}
 
 	if codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", req, "ADMIN"); codigo != fiber.StatusCreated {
 		t.Fatalf("la primera: esperaba 201, obtuve %d: %s", codigo, cuerpo)
@@ -141,7 +141,7 @@ func TestHTTP_RecibirYListarLoQueEstaAfuera(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	_, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", entregarSueltaRequest{
-		PCIDs: []string{"pc1", "pc2"}, Nombre: "Ada",
+		EquipoIDs: []string{"pc1", "pc2"}, Nombre: "Ada",
 	}, "ADMIN")
 	var entrega resultadoEntregaResponse
 	if err := json.Unmarshal(cuerpo, &entrega); err != nil {
@@ -163,7 +163,7 @@ func TestHTTP_RecibirYListarLoQueEstaAfuera(t *testing.T) {
 	}
 	// La ubicación viaja en el listado: un renglón que dice "entregada a
 	// Ada" sin decir qué computadora no sirve para nada.
-	if listado.Data[0].PCIdentificador == 0 || listado.Data[0].CarroNombre == "" {
+	if listado.Data[0].Identificador == 0 || listado.Data[0].CarroNombre == "" {
 		t.Errorf("falta la ubicación: %+v", listado.Data[0])
 	}
 
@@ -198,7 +198,7 @@ func TestHTTP_Recibir_DosVecesSeInforma(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
 	_, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", entregarSueltaRequest{
-		PCIDs: []string{"pc1"}, Nombre: "Ada",
+		EquipoIDs: []string{"pc1"}, Nombre: "Ada",
 	}, "ADMIN")
 	var entrega resultadoEntregaResponse
 	if err := json.Unmarshal(cuerpo, &entrega); err != nil {
@@ -245,7 +245,7 @@ func TestHTTP_Prestamos_SoloAdmin(t *testing.T) {
 		{"POST", "/api/reservation/prestamos"},
 		{"POST", "/api/reservation/prestamos/por-reserva"},
 		{"POST", "/api/reservation/prestamos/recibir"},
-		{"GET", "/api/reservation/pcs/pc1/prestamos"},
+		{"GET", "/api/reservation/equipos/pc1/prestamos"},
 	}
 
 	for _, r := range rutas {
@@ -299,10 +299,10 @@ func TestHTTP_EntregarPorReserva_BloqueoSinDocente(t *testing.T) {
 
 // ── Cambiar una PC de una reserva (RF-08.14) ────────────────────────────
 
-func reservaEnRepo(t *testing.T, repo *fakeRepo, id, pcID, creadoPor string) {
+func reservaEnRepo(t *testing.T, repo *fakeRepo, id, equipoID, creadoPor string) {
 	t.Helper()
 	docente := "Ada Lovelace"
-	r, err := domain.NuevaReservaNormal(id, "grupo1", pcID, "materia1", docente, &creadoPor,
+	r, err := domain.NuevaReservaNormal(id, "grupo1", equipoID, "materia1", docente, &creadoPor,
 		time.Date(2026, 3, 3, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour,
 		time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC))
 	if err != nil {
@@ -311,46 +311,46 @@ func reservaEnRepo(t *testing.T, repo *fakeRepo, id, pcID, creadoPor string) {
 	repo.reservas[id] = r
 }
 
-func TestHTTP_CambiarPCDeReserva(t *testing.T) {
+func TestHTTP_CambiarEquipoDeReserva(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaEnRepo(t, repo, "res1", "pc1", "admin1")
 	app := nuevaAppDeTest(repo)
 
-	codigo, cuerpo := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/pc",
-		cambiarPCRequest{PCID: "pc9"}, "ADMIN")
+	codigo, cuerpo := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/equipo",
+		cambiarEquipoRequest{EquipoID: "pc9"}, "ADMIN")
 
 	if codigo != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
 	}
 	// La misma reserva, otra máquina: no se creó un grupo nuevo.
-	if repo.reservas["res1"].PCID != "pc9" {
-		t.Errorf("la PC quedó en %q", repo.reservas["res1"].PCID)
+	if repo.reservas["res1"].EquipoID != "pc9" {
+		t.Errorf("la PC quedó en %q", repo.reservas["res1"].EquipoID)
 	}
 	if repo.reservas["res1"].ReservaGrupoID == nil || *repo.reservas["res1"].ReservaGrupoID != "grupo1" {
 		t.Error("la clase no puede quedar partida en dos grupos")
 	}
 }
 
-func TestHTTP_CambiarPCDeReserva_Ajena(t *testing.T) {
+func TestHTTP_CambiarEquipoDeReserva_Ajena(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaEnRepo(t, repo, "res1", "pc1", "otro-docente")
 	app := nuevaAppDeTest(repo)
 
-	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/pc",
-		cambiarPCRequest{PCID: "pc9"}, "DOCENTE")
+	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/equipo",
+		cambiarEquipoRequest{EquipoID: "pc9"}, "DOCENTE")
 
 	if codigo != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d", codigo)
 	}
 }
 
-func TestHTTP_CambiarPCDeReserva_SinPC(t *testing.T) {
+func TestHTTP_CambiarEquipoDeReserva_SinEquipo(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaEnRepo(t, repo, "res1", "pc1", "admin1")
 	app := nuevaAppDeTest(repo)
 
-	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/pc",
-		cambiarPCRequest{PCID: "  "}, "ADMIN")
+	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/equipo",
+		cambiarEquipoRequest{EquipoID: "  "}, "ADMIN")
 
 	if codigo != fiber.StatusBadRequest {
 		t.Fatalf("esperaba 400, obtuve %d", codigo)
@@ -359,7 +359,7 @@ func TestHTTP_CambiarPCDeReserva_SinPC(t *testing.T) {
 
 // Una reserva liberada por no retiro ya no reserva nada: cambiarle la
 // máquina no significaría nada.
-func TestHTTP_CambiarPCDeReserva_YaLiberada(t *testing.T) {
+func TestHTTP_CambiarEquipoDeReserva_YaLiberada(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaEnRepo(t, repo, "res1", "pc1", "admin1")
 	if err := repo.reservas["res1"].Liberar(); err != nil {
@@ -367,8 +367,8 @@ func TestHTTP_CambiarPCDeReserva_YaLiberada(t *testing.T) {
 	}
 	app := nuevaAppDeTest(repo)
 
-	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/pc",
-		cambiarPCRequest{PCID: "pc9"}, "ADMIN")
+	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/equipo",
+		cambiarEquipoRequest{EquipoID: "pc9"}, "ADMIN")
 
 	if codigo != fiber.StatusConflict {
 		t.Fatalf("esperaba 409, obtuve %d", codigo)

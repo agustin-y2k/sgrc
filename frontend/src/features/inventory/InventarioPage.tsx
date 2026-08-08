@@ -23,30 +23,30 @@ import {
 } from "@/components/ui/table"
 import * as inventoryApi from "@/features/inventory/api"
 import { ReportarIncidencia } from "@/features/inventory/ReportarIncidencia"
-import type { EstadoPC, PC } from "@/features/inventory/types"
+import type { EstadoEquipo, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
-const ETIQUETA_ESTADO: Record<EstadoPC, string> = {
+const ETIQUETA_ESTADO: Record<EstadoEquipo, string> = {
   DISPONIBLE: "Disponible",
   EN_MANTENIMIENTO: "En mantenimiento",
   FUERA_DE_SERVICIO: "Fuera de servicio",
 }
 
-function EstadoDePC({ estado }: { estado: EstadoPC }) {
+function EstadoDeEquipo({ estado }: { estado: EstadoEquipo }) {
   return <EstadoBadge tono={TONO_PC[estado]}>{ETIQUETA_ESTADO[estado]}</EstadoBadge>
 }
 
-function PCsDelCarro({ carroId }: { carroId: string }) {
+function EquiposDelCarro({ carroId }: { carroId: string }) {
   // RF-03.5: cualquier usuario autenticado puede reportar una falla, y esta
-  // es la pantalla donde un docente ya está mirando las PCs.
-  const [reportando, setReportando] = useState<PC | null>(null)
+  // es la pantalla donde un docente ya está mirando los equipos.
+  const [reportando, setReportando] = useState<Equipo | null>(null)
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["pcs", carroId],
-    queryFn: () => inventoryApi.listarPCsDeCarro(carroId),
+    queryKey: ["equipos", carroId],
+    queryFn: () => inventoryApi.listarEquiposDeCarro(carroId),
   })
 
-  if (isLoading) return <p className="text-muted-foreground text-sm">Cargando PCs…</p>
+  if (isLoading) return <p className="text-muted-foreground text-sm">Cargando equipos…</p>
   if (error) {
     return (
       <Alert variant="destructive">
@@ -55,10 +55,10 @@ function PCsDelCarro({ carroId }: { carroId: string }) {
     )
   }
 
-  const pcs = (data?.data ?? []).filter((pc) => !pc.dadaDeBaja)
-  if (pcs.length === 0) {
+  const equipos = (data?.data ?? []).filter((equipo) => !equipo.dadaDeBaja)
+  if (equipos.length === 0) {
     return (
-      <p className="text-muted-foreground text-sm">Este carro no tiene PCs activas.</p>
+      <p className="text-muted-foreground text-sm">Este carro no tiene equipos activas.</p>
     )
   }
 
@@ -69,7 +69,7 @@ function PCsDelCarro({ carroId }: { carroId: string }) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>PC</TableHead>
+            <TableHead>Equipo</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead>Freezada</TableHead>
             {/* RF-03.7: el software instalado es justamente el dato por el
@@ -79,22 +79,22 @@ function PCsDelCarro({ carroId }: { carroId: string }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {pcs.map((pc) => (
-            <TableRow key={pc.id}>
-              <TableCell className="font-medium">PC {pc.identificador}</TableCell>
+          {equipos.map((equipo) => (
+            <TableRow key={equipo.id}>
+              <TableCell className="font-medium">{equipo.etiqueta}</TableCell>
               <TableCell>
-                <EstadoDePC estado={pc.estado} />
+                <EstadoDeEquipo estado={equipo.estado} />
               </TableCell>
-              <TableCell>{pc.freezado ? "Sí" : "No"}</TableCell>
+              <TableCell>{equipo.freezado ? "Sí" : "No"}</TableCell>
               <TableCell className="text-muted-foreground max-w-xs text-sm">
-                {pc.softwareInstalado || "—"}
+                {equipo.softwareInstalado || "—"}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button asChild variant="outline" size="sm">
-                    <Link to={`/inventario/pcs/${pc.id}/calendario`}>Ver calendario</Link>
+                    <Link to={`/inventario/equipos/${equipo.id}/calendario`}>Ver calendario</Link>
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setReportando(pc)}>
+                  <Button variant="outline" size="sm" onClick={() => setReportando(equipo)}>
                     Reportar problema
                   </Button>
                 </div>
@@ -106,10 +106,10 @@ function PCsDelCarro({ carroId }: { carroId: string }) {
 
       {/* Fuera de la tabla a propósito: un formulario dentro de una celda
           queda ilegible en pantallas angostas, que es justo desde donde un
-          docente reporta una PC que no anda. */}
+          docente reporta un equipo que no anda. */}
       {reportando && (
         <div className="mt-3">
-          <ReportarIncidencia pc={reportando} onListo={() => setReportando(null)} />
+          <ReportarIncidencia equipo={reportando} onListo={() => setReportando(null)} />
         </div>
       )}
     </div>
@@ -117,7 +117,7 @@ function PCsDelCarro({ carroId }: { carroId: string }) {
 }
 
 // RF-03.7 + RF-04.4: cualquier usuario autenticado puede recorrer carros y
-// PCs, y desde acá abrir el calendario de cada una.
+// Equipos, y desde acá abrir el calendario de cada una.
 export function InventarioPage() {
   const [carroAbierto, setCarroAbierto] = useState<string | null>(null)
 
@@ -132,7 +132,7 @@ export function InventarioPage() {
     <div className="mx-auto max-w-4xl">
       <EncabezadoDePagina
         titulo="Inventario"
-        descripcion="Carros y PCs de la institución. Abrí una PC para ver su calendario, o reportá una falla."
+        descripcion="Carros y equipos de la institución. Abrí un equipo para ver su calendario, o reportá una falla."
       />
 
       {error && (
@@ -161,7 +161,7 @@ export function InventarioPage() {
                     aria-expanded={abierto}
                     onClick={() => setCarroAbierto(abierto ? null : carro.id)}
                   >
-                    {abierto ? "Ocultar PCs" : "Ver PCs"}
+                    {abierto ? "Ocultar equipos" : "Ver Equipos"}
                   </Button>
                 </CardTitle>
                 {carro.descripcion && (
@@ -170,7 +170,7 @@ export function InventarioPage() {
               </CardHeader>
               {abierto && (
                 <CardContent>
-                  <PCsDelCarro carroId={carro.id} />
+                  <EquiposDelCarro carroId={carro.id} />
                 </CardContent>
               )}
             </Card>

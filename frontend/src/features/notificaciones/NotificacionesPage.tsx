@@ -38,8 +38,8 @@ function formatearFecha(iso: string): string {
  * RF-05: notificaciones internas.
  *
  * Es el único lugar donde se ve el motivo con el que un Admin canceló una
- * reserva ajena (RF-04.8, motivo obligatorio), qué PCs puntuales se
- * cancelaron por un bloqueo de evaluación (RF-05.2) o porque una PC pasó a
+ * reserva ajena (RF-04.8, motivo obligatorio), qué Equipos puntuales se
+ * cancelaron por un bloqueo de evaluación (RF-05.2) o porque un equipo pasó a
  * fuera de servicio (RF-05.3). Sin esta pantalla el backend guardaba todo
  * eso y nadie podía leerlo.
  */

@@ -21,7 +21,7 @@ import * as reservasApi from "@/features/reservas/api"
  * "una máquina no volvió", y es donde se entrega una reserva del día con
  * calma, sin el resto del panel alrededor.
  *
- * Lo que se ve acá NO es "el estado de la PC": no hay ninguna columna que
+ * Lo que se ve acá NO es "el estado del equipo": no hay ninguna columna que
  * diga "prestada". Se deriva de si existe un préstamo sin devolver, y por eso
  * no puede quedar desincronizado — que es exactamente lo que le pasa al papel
  * cuando alguien devuelve una máquina y nadie tacha el renglón.
@@ -37,7 +37,7 @@ export function EntregasPage() {
 
   // Qué máquinas están afuera, para no ofrecerlas de nuevo. Se calcula acá y
   // se pasa a los dos formularios: es el mismo dato y una sola consulta.
-  const yaAfuera = useMemo(() => new Set((data?.data ?? []).map((p) => p.pcId)), [data])
+  const yaAfuera = useMemo(() => new Set((data?.data ?? []).map((p) => p.equipoId)), [data])
 
   return (
     <div>

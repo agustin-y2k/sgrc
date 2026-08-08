@@ -4,7 +4,7 @@ import "errors"
 
 var (
 	ErrReservaGrupoNoEncontrado = errors.New("reserva no encontrada")
-	ErrReservaNoEncontrada      = errors.New("reserva de PC no encontrada")
+	ErrReservaNoEncontrada      = errors.New("reserva de equipo no encontrado")
 
 	// ErrDocenteNoAsignado: RF-04.1 — solo un docente asignado a la
 	// materia puede reservar para ella.
@@ -25,8 +25,8 @@ var (
 	// garantía real ante condiciones de carrera.
 	ErrSolapamiento = errors.New("una o más PCs ya tienen una reserva en ese horario")
 
-	// ErrSinPCs: una reserva necesita al menos una PC.
-	ErrSinPCs = errors.New("hay que seleccionar al menos una PC")
+	// ErrSinEquipos: una reserva necesita al menos una PC.
+	ErrSinEquipos = errors.New("hay que seleccionar al menos un equipo")
 
 	// ErrDemasiadasOcurrencias: RF-04.2 materializa un ReservaGrupo por
 	// cada fecha de la serie, todo en una transacción. Sin un tope, un

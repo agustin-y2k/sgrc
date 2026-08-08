@@ -18,7 +18,7 @@ import {
  * traducir a mano al curso real. Con los desplegables, lo que llega es
  * exactamente el nombre canónico que ya existe del otro lado.
  *
- * La diferencia con el del Admin es que acá el curso es OPCIONAL, y esa
+ * La diferencia con el del Admin es que acá el curso es OEquipoIONAL, y esa
  * diferencia es la razón de que sea un componente aparte en vez de una
  * prop del otro. Un desplegable siempre tiene algo elegido, así que sin una
  * opción vacía todos los registros llegarían diciendo "1°A" —incluido el de

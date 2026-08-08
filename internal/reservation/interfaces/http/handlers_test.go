@@ -32,7 +32,7 @@ type fakeRepo struct {
 	grupos         map[string]*domain.ReservaGrupo
 	reservas       map[string]*domain.Reserva
 	prestamos      map[string]*domain.Prestamo
-	pcsDisponibles []application.PCDisponible
+	pcsDisponibles []application.EquipoDisponible
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -50,7 +50,7 @@ func nuevoFakeRepo() *fakeRepo {
 
 func (r *fakeRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) error {
 	for _, existente := range r.prestamos {
-		if existente.PCID == p.PCID && existente.EstaAbierto() {
+		if existente.EquipoID == p.EquipoID && existente.EstaAbierto() {
 			return application.ErrPCYaPrestada
 		}
 	}
@@ -77,9 +77,9 @@ func (r *fakeRepo) GuardarPrestamo(ctx context.Context, p *domain.Prestamo) erro
 	return nil
 }
 
-func (r *fakeRepo) BuscarPrestamoAbiertoDePC(ctx context.Context, pcID string) (*domain.Prestamo, error) {
+func (r *fakeRepo) BuscarPrestamoAbiertoDeEquipo(ctx context.Context, equipoID string) (*domain.Prestamo, error) {
 	for _, p := range r.prestamos {
-		if p.PCID == pcID && p.EstaAbierto() {
+		if p.EquipoID == equipoID && p.EstaAbierto() {
 			copia := *p
 			return &copia, nil
 		}
@@ -91,17 +91,17 @@ func (r *fakeRepo) ListarPrestamosAbiertos(ctx context.Context) ([]*application.
 	var resultado []*application.PrestamoDetallado
 	for _, p := range r.prestamosEnOrden() {
 		if p.EstaAbierto() {
-			resultado = append(resultado, &application.PrestamoDetallado{Prestamo: p, PCIdentificador: 1, CarroNombre: "Carro 1"})
+			resultado = append(resultado, &application.PrestamoDetallado{Prestamo: p, Identificador: 1, CarroNombre: "Carro 1"})
 		}
 	}
 	return resultado, nil
 }
 
-func (r *fakeRepo) ListarPrestamosDePC(ctx context.Context, pcID string, limite int) ([]*application.PrestamoDetallado, error) {
+func (r *fakeRepo) ListarPrestamosDeEquipo(ctx context.Context, equipoID string, limite int) ([]*application.PrestamoDetallado, error) {
 	var resultado []*application.PrestamoDetallado
 	for _, p := range r.prestamosEnOrden() {
-		if p.PCID == pcID && len(resultado) < limite {
-			resultado = append(resultado, &application.PrestamoDetallado{Prestamo: p, PCIdentificador: 1, CarroNombre: "Carro 1"})
+		if p.EquipoID == equipoID && len(resultado) < limite {
+			resultado = append(resultado, &application.PrestamoDetallado{Prestamo: p, Identificador: 1, CarroNombre: "Carro 1"})
 		}
 	}
 	return resultado, nil
@@ -115,13 +115,13 @@ func (r *fakeRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]appli
 func (r *fakeRepo) PrestamosAVigilar(ctx context.Context) ([]application.PrestamoParaVigilar, error) {
 	return nil, nil
 }
-func (r *fakeRepo) ProximaReservaDePC(ctx context.Context, pcID string, desde time.Time) (*application.ProximaReserva, error) {
+func (r *fakeRepo) ProximaReservaDeEquipo(ctx context.Context, equipoID string, desde time.Time) (*application.ProximaReserva, error) {
 	return nil, nil
 }
 func (r *fakeRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
 	return nil
 }
-func (r *fakeRepo) MarcarAvisoPCNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
+func (r *fakeRepo) MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
 	return nil
 }
 func (r *fakeRepo) MarcarDemoraAvisada(ctx context.Context, prestamoID string, ahora time.Time) error {
@@ -157,7 +157,7 @@ func (r *fakeRepo) ListarReservas(ctx context.Context, f application.FiltroReser
 		if f.CreadoPor != nil && (res.CreadoPor == nil || *res.CreadoPor != *f.CreadoPor) {
 			continue
 		}
-		if f.PCID != nil && res.PCID != *f.PCID {
+		if f.EquipoID != nil && res.EquipoID != *f.EquipoID {
 			continue
 		}
 		if !f.IncluirCanceladas && res.Estado == domain.ReservaCancelada {
@@ -166,11 +166,11 @@ func (r *fakeRepo) ListarReservas(ctx context.Context, f application.FiltroReser
 		// Los nombres los resuelve un JOIN en el repo real; acá alcanza con
 		// valores estables para poder afirmar sobre el JSON de salida.
 		resultado = append(resultado, application.ReservaDetallada{
-			Reserva:         res,
-			PCIdentificador: 7,
-			CarroNombre:     "Carro 1",
-			MateriaNombre:   "Matemáticas",
-			CursoNombre:     "1°A",
+			Reserva:       res,
+			Identificador: 7,
+			CarroNombre:   "Carro 1",
+			MateriaNombre: "Matemáticas",
+			CursoNombre:   "1°A",
 		})
 	}
 
@@ -207,10 +207,10 @@ func (r *fakeRepo) enOrden() []*domain.Reserva {
 	return ordenadas
 }
 
-func (r *fakeRepo) CalendarioDePC(ctx context.Context, pcID string, desde, hasta time.Time) ([]application.BloqueCalendario, error) {
+func (r *fakeRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) ([]application.BloqueCalendario, error) {
 	var resultado []application.BloqueCalendario
 	for _, res := range r.reservas {
-		if res.PCID != pcID || res.Estado == domain.ReservaCancelada {
+		if res.EquipoID != equipoID || res.Estado == domain.ReservaCancelada {
 			continue
 		}
 		resultado = append(resultado, application.BloqueCalendario{
@@ -259,7 +259,7 @@ func (r *fakeRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoID st
 	}
 	return resultado, nil
 }
-func (r *fakeRepo) ListarReservasFuturasDePC(ctx context.Context, pcID string, desde time.Time) ([]*domain.Reserva, error) {
+func (r *fakeRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipoID string, desde time.Time) ([]*domain.Reserva, error) {
 	return nil, nil
 }
 func (r *fakeRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID string, desde time.Time) ([]*domain.Reserva, error) {
@@ -271,14 +271,14 @@ func (r *fakeRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, cicloID s
 func (r *fakeRepo) ListarReservasConfirmadasVencidas(ctx context.Context, ahora time.Time, limite int) ([]*domain.Reserva, error) {
 	return nil, nil
 }
-func (r *fakeRepo) ListarPCsDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.PCDisponible, error) {
+func (r *fakeRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoDisponible, error) {
 	return r.pcsDisponibles, nil
 }
 
 func (r *fakeRepo) CrearReglaRecurrencia(ctx context.Context, regla *domain.ReglaRecurrencia) error {
 	return nil
 }
-func (r *fakeRepo) AsignarPCsARegla(ctx context.Context, reglaID string, pcIDs []string) error {
+func (r *fakeRepo) AsignarPCsARegla(ctx context.Context, reglaID string, equipoIDs []string) error {
 	return nil
 }
 func (r *fakeRepo) ListarGruposFuturosDeRegla(ctx context.Context, reglaID string, desde time.Time) ([]*domain.ReservaGrupo, error) {
@@ -299,7 +299,7 @@ func (f *fakeValidadorMateria) DocenteEstaAsignado(ctx context.Context, materiaI
 	return f.asignado, nil
 }
 
-type fakeValidadorPC struct {
+type fakeValidadorEquipo struct {
 	disponible         bool
 	errIdentificadores error
 	// fueraDelInventario: PCs dadas de baja. Es lo único que distingue
@@ -307,27 +307,27 @@ type fakeValidadorPC struct {
 	fueraDelInventario map[string]bool
 }
 
-func (f *fakeValidadorPC) PCDisponibleParaReservar(ctx context.Context, pcID string) (bool, error) {
+func (f *fakeValidadorEquipo) EquipoDisponibleParaReservar(ctx context.Context, equipoID string) (bool, error) {
 	return f.disponible, nil
 }
 
-// PCEstaEnInventario es más laxo: una PC en mantenimiento no se puede
+// EquipoEstaEnInventario es más laxo: una PC en mantenimiento no se puede
 // reservar pero sí se le puede entregar al técnico.
-func (f *fakeValidadorPC) PCEstaEnInventario(ctx context.Context, pcID string) (bool, error) {
-	return !f.fueraDelInventario[pcID], nil
+func (f *fakeValidadorEquipo) EquipoEstaEnInventario(ctx context.Context, equipoID string) (bool, error) {
+	return !f.fueraDelInventario[equipoID], nil
 }
 
 // EtiquetasDeEquipos: en los tests las PCs se llaman "pc1", "pc2"… así que
 // el número visible sale del sufijo. Alcanza para verificar que el aviso
 // nombre los equipos correctos.
-func (f *fakeValidadorPC) EtiquetasDeEquipos(ctx context.Context, pcIDs []string) (map[string]string, error) {
+func (f *fakeValidadorEquipo) EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error) {
 	if f.errIdentificadores != nil {
 		return nil, f.errIdentificadores
 	}
-	m := make(map[string]string, len(pcIDs))
-	for _, id := range pcIDs {
+	m := make(map[string]string, len(equipoIDs))
+	for _, id := range equipoIDs {
 		var n int
-		if _, err := fmt.Sscanf(id, "pc%d", &n); err == nil {
+		if _, err := fmt.Sscanf(id, "equipo%d", &n); err == nil {
 			m[id] = fmt.Sprintf("PC %d", n)
 		}
 	}
@@ -355,7 +355,7 @@ var testSecret = []byte("un-secreto-de-test-bastante-largo")
 
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	contadorID = 0
-	svc := application.NewService(repo, &fakeValidadorMateria{asignado: true}, &fakeValidadorPC{disponible: true},
+	svc := application.NewService(repo, &fakeValidadorMateria{asignado: true}, &fakeValidadorEquipo{disponible: true},
 		&fakeObtenedorNombre{}, idSecuencial, func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus())
 	h := NewHandler(svc, fakeAuditor{})
@@ -388,7 +388,7 @@ func TestHTTP_CrearReserva_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/reservation/reservas", jsonBody(crearReservaRequest{
-		MateriaID: "materia1", Fecha: "2026-03-09", HoraInicio: "08:00", HoraFin: "09:00", PCIDs: []string{"pc1"},
+		MateriaID: "materia1", Fecha: "2026-03-09", HoraInicio: "08:00", HoraFin: "09:00", EquipoIDs: []string{"pc1"},
 	}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
@@ -406,7 +406,7 @@ func TestHTTP_CrearReserva_FechaInvalida_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/reservation/reservas", jsonBody(crearReservaRequest{
-		MateriaID: "materia1", Fecha: "09-03-2026", HoraInicio: "08:00", HoraFin: "09:00", PCIDs: []string{"pc1"},
+		MateriaID: "materia1", Fecha: "09-03-2026", HoraInicio: "08:00", HoraFin: "09:00", EquipoIDs: []string{"pc1"},
 	}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
@@ -421,7 +421,7 @@ func TestHTTP_CrearReserva_SinToken_401(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/reservation/reservas", jsonBody(crearReservaRequest{
-		MateriaID: "materia1", Fecha: "2026-03-09", HoraInicio: "08:00", HoraFin: "09:00", PCIDs: []string{"pc1"},
+		MateriaID: "materia1", Fecha: "2026-03-09", HoraInicio: "08:00", HoraFin: "09:00", EquipoIDs: []string{"pc1"},
 	}))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -527,7 +527,7 @@ func TestHTTP_BloquearParaEvaluacion_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/reservation/bloqueos-evaluacion", jsonBody(bloquearEvaluacionRequest{
-		PCIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00", Motivo: "Evaluación",
+		EquipoIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00", Motivo: "Evaluación",
 	}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
@@ -542,7 +542,7 @@ func TestHTTP_BloquearParaEvaluacion_ComoAdmin_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/reservation/bloqueos-evaluacion", jsonBody(bloquearEvaluacionRequest{
-		PCIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00", Motivo: "Evaluación",
+		EquipoIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00", Motivo: "Evaluación",
 	}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
@@ -623,7 +623,7 @@ func TestHTTP_ObtenerReservaGrupo_SinCreador_403ParaDocente(t *testing.T) {
 
 // ── ListarReservas / Calendario / motivo obligatorio ───────────────────
 
-func reservaDeTest(repo *fakeRepo, id, pcID, creadoPor string) *domain.Reserva {
+func reservaDeTest(repo *fakeRepo, id, equipoID, creadoPor string) *domain.Reserva {
 	grupoID := "grupo-" + id
 	materiaID := "materia1"
 	nombre := "Ada Lovelace"
@@ -632,7 +632,7 @@ func reservaDeTest(repo *fakeRepo, id, pcID, creadoPor string) *domain.Reserva {
 		Fecha: time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), Estado: domain.GrupoConfirmada,
 	}
 	res := &domain.Reserva{
-		ID: id, ReservaGrupoID: &grupoID, PCID: pcID, MateriaID: &materiaID,
+		ID: id, ReservaGrupoID: &grupoID, EquipoID: equipoID, MateriaID: &materiaID,
 		NombreDocenteSnapshot: &nombre, CreadoPor: &creadoPor,
 		Fecha:      time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC),
 		HoraInicio: 8 * time.Hour, HoraFin: 9 * time.Hour,
@@ -670,7 +670,7 @@ func TestHTTP_ListarReservas_UnDocenteSoloVeLasSuyas(t *testing.T) {
 	}
 }
 
-// El listado tiene que traer los nombres resueltos y no los UUID de pc_id y
+// El listado tiene que traer los nombres resueltos y no los UUID de equipo_id y
 // materia_id: con los UUID, "Mis reservas" no puede decir de qué PC ni de
 // qué materia es cada tarjeta, y una reserva de ocho PCs se ve como ocho
 // filas idénticas.
@@ -695,8 +695,8 @@ func TestHTTP_ListarReservas_TraeNombresResueltos(t *testing.T) {
 		t.Fatalf("esperaba 1 reserva, obtuve %d", len(body.Data))
 	}
 	got := body.Data[0]
-	if got.PCIdentificador != 7 || got.CarroNombre != "Carro 1" {
-		t.Errorf("faltan los datos de la PC: identificador=%d carro=%q", got.PCIdentificador, got.CarroNombre)
+	if got.Identificador != 7 || got.CarroNombre != "Carro 1" {
+		t.Errorf("faltan los datos de la PC: identificador=%d carro=%q", got.Identificador, got.CarroNombre)
 	}
 	if got.MateriaNombre != "Matemáticas" || got.CursoNombre != "1°A" {
 		t.Errorf("faltan los datos de la materia: materia=%q curso=%q", got.MateriaNombre, got.CursoNombre)
@@ -809,12 +809,12 @@ func TestHTTP_ListarReservas_ParametrosInvalidos_400(t *testing.T) {
 }
 
 // RF-04.4
-func TestHTTP_CalendarioDePC_DevuelveDocenteYMateria(t *testing.T) {
+func TestHTTP_CalendarioDeEquipo_DevuelveDocenteYMateria(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(repo, "r1", "pc1", "docente1")
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/reservation/pcs/pc1/calendario?desde=2026-03-01&hasta=2026-03-31", nil)
+	req := httptest.NewRequest("GET", "/api/reservation/equipos/pc1/calendario?desde=2026-03-01&hasta=2026-03-31", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente2", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -825,7 +825,7 @@ func TestHTTP_CalendarioDePC_DevuelveDocenteYMateria(t *testing.T) {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
 
-	var body calendarioPCResponse
+	var body calendarioEquipoResponse
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
@@ -838,10 +838,10 @@ func TestHTTP_CalendarioDePC_DevuelveDocenteYMateria(t *testing.T) {
 	}
 }
 
-func TestHTTP_CalendarioDePC_SinRango_400(t *testing.T) {
+func TestHTTP_CalendarioDeEquipo_SinRango_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("GET", "/api/reservation/pcs/pc1/calendario", nil)
+	req := httptest.NewRequest("GET", "/api/reservation/equipos/pc1/calendario", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, _ := app.Test(req)

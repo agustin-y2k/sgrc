@@ -57,7 +57,7 @@ func CorrespondeLiberar(fecha time.Time, horaInicio, horaFin time.Duration, grac
 	return !horaDePared(ahora, horaDelDia(ahora)).Before(horaDePared(fecha, horaInicio).Add(gracia))
 }
 
-// CorrespondeAvisarPCNoDisponible resuelve la regla del docente siguiente:
+// CorrespondeAvisarEquipoNoDisponible resuelve la regla del docente siguiente:
 // el aviso sale en max(momento de la detección, inicio de su reserva − una
 // hora).
 //
@@ -72,7 +72,7 @@ func CorrespondeLiberar(fecha time.Time, horaInicio, horaFin time.Duration, grac
 // llega tarde igual, el docente ya está yendo al laboratorio. Lo que
 // resuelve ese caso de verdad es el reclamo al Admin, que sale a los diez
 // minutos y lo arregla en persona.
-func CorrespondeAvisarPCNoDisponible(fecha time.Time, horaInicio, horaFin time.Duration, antelacion time.Duration, ahora time.Time) bool {
+func CorrespondeAvisarEquipoNoDisponible(fecha time.Time, horaInicio, horaFin time.Duration, antelacion time.Duration, ahora time.Time) bool {
 	// Misma ventana que el recordatorio: desde una hora antes y mientras la
 	// clase no haya terminado. La otra mitad de la condición —que la máquina
 	// esté demorada AHORA— la pone quien llama, y es la que hace que el

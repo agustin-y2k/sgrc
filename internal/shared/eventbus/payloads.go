@@ -56,7 +56,7 @@ type LicenciaPorVencer struct {
 	// PCIdentificador va en 0 en un equipo suelto (015), así que un aviso
 	// armado con él manda a buscar una "PC 0" que no existe.
 	Etiqueta         string
-	PCIdentificador  int
+	Identificador    int
 	CarroNombre      string
 	FechaVencimiento time.Time
 	// DiasRestantes negativo significa que ya venció hace esos días.
@@ -167,13 +167,13 @@ type RecordatorioDeReserva struct {
 	MinutosDeGracia int
 }
 
-// PCNoDisponibleParaReserva es el aviso suelto al docente siguiente: una
+// EquipoNoDisponibleParaReserva es el aviso suelto al docente siguiente: una
 // máquina de su reserva no volvió.
 //
 // Existe además del recordatorio porque la demora puede detectarse DESPUÉS
 // de que el recordatorio ya salió, o cuando falta menos de una hora para su
 // clase. Es la otra mitad de max(detección, inicio − 1 h).
-type PCNoDisponibleParaReserva struct {
+type EquipoNoDisponibleParaReserva struct {
 	UsuarioID     string
 	Email         string
 	Nombre        string
@@ -225,9 +225,9 @@ type PrestamosDemorados struct {
 	Prestamos []PrestamoDemorado
 }
 
-// PCSinDevolverAlCierre es una máquina que quedó afuera al terminar la
+// EquipoSinDevolverAlCierre es una máquina que quedó afuera al terminar la
 // jornada, con el docente al que le va a faltar mañana.
-type PCSinDevolverAlCierre struct {
+type EquipoSinDevolverAlCierre struct {
 	Etiqueta    string
 	CarroNombre string
 	Quien       string
@@ -243,7 +243,7 @@ type PCSinDevolverAlCierre struct {
 	ProximaHora      time.Duration
 }
 
-// PCsSinDevolverAlCierre es el corte de fin de jornada.
-type PCsSinDevolverAlCierre struct {
-	PCs []PCSinDevolverAlCierre
+// EquiposSinDevolverAlCierre es el corte de fin de jornada.
+type EquiposSinDevolverAlCierre struct {
+	Equipos []EquipoSinDevolverAlCierre
 }

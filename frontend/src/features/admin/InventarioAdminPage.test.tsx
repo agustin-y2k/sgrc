@@ -5,13 +5,13 @@ import userEvent from "@testing-library/user-event"
 import { InventarioAdminPage } from "@/features/admin/InventarioAdminPage"
 import * as adminApi from "@/features/admin/api"
 import * as inventoryApi from "@/features/inventory/api"
-import type { Incidencia, PC } from "@/features/inventory/types"
+import type { Incidencia, Equipo } from "@/features/inventory/types"
 import { ApiError } from "@/lib/api-client"
 
 vi.mock("@/features/admin/api")
 vi.mock("@/features/inventory/api")
 
-function pc(over: Partial<PC> = {}): PC {
+function equipo(over: Partial<Equipo> = {}): Equipo {
   // La etiqueta la resuelve el backend a partir del identificador; acá se
   // deriva del override para que no queden inconsistentes.
   const identificador = over.identificador ?? 1
@@ -34,7 +34,7 @@ function pc(over: Partial<PC> = {}): PC {
 function incidencia(over: Partial<Incidencia> = {}): Incidencia {
   return {
     id: "i1",
-    pcId: "pc1",
+    equipoId: "pc1",
     descripcion: "No arranca",
     gravedad: "GRAVE",
     fecha: "2026-08-01T10:00:00Z",
@@ -54,7 +54,7 @@ function renderPagina() {
 }
 
 async function abrirCarro(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("button", { name: "Gestionar PCs" }))
+  await user.click(await screen.findByRole("button", { name: "Gestionar equipos" }))
 }
 
 describe("InventarioAdminPage", () => {
@@ -63,15 +63,15 @@ describe("InventarioAdminPage", () => {
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
       data: [{ id: "c1", nombre: "Carro 1" }],
     })
-    vi.mocked(inventoryApi.listarPCsDeCarro).mockResolvedValue({ data: [pc()] })
-    vi.mocked(adminApi.cambiarEstadoPC).mockResolvedValue(undefined)
-    vi.mocked(adminApi.darDeBajaPC).mockResolvedValue(undefined)
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(adminApi.cambiarEstadoEquipo).mockResolvedValue(undefined)
+    vi.mocked(adminApi.darDeBajaEquipo).mockResolvedValue(undefined)
     vi.mocked(adminApi.crearCarro).mockResolvedValue({ id: "c2", nombre: "Carro 2" })
     vi.mocked(adminApi.editarCarro).mockResolvedValue(undefined)
-    vi.mocked(adminApi.crearPC).mockResolvedValue(pc({ id: "pc9", identificador: 9 }))
-    vi.mocked(adminApi.editarPC).mockResolvedValue(undefined)
+    vi.mocked(adminApi.crearEquipoDeCarro).mockResolvedValue(equipo({ id: "pc9", identificador: 9 }))
+    vi.mocked(adminApi.editarEquipo).mockResolvedValue(undefined)
     vi.mocked(adminApi.editarIncidencia).mockResolvedValue(undefined)
-    vi.mocked(inventoryApi.listarIncidenciasDePC).mockResolvedValue({
+    vi.mocked(inventoryApi.listarIncidenciasDeEquipo).mockResolvedValue({
       data: [incidencia()],
     })
   })
@@ -93,7 +93,7 @@ describe("InventarioAdminPage", () => {
     })
   })
 
-  // RF-03.8: sacar una PC de DISPONIBLE cancela sus reservas futuras y NO
+  // RF-03.8: sacar un equipo de DISPONIBLE cancela sus reservas futuras y NO
   // se restauran al volver. Un solo click no puede alcanzar.
   it("cambiar a fuera de servicio pide confirmación y avisa de la cascada", async () => {
     const user = userEvent.setup()
@@ -102,7 +102,7 @@ describe("InventarioAdminPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /Fuera de servicio/ }))
 
-    expect(adminApi.cambiarEstadoPC).not.toHaveBeenCalled()
+    expect(adminApi.cambiarEstadoEquipo).not.toHaveBeenCalled()
     expect(screen.getByText(/cancela todas sus reservas futuras/)).toBeInTheDocument()
     expect(screen.getByText(/no se restauran solas/)).toBeInTheDocument()
   })
@@ -116,7 +116,7 @@ describe("InventarioAdminPage", () => {
     await user.type(screen.getByLabelText(/Motivo/), "no arranca")
     await user.click(screen.getByRole("button", { name: "Confirmar cambio" }))
 
-    expect(adminApi.cambiarEstadoPC).toHaveBeenCalledWith(
+    expect(adminApi.cambiarEstadoEquipo).toHaveBeenCalledWith(
       "pc1",
       "FUERA_DE_SERVICIO",
       "no arranca"
@@ -133,14 +133,14 @@ describe("InventarioAdminPage", () => {
     await user.click(await screen.findByRole("button", { name: /En mantenimiento/i }))
     await user.click(screen.getByRole("button", { name: "Confirmar cambio" }))
 
-    expect(adminApi.cambiarEstadoPC).toHaveBeenCalledWith(
+    expect(adminApi.cambiarEstadoEquipo).toHaveBeenCalledWith(
       "pc1",
       "EN_MANTENIMIENTO",
       undefined
     )
   })
 
-  it("no ofrece cambiar al estado en el que la PC ya está", async () => {
+  it("no ofrece cambiar al estado en el que el equipo ya está", async () => {
     const user = userEvent.setup()
     renderPagina()
     await abrirCarro(user)
@@ -150,25 +150,25 @@ describe("InventarioAdminPage", () => {
   })
 
   // RF-03.9: la baja dispara la misma cascada.
-  it("dar de baja una PC pide confirmación", async () => {
+  it("dar de baja un equipo pide confirmación", async () => {
     const user = userEvent.setup()
     renderPagina()
     await abrirCarro(user)
 
     await user.click(await screen.findByRole("button", { name: "Dar de baja" }))
 
-    expect(adminApi.darDeBajaPC).not.toHaveBeenCalled()
+    expect(adminApi.darDeBajaEquipo).not.toHaveBeenCalled()
     expect(screen.getByText(/la saca del inventario/)).toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "Confirmar baja" }))
-    expect(adminApi.darDeBajaPC).toHaveBeenCalledWith("pc1")
+    expect(adminApi.darDeBajaEquipo).toHaveBeenCalledWith("pc1")
   })
 
-  it("las PCs ya dadas de baja no se listan", async () => {
-    vi.mocked(inventoryApi.listarPCsDeCarro).mockResolvedValue({
+  it("los equipos ya dados de baja no se listan", async () => {
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
       data: [
-        pc({ id: "pc1", identificador: 1 }),
-        pc({ id: "pc2", identificador: 2, dadaDeBaja: true }),
+        equipo({ id: "pc1", identificador: 1 }),
+        equipo({ id: "pc2", identificador: 2, dadaDeBaja: true }),
       ],
     })
     const user = userEvent.setup()
@@ -179,25 +179,25 @@ describe("InventarioAdminPage", () => {
     expect(screen.queryByText(/PC 2/)).not.toBeInTheDocument()
   })
 
-  // ── Alta de PCs (RF-03.2) ────────────────────────────────────────────
+  // ── Alta de equipos (RF-03.2) ────────────────────────────────────────────
   //
   // Es la operación que faltaba y sin la cual un despliegue limpio no sirve
-  // para nada: se podía crear el carro pero no meterle una sola PC, y sin
-  // PCs nadie puede reservar.
+  // para nada: se podía crear el carro pero no meterle un solo equipo, y sin
+  // equipos nadie puede reservar.
 
-  it("agrega una PC al carro", async () => {
+  it("agrega un equipo al carro", async () => {
     const user = userEvent.setup()
     renderPagina()
     await abrirCarro(user)
 
     await user.type(await screen.findByLabelText("Identificador"), "7")
     // Con letras: es como son los de fábrica, y exigirle dígitos era lo que
-    // impedía cargar una PC con el dato real de la etiqueta.
+    // impedía cargar un equipo con el dato real de la etiqueta.
     await user.type(screen.getByLabelText("Número de serie"), "PF2K9L3M")
     await user.type(screen.getByLabelText("Software instalado"), "AutoCAD 2027")
-    await user.click(screen.getByRole("button", { name: "Agregar PC" }))
+    await user.click(screen.getByRole("button", { name: "Agregar Equipo" }))
 
-    expect(adminApi.crearPC).toHaveBeenCalledWith("c1", {
+    expect(adminApi.crearEquipoDeCarro).toHaveBeenCalledWith("c1", {
       identificador: 7,
       numeroSerie: "PF2K9L3M",
       freezado: false,
@@ -211,7 +211,7 @@ describe("InventarioAdminPage", () => {
   // El identificador SÍ es entero: es el número pintado en la máquina, lo
   // elige la escuela. Sin este chequeo, Number("siete") manda NaN y el
   // backend responde un 400 que no dice cuál de los dos campos está mal.
-  it("no deja agregar una PC con identificador no numérico", async () => {
+  it("no deja agregar un equipo con identificador no numérico", async () => {
     const user = userEvent.setup()
     renderPagina()
     await abrirCarro(user)
@@ -220,7 +220,7 @@ describe("InventarioAdminPage", () => {
     await user.type(screen.getByLabelText("Número de serie"), "PF2K9L3M")
 
     expect(screen.getByText(/número entero/)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Agregar PC" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Agregar Equipo" })).toBeDisabled()
   })
 
   // Y el número de serie NO: la regla vale en la otra dirección, y esta es
@@ -235,12 +235,12 @@ describe("InventarioAdminPage", () => {
     await user.type(screen.getByLabelText("Número de serie"), "5CD1234ABC")
 
     expect(screen.queryByText(/número entero/)).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Agregar PC" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Agregar Equipo" })).toBeEnabled()
   })
 
-  // ── Edición de PCs (RF-03.4 / RF-03.10) ──────────────────────────────
+  // ── Edición de Equipos (RF-03.4 / RF-03.10) ──────────────────────────────
 
-  it("edita el software instalado de una PC", async () => {
+  it("edita el software instalado de un equipo", async () => {
     const user = userEvent.setup()
     renderPagina()
     await abrirCarro(user)
@@ -251,7 +251,7 @@ describe("InventarioAdminPage", () => {
     await user.type(software, "Office 2021")
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }))
 
-    expect(adminApi.editarPC).toHaveBeenCalledWith("pc1", {
+    expect(adminApi.editarEquipo).toHaveBeenCalledWith("pc1", {
       carroId: undefined, // no se movió de carro
       freezado: false,
       cpu: undefined,
@@ -262,7 +262,7 @@ describe("InventarioAdminPage", () => {
   })
 
   // RF-03.10
-  it("mueve una PC a otro carro", async () => {
+  it("mueve un equipo a otro carro", async () => {
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
       data: [
         { id: "c1", nombre: "Carro 1" },
@@ -271,7 +271,7 @@ describe("InventarioAdminPage", () => {
     })
     const user = userEvent.setup()
     renderPagina()
-    await user.click((await screen.findAllByRole("button", { name: "Gestionar PCs" }))[0])
+    await user.click((await screen.findAllByRole("button", { name: "Gestionar equipos" }))[0])
 
     await user.click(await screen.findByRole("button", { name: "Editar" }))
     await user.selectOptions(screen.getByLabelText("Carro"), "c2")
@@ -280,7 +280,7 @@ describe("InventarioAdminPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }))
 
-    expect(adminApi.editarPC).toHaveBeenCalledWith(
+    expect(adminApi.editarEquipo).toHaveBeenCalledWith(
       "pc1",
       expect.objectContaining({ carroId: "c2" })
     )
@@ -323,7 +323,7 @@ describe("InventarioAdminPage", () => {
   // desde ningún lado: los reportes de RF-06 mostraban estadísticas de
   // incidencias que nadie podía cargar ni cerrar.
 
-  it("lista las incidencias de una PC", async () => {
+  it("lista las incidencias de un equipo", async () => {
     const user = userEvent.setup()
     renderPagina()
     await abrirCarro(user)
@@ -366,7 +366,7 @@ describe("InventarioAdminPage", () => {
   })
 
   it("una incidencia ya enviada a DGE muestra la fecha y no vuelve a ofrecerlo", async () => {
-    vi.mocked(inventoryApi.listarIncidenciasDePC).mockResolvedValue({
+    vi.mocked(inventoryApi.listarIncidenciasDeEquipo).mockResolvedValue({
       data: [
         incidencia({
           estado: "ENVIADA_DGE",

@@ -64,10 +64,10 @@ function BloqueOcupado({ bloque }: { bloque: BloqueCalendario }) {
   )
 }
 
-// RF-04.4: calendario completo de una PC, con nombre del docente, materia
+// RF-04.4: calendario completo de un equipo, con nombre del docente, materia
 // y horario. Lo puede ver cualquier usuario autenticado.
-export function CalendarioPCPage() {
-  const { pcId = "" } = useParams()
+export function CalendarioEquipoPage() {
+  const { equipoId = "" } = useParams()
   const [referencia, setReferencia] = useState(() => new Date())
 
   const dias = useMemo(() => fechasDeLaSemana(referencia), [referencia])
@@ -75,8 +75,8 @@ export function CalendarioPCPage() {
   const hasta = dias[dias.length - 1]
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["calendario", pcId, desde, hasta],
-    queryFn: () => calendarioApi.calendarioDePC(pcId, desde, hasta),
+    queryKey: ["calendario", equipoId, desde, hasta],
+    queryFn: () => calendarioApi.calendarioDeEquipo(equipoId, desde, hasta),
   })
 
   // Se agrupa por fecha una sola vez en vez de filtrar dentro de cada
@@ -98,7 +98,7 @@ export function CalendarioPCPage() {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">Calendario de la PC</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Calendario del equipo</h1>
           <p className="text-muted-foreground text-sm">
             {formatearRangoSemana(referencia)}
           </p>

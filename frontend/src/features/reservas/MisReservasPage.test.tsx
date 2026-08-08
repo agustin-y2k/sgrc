@@ -43,7 +43,7 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
   return {
     id: "r1",
     reservaGrupoId: "grupo1",
-    pcId: "pc1",
+    equipoId: "pc1",
     fecha: "2026-03-09",
     horaInicio: "08:00",
     horaFin: "09:00",
@@ -51,11 +51,11 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
     tipo: "NORMAL",
     creadoPor: "docente1",
     nombreDocenteSnapshot: "Ada Lovelace",
-    pcIdentificador: 1,
+    identificador: 1,
     carroNombre: "Carro 1",
     materiaNombre: "Matemáticas",
     cursoNombre: "1°A",
-    etiqueta: `PC ${over.pcIdentificador ?? 1}`,
+    etiqueta: `PC ${over.identificador ?? 1}`,
     ...over,
   }
 }
@@ -116,22 +116,22 @@ describe("MisReservasPage", () => {
   })
 
   // El glosario define ReservaGrupo como "la reserva tal como la percibe el
-  // docente": sin agrupar, una reserva de varias PCs se ve como N tarjetas
+  // docente": sin agrupar, una reserva de varias equipos se ve como N tarjetas
   // idénticas.
   describe("agrupación por reserva", () => {
-    const tresPCs = [
-      reserva({ id: "r1", pcId: "pc1", pcIdentificador: 3 }),
-      reserva({ id: "r2", pcId: "pc2", pcIdentificador: 7 }),
-      reserva({ id: "r3", pcId: "pc3", pcIdentificador: 12, carroNombre: "Carro 2" }),
+    const tresEquipos = [
+      reserva({ id: "r1", equipoId: "pc1", identificador: 3 }),
+      reserva({ id: "r2", equipoId: "pc2", identificador: 7 }),
+      reserva({ id: "r3", equipoId: "pc3", identificador: 12, carroNombre: "Carro 2" }),
     ]
 
-    it("muestra una sola tarjeta con todas sus PCs", async () => {
-      vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada(tresPCs))
+    it("muestra una sola tarjeta con todas sus equipos", async () => {
+      vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada(tresEquipos))
       renderPagina()
 
       expect(await screen.findByText("PC 3 · Carro 1")).toBeInTheDocument()
       expect(screen.getByText("PC 7 · Carro 1")).toBeInTheDocument()
-      // RF-04.2: una reserva puede combinar PCs de carros distintos.
+      // RF-04.2: una reserva puede combinar equipos de carros distintos.
       expect(screen.getByText("PC 12 · Carro 2")).toBeInTheDocument()
 
       // Una sola tarjeta, no tres: un solo botón de cancelar.
@@ -152,27 +152,27 @@ describe("MisReservasPage", () => {
       expect(screen.getAllByRole("button", { name: "Cancelar" })).toHaveLength(2)
     })
 
-    // RF-04.7 / RF-03.8: una cascada puede cancelar algunas PCs y dejar el
+    // RF-04.7 / RF-03.8: una cascada puede cancelar algunas equipos y dejar el
     // resto en pie. El motivo de cada una explica por qué la reserva quedó
     // incompleta.
-    it("muestra el motivo de cada PC cancelada dentro del grupo", async () => {
+    it("muestra el motivo de cada equipo cancelada dentro del grupo", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([
-          reserva({ id: "r1", pcIdentificador: 3 }),
+          reserva({ id: "r1", identificador: 3 }),
           reserva({
             id: "r2",
-            pcIdentificador: 7,
+            identificador: 7,
             estado: "CANCELADA",
-            motivoCancelacion: "la PC pasó a FUERA_DE_SERVICIO",
+            motivoCancelacion: "el equipo pasó a FUERA_DE_SERVICIO",
           }),
         ])
       )
       renderPagina()
 
       expect(
-        await screen.findByText("PC 7: la PC pasó a FUERA_DE_SERVICIO")
+        await screen.findByText("PC 7: el equipo pasó a FUERA_DE_SERVICIO")
       ).toBeInTheDocument()
-      // El grupo sigue vivo porque queda una PC confirmada.
+      // El grupo sigue vivo porque queda un equipo confirmada.
       expect(screen.getByText("Confirmada")).toBeInTheDocument()
       expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument()
     })
@@ -226,15 +226,15 @@ describe("MisReservasPage", () => {
       )
     })
 
-    // RF-04.6: la elección se aplica "a todas las PCs del grupo en esa fecha
+    // RF-04.6: la elección se aplica "a todas los equipos del grupo en esa fecha
     // (o rango)". Antes "solo esta fecha" llamaba a cancelarReserva y
-    // liberaba UNA sola PC, que no es lo que dice el requisito ni lo que
+    // liberaba UNA sola Equipo, que no es lo que dice el requisito ni lo que
     // sugiere el texto de la opción.
-    it("'solo esta fecha' cancela el grupo entero, no una PC suelta", async () => {
+    it("'solo esta fecha' cancela el grupo entero, no un equipo suelta", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([
-          reserva({ id: "r1", pcIdentificador: 3, reglaRecurrenciaId: "regla1" }),
-          reserva({ id: "r2", pcIdentificador: 7, reglaRecurrenciaId: "regla1" }),
+          reserva({ id: "r1", identificador: 3, reglaRecurrenciaId: "regla1" }),
+          reserva({ id: "r2", identificador: 7, reglaRecurrenciaId: "regla1" }),
         ])
       )
       const user = userEvent.setup()
@@ -278,11 +278,11 @@ describe("MisReservasPage", () => {
       ).not.toBeInTheDocument()
     })
 
-    it("avisa cuántas PCs se van a cancelar", async () => {
+    it("avisa cuántos equipos se van a cancelar", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([
-          reserva({ id: "r1", pcIdentificador: 3 }),
-          reserva({ id: "r2", pcIdentificador: 7 }),
+          reserva({ id: "r1", identificador: 3 }),
+          reserva({ id: "r2", identificador: 7 }),
         ])
       )
       const user = userEvent.setup()
@@ -291,7 +291,7 @@ describe("MisReservasPage", () => {
       await user.click(await screen.findByRole("button", { name: "Cancelar" }))
 
       expect(
-        screen.getByText(/se cancelan las 2 PCs de esta reserva/i)
+        screen.getByText(/se cancelan los 2 equipos de esta reserva/i)
       ).toBeInTheDocument()
     })
   })
@@ -299,12 +299,12 @@ describe("MisReservasPage", () => {
   it("una reserva cancelada muestra su motivo y no ofrece cancelarla de nuevo", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
       paginada([
-        reserva({ estado: "CANCELADA", motivoCancelacion: "PC fuera de servicio" }),
+        reserva({ estado: "CANCELADA", motivoCancelacion: "Equipo fuera de servicio" }),
       ])
     )
     renderPagina()
 
-    expect(await screen.findByText(/PC fuera de servicio/)).toBeInTheDocument()
+    expect(await screen.findByText(/Equipo fuera de servicio/)).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument()
   })
 
@@ -344,7 +344,7 @@ describe("MisReservasPage", () => {
   // ── Bloqueos por evaluación (RF-04.7) ────────────────────────────────
   //
   // No tienen ReservaGrupo en la base —no son la reserva de nadie— pero para
-  // el Admin que los creó fueron UNA operación: eligió varias PCs, una
+  // el Admin que los creó fueron UNA operación: eligió varias equipos, una
   // fecha y un horario, y confirmó una vez.
   describe("bloqueos por evaluación", () => {
     // Los ve el Admin que los creó: al docente el backend le fuerza el
@@ -353,7 +353,7 @@ describe("MisReservasPage", () => {
       mockUsuario({ ...DOCENTE, id: "admin1", rol: "ADMIN" })
     })
 
-    const bloqueo = (id: string, pc: number): ReservaDetallada =>
+    const bloqueo = (id: string, equipo: number): ReservaDetallada =>
       reserva({
         id,
         reservaGrupoId: undefined,
@@ -362,20 +362,20 @@ describe("MisReservasPage", () => {
         materiaNombre: undefined,
         cursoNombre: undefined,
         nombreDocenteSnapshot: undefined,
-        pcId: `pc${pc}`,
-        pcIdentificador: pc,
+        equipoId: `equipo${equipo}`,
+        identificador: equipo,
       })
 
-    it("junta las PCs de un mismo bloqueo en una sola tarjeta", async () => {
+    it("junta los equipos de un mismo bloqueo en una sola tarjeta", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([bloqueo("b1", 1), bloqueo("b2", 2), bloqueo("b3", 3)])
       )
       renderPagina()
 
-      // Una tarjeta, no tres: antes bloquear tres PCs se veía como tres
+      // Una tarjeta, no tres: antes bloquear tres equipos se veía como tres
       // bloqueos distintos.
       expect(
-        await screen.findByText(/Bloqueo por evaluación · 3 PCs/)
+        await screen.findByText(/Bloqueo por evaluación · 3 equipos/)
       ).toBeInTheDocument()
       expect(screen.getAllByRole("button", { name: "Levantar bloqueo" })).toHaveLength(1)
       expect(screen.getByText("PC 1 · Carro 1")).toBeInTheDocument()
@@ -393,15 +393,15 @@ describe("MisReservasPage", () => {
 
       await user.click(await screen.findByRole("button", { name: "Levantar bloqueo" }))
 
-      expect(screen.getByText(/Se liberan 2 PCs de este bloqueo/)).toBeInTheDocument()
+      expect(screen.getByText(/Se liberan 2 equipos de este bloqueo/)).toBeInTheDocument()
       expect(
         screen.getByRole("button", { name: "Confirmar cancelación" })
       ).toBeInTheDocument()
     })
 
-    // Liberar solo una PC dejaría el aula a medio bloquear sin que nada lo
+    // Liberar solo un equipo dejaría el aula a medio bloquear sin que nada lo
     // diga: la tarjeta representa la operación completa.
-    it("libera todas las PCs del bloqueo, no solo la primera", async () => {
+    it("libera todas los equipos del bloqueo, no solo la primera", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([bloqueo("b1", 1), bloqueo("b2", 2), bloqueo("b3", 3)])
       )
@@ -429,7 +429,7 @@ describe("MisReservasPage", () => {
       )
       renderPagina()
 
-      expect(await screen.findAllByText(/Bloqueo por evaluación · 1 PC/)).toHaveLength(2)
+      expect(await screen.findAllByText(/Bloqueo por evaluación · 1 equipo/)).toHaveLength(2)
     })
   })
 
@@ -452,9 +452,9 @@ describe("MisReservasPage", () => {
       paginada([
         reserva({
           id: "r1",
-          pcId: "eq1",
+          equipoId: "eq1",
           etiqueta: "Proyector Epson",
-          pcIdentificador: 0,
+          identificador: 0,
           carroNombre: "",
         }),
       ])

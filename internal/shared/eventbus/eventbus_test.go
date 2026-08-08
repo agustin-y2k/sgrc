@@ -22,11 +22,11 @@ func TestSubscribe_UnHandler_RecibeElEvento(t *testing.T) {
 		recibido <- e
 	})
 
-	bus.Publish(Evento{Tipo: "reserva.cancelada", Payload: "pc-27"})
+	bus.Publish(Evento{Tipo: "reserva.cancelada", Payload: "equipo-27"})
 
 	select {
 	case e := <-recibido:
-		if e.Payload != "pc-27" {
+		if e.Payload != "equipo-27" {
 			t.Errorf("payload incorrecto: %v", e.Payload)
 		}
 	case <-time.After(time.Second):
