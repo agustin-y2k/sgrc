@@ -61,7 +61,7 @@ type cambiarEstadoEquipoRequest struct {
 }
 
 type crearIncidenciaRequest struct {
-	PCID        string `json:"equipoId"`
+	EquipoID    string `json:"equipoId"`
 	Descripcion string `json:"descripcion"`
 	Gravedad    string `json:"gravedad"` // LEVE | MODERADA | GRAVE
 }
@@ -102,7 +102,7 @@ type equipoResponse struct {
 	SistemaOperativo  string     `json:"sistemaOperativo,omitempty"`
 	SoftwareInstalado string     `json:"softwareInstalado,omitempty"`
 	Estado            string     `json:"estado"`
-	DadaDeBaja        bool       `json:"dadaDeBaja"`
+	DadoDeBaja        bool       `json:"dadoDeBaja"`
 	FechaBaja         *time.Time `json:"fechaBaja,omitempty"`
 	FechaAlta         time.Time  `json:"fechaAlta"`
 }
@@ -113,7 +113,7 @@ func toEquipoResponse(pc *domain.Equipo) equipoResponse {
 		Etiqueta: pc.Etiqueta(), Tipo: pc.Tipo, Nombre: pc.Nombre, Reservable: pc.Reservable,
 		Freezado: pc.Freezado, CPU: pc.CPU, RAM: pc.RAM, SistemaOperativo: pc.SistemaOperativo,
 		SoftwareInstalado: pc.SoftwareInstalado, Estado: string(pc.Estado),
-		DadaDeBaja: pc.DadaDeBaja, FechaBaja: pc.FechaBaja, FechaAlta: pc.FechaAlta,
+		DadoDeBaja: pc.DadoDeBaja, FechaBaja: pc.FechaBaja, FechaAlta: pc.FechaAlta,
 	}
 }
 
@@ -128,7 +128,7 @@ func toCascadaResponse(r *application.ResultadoCascada) cascadaResponse {
 
 type incidenciaResponse struct {
 	ID            string     `json:"id"`
-	PCID          string     `json:"equipoId"`
+	EquipoID      string     `json:"equipoId"`
 	ReportadoPor  *string    `json:"reportadoPor,omitempty"`
 	Descripcion   string     `json:"descripcion"`
 	Gravedad      string     `json:"gravedad"`
@@ -140,7 +140,7 @@ type incidenciaResponse struct {
 
 func toIncidenciaResponse(i *domain.Incidencia) incidenciaResponse {
 	return incidenciaResponse{
-		ID: i.ID, PCID: i.PCID, ReportadoPor: i.ReportadoPor, Descripcion: i.Descripcion,
+		ID: i.ID, EquipoID: i.EquipoID, ReportadoPor: i.ReportadoPor, Descripcion: i.Descripcion,
 		Gravedad: string(i.Gravedad), Fecha: i.Fecha, EnviadoDGE: i.EnviadoDGE,
 		FechaEnvioDGE: i.FechaEnvioDGE, Estado: string(i.Estado),
 	}

@@ -12,7 +12,7 @@ import (
 func mapearError(err error) error {
 	switch {
 	case errors.Is(err, application.ErrCarroNoEncontrado),
-		errors.Is(err, application.ErrPCNoEncontrada),
+		errors.Is(err, application.ErrEquipoNoEncontrado),
 		errors.Is(err, application.ErrIncidenciaNoEncontrada),
 		errors.Is(err, application.ErrLicenciaNoEncontrada):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
@@ -27,7 +27,7 @@ func mapearError(err error) error {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida),
-		errors.Is(err, domain.ErrPCYaDadaDeBaja):
+		errors.Is(err, domain.ErrEquipoYaDadoDeBaja):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrNombreCarroVacio),
@@ -49,7 +49,7 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrDiasDuracionInvalido),
 		errors.Is(err, domain.ErrDiasAvisoInvalido),
 		errors.Is(err, domain.ErrDiasRestantesInvalido),
-		errors.Is(err, application.ErrSinPCs),
+		errors.Is(err, application.ErrSinEquipos),
 		errors.Is(err, application.ErrSinLicencias),
 		errors.Is(err, application.ErrVencimientoAmbiguo):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())

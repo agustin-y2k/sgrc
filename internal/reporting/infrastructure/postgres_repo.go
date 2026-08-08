@@ -1,5 +1,5 @@
 // Package infrastructure implementa application.Repo de reporting contra
-// PostgreSQL real (pgx), además de los adaptadores InfoPCParaSnapshot e
+// PostgreSQL real (pgx), además de los adaptadores InfoEquipoParaSnapshot e
 // InfoUsuarioParaSnapshot.
 package infrastructure
 
@@ -225,7 +225,7 @@ func (r *PostgresRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID st
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
 		}
-		return nil, fmt.Errorf("calculando uso de PCs del ciclo: %w", err)
+		return nil, fmt.Errorf("calculando uso de equipos del ciclo: %w", err)
 	}
 	defer rows.Close()
 
@@ -255,7 +255,7 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 		AND r.estado != 'CANCELADA'
 		AND r.creado_por IS NOT NULL`+condFechasPrefijo("r", condFechas)+`
 		GROUP BY r.creado_por
-		-- Mismo criterio que CalcularUsoPCsDeCiclo; el nombre desempata.
+		-- Mismo criterio que CalcularUsoEquiposDeCiclo; el nombre desempata.
 		ORDER BY minutos DESC, docente
 	`, args...)
 	if err != nil {
@@ -279,7 +279,7 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 
 // ── RF-06.3: incidencias por equipo y por carro ────────────────────────
 //
-// A diferencia del uso de PCs/docentes, estas consultas NO dependen del
+// A diferencia del uso de equipos/docentes, estas consultas NO dependen del
 // ciclo lectivo ni necesitan snapshot: Incidencia nunca se elimina, así
 // que el dato histórico siempre está disponible en vivo (ver RF-02.4).
 // El LEFT JOIN es contra las tablas de inventory, de solo lectura — mismo

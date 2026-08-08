@@ -18,7 +18,7 @@ const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_doc
 // condicionNoTerminada arma "esta reserva todavía no terminó respecto del
 // instante dado", comparando la hora de pared de la reserva contra la hora
 // de pared de ese instante. Reemplaza al `fecha >= $2` que usaban
-// ListarReservasFuturasDePC/DeMateria, por dos razones.
+// ListarReservasFuturasDeEquipo/DeMateria, por dos razones.
 //
 // La primera es un bug concreto: comparar contra la columna DATE pelada
 // ignora la hora, así que "las reservas futuras de esta PC" incluía las que
@@ -39,7 +39,7 @@ const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_doc
 // no algo que el código diga. Los dos casts explícitos —`::date` toma
 // año/mes/día, `::time` toma hora/minuto/segundo, del MISMO time.Time que se
 // pasa dos veces— lo dejan escrito y lo vuelven inmune a la zona de la
-// sesión. Mismo criterio que ListarPCsDisponiblesEn, que ya usaba
+// sesión. Mismo criterio que ListarEquiposDisponiblesEn, que ya usaba
 // `$1::date + $2::time`.
 func condicionNoTerminada(placeholderFecha, placeholderHora string) string {
 	return "(fecha + hora_fin) > (" + placeholderFecha + "::date + " + placeholderHora + "::time)"
@@ -364,9 +364,9 @@ func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, ciclo
 // que un COALESCE por columna.
 //
 // Devuelve los nombres de PC, carro, materia y curso ya resueltos: es un
-// listado para mostrar en pantalla, y sin ellos una reserva de varias PCs
+// listado para mostrar en pantalla, y sin ellos una reserva de varios equipos
 // se ve como N filas idénticas. Los JOIN son de solo lectura, igual que en
-// CalendarioDePC. El de materia/curso es LEFT porque los bloqueos por
+// CalendarioDeEquipo. El de materia/curso es LEFT porque los bloqueos por
 // evaluación estatal no tienen materia.
 func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroReservas) ([]application.ReservaDetallada, int, error) {
 	// El FROM y el WHERE se arman una sola vez y los comparten las dos
@@ -470,7 +470,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		res.HoraFin = horaComoDuracion(horaFin)
 
 		// Por Parse y no por conversión directa, como ya hacían
-		// escanearReserva y CalendarioDePC. La conversión acepta cualquier
+		// escanearReserva y CalendarioDeEquipo. La conversión acepta cualquier
 		// texto: un estado que la base no debería tener entraba igual al
 		// dominio y recién se notaba mucho más tarde, como una reserva que no
 		// se puede cancelar ni finalizar porque su estado no matchea ninguna

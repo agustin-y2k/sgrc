@@ -21,10 +21,10 @@ func (r *PostgresRepo) CrearEquipo(ctx context.Context, pc *domain.Equipo) error
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`, pc.ID, nullIfEmpty(pc.CarroID), nullSiCero(pc.Identificador), nullIfEmpty(pc.NumeroSerie), pc.Freezado,
 		nullIfEmpty(pc.CPU), nullIfEmpty(pc.RAM), nullIfEmpty(pc.SistemaOperativo), nullIfEmpty(pc.SoftwareInstalado),
-		string(pc.Estado), pc.DadaDeBaja, pc.FechaAlta, pc.Tipo, nullIfEmpty(pc.Nombre), pc.Reservable)
+		string(pc.Estado), pc.DadoDeBaja, pc.FechaAlta, pc.Tipo, nullIfEmpty(pc.Nombre), pc.Reservable)
 	if err != nil {
 		if esViolacionUnica(err) {
-			return errorDeUnicidadDePC(err)
+			return errorDeUnicidadDeEquipo(err)
 		}
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
@@ -39,10 +39,10 @@ func (r *PostgresRepo) CrearEquipo(ctx context.Context, pc *domain.Equipo) error
 
 func (r *PostgresRepo) BuscarEquipoPorID(ctx context.Context, id string) (*domain.Equipo, error) {
 	row := r.pool.QueryRow(ctx, `SELECT `+columnasEquipo+` FROM equipo WHERE id = $1`, id)
-	return escanearPC(row)
+	return escanearEquipo(row)
 }
 
-func escanearPC(row pgx.Row) (*domain.Equipo, error) {
+func escanearEquipo(row pgx.Row) (*domain.Equipo, error) {
 	var pc domain.Equipo
 	var cpu, ram, so, software, carroID, numeroSerie, nombre *string
 	var identificador *int
@@ -51,12 +51,12 @@ func escanearPC(row pgx.Row) (*domain.Equipo, error) {
 	err := row.Scan(
 		&pc.ID, &carroID, &identificador, &numeroSerie, &pc.Freezado,
 		&cpu, &ram, &so, &software,
-		&estadoStr, &pc.DadaDeBaja, &pc.FechaBaja, &pc.FechaAlta,
+		&estadoStr, &pc.DadoDeBaja, &pc.FechaBaja, &pc.FechaAlta,
 		&pc.Tipo, &nombre, &pc.Reservable,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, application.ErrPCNoEncontrada
+			return nil, application.ErrEquipoNoEncontrado
 		}
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
@@ -109,11 +109,11 @@ func (r *PostgresRepo) GuardarEquipo(ctx context.Context, pc *domain.Equipo) err
 		WHERE id=$1
 	`, pc.ID, nullIfEmpty(pc.CarroID), nullSiCero(pc.Identificador), nullIfEmpty(pc.NumeroSerie), pc.Freezado,
 		nullIfEmpty(pc.CPU), nullIfEmpty(pc.RAM), nullIfEmpty(pc.SistemaOperativo), nullIfEmpty(pc.SoftwareInstalado),
-		string(pc.Estado), pc.DadaDeBaja, pc.FechaBaja,
+		string(pc.Estado), pc.DadoDeBaja, pc.FechaBaja,
 		pc.Tipo, nullIfEmpty(pc.Nombre), pc.Reservable)
 	if err != nil {
 		if esViolacionUnica(err) {
-			return errorDeUnicidadDePC(err)
+			return errorDeUnicidadDeEquipo(err)
 		}
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
@@ -124,7 +124,7 @@ func (r *PostgresRepo) GuardarEquipo(ctx context.Context, pc *domain.Equipo) err
 		return fmt.Errorf("actualizando equipo: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return application.ErrPCNoEncontrada
+		return application.ErrEquipoNoEncontrado
 	}
 	return nil
 }
@@ -141,7 +141,7 @@ func (r *PostgresRepo) ListarEquiposPorCarro(ctx context.Context, carroID string
 
 	var resultado []*domain.Equipo
 	for rows.Next() {
-		pc, err := escanearPC(rows)
+		pc, err := escanearEquipo(rows)
 		if err != nil {
 			return nil, fmt.Errorf("escaneando fila de equipo: %w", err)
 		}
@@ -158,7 +158,7 @@ func (r *PostgresRepo) CrearIncidencia(ctx context.Context, i *domain.Incidencia
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO incidencia (id, equipo_id, reportado_por, descripcion, gravedad, fecha, enviado_dge, estado)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, i.ID, i.PCID, i.ReportadoPor, i.Descripcion, string(i.Gravedad), i.Fecha, i.EnviadoDGE, string(i.Estado))
+	`, i.ID, i.EquipoID, i.ReportadoPor, i.Descripcion, string(i.Gravedad), i.Fecha, i.EnviadoDGE, string(i.Estado))
 	if err != nil {
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
@@ -181,7 +181,7 @@ func escanearIncidencia(row pgx.Row) (*domain.Incidencia, error) {
 	var gravedadStr, estadoStr string
 
 	err := row.Scan(
-		&i.ID, &i.PCID, &i.ReportadoPor, &i.Descripcion, &gravedadStr,
+		&i.ID, &i.EquipoID, &i.ReportadoPor, &i.Descripcion, &gravedadStr,
 		&i.Fecha, &i.EnviadoDGE, &i.FechaEnvioDGE, &estadoStr,
 	)
 	if err != nil {
@@ -247,11 +247,11 @@ func (r *PostgresRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID 
 	return resultado, errorDeFilas(rows)
 }
 
-// errorDeUnicidadDePC traduce cuál de las tres restricciones de unicidad de
+// errorDeUnicidadDeEquipo traduce cuál de las tres restricciones de unicidad de
 // `pc` se violó. Sin esto, cargar un segundo "Cargador 1" respondía "ya
 // existe una PC con ese identificador", que no le dice nada a quien está
 // dando de alta un cargador.
-func errorDeUnicidadDePC(err error) error {
+func errorDeUnicidadDeEquipo(err error) error {
 	switch nombreDeConstraint(err) {
 	case "ux_equipo_suelto_nombre":
 		return application.ErrNombreDeEquipoDuplicado
@@ -287,7 +287,7 @@ func nullIfEmpty(s string) *string {
 // ListarEquiposSueltos: lo prestable que NO está en ningún carro — el
 // proyector, los cargadores, las notebooks de otro modelo.
 //
-// Es una consulta aparte y no un filtro de ListarPCsPorCarro porque no
+// Es una consulta aparte y no un filtro de ListarEquiposPorCarro porque no
 // responde la misma pregunta: aquella arma la ficha de un carro, y esta es
 // la sección "Otros equipos" del inventario, que existe justamente porque
 // estas cosas no pertenecen a ninguno.
@@ -301,7 +301,7 @@ func (r *PostgresRepo) ListarEquiposSueltos(ctx context.Context) ([]*domain.Equi
 
 	var resultado []*domain.Equipo
 	for rows.Next() {
-		pc, err := escanearPC(rows)
+		pc, err := escanearEquipo(rows)
 		if err != nil {
 			return nil, fmt.Errorf("escaneando fila de equipo: %w", err)
 		}

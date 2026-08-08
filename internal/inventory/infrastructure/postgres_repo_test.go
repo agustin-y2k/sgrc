@@ -294,7 +294,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 		{"BuscarIncidenciaPorID", func() error { _, err := repo.BuscarIncidenciaPorID(ctx, "INCIDENCIA_ID"); return err }},
 		{"ListarEquiposPorCarro", func() error { _, err := repo.ListarEquiposPorCarro(ctx, "CARRO_ID"); return err }},
 		{"ListarIncidenciasPorEquipo", func() error { _, err := repo.ListarIncidenciasPorEquipo(ctx, "PC_ID"); return err }},
-		{"CrearPC_CarroInvalido", func() error {
+		{"CrearEquipo_CarroInvalido", func() error {
 			equipo, _ := domain.NuevoEquipoDeCarro(NuevoID(), "CARRO_ID", 1, "SERIE-UNICA", false, time.Now())
 			return repo.CrearEquipo(ctx, equipo)
 		}},

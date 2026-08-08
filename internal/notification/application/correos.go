@@ -141,7 +141,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		if payload.Email == "" {
 			return
 		}
-		asunto, cuerpo := m.textoDePCNoDisponible(payload)
+		asunto, cuerpo := m.textoDeEquipoNoDisponible(payload)
 		enviar("por mail la PC que no volvió", func(ctx context.Context) error {
 			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
 		})

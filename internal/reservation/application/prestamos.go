@@ -228,15 +228,15 @@ func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams
 // inventario y crearla, traduciendo los dos rechazos esperables a una razón
 // que la pantalla pueda mostrar. Devuelve error solo ante fallas reales.
 func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntrega, ahora time.Time) (*domain.Prestamo, *EquipoNoEntregado, error) {
-	enInventario, err := s.validadorPC.EquipoEstaEnInventario(ctx, datos.EquipoID)
+	enInventario, err := s.validadorEquipo.EquipoEstaEnInventario(ctx, datos.EquipoID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("verificando la PC %s: %w", datos.EquipoID, err)
+		return nil, nil, fmt.Errorf("verificando el equipo %s: %w", datos.EquipoID, err)
 	}
 	if !enInventario {
 		return nil, &EquipoNoEntregado{
 			EquipoID: datos.EquipoID,
 			Razon:    NoEntregadaFueraDelInventario,
-			Detalle:  ErrPCDadaDeBaja.Error(),
+			Detalle:  ErrEquipoDadoDeBaja.Error(),
 		}, nil
 	}
 
@@ -248,11 +248,11 @@ func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntr
 	}
 
 	if err := s.repo.CrearPrestamo(ctx, prestamo); err != nil {
-		if errors.Is(err, ErrPCYaPrestada) {
+		if errors.Is(err, ErrEquipoYaPrestado) {
 			return nil, &EquipoNoEntregado{
 				EquipoID: datos.EquipoID,
 				Razon:    NoEntregadaYaPrestada,
-				Detalle:  ErrPCYaPrestada.Error(),
+				Detalle:  ErrEquipoYaPrestado.Error(),
 			}, nil
 		}
 		return nil, nil, err

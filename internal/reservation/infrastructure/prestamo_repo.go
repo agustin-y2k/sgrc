@@ -65,7 +65,7 @@ func (r *PostgresRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) er
 		// no hay ambigüedad sobre cuál se violó: alguien intentó entregar
 		// una máquina que ya estaba afuera.
 		if esViolacionUnica(err) {
-			return application.ErrPCYaPrestada
+			return application.ErrEquipoYaPrestado
 		}
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente

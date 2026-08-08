@@ -189,7 +189,7 @@ describe("NuevaReservaPage", () => {
     })
   })
 
-  it("no deja confirmar sin al menos un equipo seleccionada", async () => {
+  it("no deja confirmar sin al menos un equipo seleccionado", async () => {
     const user = userEvent.setup()
     renderPagina()
     await completarFranja(user)

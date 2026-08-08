@@ -286,7 +286,7 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
     ;(carros?.data ?? []).forEach((carro, i) => {
       const equiposDelCarro = consultasDeEquipos[i]?.data?.data ?? []
       equiposDelCarro
-        .filter((equipo) => !equipo.dadaDeBaja)
+        .filter((equipo) => !equipo.dadoDeBaja)
         .forEach((equipo) =>
           lista.push({
             id: equipo.id,

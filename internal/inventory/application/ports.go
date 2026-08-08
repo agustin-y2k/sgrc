@@ -60,7 +60,7 @@ type Repo interface {
 type LicenciaConUbicacion struct {
 	Licencia *domain.LicenciaSoftware
 	// Etiqueta es cómo se nombra al equipo: "PC 3" o "Notebook chica". Se
-	// muestra esto y no PCIdentificador, que va en 0 —y CarroNombre vacío—
+	// muestra esto y no el identificador, que va en 0 —y CarroNombre vacío—
 	// cuando el equipo no está en ningún carro (015).
 	Etiqueta         string
 	Identificador    int
@@ -82,7 +82,7 @@ type LicenciaConUbicacion struct {
 // operación, es un efecto que debe dispararse cuando una PC cambia de
 // estado o se da de baja.
 type ValidadorReservas interface {
-	CancelarReservasFuturasDePC(ctx context.Context, equipoID string, motivo string) (canceladas int, docentesNotificados int, err error)
+	CancelarReservasFuturasDeEquipo(ctx context.Context, equipoID string, motivo string) (canceladas int, docentesNotificados int, err error)
 
 	// TieneReservasFuturas es la única lectura de este puerto, y existe por
 	// la misma razón que TieneReservasDeCiclo en academic: la cascada de

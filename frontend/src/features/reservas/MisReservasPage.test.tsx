@@ -172,7 +172,7 @@ describe("MisReservasPage", () => {
       expect(
         await screen.findByText("PC 7: el equipo pasó a FUERA_DE_SERVICIO")
       ).toBeInTheDocument()
-      // El grupo sigue vivo porque queda un equipo confirmada.
+      // El grupo sigue vivo porque queda un equipo confirmado.
       expect(screen.getByText("Confirmada")).toBeInTheDocument()
       expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument()
     })

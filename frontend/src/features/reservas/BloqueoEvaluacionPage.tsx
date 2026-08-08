@@ -25,7 +25,7 @@ type EquipoDelCarro = { carro: Carro; equipos: Equipo[] }
 
 /** Un equipo se puede bloquear solo si el backend la aceptaría (RF-04.7). */
 function esBloqueable(equipo: Equipo): boolean {
-  return equipo.estado === "DISPONIBLE" && !equipo.dadaDeBaja
+  return equipo.estado === "DISPONIBLE" && !equipo.dadoDeBaja
 }
 
 /**
@@ -235,7 +235,7 @@ export function BloqueoEvaluacionPage() {
 
       <div className="grid gap-4">
         {inventario.map(({ carro, equipos }) => {
-          const activas = equipos.filter((equipo) => !equipo.dadaDeBaja)
+          const activas = equipos.filter((equipo) => !equipo.dadoDeBaja)
           if (activas.length === 0) return null
 
           return (

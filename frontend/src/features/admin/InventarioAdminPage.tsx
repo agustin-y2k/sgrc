@@ -73,7 +73,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
 
   if (isLoading) return <p className="text-muted-foreground text-sm">Cargando equipos…</p>
 
-  const equipos = (data?.data ?? []).filter((equipo) => !equipo.dadaDeBaja)
+  const equipos = (data?.data ?? []).filter((equipo) => !equipo.dadoDeBaja)
   const error = cambiarEstado.error ?? darDeBaja.error
 
   return (
@@ -87,7 +87,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
       {equipos.length === 0 && (
         <p className="text-muted-foreground text-sm">
           Este carro no tiene equipos activas. Agregá la primera con el formulario de abajo:
-          sin equipos cargadas nadie puede reservar.
+          sin equipos cargados nadie puede reservar.
         </p>
       )}
 
@@ -331,7 +331,7 @@ function EdicionDeCarro({ carro, onListo }: { carro: Carro; onListo: () => void 
 }
 
 // RF-03: carros, equipos e incidencias. Es la pantalla desde la que se arma el
-// inventario de cero — sin equipos cargadas acá, nadie puede reservar nada.
+// inventario de cero — sin equipos cargados acá, nadie puede reservar nada.
 export function InventarioAdminPage() {
   const queryClient = useQueryClient()
   const [carroAbierto, setCarroAbierto] = useState<string | null>(null)

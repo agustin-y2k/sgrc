@@ -77,8 +77,8 @@ func toHistoricoUsoDocenteResponse(h *domain.HistoricoUsoDocente) historicoUsoDo
 // ── RF-06.3: incidencias por equipo y por carro ────────────────────────
 
 type resumenIncidenciasEquipoResponse struct {
-	PCID string `json:"equipoId"`
-	// Ver resumenUsoPCResponse.Etiqueta.
+	EquipoID string `json:"equipoId"`
+	// Ver resumenUsoEquipoResponse.Etiqueta.
 	Etiqueta      string `json:"etiqueta"`
 	Identificador int    `json:"identificador"`
 	CarroNombre   string `json:"carroNombre"`
@@ -92,7 +92,7 @@ type resumenIncidenciasEquipoResponse struct {
 
 func toResumenIncidenciasEquipoResponse(x domain.ResumenIncidenciasEquipo) resumenIncidenciasEquipoResponse {
 	return resumenIncidenciasEquipoResponse{
-		PCID: x.EquipoID, Etiqueta: x.Etiqueta, Identificador: x.Identificador, CarroNombre: x.CarroNombre,
+		EquipoID: x.EquipoID, Etiqueta: x.Etiqueta, Identificador: x.Identificador, CarroNombre: x.CarroNombre,
 		Total: x.Total, Abiertas: x.Abiertas, EnReparacion: x.EnReparacion,
 		EnviadasDGE: x.EnviadasDGE, Resueltas: x.Resueltas, Graves: x.Graves,
 	}

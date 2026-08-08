@@ -16,10 +16,10 @@ func TestParseEstadoEquipo_Validos(t *testing.T) {
 	for entrada, esperado := range casos {
 		got, err := ParseEstadoEquipo(entrada)
 		if err != nil {
-			t.Errorf("ParseEstadoPC(%q) no debería fallar: %v", entrada, err)
+			t.Errorf("ParseEstadoEquipo(%q) no debería fallar: %v", entrada, err)
 		}
 		if got != esperado {
-			t.Errorf("ParseEstadoPC(%q) = %q, esperaba %q", entrada, got, esperado)
+			t.Errorf("ParseEstadoEquipo(%q) = %q, esperaba %q", entrada, got, esperado)
 		}
 	}
 }
@@ -29,7 +29,7 @@ func TestParseEstadoEquipo_Invalido(t *testing.T) {
 	for _, c := range casos {
 		_, err := ParseEstadoEquipo(c)
 		if !errors.Is(err, ErrEstadoEquipoInvalido) {
-			t.Errorf("ParseEstadoPC(%q): esperaba ErrEstadoPCInvalido, obtuve %v", c, err)
+			t.Errorf("ParseEstadoEquipo(%q): esperaba ErrEstadoEquipoInvalido, obtuve %v", c, err)
 		}
 	}
 }
@@ -159,7 +159,7 @@ func TestCambiarEstadoEquipo_DesdeFueraDeServicio_Rechazado(t *testing.T) {
 	err := equipo.CambiarEstado(EstadoDisponible)
 
 	if !errors.Is(err, ErrTransicionEstadoEquipoInvalida) {
-		t.Fatalf("esperaba ErrTransicionEstadoPCInvalida, obtuve %v", err)
+		t.Fatalf("esperaba ErrTransicionEstadoEquipoInvalida, obtuve %v", err)
 	}
 	if equipo.Estado != EstadoFueraDeServicio {
 		t.Error("el estado no debería haber cambiado")
@@ -175,8 +175,8 @@ func TestDarDeBaja_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if !equipo.DadaDeBaja {
-		t.Error("DadaDeBaja debería quedar true")
+	if !equipo.DadoDeBaja {
+		t.Error("DadoDeBaja debería quedar true")
 	}
 	if equipo.FechaBaja == nil || !equipo.FechaBaja.Equal(ahora) {
 		t.Error("FechaBaja debería quedar seteada")
@@ -189,8 +189,8 @@ func TestDarDeBaja_DosVeces_Error(t *testing.T) {
 
 	err := equipo.DarDeBaja(time.Now())
 
-	if !errors.Is(err, ErrPCYaDadaDeBaja) {
-		t.Fatalf("esperaba ErrPCYaDadaDeBaja, obtuve %v", err)
+	if !errors.Is(err, ErrEquipoYaDadoDeBaja) {
+		t.Fatalf("esperaba ErrEquipoYaDadoDeBaja, obtuve %v", err)
 	}
 }
 
@@ -292,7 +292,7 @@ func TestEtiqueta(t *testing.T) {
 	}
 }
 
-// Una PC de carro creada con NuevaPC tiene que quedar reservable y de tipo
+// Una PC de carro creada con NuevoEquipoDeCarro tiene que quedar reservable y de tipo
 // PC: es lo que hace que la 015 no cambie nada de lo que ya existía.
 func TestNuevaEquipo_NaceReservableYDeTipoEquipo(t *testing.T) {
 	p, err := NuevoEquipoDeCarro("equipo-1", "carro-1", 3, "5CD1234ABC", false, time.Now())

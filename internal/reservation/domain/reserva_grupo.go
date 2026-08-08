@@ -12,7 +12,7 @@ import (
 
 // EstadoReservaGrupo (RF-04, docs/05-diagramas-estado.md). Un ReservaGrupo
 // es lo que el docente percibe como "mi reserva" — una materia, fecha y
-// horario, que por debajo puede involucrar varias PCs (una Reserva cada
+// horario, que por debajo puede involucrar varios equipos (una Reserva cada
 // una).
 type EstadoReservaGrupo string
 

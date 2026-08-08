@@ -15,7 +15,7 @@ import (
 // El reloj de nuevaAppDeTest está fijado en el 1 de enero de 2026.
 const hoyEnLaApp = "2026-01-01"
 
-func repoConPC(t *testing.T) *fakeRepo {
+func repoConEquipo(t *testing.T) *fakeRepo {
 	t.Helper()
 	repo := nuevoFakeRepo()
 	repo.carros["carro-1"] = &domain.Carro{ID: "carro-1", Nombre: "Carro 1"}
@@ -44,7 +44,7 @@ func pedir(t *testing.T, app *fiber.App, metodo, ruta string, cuerpo any, rol st
 }
 
 func TestHTTP_CrearLicencias_EnVariasEquipos(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
 
 	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
@@ -77,7 +77,7 @@ func TestHTTP_CrearLicencias_EnVariasEquipos(t *testing.T) {
 }
 
 func TestHTTP_CrearLicencias_ConQuedanDias(t *testing.T) {
-	app := nuevaAppDeTest(repoConPC(t))
+	app := nuevaAppDeTest(repoConEquipo(t))
 	doce := 12
 
 	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
@@ -102,7 +102,7 @@ func TestHTTP_CrearLicencias_ConQuedanDias(t *testing.T) {
 }
 
 func TestHTTP_CrearLicencias_SegundaTandaInformaLasQueYaEstaban(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
 	req := crearLicenciasRequest{EquipoIDs: []string{"equipo-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30}
 
@@ -129,7 +129,7 @@ func TestHTTP_CrearLicencias_SegundaTandaInformaLasQueYaEstaban(t *testing.T) {
 }
 
 func TestHTTP_CrearLicencias_FechaMalFormada(t *testing.T) {
-	app := nuevaAppDeTest(repoConPC(t))
+	app := nuevaAppDeTest(repoConEquipo(t))
 	mal := "03/09/2026"
 
 	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
@@ -143,7 +143,7 @@ func TestHTTP_CrearLicencias_FechaMalFormada(t *testing.T) {
 }
 
 func TestHTTP_CrearLicencias_VencimientoAmbiguo(t *testing.T) {
-	app := nuevaAppDeTest(repoConPC(t))
+	app := nuevaAppDeTest(repoConEquipo(t))
 	doce := 12
 	vence := "2026-03-15"
 
@@ -158,7 +158,7 @@ func TestHTTP_CrearLicencias_VencimientoAmbiguo(t *testing.T) {
 }
 
 func TestHTTP_RenovarLicencias(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
 	vence := "2026-01-05"
 	_, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
@@ -197,7 +197,7 @@ func TestHTTP_RenovarLicencias(t *testing.T) {
 // puede ser un atajo para ponerle treinta días a una licencia que nadie
 // verificó.
 func TestHTTP_RenovarLicencias_SinFechaPreviaSeInforma(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
 	_, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
 		EquipoIDs: []string{"equipo-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
@@ -228,7 +228,7 @@ func TestHTTP_RenovarLicencias_SinFechaPreviaSeInforma(t *testing.T) {
 }
 
 func TestHTTP_EditarLicencia_CorregirElVencimiento(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
 	l, err := domain.NuevaLicencia("lic-1", "equipo-1", "AutoCAD 2027", 30, 1, time.Now())
 	if err != nil {
@@ -255,7 +255,7 @@ func TestHTTP_EditarLicencia_CorregirElVencimiento(t *testing.T) {
 }
 
 func TestHTTP_EditarLicencia_NoEncontrada(t *testing.T) {
-	app := nuevaAppDeTest(repoConPC(t))
+	app := nuevaAppDeTest(repoConEquipo(t))
 
 	codigo, _ := pedir(t, app, "PATCH", "/api/inventory/licencias/no-existe", editarLicenciaRequest{}, "ADMIN")
 
@@ -265,7 +265,7 @@ func TestHTTP_EditarLicencia_NoEncontrada(t *testing.T) {
 }
 
 func TestHTTP_BorrarLicencia(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
 	l, err := domain.NuevaLicencia("lic-1", "equipo-1", "AutoCAD 2027", 30, 1, time.Now())
 	if err != nil {
@@ -284,7 +284,7 @@ func TestHTTP_BorrarLicencia(t *testing.T) {
 }
 
 func TestHTTP_ListarLicencias_TraeLaUbicacion(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
 	l, err := domain.NuevaLicencia("lic-1", "equipo-1", "AutoCAD 2027", 30, 1, time.Now())
 	if err != nil {
@@ -321,7 +321,7 @@ func TestHTTP_ListarLicencias_TraeLaUbicacion(t *testing.T) {
 // información que sí le sirve para elegir PC es software_instalado, que ve
 // en la pantalla de reserva.
 func TestHTTP_Licencias_SoloAdmin(t *testing.T) {
-	app := nuevaAppDeTest(repoConPC(t))
+	app := nuevaAppDeTest(repoConEquipo(t))
 
 	rutas := []struct{ metodo, ruta string }{
 		{"GET", "/api/inventory/licencias"},

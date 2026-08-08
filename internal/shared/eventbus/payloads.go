@@ -53,7 +53,7 @@ type LicenciaPorVencer struct {
 	LicenciaID string
 	Nombre     string
 	// Etiqueta es cómo se nombra al equipo: "PC 3" o "Notebook chica".
-	// PCIdentificador va en 0 en un equipo suelto (015), así que un aviso
+	// Identificador va en 0 en un equipo suelto (015), así que un aviso
 	// armado con él manda a buscar una "PC 0" que no existe.
 	Etiqueta         string
 	Identificador    int

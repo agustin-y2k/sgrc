@@ -69,7 +69,7 @@ components:
       description: |
         Mensaje de error en texto plano. Ejemplos reales:
         "credenciales inválidas", "email ya registrado",
-        "una o más PCs ya tienen una reserva en ese horario".
+        "uno o más equipos ya tienen una reserva en ese horario".
 
     PaginationMeta:
       type: object
@@ -191,9 +191,8 @@ components:
         id: { type: string, format: uuid }
         nombre: { type: string }
         descripcion: { type: string, nullable: true }
-        pcs: { type: array, items: { $ref: '#/components/schemas/PC' } }
 
-    PC:
+    Equipo:
       type: object
       properties:
         id: { type: string, format: uuid }
@@ -210,7 +209,7 @@ components:
         sistemaOperativo: { type: string, nullable: true }
         softwareInstalado: { type: string, nullable: true }
         estado: { type: string, enum: [DISPONIBLE, EN_MANTENIMIENTO, FUERA_DE_SERVICIO] }
-        dadaDeBaja: { type: boolean, description: "Soft delete: si es true, no aparece en listados activos ni puede reservarse" }
+        dadoDeBaja: { type: boolean, description: "Soft delete: si es true, no aparece en listados activos ni puede reservarse" }
         fechaBaja: { type: string, format: date-time, nullable: true }
 
     Licencia:
@@ -1320,7 +1319,7 @@ paths:
   /api/inventory/carros:
     get:
       tags: [inventory]
-      summary: Listar carros con sus PCs (cualquier usuario autenticado)
+      summary: Listar carros (cualquier usuario autenticado)
       description: |
         Visible para ADMIN y DOCENTE por igual — un docente necesita ver estado,
         freezado y softwareInstalado (ej. versión de AutoCAD) de cada PC para elegir
@@ -1375,7 +1374,7 @@ paths:
   /api/inventory/carros/{carroId}/equipos:
     get:
       tags: [inventory]
-      summary: Listar las PCs de un carro (RF-03.7, todos los usuarios autenticados)
+      summary: Listar los equipos de un carro (RF-03.7, todos los usuarios autenticados)
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -1391,10 +1390,10 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/PC' }
+                    items: { $ref: '#/components/schemas/Equipo' }
     post:
       tags: [inventory]
-      summary: Registrar una PC en un carro (RF-03.2, Admin)
+      summary: Registrar un equipo en un carro (RF-03.2, Admin)
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -1442,12 +1441,12 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/PC' }
+                    items: { $ref: '#/components/schemas/Equipo' }
     post:
       tags: [inventory]
       summary: Registrar un equipo suelto (RF-03.15, Admin)
       description: |
-        Ruta aparte de `/carros/{carroId}/pcs` y no un campo opcional suyo
+        Ruta aparte de `/carros/{carroId}/equipos` y no un campo opcional suyo
         porque lo que se carga es distinto: acá no hay carro, ni identificador,
         ni número de serie, y lo que identifica al equipo es el nombre.
       security: [{ bearerAuth: [] }]
@@ -1467,14 +1466,14 @@ paths:
           description: Equipo registrado
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PC' }
+              schema: { $ref: '#/components/schemas/Equipo' }
         "400": { description: Falta el tipo o el nombre, o exceden el largo }
         "409": { description: Ya hay otro equipo suelto con ese nombre }
 
   /api/inventory/equipos/{id}:
     patch:
       tags: [inventory]
-      summary: Editar datos de una PC, incluyendo moverla de carro (Admin)
+      summary: Editar datos de un equipo, incluyendo moverlo de carro (Admin)
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -1502,7 +1501,7 @@ paths:
         "409": { description: Ya existe una PC con ese identificador en el carro destino, o el número de serie ya está registrado en otra PC }
     delete:
       tags: [inventory]
-      summary: Dar de baja una PC del inventario (Admin)
+      summary: Dar de baja un equipo del inventario (Admin)
       description: |
         Soft delete: marca dado_de_baja=true y fecha_baja. No se borra la fila —
         incidencia y reserva la referencian por FK y ese historial se conserva.
@@ -1524,14 +1523,14 @@ paths:
               schema:
                 type: object
                 properties:
-                  dadaDeBaja: { type: boolean }
+                  dadoDeBaja: { type: boolean }
                   reservasCanceladas: { type: integer }
                   docentesNotificados: { type: integer }
 
   /api/inventory/equipos/{id}/estado:
     patch:
       tags: [inventory]
-      summary: Cambiar estado de una PC (Admin)
+      summary: Cambiar estado de un equipo (Admin)
       description: |
         Al pasar a EN_MANTENIMIENTO o FUERA_DE_SERVICIO, cancela en cascada todas las
         reservas CONFIRMADA futuras de esa PC y notifica a cada docente afectado (RF-03.6).
@@ -1569,7 +1568,7 @@ paths:
   /api/reservation/equipos/{equipoId}/calendario:
     get:
       tags: [inventory]
-      summary: Calendario de disponibilidad de una PC (todos los usuarios autenticados)
+      summary: Calendario de disponibilidad de un equipo (todos los usuarios autenticados)
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -1598,7 +1597,7 @@ paths:
   /api/inventory/incidencias:
     post:
       tags: [inventory]
-      summary: Registrar incidencia sobre una PC
+      summary: Registrar incidencia sobre un equipo
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -1893,7 +1892,7 @@ paths:
                     items: { $ref: '#/components/schemas/Licencia' }
     post:
       tags: [inventory]
-      summary: Cargar la misma licencia en varias PCs (Admin)
+      summary: Cargar la misma licencia en varios equipos (Admin)
       description: |
         Alta masiva: el caso real es "AutoCAD, 30 días, en estas ocho máquinas",
         de uno o de varios carros.
@@ -2046,7 +2045,7 @@ paths:
   /api/inventory/equipos/{equipoId}/licencias:
     get:
       tags: [inventory]
-      summary: Licencias de una PC puntual (Admin)
+      summary: Licencias de un equipo puntual (Admin)
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -2071,7 +2070,7 @@ paths:
   /api/reservation/equipos-disponibles:
     get:
       tags: [reservations]
-      summary: Listar PCs disponibles para tildar en un horario dado
+      summary: Listar equipos disponibles para tildar en un horario dado
       description: |
         Devuelve PCs de todos los carros por defecto — un docente puede combinar PCs
         de carros distintos en la misma reserva (no hay restricción de "un solo carro
@@ -2102,7 +2101,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/PC' } }
+                  data: { type: array, items: { $ref: '#/components/schemas/Equipo' } }
 
   /api/reservation/reservas:
     get:
@@ -2139,7 +2138,7 @@ paths:
         "400": { description: page o pageSize inválidos }
     post:
       tags: [reservations]
-      summary: Crear reserva (una o varias PCs en un solo grupo)
+      summary: Crear reserva (uno o varios equipos en un solo grupo)
       description: |
         Operación transaccional: si alguna PC del arreglo tiene solapamiento, no se
         confirma ninguna — la respuesta 409 detalla qué PC(s) puntual(es) fallaron
@@ -2176,7 +2175,7 @@ paths:
   /api/reservation/reservas/recurrentes:
     post:
       tags: [reservations]
-      summary: Crear reserva recurrente (una o varias PCs, valida todas las ocurrencias antes de crear)
+      summary: Crear reserva recurrente (uno o varios equipos, valida todas las ocurrencias antes de crear)
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -2190,9 +2189,11 @@ paths:
               schema:
                 type: object
                 properties:
-                  reglaRecurrenciaId: { type: string, format: uuid }
-                  fechasCreadas: { type: array, items: { type: string, format: date } }
-                  pcsPorFecha: { type: integer, description: "Cantidad de PCs incluidas en cada fecha" }
+                  reglaId: { type: string, format: uuid }
+                  grupos:
+                    type: array
+                    description: Un ReservaGrupo por cada fecha materializada.
+                    items: { $ref: '#/components/schemas/ReservaGrupo' }
         "409":
           description: |
             Una o más ocurrencias (fecha × PC) tienen solapamiento — no se crea
@@ -2204,7 +2205,7 @@ paths:
   /api/reservation/grupos/{id}:
     get:
       tags: [reservations]
-      summary: Ver el detalle de un grupo de reserva (con el estado de cada PC)
+      summary: Ver el detalle de un grupo de reserva (con el estado de cada equipo)
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -2252,7 +2253,7 @@ paths:
   /api/reservation/reservas/{id}/cancelar:
     post:
       tags: [reservations]
-      summary: Cancelar una Reserva de PC puntual
+      summary: Cancelar la Reserva de un equipo puntual
       description: |
         Un docente solo puede cancelar las suyas; un Admin, cualquiera.
         RF-04.8: si la reserva es de otra persona el motivo es OBLIGATORIO
@@ -2283,7 +2284,7 @@ paths:
   /api/reservation/bloqueos-evaluacion:
     post:
       tags: [reservations]
-      summary: Bloquear PCs de un carro para evaluación estatal, en un rango horario definido (Admin)
+      summary: Bloquear equipos de un carro para evaluación estatal, en un rango horario definido (Admin)
       description: |
         Cancela solo las Reserva puntuales en conflicto dentro del rango exacto — el
         resto de una recurrencia u otras PCs del mismo grupo siguen vigentes. Los
@@ -2354,7 +2355,7 @@ paths:
   /api/reporting/ciclos/{cicloId}/uso-equipos:
     get:
       tags: [reports]
-      summary: Reporte de uso por PC (Admin)
+      summary: Reporte de uso por equipo (Admin)
       security: [{ bearerAuth: [] }]
       parameters:
         - in: query
@@ -2626,7 +2627,7 @@ paths:
   /api/inventory/equipos/{equipoId}/incidencias:
     get:
       tags: [inventory]
-      summary: Incidencias de una PC
+      summary: Incidencias de un equipo
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path

@@ -38,6 +38,7 @@ SGRC resuelve los tres: **impide el solapamiento a nivel de base de datos** (no 
 |---|---|
 | **Inventario** | Carros, PCs, número de serie, procesador, memoria, software instalado y estado (disponible, en mantenimiento, fuera de servicio). |
 | **Otros equipos** | Lo que se presta y no está en ningún carro: un proyector, cargadores, notebooks sueltas. Se entregan y se reciben en la misma pantalla que las computadoras, y cada uno decide si además se puede reservar con anticipación —un proyector sí, un cargador se pide en el momento—. |
+| **El mostrador** | La pantalla de inicio del administrador muestra sin buscar qué clase está pasando ahora, cuál sigue, qué hay afuera del laboratorio y el botón para marcar que volvió. Se refresca sola cada minuto, porque el mostrador lo atienden varias personas a la vez. |
 | **Entregas y devoluciones** | Qué computadoras están afuera del laboratorio, quién se las llevó y cuándo tienen que volver. Reemplaza el registro en papel, y a diferencia de él no deja que la misma máquina figure entregada dos veces. También sirve para prestar una computadora en el momento, a alguien que ni siquiera tiene cuenta en el sistema. |
 | **La reserva que nadie retiró** | Una hora antes de la clase le llega un recordatorio al docente. Si a los cuarenta minutos nadie fue a buscar las máquinas, quedan libres para otro — pero si el docente llega más tarde y siguen ahí, se le entregan igual. Y si una computadora no vuelve a horario, el sistema la reclama y le avisa a quien la tenía reservada después. |
 | **Licencias de software** | Qué programas con vencimiento hay en cada PC y cuántos días le quedan a cada uno. El día antes de que venza —y el día que vence— llega un mail a todos los administradores. Si la licencia se renovó otro día, o si hay que corregir la fecha, se edita en cualquier momento. |
@@ -133,7 +134,7 @@ Toda la documentación funcional y técnica vive en [`docs/`](docs).
 | [`11-operacion.md`](docs/11-operacion.md) | **Puesta en marcha, arranque, parada, logs, migraciones y copias de seguridad** | Quien opera el servidor |
 | [`03-diagrama-clases.md`](docs/03-diagrama-clases.md) | Modelo de dominio | Técnico |
 | [`04-diagramas-secuencia.md`](docs/04-diagramas-secuencia.md) | Los flujos críticos, paso a paso entre módulos | Técnico |
-| [`05-diagramas-estado.md`](docs/05-diagramas-estado.md) | Máquinas de estado de PC, Reserva, Usuario y Ciclo | Técnico |
+| [`05-diagramas-estado.md`](docs/05-diagramas-estado.md) | Máquinas de estado de Equipo, Reserva, Usuario y Ciclo | Técnico |
 | [`06-arquitectura.md`](docs/06-arquitectura.md) | Arquitectura del monolito modular, bus de eventos, decisiones de diseño | Técnico |
 | [`07-modelo-datos.md`](docs/07-modelo-datos.md) | Esquema completo de la base de datos | Técnico |
 | [`08-api-spec.yaml`](docs/08-api-spec.yaml) | Contrato OpenAPI de la API | Técnico |
@@ -180,7 +181,7 @@ Todo corre en contenedores: `sgrc-app` (el binario Go), `postgres` (con las migr
 
 El contenedor de la API se autochequea contra su propio `/health`, que a su vez consulta la base: `docker compose ps` muestra `healthy` solo si la API puede llegar a Postgres.
 
-En **producción la base arranca vacía a propósito**: las migraciones crean las tablas, la aplicación siembra el primer administrador y ahí termina. Ni carros, ni PCs, ni ciclo lectivo — eso lo carga el administrador desde la interfaz.
+En **producción la base arranca vacía a propósito**: las migraciones crean las tablas, la aplicación siembra el primer administrador y ahí termina. Ni carros, ni equipos, ni ciclo lectivo — eso lo carga el administrador desde la interfaz.
 
 En **desarrollo**, `make run` levanta además un servicio que siembra datos de prueba (un ciclo, una materia, un docente y un carro con PCs) apenas la API queda sana, así que `docker compose down -v && make run` deja el sistema usable sin pasos extra.
 

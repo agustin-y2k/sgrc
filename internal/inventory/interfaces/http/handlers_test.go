@@ -71,7 +71,7 @@ func (r *fakeRepo) CrearEquipo(ctx context.Context, equipo *domain.Equipo) error
 func (r *fakeRepo) BuscarEquipoPorID(ctx context.Context, id string) (*domain.Equipo, error) {
 	equipo, ok := r.equipos[id]
 	if !ok {
-		return nil, application.ErrPCNoEncontrada
+		return nil, application.ErrEquipoNoEncontrado
 	}
 	return equipo, nil
 }
@@ -118,7 +118,7 @@ func (r *fakeRepo) GuardarIncidencia(ctx context.Context, i *domain.Incidencia) 
 func (r *fakeRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error) {
 	var resultado []*domain.Incidencia
 	for _, i := range r.incidencias {
-		if i.PCID == equipoID {
+		if i.EquipoID == equipoID {
 			resultado = append(resultado, i)
 		}
 	}
@@ -181,7 +181,7 @@ func (r *fakeRepo) conUbicacion(l *domain.LicenciaSoftware) *application.Licenci
 	u := &application.LicenciaConUbicacion{Licencia: l}
 	if equipo, ok := r.equipos[l.EquipoID]; ok {
 		u.Identificador = equipo.Identificador
-		u.EquipoDadoDeBaja = equipo.DadaDeBaja
+		u.EquipoDadoDeBaja = equipo.DadoDeBaja
 		u.CarroID = equipo.CarroID
 		if carro, ok := r.carros[equipo.CarroID]; ok {
 			u.CarroNombre = carro.Nombre
@@ -192,7 +192,7 @@ func (r *fakeRepo) conUbicacion(l *domain.LicenciaSoftware) *application.Licenci
 
 type fakeValidadorReservas struct{}
 
-func (f *fakeValidadorReservas) CancelarReservasFuturasDePC(ctx context.Context, equipoID, motivo string) (int, int, error) {
+func (f *fakeValidadorReservas) CancelarReservasFuturasDeEquipo(ctx context.Context, equipoID, motivo string) (int, int, error) {
 	return 0, 0, nil
 }
 
@@ -432,7 +432,7 @@ func TestHTTP_CrearIncidencia_ComoDocente_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/inventory/incidencias",
-		jsonBody(crearIncidenciaRequest{PCID: "pc1", Descripcion: "No enciende", Gravedad: "GRAVE"}))
+		jsonBody(crearIncidenciaRequest{EquipoID: "pc1", Descripcion: "No enciende", Gravedad: "GRAVE"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
@@ -449,7 +449,7 @@ func TestHTTP_CrearIncidencia_GravedadInvalida_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/inventory/incidencias",
-		jsonBody(crearIncidenciaRequest{PCID: "pc1", Descripcion: "No enciende", Gravedad: "CRITICA"}))
+		jsonBody(crearIncidenciaRequest{EquipoID: "pc1", Descripcion: "No enciende", Gravedad: "CRITICA"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
@@ -463,7 +463,7 @@ func TestHTTP_CrearIncidencia_SinToken_401(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/inventory/incidencias",
-		jsonBody(crearIncidenciaRequest{PCID: "pc1", Descripcion: "No enciende", Gravedad: "GRAVE"}))
+		jsonBody(crearIncidenciaRequest{EquipoID: "pc1", Descripcion: "No enciende", Gravedad: "GRAVE"}))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, _ := app.Test(req)

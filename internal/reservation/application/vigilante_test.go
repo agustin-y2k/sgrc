@@ -267,7 +267,7 @@ func TestBarrer_LaAdvertenciaViajaDentroDelRecordatorio(t *testing.T) {
 	if resumen.Recordatorios != 1 {
 		t.Fatalf("esperaba el recordatorio: %+v", resumen)
 	}
-	if resumen.AvisosDePCFaltante != 0 {
+	if resumen.AvisosDeEquipoFaltante != 0 {
 		t.Errorf("la advertencia va adentro del recordatorio, no aparte: %+v", resumen)
 	}
 	aviso := bus.de("reserva.recordatorio")[0].Payload.(eventbus.RecordatorioDeReserva)
@@ -291,7 +291,7 @@ func TestBarrer_AvisoSueltoCuandoLaDemoraEsPosterior(t *testing.T) {
 
 	resumen := barrer(t, vigilanteALas(repo, bus, 7, 40))
 
-	if resumen.AvisosDePCFaltante != 1 {
+	if resumen.AvisosDeEquipoFaltante != 1 {
 		t.Fatalf("esperaba el aviso suelto: %+v", resumen)
 	}
 	aviso := bus.de("reserva.equipo-no-disponible")[0].Payload.(eventbus.EquipoNoDisponibleParaReserva)
@@ -300,7 +300,7 @@ func TestBarrer_AvisoSueltoCuandoLaDemoraEsPosterior(t *testing.T) {
 	}
 }
 
-// TestBarrer_SiLaPCVuelveATiempoNadieSeEntera es la razón por la que esto no
+// TestBarrer_SiElEquipoVuelveATiempoNadieSeEntera es la razón por la que esto no
 // bombardea: el caso más común es que alguien se demore quince minutos y
 // devuelva.
 func TestBarrer_SiElEquipoVuelveATiempoNadieSeEntera(t *testing.T) {
@@ -324,7 +324,7 @@ func TestBarrer_SiElEquipoVuelveATiempoNadieSeEntera(t *testing.T) {
 
 	resumen := barrer(t, vigilanteALas(repo, bus, 7, 45))
 
-	if resumen.AvisosDePCFaltante != 0 {
+	if resumen.AvisosDeEquipoFaltante != 0 {
 		t.Errorf("la máquina volvió: el docente no tiene que enterarse de nada")
 	}
 }
@@ -337,7 +337,7 @@ func TestBarrer_ElAvisoDeEquipoFaltanteSaleUnaSolaVez(t *testing.T) {
 
 	barrer(t, v)
 	for i := 0; i < 5; i++ {
-		if r := barrer(t, v); r.AvisosDePCFaltante != 0 || r.Recordatorios != 0 {
+		if r := barrer(t, v); r.AvisosDeEquipoFaltante != 0 || r.Recordatorios != 0 {
 			t.Fatalf("corrida %d: volvió a avisar (%+v)", i+2, r)
 		}
 	}

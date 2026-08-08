@@ -14,16 +14,16 @@ var (
 	// conserva su registro pero no admite reservas nuevas.
 	ErrMateriaArchivada = errors.New("la materia está archivada y no admite reservas nuevas")
 
-	// ErrPCNoDisponible: la PC no existe, está dada de baja, o no está en
+	// ErrEquipoNoDisponible: la PC no existe, está dada de baja, o no está en
 	// estado DISPONIBLE.
-	ErrPCNoDisponible = errors.New("la PC no está disponible para reservar")
+	ErrEquipoNoDisponible = errors.New("el equipo no está disponible para reservar")
 
-	// ErrSolapamiento: alguna de las PCs pedidas ya tiene una reserva
+	// ErrSolapamiento: alguna de los equipos pedidos ya tiene una reserva
 	// confirmada que se superpone con el horario pedido. Se intenta
 	// detectar esto ANTES de golpear la constraint de la base
 	// (mejor mensaje), pero la constraint EXCLUDE sigue siendo la
 	// garantía real ante condiciones de carrera.
-	ErrSolapamiento = errors.New("una o más PCs ya tienen una reserva en ese horario")
+	ErrSolapamiento = errors.New("uno o más equipos ya tienen una reserva en ese horario")
 
 	// ErrSinEquipos: una reserva necesita al menos una PC.
 	ErrSinEquipos = errors.New("hay que seleccionar al menos un equipo")
@@ -52,17 +52,17 @@ var (
 
 	ErrPrestamoNoEncontrado = errors.New("no se encontró ese registro de entrega")
 
-	// ErrPCYaPrestada: el índice único parcial de la migración 013 impide
+	// ErrEquipoYaPrestado: el índice único parcial de la migración 013 impide
 	// dos préstamos abiertos sobre la misma PC. Es la garantía que el papel
 	// no puede dar — entregar dos veces la misma máquina porque dos Admin
 	// la anotaron a la vez no lo detecta nadie hasta que aparece un docente
 	// sin computadora.
-	ErrPCYaPrestada = errors.New("esa computadora ya figura entregada y todavía no volvió")
+	ErrEquipoYaPrestado = errors.New("ese equipo ya figura entregado y todavía no volvió")
 
-	// ErrPCDadaDeBaja: no se entrega una máquina que salió del inventario.
+	// ErrEquipoDadoDeBaja: no se entrega una máquina que salió del inventario.
 	// Las EN_MANTENIMIENTO y FUERA_DE_SERVICIO sí se pueden entregar: llevar
 	// una PC rota al técnico es justamente un préstamo.
-	ErrPCDadaDeBaja = errors.New("esa computadora está dada de baja del inventario")
+	ErrEquipoDadoDeBaja = errors.New("ese equipo está dado de baja del inventario")
 
 	// ErrReservaAjena: RF-04.4 — un docente solo toca sus propias reservas.
 	// El Admin puede tocar cualquiera.

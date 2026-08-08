@@ -67,7 +67,7 @@ var (
 	// alguien cargaba con el código real no entraba.
 	ErrNumeroSerieInvalido = errors.New("el número de serie no puede estar vacío")
 	ErrNumeroSerieLargo    = fmt.Errorf("el número de serie no puede tener más de %d caracteres", MaxLargoNumeroSerie)
-	ErrPCYaDadaDeBaja      = errors.New("el equipo ya está dado de baja")
+	ErrEquipoYaDadoDeBaja  = errors.New("el equipo ya está dado de baja")
 )
 
 // NormalizarNumeroSerie devuelve la forma canónica: sin espacios al borde y
@@ -114,7 +114,7 @@ type Equipo struct {
 	SistemaOperativo  string
 	SoftwareInstalado string
 	Estado            EstadoEquipo
-	DadaDeBaja        bool
+	DadoDeBaja        bool
 	FechaBaja         *time.Time
 	FechaAlta         time.Time
 }
@@ -147,7 +147,7 @@ func NuevoEquipoDeCarro(id, carroID string, identificador int, numeroSerie strin
 }
 
 // CambiarEstado aplica una transición si es válida (ver
-// EstadoPC.PuedeTransicionarA). No dispara ninguna cascada de cancelación
+// EstadoEquipo.PuedeTransicionarA). No dispara ninguna cascada de cancelación
 // de reservas acá — eso es responsabilidad de application/, que llega a
 // reservation por un puerto (ValidadorReservas); el dominio no conoce
 // infraestructura.
@@ -162,10 +162,10 @@ func (p *Equipo) CambiarEstado(nuevo EstadoEquipo) error {
 // DarDeBaja marca la PC como dada de baja (soft delete, RF-03.4) — la fila
 // se conserva para no perder el historial de incidencias y reservas.
 func (p *Equipo) DarDeBaja(ahora time.Time) error {
-	if p.DadaDeBaja {
-		return ErrPCYaDadaDeBaja
+	if p.DadoDeBaja {
+		return ErrEquipoYaDadoDeBaja
 	}
-	p.DadaDeBaja = true
+	p.DadoDeBaja = true
 	p.FechaBaja = &ahora
 	return nil
 }

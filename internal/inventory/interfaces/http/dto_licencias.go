@@ -102,7 +102,7 @@ type editarLicenciaRequest struct {
 
 type licenciaResponse struct {
 	ID           string `json:"id"`
-	PCID         string `json:"equipoId"`
+	EquipoID     string `json:"equipoId"`
 	Nombre       string `json:"nombre"`
 	DiasDuracion int    `json:"diasDuracion"`
 	DiasAviso    int    `json:"diasAviso"`
@@ -136,7 +136,7 @@ type licenciaResponse struct {
 
 func toLicenciaResponse(l *domain.LicenciaSoftware, hoy time.Time) licenciaResponse {
 	r := licenciaResponse{
-		ID: l.ID, PCID: l.EquipoID, Nombre: l.Nombre,
+		ID: l.ID, EquipoID: l.EquipoID, Nombre: l.Nombre,
 		DiasDuracion: l.DiasDuracion, DiasAviso: l.DiasAviso,
 		FechaVencimiento:     formatearFechaOpcional(l.FechaVencimiento),
 		UltimaRenovacion:     formatearFechaOpcional(l.UltimaRenovacion),
@@ -160,7 +160,7 @@ func toLicenciaConUbicacionResponse(u *application.LicenciaConUbicacion, hoy tim
 	return r
 }
 
-// altaMasivaResponse dice qué pasó con cada PC del lote. PCsQueYaLaTenian
+// altaMasivaResponse dice qué pasó con cada equipo del lote. EquiposQueYaLaTenian
 // no es un error: marcar las diez PCs del carro cuando ocho ya estaban
 // cargadas tiene que funcionar, y la pantalla lo informa sin alarmar.
 type altaMasivaResponse struct {

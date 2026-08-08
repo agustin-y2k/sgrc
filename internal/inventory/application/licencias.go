@@ -18,9 +18,9 @@ import (
 // inventory.
 
 var (
-	// ErrSinPCs: un alta masiva sin ninguna PC no es un error de la base ni
+	// ErrSinEquipos: un alta masiva sin ninguna PC no es un error de la base ni
 	// del dominio, es un request vacío.
-	ErrSinPCs = errors.New("hay que indicar al menos un equipo")
+	ErrSinEquipos = errors.New("hay que indicar al menos un equipo")
 	// ErrSinLicencias: ídem para la renovación masiva.
 	ErrSinLicencias = errors.New("hay que indicar al menos una licencia")
 
@@ -110,7 +110,7 @@ type ResultadoAltaMasiva struct {
 	EquiposQueYaLaTenian []string
 }
 
-// CrearLicencias da de alta la misma licencia en varias PCs.
+// CrearLicencias da de alta la misma licencia en varios equipos.
 //
 // Una PC que ya la tiene se saltea y se informa, en vez de abortar el lote.
 // Eso hace que la operación sea REINTENTABLE: si algo falla en la PC número
@@ -119,7 +119,7 @@ type ResultadoAltaMasiva struct {
 // quedan creadas a propósito.
 func (s *Service) CrearLicencias(ctx context.Context, params NuevaLicenciaParams) (*ResultadoAltaMasiva, error) {
 	if len(params.EquipoIDs) == 0 {
-		return nil, ErrSinPCs
+		return nil, ErrSinEquipos
 	}
 	if params.Vencimiento.formasDeclaradas() > 1 {
 		return nil, ErrVencimientoAmbiguo
@@ -209,7 +209,7 @@ func (s *Service) RenovarLicencias(ctx context.Context, ids []string, renovadaEl
 // ── Edición ─────────────────────────────────────────────────────────────
 
 // EditarLicenciaParams — nil significa "no tocar ese campo", igual que en
-// EditarPC. Vencimiento sin ninguna forma declarada tampoco toca la fecha.
+// EditarEquipo. Vencimiento sin ninguna forma declarada tampoco toca la fecha.
 type EditarLicenciaParams struct {
 	Nombre       *string
 	DiasDuracion *int

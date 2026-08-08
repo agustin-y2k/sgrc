@@ -141,7 +141,7 @@ export function OtrosEquipos() {
     queryFn: inventoryApi.listarEquiposSueltos,
   })
 
-  const equipos = (data?.data ?? []).filter((e) => !e.dadaDeBaja)
+  const equipos = (data?.data ?? []).filter((e) => !e.dadoDeBaja)
   const tiposUsados = useMemo(
     () => [...new Set(equipos.map((e) => e.tipo))].sort(),
     [equipos]

@@ -4,7 +4,7 @@ import "errors"
 
 var (
 	ErrCarroNoEncontrado      = errors.New("carro no encontrado")
-	ErrPCNoEncontrada         = errors.New("equipo no encontrado")
+	ErrEquipoNoEncontrado     = errors.New("equipo no encontrado")
 	ErrIncidenciaNoEncontrada = errors.New("incidencia no encontrada")
 	ErrLicenciaNoEncontrada   = errors.New("licencia no encontrada")
 

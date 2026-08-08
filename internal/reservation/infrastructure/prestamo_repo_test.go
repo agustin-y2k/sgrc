@@ -58,7 +58,7 @@ func TestPostgresRepo_Prestamo_EspontaneoIdaYVuelta(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_Prestamo_UnaPCNoPuedeEstarEnDosManos verifica contra
+// TestPostgresRepo_Prestamo_UnEquipoNoPuedeEstarEnDosManos verifica contra
 // Postgres real la garantía que el papel no puede dar. Dos Admin anotando a
 // la vez, o un doble clic, no pueden entregar dos veces la misma máquina.
 func TestPostgresRepo_Prestamo_UnaEquipoNoPuedeEstarEnDosManos(t *testing.T) {
@@ -74,8 +74,8 @@ func TestPostgresRepo_Prestamo_UnaEquipoNoPuedeEstarEnDosManos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
-	if err := repo.CrearPrestamo(ctx, otro); err != application.ErrPCYaPrestada {
-		t.Fatalf("esperaba ErrPCYaPrestada, obtuve %v", err)
+	if err := repo.CrearPrestamo(ctx, otro); err != application.ErrEquipoYaPrestado {
+		t.Fatalf("esperaba ErrEquipoYaPrestado, obtuve %v", err)
 	}
 }
 
@@ -318,7 +318,7 @@ func TestPostgresRepo_Prestamo_SobreviveALaReserva(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_Prestamo_DentroDeUnaTransaccion: entregar varias PCs de
+// TestPostgresRepo_Prestamo_DentroDeUnaTransaccion: entregar varios equipos de
 // una reserva es una sola operación, así que el repo tiene que funcionar
 // atado a una transacción igual que el resto del paquete.
 func TestPostgresRepo_Prestamo_DentroDeUnaTransaccion(t *testing.T) {
@@ -345,15 +345,15 @@ func TestPostgresRepo_Prestamo_DentroDeUnaTransaccion(t *testing.T) {
 		return nil
 	})
 
-	if err != application.ErrPCYaPrestada {
-		t.Fatalf("esperaba ErrPCYaPrestada, obtuve %v", err)
+	if err != application.ErrEquipoYaPrestado {
+		t.Fatalf("esperaba ErrEquipoYaPrestado, obtuve %v", err)
 	}
 	if _, err := repo.BuscarPrestamoAbiertoDeEquipo(ctx, pc1); err != application.ErrPrestamoNoEncontrado {
 		t.Error("la primera entrega del lote debería haberse deshecho")
 	}
 }
 
-// TestPostgresRepo_ReservasFuturasDePC_VienenOrdenadas fija el contrato del
+// TestPostgresRepo_ReservasFuturasDeEquipo_VienenOrdenadas fija el contrato del
 // que depende el aviso de "esta PC tiene una reserva encima" al entregarla
 // suelta: quien llama toma la PRIMERA como la más próxima.
 //

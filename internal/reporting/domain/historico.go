@@ -1,9 +1,9 @@
 // Package domain contiene los tipos de RF-06 — el snapshot histórico
 // permanente que se crea una sola vez al archivar un ciclo lectivo
-// (HistoricoUsoPC/HistoricoUsoDocente, uno por año — ver
+// (HistoricoUsoEquipo/HistoricoUsoDocente, uno por año — ver
 // migrations/001_init.sql, están indexados por `anio`, no por el UUID del
 // ciclo), y los resúmenes "en vivo" que se calculan al vuelo para un
-// ciclo todavía activo (ResumenUsoPC/ResumenUsoDocente, sin persistencia
+// ciclo todavía activo (ResumenUsoEquipo/ResumenUsoDocente, sin persistencia
 // propia — son resultados de consulta, no entidades).
 package domain
 
@@ -45,7 +45,7 @@ func NuevoHistoricoUsoEquipo(id string, anio int, equipoID, etiquetaSnapshot str
 	}, nil
 }
 
-// HistoricoUsoDocente es el equivalente de HistoricoUsoPC agregado por
+// HistoricoUsoDocente es el equivalente de HistoricoUsoEquipo agregado por
 // docente. UsuarioID es nullable (la FK es SET NULL) — si el docente se
 // elimina definitivamente más adelante, el histórico se conserva vía
 // NombreDocenteSnapshot igual.
@@ -74,7 +74,7 @@ func NuevoHistoricoUsoDocente(id string, anio int, usuarioID *string, nombreDoce
 // resuelven en el momento sin necesidad de "congelar" nada.
 // ResumenUsoEquipo lleva identificador y carro resueltos, no solo el UUID: un
 // reporte que solo muestra IDs no se puede leer. El histórico ya guardaba
-// esos datos como snapshot (ver HistoricoUsoPC) — acá se resuelven en vivo
+// esos datos como snapshot (ver HistoricoUsoEquipo) — acá se resuelven en vivo
 // con un JOIN, para que ambos reportes se muestren igual.
 type ResumenUsoEquipo struct {
 	EquipoID string
@@ -96,13 +96,13 @@ type ResumenUsoDocente struct {
 }
 
 // ResumenIncidenciasEquipo / ResumenIncidenciasCarro implementan RF-06.3:
-// incidencias por equipo y por carro. A diferencia del uso de PCs y
+// incidencias por equipo y por carro. A diferencia del uso de equipos y
 // docentes, este reporte NO necesita snapshot histórico — Incidencia nunca
 // se elimina (sobrevive al archivado de cualquier ciclo, ver RF-02.4), así
 // que siempre se resuelve con una query directa.
 type ResumenIncidenciasEquipo struct {
 	EquipoID string
-	// Ver ResumenUsoPC.Etiqueta.
+	// Ver ResumenUsoEquipo.Etiqueta.
 	Etiqueta      string
 	Identificador int
 	CarroNombre   string

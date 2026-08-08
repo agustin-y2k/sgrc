@@ -342,7 +342,7 @@ const maxEquiposEnElMensaje = 8
 // Con un evento por Reserva, bloquear tres PCs de una misma reserva para
 // una evaluación dejaría tres avisos idénticos en la campana. El docente
 // vive eso como una sola cosa —"me sacaron la clase"— y lo que necesita
-// saber es qué PCs, no cuántas filas se actualizaron.
+// saber es qué equipos, no cuántas filas se actualizaron.
 //
 // El prefijo vive SOLO acá. Quien publica manda la razón pelada ("acto
 // escolar", "la PC 3 pasó a FUERA_DE_SERVICIO"): si además armara la frase
@@ -364,7 +364,7 @@ func mensajeDeCancelacion(p eventbus.CancelacionesDeUsuario) string {
 }
 
 // fechaUnica dice si todas las cancelaciones caen el mismo día — el caso
-// habitual (un bloqueo por evaluación, varias PCs de la misma clase), y el
+// habitual (un bloqueo por evaluación, varios equipos de la misma clase), y el
 // que permite nombrar la fecha una sola vez en vez de repetirla por PC.
 func fechaUnica(reservas []eventbus.ReservaCancelada) (time.Time, bool) {
 	primera := reservas[0].Fecha

@@ -221,7 +221,7 @@ func (s *Service) CambiarEstadoEquipo(ctx context.Context, equipoID string, nuev
 	resultado := &ResultadoCascada{}
 	if disparaCascada(nuevo) {
 		motivoTexto := motivoPorDefecto(pc, nuevo, motivo)
-		canceladas, notificados, err := s.validadorReservas.CancelarReservasFuturasDePC(ctx, equipoID, motivoTexto)
+		canceladas, notificados, err := s.validadorReservas.CancelarReservasFuturasDeEquipo(ctx, equipoID, motivoTexto)
 		if err != nil {
 			return nil, errCascada(err)
 		}
@@ -233,7 +233,7 @@ func (s *Service) CambiarEstadoEquipo(ctx context.Context, equipoID string, nuev
 }
 
 // DarDeBajaEquipo implementa RF-03.4/03.9: soft delete + misma cascada de
-// cancelación que CambiarEstadoPC (RF-03.9 dice explícitamente que dar de
+// cancelación que CambiarEstadoEquipo (RF-03.9 dice explícitamente que dar de
 // baja dispara la misma cascada que pasar a FUERA_DE_SERVICIO), incluido el
 // mismo reintento cuando la cascada quedó a medias.
 func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*ResultadoCascada, error) {
@@ -243,7 +243,7 @@ func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*Result
 	}
 
 	if errBaja := pc.DarDeBaja(s.ahora()); errBaja != nil {
-		if !errors.Is(errBaja, domain.ErrPCYaDadaDeBaja) {
+		if !errors.Is(errBaja, domain.ErrEquipoYaDadoDeBaja) {
 			return nil, errBaja
 		}
 		pendiente, err := s.cascadaPendiente(ctx, equipoID)
@@ -259,8 +259,11 @@ func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*Result
 
 	// Minúscula y sin prefijo: esto se lee después de "Tu reserva fue
 	// cancelada: " (ver motivoPorDefecto).
-	motivo := fmt.Sprintf("la PC %d fue dada de baja del inventario", pc.Identificador)
-	canceladas, notificados, err := s.validadorReservas.CancelarReservasFuturasDePC(ctx, equipoID, motivo)
+	// Por la etiqueta y no por el identificador: desde la 015 lo que se da de
+	// baja puede ser un proyector, que no tiene número — el docente recibía
+	// "la PC 0 fue dada de baja" y se quedaba sin saber qué perdió.
+	motivo := fmt.Sprintf("%s fue dado de baja del inventario", pc.Etiqueta())
+	canceladas, notificados, err := s.validadorReservas.CancelarReservasFuturasDeEquipo(ctx, equipoID, motivo)
 	if err != nil {
 		return nil, errCascada(err)
 	}
@@ -270,14 +273,17 @@ func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*Result
 
 // motivoPorDefecto arma la RAZÓN de la cancelación, no el aviso completo:
 // el "Tu reserva fue cancelada:" lo antepone el suscriptor de notification
-// (ver internal/notification/application/subscribers.go). Nombra la PC
-// porque el docente recibe un aviso por cada una y sin el identificador no
-// puede saber cuál se le cayó (RF-05.3).
+// (ver internal/notification/application/subscribers.go). Nombra el equipo
+// porque el docente recibe un aviso por cada uno y sin saber cuál es no
+// puede saber qué se le cayó (RF-05.3).
+//
+// Por Etiqueta() y no por el identificador, que va en 0 en todo lo que no
+// está en un carro (015).
 func motivoPorDefecto(pc *domain.Equipo, nuevo domain.EstadoEquipo, motivo *string) string {
 	if motivo != nil && *motivo != "" {
 		return *motivo
 	}
-	return fmt.Sprintf("la PC %d pasó a %s", pc.Identificador, nuevo)
+	return fmt.Sprintf("%s pasó a %s", pc.Etiqueta(), nuevo)
 }
 
 func (s *Service) ListarEquiposPorCarro(ctx context.Context, carroID string) ([]*domain.Equipo, error) {

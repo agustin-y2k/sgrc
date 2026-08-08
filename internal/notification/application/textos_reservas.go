@@ -93,7 +93,7 @@ func mensajeDeEquipoNoDisponible(a eventbus.EquipoNoDisponibleParaReserva) strin
 		listaDeEquipos(a.Equipos), horaDelDia(a.HoraInicio))
 }
 
-func (m *Mensajero) textoDePCNoDisponible(a eventbus.EquipoNoDisponibleParaReserva) (asunto, cuerpo string) {
+func (m *Mensajero) textoDeEquipoNoDisponible(a eventbus.EquipoNoDisponibleParaReserva) (asunto, cuerpo string) {
 	asunto = "Una computadora de tu reserva puede no estar"
 
 	cuerpo = saludo(a.Nombre) +

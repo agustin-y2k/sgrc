@@ -220,7 +220,7 @@ func (h *Handler) CrearIncidencia(c *fiber.Ctx) error {
 		return errClaims
 	}
 
-	i, err := h.svc.CrearIncidencia(c.UserContext(), req.PCID, claims.UserID, req.Descripcion, gravedad)
+	i, err := h.svc.CrearIncidencia(c.UserContext(), req.EquipoID, claims.UserID, req.Descripcion, gravedad)
 	if err != nil {
 		return mapearError(err)
 	}

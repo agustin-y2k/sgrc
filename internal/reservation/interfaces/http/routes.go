@@ -38,7 +38,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// leer reservas sin romper el límite de dominio.
 	reservation.Get("/equipos/:equipoId/calendario", autenticado, h.CalendarioDeEquipo)
 
-	// RF-04.2: la lista de PCs libres en una franja, de la que el docente
+	// RF-04.2: la lista de equipos libres en una franja, de la que el docente
 	// tilda las que necesita.
 	reservation.Get("/equipos-disponibles", autenticado, h.ListarEquiposDisponibles)
 
