@@ -201,6 +201,61 @@ func TestEntregarPorReserva_SinReservas(t *testing.T) {
 	}
 }
 
+// Entregar contra una reserva LIBERADA es legítimo: el docente llegó tarde y
+// las máquinas seguían ahí. Lo que no puede pasar es que el Admin se entere
+// después de que en el rato que estuvo libre otro la reservó — para entonces
+// ya se la dio al primero y el segundo se encuentra con que no está.
+func TestEntregarPorReserva_LiberadaAvisaSiOtroLaReservo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	liberada := reservaDeTest(t, repo, "res1", "pc1")
+	liberada.Estado = domain.ReservaNoRetirada
+
+	// La que agarró el hueco: de otro docente, todavía por venir.
+	delOtro := reservaDeTest(t, repo, "res2", "pc1")
+	delOtro.Fecha = fecha(2026, time.March, 3)
+	otro := "Grace Hopper"
+	delOtro.NombreDocenteSnapshot = &otro
+
+	svc := nuevoServicioDeTest(repo)
+
+	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
+		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+	})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.Entregadas) != 1 {
+		t.Fatalf("el aviso no tiene que impedir la entrega: %+v", resultado.NoEntregadas)
+	}
+	if len(resultado.Avisos) != 1 {
+		t.Fatalf("esperaba el aviso de que otro la reservó, obtuve %+v", resultado.Avisos)
+	}
+	if resultado.Avisos[0].Docente != otro {
+		t.Errorf("el aviso tiene que decir de quién es la reserva: %+v", resultado.Avisos[0])
+	}
+}
+
+// Con la reserva todavía confirmada no hay nada que avisar: la única
+// "próxima" que existe es ella misma, y nombrarla sería ruido en la
+// operación de todos los días.
+func TestEntregarPorReserva_ConfirmadaNoAvisaDeSiMisma(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaDeTest(t, repo, "res1", "pc1")
+	svc := nuevoServicioDeTest(repo)
+
+	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
+		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+	})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.Avisos) != 0 {
+		t.Errorf("no debería avisar nada: %+v", resultado.Avisos)
+	}
+}
+
 // ── Entrega espontánea ──────────────────────────────────────────────────
 
 func TestEntregarSuelta_SinReservaSinCuentaSinHora(t *testing.T) {

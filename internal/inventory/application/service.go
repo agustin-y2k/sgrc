@@ -242,6 +242,19 @@ func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*Result
 		return nil, err
 	}
 
+	// Solo cuando se está dando de baja de verdad. Si el equipo YA está de
+	// baja estamos completando una cascada que quedó pendiente, y bloquear
+	// ahí impediría terminar lo único que falta.
+	if !pc.DadoDeBaja {
+		prestado, err := s.validadorReservas.EstaPrestado(ctx, equipoID)
+		if err != nil {
+			return nil, fmt.Errorf("verificando si el equipo está prestado: %w", err)
+		}
+		if prestado {
+			return nil, ErrEquipoPrestado
+		}
+	}
+
 	if errBaja := pc.DarDeBaja(s.ahora()); errBaja != nil {
 		if !errors.Is(errBaja, domain.ErrEquipoYaDadoDeBaja) {
 			return nil, errBaja

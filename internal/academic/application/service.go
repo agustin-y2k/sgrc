@@ -106,18 +106,49 @@ type ResultadoArchivado struct {
 // ON CONFLICT DO NOTHING del snapshot (ver reporting/infrastructure)
 // chocaría contra las filas que la corrida anterior ya escribió. El único
 // camino para completar la limpieza sería SQL a mano contra producción.
+//
+// El paso 4 —clonar— quedaba afuera de ese razonamiento, y era el que más
+// lo necesitaba: es el ÚNICO que puede fallar por una causa que el Admin
+// provocó sin querer (pedir un año que ya existe), y fallaba DESPUÉS del
+// borrado irreversible. El resultado era un 409 con el año viejo ya
+// destruido y sin forma de completar el clonado desde la interfaz: había
+// que cargar a mano los cursos y materias del año nuevo. Se ataca por los
+// dos lados:
+//
+//   - Todo lo que se puede saber del clonado ANTES de tocar nada se
+//     verifica antes: que el año sea válido y que no exista ya. El caso
+//     probable —un año repetido— ahora falla con el ciclo viejo intacto.
+//   - Si igual falla por algo transitorio, el reintento lo completa: un
+//     clonado pendiente habilita volver a entrar, igual que la limpieza.
 func (s *Service) ArchivarYClonar(ctx context.Context, cicloID string, clonarAAnio *int) (*ResultadoArchivado, error) {
 	ciclo, err := s.repo.BuscarCicloPorID(ctx, cicloID)
 	if err != nil {
 		return nil, err
 	}
 
+	// El ciclo nuevo se construye y se valida acá arriba, antes del primer
+	// paso destructivo, aunque recién se use al final. Construirlo abajo
+	// dejaba que un año inválido o repetido abortara la operación con las
+	// reservas del año viejo ya borradas.
+	var nuevoCiclo *domain.CicloLectivo
+	if clonarAAnio != nil {
+		nuevoCiclo, err = domain.NuevoCicloLectivo(s.nuevoID(), *clonarAAnio)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.verificarAnioLibre(ctx, *clonarAAnio); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := ciclo.Archivar(); err != nil {
-		// Archivar dos veces sigue siendo un error (RF-02.4) — salvo que el
-		// ciclo todavía tenga reservas, que es la huella que deja un intento
-		// anterior interrumpido entre el paso 2 y el 3. En ese caso esto no
-		// es "archivar de nuevo" sino terminar lo que quedó a medias, y los
-		// pasos que faltan son justamente los que siguen.
+		// Archivar dos veces sigue siendo un error (RF-02.4) — salvo que
+		// haya quedado algo a medias de un intento anterior: reservas sin
+		// borrar (falla entre el paso 2 y el 3) o el clonado sin hacer
+		// (falla en el 4). En esos casos esto no es "archivar de nuevo"
+		// sino terminar lo que faltó, y los pasos que siguen son
+		// idempotentes: el snapshot no duplica, archivar ya archivado no
+		// cambia nada y el borrado no encuentra qué borrar.
 		if !errors.Is(err, domain.ErrCicloYaArchivado) {
 			return nil, err
 		}
@@ -125,7 +156,7 @@ func (s *Service) ArchivarYClonar(ctx context.Context, cicloID string, clonarAAn
 		if errValidacion != nil {
 			return nil, fmt.Errorf("verificando si quedó limpieza pendiente del ciclo: %w", errValidacion)
 		}
-		if !limpiezaPendiente {
+		if !limpiezaPendiente && nuevoCiclo == nil {
 			return nil, err
 		}
 	}
@@ -144,12 +175,7 @@ func (s *Service) ArchivarYClonar(ctx context.Context, cicloID string, clonarAAn
 
 	resultado := &ResultadoArchivado{}
 
-	if clonarAAnio != nil {
-		nuevoCiclo, err := domain.NuevoCicloLectivo(s.nuevoID(), *clonarAAnio)
-		if err != nil {
-			return nil, err
-		}
-
+	if nuevoCiclo != nil {
 		cursosClonados, materiasClonadas, err := s.repo.ClonarCicloA(ctx, cicloID, nuevoCiclo)
 		if err != nil {
 			return nil, fmt.Errorf("clonando ciclo: %w", err)
@@ -161,6 +187,30 @@ func (s *Service) ArchivarYClonar(ctx context.Context, cicloID string, clonarAAn
 	}
 
 	return resultado, nil
+}
+
+// verificarAnioLibre falla si ya existe un ciclo para ese año.
+//
+// La base ya lo garantiza con un UNIQUE, y ClonarCicloA traduce esa
+// violación al mismo error. La diferencia es CUÁNDO se entera cada uno: la
+// constraint salta al final, con el año viejo ya borrado; esto salta antes
+// de tocar nada. No es una validación duplicada por descuido — es la
+// comprobación temprana de algo cuya garantía real sigue estando en la base.
+//
+// Se resuelve listando en vez de con una consulta puntual porque los ciclos
+// son uno por año: son decenas de filas en la vida entera del sistema, y no
+// vale ampliar el contrato del repositorio para eso.
+func (s *Service) verificarAnioLibre(ctx context.Context, anio int) error {
+	ciclos, err := s.repo.ListarCiclos(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("verificando si el año destino está libre: %w", err)
+	}
+	for _, c := range ciclos {
+		if c.Anio == anio {
+			return ErrCicloYaTieneAnio
+		}
+	}
+	return nil
 }
 
 // ListarMateriasReservables implementa el selector de materias de RF-04.1.

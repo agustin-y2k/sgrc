@@ -92,6 +92,14 @@ type ValidadorReservas interface {
 	// terminar. Esto es lo que distingue "este equipo ya se dio de baja" de
 	// "este equipo se dio de baja pero la cascada quedó pendiente".
 	TieneReservasFuturas(ctx context.Context, equipoID string) (bool, error)
+
+	// EstaPrestado dice si el equipo está afuera del laboratorio ahora
+	// mismo. Da de baja no puede pisar eso: la fila del préstamo es lo
+	// único que registra quién lo tiene, y sacar el equipo del inventario
+	// dejándola abierta produce algo que no se puede resolver desde ninguna
+	// pantalla — el equipo ya no se lista, pero sigue en "lo que falta
+	// volver" para siempre.
+	EstaPrestado(ctx context.Context, equipoID string) (bool, error)
 }
 
 type IDGenerator func() string

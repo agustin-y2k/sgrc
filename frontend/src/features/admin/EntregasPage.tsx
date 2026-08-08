@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   PRESTAMOS_KEY,
@@ -11,6 +12,7 @@ import { EntregarDeUnaReserva } from "@/features/admin/entregas/EntregarDeUnaRes
 import { EntregaSuelta } from "@/features/admin/entregas/EntregaSuelta"
 import { LoQueEstaAfuera } from "@/features/admin/entregas/LoQueEstaAfuera"
 import * as reservasApi from "@/features/reservas/api"
+import { getErrorMessage } from "@/lib/api-client"
 
 /**
  * RF-08 — el mostrador completo: qué computadoras están afuera, quién se las
@@ -29,7 +31,7 @@ import * as reservasApi from "@/features/reservas/api"
 export function EntregasPage() {
   const [entregandoSuelta, setEntregandoSuelta] = useState(false)
 
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: PRESTAMOS_KEY,
     queryFn: reservasApi.listarPrestamosAbiertos,
     refetchInterval: REFRESCO_DEL_MOSTRADOR,
@@ -37,6 +39,11 @@ export function EntregasPage() {
 
   // Qué máquinas están afuera, para no ofrecerlas de nuevo. Se calcula acá y
   // se pasa a los dos formularios: es el mismo dato y una sola consulta.
+  //
+  // Si la consulta falla, este conjunto queda vacío y los formularios ofrecen
+  // equipos que en realidad están prestados. El backend igual los rechaza
+  // —el índice único de préstamo abierto no deja entregar dos veces— pero el
+  // Admin se entera recién al confirmar, así que conviene decírselo antes.
   const yaAfuera = useMemo(() => new Set((data?.data ?? []).map((p) => p.equipoId)), [data])
 
   return (
@@ -52,6 +59,16 @@ export function EntregasPage() {
           )
         }
       />
+
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            No se pudo consultar qué hay afuera del laboratorio, así que los
+            formularios pueden ofrecer equipos que ya están prestados. Probá recargar.
+            ({getErrorMessage(error)})
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-4">
         {/* El formulario va en el cuerpo y no en el slot de acción del

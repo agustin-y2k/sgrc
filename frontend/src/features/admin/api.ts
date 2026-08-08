@@ -18,6 +18,7 @@ import type {
 import type {
   HistoricoUsoDocente,
   HistoricoUsoEquipo,
+  ResultadoCascada,
   ResumenIncidenciasCarro,
   ResumenIncidenciasEquipo,
   ResumenUsoDocente,
@@ -149,7 +150,7 @@ export function editarEquipo(
  * backend arma uno por defecto para la notificación al docente.
  */
 export function cambiarEstadoEquipo(id: string, estado: Equipo["estado"], motivo?: string) {
-  return apiFetch<void>(`/api/inventory/equipos/${id}/estado`, {
+  return apiFetch<ResultadoCascada>(`/api/inventory/equipos/${id}/estado`, {
     method: "PATCH",
     body: { estado, motivo },
   })
@@ -157,7 +158,7 @@ export function cambiarEstadoEquipo(id: string, estado: Equipo["estado"], motivo
 
 /** RF-03.9 — dar de baja dispara la misma cascada que RF-03.8. */
 export function darDeBajaEquipo(id: string) {
-  return apiFetch<void>(`/api/inventory/equipos/${id}`, { method: "DELETE" })
+  return apiFetch<ResultadoCascada>(`/api/inventory/equipos/${id}`, { method: "DELETE" })
 }
 
 // Listar y reportar incidencias viven en features/inventory/api.ts: las

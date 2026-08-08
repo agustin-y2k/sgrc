@@ -64,8 +64,14 @@ describe("InventarioAdminPage", () => {
       data: [{ id: "c1", nombre: "Carro 1" }],
     })
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo()] })
-    vi.mocked(adminApi.cambiarEstadoEquipo).mockResolvedValue(undefined)
-    vi.mocked(adminApi.darDeBajaEquipo).mockResolvedValue(undefined)
+    vi.mocked(adminApi.cambiarEstadoEquipo).mockResolvedValue({
+      reservasCanceladas: 0,
+      docentesNotificados: 0,
+    })
+    vi.mocked(adminApi.darDeBajaEquipo).mockResolvedValue({
+      reservasCanceladas: 0,
+      docentesNotificados: 0,
+    })
     vi.mocked(adminApi.crearCarro).mockResolvedValue({ id: "c2", nombre: "Carro 2" })
     vi.mocked(adminApi.editarCarro).mockResolvedValue(undefined)
     vi.mocked(adminApi.crearEquipoDeCarro).mockResolvedValue(equipo({ id: "pc9", identificador: 9 }))
@@ -399,5 +405,40 @@ describe("InventarioAdminPage", () => {
     expect(
       await screen.findByText("ya existe un carro con ese nombre")
     ).toBeInTheDocument()
+  })
+
+  /**
+   * Sacar una máquina de circulación cancela clases de otros docentes. El
+   * backend devuelve la cuenta desde siempre; esta pantalla la descartaba, así
+   * que el Admin no se enteraba de lo que se había llevado puesto.
+   */
+  it("dice cuántas reservas canceló el cambio de estado", async () => {
+    const user = userEvent.setup()
+    vi.mocked(adminApi.cambiarEstadoEquipo).mockResolvedValue({
+      reservasCanceladas: 2,
+      docentesNotificados: 1,
+    })
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Gestionar equipos" }))
+    await user.click(await screen.findByRole("button", { name: /Fuera de servicio/ }))
+    await user.click(screen.getByRole("button", { name: "Confirmar cambio" }))
+
+    expect(
+      await screen.findByText(/Se cancelaron 2 reservas y se avisó a 1 docente/)
+    ).toBeInTheDocument()
+  })
+
+  // El caso normal —la máquina no tenía nada reservado— no muestra nada:
+  // "se cancelaron 0 reservas" es ruido en la operación de todos los días.
+  it("no dice nada cuando no había reservas que cancelar", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Gestionar equipos" }))
+    await user.click(await screen.findByRole("button", { name: /Fuera de servicio/ }))
+    await user.click(screen.getByRole("button", { name: "Confirmar cambio" }))
+
+    expect(screen.queryByText(/Se cancelaron/)).not.toBeInTheDocument()
   })
 })

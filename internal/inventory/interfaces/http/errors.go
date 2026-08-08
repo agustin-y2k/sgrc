@@ -27,7 +27,10 @@ func mapearError(err error) error {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida),
-		errors.Is(err, domain.ErrEquipoYaDadoDeBaja):
+		errors.Is(err, domain.ErrEquipoYaDadoDeBaja),
+		// 409 y no 400: el pedido está bien formado, lo que pasa es que el
+		// estado actual del equipo no lo admite.
+		errors.Is(err, application.ErrEquipoPrestado):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrNombreCarroVacio),

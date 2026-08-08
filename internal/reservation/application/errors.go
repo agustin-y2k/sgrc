@@ -1,6 +1,9 @@
 package application
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	ErrReservaGrupoNoEncontrado = errors.New("reserva no encontrada")
@@ -27,6 +30,17 @@ var (
 
 	// ErrSinEquipos: una reserva necesita al menos una PC.
 	ErrSinEquipos = errors.New("hay que seleccionar al menos un equipo")
+
+	// ErrDemasiadosEquipos acota el tamaño del lote. No lo pide ninguna regla
+	// de la escuela: lo pide que la operación es de lote y el pedido lo arma
+	// el cliente. Sin tope, mandar diez mil identificadores hace que el
+	// servidor arme diez mil filas en una transacción antes de que la base
+	// pueda quejarse de nada.
+	//
+	// El límite es holgado a propósito: MaxEquiposPorOperacion es varias
+	// veces el inventario de una escuela como esta, así que frena el pedido
+	// absurdo sin poder molestar a ninguno legítimo.
+	ErrDemasiadosEquipos = fmt.Errorf("no se pueden pedir más de %d equipos en una sola operación", MaxEquiposPorOperacion)
 
 	// ErrDemasiadasOcurrencias: RF-04.2 materializa un ReservaGrupo por
 	// cada fecha de la serie, todo en una transacción. Sin un tope, un
