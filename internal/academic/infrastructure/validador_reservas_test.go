@@ -136,3 +136,70 @@ func TestValidadorReservasPostgres_IDInvalido_ErrorControlado(t *testing.T) {
 		t.Errorf("TieneReservasMateria: esperaba application.ErrIDInvalido, obtuve %v", err2)
 	}
 }
+
+// El archivado borra tres cosas y esta comprobación es la que decide si el
+// reintento puede terminar lo que faltó. Con las reglas afuera, un fallo
+// justo entre borrar los grupos y borrar las reglas dejaba filas que el
+// reintento ya no veía.
+func TestValidadorReservasPostgres_TieneReservasDeCiclo_VeLasReglasHuerfanas(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	v := NewValidadorReservasPostgres(pool)
+	ctx := context.Background()
+
+	_, materiaID := crearMateriaConCursoDeTest(t, pool)
+	cicloID := cicloDeLaMateria(t, pool, materiaID)
+
+	// Como queda tras un borrado que murió a la mitad: sin grupos, con la
+	// regla todavía ahí.
+	insertarReglaRecurrenciaDeTest(t, pool, materiaID)
+
+	tiene, err := v.TieneReservasDeCiclo(ctx, cicloID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !tiene {
+		t.Error("una regla de recurrencia sin borrar es limpieza pendiente")
+	}
+}
+
+func TestValidadorReservasPostgres_TieneReservasDeCiclo_LimpioDaFalse(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	v := NewValidadorReservasPostgres(pool)
+	ctx := context.Background()
+
+	_, materiaID := crearMateriaConCursoDeTest(t, pool)
+	cicloID := cicloDeLaMateria(t, pool, materiaID)
+
+	tiene, err := v.TieneReservasDeCiclo(ctx, cicloID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if tiene {
+		t.Error("sin nada colgado no hay limpieza pendiente")
+	}
+}
+
+func cicloDeLaMateria(t *testing.T, pool *pgxpool.Pool, materiaID string) string {
+	t.Helper()
+	var cicloID string
+	err := pool.QueryRow(context.Background(), `
+		SELECT c.ciclo_lectivo_id FROM materia m
+		JOIN curso c ON c.id = m.curso_id
+		WHERE m.id = $1
+	`, materiaID).Scan(&cicloID)
+	if err != nil {
+		t.Fatalf("no se pudo resolver el ciclo de la materia: %v", err)
+	}
+	return cicloID
+}
+
+func insertarReglaRecurrenciaDeTest(t *testing.T, pool *pgxpool.Pool, materiaID string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO regla_recurrencia (id, materia_id, dia_semana, hora_inicio, hora_fin, fecha_inicio, fecha_fin)
+		VALUES ($1, $2, 'LUNES', '08:00', '09:00', $3, $4)
+	`, NuevoID(), materiaID, time.Now(), time.Now().AddDate(0, 0, 30))
+	if err != nil {
+		t.Fatalf("no se pudo insertar regla_recurrencia de prueba: %v", err)
+	}
+}

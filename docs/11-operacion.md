@@ -24,6 +24,7 @@ Todos los comandos se corren **parado en la carpeta del proyecto**.
 | **Aplicar cambios de código** | `make dev` de nuevo, o `make rebuild SERVICIO=frontend` | `make run-prod` de nuevo |
 | **Ver los logs** | `make logs` | `make logs` |
 | **Empezar de cero** | `docker compose down -v && make run` | Nunca sin backup (§6) |
+| **Mirar la base** | `make psql` | `make psql` |
 
 **Cuidado con "reiniciar" y "aplicar cambios": no son lo mismo.** `make
 restart` levanta de nuevo los contenedores con la imagen que ya estaba
@@ -284,9 +285,17 @@ base se crea vacía. Sobre una base que ya existe **no corren solas**: hay que
 aplicarlas a mano, en orden, cuando llega una nueva.
 
 ```bash
-docker compose exec -T postgres \
-  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < migrations/005_dia_semana_lectivo.sql
+docker compose exec -T postgres sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < migrations/005_dia_semana_lectivo.sql
 ```
+
+> **Ojo con las comillas.** `POSTGRES_USER` y `POSTGRES_DB` viven en el
+> `.env`, que la terminal NO lee: escritas entre comillas **dobles** se
+> expanden afuera, llegan vacías, y psql intenta entrar con el usuario del
+> sistema. El error que da —`role "root" does not exist`— no menciona ni el
+> `.env` ni la variable. Las comillas **simples** de abajo son lo que hace
+> que se expandan adentro del contenedor, que es donde existen.
+
 
 o, más corto:
 
@@ -371,20 +380,62 @@ make backup                    # deja backup-sgrc-AAAA-MM-DD.sql en la carpeta
 o el comando completo:
 
 ```bash
-docker compose exec -T postgres \
-  pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup-sgrc-$(date +%F).sql
+docker compose exec -T postgres sh -c \
+  'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backup-sgrc-$(date +%F).sql
 ```
 
 **Restaurar** (sobre una base vacía; borra lo que haya):
 
 ```bash
-docker compose exec -T postgres \
-  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < backup-sgrc-2026-08-03.sql
+docker compose exec -T postgres sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backup-sgrc-2026-08-03.sql
 ```
 
 Conviene sacar un backup **antes de actualizar** y **antes de aplicar una
 migración**. Un archivo por semana guardado fuera del servidor cubre el caso
 que importa: que el servidor deje de arrancar.
+
+### Mirar la base cuando algo se pone raro
+
+```bash
+make psql                                  # consola interactiva
+make psql SQL="SELECT count(*) FROM equipo;"   # una consulta y listo
+```
+
+Sirve para responder preguntas que la interfaz no contesta. La más útil, si
+alguna vez sospechás que la base se recreó:
+
+```bash
+make psql SQL="SELECT (SELECT count(*) FROM equipo) AS equipos, (SELECT count(*) FROM usuario) AS usuarios;"
+```
+
+Si `equipos` da **cero**, la base arrancó de nuevo y hay que restaurar el
+backup: el sistema no inventa inventario, así que un cero ahí solo puede
+significar que se perdió lo que había.
+
+### Tres tablas que crecen y nunca se limpian
+
+`notificacion`, `auditoria` y `horario_admin_excepcion` **no se borran
+nunca**, a propósito. Cada aviso, cada acción sensible y cada "hoy no vengo"
+queda para siempre, y el backup los arrastra.
+
+No hay ninguna purga automática, y es deliberado: la auditoría existe
+justamente para poder reconstruir qué pasó cuando alguien reclama algo de
+hace meses, y un proceso que borra sin que nadie mire es peor que una tabla
+grande. En una escuela de este tamaño esto crece muy despacio.
+
+Para ver cuánto pesan:
+
+```bash
+make psql SQL="SELECT relname AS tabla, n_live_tup AS filas, pg_size_pretty(pg_total_relation_size(relid)) AS tamanio FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 10;"
+```
+
+**Cuándo preocuparse:** cuando el backup empiece a tardar o a molestar por
+tamaño. Hasta entonces no hay nada que hacer. Si llega ese momento, lo
+razonable es archivar las filas viejas —volcarlas a un `.sql` aparte y
+guardarlo fuera del servidor— antes de borrar nada, y decidir el corte con
+un criterio explícito (por ejemplo, notificaciones leídas de más de dos
+ciclos lectivos atrás). No lo hagas a ojo sobre producción.
 
 ---
 
