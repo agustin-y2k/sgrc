@@ -93,16 +93,16 @@ func (s *Service) publicarCancelaciones(ctx context.Context, pendientes []cancel
 		return
 	}
 
-	identificadores := s.identificadoresDeLasPCs(ctx, grupos)
+	etiquetas := s.etiquetasDeLosEquipos(ctx, grupos)
 
 	for _, k := range orden {
 		reservas := grupos[k]
 		detalle := make([]eventbus.ReservaCancelada, 0, len(reservas))
 		for _, r := range reservas {
 			detalle = append(detalle, eventbus.ReservaCancelada{
-				ReservaID:       r.ID,
-				PCIdentificador: identificadores[r.PCID],
-				Fecha:           r.Fecha,
+				ReservaID: r.ID,
+				Etiqueta:  etiquetas[r.PCID],
+				Fecha:     r.Fecha,
 			})
 		}
 		s.bus.Publish(eventbus.Evento{
@@ -116,14 +116,18 @@ func (s *Service) publicarCancelaciones(ctx context.Context, pendientes []cancel
 	}
 }
 
-// identificadoresDeLasPCs resuelve el número visible de cada PC ("PC 7") a
-// partir de su UUID, para que el aviso diga cuáles fueron.
+// etiquetasDeLosEquipos resuelve cómo se llama cada equipo ("PC 7",
+// "Proyector Epson") a partir de su UUID, para que el aviso diga cuáles
+// fueron.
 //
-// Si la consulta falla NO se aborta nada: el evento sale igual con los
-// identificadores en cero y el mensaje se arma sin el detalle. Esto corre
-// después del commit, sobre una cancelación que ya ocurrió — quedarse sin
-// avisar por no poder adornar el mensaje sería el peor de los dos errores.
-func (s *Service) identificadoresDeLasPCs(ctx context.Context, grupos map[destinatario][]*domain.Reserva) map[string]int {
+// Devuelve etiquetas y no números desde la 015: lo que se reserva puede no
+// tener número, y "PC 0" es lo que sale de formatear uno que no existe.
+//
+// Si la consulta falla NO se aborta nada: el evento sale igual sin el
+// detalle. Esto corre después del commit, sobre una cancelación que ya
+// ocurrió — quedarse sin avisar por no poder adornar el mensaje sería el
+// peor de los dos errores.
+func (s *Service) etiquetasDeLosEquipos(ctx context.Context, grupos map[destinatario][]*domain.Reserva) map[string]string {
 	vistas := map[string]bool{}
 	var pcIDs []string
 	for _, reservas := range grupos {
@@ -135,12 +139,12 @@ func (s *Service) identificadoresDeLasPCs(ctx context.Context, grupos map[destin
 		}
 	}
 
-	identificadores, err := s.validadorPC.IdentificadoresDePCs(ctx, pcIDs)
+	etiquetas, err := s.validadorPC.EtiquetasDeEquipos(ctx, pcIDs)
 	if err != nil {
-		log.Printf("reservation: no se pudieron resolver los identificadores de PC para el aviso: %v", err)
-		return map[string]int{}
+		log.Printf("reservation: no se pudieron resolver las etiquetas de los equipos para el aviso: %v", err)
+		return map[string]string{}
 	}
-	return identificadores
+	return etiquetas
 }
 
 // CrearReserva implementa RF-04.1: un docente reserva una o más PCs para
@@ -1017,4 +1021,64 @@ func (s *Service) cancelarEnCascada(ctx context.Context, repo Repo, reservas []*
 // acá.
 func (s *Service) EliminarReservasDeCiclo(ctx context.Context, cicloID string) (gruposEliminados int, reservasEliminadas int, err error) {
 	return s.repo.EliminarReservasYGruposDeCiclo(ctx, cicloID)
+}
+
+// ErrReservaNoModificable: solo una reserva CONFIRMADA se puede cambiar de
+// máquina. Una cancelada, finalizada o liberada por no retiro ya no reserva
+// nada, así que cambiarle la PC no significaría nada.
+var ErrReservaNoModificable = errors.New("esa reserva ya no está vigente")
+
+// CambiarPCDeReserva mueve una reserva a otra máquina sin partir la clase en
+// dos (RF-08.14).
+//
+// Hace falta porque el barrido puede avisar que una PC no volvió, y hasta
+// ahora la única salida era cancelar esa reserva y crear otra — que arma un
+// ReservaGrupo nuevo, así que el docente terminaba con la misma clase
+// mostrada como dos tarjetas separadas en "Mis reservas".
+//
+// Se apoya en la constraint EXCLUDE para el anti-solapamiento, igual que
+// crear: se valida antes para dar un mensaje mejor, pero la garantía real
+// ante dos pedidos simultáneos es la de la base.
+func (s *Service) CambiarPCDeReserva(ctx context.Context, reservaID, pcNuevoID string, quien string, esAdmin bool) (*domain.Reserva, error) {
+	var cambiada *domain.Reserva
+
+	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		r, err := repo.BuscarReservaPorID(ctx, reservaID)
+		if err != nil {
+			return err
+		}
+		if r.Estado != domain.ReservaConfirmada {
+			return ErrReservaNoModificable
+		}
+		// Misma regla de titularidad que cancelar: es tuya, o sos Admin.
+		if !esAdmin && (r.CreadoPor == nil || *r.CreadoPor != quien) {
+			return ErrReservaAjena
+		}
+		if r.PCID == pcNuevoID {
+			cambiada = r
+			return nil // no hay nada que cambiar
+		}
+
+		disponible, err := s.validadorPC.PCDisponibleParaReservar(ctx, pcNuevoID)
+		if err != nil {
+			return fmt.Errorf("verificando la PC nueva: %w", err)
+		}
+		if !disponible {
+			return ErrPCNoDisponible
+		}
+		if err := s.verificarSinSolapamiento(ctx, []string{pcNuevoID}, r.Fecha, r.HoraInicio, r.HoraFin); err != nil {
+			return err
+		}
+
+		r.PCID = pcNuevoID
+		if err := repo.GuardarReserva(ctx, r); err != nil {
+			return err
+		}
+		cambiada = r
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cambiada, nil
 }

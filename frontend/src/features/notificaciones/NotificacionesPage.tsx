@@ -160,6 +160,17 @@ export function NotificacionesPage() {
                       <Link to="/admin/licencias">Ver licencias</Link>
                     </Button>
                   )}
+                  {(n.tipo === "RESERVA_POR_COMENZAR" ||
+                    n.tipo === "RESERVA_NO_RETIRADA") && (
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/reservas">Ver mis reservas</Link>
+                    </Button>
+                  )}
+                  {n.tipo === "PC_SIN_DEVOLVER" && (
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/admin/entregas">Ver entregas</Link>
+                    </Button>
+                  )}
                   {n.estado === "NO_LEIDA" && (
                     <Button
                       variant="outline"

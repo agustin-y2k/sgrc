@@ -107,6 +107,30 @@ func (r *fakeRepo) ListarPrestamosDePC(ctx context.Context, pcID string, limite 
 	return resultado, nil
 }
 
+// El barrido no se ejercita desde HTTP —lo dispara un reloj, no una ruta—
+// así que acá alcanza con satisfacer el contrato.
+func (r *fakeRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]application.ReservaParaVigilar, error) {
+	return nil, nil
+}
+func (r *fakeRepo) PrestamosAVigilar(ctx context.Context) ([]application.PrestamoParaVigilar, error) {
+	return nil, nil
+}
+func (r *fakeRepo) ProximaReservaDePC(ctx context.Context, pcID string, desde time.Time) (*application.ProximaReserva, error) {
+	return nil, nil
+}
+func (r *fakeRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
+	return nil
+}
+func (r *fakeRepo) MarcarAvisoPCNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
+	return nil
+}
+func (r *fakeRepo) MarcarDemoraAvisada(ctx context.Context, prestamoID string, ahora time.Time) error {
+	return nil
+}
+func (r *fakeRepo) MarcarCierreAvisado(ctx context.Context, prestamoID string, jornada time.Time) error {
+	return nil
+}
+
 func (r *fakeRepo) prestamosEnOrden() []*domain.Prestamo {
 	ids := make([]string, 0, len(r.prestamos))
 	for id := range r.prestamos {
@@ -293,18 +317,18 @@ func (f *fakeValidadorPC) PCEstaEnInventario(ctx context.Context, pcID string) (
 	return !f.fueraDelInventario[pcID], nil
 }
 
-// IdentificadoresDePCs: en los tests las PCs se llaman "pc1", "pc2"… así que
+// EtiquetasDeEquipos: en los tests las PCs se llaman "pc1", "pc2"… así que
 // el número visible sale del sufijo. Alcanza para verificar que el aviso
-// nombre las PCs correctas.
-func (f *fakeValidadorPC) IdentificadoresDePCs(ctx context.Context, pcIDs []string) (map[string]int, error) {
+// nombre los equipos correctos.
+func (f *fakeValidadorPC) EtiquetasDeEquipos(ctx context.Context, pcIDs []string) (map[string]string, error) {
 	if f.errIdentificadores != nil {
 		return nil, f.errIdentificadores
 	}
-	m := make(map[string]int, len(pcIDs))
+	m := make(map[string]string, len(pcIDs))
 	for _, id := range pcIDs {
 		var n int
 		if _, err := fmt.Sscanf(id, "pc%d", &n); err == nil {
-			m[id] = n
+			m[id] = fmt.Sprintf("PC %d", n)
 		}
 	}
 	return m, nil

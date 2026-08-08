@@ -308,9 +308,23 @@ orden alcanzan).
 La **013** agrega `prestamo` (RF-08). No toca datos existentes ni puede
 abortar: crea una tabla vacía.
 
-No hay ningún proceso de fondo asociado todavía: esta entrega solo registra
-lo que hoy se anota en papel. Los avisos por no retirar a tiempo y por no
-devolver son una segunda etapa.
+La **014** agrega el estado `NO_RETIRADA` y las marcas de los avisos. Tampoco
+toca datos: amplía CHECK y agrega columnas nulas.
+
+El barrido corre dentro del mismo proceso, cada cinco minutos, sin cron ni
+nada que instalar. Tres variables opcionales lo ajustan:
+`RETIRO_GRACIA_MINUTOS` (40), `DEVOLUCION_DEMORA_MINUTOS` (10) y
+`CIERRE_JORNADA` (18). Un valor mal escrito **impide levantar**, a propósito:
+descubrirlo tres horas después porque un aviso no salió es peor.
+
+**Ningún aviso depende de que el barrido corra a una hora exacta.** Cada uno
+deja su marca en la fila, así que reiniciar el contenedor o estar caído dos
+horas cambia *cuándo* sale, nunca *cuántas veces*. En el log se ve una línea
+por barrida que hizo algo:
+
+```
+barrido: 2 recordatorios, 1 reservas liberadas, 0 avisos de PC faltante, ...
+```
 
 Si al entregar aparece "esa computadora ya figura entregada y todavía no
 volvió", no es un error del sistema: es el índice único haciendo su trabajo.

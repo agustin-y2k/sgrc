@@ -84,6 +84,11 @@ type EditarPCParams struct {
 	RAM               *string
 	SistemaOperativo  *string
 	SoftwareInstalado *string
+	// Los tres de la 015. Tipo y Nombre solo tienen sentido en un equipo
+	// suelto; Reservable, en cualquiera.
+	Tipo       *string
+	Nombre     *string
+	Reservable *bool
 }
 
 func (s *Service) EditarPC(ctx context.Context, pcID string, params EditarPCParams) error {
@@ -109,6 +114,26 @@ func (s *Service) EditarPC(ctx context.Context, pcID string, params EditarPCPara
 	}
 	if params.SoftwareInstalado != nil {
 		pc.SoftwareInstalado = *params.SoftwareInstalado
+	}
+	if params.Tipo != nil {
+		tipo, err := domain.TipoDeEquipoValido(*params.Tipo)
+		if err != nil {
+			return err
+		}
+		pc.Tipo = tipo
+	}
+	if params.Nombre != nil {
+		nombre, err := domain.NombreDeEquipoValido(*params.Nombre)
+		// Un equipo suelto no puede quedarse sin nombre: es lo único que lo
+		// distingue, y la 015 lo exige en la base. En una PC de carro el
+		// nombre no cumple ninguna función, así que vaciarlo sí es legítimo.
+		if err != nil && (*params.Nombre != "" || !pc.EstaEnUnCarro()) {
+			return err
+		}
+		pc.Nombre = nombre
+	}
+	if params.Reservable != nil {
+		pc.Reservable = *params.Reservable
 	}
 
 	return s.repo.GuardarPC(ctx, pc)
@@ -257,6 +282,29 @@ func motivoPorDefecto(pc *domain.PC, nuevo domain.EstadoPC, motivo *string) stri
 
 func (s *Service) ListarPCsPorCarro(ctx context.Context, carroID string) ([]*domain.PC, error) {
 	return s.repo.ListarPCsPorCarro(ctx, carroID)
+}
+
+// ── Equipos que no están en ningún carro (RF-03.15) ─────────────────────
+
+// CrearEquipo da de alta algo prestable que no es una computadora de un
+// carro: un proyector, un cargador, una notebook suelta.
+//
+// Se guarda en la misma entidad que las PCs a propósito (ver la migración
+// 015): con eso queda prestable, reclamable y —si `reservable` es true—
+// reservable, sin una línea nueva en ninguno de esos flujos.
+func (s *Service) CrearEquipo(ctx context.Context, tipo, nombre string, reservable bool) (*domain.PC, error) {
+	equipo, err := domain.NuevoEquipo(s.nuevoID(), tipo, nombre, reservable, s.ahora())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.CrearPC(ctx, equipo); err != nil {
+		return nil, err
+	}
+	return equipo, nil
+}
+
+func (s *Service) ListarEquiposSueltos(ctx context.Context) ([]*domain.PC, error) {
+	return s.repo.ListarEquiposSueltos(ctx)
 }
 
 // ── Incidencia ──────────────────────────────────────────────────────────

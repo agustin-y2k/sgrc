@@ -21,6 +21,7 @@ function prestamo(over: Partial<Prestamo> = {}): Prestamo {
     demorado: false,
     pcIdentificador: 3,
     carroNombre: "Carro 1",
+    etiqueta: `PC ${over.pcIdentificador ?? 3}`,
     ...over,
   }
 }
@@ -40,6 +41,7 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
     carroNombre: "Carro 1",
     materiaNombre: "Matemáticas",
     cursoNombre: "5°A",
+    etiqueta: `PC ${over.pcIdentificador ?? 3}`,
     ...over,
   }
 }
@@ -61,6 +63,7 @@ describe("EntregasPage", () => {
     vi.mocked(reservasApi.entregarPorReserva).mockResolvedValue({ entregadas: [] })
     vi.mocked(reservasApi.entregarSuelta).mockResolvedValue({ entregadas: [] })
     vi.mocked(reservasApi.recibirPCs).mockResolvedValue({ recibidos: [] })
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [] })
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
       data: [{ id: "c1", nombre: "Carro 1" }],
     })
@@ -71,6 +74,9 @@ describe("EntregasPage", () => {
           carroId: "c1",
           identificador: 3,
           numeroSerie: "5CD1234ABC",
+          etiqueta: "PC 3",
+          tipo: "PC",
+          reservable: true,
           freezado: false,
           estado: "DISPONIBLE",
           dadaDeBaja: false,

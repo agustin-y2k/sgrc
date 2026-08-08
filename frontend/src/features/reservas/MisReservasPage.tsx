@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
 import * as reservasApi from "@/features/reservas/api"
 import { agruparReservas } from "@/features/reservas/types"
+import { CambiarPCDeReserva } from "@/features/reservas/CambiarPCDeReserva"
 import type { EstadoReserva, GrupoDeReservas } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 
@@ -62,6 +63,9 @@ const ETIQUETA_RESERVA: Record<EstadoReserva, string> = {
   CONFIRMADA: "Confirmada",
   CANCELADA: "Cancelada",
   FINALIZADA: "Finalizada",
+  // "No retirada" y no "Liberada": lo que le pasó al docente es que no la
+  // fue a buscar, y esa es la palabra que le explica por qué la perdió.
+  NO_RETIRADA: "No retirada",
 }
 
 function EstadoDeReserva({ estado }: { estado: EstadoReserva }) {
@@ -86,6 +90,9 @@ type Cancelacion = {
 function estadoDelGrupo(grupo: GrupoDeReservas): EstadoReserva {
   if (grupo.reservas.some((r) => r.estado === "CONFIRMADA")) return "CONFIRMADA"
   if (grupo.reservas.every((r) => r.estado === "CANCELADA")) return "CANCELADA"
+  // Si no quedó ninguna viva y alguna se liberó por no retiro, eso es lo que
+  // hay que mostrar: "Finalizada" haría creer que la clase se dio.
+  if (grupo.reservas.some((r) => r.estado === "NO_RETIRADA")) return "NO_RETIRADA"
   return "FINALIZADA"
 }
 
@@ -95,6 +102,7 @@ export function MisReservasPage() {
   const [incluirCanceladas, setIncluirCanceladas] = useState(false)
   const [pagina, setPagina] = useState(1)
   const [cancelando, setCancelando] = useState<Cancelacion | null>(null)
+  const [cambiandoPC, setCambiandoPC] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: [...RESERVAS_KEY, { incluirCanceladas, pagina }],
@@ -231,15 +239,31 @@ export function MisReservasPage() {
                   <div className="flex items-center gap-2">
                     <EstadoDeReserva estado={estado} />
                     {estado === "CONFIRMADA" && !enCurso && (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() =>
-                          setCancelando({ grupo, soloEsta: true, motivo: "" })
-                        }
-                      >
-                        {grupo.esBloqueoEvaluacion ? "Levantar bloqueo" : "Cancelar"}
-                      </Button>
+                      <>
+                        {/* Cambiar de máquina no tiene sentido en un bloqueo
+                            por evaluación: ahí las PCs se eligen a mano y no
+                            hay un docente esperando una en particular. */}
+                        {!grupo.esBloqueoEvaluacion && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setCambiandoPC(cambiandoPC === clave ? null : clave)
+                            }
+                          >
+                            Cambiar computadora
+                          </Button>
+                        )}
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() =>
+                            setCancelando({ grupo, soloEsta: true, motivo: "" })
+                          }
+                        >
+                          {grupo.esBloqueoEvaluacion ? "Levantar bloqueo" : "Cancelar"}
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -250,14 +274,21 @@ export function MisReservasPage() {
                   {grupo.reservas.map((r) => (
                     <Badge
                       key={r.id}
-                      variant={r.estado === "CANCELADA" ? "destructive" : "outline"}
+                      variant={
+                        r.estado === "CANCELADA" || r.estado === "NO_RETIRADA"
+                          ? "destructive"
+                          : "outline"
+                      }
                       title={
                         r.estado === "CANCELADA" && r.motivoCancelacion
                           ? `Cancelada: ${r.motivoCancelacion}`
-                          : undefined
+                          : r.estado === "NO_RETIRADA"
+                            ? "No se retiró a tiempo, así que quedó libre para otro docente"
+                            : undefined
                       }
                     >
-                      PC {r.pcIdentificador} · {r.carroNombre}
+                      {r.etiqueta}
+                      {r.carroNombre && ` · ${r.carroNombre}`}
                     </Badge>
                   ))}
                 </div>
@@ -270,9 +301,13 @@ export function MisReservasPage() {
                   .filter((r) => r.estado === "CANCELADA" && r.motivoCancelacion)
                   .map((r) => (
                     <p key={r.id} className="text-muted-foreground text-sm">
-                      PC {r.pcIdentificador}: {r.motivoCancelacion}
+                      {r.etiqueta}: {r.motivoCancelacion}
                     </p>
                   ))}
+
+                {cambiandoPC === clave && (
+                  <CambiarPCDeReserva grupo={grupo} onListo={() => setCambiandoPC(null)} />
+                )}
 
                 {enCurso && cancelando && (
                   <div className="grid gap-3 rounded-md border p-3">

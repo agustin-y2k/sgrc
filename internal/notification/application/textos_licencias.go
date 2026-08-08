@@ -33,14 +33,17 @@ func cuandoVence(l eventbus.LicenciaPorVencer) string {
 	}
 }
 
-// dondeEsta ubica la licencia: la PC y el carro. Es lo que convierte el
-// aviso en algo que se puede ir a resolver.
+// dondeEsta ubica la licencia: el equipo y, si está en uno, el carro. Es lo
+// que convierte el aviso en algo que se puede ir a resolver.
+//
+// Por la etiqueta y no por el identificador: desde la 015 una notebook
+// suelta puede tener AutoCAD, y no tiene número — el aviso mandaría a buscar
+// una "PC 0" que no existe.
 func dondeEsta(l eventbus.LicenciaPorVencer) string {
-	pc := nombrePC(l.PCIdentificador)
 	if l.CarroNombre == "" {
-		return pc
+		return l.Etiqueta
 	}
-	return fmt.Sprintf("%s (%s)", pc, l.CarroNombre)
+	return fmt.Sprintf("%s (%s)", l.Etiqueta, l.CarroNombre)
 }
 
 // mensajeDeLicencias arma el aviso de la campana.

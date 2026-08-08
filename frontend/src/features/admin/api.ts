@@ -111,6 +111,17 @@ export function crearPC(
   })
 }
 
+/**
+ * RF-03.15 — dar de alta algo prestable que no es una computadora de un
+ * carro.
+ *
+ * `reservable` separa el proyector de los cargadores: solo lo reservable
+ * aparece en la lista de equipos libres cuando un docente va a reservar.
+ */
+export function crearEquipo(req: { tipo: string; nombre: string; reservable: boolean }) {
+  return apiFetch<PC>("/api/inventory/equipos", { method: "POST", body: req })
+}
+
 export function editarPC(
   id: string,
   req: {
@@ -120,6 +131,9 @@ export function editarPC(
     ram?: string
     sistemaOperativo?: string
     softwareInstalado?: string
+    tipo?: string
+    nombre?: string
+    reservable?: boolean
   }
 ) {
   return apiFetch<void>(`/api/inventory/pcs/${id}`, { method: "PATCH", body: req })

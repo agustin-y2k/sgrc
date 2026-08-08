@@ -115,6 +115,10 @@ func toReservaResponse(r *domain.Reserva) reservaResponse {
 // idénticas, sin forma de saber cuál era cuál.
 type reservaDetalladaResponse struct {
 	reservaResponse
+	// Etiqueta es lo que se muestra: "PC 3" o "Proyector Epson". Los dos de
+	// abajo van en 0 y "" cuando el equipo no está en ningún carro, así que
+	// una pantalla que arme el rótulo con ellos escribe "PC 0 · " (RF-03.17).
+	Etiqueta        string `json:"etiqueta"`
 	PCIdentificador int    `json:"pcIdentificador"`
 	CarroNombre     string `json:"carroNombre"`
 	MateriaNombre   string `json:"materiaNombre,omitempty"`
@@ -129,6 +133,7 @@ type reservaDetalladaResponse struct {
 func toReservaDetalladaResponse(d application.ReservaDetallada) reservaDetalladaResponse {
 	return reservaDetalladaResponse{
 		reservaResponse:    toReservaResponse(d.Reserva),
+		Etiqueta:           d.Etiqueta,
 		PCIdentificador:    d.PCIdentificador,
 		CarroNombre:        d.CarroNombre,
 		MateriaNombre:      d.MateriaNombre,
@@ -221,10 +226,17 @@ func deref(s *string) string {
 // para tildar qué PCs reservar (incluye software y freezado para poder
 // decidir sin consultar inventory aparte).
 type pcDisponibleResponse struct {
-	PCID              string `json:"pcId"`
-	Identificador     int    `json:"identificador"`
-	CarroID           string `json:"carroId"`
-	CarroNombre       string `json:"carroNombre"`
+	PCID string `json:"pcId"`
+	// Identificador va en 0 para un equipo suelto. Lo que se muestra es
+	// Etiqueta: un proyector rotulado "PC 0" es lo que sale de formatear un
+	// identificador que no existe.
+	Identificador int    `json:"identificador,omitempty"`
+	Etiqueta      string `json:"etiqueta"`
+	// Tipo distingue una PC de un proyector (015). Texto libre.
+	Tipo string `json:"tipo,omitempty"`
+	// CarroID y CarroNombre vacíos en un equipo suelto.
+	CarroID           string `json:"carroId,omitempty"`
+	CarroNombre       string `json:"carroNombre,omitempty"`
 	Freezado          bool   `json:"freezado"`
 	SoftwareInstalado string `json:"softwareInstalado,omitempty"`
 }
@@ -235,8 +247,14 @@ type pcsDisponiblesResponse struct {
 
 func toPCDisponibleResponse(p application.PCDisponible) pcDisponibleResponse {
 	return pcDisponibleResponse{
-		PCID: p.PCID, Identificador: p.Identificador,
+		PCID: p.PCID, Identificador: p.Identificador, Etiqueta: p.Etiqueta, Tipo: p.Tipo,
 		CarroID: p.CarroID, CarroNombre: p.CarroNombre,
 		Freezado: p.Freezado, SoftwareInstalado: p.SoftwareInstalado,
 	}
+}
+
+// cambiarPCRequest — la máquina nueva. Nada más: fecha y horario no se
+// tocan, es la misma clase.
+type cambiarPCRequest struct {
+	PCID string `json:"pcId"`
 }

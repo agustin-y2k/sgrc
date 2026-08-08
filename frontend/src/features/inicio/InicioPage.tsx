@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
 
@@ -5,6 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth } from "@/features/auth/AuthContext"
 import * as adminApi from "@/features/admin/api"
+import { EntregaSuelta } from "@/features/admin/entregas/EntregaSuelta"
+import { LoQueEstaAfuera } from "@/features/admin/entregas/LoQueEstaAfuera"
+import { PanelDelLaboratorio } from "@/features/admin/entregas/PanelDelLaboratorio"
+import {
+  PRESTAMOS_KEY,
+  REFRESCO_DEL_MOSTRADOR,
+} from "@/features/admin/entregas/compartido"
 import { useNoLeidas } from "@/features/notificaciones/useNoLeidas"
 import * as reservasApi from "@/features/reservas/api"
 import { agruparReservas, hoyISO } from "@/features/reservas/types"
@@ -99,6 +107,7 @@ function ProximaReserva({ grupo, hoy }: { grupo: GrupoDeReservas; hoy: string })
 export function InicioPage() {
   const { user } = useAuth()
   const esAdmin = user?.rol === "ADMIN"
+  const [entregandoSuelta, setEntregandoSuelta] = useState(false)
   const hoy = hoyISO()
   const noLeidas = useNoLeidas()
 
@@ -107,6 +116,16 @@ export function InicioPage() {
   const { data: reservas } = useQuery({
     queryKey: ["reservas", "proximas", hoy],
     queryFn: () => reservasApi.listarReservas({ desde: hoy }),
+  })
+
+  // Lo que está afuera del laboratorio: alimenta el indicador y el
+  // formulario de entrega suelta, que necesita saber qué máquinas NO
+  // ofrecer. Solo para Admin — un docente no tiene por qué verlo.
+  const { data: prestamos } = useQuery({
+    queryKey: PRESTAMOS_KEY,
+    queryFn: reservasApi.listarPrestamosAbiertos,
+    enabled: esAdmin,
+    refetchInterval: REFRESCO_DEL_MOSTRADOR,
   })
 
   // Solo un Admin puede listar usuarios; para un docente ni se pregunta.
@@ -129,6 +148,10 @@ export function InicioPage() {
   const deHoy = grupos.filter((g) => g.fecha === hoy).length
   const cuentasPendientes = pendientes?.meta.total ?? 0
 
+  const afuera = prestamos?.data ?? []
+  const sinDevolverAHorario = afuera.filter((p) => p.demorado).length
+  const yaAfuera = useMemo(() => new Set(afuera.map((p) => p.pcId)), [afuera])
+
   return (
     <div className="grid gap-6">
       <div>
@@ -138,7 +161,7 @@ export function InicioPage() {
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
           {esAdmin
-            ? "Panel de administración del laboratorio."
+            ? "Qué está pasando en el laboratorio ahora mismo."
             : "Reservá las PCs para tus clases y mirá cómo venís esta semana."}
         </p>
       </div>
@@ -152,19 +175,30 @@ export function InicioPage() {
           detalle="Con PCs reservadas"
           a="/reservas"
         />
-        <Indicador
-          valor={grupos.length}
-          rotulo="próximas"
-          detalle="Reservas por venir"
-          a="/reservas"
-        />
-        <Indicador
-          valor={noLeidas}
-          rotulo="sin leer"
-          detalle="Avisos del sistema"
-          a="/notificaciones"
-          destacado={noLeidas > 0}
-        />
+        {/* Para el Admin, "afuera" reemplaza a "próximas": lo que viene ya
+            se lo dice el panel del mostrador con detalle, y lo que no puede
+            faltarle de un vistazo es cuántas máquinas están fuera del
+            laboratorio. */}
+        {esAdmin ? (
+          <Indicador
+            valor={afuera.length}
+            rotulo="afuera"
+            detalle={
+              sinDevolverAHorario > 0
+                ? `${sinDevolverAHorario} sin devolver a horario`
+                : "Computadoras entregadas"
+            }
+            a="/admin/entregas"
+            destacado={sinDevolverAHorario > 0}
+          />
+        ) : (
+          <Indicador
+            valor={grupos.length}
+            rotulo="próximas"
+            detalle="Reservas por venir"
+            a="/reservas"
+          />
+        )}
         {esAdmin && (
           <Indicador
             valor={cuentasPendientes}
@@ -174,7 +208,49 @@ export function InicioPage() {
             destacado={cuentasPendientes > 0}
           />
         )}
+        <Indicador
+          valor={noLeidas}
+          rotulo="sin leer"
+          detalle="Avisos del sistema"
+          a="/notificaciones"
+          destacado={noLeidas > 0}
+        />
       </div>
+
+      {/* El panel del mostrador va ARRIBA de "lo que viene": es lo que el
+          Admin mira todo el día, con gente esperando del otro lado. Lo de
+          más abajo se consulta; esto se opera. */}
+      {esAdmin && (
+        <>
+          <PanelDelLaboratorio />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <LoQueEstaAfuera compacto />
+            {entregandoSuelta ? (
+              <EntregaSuelta
+                yaAfuera={yaAfuera}
+                onCerrar={() => setEntregandoSuelta(false)}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Entregar sin reserva</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-2">
+                  <p className="text-muted-foreground text-sm">
+                    Para cuando piden una computadora en el momento — un trámite, algo
+                    puntual. La persona no necesita tener cuenta en el sistema.
+                  </p>
+                  <div>
+                    <Button onClick={() => setEntregandoSuelta(true)}>
+                      Entregar sin reserva
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -221,7 +297,13 @@ export function InicioPage() {
                   <Link to="/admin/academico">Ciclos, cursos y materias</Link>
                 </Button>
                 <Button asChild variant="outline" className="justify-start">
+                  <Link to="/admin/entregas">Entregas y devoluciones</Link>
+                </Button>
+                <Button asChild variant="outline" className="justify-start">
                   <Link to="/admin/inventario">Gestión del inventario</Link>
+                </Button>
+                <Button asChild variant="outline" className="justify-start">
+                  <Link to="/admin/licencias">Licencias de software</Link>
                 </Button>
                 <Button asChild variant="outline" className="justify-start">
                   <Link to="/admin/bloqueo-evaluacion">Bloqueo por evaluación</Link>

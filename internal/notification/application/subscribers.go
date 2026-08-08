@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -196,6 +197,115 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		})
 	})
 
+	// ── El barrido de reservas y entregas (RF-08.10 a RF-08.13) ─────
+	//
+	// Los cinco de abajo los dispara un reloj, no una persona. La
+	// idempotencia —que no salgan dos veces— la garantizan las marcas de
+	// cada fila del lado de reservation, no estos handlers.
+
+	bus.Subscribe("reserva.recordatorio", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.RecordatorioDeReserva)
+		if !ok {
+			log.Printf("notification: payload inesperado para reserva.recordatorio: %+v", e.Payload)
+			return
+		}
+		if payload.UsuarioID == "" {
+			return // un bloqueo por evaluación no tiene a quién avisarle
+		}
+		mensaje := mensajeDeRecordatorio(payload)
+		entregar("reserva.recordatorio", func(ctx context.Context) error {
+			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
+				domain.TipoReservaPorComenzar, domain.Referencias{})
+			return err
+		})
+	})
+
+	bus.Subscribe("reserva.pc-no-disponible", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PCNoDisponibleParaReserva)
+		if !ok {
+			log.Printf("notification: payload inesperado para reserva.pc-no-disponible: %+v", e.Payload)
+			return
+		}
+		if payload.UsuarioID == "" {
+			return
+		}
+		mensaje := mensajeDePCNoDisponible(payload)
+		entregar("reserva.pc-no-disponible", func(ctx context.Context) error {
+			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
+				domain.TipoReservaPorComenzar, domain.Referencias{})
+			return err
+		})
+	})
+
+	bus.Subscribe("reserva.no-retirada", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.ReservasLiberadas)
+		if !ok {
+			log.Printf("notification: payload inesperado para reserva.no-retirada: %+v", e.Payload)
+			return
+		}
+		if payload.UsuarioID == "" {
+			return
+		}
+		mensaje := mensajeDeReservasLiberadas(payload)
+		entregar("reserva.no-retirada", func(ctx context.Context) error {
+			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
+				domain.TipoReservaNoRetirada, domain.Referencias{})
+			return err
+		})
+	})
+
+	// Los dos de las máquinas que no volvieron van a los Admin: son ellos
+	// quienes pueden ir a buscarlas.
+	bus.Subscribe("prestamo.demorado", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PrestamosDemorados)
+		if !ok {
+			log.Printf("notification: payload inesperado para prestamo.demorado: %+v", e.Payload)
+			return
+		}
+		if len(payload.Prestamos) == 0 {
+			return
+		}
+		mensaje := mensajeDePrestamosDemorados(payload)
+		entregar("prestamo.demorado", func(ctx context.Context) error {
+			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoPCSinDevolver,
+				domain.Referencias{})
+			return err
+		})
+	})
+
+	bus.Subscribe("prestamo.sin-devolver.cierre", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PCsSinDevolverAlCierre)
+		if !ok {
+			log.Printf("notification: payload inesperado para prestamo.sin-devolver.cierre: %+v", e.Payload)
+			return
+		}
+		if len(payload.PCs) == 0 {
+			return
+		}
+		mensaje := mensajeDeCierre(payload)
+		entregar("prestamo.sin-devolver.cierre", func(ctx context.Context) error {
+			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoPCSinDevolver,
+				domain.Referencias{})
+			return err
+		})
+
+		// Y al docente que la tiene reservada, si hay uno: es el único para
+		// quien esto es accionable antes de mañana.
+		for _, pc := range payload.PCs {
+			if pc.ProximoUsuarioID == "" {
+				continue
+			}
+			usuarioID, aviso := pc.ProximoUsuarioID, pc
+			entregar("prestamo.sin-devolver.cierre (docente siguiente)", func(ctx context.Context) error {
+				mensaje := fmt.Sprintf("%s, que tenés reservado para el %s, quedó fuera del laboratorio al cierre",
+					aviso.Etiqueta, formatearFecha(aviso.ProximaFecha))
+				_, err := svc.NotificarUsuario(ctx, usuarioID, mensaje,
+					domain.TipoReservaPorComenzar, domain.Referencias{})
+				return err
+			})
+		}
+	})
+
 	// RF-05.1/05.2/05.3: una reserva puntual se canceló (manual,
 	// evaluación estatal, o cambio de estado de PC) — el mismo evento
 	// cubre los tres casos, el motivo ya viene armado desde reservation.
@@ -241,7 +351,7 @@ func mensajeDeCancelacion(p eventbus.CancelacionesDeUsuario) string {
 	if len(p.Reservas) == 1 {
 		r := p.Reservas[0]
 		return fmt.Sprintf("Tu reserva del %s (%s) fue cancelada: %s",
-			formatearFecha(r.Fecha), nombrePC(r.PCIdentificador), p.Motivo)
+			formatearFecha(r.Fecha), etiquetaODefecto(r.Etiqueta), p.Motivo)
 	}
 
 	if fecha, unica := fechaUnica(p.Reservas); unica {
@@ -270,23 +380,26 @@ func mismoDia(a, b time.Time) bool {
 	return a.Year() == b.Year() && a.Month() == b.Month() && a.Day() == b.Day()
 }
 
-// listaDePCs enumera las PCs afectadas, sin repetir y en orden. Si son
-// muchas, corta y dice cuántas quedaron afuera.
+// listaDePCs enumera los equipos afectados, sin repetir y en orden. Si son
+// muchos, corta y dice cuántos quedaron afuera.
 func listaDePCs(reservas []eventbus.ReservaCancelada) string {
-	vistas := map[int]bool{}
-	var ids []int
+	vistas := map[string]bool{}
+	var ids []string
 	for _, r := range reservas {
-		if r.PCIdentificador > 0 && !vistas[r.PCIdentificador] {
-			vistas[r.PCIdentificador] = true
-			ids = append(ids, r.PCIdentificador)
+		if r.Etiqueta != "" && !vistas[r.Etiqueta] {
+			vistas[r.Etiqueta] = true
+			ids = append(ids, r.Etiqueta)
 		}
 	}
 	if len(ids) == 0 {
-		// No se pudieron resolver los identificadores: el aviso sale igual,
-		// sin el detalle. Perder la notificación sería mucho peor.
-		return fmt.Sprintf("%d PCs", len(reservas))
+		// No se pudieron resolver las etiquetas: el aviso sale igual, sin el
+		// detalle. Perder la notificación sería mucho peor.
+		return fmt.Sprintf("%d equipos", len(reservas))
 	}
-	sort.Ints(ids)
+	// Orden natural y no alfabético: con sort.Strings, "PC 12" va antes que
+	// "PC 3" porque compara carácter por carácter. El docente lee la lista
+	// de sus máquinas, y verlas desordenadas hace dudar de si son las suyas.
+	sort.Slice(ids, func(i, j int) bool { return menorEnOrdenNatural(ids[i], ids[j]) })
 
 	sobrantes := 0
 	if len(ids) > maxPCsEnElMensaje {
@@ -294,22 +407,55 @@ func listaDePCs(reservas []eventbus.ReservaCancelada) string {
 		ids = ids[:maxPCsEnElMensaje]
 	}
 
-	partes := make([]string, len(ids))
-	for i, id := range ids {
-		partes[i] = nombrePC(id)
-	}
-	texto := strings.Join(partes, ", ")
+	texto := strings.Join(ids, ", ")
 	if sobrantes > 0 {
 		return fmt.Sprintf("%s y %d más", texto, sobrantes)
 	}
 	return texto
 }
 
-func nombrePC(identificador int) string {
-	if identificador <= 0 {
-		return "una PC"
+// menorEnOrdenNatural compara etiquetas dejando los números al final en
+// orden numérico: "PC 3" antes que "PC 12", y "Proyector Epson" donde le
+// toque alfabéticamente.
+//
+// Hace falta desde que las etiquetas son texto (015): antes eran enteros y
+// el orden salía solo.
+func menorEnOrdenNatural(a, b string) bool {
+	prefijoA, numeroA := partirEtiqueta(a)
+	prefijoB, numeroB := partirEtiqueta(b)
+	if prefijoA != prefijoB {
+		return prefijoA < prefijoB
 	}
-	return fmt.Sprintf("PC %d", identificador)
+	return numeroA < numeroB
+}
+
+// partirEtiqueta separa "PC 12" en ("PC ", 12). Sin número final devuelve la
+// etiqueta entera y -1, que la deja antes que cualquier numerada del mismo
+// prefijo — un caso que en la práctica no se da, porque o tiene número o es
+// un nombre propio.
+func partirEtiqueta(s string) (string, int) {
+	i := len(s)
+	for i > 0 && s[i-1] >= '0' && s[i-1] <= '9' {
+		i--
+	}
+	if i == len(s) {
+		return s, -1
+	}
+	n, err := strconv.Atoi(s[i:])
+	if err != nil {
+		return s, -1
+	}
+	return s[:i], n
+}
+
+// etiquetaODefecto cubre el caso en que no se pudo resolver el nombre del
+// equipo: el aviso sale igual, sin el detalle. Perder la notificación por no
+// poder adornarla sería mucho peor.
+func etiquetaODefecto(etiqueta string) string {
+	if etiqueta == "" {
+		return "un equipo"
+	}
+	return etiqueta
 }
 
 func formatearFecha(f time.Time) string {

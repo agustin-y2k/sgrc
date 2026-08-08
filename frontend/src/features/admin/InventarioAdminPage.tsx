@@ -17,6 +17,7 @@ import * as adminApi from "@/features/admin/api"
 import { AltaDePC, EdicionDePC } from "@/features/admin/FormularioPC"
 import { IncidenciasDePC } from "@/features/admin/IncidenciasDePC"
 import { LicenciasDePC } from "@/features/admin/LicenciasDePC"
+import { OtrosEquipos } from "@/features/admin/OtrosEquipos"
 import { PrestamosDePC } from "@/features/admin/PrestamosDePC"
 import * as inventoryApi from "@/features/inventory/api"
 import type { Carro, EstadoPC, PC } from "@/features/inventory/types"
@@ -410,6 +411,14 @@ export function InventarioAdminPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Los equipos que no están en ningún carro van en su propia sección,
+          antes de la lista de carros: no pertenecen a ninguno, y meterlos en
+          un carro llamado "Sueltos" sería volver a la mentira que el modelo
+          viene sacándose de encima. */}
+      <div className="mb-4">
+        <OtrosEquipos />
+      </div>
 
       {isLoading && <p className="text-muted-foreground">Cargando…</p>}
 

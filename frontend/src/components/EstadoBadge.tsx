@@ -48,6 +48,9 @@ export const TONO_RESERVA: Record<string, Tono> = {
   CANCELADA: "peligro",
   // Finalizada no es ni bueno ni malo: ya pasó.
   FINALIZADA: "neutro",
+  // NO_RETIRADA en alerta y no en peligro: no es una cancelación ni un
+  // error, es que se pasó el plazo. Y la máquina puede seguir disponible.
+  NO_RETIRADA: "alerta",
 }
 
 /** RF-01/RF-02 — estado de una cuenta. */

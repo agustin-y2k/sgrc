@@ -16,12 +16,16 @@ const columnasLicencia = `id, pc_id, nombre, dias_duracion, dias_aviso, fecha_ve
 	`ultima_renovacion, vencimiento_fijado_por, vencimiento_fijado_en, ` +
 	`avisado_previo_para, avisado_vencimiento_para, creada_en`
 
-// columnasLicenciaConUbicacion agrega el identificador de la PC y el nombre
-// del carro. Van prefijadas con l./p./c. porque la consulta hace JOIN.
+// columnasLicenciaConUbicacion agrega cómo se llama el equipo y dónde está.
+// Van prefijadas con l./p./c. porque la consulta hace JOIN.
+//
+// Los COALESCE son por la 015: una notebook suelta con AutoCAD no tiene
+// carro ni identificador, y sin ellos el escaneo a string/int reventaba.
 const columnasLicenciaConUbicacion = `l.id, l.pc_id, l.nombre, l.dias_duracion, l.dias_aviso, l.fecha_vencimiento, ` +
 	`l.ultima_renovacion, l.vencimiento_fijado_por, l.vencimiento_fijado_en, ` +
 	`l.avisado_previo_para, l.avisado_vencimiento_para, l.creada_en, ` +
-	`p.identificador, p.dada_de_baja, c.id, c.nombre`
+	`COALESCE(p.nombre, 'PC ' || p.identificador), COALESCE(p.identificador, 0), ` +
+	`p.dada_de_baja, COALESCE(c.id::text, ''), COALESCE(c.nombre, '')`
 
 func (r *PostgresRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
 	_, err := r.pool.Exec(ctx, `
@@ -82,7 +86,7 @@ func escanearLicenciaConUbicacion(row pgx.Row) (*application.LicenciaConUbicacio
 		&l.ID, &l.PCID, &l.Nombre, &l.DiasDuracion, &l.DiasAviso, &l.FechaVencimiento,
 		&l.UltimaRenovacion, &l.VencimientoFijadoPor, &l.VencimientoFijadoEn,
 		&l.AvisadoPrevioPara, &l.AvisadoVencimientoPara, &l.CreadaEn,
-		&u.PCIdentificador, &u.PCDadaDeBaja, &u.CarroID, &u.CarroNombre,
+		&u.Etiqueta, &u.PCIdentificador, &u.PCDadaDeBaja, &u.CarroID, &u.CarroNombre,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -195,14 +199,21 @@ func (r *PostgresRepo) ListarLicenciasPorPC(ctx context.Context, pcID string) ([
 // que dos licencias que vencen el mismo día salgan siempre en el mismo
 // orden — sin él, Postgres puede devolverlas alternadas entre corridas y la
 // tabla parece moverse sola.
-const ordenDeLaPantalla = `ORDER BY l.fecha_vencimiento IS NOT NULL, l.fecha_vencimiento, c.nombre, p.identificador, l.nombre`
+// Los COALESCE del orden son por la 015: con c.nombre y p.identificador en
+// NULL, los equipos sueltos empatarían todos entre sí y la lista se movería
+// sola entre corridas. Ordenados por nombre quedan juntos y estables.
+const ordenDeLaPantalla = `ORDER BY l.fecha_vencimiento IS NOT NULL, l.fecha_vencimiento, ` +
+	`COALESCE(c.nombre, ''), COALESCE(p.identificador, 0), COALESCE(p.nombre, ''), l.nombre`
 
 func (r *PostgresRepo) ListarLicencias(ctx context.Context) ([]*application.LicenciaConUbicacion, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+columnasLicenciaConUbicacion+`
 		FROM licencia_software l
 		JOIN pc p ON p.id = l.pc_id
-		JOIN carro c ON c.id = p.carro_id
+		-- LEFT desde la 015: una notebook suelta puede tener AutoCAD igual
+		-- que las del carro, y con INNER JOIN su licencia no aparecía en la
+		-- pantalla — se vencía sin que nadie la viera.
+		LEFT JOIN carro c ON c.id = p.carro_id
 	`+ordenDeLaPantalla)
 	if err != nil {
 		return nil, fmt.Errorf("listando licencias: %w", err)
@@ -244,7 +255,10 @@ func (r *PostgresRepo) ListarCandidatasAAviso(ctx context.Context, hoy time.Time
 		SELECT `+columnasLicenciaConUbicacion+`
 		FROM licencia_software l
 		JOIN pc p ON p.id = l.pc_id
-		JOIN carro c ON c.id = p.carro_id
+		-- LEFT por lo mismo que en ListarLicencias, y acá es peor: con INNER
+		-- JOIN la licencia de un equipo suelto no era candidata a aviso
+		-- NUNCA, así que el correo no salía y nadie se enteraba.
+		LEFT JOIN carro c ON c.id = p.carro_id
 		WHERE l.fecha_vencimiento IS NOT NULL
 		  AND p.dada_de_baja = false
 		  AND l.fecha_vencimiento - l.dias_aviso <= $1

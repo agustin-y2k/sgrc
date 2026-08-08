@@ -34,11 +34,13 @@ type Repo interface {
 }
 
 // InfoPCParaSnapshot es el puerto hacia inventory — necesario para
-// "congelar" el identificador y el nombre del carro de una PC al momento
-// de archivar (IdentificadorSnapshot/CarroNombreSnapshot). Nunca se
+// "congelar" cómo se llamaba el equipo y dónde estaba al momento de archivar
+// (EtiquetaSnapshot/IdentificadorSnapshot/CarroNombreSnapshot). Nunca se
 // importa internal/inventory directamente.
 type InfoPCParaSnapshot interface {
-	IdentificadorYCarroDe(ctx context.Context, pcID string) (identificador int, carroNombre string, err error)
+	// Devuelve la etiqueta siempre; identificador en 0 y carro vacío si el
+	// equipo no está en ningún carro (015).
+	EtiquetaYCarroDe(ctx context.Context, pcID string) (etiqueta string, identificador int, carroNombre string, err error)
 }
 
 // InfoUsuarioParaSnapshot es el puerto hacia auth — para

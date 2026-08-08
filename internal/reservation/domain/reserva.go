@@ -16,23 +16,38 @@ const (
 	ReservaConfirmada EstadoReserva = "CONFIRMADA"
 	ReservaCancelada  EstadoReserva = "CANCELADA"
 	ReservaFinalizada EstadoReserva = "FINALIZADA"
+	// ReservaNoRetirada: nadie vino a buscar la máquina dentro del plazo de
+	// gracia, así que dejó de bloquear el horario (RF-08.10).
+	//
+	// Es un estado propio y no CANCELADA porque son dos noticias distintas
+	// para quien las lee: "te la cancelaron" pide saber quién y por qué,
+	// "no la retiraste" se explica sola. Y porque el reporte de uso
+	// (RF-06.1) puede dejar de contarla como una clase dada, que es lo que
+	// hoy hace.
+	ReservaNoRetirada EstadoReserva = "NO_RETIRADA"
 )
 
 var ErrEstadoReservaInvalido = errors.New("estado de reserva inválido")
 
 func ParseEstadoReserva(s string) (EstadoReserva, error) {
 	switch EstadoReserva(s) {
-	case ReservaConfirmada, ReservaCancelada, ReservaFinalizada:
+	case ReservaConfirmada, ReservaCancelada, ReservaFinalizada, ReservaNoRetirada:
 		return EstadoReserva(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrEstadoReservaInvalido, s)
 	}
 }
 
-// PuedeTransicionarA: CONFIRMADA puede cancelarse o finalizar; CANCELADA y
-// FINALIZADA son terminales.
+// PuedeTransicionarA: CONFIRMADA puede cancelarse, finalizar o liberarse por
+// no retiro; los otros tres son terminales.
+//
+// NO_RETIRADA no vuelve a CONFIRMADA aunque el docente aparezca a los
+// cincuenta minutos: liberar no es prohibir. Si las máquinas siguen ahí se
+// las entregás igual, y eso queda registrado como un préstamo (RF-08) —
+// que es otra cosa que la reserva.
 func (e EstadoReserva) PuedeTransicionarA(nuevo EstadoReserva) bool {
-	return e == ReservaConfirmada && (nuevo == ReservaCancelada || nuevo == ReservaFinalizada)
+	return e == ReservaConfirmada &&
+		(nuevo == ReservaCancelada || nuevo == ReservaFinalizada || nuevo == ReservaNoRetirada)
 }
 
 var ErrTransicionReservaInvalida = errors.New("transición de estado de reserva inválida")
@@ -142,6 +157,15 @@ func (r *Reserva) Cancelar(canceladoPor *string, motivo string, ahora time.Time)
 // "cancelado por", es una transición natural del paso del tiempo.
 func (r *Reserva) Finalizar() error {
 	return r.cambiarEstado(ReservaFinalizada)
+}
+
+// Liberar marca que nadie vino a buscar la máquina dentro del plazo de
+// gracia (RF-08.10). Con eso deja de bloquear el horario, porque la
+// constraint de anti-solapamiento solo mira las CONFIRMADA.
+//
+// No lleva quién ni por qué, a diferencia de Cancelar: no lo decidió nadie.
+func (r *Reserva) Liberar() error {
+	return r.cambiarEstado(ReservaNoRetirada)
 }
 
 func (r *Reserva) cambiarEstado(nuevo EstadoReserva) error {

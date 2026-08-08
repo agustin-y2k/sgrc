@@ -24,7 +24,7 @@ erDiagram
 
     USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; string rol; string estado; timestamp fecha_registro; uuid aprobado_por; string curso_solicitado; string materia_solicitada; int version_sesion }
     CARRO { uuid id; string nombre; string descripcion }
-    PC { uuid id; uuid carro_id; int identificador; string numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool dada_de_baja; timestamp fecha_alta }
+    PC { uuid id; uuid carro_id; int identificador; string numero_serie; string tipo; string nombre; bool reservable; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool dada_de_baja; timestamp fecha_alta }
     INCIDENCIA { uuid id; uuid pc_id; uuid reportado_por; string descripcion; string gravedad; timestamp fecha; bool enviado_dge; timestamp fecha_envio_dge; string estado }
     LICENCIA_SOFTWARE { uuid id; uuid pc_id; string nombre; int dias_duracion; int dias_aviso; date fecha_vencimiento; date ultima_renovacion; uuid vencimiento_fijado_por; timestamp vencimiento_fijado_en; date avisado_previo_para; date avisado_vencimiento_para; timestamp creada_en }
     CICLO_LECTIVO { uuid id; int anio; bool activo; bool archivado }
@@ -175,6 +175,12 @@ CREATE INDEX idx_materia_curso ON materia(curso_id);
 >
 > `freezado`: indica si la PC tiene Deep Freeze (u otro software equivalente) instalado. Es **metadata informativa** para el admin/técnico — no restringe reservas ni ningún otro flujo. Se muestra a **todos los usuarios autenticados** (no solo Admin): un docente necesita saber, por ejemplo, qué PCs tienen AutoCAD 2007 vs AutoCAD 2027 antes de elegir cuáles reservar — ese dato vive en `software_instalado` (texto libre), y `software_instalado` + `freezado` + `estado` son visibles al listar PCs para cualquier rol.
 >
+> **Desde la 015 esta tabla no es solo de computadoras.** `carro_id`, `identificador` y `numero_serie` pasaron a ser opcionales, y se sumaron `tipo` (texto libre), `nombre` y `reservable`: la escuela también presta un proyector y cargadores, que no están en ningún carro. Un CHECK garantiza que nada quede sin forma de nombrarse — **o está en un carro y tiene número, o no está en un carro y tiene nombre** — y un índice único parcial sobre `lower(nombre)` impide dos "Cargador 1" indistinguibles — excluyendo las dadas de baja, porque a diferencia de un número de serie el nombre es un apodo y se reusa cuando se reemplaza el equipo.
+>
+> Están acá y no en una tabla aparte porque "qué hay afuera del laboratorio" (RF-08) tiene que ser una sola lista. La tabla se sigue llamando `pc` por historia; ver el encabezado de la migración 015.
+
+> **La 015 también toca `historico_uso_pc`**: se le sumó `etiqueta_snapshot` —cómo se llamaba el equipo el día que se archivó el ciclo— y `identificador_snapshot`/`carro_nombre_snapshot` dejaron de ser obligatorias. Un proyector archivado no tiene ninguna de las dos, y el reporte del año pasado decía "PC 0 ()". El backfill reconstruye la etiqueta de lo ya guardado (`'PC ' || identificador_snapshot`), que hasta hoy era siempre una PC de carro.
+
 > `dada_de_baja` / `fecha_baja`: el "eliminar" una PC desde la UI del Admin es en realidad un **soft delete** — se oculta de los listados activos y no puede reservarse, pero la fila permanece porque `incidencia` y `reserva` la referencian por FK y esa historia no se pierde. Un hard delete real requeriría borrar en cascada su historial de incidencias y reservas, lo cual no es deseable.
 
 ### `carro`
@@ -368,12 +374,18 @@ La custodia física de una PC: quién la tiene ahora — migración `013`. Ver R
 | devuelto_en | TIMESTAMPTZ | **NULL = la máquina sigue afuera** |
 | recibido_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | observaciones | TEXT | NULL |
+| avisado_demora_en | TIMESTAMPTZ | NULL — marca del reclamo (014) |
+| avisado_cierre_para | DATE | NULL — jornada ya avisada (014) |
 
 ```sql
 CREATE UNIQUE INDEX ux_prestamo_abierto ON prestamo(pc_id) WHERE devuelto_en IS NULL;
 CREATE INDEX idx_prestamo_abiertos ON prestamo(entregado_en) WHERE devuelto_en IS NULL;
 CREATE INDEX idx_prestamo_pc ON prestamo(pc_id, entregado_en DESC);
 ```
+
+> **Las marcas del barrido (migración 014).** `avisado_demora_en` es un instante porque el reclamo sale UNA vez; `avisado_cierre_para` es una FECHA porque el corte de fin de jornada se repite cada día que la máquina siga afuera, así que lo que hay que recordar es "de este día ya avisé". Del lado de las reservas hay dos más: `reserva_grupo.recordatorio_enviado_en` (uno por clase, no por PC) y `reserva.avisado_pc_no_disponible_en`.
+>
+> **Ese último va en `reserva` y no en `prestamo`, y es la diferencia que importa:** la misma máquina demorada toda la mañana le falta a la clase de las 10 y también a la de las 12, y a las dos hay que avisarles. Con la marca del lado del préstamo, solo se enteraría la primera.
 
 > **`prestamo` no es `reserva`, y esa es la razón de que exista la tabla.** La reserva es el derecho a usar una PC en una franja; el préstamo es dónde está la máquina. Existen por separado: hay reservas que nadie vino a buscar, préstamos sin reserva (alguien pide una PC para un trámite) y préstamos que sobreviven a su reserva (la clase terminó y las máquinas no volvieron).
 
@@ -392,7 +404,7 @@ CREATE INDEX idx_prestamo_pc ON prestamo(pc_id, entregado_en DESC);
 | usuario_id | UUID | FK → usuario.id **ON DELETE CASCADE**, NOT NULL |
 | reserva_id | UUID | FK → reserva.id **ON DELETE SET NULL**, NULL |
 | mensaje | TEXT | NOT NULL |
-| tipo | VARCHAR(30) | NOT NULL DEFAULT 'GENERAL', CHECK IN ('GENERAL','DOCENTE_PENDIENTE','RESERVA_CANCELADA','LICENCIA_POR_VENCER') |
+| tipo | VARCHAR(30) | NOT NULL DEFAULT 'GENERAL', CHECK IN ('GENERAL','DOCENTE_PENDIENTE','RESERVA_CANCELADA','LICENCIA_POR_VENCER','RESERVA_POR_COMENZAR','RESERVA_NO_RETIRADA','PC_SIN_DEVOLVER') |
 | estado | VARCHAR(10) | NOT NULL DEFAULT 'NO_LEIDA', CHECK IN ('NO_LEIDA','LEIDA') |
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 | leida_en | TIMESTAMPTZ | NULL |

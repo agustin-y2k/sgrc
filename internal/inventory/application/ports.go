@@ -18,6 +18,9 @@ type Repo interface {
 	BuscarPCPorID(ctx context.Context, id string) (*domain.PC, error)
 	GuardarPC(ctx context.Context, pc *domain.PC) error
 	ListarPCsPorCarro(ctx context.Context, carroID string) ([]*domain.PC, error)
+	// ListarEquiposSueltos: lo prestable que no está en ningún carro
+	// (RF-03.15) — el proyector, los cargadores.
+	ListarEquiposSueltos(ctx context.Context) ([]*domain.PC, error)
 
 	CrearIncidencia(ctx context.Context, i *domain.Incidencia) error
 	BuscarIncidenciaPorID(ctx context.Context, id string) (*domain.Incidencia, error)
@@ -55,7 +58,11 @@ type Repo interface {
 // "AutoCAD vence mañana" no sirve sin "en la PC 3 del Carro 1"—, así que
 // se resuelve con un JOIN en vez de dejar que quien llama busque cada PC.
 type LicenciaConUbicacion struct {
-	Licencia        *domain.LicenciaSoftware
+	Licencia *domain.LicenciaSoftware
+	// Etiqueta es cómo se nombra al equipo: "PC 3" o "Notebook chica". Se
+	// muestra esto y no PCIdentificador, que va en 0 —y CarroNombre vacío—
+	// cuando el equipo no está en ningún carro (015).
+	Etiqueta        string
 	PCIdentificador int
 	PCDadaDeBaja    bool
 	CarroID         string

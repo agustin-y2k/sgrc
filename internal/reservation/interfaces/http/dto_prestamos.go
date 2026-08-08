@@ -69,7 +69,12 @@ type prestamoResponse struct {
 	MinutosDeDemora int  `json:"minutosDeDemora,omitempty"`
 
 	// Ubicación. Solo en los listados, que es donde hace falta.
+	//
+	// Etiqueta es cómo se nombra al equipo: "PC 3" o "Proyector Epson". Se
+	// resuelve del lado del servidor para que la misma cosa no se vea
+	// distinta según la pantalla.
 	PCIdentificador int     `json:"pcIdentificador,omitempty"`
+	Etiqueta        string  `json:"etiqueta,omitempty"`
 	CarroNombre     string  `json:"carroNombre,omitempty"`
 	MateriaNombre   *string `json:"materiaNombre,omitempty"`
 }
@@ -95,6 +100,7 @@ func toPrestamoResponse(p *domain.Prestamo, ahora time.Time) prestamoResponse {
 func toPrestamoDetalladoResponse(d *application.PrestamoDetallado, ahora time.Time) prestamoResponse {
 	r := toPrestamoResponse(d.Prestamo, ahora)
 	r.PCIdentificador = d.PCIdentificador
+	r.Etiqueta = d.Etiqueta
 	r.CarroNombre = d.CarroNombre
 	r.MateriaNombre = d.MateriaNombre
 	return r

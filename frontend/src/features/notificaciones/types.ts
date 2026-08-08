@@ -14,6 +14,9 @@ export type TipoNotificacion =
   | "DOCENTE_PENDIENTE"
   | "RESERVA_CANCELADA"
   | "LICENCIA_POR_VENCER"
+  | "RESERVA_POR_COMENZAR"
+  | "RESERVA_NO_RETIRADA"
+  | "PC_SIN_DEVOLVER"
 
 export type Notificacion = {
   id: string

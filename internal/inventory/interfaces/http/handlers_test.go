@@ -88,6 +88,18 @@ func (r *fakeRepo) ListarPCsPorCarro(ctx context.Context, carroID string) ([]*do
 	}
 	return resultado, nil
 }
+
+// ListarEquiposSueltos: lo prestable que no está en ningún carro (015).
+func (r *fakeRepo) ListarEquiposSueltos(ctx context.Context) ([]*domain.PC, error) {
+	var resultado []*domain.PC
+	for _, pc := range r.pcs {
+		if !pc.EstaEnUnCarro() {
+			resultado = append(resultado, pc)
+		}
+	}
+	return resultado, nil
+}
+
 func (r *fakeRepo) CrearIncidencia(ctx context.Context, i *domain.Incidencia) error {
 	r.incidencias[i.ID] = i
 	return nil
