@@ -59,6 +59,9 @@ describe("ReportesPage", () => {
     })
     vi.mocked(adminApi.reporteIncidenciasPorEquipo).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.reporteIncidenciasPorCarro).mockResolvedValue({ data: [] })
+    vi.mocked(adminApi.reporteEstadoDelInventario).mockResolvedValue({ data: [] })
+    vi.mocked(adminApi.reporteEquiposFueraDeCirculacion).mockResolvedValue({ data: [] })
+    vi.mocked(adminApi.reporteIncidenciasPorCategoria).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.historicoUsoEquipos).mockResolvedValue({
       data: [
         {
@@ -354,5 +357,89 @@ describe("ReportesPage", () => {
     ).toBeInTheDocument()
     expect(screen.queryByLabelText("Año")).not.toBeInTheDocument()
     expect(adminApi.historicoUsoEquipos).not.toHaveBeenCalled()
+  })
+
+  // ── RF-06.5: el estado del parque ───────────────────────────────────
+
+  /**
+   * El número que se lleva a pedir presupuesto. Sin esta línea, saber cuántas
+   * máquinas están fuera de circulación pedía abrir carro por carro y contar
+   * los badges a mano.
+   */
+  it("dice cuántos equipos hay y cuántos están fuera de circulación", async () => {
+    vi.mocked(adminApi.reporteEstadoDelInventario).mockResolvedValue({
+      data: [
+        {
+          carroId: "c1",
+          carroNombre: "Carro 1",
+          disponibles: 20,
+          enMantenimiento: 6,
+          fueraDeServicio: 4,
+          total: 30,
+        },
+      ],
+    })
+    renderPagina()
+
+    expect(
+      await screen.findByText(/20 de 30 disponibles · 10 fuera de circulación/)
+    ).toBeInTheDocument()
+  })
+
+  /**
+   * La lista que se manda al service. Lo que no puede faltar es la falla:
+   * "PC 7 rota" no sirve para pedir un repuesto, "PC 7 - batería" sí.
+   */
+  it("lista los equipos fuera de circulación con su falla", async () => {
+    vi.mocked(adminApi.reporteEquiposFueraDeCirculacion).mockResolvedValue({
+      data: [
+        {
+          equipoId: "pc1",
+          etiqueta: "PC 7",
+          carroNombre: "Carro 1",
+          estado: "EN_MANTENIMIENTO",
+          categoria: "batería",
+          ultimaFalla: "no carga",
+        },
+      ],
+    })
+    renderPagina()
+
+    expect(await screen.findByText("PC 7")).toBeInTheDocument()
+    expect(screen.getByText("batería")).toBeInTheDocument()
+    expect(screen.getByText("En mantenimiento")).toBeInTheDocument()
+  })
+
+  /**
+   * Una máquina se puede sacar de circulación sin que nadie escriba qué
+   * tiene, y eso hay que verlo: es trabajo pendiente de diagnóstico, no una
+   * fila para esconder.
+   */
+  it("marca las que nadie pudo diagnosticar", async () => {
+    vi.mocked(adminApi.reporteEquiposFueraDeCirculacion).mockResolvedValue({
+      data: [
+        {
+          equipoId: "pc1",
+          etiqueta: "PC 7",
+          estado: "FUERA_DE_SERVICIO",
+        },
+      ],
+    })
+    renderPagina()
+
+    expect(await screen.findAllByText("Sin diagnosticar")).not.toHaveLength(0)
+  })
+
+  it("agrupa las incidencias por tipo de falla", async () => {
+    vi.mocked(adminApi.reporteIncidenciasPorCategoria).mockResolvedValue({
+      data: [
+        { categoria: "batería", total: 12, abiertas: 8, equiposAlcanzados: 12 },
+        { categoria: "pantalla", total: 3, abiertas: 1, equiposAlcanzados: 2 },
+      ],
+    })
+    renderPagina()
+
+    expect(await screen.findByText(/15 incidencias en 2 tipos de falla/)).toBeInTheDocument()
+    expect(screen.getByText("batería")).toBeInTheDocument()
   })
 })

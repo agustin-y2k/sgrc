@@ -22,6 +22,7 @@ import {
 } from "@/features/admin/types"
 import { HistoricoPorAnio } from "@/features/admin/HistoricoPorAnio"
 import { Proporcion, Seccion, sumar } from "@/features/admin/ReportesUI"
+import { ETIQUETA_ESTADO_EQUIPO } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { descargarCSV } from "@/lib/csv"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
@@ -71,8 +72,33 @@ export function ReportesPage() {
       adminApi.reporteIncidenciasPorCarro(desde || undefined, hasta || undefined),
   })
 
+  // Los dos del parque NO llevan rango de fechas: describen la situación de
+  // hoy. Filtrarlos por fecha daría un número que parece "cuántas estaban
+  // rotas en marzo" sin serlo.
+  const estadoInventario = useQuery({
+    queryKey: ["reporte", "estado-inventario"],
+    queryFn: adminApi.reporteEstadoDelInventario,
+  })
+
+  const fueraDeCirculacion = useQuery({
+    queryKey: ["reporte", "fuera-de-circulacion"],
+    queryFn: adminApi.reporteEquiposFueraDeCirculacion,
+  })
+
+  const porCategoria = useQuery({
+    queryKey: ["reporte", "incidencias-categorias", desde, hasta],
+    queryFn: () =>
+      adminApi.reporteIncidenciasPorCategoria(desde || undefined, hasta || undefined),
+  })
+
   const errorActivo =
-    usoEquipos.error ?? usoDocentes.error ?? incidenciasEquipo.error ?? incidenciasCarro.error
+    usoEquipos.error ??
+    usoDocentes.error ??
+    incidenciasEquipo.error ??
+    incidenciasCarro.error ??
+    estadoInventario.error ??
+    fueraDeCirculacion.error ??
+    porCategoria.error
 
   /**
    * Las cuatro tablas, ordenadas de mayor a menor y con sus totales.
@@ -108,6 +134,20 @@ export function ReportesPage() {
     (a, b) => b.total - a.total
   )
   const totalIncidenciasCarro = sumar(filasIncidenciasCarro, (f) => f.total)
+
+  // ── El parque de equipos (RF-06.5) ────────────────────────────────────
+  const filasInventario = estadoInventario.data?.data ?? []
+  const parqueTotal = sumar(filasInventario, (f) => f.total)
+  const parqueDisponible = sumar(filasInventario, (f) => f.disponibles)
+  const parqueMantenimiento = sumar(filasInventario, (f) => f.enMantenimiento)
+  const parqueFueraDeServicio = sumar(filasInventario, (f) => f.fueraDeServicio)
+  const parqueAfuera = parqueMantenimiento + parqueFueraDeServicio
+
+  const filasFuera = fueraDeCirculacion.data?.data ?? []
+  const sinDiagnosticar = filasFuera.filter((f) => !f.categoria).length
+
+  const filasCategoria = porCategoria.data?.data ?? []
+  const totalPorCategoria = sumar(filasCategoria, (f) => f.total)
 
   /**
    * Con qué período se guarda el archivo. Un `reportes.csv` en la carpeta
@@ -405,6 +445,197 @@ export function ReportesPage() {
                     <TableCell className="text-right">{x.graves}</TableCell>
                     <TableCell>
                       <Proporcion parte={x.total} total={totalIncidenciasCarro} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Seccion>
+
+        {/* RF-06.5 — el estado del parque. Va después de las cuatro de uso
+            porque responde otra pregunta: aquellas miran un período, estas
+            tres miran cómo está el inventario ahora. */}
+        <Seccion
+          titulo="Estado del parque de equipos"
+          resumen={
+            parqueTotal > 0 &&
+            `${parqueDisponible} de ${parqueTotal} disponibles · ${parqueAfuera} fuera de circulación`
+          }
+          alDescargar={
+            filasInventario.length > 0
+              ? () =>
+                  descargarCSV(
+                    `estado-inventario_${sufijo}.csv`,
+                    [
+                      ["Carro", "Disponibles", "En mantenimiento", "Fuera de servicio", "Total"],
+                      ...filasInventario.map((f) => [
+                        f.carroNombre || "Sin carro",
+                        f.disponibles,
+                        f.enMantenimiento,
+                        f.fueraDeServicio,
+                        f.total,
+                      ]),
+                    ]
+                  )
+              : undefined
+          }
+        >
+          {filasInventario.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No hay ningún equipo cargado todavía.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Carro</TableHead>
+                  <TableHead className="text-right">Disponibles</TableHead>
+                  <TableHead className="text-right">En mantenimiento</TableHead>
+                  <TableHead className="text-right">Fuera de servicio</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="w-40">Disponibilidad</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filasInventario.map((f) => (
+                  <TableRow key={f.carroId || "sueltos"}>
+                    <TableCell className="font-medium">
+                      {f.carroNombre || "Sin carro"}
+                    </TableCell>
+                    <TableCell className="text-right">{f.disponibles}</TableCell>
+                    <TableCell className="text-right">{f.enMantenimiento}</TableCell>
+                    <TableCell className="text-right">{f.fueraDeServicio}</TableCell>
+                    <TableCell className="text-right">{f.total}</TableCell>
+                    <TableCell>
+                      <Proporcion parte={f.disponibles} total={f.total} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Seccion>
+
+        <Seccion
+          titulo="Equipos fuera de circulación"
+          resumen={
+            filasFuera.length > 0 &&
+            `${filasFuera.length} ${filasFuera.length === 1 ? "equipo" : "equipos"}${
+              sinDiagnosticar > 0 ? ` · ${sinDiagnosticar} sin diagnosticar` : ""
+            }`
+          }
+          alDescargar={
+            filasFuera.length > 0
+              ? () =>
+                  descargarCSV(
+                    `equipos-fuera-de-circulacion_${sufijo}.csv`,
+                    [
+                      ["Equipo", "Carro", "Estado", "Falla", "Detalle"],
+                      ...filasFuera.map((f) => [
+                        f.etiqueta,
+                        f.carroNombre ?? "",
+                        ETIQUETA_ESTADO_EQUIPO[f.estado] ?? f.estado,
+                        f.categoria ?? "Sin diagnosticar",
+                        f.ultimaFalla ?? "",
+                      ]),
+                    ]
+                  )
+              : undefined
+          }
+        >
+          {filasFuera.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Están todos disponibles: no hay ninguno en mantenimiento ni fuera de
+              servicio.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Equipo</TableHead>
+                  <TableHead>Carro</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Falla</TableHead>
+                  <TableHead>Detalle</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filasFuera.map((f) => (
+                  <TableRow key={f.equipoId}>
+                    <TableCell className="font-medium">{f.etiqueta}</TableCell>
+                    <TableCell>{f.carroNombre}</TableCell>
+                    <TableCell>{ETIQUETA_ESTADO_EQUIPO[f.estado] ?? f.estado}</TableCell>
+                    <TableCell>
+                      {f.categoria || (
+                        <span className="text-muted-foreground">Sin diagnosticar</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {f.ultimaFalla}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Seccion>
+
+        <Seccion
+          titulo="Qué se rompe"
+          resumen={
+            filasCategoria.length > 0 &&
+            `${totalPorCategoria} incidencias en ${filasCategoria.length} ${filasCategoria.length === 1 ? "tipo de falla" : "tipos de falla"}`
+          }
+          alDescargar={
+            filasCategoria.length > 0
+              ? () =>
+                  descargarCSV(
+                    `incidencias-por-categoria_${sufijo}.csv`,
+                    [
+                      ["Falla", "Total", "Abiertas", "Equipos alcanzados"],
+                      ...filasCategoria.map((f) => [
+                        f.categoria || "Sin diagnosticar",
+                        f.total,
+                        f.abiertas,
+                        f.equiposAlcanzados,
+                      ]),
+                    ]
+                  )
+              : undefined
+          }
+        >
+          {filasCategoria.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No hay incidencias reportadas en ese período.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Falla</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Abiertas</TableHead>
+                  {/* Las dos cuentas dicen cosas distintas: veinte baterías en
+                      veinte máquinas es un problema de lote; veinte en la
+                      misma es una máquina para dar de baja. */}
+                  <TableHead className="text-right">Equipos</TableHead>
+                  <TableHead className="w-40">Del total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filasCategoria.map((f) => (
+                  <TableRow key={f.categoria || "sin-clasificar"}>
+                    <TableCell className="font-medium">
+                      {f.categoria || (
+                        <span className="text-muted-foreground">Sin diagnosticar</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">{f.total}</TableCell>
+                    <TableCell className="text-right">{f.abiertas}</TableCell>
+                    <TableCell className="text-right">{f.equiposAlcanzados}</TableCell>
+                    <TableCell>
+                      <Proporcion parte={f.total} total={totalPorCategoria} />
                     </TableCell>
                   </TableRow>
                 ))}

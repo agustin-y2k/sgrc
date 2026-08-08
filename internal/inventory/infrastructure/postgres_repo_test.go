@@ -233,7 +233,7 @@ func TestPostgresRepo_Incidencia_CrearYListar(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	inc, err := domain.NuevaIncidencia(NuevoID(), equipo.ID, "", "No enciende", domain.GravedadGrave, time.Now().UTC().Truncate(time.Microsecond))
+	inc, err := domain.NuevaIncidencia(NuevoID(), equipo.ID, "", "No enciende", "sin diagnosticar", domain.GravedadGrave, time.Now().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestPostgresRepo_GuardarIncidencia_MarcarEnviadaDGE(t *testing.T) {
 	equipo, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 1, "SERIE-UNICA", false, time.Now())
 	repo.CrearEquipo(ctx, equipo)
 
-	inc, _ := domain.NuevaIncidencia(NuevoID(), equipo.ID, "", "Falla", domain.GravedadGrave, time.Now().UTC().Truncate(time.Microsecond))
+	inc, _ := domain.NuevaIncidencia(NuevoID(), equipo.ID, "", "Falla", "", domain.GravedadGrave, time.Now().UTC().Truncate(time.Microsecond))
 	if err := repo.CrearIncidencia(ctx, inc); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}

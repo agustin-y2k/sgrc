@@ -27,6 +27,12 @@ type Repo interface {
 	GuardarIncidencia(ctx context.Context, i *domain.Incidencia) error
 	ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error)
 
+	// CategoriasDeFallaUsadas alimenta las sugerencias del formulario. Es lo
+	// que hace que el texto libre converja solo: sin la lista a la vista,
+	// "batería" y "Bateria" nacen como dos categorías y la estadística se
+	// fragmenta desde el primer día.
+	CategoriasDeFallaUsadas(ctx context.Context) ([]string, error)
+
 	CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error
 	BuscarLicenciaPorID(ctx context.Context, id string) (*domain.LicenciaSoftware, error)
 	GuardarLicencia(ctx context.Context, l *domain.LicenciaSoftware) error

@@ -328,8 +328,8 @@ func (s *Service) ListarEquiposSueltos(ctx context.Context) ([]*domain.Equipo, e
 
 // ── Incidencia ──────────────────────────────────────────────────────────
 
-func (s *Service) CrearIncidencia(ctx context.Context, equipoID, reportadoPor, descripcion string, gravedad domain.Gravedad) (*domain.Incidencia, error) {
-	i, err := domain.NuevaIncidencia(s.nuevoID(), equipoID, reportadoPor, descripcion, gravedad, s.ahora())
+func (s *Service) CrearIncidencia(ctx context.Context, equipoID, reportadoPor, descripcion, categoria string, gravedad domain.Gravedad) (*domain.Incidencia, error) {
+	i, err := domain.NuevaIncidencia(s.nuevoID(), equipoID, reportadoPor, descripcion, categoria, gravedad, s.ahora())
 	if err != nil {
 		return nil, err
 	}
@@ -343,6 +343,11 @@ func (s *Service) CrearIncidencia(ctx context.Context, equipoID, reportadoPor, d
 type EditarIncidenciaParams struct {
 	Estado           *domain.EstadoIncidencia
 	MarcarEnviadaDGE bool
+	// Categoria se puede completar DESPUÉS, y ese es su caso principal: la
+	// falla se reporta el día que aparece —"no enciende"— y el diagnóstico
+	// llega cuando alguien pudo abrirla. Una cadena vacía la devuelve a "sin
+	// clasificar", que también es una corrección legítima.
+	Categoria *string
 }
 
 func (s *Service) EditarIncidencia(ctx context.Context, incidenciaID string, params EditarIncidenciaParams) error {
@@ -357,9 +362,21 @@ func (s *Service) EditarIncidencia(ctx context.Context, incidenciaID string, par
 		i.Estado = *params.Estado
 	}
 
+	if params.Categoria != nil {
+		categoria, err := domain.CategoriaDeFallaValida(*params.Categoria)
+		if err != nil {
+			return err
+		}
+		i.Categoria = categoria
+	}
+
 	return s.repo.GuardarIncidencia(ctx, i)
 }
 
 func (s *Service) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error) {
 	return s.repo.ListarIncidenciasPorEquipo(ctx, equipoID)
+}
+
+func (s *Service) CategoriasDeFallaUsadas(ctx context.Context) ([]string, error) {
+	return s.repo.CategoriasDeFallaUsadas(ctx)
 }

@@ -55,7 +55,7 @@ func TestParseEstadoIncidencia_Invalido(t *testing.T) {
 }
 
 func TestNuevaIncidencia_OK(t *testing.T) {
-	i, err := NuevaIncidencia("id1", "pc1", "usuario1", "La pantalla no enciende", GravedadGrave, time.Now())
+	i, err := NuevaIncidencia("id1", "pc1", "usuario1", "La pantalla no enciende", "pantalla", GravedadGrave, time.Now())
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestNuevaIncidencia_OK(t *testing.T) {
 func TestNuevaIncidencia_DescripcionVacia_Error(t *testing.T) {
 	casos := []string{"", "   "}
 	for _, d := range casos {
-		_, err := NuevaIncidencia("id1", "pc1", "usuario1", d, GravedadLeve, time.Now())
+		_, err := NuevaIncidencia("id1", "pc1", "usuario1", d, "", GravedadLeve, time.Now())
 		if !errors.Is(err, ErrDescripcionVacia) {
 			t.Errorf("descripción %q: esperaba ErrDescripcionVacia, obtuve %v", d, err)
 		}
@@ -80,7 +80,7 @@ func TestNuevaIncidencia_DescripcionVacia_Error(t *testing.T) {
 func TestNuevaIncidencia_SinReportadoPor_QuedaNil(t *testing.T) {
 	// Caso límite: si en algún flujo no hay un usuario identificado (no
 	// debería pasar en la práctica, pero el dominio no debe panickear).
-	i, err := NuevaIncidencia("id1", "pc1", "", "Algo raro", GravedadLeve, time.Now())
+	i, err := NuevaIncidencia("id1", "pc1", "", "Algo raro", "", GravedadLeve, time.Now())
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestNuevaIncidencia_SinReportadoPor_QuedaNil(t *testing.T) {
 }
 
 func TestMarcarEnviadaDGE_OK(t *testing.T) {
-	i, _ := NuevaIncidencia("id1", "pc1", "usuario1", "Falla", GravedadGrave, time.Now())
+	i, _ := NuevaIncidencia("id1", "pc1", "usuario1", "Falla", "", GravedadGrave, time.Now())
 	fecha := time.Now()
 
 	i.MarcarEnviadaDGE(fecha)

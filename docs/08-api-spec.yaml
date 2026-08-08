@@ -353,6 +353,13 @@ components:
         equipoId: { type: string, format: uuid }
         reportadoPor: { type: string, format: uuid }
         descripcion: { type: string }
+        categoria:
+          type: string
+          description: |
+            Qué tipo de falla es, en texto libre (RF-03.5). Se omite cuando
+            todavía no se diagnosticó, que es un estado válido y no un dato
+            faltante.
+          example: batería
         gravedad: { type: string, enum: [LEVE, MODERADA, GRAVE] }
         fecha: { type: string, format: date-time }
         enviadoDGE: { type: boolean }
@@ -1641,9 +1648,19 @@ paths:
               properties:
                 equipoId: { type: string, format: uuid }
                 descripcion: { type: string }
+                categoria:
+                  type: string
+                  maxLength: 50
+                  description: |
+                    Opcional (RF-03.5): quien reporta no siempre sabe qué
+                    falla. Texto libre; conviene tomarla de
+                    `/api/inventory/incidencias/categorias` para no crear
+                    variantes de una categoría que ya existe.
+                  example: batería
                 gravedad: { type: string, enum: [LEVE, MODERADA, GRAVE] }
       responses:
         "201": { description: Incidencia registrada }
+        "400": { description: La categoría supera los 50 caracteres }
 
   /api/inventory/incidencias/{id}:
     patch:
@@ -1662,6 +1679,13 @@ paths:
               type: object
               properties:
                 estado: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_DGE, RESUELTA] }
+                categoria:
+                  type: string
+                  maxLength: 50
+                  description: |
+                    Clasificar después una falla que se reportó sin
+                    diagnosticar. Mandarla vacía la devuelve a "sin
+                    clasificar"; omitir el campo la deja como está.
                 enviadoDGE: { type: boolean }
                 fechaEnvioDGE: { type: string, format: date-time }
       responses:
@@ -2742,6 +2766,148 @@ paths:
                         total: { type: integer }
                         abiertas: { type: integer }
                         graves: { type: integer }
+
+  /api/inventory/incidencias/categorias:
+    get:
+      tags: [inventory]
+      summary: Categorías de falla ya usadas (RF-03.5)
+      description: |
+        Las categorías distintas que ya se cargaron, ordenadas alfabéticamente
+        y sin repetir por diferencia de mayúsculas.
+
+        Alimenta la sugerencia del formulario de reporte. Es lo único que
+        mantiene la categoría —que es texto libre a propósito— convergiendo
+        sola, sin obligar a nadie a elegir de una lista cerrada.
+
+        No requiere ser Admin: la usa la misma pantalla donde un docente
+        reporta la falla.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { type: string }
+                    example: [batería, pantalla, teclado]
+
+  /api/reporting/inventario/estado:
+    get:
+      tags: [reports]
+      summary: Estado del parque de equipos, por carro (RF-06.5, Admin)
+      description: |
+        Cuántos equipos hay disponibles, en mantenimiento y fuera de servicio,
+        desglosado por carro.
+
+        Describe el estado de HOY, así que no acepta rango de fechas ni
+        depende del ciclo lectivo.
+
+        Los dados de baja quedan afuera del total: ya no son parte del parque,
+        y contarlos haría crecer el número para siempre. Los equipos sueltos
+        (RF-03.16) van en una fila final sin `carroId` ni `carroNombre`.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        carroId: { type: string, format: uuid, description: "Ausente en la fila de los equipos sueltos" }
+                        carroNombre: { type: string }
+                        disponibles: { type: integer }
+                        enMantenimiento: { type: integer }
+                        fueraDeServicio: { type: integer }
+                        total: { type: integer, description: "Equipos no dados de baja de ese carro" }
+
+  /api/reporting/inventario/fuera-de-circulacion:
+    get:
+      tags: [reports]
+      summary: Equipos que hoy no se pueden reservar, con su falla (RF-06.6, Admin)
+      description: |
+        Un renglón por equipo en `EN_MANTENIMIENTO` o `FUERA_DE_SERVICIO`, con
+        los datos de su ÚLTIMA incidencia. Es la lista con la que se pide un
+        repuesto, frente a `/inventario/estado`, que da el número con el que se
+        decide.
+
+        Un equipo fuera de circulación SIN incidencias registradas aparece
+        igual, con los campos de falla ausentes: alguien lo sacó de circulación
+        y no anotó por qué, y eso es trabajo pendiente.
+
+        Los dados de baja no se listan. Describe el estado de HOY: no acepta
+        rango de fechas.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        equipoId: { type: string, format: uuid }
+                        etiqueta: { type: string, example: "PC 7" }
+                        carroNombre: { type: string, description: "Ausente si es un equipo suelto" }
+                        estado: { type: string, enum: [EN_MANTENIMIENTO, FUERA_DE_SERVICIO] }
+                        categoria: { type: string, description: "Ausente si no se diagnosticó" }
+                        ultimaFalla: { type: string, description: "Descripción de la incidencia más reciente" }
+                        estadoIncidencia: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_DGE, RESUELTA] }
+
+  /api/reporting/incidencias/categorias:
+    get:
+      tags: [reports]
+      summary: Incidencias agrupadas por tipo de falla (RF-06.7, Admin)
+      description: |
+        Responde "qué se rompe acá". Agrupa sin distinguir mayúsculas, porque
+        la categoría es texto libre y "Batería" y "batería" son la misma falla
+        escrita por dos personas.
+
+        `equiposAlcanzados` es lo que distingue una máquina que se rompió diez
+        veces de diez máquinas rotas: el mismo total con soluciones opuestas.
+
+        Las incidencias sin clasificar no se descartan — van en una fila con
+        `categoria` ausente. Cuántas fallas nadie pudo diagnosticar es parte de
+        lo que el reporte tiene que decir.
+
+        No depende del ciclo lectivo (RF-06.3), pero sí acepta rango: cuenta
+        hechos fechados.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: desde
+          schema: { type: string, format: date }
+        - in: query
+          name: hasta
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    description: De la falla más frecuente a la menos
+                    items:
+                      type: object
+                      properties:
+                        categoria: { type: string, description: "Ausente en la fila de las no clasificadas" }
+                        total: { type: integer }
+                        abiertas: { type: integer }
+                        equiposAlcanzados: { type: integer, description: "Equipos distintos con esa falla" }
 
   /api/notifications/leer-todas:
     post:

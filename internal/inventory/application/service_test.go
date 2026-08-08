@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -122,6 +123,20 @@ func (r *fakeRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID stri
 			resultado = append(resultado, i)
 		}
 	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) CategoriasDeFallaUsadas(ctx context.Context) ([]string, error) {
+	vistas := map[string]bool{}
+	var resultado []string
+	for _, i := range r.incidencias {
+		if i.Categoria == "" || vistas[strings.ToLower(i.Categoria)] {
+			continue
+		}
+		vistas[strings.ToLower(i.Categoria)] = true
+		resultado = append(resultado, i.Categoria)
+	}
+	sort.Strings(resultado)
 	return resultado, nil
 }
 
@@ -629,7 +644,7 @@ func TestDarDeBajaEquipo_DosVeces_Error(t *testing.T) {
 func TestCrearIncidencia_OK(t *testing.T) {
 	svc := servicioSimple(nuevoFakeRepo())
 
-	i, err := svc.CrearIncidencia(context.Background(), "pc1", "usuario1", "No enciende", domain.GravedadGrave)
+	i, err := svc.CrearIncidencia(context.Background(), "pc1", "usuario1", "No enciende", "", domain.GravedadGrave)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -642,7 +657,7 @@ func TestCrearIncidencia_OK(t *testing.T) {
 func TestCrearIncidencia_DescripcionVacia_Error(t *testing.T) {
 	svc := servicioSimple(nuevoFakeRepo())
 
-	_, err := svc.CrearIncidencia(context.Background(), "pc1", "usuario1", "", domain.GravedadLeve)
+	_, err := svc.CrearIncidencia(context.Background(), "pc1", "usuario1", "", "", domain.GravedadLeve)
 
 	if !errors.Is(err, domain.ErrDescripcionVacia) {
 		t.Fatalf("esperaba ErrDescripcionVacia, obtuve %v", err)

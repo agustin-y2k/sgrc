@@ -45,7 +45,7 @@ SGRC resuelve los tres: **impide el solapamiento a nivel de base de datos** (no 
 | **Ciclo lectivo** | Años, cursos, materias y qué docente dicta cada una. Al cerrar el año, el sistema guarda un resumen histórico permanente. |
 | **Aprobación de cuentas** | Un docente se registra solo —con email y contraseña, o con su cuenta de Google— pero no entra hasta que alguien lo aprueba. Un docente aprobado también puede recibir permisos de Admin, y perderlos sin que se le cierre la cuenta. |
 | **Bloqueo por evaluación** | Reserva las máquinas para una prueba estatal y cancela automáticamente lo que se pisa, notificando a cada docente afectado. |
-| **Reportes** | Uso por equipo y por docente, incidencias por equipo y por carro, con porcentajes y descarga a CSV. |
+| **Reportes** | Uso por equipo y por docente, incidencias por equipo y por carro, con porcentajes y descarga a CSV. Y para el parque de máquinas: cuántas andan y cuántas no, la lista de las que están fuera de circulación con qué le pasa a cada una, y qué se rompe más seguido. |
 | **Auditoría** | Toda acción sensible queda registrada con quién, cuándo y desde qué dirección. |
 
 ---
@@ -153,6 +153,8 @@ Si es tu primera vez en el repositorio y venís del lado técnico, leé `01` y `
 **Monolito modular, no microservicios.** Un solo binario Go y un solo Postgres, divididos en módulos que se comunican únicamente a través de interfaces: ningún módulo importa el dominio de otro. Para una escuela con decenas de usuarios, la complejidad operativa de los microservicios no se justifica — pero los límites están puestos como si lo fueran, así que el día que haga falta dividir, no hay que reescribir la lógica. Hay un test automático que falla si alguien cruza un límite.
 
 **El histórico sobrevive al borrado.** Al cerrar un año lectivo se eliminan sus reservas, pero antes el sistema guarda un resumen permanente con los nombres "congelados" tal como estaban. Una PC que después se muda de carro, o un docente cuya cuenta se elimina, siguen apareciendo correctamente en el reporte del año que ya pasó.
+
+**El tipo de falla se escribe, no se elige de una lista.** Al reportar una máquina rota se anota qué falla —batería, pantalla, lo que sea— en texto libre, y el sistema sugiere las categorías que ya se usaron. Con un menú cerrado, la primera falla no prevista pediría una migración y un despliegue para poder anotarse; con texto libre y sugerencias, las categorías convergen solas y los reportes agrupan sin distinguir mayúsculas. Se puede dejar vacío, y eso también dice algo: es una máquina que nadie pudo diagnosticar todavía, y el reporte las cuenta aparte en lugar de esconderlas.
 
 **Same-origin, sin CORS.** El navegador pide todo al mismo host: nginx sirve la interfaz y redirige `/api` al backend. Un hostname, un certificado, ninguna configuración de CORS que se rompa.
 

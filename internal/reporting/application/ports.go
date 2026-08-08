@@ -31,6 +31,13 @@ type Repo interface {
 	// resuelven siempre con una query directa, sin snapshot.
 	CalcularIncidenciasPorEquipo(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasEquipo, error)
 	CalcularIncidenciasPorCarro(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasCarro, error)
+
+	// Los tres de RF-06.5 no dependen del ciclo lectivo: son una foto del
+	// parque HOY. Una máquina rota lo está ahora, sin importar en qué año se
+	// reportó la falla.
+	EstadoDelInventario(ctx context.Context) ([]domain.EstadoDelInventario, error)
+	EquiposFueraDeCirculacion(ctx context.Context) ([]domain.EquipoFueraDeCirculacion, error)
+	CalcularIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error)
 }
 
 // InfoEquipoParaSnapshot es el puerto hacia inventory — necesario para

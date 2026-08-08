@@ -220,7 +220,7 @@ func (h *Handler) CrearIncidencia(c *fiber.Ctx) error {
 		return errClaims
 	}
 
-	i, err := h.svc.CrearIncidencia(c.UserContext(), req.EquipoID, claims.UserID, req.Descripcion, gravedad)
+	i, err := h.svc.CrearIncidencia(c.UserContext(), req.EquipoID, claims.UserID, req.Descripcion, req.Categoria, gravedad)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -243,6 +243,23 @@ func (h *Handler) ListarIncidenciasPorEquipo(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
+// GET /api/inventory/incidencias/categorias (cualquier autenticado)
+//
+// Las categorías de falla ya usadas, para sugerirlas al reportar una nueva.
+// Lo puede ver cualquiera por el mismo motivo que el inventario: un docente
+// también reporta fallas (RF-03.5), y es justo quien más ayuda necesita para
+// no inventar una categoría nueva por cada tipeo distinto.
+func (h *Handler) ListarCategoriasDeFalla(c *fiber.Ctx) error {
+	categorias, err := h.svc.CategoriasDeFallaUsadas(c.UserContext())
+	if err != nil {
+		return mapearError(err)
+	}
+	if categorias == nil {
+		categorias = []string{}
+	}
+	return c.JSON(fiber.Map{"data": categorias})
+}
+
 // PATCH /api/inventory/incidencias/{id} (Admin)
 func (h *Handler) EditarIncidencia(c *fiber.Ctx) error {
 	id := c.Params("id")
@@ -252,7 +269,10 @@ func (h *Handler) EditarIncidencia(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	params := application.EditarIncidenciaParams{MarcarEnviadaDGE: req.MarcarEnviadaDGE}
+	params := application.EditarIncidenciaParams{
+		MarcarEnviadaDGE: req.MarcarEnviadaDGE,
+		Categoria:        req.Categoria,
+	}
 	if req.Estado != nil {
 		estado, err := domain.ParseEstadoIncidencia(*req.Estado)
 		if err != nil {

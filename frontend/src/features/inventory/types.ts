@@ -67,6 +67,8 @@ export type Incidencia = {
   equipoId: string
   reportadoPor?: string
   descripcion: string
+  /** Qué tipo de falla es. Vacía mientras no se haya podido diagnosticar. */
+  categoria?: string
   gravedad: GravedadIncidencia
   /** ISO 8601 */
   fecha: string
@@ -175,4 +177,16 @@ export type AltaMasivaLicencias = {
 export type RenovacionLicencias = {
   renovadas: Licencia[]
   sinFechaPrevia?: string[]
+}
+
+/**
+ * Cómo se nombra cada estado en pantalla. Vive acá y no en cada página
+ * porque lo usan el inventario, el panel de administración y los reportes:
+ * con una copia por pantalla, renombrar un estado deja las tres diciendo
+ * cosas distintas sobre la misma máquina.
+ */
+export const ETIQUETA_ESTADO_EQUIPO: Record<EstadoEquipo, string> = {
+  DISPONIBLE: "Disponible",
+  EN_MANTENIMIENTO: "En mantenimiento",
+  FUERA_DE_SERVICIO: "Fuera de servicio",
 }
