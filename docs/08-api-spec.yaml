@@ -197,9 +197,13 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        carroId: { type: string, format: uuid }
-        identificador: { type: integer, description: "Único dentro del carro, no globalmente — puede repetirse en otro carro", example: 27 }
-        numeroSerie: { type: string, maxLength: 50, example: "5CD1234ABC", description: "Número de serie de fábrica, único en toda la institución. Alfanumérico: se guarda en mayúsculas y sin espacios al borde, así que la respuesta puede diferir de lo enviado" }
+        etiqueta: { type: string, example: "PC 27", description: "Cómo se lo nombra en pantallas y correos: 'PC {identificador}' si está en un carro, el nombre si no. La resuelve el servidor para que la misma cosa no se vea distinta según dónde se la mire (RF-03.17)" }
+        tipo: { type: string, maxLength: 50, example: "PROYECTOR", description: "Texto libre. 'PC' en las computadoras de un carro" }
+        nombre: { type: string, maxLength: 100, nullable: true, example: "Proyector Epson", description: "Solo en equipos sueltos: es lo único que los distingue, y es único entre ellos sin distinguir mayúsculas. Ausente en las PCs de un carro" }
+        reservable: { type: boolean, description: "Si aparece en la lista de equipos libres al reservar (RF-03.16). Un proyector sí; un cargador no, se presta en el momento" }
+        carroId: { type: string, format: uuid, nullable: true, description: "Ausente en un equipo suelto: un proyector no está en ningún carro" }
+        identificador: { type: integer, nullable: true, description: "Único dentro del carro, no globalmente — puede repetirse en otro carro. Ausente en un equipo suelto", example: 27 }
+        numeroSerie: { type: string, maxLength: 50, nullable: true, example: "5CD1234ABC", description: "Número de serie de fábrica, único en toda la institución. Alfanumérico: se guarda en mayúsculas y sin espacios al borde, así que la respuesta puede diferir de lo enviado. Ausente en un equipo suelto: un cargador puede no traer serie" }
         freezado: { type: boolean, description: "Informativo: indica si tiene Deep Freeze instalado. Sin efecto funcional sobre reservas." }
         cpu: { type: string, nullable: true }
         ram: { type: string, nullable: true }
@@ -248,6 +252,7 @@ components:
             = venció hace esos días. Ausente si no hay fecha. Viaja resuelto
             para que la pantalla, el correo y el job digan lo mismo.
         estado: { type: string, enum: [SIN_FECHA, VENCIDA, POR_VENCER, VIGENTE], description: "Derivado. POR_VENCER depende del diasAviso de esa licencia, no de un umbral fijo." }
+        etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Solo en el listado general. Es lo que se muestra: los dos de abajo van en 0 y \"\" si el equipo no está en ningún carro" }
         pcIdentificador: { type: integer, description: "Solo en el listado general" }
         carroId: { type: string, format: uuid }
         carroNombre: { type: string }
@@ -296,6 +301,7 @@ components:
         abierto: { type: boolean, description: "Derivado: devueltoEn ausente" }
         demorado: { type: boolean, description: "Derivado. Un préstamo sin hora pactada NUNCA está demorado" }
         minutosDeDemora: { type: integer, description: "Derivado. 0 si no está demorado" }
+        etiqueta: { type: string, example: "Proyector Epson", description: "Cómo se nombra el equipo (RF-03.17). Solo en los listados" }
         pcIdentificador: { type: integer, description: "Solo en los listados" }
         carroNombre: { type: string }
         materiaNombre: { type: string, nullable: true, description: "Solo en préstamos que salieron contra una reserva" }
@@ -380,7 +386,7 @@ components:
         fecha: { type: string, format: date }
         horaInicio: { type: string }
         horaFin: { type: string }
-        estado: { type: string, enum: [CONFIRMADA, PARCIALMENTE_CANCELADA, CANCELADA, FINALIZADA] }
+        estado: { type: string, enum: [CONFIRMADA, PARCIALMENTE_CANCELADA, CANCELADA, FINALIZADA, NO_RETIRADA] }
         esRecurrente: { type: boolean }
         reglaRecurrenciaId: { type: string, format: uuid, nullable: true }
         creadaEn: { type: string, format: date-time }
@@ -393,8 +399,9 @@ components:
         id: { type: string, format: uuid }
         reservaGrupoId: { type: string, format: uuid, nullable: true, description: "NULL solo para tipo EVALUACION_ESTATAL" }
         pcId: { type: string, format: uuid }
+        etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Solo en los listados detallados. Es lo que se muestra: pcIdentificador va en 0 y carroNombre vacío si el equipo no está en ningún carro" }
         pcIdentificador: { type: integer }
-        estado: { type: string, enum: [CONFIRMADA, CANCELADA, FINALIZADA] }
+        estado: { type: string, enum: [CONFIRMADA, CANCELADA, FINALIZADA, NO_RETIRADA] }
         tipo: { type: string, enum: [NORMAL, EVALUACION_ESTATAL] }
         motivoCancelacion: { type: string, nullable: true }
         canceladaEn: { type: string, format: date-time, nullable: true }
@@ -1424,6 +1431,57 @@ paths:
         "201": { description: PC registrada }
         "409": { description: Ya existe una PC con ese identificador en el carro, o el número de serie ya está registrado en otra PC }
 
+  /api/inventory/equipos:
+    get:
+      tags: [inventory]
+      summary: Listar lo prestable que no está en ningún carro (RF-03.15, todos los usuarios autenticados)
+      description: |
+        El proyector, los cargadores, las notebooks sueltas. Lo ve cualquier
+        autenticado por el mismo motivo que los carros y las PCs (RF-03.7): un
+        docente necesita saber que existe un proyector antes de pedirlo.
+
+        Comparten entidad —y esquema de respuesta— con las PCs de carro, y eso
+        es deliberado: "qué hay afuera del laboratorio" (RF-08) tiene que ser
+        una sola lista. Ver el encabezado de la migración 015.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PC' }
+    post:
+      tags: [inventory]
+      summary: Registrar un equipo suelto (RF-03.15, Admin)
+      description: |
+        Ruta aparte de `/carros/{carroId}/pcs` y no un campo opcional suyo
+        porque lo que se carga es distinto: acá no hay carro, ni identificador,
+        ni número de serie, y lo que identifica al equipo es el nombre.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo, nombre]
+              properties:
+                tipo: { type: string, maxLength: 50, example: "PROYECTOR", description: "Texto libre: la lista de cosas que presta una escuela no es la de otra. El formulario sugiere los tipos ya cargados" }
+                nombre: { type: string, maxLength: 100, example: "Proyector Epson", description: "Único entre los equipos sueltos, sin distinguir mayúsculas" }
+                reservable: { type: boolean, default: false, description: "Marcar solo lo que alguien pueda querer planificar. Por defecto false: un cargador se presta en el momento y aparecería como ruido cada vez que un docente va a reservar" }
+      responses:
+        "201":
+          description: Equipo registrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PC' }
+        "400": { description: Falta el tipo o el nombre, o exceden el largo }
+        "409": { description: Ya hay otro equipo suelto con ese nombre }
+
   /api/inventory/pcs/{id}:
     patch:
       tags: [inventory]
@@ -1441,15 +1499,17 @@ paths:
               type: object
               properties:
                 carroId: { type: string, format: uuid, description: "Mueve la PC a otro carro (RF-03.10). El identificador debe seguir siendo único en el carro destino." }
-                identificador: { type: integer, description: "Único dentro del carro (el actual o el destino, si también se mueve)" }
-                numeroSerie: { type: string, maxLength: 50, example: "5CD1234ABC", description: "Único en toda la institución" }
                 freezado: { type: boolean }
                 cpu: { type: string }
                 ram: { type: string }
                 sistemaOperativo: { type: string }
                 softwareInstalado: { type: string }
+                tipo: { type: string, maxLength: 50, description: "RF-03.15" }
+                nombre: { type: string, maxLength: 100, description: "RF-03.15. En un equipo suelto no puede quedar vacío: es lo único que lo distingue. En una PC de carro sí, porque ahí no cumple ninguna función" }
+                reservable: { type: boolean, description: "RF-03.16" }
       responses:
         "200": { description: PC actualizada }
+        "400": { description: Tipo o nombre vacíos o demasiado largos }
         "409": { description: Ya existe una PC con ese identificador en el carro destino, o el número de serie ya está registrado en otra PC }
     delete:
       tags: [inventory]
@@ -1586,6 +1646,47 @@ paths:
                 fechaEnvioDGE: { type: string, format: date-time }
       responses:
         "200": { description: Incidencia actualizada }
+
+  /api/reservation/reservas/{id}/pc:
+    patch:
+      tags: [reservation]
+      summary: Cambiar una reserva de computadora (RF-08.14)
+      description: |
+        Mueve la reserva a otra máquina libre en la misma franja, sin tocar
+        fecha ni horario: es la misma clase.
+
+        Existe porque la alternativa —cancelar esa PC y crear otra reserva—
+        arma un ReservaGrupo nuevo, así que el docente terminaba con la misma
+        clase mostrada como dos tarjetas separadas en "Mis reservas".
+
+        Es de quien tenga la reserva, o de un Admin. Solo se puede cambiar
+        una reserva CONFIRMADA: una cancelada, finalizada o liberada por no
+        retiro ya no reserva nada.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pcId]
+              properties:
+                pcId: { type: string, format: uuid, description: "La máquina nueva. Tiene que estar DISPONIBLE y libre en esa franja." }
+      responses:
+        "200":
+          description: Reserva actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reserva' }
+        "400": { description: Falta la PC nueva }
+        "403": { description: La reserva es de otra persona y quien pide no es Admin }
+        "404": { description: La reserva no existe }
+        "409": { description: La reserva ya no está vigente, o la PC nueva no está disponible o ya tiene reserva en esa franja }
 
   /api/reservation/prestamos:
     get:
@@ -2034,7 +2135,7 @@ paths:
           schema: { type: string, format: uuid }
         - in: query
           name: estado
-          schema: { type: string, enum: [CONFIRMADA, PARCIALMENTE_CANCELADA, CANCELADA, FINALIZADA] }
+          schema: { type: string, enum: [CONFIRMADA, PARCIALMENTE_CANCELADA, CANCELADA, FINALIZADA, NO_RETIRADA] }
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
       responses:
@@ -2291,6 +2392,7 @@ paths:
                       type: object
                       properties:
                         pcId: { type: string, format: uuid }
+                        etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Es lo que se muestra: los dos de abajo van en 0 y \"\" si no está en ningún carro" }
                         identificador: { type: integer }
                         carroNombre: { type: string }
                         minutosReservados: { type: integer }
@@ -2350,6 +2452,7 @@ paths:
                       type: object
                       properties:
                         pcId: { type: string, format: uuid }
+                        etiquetaSnapshot: { type: string, description: "Cómo se llamaba el equipo el día que se archivó el ciclo. Los dos de abajo van en 0 y \"\" si no estaba en ningún carro" }
                         identificadorSnapshot: { type: integer }
                         carroNombreSnapshot: { type: string }
                         minutosReservados: { type: integer }
@@ -2368,7 +2471,11 @@ paths:
   /api/reporting/incidencias/pcs:
     get:
       tags: [reports]
-      summary: Reporte de incidencias por PC/carro (Admin)
+      summary: Incidencias agregadas por equipo (RF-06.3, Admin)
+      description: |
+        Devuelve el CONTEO por equipo, no las incidencias sueltas. Incluye lo
+        que no está en ningún carro (015): al proyector también se le rompe la
+        lámpara.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: query
@@ -2377,9 +2484,6 @@ paths:
         - in: query
           name: hasta
           schema: { type: string, format: date }
-        - in: query
-          name: carroId
-          schema: { type: string, format: uuid }
       responses:
         "200":
           content:
@@ -2387,7 +2491,21 @@ paths:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/Incidencia' } }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        pcId: { type: string, format: uuid }
+                        etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Es lo que se muestra: los dos de abajo van en 0 y \"\" si no está en ningún carro" }
+                        identificador: { type: integer }
+                        carroNombre: { type: string }
+                        total: { type: integer }
+                        abiertas: { type: integer }
+                        enReparacion: { type: integer }
+                        enviadasDge: { type: integer }
+                        resueltas: { type: integer }
+                        graves: { type: integer }
 
   # ══════════════════════════════
   # AVAILABILITY
@@ -2557,6 +2675,10 @@ paths:
       description: |
         No depende del ciclo lectivo: Incidencia nunca se elimina (sobrevive
         al archivado, RF-02.4), así que se resuelve siempre en vivo.
+
+        Este reporte agrupa POR CARRO, así que los equipos sueltos (015) no
+        aparecen: no pertenecen a ninguno. Sus incidencias se ven en
+        `/api/reporting/incidencias/pcs`.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: query

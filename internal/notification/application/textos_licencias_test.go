@@ -1,6 +1,7 @@
 package application
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +11,11 @@ import (
 
 func licenciaDelAviso(nombre string, pc int, carro string, diasRestantes int) eventbus.LicenciaPorVencer {
 	return eventbus.LicenciaPorVencer{
-		Nombre:           nombre,
+		Nombre: nombre,
+		// La etiqueta es lo que se muestra; el identificador viaja igual
+		// porque otras pantallas lo usan. Ver licenciaSueltaDelAviso para el
+		// caso en que no hay identificador ninguno.
+		Etiqueta:         fmt.Sprintf("PC %d", pc),
 		PCIdentificador:  pc,
 		CarroNombre:      carro,
 		FechaVencimiento: time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC),
@@ -127,6 +132,29 @@ func TestMensajeDeLicencias_SinCarroNoDejaParentesisVacio(t *testing.T) {
 	}
 	if !strings.Contains(got, "PC 3") {
 		t.Errorf("se perdió la PC: %q", got)
+	}
+}
+
+// El caso de la 015: una notebook suelta también puede tener AutoCAD, y no
+// tiene número. Armar el aviso con el identificador mandaba al Admin a
+// buscar una "PC 0" que no existe.
+func TestMensajeDeLicencias_EquipoSueltoSeNombraPorSuNombre(t *testing.T) {
+	aviso := eventbus.AvisoDeLicencias{
+		PorVencer: []eventbus.LicenciaPorVencer{{
+			Nombre:           "AutoCAD 2027",
+			Etiqueta:         "Notebook chica",
+			FechaVencimiento: time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC),
+			DiasRestantes:    1,
+		}},
+	}
+
+	got := mensajeDeLicencias(aviso)
+
+	if !strings.Contains(got, "Notebook chica") {
+		t.Errorf("se perdió el equipo: %q", got)
+	}
+	if strings.Contains(got, "PC 0") {
+		t.Errorf("nombró una PC que no existe: %q", got)
 	}
 }
 

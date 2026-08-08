@@ -17,6 +17,12 @@ var (
 	// ya existe en ese carro puntual (puede repetirse en otro carro).
 	ErrIdentificadorDuplicado = errors.New("ya existe una PC con ese identificador en este carro")
 
+	// ErrNombreDeEquipoDuplicado: entre los equipos que no están en ningún
+	// carro, el nombre es lo único que los distingue. Dos filas llamadas
+	// "Cargador" serían indistinguibles justo donde hay que elegir cuál se
+	// está prestando.
+	ErrNombreDeEquipoDuplicado = errors.New("ya existe un equipo con ese nombre")
+
 	// ErrNumeroSerieDuplicado: UNIQUE global — el número de serie de
 	// fábrica no puede repetirse en ninguna PC del sistema.
 	ErrNumeroSerieDuplicado = errors.New("ya existe una PC con ese número de serie")

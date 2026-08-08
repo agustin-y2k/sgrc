@@ -57,10 +57,10 @@ func NewValidadorPCPostgres(pool *pgxpool.Pool) *ValidadorPCPostgres {
 
 func (v *ValidadorPCPostgres) PCDisponibleParaReservar(ctx context.Context, pcID string) (bool, error) {
 	var estado string
-	var dadaDeBaja bool
+	var dadaDeBaja, reservable bool
 	err := v.pool.QueryRow(ctx,
-		`SELECT estado, dada_de_baja FROM pc WHERE id = $1`, pcID,
-	).Scan(&estado, &dadaDeBaja)
+		`SELECT estado, dada_de_baja, reservable FROM pc WHERE id = $1`, pcID,
+	).Scan(&estado, &dadaDeBaja, &reservable)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil // no existe → no disponible, pero no es un error
@@ -70,7 +70,10 @@ func (v *ValidadorPCPostgres) PCDisponibleParaReservar(ctx context.Context, pcID
 		}
 		return false, fmt.Errorf("verificando disponibilidad de PC: %w", err)
 	}
-	return estado == "DISPONIBLE" && !dadaDeBaja, nil
+	// `reservable` es la mitad que agrega la 015: la lista de disponibles ya
+	// lo filtra, pero un pedido armado a mano no pasa por esa lista, y sin
+	// este chequeo se podría reservar un cargador igual.
+	return estado == "DISPONIBLE" && !dadaDeBaja && reservable, nil
 }
 
 // PCEstaEnInventario: existe y no está dada de baja, sin mirar el estado.
@@ -95,30 +98,33 @@ func (v *ValidadorPCPostgres) PCEstaEnInventario(ctx context.Context, pcID strin
 // IdentificadoresDePCs: el número visible de cada PC, para los avisos de
 // cancelación. Una sola consulta con = ANY en vez de una por PC — un
 // bloqueo por evaluación sobre un carro entero puede tocar treinta.
-func (v *ValidadorPCPostgres) IdentificadoresDePCs(ctx context.Context, pcIDs []string) (map[string]int, error) {
-	identificadores := make(map[string]int, len(pcIDs))
+func (v *ValidadorPCPostgres) EtiquetasDeEquipos(ctx context.Context, pcIDs []string) (map[string]string, error) {
+	etiquetas := make(map[string]string, len(pcIDs))
 	if len(pcIDs) == 0 {
-		return identificadores, nil
+		return etiquetas, nil
 	}
 
-	rows, err := v.pool.Query(ctx, `SELECT id, identificador FROM pc WHERE id = ANY($1)`, pcIDs)
+	// COALESCE en este orden: el nombre manda cuando existe (un proyector),
+	// y si no, el número. Es la misma regla que domain.PC.Etiqueta, resuelta
+	// en SQL para no traer la fila entera solo por el rótulo.
+	rows, err := v.pool.Query(ctx,
+		`SELECT id, COALESCE(nombre, 'PC ' || identificador) FROM pc WHERE id = ANY($1)`, pcIDs)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
 		}
-		return nil, fmt.Errorf("resolviendo identificadores de PC: %w", err)
+		return nil, fmt.Errorf("resolviendo las etiquetas de los equipos: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var id string
-		var identificador int
-		if err := rows.Scan(&id, &identificador); err != nil {
-			return nil, fmt.Errorf("escaneando identificador de PC: %w", err)
+		var id, etiqueta string
+		if err := rows.Scan(&id, &etiqueta); err != nil {
+			return nil, fmt.Errorf("escaneando la etiqueta de un equipo: %w", err)
 		}
-		identificadores[id] = identificador
+		etiquetas[id] = etiqueta
 	}
-	return identificadores, rows.Err()
+	return etiquetas, rows.Err()
 }
 
 // ── ObtenedorNombreDocente (puerto hacia auth) ──────────────────────────

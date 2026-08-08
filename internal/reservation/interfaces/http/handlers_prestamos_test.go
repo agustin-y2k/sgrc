@@ -296,3 +296,81 @@ func TestHTTP_EntregarPorReserva_BloqueoSinDocente(t *testing.T) {
 		t.Errorf("con nombre tiene que entregarse: %+v", resp)
 	}
 }
+
+// ── Cambiar una PC de una reserva (RF-08.14) ────────────────────────────
+
+func reservaEnRepo(t *testing.T, repo *fakeRepo, id, pcID, creadoPor string) {
+	t.Helper()
+	docente := "Ada Lovelace"
+	r, err := domain.NuevaReservaNormal(id, "grupo1", pcID, "materia1", docente, &creadoPor,
+		time.Date(2026, 3, 3, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour,
+		time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	repo.reservas[id] = r
+}
+
+func TestHTTP_CambiarPCDeReserva(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaEnRepo(t, repo, "res1", "pc1", "admin1")
+	app := nuevaAppDeTest(repo)
+
+	codigo, cuerpo := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/pc",
+		cambiarPCRequest{PCID: "pc9"}, "ADMIN")
+
+	if codigo != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
+	}
+	// La misma reserva, otra máquina: no se creó un grupo nuevo.
+	if repo.reservas["res1"].PCID != "pc9" {
+		t.Errorf("la PC quedó en %q", repo.reservas["res1"].PCID)
+	}
+	if repo.reservas["res1"].ReservaGrupoID == nil || *repo.reservas["res1"].ReservaGrupoID != "grupo1" {
+		t.Error("la clase no puede quedar partida en dos grupos")
+	}
+}
+
+func TestHTTP_CambiarPCDeReserva_Ajena(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaEnRepo(t, repo, "res1", "pc1", "otro-docente")
+	app := nuevaAppDeTest(repo)
+
+	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/pc",
+		cambiarPCRequest{PCID: "pc9"}, "DOCENTE")
+
+	if codigo != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", codigo)
+	}
+}
+
+func TestHTTP_CambiarPCDeReserva_SinPC(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaEnRepo(t, repo, "res1", "pc1", "admin1")
+	app := nuevaAppDeTest(repo)
+
+	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/pc",
+		cambiarPCRequest{PCID: "  "}, "ADMIN")
+
+	if codigo != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", codigo)
+	}
+}
+
+// Una reserva liberada por no retiro ya no reserva nada: cambiarle la
+// máquina no significaría nada.
+func TestHTTP_CambiarPCDeReserva_YaLiberada(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaEnRepo(t, repo, "res1", "pc1", "admin1")
+	if err := repo.reservas["res1"].Liberar(); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	app := nuevaAppDeTest(repo)
+
+	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/pc",
+		cambiarPCRequest{PCID: "pc9"}, "ADMIN")
+
+	if codigo != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", codigo)
+	}
+}

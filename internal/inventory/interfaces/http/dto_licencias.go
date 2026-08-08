@@ -124,6 +124,10 @@ type licenciaResponse struct {
 
 	// Ubicación. Solo viene en el listado general; en el de una PC ya se
 	// sabe de qué máquina se está hablando.
+	//
+	// Etiqueta es lo que se muestra: "PC 3" o "Notebook chica". Los dos de
+	// abajo van vacíos cuando el equipo no está en ningún carro (015).
+	Etiqueta        string `json:"etiqueta,omitempty"`
 	PCIdentificador int    `json:"pcIdentificador,omitempty"`
 	CarroID         string `json:"carroId,omitempty"`
 	CarroNombre     string `json:"carroNombre,omitempty"`
@@ -148,6 +152,7 @@ func toLicenciaResponse(l *domain.LicenciaSoftware, hoy time.Time) licenciaRespo
 
 func toLicenciaConUbicacionResponse(u *application.LicenciaConUbicacion, hoy time.Time) licenciaResponse {
 	r := toLicenciaResponse(u.Licencia, hoy)
+	r.Etiqueta = u.Etiqueta
 	r.PCIdentificador = u.PCIdentificador
 	r.CarroID = u.CarroID
 	r.CarroNombre = u.CarroNombre

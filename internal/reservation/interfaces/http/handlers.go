@@ -407,3 +407,30 @@ func (h *Handler) ListarPCsDisponibles(c *fiber.Ctx) error {
 	}
 	return c.JSON(pcsDisponiblesResponse{Data: data})
 }
+
+// PATCH /api/reservation/reservas/{id}/pc — cambiar una reserva de máquina.
+//
+// Existe para que "elegí otra" no obligue a cancelar y volver a reservar,
+// que arma un grupo nuevo y parte la clase en dos tarjetas. Es de quien
+// tenga la reserva, o de un Admin.
+func (h *Handler) CambiarPCDeReserva(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	var req cambiarPCRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+	if strings.TrimSpace(req.PCID) == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "hay que indicar la PC nueva")
+	}
+
+	reserva, err := h.svc.CambiarPCDeReserva(c.UserContext(), c.Params("id"), req.PCID,
+		claims.UserID, claims.Rol == "ADMIN")
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toReservaResponse(reserva))
+}

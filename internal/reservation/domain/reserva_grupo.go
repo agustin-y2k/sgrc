@@ -21,13 +21,17 @@ const (
 	GrupoParcialmenteCancelada EstadoReservaGrupo = "PARCIALMENTE_CANCELADA"
 	GrupoCancelada             EstadoReservaGrupo = "CANCELADA"
 	GrupoFinalizada            EstadoReservaGrupo = "FINALIZADA"
+	// GrupoNoRetirado: NINGUNA de sus PCs se retiró. Si el docente vino y se
+	// llevó tres de cinco, el grupo NO pasa por acá: vino a dar la clase, y
+	// lo que pasó con las otras dos máquinas se ve fila por fila.
+	GrupoNoRetirado EstadoReservaGrupo = "NO_RETIRADA"
 )
 
 var ErrEstadoGrupoInvalido = errors.New("estado de reserva grupo inválido")
 
 func ParseEstadoReservaGrupo(s string) (EstadoReservaGrupo, error) {
 	switch EstadoReservaGrupo(s) {
-	case GrupoConfirmada, GrupoParcialmenteCancelada, GrupoCancelada, GrupoFinalizada:
+	case GrupoConfirmada, GrupoParcialmenteCancelada, GrupoCancelada, GrupoFinalizada, GrupoNoRetirado:
 		return EstadoReservaGrupo(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrEstadoGrupoInvalido, s)
@@ -42,10 +46,11 @@ func ParseEstadoReservaGrupo(s string) (EstadoReservaGrupo, error) {
 func (e EstadoReservaGrupo) PuedeTransicionarA(nuevo EstadoReservaGrupo) bool {
 	switch e {
 	case GrupoConfirmada:
-		return nuevo == GrupoParcialmenteCancelada || nuevo == GrupoCancelada || nuevo == GrupoFinalizada
+		return nuevo == GrupoParcialmenteCancelada || nuevo == GrupoCancelada ||
+			nuevo == GrupoFinalizada || nuevo == GrupoNoRetirado
 	case GrupoParcialmenteCancelada:
 		return nuevo == GrupoCancelada || nuevo == GrupoFinalizada
-	case GrupoCancelada, GrupoFinalizada:
+	case GrupoCancelada, GrupoFinalizada, GrupoNoRetirado:
 		return false
 	default:
 		return false

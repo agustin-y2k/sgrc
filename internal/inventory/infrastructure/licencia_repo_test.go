@@ -445,3 +445,53 @@ func TestPostgresRepo_Licencia_CandidatasNoDependenDeLaZonaDeLaSesion(t *testing
 		})
 	}
 }
+
+// Las dos consultas de licencias hacían INNER JOIN a carro. Desde la 015 eso
+// es un agujero silencioso: una notebook suelta puede tener AutoCAD igual que
+// las del carro, y su licencia no aparecía en la pantalla NI era candidata a
+// aviso — se vencía sin que nadie se enterara, que es exactamente lo que esta
+// funcionalidad existe para evitar.
+func TestPostgresRepo_Licencia_DeUnEquipoSinCarro(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	equipo := crearEquipoDeTest(t, repo, "NOTEBOOK", "Notebook chica", false)
+	l := crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", 30, 1)
+
+	// Vence mañana: entra en la ventana de aviso. Sin usuario, igual que los
+	// demás tests de este archivo — la columna referencia a usuario y acá no
+	// hace falta ninguno.
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	hoy := diaDe(2026, time.August, 7)
+	l.FijarVencimiento(diaDe(2026, time.August, 8), "", ahora)
+	if err := repo.GuardarLicencia(ctx, l); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	listadas, err := repo.ListarLicencias(ctx)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(listadas) != 1 {
+		t.Fatalf("la licencia de un equipo suelto tiene que listarse; obtuve %d", len(listadas))
+	}
+	if listadas[0].Etiqueta != "Notebook chica" {
+		t.Errorf("esperaba la etiqueta del equipo, obtuve %q", listadas[0].Etiqueta)
+	}
+	if listadas[0].PCIdentificador != 0 || listadas[0].CarroNombre != "" {
+		t.Errorf("esperaba identificador 0 y carro vacío, obtuve %d y %q",
+			listadas[0].PCIdentificador, listadas[0].CarroNombre)
+	}
+
+	candidatas, err := repo.ListarCandidatasAAviso(ctx, hoy)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(candidatas) != 1 {
+		t.Fatalf("tenía que ser candidata a aviso; obtuve %d", len(candidatas))
+	}
+	if candidatas[0].Etiqueta != "Notebook chica" {
+		t.Errorf("el aviso mandaría a buscar %q", candidatas[0].Etiqueta)
+	}
+}

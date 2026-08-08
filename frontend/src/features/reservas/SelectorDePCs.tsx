@@ -8,6 +8,12 @@ import * as reservasApi from "@/features/reservas/api"
 import type { PCDisponible } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 
+/**
+ * Título del grupo de lo que no cuelga de ningún carro. Es lo que ve el
+ * docente arriba del proyector cuando va a reservar.
+ */
+const SIN_CARRO = "Otros equipos"
+
 type Props = {
   fecha: string
   horaInicio: string
@@ -60,17 +66,22 @@ export function SelectorDePCs({
   if (pcs.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
-        No hay ninguna PC libre en esa franja.
+        No hay ningún equipo libre en esa franja.
       </p>
     )
   }
 
   // Agrupadas por carro solo para que sea legible; la selección cruza carros.
+  //
+  // Lo que no está en ningún carro (015 — el proyector) va bajo su propio
+  // título: con `carroNombre` vacío caía en un grupo sin leyenda, y ahí no
+  // hay nada que le diga al docente qué está mirando.
   const porCarro = new Map<string, PCDisponible[]>()
   for (const pc of pcs) {
-    const delCarro = porCarro.get(pc.carroNombre)
+    const grupo = pc.carroNombre || SIN_CARRO
+    const delCarro = porCarro.get(grupo)
     if (delCarro) delCarro.push(pc)
-    else porCarro.set(pc.carroNombre, [pc])
+    else porCarro.set(grupo, [pc])
   }
 
   function alternar(pcId: string, tildada: boolean) {
@@ -83,7 +94,7 @@ export function SelectorDePCs({
     <div className="grid gap-4">
       <p className="text-muted-foreground text-sm">
         {seleccionadas.length === 0
-          ? `${pcs.length} PC(s) libres en esa franja.`
+          ? `${pcs.length} equipo(s) libres en esa franja.`
           : `${seleccionadas.length} de ${pcs.length} seleccionada(s).`}
       </p>
 
@@ -105,7 +116,7 @@ export function SelectorDePCs({
                   />
                   <div className="grid gap-0.5">
                     <Label htmlFor={id} className="cursor-pointer">
-                      PC {pc.identificador}
+                      {pc.etiqueta}
                       {pc.freezado && (
                         <Badge variant="outline" className="ml-1">
                           Freezada

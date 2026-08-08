@@ -91,10 +91,23 @@ func NormalizarNumeroSerie(s string) string {
 // Freezado es puramente informativo (Deep Freeze instalado) — no afecta
 // ningún flujo de reservas ni de negocio.
 type PC struct {
-	ID                string
-	CarroID           string
-	Identificador     int
-	NumeroSerie       string
+	ID string
+	// CarroID vacío = no está en ningún carro. Desde la 015 esto es
+	// legítimo: un proyector o un cargador no pertenecen a ninguno.
+	CarroID string
+	// Identificador 0 y NumeroSerie vacío = no aplica. "PC 3" no significa
+	// nada para un cargador, y un cargador puede no traer serie.
+	Identificador int
+	NumeroSerie   string
+	// Tipo es texto libre ("PC", "PROYECTOR", "CARGADOR"): la lista de cosas
+	// que presta una escuela no es la misma que la de otra.
+	Tipo string
+	// Nombre es cómo se lo llama cuando no tiene número de carro.
+	Nombre string
+	// Reservable: si aparece en la lista de equipos libres al reservar. Un
+	// proyector sí; un cargador se presta en el momento y nadie planifica
+	// con él.
+	Reservable        bool
 	Freezado          bool
 	CPU               string
 	RAM               string
@@ -126,6 +139,8 @@ func NuevaPC(id, carroID string, identificador int, numeroSerie string, freezado
 		Identificador: identificador,
 		NumeroSerie:   serie,
 		Freezado:      freezado,
+		Tipo:          TipoPC,
+		Reservable:    true,
 		Estado:        EstadoDisponible,
 		FechaAlta:     fechaAlta,
 	}, nil
@@ -161,4 +176,116 @@ func (p *PC) DarDeBaja(ahora time.Time) error {
 // el dominio no tiene visibilidad de qué otras PCs existen.
 func (p *PC) MoverACarro(nuevoCarroID string) {
 	p.CarroID = nuevoCarroID
+}
+
+// ── Equipos que no son PCs de un carro (RF-03.15) ───────────────────────
+//
+// La escuela también presta un proyector, cargadores y notebooks sueltas.
+// Viven en esta misma entidad y no en una aparte porque "qué hay afuera del
+// laboratorio" tiene que ser UNA sola lista: con dos tipos de cosa, el
+// préstamo necesitaría dos referencias, el mostrador dos consultas y el
+// barrido dos recorridos. Ver la migración 015.
+
+const (
+	// TipoPC es el tipo por defecto: una computadora de un carro.
+	TipoPC = "PC"
+	// MaxLargoTipoEquipo y MaxLargoNombreEquipo coinciden con la 015.
+	MaxLargoTipoEquipo   = 50
+	MaxLargoNombreEquipo = 100
+)
+
+var (
+	ErrTipoEquipoVacio   = errors.New("hay que indicar de qué tipo es el equipo")
+	ErrTipoEquipoLargo   = fmt.Errorf("el tipo no puede tener más de %d caracteres", MaxLargoTipoEquipo)
+	ErrNombreEquipoVacio = errors.New("un equipo que no está en un carro necesita un nombre")
+	ErrNombreEquipoLargo = fmt.Errorf("el nombre no puede tener más de %d caracteres", MaxLargoNombreEquipo)
+)
+
+// NormalizarTextoDeEquipo recorta los bordes y colapsa los espacios
+// internos, sin tocar la caja: "Proyector Epson" se muestra tal cual se
+// escribió. La unicidad sin distinguir mayúsculas la da el índice funcional
+// de la 015, igual que con el nombre de una licencia.
+func NormalizarTextoDeEquipo(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// TipoDeEquipoValido y NombreDeEquipoValido normalizan y validan, y devuelven
+// el texto ya listo para guardar.
+//
+// Están separadas de NuevoEquipo porque el alta no es el único lugar que los
+// escribe: el PATCH de una PC también puede cambiarlos, y sin pasar por acá
+// un `"nombre": ""` llegaría hasta el CHECK de la 015 y volvería como un 500
+// en vez de como el 400 que es.
+func TipoDeEquipoValido(tipo string) (string, error) {
+	tipo = NormalizarTextoDeEquipo(tipo)
+	if tipo == "" {
+		return "", ErrTipoEquipoVacio
+	}
+	if len([]rune(tipo)) > MaxLargoTipoEquipo {
+		return "", ErrTipoEquipoLargo
+	}
+	return tipo, nil
+}
+
+func NombreDeEquipoValido(nombre string) (string, error) {
+	nombre = NormalizarTextoDeEquipo(nombre)
+	if nombre == "" {
+		return "", ErrNombreEquipoVacio
+	}
+	if len([]rune(nombre)) > MaxLargoNombreEquipo {
+		return "", ErrNombreEquipoLargo
+	}
+	return nombre, nil
+}
+
+// NuevoEquipo crea algo prestable que NO está en un carro: un proyector, un
+// cargador, una notebook suelta.
+//
+// No tiene identificador ni número de serie —"PC 3" no significa nada para
+// un cargador, y un cargador puede no traer serie de fábrica— así que lo que
+// lo identifica es el nombre, y por eso es obligatorio.
+//
+// `reservable` separa el proyector de los cargadores: solo lo reservable
+// aparece en la lista de equipos libres cuando un docente va a reservar.
+func NuevoEquipo(id, tipo, nombre string, reservable bool, fechaAlta time.Time) (*PC, error) {
+	tipo, err := TipoDeEquipoValido(tipo)
+	if err != nil {
+		return nil, err
+	}
+
+	nombre, err = NombreDeEquipoValido(nombre)
+	if err != nil {
+		return nil, err
+	}
+
+	return &PC{
+		ID:         id,
+		Tipo:       tipo,
+		Nombre:     nombre,
+		Reservable: reservable,
+		Estado:     EstadoDisponible,
+		FechaAlta:  fechaAlta,
+	}, nil
+}
+
+// EstaEnUnCarro distingue una computadora de laboratorio de un equipo
+// suelto. Es la condición que decide cómo se lo nombra y dónde se lo lista.
+func (p *PC) EstaEnUnCarro() bool {
+	return p.CarroID != ""
+}
+
+// Etiqueta es cómo se llama a este equipo en cualquier pantalla o correo:
+// "PC 3" si está en un carro, su nombre si no.
+//
+// Vive en el dominio y no en cada pantalla porque si no, la misma máquina se
+// vería distinta según por dónde se la mire — y porque un proyector rotulado
+// "PC 0" es lo que sale de formatear un identificador que no existe.
+func (p *PC) Etiqueta() string {
+	if p.Nombre != "" {
+		return p.Nombre
+	}
+	if p.Identificador > 0 {
+		return fmt.Sprintf("PC %d", p.Identificador)
+	}
+	return "Equipo sin nombre"
 }

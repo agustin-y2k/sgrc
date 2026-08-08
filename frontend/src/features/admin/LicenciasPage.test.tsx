@@ -24,6 +24,7 @@ function licencia(over: Partial<Licencia> = {}): Licencia {
     pcIdentificador: 3,
     carroId: "c1",
     carroNombre: "Carro 1",
+    etiqueta: `PC ${over.pcIdentificador ?? 3}`,
     ...over,
   }
 }
@@ -52,6 +53,9 @@ describe("LicenciasPage", () => {
           carroId: "c1",
           identificador: 3,
           numeroSerie: "5CD1234ABC",
+          etiqueta: "PC 3",
+          tipo: "PC",
+          reservable: true,
           freezado: false,
           estado: "DISPONIBLE",
           dadaDeBaja: false,

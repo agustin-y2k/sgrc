@@ -296,7 +296,7 @@ func TestPostgresRepo_GuardarYListarHistoricoUsoPC(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	pcID := crearCarroYPCDeTest(t, pool, 27)
 
-	h, err := domain.NuevoHistoricoUsoPC(NuevoID(), 5000, pcID, 27, "Carro 1", 900, 12)
+	h, err := domain.NuevoHistoricoUsoPC(NuevoID(), 5000, pcID, "PC 27", 27, "Carro 1", 900, 12)
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -310,6 +310,47 @@ func TestPostgresRepo_GuardarYListarHistoricoUsoPC(t *testing.T) {
 	}
 	if len(resultado) != 1 || resultado[0].MinutosReservados != 900 {
 		t.Fatalf("resultado incorrecto: %+v", resultado)
+	}
+	if resultado[0].EtiquetaSnapshot != "PC 27" {
+		t.Errorf("la etiqueta congelada no volvió: %q", resultado[0].EtiquetaSnapshot)
+	}
+}
+
+// Lo que la 015 hizo posible archivar: un proyector, que no tiene número ni
+// carro. Sin la etiqueta congelada el reporte del año pasado decía "PC 0 ()".
+func TestPostgresRepo_HistoricoUsoPC_DeUnEquipoSinCarro(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+
+	pcID := NuevoID()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO pc (id, tipo, nombre, estado) VALUES ($1, 'PROYECTOR', $2, 'DISPONIBLE')`,
+		pcID, "Proyector Epson-"+pcID[:8],
+	); err != nil {
+		t.Fatalf("no se pudo crear el equipo de prueba: %v", err)
+	}
+
+	h, err := domain.NuevoHistoricoUsoPC(NuevoID(), 5002, pcID, "Proyector Epson", 0, "", 300, 4)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.GuardarHistoricoUsoPC(context.Background(), h); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	resultado, err := repo.ListarHistoricoUsoPCPorAnio(context.Background(), 5002)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado) != 1 {
+		t.Fatalf("esperaba 1 fila, obtuve %d", len(resultado))
+	}
+	if resultado[0].EtiquetaSnapshot != "Proyector Epson" {
+		t.Errorf("esperaba la etiqueta congelada, obtuve %q", resultado[0].EtiquetaSnapshot)
+	}
+	if resultado[0].IdentificadorSnapshot != 0 || resultado[0].CarroNombreSnapshot != "" {
+		t.Errorf("esperaba identificador 0 y carro vacío, obtuve %d y %q",
+			resultado[0].IdentificadorSnapshot, resultado[0].CarroNombreSnapshot)
 	}
 }
 
@@ -360,20 +401,47 @@ func TestPostgresRepo_GuardarHistoricoUsoDocente_SinUsuarioID_OK(t *testing.T) {
 
 // ── Adaptadores ─────────────────────────────────────────────────────────
 
-func TestInfoPCPostgres_IdentificadorYCarroDe(t *testing.T) {
+func TestInfoPCPostgres_EtiquetaYCarroDe(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	pcID := crearCarroYPCDeTest(t, pool, 42)
 
 	info := NewInfoPCPostgres(pool)
-	identificador, carroNombre, err := info.IdentificadorYCarroDe(context.Background(), pcID)
+	etiqueta, identificador, carroNombre, err := info.EtiquetaYCarroDe(context.Background(), pcID)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	// El nombre exacto lo genera el helper a partir del id del carro; lo
 	// que importa acá es que el adaptador lo resuelva y no venga vacío.
-	if identificador != 42 || !strings.HasPrefix(carroNombre, "Carro-") {
-		t.Errorf("valores incorrectos: identificador=%d carro=%q", identificador, carroNombre)
+	if etiqueta != "PC 42" || identificador != 42 || !strings.HasPrefix(carroNombre, "Carro-") {
+		t.Errorf("valores incorrectos: etiqueta=%q identificador=%d carro=%q", etiqueta, identificador, carroNombre)
+	}
+}
+
+// Archivar un ciclo llama a esto por cada equipo con uso. Con el INNER JOIN
+// a carro, un proyector devolvía "PC no encontrada" y abortaba el archivado
+// del ciclo entero — no solo la fila del proyector.
+func TestInfoPCPostgres_EtiquetaYCarroDe_EquipoSinCarro(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	pcID := NuevoID()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO pc (id, tipo, nombre, estado) VALUES ($1, 'PROYECTOR', $2, 'DISPONIBLE')`,
+		pcID, "Proyector-"+pcID[:8],
+	); err != nil {
+		t.Fatalf("no se pudo crear el equipo de prueba: %v", err)
+	}
+
+	info := NewInfoPCPostgres(pool)
+	etiqueta, identificador, carroNombre, err := info.EtiquetaYCarroDe(context.Background(), pcID)
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !strings.HasPrefix(etiqueta, "Proyector-") {
+		t.Errorf("esperaba el nombre del equipo, obtuve %q", etiqueta)
+	}
+	if identificador != 0 || carroNombre != "" {
+		t.Errorf("esperaba identificador 0 y carro vacío, obtuve %d y %q", identificador, carroNombre)
 	}
 }
 
@@ -405,7 +473,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 	}{
 		{"CalcularUsoPCsDeCiclo", func() error { _, err := repo.CalcularUsoPCsDeCiclo(ctx, "CICLO_ID", nil, nil); return err }},
 		{"CalcularUsoDocentesDeCiclo", func() error { _, err := repo.CalcularUsoDocentesDeCiclo(ctx, "CICLO_ID", nil, nil); return err }},
-		{"IdentificadorYCarroDe", func() error { _, _, err := infoPC.IdentificadorYCarroDe(ctx, "PC_ID"); return err }},
+		{"EtiquetaYCarroDe", func() error { _, _, _, err := infoPC.EtiquetaYCarroDe(ctx, "PC_ID"); return err }},
 		{"NombreCompletoDe", func() error { _, err := infoUsuario.NombreCompletoDe(ctx, "USUARIO_ID"); return err }},
 	}
 

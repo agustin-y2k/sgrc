@@ -64,6 +64,10 @@ var (
 	// una PC rota al técnico es justamente un préstamo.
 	ErrPCDadaDeBaja = errors.New("esa computadora está dada de baja del inventario")
 
+	// ErrReservaAjena: RF-04.4 — un docente solo toca sus propias reservas.
+	// El Admin puede tocar cualquiera.
+	ErrReservaAjena = errors.New("esa reserva es de otra persona")
+
 	ErrIDInvalido = errors.New("el ID indicado no tiene un formato válido")
 
 	// ErrReferenciaInexistente: SQLSTATE 23503 (foreign_key_violation) — el

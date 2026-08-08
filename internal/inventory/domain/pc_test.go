@@ -203,3 +203,104 @@ func TestMoverACarro_OK(t *testing.T) {
 		t.Errorf("el carro no se actualizó: %s", pc.CarroID)
 	}
 }
+
+// ── Equipos que no son PCs de un carro (RF-03.15) ───────────────────────
+
+func TestNuevoEquipo_ProyectorSinCarroNiNumero(t *testing.T) {
+	p, err := NuevoEquipo("eq-1", "PROYECTOR", "Proyector Epson", true, time.Now())
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if p.EstaEnUnCarro() {
+		t.Error("un proyector no está en ningún carro")
+	}
+	if p.Identificador != 0 || p.NumeroSerie != "" {
+		t.Errorf("no tiene número ni serie: %+v", p)
+	}
+	if !p.Reservable {
+		t.Error("el proyector se puede reservar")
+	}
+	if p.Estado != EstadoDisponible {
+		t.Errorf("nace disponible, no %s", p.Estado)
+	}
+}
+
+func TestNuevoEquipo_CargadorNoReservable(t *testing.T) {
+	p, err := NuevoEquipo("eq-2", "CARGADOR", "Cargador 1", false, time.Now())
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if p.Reservable {
+		t.Error("un cargador se presta en el momento; nadie planifica con él")
+	}
+}
+
+func TestNuevoEquipo_NormalizaSinTocarLaCaja(t *testing.T) {
+	p, err := NuevoEquipo("eq-1", "  proyector  ", "  Proyector   Epson  ", true, time.Now())
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	// Bordes recortados y espacios internos colapsados, pero la caja intacta:
+	// se muestra tal como se escribió.
+	if p.Tipo != "proyector" || p.Nombre != "Proyector Epson" {
+		t.Errorf("tipo=%q nombre=%q", p.Tipo, p.Nombre)
+	}
+}
+
+func TestNuevoEquipo_Invalidos(t *testing.T) {
+	casos := []struct {
+		caso     string
+		tipo     string
+		nombre   string
+		esperado error
+	}{
+		{"sin tipo", "  ", "Proyector", ErrTipoEquipoVacio},
+		{"sin nombre", "PROYECTOR", "   ", ErrNombreEquipoVacio},
+		{"tipo larguísimo", strings.Repeat("a", MaxLargoTipoEquipo+1), "Proyector", ErrTipoEquipoLargo},
+		{"nombre larguísimo", "PROYECTOR", strings.Repeat("a", MaxLargoNombreEquipo+1), ErrNombreEquipoLargo},
+	}
+
+	for _, c := range casos {
+		t.Run(c.caso, func(t *testing.T) {
+			if _, err := NuevoEquipo("eq-1", c.tipo, c.nombre, true, time.Now()); !errors.Is(err, c.esperado) {
+				t.Errorf("esperaba %v, obtuve %v", c.esperado, err)
+			}
+		})
+	}
+}
+
+// TestEtiqueta es lo que evita que un proyector aparezca rotulado "PC 0" en
+// una pantalla o en un correo: un identificador que no existe, formateado.
+func TestEtiqueta(t *testing.T) {
+	deCarro, err := NuevaPC("pc-1", "carro-1", 3, "5CD1234ABC", false, time.Now())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if deCarro.Etiqueta() != "PC 3" {
+		t.Errorf("una PC de carro se llama por su número: %q", deCarro.Etiqueta())
+	}
+
+	suelto, err := NuevoEquipo("eq-1", "PROYECTOR", "Proyector Epson", true, time.Now())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if suelto.Etiqueta() != "Proyector Epson" {
+		t.Errorf("un equipo suelto se llama por su nombre: %q", suelto.Etiqueta())
+	}
+}
+
+// Una PC de carro creada con NuevaPC tiene que quedar reservable y de tipo
+// PC: es lo que hace que la 015 no cambie nada de lo que ya existía.
+func TestNuevaPC_NaceReservableYDeTipoPC(t *testing.T) {
+	p, err := NuevaPC("pc-1", "carro-1", 3, "5CD1234ABC", false, time.Now())
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if p.Tipo != TipoPC || !p.Reservable || !p.EstaEnUnCarro() {
+		t.Errorf("%+v", p)
+	}
+}

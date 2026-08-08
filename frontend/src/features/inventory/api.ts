@@ -14,6 +14,17 @@ export function listarCarros() {
   return apiFetch<RespuestaLista<Carro>>("/api/inventory/carros")
 }
 
+/**
+ * RF-03.15 — lo prestable que no está en ningún carro: el proyector, los
+ * cargadores, las notebooks de otro modelo.
+ *
+ * Lo puede ver cualquier autenticado por el mismo motivo que los carros: un
+ * docente necesita saber que existe un proyector antes de pedirlo.
+ */
+export function listarEquiposSueltos() {
+  return apiFetch<RespuestaLista<PC>>("/api/inventory/equipos")
+}
+
 export function listarPCsDeCarro(carroId: string) {
   return apiFetch<RespuestaLista<PC>>(`/api/inventory/carros/${carroId}/pcs`)
 }

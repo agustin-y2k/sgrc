@@ -24,6 +24,10 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	reservation.Post("/reservas", autenticado, h.CrearReserva)
 	reservation.Post("/reservas/recurrentes", autenticado, h.CrearReservaRecurrente)
 	reservation.Post("/reservas/:id/cancelar", autenticado, h.CancelarReserva)
+	// RF-08.14: cambiar una reserva de máquina sin partir la clase en dos
+	// grupos. La titularidad se verifica adentro del handler, como en
+	// cancelar.
+	reservation.Patch("/reservas/:id/pc", autenticado, h.CambiarPCDeReserva)
 	reservation.Post("/grupos/:id/cancelar", autenticado, h.CancelarOcurrenciaRecurrente)
 	reservation.Get("/grupos/:id", autenticado, h.ObtenerReservaGrupo)
 	reservation.Post("/bloqueos-evaluacion", autenticado, soloAdmin, h.BloquearParaEvaluacion)

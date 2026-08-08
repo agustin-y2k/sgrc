@@ -80,16 +80,17 @@ func (r *fakeRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID strin
 // ── fakes de los puertos hacia inventory/auth ──────────────────────────
 
 type fakeInfoPC struct {
+	etiqueta      string
 	identificador int
 	carroNombre   string
 	err           error
 }
 
-func (f *fakeInfoPC) IdentificadorYCarroDe(ctx context.Context, pcID string) (int, string, error) {
+func (f *fakeInfoPC) EtiquetaYCarroDe(ctx context.Context, pcID string) (string, int, string, error) {
 	if f.err != nil {
-		return 0, "", f.err
+		return "", 0, "", f.err
 	}
-	return f.identificador, f.carroNombre, nil
+	return f.etiqueta, f.identificador, f.carroNombre, nil
 }
 
 type fakeInfoUsuario struct {
