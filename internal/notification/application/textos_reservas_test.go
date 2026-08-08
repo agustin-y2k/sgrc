@@ -188,8 +188,8 @@ func TestCorreo_Demora_SinCuentaSoloAvisaALosAdmins(t *testing.T) {
 func TestCorreo_Cierre_DiceAQuienLeVaAFaltar(t *testing.T) {
 	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
 
-	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.PCsSinDevolverAlCierre{
-		PCs: []eventbus.PCSinDevolverAlCierre{{
+	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{
+		Equipos: []eventbus.EquipoSinDevolverAlCierre{{
 			Etiqueta: "PC 3", CarroNombre: "Carro 1", Quien: "Marta",
 			DesdeCuando:      time.Date(2026, time.August, 10, 9, 0, 0, 0, time.UTC),
 			ProximoUsuarioID: "docente2", ProximoEmail: "ada@escuela.edu.ar", ProximoNombre: "Ada",
@@ -223,8 +223,8 @@ func TestCorreo_Cierre_DiceAQuienLeVaAFaltar(t *testing.T) {
 func TestCorreo_Cierre_SinProximaReservaSoloAvisaALosAdmins(t *testing.T) {
 	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
 
-	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.PCsSinDevolverAlCierre{
-		PCs: []eventbus.PCSinDevolverAlCierre{{
+	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{
+		Equipos: []eventbus.EquipoSinDevolverAlCierre{{
 			Etiqueta: "PC 3", Quien: "Marta",
 			DesdeCuando: time.Date(2026, time.August, 10, 9, 0, 0, 0, time.UTC),
 		}},
@@ -239,7 +239,7 @@ func TestCorreo_BarridoConListasVaciasNoMandaNada(t *testing.T) {
 	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
 
 	bus.Publish(eventbus.Evento{Tipo: "prestamo.demorado", Payload: eventbus.PrestamosDemorados{}})
-	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.PCsSinDevolverAlCierre{}})
+	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{}})
 
 	if len(enviador.enviados) != 0 {
 		t.Errorf("no debería mandar nada, mandó %d", len(enviador.enviados))

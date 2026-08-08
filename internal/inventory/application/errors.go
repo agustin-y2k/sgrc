@@ -4,18 +4,18 @@ import "errors"
 
 var (
 	ErrCarroNoEncontrado      = errors.New("carro no encontrado")
-	ErrPCNoEncontrada         = errors.New("PC no encontrada")
+	ErrPCNoEncontrada         = errors.New("equipo no encontrado")
 	ErrIncidenciaNoEncontrada = errors.New("incidencia no encontrada")
 	ErrLicenciaNoEncontrada   = errors.New("licencia no encontrada")
 
-	// ErrLicenciaDuplicada: UNIQUE(pc_id, lower(nombre)) — esa PC ya tiene
+	// ErrLicenciaDuplicada: UNIQUE(equipo_id, lower(nombre)) — esa PC ya tiene
 	// una licencia de ese software. Dos filas del mismo programa en la
 	// misma máquina serían dos contadores que se contradicen.
-	ErrLicenciaDuplicada = errors.New("esa PC ya tiene cargada una licencia de ese software")
+	ErrLicenciaDuplicada = errors.New("ese equipo ya tiene cargada una licencia de ese software")
 
 	// ErrIdentificadorDuplicado: UNIQUE(carro_id, identificador) — "PC 27"
 	// ya existe en ese carro puntual (puede repetirse en otro carro).
-	ErrIdentificadorDuplicado = errors.New("ya existe una PC con ese identificador en este carro")
+	ErrIdentificadorDuplicado = errors.New("ya existe un equipo con ese identificador en este carro")
 
 	// ErrNombreDeEquipoDuplicado: entre los equipos que no están en ningún
 	// carro, el nombre es lo único que los distingue. Dos filas llamadas
@@ -25,7 +25,7 @@ var (
 
 	// ErrNumeroSerieDuplicado: UNIQUE global — el número de serie de
 	// fábrica no puede repetirse en ninguna PC del sistema.
-	ErrNumeroSerieDuplicado = errors.New("ya existe una PC con ese número de serie")
+	ErrNumeroSerieDuplicado = errors.New("ya existe un equipo con ese número de serie")
 
 	// ErrIDInvalido: mismo criterio que en academic — un ID sin formato
 	// UUID válido se mapea a 400, no a 500.

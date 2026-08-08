@@ -105,11 +105,11 @@ func crearUsuarioDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	return id
 }
 
-func crearCarroYPCDeTest(t *testing.T, pool *pgxpool.Pool, identificador int) (pcID string) {
+func crearCarroYPCDeTest(t *testing.T, pool *pgxpool.Pool, identificador int) (equipoID string) {
 	t.Helper()
 	ctx := context.Background()
 	carroID := NuevoID()
-	pcID = NuevoID()
+	equipoID = NuevoID()
 	numeroSerie := fmt.Sprintf("SERIE-%d", time.Now().UnixNano())
 
 	// El nombre del carro es UNIQUE: se deriva del id para que un mismo
@@ -118,26 +118,26 @@ func crearCarroYPCDeTest(t *testing.T, pool *pgxpool.Pool, identificador int) (p
 		t.Fatalf("no se pudo crear carro de prueba: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO pc (id, carro_id, identificador, numero_serie, estado) VALUES ($1, $2, $3, $4, 'DISPONIBLE')`,
-		pcID, carroID, identificador, numeroSerie,
+		`INSERT INTO equipo (id, carro_id, identificador, numero_serie, estado) VALUES ($1, $2, $3, $4, 'DISPONIBLE')`,
+		equipoID, carroID, identificador, numeroSerie,
 	); err != nil {
 		t.Fatalf("no se pudo crear PC de prueba: %v", err)
 	}
-	return pcID
+	return equipoID
 }
 
 // insertarReservaDeTest inserta una fila de reserva directo por SQL (sin
 // pasar por reservation, que reporting no importa) — un reserva_grupo
 // mínimo más su reserva, con el horario dado.
-func insertarReservaDeTest(t *testing.T, pool *pgxpool.Pool, materiaID, pcID, docenteID string, horaInicio, horaFin string, estado string) {
+func insertarReservaDeTest(t *testing.T, pool *pgxpool.Pool, materiaID, equipoID, docenteID string, horaInicio, horaFin string, estado string) {
 	t.Helper()
-	insertarReservaEnFecha(t, pool, materiaID, pcID, docenteID,
+	insertarReservaEnFecha(t, pool, materiaID, equipoID, docenteID,
 		time.Now().UTC().Truncate(24*time.Hour), horaInicio, horaFin, estado)
 }
 
 // insertarReservaEnFecha es la variante con fecha explícita, para los
 // tests del filtro por rango (RF-06.1).
-func insertarReservaEnFecha(t *testing.T, pool *pgxpool.Pool, materiaID, pcID, docenteID string, fecha time.Time, horaInicio, horaFin string, estado string) {
+func insertarReservaEnFecha(t *testing.T, pool *pgxpool.Pool, materiaID, equipoID, docenteID string, fecha time.Time, horaInicio, horaFin string, estado string) {
 	t.Helper()
 	ctx := context.Background()
 	grupoID := NuevoID()
@@ -150,27 +150,27 @@ func insertarReservaEnFecha(t *testing.T, pool *pgxpool.Pool, materiaID, pcID, d
 		t.Fatalf("no se pudo crear reserva_grupo de prueba: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO reserva (id, reserva_grupo_id, pc_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, creado_por)
+		INSERT INTO reserva (id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, creado_por)
 		VALUES ($1, $2, $3, $4, 'Ada Lovelace', $5, $6::TIME, $7::TIME, $8, 'NORMAL', $9)
-	`, reservaID, grupoID, pcID, materiaID, fecha, horaInicio, horaFin, estado, docenteID); err != nil {
+	`, reservaID, grupoID, equipoID, materiaID, fecha, horaInicio, horaFin, estado, docenteID); err != nil {
 		t.Fatalf("no se pudo crear reserva de prueba: %v", err)
 	}
 }
 
 // ── Agregaciones en vivo ────────────────────────────────────────────────
 
-func TestPostgresRepo_CalcularUsoPCsDeCiclo(t *testing.T) {
+func TestPostgresRepo_CalcularUsoEquiposDeCiclo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	cicloID, materiaID := crearCicloDeTest(t, pool)
-	pcID := crearCarroYPCDeTest(t, pool, 27)
+	equipoID := crearCarroYPCDeTest(t, pool, 27)
 	docenteID := crearUsuarioDeTest(t, pool)
 
-	insertarReservaDeTest(t, pool, materiaID, pcID, docenteID, "08:00", "09:00", "CONFIRMADA") // 60 min
-	insertarReservaDeTest(t, pool, materiaID, pcID, docenteID, "10:00", "10:30", "FINALIZADA") // 30 min
-	insertarReservaDeTest(t, pool, materiaID, pcID, docenteID, "12:00", "13:00", "CANCELADA")  // no debe contar
+	insertarReservaDeTest(t, pool, materiaID, equipoID, docenteID, "08:00", "09:00", "CONFIRMADA") // 60 min
+	insertarReservaDeTest(t, pool, materiaID, equipoID, docenteID, "10:00", "10:30", "FINALIZADA") // 30 min
+	insertarReservaDeTest(t, pool, materiaID, equipoID, docenteID, "12:00", "13:00", "CANCELADA")  // no debe contar
 
-	resultado, err := repo.CalcularUsoPCsDeCiclo(context.Background(), cicloID, nil, nil)
+	resultado, err := repo.CalcularUsoEquiposDeCiclo(context.Background(), cicloID, nil, nil)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -178,8 +178,8 @@ func TestPostgresRepo_CalcularUsoPCsDeCiclo(t *testing.T) {
 	if len(resultado) != 1 {
 		t.Fatalf("esperaba 1 PC con uso, obtuve %d: %+v", len(resultado), resultado)
 	}
-	if resultado[0].PCID != pcID {
-		t.Errorf("PCID incorrecto: %s", resultado[0].PCID)
+	if resultado[0].EquipoID != equipoID {
+		t.Errorf("EquipoID incorrecto: %s", resultado[0].EquipoID)
 	}
 	if resultado[0].CantidadReservas != 2 {
 		t.Errorf("esperaba 2 reservas contadas (sin la cancelada), obtuve %d", resultado[0].CantidadReservas)
@@ -193,10 +193,10 @@ func TestPostgresRepo_CalcularUsoDocentesDeCiclo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	cicloID, materiaID := crearCicloDeTest(t, pool)
-	pcID := crearCarroYPCDeTest(t, pool, 27)
+	equipoID := crearCarroYPCDeTest(t, pool, 27)
 	docenteID := crearUsuarioDeTest(t, pool)
 
-	insertarReservaDeTest(t, pool, materiaID, pcID, docenteID, "08:00", "09:30", "CONFIRMADA") // 90 min
+	insertarReservaDeTest(t, pool, materiaID, equipoID, docenteID, "08:00", "09:30", "CONFIRMADA") // 90 min
 
 	resultado, err := repo.CalcularUsoDocentesDeCiclo(context.Background(), cicloID, nil, nil)
 
@@ -215,7 +215,7 @@ func TestPostgresRepo_CalcularUsoDocentesDeCiclo(t *testing.T) {
 // que la respuesta tiene que estar en la primera fila. Sin ORDER BY las
 // filas salían en el orden del hash de agregación: no aleatorio, pero
 // tampoco estable entre llamadas.
-func TestPostgresRepo_CalcularUsoPCsDeCiclo_OrdenaDeMayorAMenor(t *testing.T) {
+func TestPostgresRepo_CalcularUsoEquiposDeCiclo_OrdenaDeMayorAMenor(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	cicloID, materiaID := crearCicloDeTest(t, pool)
@@ -227,7 +227,7 @@ func TestPostgresRepo_CalcularUsoPCsDeCiclo_OrdenaDeMayorAMenor(t *testing.T) {
 	insertarReservaDeTest(t, pool, materiaID, pocoUsada, docenteID, "08:00", "08:30", "CONFIRMADA") // 30 min
 	insertarReservaDeTest(t, pool, materiaID, muyUsada, docenteID, "10:00", "13:00", "CONFIRMADA")  // 180 min
 
-	resultado, err := repo.CalcularUsoPCsDeCiclo(context.Background(), cicloID, nil, nil)
+	resultado, err := repo.CalcularUsoEquiposDeCiclo(context.Background(), cicloID, nil, nil)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -235,7 +235,7 @@ func TestPostgresRepo_CalcularUsoPCsDeCiclo_OrdenaDeMayorAMenor(t *testing.T) {
 	if len(resultado) != 2 {
 		t.Fatalf("esperaba 2 PCs con uso, obtuve %d: %+v", len(resultado), resultado)
 	}
-	if resultado[0].PCID != muyUsada {
+	if resultado[0].EquipoID != muyUsada {
 		t.Errorf("la más usada tiene que venir primera; llegó %+v", resultado)
 	}
 	if resultado[0].MinutosReservados < resultado[1].MinutosReservados {
@@ -248,13 +248,13 @@ func TestPostgresRepo_CalcularUsoDocentesDeCiclo_OrdenaDeMayorAMenor(t *testing.
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	cicloID, materiaID := crearCicloDeTest(t, pool)
-	pcID := crearCarroYPCDeTest(t, pool, 27)
+	equipoID := crearCarroYPCDeTest(t, pool, 27)
 
 	reservaPoco := crearUsuarioDeTest(t, pool)
 	reservaMucho := crearUsuarioDeTest(t, pool)
 
-	insertarReservaDeTest(t, pool, materiaID, pcID, reservaPoco, "08:00", "08:30", "CONFIRMADA")  // 30 min
-	insertarReservaDeTest(t, pool, materiaID, pcID, reservaMucho, "10:00", "13:00", "CONFIRMADA") // 180 min
+	insertarReservaDeTest(t, pool, materiaID, equipoID, reservaPoco, "08:00", "08:30", "CONFIRMADA")  // 30 min
+	insertarReservaDeTest(t, pool, materiaID, equipoID, reservaMucho, "10:00", "13:00", "CONFIRMADA") // 180 min
 
 	resultado, err := repo.CalcularUsoDocentesDeCiclo(context.Background(), cicloID, nil, nil)
 
@@ -274,12 +274,12 @@ func TestPostgresRepo_CalcularUso_OtroCicloNoSeToca(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	_, materiaDelOtroCiclo := crearCicloDeTest(t, pool)
 	cicloVacio, _ := crearCicloDeTest(t, pool)
-	pcID := crearCarroYPCDeTest(t, pool, 27)
+	equipoID := crearCarroYPCDeTest(t, pool, 27)
 	docenteID := crearUsuarioDeTest(t, pool)
 
-	insertarReservaDeTest(t, pool, materiaDelOtroCiclo, pcID, docenteID, "08:00", "09:00", "CONFIRMADA")
+	insertarReservaDeTest(t, pool, materiaDelOtroCiclo, equipoID, docenteID, "08:00", "09:00", "CONFIRMADA")
 
-	resultado, err := repo.CalcularUsoPCsDeCiclo(context.Background(), cicloVacio, nil, nil)
+	resultado, err := repo.CalcularUsoEquiposDeCiclo(context.Background(), cicloVacio, nil, nil)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -291,20 +291,20 @@ func TestPostgresRepo_CalcularUso_OtroCicloNoSeToca(t *testing.T) {
 
 // ── Snapshot histórico ──────────────────────────────────────────────────
 
-func TestPostgresRepo_GuardarYListarHistoricoUsoPC(t *testing.T) {
+func TestPostgresRepo_GuardarYListarHistoricoUsoEquipo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	pcID := crearCarroYPCDeTest(t, pool, 27)
+	equipoID := crearCarroYPCDeTest(t, pool, 27)
 
-	h, err := domain.NuevoHistoricoUsoPC(NuevoID(), 5000, pcID, "PC 27", 27, "Carro 1", 900, 12)
+	h, err := domain.NuevoHistoricoUsoEquipo(NuevoID(), 5000, equipoID, "PC 27", 27, "Carro 1", 900, 12)
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
-	if err := repo.GuardarHistoricoUsoPC(context.Background(), h); err != nil {
+	if err := repo.GuardarHistoricoUsoEquipo(context.Background(), h); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	resultado, err := repo.ListarHistoricoUsoPCPorAnio(context.Background(), 5000)
+	resultado, err := repo.ListarHistoricoUsoEquipoPorAnio(context.Background(), 5000)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -318,27 +318,27 @@ func TestPostgresRepo_GuardarYListarHistoricoUsoPC(t *testing.T) {
 
 // Lo que la 015 hizo posible archivar: un proyector, que no tiene número ni
 // carro. Sin la etiqueta congelada el reporte del año pasado decía "PC 0 ()".
-func TestPostgresRepo_HistoricoUsoPC_DeUnEquipoSinCarro(t *testing.T) {
+func TestPostgresRepo_HistoricoUsoEquipo_DeUnEquipoSinCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 
-	pcID := NuevoID()
+	equipoID := NuevoID()
 	if _, err := pool.Exec(context.Background(),
-		`INSERT INTO pc (id, tipo, nombre, estado) VALUES ($1, 'PROYECTOR', $2, 'DISPONIBLE')`,
-		pcID, "Proyector Epson-"+pcID[:8],
+		`INSERT INTO equipo (id, tipo, nombre, estado) VALUES ($1, 'PROYECTOR', $2, 'DISPONIBLE')`,
+		equipoID, "Proyector Epson-"+equipoID[:8],
 	); err != nil {
 		t.Fatalf("no se pudo crear el equipo de prueba: %v", err)
 	}
 
-	h, err := domain.NuevoHistoricoUsoPC(NuevoID(), 5002, pcID, "Proyector Epson", 0, "", 300, 4)
+	h, err := domain.NuevoHistoricoUsoEquipo(NuevoID(), 5002, equipoID, "Proyector Epson", 0, "", 300, 4)
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
-	if err := repo.GuardarHistoricoUsoPC(context.Background(), h); err != nil {
+	if err := repo.GuardarHistoricoUsoEquipo(context.Background(), h); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	resultado, err := repo.ListarHistoricoUsoPCPorAnio(context.Background(), 5002)
+	resultado, err := repo.ListarHistoricoUsoEquipoPorAnio(context.Background(), 5002)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -401,12 +401,12 @@ func TestPostgresRepo_GuardarHistoricoUsoDocente_SinUsuarioID_OK(t *testing.T) {
 
 // ── Adaptadores ─────────────────────────────────────────────────────────
 
-func TestInfoPCPostgres_EtiquetaYCarroDe(t *testing.T) {
+func TestInfoEquipoPostgres_EtiquetaYCarroDe(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	pcID := crearCarroYPCDeTest(t, pool, 42)
+	equipoID := crearCarroYPCDeTest(t, pool, 42)
 
-	info := NewInfoPCPostgres(pool)
-	etiqueta, identificador, carroNombre, err := info.EtiquetaYCarroDe(context.Background(), pcID)
+	info := NewInfoEquipoPostgres(pool)
+	etiqueta, identificador, carroNombre, err := info.EtiquetaYCarroDe(context.Background(), equipoID)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -419,20 +419,20 @@ func TestInfoPCPostgres_EtiquetaYCarroDe(t *testing.T) {
 }
 
 // Archivar un ciclo llama a esto por cada equipo con uso. Con el INNER JOIN
-// a carro, un proyector devolvía "PC no encontrada" y abortaba el archivado
+// a carro, un proyector devolvía "equipo no encontrado" y abortaba el archivado
 // del ciclo entero — no solo la fila del proyector.
-func TestInfoPCPostgres_EtiquetaYCarroDe_EquipoSinCarro(t *testing.T) {
+func TestInfoEquipoPostgres_EtiquetaYCarroDe_EquipoSinCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	pcID := NuevoID()
+	equipoID := NuevoID()
 	if _, err := pool.Exec(context.Background(),
-		`INSERT INTO pc (id, tipo, nombre, estado) VALUES ($1, 'PROYECTOR', $2, 'DISPONIBLE')`,
-		pcID, "Proyector-"+pcID[:8],
+		`INSERT INTO equipo (id, tipo, nombre, estado) VALUES ($1, 'PROYECTOR', $2, 'DISPONIBLE')`,
+		equipoID, "Proyector-"+equipoID[:8],
 	); err != nil {
 		t.Fatalf("no se pudo crear el equipo de prueba: %v", err)
 	}
 
-	info := NewInfoPCPostgres(pool)
-	etiqueta, identificador, carroNombre, err := info.EtiquetaYCarroDe(context.Background(), pcID)
+	info := NewInfoEquipoPostgres(pool)
+	etiqueta, identificador, carroNombre, err := info.EtiquetaYCarroDe(context.Background(), equipoID)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -463,7 +463,7 @@ func TestInfoUsuarioPostgres_NombreCompletoDe(t *testing.T) {
 func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	infoPC := NewInfoPCPostgres(pool)
+	infoPC := NewInfoEquipoPostgres(pool)
 	infoUsuario := NewInfoUsuarioPostgres(pool)
 	ctx := context.Background()
 
@@ -471,7 +471,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 		nombre string
 		fn     func() error
 	}{
-		{"CalcularUsoPCsDeCiclo", func() error { _, err := repo.CalcularUsoPCsDeCiclo(ctx, "CICLO_ID", nil, nil); return err }},
+		{"CalcularUsoEquiposDeCiclo", func() error { _, err := repo.CalcularUsoEquiposDeCiclo(ctx, "CICLO_ID", nil, nil); return err }},
 		{"CalcularUsoDocentesDeCiclo", func() error { _, err := repo.CalcularUsoDocentesDeCiclo(ctx, "CICLO_ID", nil, nil); return err }},
 		{"EtiquetaYCarroDe", func() error { _, _, _, err := infoPC.EtiquetaYCarroDe(ctx, "PC_ID"); return err }},
 		{"NombreCompletoDe", func() error { _, err := infoUsuario.NombreCompletoDe(ctx, "USUARIO_ID"); return err }},
@@ -487,18 +487,18 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 
 // ── RF-06.3: incidencias por equipo y por carro ────────────────────────
 
-func insertarIncidenciaDeTest(t *testing.T, pool *pgxpool.Pool, pcID, gravedad, estado string, fecha time.Time) {
+func insertarIncidenciaDeTest(t *testing.T, pool *pgxpool.Pool, equipoID, gravedad, estado string, fecha time.Time) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(), `
-		INSERT INTO incidencia (id, pc_id, descripcion, gravedad, estado, fecha)
+		INSERT INTO incidencia (id, equipo_id, descripcion, gravedad, estado, fecha)
 		VALUES ($1, $2, 'no arranca', $3, $4, $5)
-	`, NuevoID(), pcID, gravedad, estado, fecha)
+	`, NuevoID(), equipoID, gravedad, estado, fecha)
 	if err != nil {
 		t.Fatalf("no se pudo insertar incidencia de prueba: %v", err)
 	}
 }
 
-func TestCalcularIncidenciasPorPC_AgrupaYCuentaPorEstadoYGravedad(t *testing.T) {
+func TestCalcularIncidenciasPorEquipo_AgrupaYCuentaPorEstadoYGravedad(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
@@ -512,7 +512,7 @@ func TestCalcularIncidenciasPorPC_AgrupaYCuentaPorEstadoYGravedad(t *testing.T) 
 	insertarIncidenciaDeTest(t, pool, pc1, "MODERADA", "EN_REPARACION", fecha)
 	insertarIncidenciaDeTest(t, pool, pc2, "LEVE", "ABIERTA", fecha)
 
-	resumenes, err := repo.CalcularIncidenciasPorPC(ctx, nil, nil)
+	resumenes, err := repo.CalcularIncidenciasPorEquipo(ctx, nil, nil)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -522,7 +522,7 @@ func TestCalcularIncidenciasPorPC_AgrupaYCuentaPorEstadoYGravedad(t *testing.T) 
 
 	// Viene ordenado por total desc, así que pc1 (3) va primero.
 	primero := resumenes[0]
-	if primero.PCID != pc1 || primero.Total != 3 {
+	if primero.EquipoID != pc1 || primero.Total != 3 {
 		t.Fatalf("esperaba pc1 con 3 incidencias primero, obtuve %+v", primero)
 	}
 	if primero.Abiertas != 1 || primero.Resueltas != 1 || primero.EnReparacion != 1 || primero.Graves != 1 {
@@ -533,17 +533,17 @@ func TestCalcularIncidenciasPorPC_AgrupaYCuentaPorEstadoYGravedad(t *testing.T) 
 	}
 }
 
-func TestCalcularIncidenciasPorPC_RespetaElRangoDeFechas(t *testing.T) {
+func TestCalcularIncidenciasPorEquipo_RespetaElRangoDeFechas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	pc := crearCarroYPCDeTest(t, pool, 1)
-	insertarIncidenciaDeTest(t, pool, pc, "LEVE", "ABIERTA", time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
-	insertarIncidenciaDeTest(t, pool, pc, "LEVE", "ABIERTA", time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC))
+	equipo := crearCarroYPCDeTest(t, pool, 1)
+	insertarIncidenciaDeTest(t, pool, equipo, "LEVE", "ABIERTA", time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
+	insertarIncidenciaDeTest(t, pool, equipo, "LEVE", "ABIERTA", time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC))
 
 	desde := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-	resumenes, err := repo.CalcularIncidenciasPorPC(ctx, &desde, nil)
+	resumenes, err := repo.CalcularIncidenciasPorEquipo(ctx, &desde, nil)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -557,10 +557,10 @@ func TestCalcularIncidenciasPorCarro_AgrupaPorCarro(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	pc := crearCarroYPCDeTest(t, pool, 1)
+	equipo := crearCarroYPCDeTest(t, pool, 1)
 	fecha := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
-	insertarIncidenciaDeTest(t, pool, pc, "GRAVE", "ABIERTA", fecha)
-	insertarIncidenciaDeTest(t, pool, pc, "LEVE", "RESUELTA", fecha)
+	insertarIncidenciaDeTest(t, pool, equipo, "GRAVE", "ABIERTA", fecha)
+	insertarIncidenciaDeTest(t, pool, equipo, "LEVE", "RESUELTA", fecha)
 
 	resumenes, err := repo.CalcularIncidenciasPorCarro(ctx, nil, nil)
 	if err != nil {
@@ -575,22 +575,22 @@ func TestCalcularIncidenciasPorCarro_AgrupaPorCarro(t *testing.T) {
 }
 
 // RF-06.1: el uso por PC es filtrable por rango de fechas.
-func TestCalcularUsoPCsDeCiclo_RespetaElRangoDeFechas(t *testing.T) {
+func TestCalcularUsoEquiposDeCiclo_RespetaElRangoDeFechas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
 	cicloID, materiaID := crearCicloDeTest(t, pool)
-	pcID := crearCarroYPCDeTest(t, pool, 1)
+	equipoID := crearCarroYPCDeTest(t, pool, 1)
 	usuarioID := crearUsuarioDeTest(t, pool)
 
-	insertarReservaEnFecha(t, pool, materiaID, pcID, usuarioID,
+	insertarReservaEnFecha(t, pool, materiaID, equipoID, usuarioID,
 		time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC), "08:00", "09:00", "FINALIZADA")
-	insertarReservaEnFecha(t, pool, materiaID, pcID, usuarioID,
+	insertarReservaEnFecha(t, pool, materiaID, equipoID, usuarioID,
 		time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC), "08:00", "10:00", "FINALIZADA")
 
 	// Sin filtro: las dos.
-	todos, err := repo.CalcularUsoPCsDeCiclo(ctx, cicloID, nil, nil)
+	todos, err := repo.CalcularUsoEquiposDeCiclo(ctx, cicloID, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -600,7 +600,7 @@ func TestCalcularUsoPCsDeCiclo_RespetaElRangoDeFechas(t *testing.T) {
 
 	// Solo el segundo semestre.
 	desde := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	filtrado, err := repo.CalcularUsoPCsDeCiclo(ctx, cicloID, &desde, nil)
+	filtrado, err := repo.CalcularUsoEquiposDeCiclo(ctx, cicloID, &desde, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

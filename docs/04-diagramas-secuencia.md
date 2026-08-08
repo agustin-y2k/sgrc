@@ -98,14 +98,14 @@ sequenceDiagram
     participant DB as sgrc_db
 
     U->>FE: Selecciona materia, fecha, horario
-    FE->>RES: GET /api/inventory/pcs/disponibles?fecha&horaInicio&horaFin
+    FE->>RES: GET /api/reservation/equipos-disponibles?fecha&horaInicio&horaFin
     RES->>INV: Listar PCs DISPONIBLE sin solapamiento en ese horario
     INV-->>FE: Lista de PCs para tildar
     U->>FE: Tilda las PCs que necesita (una o varias)
-    FE->>RES: POST /api/reservations { materiaId, fecha, horaInicio, horaFin, pcIds: [...] }
+    FE->>RES: POST /api/reservations { materiaId, fecha, horaInicio, horaFin, equipoIds: [...] }
     RES->>RES: Verifica permiso sobre la materia (rol + docente_materia)
     RES->>DB: INSERT reserva_grupo (CONFIRMADA)
-    loop por cada pcId
+    loop por cada equipoId
         RES->>DB: INSERT reserva (EXCLUDE constraint valida solapamiento por PC)
     end
     alt Todas las PCs sin solapamiento
@@ -116,7 +116,7 @@ sequenceDiagram
         DB-->>RES: Constraint violation en esa PC puntual
         RES->>DB: SELECT reserva en conflicto para esa PC
         RES->>DB: ROLLBACK — no se confirma ninguna PC del grupo
-        RES-->>FE: 409 { conflictos: [{ pcId, docente, materia, horario }] }
+        RES-->>FE: 409 { conflictos: [{ equipoId, docente, materia, horario }] }
         FE-->>U: ❌ PC-07 ocupada por [nombre] - destildá esa PC y reintentá
     end
 ```
@@ -133,7 +133,7 @@ sequenceDiagram
     participant DB as sgrc_db
 
     U->>FE: Materia, PCs elegidas, día semana, horario, rango fechas
-    FE->>RES: POST /api/reservations/recurrentes { materiaId, pcIds: [...], diaSemana, ... }
+    FE->>RES: POST /api/reservations/recurrentes { materiaId, equipoIds: [...], diaSemana, ... }
     RES->>RES: Calcula todas las ocurrencias (cada fecha × cada PC elegida)
     RES->>DB: SELECT solapamientos para TODAS las fechas x PCs
     alt Sin conflictos
@@ -148,7 +148,7 @@ sequenceDiagram
         RES-->>FE: 201 { reglaRecurrenciaId, fechasCreadas: [...] }
         FE-->>U: ✅ N fechas × M PCs creadas
     else Con conflictos
-        DB-->>RES: [{ fecha, pcId, docente, materia, horario }, ...]
+        DB-->>RES: [{ fecha, equipoId, docente, materia, horario }, ...]
         RES-->>FE: 409 { conflictos: [...] }
         FE-->>U: ❌ Tabla de conflictos (por fecha y PC) — resolver antes de continuar
     end
@@ -231,7 +231,7 @@ sequenceDiagram
     participant DB as sgrc_db
 
     ADM->>FE: Cambia estado de PC a EN_MANTENIMIENTO/FUERA_DE_SERVICIO (+ motivo opcional)
-    FE->>INV: PATCH /api/inventory/pcs/{id}/estado
+    FE->>INV: PATCH /api/inventory/equipos/{id}/estado
     INV->>DB: UPDATE pc SET estado=...
     INV->>DB: SELECT reserva CONFIRMADA de esa PC puntual con fecha/hora futura
     DB-->>INV: [reserva puntuales con reserva_grupo_id, docenteId]
@@ -258,8 +258,8 @@ sequenceDiagram
     participant DB as sgrc_db
 
     ADM->>FE: Elimina una PC del inventario
-    FE->>INV: DELETE /api/inventory/pcs/{id}
-    INV->>DB: UPDATE pc SET dada_de_baja=true, fecha_baja=now(), estado=FUERA_DE_SERVICIO
+    FE->>INV: DELETE /api/inventory/equipos/{id}
+    INV->>DB: UPDATE pc SET dado_de_baja=true, fecha_baja=now(), estado=FUERA_DE_SERVICIO
     Note over INV,DB: Soft delete: no se borra la fila — incidencia y reserva la referencian por FK
     INV-->>FE: 200 { dadaDeBaja: true }
     FE-->>ADM: ✅ PC dada de baja. Ya no aparece en listados activos ni puede reservarse.
@@ -282,7 +282,7 @@ sequenceDiagram
     FE->>ACAD: POST /api/academic/ciclos/{id}/archivar { clonarA: año+1 }
     ACAD->>REP: CalcularSnapshotAnual(cicloId) — antes de borrar nada
     REP->>DB: SELECT agregados de reserva/reserva_grupo de las materias del ciclo
-    REP->>DB: INSERT historico_uso_pc, historico_uso_docente (permanentes)
+    REP->>DB: INSERT historico_uso_equipo, historico_uso_docente (permanentes)
     ACAD->>RES: EliminarReservasDeCiclo(cicloId)
     RES->>DB: DELETE reserva WHERE reserva_grupo_id IN (SELECT id FROM reserva_grupo WHERE materia_id IN [...])
     RES->>DB: DELETE reserva_grupo WHERE materia_id IN [...]

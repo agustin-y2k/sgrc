@@ -97,7 +97,7 @@ func aLicenciaDelAviso(c *LicenciaConUbicacion, hoy time.Time) eventbus.Licencia
 		LicenciaID:       c.Licencia.ID,
 		Nombre:           c.Licencia.Nombre,
 		Etiqueta:         c.Etiqueta,
-		PCIdentificador:  c.PCIdentificador,
+		Identificador:    c.Identificador,
 		CarroNombre:      c.CarroNombre,
 		FechaVencimiento: *c.Licencia.FechaVencimiento,
 		DiasRestantes:    dias,

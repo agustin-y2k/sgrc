@@ -12,27 +12,27 @@ import (
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
-	historicoPC      map[string]*domain.HistoricoUsoPC
+	historicoPC      map[string]*domain.HistoricoUsoEquipo
 	historicoDocente map[string]*domain.HistoricoUsoDocente
-	usoPCs           []domain.ResumenUsoPC
+	usoPCs           []domain.ResumenUsoEquipo
 	usoDocentes      []domain.ResumenUsoDocente
 	errCalcularPC    error
 	errCalcularDoc   error
 	errGuardarPC     error
 	errGuardarDoc    error
-	incidenciasPC    []domain.ResumenIncidenciasPC
+	incidenciasPC    []domain.ResumenIncidenciasEquipo
 	incidenciasCarro []domain.ResumenIncidenciasCarro
 	errIncidencias   error
 }
 
 func nuevoFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		historicoPC:      make(map[string]*domain.HistoricoUsoPC),
+		historicoPC:      make(map[string]*domain.HistoricoUsoEquipo),
 		historicoDocente: make(map[string]*domain.HistoricoUsoDocente),
 	}
 }
 
-func (r *fakeRepo) GuardarHistoricoUsoPC(ctx context.Context, h *domain.HistoricoUsoPC) error {
+func (r *fakeRepo) GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.HistoricoUsoEquipo) error {
 	if r.errGuardarPC != nil {
 		return r.errGuardarPC
 	}
@@ -46,8 +46,8 @@ func (r *fakeRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain.His
 	r.historicoDocente[h.ID] = h
 	return nil
 }
-func (r *fakeRepo) ListarHistoricoUsoPCPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoPC, error) {
-	var resultado []*domain.HistoricoUsoPC
+func (r *fakeRepo) ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error) {
+	var resultado []*domain.HistoricoUsoEquipo
 	for _, h := range r.historicoPC {
 		if h.Anio == anio {
 			resultado = append(resultado, h)
@@ -64,7 +64,7 @@ func (r *fakeRepo) ListarHistoricoUsoDocentePorAnio(ctx context.Context, anio in
 	}
 	return resultado, nil
 }
-func (r *fakeRepo) CalcularUsoPCsDeCiclo(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoPC, error) {
+func (r *fakeRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoEquipo, error) {
 	if r.errCalcularPC != nil {
 		return nil, r.errCalcularPC
 	}
@@ -86,7 +86,7 @@ type fakeInfoPC struct {
 	err           error
 }
 
-func (f *fakeInfoPC) EtiquetaYCarroDe(ctx context.Context, pcID string) (string, int, string, error) {
+func (f *fakeInfoPC) EtiquetaYCarroDe(ctx context.Context, equipoID string) (string, int, string, error) {
 	if f.err != nil {
 		return "", 0, "", f.err
 	}
@@ -119,27 +119,27 @@ func nuevoServicioDeTest(repo Repo) *Service {
 
 // ── ReporteUsoPCs / ReporteUsoDocentes (en vivo) ────────────────────────
 
-func TestReporteUsoPCs_OK(t *testing.T) {
+func TestReporteUsoEquipos_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usoPCs = []domain.ResumenUsoPC{{PCID: "pc1", CantidadReservas: 5, MinutosReservados: 450}}
+	repo.usoPCs = []domain.ResumenUsoEquipo{{EquipoID: "pc1", CantidadReservas: 5, MinutosReservados: 450}}
 	svc := nuevoServicioDeTest(repo)
 
-	resultado, err := svc.ReporteUsoPCs(context.Background(), "ciclo1", nil, nil)
+	resultado, err := svc.ReporteUsoEquipos(context.Background(), "ciclo1", nil, nil)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if len(resultado) != 1 || resultado[0].PCID != "pc1" {
+	if len(resultado) != 1 || resultado[0].EquipoID != "pc1" {
 		t.Fatalf("resultado incorrecto: %+v", resultado)
 	}
 }
 
-func TestReporteUsoPCs_ErrorDelRepo_SePropaga(t *testing.T) {
+func TestReporteUsoEquipos_ErrorDelRepo_SePropaga(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.errCalcularPC = errors.New("base caída")
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.ReporteUsoPCs(context.Background(), "ciclo1", nil, nil)
+	_, err := svc.ReporteUsoEquipos(context.Background(), "ciclo1", nil, nil)
 
 	if err == nil {
 		t.Fatal("esperaba que el error se propague")
@@ -163,13 +163,13 @@ func TestReporteUsoDocentes_OK(t *testing.T) {
 
 // ── HistoricoUsoPCs / HistoricoUsoDocentes ──────────────────────────────
 
-func TestHistoricoUsoPCs_SoloDelAnioPedido(t *testing.T) {
+func TestHistoricoUsoEquipos_SoloDelAnioPedido(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.historicoPC["h1"] = &domain.HistoricoUsoPC{ID: "h1", Anio: 2026, PCID: "pc1"}
-	repo.historicoPC["h2"] = &domain.HistoricoUsoPC{ID: "h2", Anio: 2025, PCID: "pc2"}
+	repo.historicoPC["h1"] = &domain.HistoricoUsoEquipo{ID: "h1", Anio: 2026, EquipoID: "pc1"}
+	repo.historicoPC["h2"] = &domain.HistoricoUsoEquipo{ID: "h2", Anio: 2025, EquipoID: "pc2"}
 	svc := nuevoServicioDeTest(repo)
 
-	resultado, err := svc.HistoricoUsoPCs(context.Background(), 2026)
+	resultado, err := svc.HistoricoUsoEquipos(context.Background(), 2026)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -183,9 +183,9 @@ func TestHistoricoUsoPCs_SoloDelAnioPedido(t *testing.T) {
 
 func TestArchivarSnapshotDeCiclo_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usoPCs = []domain.ResumenUsoPC{
-		{PCID: "pc1", CantidadReservas: 10, MinutosReservados: 900},
-		{PCID: "pc2", CantidadReservas: 0, MinutosReservados: 0},
+	repo.usoPCs = []domain.ResumenUsoEquipo{
+		{EquipoID: "pc1", CantidadReservas: 10, MinutosReservados: 900},
+		{EquipoID: "pc2", CantidadReservas: 0, MinutosReservados: 0},
 	}
 	repo.usoDocentes = []domain.ResumenUsoDocente{
 		{UsuarioID: "docente1", CantidadReservas: 6, MinutosReservados: 540},
@@ -228,7 +228,7 @@ func TestArchivarSnapshotDeCiclo_SinNadaQueAgregar_NoFalla(t *testing.T) {
 	}
 }
 
-func TestArchivarSnapshotDeCiclo_ErrorCalculandoPCs_SePropagaYNoTocaDocentes(t *testing.T) {
+func TestArchivarSnapshotDeCiclo_ErrorCalculandoEquipos_SePropagaYNoTocaDocentes(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.errCalcularPC = errors.New("base caída")
 	svc := nuevoServicioDeTest(repo)
@@ -243,9 +243,9 @@ func TestArchivarSnapshotDeCiclo_ErrorCalculandoPCs_SePropagaYNoTocaDocentes(t *
 	}
 }
 
-func TestArchivarSnapshotDeCiclo_ErrorGuardandoPC_SePropaga(t *testing.T) {
+func TestArchivarSnapshotDeCiclo_ErrorGuardandoEquipo_SePropaga(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usoPCs = []domain.ResumenUsoPC{{PCID: "pc1", CantidadReservas: 1, MinutosReservados: 60}}
+	repo.usoPCs = []domain.ResumenUsoEquipo{{EquipoID: "pc1", CantidadReservas: 1, MinutosReservados: 60}}
 	repo.errGuardarPC = errors.New("constraint violada")
 	svc := nuevoServicioDeTest(repo)
 
@@ -256,9 +256,9 @@ func TestArchivarSnapshotDeCiclo_ErrorGuardandoPC_SePropaga(t *testing.T) {
 	}
 }
 
-func TestArchivarSnapshotDeCiclo_ErrorObteniendoInfoPC_SePropaga(t *testing.T) {
+func TestArchivarSnapshotDeCiclo_ErrorObteniendoInfoEquipo_SePropaga(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usoPCs = []domain.ResumenUsoPC{{PCID: "pc1", CantidadReservas: 1, MinutosReservados: 60}}
+	repo.usoPCs = []domain.ResumenUsoEquipo{{EquipoID: "pc1", CantidadReservas: 1, MinutosReservados: 60}}
 	contadorID = 0
 	svc := NewService(repo, &fakeInfoPC{err: errors.New("inventory caído")}, &fakeInfoUsuario{nombre: "Ada"}, idSecuencial)
 
@@ -269,7 +269,7 @@ func TestArchivarSnapshotDeCiclo_ErrorObteniendoInfoPC_SePropaga(t *testing.T) {
 	}
 }
 
-func (r *fakeRepo) CalcularIncidenciasPorPC(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasPC, error) {
+func (r *fakeRepo) CalcularIncidenciasPorEquipo(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasEquipo, error) {
 	return r.incidenciasPC, r.errIncidencias
 }
 

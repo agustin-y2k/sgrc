@@ -220,17 +220,17 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		})
 	})
 
-	bus.Subscribe("reserva.pc-no-disponible", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.PCNoDisponibleParaReserva)
+	bus.Subscribe("reserva.equipo-no-disponible", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.EquipoNoDisponibleParaReserva)
 		if !ok {
-			log.Printf("notification: payload inesperado para reserva.pc-no-disponible: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para reserva.equipo-no-disponible: %+v", e.Payload)
 			return
 		}
 		if payload.UsuarioID == "" {
 			return
 		}
-		mensaje := mensajeDePCNoDisponible(payload)
-		entregar("reserva.pc-no-disponible", func(ctx context.Context) error {
+		mensaje := mensajeDeEquipoNoDisponible(payload)
+		entregar("reserva.equipo-no-disponible", func(ctx context.Context) error {
 			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
 				domain.TipoReservaPorComenzar, domain.Referencias{})
 			return err
@@ -267,31 +267,31 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		}
 		mensaje := mensajeDePrestamosDemorados(payload)
 		entregar("prestamo.demorado", func(ctx context.Context) error {
-			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoPCSinDevolver,
+			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoEquipoSinDevolver,
 				domain.Referencias{})
 			return err
 		})
 	})
 
 	bus.Subscribe("prestamo.sin-devolver.cierre", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.PCsSinDevolverAlCierre)
+		payload, ok := e.Payload.(eventbus.EquiposSinDevolverAlCierre)
 		if !ok {
 			log.Printf("notification: payload inesperado para prestamo.sin-devolver.cierre: %+v", e.Payload)
 			return
 		}
-		if len(payload.PCs) == 0 {
+		if len(payload.Equipos) == 0 {
 			return
 		}
 		mensaje := mensajeDeCierre(payload)
 		entregar("prestamo.sin-devolver.cierre", func(ctx context.Context) error {
-			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoPCSinDevolver,
+			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoEquipoSinDevolver,
 				domain.Referencias{})
 			return err
 		})
 
 		// Y al docente que la tiene reservada, si hay uno: es el único para
 		// quien esto es accionable antes de mañana.
-		for _, pc := range payload.PCs {
+		for _, pc := range payload.Equipos {
 			if pc.ProximoUsuarioID == "" {
 				continue
 			}
@@ -331,10 +331,10 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	})
 }
 
-// maxPCsEnElMensaje acota el listado: un bloqueo sobre un carro entero
+// maxEquiposEnElMensaje acota el listado: un bloqueo sobre un carro entero
 // puede alcanzar 30 PCs de un mismo docente, y un mensaje con treinta
 // números no se lee, se saltea.
-const maxPCsEnElMensaje = 8
+const maxEquiposEnElMensaje = 8
 
 // mensajeDeCancelacion arma UNA frase para todo lo que se le canceló a un
 // docente de una sola vez.
@@ -356,11 +356,11 @@ func mensajeDeCancelacion(p eventbus.CancelacionesDeUsuario) string {
 
 	if fecha, unica := fechaUnica(p.Reservas); unica {
 		return fmt.Sprintf("Se cancelaron %d de tus reservas del %s (%s): %s",
-			len(p.Reservas), formatearFecha(fecha), listaDePCs(p.Reservas), p.Motivo)
+			len(p.Reservas), formatearFecha(fecha), equiposDeLasCanceladas(p.Reservas), p.Motivo)
 	}
 
 	return fmt.Sprintf("Se cancelaron %d de tus reservas (%s): %s",
-		len(p.Reservas), listaDePCs(p.Reservas), p.Motivo)
+		len(p.Reservas), equiposDeLasCanceladas(p.Reservas), p.Motivo)
 }
 
 // fechaUnica dice si todas las cancelaciones caen el mismo día — el caso
@@ -380,9 +380,9 @@ func mismoDia(a, b time.Time) bool {
 	return a.Year() == b.Year() && a.Month() == b.Month() && a.Day() == b.Day()
 }
 
-// listaDePCs enumera los equipos afectados, sin repetir y en orden. Si son
+// equiposDeLasCanceladas enumera los equipos afectados, sin repetir y en orden. Si son
 // muchos, corta y dice cuántos quedaron afuera.
-func listaDePCs(reservas []eventbus.ReservaCancelada) string {
+func equiposDeLasCanceladas(reservas []eventbus.ReservaCancelada) string {
 	vistas := map[string]bool{}
 	var ids []string
 	for _, r := range reservas {
@@ -402,9 +402,9 @@ func listaDePCs(reservas []eventbus.ReservaCancelada) string {
 	sort.Slice(ids, func(i, j int) bool { return menorEnOrdenNatural(ids[i], ids[j]) })
 
 	sobrantes := 0
-	if len(ids) > maxPCsEnElMensaje {
-		sobrantes = len(ids) - maxPCsEnElMensaje
-		ids = ids[:maxPCsEnElMensaje]
+	if len(ids) > maxEquiposEnElMensaje {
+		sobrantes = len(ids) - maxEquiposEnElMensaje
+		ids = ids[:maxEquiposEnElMensaje]
 	}
 
 	texto := strings.Join(ids, ", ")

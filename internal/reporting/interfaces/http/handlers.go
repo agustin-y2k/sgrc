@@ -37,8 +37,8 @@ func NewHandler(svc *application.Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// GET /api/reporting/ciclos/:cicloId/uso-pcs — RF-06.1, en vivo.
-func (h *Handler) ReporteUsoPCs(c *fiber.Ctx) error {
+// GET /api/reporting/ciclos/:cicloId/uso-equipos — RF-06.1, en vivo.
+func (h *Handler) ReporteUsoEquipos(c *fiber.Ctx) error {
 	cicloID := c.Params("cicloId")
 
 	desde, hasta, err := rangoDeQuery(c)
@@ -46,14 +46,14 @@ func (h *Handler) ReporteUsoPCs(c *fiber.Ctx) error {
 		return err
 	}
 
-	resumenes, err := h.svc.ReporteUsoPCs(c.UserContext(), cicloID, desde, hasta)
+	resumenes, err := h.svc.ReporteUsoEquipos(c.UserContext(), cicloID, desde, hasta)
 	if err != nil {
 		return mapearError(err)
 	}
 
-	data := make([]resumenUsoPCResponse, len(resumenes))
+	data := make([]resumenUsoEquipoResponse, len(resumenes))
 	for i, u := range resumenes {
-		data[i] = toResumenUsoPCResponse(u)
+		data[i] = toResumenUsoEquipoResponse(u)
 	}
 	return c.JSON(fiber.Map{"data": data})
 }
@@ -89,21 +89,21 @@ func parseAnio(c *fiber.Ctx) (int, error) {
 	return anio, nil
 }
 
-// GET /api/reporting/historico/:anio/uso-pcs — RF-06.3, ya archivado.
-func (h *Handler) HistoricoUsoPCs(c *fiber.Ctx) error {
+// GET /api/reporting/historico/:anio/uso-equipos — RF-06.3, ya archivado.
+func (h *Handler) HistoricoUsoEquipos(c *fiber.Ctx) error {
 	anio, err := parseAnio(c)
 	if err != nil {
 		return err
 	}
 
-	historico, err := h.svc.HistoricoUsoPCs(c.UserContext(), anio)
+	historico, err := h.svc.HistoricoUsoEquipos(c.UserContext(), anio)
 	if err != nil {
 		return mapearError(err)
 	}
 
-	data := make([]historicoUsoPCResponse, len(historico))
+	data := make([]historicoUsoEquipoResponse, len(historico))
 	for i, h := range historico {
-		data[i] = toHistoricoUsoPCResponse(h)
+		data[i] = toHistoricoUsoEquipoResponse(h)
 	}
 	return c.JSON(fiber.Map{"data": data})
 }
@@ -127,21 +127,21 @@ func (h *Handler) HistoricoUsoDocentes(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/reporting/incidencias/pcs — RF-06.3, incidencias por equipo.
-func (h *Handler) ReporteIncidenciasPorPC(c *fiber.Ctx) error {
+// GET /api/reporting/incidencias/equipos — RF-06.3, incidencias por equipo.
+func (h *Handler) ReporteIncidenciasPorEquipo(c *fiber.Ctx) error {
 	desde, hasta, err := rangoDeQuery(c)
 	if err != nil {
 		return err
 	}
 
-	resumenes, err := h.svc.ReporteIncidenciasPorPC(c.UserContext(), desde, hasta)
+	resumenes, err := h.svc.ReporteIncidenciasPorEquipo(c.UserContext(), desde, hasta)
 	if err != nil {
 		return mapearError(err)
 	}
 
-	data := make([]resumenIncidenciasPCResponse, len(resumenes))
+	data := make([]resumenIncidenciasEquipoResponse, len(resumenes))
 	for i, x := range resumenes {
-		data[i] = toResumenIncidenciasPCResponse(x)
+		data[i] = toResumenIncidenciasEquipoResponse(x)
 	}
 	return c.JSON(fiber.Map{"data": data})
 }

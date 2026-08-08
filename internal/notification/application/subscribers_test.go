@@ -138,7 +138,7 @@ func TestRegisterEventHandlers_ReservaCancelada_NotificaAlDocenteAfectado(t *tes
 
 // El caso que motivó agrupar: un Admin bloquea tres PCs de la misma reserva
 // para una evaluación y el docente recibía tres avisos idénticos.
-func TestRegisterEventHandlers_ReservaCancelada_VariasPCs_UnSoloAviso(t *testing.T) {
+func TestRegisterEventHandlers_ReservaCancelada_VariasEquipos_UnSoloAviso(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
 	bus := eventbus.NewInMemoryEventBus()
@@ -388,7 +388,7 @@ func TestRegisterEventHandlers_LicenciaPorVencer_NotificaATodosLosAdmins(t *test
 		Tipo: "licencia.por-vencer",
 		Payload: eventbus.AvisoDeLicencias{
 			PorVencer: []eventbus.LicenciaPorVencer{{
-				Nombre: "AutoCAD 2027", PCIdentificador: 3, CarroNombre: "Carro 1",
+				Nombre: "AutoCAD 2027", Identificador: 3, CarroNombre: "Carro 1",
 				FechaVencimiento: time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC),
 				DiasRestantes:    1,
 			}},
@@ -506,8 +506,8 @@ func TestRegisterEventHandlers_PrestamoDemorado_VaALosAdmins(t *testing.T) {
 
 	esperarNotificaciones(t, repo, 2)
 	for _, n := range repo.notificaciones {
-		if n.Tipo != domain.TipoPCSinDevolver {
-			t.Errorf("tipo = %q, esperaba %q", n.Tipo, domain.TipoPCSinDevolver)
+		if n.Tipo != domain.TipoEquipoSinDevolver {
+			t.Errorf("tipo = %q, esperaba %q", n.Tipo, domain.TipoEquipoSinDevolver)
 		}
 	}
 }
@@ -520,8 +520,8 @@ func TestRegisterEventHandlers_Cierre_AvisaALosAdminsYAlProximo(t *testing.T) {
 	bus := eventbus.NewInMemoryEventBus()
 	RegisterEventHandlersSincronos(bus, svc)
 
-	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.PCsSinDevolverAlCierre{
-		PCs: []eventbus.PCSinDevolverAlCierre{{
+	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{
+		Equipos: []eventbus.EquipoSinDevolverAlCierre{{
 			Etiqueta: "PC 3", Quien: "Marta",
 			ProximoUsuarioID: "docente2",
 			ProximaFecha:     time.Date(2026, time.August, 11, 0, 0, 0, 0, time.UTC),
@@ -543,23 +543,23 @@ func TestRegisterEventHandlers_Cierre_AvisaALosAdminsYAlProximo(t *testing.T) {
 // sus máquinas, y verlas desordenadas hace dudar de si son las suyas.
 //
 // Antes de la 015 esto no podía pasar: las etiquetas eran enteros.
-func TestListaDePCs_OrdenNatural(t *testing.T) {
+func TestListaDeEquipos_OrdenNatural(t *testing.T) {
 	reservas := []eventbus.ReservaCancelada{
 		{Etiqueta: "PC 12"}, {Etiqueta: "PC 3"}, {Etiqueta: "PC 7"},
 	}
 
-	if got := listaDePCs(reservas); got != "PC 3, PC 7, PC 12" {
+	if got := equiposDeLasCanceladas(reservas); got != "PC 3, PC 7, PC 12" {
 		t.Errorf("listaDePCs = %q, esperaba orden natural", got)
 	}
 }
 
 // Y con un equipo suelto en la mezcla, que no tiene número.
-func TestListaDePCs_ConUnEquipoSuelto(t *testing.T) {
+func TestListaDeEquipos_ConUnEquipoSuelto(t *testing.T) {
 	reservas := []eventbus.ReservaCancelada{
 		{Etiqueta: "Proyector Epson"}, {Etiqueta: "PC 3"},
 	}
 
-	if got := listaDePCs(reservas); got != "PC 3, Proyector Epson" {
+	if got := equiposDeLasCanceladas(reservas); got != "PC 3, Proyector Epson" {
 		t.Errorf("listaDePCs = %q", got)
 	}
 }

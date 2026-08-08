@@ -14,14 +14,14 @@ import { getErrorMessage } from "@/lib/api-client"
  *
  * Sirve cuando el sistema avisa que una máquina no volvió al laboratorio y
  * puede no estar para tu clase. Hasta ahora la única salida era cancelar esa
- * PC y hacer otra reserva, que arma un grupo nuevo: la misma clase terminaba
+ * Equipo y hacer otra reserva, que arma un grupo nuevo: la misma clase terminaba
  * mostrada como dos tarjetas separadas en esta misma pantalla.
  *
- * Solo se ofrecen las PCs libres en esa franja. La lista sale del mismo
+ * Solo se ofrecen los equipos libres en esa franja. La lista sale del mismo
  * endpoint que usa el formulario de reserva, así que lo que se ve acá es lo
  * mismo que se vería al reservar de cero.
  */
-export function CambiarPCDeReserva({
+export function CambiarEquipoDeReserva({
   grupo,
   onListo,
 }: {
@@ -31,15 +31,15 @@ export function CambiarPCDeReserva({
   const queryClient = useQueryClient()
   const cambiables = grupo.reservas.filter((r) => r.estado === "CONFIRMADA")
   const [reservaID, setReservaID] = useState(cambiables[0]?.id ?? "")
-  const [pcID, setPCID] = useState("")
+  const [equipoID, setEquipoID] = useState("")
 
   const { data, isLoading } = useQuery({
-    queryKey: ["pcs-disponibles", grupo.fecha, grupo.horaInicio, grupo.horaFin],
-    queryFn: () => reservasApi.pcsDisponibles(grupo.fecha, grupo.horaInicio, grupo.horaFin),
+    queryKey: ["equipos-disponibles", grupo.fecha, grupo.horaInicio, grupo.horaFin],
+    queryFn: () => reservasApi.equiposDisponibles(grupo.fecha, grupo.horaInicio, grupo.horaFin),
   })
 
   const cambiar = useMutation({
-    mutationFn: () => reservasApi.cambiarPCDeReserva(reservaID, pcID),
+    mutationFn: () => reservasApi.cambiarEquipoDeReserva(reservaID, equipoID),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["reservas"] })
       onListo()
@@ -76,16 +76,16 @@ export function CambiarPCDeReserva({
           <Label htmlFor={`cambiar-a-${grupo.grupoId ?? reservaID}`}>¿Por cuál?</Label>
           <Select
             id={`cambiar-a-${grupo.grupoId ?? reservaID}`}
-            value={pcID}
-            onChange={(e) => setPCID(e.target.value)}
+            value={equipoID}
+            onChange={(e) => setEquipoID(e.target.value)}
             disabled={isLoading || disponibles.length === 0}
           >
             <option value="">Elegí una computadora</option>
-            {disponibles.map((pc) => (
-              <option key={pc.pcId} value={pc.pcId}>
-                {pc.etiqueta}
-                {pc.carroNombre && ` · ${pc.carroNombre}`}
-                {pc.softwareInstalado ? ` · ${pc.softwareInstalado}` : ""}
+            {disponibles.map((equipo) => (
+              <option key={equipo.equipoId} value={equipo.equipoId}>
+                {equipo.etiqueta}
+                {equipo.carroNombre && ` · ${equipo.carroNombre}`}
+                {equipo.softwareInstalado ? ` · ${equipo.softwareInstalado}` : ""}
               </option>
             ))}
           </Select>
@@ -109,7 +109,7 @@ export function CambiarPCDeReserva({
       <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
-          disabled={cambiar.isPending || !reservaID || !pcID}
+          disabled={cambiar.isPending || !reservaID || !equipoID}
           onClick={() => cambiar.mutate()}
         >
           Cambiar

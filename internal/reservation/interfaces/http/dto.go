@@ -20,7 +20,7 @@ type crearReservaRequest struct {
 	Fecha      string   `json:"fecha"` // "2026-03-09"
 	HoraInicio string   `json:"horaInicio"`
 	HoraFin    string   `json:"horaFin"`
-	PCIDs      []string `json:"pcIds"`
+	EquipoIDs  []string `json:"equipoIds"`
 }
 
 type crearReservaRecurrenteRequest struct {
@@ -30,7 +30,7 @@ type crearReservaRecurrenteRequest struct {
 	HoraFin     string   `json:"horaFin"`
 	FechaInicio string   `json:"fechaInicio"`
 	FechaFin    string   `json:"fechaFin"`
-	PCIDs       []string `json:"pcIds"`
+	EquipoIDs   []string `json:"equipoIds"`
 }
 
 type cancelarReservaRequest struct {
@@ -43,7 +43,7 @@ type cancelarOcurrenciaRequest struct {
 }
 
 type bloquearEvaluacionRequest struct {
-	PCIDs      []string `json:"pcIds"`
+	EquipoIDs  []string `json:"equipoIds"`
 	Fecha      string   `json:"fecha"`
 	HoraInicio string   `json:"horaInicio"`
 	HoraFin    string   `json:"horaFin"`
@@ -79,7 +79,7 @@ func toReservaGrupoResponse(g *domain.ReservaGrupo) reservaGrupoResponse {
 type reservaResponse struct {
 	ID                    string     `json:"id"`
 	ReservaGrupoID        *string    `json:"reservaGrupoId,omitempty"`
-	PCID                  string     `json:"pcId"`
+	EquipoID              string     `json:"equipoId"`
 	MateriaID             *string    `json:"materiaId,omitempty"`
 	NombreDocenteSnapshot *string    `json:"nombreDocenteSnapshot,omitempty"`
 	Fecha                 string     `json:"fecha"`
@@ -95,7 +95,7 @@ type reservaResponse struct {
 
 func toReservaResponse(r *domain.Reserva) reservaResponse {
 	return reservaResponse{
-		ID: r.ID, ReservaGrupoID: r.ReservaGrupoID, PCID: r.PCID, MateriaID: r.MateriaID,
+		ID: r.ID, ReservaGrupoID: r.ReservaGrupoID, EquipoID: r.EquipoID, MateriaID: r.MateriaID,
 		NombreDocenteSnapshot: r.NombreDocenteSnapshot,
 		Fecha:                 r.Fecha.Format("2006-01-02"),
 		HoraInicio:            formatHora(r.HoraInicio),
@@ -118,11 +118,11 @@ type reservaDetalladaResponse struct {
 	// Etiqueta es lo que se muestra: "PC 3" o "Proyector Epson". Los dos de
 	// abajo van en 0 y "" cuando el equipo no está en ningún carro, así que
 	// una pantalla que arme el rótulo con ellos escribe "PC 0 · " (RF-03.17).
-	Etiqueta        string `json:"etiqueta"`
-	PCIdentificador int    `json:"pcIdentificador"`
-	CarroNombre     string `json:"carroNombre"`
-	MateriaNombre   string `json:"materiaNombre,omitempty"`
-	CursoNombre     string `json:"cursoNombre,omitempty"`
+	Etiqueta      string `json:"etiqueta"`
+	Identificador int    `json:"identificador"`
+	CarroNombre   string `json:"carroNombre"`
+	MateriaNombre string `json:"materiaNombre,omitempty"`
+	CursoNombre   string `json:"cursoNombre,omitempty"`
 	// Presente solo si la reserva es parte de una serie recurrente. De esto
 	// depende que tenga sentido ofrecer "cancelar esta y las siguientes"
 	// (RF-04.6). No sirve usar reservaGrupoId como proxy: lo tienen TODAS
@@ -134,7 +134,7 @@ func toReservaDetalladaResponse(d application.ReservaDetallada) reservaDetallada
 	return reservaDetalladaResponse{
 		reservaResponse:    toReservaResponse(d.Reserva),
 		Etiqueta:           d.Etiqueta,
-		PCIdentificador:    d.PCIdentificador,
+		Identificador:      d.Identificador,
 		CarroNombre:        d.CarroNombre,
 		MateriaNombre:      d.MateriaNombre,
 		CursoNombre:        d.CursoNombre,
@@ -192,11 +192,11 @@ type bloqueCalendarioResponse struct {
 	CursoNombre   string `json:"cursoNombre,omitempty"`
 }
 
-type calendarioPCResponse struct {
-	PCID    string                     `json:"pcId"`
-	Desde   string                     `json:"desde"`
-	Hasta   string                     `json:"hasta"`
-	Bloques []bloqueCalendarioResponse `json:"bloques"`
+type calendarioEquipoResponse struct {
+	EquipoID string                     `json:"equipoId"`
+	Desde    string                     `json:"desde"`
+	Hasta    string                     `json:"hasta"`
+	Bloques  []bloqueCalendarioResponse `json:"bloques"`
 }
 
 func toBloqueCalendarioResponse(b application.BloqueCalendario) bloqueCalendarioResponse {
@@ -222,11 +222,11 @@ func deref(s *string) string {
 	return *s
 }
 
-// pcDisponibleResponse: RF-04.2 + RF-03.7 — lo que el docente necesita
+// equipoDisponibleResponse: RF-04.2 + RF-03.7 — lo que el docente necesita
 // para tildar qué PCs reservar (incluye software y freezado para poder
 // decidir sin consultar inventory aparte).
-type pcDisponibleResponse struct {
-	PCID string `json:"pcId"`
+type equipoDisponibleResponse struct {
+	EquipoID string `json:"equipoId"`
 	// Identificador va en 0 para un equipo suelto. Lo que se muestra es
 	// Etiqueta: un proyector rotulado "PC 0" es lo que sale de formatear un
 	// identificador que no existe.
@@ -241,20 +241,20 @@ type pcDisponibleResponse struct {
 	SoftwareInstalado string `json:"softwareInstalado,omitempty"`
 }
 
-type pcsDisponiblesResponse struct {
-	Data []pcDisponibleResponse `json:"data"`
+type equiposDisponiblesResponse struct {
+	Data []equipoDisponibleResponse `json:"data"`
 }
 
-func toPCDisponibleResponse(p application.PCDisponible) pcDisponibleResponse {
-	return pcDisponibleResponse{
-		PCID: p.PCID, Identificador: p.Identificador, Etiqueta: p.Etiqueta, Tipo: p.Tipo,
+func toEquipoDisponibleResponse(p application.EquipoDisponible) equipoDisponibleResponse {
+	return equipoDisponibleResponse{
+		EquipoID: p.EquipoID, Identificador: p.Identificador, Etiqueta: p.Etiqueta, Tipo: p.Tipo,
 		CarroID: p.CarroID, CarroNombre: p.CarroNombre,
 		Freezado: p.Freezado, SoftwareInstalado: p.SoftwareInstalado,
 	}
 }
 
-// cambiarPCRequest — la máquina nueva. Nada más: fecha y horario no se
+// cambiarEquipoRequest — la máquina nueva. Nada más: fecha y horario no se
 // tocan, es la misma clase.
-type cambiarPCRequest struct {
-	PCID string `json:"pcId"`
+type cambiarEquipoRequest struct {
+	EquipoID string `json:"equipoId"`
 }

@@ -222,7 +222,7 @@ components:
         caso a cubrir es que una quede sin renovar mientras las demás sí.
       properties:
         id: { type: string, format: uuid }
-        pcId: { type: string, format: uuid }
+        equipoId: { type: string, format: uuid }
         nombre: { type: string, maxLength: 100, example: "AutoCAD 2027", description: "Se guarda sin espacios al borde, respetando mayúsculas. Único por PC ignorando la caja." }
         diasDuracion: { type: integer, minimum: 1, maximum: 3650, description: "Cuánto dura una renovación. Es el paso del botón Renovar, no una propiedad inmutable: puede cambiar de 30 a 60." }
         diasAviso: { type: integer, minimum: 0, maximum: 365, default: 1, description: "Con cuánta antelación avisar. 0 = avisar recién el día que vence." }
@@ -253,10 +253,10 @@ components:
             para que la pantalla, el correo y el job digan lo mismo.
         estado: { type: string, enum: [SIN_FECHA, VENCIDA, POR_VENCER, VIGENTE], description: "Derivado. POR_VENCER depende del diasAviso de esa licencia, no de un umbral fijo." }
         etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Solo en el listado general. Es lo que se muestra: los dos de abajo van en 0 y \"\" si el equipo no está en ningún carro" }
-        pcIdentificador: { type: integer, description: "Solo en el listado general" }
+        identificador: { type: integer, description: "Solo en el listado general" }
         carroId: { type: string, format: uuid }
         carroNombre: { type: string }
-        pcDadaDeBaja: { type: boolean }
+        equipoDadoDeBaja: { type: boolean }
 
     VencimientoDeclarado:
       type: object
@@ -280,7 +280,7 @@ components:
         préstamos que sobreviven a su reserva.
       properties:
         id: { type: string, format: uuid }
-        pcId: { type: string, format: uuid }
+        equipoId: { type: string, format: uuid }
         reservaId: { type: string, format: uuid, nullable: true, description: "Ausente = préstamo espontáneo, sin reserva detrás" }
         entregadoAUsuarioId: { type: string, format: uuid, nullable: true, description: "Solo si esa persona tiene cuenta en el sistema" }
         entregadoANombre: { type: string, maxLength: 200, description: "Va siempre, aunque haya cuenta: es un snapshot, para que el registro siga diciendo quién se llevó la máquina si esa cuenta se elimina" }
@@ -302,7 +302,7 @@ components:
         demorado: { type: boolean, description: "Derivado. Un préstamo sin hora pactada NUNCA está demorado" }
         minutosDeDemora: { type: integer, description: "Derivado. 0 si no está demorado" }
         etiqueta: { type: string, example: "Proyector Epson", description: "Cómo se nombra el equipo (RF-03.17). Solo en los listados" }
-        pcIdentificador: { type: integer, description: "Solo en los listados" }
+        identificador: { type: integer, description: "Solo en los listados" }
         carroNombre: { type: string }
         materiaNombre: { type: string, nullable: true, description: "Solo en préstamos que salieron contra una reserva" }
 
@@ -322,7 +322,7 @@ components:
           items:
             type: object
             properties:
-              pcId: { type: string, format: uuid }
+              equipoId: { type: string, format: uuid }
               razon: { type: string, enum: [YA_ENTREGADA, FUERA_DEL_INVENTARIO, RESERVA_CANCELADA, SIN_DESTINATARIO], description: "SIN_DESTINATARIO: la reserva no tiene docente (bloqueo por evaluación). Se resuelve mandando nombreAlternativo." }
               detalle: { type: string }
         avisos:
@@ -331,7 +331,7 @@ components:
           items:
             type: object
             properties:
-              pcId: { type: string, format: uuid }
+              equipoId: { type: string, format: uuid }
               fecha: { type: string, format: date }
               horaInicio: { type: string, example: "10:00" }
               horaFin: { type: string, example: "11:00" }
@@ -341,7 +341,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        pcId: { type: string, format: uuid }
+        equipoId: { type: string, format: uuid }
         reportadoPor: { type: string, format: uuid }
         descripcion: { type: string }
         gravedad: { type: string, enum: [LEVE, MODERADA, GRAVE] }
@@ -353,9 +353,9 @@ components:
     # ── Reservations ──
     ReservaRequest:
       type: object
-      required: [pcIds, materiaId, fecha, horaInicio, horaFin]
+      required: [equipoIds, materiaId, fecha, horaInicio, horaFin]
       properties:
-        pcIds: { type: array, items: { type: string, format: uuid }, minItems: 1, description: "Una o varias PCs elegidas de la lista de disponibles" }
+        equipoIds: { type: array, items: { type: string, format: uuid }, minItems: 1, description: "Una o varias PCs elegidas de la lista de disponibles" }
         materiaId: { type: string, format: uuid }
         fecha: { type: string, format: date }
         horaInicio: { type: string, pattern: '^\d{2}:\d{2}$', example: "10:00" }
@@ -363,9 +363,9 @@ components:
 
     ReservaRecurrenteRequest:
       type: object
-      required: [pcIds, materiaId, diaSemana, horaInicio, horaFin, fechaInicio, fechaFin]
+      required: [equipoIds, materiaId, diaSemana, horaInicio, horaFin, fechaInicio, fechaFin]
       properties:
-        pcIds: { type: array, items: { type: string, format: uuid }, minItems: 1 }
+        equipoIds: { type: array, items: { type: string, format: uuid }, minItems: 1 }
         materiaId: { type: string, format: uuid }
         diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES] }
         horaInicio: { type: string, example: "10:00" }
@@ -398,25 +398,14 @@ components:
       properties:
         id: { type: string, format: uuid }
         reservaGrupoId: { type: string, format: uuid, nullable: true, description: "NULL solo para tipo EVALUACION_ESTATAL" }
-        pcId: { type: string, format: uuid }
-        etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Solo en los listados detallados. Es lo que se muestra: pcIdentificador va en 0 y carroNombre vacío si el equipo no está en ningún carro" }
-        pcIdentificador: { type: integer }
+        equipoId: { type: string, format: uuid }
+        etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Solo en los listados detallados. Es lo que se muestra: identificador va en 0 y carroNombre vacío si el equipo no está en ningún carro" }
+        identificador: { type: integer }
         estado: { type: string, enum: [CONFIRMADA, CANCELADA, FINALIZADA, NO_RETIRADA] }
         tipo: { type: string, enum: [NORMAL, EVALUACION_ESTATAL] }
         motivoCancelacion: { type: string, nullable: true }
         canceladaEn: { type: string, format: date-time, nullable: true }
         creadaEn: { type: string, format: date-time }
-
-    ConflictoReserva:
-      type: object
-      properties:
-        pcId: { type: string, format: uuid }
-        pcIdentificador: { type: integer }
-        fecha: { type: string, format: date }
-        horaInicio: { type: string }
-        horaFin: { type: string }
-        nombreDocente: { type: string }
-        materiaNombre: { type: string }
 
     BloqueoRequest:
       type: object
@@ -1066,7 +1055,7 @@ paths:
       summary: Archivar ciclo y opcionalmente clonar al siguiente año (Admin)
       description: |
         Preserva curso/materia/docente_materia (archivado=true) para no recrearlos.
-        Antes de nada, calcula y guarda un snapshot histórico agregado (historico_uso_pc,
+        Antes de nada, calcula y guarda un snapshot histórico agregado (historico_uso_equipo,
         historico_uso_docente). Luego ELIMINA FÍSICAMENTE todos los ReservaGrupo, Reserva,
         ReglaRecurrencia y ReglaRecurrenciaPc de las materias de ese ciclo. Incidencia no
         se ve afectada (pertenece a la PC, no al ciclo lectivo).
@@ -1383,7 +1372,7 @@ paths:
       responses:
         "200": { description: Carro actualizado }
 
-  /api/inventory/carros/{carroId}/pcs:
+  /api/inventory/carros/{carroId}/equipos:
     get:
       tags: [inventory]
       summary: Listar las PCs de un carro (RF-03.7, todos los usuarios autenticados)
@@ -1431,7 +1420,7 @@ paths:
         "201": { description: PC registrada }
         "409": { description: Ya existe una PC con ese identificador en el carro, o el número de serie ya está registrado en otra PC }
 
-  /api/inventory/equipos:
+  /api/inventory/equipos/sueltos:
     get:
       tags: [inventory]
       summary: Listar lo prestable que no está en ningún carro (RF-03.15, todos los usuarios autenticados)
@@ -1482,7 +1471,7 @@ paths:
         "400": { description: Falta el tipo o el nombre, o exceden el largo }
         "409": { description: Ya hay otro equipo suelto con ese nombre }
 
-  /api/inventory/pcs/{id}:
+  /api/inventory/equipos/{id}:
     patch:
       tags: [inventory]
       summary: Editar datos de una PC, incluyendo moverla de carro (Admin)
@@ -1515,7 +1504,7 @@ paths:
       tags: [inventory]
       summary: Dar de baja una PC del inventario (Admin)
       description: |
-        Soft delete: marca dada_de_baja=true y fecha_baja. No se borra la fila —
+        Soft delete: marca dado_de_baja=true y fecha_baja. No se borra la fila —
         incidencia y reserva la referencian por FK y ese historial se conserva.
         La PC deja de listarse como disponible y no puede reservarse.
         Dispara la misma cascada de cancelación que el cambio de estado a
@@ -1539,7 +1528,7 @@ paths:
                   reservasCanceladas: { type: integer }
                   docentesNotificados: { type: integer }
 
-  /api/inventory/pcs/{id}/estado:
+  /api/inventory/equipos/{id}/estado:
     patch:
       tags: [inventory]
       summary: Cambiar estado de una PC (Admin)
@@ -1577,7 +1566,7 @@ paths:
                   reservasCanceladas: { type: integer }
                   docentesNotificados: { type: integer }
 
-  /api/reservation/pcs/{pcId}/calendario:
+  /api/reservation/equipos/{equipoId}/calendario:
     get:
       tags: [inventory]
       summary: Calendario de disponibilidad de una PC (todos los usuarios autenticados)
@@ -1617,9 +1606,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [pcId, descripcion, gravedad]
+              required: [equipoId, descripcion, gravedad]
               properties:
-                pcId: { type: string, format: uuid }
+                equipoId: { type: string, format: uuid }
                 descripcion: { type: string }
                 gravedad: { type: string, enum: [LEVE, MODERADA, GRAVE] }
       responses:
@@ -1647,7 +1636,7 @@ paths:
       responses:
         "200": { description: Incidencia actualizada }
 
-  /api/reservation/reservas/{id}/pc:
+  /api/reservation/reservas/{id}/equipo:
     patch:
       tags: [reservation]
       summary: Cambiar una reserva de computadora (RF-08.14)
@@ -1674,9 +1663,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [pcId]
+              required: [equipoId]
               properties:
-                pcId: { type: string, format: uuid, description: "La máquina nueva. Tiene que estar DISPONIBLE y libre en esa franja." }
+                equipoId: { type: string, format: uuid, description: "La máquina nueva. Tiene que estar DISPONIBLE y libre en esa franja." }
       responses:
         "200":
           description: Reserva actualizada
@@ -1734,9 +1723,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [pcIds, nombre]
+              required: [equipoIds, nombre]
               properties:
-                pcIds:
+                equipoIds:
                   type: array
                   minItems: 1
                   items: { type: string, format: uuid }
@@ -1849,7 +1838,7 @@ paths:
         "400": { description: Sin préstamos indicados }
         "404": { description: Alguno de los préstamos no existe }
 
-  /api/reservation/pcs/{pcId}/prestamos:
+  /api/reservation/equipos/{equipoId}/prestamos:
     get:
       tags: [reservation]
       summary: Historial de entregas de una computadora (Admin)
@@ -1861,7 +1850,7 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
-          name: pcId
+          name: equipoId
           required: true
           schema: { type: string, format: uuid }
       responses:
@@ -1922,9 +1911,9 @@ paths:
             schema:
               allOf:
                 - type: object
-                  required: [pcIds, nombre, diasDuracion]
+                  required: [equipoIds, nombre, diasDuracion]
                   properties:
-                    pcIds:
+                    equipoIds:
                       type: array
                       minItems: 1
                       items: { type: string, format: uuid }
@@ -1943,7 +1932,7 @@ paths:
                   creadas:
                     type: array
                     items: { $ref: '#/components/schemas/Licencia' }
-                  pcsQueYaLaTenian:
+                  equiposQueYaLaTenian:
                     type: array
                     items: { type: string, format: uuid }
                     description: "No es un error: marcar las diez PCs del carro cuando ocho ya estaban cargadas tiene que funcionar."
@@ -2054,14 +2043,14 @@ paths:
         "204": { description: Licencia eliminada }
         "404": { description: La licencia no existe }
 
-  /api/inventory/pcs/{pcId}/licencias:
+  /api/inventory/equipos/{equipoId}/licencias:
     get:
       tags: [inventory]
       summary: Licencias de una PC puntual (Admin)
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
-          name: pcId
+          name: equipoId
           required: true
           schema: { type: string, format: uuid }
       responses:
@@ -2079,7 +2068,7 @@ paths:
   # ══════════════════════════════
   # RESERVATIONS
   # ══════════════════════════════
-  /api/reservation/pcs-disponibles:
+  /api/reservation/equipos-disponibles:
     get:
       tags: [reservations]
       summary: Listar PCs disponibles para tildar en un horario dado
@@ -2087,7 +2076,7 @@ paths:
         Devuelve PCs de todos los carros por defecto — un docente puede combinar PCs
         de carros distintos en la misma reserva (no hay restricción de "un solo carro
         por ReservaGrupo"). El filtro carroId es opcional, para cuando el usuario
-        quiere ver solo las PCs de un carro puntual. Excluye PCs con dada_de_baja=true
+        quiere ver solo las PCs de un carro puntual. Excluye PCs con dado_de_baja=true
         o estado != DISPONIBLE.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -2128,7 +2117,7 @@ paths:
           name: hasta
           schema: { type: string, format: date }
         - in: query
-          name: pcId
+          name: equipoId
           schema: { type: string, format: uuid }
         - in: query
           name: materiaId
@@ -2173,14 +2162,16 @@ paths:
             horas (un turno completo).
         "403": { description: Sin permiso para reservar en esa materia }
         "409":
-          description: Una o más PCs elegidas tienen solapamiento — no se crea ninguna
+          description: |
+            Una o más PCs elegidas tienen solapamiento — no se crea ninguna.
+
+            El cuerpo es el mensaje en texto plano, sin el detalle de cuáles
+            chocaron: el backend usa el ErrorHandler por defecto de Fiber (ver
+            ErrorResponse). La pantalla vuelve a pedir la lista de libres, que
+            para entonces ya no las incluye.
           content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error: { type: string }
-                  conflictos: { type: array, items: { $ref: '#/components/schemas/ConflictoReserva' } }
+            text/plain:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/reservation/reservas/recurrentes:
     post:
@@ -2203,14 +2194,12 @@ paths:
                   fechasCreadas: { type: array, items: { type: string, format: date } }
                   pcsPorFecha: { type: integer, description: "Cantidad de PCs incluidas en cada fecha" }
         "409":
-          description: Una o más ocurrencias (fecha × PC) tienen solapamiento — no se crea ninguna
+          description: |
+            Una o más ocurrencias (fecha × PC) tienen solapamiento — no se crea
+            ninguna. Cuerpo en texto plano, igual que el alta puntual.
           content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error: { type: string }
-                  conflictos: { type: array, items: { $ref: '#/components/schemas/ConflictoReserva' } }
+            text/plain:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/reservation/grupos/{id}:
     get:
@@ -2362,7 +2351,7 @@ paths:
   # ══════════════════════════════
   # REPORTS
   # ══════════════════════════════
-  /api/reporting/ciclos/{cicloId}/uso-pcs:
+  /api/reporting/ciclos/{cicloId}/uso-equipos:
     get:
       tags: [reports]
       summary: Reporte de uso por PC (Admin)
@@ -2391,7 +2380,7 @@ paths:
                     items:
                       type: object
                       properties:
-                        pcId: { type: string, format: uuid }
+                        equipoId: { type: string, format: uuid }
                         etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Es lo que se muestra: los dos de abajo van en 0 y \"\" si no está en ningún carro" }
                         identificador: { type: integer }
                         carroNombre: { type: string }
@@ -2425,12 +2414,12 @@ paths:
                         cantidadReservas: { type: integer }
                         minutosTotales: { type: integer }
 
-  /api/reporting/historico/{anio}/uso-pcs:
+  /api/reporting/historico/{anio}/uso-equipos:
     get:
       tags: [reports]
       summary: Estadísticas de un ciclo lectivo ya archivado (Admin)
       description: |
-        Lee de historico_uso_pc / historico_uso_docente — el único origen de datos
+        Lee de historico_uso_equipo / historico_uso_docente — el único origen de datos
         disponible para años archivados, ya que sus ReservaGrupo/Reserva se
         eliminaron físicamente al archivar (ver RF-02.4).
       security: [{ bearerAuth: [] }]
@@ -2451,7 +2440,7 @@ paths:
                     items:
                       type: object
                       properties:
-                        pcId: { type: string, format: uuid }
+                        equipoId: { type: string, format: uuid }
                         etiquetaSnapshot: { type: string, description: "Cómo se llamaba el equipo el día que se archivó el ciclo. Los dos de abajo van en 0 y \"\" si no estaba en ningún carro" }
                         identificadorSnapshot: { type: integer }
                         carroNombreSnapshot: { type: string }
@@ -2468,7 +2457,7 @@ paths:
                         minutosTotales: { type: integer }
         "404": { description: No hay estadísticas archivadas para ese año }
 
-  /api/reporting/incidencias/pcs:
+  /api/reporting/incidencias/equipos:
     get:
       tags: [reports]
       summary: Incidencias agregadas por equipo (RF-06.3, Admin)
@@ -2496,7 +2485,7 @@ paths:
                     items:
                       type: object
                       properties:
-                        pcId: { type: string, format: uuid }
+                        equipoId: { type: string, format: uuid }
                         etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Es lo que se muestra: los dos de abajo van en 0 y \"\" si no está en ningún carro" }
                         identificador: { type: integer }
                         carroNombre: { type: string }
@@ -2634,14 +2623,14 @@ paths:
   # ── Endpoints agregados tras la revisión completa ────────────────────
   # (RF que el spec declaraba pero que no tenían implementación)
 
-  /api/inventory/pcs/{pcId}/incidencias:
+  /api/inventory/equipos/{equipoId}/incidencias:
     get:
       tags: [inventory]
       summary: Incidencias de una PC
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
-          name: pcId
+          name: equipoId
           required: true
           schema: { type: string, format: uuid }
       responses:
@@ -2678,7 +2667,7 @@ paths:
 
         Este reporte agrupa POR CARRO, así que los equipos sueltos (015) no
         aparecen: no pertenecen a ninguno. Sus incidencias se ven en
-        `/api/reporting/incidencias/pcs`.
+        `/api/reporting/incidencias/equipos`.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: query

@@ -14,24 +14,24 @@ type Repo interface {
 	GuardarCarro(ctx context.Context, c *domain.Carro) error
 	ListarCarros(ctx context.Context) ([]*domain.Carro, error)
 
-	CrearPC(ctx context.Context, pc *domain.PC) error
-	BuscarPCPorID(ctx context.Context, id string) (*domain.PC, error)
-	GuardarPC(ctx context.Context, pc *domain.PC) error
-	ListarPCsPorCarro(ctx context.Context, carroID string) ([]*domain.PC, error)
+	CrearEquipo(ctx context.Context, pc *domain.Equipo) error
+	BuscarEquipoPorID(ctx context.Context, id string) (*domain.Equipo, error)
+	GuardarEquipo(ctx context.Context, pc *domain.Equipo) error
+	ListarEquiposPorCarro(ctx context.Context, carroID string) ([]*domain.Equipo, error)
 	// ListarEquiposSueltos: lo prestable que no está en ningún carro
 	// (RF-03.15) — el proyector, los cargadores.
-	ListarEquiposSueltos(ctx context.Context) ([]*domain.PC, error)
+	ListarEquiposSueltos(ctx context.Context) ([]*domain.Equipo, error)
 
 	CrearIncidencia(ctx context.Context, i *domain.Incidencia) error
 	BuscarIncidenciaPorID(ctx context.Context, id string) (*domain.Incidencia, error)
 	GuardarIncidencia(ctx context.Context, i *domain.Incidencia) error
-	ListarIncidenciasPorPC(ctx context.Context, pcID string) ([]*domain.Incidencia, error)
+	ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error)
 
 	CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error
 	BuscarLicenciaPorID(ctx context.Context, id string) (*domain.LicenciaSoftware, error)
 	GuardarLicencia(ctx context.Context, l *domain.LicenciaSoftware) error
 	BorrarLicencia(ctx context.Context, id string) error
-	ListarLicenciasPorPC(ctx context.Context, pcID string) ([]*domain.LicenciaSoftware, error)
+	ListarLicenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.LicenciaSoftware, error)
 	// ListarLicencias devuelve todas las del sistema con su ubicación. Sin
 	// paginar a propósito: la cantidad está acotada por el inventario
 	// (PCs × un puñado de programas), igual que ciclos, cursos y carros.
@@ -62,11 +62,11 @@ type LicenciaConUbicacion struct {
 	// Etiqueta es cómo se nombra al equipo: "PC 3" o "Notebook chica". Se
 	// muestra esto y no PCIdentificador, que va en 0 —y CarroNombre vacío—
 	// cuando el equipo no está en ningún carro (015).
-	Etiqueta        string
-	PCIdentificador int
-	PCDadaDeBaja    bool
-	CarroID         string
-	CarroNombre     string
+	Etiqueta         string
+	Identificador    int
+	EquipoDadoDeBaja bool
+	CarroID          string
+	CarroNombre      string
 }
 
 // ValidadorReservas es el puerto hacia reservation — todavía no existe ese
@@ -82,16 +82,16 @@ type LicenciaConUbicacion struct {
 // operación, es un efecto que debe dispararse cuando una PC cambia de
 // estado o se da de baja.
 type ValidadorReservas interface {
-	CancelarReservasFuturasDePC(ctx context.Context, pcID string, motivo string) (canceladas int, docentesNotificados int, err error)
+	CancelarReservasFuturasDePC(ctx context.Context, equipoID string, motivo string) (canceladas int, docentesNotificados int, err error)
 
 	// TieneReservasFuturas es la única lectura de este puerto, y existe por
 	// la misma razón que TieneReservasDeCiclo en academic: la cascada de
 	// RF-03.8/03.9 no puede ser atómica con el guardado de la PC (cruza a
 	// reservation, que abre su propia transacción), así que lo que se puede
 	// garantizar no es que nunca falle a la mitad, sino que se pueda
-	// terminar. Esto es lo que distingue "esta PC ya se dio de baja" de
-	// "esta PC se dio de baja pero la cascada quedó pendiente".
-	TieneReservasFuturas(ctx context.Context, pcID string) (bool, error)
+	// terminar. Esto es lo que distingue "este equipo ya se dio de baja" de
+	// "este equipo se dio de baja pero la cascada quedó pendiente".
+	TieneReservasFuturas(ctx context.Context, equipoID string) (bool, error)
 }
 
 type IDGenerator func() string

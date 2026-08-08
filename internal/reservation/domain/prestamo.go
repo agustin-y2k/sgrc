@@ -19,7 +19,7 @@ var (
 
 	// ErrPrestamoYaDevuelto: se intentó recibir dos veces la misma máquina.
 	// Pasa de verdad —dos Admin en el mostrador, o un doble clic— y tiene
-	// que distinguirse de "esta PC nunca salió", porque son dos confusiones
+	// que distinguirse de "este equipo nunca salió", porque son dos confusiones
 	// distintas para quien está atendiendo.
 	ErrPrestamoYaDevuelto = errors.New("esa computadora ya figura devuelta")
 )
@@ -50,8 +50,8 @@ func NormalizarNombreDestinatario(s string) string {
 // tener dos abiertos a la vez lo garantiza el índice único parcial de la
 // migración 013, no este tipo: el dominio no ve las demás filas.
 type Prestamo struct {
-	ID   string
-	PCID string
+	ID       string
+	EquipoID string
 	// ReservaID nil = préstamo espontáneo. Es un caso normal, no una
 	// excepción.
 	ReservaID *string
@@ -88,7 +88,7 @@ type Prestamo struct {
 // de parámetros porque son ocho y la mitad opcionales: posicionales, nadie
 // puede leer la llamada.
 type DatosDeEntrega struct {
-	PCID string
+	EquipoID string
 	// ReservaID nil para una entrega espontánea.
 	ReservaID *string
 	// UsuarioID nil si quien se la lleva no tiene cuenta en el sistema —
@@ -124,7 +124,7 @@ func NuevoPrestamo(id string, d DatosDeEntrega, ahora time.Time) (*Prestamo, err
 
 	p := &Prestamo{
 		ID:                  id,
-		PCID:                d.PCID,
+		EquipoID:            d.EquipoID,
 		ReservaID:           d.ReservaID,
 		EntregadoAUsuarioID: d.UsuarioID,
 		EntregadoANombre:    nombre,

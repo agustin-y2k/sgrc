@@ -56,9 +56,12 @@ const (
 	// TipoReservaNoRetirada: pasaron los minutos de gracia y esas máquinas
 	// dejaron de estar reservadas (RF-08.10).
 	TipoReservaNoRetirada Tipo = "RESERVA_NO_RETIRADA"
-	// TipoPCSinDevolver: para los Admin — una máquina no volvió a horario.
+	// TipoEquipoSinDevolver: para los Admin — una máquina no volvió a horario.
 	// Lleva a la pantalla de entregas, no a la de reservas.
-	TipoPCSinDevolver Tipo = "PC_SIN_DEVOLVER"
+	// El valor sigue diciendo PC aunque la entidad se llame equipo (016): lo
+	// enumera un CHECK de la 014 y ya hay notificaciones guardadas con él.
+	// Cambiarlo obligaría a migrar filas históricas para no ganar nada.
+	TipoEquipoSinDevolver Tipo = "PC_SIN_DEVOLVER"
 )
 
 var ErrTipoInvalido = errors.New("tipo de notificación inválido")
@@ -66,7 +69,7 @@ var ErrTipoInvalido = errors.New("tipo de notificación inválido")
 func ParseTipo(s string) (Tipo, error) {
 	switch Tipo(s) {
 	case TipoGeneral, TipoDocentePendiente, TipoReservaCancelada, TipoLicenciaPorVencer,
-		TipoReservaPorComenzar, TipoReservaNoRetirada, TipoPCSinDevolver:
+		TipoReservaPorComenzar, TipoReservaNoRetirada, TipoEquipoSinDevolver:
 		return Tipo(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrTipoInvalido, s)

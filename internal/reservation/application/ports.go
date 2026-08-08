@@ -32,11 +32,11 @@ type Repo interface {
 	GuardarReserva(ctx context.Context, r *domain.Reserva) error
 	ListarReservasPorGrupo(ctx context.Context, reservaGrupoID string) ([]*domain.Reserva, error)
 
-	// ListarReservasFuturasDePC: usado tanto por la cascada de inventory
+	// ListarReservasFuturasDeEquipo: usado tanto por la cascada de inventory
 	// (cambio de estado / baja de una PC) como por el bloqueo de
 	// evaluación — todas las Reserva CONFIRMADA de una PC a partir de
 	// cierta fecha/hora.
-	ListarReservasFuturasDePC(ctx context.Context, pcID string, desde time.Time) ([]*domain.Reserva, error)
+	ListarReservasFuturasDeEquipo(ctx context.Context, equipoID string, desde time.Time) ([]*domain.Reserva, error)
 
 	// ListarReservasFuturasDeMateria: usado por la cascada de auth
 	// (dar de baja al único docente de una materia, RF-02.8) — todas las
@@ -70,18 +70,18 @@ type Repo interface {
 	CrearPrestamo(ctx context.Context, p *domain.Prestamo) error
 	BuscarPrestamoPorID(ctx context.Context, id string) (*domain.Prestamo, error)
 	GuardarPrestamo(ctx context.Context, p *domain.Prestamo) error
-	// BuscarPrestamoAbiertoDePC devuelve el préstamo sin devolver de esa PC,
+	// BuscarPrestamoAbiertoDeEquipo devuelve el préstamo sin devolver de esa PC,
 	// o ErrPrestamoNoEncontrado si la máquina está en el laboratorio. Es la
 	// forma de responder "¿dónde está la PC 3?" — no hay ninguna columna en
 	// `pc` que lo diga, justamente para que no pueda desincronizarse.
-	BuscarPrestamoAbiertoDePC(ctx context.Context, pcID string) (*domain.Prestamo, error)
+	BuscarPrestamoAbiertoDeEquipo(ctx context.Context, equipoID string) (*domain.Prestamo, error)
 	// ListarPrestamosAbiertos es "qué hay afuera ahora mismo": la pantalla
 	// que reemplaza al papel. Vienen ordenados por hora de devolución, así
 	// que lo más atrasado queda arriba.
 	ListarPrestamosAbiertos(ctx context.Context) ([]*PrestamoDetallado, error)
-	// ListarPrestamosDePC es el historial de una máquina, de lo más reciente
+	// ListarPrestamosDeEquipo es el historial de una máquina, de lo más reciente
 	// a lo más viejo.
-	ListarPrestamosDePC(ctx context.Context, pcID string, limite int) ([]*PrestamoDetallado, error)
+	ListarPrestamosDeEquipo(ctx context.Context, equipoID string, limite int) ([]*PrestamoDetallado, error)
 
 	// ── El barrido (RF-08.10 a RF-08.13) ────────────────────────────
 	//
@@ -99,18 +99,18 @@ type Repo interface {
 	// PrestamosAVigilar son todos los abiertos, con ubicación y contacto.
 	PrestamosAVigilar(ctx context.Context) ([]PrestamoParaVigilar, error)
 
-	// ProximaReservaDePC es a quién le va a faltar esa máquina, con el
+	// ProximaReservaDeEquipo es a quién le va a faltar esa máquina, con el
 	// contacto resuelto. Existe aparte de ListarReservasFuturasDePC porque
 	// el corte de fin de jornada necesita MANDARLE UN CORREO al docente, y
 	// esa consulta devuelve reservas peladas: sin dirección, el aviso no
 	// puede salir. Devuelve nil si no hay ninguna.
-	ProximaReservaDePC(ctx context.Context, pcID string, desde time.Time) (*ProximaReserva, error)
+	ProximaReservaDeEquipo(ctx context.Context, equipoID string, desde time.Time) (*ProximaReserva, error)
 
 	// Las cuatro marcas de idempotencia. Cada una toca UNA columna: el
 	// barrido no puede pisar nada que un Admin haya cambiado desde la
 	// pantalla mientras el correo salía.
 	MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error
-	MarcarAvisoPCNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error
+	MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error
 	MarcarDemoraAvisada(ctx context.Context, prestamoID string, ahora time.Time) error
 	MarcarCierreAvisado(ctx context.Context, prestamoID string, jornada time.Time) error
 
@@ -123,17 +123,17 @@ type Repo interface {
 	// es lo que el cliente necesita para saber si hay una página siguiente.
 	ListarReservas(ctx context.Context, f FiltroReservas) ([]ReservaDetallada, int, error)
 
-	// CalendarioDePC implementa RF-04.4 — los bloques ocupados de una PC en
+	// CalendarioDeEquipo implementa RF-04.4 — los bloques ocupados de una PC en
 	// un rango de fechas, con el nombre del docente y de la materia para
 	// poder mostrarlos. Devuelve también los bloqueos por evaluación
 	// estatal (que no tienen materia).
-	CalendarioDePC(ctx context.Context, pcID string, desde, hasta time.Time) ([]BloqueCalendario, error)
+	CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) ([]BloqueCalendario, error)
 
-	// ListarPCsDisponiblesEn implementa el "tildar casillas" de RF-04.2:
+	// ListarEquiposDisponiblesEn implementa el "tildar casillas" de RF-04.2:
 	// qué PCs están libres para un día y franja horaria concretos. Sin
 	// esto el frontend tendría que pedir el calendario de cada PC por
 	// separado y cruzarlo a mano.
-	ListarPCsDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]PCDisponible, error)
+	ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoDisponible, error)
 
 	CrearReglaRecurrencia(ctx context.Context, regla *domain.ReglaRecurrencia) error
 	// ListarGruposFuturosDeRegla: los ReservaGrupo de una regla recurrente
@@ -149,7 +149,7 @@ type FiltroReservas struct {
 	// CreadoPor: las reservas de un docente puntual. Es el filtro que usa
 	// "mis reservas".
 	CreadoPor *string
-	PCID      *string
+	EquipoID  *string
 	MateriaID *string
 	// Desde/Hasta acotan por fecha (inclusive ambos extremos).
 	Desde *time.Time
@@ -179,16 +179,16 @@ type BloqueCalendario struct {
 // curso.
 //
 // Sin esto, "Mis reservas" solo podía mostrar fecha y horario — el DTO
-// devolvía pc_id y materia_id como UUIDs, así que una reserva de ocho PCs
+// devolvía equipo_id y materia_id como UUIDs, así que una reserva de ocho PCs
 // se veía como ocho tarjetas idénticas e indistinguibles. Mismo criterio
 // que BloqueCalendario: un JOIN de solo lectura, sin importar el domain/
 // de inventory ni el de academic.
 type ReservaDetallada struct {
 	Reserva *domain.Reserva
-	// PCIdentificador va en 0 y CarroNombre vacío en un equipo suelto: un
+	// Identificador va en 0 y CarroNombre vacío en un equipo suelto: un
 	// proyector no está en ningún carro. Lo que se muestra es Etiqueta.
-	PCIdentificador int
-	CarroNombre     string
+	Identificador int
+	CarroNombre   string
 	// Etiqueta es cómo se nombra al equipo en pantalla: "PC 3" o "Proyector
 	// Epson". La resuelve el repositorio para que la misma cosa no se vea
 	// distinta según la pantalla.
@@ -202,11 +202,11 @@ type ReservaDetallada struct {
 	ReglaRecurrenciaID *string
 }
 
-// PCDisponible es una PC libre en la franja consultada, con los datos que
+// EquipoDisponible es una PC libre en la franja consultada, con los datos que
 // RF-03.7 dice que el docente necesita para elegir (software instalado,
 // freezado) sin tener que pedirlos a inventory por separado.
-type PCDisponible struct {
-	PCID string
+type EquipoDisponible struct {
+	EquipoID string
 	// Identificador va en 0 para un equipo suelto (un proyector no es
 	// "PC 3"). Lo que se muestra es Etiqueta.
 	Identificador int
@@ -236,14 +236,14 @@ type ValidadorMateria interface {
 	MateriaAceptaReservas(ctx context.Context, materiaID string) (bool, error)
 }
 
-// ValidadorPC es el puerto hacia inventory — confirma que una PC existe y
+// ValidadorEquipo es el puerto hacia inventory — confirma que una PC existe y
 // está en condiciones de reservarse (estado DISPONIBLE, no dada de baja)
 // antes de dejarla incluir en una reserva. Nunca se importa
 // internal/inventory directamente.
-type ValidadorPC interface {
-	PCDisponibleParaReservar(ctx context.Context, pcID string) (bool, error)
+type ValidadorEquipo interface {
+	EquipoDisponibleParaReservar(ctx context.Context, equipoID string) (bool, error)
 
-	// PCEstaEnInventario es más laxo que PCDisponibleParaReservar: solo
+	// EquipoEstaEnInventario es más laxo que PCDisponibleParaReservar: solo
 	// exige que la PC exista y no esté dada de baja, sin mirar su estado.
 	//
 	// Es lo que corresponde para ENTREGAR una máquina, que no es lo mismo
@@ -251,7 +251,7 @@ type ValidadorPC interface {
 	// justamente un préstamo, y prohibirlo obligaría a sacarla del sistema
 	// para poder anotarlo. Lo que sí se rechaza es entregar una que ya no
 	// está en el inventario.
-	PCEstaEnInventario(ctx context.Context, pcID string) (bool, error)
+	EquipoEstaEnInventario(ctx context.Context, equipoID string) (bool, error)
 
 	// EtiquetasDeEquipos traduce los UUID al nombre con el que la gente
 	// reconoce cada cosa ("PC 7", "Proyector Epson"), para poder decir en un
@@ -267,7 +267,7 @@ type ValidadorPC interface {
 	// PCDisponibleParaReservar — no hace falta pasar por inventory, que es
 	// lo que sí corresponde cuando hay reglas de negocio en juego (ver el
 	// comentario de las cascadas al final de service.go).
-	EtiquetasDeEquipos(ctx context.Context, pcIDs []string) (map[string]string, error)
+	EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error)
 }
 
 // ObtenedorNombreDocente es el puerto hacia auth — solo necesitamos el
@@ -290,11 +290,11 @@ type IDGenerator func() string
 // sí anota.
 type PrestamoDetallado struct {
 	Prestamo *domain.Prestamo
-	// PCIdentificador va en 0 para un equipo suelto. Lo que se muestra es
+	// Identificador va en 0 para un equipo suelto. Lo que se muestra es
 	// Etiqueta: un proyector rotulado "PC 0" es lo que sale de formatear un
 	// identificador que no existe.
-	PCIdentificador int
-	Etiqueta        string
+	Identificador int
+	Etiqueta      string
 	// CarroNombre vacío en un equipo suelto.
 	CarroNombre string
 	// MateriaNombre solo en los préstamos que salieron contra una reserva.
@@ -326,10 +326,10 @@ type PrestamoDetallado struct {
 type ReservaParaVigilar struct {
 	ReservaID string
 	GrupoID   *string
-	PCID      string
-	// PCIdentificador es el número visible ("PC 7"), que es lo que el
+	EquipoID  string
+	// Identificador es el número visible ("PC 7"), que es lo que el
 	// docente reconoce.
-	PCIdentificador int
+	Identificador int
 	// Etiqueta es cómo se nombra al equipo en un aviso: "PC 7" o "Proyector
 	// Epson". Un proyector rotulado "PC 0" es lo que sale de formatear un
 	// identificador que no existe.
@@ -350,21 +350,21 @@ type ReservaParaVigilar struct {
 	RecordatorioEnviado        bool
 	AvisoPCNoDisponibleEnviado bool
 
-	// PCAfuera: hay un préstamo sin devolver sobre esa máquina. Es lo que
+	// EquipoAfuera: hay un préstamo sin devolver sobre esa máquina. Es lo que
 	// distingue "el docente no vino" de "el docente vino y se la llevó", y
 	// también lo que impide liberar una reserva cuya PC está en manos de
 	// alguien.
-	PCAfuera bool
-	// PCDeboVolverA es la hora en que esa máquina tenía que estar de vuelta.
+	EquipoAfuera bool
+	// EquipoDebioVolverA es la hora en que esa máquina tenía que estar de vuelta.
 	// nil si está adentro, o si salió sin hora pactada.
-	PCDeboVolverA *time.Time
+	EquipoDebioVolverA *time.Time
 }
 
 // PrestamoParaVigilar es un préstamo abierto con la ubicación de la máquina
 // y el contacto de quien la tiene, cuando esa persona tiene cuenta.
 type PrestamoParaVigilar struct {
-	Prestamo        *domain.Prestamo
-	PCIdentificador int
+	Prestamo      *domain.Prestamo
+	Identificador int
 	// Etiqueta: "PC 7" o "Proyector Epson". Es lo que va en el reclamo.
 	Etiqueta    string
 	CarroNombre string

@@ -25,7 +25,7 @@ import { getErrorMessage } from "@/lib/api-client"
  * pertenece a ninguno: meterlo en un carro llamado "Sueltos" sería volver a
  * la mentira que el modelo viene sacándose de encima.
  *
- * Puertas adentro son la misma entidad que las PCs, y eso no es un detalle
+ * Puertas adentro son la misma entidad que los equipos, y eso no es un detalle
  * de implementación: es lo que hace que el proyector se preste, se reclame y
  * —si es reservable— se reserve, con exactamente los mismos flujos.
  */
@@ -40,7 +40,7 @@ function Alta({ tiposUsados, onListo }: { tiposUsados: string[]; onListo: () => 
 
   const crear = useMutation({
     mutationFn: () =>
-      adminApi.crearEquipo({ tipo: tipo.trim(), nombre: nombre.trim(), reservable }),
+      adminApi.crearEquipoSuelto({ tipo: tipo.trim(), nombre: nombre.trim(), reservable }),
     onSuccess: async () => {
       setTipo("")
       setNombre("")

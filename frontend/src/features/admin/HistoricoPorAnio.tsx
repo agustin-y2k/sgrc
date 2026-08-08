@@ -46,9 +46,9 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
     .sort((a, b) => b - a)
   const anioElegido = Number(anio) || aniosArchivados[0] || 0
 
-  const historicoPCs = useQuery({
-    queryKey: ["reporte", "historico-pcs", anioElegido],
-    queryFn: () => adminApi.historicoUsoPCs(anioElegido),
+  const historicoEquipos = useQuery({
+    queryKey: ["reporte", "historico-equipos", anioElegido],
+    queryFn: () => adminApi.historicoUsoEquipos(anioElegido),
     enabled: anioElegido !== 0,
   })
 
@@ -58,15 +58,15 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
     enabled: anioElegido !== 0,
   })
 
-  const errorHistorico = historicoPCs.error ?? historicoDocentes.error
+  const errorHistorico = historicoEquipos.error ?? historicoDocentes.error
 
   // Mismo criterio que las tablas del ciclo activo: de mayor a menor y con
   // el total a mano. Ojo con el nombre del campo de tiempo — acá es
   // `minutosTotales`, no `minutosReservados` (ver types.ts).
-  const filasHistoricoPCs = [...(historicoPCs.data?.data ?? [])].sort(
+  const filasHistoricoEquipos = [...(historicoEquipos.data?.data ?? [])].sort(
     (a, b) => b.minutosReservados - a.minutosReservados
   )
-  const totalMinutosHistoricoPCs = sumar(filasHistoricoPCs, (h) => h.minutosReservados)
+  const totalMinutosHistoricoEquipos = sumar(filasHistoricoEquipos, (h) => h.minutosReservados)
 
   const filasHistoricoDocentes = [...(historicoDocentes.data?.data ?? [])].sort(
     (a, b) => b.minutosTotales - a.minutosTotales
@@ -108,7 +108,7 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
       ) : (
         <>
           <p className="text-muted-foreground text-sm">
-            Los nombres son los que tenían al cerrar el año: una PC pudo haberse mudado de
+            Los nombres son los que tenían al cerrar el año: un equipo pudo haberse mudado de
             carro o darse de baja desde entonces, y el histórico igual tiene que seguir
             diciendo dónde estaba.
           </p>
@@ -120,30 +120,30 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
           )}
 
           <Seccion
-            titulo={`Uso por PC en ${anioElegido}`}
+            titulo={`Uso por Equipo en ${anioElegido}`}
             resumen={
-              filasHistoricoPCs.length > 0 &&
-              `${filasHistoricoPCs.length} PCs · ${sumar(filasHistoricoPCs, (h) => h.cantidadReservas)} reservas · ${formatearDuracion(totalMinutosHistoricoPCs)} en total`
+              filasHistoricoEquipos.length > 0 &&
+              `${filasHistoricoEquipos.length} Equipos · ${sumar(filasHistoricoEquipos, (h) => h.cantidadReservas)} reservas · ${formatearDuracion(totalMinutosHistoricoEquipos)} en total`
             }
             alDescargar={
-              filasHistoricoPCs.length > 0
+              filasHistoricoEquipos.length > 0
                 ? () =>
                     descargarCSV(`historico-uso-por-pc_${anioElegido}`, [
-                      ["PC", "Carro", "Reservas", "Minutos reservados", "% del total"],
-                      ...filasHistoricoPCs.map((h) => [
-                        `PC ${h.identificadorSnapshot}`,
+                      ["Equipo", "Carro", "Reservas", "Minutos reservados", "% del total"],
+                      ...filasHistoricoEquipos.map((h) => [
+                        h.etiquetaSnapshot,
                         h.carroNombreSnapshot,
                         h.cantidadReservas,
                         h.minutosReservados,
                         formatearPorcentaje(
-                          proporcion(h.minutosReservados, totalMinutosHistoricoPCs)
+                          proporcion(h.minutosReservados, totalMinutosHistoricoEquipos)
                         ),
                       ]),
                     ])
                 : undefined
             }
           >
-            {filasHistoricoPCs.length === 0 ? (
+            {filasHistoricoEquipos.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 Ese año se archivó sin ninguna reserva registrada.
               </p>
@@ -151,7 +151,7 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>PC</TableHead>
+                    <TableHead>Equipo</TableHead>
                     <TableHead>Carro</TableHead>
                     <TableHead className="text-right">Reservas</TableHead>
                     <TableHead className="text-right">Tiempo reservado</TableHead>
@@ -159,10 +159,10 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filasHistoricoPCs.map((h) => (
+                  {filasHistoricoEquipos.map((h) => (
                     <TableRow key={h.id}>
                       <TableCell className="font-medium">
-                        PC {h.identificadorSnapshot}
+                        {h.etiquetaSnapshot}
                       </TableCell>
                       <TableCell>{h.carroNombreSnapshot}</TableCell>
                       <TableCell className="text-right">{h.cantidadReservas}</TableCell>
@@ -172,7 +172,7 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
                       <TableCell>
                         <Proporcion
                           parte={h.minutosReservados}
-                          total={totalMinutosHistoricoPCs}
+                          total={totalMinutosHistoricoEquipos}
                         />
                       </TableCell>
                     </TableRow>

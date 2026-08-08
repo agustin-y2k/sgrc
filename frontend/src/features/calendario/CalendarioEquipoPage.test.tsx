@@ -3,9 +3,9 @@ import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router"
 
-import { CalendarioPCPage } from "@/features/calendario/CalendarioPCPage"
+import { CalendarioEquipoPage } from "@/features/calendario/CalendarioEquipoPage"
 import * as calendarioApi from "@/features/calendario/api"
-import type { CalendarioPC } from "@/features/calendario/types"
+import type { CalendarioEquipo } from "@/features/calendario/types"
 import { ApiError } from "@/lib/api-client"
 
 vi.mock("@/features/calendario/api")
@@ -17,9 +17,9 @@ function renderCalendario() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/inventario/pcs/pc1/calendario"]}>
+      <MemoryRouter initialEntries={["/inventario/equipos/pc1/calendario"]}>
         <Routes>
-          <Route path="/inventario/pcs/:pcId/calendario" element={<CalendarioPCPage />} />
+          <Route path="/inventario/equipos/:equipoId/calendario" element={<CalendarioEquipoPage />} />
           <Route path="/inventario" element={<div>Inventario</div>} />
         </Routes>
       </MemoryRouter>
@@ -27,8 +27,8 @@ function renderCalendario() {
   )
 }
 
-const calendarioMock: CalendarioPC = {
-  pcId: "pc1",
+const calendarioMock: CalendarioEquipo = {
+  equipoId: "pc1",
   desde: "2026-03-09",
   hasta: "2026-03-14",
   bloques: [
@@ -55,7 +55,7 @@ const calendarioMock: CalendarioPC = {
   ],
 }
 
-describe("CalendarioPCPage", () => {
+describe("CalendarioEquipoPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -69,7 +69,7 @@ describe("CalendarioPCPage", () => {
 
   // RF-04.4: los bloques muestran docente, materia y horario.
   it("muestra docente, materia, curso y horario de cada bloque", async () => {
-    vi.mocked(calendarioApi.calendarioDePC).mockResolvedValue(calendarioMock)
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
     renderCalendario()
 
     expect(await screen.findByText("Matemáticas")).toBeInTheDocument()
@@ -81,18 +81,18 @@ describe("CalendarioPCPage", () => {
   // Un bloqueo por evaluación estatal no tiene materia ni docente: se
   // muestra distinto en vez de dejar campos vacíos.
   it("distingue el bloqueo por evaluación estatal", async () => {
-    vi.mocked(calendarioApi.calendarioDePC).mockResolvedValue(calendarioMock)
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
     renderCalendario()
 
     expect(await screen.findByText("Evaluación estatal")).toBeInTheDocument()
   })
 
   it("pide el calendario de la semana en curso, de lunes a sábado", async () => {
-    vi.mocked(calendarioApi.calendarioDePC).mockResolvedValue(calendarioMock)
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
     renderCalendario()
 
     await screen.findByText("Matemáticas")
-    expect(calendarioApi.calendarioDePC).toHaveBeenCalledWith(
+    expect(calendarioApi.calendarioDeEquipo).toHaveBeenCalledWith(
       "pc1",
       "2026-03-09",
       "2026-03-14"
@@ -100,14 +100,14 @@ describe("CalendarioPCPage", () => {
   })
 
   it("navegar a la semana siguiente vuelve a consultar el rango corrido", async () => {
-    vi.mocked(calendarioApi.calendarioDePC).mockResolvedValue(calendarioMock)
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
     const user = userEvent.setup()
     renderCalendario()
     await screen.findByText("Matemáticas")
 
     await user.click(screen.getByRole("button", { name: /Semana siguiente/ }))
 
-    expect(calendarioApi.calendarioDePC).toHaveBeenLastCalledWith(
+    expect(calendarioApi.calendarioDeEquipo).toHaveBeenLastCalledWith(
       "pc1",
       "2026-03-16",
       "2026-03-21"
@@ -115,14 +115,14 @@ describe("CalendarioPCPage", () => {
   })
 
   it("navegar a la semana anterior vuelve a consultar el rango corrido", async () => {
-    vi.mocked(calendarioApi.calendarioDePC).mockResolvedValue(calendarioMock)
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
     const user = userEvent.setup()
     renderCalendario()
     await screen.findByText("Matemáticas")
 
     await user.click(screen.getByRole("button", { name: /Semana anterior/ }))
 
-    expect(calendarioApi.calendarioDePC).toHaveBeenLastCalledWith(
+    expect(calendarioApi.calendarioDeEquipo).toHaveBeenLastCalledWith(
       "pc1",
       "2026-03-02",
       "2026-03-07"
@@ -130,7 +130,7 @@ describe("CalendarioPCPage", () => {
   })
 
   it("muestra el error del backend tal cual", async () => {
-    vi.mocked(calendarioApi.calendarioDePC).mockRejectedValue(
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockRejectedValue(
       new ApiError(400, "desde: la fecha debe tener formato YYYY-MM-DD")
     )
     renderCalendario()

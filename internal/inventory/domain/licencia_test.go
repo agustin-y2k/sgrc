@@ -29,7 +29,7 @@ func enBuenosAires(t *testing.T, anio int, mes time.Month, dia, hora int) time.T
 
 func licenciaDePrueba(t *testing.T, diasDuracion, diasAviso int) *LicenciaSoftware {
 	t.Helper()
-	l, err := NuevaLicencia("lic-1", "pc-1", "AutoCAD 2027", diasDuracion, diasAviso, fecha(2026, time.August, 1))
+	l, err := NuevaLicencia("lic-1", "equipo-1", "AutoCAD 2027", diasDuracion, diasAviso, fecha(2026, time.August, 1))
 	if err != nil {
 		t.Fatalf("NuevaLicencia no debería fallar: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestNuevaLicencia_NaceSinFecha(t *testing.T) {
 }
 
 func TestNuevaLicencia_NormalizaElNombre(t *testing.T) {
-	l, err := NuevaLicencia("lic-1", "pc-1", "  AutoCAD 2027  ", 30, 1, fecha(2026, time.August, 1))
+	l, err := NuevaLicencia("lic-1", "equipo-1", "  AutoCAD 2027  ", 30, 1, fecha(2026, time.August, 1))
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestNuevaLicencia_Invalidas(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
-			_, err := NuevaLicencia("lic-1", "pc-1", c.queSeCarga, c.diasDuracion, c.diasAviso, fecha(2026, time.August, 1))
+			_, err := NuevaLicencia("lic-1", "equipo-1", c.queSeCarga, c.diasDuracion, c.diasAviso, fecha(2026, time.August, 1))
 			if !errors.Is(err, c.esperado) {
 				t.Errorf("esperaba %v, obtuve %v", c.esperado, err)
 			}
@@ -92,7 +92,7 @@ func TestNuevaLicencia_Invalidas(t *testing.T) {
 }
 
 func TestNuevaLicencia_NombreEnElLimiteEntra(t *testing.T) {
-	_, err := NuevaLicencia("lic-1", "pc-1", strings.Repeat("a", MaxLargoNombreLicencia), 30, 1, fecha(2026, time.August, 1))
+	_, err := NuevaLicencia("lic-1", "equipo-1", strings.Repeat("a", MaxLargoNombreLicencia), 30, 1, fecha(2026, time.August, 1))
 	if err != nil {
 		t.Errorf("un nombre de exactamente %d caracteres debería entrar: %v", MaxLargoNombreLicencia, err)
 	}

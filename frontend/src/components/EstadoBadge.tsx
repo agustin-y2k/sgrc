@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
  * Antes salían todos de las tres variantes de shadcn (`default`,
  * `secondary`, `destructive`), así que "en mantenimiento" y "fuera de
  * servicio" se veían igual —las dos en rojo— y "disponible" era el mismo
- * gris que "finalizada". En una grilla de treinta PCs eso obliga a leer
+ * gris que "finalizada". En una grilla de treinta equipos eso obliga a leer
  * cada etiqueta en vez de barrer con la vista.
  *
  * El color nunca va solo: cada badge lleva su texto. Alrededor de un 8% de
@@ -34,7 +34,7 @@ export function EstadoBadge({
   return <Badge className={CLASES[tono]}>{children}</Badge>
 }
 
-/** RF-03.3 — estado de una PC. */
+/** RF-03.3 — estado de un equipo. */
 export const TONO_PC: Record<string, Tono> = {
   DISPONIBLE: "exito",
   EN_MANTENIMIENTO: "alerta",

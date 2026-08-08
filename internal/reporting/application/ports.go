@@ -13,34 +13,34 @@ import (
 // internal/academic, mismo criterio que cualquier otro validador de solo
 // lectura del proyecto.
 type Repo interface {
-	GuardarHistoricoUsoPC(ctx context.Context, h *domain.HistoricoUsoPC) error
+	GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.HistoricoUsoEquipo) error
 	GuardarHistoricoUsoDocente(ctx context.Context, h *domain.HistoricoUsoDocente) error
 	// Los históricos se listan por año (no por ciclo — ver el comentario
 	// en domain/historico.go sobre por qué esa tabla usa `anio`).
-	ListarHistoricoUsoPCPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoPC, error)
+	ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error)
 	ListarHistoricoUsoDocentePorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoDocente, error)
 
-	// CalcularUsoPCsDeCiclo acepta un rango de fechas opcional (RF-06.1:
+	// CalcularUsoEquiposDeCiclo acepta un rango de fechas opcional (RF-06.1:
 	// "filtrable por rango de fechas"). nil en cualquiera de los dos
 	// extremos significa "sin ese límite".
-	CalcularUsoPCsDeCiclo(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoPC, error)
+	CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoEquipo, error)
 	CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoDocente, error)
 
 	// RF-06.3: incidencias por equipo y por carro. No dependen del ciclo
 	// lectivo (Incidencia sobrevive al archivado, ver RF-02.4), así que se
 	// resuelven siempre con una query directa, sin snapshot.
-	CalcularIncidenciasPorPC(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasPC, error)
+	CalcularIncidenciasPorEquipo(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasEquipo, error)
 	CalcularIncidenciasPorCarro(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasCarro, error)
 }
 
-// InfoPCParaSnapshot es el puerto hacia inventory — necesario para
+// InfoEquipoParaSnapshot es el puerto hacia inventory — necesario para
 // "congelar" cómo se llamaba el equipo y dónde estaba al momento de archivar
 // (EtiquetaSnapshot/IdentificadorSnapshot/CarroNombreSnapshot). Nunca se
 // importa internal/inventory directamente.
-type InfoPCParaSnapshot interface {
+type InfoEquipoParaSnapshot interface {
 	// Devuelve la etiqueta siempre; identificador en 0 y carro vacío si el
 	// equipo no está en ningún carro (015).
-	EtiquetaYCarroDe(ctx context.Context, pcID string) (etiqueta string, identificador int, carroNombre string, err error)
+	EtiquetaYCarroDe(ctx context.Context, equipoID string) (etiqueta string, identificador int, carroNombre string, err error)
 }
 
 // InfoUsuarioParaSnapshot es el puerto hacia auth — para

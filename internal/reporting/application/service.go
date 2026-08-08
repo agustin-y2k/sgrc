@@ -13,25 +13,25 @@ import (
 
 type Service struct {
 	repo        Repo
-	infoPC      InfoPCParaSnapshot
+	infoPC      InfoEquipoParaSnapshot
 	infoUsuario InfoUsuarioParaSnapshot
 	nuevoID     IDGenerator
 }
 
-func NewService(repo Repo, infoPC InfoPCParaSnapshot, infoUsuario InfoUsuarioParaSnapshot, nuevoID IDGenerator) *Service {
+func NewService(repo Repo, infoPC InfoEquipoParaSnapshot, infoUsuario InfoUsuarioParaSnapshot, nuevoID IDGenerator) *Service {
 	return &Service{repo: repo, infoPC: infoPC, infoUsuario: infoUsuario, nuevoID: nuevoID}
 }
 
-// ReporteUsoPCs / ReporteUsoDocentes implementan RF-06.1/06.2 — agregan EN
+// ReporteUsoEquipos / ReporteUsoDocentes implementan RF-06.1/06.2 — agregan EN
 // VIVO desde reserva/materia/curso. Solo tienen sentido para un ciclo que
 // todavía no se archivó: una vez archivado, sus Reserva se borran
 // físicamente y esta consulta no encuentra nada — para esos casos está
 // HistoricoUsoPCs/HistoricoUsoDocentes en su lugar (RF-06.3, por año).
-func (s *Service) ReporteUsoPCs(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoPC, error) {
+func (s *Service) ReporteUsoEquipos(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoEquipo, error) {
 	if err := validarRango(desde, hasta); err != nil {
 		return nil, err
 	}
-	return s.repo.CalcularUsoPCsDeCiclo(ctx, cicloID, desde, hasta)
+	return s.repo.CalcularUsoEquiposDeCiclo(ctx, cicloID, desde, hasta)
 }
 
 func (s *Service) ReporteUsoDocentes(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoDocente, error) {
@@ -41,12 +41,12 @@ func (s *Service) ReporteUsoDocentes(ctx context.Context, cicloID string, desde,
 	return s.repo.CalcularUsoDocentesDeCiclo(ctx, cicloID, desde, hasta)
 }
 
-// ReporteIncidenciasPorPC / ReporteIncidenciasPorCarro implementan RF-06.3.
-func (s *Service) ReporteIncidenciasPorPC(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasPC, error) {
+// ReporteIncidenciasPorEquipo / ReporteIncidenciasPorCarro implementan RF-06.3.
+func (s *Service) ReporteIncidenciasPorEquipo(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasEquipo, error) {
 	if err := validarRango(desde, hasta); err != nil {
 		return nil, err
 	}
-	return s.repo.CalcularIncidenciasPorPC(ctx, desde, hasta)
+	return s.repo.CalcularIncidenciasPorEquipo(ctx, desde, hasta)
 }
 
 func (s *Service) ReporteIncidenciasPorCarro(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasCarro, error) {
@@ -63,10 +63,10 @@ func validarRango(desde, hasta *time.Time) error {
 	return nil
 }
 
-// HistoricoUsoPCs / HistoricoUsoDocentes implementan RF-06.3 — el
+// HistoricoUsoEquipos / HistoricoUsoDocentes implementan RF-06.3 — el
 // snapshot ya calculado y persistido de un año lectivo ya archivado.
-func (s *Service) HistoricoUsoPCs(ctx context.Context, anio int) ([]*domain.HistoricoUsoPC, error) {
-	return s.repo.ListarHistoricoUsoPCPorAnio(ctx, anio)
+func (s *Service) HistoricoUsoEquipos(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error) {
+	return s.repo.ListarHistoricoUsoEquipoPorAnio(ctx, anio)
 }
 
 func (s *Service) HistoricoUsoDocentes(ctx context.Context, anio int) ([]*domain.HistoricoUsoDocente, error) {
@@ -87,21 +87,21 @@ func (s *Service) HistoricoUsoDocentes(ctx context.Context, anio int) ([]*domain
 // inventory/auth hacia reservation.
 func (s *Service) ArchivarSnapshotDeCiclo(ctx context.Context, cicloID string, anio int) error {
 	// Sin rango de fechas a propósito: el snapshot cubre el ciclo entero.
-	usosPC, err := s.repo.CalcularUsoPCsDeCiclo(ctx, cicloID, nil, nil)
+	usosPC, err := s.repo.CalcularUsoEquiposDeCiclo(ctx, cicloID, nil, nil)
 	if err != nil {
 		return fmt.Errorf("calculando uso de PCs: %w", err)
 	}
 	for _, u := range usosPC {
-		etiqueta, identificador, carroNombre, err := s.infoPC.EtiquetaYCarroDe(ctx, u.PCID)
+		etiqueta, identificador, carroNombre, err := s.infoPC.EtiquetaYCarroDe(ctx, u.EquipoID)
 		if err != nil {
-			return fmt.Errorf("obteniendo datos de la PC %s: %w", u.PCID, err)
+			return fmt.Errorf("obteniendo datos de la PC %s: %w", u.EquipoID, err)
 		}
-		h, err := domain.NuevoHistoricoUsoPC(s.nuevoID(), anio, u.PCID, etiqueta, identificador, carroNombre, u.MinutosReservados, u.CantidadReservas)
+		h, err := domain.NuevoHistoricoUsoEquipo(s.nuevoID(), anio, u.EquipoID, etiqueta, identificador, carroNombre, u.MinutosReservados, u.CantidadReservas)
 		if err != nil {
 			return err
 		}
-		if err := s.repo.GuardarHistoricoUsoPC(ctx, h); err != nil {
-			return fmt.Errorf("guardando histórico de PC %s: %w", u.PCID, err)
+		if err := s.repo.GuardarHistoricoUsoEquipo(ctx, h); err != nil {
+			return fmt.Errorf("guardando histórico de PC %s: %w", u.EquipoID, err)
 		}
 	}
 

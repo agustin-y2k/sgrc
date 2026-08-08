@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import * as reservasApi from "@/features/reservas/api"
-import { SelectorDePCs } from "@/features/reservas/SelectorDePCs"
+import { SelectorDeEquipos } from "@/features/reservas/SelectorDeEquipos"
 import {
   DIAS_SEMANA,
   MAX_HORAS_RESERVA,
@@ -38,7 +38,7 @@ function enumerar(partes: string[]): string {
 }
 
 // RF-04.2 (reserva puntual) y RF-04.5 (recurrente). Los dos modos comparten
-// materia, horario y selección de PCs; lo único que cambia es si se pide una
+// materia, horario y selección de equipos; lo único que cambia es si se pide una
 // fecha o un día de la semana más un rango.
 export function NuevaReservaPage() {
   const navigate = useNavigate()
@@ -52,7 +52,7 @@ export function NuevaReservaPage() {
   const [diaSemana, setDiaSemana] = useState<DiaSemana>("LUNES")
   const [fechaInicio, setFechaInicio] = useState("")
   const [fechaFin, setFechaFin] = useState("")
-  const [pcIds, setPcIds] = useState<string[]>([])
+  const [equipoIds, setPcIds] = useState<string[]>([])
 
   const { data: materias, isLoading: cargandoMaterias } = useQuery({
     queryKey: ["mis-materias"],
@@ -67,11 +67,11 @@ export function NuevaReservaPage() {
      * tiene a mano.
      */
     mutationFn: async (): Promise<string> => {
-      const cuantasPCs = `${pcIds.length} ${pcIds.length === 1 ? "PC" : "PCs"}`
+      const cuantosEquipos = `${equipoIds.length} ${equipoIds.length === 1 ? "equipo" : "equipos"}`
 
       if (modo === "simple") {
-        await reservasApi.crearReserva({ materiaId, fecha, horaInicio, horaFin, pcIds })
-        return `Reserva confirmada para el ${formatearFechaLargaCapitalizada(fecha)}, de ${horaInicio} a ${horaFin}, con ${cuantasPCs}.`
+        await reservasApi.crearReserva({ materiaId, fecha, horaInicio, horaFin, equipoIds })
+        return `Reserva confirmada para el ${formatearFechaLargaCapitalizada(fecha)}, de ${horaInicio} a ${horaFin}, con ${cuantosEquipos}.`
       }
 
       await reservasApi.crearReservaRecurrente({
@@ -81,10 +81,10 @@ export function NuevaReservaPage() {
         horaFin,
         fechaInicio,
         fechaFin,
-        pcIds,
+        equipoIds,
       })
       const dia = DIAS_SEMANA.find((d) => d.valor === diaSemana)?.etiqueta ?? diaSemana
-      return `Reserva recurrente confirmada: todos los ${dia.toLowerCase()} de ${horaInicio} a ${horaFin}, con ${cuantasPCs}, hasta el ${formatearFechaLargaCapitalizada(fechaFin)}.`
+      return `Reserva recurrente confirmada: todos los ${dia.toLowerCase()} de ${horaInicio} a ${horaFin}, con ${cuantosEquipos}, hasta el ${formatearFechaLargaCapitalizada(fechaFin)}.`
     },
     // El listado es la confirmación: la reserva recién creada aparece ahí.
     // Pero llegar a una pantalla nueva no alcanza para saber que salió bien
@@ -96,7 +96,7 @@ export function NuevaReservaPage() {
     },
   })
 
-  // La franja de la que depende el selector de PCs: en modo recurrente se
+  // La franja de la que depende el selector de equipos: en modo recurrente se
   // usa la primera fecha del rango como muestra, porque el backend valida
   // la disponibilidad de TODAS las ocurrencias al crear (RF-04.5) — acá
   // solo se necesita una lista razonable para tildar.
@@ -117,7 +117,7 @@ export function NuevaReservaPage() {
    * de siete campos, un botón gris no dice cuál de los siete es el que
    * falta, y la persona no tiene forma de saber qué corregir. Algunos
    * errores se explican abajo del campo (el fin de semana, la duración),
-   * pero los más comunes —no elegí materia, no tildé ninguna PC— no tienen
+   * pero los más comunes —no elegí materia, no tildé ningún equipo— no tienen
    * dónde aparecer.
    *
    * Los que ya tienen su propio mensaje al lado del campo no se repiten
@@ -134,7 +134,7 @@ export function NuevaReservaPage() {
   }
   if (horaInicio === "") faltantes.push("elegir la hora de inicio")
   if (horaFin === "") faltantes.push("elegir la hora de fin")
-  if (pcIds.length === 0) faltantes.push("tildar al menos una PC")
+  if (equipoIds.length === 0) faltantes.push("tildar al menos un equipo")
 
   const listoParaEnviar =
     faltantes.length === 0 &&
@@ -146,7 +146,7 @@ export function NuevaReservaPage() {
     <div className="mx-auto max-w-3xl">
       <EncabezadoDePagina
         titulo="Nueva reserva"
-        descripcion="Elegí el día, la franja horaria y las PCs. Los horarios van en formato de 24 horas."
+        descripcion="Elegí el día, la franja horaria y los equipos. Los horarios van en formato de 24 horas."
       />
 
       {!cargandoMaterias && materiasDisponibles.length === 0 && (
@@ -160,7 +160,7 @@ export function NuevaReservaPage() {
 
       {crear.error && (
         <Alert variant="destructive" className="mb-4">
-          {/* RF-04.3: el backend informa qué PCs puntuales están ocupadas;
+          {/* RF-04.3: el backend informa qué equipos puntuales están ocupados;
               se muestra su mensaje tal cual en vez de uno genérico. */}
           <AlertDescription>{getErrorMessage(crear.error)}</AlertDescription>
         </Alert>
@@ -170,7 +170,7 @@ export function NuevaReservaPage() {
         <CardHeader>
           <CardTitle>Datos de la reserva</CardTitle>
           <CardDescription>
-            Podés combinar PCs de distintos carros en la misma reserva.
+            Podés combinar equipos de distintos carros en la misma reserva.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -300,7 +300,7 @@ export function NuevaReservaPage() {
             )}
 
             <div className="grid gap-2">
-              <Label>PCs</Label>
+              <Label>Equipos a reservar</Label>
               {modo === "recurrente" && (
                 <p className="text-muted-foreground text-xs">
                   Se muestran las libres en la fecha de inicio. Al confirmar, el sistema
@@ -308,11 +308,11 @@ export function NuevaReservaPage() {
                   ocupada.
                 </p>
               )}
-              <SelectorDePCs
+              <SelectorDeEquipos
                 fecha={fechaParaDisponibilidad}
                 horaInicio={horaInicio}
                 horaFin={horaFin}
-                seleccionadas={pcIds}
+                seleccionadas={equipoIds}
                 onCambio={setPcIds}
               />
             </div>

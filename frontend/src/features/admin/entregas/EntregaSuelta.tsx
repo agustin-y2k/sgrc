@@ -45,10 +45,10 @@ export function EntregaSuelta({
     queryFn: inventoryApi.listarCarros,
   })
 
-  const consultasDePCs = useQueries({
+  const consultasDeEquipos = useQueries({
     queries: (carros?.data ?? []).map((c) => ({
-      queryKey: ["pcs", c.id],
-      queryFn: () => inventoryApi.listarPCsDeCarro(c.id),
+      queryKey: ["equipos", c.id],
+      queryFn: () => inventoryApi.listarEquiposDeCarro(c.id),
     })),
   })
 
@@ -61,11 +61,11 @@ export function EntregaSuelta({
   })
 
   // Se ofrece todo lo que esté en el inventario y no esté ya afuera. No se
-  // filtra por estado a propósito: llevarle al técnico una PC en
+  // filtra por estado a propósito: llevarle al técnico un equipo en
   // mantenimiento es justamente un préstamo, y prohibirlo obligaría a
   // sacarla del sistema para poder anotarlo. Tampoco por `reservable`: un
   // cargador no se reserva pero sí se presta — es el caso principal.
-  const pcs = useMemo(() => {
+  const equipos = useMemo(() => {
     const lista: { id: string; etiqueta: string; donde: string }[] = []
 
     ;(sueltos?.data ?? [])
@@ -73,18 +73,18 @@ export function EntregaSuelta({
       .forEach((eq) => lista.push({ id: eq.id, etiqueta: eq.etiqueta, donde: eq.tipo }))
 
     ;(carros?.data ?? []).forEach((carro, i) => {
-      const pcsDelCarro = consultasDePCs[i]?.data?.data ?? []
-      pcsDelCarro
-        .filter((pc) => !pc.dadaDeBaja && !yaAfuera.has(pc.id))
-        .forEach((pc) => lista.push({ id: pc.id, etiqueta: pc.etiqueta, donde: carro.nombre }))
+      const equiposDelCarro = consultasDeEquipos[i]?.data?.data ?? []
+      equiposDelCarro
+        .filter((equipo) => !equipo.dadaDeBaja && !yaAfuera.has(equipo.id))
+        .forEach((equipo) => lista.push({ id: equipo.id, etiqueta: equipo.etiqueta, donde: carro.nombre }))
     })
     return lista
-  }, [carros, consultasDePCs, sueltos, yaAfuera])
+  }, [carros, consultasDeEquipos, sueltos, yaAfuera])
 
   const entregar = useMutation({
     mutationFn: () =>
       reservasApi.entregarSuelta({
-        pcIds: [...seleccionadas],
+        equipoIds: [...seleccionadas],
         nombre: nombre.trim(),
         motivo: motivo.trim() || undefined,
         devolucionEstimada: devolucion ? new Date(devolucion).toISOString() : undefined,
@@ -171,25 +171,25 @@ export function EntregaSuelta({
           <div className="grid gap-2">
             <Label>¿Qué computadoras?</Label>
             <div className="grid max-h-56 gap-1 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
-              {pcs.length === 0 && (
+              {equipos.length === 0 && (
                 <p className="text-muted-foreground text-sm">
                   No hay computadoras disponibles para entregar.
                 </p>
               )}
-              {pcs.map((pc) => (
-                <label key={pc.id} className="flex items-center gap-2 text-sm">
+              {equipos.map((equipo) => (
+                <label key={equipo.id} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={seleccionadas.has(pc.id)}
+                    checked={seleccionadas.has(equipo.id)}
                     onChange={() => {
                       const nueva = new Set(seleccionadas)
-                      if (nueva.has(pc.id)) nueva.delete(pc.id)
-                      else nueva.add(pc.id)
+                      if (nueva.has(equipo.id)) nueva.delete(equipo.id)
+                      else nueva.add(equipo.id)
                       setSeleccionadas(nueva)
                     }}
                   />
-                  {pc.etiqueta}
-                  <span className="text-muted-foreground">({pc.donde})</span>
+                  {equipo.etiqueta}
+                  <span className="text-muted-foreground">({equipo.donde})</span>
                 </label>
               ))}
             </div>

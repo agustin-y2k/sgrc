@@ -29,10 +29,11 @@
 -- ══════════════════════════════════════════════════════════════════
 -- Un proyector en una tabla llamada `pc` es una mentira, la segunda del
 -- modelo después de `carro` —que en realidad es un laboratorio fijo, ver
--- docs/01-requisitos.md—. Se decidió a propósito: renombrar a `equipo` toca
--- 419 sitios en 93 archivos, y mezclar ese renombre con este cambio de
--- comportamiento daría un diff imposible de revisar. Va en su propio commit,
--- después.
+-- docs/01-requisitos.md—. Se decidió a propósito: mezclar el renombre con
+-- este cambio de comportamiento daría un diff imposible de revisar.
+--
+-- La deuda quedó saldada en la 016, que renombra la tabla a `equipo`. Esta
+-- migración se deja tal como se aplicó: es el registro de lo que pasó.
 
 BEGIN;
 

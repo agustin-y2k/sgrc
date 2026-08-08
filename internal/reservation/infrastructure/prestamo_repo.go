@@ -23,17 +23,17 @@ func esViolacionUnica(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == codigoViolacionUnica
 }
 
-const columnasPrestamo = `id, pc_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre, ` +
+const columnasPrestamo = `id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre, ` +
 	`motivo, devolucion_estimada, entregado_por, entregado_en, devuelto_en, recibido_por, observaciones, ` +
 	`avisado_demora_en, avisado_cierre_para`
 
 // columnasPrestamoDetallado agrega la ubicación de la PC y, si el préstamo
 // salió contra una reserva, el nombre de la materia. Prefijadas porque la
 // consulta hace JOIN.
-const columnasPrestamoDetallado = `p.id, p.pc_id, p.reserva_id, p.entregado_a_usuario_id, p.entregado_a_nombre, ` +
+const columnasPrestamoDetallado = `p.id, p.equipo_id, p.reserva_id, p.entregado_a_usuario_id, p.entregado_a_nombre, ` +
 	`p.motivo, p.devolucion_estimada, p.entregado_por, p.entregado_en, p.devuelto_en, p.recibido_por, p.observaciones, ` +
 	`p.avisado_demora_en, p.avisado_cierre_para, ` +
-	`COALESCE(pc.identificador, 0), COALESCE(pc.nombre, 'PC ' || pc.identificador), COALESCE(c.nombre, ''), m.nombre`
+	`COALESCE(eq.identificador, 0), COALESCE(eq.nombre, 'PC ' || eq.identificador), COALESCE(c.nombre, ''), m.nombre`
 
 // joinsDelPrestamo: la PC y su carro son INNER —un préstamo sin PC no
 // existe— pero la reserva y la materia van LEFT, y por dos motivos
@@ -42,22 +42,22 @@ const columnasPrestamoDetallado = `p.id, p.pc_id, p.reserva_id, p.entregado_a_us
 // borra las reservas; el préstamo sobrevive con reserva_id en NULL).
 const joinsDelPrestamo = `
 	FROM prestamo p
-	JOIN pc ON pc.id = p.pc_id
+	JOIN equipo eq ON eq.id = p.equipo_id
 	-- LEFT desde la 015: un proyector o un cargador no están en ningún
 	-- carro, y con INNER JOIN desaparecían del listado de lo que está
 	-- afuera — justo la lista que no puede tener agujeros.
-	LEFT JOIN carro c ON c.id = pc.carro_id
+	LEFT JOIN carro c ON c.id = eq.carro_id
 	LEFT JOIN reserva r ON r.id = p.reserva_id
 	LEFT JOIN materia m ON m.id = r.materia_id`
 
 func (r *PostgresRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO prestamo (
-			id, pc_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre,
+			id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre,
 			motivo, devolucion_estimada, entregado_por, entregado_en, devuelto_en,
 			recibido_por, observaciones
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`, p.ID, p.PCID, p.ReservaID, p.EntregadoAUsuarioID, p.EntregadoANombre,
+	`, p.ID, p.EquipoID, p.ReservaID, p.EntregadoAUsuarioID, p.EntregadoANombre,
 		nullSiVacio(p.Motivo), p.DevolucionEstimada, p.EntregadoPor, p.EntregadoEn,
 		p.DevueltoEn, p.RecibidoPor, nullSiVacio(p.Observaciones))
 	if err != nil {
@@ -83,11 +83,11 @@ func (r *PostgresRepo) BuscarPrestamoPorID(ctx context.Context, id string) (*dom
 	return escanearPrestamo(row)
 }
 
-// BuscarPrestamoAbiertoDePC responde "¿dónde está esta máquina?". Devuelve
+// BuscarPrestamoAbiertoDeEquipo responde "¿dónde está esta máquina?". Devuelve
 // ErrPrestamoNoEncontrado si está en el laboratorio.
-func (r *PostgresRepo) BuscarPrestamoAbiertoDePC(ctx context.Context, pcID string) (*domain.Prestamo, error) {
+func (r *PostgresRepo) BuscarPrestamoAbiertoDeEquipo(ctx context.Context, equipoID string) (*domain.Prestamo, error) {
 	row := r.db.QueryRow(ctx,
-		`SELECT `+columnasPrestamo+` FROM prestamo WHERE pc_id = $1 AND devuelto_en IS NULL`, pcID)
+		`SELECT `+columnasPrestamo+` FROM prestamo WHERE equipo_id = $1 AND devuelto_en IS NULL`, equipoID)
 	return escanearPrestamo(row)
 }
 
@@ -96,7 +96,7 @@ func escanearPrestamo(row pgx.Row) (*domain.Prestamo, error) {
 	var motivo, observaciones *string
 
 	err := row.Scan(
-		&p.ID, &p.PCID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
+		&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 		&motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 		&p.DevueltoEn, &p.RecibidoPor, &observaciones,
 		&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
@@ -160,19 +160,19 @@ func (r *PostgresRepo) ListarPrestamosAbiertos(ctx context.Context) ([]*applicat
 	return escanearPrestamosDetallados(rows)
 }
 
-// ListarPrestamosDePC es el historial de una máquina, de lo más reciente a
+// ListarPrestamosDeEquipo es el historial de una máquina, de lo más reciente a
 // lo más viejo. Incluye el préstamo abierto si lo hay.
-func (r *PostgresRepo) ListarPrestamosDePC(ctx context.Context, pcID string, limite int) ([]*application.PrestamoDetallado, error) {
+func (r *PostgresRepo) ListarPrestamosDeEquipo(ctx context.Context, equipoID string, limite int) ([]*application.PrestamoDetallado, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasPrestamoDetallado+joinsDelPrestamo+`
-		WHERE p.pc_id = $1
+		WHERE p.equipo_id = $1
 		ORDER BY p.entregado_en DESC
-		LIMIT $2`, pcID, limite)
+		LIMIT $2`, equipoID, limite)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
 		}
-		return nil, fmt.Errorf("listando el historial de entregas de la PC: %w", err)
+		return nil, fmt.Errorf("listando el historial de entregas del equipo: %w", err)
 	}
 	return escanearPrestamosDetallados(rows)
 }
@@ -187,11 +187,11 @@ func escanearPrestamosDetallados(rows pgx.Rows) ([]*application.PrestamoDetallad
 		var motivo, observaciones *string
 
 		err := rows.Scan(
-			&p.ID, &p.PCID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
+			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 			&motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
 			&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
-			&d.PCIdentificador, &d.Etiqueta, &d.CarroNombre, &d.MateriaNombre,
+			&d.Identificador, &d.Etiqueta, &d.CarroNombre, &d.MateriaNombre,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("escaneando fila de entrega: %w", err)

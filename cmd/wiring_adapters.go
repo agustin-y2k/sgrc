@@ -31,12 +31,12 @@ type inventoryValidadorReservasAdapter struct {
 	reservationSvc *reservationapp.Service
 }
 
-func (a *inventoryValidadorReservasAdapter) CancelarReservasFuturasDePC(ctx context.Context, pcID, motivo string) (int, int, error) {
-	return a.reservationSvc.CancelarReservasFuturasDePC(ctx, pcID, motivo)
+func (a *inventoryValidadorReservasAdapter) CancelarReservasFuturasDePC(ctx context.Context, equipoID, motivo string) (int, int, error) {
+	return a.reservationSvc.CancelarReservasFuturasDeEquipo(ctx, equipoID, motivo)
 }
 
-func (a *inventoryValidadorReservasAdapter) TieneReservasFuturas(ctx context.Context, pcID string) (bool, error) {
-	return a.reservationSvc.TieneReservasFuturasDePC(ctx, pcID)
+func (a *inventoryValidadorReservasAdapter) TieneReservasFuturas(ctx context.Context, equipoID string) (bool, error) {
+	return a.reservationSvc.TieneReservasFuturasDeEquipo(ctx, equipoID)
 }
 
 // authCanceladorReservasAdapter satisface

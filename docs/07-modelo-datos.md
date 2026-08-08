@@ -8,12 +8,12 @@ erDiagram
     USUARIO ||--o{ RESERVA_GRUPO : crea
     USUARIO ||--o{ NOTIFICACION : recibe
     USUARIO ||--o{ CODIGO_RECUPERACION : pide
-    CARRO ||--o{ PC : contiene
-    PC ||--o{ INCIDENCIA : registra
-    PC ||--o{ LICENCIA_SOFTWARE : tiene
-    PC ||--o{ PRESTAMO : sale_en
+    CARRO ||--o{ EQUIPO : contiene
+    EQUIPO ||--o{ INCIDENCIA : registra
+    EQUIPO ||--o{ LICENCIA_SOFTWARE : tiene
+    EQUIPO ||--o{ PRESTAMO : sale_en
     RESERVA ||--o{ PRESTAMO : origina
-    PC ||--o{ RESERVA : recibe
+    EQUIPO ||--o{ RESERVA : recibe
     CICLO_LECTIVO ||--o{ CURSO : contiene
     CURSO ||--o{ MATERIA : contiene
     MATERIA ||--o{ DOCENTE_MATERIA : asigna
@@ -24,17 +24,17 @@ erDiagram
 
     USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; string rol; string estado; timestamp fecha_registro; uuid aprobado_por; string curso_solicitado; string materia_solicitada; int version_sesion }
     CARRO { uuid id; string nombre; string descripcion }
-    PC { uuid id; uuid carro_id; int identificador; string numero_serie; string tipo; string nombre; bool reservable; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool dada_de_baja; timestamp fecha_alta }
-    INCIDENCIA { uuid id; uuid pc_id; uuid reportado_por; string descripcion; string gravedad; timestamp fecha; bool enviado_dge; timestamp fecha_envio_dge; string estado }
-    LICENCIA_SOFTWARE { uuid id; uuid pc_id; string nombre; int dias_duracion; int dias_aviso; date fecha_vencimiento; date ultima_renovacion; uuid vencimiento_fijado_por; timestamp vencimiento_fijado_en; date avisado_previo_para; date avisado_vencimiento_para; timestamp creada_en }
+    EQUIPO { uuid id; uuid carro_id; int identificador; string numero_serie; string tipo; string nombre; bool reservable; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool dado_de_baja; timestamp fecha_alta }
+    INCIDENCIA { uuid id; uuid equipo_id; uuid reportado_por; string descripcion; string gravedad; timestamp fecha; bool enviado_dge; timestamp fecha_envio_dge; string estado }
+    LICENCIA_SOFTWARE { uuid id; uuid equipo_id; string nombre; int dias_duracion; int dias_aviso; date fecha_vencimiento; date ultima_renovacion; uuid vencimiento_fijado_por; timestamp vencimiento_fijado_en; date avisado_previo_para; date avisado_vencimiento_para; timestamp creada_en }
     CICLO_LECTIVO { uuid id; int anio; bool activo; bool archivado }
     CURSO { uuid id; uuid ciclo_lectivo_id; string nombre; bool activo; bool archivado }
     MATERIA { uuid id; uuid curso_id; string nombre; bool activo; bool archivado }
     DOCENTE_MATERIA { uuid id; uuid usuario_id; uuid materia_id; string rol }
     REGLA_RECURRENCIA { uuid id; uuid materia_id; uuid creado_por; string dia_semana; time hora_inicio; time hora_fin; date fecha_inicio; date fecha_fin }
     RESERVA_GRUPO { uuid id; uuid materia_id; uuid creado_por; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; uuid regla_recurrencia_id; timestamp creada_en }
-    RESERVA { uuid id; uuid reserva_grupo_id; uuid pc_id; string estado; string tipo; timestamp creada_en; uuid cancelado_por; string motivo_cancelacion; timestamp cancelada_en }
-    PRESTAMO { uuid id; uuid pc_id; uuid reserva_id; uuid entregado_a_usuario_id; string entregado_a_nombre; string motivo; timestamp devolucion_estimada; uuid entregado_por; timestamp entregado_en; timestamp devuelto_en; uuid recibido_por; string observaciones }
+    RESERVA { uuid id; uuid reserva_grupo_id; uuid equipo_id; string estado; string tipo; timestamp creada_en; uuid cancelado_por; string motivo_cancelacion; timestamp cancelada_en }
+    PRESTAMO { uuid id; uuid equipo_id; uuid reserva_id; uuid entregado_a_usuario_id; string entregado_a_nombre; string motivo; timestamp devolucion_estimada; uuid entregado_por; timestamp entregado_en; timestamp devuelto_en; uuid recibido_por; string observaciones }
     NOTIFICACION { uuid id; uuid usuario_id; uuid reserva_id; string mensaje; string estado; timestamp creada_en; timestamp leida_en }
     CODIGO_RECUPERACION { uuid id; uuid usuario_id; string codigo_hash; timestamp creado_en; timestamp expira_en; timestamp usado_en; int intentos }
 ```
@@ -153,7 +153,7 @@ CREATE INDEX idx_curso_ciclo ON curso(ciclo_lectivo_id);
 CREATE INDEX idx_materia_curso ON materia(curso_id);
 ```
 
-### `pc`
+### `equipo`
 | Campo | Tipo | Restricciones |
 |---|---|---|
 | id | UUID | PK |
@@ -166,7 +166,7 @@ CREATE INDEX idx_materia_curso ON materia(curso_id);
 | sistema_operativo | VARCHAR(50) | NULL |
 | software_instalado | TEXT | NULL |
 | estado | VARCHAR(25) | NOT NULL DEFAULT 'DISPONIBLE', CHECK IN ('DISPONIBLE','EN_MANTENIMIENTO','FUERA_DE_SERVICIO') |
-| dada_de_baja | BOOLEAN | NOT NULL DEFAULT false |
+| dado_de_baja | BOOLEAN | NOT NULL DEFAULT false |
 | fecha_baja | TIMESTAMPTZ | NULL |
 | fecha_alta | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 | | | UNIQUE (carro_id, identificador) |
@@ -177,11 +177,11 @@ CREATE INDEX idx_materia_curso ON materia(curso_id);
 >
 > **Desde la 015 esta tabla no es solo de computadoras.** `carro_id`, `identificador` y `numero_serie` pasaron a ser opcionales, y se sumaron `tipo` (texto libre), `nombre` y `reservable`: la escuela también presta un proyector y cargadores, que no están en ningún carro. Un CHECK garantiza que nada quede sin forma de nombrarse — **o está en un carro y tiene número, o no está en un carro y tiene nombre** — y un índice único parcial sobre `lower(nombre)` impide dos "Cargador 1" indistinguibles — excluyendo las dadas de baja, porque a diferencia de un número de serie el nombre es un apodo y se reusa cuando se reemplaza el equipo.
 >
-> Están acá y no en una tabla aparte porque "qué hay afuera del laboratorio" (RF-08) tiene que ser una sola lista. La tabla se sigue llamando `pc` por historia; ver el encabezado de la migración 015.
+> Están acá y no en una tabla aparte porque "qué hay afuera del laboratorio" (RF-08) tiene que ser una sola lista; ver el encabezado de la migración 015. La tabla se llamó `pc` hasta la **016**, que la renombró a `equipo` junto con sus índices, sus constraints y las columnas `pc_id` de las cinco tablas que la referencian.
 
-> **La 015 también toca `historico_uso_pc`**: se le sumó `etiqueta_snapshot` —cómo se llamaba el equipo el día que se archivó el ciclo— y `identificador_snapshot`/`carro_nombre_snapshot` dejaron de ser obligatorias. Un proyector archivado no tiene ninguna de las dos, y el reporte del año pasado decía "PC 0 ()". El backfill reconstruye la etiqueta de lo ya guardado (`'PC ' || identificador_snapshot`), que hasta hoy era siempre una PC de carro.
+> **La 015 también toca `historico_uso_equipo`**: se le sumó `etiqueta_snapshot` —cómo se llamaba el equipo el día que se archivó el ciclo— y `identificador_snapshot`/`carro_nombre_snapshot` dejaron de ser obligatorias. Un proyector archivado no tiene ninguna de las dos, y el reporte del año pasado decía "PC 0 ()". El backfill reconstruye la etiqueta de lo ya guardado (`'PC ' || identificador_snapshot`), que hasta hoy era siempre una PC de carro.
 
-> `dada_de_baja` / `fecha_baja`: el "eliminar" una PC desde la UI del Admin es en realidad un **soft delete** — se oculta de los listados activos y no puede reservarse, pero la fila permanece porque `incidencia` y `reserva` la referencian por FK y esa historia no se pierde. Un hard delete real requeriría borrar en cascada su historial de incidencias y reservas, lo cual no es deseable.
+> `dado_de_baja` / `fecha_baja`: el "eliminar" una PC desde la UI del Admin es en realidad un **soft delete** — se oculta de los listados activos y no puede reservarse, pero la fila permanece porque `incidencia` y `reserva` la referencian por FK y esa historia no se pierde. Un hard delete real requeriría borrar en cascada su historial de incidencias y reservas, lo cual no es deseable.
 
 ### `carro`
 | Campo | Tipo | Restricciones |
@@ -190,13 +190,13 @@ CREATE INDEX idx_materia_curso ON materia(curso_id);
 | nombre | VARCHAR(100) | NOT NULL, UNIQUE |
 | descripcion | TEXT | NULL |
 
-> `freezado` no es un atributo del carro, es de cada PC individual (ver `pc` arriba) — cada PC de un mismo carro puede tener o no Deep Freeze instalado. El `ADMIN` puede editar `nombre`/`descripcion` de un carro en cualquier momento (`PATCH`); no hay "eliminar carro" en el alcance actual — se elimina indirectamente dando de baja todas sus PCs.
+> `freezado` no es un atributo del carro, es de cada PC individual (ver `equipo` arriba) — cada PC de un mismo carro puede tener o no Deep Freeze instalado. El `ADMIN` puede editar `nombre`/`descripcion` de un carro en cualquier momento (`PATCH`); no hay "eliminar carro" en el alcance actual — se elimina indirectamente dando de baja todas sus PCs.
 
 ### `incidencia`
 | Campo | Tipo | Restricciones |
 |---|---|---|
 | id | UUID | PK |
-| pc_id | UUID | FK → pc.id, NOT NULL |
+| equipo_id | UUID | FK → pc.id, NOT NULL |
 | reportado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | descripcion | TEXT | NOT NULL |
 | gravedad | VARCHAR(10) | NOT NULL, CHECK IN ('LEVE','MODERADA','GRAVE') |
@@ -209,7 +209,7 @@ CREATE INDEX idx_materia_curso ON materia(curso_id);
 
 ```sql
 CREATE INDEX idx_pc_carro_estado ON pc(carro_id, estado);
-CREATE INDEX idx_incidencia_pc ON incidencia(pc_id);
+CREATE INDEX idx_incidencia_pc ON incidencia(equipo_id);
 ```
 
 ### `licencia_software`
@@ -218,7 +218,7 @@ Licencias de software con vencimiento periódico, una por (PC, software) — mig
 | Campo | Tipo | Restricciones |
 |---|---|---|
 | id | UUID | PK |
-| pc_id | UUID | FK → pc.id **ON DELETE CASCADE**, NOT NULL |
+| equipo_id | UUID | FK → pc.id **ON DELETE CASCADE**, NOT NULL |
 | nombre | VARCHAR(100) | NOT NULL, CHECK no vacío y sin espacios al borde |
 | dias_duracion | INTEGER | NOT NULL, CHECK entre 1 y 3650 |
 | dias_aviso | INTEGER | NOT NULL DEFAULT 1, CHECK entre 0 y 365 |
@@ -231,7 +231,7 @@ Licencias de software con vencimiento periódico, una por (PC, software) — mig
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 
 ```sql
-CREATE UNIQUE INDEX ux_licencia_pc_nombre ON licencia_software (pc_id, lower(nombre));
+CREATE UNIQUE INDEX ux_licencia_pc_nombre ON licencia_software (equipo_id, lower(nombre));
 CREATE INDEX idx_licencia_vencimiento ON licencia_software (fecha_vencimiento)
     WHERE fecha_vencimiento IS NOT NULL;
 ```
@@ -266,7 +266,7 @@ Representa el **patrón** temporal (materia + día de semana + horario + rango d
 
 > **`creado_por` es nullable a propósito** (migración `002`). RF-01.9 permite eliminar definitivamente una cuenta en BAJA para liberar su email, y lo asociado a ella "pierde la referencia al usuario" en vez de borrarse. Cuando esta FK era `NOT NULL` sin política de borrado, cualquier docente que hubiera creado una reserva recurrente quedaba imposible de eliminar: el `DELETE` moría con violación de FK y la API devolvía 500.
 
-> **`regla_recurrencia_pc` fue eliminada** en la migración `002`. Existía como tabla puente hacia `pc`, pero solo se escribía y nunca se leía: la cancelación de ocurrencias futuras (RF-04.6) resuelve por `reserva_grupo.regla_recurrencia_id`.
+> **`regla_recurrencia_pc` fue eliminada** en la migración `002`. Existía como tabla puente hacia `equipo`, pero solo se escribía y nunca se leía: la cancelación de ocurrencias futuras (RF-04.6) resuelve por `reserva_grupo.regla_recurrencia_id`.
 
 ### `reserva_grupo` (nueva)
 Es "la reserva" tal como la percibe el docente: una materia, una fecha, un horario — independientemente de cuántas PCs incluya, y **sin restricción de que todas pertenezcan al mismo carro** (un docente puede combinar PCs de carros distintos en la misma reserva si así lo necesita).
@@ -305,7 +305,7 @@ Ahora es "una PC dentro de un grupo de reserva" para las reservas normales, o un
 |---|---|---|
 | id | UUID | PK |
 | reserva_grupo_id | UUID | FK → reserva_grupo.id **ON DELETE CASCADE**, NULL (ver CHECK abajo) |
-| pc_id | UUID | FK → pc.id, NOT NULL |
+| equipo_id | UUID | FK → pc.id, NOT NULL |
 | materia_id | UUID | FK → materia.id, NULL (ver CHECK abajo) |
 | nombre_docente_snapshot | VARCHAR(200) | NULL (solo para NORMAL; ver CHECK abajo) |
 | fecha | DATE | NOT NULL |
@@ -331,7 +331,7 @@ ALTER TABLE reserva ADD CONSTRAINT chk_reserva_tipo_coherente CHECK (
 );
 
 -- fecha/hora se duplican de reserva_grupo hacia reserva a propósito:
--- el EXCLUDE de solapamiento necesita filtrar por pc_id + rango horario
+-- el EXCLUDE de solapamiento necesita filtrar por equipo_id + rango horario
 -- sin depender de un JOIN.
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
@@ -344,12 +344,12 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 -- be marked IMMUTABLE". La suma date+time no tiene ese problema.
 ALTER TABLE reserva ADD CONSTRAINT no_solapamiento
   EXCLUDE USING gist (
-    pc_id WITH =,
+    equipo_id WITH =,
     tsrange(fecha + hora_inicio, fecha + hora_fin) WITH &&
   )
   WHERE (estado = 'CONFIRMADA');
 
-CREATE INDEX idx_reserva_pc_fecha ON reserva(pc_id, fecha);
+CREATE INDEX idx_reserva_pc_fecha ON reserva(equipo_id, fecha);
 CREATE INDEX idx_reserva_grupo ON reserva(reserva_grupo_id) WHERE reserva_grupo_id IS NOT NULL;
 CREATE INDEX idx_reserva_materia ON reserva(materia_id) WHERE materia_id IS NOT NULL;
 CREATE INDEX idx_reserva_creado_por ON reserva(creado_por);
@@ -363,7 +363,7 @@ La custodia física de una PC: quién la tiene ahora — migración `013`. Ver R
 | Campo | Tipo | Restricciones |
 |---|---|---|
 | id | UUID | PK |
-| pc_id | UUID | FK → pc.id, NOT NULL |
+| equipo_id | UUID | FK → pc.id, NOT NULL |
 | reserva_id | UUID | FK → reserva.id **ON DELETE SET NULL**, NULL = préstamo espontáneo |
 | entregado_a_usuario_id | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | entregado_a_nombre | VARCHAR(200) | NOT NULL, CHECK no vacío y sin espacios al borde |
@@ -378,12 +378,12 @@ La custodia física de una PC: quién la tiene ahora — migración `013`. Ver R
 | avisado_cierre_para | DATE | NULL — jornada ya avisada (014) |
 
 ```sql
-CREATE UNIQUE INDEX ux_prestamo_abierto ON prestamo(pc_id) WHERE devuelto_en IS NULL;
+CREATE UNIQUE INDEX ux_prestamo_abierto ON prestamo(equipo_id) WHERE devuelto_en IS NULL;
 CREATE INDEX idx_prestamo_abiertos ON prestamo(entregado_en) WHERE devuelto_en IS NULL;
-CREATE INDEX idx_prestamo_pc ON prestamo(pc_id, entregado_en DESC);
+CREATE INDEX idx_prestamo_pc ON prestamo(equipo_id, entregado_en DESC);
 ```
 
-> **Las marcas del barrido (migración 014).** `avisado_demora_en` es un instante porque el reclamo sale UNA vez; `avisado_cierre_para` es una FECHA porque el corte de fin de jornada se repite cada día que la máquina siga afuera, así que lo que hay que recordar es "de este día ya avisé". Del lado de las reservas hay dos más: `reserva_grupo.recordatorio_enviado_en` (uno por clase, no por PC) y `reserva.avisado_pc_no_disponible_en`.
+> **Las marcas del barrido (migración 014).** `avisado_demora_en` es un instante porque el reclamo sale UNA vez; `avisado_cierre_para` es una FECHA porque el corte de fin de jornada se repite cada día que la máquina siga afuera, así que lo que hay que recordar es "de este día ya avisé". Del lado de las reservas hay dos más: `reserva_grupo.recordatorio_enviado_en` (uno por clase, no por PC) y `reserva.avisado_equipo_no_disponible_en`.
 >
 > **Ese último va en `reserva` y no en `prestamo`, y es la diferencia que importa:** la misma máquina demorada toda la mañana le falta a la clase de las 10 y también a la de las 12, y a las dos hay que avisarles. Con la marca del lado del préstamo, solo se enteraría la primera.
 
@@ -391,7 +391,7 @@ CREATE INDEX idx_prestamo_pc ON prestamo(pc_id, entregado_en DESC);
 
 > **El índice único parcial es la garantía que el papel no puede dar:** una PC no puede tener dos préstamos abiertos. Es parcial (`WHERE devuelto_en IS NULL`) para conservar igual el historial completo — la misma máquina prestada cien veces son cien filas, pero como mucho una abierta.
 
-> **No hay ninguna columna en `pc` que diga "prestada".** El estado se deriva de si existe un préstamo abierto, por la misma razón que el contador de licencias no se guarda: lo que se duplica se desincroniza, y eso es exactamente lo que le pasa al papel cuando alguien devuelve una máquina y nadie tacha el renglón.
+> **No hay ninguna columna en `equipo` que diga "prestada".** El estado se deriva de si existe un préstamo abierto, por la misma razón que el contador de licencias no se guarda: lo que se duplica se desincroniza, y eso es exactamente lo que le pasa al papel cuando alguien devuelve una máquina y nadie tacha el renglón.
 
 > **`entregado_a_nombre` va siempre, aunque haya `entregado_a_usuario_id`.** Es un snapshot, igual que `reserva_grupo.nombre_docente_snapshot`: si la cuenta se elimina definitivamente (RF-01.9), el registro tiene que seguir diciendo quién se llevó la máquina. Y el usuario es opcional porque quien pide una PC para un trámite puede no tener cuenta.
 
@@ -504,21 +504,21 @@ Archivar un ciclo lectivo **no es un soft-delete de las reservas** — es un bor
 
 **Al archivar un ciclo lectivo:**
 1. Se preservan (`archivado = true`, sin borrar): `curso`, `materia`, `docente_materia` — esto es lo que evita recrear "1°A" + "Matemáticas" + "el titular es Fulano" el año que viene.
-2. Antes de borrar nada, se calcula y persiste un **snapshot histórico agregado** (ver `historico_uso_pc` / `historico_uso_docente` abajo) con las estadísticas del año que termina.
+2. Antes de borrar nada, se calcula y persiste un **snapshot histórico agregado** (ver `historico_uso_equipo` / `historico_uso_docente` abajo) con las estadísticas del año que termina.
 3. Se **eliminan físicamente** (`DELETE`, no `UPDATE archivado=true`): todos los `reserva_grupo`, `reserva`, `regla_recurrencia` cuya `materia_id` pertenece a un curso de ese ciclo, más los bloqueos por evaluación estatal (`reserva` con `tipo = EVALUACION_ESTATAL`) del año de ese ciclo — no tienen materia, así que hay que ubicarlos por año.
-4. `incidencia` **no se toca** — pertenece a la `pc`, no al ciclo lectivo ni a ninguna materia; el historial de incidencias es independiente del calendario académico.
+4. `incidencia` **no se toca** — pertenece a la `equipo`, no al ciclo lectivo ni a ninguna materia; el historial de incidencias es independiente del calendario académico.
 
-### `historico_uso_pc` (nueva — permanente, uno por PC por año)
+### `historico_uso_equipo` (nueva — permanente, uno por PC por año)
 | Campo | Tipo | Restricciones |
 |---|---|---|
 | id | UUID | PK |
 | anio | INTEGER | NOT NULL |
-| pc_id | UUID | FK → pc.id, NOT NULL |
+| equipo_id | UUID | FK → pc.id, NOT NULL |
 | identificador_snapshot | INTEGER | NOT NULL |
 | carro_nombre_snapshot | VARCHAR(100) | NOT NULL |
 | minutos_reservados | INTEGER | NOT NULL |
 | cantidad_reservas | INTEGER | NOT NULL |
-| | | UNIQUE (anio, pc_id) |
+| | | UNIQUE (anio, equipo_id) |
 
 ### `historico_uso_docente` (nueva — permanente, uno por docente por año)
 | Campo | Tipo | Restricciones |
@@ -534,28 +534,28 @@ Archivar un ciclo lectivo **no es un soft-delete de las reservas** — es un bor
 > `usuario_id` queda en NULL si esa cuenta se elimina físicamente más adelante (RF-01.9); la fila sobrevive y sigue siendo legible por `nombre_docente_snapshot`. La política `SET NULL` se agregó en la migración `002`: originalmente la FK no tenía ninguna, así que el hard delete de un docente que figurara en cualquier snapshot histórico fallaba con violación de FK.
 
 ```sql
-CREATE INDEX idx_historico_pc_anio ON historico_uso_pc(anio);
+CREATE INDEX idx_historico_pc_anio ON historico_uso_equipo(anio);
 CREATE INDEX idx_historico_docente_anio ON historico_uso_docente(anio);
 ```
 
 > Estas dos tablas **sí** son un read-model permanente (a diferencia de la decisión de "sin CQRS" para reportes del ciclo activo, §4) — pero se calculan **una sola vez, al archivar**, no se sincronizan continuamente por eventos. Son baratas de mantener y son la única fuente de verdad para años ya cerrados, porque el detalle (`reserva`/`reserva_grupo`) de esos años ya no existe.
 >
-> **`incidencia` no necesita una tabla histórica equivalente**: a diferencia de `reserva`/`reserva_grupo`, nunca se elimina al archivar un ciclo (no depende de ningún ciclo lectivo — pertenece a la `pc`). El reporte de incidencias (RF-06.3) siempre puede resolverse con una query directa sobre `incidencia`, sin importar cuántos ciclos se hayan archivado desde entonces.
+> **`incidencia` no necesita una tabla histórica equivalente**: a diferencia de `reserva`/`reserva_grupo`, nunca se elimina al archivar un ciclo (no depende de ningún ciclo lectivo — pertenece a la `equipo`). El reporte de incidencias (RF-06.3) siempre puede resolverse con una query directa sobre `incidencia`, sin importar cuántos ciclos se hayan archivado desde entonces.
 
 ## 4. Reportes: queries agregadas para el ciclo activo, tablas históricas para años cerrados
 
 A esta escala no hace falta un read-model continuo sincronizado por eventos — pero sí hace falta uno puntual al archivar (§3), ya que el detalle se borra. Los reportes de RF-06 se resuelven así:
 
 - **Ciclo lectivo activo** (el año en curso, con `reserva`/`reserva_grupo` todavía en la base): queries directas.
-- **Ciclos ya archivados**: se leen de `historico_uso_pc` / `historico_uso_docente`.
+- **Ciclos ya archivados**: se leen de `historico_uso_equipo` / `historico_uso_docente`.
 
 ```sql
 -- Uso por PC en un rango de fechas (ciclo activo)
-SELECT p.id AS pc_id, p.identificador, c.nombre AS carro_nombre,
+SELECT p.id AS equipo_id, p.identificador, c.nombre AS carro_nombre,
        SUM(EXTRACT(EPOCH FROM (r.hora_fin - r.hora_inicio)) / 60)::int AS minutos_reservados,
        COUNT(*) AS cantidad_reservas
 FROM reserva r
-JOIN pc p ON p.id = r.pc_id
+JOIN pc p ON p.id = r.equipo_id
 JOIN carro c ON c.id = p.carro_id
 WHERE r.fecha BETWEEN $1 AND $2 AND r.estado != 'CANCELADA'
 GROUP BY p.id, p.identificador, c.nombre;
@@ -570,14 +570,14 @@ WHERE to_char(rg.fecha, 'YYYY-MM') = $1 AND r.estado != 'CANCELADA'
 GROUP BY rg.creado_por, rg.nombre_docente_snapshot;
 
 -- Uso por PC en un año ya archivado
-SELECT pc_id, identificador_snapshot, carro_nombre_snapshot, minutos_reservados, cantidad_reservas
-FROM historico_uso_pc
+SELECT equipo_id, identificador_snapshot, carro_nombre_snapshot, minutos_reservados, cantidad_reservas
+FROM historico_uso_equipo
 WHERE anio = $1;
 ```
 
 ## 5. Notas de diseño
 
 - `pc.freezado` es informativo (Deep Freeze instalado), sin efecto funcional sobre reservas.
-- `pc.dada_de_baja` / `pc.fecha_baja`: soft delete de inventario — la fila se conserva para no perder el historial de incidencias y reservas ya asociadas.
+- `pc.dado_de_baja` / `pc.fecha_baja`: soft delete de inventario — la fila se conserva para no perder el historial de incidencias y reservas ya asociadas.
 - `usuario.estado` incluye `BAJA` como estado terminal (sin reactivación) — distinto de `RECHAZADA`, que es para una solicitud de registro que nunca se aprobó.
 - `reserva_grupo` / `reserva` / `regla_recurrencia` no persisten indefinidamente: se **eliminan físicamente** al archivar el ciclo lectivo de su materia (ver §3), a diferencia de `curso`/`materia`/`docente_materia`, que solo se marcan `archivado=true` y se preservan.

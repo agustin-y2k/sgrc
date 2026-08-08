@@ -15,18 +15,18 @@ var mediodiaDeTest = time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC)
 
 // servicioConValidador deja tocar qué PCs están fuera del inventario, que
 // es lo único que el servicio le pregunta a inventory antes de entregar.
-func servicioConValidador(repo Repo, validador *fakeValidadorPC) *Service {
+func servicioConValidador(repo Repo, validador *fakeValidadorEquipo) *Service {
 	svc := nuevoServicioDeTest(repo)
 	svc.validadorPC = validador
 	return svc
 }
 
 // reservaDeTest deja una reserva confirmada de 8 a 9 en el repo.
-func reservaDeTest(t *testing.T, repo *fakeRepo, id, pcID string) *domain.Reserva {
+func reservaDeTest(t *testing.T, repo *fakeRepo, id, equipoID string) *domain.Reserva {
 	t.Helper()
 	docente := "Ada Lovelace"
 	creadoPor := "docente1"
-	r, err := domain.NuevaReservaNormal(id, "grupo1", pcID, "materia1", docente, &creadoPor,
+	r, err := domain.NuevaReservaNormal(id, "grupo1", equipoID, "materia1", docente, &creadoPor,
 		fecha(2026, time.March, 2), 8*time.Hour, 9*time.Hour, mediodiaDeTest.Add(-24*time.Hour))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
@@ -100,8 +100,8 @@ func TestEntregarPorReserva_SeLasLlevoOtraPersona(t *testing.T) {
 // Entregar es máquina por máquina, no de a grupo.
 func TestEntregarPorReserva_RetiroParcial(t *testing.T) {
 	repo := nuevoFakeRepo()
-	for i, pc := range []string{"pc1", "pc2", "pc3", "pc4", "pc5"} {
-		reservaDeTest(t, repo, string(rune('a'+i)), pc)
+	for i, equipo := range []string{"pc1", "pc2", "pc3", "pc4", "pc5"} {
+		reservaDeTest(t, repo, string(rune('a'+i)), equipo)
 	}
 	svc := nuevoServicioDeTest(repo)
 
@@ -149,7 +149,7 @@ func TestEntregarPorReserva_UnaFallaNoAbortaElLote(t *testing.T) {
 	reservaDeTest(t, repo, "res2", "pc2")
 	reservaDeTest(t, repo, "res3", "pc3")
 	// La del medio ya está afuera, en manos de otro.
-	yaAfuera, err := domain.NuevoPrestamo("pr-previo", domain.DatosDeEntrega{PCID: "pc2", Nombre: "Otro"}, mediodiaDeTest)
+	yaAfuera, err := domain.NuevoPrestamo("pr-previo", domain.DatosDeEntrega{EquipoID: "pc2", Nombre: "Otro"}, mediodiaDeTest)
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -171,10 +171,10 @@ func TestEntregarPorReserva_UnaFallaNoAbortaElLote(t *testing.T) {
 	}
 }
 
-func TestEntregarPorReserva_PCDadaDeBaja(t *testing.T) {
+func TestEntregarPorReserva_EquipoDadaDeBaja(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(t, repo, "res1", "pc1")
-	svc := servicioConValidador(repo, &fakeValidadorPC{
+	svc := servicioConValidador(repo, &fakeValidadorEquipo{
 		disponible:         true,
 		fueraDelInventario: map[string]bool{"pc1": true},
 	})
@@ -196,7 +196,7 @@ func TestEntregarPorReserva_SinReservas(t *testing.T) {
 
 	_, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{EntregadoPor: "admin1"})
 
-	if !errors.Is(err, ErrSinPCs) {
+	if !errors.Is(err, ErrSinEquipos) {
 		t.Errorf("esperaba ErrSinPCs, obtuve %v", err)
 	}
 }
@@ -209,7 +209,7 @@ func TestEntregarSuelta_SinReservaSinCuentaSinHora(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		PCIDs: []string{"pc1"}, Nombre: "Marta (secretaría)",
+		EquipoIDs: []string{"pc1"}, Nombre: "Marta (secretaría)",
 		Motivo: "trámite", EntregadoPor: "admin1",
 	})
 
@@ -233,7 +233,7 @@ func TestEntregarSuelta_NombreVacio(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
 	_, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		PCIDs: []string{"pc1"}, Nombre: "   ", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1"}, Nombre: "   ", EntregadoPor: "admin1",
 	})
 
 	// Falla el lote entero, no una PC: el nombre es el mismo para todas.
@@ -245,7 +245,7 @@ func TestEntregarSuelta_NombreVacio(t *testing.T) {
 // TestEntregarSuelta_AvisaSiLaPCTieneReservaEncima: no impide la entrega.
 // El sistema no sabe cuánto va a durar un trámite, así que decidir por el
 // Admin sería peor que darle el dato.
-func TestEntregarSuelta_AvisaSiLaPCTieneReservaEncima(t *testing.T) {
+func TestEntregarSuelta_AvisaSiLaEquipoTieneReservaEncima(t *testing.T) {
 	repo := nuevoFakeRepo()
 	r := reservaDeTest(t, repo, "res1", "pc1")
 	// La reserva tiene que ser futura respecto del reloj del test.
@@ -253,7 +253,7 @@ func TestEntregarSuelta_AvisaSiLaPCTieneReservaEncima(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		PCIDs: []string{"pc1"}, Nombre: "Marta", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1"}, Nombre: "Marta", EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -262,7 +262,7 @@ func TestEntregarSuelta_AvisaSiLaPCTieneReservaEncima(t *testing.T) {
 	if len(resultado.Entregadas) != 1 {
 		t.Fatal("el aviso no tiene que impedir la entrega")
 	}
-	if len(resultado.Avisos) != 1 || resultado.Avisos[0].PCID != "pc1" {
+	if len(resultado.Avisos) != 1 || resultado.Avisos[0].EquipoID != "pc1" {
 		t.Fatalf("esperaba un aviso de reserva próxima, obtuve %+v", resultado.Avisos)
 	}
 	if resultado.Avisos[0].Docente != "Ada Lovelace" {
@@ -274,7 +274,7 @@ func TestEntregarSuelta_SinReservasEncimaNoAvisaNada(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
 	resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		PCIDs: []string{"pc1"}, Nombre: "Marta", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1"}, Nombre: "Marta", EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -287,18 +287,18 @@ func TestEntregarSuelta_SinReservasEncimaNoAvisaNada(t *testing.T) {
 
 // ── Devolución ──────────────────────────────────────────────────────────
 
-func TestRecibirPCs_VariasDeUnaVez(t *testing.T) {
+func TestRecibirEquipos_VariasDeUnaVez(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 	entrega, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		PCIDs: []string{"pc1", "pc2", "pc3"}, Nombre: "Ada", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1", "pc2", "pc3"}, Nombre: "Ada", EntregadoPor: "admin1",
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	ids := []string{entrega.Entregadas[0].ID, entrega.Entregadas[1].ID, entrega.Entregadas[2].ID}
 
-	resultado, err := svc.RecibirPCs(context.Background(), ids, "admin2", "")
+	resultado, err := svc.RecibirEquipos(context.Background(), ids, "admin2", "")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -317,17 +317,17 @@ func TestRecibirPCs_VariasDeUnaVez(t *testing.T) {
 
 // TestRecibirPCs_FaltoUna: el caso que planteó la escuela. Devolver tres de
 // cuatro no necesita nada especial — la cuarta simplemente sigue abierta.
-func TestRecibirPCs_FaltoUna(t *testing.T) {
+func TestRecibirEquipos_FaltoUna(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 	entrega, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		PCIDs: []string{"pc1", "pc2", "pc3", "pc4"}, Nombre: "Ada", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1", "pc2", "pc3", "pc4"}, Nombre: "Ada", EntregadoPor: "admin1",
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	if _, err := svc.RecibirPCs(context.Background(),
+	if _, err := svc.RecibirEquipos(context.Background(),
 		[]string{entrega.Entregadas[0].ID, entrega.Entregadas[1].ID, entrega.Entregadas[2].ID},
 		"admin2", ""); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -337,22 +337,22 @@ func TestRecibirPCs_FaltoUna(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if len(abiertos) != 1 || abiertos[0].Prestamo.PCID != "pc4" {
+	if len(abiertos) != 1 || abiertos[0].Prestamo.EquipoID != "pc4" {
 		t.Errorf("la que falta debería seguir figurando afuera: %+v", abiertos)
 	}
 }
 
-func TestRecibirPCs_ObservacionesYQuienRecibio(t *testing.T) {
+func TestRecibirEquipos_ObservacionesYQuienRecibio(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 	entrega, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		PCIDs: []string{"pc1"}, Nombre: "Ada", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1"}, Nombre: "Ada", EntregadoPor: "admin1",
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	resultado, err := svc.RecibirPCs(context.Background(),
+	resultado, err := svc.RecibirEquipos(context.Background(),
 		[]string{entrega.Entregadas[0].ID}, "admin2", "volvió sin el cargador")
 
 	if err != nil {
@@ -373,21 +373,21 @@ func TestRecibirPCs_ObservacionesYQuienRecibio(t *testing.T) {
 // TestRecibirPCs_DosVecesSeInforma: dos Admin en el mostrador o un doble
 // clic. Lo que el Admin quería —que la máquina figure adentro— ya pasó, así
 // que se informa en vez de fallar.
-func TestRecibirPCs_DosVecesSeInforma(t *testing.T) {
+func TestRecibirEquipos_DosVecesSeInforma(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 	entrega, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		PCIDs: []string{"pc1"}, Nombre: "Ada", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1"}, Nombre: "Ada", EntregadoPor: "admin1",
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	id := entrega.Entregadas[0].ID
-	if _, err := svc.RecibirPCs(context.Background(), []string{id}, "admin2", ""); err != nil {
+	if _, err := svc.RecibirEquipos(context.Background(), []string{id}, "admin2", ""); err != nil {
 		t.Fatalf("la primera no debería fallar: %v", err)
 	}
 
-	resultado, err := svc.RecibirPCs(context.Background(), []string{id}, "admin3", "")
+	resultado, err := svc.RecibirEquipos(context.Background(), []string{id}, "admin3", "")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -405,7 +405,7 @@ func TestEntregarDevolverYEntregarDeNuevo(t *testing.T) {
 	ctx := context.Background()
 
 	primera, err := svc.EntregarSuelta(ctx, EntregaSueltaParams{
-		PCIDs: []string{"pc1"}, Nombre: "Ada", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1"}, Nombre: "Ada", EntregadoPor: "admin1",
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -413,7 +413,7 @@ func TestEntregarDevolverYEntregarDeNuevo(t *testing.T) {
 
 	// Mientras está afuera, no se puede volver a entregar.
 	segunda, err := svc.EntregarSuelta(ctx, EntregaSueltaParams{
-		PCIDs: []string{"pc1"}, Nombre: "Marta", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1"}, Nombre: "Marta", EntregadoPor: "admin1",
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -422,12 +422,12 @@ func TestEntregarDevolverYEntregarDeNuevo(t *testing.T) {
 		t.Fatalf("una máquina afuera no se puede entregar de nuevo: %+v", segunda)
 	}
 
-	if _, err := svc.RecibirPCs(ctx, []string{primera.Entregadas[0].ID}, "admin1", ""); err != nil {
+	if _, err := svc.RecibirEquipos(ctx, []string{primera.Entregadas[0].ID}, "admin1", ""); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
 	tercera, err := svc.EntregarSuelta(ctx, EntregaSueltaParams{
-		PCIDs: []string{"pc1"}, Nombre: "Marta", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1"}, Nombre: "Marta", EntregadoPor: "admin1",
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -436,7 +436,7 @@ func TestEntregarDevolverYEntregarDeNuevo(t *testing.T) {
 		t.Errorf("tras volver, la máquina se puede entregar de nuevo: %+v", tercera)
 	}
 
-	historial, err := svc.HistorialDePC(ctx, "pc1")
+	historial, err := svc.HistorialDeEquipo(ctx, "pc1")
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -472,10 +472,10 @@ func TestEntregarPorReserva_BloqueoDeEvaluacionNoRompeElLote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("un bloqueo sin docente no puede tumbar el lote entero: %v", err)
 	}
-	if len(resultado.Entregadas) != 1 || resultado.Entregadas[0].PCID != "pc1" {
+	if len(resultado.Entregadas) != 1 || resultado.Entregadas[0].EquipoID != "pc1" {
 		t.Errorf("la reserva con docente tenía que salir igual: %+v", resultado.Entregadas)
 	}
-	if len(resultado.NoEntregadas) != 1 || resultado.NoEntregadas[0].PCID != "pc2" {
+	if len(resultado.NoEntregadas) != 1 || resultado.NoEntregadas[0].EquipoID != "pc2" {
 		t.Errorf("el bloqueo tenía que informarse, no romper: %+v", resultado.NoEntregadas)
 	}
 }
@@ -520,7 +520,7 @@ func TestEntregarSuelta_AvisaDeLaReservaMasProxima(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		PCIDs: []string{"pc1"}, Nombre: "Marta", EntregadoPor: "admin1",
+		EquipoIDs: []string{"pc1"}, Nombre: "Marta", EntregadoPor: "admin1",
 	})
 
 	if err != nil {

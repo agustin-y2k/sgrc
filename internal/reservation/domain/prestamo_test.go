@@ -12,7 +12,7 @@ func instante(h, m int) time.Time {
 }
 
 func entregaMinima() DatosDeEntrega {
-	return DatosDeEntrega{PCID: "pc-1", Nombre: "Ana Pérez", EntregadoPor: "admin-1"}
+	return DatosDeEntrega{EquipoID: "equipo-1", Nombre: "Ana Pérez", EntregadoPor: "admin-1"}
 }
 
 func TestNuevoPrestamo_Espontaneo(t *testing.T) {
@@ -146,7 +146,7 @@ func TestDevolver(t *testing.T) {
 }
 
 // TestDevolver_DosVeces: pasa de verdad —dos Admin en el mostrador, o un
-// doble clic— y tiene que distinguirse de "esta PC nunca salió".
+// doble clic— y tiene que distinguirse de "este equipo nunca salió".
 func TestDevolver_DosVeces(t *testing.T) {
 	p, err := NuevoPrestamo("pr-1", entregaMinima(), instante(9, 0))
 	if err != nil {

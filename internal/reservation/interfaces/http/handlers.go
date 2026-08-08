@@ -74,7 +74,7 @@ func (h *Handler) CrearReserva(c *fiber.Ctx) error {
 	// RF-04.1: un Admin puede reservar para cualquier materia no archivada,
 	// sin estar asignado a ella.
 	grupo, reservas, err := h.svc.CrearReserva(c.UserContext(), req.MateriaID, claims.UserID,
-		claims.Rol == "ADMIN", fecha, horaInicio, horaFin, req.PCIDs)
+		claims.Rol == "ADMIN", fecha, horaInicio, horaFin, req.EquipoIDs)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -122,7 +122,7 @@ func (h *Handler) CrearReservaRecurrente(c *fiber.Ctx) error {
 	}
 
 	res, err := h.svc.CrearReservaRecurrente(c.UserContext(), req.MateriaID, claims.UserID,
-		claims.Rol == "ADMIN", diaSemana, horaInicio, horaFin, fechaInicio, fechaFin, req.PCIDs)
+		claims.Rol == "ADMIN", diaSemana, horaInicio, horaFin, fechaInicio, fechaFin, req.EquipoIDs)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -239,12 +239,12 @@ func (h *Handler) BloquearParaEvaluacion(c *fiber.Ctx) error {
 	}
 
 	usuarioID := claims.UserID
-	res, err := h.svc.BloquearParaEvaluacion(c.UserContext(), req.PCIDs, &usuarioID, fecha, horaInicio, horaFin, req.Motivo)
+	res, err := h.svc.BloquearParaEvaluacion(c.UserContext(), req.EquipoIDs, &usuarioID, fecha, horaInicio, horaFin, req.Motivo)
 	if err != nil {
 		return mapearError(err)
 	}
 	h.auditar(c, claims.UserID, audit.BloqueoEvaluacionCreado, "reserva", nil, map[string]any{
-		"pcIds":               req.PCIDs,
+		"pcIds":               req.EquipoIDs,
 		"fecha":               req.Fecha,
 		"reservasCanceladas":  res.ReservasCanceladas,
 		"docentesNotificados": res.DocentesNotificados,
@@ -281,7 +281,7 @@ func (h *Handler) ObtenerReservaGrupo(c *fiber.Ctx) error {
 }
 
 // GET /api/reservation/reservas — lista reservas con filtros opcionales
-// (materiaId, pcId, desde, hasta, incluirCanceladas).
+// (materiaId, equipoId, desde, hasta, incluirCanceladas).
 //
 // Control de acceso: un docente solo puede ver las suyas, así que el
 // filtro por creador se le fuerza sin importar lo que mande. Un Admin ve
@@ -308,8 +308,8 @@ func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 	if v := c.Query("materiaId"); v != "" {
 		filtro.MateriaID = &v
 	}
-	if v := c.Query("pcId"); v != "" {
-		filtro.PCID = &v
+	if v := c.Query("equipoId"); v != "" {
+		filtro.EquipoID = &v
 	}
 	if v := c.Query("desde"); v != "" {
 		desde, err := parseFecha(v)
@@ -347,11 +347,11 @@ func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 	})
 }
 
-// GET /api/reservation/pcs/{pcId}/calendario?desde&hasta — RF-04.4.
+// GET /api/reservation/equipos/{equipoId}/calendario?desde&hasta — RF-04.4.
 // Cualquier usuario autenticado puede consultarlo: un docente necesita ver
 // qué PCs están libres antes de elegir cuáles reservar.
-func (h *Handler) CalendarioDePC(c *fiber.Ctx) error {
-	pcID := c.Params("pcId")
+func (h *Handler) CalendarioDeEquipo(c *fiber.Ctx) error {
+	equipoID := c.Params("equipoId")
 
 	desde, err := parseFecha(c.Query("desde"))
 	if err != nil {
@@ -362,16 +362,16 @@ func (h *Handler) CalendarioDePC(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "hasta: "+err.Error())
 	}
 
-	bloques, err := h.svc.CalendarioDePC(c.UserContext(), pcID, desde, hasta)
+	bloques, err := h.svc.CalendarioDeEquipo(c.UserContext(), equipoID, desde, hasta)
 	if err != nil {
 		return mapearError(err)
 	}
 
-	resp := calendarioPCResponse{
-		PCID:    pcID,
-		Desde:   desde.Format("2006-01-02"),
-		Hasta:   hasta.Format("2006-01-02"),
-		Bloques: make([]bloqueCalendarioResponse, len(bloques)),
+	resp := calendarioEquipoResponse{
+		EquipoID: equipoID,
+		Desde:    desde.Format("2006-01-02"),
+		Hasta:    hasta.Format("2006-01-02"),
+		Bloques:  make([]bloqueCalendarioResponse, len(bloques)),
 	}
 	for i, b := range bloques {
 		resp.Bloques[i] = toBloqueCalendarioResponse(b)
@@ -379,10 +379,10 @@ func (h *Handler) CalendarioDePC(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// GET /api/reservation/pcs-disponibles?fecha&horaInicio&horaFin — RF-04.2.
+// GET /api/reservation/equipos-disponibles?fecha&horaInicio&horaFin — RF-04.2.
 // La lista de la que el docente tilda las PCs que necesita; no está
 // restringida a un solo carro.
-func (h *Handler) ListarPCsDisponibles(c *fiber.Ctx) error {
+func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 	fecha, err := parseFecha(c.Query("fecha"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "fecha: "+err.Error())
@@ -396,38 +396,38 @@ func (h *Handler) ListarPCsDisponibles(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "horaFin: "+err.Error())
 	}
 
-	pcs, err := h.svc.ListarPCsDisponiblesEn(c.UserContext(), fecha, horaInicio, horaFin)
+	equipos, err := h.svc.ListarEquiposDisponiblesEn(c.UserContext(), fecha, horaInicio, horaFin)
 	if err != nil {
 		return mapearError(err)
 	}
 
-	data := make([]pcDisponibleResponse, len(pcs))
-	for i, p := range pcs {
-		data[i] = toPCDisponibleResponse(p)
+	data := make([]equipoDisponibleResponse, len(equipos))
+	for i, p := range equipos {
+		data[i] = toEquipoDisponibleResponse(p)
 	}
-	return c.JSON(pcsDisponiblesResponse{Data: data})
+	return c.JSON(equiposDisponiblesResponse{Data: data})
 }
 
-// PATCH /api/reservation/reservas/{id}/pc — cambiar una reserva de máquina.
+// PATCH /api/reservation/reservas/{id}/equipo — cambiar una reserva de máquina.
 //
 // Existe para que "elegí otra" no obligue a cancelar y volver a reservar,
 // que arma un grupo nuevo y parte la clase en dos tarjetas. Es de quien
 // tenga la reserva, o de un Admin.
-func (h *Handler) CambiarPCDeReserva(c *fiber.Ctx) error {
+func (h *Handler) CambiarEquipoDeReserva(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
 		return err
 	}
 
-	var req cambiarPCRequest
+	var req cambiarEquipoRequest
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
-	if strings.TrimSpace(req.PCID) == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "hay que indicar la PC nueva")
+	if strings.TrimSpace(req.EquipoID) == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "hay que indicar el equipo nuevo")
 	}
 
-	reserva, err := h.svc.CambiarPCDeReserva(c.UserContext(), c.Params("id"), req.PCID,
+	reserva, err := h.svc.CambiarEquipoDeReserva(c.UserContext(), c.Params("id"), req.EquipoID,
 		claims.UserID, claims.Rol == "ADMIN")
 	if err != nil {
 		return mapearError(err)
