@@ -16,11 +16,15 @@ import "time"
 // ReservaCancelada es una Reserva puntual que se canceló.
 type ReservaCancelada struct {
 	ReservaID string
-	// PCIdentificador es el número visible de la PC ("PC 7"), no su UUID:
-	// es lo que el docente puede reconocer. Va en 0 si no se pudo resolver,
-	// y el mensaje sale igual sin el detalle — perder el aviso sería peor.
-	PCIdentificador int
-	Fecha           time.Time
+	// Etiqueta es cómo el docente reconoce el equipo: "PC 7", "Proyector
+	// Epson". No es el UUID ni el número pelado — desde la 015 lo que se
+	// reserva puede no tener número, y "PC 0" es lo que sale de formatear
+	// uno que no existe.
+	//
+	// Vacía si no se pudo resolver, y el mensaje sale igual sin el detalle:
+	// perder el aviso sería peor.
+	Etiqueta string
+	Fecha    time.Time
 }
 
 // CancelacionesDeUsuario junta TODO lo que se le canceló a una persona en
@@ -46,8 +50,12 @@ type CancelacionesDeUsuario struct {
 // el aviso lo lee una persona que tiene que ir hasta una máquina, y "PC 3
 // del Carro 1" es lo que le sirve para encontrarla.
 type LicenciaPorVencer struct {
-	LicenciaID       string
-	Nombre           string
+	LicenciaID string
+	Nombre     string
+	// Etiqueta es cómo se nombra al equipo: "PC 3" o "Notebook chica".
+	// PCIdentificador va en 0 en un equipo suelto (015), así que un aviso
+	// armado con él manda a buscar una "PC 0" que no existe.
+	Etiqueta         string
 	PCIdentificador  int
 	CarroNombre      string
 	FechaVencimiento time.Time
@@ -120,4 +128,122 @@ type CuentaAprobada struct {
 	UsuarioID string
 	Email     string
 	Nombre    string
+}
+
+// ══════════════════════════════════════════════════════════════════
+// El barrido de reservas y entregas (RF-08.10 a RF-08.13)
+// ══════════════════════════════════════════════════════════════════
+//
+// Los cuatro payloads de abajo los publica un RELOJ, no una persona. Eso
+// cambia lo que hay que cuidar: como nadie está esperando el resultado,
+// nadie se da cuenta si un aviso sale dos veces. La idempotencia la
+// garantizan las marcas de cada fila, del lado de reservation (migración
+// 014), no estos tipos.
+//
+// Todos llevan el contacto adentro por el mismo motivo que los de correo:
+// quien los consume es notification, que no puede importar el domain de
+// auth (docs/06-arquitectura.md §3).
+
+// RecordatorioDeReserva: "en un rato tenés reserva". Uno por ReservaGrupo,
+// no por PC — el docente vive la clase como una sola cosa.
+type RecordatorioDeReserva struct {
+	UsuarioID     string
+	Email         string
+	Nombre        string
+	MateriaNombre string
+	Fecha         time.Time
+	HoraInicio    time.Duration
+	// Equipos son las etiquetas ("PC 3", "Proyector Epson"), no los UUID
+	// ni los números: desde la 015 lo reservable puede no tener número.
+	Equipos []string
+	// EquiposSinDevolver son los de esa misma reserva que en este momento
+	// están afuera y pasados de hora. Van ADENTRO del recordatorio y no en
+	// un aviso aparte: si el docente igual va a recibir un correo por esta
+	// clase, mandarle dos es el bombardeo que se quiso evitar.
+	EquiposSinDevolver []string
+	// MinutosDeGracia es cuánto se espera antes de liberar la reserva. Va
+	// en el payload para que el texto no tenga que conocer la
+	// configuración del despliegue.
+	MinutosDeGracia int
+}
+
+// PCNoDisponibleParaReserva es el aviso suelto al docente siguiente: una
+// máquina de su reserva no volvió.
+//
+// Existe además del recordatorio porque la demora puede detectarse DESPUÉS
+// de que el recordatorio ya salió, o cuando falta menos de una hora para su
+// clase. Es la otra mitad de max(detección, inicio − 1 h).
+type PCNoDisponibleParaReserva struct {
+	UsuarioID     string
+	Email         string
+	Nombre        string
+	MateriaNombre string
+	Fecha         time.Time
+	HoraInicio    time.Duration
+	Equipos       []string
+}
+
+// ReservasLiberadas: las PCs que el docente no retiró y que dejaron de estar
+// reservadas para él.
+//
+// Se agrupa por docente y clase, como las cancelaciones: liberar tres
+// máquinas de una misma reserva es una sola noticia.
+type ReservasLiberadas struct {
+	UsuarioID     string
+	Email         string
+	Nombre        string
+	MateriaNombre string
+	Fecha         time.Time
+	HoraInicio    time.Duration
+	Equipos       []string
+	// TodaLaReserva: no retiró ninguna. Cambia el texto —"tu reserva" en vez
+	// de "tres de tus máquinas"— y es la diferencia entre no haber ido y
+	// haber ido a buscar solo algunas.
+	TodaLaReserva   bool
+	MinutosDeGracia int
+}
+
+// PrestamoDemorado es una máquina que tenía que haber vuelto y no volvió.
+type PrestamoDemorado struct {
+	PrestamoID string
+	// Etiqueta: "PC 7" o "Proyector Epson".
+	Etiqueta    string
+	CarroNombre string
+	Quien       string
+	// Email vacío si quien la tiene no tiene cuenta en el sistema. En ese
+	// caso el reclamo le llega solo a los Admin, que es lo único que se
+	// puede hacer.
+	Email           string
+	DebioVolverA    time.Time
+	MinutosDeDemora int
+}
+
+// PrestamosDemorados junta todo lo que está vencido en esta barrida: a los
+// Admin les llega un solo correo con la lista, y a cada persona que tenga
+// cuenta, uno suyo.
+type PrestamosDemorados struct {
+	Prestamos []PrestamoDemorado
+}
+
+// PCSinDevolverAlCierre es una máquina que quedó afuera al terminar la
+// jornada, con el docente al que le va a faltar mañana.
+type PCSinDevolverAlCierre struct {
+	Etiqueta    string
+	CarroNombre string
+	Quien       string
+	DesdeCuando time.Time
+	// Del docente de la PRÓXIMA reserva de esa PC, si la hay. Se avisa solo
+	// al siguiente y no a todos los de la semana: es el único para quien el
+	// aviso es accionable hoy, y si mañana la máquina sigue afuera, el corte
+	// del día siguiente avisa al que siga.
+	ProximoUsuarioID string
+	ProximoEmail     string
+	ProximoNombre    string
+	ProximaFecha     time.Time
+	ProximaHora      time.Duration
+}
+
+// PCsSinDevolverAlCierre es el corte de fin de jornada.
+type PCsSinDevolverAlCierre struct {
+	PCs []PCSinDevolverAlCierre
 }

@@ -55,6 +55,7 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
     carroNombre: "Carro 1",
     materiaNombre: "Matemáticas",
     cursoNombre: "1°A",
+    etiqueta: `PC ${over.pcIdentificador ?? 1}`,
     ...over,
   }
 }
@@ -439,5 +440,28 @@ describe("MisReservasPage", () => {
     renderPagina()
 
     expect(await screen.findByText("token inválido o expirado")).toBeInTheDocument()
+  })
+
+  /**
+   * El proyector (015) se reserva pero no está en ningún carro. La pantalla
+   * armaba el rótulo con identificador y carro, así que una reserva suya se
+   * leía "PC 0 · " — y con el INNER JOIN del repo ni siquiera llegaba acá.
+   */
+  it("nombra por su nombre lo que no está en ningún carro", async () => {
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([
+        reserva({
+          id: "r1",
+          pcId: "eq1",
+          etiqueta: "Proyector Epson",
+          pcIdentificador: 0,
+          carroNombre: "",
+        }),
+      ])
+    )
+    renderPagina()
+
+    expect(await screen.findByText("Proyector Epson")).toBeInTheDocument()
+    expect(screen.queryByText(/PC 0/)).not.toBeInTheDocument()
   })
 })

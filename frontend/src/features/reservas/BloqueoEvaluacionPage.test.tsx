@@ -25,6 +25,9 @@ function pc(over: Partial<PC> = {}): PC {
     carroId: "carro1",
     identificador: 1,
     numeroSerie: "SERIE-1001",
+    etiqueta: "PC 1",
+    tipo: "PC",
+    reservable: true,
     freezado: false,
     estado: "DISPONIBLE",
     dadaDeBaja: false,
@@ -37,6 +40,7 @@ function disponible(pcId: string, identificador: number): PCDisponible {
   return {
     pcId,
     identificador,
+    etiqueta: `PC ${identificador}`,
     carroId: "carro1",
     carroNombre: "Carro A",
     freezado: false,

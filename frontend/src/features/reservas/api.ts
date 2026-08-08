@@ -170,3 +170,19 @@ export function recibirPCs(req: { prestamoIds: string[]; observaciones?: string 
     body: req,
   })
 }
+
+/**
+ * RF-08.14 — cambiar una reserva de máquina sin partir la clase en dos.
+ *
+ * Sirve cuando el sistema avisa que una PC no volvió al laboratorio: la
+ * alternativa era cancelar esa reserva y crear otra, que arma un grupo nuevo
+ * y deja la misma clase mostrada como dos tarjetas separadas.
+ *
+ * Es de quien tenga la reserva, o de un Admin.
+ */
+export function cambiarPCDeReserva(reservaId: string, pcId: string) {
+  return apiFetch<Reserva>(`/api/reservation/reservas/${reservaId}/pc`, {
+    method: "PATCH",
+    body: { pcId },
+  })
+}

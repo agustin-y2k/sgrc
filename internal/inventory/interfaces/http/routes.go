@@ -29,6 +29,12 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	inventory.Patch("/pcs/:id/estado", autenticado, soloAdmin, h.CambiarEstadoPC)
 	inventory.Delete("/pcs/:id", autenticado, soloAdmin, h.DarDeBajaPC)
 
+	// Equipos que no están en ningún carro (RF-03.15): el proyector, los
+	// cargadores. Se listan para cualquier autenticado por el mismo motivo
+	// que las PCs; darlos de alta es solo de Admin.
+	inventory.Post("/equipos", autenticado, soloAdmin, h.CrearEquipo)
+	inventory.Get("/equipos", autenticado, h.ListarEquiposSueltos)
+
 	// Incidencia
 	inventory.Post("/incidencias", autenticado, h.CrearIncidencia)
 	inventory.Get("/pcs/:pcId/incidencias", autenticado, h.ListarIncidenciasPorPC)

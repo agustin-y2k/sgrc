@@ -115,6 +115,109 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
+	// ── El barrido de reservas y entregas (RF-08.10 a RF-08.13) ─────
+
+	bus.Subscribe("reserva.recordatorio", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.RecordatorioDeReserva)
+		if !ok {
+			log.Printf("correo: payload inesperado para reserva.recordatorio: %+v", e.Payload)
+			return
+		}
+		if payload.Email == "" {
+			return
+		}
+		asunto, cuerpo := m.textoDeRecordatorio(payload)
+		enviar("por mail el recordatorio de la reserva", func(ctx context.Context) error {
+			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+		})
+	})
+
+	bus.Subscribe("reserva.pc-no-disponible", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PCNoDisponibleParaReserva)
+		if !ok {
+			log.Printf("correo: payload inesperado para reserva.pc-no-disponible: %+v", e.Payload)
+			return
+		}
+		if payload.Email == "" {
+			return
+		}
+		asunto, cuerpo := m.textoDePCNoDisponible(payload)
+		enviar("por mail la PC que no volvió", func(ctx context.Context) error {
+			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+		})
+	})
+
+	bus.Subscribe("reserva.no-retirada", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.ReservasLiberadas)
+		if !ok {
+			log.Printf("correo: payload inesperado para reserva.no-retirada: %+v", e.Payload)
+			return
+		}
+		if payload.Email == "" {
+			return
+		}
+		asunto, cuerpo := m.textoDeReservasLiberadas(payload)
+		enviar("por mail la reserva liberada", func(ctx context.Context) error {
+			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+		})
+	})
+
+	// El reclamo va a dos lados: a los Admin con la lista completa, y a cada
+	// persona que tenga cuenta con el suyo. Quien se llevó una máquina para
+	// un trámite y no tiene cuenta no recibe nada — no hay a dónde
+	// mandárselo, y por eso el aviso a los Admin es el que no puede fallar.
+	bus.Subscribe("prestamo.demorado", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PrestamosDemorados)
+		if !ok {
+			log.Printf("correo: payload inesperado para prestamo.demorado: %+v", e.Payload)
+			return
+		}
+		if len(payload.Prestamos) == 0 {
+			return
+		}
+		asunto, cuerpo := m.textoDeDemoraParaAdmins(payload)
+		enviar("por mail las devoluciones demoradas", func(ctx context.Context) error {
+			return m.enviarATodosLosAdmins(ctx, asunto, cuerpo)
+		})
+
+		for _, p := range payload.Prestamos {
+			if p.Email == "" {
+				continue
+			}
+			demorado := p
+			asunto, cuerpo := m.textoDeDemoraParaQuienLaTiene(demorado)
+			enviar("por mail el recordatorio de devolución", func(ctx context.Context) error {
+				return m.enviador.Enviar(ctx, demorado.Email, asunto, cuerpo)
+			})
+		}
+	})
+
+	bus.Subscribe("prestamo.sin-devolver.cierre", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PCsSinDevolverAlCierre)
+		if !ok {
+			log.Printf("correo: payload inesperado para prestamo.sin-devolver.cierre: %+v", e.Payload)
+			return
+		}
+		if len(payload.PCs) == 0 {
+			return
+		}
+		asunto, cuerpo := m.textoDeCierreParaAdmins(payload)
+		enviar("por mail el cierre de jornada", func(ctx context.Context) error {
+			return m.enviarATodosLosAdmins(ctx, asunto, cuerpo)
+		})
+
+		for _, pc := range payload.PCs {
+			if pc.ProximoEmail == "" {
+				continue
+			}
+			aviso := pc
+			asunto, cuerpo := m.textoDeCierreParaElProximo(aviso)
+			enviar("por mail la PC que le va a faltar al docente siguiente", func(ctx context.Context) error {
+				return m.enviador.Enviar(ctx, aviso.ProximoEmail, asunto, cuerpo)
+			})
+		}
+	})
+
 	// ── Aviso a la persona: le aprobaron la cuenta ──────────────────
 	bus.Subscribe("cuenta.aprobada", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.CuentaAprobada)

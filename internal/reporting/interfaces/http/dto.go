@@ -5,7 +5,10 @@ package http
 import "github.com/ramiro/sgrc/internal/reporting/domain"
 
 type resumenUsoPCResponse struct {
-	PCID              string `json:"pcId"`
+	PCID string `json:"pcId"`
+	// Etiqueta es lo que se muestra: "PC 3" o "Proyector Epson". Los dos de
+	// abajo van en 0 y "" cuando el equipo no está en ningún carro (015).
+	Etiqueta          string `json:"etiqueta"`
 	Identificador     int    `json:"identificador"`
 	CarroNombre       string `json:"carroNombre"`
 	CantidadReservas  int    `json:"cantidadReservas"`
@@ -14,7 +17,7 @@ type resumenUsoPCResponse struct {
 
 func toResumenUsoPCResponse(u domain.ResumenUsoPC) resumenUsoPCResponse {
 	return resumenUsoPCResponse{
-		PCID: u.PCID, Identificador: u.Identificador, CarroNombre: u.CarroNombre,
+		PCID: u.PCID, Etiqueta: u.Etiqueta, Identificador: u.Identificador, CarroNombre: u.CarroNombre,
 		CantidadReservas: u.CantidadReservas, MinutosReservados: u.MinutosReservados,
 	}
 }
@@ -34,9 +37,13 @@ func toResumenUsoDocenteResponse(u domain.ResumenUsoDocente) resumenUsoDocenteRe
 }
 
 type historicoUsoPCResponse struct {
-	ID                    string `json:"id"`
-	Anio                  int    `json:"anio"`
-	PCID                  string `json:"pcId"`
+	ID   string `json:"id"`
+	Anio int    `json:"anio"`
+	PCID string `json:"pcId"`
+	// Cómo se llamaba el equipo el día que se archivó el ciclo: "PC 3" o
+	// "Proyector Epson". Los dos de abajo van en 0 y "" si no estaba en
+	// ningún carro (015).
+	EtiquetaSnapshot      string `json:"etiquetaSnapshot"`
 	IdentificadorSnapshot int    `json:"identificadorSnapshot"`
 	CarroNombreSnapshot   string `json:"carroNombreSnapshot"`
 	MinutosReservados     int    `json:"minutosReservados"`
@@ -45,8 +52,9 @@ type historicoUsoPCResponse struct {
 
 func toHistoricoUsoPCResponse(h *domain.HistoricoUsoPC) historicoUsoPCResponse {
 	return historicoUsoPCResponse{
-		ID: h.ID, Anio: h.Anio, PCID: h.PCID, IdentificadorSnapshot: h.IdentificadorSnapshot,
-		CarroNombreSnapshot: h.CarroNombreSnapshot, MinutosReservados: h.MinutosReservados, CantidadReservas: h.CantidadReservas,
+		ID: h.ID, Anio: h.Anio, PCID: h.PCID, EtiquetaSnapshot: h.EtiquetaSnapshot,
+		IdentificadorSnapshot: h.IdentificadorSnapshot,
+		CarroNombreSnapshot:   h.CarroNombreSnapshot, MinutosReservados: h.MinutosReservados, CantidadReservas: h.CantidadReservas,
 	}
 }
 
@@ -69,7 +77,9 @@ func toHistoricoUsoDocenteResponse(h *domain.HistoricoUsoDocente) historicoUsoDo
 // ── RF-06.3: incidencias por equipo y por carro ────────────────────────
 
 type resumenIncidenciasPCResponse struct {
-	PCID          string `json:"pcId"`
+	PCID string `json:"pcId"`
+	// Ver resumenUsoPCResponse.Etiqueta.
+	Etiqueta      string `json:"etiqueta"`
 	Identificador int    `json:"identificador"`
 	CarroNombre   string `json:"carroNombre"`
 	Total         int    `json:"total"`
@@ -82,7 +92,7 @@ type resumenIncidenciasPCResponse struct {
 
 func toResumenIncidenciasPCResponse(x domain.ResumenIncidenciasPC) resumenIncidenciasPCResponse {
 	return resumenIncidenciasPCResponse{
-		PCID: x.PCID, Identificador: x.Identificador, CarroNombre: x.CarroNombre,
+		PCID: x.PCID, Etiqueta: x.Etiqueta, Identificador: x.Identificador, CarroNombre: x.CarroNombre,
 		Total: x.Total, Abiertas: x.Abiertas, EnReparacion: x.EnReparacion,
 		EnviadasDGE: x.EnviadasDGE, Resueltas: x.Resueltas, Graves: x.Graves,
 	}

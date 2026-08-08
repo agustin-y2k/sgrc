@@ -48,13 +48,25 @@ const (
 	// es donde está el detalle y el botón de renovar — el aviso resume,
 	// no enumera.
 	TipoLicenciaPorVencer Tipo = "LICENCIA_POR_VENCER"
+	// TipoReservaPorComenzar: el recordatorio de que en un rato hay clase, y
+	// también el aviso de que una de esas máquinas no volvió. Comparten tipo
+	// porque para el docente la acción es la misma —mirar su reserva— y el
+	// tipo existe para elegir el botón, no para clasificar noticias.
+	TipoReservaPorComenzar Tipo = "RESERVA_POR_COMENZAR"
+	// TipoReservaNoRetirada: pasaron los minutos de gracia y esas máquinas
+	// dejaron de estar reservadas (RF-08.10).
+	TipoReservaNoRetirada Tipo = "RESERVA_NO_RETIRADA"
+	// TipoPCSinDevolver: para los Admin — una máquina no volvió a horario.
+	// Lleva a la pantalla de entregas, no a la de reservas.
+	TipoPCSinDevolver Tipo = "PC_SIN_DEVOLVER"
 )
 
 var ErrTipoInvalido = errors.New("tipo de notificación inválido")
 
 func ParseTipo(s string) (Tipo, error) {
 	switch Tipo(s) {
-	case TipoGeneral, TipoDocentePendiente, TipoReservaCancelada, TipoLicenciaPorVencer:
+	case TipoGeneral, TipoDocentePendiente, TipoReservaCancelada, TipoLicenciaPorVencer,
+		TipoReservaPorComenzar, TipoReservaNoRetirada, TipoPCSinDevolver:
 		return Tipo(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrTipoInvalido, s)

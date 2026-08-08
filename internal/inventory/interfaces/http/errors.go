@@ -22,7 +22,8 @@ func mapearError(err error) error {
 		// El alta masiva saltea los duplicados y los informa en el cuerpo;
 		// esto solo salta al RENOMBRAR una licencia al nombre de otra que
 		// esa misma PC ya tiene.
-		errors.Is(err, application.ErrLicenciaDuplicada):
+		errors.Is(err, application.ErrLicenciaDuplicada),
+		errors.Is(err, application.ErrNombreDeEquipoDuplicado):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrTransicionEstadoPCInvalida),
@@ -33,6 +34,10 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrIdentificadorInvalido),
 		errors.Is(err, domain.ErrNumeroSerieInvalido),
 		errors.Is(err, domain.ErrNumeroSerieLargo),
+		errors.Is(err, domain.ErrTipoEquipoVacio),
+		errors.Is(err, domain.ErrTipoEquipoLargo),
+		errors.Is(err, domain.ErrNombreEquipoVacio),
+		errors.Is(err, domain.ErrNombreEquipoLargo),
 		errors.Is(err, domain.ErrDescripcionVacia),
 		errors.Is(err, domain.ErrEstadoPCInvalido),
 		errors.Is(err, domain.ErrGravedadInvalida),

@@ -28,6 +28,14 @@ type fakeRepo struct {
 	// pcsDadasDeBaja imita lo único que el servicio le pregunta a
 	// inventory antes de entregar una máquina.
 	pcsDadasDeBaja map[string]bool
+
+	// Lo que el barrido lee por JOIN contra pc y usuario. En los tests se
+	// carga a mano: acá no hay base que lo resuelva.
+	identificadorDePC map[string]int
+	contactoDeUsuario map[string][2]string // usuarioID → {nombre, email}
+	// Las marcas del barrido, que en la base son columnas.
+	recordatorioEnviado map[string]time.Time
+	avisoPCNoDisponible map[string]time.Time
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -37,7 +45,153 @@ func nuevoFakeRepo() *fakeRepo {
 		reglas:         make(map[string]*domain.ReglaRecurrencia),
 		prestamos:      make(map[string]*domain.Prestamo),
 		pcsDadasDeBaja: make(map[string]bool),
+
+		identificadorDePC:   make(map[string]int),
+		contactoDeUsuario:   make(map[string][2]string),
+		recordatorioEnviado: make(map[string]time.Time),
+		avisoPCNoDisponible: make(map[string]time.Time),
 	}
+}
+
+// ── Lo que lee el barrido ───────────────────────────────────────────────
+
+// ReservasAVigilar reproduce la consulta real: las CONFIRMADA de hoy y
+// mañana, con el contacto del docente y el estado de custodia de cada PC.
+//
+// El cruce con los préstamos va por pc_id y no por reserva_id, igual que en
+// SQL: si la máquina salió por una entrega espontánea, igual está afuera.
+func (r *fakeRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]ReservaParaVigilar, error) {
+	desde := diaDe(hoy)
+	hasta := desde.AddDate(0, 0, 1)
+
+	var resultado []ReservaParaVigilar
+	for _, res := range r.enOrden() {
+		if res.Estado != domain.ReservaConfirmada {
+			continue
+		}
+		dia := diaDe(res.Fecha)
+		if dia.Before(desde) || dia.After(hasta) {
+			continue
+		}
+
+		v := ReservaParaVigilar{
+			ReservaID:       res.ID,
+			GrupoID:         res.ReservaGrupoID,
+			PCID:            res.PCID,
+			PCIdentificador: r.identificadorDePC[res.PCID],
+			Etiqueta:        fmt.Sprintf("PC %d", r.identificadorDePC[res.PCID]),
+			Fecha:           res.Fecha,
+			HoraInicio:      res.HoraInicio,
+			HoraFin:         res.HoraFin,
+			Tipo:            res.Tipo,
+			MateriaNombre:   res.MateriaID,
+		}
+		if res.NombreDocenteSnapshot != nil {
+			v.DocenteNombre = *res.NombreDocenteSnapshot
+		}
+		if res.ReservaGrupoID != nil {
+			if g, ok := r.grupos[*res.ReservaGrupoID]; ok {
+				v.DocenteID = g.CreadoPor
+				if g.CreadoPor != nil {
+					if c, ok := r.contactoDeUsuario[*g.CreadoPor]; ok {
+						v.DocenteNombre, v.DocenteEmail = c[0], c[1]
+					}
+				}
+			}
+			_, v.RecordatorioEnviado = r.recordatorioEnviado[*res.ReservaGrupoID]
+		}
+		_, v.AvisoPCNoDisponibleEnviado = r.avisoPCNoDisponible[res.ID]
+
+		for _, p := range r.prestamos {
+			if p.PCID == res.PCID && p.EstaAbierto() {
+				v.PCAfuera = true
+				v.PCDeboVolverA = p.DevolucionEstimada
+				break
+			}
+		}
+		resultado = append(resultado, v)
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) PrestamosAVigilar(ctx context.Context) ([]PrestamoParaVigilar, error) {
+	var resultado []PrestamoParaVigilar
+	for _, p := range r.prestamosEnOrden() {
+		if !p.EstaAbierto() {
+			continue
+		}
+		v := PrestamoParaVigilar{
+			Prestamo:        p,
+			PCIdentificador: r.identificadorDePC[p.PCID],
+			Etiqueta:        fmt.Sprintf("PC %d", r.identificadorDePC[p.PCID]),
+		}
+		if p.EntregadoAUsuarioID != nil {
+			if c, ok := r.contactoDeUsuario[*p.EntregadoAUsuarioID]; ok {
+				v.Email = c[1]
+			}
+		}
+		resultado = append(resultado, v)
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) ProximaReservaDePC(ctx context.Context, pcID string, desde time.Time) (*ProximaReserva, error) {
+	var mejor *domain.Reserva
+	for _, res := range r.enOrden() {
+		if res.PCID != pcID || res.Estado != domain.ReservaConfirmada {
+			continue
+		}
+		if mejor == nil || res.Fecha.Before(mejor.Fecha) ||
+			(res.Fecha.Equal(mejor.Fecha) && res.HoraInicio < mejor.HoraInicio) {
+			mejor = res
+		}
+	}
+	if mejor == nil {
+		return nil, nil
+	}
+	p := &ProximaReserva{Fecha: mejor.Fecha, HoraInicio: mejor.HoraInicio}
+	if mejor.NombreDocenteSnapshot != nil {
+		p.Nombre = *mejor.NombreDocenteSnapshot
+	}
+	if mejor.ReservaGrupoID != nil {
+		if g, ok := r.grupos[*mejor.ReservaGrupoID]; ok && g.CreadoPor != nil {
+			p.UsuarioID = *g.CreadoPor
+			if c, ok := r.contactoDeUsuario[*g.CreadoPor]; ok {
+				p.Nombre, p.Email = c[0], c[1]
+			}
+		}
+	}
+	return p, nil
+}
+
+func (r *fakeRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
+	r.recordatorioEnviado[grupoID] = ahora
+	return nil
+}
+
+func (r *fakeRepo) MarcarAvisoPCNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
+	r.avisoPCNoDisponible[reservaID] = ahora
+	return nil
+}
+
+func (r *fakeRepo) MarcarDemoraAvisada(ctx context.Context, prestamoID string, ahora time.Time) error {
+	if p, ok := r.prestamos[prestamoID]; ok {
+		p.AvisadoDemoraEn = &ahora
+	}
+	return nil
+}
+
+func (r *fakeRepo) MarcarCierreAvisado(ctx context.Context, prestamoID string, jornada time.Time) error {
+	if p, ok := r.prestamos[prestamoID]; ok {
+		d := diaDe(jornada)
+		p.AvisadoCierrePara = &d
+	}
+	return nil
+}
+
+func diaDe(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
 // EnTransaccion imita el todo-o-nada de Postgres: saca una copia del
@@ -375,18 +529,18 @@ func (f *fakeValidadorPC) PCEstaEnInventario(ctx context.Context, pcID string) (
 	return !f.fueraDelInventario[pcID], nil
 }
 
-// IdentificadoresDePCs: en los tests las PCs se llaman "pc1", "pc2"… así que
+// EtiquetasDeEquipos: en los tests las PCs se llaman "pc1", "pc2"… así que
 // el número visible sale del sufijo. Alcanza para verificar que el aviso
-// nombre las PCs correctas.
-func (f *fakeValidadorPC) IdentificadoresDePCs(ctx context.Context, pcIDs []string) (map[string]int, error) {
+// nombre los equipos correctos.
+func (f *fakeValidadorPC) EtiquetasDeEquipos(ctx context.Context, pcIDs []string) (map[string]string, error) {
 	if f.errIdentificadores != nil {
 		return nil, f.errIdentificadores
 	}
-	m := make(map[string]int, len(pcIDs))
+	m := make(map[string]string, len(pcIDs))
 	for _, id := range pcIDs {
 		var n int
 		if _, err := fmt.Sscanf(id, "pc%d", &n); err == nil {
-			m[id] = n
+			m[id] = fmt.Sprintf("PC %d", n)
 		}
 	}
 	return m, nil
@@ -711,7 +865,7 @@ func TestCancelarReserva_PublicaEventoReservaCancelada(t *testing.T) {
 		if len(payload.Reservas) != 1 || payload.Reservas[0].ReservaID != reservas[0].ID {
 			t.Errorf("esperaba la reserva cancelada en el detalle: %+v", payload.Reservas)
 		}
-		if payload.Reservas[0].PCIdentificador != 1 {
+		if payload.Reservas[0].Etiqueta != "PC 1" {
 			t.Errorf("el aviso tiene que poder nombrar la PC: %+v", payload.Reservas[0])
 		}
 	case <-time.After(time.Second):
@@ -762,13 +916,13 @@ func TestBloquearParaEvaluacion_UnSoloEventoPorDocente(t *testing.T) {
 	if len(payload.Reservas) != 3 {
 		t.Fatalf("el aviso tiene que traer las 3 PCs, trae %d", len(payload.Reservas))
 	}
-	pcs := map[int]bool{}
+	pcs := map[string]bool{}
 	for _, r := range payload.Reservas {
-		pcs[r.PCIdentificador] = true
+		pcs[r.Etiqueta] = true
 	}
-	for _, esperada := range []int{1, 2, 3} {
+	for _, esperada := range []string{"PC 1", "PC 2", "PC 3"} {
 		if !pcs[esperada] {
-			t.Errorf("falta la PC %d en el detalle: %+v", esperada, payload.Reservas)
+			t.Errorf("falta la %s en el detalle: %+v", esperada, payload.Reservas)
 		}
 	}
 }
@@ -847,8 +1001,8 @@ func TestPublicarCancelaciones_SinIdentificadores_ElAvisoSaleIgual(t *testing.T)
 	select {
 	case e := <-recibido:
 		payload := e.Payload.(eventbus.CancelacionesDeUsuario)
-		if len(payload.Reservas) != 1 || payload.Reservas[0].PCIdentificador != 0 {
-			t.Errorf("esperaba el aviso sin identificador: %+v", payload.Reservas)
+		if len(payload.Reservas) != 1 || payload.Reservas[0].Etiqueta != "" {
+			t.Errorf("esperaba el aviso sin etiqueta: %+v", payload.Reservas)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("el evento tenía que publicarse igual")

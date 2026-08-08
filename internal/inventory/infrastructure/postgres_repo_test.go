@@ -4,6 +4,7 @@ package infrastructure
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -304,5 +305,140 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 		if err != application.ErrIDInvalido {
 			t.Errorf("%s: esperaba application.ErrIDInvalido, obtuve %v", c.nombre, err)
 		}
+	}
+}
+
+// ── Equipos sueltos (015) ───────────────────────────────────────────────
+
+func crearEquipoDeTest(t *testing.T, repo *PostgresRepo, tipo, nombre string, reservable bool) *domain.PC {
+	t.Helper()
+	eq, err := domain.NuevoEquipo(NuevoID(), tipo, nombre, reservable, time.Now().UTC().Truncate(time.Microsecond))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearPC(context.Background(), eq); err != nil {
+		t.Fatalf("no se pudo crear el equipo de prueba: %v", err)
+	}
+	return eq
+}
+
+// Lo que solo una base de verdad puede confirmar: que las tres columnas que
+// la 015 aflojó aceptan NULL y vuelven vacías, no como un cero o un error de
+// escaneo. Un proyector sin carro, sin identificador y sin número de serie es
+// exactamente la fila que antes era imposible.
+func TestPostgresRepo_EquipoSuelto_GuardarYRecuperar(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	eq := crearEquipoDeTest(t, repo, "PROYECTOR", "Proyector Epson", true)
+
+	vuelto, err := repo.BuscarPCPorID(ctx, eq.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if vuelto.CarroID != "" || vuelto.Identificador != 0 || vuelto.NumeroSerie != "" {
+		t.Errorf("esperaba carro/identificador/serie vacíos, obtuve %q/%d/%q",
+			vuelto.CarroID, vuelto.Identificador, vuelto.NumeroSerie)
+	}
+	if vuelto.Tipo != "PROYECTOR" || vuelto.Nombre != "Proyector Epson" || !vuelto.Reservable {
+		t.Errorf("no volvió como se guardó: %+v", vuelto)
+	}
+	if vuelto.Etiqueta() != "Proyector Epson" {
+		t.Errorf("un equipo suelto se nombra por su nombre, obtuve %q", vuelto.Etiqueta())
+	}
+}
+
+// Una PC de carro tiene que seguir volviendo igual que siempre: las columnas
+// nuevas no pueden ensuciarla ni el escaneo por punteros perder nada.
+func TestPostgresRepo_PCDeCarro_SigueSiendoPC(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	carro := crearCarroDeTest(t, repo, "Carro 1")
+	pc := crearPCDeTest(t, repo, carro.ID, 3, "SERIE-EQ-1")
+
+	vuelto, err := repo.BuscarPCPorID(ctx, pc.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if vuelto.Tipo != domain.TipoPC || vuelto.Nombre != "" || !vuelto.Reservable {
+		t.Errorf("esperaba tipo PC, sin nombre y reservable; obtuve %q/%q/%v",
+			vuelto.Tipo, vuelto.Nombre, vuelto.Reservable)
+	}
+	if vuelto.Etiqueta() != "PC 3" {
+		t.Errorf("una PC de carro se nombra por su identificador, obtuve %q", vuelto.Etiqueta())
+	}
+}
+
+// El nombre es lo único que distingue a un equipo suelto en la lista de
+// entregas. Dos "Cargador 1" tienen que rebotar como un 409 con mensaje, no
+// como un 500 de la base — y sin importar la caja.
+func TestPostgresRepo_EquipoSuelto_NombreDuplicado(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	crearEquipoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
+
+	otro, _ := domain.NuevoEquipo(NuevoID(), "CARGADOR", "CARGADOR 1", false, time.Now().UTC())
+	err := repo.CrearPC(ctx, otro)
+
+	if !errors.Is(err, application.ErrNombreDeEquipoDuplicado) {
+		t.Fatalf("esperaba ErrNombreDeEquipoDuplicado, obtuve %v", err)
+	}
+}
+
+// A diferencia de un número de serie, que es único de fábrica, "Cargador 1"
+// es un apodo: si el cargador se rompe y compran otro lo van a seguir
+// llamando igual. Sin esto el alta rebotaría con un 409 sin salida.
+func TestPostgresRepo_EquipoSuelto_NombreSeReusaTrasLaBaja(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	viejo := crearEquipoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
+	if err := viejo.DarDeBaja(time.Now().UTC()); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if err := repo.GuardarPC(ctx, viejo); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	nuevo, _ := domain.NuevoEquipo(NuevoID(), "CARGADOR", "Cargador 1", false, time.Now().UTC())
+	if err := repo.CrearPC(ctx, nuevo); err != nil {
+		t.Fatalf("el nombre de un equipo dado de baja debería poder reusarse: %v", err)
+	}
+}
+
+// El listado de la sección "Otros equipos": trae lo que no cuelga de ningún
+// carro y nada más. Si se colara una PC de carro, el proyector aparecería
+// junto a las 64 computadoras y la sección perdería sentido.
+func TestPostgresRepo_ListarEquiposSueltos_NoTraeLasDeCarro(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	carro := crearCarroDeTest(t, repo, "Carro 1")
+	crearPCDeTest(t, repo, carro.ID, 3, "SERIE-EQ-2")
+	crearEquipoDeTest(t, repo, "PROYECTOR", "Proyector Epson", true)
+	crearEquipoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
+
+	sueltos, err := repo.ListarEquiposSueltos(ctx)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	var nombres []string
+	for _, e := range sueltos {
+		if e.EstaEnUnCarro() {
+			t.Errorf("se coló una PC de carro: %+v", e)
+		}
+		nombres = append(nombres, e.Nombre)
+	}
+	// Ordenados por tipo y después por nombre: CARGADOR antes que PROYECTOR.
+	if len(nombres) != 2 || nombres[0] != "Cargador 1" || nombres[1] != "Proyector Epson" {
+		t.Errorf("esperaba [Cargador 1, Proyector Epson], obtuve %v", nombres)
 	}
 }

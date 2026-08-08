@@ -89,6 +89,17 @@ func (r *fakeRepo) ListarPCsPorCarro(ctx context.Context, carroID string) ([]*do
 	return resultado, nil
 }
 
+// ListarEquiposSueltos: lo prestable que no está en ningún carro (015).
+func (r *fakeRepo) ListarEquiposSueltos(ctx context.Context) ([]*domain.PC, error) {
+	var resultado []*domain.PC
+	for _, pc := range r.pcs {
+		if !pc.EstaEnUnCarro() {
+			resultado = append(resultado, pc)
+		}
+	}
+	return resultado, nil
+}
+
 func (r *fakeRepo) CrearIncidencia(ctx context.Context, i *domain.Incidencia) error {
 	r.incidencias[i.ID] = i
 	return nil
@@ -362,6 +373,55 @@ func TestEditarPC_MoverDeCarro(t *testing.T) {
 	}
 	if repo.pcs["pc1"].CarroID != "c2" {
 		t.Errorf("no se movió de carro: %s", repo.pcs["pc1"].CarroID)
+	}
+}
+
+// Editar es la otra puerta por la que se escriben tipo y nombre, además del
+// alta. Sin validar acá, un nombre vacío llegaría hasta el CHECK de la 015 y
+// volvería como un 500 en vez del 400 que corresponde — y dejaría un equipo
+// suelto sin lo único que lo distingue en la lista de entregas.
+func TestEditarPC_EquipoSueltoNoPuedeQuedarSinNombre(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.pcs["eq1"] = &domain.PC{ID: "eq1", Tipo: "PROYECTOR", Nombre: "Proyector Epson"}
+	svc := servicioSimple(repo)
+
+	vacio := ""
+	err := svc.EditarPC(context.Background(), "eq1", EditarPCParams{Nombre: &vacio})
+
+	if !errors.Is(err, domain.ErrNombreEquipoVacio) {
+		t.Fatalf("esperaba ErrNombreEquipoVacio, obtuve %v", err)
+	}
+	if repo.pcs["eq1"].Nombre != "Proyector Epson" {
+		t.Errorf("no debería haberse tocado: %q", repo.pcs["eq1"].Nombre)
+	}
+}
+
+func TestEditarPC_TipoVacioSeRechaza(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.pcs["eq1"] = &domain.PC{ID: "eq1", Tipo: "PROYECTOR", Nombre: "Proyector Epson"}
+	svc := servicioSimple(repo)
+
+	espacios := "   "
+	err := svc.EditarPC(context.Background(), "eq1", EditarPCParams{Tipo: &espacios})
+
+	if !errors.Is(err, domain.ErrTipoEquipoVacio) {
+		t.Fatalf("esperaba ErrTipoEquipoVacio, obtuve %v", err)
+	}
+}
+
+// En una PC de carro el nombre no cumple ninguna función —se la nombra por
+// su identificador—, así que borrarlo no rompe nada.
+func TestEditarPC_UnaPCDeCarroSiPuedeQuedarSinNombre(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.pcs["pc1"] = &domain.PC{ID: "pc1", CarroID: "c1", Identificador: 3, Nombre: "sobrante"}
+	svc := servicioSimple(repo)
+
+	vacio := ""
+	if err := svc.EditarPC(context.Background(), "pc1", EditarPCParams{Nombre: &vacio}); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if repo.pcs["pc1"].Nombre != "" {
+		t.Errorf("no se limpió: %q", repo.pcs["pc1"].Nombre)
 	}
 }
 

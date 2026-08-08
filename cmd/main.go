@@ -204,6 +204,48 @@ func horaAvisoLicencias() int {
 	return hora
 }
 
+// configDeVigilancia lee los tres plazos del barrido de reservas y entregas
+// (RF-08.10 a RF-08.13). Sin variables, quedan los del dominio.
+//
+// Se validan en el arranque y no en cada barrida: un valor mal escrito tiene
+// que impedir levantar, no descubrirse tres horas después cuando el aviso no
+// salga o salga cuando no corresponde.
+func configDeVigilancia() reservationapp.ConfigDeVigilancia {
+	cfg := reservationapp.ConfigDeVigilanciaPorDefecto()
+
+	if v := minutosDeEntorno("RETIRO_GRACIA_MINUTOS"); v > 0 {
+		cfg.GraciaDeRetiro = v
+	}
+	if v := minutosDeEntorno("DEVOLUCION_DEMORA_MINUTOS"); v > 0 {
+		cfg.DemoraParaReclamar = v
+	}
+	if crudo := strings.TrimSpace(os.Getenv("CIERRE_JORNADA")); crudo != "" {
+		hora, err := strconv.Atoi(crudo)
+		if err != nil || hora < 0 || hora > 23 {
+			log.Fatalf("CIERRE_JORNADA (%q) tiene que ser un número entero de 0 a 23 "+
+				"(la hora, en la zona de la escuela, a partir de la cual se avisa qué "+
+				"computadoras quedaron afuera)", crudo)
+		}
+		cfg.HoraDeCierre = hora
+	}
+	return cfg
+}
+
+// minutosDeEntorno devuelve 0 si la variable no está. Un valor que no sea un
+// entero positivo aborta el arranque: "0" o "-5" no son configuraciones, son
+// errores de tipeo que dejarían el barrido haciendo cualquier cosa.
+func minutosDeEntorno(clave string) time.Duration {
+	crudo := strings.TrimSpace(os.Getenv(clave))
+	if crudo == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(crudo)
+	if err != nil || n <= 0 {
+		log.Fatalf("%s (%q) tiene que ser un número entero de minutos mayor que cero", clave, crudo)
+	}
+	return time.Duration(n) * time.Minute
+}
+
 // puertoHTTP es el puerto en el que escucha la API. Lo comparten el
 // servidor y el autochequeo del contenedor, que necesita saber a dónde
 // pegar (ver healthcheck.go).
@@ -444,6 +486,11 @@ func main() {
 	)
 	inventoryHandler := inventoryhttp.NewHandler(inventorySvc, auditor)
 
+	// El barrido de reservas y entregas (RF-08.10 a RF-08.13). Como el
+	// avisador de licencias, es un tipo aparte del Service porque lo
+	// dispara un reloj y no un request.
+	vigilante := reservationapp.NewVigilante(reservationRepo, bus, ahora, configDeVigilancia())
+
 	// El avisador de licencias es un tipo aparte del Service porque no lo
 	// dispara un request sino un reloj (ver el job más abajo). Se arma acá,
 	// junto al resto de inventory, pero el ticker que lo llama vive con los
@@ -525,6 +572,36 @@ func main() {
 				}
 				if n > 0 {
 					log.Printf("job de vencimiento: %d reservas finalizadas", n)
+				}
+			}
+		}
+	}()
+
+	// ── Barrido de reservas y entregas (RF-08.10 a RF-08.13) ────────
+	// Cada cinco minutos, como el de vencimiento de reservas. No hace falta
+	// más precisión: cada aviso deja su marca en la fila, así que la
+	// frecuencia solo define cuánto puede tardar en salir, nunca cuántas
+	// veces sale.
+	jobTerminado.Add(1)
+	go func() {
+		defer jobTerminado.Done()
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				resumen, err := vigilante.Barrer(ctx)
+				if err != nil {
+					log.Printf("barrido de reservas y entregas: %v", err)
+					continue
+				}
+				if resumen.HizoAlgo() {
+					log.Printf("barrido: %d recordatorios, %d reservas liberadas, "+
+						"%d avisos de PC faltante, %d reclamos de devolución, %d avisos de cierre",
+						resumen.Recordatorios, resumen.Liberadas, resumen.AvisosDePCFaltante,
+						resumen.Reclamos, resumen.AvisosDeCierre)
 				}
 			}
 		}

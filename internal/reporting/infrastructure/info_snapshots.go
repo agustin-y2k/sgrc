@@ -23,22 +23,29 @@ func NewInfoPCPostgres(pool *pgxpool.Pool) *InfoPCPostgres {
 	return &InfoPCPostgres{pool: pool}
 }
 
-func (i *InfoPCPostgres) IdentificadorYCarroDe(ctx context.Context, pcID string) (int, string, error) {
+// El JOIN a carro es LEFT desde la 015: un proyector no está en ninguno, y
+// con INNER esta consulta devolvía "no encontrada" y abortaba el archivado
+// del ciclo entero.
+func (i *InfoPCPostgres) EtiquetaYCarroDe(ctx context.Context, pcID string) (string, int, string, error) {
+	var etiqueta, carroNombre string
 	var identificador int
-	var carroNombre string
 	err := i.pool.QueryRow(ctx, `
-		SELECT p.identificador, c.nombre FROM pc p JOIN carro c ON c.id = p.carro_id WHERE p.id = $1
-	`, pcID).Scan(&identificador, &carroNombre)
+		SELECT COALESCE(p.nombre, 'PC ' || p.identificador),
+		       COALESCE(p.identificador, 0), COALESCE(c.nombre, '')
+		FROM pc p
+		LEFT JOIN carro c ON c.id = p.carro_id
+		WHERE p.id = $1
+	`, pcID).Scan(&etiqueta, &identificador, &carroNombre)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, "", fmt.Errorf("PC %s no encontrada", pcID)
+			return "", 0, "", fmt.Errorf("PC %s no encontrada", pcID)
 		}
 		if esIDInvalido(err) {
-			return 0, "", application.ErrIDInvalido
+			return "", 0, "", application.ErrIDInvalido
 		}
-		return 0, "", fmt.Errorf("obteniendo identificador/carro de la PC: %w", err)
+		return "", 0, "", fmt.Errorf("obteniendo etiqueta/carro de la PC: %w", err)
 	}
-	return identificador, carroNombre, nil
+	return etiqueta, identificador, carroNombre, nil
 }
 
 var _ application.InfoUsuarioParaSnapshot = (*InfoUsuarioPostgres)(nil)

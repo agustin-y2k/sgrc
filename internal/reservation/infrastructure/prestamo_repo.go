@@ -24,14 +24,16 @@ func esViolacionUnica(err error) bool {
 }
 
 const columnasPrestamo = `id, pc_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre, ` +
-	`motivo, devolucion_estimada, entregado_por, entregado_en, devuelto_en, recibido_por, observaciones`
+	`motivo, devolucion_estimada, entregado_por, entregado_en, devuelto_en, recibido_por, observaciones, ` +
+	`avisado_demora_en, avisado_cierre_para`
 
 // columnasPrestamoDetallado agrega la ubicación de la PC y, si el préstamo
 // salió contra una reserva, el nombre de la materia. Prefijadas porque la
 // consulta hace JOIN.
 const columnasPrestamoDetallado = `p.id, p.pc_id, p.reserva_id, p.entregado_a_usuario_id, p.entregado_a_nombre, ` +
 	`p.motivo, p.devolucion_estimada, p.entregado_por, p.entregado_en, p.devuelto_en, p.recibido_por, p.observaciones, ` +
-	`pc.identificador, c.nombre, m.nombre`
+	`p.avisado_demora_en, p.avisado_cierre_para, ` +
+	`COALESCE(pc.identificador, 0), COALESCE(pc.nombre, 'PC ' || pc.identificador), COALESCE(c.nombre, ''), m.nombre`
 
 // joinsDelPrestamo: la PC y su carro son INNER —un préstamo sin PC no
 // existe— pero la reserva y la materia van LEFT, y por dos motivos
@@ -41,7 +43,10 @@ const columnasPrestamoDetallado = `p.id, p.pc_id, p.reserva_id, p.entregado_a_us
 const joinsDelPrestamo = `
 	FROM prestamo p
 	JOIN pc ON pc.id = p.pc_id
-	JOIN carro c ON c.id = pc.carro_id
+	-- LEFT desde la 015: un proyector o un cargador no están en ningún
+	-- carro, y con INNER JOIN desaparecían del listado de lo que está
+	-- afuera — justo la lista que no puede tener agujeros.
+	LEFT JOIN carro c ON c.id = pc.carro_id
 	LEFT JOIN reserva r ON r.id = p.reserva_id
 	LEFT JOIN materia m ON m.id = r.materia_id`
 
@@ -94,6 +99,7 @@ func escanearPrestamo(row pgx.Row) (*domain.Prestamo, error) {
 		&p.ID, &p.PCID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 		&motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 		&p.DevueltoEn, &p.RecibidoPor, &observaciones,
+		&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -184,7 +190,8 @@ func escanearPrestamosDetallados(rows pgx.Rows) ([]*application.PrestamoDetallad
 			&p.ID, &p.PCID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 			&motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
-			&d.PCIdentificador, &d.CarroNombre, &d.MateriaNombre,
+			&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
+			&d.PCIdentificador, &d.Etiqueta, &d.CarroNombre, &d.MateriaNombre,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("escaneando fila de entrega: %w", err)

@@ -26,6 +26,9 @@ classDiagram
         +UUID carroId
         +int identificador
         +string numeroSerie
+        +string tipo
+        +string nombre
+        +boolean reservable
         +boolean freezado
         +string cpu
         +string ram
@@ -35,7 +38,16 @@ classDiagram
         +boolean dadaDeBaja
         +DateTime fechaBaja
         +DateTime fechaAlta
+        +etiqueta() string
+        +estaEnUnCarro() boolean
     }
+
+    %% PC no es solo una computadora: desde la 015 también son el proyector y
+    %% los cargadores, que no cuelgan de ningún carro (carroId, identificador y
+    %% numeroSerie quedan vacíos y los nombra `nombre`). Comparten entidad para
+    %% que "qué hay afuera del laboratorio" sea una sola lista. `etiqueta()`
+    %% resuelve cómo se lo nombra: "PC 3" o el nombre. Sigue llamándose PC por
+    %% historia; el renombre a Equipo va aparte.
 
     class LicenciaSoftware {
         +UUID id
@@ -228,13 +240,13 @@ classDiagram
 | `EstadoCuenta` | `PENDIENTE`, `APROBADA`, `RECHAZADA`, `BAJA` |
 | `RolDocente` | `TITULAR`, `SUPLENTE` |
 | `EstadoPC` | `DISPONIBLE`, `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` |
-| `EstadoReservaGrupo` | `CONFIRMADA`, `PARCIALMENTE_CANCELADA`, `CANCELADA`, `FINALIZADA` |
-| `EstadoReserva` (por PC) | `CONFIRMADA`, `CANCELADA`, `FINALIZADA` |
+| `EstadoReservaGrupo` | `CONFIRMADA`, `PARCIALMENTE_CANCELADA`, `CANCELADA`, `FINALIZADA`, `NO_RETIRADA` |
+| `EstadoReserva` (por PC) | `CONFIRMADA`, `CANCELADA`, `FINALIZADA`, `NO_RETIRADA` |
 | `TipoReserva` | `NORMAL`, `EVALUACION_ESTATAL` |
 | `Gravedad` | `LEVE`, `MODERADA`, `GRAVE` |
 | `EstadoIncidencia` | `ABIERTA`, `EN_REPARACION`, `ENVIADA_DGE`, `RESUELTA` |
 | `EstadoNotif` | `NO_LEIDA`, `LEIDA` |
-| `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `LICENCIA_POR_VENCER` |
+| `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `LICENCIA_POR_VENCER`, `RESERVA_POR_COMENZAR`, `RESERVA_NO_RETIRADA`, `PC_SIN_DEVOLVER` |
 | `EstadoLicencia` | `SIN_FECHA`, `VENCIDA`, `POR_VENCER`, `VIGENTE` — **derivado**, nunca una columna: se calcula contra la fecha de hoy |
 | `DiaSemana` | `LUNES`…`VIERNES` (la semana lectiva es de lunes a viernes) |
 | `TipoExcepcionHorario` | `NO_DISPONIBLE`, `HORARIO_MODIFICADO` |

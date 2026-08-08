@@ -24,7 +24,8 @@ func mapearError(err error) error {
 		// fallar; acá solo llegan si alguna vez se pide una entrega de una
 		// sola máquina como operación atómica.
 		errors.Is(err, application.ErrPCYaPrestada),
-		errors.Is(err, application.ErrPCDadaDeBaja):
+		errors.Is(err, application.ErrPCDadaDeBaja),
+		errors.Is(err, application.ErrReservaNoModificable):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, application.ErrSinPCs),
@@ -47,6 +48,9 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrTransicionGrupoInvalida),
 		errors.Is(err, domain.ErrPrestamoYaDevuelto):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
+
+	case errors.Is(err, application.ErrReservaAjena):
+		return fiber.NewError(fiber.StatusForbidden, err.Error())
 
 	default:
 		return fiber.NewError(fiber.StatusInternalServerError, "error interno")
