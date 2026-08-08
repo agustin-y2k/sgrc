@@ -151,12 +151,11 @@ func (s *Service) etiquetasDeLosEquipos(ctx context.Context, grupos map[destinat
 // MaxEquiposPorOperacion es el tope de equipos que puede llevar un solo
 // pedido —reservar, reservar en serie, bloquear para evaluación, entregar—.
 //
-// Doscientos no sale de ninguna regla de la escuela: sale de que el número
-// tiene que estar MUY por encima de cualquier uso real y aun así ser finito.
-// El inventario acá son sesenta y pico de equipos y el pedido más grande que
-// existe es bloquear un carro entero, así que nadie lo va a rozar; lo que
-// frena es un cliente pidiendo diez mil, que sin tope se traduce en diez mil
-// filas en una transacción.
+// El valor no sale de ninguna regla del dominio: sale de que tiene que estar
+// muy por encima de cualquier inventario escolar razonable y aun así ser
+// finito. El pedido legítimo más grande es bloquear un carro entero, que son
+// decenas de equipos; lo que este tope frena es un cliente pidiendo diez mil,
+// que sin él se traduce en diez mil filas en una sola transacción.
 const MaxEquiposPorOperacion = 200
 
 // verificarCantidadDeEquipos aplica las dos cotas del lote: que haya al
@@ -253,9 +252,10 @@ func (s *Service) verificarPuedeReservar(ctx context.Context, materiaID, usuario
 // verificarEquiposReservables valida de una sola vez que todo lo pedido se
 // pueda reservar, y nombra lo que no.
 //
-// Antes era un bucle con una consulta por equipo. Con ocho máquinas daba
-// igual; con un bloqueo por evaluación sobre un carro entero eran 64 idas a
-// la base antes de escribir una sola fila, y eso lo dispara el uso normal.
+// Antes era un bucle con una consulta por equipo. Con un puñado de máquinas
+// daba igual; con un bloqueo por evaluación sobre un carro entero son tantas
+// idas a la base como equipos tenga ese carro, antes de escribir una sola
+// fila — y eso lo dispara el uso normal, no un abuso.
 func (s *Service) verificarEquiposReservables(ctx context.Context, equipoIDs []string) error {
 	noReservables, err := s.validadorEquipo.EquiposNoReservables(ctx, equipoIDs)
 	if err != nil {
@@ -499,9 +499,9 @@ type ResultadoRecurrencia struct {
 // maxOcurrenciasRecurrencia acota cuántas fechas puede materializar una
 // sola serie recurrente.
 //
-// 45 son algo más de un año lectivo de clases semanales (la escuela tiene
-// ~40 semanas de cursada), así que el caso de uso real de RF-04.2 —"todos
-// los martes hasta que termine el año"— entra holgado. Lo que queda afuera
+// 45 son algo más de un año lectivo de clases semanales —un ciclo ronda las
+// 40 semanas de cursada—, así que el caso de uso real de RF-04.2 —"todos los
+// martes hasta que termine el año"— entra holgado. Lo que queda afuera
 // es el pedido que no describe ninguna clase real: un fechaFin en 2099
 // generaba 3.863 ReservaGrupo y otras tantas Reserva en un único request,
 // con ~7.700 consultas de pre-chequeo y una respuesta JSON de 1,2 MB.

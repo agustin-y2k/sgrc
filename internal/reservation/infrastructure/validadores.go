@@ -145,7 +145,7 @@ func (v *ValidadorEquipoPostgres) EquipoEstaEnInventario(ctx context.Context, eq
 
 // EtiquetasDeEquipos: cómo se nombra cada equipo, para los avisos de
 // cancelación. Una sola consulta con = ANY en vez de una por PC — un
-// bloqueo por evaluación sobre un carro entero puede tocar treinta.
+// bloqueo por evaluación sobre un carro entero puede tocar todas las suyas.
 func (v *ValidadorEquipoPostgres) EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error) {
 	etiquetas := make(map[string]string, len(equipoIDs))
 	if len(equipoIDs) == 0 {

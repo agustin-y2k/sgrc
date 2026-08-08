@@ -190,6 +190,12 @@ CREATE INDEX idx_materia_curso ON materia(curso_id);
 | nombre | VARCHAR(100) | NOT NULL, UNIQUE |
 | descripcion | TEXT | NULL |
 
+> **Qué es un carro, literalmente**: un mueble metálico con ruedas y zócalos numerados donde las notebooks se guardan y se cargan cuando no se usan. Está siempre en el laboratorio de informática. El nombre no es una metáfora ni una imprecisión heredada: es el nombre del mueble.
+>
+> **La cantidad de zócalos varía de un carro a otro** y el modelo no la presupone en ningún lado: no hay columna de capacidad, ni tope en el `identificador` —solo que sea un entero positivo—, ni constraint que cuente equipos por carro. Un carro de 15 y otro de 30 conviven sin que nada lo note.
+>
+> Eso explica el modelo mejor que cualquier otra cosa: `equipo.identificador` **es el número del zócalo**. Por eso `UNIQUE (carro_id, identificador)` y no un único global — el zócalo 7 existe en cada carro— y por eso la etiqueta "PC 7" le sirve a alguien que está parado frente al mueble buscando cuál sacar.
+
 > `freezado` no es un atributo del carro, es de cada PC individual (ver `equipo` arriba) — cada PC de un mismo carro puede tener o no Deep Freeze instalado. El `ADMIN` puede editar `nombre`/`descripcion` de un carro en cualquier momento (`PATCH`); no hay "eliminar carro" en el alcance actual — se elimina indirectamente dando de baja todas sus PCs.
 
 ### `incidencia`
