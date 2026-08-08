@@ -248,11 +248,11 @@ type ValidadorEquipo interface {
 	// se pueden reservar (no existen, no están disponibles, están dados de
 	// baja o no son reservables). Lista vacía = están todos bien.
 	//
-	// Existe porque reservar es una operación de LOTE: un docente tilda ocho
+	// Existe porque reservar es una operación de LOTE: un docente tilda varias
 	// máquinas y un bloqueo por evaluación puede tomar un carro entero.
-	// Preguntando de a una, un bloqueo de 64 equipos son 64 consultas antes
-	// de escribir la primera fila — y eso lo dispara el uso normal, no un
-	// abuso.
+	// Preguntando de a una, bloquear un carro son tantas consultas como
+	// equipos tenga, antes de escribir la primera fila — y eso lo dispara el
+	// uso normal, no un abuso.
 	//
 	// Devuelve los que fallan y no un bool para poder decir CUÁLES: con un
 	// "alguno no se puede" el docente tiene que adivinar a cuál destildar.
