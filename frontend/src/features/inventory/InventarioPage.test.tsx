@@ -194,4 +194,85 @@ describe("InventarioPage", () => {
 
     expect(await screen.findByText("token inválido o expirado")).toBeInTheDocument()
   })
+
+  // ── La categoría de la falla (RF-03.5) ───────────────────────────────
+
+  /**
+   * La categoría es lo que después permite contar: sin ella, "cuántas están
+   * rotas de batería" solo se responde leyendo las descripciones de a una.
+   */
+  it("un docente puede clasificar la falla, no solo describirla", async () => {
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo({})] })
+    const user = userEvent.setup()
+    renderInventario()
+
+    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Reportar problema" }))
+    await user.type(screen.getByLabelText(/¿Qué le pasa\?/), "No carga")
+    await user.type(screen.getByLabelText(/¿Qué es lo que falla\?/), "batería")
+    await user.click(screen.getByRole("button", { name: "Reportar" }))
+
+    expect(inventoryApi.reportarIncidencia).toHaveBeenCalledWith(
+      expect.objectContaining({ descripcion: "No carga", categoria: "batería" })
+    )
+  })
+
+  /**
+   * Las categorías ya usadas se ofrecen como sugerencia. Es lo único que
+   * impide que "batería" y "Bateria" nazcan como dos categorías distintas,
+   * porque el campo es texto libre a propósito.
+   */
+  it("sugiere las categorías que ya se usaron", async () => {
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo({})] })
+    vi.mocked(inventoryApi.listarCategoriasDeFalla).mockResolvedValue({
+      data: ["batería", "pantalla"],
+    })
+    const user = userEvent.setup()
+    renderInventario()
+
+    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Reportar problema" }))
+
+    // El datalist no expone sus opciones por rol accesible, así que se lee
+    // del DOM: lo que se verifica es que las sugerencias sean las ya usadas.
+    await vi.waitFor(() => {
+      const opciones = document.querySelectorAll("#categorias-de-falla option")
+      expect([...opciones].map((o) => o.getAttribute("value"))).toEqual([
+        "batería",
+        "pantalla",
+      ])
+    })
+  })
+
+  /**
+   * Sin diagnóstico también se puede reportar. Obligar a completarla llevaría
+   * a que alguien escriba "otro" o "no sé", que es peor que el vacío: parece
+   * un diagnóstico y no lo es.
+   */
+  it("deja reportar sin clasificar la falla", async () => {
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo({})] })
+    vi.mocked(inventoryApi.reportarIncidencia).mockResolvedValue({
+      id: "i1",
+      equipoId: "pc1",
+      descripcion: "No enciende",
+      gravedad: "MODERADA",
+      fecha: "2026-08-03T10:00:00Z",
+      enviadoDge: false,
+      estado: "ABIERTA",
+    })
+    const user = userEvent.setup()
+    renderInventario()
+
+    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Reportar problema" }))
+    await user.type(screen.getByLabelText(/¿Qué le pasa\?/), "No enciende")
+
+    expect(screen.getByLabelText(/¿Qué es lo que falla\?/)).toHaveValue("")
+    await user.click(screen.getByRole("button", { name: "Reportar" }))
+
+    expect(await screen.findByText(/quedó registrada/)).toBeInTheDocument()
+    expect(inventoryApi.reportarIncidencia).toHaveBeenCalledWith(
+      expect.objectContaining({ categoria: undefined })
+    )
+  })
 })

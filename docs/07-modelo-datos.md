@@ -205,6 +205,7 @@ CREATE INDEX idx_materia_curso ON materia(curso_id);
 | equipo_id | UUID | FK → pc.id, NOT NULL |
 | reportado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | descripcion | TEXT | NOT NULL |
+| categoria | VARCHAR(50) | NULL, CHECK (NULL, o no vacía y sin espacios al borde) |
 | gravedad | VARCHAR(10) | NOT NULL, CHECK IN ('LEVE','MODERADA','GRAVE') |
 | fecha | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 | enviado_dge | BOOLEAN | NOT NULL DEFAULT false |
@@ -213,9 +214,21 @@ CREATE INDEX idx_materia_curso ON materia(curso_id);
 
 > `reportado_por` en `SET NULL`: el historial de la incidencia (`descripcion`, `gravedad`, fechas) vale por sí mismo aunque se pierda el dato de quién la reportó si esa cuenta se elimina definitivamente más adelante.
 
+> `categoria` es **texto libre y no un enum**, por el mismo criterio que `equipo.tipo`: cada institución rompe cosas distintas, y una lista cerrada haría que la primera falla no prevista pidiera una migración para poder anotarse (ver RF-03.5 y la migración `017`). Es una decisión con un costo asumido —"Batería" y "batería" son dos cadenas— que se compensa fuera de la base: el formulario sugiere las ya usadas y los reportes agrupan por `lower(categoria)`. El `CHECK` solo impide las dos formas de escribir "nada" que no son `NULL` (la cadena vacía y los espacios), para que exista **un** valor que signifique sin clasificar y no tres.
+>
+> `NULL` no es un dato faltante sino un estado real: una máquina que no enciende y que nadie diagnosticó todavía tiene una falla y ninguna categoría. Los reportes la cuentan aparte en vez de descartarla (RF-06.7).
+
 ```sql
 CREATE INDEX idx_pc_carro_estado ON pc(carro_id, estado);
 CREATE INDEX idx_incidencia_pc ON incidencia(equipo_id);
+
+-- Agrupar por tipo de falla sin distinguir mayúsculas (RF-06.7). Parcial
+-- porque las no clasificadas se cuentan por separado.
+CREATE INDEX idx_incidencia_categoria ON incidencia(lower(categoria)) WHERE categoria IS NOT NULL;
+
+-- "La última incidencia de este equipo", que es lo que pide el listado de
+-- equipos fuera de circulación (RF-06.6) por cada fila que muestra.
+CREATE INDEX idx_incidencia_equipo_fecha ON incidencia(equipo_id, fecha DESC);
 ```
 
 ### `licencia_software`
@@ -554,6 +567,7 @@ A esta escala no hace falta un read-model continuo sincronizado por eventos — 
 
 - **Ciclo lectivo activo** (el año en curso, con `reserva`/`reserva_grupo` todavía en la base): queries directas.
 - **Ciclos ya archivados**: se leen de `historico_uso_equipo` / `historico_uso_docente`.
+- **Los que no son de un ciclo** (estado del inventario, equipos fuera de circulación, incidencias por categoría — RF-06.5 a RF-06.7): queries directas sobre `equipo` e `incidencia`, siempre. Ninguna de las dos tablas se archiva, así que no hay un "año cerrado" del que leerlas ni razón para materializarlas: describen lo que hay hoy, no lo que pasó en un período.
 
 ```sql
 -- Uso por PC en un rango de fechas (ciclo activo)

@@ -164,3 +164,59 @@ func (h *Handler) ReporteIncidenciasPorCarro(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"data": data})
 }
+
+// ── RF-06.5: el estado del parque de equipos ────────────────────────────
+
+// GET /api/reporting/inventario/estado
+//
+// Sin rango de fechas a propósito: es una foto de AHORA. "Cuántas estaban
+// rotas en marzo" no se puede responder con el estado actual, y aceptar el
+// parámetro daría un número que parece esa respuesta sin serlo.
+func (h *Handler) ReporteEstadoDelInventario(c *fiber.Ctx) error {
+	filas, err := h.svc.EstadoDelInventario(c.UserContext())
+	if err != nil {
+		return mapearError(err)
+	}
+
+	data := make([]estadoDelInventarioResponse, len(filas))
+	for i, e := range filas {
+		data[i] = toEstadoDelInventarioResponse(e)
+	}
+	return c.JSON(fiber.Map{"data": data})
+}
+
+// GET /api/reporting/inventario/fuera-de-circulacion — la lista que se manda
+// a reparar: qué máquinas están afuera y qué se sabe de cada una.
+func (h *Handler) ReporteEquiposFueraDeCirculacion(c *fiber.Ctx) error {
+	filas, err := h.svc.EquiposFueraDeCirculacion(c.UserContext())
+	if err != nil {
+		return mapearError(err)
+	}
+
+	data := make([]equipoFueraDeCirculacionResponse, len(filas))
+	for i, e := range filas {
+		data[i] = toEquipoFueraDeCirculacionResponse(e)
+	}
+	return c.JSON(fiber.Map{"data": data})
+}
+
+// GET /api/reporting/incidencias/categorias — qué se rompe, agrupado por
+// tipo de falla. Este SÍ acepta rango de fechas: la pregunta es qué se rompió
+// en un período, y eso permite comparar un año contra otro.
+func (h *Handler) ReporteIncidenciasPorCategoria(c *fiber.Ctx) error {
+	desde, hasta, err := rangoDeQuery(c)
+	if err != nil {
+		return err
+	}
+
+	filas, err := h.svc.ReporteIncidenciasPorCategoria(c.UserContext(), desde, hasta)
+	if err != nil {
+		return mapearError(err)
+	}
+
+	data := make([]resumenPorCategoriaResponse, len(filas))
+	for i, x := range filas {
+		data[i] = toResumenPorCategoriaResponse(x)
+	}
+	return c.JSON(fiber.Map{"data": data})
+}

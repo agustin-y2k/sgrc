@@ -152,13 +152,17 @@ func (r *PostgresRepo) ListarEquiposPorCarro(ctx context.Context, carroID string
 
 // ── Incidencia ──────────────────────────────────────────────────────────
 
-const columnasIncidencia = `id, equipo_id, reportado_por, descripcion, gravedad, fecha, enviado_dge, fecha_envio_dge, estado`
+// COALESCE en la categoría: la columna es NULL-able (017) y el dominio la
+// representa con una cadena vacía, que es lo mismo —sin clasificar— sin
+// obligar a un puntero en todo el paso.
+const columnasIncidencia = `id, equipo_id, reportado_por, descripcion, COALESCE(categoria, ''), gravedad, fecha, enviado_dge, fecha_envio_dge, estado`
 
 func (r *PostgresRepo) CrearIncidencia(ctx context.Context, i *domain.Incidencia) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO incidencia (id, equipo_id, reportado_por, descripcion, gravedad, fecha, enviado_dge, estado)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, i.ID, i.EquipoID, i.ReportadoPor, i.Descripcion, string(i.Gravedad), i.Fecha, i.EnviadoDGE, string(i.Estado))
+		INSERT INTO incidencia (id, equipo_id, reportado_por, descripcion, categoria, gravedad, fecha, enviado_dge, estado)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, i.ID, i.EquipoID, i.ReportadoPor, i.Descripcion, nullIfEmpty(i.Categoria),
+		string(i.Gravedad), i.Fecha, i.EnviadoDGE, string(i.Estado))
 	if err != nil {
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
@@ -181,7 +185,7 @@ func escanearIncidencia(row pgx.Row) (*domain.Incidencia, error) {
 	var gravedadStr, estadoStr string
 
 	err := row.Scan(
-		&i.ID, &i.EquipoID, &i.ReportadoPor, &i.Descripcion, &gravedadStr,
+		&i.ID, &i.EquipoID, &i.ReportadoPor, &i.Descripcion, &i.Categoria, &gravedadStr,
 		&i.Fecha, &i.EnviadoDGE, &i.FechaEnvioDGE, &estadoStr,
 	)
 	if err != nil {
@@ -211,9 +215,10 @@ func escanearIncidencia(row pgx.Row) (*domain.Incidencia, error) {
 func (r *PostgresRepo) GuardarIncidencia(ctx context.Context, i *domain.Incidencia) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE incidencia SET
-			descripcion=$2, gravedad=$3, enviado_dge=$4, fecha_envio_dge=$5, estado=$6
+			descripcion=$2, categoria=$3, gravedad=$4, enviado_dge=$5, fecha_envio_dge=$6, estado=$7
 		WHERE id=$1
-	`, i.ID, i.Descripcion, string(i.Gravedad), i.EnviadoDGE, i.FechaEnvioDGE, string(i.Estado))
+	`, i.ID, i.Descripcion, nullIfEmpty(i.Categoria), string(i.Gravedad), i.EnviadoDGE,
+		i.FechaEnvioDGE, string(i.Estado))
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -224,6 +229,37 @@ func (r *PostgresRepo) GuardarIncidencia(ctx context.Context, i *domain.Incidenc
 		return application.ErrIncidenciaNoEncontrada
 	}
 	return nil
+}
+
+// CategoriasDeFallaUsadas devuelve las categorías ya cargadas, una sola vez
+// cada una y en orden alfabético.
+//
+// DISTINCT ON sobre lower(categoria) y no un DISTINCT a secas: si alguien
+// escribió "Batería" y otro "batería", sugerir las dos no ayudaría a
+// converger — que es justamente para lo que existe esta lista. Se devuelve
+// la primera en orden alfabético de las variantes, que es estable entre
+// llamadas.
+func (r *PostgresRepo) CategoriasDeFallaUsadas(ctx context.Context) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT ON (lower(categoria)) categoria
+		FROM incidencia
+		WHERE categoria IS NOT NULL
+		ORDER BY lower(categoria), categoria
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("listando categorías de falla: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, fmt.Errorf("escaneando categoría de falla: %w", err)
+		}
+		resultado = append(resultado, c)
+	}
+	return resultado, errorDeFilas(rows)
 }
 
 func (r *PostgresRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error) {

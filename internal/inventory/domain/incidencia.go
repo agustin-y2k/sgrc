@@ -65,11 +65,43 @@ type Incidencia struct {
 	EnviadoDGE    bool
 	FechaEnvioDGE *time.Time
 	Estado        EstadoIncidencia
+	// Categoria es QUÉ tipo de falla es, en texto libre ("batería",
+	// "pantalla"). Vacía mientras no se haya podido diagnosticar, que es un
+	// estado real y no un dato faltante: una máquina que no enciende tiene
+	// una falla perfectamente concreta y ninguna categoría todavía.
+	//
+	// Es texto libre y no una lista cerrada por lo mismo que el tipo de
+	// equipo: cada institución rompe y repara cosas distintas, y una lista
+	// fija haría que la primera falla no prevista pida tocar el sistema. Lo
+	// que evita que la estadística se fragmente es que el formulario sugiere
+	// las ya usadas y que los reportes agrupan sin distinguir mayúsculas.
+	Categoria string
 }
 
-func NuevaIncidencia(id, equipoID, reportadoPor, descripcion string, gravedad Gravedad, fecha time.Time) (*Incidencia, error) {
+// MaxLargoCategoriaFalla lo fija la columna (VARCHAR(50) en la 017).
+const MaxLargoCategoriaFalla = 50
+
+// ErrCategoriaFallaLarga: el largo se valida acá y no solo en la base para
+// que el error sea un 400 con explicación y no un 500 de Postgres.
+var ErrCategoriaFallaLarga = fmt.Errorf("la categoría no puede tener más de %d caracteres", MaxLargoCategoriaFalla)
+
+// CategoriaDeFallaValida normaliza y valida. La categoría vacía es válida y
+// significa "sin clasificar": ver el comentario del campo.
+func CategoriaDeFallaValida(categoria string) (string, error) {
+	categoria = strings.Join(strings.Fields(categoria), " ")
+	if len([]rune(categoria)) > MaxLargoCategoriaFalla {
+		return "", ErrCategoriaFallaLarga
+	}
+	return categoria, nil
+}
+
+func NuevaIncidencia(id, equipoID, reportadoPor, descripcion, categoria string, gravedad Gravedad, fecha time.Time) (*Incidencia, error) {
 	if strings.TrimSpace(descripcion) == "" {
 		return nil, ErrDescripcionVacia
+	}
+	categoria, err := CategoriaDeFallaValida(categoria)
+	if err != nil {
+		return nil, err
 	}
 	var reportadoPorPtr *string
 	if reportadoPor != "" {
@@ -80,6 +112,7 @@ func NuevaIncidencia(id, equipoID, reportadoPor, descripcion string, gravedad Gr
 		EquipoID:     equipoID,
 		ReportadoPor: reportadoPorPtr,
 		Descripcion:  descripcion,
+		Categoria:    categoria,
 		Gravedad:     gravedad,
 		Fecha:        fecha,
 		Estado:       IncidenciaAbierta,

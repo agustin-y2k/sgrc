@@ -14,11 +14,14 @@ import (
 )
 
 type fakeRepo struct {
-	usoEquipos        []domain.ResumenUsoEquipo
-	usoDocentes       []domain.ResumenUsoDocente
-	historicoEquipo   []*domain.HistoricoUsoEquipo
-	incidenciasEquipo []domain.ResumenIncidenciasEquipo
-	incidenciasCarro  []domain.ResumenIncidenciasCarro
+	estadoInventario   []domain.EstadoDelInventario
+	fueraDeCirculacion []domain.EquipoFueraDeCirculacion
+	porCategoria       []domain.ResumenPorCategoriaDeFalla
+	usoEquipos         []domain.ResumenUsoEquipo
+	usoDocentes        []domain.ResumenUsoDocente
+	historicoEquipo    []*domain.HistoricoUsoEquipo
+	incidenciasEquipo  []domain.ResumenIncidenciasEquipo
+	incidenciasCarro   []domain.ResumenIncidenciasCarro
 }
 
 func (r *fakeRepo) GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.HistoricoUsoEquipo) error {
@@ -186,4 +189,16 @@ func (r *fakeRepo) CalcularIncidenciasPorEquipo(ctx context.Context, desde, hast
 
 func (r *fakeRepo) CalcularIncidenciasPorCarro(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasCarro, error) {
 	return r.incidenciasCarro, nil
+}
+
+func (r *fakeRepo) EstadoDelInventario(ctx context.Context) ([]domain.EstadoDelInventario, error) {
+	return r.estadoInventario, nil
+}
+
+func (r *fakeRepo) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.EquipoFueraDeCirculacion, error) {
+	return r.fueraDeCirculacion, nil
+}
+
+func (r *fakeRepo) CalcularIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error) {
+	return r.porCategoria, nil
 }
