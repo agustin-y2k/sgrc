@@ -13,12 +13,12 @@ import (
 	"github.com/ramiro/sgrc/internal/reservation/domain"
 )
 
-const columnasReserva = `id, reserva_grupo_id, pc_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, creado_por, creada_en, cancelado_por, motivo_cancelacion, cancelada_en`
+const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, creado_por, creada_en, cancelado_por, motivo_cancelacion, cancelada_en`
 
 // condicionNoTerminada arma "esta reserva todavía no terminó respecto del
 // instante dado", comparando la hora de pared de la reserva contra la hora
 // de pared de ese instante. Reemplaza al `fecha >= $2` que usaban
-// ListarReservasFuturasDePC/DeMateria, por dos razones.
+// ListarReservasFuturasDeEquipo/DeMateria, por dos razones.
 //
 // La primera es un bug concreto: comparar contra la columna DATE pelada
 // ignora la hora, así que "las reservas futuras de esta PC" incluía las que
@@ -39,7 +39,7 @@ const columnasReserva = `id, reserva_grupo_id, pc_id, materia_id, nombre_docente
 // no algo que el código diga. Los dos casts explícitos —`::date` toma
 // año/mes/día, `::time` toma hora/minuto/segundo, del MISMO time.Time que se
 // pasa dos veces— lo dejan escrito y lo vuelven inmune a la zona de la
-// sesión. Mismo criterio que ListarPCsDisponiblesEn, que ya usaba
+// sesión. Mismo criterio que ListarEquiposDisponiblesEn, que ya usaba
 // `$1::date + $2::time`.
 func condicionNoTerminada(placeholderFecha, placeholderHora string) string {
 	return "(fecha + hora_fin) > (" + placeholderFecha + "::date + " + placeholderHora + "::time)"
@@ -47,9 +47,9 @@ func condicionNoTerminada(placeholderFecha, placeholderHora string) string {
 
 func (r *PostgresRepo) CrearReserva(ctx context.Context, res *domain.Reserva) error {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO reserva (id, reserva_grupo_id, pc_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, creado_por, creada_en)
+		INSERT INTO reserva (id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, creado_por, creada_en)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`, res.ID, res.ReservaGrupoID, res.PCID, res.MateriaID, res.NombreDocenteSnapshot, res.Fecha,
+	`, res.ID, res.ReservaGrupoID, res.EquipoID, res.MateriaID, res.NombreDocenteSnapshot, res.Fecha,
 		duracionComoHora(res.HoraInicio), duracionComoHora(res.HoraFin),
 		string(res.Estado), string(res.Tipo), res.CreadoPor, res.CreadaEn)
 	if err != nil {
@@ -82,7 +82,7 @@ func escanearReserva(row pgx.Row) (*domain.Reserva, error) {
 	var estadoStr, tipoStr string
 
 	err := row.Scan(
-		&res.ID, &res.ReservaGrupoID, &res.PCID, &res.MateriaID, &res.NombreDocenteSnapshot,
+		&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 		&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr,
 		&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
 	)
@@ -150,11 +150,11 @@ func (r *PostgresRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoI
 	return resultado, errorDeFilas(rows)
 }
 
-// ListarReservasFuturasDePC: todas las reservas CONFIRMADA de una PC que
+// ListarReservasFuturasDeEquipo: todas las reservas CONFIRMADA de una PC que
 // todavía no terminaron en el instante `desde`. Usado tanto para el chequeo
 // anticipado de solapamiento como para el bloqueo por evaluación (RF-04.7) y
 // la cascada de cancelación de inventory/academic.
-func (r *PostgresRepo) ListarReservasFuturasDePC(ctx context.Context, pcID string, desde time.Time) ([]*domain.Reserva, error) {
+func (r *PostgresRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipoID string, desde time.Time) ([]*domain.Reserva, error) {
 	// ORDER BY: quien llama puede necesitar LA PRÓXIMA, no una cualquiera.
 	// Sin él, el aviso de "esta PC tiene una reserva encima" que sale al
 	// entregarla suelta podía nombrar la reserva de la semana siguiente en
@@ -163,14 +163,14 @@ func (r *PostgresRepo) ListarReservasFuturasDePC(ctx context.Context, pcID strin
 	// del orden, así que esto no les cambia nada.
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
-		WHERE pc_id = $1 AND `+condicionNoTerminada("$2", "$3")+` AND estado = 'CONFIRMADA'
+		WHERE equipo_id = $1 AND `+condicionNoTerminada("$2", "$3")+` AND estado = 'CONFIRMADA'
 		ORDER BY fecha, hora_inicio
-	`, pcID, desde, desde)
+	`, equipoID, desde, desde)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
 		}
-		return nil, fmt.Errorf("listando reservas futuras de la PC: %w", err)
+		return nil, fmt.Errorf("listando reservas futuras del equipo: %w", err)
 	}
 	defer rows.Close()
 
@@ -364,9 +364,9 @@ func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, ciclo
 // que un COALESCE por columna.
 //
 // Devuelve los nombres de PC, carro, materia y curso ya resueltos: es un
-// listado para mostrar en pantalla, y sin ellos una reserva de varias PCs
+// listado para mostrar en pantalla, y sin ellos una reserva de varios equipos
 // se ve como N filas idénticas. Los JOIN son de solo lectura, igual que en
-// CalendarioDePC. El de materia/curso es LEFT porque los bloqueos por
+// CalendarioDeEquipo. El de materia/curso es LEFT porque los bloqueos por
 // evaluación estatal no tienen materia.
 func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroReservas) ([]application.ReservaDetallada, int, error) {
 	// El FROM y el WHERE se arman una sola vez y los comparten las dos
@@ -375,7 +375,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 	// distinto de lo que devuelve la lista.
 	desde := `
 		FROM reserva res
-		JOIN pc p ON p.id = res.pc_id
+		JOIN equipo p ON p.id = res.equipo_id
 		-- LEFT desde la 015: un proyector reservable no está en ningún carro,
 		-- y con INNER JOIN su reserva no desaparecía de la pantalla — se caía
 		-- de la consulta entera, incluido el total paginado. El docente veía
@@ -395,8 +395,8 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 	if f.CreadoPor != nil {
 		agregar("creado_por = $%d", *f.CreadoPor)
 	}
-	if f.PCID != nil {
-		agregar("pc_id = $%d", *f.PCID)
+	if f.EquipoID != nil {
+		agregar("equipo_id = $%d", *f.EquipoID)
 	}
 	if f.MateriaID != nil {
 		agregar("materia_id = $%d", *f.MateriaID)
@@ -427,9 +427,9 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 	//
 	// El identificador NO alcanza para desempatar: se repite entre carros
 	// distintos, y desde la 015 es NULL en todo lo que no está en un carro
-	// —los equipos sueltos empatarían todos entre sí—. res.pc_id cierra el
+	// —los equipos sueltos empatarían todos entre sí—. res.equipo_id cierra el
 	// orden, que es lo único único de verdad acá.
-	query += " ORDER BY res.fecha, res.hora_inicio, p.identificador NULLS LAST, res.pc_id"
+	query += " ORDER BY res.fecha, res.hora_inicio, p.identificador NULLS LAST, res.equipo_id"
 
 	argsPagina := append(append([]any{}, args...), f.Pagina.Limit(), f.Pagina.Offset())
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(argsPagina)-1, len(argsPagina))
@@ -455,10 +455,10 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		// LIMIT: da el total en la misma pasada, sin una segunda consulta que
 		// podría además ver un estado distinto de la tabla.
 		if err := rows.Scan(
-			&res.ID, &res.ReservaGrupoID, &res.PCID, &res.MateriaID, &res.NombreDocenteSnapshot,
+			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr,
 			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
-			&detalle.PCIdentificador, &detalle.Etiqueta, &detalle.CarroNombre,
+			&detalle.Identificador, &detalle.Etiqueta, &detalle.CarroNombre,
 			&detalle.MateriaNombre, &detalle.CursoNombre,
 			&detalle.ReglaRecurrenciaID,
 			&total,
@@ -470,7 +470,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		res.HoraFin = horaComoDuracion(horaFin)
 
 		// Por Parse y no por conversión directa, como ya hacían
-		// escanearReserva y CalendarioDePC. La conversión acepta cualquier
+		// escanearReserva y CalendarioDeEquipo. La conversión acepta cualquier
 		// texto: un estado que la base no debería tener entraba igual al
 		// dominio y recién se notaba mucho más tarde, como una reserva que no
 		// se puede cancelar ni finalizar porque su estado no matchea ninguna
@@ -506,28 +506,28 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 	return resultado, total, nil
 }
 
-// CalendarioDePC implementa RF-04.4. El LEFT JOIN hacia materia/curso es
+// CalendarioDeEquipo implementa RF-04.4. El LEFT JOIN hacia materia/curso es
 // de solo lectura (mismo criterio que los validadores de este paquete
 // hacia academic): tiene que ser LEFT porque los bloqueos por evaluación
 // estatal no tienen materia asociada y también ocupan la PC, así que
 // también deben verse en el calendario.
-func (r *PostgresRepo) CalendarioDePC(ctx context.Context, pcID string, desde, hasta time.Time) ([]application.BloqueCalendario, error) {
+func (r *PostgresRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) ([]application.BloqueCalendario, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasReservaConPrefijo("res")+`,
 		       COALESCE(m.nombre, ''), COALESCE(c.nombre, '')
 		FROM reserva res
 		LEFT JOIN materia m ON m.id = res.materia_id
 		LEFT JOIN curso c ON c.id = m.curso_id
-		WHERE res.pc_id = $1
+		WHERE res.equipo_id = $1
 		  AND res.fecha >= $2 AND res.fecha <= $3
 		  AND res.estado <> 'CANCELADA'
 		ORDER BY res.fecha, res.hora_inicio
-	`, pcID, desde, hasta)
+	`, equipoID, desde, hasta)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
 		}
-		return nil, fmt.Errorf("listando calendario de la PC: %w", err)
+		return nil, fmt.Errorf("listando calendario del equipo: %w", err)
 	}
 	defer rows.Close()
 
@@ -539,7 +539,7 @@ func (r *PostgresRepo) CalendarioDePC(ctx context.Context, pcID string, desde, h
 		var materiaNombre, cursoNombre string
 
 		if err := rows.Scan(
-			&res.ID, &res.ReservaGrupoID, &res.PCID, &res.MateriaID, &res.NombreDocenteSnapshot,
+			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr,
 			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
 			&materiaNombre, &cursoNombre,
@@ -578,23 +578,23 @@ func columnasReservaConPrefijo(alias string) string {
 	return strings.Join(columnas, ", ")
 }
 
-// ListarPCsDisponiblesEn implementa RF-04.2: las PCs que se pueden
+// ListarEquiposDisponiblesEn implementa RF-04.2: las PCs que se pueden
 // reservar en una franja concreta. El NOT EXISTS usa el mismo criterio de
 // solapamiento que la constraint EXCLUDE de la migración (tsrange con
 // aritmética date+time), para que lo que se ofrece coincida exactamente
 // con lo que la base va a aceptar después. Consulta pc/carro de solo
 // lectura, mismo criterio que los validadores de este paquete.
-func (r *PostgresRepo) ListarPCsDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.PCDisponible, error) {
+func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoDisponible, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT p.id, COALESCE(p.identificador, 0),
 		       COALESCE(p.nombre, 'PC ' || p.identificador),
 		       p.tipo,
 		       COALESCE(c.id::text, ''), COALESCE(c.nombre, ''),
 		       p.freezado, COALESCE(p.software_instalado, '')
-		FROM pc p
+		FROM equipo p
 		LEFT JOIN carro c ON c.id = p.carro_id
 		WHERE p.estado = 'DISPONIBLE'
-		  AND p.dada_de_baja = false
+		  AND p.dado_de_baja = false
 		  -- Desde la 015: un cargador no se planifica, se pide en el
 		  -- momento. Sin este filtro aparecería en la lista cada vez que un
 		  -- docente va a reservar, y la primera vez que alguien reserve uno
@@ -602,7 +602,7 @@ func (r *PostgresRepo) ListarPCsDisponiblesEn(ctx context.Context, fecha time.Ti
 		  AND p.reservable = true
 		  AND NOT EXISTS (
 			SELECT 1 FROM reserva res
-			WHERE res.pc_id = p.id
+			WHERE res.equipo_id = p.id
 			  AND res.estado = 'CONFIRMADA'
 			  AND res.fecha = $1
 			  AND tsrange(res.fecha + res.hora_inicio, res.fecha + res.hora_fin)
@@ -613,17 +613,17 @@ func (r *PostgresRepo) ListarPCsDisponiblesEn(ctx context.Context, fecha time.Ti
 		ORDER BY p.carro_id IS NULL, c.nombre, p.identificador, p.nombre
 	`, fecha, duracionComoHora(horaInicio), duracionComoHora(horaFin))
 	if err != nil {
-		return nil, fmt.Errorf("listando PCs disponibles: %w", err)
+		return nil, fmt.Errorf("listando equipos disponibles: %w", err)
 	}
 	defer rows.Close()
 
-	var resultado []application.PCDisponible
+	var resultado []application.EquipoDisponible
 	for rows.Next() {
-		var pc application.PCDisponible
-		if err := rows.Scan(&pc.PCID, &pc.Identificador, &pc.Etiqueta, &pc.Tipo,
+		var pc application.EquipoDisponible
+		if err := rows.Scan(&pc.EquipoID, &pc.Identificador, &pc.Etiqueta, &pc.Tipo,
 			&pc.CarroID, &pc.CarroNombre,
 			&pc.Freezado, &pc.SoftwareInstalado); err != nil {
-			return nil, fmt.Errorf("escaneando PC disponible: %w", err)
+			return nil, fmt.Errorf("escaneando equipo disponible: %w", err)
 		}
 		resultado = append(resultado, pc)
 	}

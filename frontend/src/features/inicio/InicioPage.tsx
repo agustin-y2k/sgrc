@@ -90,7 +90,7 @@ function ProximaReserva({ grupo, hoy }: { grupo: GrupoDeReservas; hoy: string })
           )}
         </p>
         <p className="text-muted-foreground text-sm">
-          {grupo.reservas.length} {grupo.reservas.length === 1 ? "PC" : "PCs"}
+          {grupo.reservas.length} {grupo.reservas.length === 1 ? "equipo" : "equipos"}
           {grupo.esRecurrente && " · se repite"}
         </p>
       </div>
@@ -150,7 +150,7 @@ export function InicioPage() {
 
   const afuera = prestamos?.data ?? []
   const sinDevolverAHorario = afuera.filter((p) => p.demorado).length
-  const yaAfuera = useMemo(() => new Set(afuera.map((p) => p.pcId)), [afuera])
+  const yaAfuera = useMemo(() => new Set(afuera.map((p) => p.equipoId)), [afuera])
 
   return (
     <div className="grid gap-6">
@@ -162,7 +162,7 @@ export function InicioPage() {
         <p className="text-muted-foreground mt-1 text-sm">
           {esAdmin
             ? "Qué está pasando en el laboratorio ahora mismo."
-            : "Reservá las PCs para tus clases y mirá cómo venís esta semana."}
+            : "Reservá los equipos para tus clases y mirá cómo venís esta semana."}
         </p>
       </div>
 
@@ -172,7 +172,7 @@ export function InicioPage() {
         <Indicador
           valor={deHoy}
           rotulo={deHoy === 1 ? "clase hoy" : "clases hoy"}
-          detalle="Con PCs reservadas"
+          detalle="Con Equipos reservadas"
           a="/reservas"
         />
         {/* Para el Admin, "afuera" reemplaza a "próximas": lo que viene ya
@@ -264,7 +264,7 @@ export function InicioPage() {
             {grupos.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 No tenés reservas próximas. Cuando crees una, va a aparecer acá con el
-                día, el horario y las PCs.
+                día, el horario y los equipos.
               </p>
             ) : (
               <ul>
@@ -286,7 +286,7 @@ export function InicioPage() {
           </CardHeader>
           <CardContent className="grid gap-2">
             <Button asChild variant="outline" className="justify-start">
-              <Link to="/inventario">Ver carros y PCs</Link>
+              <Link to="/inventario">Ver carros y equipos</Link>
             </Button>
             <Button asChild variant="outline" className="justify-start">
               <Link to="/disponibilidad">Disponibilidad de Admins</Link>

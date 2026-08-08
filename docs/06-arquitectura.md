@@ -10,7 +10,7 @@
 |---|---|
 | `internal/auth` | Usuarios, JWT, aprobación de cuentas docentes |
 | `internal/academic` | Ciclos lectivos, cursos, materias, DocenteMateria, clonado |
-| `internal/inventory` | Carros, PCs, incidencias |
+| `internal/inventory` | Carros, equipos, incidencias, licencias |
 | `internal/reservation` | Reservas, solapamiento, recurrencias, bloqueo, job de vencimiento |
 | `internal/notification` | Notificaciones internas y las copias por email de algunas de ellas (RF-05.8) |
 | `internal/reporting` | Estadísticas y reportes: queries agregadas directas para el ciclo activo + snapshot histórico permanente calculado al archivar |
@@ -65,7 +65,7 @@ type Service struct {
 
 Hay dos formas de implementar esos puertos, y la diferencia importa:
 
-- **Lecturas simples** (¿esta PC está disponible?, ¿este usuario está
+- **Lecturas simples** (¿este equipo está disponible?, ¿este usuario está
   aprobado?): las resuelve el propio `infrastructure/` del paquete que
   pregunta, con un SQL directo sobre la tabla ajena. No hay reglas de negocio
   que duplicar.
@@ -103,7 +103,7 @@ type EventBus interface {
 
 **Un mismo evento puede tener varios suscriptores, y se usa.** `docente.registro.pendiente` tiene dos: el que escribe el aviso interno y el que manda el mail (RF-05.8). Están registrados por separado a propósito — el aviso interno es la fuente de verdad y el correo una copia, así que un fallo de SMTP no puede impedir que el aviso se escriba. `Publish` además recupera el panic de cada handler por separado, así que uno roto no se lleva a los demás.
 
-**`prestamo` vive en `reservation` y no en `inventory`, aunque hable de una PC.** El criterio no es de qué entidad cuelga sino de qué reglas depende: contra qué reserva salió la máquina, si volvió antes de que empiece la siguiente, quién es el próximo que la tiene reservada. Ponerlo en `inventory` obligaría a ese paquete a leer reservas, que es exactamente el límite que §3 no deja cruzar. Lo único que necesita de `inventory` —que la PC exista y no esté dada de baja— entra por el puerto `ValidadorPC` que ya existía.
+**`prestamo` vive en `reservation` y no en `inventory`, aunque hable de un equipo.** El criterio no es de qué entidad cuelga sino de qué reglas depende: contra qué reserva salió la máquina, si volvió antes de que empiece la siguiente, quién es el próximo que la tiene reservada. Ponerlo en `inventory` obligaría a ese paquete a leer reservas, que es exactamente el límite que §3 no deja cruzar. Lo único que necesita de `inventory` —que el equipo exista y no esté dado de baja— entra por el puerto `ValidadorEquipo` que ya existía.
 
 **Hay eventos que no los dispara ningún request.** Además de `licencia.por-vencer`, los cinco del barrido de reservas y entregas (`reserva.recordatorio`, `reserva.pc-no-disponible`, `reserva.no-retirada`, `prestamo.demorado`, `prestamo.sin-devolver.cierre`). `licencia.por-vencer` lo publica un barrido periódico de `inventory` (RF-03.14), no una acción de una persona. Eso cambia una cosa importante: como nadie está esperando el resultado, nadie se da cuenta si sale dos veces — así que la idempotencia no puede depender de que el job corra "una vez por día". La garantiza el estado de cada licencia (dos columnas que apuntan a la fecha de vencimiento para la que ya se avisó), lo que permite correr el barrido cada hora, reiniciar el contenedor y seguir mandando un solo mail. El barrido **publica primero y marca después**: si el proceso se cae en el medio, un aviso repetido molesta, pero un vencimiento que pasa en silencio es exactamente lo que la funcionalidad existe para evitar.
 
@@ -185,7 +185,7 @@ escuela permitiría falsificar el header con la IP real del cliente
 | **Monolito modular, no monolito plano** | Los límites de paquete vía interfaces se mantienen aunque corran en el mismo proceso — permite extraer a servicios separados sin reescribir lógica el día que haga falta, y documenta criterio de diseño real. |
 | **Event bus in-process en vez de un message broker** | Mismo patrón pub/sub, sin contenedor ni complejidad operativa adicional para un servidor sin equipo de DevOps dedicado. |
 | **JWT HS256** | Un solo proceso firma y verifica el token — un secreto simétrico cumple esa función sin la gestión de un par de claves asimétricas. Si en el futuro varios procesos necesitaran verificar sin llamar a `auth` por red, se puede pasar a RS256 sin tocar el resto del sistema. |
-| **Reporting con queries agregadas directas para el ciclo activo, sin CQRS continuo** | A esta escala (una escuela, decenas de usuarios) no hay volumen que justifique un read-model sincronizado por eventos. La única excepción es un snapshot agregado (`historico_uso_pc`/`historico_uso_docente`) calculado **una sola vez, al archivar un ciclo lectivo** — porque el detalle de reservas de ese ciclo se borra físicamente en el mismo paso (ver `01-requisitos.md` RF-02.4 y `07-modelo-datos.md` §3). |
+| **Reporting con queries agregadas directas para el ciclo activo, sin CQRS continuo** | A esta escala (una escuela, decenas de usuarios) no hay volumen que justifique un read-model sincronizado por eventos. La única excepción es un snapshot agregado (`historico_uso_equipo`/`historico_uso_docente`) calculado **una sola vez, al archivar un ciclo lectivo** — porque el detalle de reservas de ese ciclo se borra físicamente en el mismo paso (ver `01-requisitos.md` RF-02.4 y `07-modelo-datos.md` §3). |
 | **PostgreSQL único, FKs reales** | Toda referencia entre tablas es una foreign key real — integridad referencial completa, sin el costo de mantener bases de datos separadas. |
 | **Imágenes Docker desde `scratch`** | Binario Go estático + imagen `scratch` = ~10–15 MB, sin shell, sin librerías extra, superficie de ataque mínima. El proceso corre como `USER 65532` (no root) y el `HEALTHCHECK` lo hace el propio binario contra su `/health`, porque en `scratch` no hay `curl` con el que armarlo desde afuera. El costo de `scratch` es que **el binario no puede dar por sentado nada del sistema de archivos**: la zona horaria se embebe importando `time/tzdata` en `cmd/main.go`, y los certificados raíz se copian a `/etc/ssl/certs/ca-certificates.crt` desde la etapa de build. Sin esos dos, el proceso arranca igual y falla más tarde y lejos — sin CAs, el ingreso con Google devuelve 500 y los correos no salen (ver `Dockerfile`). |
 | **Preparado para escalar a más de una institución** | Docker Compose hoy → Kubernetes si hiciera falta escalar. Los límites de paquete de §3 y la interfaz de `EventBus` de §4 permiten esa extracción sin reescribir el dominio. |

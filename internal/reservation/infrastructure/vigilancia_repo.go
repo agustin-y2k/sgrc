@@ -30,7 +30,7 @@ const formatoFechaSQL = "2006-01-02"
 //
 // El LEFT JOIN con prestamo es lo que distingue "el docente no vino" de "el
 // docente vino y se la llevó": sin él, el barrido liberaría reservas cuya PC
-// está en manos de alguien. Se cruza por pc_id y no por reserva_id a
+// está en manos de alguien. Se cruza por equipo_id y no por reserva_id a
 // propósito — si la máquina salió por una entrega espontánea en vez de
 // contra la reserva, igual está afuera y la franja no se puede liberar.
 //
@@ -41,25 +41,25 @@ const formatoFechaSQL = "2006-01-02"
 func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]application.ReservaParaVigilar, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT
-			res.id, res.reserva_grupo_id, res.pc_id, COALESCE(pc.identificador, 0),
+			res.id, res.reserva_grupo_id, res.equipo_id, COALESCE(eq.identificador, 0),
 			res.fecha, res.hora_inicio, res.hora_fin, res.tipo, m.nombre,
-			COALESCE(pc.nombre, 'PC ' || pc.identificador),
+			COALESCE(eq.nombre, 'PC ' || eq.identificador),
 			g.creado_por,
 			COALESCE(u.nombre || ' ' || u.apellido, res.nombre_docente_snapshot, ''),
 			COALESCE(u.email, ''),
 			g.recordatorio_enviado_en IS NOT NULL,
-			res.avisado_pc_no_disponible_en IS NOT NULL,
+			res.avisado_equipo_no_disponible_en IS NOT NULL,
 			p.id IS NOT NULL,
 			p.devolucion_estimada
 		FROM reserva res
-		JOIN pc ON pc.id = res.pc_id
+		JOIN equipo eq ON eq.id = res.equipo_id
 		LEFT JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
 		LEFT JOIN materia m ON m.id = res.materia_id
 		LEFT JOIN usuario u ON u.id = g.creado_por
-		LEFT JOIN prestamo p ON p.pc_id = res.pc_id AND p.devuelto_en IS NULL
+		LEFT JOIN prestamo p ON p.equipo_id = res.equipo_id AND p.devuelto_en IS NULL
 		WHERE res.estado = 'CONFIRMADA'
 		  AND res.fecha BETWEEN $1::date AND $1::date + 1
-		ORDER BY res.fecha, res.hora_inicio, pc.identificador
+		ORDER BY res.fecha, res.hora_inicio, eq.identificador
 	`, hoy.Format(formatoFechaSQL))
 	if err != nil {
 		return nil, fmt.Errorf("listando reservas a vigilar: %w", err)
@@ -71,11 +71,11 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 		var v application.ReservaParaVigilar
 		var tipo string
 		if err := rows.Scan(
-			&v.ReservaID, &v.GrupoID, &v.PCID, &v.PCIdentificador,
+			&v.ReservaID, &v.GrupoID, &v.EquipoID, &v.Identificador,
 			&v.Fecha, &v.HoraInicio, &v.HoraFin, &tipo, &v.MateriaNombre, &v.Etiqueta,
 			&v.DocenteID, &v.DocenteNombre, &v.DocenteEmail,
-			&v.RecordatorioEnviado, &v.AvisoPCNoDisponibleEnviado,
-			&v.PCAfuera, &v.PCDeboVolverA,
+			&v.RecordatorioEnviado, &v.AvisoEquipoNoDisponibleEnviado,
+			&v.EquipoAfuera, &v.EquipoDebioVolverA,
 		); err != nil {
 			return nil, fmt.Errorf("escaneando reserva a vigilar: %w", err)
 		}
@@ -97,8 +97,8 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasPrestamoDetallado+`, COALESCE(u.email, '')
 		FROM prestamo p
-		JOIN pc ON pc.id = p.pc_id
-		LEFT JOIN carro c ON c.id = pc.carro_id
+		JOIN equipo eq ON eq.id = p.equipo_id
+		LEFT JOIN carro c ON c.id = eq.carro_id
 		LEFT JOIN reserva r ON r.id = p.reserva_id
 		LEFT JOIN materia m ON m.id = r.materia_id
 		LEFT JOIN usuario u ON u.id = p.entregado_a_usuario_id
@@ -117,11 +117,11 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 		var materiaNombre *string
 
 		if err := rows.Scan(
-			&p.ID, &p.PCID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
+			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 			&motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
 			&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
-			&v.PCIdentificador, &v.Etiqueta, &v.CarroNombre, &materiaNombre,
+			&v.Identificador, &v.Etiqueta, &v.CarroNombre, &materiaNombre,
 			&v.Email,
 		); err != nil {
 			return nil, fmt.Errorf("escaneando préstamo a vigilar: %w", err)
@@ -151,8 +151,8 @@ func (r *PostgresRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID st
 		grupoID, ahora, "recordatorio")
 }
 
-func (r *PostgresRepo) MarcarAvisoPCNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
-	return r.marcar(ctx, `UPDATE reserva SET avisado_pc_no_disponible_en=$2 WHERE id=$1`,
+func (r *PostgresRepo) MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
+	return r.marcar(ctx, `UPDATE reserva SET avisado_equipo_no_disponible_en=$2 WHERE id=$1`,
 		reservaID, ahora, "aviso de PC no disponible")
 }
 
@@ -186,14 +186,14 @@ func (r *PostgresRepo) marcar(ctx context.Context, sql, id string, ahora time.Ti
 	return nil
 }
 
-// ProximaReservaDePC: la siguiente reserva confirmada de esa máquina, con el
+// ProximaReservaDeEquipo: la siguiente reserva confirmada de esa máquina, con el
 // contacto del docente ya resuelto.
 //
-// LIMIT 1 con el mismo orden que ListarReservasFuturasDePC. Es una consulta
+// LIMIT 1 con el mismo orden que ListarReservasFuturasDeEquipo. Es una consulta
 // aparte y no un filtro sobre aquella porque lo que cambia no es el criterio
 // sino lo que hace falta traer: para avisar por correo hace falta la
 // dirección, y esa consulta devuelve reservas peladas.
-func (r *PostgresRepo) ProximaReservaDePC(ctx context.Context, pcID string, desde time.Time) (*application.ProximaReserva, error) {
+func (r *PostgresRepo) ProximaReservaDeEquipo(ctx context.Context, equipoID string, desde time.Time) (*application.ProximaReserva, error) {
 	var p application.ProximaReserva
 	err := r.db.QueryRow(ctx, `
 		SELECT COALESCE(g.creado_por::text, ''),
@@ -203,10 +203,10 @@ func (r *PostgresRepo) ProximaReservaDePC(ctx context.Context, pcID string, desd
 		FROM reserva res
 		LEFT JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
 		LEFT JOIN usuario u ON u.id = g.creado_por
-		WHERE res.pc_id = $1 AND `+condicionNoTerminada("$2", "$3")+` AND res.estado = 'CONFIRMADA'
+		WHERE res.equipo_id = $1 AND `+condicionNoTerminada("$2", "$3")+` AND res.estado = 'CONFIRMADA'
 		ORDER BY res.fecha, res.hora_inicio
 		LIMIT 1
-	`, pcID, desde, desde).Scan(&p.UsuarioID, &p.Email, &p.Nombre, &p.Fecha, &p.HoraInicio)
+	`, equipoID, desde, desde).Scan(&p.UsuarioID, &p.Email, &p.Nombre, &p.Fecha, &p.HoraInicio)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil // no hay próxima: no es un error
@@ -214,7 +214,7 @@ func (r *PostgresRepo) ProximaReservaDePC(ctx context.Context, pcID string, desd
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
 		}
-		return nil, fmt.Errorf("buscando la próxima reserva de la PC: %w", err)
+		return nil, fmt.Errorf("buscando la próxima reserva del equipo: %w", err)
 	}
 	return &p, nil
 }

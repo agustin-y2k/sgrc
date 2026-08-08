@@ -28,7 +28,7 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 
 type fakeRepo struct {
 	carros      map[string]*domain.Carro
-	pcs         map[string]*domain.PC
+	equipos     map[string]*domain.Equipo
 	incidencias map[string]*domain.Incidencia
 	licencias   map[string]*domain.LicenciaSoftware
 }
@@ -36,7 +36,7 @@ type fakeRepo struct {
 func nuevoFakeRepo() *fakeRepo {
 	return &fakeRepo{
 		carros:      make(map[string]*domain.Carro),
-		pcs:         make(map[string]*domain.PC),
+		equipos:     make(map[string]*domain.Equipo),
 		incidencias: make(map[string]*domain.Incidencia),
 		licencias:   make(map[string]*domain.LicenciaSoftware),
 	}
@@ -64,37 +64,37 @@ func (r *fakeRepo) ListarCarros(ctx context.Context) ([]*domain.Carro, error) {
 	}
 	return resultado, nil
 }
-func (r *fakeRepo) CrearPC(ctx context.Context, pc *domain.PC) error {
-	r.pcs[pc.ID] = pc
+func (r *fakeRepo) CrearEquipo(ctx context.Context, equipo *domain.Equipo) error {
+	r.equipos[equipo.ID] = equipo
 	return nil
 }
-func (r *fakeRepo) BuscarPCPorID(ctx context.Context, id string) (*domain.PC, error) {
-	pc, ok := r.pcs[id]
+func (r *fakeRepo) BuscarEquipoPorID(ctx context.Context, id string) (*domain.Equipo, error) {
+	equipo, ok := r.equipos[id]
 	if !ok {
-		return nil, application.ErrPCNoEncontrada
+		return nil, application.ErrEquipoNoEncontrado
 	}
-	return pc, nil
+	return equipo, nil
 }
-func (r *fakeRepo) GuardarPC(ctx context.Context, pc *domain.PC) error {
-	r.pcs[pc.ID] = pc
+func (r *fakeRepo) GuardarEquipo(ctx context.Context, equipo *domain.Equipo) error {
+	r.equipos[equipo.ID] = equipo
 	return nil
 }
-func (r *fakeRepo) ListarPCsPorCarro(ctx context.Context, carroID string) ([]*domain.PC, error) {
-	var resultado []*domain.PC
-	for _, pc := range r.pcs {
-		if pc.CarroID == carroID {
-			resultado = append(resultado, pc)
+func (r *fakeRepo) ListarEquiposPorCarro(ctx context.Context, carroID string) ([]*domain.Equipo, error) {
+	var resultado []*domain.Equipo
+	for _, equipo := range r.equipos {
+		if equipo.CarroID == carroID {
+			resultado = append(resultado, equipo)
 		}
 	}
 	return resultado, nil
 }
 
 // ListarEquiposSueltos: lo prestable que no está en ningún carro (015).
-func (r *fakeRepo) ListarEquiposSueltos(ctx context.Context) ([]*domain.PC, error) {
-	var resultado []*domain.PC
-	for _, pc := range r.pcs {
-		if !pc.EstaEnUnCarro() {
-			resultado = append(resultado, pc)
+func (r *fakeRepo) ListarEquiposSueltos(ctx context.Context) ([]*domain.Equipo, error) {
+	var resultado []*domain.Equipo
+	for _, equipo := range r.equipos {
+		if !equipo.EstaEnUnCarro() {
+			resultado = append(resultado, equipo)
 		}
 	}
 	return resultado, nil
@@ -115,10 +115,10 @@ func (r *fakeRepo) GuardarIncidencia(ctx context.Context, i *domain.Incidencia) 
 	r.incidencias[i.ID] = i
 	return nil
 }
-func (r *fakeRepo) ListarIncidenciasPorPC(ctx context.Context, pcID string) ([]*domain.Incidencia, error) {
+func (r *fakeRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error) {
 	var resultado []*domain.Incidencia
 	for _, i := range r.incidencias {
-		if i.PCID == pcID {
+		if i.EquipoID == equipoID {
 			resultado = append(resultado, i)
 		}
 	}
@@ -127,7 +127,7 @@ func (r *fakeRepo) ListarIncidenciasPorPC(ctx context.Context, pcID string) ([]*
 
 func (r *fakeRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
 	for _, existente := range r.licencias {
-		if existente.PCID == l.PCID && strings.EqualFold(existente.Nombre, l.Nombre) {
+		if existente.EquipoID == l.EquipoID && strings.EqualFold(existente.Nombre, l.Nombre) {
 			return application.ErrLicenciaDuplicada
 		}
 	}
@@ -155,10 +155,10 @@ func (r *fakeRepo) BorrarLicencia(ctx context.Context, id string) error {
 	delete(r.licencias, id)
 	return nil
 }
-func (r *fakeRepo) ListarLicenciasPorPC(ctx context.Context, pcID string) ([]*domain.LicenciaSoftware, error) {
+func (r *fakeRepo) ListarLicenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.LicenciaSoftware, error) {
 	var resultado []*domain.LicenciaSoftware
 	for _, l := range r.licencias {
-		if l.PCID == pcID {
+		if l.EquipoID == equipoID {
 			resultado = append(resultado, l)
 		}
 	}
@@ -179,11 +179,11 @@ func (r *fakeRepo) MarcarAvisosEnviados(ctx context.Context, l *domain.LicenciaS
 }
 func (r *fakeRepo) conUbicacion(l *domain.LicenciaSoftware) *application.LicenciaConUbicacion {
 	u := &application.LicenciaConUbicacion{Licencia: l}
-	if pc, ok := r.pcs[l.PCID]; ok {
-		u.PCIdentificador = pc.Identificador
-		u.PCDadaDeBaja = pc.DadaDeBaja
-		u.CarroID = pc.CarroID
-		if carro, ok := r.carros[pc.CarroID]; ok {
+	if equipo, ok := r.equipos[l.EquipoID]; ok {
+		u.Identificador = equipo.Identificador
+		u.EquipoDadoDeBaja = equipo.DadoDeBaja
+		u.CarroID = equipo.CarroID
+		if carro, ok := r.carros[equipo.CarroID]; ok {
 			u.CarroNombre = carro.Nombre
 		}
 	}
@@ -192,11 +192,11 @@ func (r *fakeRepo) conUbicacion(l *domain.LicenciaSoftware) *application.Licenci
 
 type fakeValidadorReservas struct{}
 
-func (f *fakeValidadorReservas) CancelarReservasFuturasDePC(ctx context.Context, pcID, motivo string) (int, int, error) {
+func (f *fakeValidadorReservas) CancelarReservasFuturasDeEquipo(ctx context.Context, equipoID, motivo string) (int, int, error) {
 	return 0, 0, nil
 }
 
-func (f *fakeValidadorReservas) TieneReservasFuturas(ctx context.Context, pcID string) (bool, error) {
+func (f *fakeValidadorReservas) TieneReservasFuturas(ctx context.Context, equipoID string) (bool, error) {
 	return false, nil
 }
 
@@ -288,11 +288,11 @@ func TestHTTP_ListarCarros_ComoDocente_OK(t *testing.T) {
 
 // ── PC ──────────────────────────────────────────────────────────────────
 
-func TestHTTP_CrearPC_OK(t *testing.T) {
+func TestHTTP_CrearEquipo_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/pcs",
-		jsonBody(crearPCRequest{Identificador: 27, NumeroSerie: "5CD1234ABC"}))
+	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/equipos",
+		jsonBody(crearEquipoDeCarroRequest{Identificador: 27, NumeroSerie: "5CD1234ABC"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -308,11 +308,11 @@ func TestHTTP_CrearPC_OK(t *testing.T) {
 // El número de serie es texto: sin esto, cargar la primera PC con el código
 // que dice la etiqueta era imposible (ver migración 011). La respuesta trae
 // la forma canónica, que puede no ser lo que se tipeó.
-func TestHTTP_CrearPC_NumeroSerieAlfanumerico_SeNormaliza(t *testing.T) {
+func TestHTTP_CrearEquipo_NumeroSerieAlfanumerico_SeNormaliza(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/pcs",
-		jsonBody(crearPCRequest{Identificador: 27, NumeroSerie: " pf2k9l3m "}))
+	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/equipos",
+		jsonBody(crearEquipoDeCarroRequest{Identificador: 27, NumeroSerie: " pf2k9l3m "}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -324,7 +324,7 @@ func TestHTTP_CrearPC_NumeroSerieAlfanumerico_SeNormaliza(t *testing.T) {
 		t.Fatalf("esperaba 201, obtuve %d", resp.StatusCode)
 	}
 
-	var creada pcResponse
+	var creada equipoResponse
 	if err := json.NewDecoder(resp.Body).Decode(&creada); err != nil {
 		t.Fatalf("no se pudo leer la respuesta: %v", err)
 	}
@@ -333,11 +333,11 @@ func TestHTTP_CrearPC_NumeroSerieAlfanumerico_SeNormaliza(t *testing.T) {
 	}
 }
 
-func TestHTTP_CrearPC_NumeroSerieVacio_400(t *testing.T) {
+func TestHTTP_CrearEquipo_NumeroSerieVacio_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/pcs",
-		jsonBody(crearPCRequest{Identificador: 27, NumeroSerie: "   "}))
+	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/equipos",
+		jsonBody(crearEquipoDeCarroRequest{Identificador: 27, NumeroSerie: "   "}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -347,11 +347,11 @@ func TestHTTP_CrearPC_NumeroSerieVacio_400(t *testing.T) {
 	}
 }
 
-func TestHTTP_CrearPC_IdentificadorInvalido_400(t *testing.T) {
+func TestHTTP_CrearEquipo_IdentificadorInvalido_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/pcs",
-		jsonBody(crearPCRequest{Identificador: -1, NumeroSerie: "5CD1234ABC"}))
+	req := httptest.NewRequest("POST", "/api/inventory/carros/c1/equipos",
+		jsonBody(crearEquipoDeCarroRequest{Identificador: -1, NumeroSerie: "5CD1234ABC"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -361,13 +361,13 @@ func TestHTTP_CrearPC_IdentificadorInvalido_400(t *testing.T) {
 	}
 }
 
-func TestHTTP_CambiarEstadoPC_ADisponible_OK(t *testing.T) {
+func TestHTTP_CambiarEstadoEquipo_ADisponible_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.pcs["pc1"] = &domain.PC{ID: "pc1", Identificador: 1, Estado: domain.EstadoEnMantenimiento}
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Identificador: 1, Estado: domain.EstadoEnMantenimiento}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("PATCH", "/api/inventory/pcs/pc1/estado",
-		jsonBody(cambiarEstadoPCRequest{Estado: "DISPONIBLE"}))
+	req := httptest.NewRequest("PATCH", "/api/inventory/equipos/pc1/estado",
+		jsonBody(cambiarEstadoEquipoRequest{Estado: "DISPONIBLE"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -380,13 +380,13 @@ func TestHTTP_CambiarEstadoPC_ADisponible_OK(t *testing.T) {
 	}
 }
 
-func TestHTTP_CambiarEstadoPC_EstadoInvalido_400(t *testing.T) {
+func TestHTTP_CambiarEstadoEquipo_EstadoInvalido_400(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.pcs["pc1"] = &domain.PC{ID: "pc1", Estado: domain.EstadoDisponible}
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Estado: domain.EstadoDisponible}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("PATCH", "/api/inventory/pcs/pc1/estado",
-		jsonBody(cambiarEstadoPCRequest{Estado: "ROTA"}))
+	req := httptest.NewRequest("PATCH", "/api/inventory/equipos/pc1/estado",
+		jsonBody(cambiarEstadoEquipoRequest{Estado: "ROTA"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -396,13 +396,13 @@ func TestHTTP_CambiarEstadoPC_EstadoInvalido_400(t *testing.T) {
 	}
 }
 
-func TestHTTP_CambiarEstadoPC_DesdeFueraDeServicio_409(t *testing.T) {
+func TestHTTP_CambiarEstadoEquipo_DesdeFueraDeServicio_409(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.pcs["pc1"] = &domain.PC{ID: "pc1", Estado: domain.EstadoFueraDeServicio}
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Estado: domain.EstadoFueraDeServicio}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("PATCH", "/api/inventory/pcs/pc1/estado",
-		jsonBody(cambiarEstadoPCRequest{Estado: "DISPONIBLE"}))
+	req := httptest.NewRequest("PATCH", "/api/inventory/equipos/pc1/estado",
+		jsonBody(cambiarEstadoEquipoRequest{Estado: "DISPONIBLE"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -412,10 +412,10 @@ func TestHTTP_CambiarEstadoPC_DesdeFueraDeServicio_409(t *testing.T) {
 	}
 }
 
-func TestHTTP_DarDeBajaPC_ComoDocente_403(t *testing.T) {
+func TestHTTP_DarDeBajaEquipo_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("DELETE", "/api/inventory/pcs/pc1", nil)
+	req := httptest.NewRequest("DELETE", "/api/inventory/equipos/pc1", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
@@ -432,7 +432,7 @@ func TestHTTP_CrearIncidencia_ComoDocente_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/inventory/incidencias",
-		jsonBody(crearIncidenciaRequest{PCID: "pc1", Descripcion: "No enciende", Gravedad: "GRAVE"}))
+		jsonBody(crearIncidenciaRequest{EquipoID: "pc1", Descripcion: "No enciende", Gravedad: "GRAVE"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
@@ -449,7 +449,7 @@ func TestHTTP_CrearIncidencia_GravedadInvalida_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/inventory/incidencias",
-		jsonBody(crearIncidenciaRequest{PCID: "pc1", Descripcion: "No enciende", Gravedad: "CRITICA"}))
+		jsonBody(crearIncidenciaRequest{EquipoID: "pc1", Descripcion: "No enciende", Gravedad: "CRITICA"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
@@ -463,7 +463,7 @@ func TestHTTP_CrearIncidencia_SinToken_401(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/inventory/incidencias",
-		jsonBody(crearIncidenciaRequest{PCID: "pc1", Descripcion: "No enciende", Gravedad: "GRAVE"}))
+		jsonBody(crearIncidenciaRequest{EquipoID: "pc1", Descripcion: "No enciende", Gravedad: "GRAVE"}))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, _ := app.Test(req)

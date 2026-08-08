@@ -10,7 +10,7 @@
 // etc.) — reimplementar esa máquina de estados con SQL crudo en cada
 // paquete consumidor sería duplicar lógica con riesgo real de que
 // diverja. Los validadores de solo LECTURA (ValidadorUsuario,
-// ValidadorMateria, ValidadorPC, etc.) sí van directo por SQL en cada
+// ValidadorMateria, ValidadorEquipo, etc.) sí van directo por SQL en cada
 // paquete, porque ahí no hay ninguna regla de negocio que valga la pena
 // centralizar — la diferencia es lectura vs. acción, no una excepción
 // arbitraria a la regla de "no importar entre paquetes".
@@ -31,12 +31,12 @@ type inventoryValidadorReservasAdapter struct {
 	reservationSvc *reservationapp.Service
 }
 
-func (a *inventoryValidadorReservasAdapter) CancelarReservasFuturasDePC(ctx context.Context, pcID, motivo string) (int, int, error) {
-	return a.reservationSvc.CancelarReservasFuturasDePC(ctx, pcID, motivo)
+func (a *inventoryValidadorReservasAdapter) CancelarReservasFuturasDeEquipo(ctx context.Context, equipoID, motivo string) (int, int, error) {
+	return a.reservationSvc.CancelarReservasFuturasDeEquipo(ctx, equipoID, motivo)
 }
 
-func (a *inventoryValidadorReservasAdapter) TieneReservasFuturas(ctx context.Context, pcID string) (bool, error) {
-	return a.reservationSvc.TieneReservasFuturasDePC(ctx, pcID)
+func (a *inventoryValidadorReservasAdapter) TieneReservasFuturas(ctx context.Context, equipoID string) (bool, error) {
+	return a.reservationSvc.TieneReservasFuturasDeEquipo(ctx, equipoID)
 }
 
 // authCanceladorReservasAdapter satisface

@@ -3,10 +3,10 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import * as inventoryApi from "@/features/inventory/api"
-import type { Carro, PC } from "@/features/inventory/types"
+import type { Carro, Equipo } from "@/features/inventory/types"
 import { BloqueoEvaluacionPage } from "@/features/reservas/BloqueoEvaluacionPage"
 import * as reservasApi from "@/features/reservas/api"
-import type { PCDisponible } from "@/features/reservas/types"
+import type { EquipoDisponible } from "@/features/reservas/types"
 import { ApiError } from "@/lib/api-client"
 import { diaLectivoEnDias } from "@/test/fechas"
 
@@ -19,26 +19,26 @@ const FECHA = diaLectivoEnDias(7)
 
 const CARRO: Carro = { id: "carro1", nombre: "Carro A" }
 
-function pc(over: Partial<PC> = {}): PC {
+function equipo(over: Partial<Equipo> = {}): Equipo {
   return {
     id: "pc1",
     carroId: "carro1",
     identificador: 1,
     numeroSerie: "SERIE-1001",
-    etiqueta: "PC 1",
+    etiqueta: `PC ${over.identificador ?? 1}`,
     tipo: "PC",
     reservable: true,
     freezado: false,
     estado: "DISPONIBLE",
-    dadaDeBaja: false,
+    dadoDeBaja: false,
     fechaAlta: "2026-01-01",
     ...over,
   }
 }
 
-function disponible(pcId: string, identificador: number): PCDisponible {
+function disponible(equipoId: string, identificador: number): EquipoDisponible {
   return {
-    pcId,
+    equipoId,
     identificador,
     etiqueta: `PC ${identificador}`,
     carroId: "carro1",
@@ -70,11 +70,11 @@ describe("BloqueoEvaluacionPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({ data: [CARRO] })
-    vi.mocked(inventoryApi.listarPCsDeCarro).mockResolvedValue({
-      data: [pc(), pc({ id: "pc2", identificador: 2 })],
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+      data: [equipo(), equipo({ id: "pc2", identificador: 2 })],
     })
     // Las dos libres: sin reservas que cancelar, salvo que un test diga otra cosa.
-    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
       data: [disponible("pc1", 1), disponible("pc2", 2)],
     })
     vi.mocked(reservasApi.bloquearParaEvaluacion).mockResolvedValue({
@@ -88,7 +88,7 @@ describe("BloqueoEvaluacionPage", () => {
     vi.restoreAllMocks()
   })
 
-  it("lista las PCs del inventario agrupadas por carro", async () => {
+  it("lista los equipos del inventario agrupadas por carro", async () => {
     renderPagina()
 
     expect(await screen.findByText("Carro A")).toBeInTheDocument()
@@ -97,13 +97,13 @@ describe("BloqueoEvaluacionPage", () => {
   })
 
   /**
-   * El backend rechaza el bloqueo ENTERO si viene una PC que no está
-   * DISPONIBLE (ErrPCNoDisponible): no la saltea. Si la pantalla la
-   * dejara tildar, el Admin perdería toda la operación por una PC.
+   * El backend rechaza el bloqueo ENTERO si viene un equipo que no está
+   * DISPONIBLE (ErrEquipoNoDisponible): no la saltea. Si la pantalla la
+   * dejara tildar, el Admin perdería toda la operación por un equipo.
    */
-  it("no deja elegir una PC que no está disponible", async () => {
-    vi.mocked(inventoryApi.listarPCsDeCarro).mockResolvedValue({
-      data: [pc(), pc({ id: "pc2", identificador: 2, estado: "FUERA_DE_SERVICIO" })],
+  it("no deja elegir un equipo que no está disponible", async () => {
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+      data: [equipo(), equipo({ id: "pc2", identificador: 2, estado: "FUERA_DE_SERVICIO" })],
     })
     renderPagina()
 
@@ -112,9 +112,9 @@ describe("BloqueoEvaluacionPage", () => {
     expect(screen.getByText("Fuera de servicio")).toBeInTheDocument()
   })
 
-  it("no muestra las PCs dadas de baja", async () => {
-    vi.mocked(inventoryApi.listarPCsDeCarro).mockResolvedValue({
-      data: [pc(), pc({ id: "pc2", identificador: 2, dadaDeBaja: true })],
+  it("no muestra los equipos dados de baja", async () => {
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+      data: [equipo(), equipo({ id: "pc2", identificador: 2, dadoDeBaja: true })],
     })
     renderPagina()
 
@@ -126,7 +126,7 @@ describe("BloqueoEvaluacionPage", () => {
     renderPagina()
 
     await screen.findByLabelText("PC 1")
-    expect(reservasApi.pcsDisponibles).not.toHaveBeenCalled()
+    expect(reservasApi.equiposDisponibles).not.toHaveBeenCalled()
     expect(
       screen.getByText(/Completá la fecha y el horario para ver cuáles ya tienen reserva/)
     ).toBeInTheDocument()
@@ -135,10 +135,10 @@ describe("BloqueoEvaluacionPage", () => {
   /**
    * Es el punto de la pantalla: el endpoint no simula nada, así que la
    * única forma de saber qué se va a cancelar es cruzar el inventario
-   * contra las PCs libres en esa franja.
+   * contra los equipos libres en esa franja.
    */
-  it("marca las PCs que ya tienen reserva en la franja elegida", async () => {
-    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({
+  it("marca los equipos que ya tienen reserva en la franja elegida", async () => {
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
       data: [disponible("pc1", 1)],
     })
     const user = userEvent.setup()
@@ -150,7 +150,7 @@ describe("BloqueoEvaluacionPage", () => {
   })
 
   it("avisa cuántas reservas se van a cancelar antes de confirmar", async () => {
-    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
       data: [disponible("pc1", 1)],
     })
     const user = userEvent.setup()
@@ -161,7 +161,7 @@ describe("BloqueoEvaluacionPage", () => {
     await user.click(screen.getByRole("button", { name: "Revisar bloqueo" }))
 
     expect(
-      await screen.findByText(/1 de esas PCs tienen una reserva en esa franja/)
+      await screen.findByText(/1 de esos equipos tienen una reserva en esa franja/)
     ).toBeInTheDocument()
     expect(screen.getByText(/no se recuperan/)).toBeInTheDocument()
   })
@@ -175,7 +175,7 @@ describe("BloqueoEvaluacionPage", () => {
     await user.click(screen.getByRole("button", { name: "Revisar bloqueo" }))
 
     expect(
-      await screen.findByText(/Ninguna de las PCs elegidas tiene reservas/)
+      await screen.findByText(/Ninguna de los equipos elegidas tiene reservas/)
     ).toBeInTheDocument()
   })
 
@@ -192,7 +192,7 @@ describe("BloqueoEvaluacionPage", () => {
     expect(reservasApi.bloquearParaEvaluacion).not.toHaveBeenCalled()
   })
 
-  it("bloquea las PCs elegidas al confirmar", async () => {
+  it("bloquea los equipos elegidas al confirmar", async () => {
     const user = userEvent.setup()
     renderPagina()
 
@@ -204,7 +204,7 @@ describe("BloqueoEvaluacionPage", () => {
 
     await waitFor(() => {
       expect(reservasApi.bloquearParaEvaluacion).toHaveBeenCalledWith({
-        pcIds: ["pc1", "pc2"],
+        equipoIds: ["pc1", "pc2"],
         fecha: FECHA,
         horaInicio: "08:00",
         horaFin: "10:00",
@@ -234,7 +234,7 @@ describe("BloqueoEvaluacionPage", () => {
     expect(screen.getByRole("button", { name: "Revisar bloqueo" })).toBeEnabled()
   })
 
-  it("no deja bloquear sin elegir ninguna PC", async () => {
+  it("no deja bloquear sin elegir ningún equipo", async () => {
     const user = userEvent.setup()
     renderPagina()
 
@@ -280,7 +280,7 @@ describe("BloqueoEvaluacionPage", () => {
 
   it("muestra el error del backend", async () => {
     vi.mocked(reservasApi.bloquearParaEvaluacion).mockRejectedValue(
-      new ApiError(409, "la PC no está disponible para reservar")
+      new ApiError(409, "el equipo no está disponible para reservar")
     )
     const user = userEvent.setup()
     renderPagina()
@@ -291,7 +291,7 @@ describe("BloqueoEvaluacionPage", () => {
     await user.click(screen.getByRole("button", { name: "Confirmar bloqueo" }))
 
     expect(
-      await screen.findByText("la PC no está disponible para reservar")
+      await screen.findByText("el equipo no está disponible para reservar")
     ).toBeInTheDocument()
   })
 })

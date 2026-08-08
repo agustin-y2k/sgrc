@@ -27,7 +27,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// RF-08.14: cambiar una reserva de máquina sin partir la clase en dos
 	// grupos. La titularidad se verifica adentro del handler, como en
 	// cancelar.
-	reservation.Patch("/reservas/:id/pc", autenticado, h.CambiarPCDeReserva)
+	reservation.Patch("/reservas/:id/equipo", autenticado, h.CambiarEquipoDeReserva)
 	reservation.Post("/grupos/:id/cancelar", autenticado, h.CancelarOcurrenciaRecurrente)
 	reservation.Get("/grupos/:id", autenticado, h.ObtenerReservaGrupo)
 	reservation.Post("/bloqueos-evaluacion", autenticado, soloAdmin, h.BloquearParaEvaluacion)
@@ -36,11 +36,11 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// autenticado. Vive bajo /api/reservation aunque conceptualmente sea
 	// "de la PC", porque el dato es de este paquete — inventory no puede
 	// leer reservas sin romper el límite de dominio.
-	reservation.Get("/pcs/:pcId/calendario", autenticado, h.CalendarioDePC)
+	reservation.Get("/equipos/:equipoId/calendario", autenticado, h.CalendarioDeEquipo)
 
-	// RF-04.2: la lista de PCs libres en una franja, de la que el docente
+	// RF-04.2: la lista de equipos libres en una franja, de la que el docente
 	// tilda las que necesita.
-	reservation.Get("/pcs-disponibles", autenticado, h.ListarPCsDisponibles)
+	reservation.Get("/equipos-disponibles", autenticado, h.ListarEquiposDisponibles)
 
 	// RF-08: entregas y devoluciones. Todo solo Admin — quien entrega y
 	// recibe las máquinas es quien hoy escribe el papel. Que un docente
@@ -52,7 +52,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// pero el orden deja el camino despejado si mañana la hay.
 	reservation.Get("/prestamos", autenticado, soloAdmin, h.ListarPrestamosAbiertos)
 	reservation.Post("/prestamos/por-reserva", autenticado, soloAdmin, h.EntregarPorReserva)
-	reservation.Post("/prestamos/recibir", autenticado, soloAdmin, h.RecibirPCs)
+	reservation.Post("/prestamos/recibir", autenticado, soloAdmin, h.RecibirEquipos)
 	reservation.Post("/prestamos", autenticado, soloAdmin, h.EntregarSuelta)
-	reservation.Get("/pcs/:pcId/prestamos", autenticado, soloAdmin, h.HistorialDePrestamosDePC)
+	reservation.Get("/equipos/:equipoId/prestamos", autenticado, soloAdmin, h.HistorialDePrestamosDeEquipo)
 }

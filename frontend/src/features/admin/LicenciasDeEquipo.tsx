@@ -10,7 +10,7 @@ import { formatearFechaLarga } from "@/lib/fechas"
 import { useQuery } from "@tanstack/react-query"
 
 /**
- * RF-03.11 — las licencias de una PC, dentro de la ficha de esa PC.
+ * RF-03.11 — las licencias de un equipo, dentro de la ficha de ese equipo.
  *
  * Es de solo lectura a propósito. Cargarlas, renovarlas y editarlas se hace
  * en /admin/licencias, donde las acciones son masivas: el mismo software
@@ -19,7 +19,7 @@ import { useQuery } from "@tanstack/react-query"
  * trabajo que la otra pantalla resuelve en uno, y a que las ocho fechas
  * queden desparejas sin motivo.
  *
- * Lo que sí aporta acá: mirando una PC concreta —porque falló, porque un
+ * Lo que sí aporta acá: mirando un equipo concreta —porque falló, porque un
  * docente preguntó por ella— se ve de una si su software está al día.
  */
 
@@ -40,10 +40,10 @@ function contador(l: Licencia): string {
   return `venció hace ${-d} días`
 }
 
-export function LicenciasDePC({ pcId }: { pcId: string }) {
+export function LicenciasDeEquipo({ equipoId }: { equipoId: string }) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["licencias", "pc", pcId],
-    queryFn: () => adminApi.listarLicenciasDePC(pcId),
+    queryKey: ["licencias", "equipo", equipoId],
+    queryFn: () => adminApi.listarLicenciasDeEquipo(equipoId),
   })
 
   if (isLoading) {
@@ -63,7 +63,7 @@ export function LicenciasDePC({ pcId }: { pcId: string }) {
     <div className="grid gap-2 rounded-md border border-dashed p-3">
       {licencias.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          Esta PC no tiene licencias con vencimiento cargadas.
+          Este equipo no tiene licencias con vencimiento cargadas.
         </p>
       ) : (
         <ul className="grid gap-1 text-sm">

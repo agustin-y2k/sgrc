@@ -2,7 +2,7 @@
 // es ese archivo (ver la nota en lib/api-client.ts sobre por qué no se
 // confía ciegamente en docs/08-api-spec.yaml).
 
-export type EstadoPC = "DISPONIBLE" | "EN_MANTENIMIENTO" | "FUERA_DE_SERVICIO"
+export type EstadoEquipo = "DISPONIBLE" | "EN_MANTENIMIENTO" | "FUERA_DE_SERVICIO"
 
 export type Carro = {
   id: string
@@ -10,7 +10,7 @@ export type Carro = {
   descripcion?: string
 }
 
-export type PC = {
+export type Equipo = {
   id: string
   /**
    * Los tres pueden faltar desde la 015: la escuela también presta un
@@ -39,24 +39,24 @@ export type PC = {
   ram?: string
   sistemaOperativo?: string
   softwareInstalado?: string
-  estado: EstadoPC
-  dadaDeBaja: boolean
+  estado: EstadoEquipo
+  dadoDeBaja: boolean
   fechaBaja?: string
   fechaAlta: string
 }
 
 /**
- * RF-03.5 — una falla reportada sobre una PC.
+ * RF-03.5 — una falla reportada sobre un equipo.
  *
  * Vive acá y no en features/admin porque no es un concepto de
- * administración: el docente que usa la PC es quien reporta ("Docentes solo
+ * administración: el docente que usa el equipo es quien reporta ("Docentes solo
  * pueden reportarlas"), y el Admin es quien después la gestiona.
  */
 export type GravedadIncidencia = "LEVE" | "MODERADA" | "GRAVE"
 
 /**
  * El backend NO impone una máquina de estados acá (a diferencia de Usuario o
- * PC): valida que el valor sea uno de los cuatro y nada más, así que
+ * Equipo): valida que el valor sea uno de los cuatro y nada más, así que
  * cualquier estado puede pasar a cualquier otro. La pantalla ofrece el
  * recorrido esperado sin bloquear el resto.
  */
@@ -64,7 +64,7 @@ export type EstadoIncidencia = "ABIERTA" | "EN_REPARACION" | "ENVIADA_DGE" | "RE
 
 export type Incidencia = {
   id: string
-  pcId: string
+  equipoId: string
   reportadoPor?: string
   descripcion: string
   gravedad: GravedadIncidencia
@@ -80,14 +80,14 @@ export type RespuestaLista<T> = { data: T[] }
 
 /**
  * RF-03.11 — una licencia de software con vencimiento periódico, instalada
- * en una PC puntual.
+ * en un equipo puntual.
  *
- * Hay una fila por (PC, software): el mismo AutoCAD en las ocho PCs de un
+ * Hay una fila por (Equipo, software): el mismo AutoCAD en las ocho equipos de un
  * carro son ocho licencias. Se modeló así porque el caso a cubrir es
  * justamente el desfasaje —una máquina que quedó sin renovar mientras las
  * demás sí—, y por eso el alta y la renovación son masivas en la pantalla.
  *
- * A diferencia de `PC.softwareInstalado`, que es texto libre y lo ve el
+ * A diferencia de `Equipo.softwareInstalado`, que es texto libre y lo ve el
  * docente al elegir qué reservar, esto es solo de Admin. Los dos conviven:
  * uno describe qué hay en la máquina, el otro lleva el vencimiento.
  */
@@ -95,7 +95,7 @@ export type EstadoLicencia = "SIN_FECHA" | "VENCIDA" | "POR_VENCER" | "VIGENTE"
 
 export type Licencia = {
   id: string
-  pcId: string
+  equipoId: string
   nombre: string
   /** Cuánto dura una renovación. Es el paso del botón "Renovar". */
   diasDuracion: number
@@ -130,14 +130,14 @@ export type Licencia = {
   diasRestantes?: number
   estado: EstadoLicencia
 
-  /** Ubicación. Solo viene en el listado general, no en el de una PC. */
+  /** Ubicación. Solo viene en el listado general, no en el de un equipo. */
   /** Cómo se nombra el equipo: "PC 3" o "Notebook chica". */
   etiqueta?: string
   /** 0 en un equipo suelto; el carro, vacío. Lo que se muestra es `etiqueta`. */
-  pcIdentificador?: number
+  identificador?: number
   carroId?: string
   carroNombre?: string
-  pcDadaDeBaja?: boolean
+  equipoDadoDeBaja?: boolean
 }
 
 /**
@@ -157,13 +157,13 @@ export type VencimientoDeclarado = {
 }
 
 /**
- * `pcsQueYaLaTenian` no es un error: marcar las diez PCs del carro cuando
+ * `equiposQueYaLaTenian` no es un error: marcar las diez Equipos del carro cuando
  * ocho ya estaban cargadas tiene que funcionar. Por eso el alta responde
  * 201 aunque haya salteado algunas.
  */
 export type AltaMasivaLicencias = {
   creadas: Licencia[]
-  pcsQueYaLaTenian?: string[]
+  equiposQueYaLaTenian?: string[]
 }
 
 /**

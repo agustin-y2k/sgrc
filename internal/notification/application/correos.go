@@ -132,16 +132,16 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
-	bus.Subscribe("reserva.pc-no-disponible", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.PCNoDisponibleParaReserva)
+	bus.Subscribe("reserva.equipo-no-disponible", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.EquipoNoDisponibleParaReserva)
 		if !ok {
-			log.Printf("correo: payload inesperado para reserva.pc-no-disponible: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para reserva.equipo-no-disponible: %+v", e.Payload)
 			return
 		}
 		if payload.Email == "" {
 			return
 		}
-		asunto, cuerpo := m.textoDePCNoDisponible(payload)
+		asunto, cuerpo := m.textoDeEquipoNoDisponible(payload)
 		enviar("por mail la PC que no volvió", func(ctx context.Context) error {
 			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
 		})
@@ -193,12 +193,12 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	})
 
 	bus.Subscribe("prestamo.sin-devolver.cierre", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.PCsSinDevolverAlCierre)
+		payload, ok := e.Payload.(eventbus.EquiposSinDevolverAlCierre)
 		if !ok {
 			log.Printf("correo: payload inesperado para prestamo.sin-devolver.cierre: %+v", e.Payload)
 			return
 		}
-		if len(payload.PCs) == 0 {
+		if len(payload.Equipos) == 0 {
 			return
 		}
 		asunto, cuerpo := m.textoDeCierreParaAdmins(payload)
@@ -206,7 +206,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 			return m.enviarATodosLosAdmins(ctx, asunto, cuerpo)
 		})
 
-		for _, pc := range payload.PCs {
+		for _, pc := range payload.Equipos {
 			if pc.ProximoEmail == "" {
 				continue
 			}

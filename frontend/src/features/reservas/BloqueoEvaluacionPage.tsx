@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import * as inventoryApi from "@/features/inventory/api"
-import type { Carro, PC } from "@/features/inventory/types"
+import type { Carro, Equipo } from "@/features/inventory/types"
 import * as reservasApi from "@/features/reservas/api"
 import { hoyISO, type ResultadoBloqueoEvaluacion } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
@@ -21,15 +21,15 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   FUERA_DE_SERVICIO: "Fuera de servicio",
 }
 
-type PCDelCarro = { carro: Carro; pcs: PC[] }
+type EquipoDelCarro = { carro: Carro; equipos: Equipo[] }
 
-/** Una PC se puede bloquear solo si el backend la aceptaría (RF-04.7). */
-function esBloqueable(pc: PC): boolean {
-  return pc.estado === "DISPONIBLE" && !pc.dadaDeBaja
+/** Un equipo se puede bloquear solo si el backend la aceptaría (RF-04.7). */
+function esBloqueable(equipo: Equipo): boolean {
+  return equipo.estado === "DISPONIBLE" && !equipo.dadoDeBaja
 }
 
 /**
- * RF-04.7 — un Admin bloquea PCs para una evaluación estatal en una fecha y
+ * RF-04.7 — un Admin bloquea equipos para una evaluación estatal en una fecha y
  * un rango horario conocidos de antemano.
  *
  * El endpoint existía desde el principio sin ninguna pantalla que lo
@@ -58,26 +58,26 @@ export function BloqueoEvaluacionPage() {
   const carros = carrosQuery.data?.data ?? []
 
   // Todo el inventario de una, no carro por carro como en /inventario: acá
-  // hace falta el total para poder decir cuántas de las PCs elegidas están
+  // hace falta el total para poder decir cuántas de los equipos elegidas están
   // ocupadas, y la selección cruza carros.
-  const pcsQueries = useQueries({
+  const equiposQueries = useQueries({
     queries: carros.map((c) => ({
-      queryKey: ["pcs", c.id],
-      queryFn: () => inventoryApi.listarPCsDeCarro(c.id),
+      queryKey: ["equipos", c.id],
+      queryFn: () => inventoryApi.listarEquiposDeCarro(c.id),
     })),
   })
 
   /**
-   * Las PCs libres en la franja. La diferencia contra el inventario es lo
+   * Los equipos libres en la franja. La diferencia contra el inventario es lo
    * que permite avisar "esta tiene una reserva que se va a cancelar" sin
    * que el backend tenga un endpoint de simulación.
    *
-   * `pcs-disponibles` ya excluye las que no son reservables, así que se
+   * `equipos-disponibles` ya excluye las que no son reservables, así que se
    * cruza solo contra las bloqueables.
    */
   const libresQuery = useQuery({
-    queryKey: ["pcs-disponibles", fecha, horaInicio, horaFin],
-    queryFn: () => reservasApi.pcsDisponibles(fecha, horaInicio, horaFin),
+    queryKey: ["equipos-disponibles", fecha, horaInicio, horaFin],
+    queryFn: () => reservasApi.equiposDisponibles(fecha, horaInicio, horaFin),
     enabled: franjaCompleta,
   })
 
@@ -88,31 +88,31 @@ export function BloqueoEvaluacionPage() {
       setResultado(res)
       setConfirmando(false)
       setSeleccionadas([])
-      // El bloqueo ocupa las PCs y cancela reservas: lo que quedó cacheado
+      // El bloqueo ocupa los equipos y cancela reservas: lo que quedó cacheado
       // de disponibilidad y de listados de reservas ya no vale.
-      await queryClient.invalidateQueries({ queryKey: ["pcs-disponibles"] })
+      await queryClient.invalidateQueries({ queryKey: ["equipos-disponibles"] })
       await queryClient.invalidateQueries({ queryKey: ["reservas"] })
     },
   })
 
-  const inventario: PCDelCarro[] = carros.map((carro, i) => ({
+  const inventario: EquipoDelCarro[] = carros.map((carro, i) => ({
     carro,
-    pcs: pcsQueries[i]?.data?.data ?? [],
+    equipos: equiposQueries[i]?.data?.data ?? [],
   }))
-  const inventarioCargando = carrosQuery.isLoading || pcsQueries.some((q) => q.isLoading)
+  const inventarioCargando = carrosQuery.isLoading || equiposQueries.some((q) => q.isLoading)
 
   // Mientras la consulta de libres no haya vuelto no se sabe nada: sin este
-  // recaudo un `Set` vacío haría figurar TODAS las PCs como ocupadas.
+  // recaudo un `Set` vacío haría figurar TODAS los equipos como ocupadas.
   const hayDatosDeOcupacion = franjaCompleta && libresQuery.isSuccess
-  const idsLibres = new Set((libresQuery.data?.data ?? []).map((p) => p.pcId))
+  const idsLibres = new Set((libresQuery.data?.data ?? []).map((p) => p.equipoId))
 
-  function estaOcupada(pc: PC): boolean {
-    return hayDatosDeOcupacion && esBloqueable(pc) && !idsLibres.has(pc.id)
+  function estaOcupada(equipo: Equipo): boolean {
+    return hayDatosDeOcupacion && esBloqueable(equipo) && !idsLibres.has(equipo.id)
   }
 
-  const todasLasPCs = inventario.flatMap((g) => g.pcs)
-  const elegidasOcupadas = todasLasPCs.filter(
-    (pc) => seleccionadas.includes(pc.id) && estaOcupada(pc)
+  const todasLasEquipos = inventario.flatMap((g) => g.equipos)
+  const elegidasOcupadas = todasLasEquipos.filter(
+    (equipo) => seleccionadas.includes(equipo.id) && estaOcupada(equipo)
   )
 
   // El backend no valida el motivo: lo intercala tal cual en el aviso a cada
@@ -120,17 +120,17 @@ export function BloqueoEvaluacionPage() {
   // paréntesis hueco en la notificación. Se exige acá.
   const puedeBloquear = franjaCompleta && motivo.trim() !== "" && seleccionadas.length > 0
 
-  function alternar(pcId: string, tildada: boolean) {
+  function alternar(equipoId: string, tildada: boolean) {
     setResultado(null)
     setConfirmando(false)
     setSeleccionadas((antes) =>
-      tildada ? [...antes, pcId] : antes.filter((id) => id !== pcId)
+      tildada ? [...antes, equipoId] : antes.filter((id) => id !== equipoId)
     )
   }
 
   function confirmar() {
     bloquear.mutate({
-      pcIds: seleccionadas,
+      equipoIds: seleccionadas,
       fecha,
       horaInicio,
       horaFin,
@@ -142,7 +142,7 @@ export function BloqueoEvaluacionPage() {
     <div className="mx-auto max-w-3xl">
       <EncabezadoDePagina
         titulo="Bloqueo por evaluación estatal"
-        descripcion="Reserva las PCs para una evaluación y cancela las reservas de docentes que se superpongan. Los docentes afectados reciben un aviso con el motivo."
+        descripcion="Reserva los equipos para una evaluación y cancela las reservas de docentes que se superpongan. Los docentes afectados reciben un aviso con el motivo."
       />
 
       {carrosQuery.error && (
@@ -159,7 +159,7 @@ export function BloqueoEvaluacionPage() {
       {resultado && (
         <Alert className="mb-4">
           <AlertDescription>
-            Bloqueo creado sobre {resultado.bloqueos.length} PC
+            Bloqueo creado sobre {resultado.bloqueos.length} Equipo
             {resultado.bloqueos.length === 1 ? "" : "s"}.{" "}
             {resultado.reservasCanceladas === 0
               ? "No había ninguna reserva en esa franja."
@@ -219,55 +219,55 @@ export function BloqueoEvaluacionPage() {
         </CardContent>
       </Card>
 
-      <h2 className="mb-2 text-xl font-semibold">Qué PCs se bloquean</h2>
+      <h2 className="mb-2 text-xl font-semibold">Qué equipos se bloquean</h2>
 
       {!franjaCompleta && (
         <p className="text-muted-foreground mb-2 text-sm">
           Completá la fecha y el horario para ver cuáles ya tienen reserva.
         </p>
       )}
-      {inventarioCargando && <p className="text-muted-foreground">Cargando PCs…</p>}
-      {!inventarioCargando && todasLasPCs.length === 0 && (
+      {inventarioCargando && <p className="text-muted-foreground">Cargando equipos…</p>}
+      {!inventarioCargando && todasLasEquipos.length === 0 && (
         <p className="text-muted-foreground">
-          No hay ninguna PC cargada en el inventario.
+          No hay ningún equipo cargado en el inventario.
         </p>
       )}
 
       <div className="grid gap-4">
-        {inventario.map(({ carro, pcs }) => {
-          const activas = pcs.filter((pc) => !pc.dadaDeBaja)
+        {inventario.map(({ carro, equipos }) => {
+          const activas = equipos.filter((equipo) => !equipo.dadoDeBaja)
           if (activas.length === 0) return null
 
           return (
             <fieldset key={carro.id} className="grid gap-2">
               <legend className="mb-1 text-sm font-medium">{carro.nombre}</legend>
               <div className="grid gap-2 sm:grid-cols-2">
-                {activas.map((pc) => {
-                  const id = `pc-${pc.id}`
-                  const bloqueable = esBloqueable(pc)
-                  const ocupada = estaOcupada(pc)
+                {activas.map((equipo) => {
+                  const id = `equipo-${equipo.id}`
+                  const bloqueable = esBloqueable(equipo)
+                  const ocupada = estaOcupada(equipo)
 
                   return (
                     <div
-                      key={pc.id}
+                      key={equipo.id}
                       className="flex items-start gap-2 rounded-md border p-2"
                     >
                       {/* Las que no están DISPONIBLE no se ofrecen: el
                           backend rechaza el bloqueo ENTERO si viene una
-                          sola así (ErrPCNoDisponible), no la saltea. */}
+                          sola así (ErrEquipoNoDisponible), no la saltea. */}
                       <Checkbox
                         id={id}
                         disabled={!bloqueable}
-                        checked={seleccionadas.includes(pc.id)}
-                        onCheckedChange={(v) => alternar(pc.id, v === true)}
+                        checked={seleccionadas.includes(equipo.id)}
+                        onCheckedChange={(v) => alternar(equipo.id, v === true)}
                       />
                       <div className="grid gap-0.5">
                         <Label htmlFor={id} className="cursor-pointer">
-                          PC {pc.identificador}
+                          {equipo.etiqueta}
                         </Label>
                         {!bloqueable && (
                           <Badge variant="destructive" className="w-fit">
-                            {ETIQUETA_ESTADO[pc.estado] ?? pc.estado}
+                            {ETIQUETA_ESTADO[equipo.estado] ?? equipo.estado}
                           </Badge>
                         )}
                         {ocupada && (
@@ -288,7 +288,7 @@ export function BloqueoEvaluacionPage() {
       <div className="mt-4 grid gap-3">
         {seleccionadas.length > 0 && (
           <p className="text-sm">
-            {seleccionadas.length} PC{seleccionadas.length === 1 ? "" : "s"} seleccionada
+            {seleccionadas.length} Equipo{seleccionadas.length === 1 ? "" : "s"} seleccionada
             {seleccionadas.length === 1 ? "" : "s"}.
           </p>
         )}
@@ -306,19 +306,19 @@ export function BloqueoEvaluacionPage() {
         {confirmando && (
           <div className="grid gap-2 rounded-md border p-3">
             <p className="text-sm">
-              Se van a bloquear {seleccionadas.length} PC
+              Se van a bloquear {seleccionadas.length} Equipo
               {seleccionadas.length === 1 ? "" : "s"} el {fecha} de {horaInicio} a{" "}
               {horaFin}.
             </p>
             {elegidasOcupadas.length > 0 ? (
               <p className="text-destructive text-sm">
-                {elegidasOcupadas.length} de esas PCs tienen una reserva en esa franja: se
+                {elegidasOcupadas.length} de esos equipos tienen una reserva en esa franja: se
                 va a cancelar y el docente va a recibir un aviso. Las reservas canceladas
                 no se recuperan aunque después se saque el bloqueo.
               </p>
             ) : (
               <p className="text-muted-foreground text-sm">
-                Ninguna de las PCs elegidas tiene reservas en esa franja.
+                Ninguna de los equipos elegidas tiene reservas en esa franja.
               </p>
             )}
             <div className="flex gap-2">

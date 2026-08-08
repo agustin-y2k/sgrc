@@ -15,21 +15,21 @@ func diaDe(anio int, mes time.Month, dia int) time.Time {
 	return time.Date(anio, mes, dia, 0, 0, 0, 0, time.UTC)
 }
 
-func crearPCDeTest(t *testing.T, repo *PostgresRepo, carroID string, identificador int, serie string) *domain.PC {
+func crearEquipoDeCarroDeTest(t *testing.T, repo *PostgresRepo, carroID string, identificador int, serie string) *domain.Equipo {
 	t.Helper()
-	pc, err := domain.NuevaPC(NuevoID(), carroID, identificador, serie, false, time.Now().UTC().Truncate(time.Microsecond))
+	equipo, err := domain.NuevoEquipoDeCarro(NuevoID(), carroID, identificador, serie, false, time.Now().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
-	if err := repo.CrearPC(context.Background(), pc); err != nil {
+	if err := repo.CrearEquipo(context.Background(), equipo); err != nil {
 		t.Fatalf("no se pudo crear la PC de prueba: %v", err)
 	}
-	return pc
+	return equipo
 }
 
-func crearLicenciaDeTest(t *testing.T, repo *PostgresRepo, pcID, nombre string, diasDuracion, diasAviso int) *domain.LicenciaSoftware {
+func crearLicenciaDeTest(t *testing.T, repo *PostgresRepo, equipoID, nombre string, diasDuracion, diasAviso int) *domain.LicenciaSoftware {
 	t.Helper()
-	l, err := domain.NuevaLicencia(NuevoID(), pcID, nombre, diasDuracion, diasAviso,
+	l, err := domain.NuevaLicencia(NuevoID(), equipoID, nombre, diasDuracion, diasAviso,
 		time.Now().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
@@ -48,8 +48,8 @@ func TestPostgresRepo_Licencia_CrearSinFechaYBuscar(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc := crearPCDeTest(t, repo, carro.ID, 3, "SERIE-LIC-1")
-	l := crearLicenciaDeTest(t, repo, pc.ID, "AutoCAD 2027", 30, 1)
+	equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, 3, "SERIE-LIC-1")
+	l := crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", 30, 1)
 
 	encontrada, err := repo.BuscarLicenciaPorID(ctx, l.ID)
 	if err != nil {
@@ -72,8 +72,8 @@ func TestPostgresRepo_Licencia_GuardarYReleerLaFecha(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc := crearPCDeTest(t, repo, carro.ID, 3, "SERIE-LIC-1")
-	l := crearLicenciaDeTest(t, repo, pc.ID, "AutoCAD 2027", 30, 1)
+	equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, 3, "SERIE-LIC-1")
+	l := crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", 30, 1)
 
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 	l.RenovadaEl(diaDe(2026, time.August, 4), "", ahora)
@@ -96,17 +96,17 @@ func TestPostgresRepo_Licencia_GuardarYReleerLaFecha(t *testing.T) {
 	}
 }
 
-func TestPostgresRepo_Licencia_MismoSoftwareDosVecesEnLaMismaPC_Error(t *testing.T) {
+func TestPostgresRepo_Licencia_MismoSoftwareDosVecesEnLaMismaEquipo_Error(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc := crearPCDeTest(t, repo, carro.ID, 3, "SERIE-LIC-1")
-	crearLicenciaDeTest(t, repo, pc.ID, "AutoCAD 2027", 30, 1)
+	equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, 3, "SERIE-LIC-1")
+	crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", 30, 1)
 
 	// Distinta capitalización: para el índice funcional es la misma.
-	otra, err := domain.NuevaLicencia(NuevoID(), pc.ID, "autocad 2027", 30, 1, time.Now())
+	otra, err := domain.NuevaLicencia(NuevoID(), equipo.ID, "autocad 2027", 30, 1, time.Now())
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -115,31 +115,31 @@ func TestPostgresRepo_Licencia_MismoSoftwareDosVecesEnLaMismaPC_Error(t *testing
 	}
 }
 
-func TestPostgresRepo_Licencia_MismoSoftwareEnOtraPC_OK(t *testing.T) {
+func TestPostgresRepo_Licencia_MismoSoftwareEnOtraEquipo_OK(t *testing.T) {
 	// La regla de negocio del modelo elegido: una fila por (PC, software).
 	// El mismo AutoCAD en las ocho PCs del carro son ocho filas.
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc1 := crearPCDeTest(t, repo, carro.ID, 1, "SERIE-LIC-1")
-	pc2 := crearPCDeTest(t, repo, carro.ID, 2, "SERIE-LIC-2")
+	pc1 := crearEquipoDeCarroDeTest(t, repo, carro.ID, 1, "SERIE-LIC-1")
+	pc2 := crearEquipoDeCarroDeTest(t, repo, carro.ID, 2, "SERIE-LIC-2")
 
 	crearLicenciaDeTest(t, repo, pc1.ID, "AutoCAD 2027", 30, 1)
 	crearLicenciaDeTest(t, repo, pc2.ID, "AutoCAD 2027", 30, 1)
 }
 
-func TestPostgresRepo_Licencia_BorrarYListarPorPC(t *testing.T) {
+func TestPostgresRepo_Licencia_BorrarYListarPorEquipo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc := crearPCDeTest(t, repo, carro.ID, 3, "SERIE-LIC-1")
-	l1 := crearLicenciaDeTest(t, repo, pc.ID, "AutoCAD 2027", 30, 1)
-	crearLicenciaDeTest(t, repo, pc.ID, "SolidWorks", 365, 7)
+	equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, 3, "SERIE-LIC-1")
+	l1 := crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", 30, 1)
+	crearLicenciaDeTest(t, repo, equipo.ID, "SolidWorks", 365, 7)
 
-	licencias, err := repo.ListarLicenciasPorPC(ctx, pc.ID)
+	licencias, err := repo.ListarLicenciasPorEquipo(ctx, equipo.ID)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestPostgresRepo_Licencia_BorrarYListarPorPC(t *testing.T) {
 	if err := repo.BorrarLicencia(ctx, l1.ID); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	licencias, err = repo.ListarLicenciasPorPC(ctx, pc.ID)
+	licencias, err = repo.ListarLicenciasPorEquipo(ctx, equipo.ID)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -169,18 +169,18 @@ func TestPostgresRepo_Licencia_ListarTraeLaUbicacionYOrdena(t *testing.T) {
 	ctx := context.Background()
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc := crearPCDeTest(t, repo, carro.ID, 7, "SERIE-LIC-1")
+	equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, 7, "SERIE-LIC-1")
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
-	sinFecha := crearLicenciaDeTest(t, repo, pc.ID, "Sin fecha", 30, 1)
+	sinFecha := crearLicenciaDeTest(t, repo, equipo.ID, "Sin fecha", 30, 1)
 
-	vencida := crearLicenciaDeTest(t, repo, pc.ID, "Vencida", 30, 1)
+	vencida := crearLicenciaDeTest(t, repo, equipo.ID, "Vencida", 30, 1)
 	vencida.FijarVencimiento(diaDe(2026, time.August, 1), "", ahora)
 	if err := repo.GuardarLicencia(ctx, vencida); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	lejana := crearLicenciaDeTest(t, repo, pc.ID, "Lejana", 30, 1)
+	lejana := crearLicenciaDeTest(t, repo, equipo.ID, "Lejana", 30, 1)
 	lejana.FijarVencimiento(diaDe(2026, time.December, 1), "", ahora)
 	if err := repo.GuardarLicencia(ctx, lejana); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -203,9 +203,9 @@ func TestPostgresRepo_Licencia_ListarTraeLaUbicacionYOrdena(t *testing.T) {
 		}
 	}
 
-	if licencias[0].PCIdentificador != 7 || licencias[0].CarroNombre != "Carro 1" {
+	if licencias[0].Identificador != 7 || licencias[0].CarroNombre != "Carro 1" {
 		t.Errorf("ubicación incompleta: PC %d del carro %q",
-			licencias[0].PCIdentificador, licencias[0].CarroNombre)
+			licencias[0].Identificador, licencias[0].CarroNombre)
 	}
 }
 
@@ -221,10 +221,10 @@ func TestPostgresRepo_Licencia_CandidatasAAviso(t *testing.T) {
 	hoy := diaDe(2026, time.August, 7)
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc := crearPCDeTest(t, repo, carro.ID, 1, "SERIE-LIC-1")
+	equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, 1, "SERIE-LIC-1")
 
 	conVencimiento := func(nombre string, vencimiento time.Time, diasAviso int) *domain.LicenciaSoftware {
-		l := crearLicenciaDeTest(t, repo, pc.ID, nombre, 30, diasAviso)
+		l := crearLicenciaDeTest(t, repo, equipo.ID, nombre, 30, diasAviso)
 		l.FijarVencimiento(vencimiento, "", ahora)
 		if err := repo.GuardarLicencia(ctx, l); err != nil {
 			t.Fatalf("no debería fallar: %v", err)
@@ -240,7 +240,7 @@ func TestPostgresRepo_Licencia_CandidatasAAviso(t *testing.T) {
 
 	// No entran.
 	conVencimiento("Falta mucho", diaDe(2026, time.December, 1), 1)
-	crearLicenciaDeTest(t, repo, pc.ID, "Sin fecha", 30, 1)
+	crearLicenciaDeTest(t, repo, equipo.ID, "Sin fecha", 30, 1)
 
 	candidatas, err := repo.ListarCandidatasAAviso(ctx, hoy)
 	if err != nil {
@@ -275,8 +275,8 @@ func TestPostgresRepo_Licencia_MarcarAvisosSacaDeLasCandidatas(t *testing.T) {
 	hoy := diaDe(2026, time.August, 7)
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc := crearPCDeTest(t, repo, carro.ID, 1, "SERIE-LIC-1")
-	l := crearLicenciaDeTest(t, repo, pc.ID, "AutoCAD 2027", 30, 1)
+	equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, 1, "SERIE-LIC-1")
+	l := crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", 30, 1)
 	l.FijarVencimiento(diaDe(2026, time.August, 8), "", ahora)
 	if err := repo.GuardarLicencia(ctx, l); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -355,9 +355,9 @@ func TestPostgresRepo_Licencia_MarcarAvisosSacaDeLasCandidatas(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_Licencia_PCDadaDeBajaNoAvisa: renovarle la licencia a una
+// TestPostgresRepo_Licencia_EquipoDadoDeBajaNoAvisa: renovarle la licencia a una
 // máquina que ya no está en el inventario no le sirve a nadie.
-func TestPostgresRepo_Licencia_PCDadaDeBajaNoAvisa(t *testing.T) {
+func TestPostgresRepo_Licencia_EquipoDadaDeBajaNoAvisa(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
@@ -365,17 +365,17 @@ func TestPostgresRepo_Licencia_PCDadaDeBajaNoAvisa(t *testing.T) {
 	hoy := diaDe(2026, time.August, 7)
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc := crearPCDeTest(t, repo, carro.ID, 1, "SERIE-LIC-1")
-	l := crearLicenciaDeTest(t, repo, pc.ID, "AutoCAD 2027", 30, 1)
+	equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, 1, "SERIE-LIC-1")
+	l := crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", 30, 1)
 	l.FijarVencimiento(diaDe(2026, time.August, 8), "", ahora)
 	if err := repo.GuardarLicencia(ctx, l); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	if err := pc.DarDeBaja(ahora); err != nil {
+	if err := equipo.DarDeBaja(ahora); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if err := repo.GuardarPC(ctx, pc); err != nil {
+	if err := repo.GuardarEquipo(ctx, equipo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -412,8 +412,8 @@ func TestPostgresRepo_Licencia_CandidatasNoDependenDeLaZonaDeLaSesion(t *testing
 	hoy := diaDe(2026, time.August, 7)
 
 	carro := crearCarroDeTest(t, repo, "Carro 1")
-	pc := crearPCDeTest(t, repo, carro.ID, 1, "SERIE-LIC-TZ")
-	l := crearLicenciaDeTest(t, repo, pc.ID, "AutoCAD 2027", 30, 1)
+	equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, 1, "SERIE-LIC-TZ")
+	l := crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", 30, 1)
 	// El borde exacto: vence mañana, avisa con un día de anticipación, así
 	// que hoy es el primer día en que corresponde el aviso.
 	l.FijarVencimiento(diaDe(2026, time.August, 8), "", ahora)
@@ -456,7 +456,7 @@ func TestPostgresRepo_Licencia_DeUnEquipoSinCarro(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	equipo := crearEquipoDeTest(t, repo, "NOTEBOOK", "Notebook chica", false)
+	equipo := crearEquipoSueltoDeTest(t, repo, "NOTEBOOK", "Notebook chica", false)
 	l := crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", 30, 1)
 
 	// Vence mañana: entra en la ventana de aviso. Sin usuario, igual que los
@@ -479,9 +479,9 @@ func TestPostgresRepo_Licencia_DeUnEquipoSinCarro(t *testing.T) {
 	if listadas[0].Etiqueta != "Notebook chica" {
 		t.Errorf("esperaba la etiqueta del equipo, obtuve %q", listadas[0].Etiqueta)
 	}
-	if listadas[0].PCIdentificador != 0 || listadas[0].CarroNombre != "" {
+	if listadas[0].Identificador != 0 || listadas[0].CarroNombre != "" {
 		t.Errorf("esperaba identificador 0 y carro vacío, obtuve %d y %q",
-			listadas[0].PCIdentificador, listadas[0].CarroNombre)
+			listadas[0].Identificador, listadas[0].CarroNombre)
 	}
 
 	candidatas, err := repo.ListarCandidatasAAviso(ctx, hoy)

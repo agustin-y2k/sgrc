@@ -4,10 +4,10 @@ describe("filasACSV", () => {
   it("separa con punto y coma y termina las filas con CRLF", () => {
     expect(
       filasACSV([
-        ["PC", "Reservas"],
+        ["Equipo", "Reservas"],
         ["PC 7", 3],
       ])
-    ).toBe("PC;Reservas\r\nPC 7;3")
+    ).toBe("Equipo;Reservas\r\nPC 7;3")
   })
 
   // El caso que rompe un CSV armado a mano: un nombre de materia con punto

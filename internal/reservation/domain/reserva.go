@@ -82,7 +82,7 @@ func ParseTipoReserva(s string) (TipoReserva, error) {
 type Reserva struct {
 	ID                    string
 	ReservaGrupoID        *string
-	PCID                  string
+	EquipoID              string
 	MateriaID             *string
 	NombreDocenteSnapshot *string
 	Fecha                 time.Time
@@ -100,14 +100,14 @@ type Reserva struct {
 // NuevaReservaNormal crea una Reserva perteneciente a un ReservaGrupo
 // (RF-04.1) — reservaGrupoID y materiaID son obligatorios acá, a
 // diferencia de un bloqueo de evaluación.
-func NuevaReservaNormal(id, reservaGrupoID, pcID, materiaID string, nombreDocenteSnapshot string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) (*Reserva, error) {
+func NuevaReservaNormal(id, reservaGrupoID, equipoID, materiaID string, nombreDocenteSnapshot string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) (*Reserva, error) {
 	if horaFin <= horaInicio {
 		return nil, ErrRangoHorarioInvalido
 	}
 	return &Reserva{
 		ID:                    id,
 		ReservaGrupoID:        &reservaGrupoID,
-		PCID:                  pcID,
+		EquipoID:              equipoID,
 		MateriaID:             &materiaID,
 		NombreDocenteSnapshot: &nombreDocenteSnapshot,
 		Fecha:                 fecha,
@@ -122,13 +122,13 @@ func NuevaReservaNormal(id, reservaGrupoID, pcID, materiaID string, nombreDocent
 
 // NuevaReservaEvaluacion crea un bloqueo administrativo sobre una PC
 // puntual, sin pertenecer a ningún ReservaGrupo ni Materia (RF-04.7).
-func NuevaReservaEvaluacion(id, pcID string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) (*Reserva, error) {
+func NuevaReservaEvaluacion(id, equipoID string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) (*Reserva, error) {
 	if horaFin <= horaInicio {
 		return nil, ErrRangoHorarioInvalido
 	}
 	return &Reserva{
 		ID:         id,
-		PCID:       pcID,
+		EquipoID:   equipoID,
 		Fecha:      fecha,
 		HoraInicio: horaInicio,
 		HoraFin:    horaFin,

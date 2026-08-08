@@ -22,26 +22,28 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	inventory.Get("/carros", autenticado, h.ListarCarros)
 	inventory.Patch("/carros/:id", autenticado, soloAdmin, h.EditarCarro)
 
-	// PC
-	inventory.Post("/carros/:carroId/pcs", autenticado, soloAdmin, h.CrearPC)
-	inventory.Get("/carros/:carroId/pcs", autenticado, h.ListarPCsPorCarro)
-	inventory.Patch("/pcs/:id", autenticado, soloAdmin, h.EditarPC)
-	inventory.Patch("/pcs/:id/estado", autenticado, soloAdmin, h.CambiarEstadoPC)
-	inventory.Delete("/pcs/:id", autenticado, soloAdmin, h.DarDeBajaPC)
+	// Equipo — las computadoras de un carro y todo lo demás que se presta.
+	//
+	// /equipos/sueltos va ANTES que /equipos/:id, y eso no es cosmético:
+	// Fiber resuelve por orden de registro, así que al revés el :id se
+	// tragaría la palabra "sueltos" y el listado devolvería un 404 buscando
+	// un equipo con ese ID.
+	inventory.Post("/equipos/sueltos", autenticado, soloAdmin, h.CrearEquipo)
+	inventory.Get("/equipos/sueltos", autenticado, h.ListarEquiposSueltos)
 
-	// Equipos que no están en ningún carro (RF-03.15): el proyector, los
-	// cargadores. Se listan para cualquier autenticado por el mismo motivo
-	// que las PCs; darlos de alta es solo de Admin.
-	inventory.Post("/equipos", autenticado, soloAdmin, h.CrearEquipo)
-	inventory.Get("/equipos", autenticado, h.ListarEquiposSueltos)
+	inventory.Post("/carros/:carroId/equipos", autenticado, soloAdmin, h.CrearEquipoDeCarro)
+	inventory.Get("/carros/:carroId/equipos", autenticado, h.ListarEquiposPorCarro)
+	inventory.Patch("/equipos/:id", autenticado, soloAdmin, h.EditarEquipo)
+	inventory.Patch("/equipos/:id/estado", autenticado, soloAdmin, h.CambiarEstadoEquipo)
+	inventory.Delete("/equipos/:id", autenticado, soloAdmin, h.DarDeBajaEquipo)
 
 	// Incidencia
 	inventory.Post("/incidencias", autenticado, h.CrearIncidencia)
-	inventory.Get("/pcs/:pcId/incidencias", autenticado, h.ListarIncidenciasPorPC)
+	inventory.Get("/equipos/:equipoId/incidencias", autenticado, h.ListarIncidenciasPorEquipo)
 	inventory.Patch("/incidencias/:id", autenticado, soloAdmin, h.EditarIncidencia)
 
 	// Licencias de software (RF-03.11 a RF-03.14). Todas solo Admin,
-	// incluidas las lecturas: el docente elige PC por software_instalado,
+	// incluidas las lecturas: el docente elige el equipo por software_instalado,
 	// que ya ve en la pantalla de reserva; cuándo vence una licencia es
 	// trabajo administrativo y no le sirve para decidir nada.
 	//
@@ -53,5 +55,5 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	inventory.Post("/licencias/renovar", autenticado, soloAdmin, h.RenovarLicencias)
 	inventory.Patch("/licencias/:id", autenticado, soloAdmin, h.EditarLicencia)
 	inventory.Delete("/licencias/:id", autenticado, soloAdmin, h.BorrarLicencia)
-	inventory.Get("/pcs/:pcId/licencias", autenticado, soloAdmin, h.ListarLicenciasPorPC)
+	inventory.Get("/equipos/:equipoId/licencias", autenticado, soloAdmin, h.ListarLicenciasPorEquipo)
 }

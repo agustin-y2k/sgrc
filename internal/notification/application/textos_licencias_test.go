@@ -9,14 +9,14 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
 )
 
-func licenciaDelAviso(nombre string, pc int, carro string, diasRestantes int) eventbus.LicenciaPorVencer {
+func licenciaDelAviso(nombre string, equipo int, carro string, diasRestantes int) eventbus.LicenciaPorVencer {
 	return eventbus.LicenciaPorVencer{
 		Nombre: nombre,
 		// La etiqueta es lo que se muestra; el identificador viaja igual
 		// porque otras pantallas lo usan. Ver licenciaSueltaDelAviso para el
 		// caso en que no hay identificador ninguno.
-		Etiqueta:         fmt.Sprintf("PC %d", pc),
-		PCIdentificador:  pc,
+		Etiqueta:         fmt.Sprintf("PC %d", equipo),
+		Identificador:    equipo,
 		CarroNombre:      carro,
 		FechaVencimiento: time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC),
 		DiasRestantes:    diasRestantes,

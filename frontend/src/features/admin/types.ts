@@ -8,8 +8,11 @@
  * RF-06.1. Trae identificador y carro además del UUID: un reporte que solo
  * muestra IDs no se puede leer.
  */
-export type ResumenUsoPC = {
-  pcId: string
+export type ResumenUsoEquipo = {
+  equipoId: string
+  /** Cómo se nombra: "PC 3" o "Proyector Epson". Lo resuelve el servidor. */
+  etiqueta: string
+  /** 0 si no está en ningún carro. Lo que se muestra es `etiqueta`. */
   identificador: number
   carroNombre: string
   cantidadReservas: number
@@ -25,19 +28,22 @@ export type ResumenUsoDocente = {
 }
 
 /**
- * RF-06.4 — el uso de una PC en un año ya archivado.
+ * RF-06.4 — el uso de un equipo en un año ya archivado.
  *
  * Todo lo que se muestra es un *snapshot*: al archivar el ciclo se borran
  * físicamente sus reservas (RF-02.4), así que estos números no se pueden
  * recalcular ni filtrar por fecha. El identificador y el carro son los que
- * la PC tenía al cerrar el año — desde entonces pudo mudarse de carro
+ * el equipo tenía al cerrar el año — desde entonces pudo mudarse de carro
  * (RF-03.10) o darse de baja, y el reporte igual tiene que seguir
  * diciendo dónde estaba.
  */
-export type HistoricoUsoPC = {
+export type HistoricoUsoEquipo = {
   id: string
   anio: number
-  pcId: string
+  equipoId: string
+  /** Cómo se llamaba el equipo el día que se archivó el ciclo. */
+  etiquetaSnapshot: string
+  /** 0 si no estaba en ningún carro. Lo que se muestra es `etiquetaSnapshot`. */
   identificadorSnapshot: number
   carroNombreSnapshot: string
   minutosReservados: number
@@ -63,8 +69,10 @@ export type HistoricoUsoDocente = {
 }
 
 /** RF-06.3 */
-export type ResumenIncidenciasPC = {
-  pcId: string
+export type ResumenIncidenciasEquipo = {
+  equipoId: string
+  /** Ver ResumenUsoEquipo.etiqueta. */
+  etiqueta: string
   identificador: number
   carroNombre: string
   total: number
@@ -106,7 +114,7 @@ export function formatearDuracion(minutos: number): string {
  * absoluto solo no se puede juzgar: nadie sabe si 1240 minutos es mucho sin
  * saber contra qué. El total de la propia tabla es el denominador que
  * tenemos sin pedirle nada nuevo al backend; no es la ocupación real del
- * laboratorio (eso necesita las PCs operativas y la franja lectiva, que hoy
+ * laboratorio (eso necesita los equipos operativas y la franja lectiva, que hoy
  * no llegan a esta pantalla), así que se rotula como lo que es: la
  * participación de esa fila en el período consultado.
  */

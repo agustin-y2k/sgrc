@@ -74,9 +74,9 @@ func (v vencimientoRequest) aDominio() (application.VencimientoDeclarado, error)
 const diasAvisoPorDefecto = 1
 
 type crearLicenciasRequest struct {
-	// PCIDs en plural: el alta es masiva porque el mismo software está en
+	// EquipoIDs en plural: el alta es masiva porque el mismo software está en
 	// varias máquinas y cargarlo de a una serían ocho formularios iguales.
-	PCIDs        []string `json:"pcIds"`
+	EquipoIDs    []string `json:"equipoIds"`
 	Nombre       string   `json:"nombre"`
 	DiasDuracion int      `json:"diasDuracion"`
 	// DiasAviso opcional: sin él, se avisa el día anterior.
@@ -102,7 +102,7 @@ type editarLicenciaRequest struct {
 
 type licenciaResponse struct {
 	ID           string `json:"id"`
-	PCID         string `json:"pcId"`
+	EquipoID     string `json:"equipoId"`
 	Nombre       string `json:"nombre"`
 	DiasDuracion int    `json:"diasDuracion"`
 	DiasAviso    int    `json:"diasAviso"`
@@ -127,16 +127,16 @@ type licenciaResponse struct {
 	//
 	// Etiqueta es lo que se muestra: "PC 3" o "Notebook chica". Los dos de
 	// abajo van vacíos cuando el equipo no está en ningún carro (015).
-	Etiqueta        string `json:"etiqueta,omitempty"`
-	PCIdentificador int    `json:"pcIdentificador,omitempty"`
-	CarroID         string `json:"carroId,omitempty"`
-	CarroNombre     string `json:"carroNombre,omitempty"`
-	PCDadaDeBaja    bool   `json:"pcDadaDeBaja,omitempty"`
+	Etiqueta         string `json:"etiqueta,omitempty"`
+	Identificador    int    `json:"identificador,omitempty"`
+	CarroID          string `json:"carroId,omitempty"`
+	CarroNombre      string `json:"carroNombre,omitempty"`
+	EquipoDadoDeBaja bool   `json:"equipoDadoDeBaja,omitempty"`
 }
 
 func toLicenciaResponse(l *domain.LicenciaSoftware, hoy time.Time) licenciaResponse {
 	r := licenciaResponse{
-		ID: l.ID, PCID: l.PCID, Nombre: l.Nombre,
+		ID: l.ID, EquipoID: l.EquipoID, Nombre: l.Nombre,
 		DiasDuracion: l.DiasDuracion, DiasAviso: l.DiasAviso,
 		FechaVencimiento:     formatearFechaOpcional(l.FechaVencimiento),
 		UltimaRenovacion:     formatearFechaOpcional(l.UltimaRenovacion),
@@ -153,19 +153,19 @@ func toLicenciaResponse(l *domain.LicenciaSoftware, hoy time.Time) licenciaRespo
 func toLicenciaConUbicacionResponse(u *application.LicenciaConUbicacion, hoy time.Time) licenciaResponse {
 	r := toLicenciaResponse(u.Licencia, hoy)
 	r.Etiqueta = u.Etiqueta
-	r.PCIdentificador = u.PCIdentificador
+	r.Identificador = u.Identificador
 	r.CarroID = u.CarroID
 	r.CarroNombre = u.CarroNombre
-	r.PCDadaDeBaja = u.PCDadaDeBaja
+	r.EquipoDadoDeBaja = u.EquipoDadoDeBaja
 	return r
 }
 
-// altaMasivaResponse dice qué pasó con cada PC del lote. PCsQueYaLaTenian
+// altaMasivaResponse dice qué pasó con cada equipo del lote. EquiposQueYaLaTenian
 // no es un error: marcar las diez PCs del carro cuando ocho ya estaban
 // cargadas tiene que funcionar, y la pantalla lo informa sin alarmar.
 type altaMasivaResponse struct {
-	Creadas          []licenciaResponse `json:"creadas"`
-	PCsQueYaLaTenian []string           `json:"pcsQueYaLaTenian,omitempty"`
+	Creadas              []licenciaResponse `json:"creadas"`
+	EquiposQueYaLaTenian []string           `json:"equiposQueYaLaTenian,omitempty"`
 }
 
 // renovacionResponse — SinFechaPrevia son las que no se pudieron renovar

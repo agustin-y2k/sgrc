@@ -15,8 +15,8 @@ func diaDe(anio int, mes time.Month, dia int) time.Time {
 	return time.Date(anio, mes, dia, 0, 0, 0, 0, time.UTC)
 }
 
-func entregaDeTest(pcID string) domain.DatosDeEntrega {
-	return domain.DatosDeEntrega{PCID: pcID, Nombre: "Ana Pérez"}
+func entregaDeTest(equipoID string) domain.DatosDeEntrega {
+	return domain.DatosDeEntrega{EquipoID: equipoID, Nombre: "Ana Pérez"}
 }
 
 func crearPrestamoDeTest(t *testing.T, repo *PostgresRepo, d domain.DatosDeEntrega, ahora time.Time) *domain.Prestamo {
@@ -36,10 +36,10 @@ func TestPostgresRepo_Prestamo_EspontaneoIdaYVuelta(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
-	d := entregaDeTest(pcID)
+	d := entregaDeTest(equipoID)
 	d.Motivo = "trámite en secretaría"
 	p := crearPrestamoDeTest(t, repo, d, ahora)
 
@@ -58,24 +58,24 @@ func TestPostgresRepo_Prestamo_EspontaneoIdaYVuelta(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_Prestamo_UnaPCNoPuedeEstarEnDosManos verifica contra
+// TestPostgresRepo_Prestamo_UnEquipoNoPuedeEstarEnDosManos verifica contra
 // Postgres real la garantía que el papel no puede dar. Dos Admin anotando a
 // la vez, o un doble clic, no pueden entregar dos veces la misma máquina.
-func TestPostgresRepo_Prestamo_UnaPCNoPuedeEstarEnDosManos(t *testing.T) {
+func TestPostgresRepo_Prestamo_UnaEquipoNoPuedeEstarEnDosManos(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
-	crearPrestamoDeTest(t, repo, entregaDeTest(pcID), ahora)
+	crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
 
-	otro, err := domain.NuevoPrestamo(NuevoID(), entregaDeTest(pcID), ahora)
+	otro, err := domain.NuevoPrestamo(NuevoID(), entregaDeTest(equipoID), ahora)
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
-	if err := repo.CrearPrestamo(ctx, otro); err != application.ErrPCYaPrestada {
-		t.Fatalf("esperaba ErrPCYaPrestada, obtuve %v", err)
+	if err := repo.CrearPrestamo(ctx, otro); err != application.ErrEquipoYaPrestado {
+		t.Fatalf("esperaba ErrEquipoYaPrestado, obtuve %v", err)
 	}
 }
 
@@ -86,10 +86,10 @@ func TestPostgresRepo_Prestamo_TrasDevolverSePuedeVolverAEntregar(t *testing.T) 
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
-	primero := crearPrestamoDeTest(t, repo, entregaDeTest(pcID), ahora)
+	primero := crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
 	if err := primero.Devolver("", "", ahora.Add(time.Hour)); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -97,9 +97,9 @@ func TestPostgresRepo_Prestamo_TrasDevolverSePuedeVolverAEntregar(t *testing.T) 
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	crearPrestamoDeTest(t, repo, entregaDeTest(pcID), ahora.Add(2*time.Hour))
+	crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora.Add(2*time.Hour))
 
-	historial, err := repo.ListarPrestamosDePC(ctx, pcID, 10)
+	historial, err := repo.ListarPrestamosDeEquipo(ctx, equipoID, 10)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -112,21 +112,21 @@ func TestPostgresRepo_Prestamo_TrasDevolverSePuedeVolverAEntregar(t *testing.T) 
 	}
 }
 
-func TestPostgresRepo_Prestamo_BuscarAbiertoDePC(t *testing.T) {
+func TestPostgresRepo_Prestamo_BuscarAbiertoDeEquipo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	// Con la máquina en el laboratorio, no hay préstamo abierto.
-	if _, err := repo.BuscarPrestamoAbiertoDePC(ctx, pcID); err != application.ErrPrestamoNoEncontrado {
+	if _, err := repo.BuscarPrestamoAbiertoDeEquipo(ctx, equipoID); err != application.ErrPrestamoNoEncontrado {
 		t.Fatalf("esperaba ErrPrestamoNoEncontrado, obtuve %v", err)
 	}
 
-	p := crearPrestamoDeTest(t, repo, entregaDeTest(pcID), ahora)
+	p := crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
 
-	abierto, err := repo.BuscarPrestamoAbiertoDePC(ctx, pcID)
+	abierto, err := repo.BuscarPrestamoAbiertoDeEquipo(ctx, equipoID)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestPostgresRepo_Prestamo_BuscarAbiertoDePC(t *testing.T) {
 	if err := repo.GuardarPrestamo(ctx, abierto); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if _, err := repo.BuscarPrestamoAbiertoDePC(ctx, pcID); err != application.ErrPrestamoNoEncontrado {
+	if _, err := repo.BuscarPrestamoAbiertoDeEquipo(ctx, equipoID); err != application.ErrPrestamoNoEncontrado {
 		t.Errorf("tras devolver no debería quedar ningún préstamo abierto, obtuve %v", err)
 	}
 }
@@ -152,11 +152,11 @@ func TestPostgresRepo_Prestamo_GuardarRegistraLaDevolucion(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	adminID := crearUsuarioDeTest(t, pool, "ADMIN", "APROBADA")
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
-	p := crearPrestamoDeTest(t, repo, entregaDeTest(pcID), ahora)
+	p := crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
 	devuelta := ahora.Add(90 * time.Minute)
 	if err := p.Devolver(adminID, "volvió sin el cargador", devuelta); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -190,14 +190,14 @@ func TestPostgresRepo_Prestamo_AbiertosTraenUbicacionYMateria(t *testing.T) {
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	materiaID := crearMateriaDeTest(t, pool)
-	pcConReserva := crearPCDeTest(t, pool)
-	pcSuelta := crearPCDeTest(t, pool)
+	equipoConReserva := crearEquipoDeCarroDeTest(t, pool)
+	equipoSuelto := crearEquipoDeCarroDeTest(t, pool)
 
 	grupo := nuevoReservaGrupoDeTest(materiaID, ahora, 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	reserva, err := domain.NuevaReservaNormal(NuevoID(), grupo.ID, pcConReserva, materiaID,
+	reserva, err := domain.NuevaReservaNormal(NuevoID(), grupo.ID, equipoConReserva, materiaID,
 		"Ada Lovelace", nil, ahora, 8*time.Hour, 9*time.Hour, ahora.Add(-time.Hour))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
@@ -208,13 +208,13 @@ func TestPostgresRepo_Prestamo_AbiertosTraenUbicacionYMateria(t *testing.T) {
 
 	// La de la reserva vence antes, así que tiene que salir primera.
 	vence := ahora.Add(time.Hour)
-	dConReserva := entregaDeTest(pcConReserva)
+	dConReserva := entregaDeTest(equipoConReserva)
 	dConReserva.ReservaID = &reserva.ID
 	dConReserva.DevolucionEstimada = &vence
 	crearPrestamoDeTest(t, repo, dConReserva, ahora)
 
 	// La suelta no tiene hora pactada: va al final.
-	crearPrestamoDeTest(t, repo, entregaDeTest(pcSuelta), ahora)
+	crearPrestamoDeTest(t, repo, entregaDeTest(equipoSuelto), ahora)
 
 	abiertos, err := repo.ListarPrestamosAbiertos(ctx)
 	if err != nil {
@@ -224,14 +224,14 @@ func TestPostgresRepo_Prestamo_AbiertosTraenUbicacionYMateria(t *testing.T) {
 		t.Fatalf("esperaba 2 préstamos abiertos, obtuve %d", len(abiertos))
 	}
 
-	if abiertos[0].Prestamo.PCID != pcConReserva {
+	if abiertos[0].Prestamo.EquipoID != equipoConReserva {
 		t.Error("primero debería ir lo que tiene hora de devolución, no lo que no la tiene")
 	}
 	if abiertos[0].MateriaNombre == nil || *abiertos[0].MateriaNombre != "Matemáticas" {
 		t.Errorf("un préstamo contra reserva debería traer la materia: %v", abiertos[0].MateriaNombre)
 	}
-	if abiertos[0].PCIdentificador != 1 || abiertos[0].CarroNombre == "" {
-		t.Errorf("falta la ubicación: PC %d del carro %q", abiertos[0].PCIdentificador, abiertos[0].CarroNombre)
+	if abiertos[0].Identificador != 1 || abiertos[0].CarroNombre == "" {
+		t.Errorf("falta la ubicación: PC %d del carro %q", abiertos[0].Identificador, abiertos[0].CarroNombre)
 	}
 	// Un préstamo espontáneo no tiene materia, y eso no es un dato faltante.
 	if abiertos[1].MateriaNombre != nil {
@@ -245,10 +245,10 @@ func TestPostgresRepo_Prestamo_SoloListaLosAbiertos(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
-	p := crearPrestamoDeTest(t, repo, entregaDeTest(pcID), ahora)
+	p := crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
 	if err := p.Devolver("", "", ahora.Add(time.Hour)); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestPostgresRepo_Prestamo_SoloListaLosAbiertos(t *testing.T) {
 		t.Errorf("una máquina devuelta no debería seguir figurando afuera: %d", len(abiertos))
 	}
 
-	historial, err := repo.ListarPrestamosDePC(ctx, pcID, 10)
+	historial, err := repo.ListarPrestamosDeEquipo(ctx, equipoID, 10)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -284,12 +284,12 @@ func TestPostgresRepo_Prestamo_SobreviveALaReserva(t *testing.T) {
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	grupo := nuevoReservaGrupoDeTest(materiaID, ahora, 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	reserva, err := domain.NuevaReservaNormal(NuevoID(), grupo.ID, pcID, materiaID,
+	reserva, err := domain.NuevaReservaNormal(NuevoID(), grupo.ID, equipoID, materiaID,
 		"Ada Lovelace", nil, ahora, 8*time.Hour, 9*time.Hour, ahora.Add(-time.Hour))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
@@ -298,7 +298,7 @@ func TestPostgresRepo_Prestamo_SobreviveALaReserva(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	d := entregaDeTest(pcID)
+	d := entregaDeTest(equipoID)
 	d.ReservaID = &reserva.ID
 	p := crearPrestamoDeTest(t, repo, d, ahora)
 
@@ -318,23 +318,23 @@ func TestPostgresRepo_Prestamo_SobreviveALaReserva(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_Prestamo_DentroDeUnaTransaccion: entregar varias PCs de
+// TestPostgresRepo_Prestamo_DentroDeUnaTransaccion: entregar varios equipos de
 // una reserva es una sola operación, así que el repo tiene que funcionar
 // atado a una transacción igual que el resto del paquete.
 func TestPostgresRepo_Prestamo_DentroDeUnaTransaccion(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	pc1 := crearPCDeTest(t, pool)
-	pc2 := crearPCDeTest(t, pool)
+	pc1 := crearEquipoDeCarroDeTest(t, pool)
+	pc2 := crearEquipoDeCarroDeTest(t, pool)
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	// La segunda PC ya está afuera: el lote entero tiene que volver atrás.
 	crearPrestamoDeTest(t, repo, entregaDeTest(pc2), ahora)
 
 	err := repo.EnTransaccion(ctx, func(tx application.Repo) error {
-		for _, pcID := range []string{pc1, pc2} {
-			p, err := domain.NuevoPrestamo(NuevoID(), entregaDeTest(pcID), ahora)
+		for _, equipoID := range []string{pc1, pc2} {
+			p, err := domain.NuevoPrestamo(NuevoID(), entregaDeTest(equipoID), ahora)
 			if err != nil {
 				return err
 			}
@@ -345,27 +345,27 @@ func TestPostgresRepo_Prestamo_DentroDeUnaTransaccion(t *testing.T) {
 		return nil
 	})
 
-	if err != application.ErrPCYaPrestada {
-		t.Fatalf("esperaba ErrPCYaPrestada, obtuve %v", err)
+	if err != application.ErrEquipoYaPrestado {
+		t.Fatalf("esperaba ErrEquipoYaPrestado, obtuve %v", err)
 	}
-	if _, err := repo.BuscarPrestamoAbiertoDePC(ctx, pc1); err != application.ErrPrestamoNoEncontrado {
+	if _, err := repo.BuscarPrestamoAbiertoDeEquipo(ctx, pc1); err != application.ErrPrestamoNoEncontrado {
 		t.Error("la primera entrega del lote debería haberse deshecho")
 	}
 }
 
-// TestPostgresRepo_ReservasFuturasDePC_VienenOrdenadas fija el contrato del
+// TestPostgresRepo_ReservasFuturasDeEquipo_VienenOrdenadas fija el contrato del
 // que depende el aviso de "esta PC tiene una reserva encima" al entregarla
 // suelta: quien llama toma la PRIMERA como la más próxima.
 //
 // La consulta no tenía ORDER BY, así que Postgres podía devolverlas en
 // cualquier orden y el aviso nombraba la reserva de la semana siguiente en
 // vez de la de dentro de una hora.
-func TestPostgresRepo_ReservasFuturasDePC_VienenOrdenadas(t *testing.T) {
+func TestPostgresRepo_ReservasFuturasDeEquipo_VienenOrdenadas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 	materiaID := crearMateriaDeTest(t, pool)
-	pcID := crearPCDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	creada := time.Now().UTC().Truncate(time.Microsecond)
 	desde := diaDe(2026, time.March, 1)
 
@@ -377,7 +377,7 @@ func TestPostgresRepo_ReservasFuturasDePC_VienenOrdenadas(t *testing.T) {
 		if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
 			t.Fatalf("no debería fallar: %v", err)
 		}
-		reserva, err := domain.NuevaReservaNormal(NuevoID(), grupo.ID, pcID, materiaID,
+		reserva, err := domain.NuevaReservaNormal(NuevoID(), grupo.ID, equipoID, materiaID,
 			"Ada Lovelace", nil, fecha, 8*time.Hour, 9*time.Hour, creada)
 		if err != nil {
 			t.Fatalf("error de dominio inesperado: %v", err)
@@ -387,7 +387,7 @@ func TestPostgresRepo_ReservasFuturasDePC_VienenOrdenadas(t *testing.T) {
 		}
 	}
 
-	futuras, err := repo.ListarReservasFuturasDePC(ctx, pcID, desde)
+	futuras, err := repo.ListarReservasFuturasDeEquipo(ctx, equipoID, desde)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}

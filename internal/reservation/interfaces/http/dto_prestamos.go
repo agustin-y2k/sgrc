@@ -23,7 +23,7 @@ type entregarPorReservaRequest struct {
 // entregarSueltaRequest es el préstamo sin reserva: "necesito una compu para
 // hacer un trámite".
 type entregarSueltaRequest struct {
-	PCIDs []string `json:"pcIds"`
+	EquipoIDs []string `json:"equipoIds"`
 	// Nombre es obligatorio; usuarioId solo si esa persona tiene cuenta.
 	// Quien pide una máquina para un trámite muchas veces no la tiene.
 	Nombre    string  `json:"nombre"`
@@ -47,7 +47,7 @@ type recibirRequest struct {
 
 type prestamoResponse struct {
 	ID        string  `json:"id"`
-	PCID      string  `json:"pcId"`
+	EquipoID  string  `json:"equipoId"`
 	ReservaID *string `json:"reservaId,omitempty"`
 
 	EntregadoAUsuarioID *string `json:"entregadoAUsuarioId,omitempty"`
@@ -73,15 +73,15 @@ type prestamoResponse struct {
 	// Etiqueta es cómo se nombra al equipo: "PC 3" o "Proyector Epson". Se
 	// resuelve del lado del servidor para que la misma cosa no se vea
 	// distinta según la pantalla.
-	PCIdentificador int     `json:"pcIdentificador,omitempty"`
-	Etiqueta        string  `json:"etiqueta,omitempty"`
-	CarroNombre     string  `json:"carroNombre,omitempty"`
-	MateriaNombre   *string `json:"materiaNombre,omitempty"`
+	Identificador int     `json:"identificador,omitempty"`
+	Etiqueta      string  `json:"etiqueta,omitempty"`
+	CarroNombre   string  `json:"carroNombre,omitempty"`
+	MateriaNombre *string `json:"materiaNombre,omitempty"`
 }
 
 func toPrestamoResponse(p *domain.Prestamo, ahora time.Time) prestamoResponse {
 	return prestamoResponse{
-		ID: p.ID, PCID: p.PCID, ReservaID: p.ReservaID,
+		ID: p.ID, EquipoID: p.EquipoID, ReservaID: p.ReservaID,
 		EntregadoAUsuarioID: p.EntregadoAUsuarioID,
 		EntregadoANombre:    p.EntregadoANombre,
 		Motivo:              p.Motivo,
@@ -99,7 +99,7 @@ func toPrestamoResponse(p *domain.Prestamo, ahora time.Time) prestamoResponse {
 
 func toPrestamoDetalladoResponse(d *application.PrestamoDetallado, ahora time.Time) prestamoResponse {
 	r := toPrestamoResponse(d.Prestamo, ahora)
-	r.PCIdentificador = d.PCIdentificador
+	r.Identificador = d.Identificador
 	r.Etiqueta = d.Etiqueta
 	r.CarroNombre = d.CarroNombre
 	r.MateriaNombre = d.MateriaNombre
@@ -110,19 +110,19 @@ func toPrestamoDetalladoResponse(d *application.PrestamoDetallado, ahora time.Ti
 // pantalla pueda ofrecer la acción que corresponde: "ver quién la tiene" no
 // es lo mismo que "revisá el inventario".
 type pcNoEntregadaResponse struct {
-	PCID    string `json:"pcId"`
-	Razon   string `json:"razon"`
-	Detalle string `json:"detalle"`
+	EquipoID string `json:"equipoId"`
+	Razon    string `json:"razon"`
+	Detalle  string `json:"detalle"`
 }
 
 // reservaProximaResponse avisa que una máquina recién entregada tiene una
 // reserva encima. No impidió nada: es información para que el Admin decida.
 type reservaProximaResponse struct {
-	PCID    string `json:"pcId"`
-	Fecha   string `json:"fecha"`
-	Inicio  string `json:"horaInicio"`
-	Fin     string `json:"horaFin"`
-	Docente string `json:"docente,omitempty"`
+	EquipoID string `json:"equipoId"`
+	Fecha    string `json:"fecha"`
+	Inicio   string `json:"horaInicio"`
+	Fin      string `json:"horaFin"`
+	Docente  string `json:"docente,omitempty"`
 }
 
 type resultadoEntregaResponse struct {
@@ -138,16 +138,16 @@ func toResultadoEntregaResponse(r *application.ResultadoEntrega, ahora time.Time
 	}
 	for _, n := range r.NoEntregadas {
 		resp.NoEntregadas = append(resp.NoEntregadas, pcNoEntregadaResponse{
-			PCID: n.PCID, Razon: string(n.Razon), Detalle: n.Detalle,
+			EquipoID: n.EquipoID, Razon: string(n.Razon), Detalle: n.Detalle,
 		})
 	}
 	for _, a := range r.Avisos {
 		resp.Avisos = append(resp.Avisos, reservaProximaResponse{
-			PCID:    a.PCID,
-			Fecha:   a.Fecha.Format("2006-01-02"),
-			Inicio:  formatHora(a.Inicio),
-			Fin:     formatHora(a.Fin),
-			Docente: a.Docente,
+			EquipoID: a.EquipoID,
+			Fecha:    a.Fecha.Format("2006-01-02"),
+			Inicio:   formatHora(a.Inicio),
+			Fin:      formatHora(a.Fin),
+			Docente:  a.Docente,
 		})
 	}
 	return resp

@@ -18,9 +18,9 @@ import (
 // inventory.
 
 var (
-	// ErrSinPCs: un alta masiva sin ninguna PC no es un error de la base ni
+	// ErrSinEquipos: un alta masiva sin ninguna PC no es un error de la base ni
 	// del dominio, es un request vacío.
-	ErrSinPCs = errors.New("hay que indicar al menos una PC")
+	ErrSinEquipos = errors.New("hay que indicar al menos un equipo")
 	// ErrSinLicencias: ídem para la renovación masiva.
 	ErrSinLicencias = errors.New("hay que indicar al menos una licencia")
 
@@ -93,7 +93,7 @@ func (s *Service) Hoy() time.Time {
 // comparten nombre, duración, antelación y vencimiento: el caso real es
 // "AutoCAD, 30 días, en estas ocho máquinas".
 type NuevaLicenciaParams struct {
-	PCIDs        []string
+	EquipoIDs    []string
 	Nombre       string
 	DiasDuracion int
 	DiasAviso    int
@@ -104,13 +104,13 @@ type NuevaLicenciaParams struct {
 // ResultadoAltaMasiva separa lo que se creó de lo que ya estaba.
 type ResultadoAltaMasiva struct {
 	Creadas []*domain.LicenciaSoftware
-	// PCsQueYaLaTenian son las que ya tenían cargado ese software. No es un
+	// EquiposQueYaLaTenian son las que ya tenían cargado ese software. No es un
 	// error: el caso normal es marcar las diez PCs del carro cuando ocho ya
 	// estaban cargadas de antes.
-	PCsQueYaLaTenian []string
+	EquiposQueYaLaTenian []string
 }
 
-// CrearLicencias da de alta la misma licencia en varias PCs.
+// CrearLicencias da de alta la misma licencia en varios equipos.
 //
 // Una PC que ya la tiene se saltea y se informa, en vez de abortar el lote.
 // Eso hace que la operación sea REINTENTABLE: si algo falla en la PC número
@@ -118,8 +118,8 @@ type ResultadoAltaMasiva struct {
 // lo que ya entró. Por eso tampoco hay transacción — las que se crearon se
 // quedan creadas a propósito.
 func (s *Service) CrearLicencias(ctx context.Context, params NuevaLicenciaParams) (*ResultadoAltaMasiva, error) {
-	if len(params.PCIDs) == 0 {
-		return nil, ErrSinPCs
+	if len(params.EquipoIDs) == 0 {
+		return nil, ErrSinEquipos
 	}
 	if params.Vencimiento.formasDeclaradas() > 1 {
 		return nil, ErrVencimientoAmbiguo
@@ -129,8 +129,8 @@ func (s *Service) CrearLicencias(ctx context.Context, params NuevaLicenciaParams
 	hoy := s.Hoy()
 	resultado := &ResultadoAltaMasiva{}
 
-	for _, pcID := range params.PCIDs {
-		l, err := domain.NuevaLicencia(s.nuevoID(), pcID, params.Nombre,
+	for _, equipoID := range params.EquipoIDs {
+		l, err := domain.NuevaLicencia(s.nuevoID(), equipoID, params.Nombre,
 			params.DiasDuracion, params.DiasAviso, ahora)
 		if err != nil {
 			// El nombre y los días son los mismos para todas: si la
@@ -144,10 +144,10 @@ func (s *Service) CrearLicencias(ctx context.Context, params NuevaLicenciaParams
 
 		if err := s.repo.CrearLicencia(ctx, l); err != nil {
 			if errors.Is(err, ErrLicenciaDuplicada) {
-				resultado.PCsQueYaLaTenian = append(resultado.PCsQueYaLaTenian, pcID)
+				resultado.EquiposQueYaLaTenian = append(resultado.EquiposQueYaLaTenian, equipoID)
 				continue
 			}
-			return nil, fmt.Errorf("creando la licencia en la PC %s: %w", pcID, err)
+			return nil, fmt.Errorf("creando la licencia en el equipo %s: %w", equipoID, err)
 		}
 		resultado.Creadas = append(resultado.Creadas, l)
 	}
@@ -209,7 +209,7 @@ func (s *Service) RenovarLicencias(ctx context.Context, ids []string, renovadaEl
 // ── Edición ─────────────────────────────────────────────────────────────
 
 // EditarLicenciaParams — nil significa "no tocar ese campo", igual que en
-// EditarPC. Vencimiento sin ninguna forma declarada tampoco toca la fecha.
+// EditarEquipo. Vencimiento sin ninguna forma declarada tampoco toca la fecha.
 type EditarLicenciaParams struct {
 	Nombre       *string
 	DiasDuracion *int
@@ -269,8 +269,8 @@ func (s *Service) ListarLicencias(ctx context.Context) ([]*LicenciaConUbicacion,
 	return s.repo.ListarLicencias(ctx)
 }
 
-func (s *Service) ListarLicenciasPorPC(ctx context.Context, pcID string) ([]*domain.LicenciaSoftware, error) {
-	return s.repo.ListarLicenciasPorPC(ctx, pcID)
+func (s *Service) ListarLicenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.LicenciaSoftware, error) {
+	return s.repo.ListarLicenciasPorEquipo(ctx, equipoID)
 }
 
 // BorrarLicencia elimina la fila. Borrado real y no baja lógica: de una

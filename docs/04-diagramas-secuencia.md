@@ -87,7 +87,7 @@ sequenceDiagram
 
 > El JWT se emite igual con la contraseña temporal — `debeCambiarPassword` es una bandera que el frontend usa para bloquear la navegación hasta que se cambie, no una restricción a nivel de token.
 
-## 2. Reservar PCs (una o varias, en un solo grupo)
+## 2. Reservar equipos (una o varias, en un solo grupo)
 
 ```mermaid
 sequenceDiagram
@@ -98,32 +98,32 @@ sequenceDiagram
     participant DB as sgrc_db
 
     U->>FE: Selecciona materia, fecha, horario
-    FE->>RES: GET /api/inventory/pcs/disponibles?fecha&horaInicio&horaFin
-    RES->>INV: Listar PCs DISPONIBLE sin solapamiento en ese horario
-    INV-->>FE: Lista de PCs para tildar
-    U->>FE: Tilda las PCs que necesita (una o varias)
-    FE->>RES: POST /api/reservations { materiaId, fecha, horaInicio, horaFin, pcIds: [...] }
+    FE->>RES: GET /api/reservation/equipos-disponibles?fecha&horaInicio&horaFin
+    RES->>INV: Listar equipos DISPONIBLE sin solapamiento en ese horario
+    INV-->>FE: Lista de equipos para tildar
+    U->>FE: Tilda los equipos que necesita (una o varias)
+    FE->>RES: POST /api/reservations { materiaId, fecha, horaInicio, horaFin, equipoIds: [...] }
     RES->>RES: Verifica permiso sobre la materia (rol + docente_materia)
     RES->>DB: INSERT reserva_grupo (CONFIRMADA)
-    loop por cada pcId
-        RES->>DB: INSERT reserva (EXCLUDE constraint valida solapamiento por PC)
+    loop por cada equipoId
+        RES->>DB: INSERT reserva (EXCLUDE constraint valida solapamiento por equipo)
     end
-    alt Todas las PCs sin solapamiento
+    alt Todos los equipos sin solapamiento
         DB-->>RES: OK
         RES-->>FE: 201 { reservaGrupoId, pcsConfirmadas: N }
-        FE-->>U: ✅ Reserva confirmada (N PCs)
-    else Alguna PC con solapamiento
-        DB-->>RES: Constraint violation en esa PC puntual
-        RES->>DB: SELECT reserva en conflicto para esa PC
-        RES->>DB: ROLLBACK — no se confirma ninguna PC del grupo
-        RES-->>FE: 409 { conflictos: [{ pcId, docente, materia, horario }] }
-        FE-->>U: ❌ PC-07 ocupada por [nombre] - destildá esa PC y reintentá
+        FE-->>U: ✅ Reserva confirmada (N equipos)
+    else Algún equipo con solapamiento
+        DB-->>RES: Constraint violation en ese equipo puntual
+        RES->>DB: SELECT reserva en conflicto para ese equipo
+        RES->>DB: ROLLBACK — no se confirma ningún equipo del grupo
+        RES-->>FE: 409 { conflictos: [{ equipoId, docente, materia, horario }] }
+        FE-->>U: ❌ PC-07 ocupada por [nombre] - destildá ese equipo y reintentá
     end
 ```
 
-> La creación es transaccional: si una sola PC del grupo tiene solapamiento, no se confirma ninguna — el usuario ve exactamente cuál PC falló y puede destildarla sin perder el resto de la selección.
+> La creación es transaccional: si un solo equipo del grupo tiene solapamiento, no se confirma ninguna — el usuario ve exactamente cuál equipo falló y puede destildarla sin perder el resto de la selección.
 
-## 3. Reserva recurrente (una o varias PCs)
+## 3. Reserva recurrente (una o varias equipos)
 
 ```mermaid
 sequenceDiagram
@@ -132,25 +132,25 @@ sequenceDiagram
     participant RES as reservation (paquete)
     participant DB as sgrc_db
 
-    U->>FE: Materia, PCs elegidas, día semana, horario, rango fechas
-    FE->>RES: POST /api/reservations/recurrentes { materiaId, pcIds: [...], diaSemana, ... }
-    RES->>RES: Calcula todas las ocurrencias (cada fecha × cada PC elegida)
-    RES->>DB: SELECT solapamientos para TODAS las fechas x PCs
+    U->>FE: Materia, equipos elegidas, día semana, horario, rango fechas
+    FE->>RES: POST /api/reservations/recurrentes { materiaId, equipoIds: [...], diaSemana, ... }
+    RES->>RES: Calcula todas las ocurrencias (cada fecha × cada equipo elegido)
+    RES->>DB: SELECT solapamientos para TODAS las fechas x equipos
     alt Sin conflictos
         DB-->>RES: []
         RES->>DB: INSERT regla_recurrencia
         loop por cada fecha calculada
             RES->>DB: INSERT reserva_grupo (CONFIRMADA)
-            loop por cada PC elegida
+            loop por cada equipo elegido
                 RES->>DB: INSERT reserva (CONFIRMADA)
             end
         end
         RES-->>FE: 201 { reglaRecurrenciaId, fechasCreadas: [...] }
-        FE-->>U: ✅ N fechas × M PCs creadas
+        FE-->>U: ✅ N fechas × M equipos creadas
     else Con conflictos
-        DB-->>RES: [{ fecha, pcId, docente, materia, horario }, ...]
+        DB-->>RES: [{ fecha, equipoId, docente, materia, horario }, ...]
         RES-->>FE: 409 { conflictos: [...] }
-        FE-->>U: ❌ Tabla de conflictos (por fecha y PC) — resolver antes de continuar
+        FE-->>U: ❌ Tabla de conflictos (por fecha y equipo) — resolver antes de continuar
     end
 ```
 
@@ -181,7 +181,7 @@ sequenceDiagram
     FE-->>U: ✅ Cancelada(s)
 ```
 
-## 5. Bloqueo de PCs para evaluación estatal
+## 5. Bloqueo de equipos para evaluación estatal
 
 ```mermaid
 sequenceDiagram
@@ -194,32 +194,32 @@ sequenceDiagram
 
     ADM->>FE: Selecciona carro, rango fecha/hora (definido)
     FE->>RES: POST /api/reservations/bloqueo-evaluacion (JWT)
-    RES->>DB: SELECT PCs del carro
-    RES->>DB: SELECT reserva CONFIRMADA en conflicto (solo esas PCs, ese rango exacto)
+    RES->>DB: SELECT equipos del carro
+    RES->>DB: SELECT reserva CONFIRMADA en conflicto (solo esas equipos, ese rango exacto)
     DB-->>RES: [reserva puntuales con reserva_grupo_id, docenteId]
     loop por cada reserva en conflicto
         RES->>DB: UPDATE reserva SET estado=CANCELADA, motivo='Evaluación estatal'
         RES->>DB: Recalcular estado de reserva_grupo (PARCIALMENTE_CANCELADA o CANCELADA)
     end
-    RES->>DB: INSERT reserva tipo EVALUACION_ESTATAL (sin materia_id ni reserva_grupo_id) por cada PC del carro
+    RES->>DB: INSERT reserva tipo EVALUACION_ESTATAL (sin materia_id ni reserva_grupo_id) por cada equipo del carro
     RES->>EB: Publish("reserva.cancelada", { usuarioId, reservaId, motivo }) por reserva
     EB->>NOTIF: Subscribe handler ejecuta en la misma goroutine/worker
-    NOTIF->>DB: INSERT notificación por docente, detallando qué PCs puntuales se cancelaron
+    NOTIF->>DB: INSERT notificación por docente, detallando qué equipos puntuales se cancelaron
     RES-->>FE: 201 { bloqueoId, reservasCanceladas: N, docentesNotificados: N }
-    FE-->>ADM: ✅ PCs bloqueadas. N reservas puntuales canceladas.
+    FE-->>ADM: ✅ equipos bloqueadas. N reservas puntuales canceladas.
 ```
 
-> Solo se cancelan las `Reserva` (PC + fecha) que caen dentro del rango exacto del bloqueo. El resto de una recurrencia, o del mismo `ReservaGrupo` en otro horario, sigue vigente.
+> Solo se cancelan las `Reserva` (equipo + fecha) que caen dentro del rango exacto del bloqueo. El resto de una recurrencia, o del mismo `ReservaGrupo` en otro horario, sigue vigente.
 
 > **Un solo tipo de evento para los tres orígenes.** RF-05.1, 05.2 y 05.3 son,
 > de punta a punta, la misma notificación con distinto motivo: cancelación
-> manual de un Admin, bloqueo por evaluación, o PC fuera de servicio. El
+> manual de un Admin, bloqueo por evaluación, o equipo fuera de servicio. El
 > motivo ya viene armado desde `reservation`, así que `notification` no
 > necesita saber de dónde vino. Los eventos se publican **después del
 > commit**: si la transacción se deshace, nadie recibe el aviso de una
 > cancelación que no ocurrió.
 
-## 6. Cambio de estado de PC individual → cascada de cancelación
+## 6. Cambio de estado de un equipo individual → cascada de cancelación
 
 ```mermaid
 sequenceDiagram
@@ -230,10 +230,10 @@ sequenceDiagram
     participant NOTIF as notification (paquete)
     participant DB as sgrc_db
 
-    ADM->>FE: Cambia estado de PC a EN_MANTENIMIENTO/FUERA_DE_SERVICIO (+ motivo opcional)
-    FE->>INV: PATCH /api/inventory/pcs/{id}/estado
+    ADM->>FE: Cambia estado del equipo a EN_MANTENIMIENTO/FUERA_DE_SERVICIO (+ motivo opcional)
+    FE->>INV: PATCH /api/inventory/equipos/{id}/estado
     INV->>DB: UPDATE pc SET estado=...
-    INV->>DB: SELECT reserva CONFIRMADA de esa PC puntual con fecha/hora futura
+    INV->>DB: SELECT reserva CONFIRMADA de ese equipo puntual con fecha/hora futura
     DB-->>INV: [reserva puntuales con reserva_grupo_id, docenteId]
     loop por cada reserva afectada
         INV->>DB: UPDATE reserva SET estado=CANCELADA, cancelado_por=admin, motivo_cancelacion=(ingresado o por defecto)
@@ -241,14 +241,14 @@ sequenceDiagram
     end
     INV->>EB: Publish("reserva.cancelada", { usuarioId, reservaId, motivo }) por reserva
     EB->>NOTIF: Subscribe handler ejecuta en la misma goroutine/worker
-    NOTIF->>DB: INSERT notificación por docente, detallando que fue esa PC puntual
+    NOTIF->>DB: INSERT notificación por docente, detallando que fue ese equipo puntual
     INV-->>FE: 200 { estado, reservasCanceladas: N, docentesNotificados: N }
-    FE-->>ADM: ✅ PC actualizada. N reservas canceladas y docentes notificados.
+    FE-->>ADM: ✅ Equipo actualizado. N reservas canceladas y docentes notificados.
 ```
 
-> Duración **indefinida** (a diferencia del bloqueo de evaluación, que tiene rango definido): se cancelan todas las reservas futuras de esa PC puntual, sin fecha de corte. Cuando la PC vuelve a `DISPONIBLE`, nada se restaura automáticamente.
+> Duración **indefinida** (a diferencia del bloqueo de evaluación, que tiene rango definido): se cancelan todas las reservas futuras de ese equipo puntual, sin fecha de corte. Cuando el equipo vuelve a `DISPONIBLE`, nada se restaura automáticamente.
 
-## 6b. Dar de baja una PC del inventario (soft delete)
+## 6b. Dar de baja un equipo del inventario (soft delete)
 
 ```mermaid
 sequenceDiagram
@@ -257,15 +257,15 @@ sequenceDiagram
     participant INV as inventory (paquete)
     participant DB as sgrc_db
 
-    ADM->>FE: Elimina una PC del inventario
-    FE->>INV: DELETE /api/inventory/pcs/{id}
-    INV->>DB: UPDATE pc SET dada_de_baja=true, fecha_baja=now(), estado=FUERA_DE_SERVICIO
+    ADM->>FE: Elimina un equipo del inventario
+    FE->>INV: DELETE /api/inventory/equipos/{id}
+    INV->>DB: UPDATE pc SET dado_de_baja=true, fecha_baja=now(), estado=FUERA_DE_SERVICIO
     Note over INV,DB: Soft delete: no se borra la fila — incidencia y reserva la referencian por FK
     INV-->>FE: 200 { dadaDeBaja: true }
-    FE-->>ADM: ✅ PC dada de baja. Ya no aparece en listados activos ni puede reservarse.
+    FE-->>ADM: ✅ Equipo dado de baja. Ya no aparece en listados activos ni puede reservarse.
 ```
 
-> Un `DELETE` en la API es, puertas adentro, un soft delete: si se borrara la fila físicamente, se perdería la referencia de todo el historial de incidencias y reservas pasadas de esa PC. Distinto del borrado de reservas al archivar un ciclo lectivo (§7), que sí es físico porque ahí se preserva un snapshot agregado aparte.
+> Un `DELETE` en la API es, puertas adentro, un soft delete: si se borrara la fila físicamente, se perdería la referencia de todo el historial de incidencias y reservas pasadas de ese equipo. Distinto del borrado de reservas al archivar un ciclo lectivo (§7), que sí es físico porque ahí se preserva un snapshot agregado aparte.
 
 ## 7. Archivar y clonar ciclo lectivo
 
@@ -282,12 +282,12 @@ sequenceDiagram
     FE->>ACAD: POST /api/academic/ciclos/{id}/archivar { clonarA: año+1 }
     ACAD->>REP: CalcularSnapshotAnual(cicloId) — antes de borrar nada
     REP->>DB: SELECT agregados de reserva/reserva_grupo de las materias del ciclo
-    REP->>DB: INSERT historico_uso_pc, historico_uso_docente (permanentes)
+    REP->>DB: INSERT historico_uso_equipo, historico_uso_docente (permanentes)
     ACAD->>RES: EliminarReservasDeCiclo(cicloId)
     RES->>DB: DELETE reserva WHERE reserva_grupo_id IN (SELECT id FROM reserva_grupo WHERE materia_id IN [...])
     RES->>DB: DELETE reserva_grupo WHERE materia_id IN [...]
     RES->>DB: DELETE regla_recurrencia WHERE materia_id IN [...]
-    Note over RES,DB: incidencia NO se toca — pertenece a la PC, no al ciclo
+    Note over RES,DB: incidencia NO se toca — pertenece a el equipo, no al ciclo
     ACAD->>DB: UPDATE curso SET archivado=true WHERE ciclo_lectivo_id
     ACAD->>DB: UPDATE materia SET archivado=true WHERE curso_id IN [...]
     ACAD->>DB: UPDATE ciclo_lectivo SET archivado=true, activo=false
@@ -388,7 +388,7 @@ sequenceDiagram
     loop cada 5 minutos
         CRON->>RES: Trigger (time.Ticker, sin proceso externo)
         RES->>DB: UPDATE reserva SET estado=FINALIZADA WHERE estado=CONFIRMADA AND (fecha+hora_fin) < now()
-        RES->>DB: Recalcular estado de reserva_grupo afectados (FINALIZADA si ninguna PC quedó cancelada)
+        RES->>DB: Recalcular estado de reserva_grupo afectados (FINALIZADA si ningún equipo quedó cancelada)
     end
 ```
 

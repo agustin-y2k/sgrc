@@ -200,7 +200,7 @@ export function CamposComunesDeLicencia({
           list={sugerencias && sugerencias.length > 0 ? listaId : undefined}
           required
         />
-        {/* El datalist ofrece los nombres que ya existen. La unicidad por PC
+        {/* El datalist ofrece los nombres que ya existen. La unicidad por Equipo
             ignora mayúsculas, pero nada impide cargar "AutoCAD 2027" en una
             máquina y "Autocad 2027" en otra: ahí serían dos programas
             distintos en la lista, con dos contadores que nadie relaciona. */}
@@ -246,13 +246,13 @@ export function CamposComunesDeLicencia({
   )
 }
 
-/** Selección de las PCs sobre las que se va a dar de alta la licencia. */
-export function SelectorDePCs({
-  pcs,
+/** Selección de los equipos sobre las que se va a dar de alta la licencia. */
+export function SelectorDeEquipos({
+  equipos,
   seleccionadas,
   onChange,
 }: {
-  pcs: { id: string; etiqueta: string; carroNombre: string }[]
+  equipos: { id: string; etiqueta: string; carroNombre: string }[]
   seleccionadas: Set<string>
   onChange: (s: Set<string>) => void
 }) {
@@ -263,37 +263,37 @@ export function SelectorDePCs({
     onChange(nueva)
   }
 
-  const todasMarcadas = pcs.length > 0 && pcs.every((pc) => seleccionadas.has(pc.id))
+  const todasMarcadas = equipos.length > 0 && equipos.every((equipo) => seleccionadas.has(equipo.id))
 
   return (
     <div className="grid gap-2">
       <div className="flex items-center justify-between">
-        <Label>PCs donde está instalado</Label>
+        <Label>Equipos donde está instalado</Label>
         {/* "Todas" es el caso normal: el software se instala por carro
             entero. Marcar ocho casillas a mano para eso sería absurdo. */}
         <button
           type="button"
           className="text-muted-foreground hover:text-foreground text-xs underline"
-          onClick={() => onChange(todasMarcadas ? new Set() : new Set(pcs.map((p) => p.id)))}
+          onClick={() => onChange(todasMarcadas ? new Set() : new Set(equipos.map((p) => p.id)))}
         >
           {todasMarcadas ? "Desmarcar todas" : "Marcar todas"}
         </button>
       </div>
       <div className="grid max-h-56 gap-1 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
-        {pcs.length === 0 && (
+        {equipos.length === 0 && (
           <p className="text-muted-foreground text-sm">
-            No hay PCs cargadas. Cargá el inventario antes de las licencias.
+            No hay equipos cargados. Cargá el inventario antes de las licencias.
           </p>
         )}
-        {pcs.map((pc) => (
-          <label key={pc.id} className="flex items-center gap-2 text-sm">
+        {equipos.map((equipo) => (
+          <label key={equipo.id} className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={seleccionadas.has(pc.id)}
-              onChange={() => alternar(pc.id)}
+              checked={seleccionadas.has(equipo.id)}
+              onChange={() => alternar(equipo.id)}
             />
-            {pc.etiqueta}
-            <span className="text-muted-foreground">({pc.carroNombre})</span>
+            {equipo.etiqueta}
+            <span className="text-muted-foreground">({equipo.carroNombre})</span>
           </label>
         ))}
       </div>

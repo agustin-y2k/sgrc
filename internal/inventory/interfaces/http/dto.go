@@ -21,7 +21,7 @@ type editarCarroRequest struct {
 	Descripcion *string `json:"descripcion,omitempty"`
 }
 
-type crearPCRequest struct {
+type crearEquipoDeCarroRequest struct {
 	Identificador     int    `json:"identificador"`
 	NumeroSerie       string `json:"numeroSerie"`
 	Freezado          bool   `json:"freezado"`
@@ -31,9 +31,9 @@ type crearPCRequest struct {
 	SoftwareInstalado string `json:"softwareInstalado"`
 }
 
-// crearEquipoRequest: algo prestable que no es una computadora de un carro
+// crearEquipoSueltoRequest: algo prestable que no es una computadora de un carro
 // (015) — un proyector, un cargador, una notebook suelta.
-type crearEquipoRequest struct {
+type crearEquipoSueltoRequest struct {
 	// Tipo es texto libre: la lista de cosas que presta una escuela no es la
 	// misma que la de otra.
 	Tipo   string `json:"tipo"`
@@ -43,7 +43,7 @@ type crearEquipoRequest struct {
 	Reservable bool `json:"reservable"`
 }
 
-type editarPCRequest struct {
+type editarEquipoRequest struct {
 	CarroID           *string `json:"carroId,omitempty"`
 	Freezado          *bool   `json:"freezado,omitempty"`
 	CPU               *string `json:"cpu,omitempty"`
@@ -55,13 +55,13 @@ type editarPCRequest struct {
 	Reservable        *bool   `json:"reservable,omitempty"`
 }
 
-type cambiarEstadoPCRequest struct {
+type cambiarEstadoEquipoRequest struct {
 	Estado string  `json:"estado"` // DISPONIBLE | EN_MANTENIMIENTO | FUERA_DE_SERVICIO
 	Motivo *string `json:"motivo,omitempty"`
 }
 
 type crearIncidenciaRequest struct {
-	PCID        string `json:"pcId"`
+	EquipoID    string `json:"equipoId"`
 	Descripcion string `json:"descripcion"`
 	Gravedad    string `json:"gravedad"` // LEVE | MODERADA | GRAVE
 }
@@ -83,7 +83,7 @@ func toCarroResponse(c *domain.Carro) carroResponse {
 	return carroResponse{ID: c.ID, Nombre: c.Nombre, Descripcion: c.Descripcion}
 }
 
-type pcResponse struct {
+type equipoResponse struct {
 	ID string `json:"id"`
 	// Los tres pueden faltar desde la 015: un proyector no está en ningún
 	// carro, no es "PC 3" y puede no traer número de serie.
@@ -102,18 +102,18 @@ type pcResponse struct {
 	SistemaOperativo  string     `json:"sistemaOperativo,omitempty"`
 	SoftwareInstalado string     `json:"softwareInstalado,omitempty"`
 	Estado            string     `json:"estado"`
-	DadaDeBaja        bool       `json:"dadaDeBaja"`
+	DadoDeBaja        bool       `json:"dadoDeBaja"`
 	FechaBaja         *time.Time `json:"fechaBaja,omitempty"`
 	FechaAlta         time.Time  `json:"fechaAlta"`
 }
 
-func toPCResponse(pc *domain.PC) pcResponse {
-	return pcResponse{
+func toEquipoResponse(pc *domain.Equipo) equipoResponse {
+	return equipoResponse{
 		ID: pc.ID, CarroID: pc.CarroID, Identificador: pc.Identificador, NumeroSerie: pc.NumeroSerie,
 		Etiqueta: pc.Etiqueta(), Tipo: pc.Tipo, Nombre: pc.Nombre, Reservable: pc.Reservable,
 		Freezado: pc.Freezado, CPU: pc.CPU, RAM: pc.RAM, SistemaOperativo: pc.SistemaOperativo,
 		SoftwareInstalado: pc.SoftwareInstalado, Estado: string(pc.Estado),
-		DadaDeBaja: pc.DadaDeBaja, FechaBaja: pc.FechaBaja, FechaAlta: pc.FechaAlta,
+		DadoDeBaja: pc.DadoDeBaja, FechaBaja: pc.FechaBaja, FechaAlta: pc.FechaAlta,
 	}
 }
 
@@ -128,7 +128,7 @@ func toCascadaResponse(r *application.ResultadoCascada) cascadaResponse {
 
 type incidenciaResponse struct {
 	ID            string     `json:"id"`
-	PCID          string     `json:"pcId"`
+	EquipoID      string     `json:"equipoId"`
 	ReportadoPor  *string    `json:"reportadoPor,omitempty"`
 	Descripcion   string     `json:"descripcion"`
 	Gravedad      string     `json:"gravedad"`
@@ -140,7 +140,7 @@ type incidenciaResponse struct {
 
 func toIncidenciaResponse(i *domain.Incidencia) incidenciaResponse {
 	return incidenciaResponse{
-		ID: i.ID, PCID: i.PCID, ReportadoPor: i.ReportadoPor, Descripcion: i.Descripcion,
+		ID: i.ID, EquipoID: i.EquipoID, ReportadoPor: i.ReportadoPor, Descripcion: i.Descripcion,
 		Gravedad: string(i.Gravedad), Fecha: i.Fecha, EnviadoDGE: i.EnviadoDGE,
 		FechaEnvioDGE: i.FechaEnvioDGE, Estado: string(i.Estado),
 	}

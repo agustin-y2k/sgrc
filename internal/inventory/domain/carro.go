@@ -13,7 +13,7 @@ import (
 var ErrNombreCarroVacio = errors.New("el nombre del carro no puede estar vacío")
 
 // Carro es el contenedor físico de PCs. No tiene freezado — ese atributo
-// es de cada PC individual (ver pc.go), no del carro que la contiene.
+// es de cada equipo individual (ver equipo.go), no del carro que lo contiene.
 type Carro struct {
 	ID          string
 	Nombre      string

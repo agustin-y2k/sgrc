@@ -12,7 +12,7 @@ import { getErrorMessage } from "@/lib/api-client"
  * Es de solo lectura: entregar y recibir se hace en /admin/entregas, que es
  * donde está la gente esperando. Lo que aporta acá es lo que no se ve en
  * ningún otro lado — las observaciones de cada devolución ("volvió sin el
- * cargador"), que son justo lo que se consulta cuando una PC aparece con un
+ * cargador"), que son justo lo que se consulta cuando un equipo aparece con un
  * problema y hay que reconstruir por dónde anduvo.
  */
 
@@ -31,10 +31,10 @@ function estadoDelPrestamo(p: Prestamo) {
   return <EstadoBadge tono="alerta">Afuera</EstadoBadge>
 }
 
-export function PrestamosDePC({ pcId }: { pcId: string }) {
+export function PrestamosDeEquipo({ equipoId }: { equipoId: string }) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["prestamos", "pc", pcId],
-    queryFn: () => reservasApi.historialDePrestamosDePC(pcId),
+    queryKey: ["prestamos", "equipo", equipoId],
+    queryFn: () => reservasApi.historialDePrestamosDeEquipo(equipoId),
   })
 
   if (isLoading) {

@@ -63,15 +63,15 @@ func NewVigilante(repo Repo, bus eventbus.EventBus, ahora func() time.Time, cfg 
 // ResumenDelBarrido es lo que hizo esta pasada. Se loguea: es la única forma
 // de saber que el barrido está vivo sin mirar la base.
 type ResumenDelBarrido struct {
-	Recordatorios      int
-	Liberadas          int
-	AvisosDePCFaltante int
-	Reclamos           int
-	AvisosDeCierre     int
+	Recordatorios          int
+	Liberadas              int
+	AvisosDeEquipoFaltante int
+	Reclamos               int
+	AvisosDeCierre         int
 }
 
 func (r ResumenDelBarrido) HizoAlgo() bool {
-	return r.Recordatorios+r.Liberadas+r.AvisosDePCFaltante+r.Reclamos+r.AvisosDeCierre > 0
+	return r.Recordatorios+r.Liberadas+r.AvisosDeEquipoFaltante+r.Reclamos+r.AvisosDeCierre > 0
 }
 
 // Barrer corre las cinco pasadas. El orden importa en un solo punto: los
@@ -92,7 +92,7 @@ func (v *Vigilante) Barrer(ctx context.Context) (ResumenDelBarrido, error) {
 	avisadas := map[string]bool{}
 
 	resumen.Recordatorios = v.recordar(ctx, reservas, ahora, avisadas)
-	resumen.AvisosDePCFaltante = v.avisarPCsQueNoVolvieron(ctx, reservas, ahora, avisadas)
+	resumen.AvisosDeEquipoFaltante = v.avisarEquiposQueNoVolvieron(ctx, reservas, ahora, avisadas)
 	resumen.Liberadas = v.liberarNoRetiradas(ctx, reservas, ahora)
 
 	prestamos, err := v.repo.PrestamosAVigilar(ctx)
@@ -137,9 +137,9 @@ func (v *Vigilante) recordar(ctx context.Context, reservas []ReservaParaVigilar,
 			// La advertencia de la máquina que no volvió viaja DENTRO del
 			// recordatorio: si el docente igual va a recibir un correo por
 			// esta clase, mandarle dos es el bombardeo que se quiso evitar.
-			if v.pcDemorada(r, ahora) && !r.AvisoPCNoDisponibleEnviado {
+			if v.pcDemorada(r, ahora) && !r.AvisoEquipoNoDisponibleEnviado {
 				aviso.EquiposSinDevolver = append(aviso.EquiposSinDevolver, r.Etiqueta)
-				v.marcarAvisoDePC(ctx, r.ReservaID, ahora, avisadas)
+				v.marcarAvisoDeEquipo(ctx, r.ReservaID, ahora, avisadas)
 			}
 		}
 
@@ -158,7 +158,7 @@ func (v *Vigilante) recordar(ctx context.Context, reservas []ReservaParaVigilar,
 
 // ── 2. El aviso suelto de "tu PC no volvió" ─────────────────────────────
 
-// avisarPCsQueNoVolvieron cubre la otra mitad de max(detección, inicio − 1 h):
+// avisarEquiposQueNoVolvieron cubre la otra mitad de max(detección, inicio − 1 h):
 // la demora se detectó DESPUÉS de que el recordatorio ya había salido, o
 // falta menos de una hora para la clase.
 //
@@ -166,7 +166,7 @@ func (v *Vigilante) recordar(ctx context.Context, reservas []ReservaParaVigilar,
 // vuelve antes de que se cumpla esa cuenta, el aviso no sale nunca. En el
 // caso más común —alguien se demora quince minutos y devuelve— el docente de
 // tres horas después no se entera de nada.
-func (v *Vigilante) avisarPCsQueNoVolvieron(ctx context.Context, reservas []ReservaParaVigilar, ahora time.Time, avisadas map[string]bool) int {
+func (v *Vigilante) avisarEquiposQueNoVolvieron(ctx context.Context, reservas []ReservaParaVigilar, ahora time.Time, avisadas map[string]bool) int {
 	enviados := 0
 
 	for _, grupo := range agruparPorGrupo(reservas) {
@@ -174,7 +174,7 @@ func (v *Vigilante) avisarPCsQueNoVolvieron(ctx context.Context, reservas []Rese
 		if !esDeUnDocente(primera) {
 			continue
 		}
-		if !domain.CorrespondeAvisarPCNoDisponible(primera.Fecha, primera.HoraInicio, primera.HoraFin,
+		if !domain.CorrespondeAvisarEquipoNoDisponible(primera.Fecha, primera.HoraInicio, primera.HoraFin,
 			domain.AntelacionDelRecordatorio, ahora) {
 			continue
 		}
@@ -182,7 +182,7 @@ func (v *Vigilante) avisarPCsQueNoVolvieron(ctx context.Context, reservas []Rese
 		var faltantes []string
 		var reservaIDs []string
 		for _, r := range grupo {
-			if r.AvisoPCNoDisponibleEnviado || avisadas[r.ReservaID] {
+			if r.AvisoEquipoNoDisponibleEnviado || avisadas[r.ReservaID] {
 				continue
 			}
 			if v.pcDemorada(r, ahora) {
@@ -194,7 +194,7 @@ func (v *Vigilante) avisarPCsQueNoVolvieron(ctx context.Context, reservas []Rese
 			continue
 		}
 
-		aviso := eventbus.PCNoDisponibleParaReserva{
+		aviso := eventbus.EquipoNoDisponibleParaReserva{
 			Email:         primera.DocenteEmail,
 			Nombre:        primera.DocenteNombre,
 			MateriaNombre: nombreODefecto(primera.MateriaNombre),
@@ -206,9 +206,9 @@ func (v *Vigilante) avisarPCsQueNoVolvieron(ctx context.Context, reservas []Rese
 			aviso.UsuarioID = *primera.DocenteID
 		}
 
-		v.bus.Publish(eventbus.Evento{Tipo: "reserva.pc-no-disponible", Payload: aviso})
+		v.bus.Publish(eventbus.Evento{Tipo: "reserva.equipo-no-disponible", Payload: aviso})
 		for _, id := range reservaIDs {
-			v.marcarAvisoDePC(ctx, id, ahora, avisadas)
+			v.marcarAvisoDeEquipo(ctx, id, ahora, avisadas)
 		}
 		enviados++
 	}
@@ -240,7 +240,7 @@ func (v *Vigilante) liberarNoRetiradas(ctx context.Context, reservas []ReservaPa
 
 		var equipos []string
 		for _, r := range grupo {
-			if r.PCAfuera {
+			if r.EquipoAfuera {
 				continue
 			}
 			if err := v.liberar(ctx, r.ReservaID, ahora); err != nil {
@@ -390,25 +390,25 @@ func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoPar
 	}
 	hoy := ahora.Format("2006-01-02")
 
-	var afuera []eventbus.PCSinDevolverAlCierre
+	var afuera []eventbus.EquipoSinDevolverAlCierre
 	for _, p := range prestamos {
 		if p.Prestamo.AvisadoCierrePara != nil && p.Prestamo.AvisadoCierrePara.Format("2006-01-02") == hoy {
 			continue
 		}
-		pc := eventbus.PCSinDevolverAlCierre{
+		pc := eventbus.EquipoSinDevolverAlCierre{
 			Etiqueta:    p.Etiqueta,
 			CarroNombre: p.CarroNombre,
 			Quien:       p.Prestamo.EntregadoANombre,
 			DesdeCuando: p.Prestamo.EntregadoEn,
 		}
-		v.completarProximaReserva(ctx, p.Prestamo.PCID, ahora, &pc)
+		v.completarProximaReserva(ctx, p.Prestamo.EquipoID, ahora, &pc)
 		afuera = append(afuera, pc)
 	}
 	if len(afuera) == 0 {
 		return 0
 	}
 
-	v.bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.PCsSinDevolverAlCierre{PCs: afuera}})
+	v.bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{Equipos: afuera}})
 	for _, p := range prestamos {
 		if p.Prestamo.AvisadoCierrePara != nil && p.Prestamo.AvisadoCierrePara.Format("2006-01-02") == hoy {
 			continue
@@ -423,10 +423,10 @@ func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoPar
 // completarProximaReserva busca a quién le va a faltar esa máquina. Es
 // informativo: si falla, el corte sale igual sin ese dato — perder el aviso
 // entero por no haber podido resolver un nombre sería peor.
-func (v *Vigilante) completarProximaReserva(ctx context.Context, pcID string, ahora time.Time, destino *eventbus.PCSinDevolverAlCierre) {
-	proxima, err := v.repo.ProximaReservaDePC(ctx, pcID, ahora)
+func (v *Vigilante) completarProximaReserva(ctx context.Context, equipoID string, ahora time.Time, destino *eventbus.EquipoSinDevolverAlCierre) {
+	proxima, err := v.repo.ProximaReservaDeEquipo(ctx, equipoID, ahora)
 	if err != nil {
-		log.Printf("barrido: no se pudo resolver la próxima reserva de la PC %s: %v", pcID, err)
+		log.Printf("barrido: no se pudo resolver la próxima reserva del equipo %s: %v", equipoID, err)
 		return
 	}
 	if proxima == nil {
@@ -446,13 +446,13 @@ func (v *Vigilante) completarProximaReserva(ctx context.Context, pcID string, ah
 // "Afuera" solo no alcanza: una PC entregada a las 8 para una clase que
 // termina a las 9 está afuera a las 8:30 y no le falta a nadie.
 func (v *Vigilante) pcDemorada(r ReservaParaVigilar, ahora time.Time) bool {
-	return r.PCAfuera && r.PCDeboVolverA != nil && ahora.After(*r.PCDeboVolverA)
+	return r.EquipoAfuera && r.EquipoDebioVolverA != nil && ahora.After(*r.EquipoDebioVolverA)
 }
 
-func (v *Vigilante) marcarAvisoDePC(ctx context.Context, reservaID string, ahora time.Time, avisadas map[string]bool) {
+func (v *Vigilante) marcarAvisoDeEquipo(ctx context.Context, reservaID string, ahora time.Time, avisadas map[string]bool) {
 	avisadas[reservaID] = true
-	if err := v.repo.MarcarAvisoPCNoDisponible(ctx, reservaID, ahora); err != nil {
-		log.Printf("barrido: no se pudo marcar el aviso de PC faltante de la reserva %s (ya salió): %v",
+	if err := v.repo.MarcarAvisoEquipoNoDisponible(ctx, reservaID, ahora); err != nil {
+		log.Printf("barrido: no se pudo marcar el aviso de equipo faltante de la reserva %s (ya salió): %v",
 			reservaID, err)
 	}
 }

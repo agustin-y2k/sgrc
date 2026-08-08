@@ -7,20 +7,20 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import * as adminApi from "@/features/admin/api"
-import type { Carro, PC } from "@/features/inventory/types"
+import type { Carro, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
 /**
- * Alta (RF-03.2) y edición (RF-03.4/RF-03.10) de una PC.
+ * Alta (RF-03.2) y edición (RF-03.4/RF-03.10) de un equipo.
  *
  * Es un solo componente para las dos cosas porque los campos son los mismos;
  * lo que cambia es qué se puede tocar. `identificador` y `numeroSerie` solo
  * aparecen al crear: el backend no los acepta en el PATCH (ver
- * editarPCRequest en internal/inventory/interfaces/http/dto.go), y ofrecer
+ * editarEquipoRequest en internal/inventory/interfaces/http/dto.go), y ofrecer
  * un campo que se ignora en silencio es peor que no ofrecerlo.
  */
 
-type CamposPC = {
+type CamposEquipo = {
   identificador: string
   numeroSerie: string
   freezado: boolean
@@ -30,7 +30,7 @@ type CamposPC = {
   softwareInstalado: string
 }
 
-const VACIO: CamposPC = {
+const VACIO: CamposEquipo = {
   identificador: "",
   numeroSerie: "",
   freezado: false,
@@ -40,15 +40,15 @@ const VACIO: CamposPC = {
   softwareInstalado: "",
 }
 
-function desdePC(pc: PC): CamposPC {
+function desdeEquipo(equipo: Equipo): CamposEquipo {
   return {
-    identificador: String(pc.identificador),
-    numeroSerie: String(pc.numeroSerie),
-    freezado: pc.freezado,
-    cpu: pc.cpu ?? "",
-    ram: pc.ram ?? "",
-    sistemaOperativo: pc.sistemaOperativo ?? "",
-    softwareInstalado: pc.softwareInstalado ?? "",
+    identificador: String(equipo.identificador),
+    numeroSerie: String(equipo.numeroSerie),
+    freezado: equipo.freezado,
+    cpu: equipo.cpu ?? "",
+    ram: equipo.ram ?? "",
+    sistemaOperativo: equipo.sistemaOperativo ?? "",
+    softwareInstalado: equipo.softwareInstalado ?? "",
   }
 }
 
@@ -64,8 +64,8 @@ function CamposComunes({
   onChange,
 }: {
   idPrefijo: string
-  valor: CamposPC
-  onChange: (v: CamposPC) => void
+  valor: CamposEquipo
+  onChange: (v: CamposEquipo) => void
 }) {
   return (
     <>
@@ -120,13 +120,13 @@ function CamposComunes({
   )
 }
 
-export function AltaDePC({ carroId }: { carroId: string }) {
+export function AltaDeEquipo({ carroId }: { carroId: string }) {
   const queryClient = useQueryClient()
-  const [campos, setCampos] = useState<CamposPC>(VACIO)
+  const [campos, setCampos] = useState<CamposEquipo>(VACIO)
 
   const crear = useMutation({
     mutationFn: () =>
-      adminApi.crearPC(carroId, {
+      adminApi.crearEquipoDeCarro(carroId, {
         identificador: Number(campos.identificador),
         // El backend lo normaliza igual (a mayúsculas y sin espacios al
         // borde, ver domain.NormalizarNumeroSerie); acá se manda tal cual
@@ -140,7 +140,7 @@ export function AltaDePC({ carroId }: { carroId: string }) {
       }),
     onSuccess: async () => {
       setCampos(VACIO)
-      await queryClient.invalidateQueries({ queryKey: ["pcs", carroId] })
+      await queryClient.invalidateQueries({ queryKey: ["equipos", carroId] })
     },
   })
 
@@ -152,7 +152,7 @@ export function AltaDePC({ carroId }: { carroId: string }) {
   // el identificador es el que la escuela pinta en la máquina —"PC 1",
   // "PC 2"— y sí es un entero. El número de serie es el código de fábrica
   // de la etiqueta, y casi siempre trae letras ("5CD1234ABC"): exigirle
-  // dígitos era lo que hacía imposible cargar la primera PC con el dato
+  // dígitos era lo que hacía imposible cargar la primera Equipo con el dato
   // real (ver migración 011).
   const identificadorValido = /^\d+$/.test(campos.identificador.trim())
   const serieValida = campos.numeroSerie.trim() !== ""
@@ -165,7 +165,7 @@ export function AltaDePC({ carroId }: { carroId: string }) {
         crear.mutate()
       }}
     >
-      <p className="font-medium">Agregar una PC a este carro</p>
+      <p className="font-medium">Agregar un equipo a este carro</p>
 
       {crear.error && (
         <Alert variant="destructive">
@@ -181,7 +181,7 @@ export function AltaDePC({ carroId }: { carroId: string }) {
             inputMode="numeric"
             value={campos.identificador}
             onChange={(e) => setCampos({ ...campos, identificador: e.target.value })}
-            placeholder="El número pintado en la PC"
+            placeholder="El número pintado en el equipo"
           />
         </div>
         <div className="grid gap-1.5">
@@ -213,34 +213,34 @@ export function AltaDePC({ carroId }: { carroId: string }) {
           type="submit"
           disabled={!identificadorValido || !serieValida || crear.isPending}
         >
-          {crear.isPending ? "Agregando…" : "Agregar PC"}
+          {crear.isPending ? "Agregando…" : "Agregar Equipo"}
         </Button>
       </div>
     </form>
   )
 }
 
-export function EdicionDePC({
-  pc,
+export function EdicionDeEquipo({
+  equipo,
   carros,
   onListo,
 }: {
-  pc: PC
+  equipo: Equipo
   /** Para poder moverla a otro carro (RF-03.10). */
   carros: Carro[]
   onListo: () => void
 }) {
   const queryClient = useQueryClient()
-  const [campos, setCampos] = useState<CamposPC>(() => desdePC(pc))
-  const [carroDestino, setCarroDestino] = useState(pc.carroId)
+  const [campos, setCampos] = useState<CamposEquipo>(() => desdeEquipo(equipo))
+  const [carroDestino, setCarroDestino] = useState(equipo.carroId)
 
   const editar = useMutation({
     mutationFn: () =>
-      adminApi.editarPC(pc.id, {
+      adminApi.editarEquipo(equipo.id, {
         // El carro solo viaja si cambió: mandarlo igual haría que el backend
         // revalide la unicidad del identificador contra el mismo carro sin
         // ninguna razón.
-        carroId: carroDestino !== pc.carroId ? carroDestino : undefined,
+        carroId: carroDestino !== equipo.carroId ? carroDestino : undefined,
         freezado: campos.freezado,
         cpu: opcional(campos.cpu),
         ram: opcional(campos.ram),
@@ -248,11 +248,11 @@ export function EdicionDePC({
         softwareInstalado: opcional(campos.softwareInstalado),
       }),
     onSuccess: async () => {
-      // Se invalidan los dos carros: si la PC se movió, desaparece de uno y
+      // Se invalidan los dos carros: si el equipo se movió, desaparece de uno y
       // aparece en el otro.
-      await queryClient.invalidateQueries({ queryKey: ["pcs", pc.carroId] })
-      if (carroDestino !== pc.carroId) {
-        await queryClient.invalidateQueries({ queryKey: ["pcs", carroDestino] })
+      await queryClient.invalidateQueries({ queryKey: ["equipos", equipo.carroId] })
+      if (carroDestino !== equipo.carroId) {
+        await queryClient.invalidateQueries({ queryKey: ["equipos", carroDestino] })
       }
       onListo()
     },
@@ -266,7 +266,7 @@ export function EdicionDePC({
         editar.mutate()
       }}
     >
-      <p className="font-medium">Editar PC {pc.identificador}</p>
+      <p className="font-medium">Editar {equipo.etiqueta}</p>
 
       {editar.error && (
         <Alert variant="destructive">
@@ -275,19 +275,19 @@ export function EdicionDePC({
       )}
 
       <p className="text-muted-foreground text-sm">
-        El identificador ({pc.identificador}) y el número de serie ({pc.numeroSerie}) no
+        El identificador ({equipo.identificador}) y el número de serie ({equipo.numeroSerie}) no
         se editan: identifican al equipo.
       </p>
 
-      <CamposComunes idPrefijo={`edicion-${pc.id}`} valor={campos} onChange={setCampos} />
+      <CamposComunes idPrefijo={`edicion-${equipo.id}`} valor={campos} onChange={setCampos} />
 
       <div className="grid gap-1.5">
         {/* RF-03.10: el identificador tiene que seguir siendo único dentro
             del carro destino, y de eso se encarga el backend — acá alcanza
             con mostrar el error si choca. */}
-        <Label htmlFor={`edicion-${pc.id}-carro`}>Carro</Label>
+        <Label htmlFor={`edicion-${equipo.id}-carro`}>Carro</Label>
         <Select
-          id={`edicion-${pc.id}-carro`}
+          id={`edicion-${equipo.id}-carro`}
           value={carroDestino}
           onChange={(e) => setCarroDestino(e.target.value)}
         >
@@ -297,9 +297,9 @@ export function EdicionDePC({
             </option>
           ))}
         </Select>
-        {carroDestino !== pc.carroId && (
+        {carroDestino !== equipo.carroId && (
           <p className="text-muted-foreground text-sm">
-            La PC se va a mover de carro. Sus reservas y su historial de incidencias no se
+            El equipo se va a mover de carro. Sus reservas y su historial de incidencias no se
             tocan.
           </p>
         )}

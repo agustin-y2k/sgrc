@@ -29,11 +29,11 @@ func (h *Handler) ListarLicencias(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/inventory/pcs/{pcId}/licencias (Admin)
-func (h *Handler) ListarLicenciasPorPC(c *fiber.Ctx) error {
-	pcID := c.Params("pcId")
+// GET /api/inventory/equipos/{equipoId}/licencias (Admin)
+func (h *Handler) ListarLicenciasPorEquipo(c *fiber.Ctx) error {
+	equipoID := c.Params("equipoId")
 
-	licencias, err := h.svc.ListarLicenciasPorPC(c.UserContext(), pcID)
+	licencias, err := h.svc.ListarLicenciasPorEquipo(c.UserContext(), equipoID)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -47,7 +47,7 @@ func (h *Handler) ListarLicenciasPorPC(c *fiber.Ctx) error {
 }
 
 // POST /api/inventory/licencias (Admin) — alta de la misma licencia en
-// varias PCs de una vez.
+// varios equipos de una vez.
 //
 // Responde 201 aunque alguna se haya salteado: el lote se procesó, y qué
 // pasó con cada PC está en el cuerpo. Un 409 acá obligaría a la pantalla a
@@ -74,7 +74,7 @@ func (h *Handler) CrearLicencias(c *fiber.Ctx) error {
 	}
 
 	resultado, err := h.svc.CrearLicencias(c.UserContext(), application.NuevaLicenciaParams{
-		PCIDs:        req.PCIDs,
+		EquipoIDs:    req.EquipoIDs,
 		Nombre:       req.Nombre,
 		DiasDuracion: req.DiasDuracion,
 		DiasAviso:    diasAviso,
@@ -91,8 +91,8 @@ func (h *Handler) CrearLicencias(c *fiber.Ctx) error {
 		creadas[i] = toLicenciaResponse(l, hoy)
 	}
 	return c.Status(fiber.StatusCreated).JSON(altaMasivaResponse{
-		Creadas:          creadas,
-		PCsQueYaLaTenian: resultado.PCsQueYaLaTenian,
+		Creadas:              creadas,
+		EquiposQueYaLaTenian: resultado.EquiposQueYaLaTenian,
 	})
 }
 

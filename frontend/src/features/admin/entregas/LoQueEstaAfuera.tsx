@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   hora,
-  nombreDePC,
+  nombreDeEquipo,
   PRESTAMOS_KEY,
   REFRESCO_DEL_MOSTRADOR,
   textoDeDemora,
@@ -51,7 +51,7 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
 
   const recibir = useMutation({
     mutationFn: (ids: string[]) =>
-      reservasApi.recibirPCs({
+      reservasApi.recibirEquipos({
         prestamoIds: ids,
         observaciones: observaciones || undefined,
       }),
@@ -118,12 +118,12 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
                 type="checkbox"
                 className="mt-1"
                 checked={marcados.has(p.id)}
-                aria-label={`Seleccionar ${nombreDePC(p)}`}
+                aria-label={`Seleccionar ${nombreDeEquipo(p)}`}
                 onChange={() => alternar(p.id)}
               />
               <div className="min-w-0">
                 <p className="font-medium">
-                  {nombreDePC(p)}{" "}
+                  {nombreDeEquipo(p)}{" "}
                   {p.demorado && (
                     <EstadoBadge tono="peligro">
                       {textoDeDemora(p.minutosDeDemora ?? 0)}

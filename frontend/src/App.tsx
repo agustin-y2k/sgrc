@@ -12,7 +12,7 @@ import { InventarioAdminPage } from "@/features/admin/InventarioAdminPage"
 import { LicenciasPage } from "@/features/admin/LicenciasPage"
 import { ReportesPage } from "@/features/admin/ReportesPage"
 import { UsuariosPage } from "@/features/admin/UsuariosPage"
-import { CalendarioPCPage } from "@/features/calendario/CalendarioPCPage"
+import { CalendarioEquipoPage } from "@/features/calendario/CalendarioEquipoPage"
 import { DisponibilidadPage } from "@/features/disponibilidad/DisponibilidadPage"
 import { InicioPage } from "@/features/inicio/InicioPage"
 import { InventarioPage } from "@/features/inventory/InventarioPage"
@@ -50,7 +50,7 @@ const router = createBrowserRouter([
           // RF-07.2: cualquier usuario autenticado, no solo Admins. Editar
           // el horario propio está dentro de la página, condicionado al rol.
           { path: "/disponibilidad", element: <DisponibilidadPage /> },
-          { path: "/inventario/pcs/:pcId/calendario", element: <CalendarioPCPage /> },
+          { path: "/inventario/equipos/:equipoId/calendario", element: <CalendarioEquipoPage /> },
           {
             element: <AdminRoute />,
             children: [

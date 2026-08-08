@@ -57,7 +57,7 @@ var ErrDescripcionVacia = errors.New("la descripción de la incidencia no puede 
 // valor en sí sea uno de los cuatro conocidos (ParseEstadoIncidencia).
 type Incidencia struct {
 	ID            string
-	PCID          string
+	EquipoID      string
 	ReportadoPor  *string
 	Descripcion   string
 	Gravedad      Gravedad
@@ -67,7 +67,7 @@ type Incidencia struct {
 	Estado        EstadoIncidencia
 }
 
-func NuevaIncidencia(id, pcID, reportadoPor, descripcion string, gravedad Gravedad, fecha time.Time) (*Incidencia, error) {
+func NuevaIncidencia(id, equipoID, reportadoPor, descripcion string, gravedad Gravedad, fecha time.Time) (*Incidencia, error) {
 	if strings.TrimSpace(descripcion) == "" {
 		return nil, ErrDescripcionVacia
 	}
@@ -77,7 +77,7 @@ func NuevaIncidencia(id, pcID, reportadoPor, descripcion string, gravedad Graved
 	}
 	return &Incidencia{
 		ID:           id,
-		PCID:         pcID,
+		EquipoID:     equipoID,
 		ReportadoPor: reportadoPorPtr,
 		Descripcion:  descripcion,
 		Gravedad:     gravedad,

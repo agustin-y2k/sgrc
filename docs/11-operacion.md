@@ -162,13 +162,13 @@ de que el proceso consultó Postgres y respondió. Si dice `unhealthy` o
 
 ### 1.4 Cargar el inventario
 
-El sistema arranca vacío a propósito: no inventa carros ni PCs. Desde la
+El sistema arranca vacío a propósito: no inventa carros ni equipos. Desde la
 interfaz, con la cuenta de Admin:
 
 1. **Ciclo lectivo** (`/admin/academico`) → sin ciclo no hay cursos ni
    materias, y sin materias nadie puede reservar.
 2. **Cursos y materias**, y asignar los docentes a cada materia.
-3. **Carros y PCs** (`/admin/inventario`) → sin PCs cargadas no hay nada que
+3. **Carros y equipos** (`/admin/inventario`) → sin equipos cargados no hay nada que
    reservar.
 
 Los docentes se autorregistran y quedan pendientes hasta que un Admin los
@@ -323,10 +323,10 @@ horas cambia *cuándo* sale, nunca *cuántas veces*. En el log se ve una línea
 por barrida que hizo algo:
 
 ```
-barrido: 2 recordatorios, 1 reservas liberadas, 0 avisos de PC faltante, ...
+barrido: 2 recordatorios, 1 reservas liberadas, 0 avisos de equipo faltante, ...
 ```
 
-Si al entregar aparece "esa computadora ya figura entregada y todavía no
+Si al entregar aparece "ese equipo ya figura entregado y todavía no
 volvió", no es un error del sistema: es el índice único haciendo su trabajo.
 La máquina figura afuera, y lo que corresponde es recibirla primero — o
 averiguar quién la tiene, que la pantalla de entregas lo dice.
@@ -397,7 +397,7 @@ que cambia es qué datos hay adentro:
 |---|---|---|
 | Tablas | Las crea Postgres al arrancar con el volumen vacío, aplicando `migrations/` | Igual |
 | Primer Admin | Lo siembra la app (`SEED_ADMIN_*` del `.env`) | Igual |
-| Datos | **Ninguno**: ni ciclo, ni carros, ni PCs. El Admin arma todo desde la interfaz | Ciclo, curso, materia, un docente aprobado y un carro con 8 PCs |
+| Datos | **Ninguno**: ni ciclo, ni carros, ni equipos. El Admin arma todo desde la interfaz | Ciclo, curso, materia, un docente aprobado y un carro con 8 PCs |
 
 El sistema no inventa datos en producción a propósito: un carro llamado
 "Carro 1" que nadie cargó es peor que la pantalla vacía, porque parece real.

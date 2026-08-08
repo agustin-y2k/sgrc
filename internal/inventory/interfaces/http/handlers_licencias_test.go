@@ -15,12 +15,12 @@ import (
 // El reloj de nuevaAppDeTest está fijado en el 1 de enero de 2026.
 const hoyEnLaApp = "2026-01-01"
 
-func repoConPC(t *testing.T) *fakeRepo {
+func repoConEquipo(t *testing.T) *fakeRepo {
 	t.Helper()
 	repo := nuevoFakeRepo()
 	repo.carros["carro-1"] = &domain.Carro{ID: "carro-1", Nombre: "Carro 1"}
-	repo.pcs["pc-1"] = &domain.PC{ID: "pc-1", CarroID: "carro-1", Identificador: 1, Estado: domain.EstadoDisponible}
-	repo.pcs["pc-2"] = &domain.PC{ID: "pc-2", CarroID: "carro-1", Identificador: 2, Estado: domain.EstadoDisponible}
+	repo.equipos["equipo-1"] = &domain.Equipo{ID: "equipo-1", CarroID: "carro-1", Identificador: 1, Estado: domain.EstadoDisponible}
+	repo.equipos["equipo-2"] = &domain.Equipo{ID: "equipo-2", CarroID: "carro-1", Identificador: 2, Estado: domain.EstadoDisponible}
 	return repo
 }
 
@@ -43,12 +43,12 @@ func pedir(t *testing.T, app *fiber.App, metodo, ruta string, cuerpo any, rol st
 	return resp.StatusCode, cuerpoResp
 }
 
-func TestHTTP_CrearLicencias_EnVariasPCs(t *testing.T) {
-	repo := repoConPC(t)
+func TestHTTP_CrearLicencias_EnVariasEquipos(t *testing.T) {
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
 
 	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
-		PCIDs: []string{"pc-1", "pc-2"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
+		EquipoIDs: []string{"equipo-1", "equipo-2"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
 	}, "ADMIN")
 
 	if codigo != fiber.StatusCreated {
@@ -77,11 +77,11 @@ func TestHTTP_CrearLicencias_EnVariasPCs(t *testing.T) {
 }
 
 func TestHTTP_CrearLicencias_ConQuedanDias(t *testing.T) {
-	app := nuevaAppDeTest(repoConPC(t))
+	app := nuevaAppDeTest(repoConEquipo(t))
 	doce := 12
 
 	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
-		PCIDs: []string{"pc-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
+		EquipoIDs: []string{"equipo-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
 		vencimientoRequest: vencimientoRequest{QuedanDias: &doce},
 	}, "ADMIN")
 
@@ -102,15 +102,15 @@ func TestHTTP_CrearLicencias_ConQuedanDias(t *testing.T) {
 }
 
 func TestHTTP_CrearLicencias_SegundaTandaInformaLasQueYaEstaban(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
-	req := crearLicenciasRequest{PCIDs: []string{"pc-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30}
+	req := crearLicenciasRequest{EquipoIDs: []string{"equipo-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30}
 
 	if codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", req, "ADMIN"); codigo != fiber.StatusCreated {
 		t.Fatalf("la primera: esperaba 201, obtuve %d: %s", codigo, cuerpo)
 	}
 
-	req.PCIDs = []string{"pc-1", "pc-2"}
+	req.EquipoIDs = []string{"equipo-1", "equipo-2"}
 	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", req, "ADMIN")
 
 	// 201 y no 409: el lote se procesó, y lo que pasó con cada PC está en
@@ -123,17 +123,17 @@ func TestHTTP_CrearLicencias_SegundaTandaInformaLasQueYaEstaban(t *testing.T) {
 	if err := json.Unmarshal(cuerpo, &resp); err != nil {
 		t.Fatalf("respuesta ilegible: %v", err)
 	}
-	if len(resp.Creadas) != 1 || len(resp.PCsQueYaLaTenian) != 1 {
-		t.Errorf("esperaba 1 creada y 1 salteada, obtuve %d y %d", len(resp.Creadas), len(resp.PCsQueYaLaTenian))
+	if len(resp.Creadas) != 1 || len(resp.EquiposQueYaLaTenian) != 1 {
+		t.Errorf("esperaba 1 creada y 1 salteada, obtuve %d y %d", len(resp.Creadas), len(resp.EquiposQueYaLaTenian))
 	}
 }
 
 func TestHTTP_CrearLicencias_FechaMalFormada(t *testing.T) {
-	app := nuevaAppDeTest(repoConPC(t))
+	app := nuevaAppDeTest(repoConEquipo(t))
 	mal := "03/09/2026"
 
 	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
-		PCIDs: []string{"pc-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
+		EquipoIDs: []string{"equipo-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
 		vencimientoRequest: vencimientoRequest{VenceEl: &mal},
 	}, "ADMIN")
 
@@ -143,12 +143,12 @@ func TestHTTP_CrearLicencias_FechaMalFormada(t *testing.T) {
 }
 
 func TestHTTP_CrearLicencias_VencimientoAmbiguo(t *testing.T) {
-	app := nuevaAppDeTest(repoConPC(t))
+	app := nuevaAppDeTest(repoConEquipo(t))
 	doce := 12
 	vence := "2026-03-15"
 
 	codigo, _ := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
-		PCIDs: []string{"pc-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
+		EquipoIDs: []string{"equipo-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
 		vencimientoRequest: vencimientoRequest{QuedanDias: &doce, VenceEl: &vence},
 	}, "ADMIN")
 
@@ -158,11 +158,11 @@ func TestHTTP_CrearLicencias_VencimientoAmbiguo(t *testing.T) {
 }
 
 func TestHTTP_RenovarLicencias(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
 	vence := "2026-01-05"
 	_, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
-		PCIDs: []string{"pc-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
+		EquipoIDs: []string{"equipo-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
 		vencimientoRequest: vencimientoRequest{VenceEl: &vence},
 	}, "ADMIN")
 	var alta altaMasivaResponse
@@ -197,10 +197,10 @@ func TestHTTP_RenovarLicencias(t *testing.T) {
 // puede ser un atajo para ponerle treinta días a una licencia que nadie
 // verificó.
 func TestHTTP_RenovarLicencias_SinFechaPreviaSeInforma(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
 	_, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", crearLicenciasRequest{
-		PCIDs: []string{"pc-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
+		EquipoIDs: []string{"equipo-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30,
 	}, "ADMIN")
 	var alta altaMasivaResponse
 	if err := json.Unmarshal(cuerpo, &alta); err != nil {
@@ -228,9 +228,9 @@ func TestHTTP_RenovarLicencias_SinFechaPreviaSeInforma(t *testing.T) {
 }
 
 func TestHTTP_EditarLicencia_CorregirElVencimiento(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
-	l, err := domain.NuevaLicencia("lic-1", "pc-1", "AutoCAD 2027", 30, 1, time.Now())
+	l, err := domain.NuevaLicencia("lic-1", "equipo-1", "AutoCAD 2027", 30, 1, time.Now())
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestHTTP_EditarLicencia_CorregirElVencimiento(t *testing.T) {
 }
 
 func TestHTTP_EditarLicencia_NoEncontrada(t *testing.T) {
-	app := nuevaAppDeTest(repoConPC(t))
+	app := nuevaAppDeTest(repoConEquipo(t))
 
 	codigo, _ := pedir(t, app, "PATCH", "/api/inventory/licencias/no-existe", editarLicenciaRequest{}, "ADMIN")
 
@@ -265,9 +265,9 @@ func TestHTTP_EditarLicencia_NoEncontrada(t *testing.T) {
 }
 
 func TestHTTP_BorrarLicencia(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
-	l, err := domain.NuevaLicencia("lic-1", "pc-1", "AutoCAD 2027", 30, 1, time.Now())
+	l, err := domain.NuevaLicencia("lic-1", "equipo-1", "AutoCAD 2027", 30, 1, time.Now())
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -284,9 +284,9 @@ func TestHTTP_BorrarLicencia(t *testing.T) {
 }
 
 func TestHTTP_ListarLicencias_TraeLaUbicacion(t *testing.T) {
-	repo := repoConPC(t)
+	repo := repoConEquipo(t)
 	app := nuevaAppDeTest(repo)
-	l, err := domain.NuevaLicencia("lic-1", "pc-1", "AutoCAD 2027", 30, 1, time.Now())
+	l, err := domain.NuevaLicencia("lic-1", "equipo-1", "AutoCAD 2027", 30, 1, time.Now())
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestHTTP_ListarLicencias_TraeLaUbicacion(t *testing.T) {
 	if len(resp.Data) != 1 {
 		t.Fatalf("esperaba 1 licencia, obtuve %d", len(resp.Data))
 	}
-	if resp.Data[0].PCIdentificador != 1 || resp.Data[0].CarroNombre != "Carro 1" {
+	if resp.Data[0].Identificador != 1 || resp.Data[0].CarroNombre != "Carro 1" {
 		t.Errorf("falta la ubicación: %+v", resp.Data[0])
 	}
 	// Vence mañana con dias_aviso 1: la pantalla lo tiene que poder pintar
@@ -321,7 +321,7 @@ func TestHTTP_ListarLicencias_TraeLaUbicacion(t *testing.T) {
 // información que sí le sirve para elegir PC es software_instalado, que ve
 // en la pantalla de reserva.
 func TestHTTP_Licencias_SoloAdmin(t *testing.T) {
-	app := nuevaAppDeTest(repoConPC(t))
+	app := nuevaAppDeTest(repoConEquipo(t))
 
 	rutas := []struct{ metodo, ruta string }{
 		{"GET", "/api/inventory/licencias"},
@@ -329,7 +329,7 @@ func TestHTTP_Licencias_SoloAdmin(t *testing.T) {
 		{"POST", "/api/inventory/licencias/renovar"},
 		{"PATCH", "/api/inventory/licencias/lic-1"},
 		{"DELETE", "/api/inventory/licencias/lic-1"},
-		{"GET", "/api/inventory/pcs/pc-1/licencias"},
+		{"GET", "/api/inventory/equipos/equipo-1/licencias"},
 	}
 
 	for _, r := range rutas {
@@ -345,14 +345,14 @@ func TestHTTP_Licencias_SoloAdmin(t *testing.T) {
 func TestHTTP_CrearEquipo_ProyectorReservable(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoRequest{
+	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos/sueltos", crearEquipoSueltoRequest{
 		Tipo: "PROYECTOR", Nombre: "Proyector Epson", Reservable: true,
 	}, "ADMIN")
 
 	if codigo != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d: %s", codigo, cuerpo)
 	}
-	var resp pcResponse
+	var resp equipoResponse
 	if err := json.Unmarshal(cuerpo, &resp); err != nil {
 		t.Fatalf("respuesta ilegible: %v", err)
 	}
@@ -370,14 +370,14 @@ func TestHTTP_CrearEquipo_CargadorNoReservable(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
 
-	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoRequest{
+	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos/sueltos", crearEquipoSueltoRequest{
 		Tipo: "CARGADOR", Nombre: "Cargador 1", Reservable: false,
 	}, "ADMIN")
 
 	if codigo != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d: %s", codigo, cuerpo)
 	}
-	var resp pcResponse
+	var resp equipoResponse
 	if err := json.Unmarshal(cuerpo, &resp); err != nil {
 		t.Fatalf("respuesta ilegible: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestHTTP_CrearEquipo_CargadorNoReservable(t *testing.T) {
 func TestHTTP_CrearEquipo_SinNombre(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	codigo, _ := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoRequest{
+	codigo, _ := pedir(t, app, "POST", "/api/inventory/equipos/sueltos", crearEquipoSueltoRequest{
 		Tipo: "CARGADOR", Nombre: "   ",
 	}, "ADMIN")
 
@@ -403,19 +403,19 @@ func TestHTTP_CrearEquipo_SinNombre(t *testing.T) {
 func TestHTTP_ListarEquiposSueltos(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
-	pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoRequest{
+	pedir(t, app, "POST", "/api/inventory/equipos/sueltos", crearEquipoSueltoRequest{
 		Tipo: "PROYECTOR", Nombre: "Proyector Epson", Reservable: true,
 	}, "ADMIN")
 
 	// Un docente también los puede ver: necesita saber que existe un
 	// proyector antes de pedirlo (RF-03.7).
-	codigo, cuerpo := pedir(t, app, "GET", "/api/inventory/equipos", nil, "DOCENTE")
+	codigo, cuerpo := pedir(t, app, "GET", "/api/inventory/equipos/sueltos", nil, "DOCENTE")
 
 	if codigo != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
 	}
 	var resp struct {
-		Data []pcResponse `json:"data"`
+		Data []equipoResponse `json:"data"`
 	}
 	if err := json.Unmarshal(cuerpo, &resp); err != nil {
 		t.Fatalf("respuesta ilegible: %v", err)
@@ -428,7 +428,7 @@ func TestHTTP_ListarEquiposSueltos(t *testing.T) {
 func TestHTTP_CrearEquipo_SoloAdmin(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	codigo, _ := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoRequest{
+	codigo, _ := pedir(t, app, "POST", "/api/inventory/equipos/sueltos", crearEquipoSueltoRequest{
 		Tipo: "CARGADOR", Nombre: "Cargador 1",
 	}, "DOCENTE")
 

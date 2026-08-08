@@ -60,7 +60,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
     },
   })
 
-  // Las de hoy que todavía están en el laboratorio. Se cruzan por pcId
+  // Las de hoy que todavía están en el laboratorio. Se cruzan por equipoId
   // contra lo que está afuera: el backend no marca la reserva, porque la
   // custodia es de la máquina y no de la reserva.
   const pendientes = useMemo(() => {
@@ -69,11 +69,11 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
       (r) =>
         r.estado === "CONFIRMADA" &&
         // Un bloqueo por evaluación no tiene docente: lo crea un Admin sobre
-        // PCs sueltas, y no hay nadie esperando para retirarlas. Si alguien
+        // equipos sueltos, y no hay nadie esperando para retirarlas. Si alguien
         // tiene que llevárselas para una mesa de examen, es una entrega
         // suelta con el nombre escrito a mano.
         r.tipo !== "EVALUACION_ESTATAL" &&
-        !yaAfuera.has(r.pcId)
+        !yaAfuera.has(r.equipoId)
     )
   }, [data, yaAfuera])
 

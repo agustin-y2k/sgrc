@@ -5,7 +5,7 @@ import type {
   CrearReservaRecurrenteRequest,
   CrearReservaRequest,
   MateriaReservable,
-  PCDisponible,
+  EquipoDisponible,
   Prestamo,
   Reserva,
   ReservaDetallada,
@@ -24,11 +24,11 @@ export function misMaterias() {
   return apiFetch<RespuestaLista<MateriaReservable>>("/api/academic/mis-materias")
 }
 
-/** RF-04.2 — las PCs libres en esa franja, de cualquier carro. */
-export function pcsDisponibles(fecha: string, horaInicio: string, horaFin: string) {
+/** RF-04.2 — los equipos libres en esa franja, de cualquier carro. */
+export function equiposDisponibles(fecha: string, horaInicio: string, horaFin: string) {
   const params = new URLSearchParams({ fecha, horaInicio, horaFin })
-  return apiFetch<RespuestaLista<PCDisponible>>(
-    `/api/reservation/pcs-disponibles?${params}`
+  return apiFetch<RespuestaLista<EquipoDisponible>>(
+    `/api/reservation/equipos-disponibles?${params}`
   )
 }
 
@@ -85,14 +85,14 @@ export function cancelarReserva(reservaId: string, motivo: string) {
 }
 
 /**
- * RF-04.7 — bloquea PCs para una evaluación estatal y cancela en cascada
+ * RF-04.7 — bloquea equipos para una evaluación estatal y cancela en cascada
  * las reservas que se solapen.
  *
  * Es destructivo e irreversible: las reservas canceladas no se restauran
  * si después se borra el bloqueo. El backend lo hace todo en una sola
- * transacción, así que o se bloquean todas las PCs o ninguna.
+ * transacción, así que o se bloquean todas los equipos o ninguna.
  *
- * Rechaza con 409 si alguna PC no está DISPONIBLE o está dada de baja.
+ * Rechaza con 409 si alguna Equipo no está DISPONIBLE o está dada de baja.
  */
 export function bloquearParaEvaluacion(req: BloquearEvaluacionRequest) {
   return apiFetch<ResultadoBloqueoEvaluacion>("/api/reservation/bloqueos-evaluacion", {
@@ -120,17 +120,17 @@ export function listarPrestamosAbiertos() {
 }
 
 /** El historial de entregas de una máquina, de lo más reciente a lo más viejo. */
-export function historialDePrestamosDePC(pcId: string) {
-  return apiFetch<RespuestaLista<Prestamo>>(`/api/reservation/pcs/${pcId}/prestamos`)
+export function historialDePrestamosDeEquipo(equipoId: string) {
+  return apiFetch<RespuestaLista<Prestamo>>(`/api/reservation/equipos/${equipoId}/prestamos`)
 }
 
 /**
  * Entregar las máquinas de una reserva. Se mandan las reservas puntuales
- * (una por PC), no el grupo: el docente puede llevarse tres de las cinco.
+ * (una por Equipo), no el grupo: el docente puede llevarse tres de las cinco.
  *
  * La hora de devolución no se manda — sale del fin de la reserva.
  *
- * Responde 200 aunque alguna PC no haya salido; qué pasó con cada una está
+ * Responde 200 aunque alguna Equipo no haya salido; qué pasó con cada una está
  * en `noEntregadas`.
  */
 export function entregarPorReserva(req: {
@@ -146,7 +146,7 @@ export function entregarPorReserva(req: {
 
 /** Entrega espontánea, sin reserva detrás: "necesito una compu para un trámite". */
 export function entregarSuelta(req: {
-  pcIds: string[]
+  equipoIds: string[]
   nombre: string
   usuarioId?: string
   motivo?: string
@@ -164,7 +164,7 @@ export function entregarSuelta(req: {
  * hay algo puntual que anotar sobre una —"volvió sin el cargador"— conviene
  * recibir esa sola.
  */
-export function recibirPCs(req: { prestamoIds: string[]; observaciones?: string }) {
+export function recibirEquipos(req: { prestamoIds: string[]; observaciones?: string }) {
   return apiFetch<ResultadoDevolucion>("/api/reservation/prestamos/recibir", {
     method: "POST",
     body: req,
@@ -174,15 +174,15 @@ export function recibirPCs(req: { prestamoIds: string[]; observaciones?: string 
 /**
  * RF-08.14 — cambiar una reserva de máquina sin partir la clase en dos.
  *
- * Sirve cuando el sistema avisa que una PC no volvió al laboratorio: la
+ * Sirve cuando el sistema avisa que un equipo no volvió al laboratorio: la
  * alternativa era cancelar esa reserva y crear otra, que arma un grupo nuevo
  * y deja la misma clase mostrada como dos tarjetas separadas.
  *
  * Es de quien tenga la reserva, o de un Admin.
  */
-export function cambiarPCDeReserva(reservaId: string, pcId: string) {
-  return apiFetch<Reserva>(`/api/reservation/reservas/${reservaId}/pc`, {
+export function cambiarEquipoDeReserva(reservaId: string, equipoId: string) {
+  return apiFetch<Reserva>(`/api/reservation/reservas/${reservaId}/equipo`, {
     method: "PATCH",
-    body: { pcId },
+    body: { equipoId },
   })
 }

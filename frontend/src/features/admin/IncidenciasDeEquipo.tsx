@@ -9,7 +9,7 @@ import type { EstadoIncidencia, Incidencia } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
 /**
- * RF-03.5/RF-03.6 — el historial de fallas de una PC y su gestión.
+ * RF-03.5/RF-03.6 — el historial de fallas de un equipo y su gestión.
  *
  * Sin esta pantalla, el ciclo de vida completo de una incidencia existía en
  * el backend y no se podía tocar desde ningún lado: los reportes de RF-06
@@ -37,13 +37,13 @@ function formatearFecha(iso: string): string {
   })
 }
 
-export function IncidenciasDePC({ pcId }: { pcId: string }) {
+export function IncidenciasDeEquipo({ equipoId }: { equipoId: string }) {
   const queryClient = useQueryClient()
-  const incidenciasKey = ["incidencias", pcId]
+  const incidenciasKey = ["incidencias", equipoId]
 
   const { data, isLoading, error } = useQuery({
     queryKey: incidenciasKey,
-    queryFn: () => inventoryApi.listarIncidenciasDePC(pcId),
+    queryFn: () => inventoryApi.listarIncidenciasDeEquipo(equipoId),
   })
 
   const editar = useMutation({
@@ -83,7 +83,7 @@ export function IncidenciasDePC({ pcId }: { pcId: string }) {
 
       {incidencias.length === 0 && (
         <p className="text-muted-foreground text-sm">
-          Esta PC no tiene incidencias reportadas.
+          Este equipo no tiene incidencias reportadas.
         </p>
       )}
 
