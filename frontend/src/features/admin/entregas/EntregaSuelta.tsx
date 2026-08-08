@@ -69,13 +69,13 @@ export function EntregaSuelta({
     const lista: { id: string; etiqueta: string; donde: string }[] = []
 
     ;(sueltos?.data ?? [])
-      .filter((eq) => !eq.dadaDeBaja && !yaAfuera.has(eq.id))
+      .filter((eq) => !eq.dadoDeBaja && !yaAfuera.has(eq.id))
       .forEach((eq) => lista.push({ id: eq.id, etiqueta: eq.etiqueta, donde: eq.tipo }))
 
     ;(carros?.data ?? []).forEach((carro, i) => {
       const equiposDelCarro = consultasDeEquipos[i]?.data?.data ?? []
       equiposDelCarro
-        .filter((equipo) => !equipo.dadaDeBaja && !yaAfuera.has(equipo.id))
+        .filter((equipo) => !equipo.dadoDeBaja && !yaAfuera.has(equipo.id))
         .forEach((equipo) => lista.push({ id: equipo.id, etiqueta: equipo.etiqueta, donde: carro.nombre }))
     })
     return lista

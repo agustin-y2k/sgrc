@@ -127,7 +127,7 @@ func diasEntre(desde, hasta time.Time) int {
 // llega de tres formas distintas según lo que el Admin tenga a mano, y
 // ninguna de las tres es más "la normal" que las otras.
 func NuevaLicencia(id, equipoID, nombre string, diasDuracion, diasAviso int, creadaEn time.Time) (*LicenciaSoftware, error) {
-	// Normalizar antes de validar, igual que NuevaPC: un nombre de puros
+	// Normalizar antes de validar, igual que NuevoEquipoDeCarro: un nombre de puros
 	// espacios pasaría el "no vacío" y chocaría contra el CHECK de la 012
 	// como un 500.
 	nombre = NormalizarNombreLicencia(nombre)

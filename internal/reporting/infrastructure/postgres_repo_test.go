@@ -105,7 +105,7 @@ func crearUsuarioDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	return id
 }
 
-func crearCarroYPCDeTest(t *testing.T, pool *pgxpool.Pool, identificador int) (equipoID string) {
+func crearCarroYEquipoDeTest(t *testing.T, pool *pgxpool.Pool, identificador int) (equipoID string) {
 	t.Helper()
 	ctx := context.Background()
 	carroID := NuevoID()
@@ -163,7 +163,7 @@ func TestPostgresRepo_CalcularUsoEquiposDeCiclo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	cicloID, materiaID := crearCicloDeTest(t, pool)
-	equipoID := crearCarroYPCDeTest(t, pool, 27)
+	equipoID := crearCarroYEquipoDeTest(t, pool, 27)
 	docenteID := crearUsuarioDeTest(t, pool)
 
 	insertarReservaDeTest(t, pool, materiaID, equipoID, docenteID, "08:00", "09:00", "CONFIRMADA") // 60 min
@@ -193,7 +193,7 @@ func TestPostgresRepo_CalcularUsoDocentesDeCiclo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	cicloID, materiaID := crearCicloDeTest(t, pool)
-	equipoID := crearCarroYPCDeTest(t, pool, 27)
+	equipoID := crearCarroYEquipoDeTest(t, pool, 27)
 	docenteID := crearUsuarioDeTest(t, pool)
 
 	insertarReservaDeTest(t, pool, materiaID, equipoID, docenteID, "08:00", "09:30", "CONFIRMADA") // 90 min
@@ -221,8 +221,8 @@ func TestPostgresRepo_CalcularUsoEquiposDeCiclo_OrdenaDeMayorAMenor(t *testing.T
 	cicloID, materiaID := crearCicloDeTest(t, pool)
 	docenteID := crearUsuarioDeTest(t, pool)
 
-	pocoUsada := crearCarroYPCDeTest(t, pool, 3)
-	muyUsada := crearCarroYPCDeTest(t, pool, 8)
+	pocoUsada := crearCarroYEquipoDeTest(t, pool, 3)
+	muyUsada := crearCarroYEquipoDeTest(t, pool, 8)
 
 	insertarReservaDeTest(t, pool, materiaID, pocoUsada, docenteID, "08:00", "08:30", "CONFIRMADA") // 30 min
 	insertarReservaDeTest(t, pool, materiaID, muyUsada, docenteID, "10:00", "13:00", "CONFIRMADA")  // 180 min
@@ -248,7 +248,7 @@ func TestPostgresRepo_CalcularUsoDocentesDeCiclo_OrdenaDeMayorAMenor(t *testing.
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	cicloID, materiaID := crearCicloDeTest(t, pool)
-	equipoID := crearCarroYPCDeTest(t, pool, 27)
+	equipoID := crearCarroYEquipoDeTest(t, pool, 27)
 
 	reservaPoco := crearUsuarioDeTest(t, pool)
 	reservaMucho := crearUsuarioDeTest(t, pool)
@@ -274,7 +274,7 @@ func TestPostgresRepo_CalcularUso_OtroCicloNoSeToca(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	_, materiaDelOtroCiclo := crearCicloDeTest(t, pool)
 	cicloVacio, _ := crearCicloDeTest(t, pool)
-	equipoID := crearCarroYPCDeTest(t, pool, 27)
+	equipoID := crearCarroYEquipoDeTest(t, pool, 27)
 	docenteID := crearUsuarioDeTest(t, pool)
 
 	insertarReservaDeTest(t, pool, materiaDelOtroCiclo, equipoID, docenteID, "08:00", "09:00", "CONFIRMADA")
@@ -294,7 +294,7 @@ func TestPostgresRepo_CalcularUso_OtroCicloNoSeToca(t *testing.T) {
 func TestPostgresRepo_GuardarYListarHistoricoUsoEquipo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	equipoID := crearCarroYPCDeTest(t, pool, 27)
+	equipoID := crearCarroYEquipoDeTest(t, pool, 27)
 
 	h, err := domain.NuevoHistoricoUsoEquipo(NuevoID(), 5000, equipoID, "PC 27", 27, "Carro 1", 900, 12)
 	if err != nil {
@@ -403,7 +403,7 @@ func TestPostgresRepo_GuardarHistoricoUsoDocente_SinUsuarioID_OK(t *testing.T) {
 
 func TestInfoEquipoPostgres_EtiquetaYCarroDe(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	equipoID := crearCarroYPCDeTest(t, pool, 42)
+	equipoID := crearCarroYEquipoDeTest(t, pool, 42)
 
 	info := NewInfoEquipoPostgres(pool)
 	etiqueta, identificador, carroNombre, err := info.EtiquetaYCarroDe(context.Background(), equipoID)
@@ -463,7 +463,7 @@ func TestInfoUsuarioPostgres_NombreCompletoDe(t *testing.T) {
 func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	infoPC := NewInfoEquipoPostgres(pool)
+	infoEquipo := NewInfoEquipoPostgres(pool)
 	infoUsuario := NewInfoUsuarioPostgres(pool)
 	ctx := context.Background()
 
@@ -473,7 +473,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 	}{
 		{"CalcularUsoEquiposDeCiclo", func() error { _, err := repo.CalcularUsoEquiposDeCiclo(ctx, "CICLO_ID", nil, nil); return err }},
 		{"CalcularUsoDocentesDeCiclo", func() error { _, err := repo.CalcularUsoDocentesDeCiclo(ctx, "CICLO_ID", nil, nil); return err }},
-		{"EtiquetaYCarroDe", func() error { _, _, _, err := infoPC.EtiquetaYCarroDe(ctx, "PC_ID"); return err }},
+		{"EtiquetaYCarroDe", func() error { _, _, _, err := infoEquipo.EtiquetaYCarroDe(ctx, "PC_ID"); return err }},
 		{"NombreCompletoDe", func() error { _, err := infoUsuario.NombreCompletoDe(ctx, "USUARIO_ID"); return err }},
 	}
 
@@ -503,8 +503,8 @@ func TestCalcularIncidenciasPorEquipo_AgrupaYCuentaPorEstadoYGravedad(t *testing
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	pc1 := crearCarroYPCDeTest(t, pool, 1)
-	pc2 := crearCarroYPCDeTest(t, pool, 2)
+	pc1 := crearCarroYEquipoDeTest(t, pool, 1)
+	pc2 := crearCarroYEquipoDeTest(t, pool, 2)
 	fecha := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
 
 	insertarIncidenciaDeTest(t, pool, pc1, "GRAVE", "ABIERTA", fecha)
@@ -538,7 +538,7 @@ func TestCalcularIncidenciasPorEquipo_RespetaElRangoDeFechas(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	equipo := crearCarroYPCDeTest(t, pool, 1)
+	equipo := crearCarroYEquipoDeTest(t, pool, 1)
 	insertarIncidenciaDeTest(t, pool, equipo, "LEVE", "ABIERTA", time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
 	insertarIncidenciaDeTest(t, pool, equipo, "LEVE", "ABIERTA", time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC))
 
@@ -557,7 +557,7 @@ func TestCalcularIncidenciasPorCarro_AgrupaPorCarro(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	equipo := crearCarroYPCDeTest(t, pool, 1)
+	equipo := crearCarroYEquipoDeTest(t, pool, 1)
 	fecha := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
 	insertarIncidenciaDeTest(t, pool, equipo, "GRAVE", "ABIERTA", fecha)
 	insertarIncidenciaDeTest(t, pool, equipo, "LEVE", "RESUELTA", fecha)
@@ -581,7 +581,7 @@ func TestCalcularUsoEquiposDeCiclo_RespetaElRangoDeFechas(t *testing.T) {
 	ctx := context.Background()
 
 	cicloID, materiaID := crearCicloDeTest(t, pool)
-	equipoID := crearCarroYPCDeTest(t, pool, 1)
+	equipoID := crearCarroYEquipoDeTest(t, pool, 1)
 	usuarioID := crearUsuarioDeTest(t, pool)
 
 	insertarReservaEnFecha(t, pool, materiaID, equipoID, usuarioID,

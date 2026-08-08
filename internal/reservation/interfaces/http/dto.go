@@ -111,7 +111,7 @@ func toReservaResponse(r *domain.Reserva) reservaResponse {
 
 // reservaDetalladaResponse agrega a reservaResponse los nombres que hacen
 // falta para mostrar la reserva en pantalla. Sin ellos, "Mis reservas"
-// solo tenía UUIDs: una reserva de ocho PCs se veía como ocho tarjetas
+// solo tenía UUIDs: una reserva de ocho equipos se veía como ocho tarjetas
 // idénticas, sin forma de saber cuál era cuál.
 type reservaDetalladaResponse struct {
 	reservaResponse
@@ -223,7 +223,7 @@ func deref(s *string) string {
 }
 
 // equipoDisponibleResponse: RF-04.2 + RF-03.7 — lo que el docente necesita
-// para tildar qué PCs reservar (incluye software y freezado para poder
+// para tildar qué equipos reservar (incluye software y freezado para poder
 // decidir sin consultar inventory aparte).
 type equipoDisponibleResponse struct {
 	EquipoID string `json:"equipoId"`

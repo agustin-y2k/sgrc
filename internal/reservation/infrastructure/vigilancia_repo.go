@@ -74,7 +74,7 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 			&v.ReservaID, &v.GrupoID, &v.EquipoID, &v.Identificador,
 			&v.Fecha, &v.HoraInicio, &v.HoraFin, &tipo, &v.MateriaNombre, &v.Etiqueta,
 			&v.DocenteID, &v.DocenteNombre, &v.DocenteEmail,
-			&v.RecordatorioEnviado, &v.AvisoPCNoDisponibleEnviado,
+			&v.RecordatorioEnviado, &v.AvisoEquipoNoDisponibleEnviado,
 			&v.EquipoAfuera, &v.EquipoDebioVolverA,
 		); err != nil {
 			return nil, fmt.Errorf("escaneando reserva a vigilar: %w", err)
@@ -189,7 +189,7 @@ func (r *PostgresRepo) marcar(ctx context.Context, sql, id string, ahora time.Ti
 // ProximaReservaDeEquipo: la siguiente reserva confirmada de esa máquina, con el
 // contacto del docente ya resuelto.
 //
-// LIMIT 1 con el mismo orden que ListarReservasFuturasDePC. Es una consulta
+// LIMIT 1 con el mismo orden que ListarReservasFuturasDeEquipo. Es una consulta
 // aparte y no un filtro sobre aquella porque lo que cambia no es el criterio
 // sino lo que hace falta traer: para avisar por correo hace falta la
 // dirección, y esa consulta devuelve reservas peladas.

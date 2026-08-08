@@ -13,20 +13,20 @@ import (
 
 type Service struct {
 	repo        Repo
-	infoPC      InfoEquipoParaSnapshot
+	infoEquipo  InfoEquipoParaSnapshot
 	infoUsuario InfoUsuarioParaSnapshot
 	nuevoID     IDGenerator
 }
 
-func NewService(repo Repo, infoPC InfoEquipoParaSnapshot, infoUsuario InfoUsuarioParaSnapshot, nuevoID IDGenerator) *Service {
-	return &Service{repo: repo, infoPC: infoPC, infoUsuario: infoUsuario, nuevoID: nuevoID}
+func NewService(repo Repo, infoEquipo InfoEquipoParaSnapshot, infoUsuario InfoUsuarioParaSnapshot, nuevoID IDGenerator) *Service {
+	return &Service{repo: repo, infoEquipo: infoEquipo, infoUsuario: infoUsuario, nuevoID: nuevoID}
 }
 
 // ReporteUsoEquipos / ReporteUsoDocentes implementan RF-06.1/06.2 — agregan EN
 // VIVO desde reserva/materia/curso. Solo tienen sentido para un ciclo que
 // todavía no se archivó: una vez archivado, sus Reserva se borran
 // físicamente y esta consulta no encuentra nada — para esos casos está
-// HistoricoUsoPCs/HistoricoUsoDocentes en su lugar (RF-06.3, por año).
+// HistoricoUsoEquipos/HistoricoUsoDocentes en su lugar (RF-06.3, por año).
 func (s *Service) ReporteUsoEquipos(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoEquipo, error) {
 	if err := validarRango(desde, hasta); err != nil {
 		return nil, err
@@ -87,14 +87,14 @@ func (s *Service) HistoricoUsoDocentes(ctx context.Context, anio int) ([]*domain
 // inventory/auth hacia reservation.
 func (s *Service) ArchivarSnapshotDeCiclo(ctx context.Context, cicloID string, anio int) error {
 	// Sin rango de fechas a propósito: el snapshot cubre el ciclo entero.
-	usosPC, err := s.repo.CalcularUsoEquiposDeCiclo(ctx, cicloID, nil, nil)
+	usosEquipo, err := s.repo.CalcularUsoEquiposDeCiclo(ctx, cicloID, nil, nil)
 	if err != nil {
-		return fmt.Errorf("calculando uso de PCs: %w", err)
+		return fmt.Errorf("calculando uso de equipos: %w", err)
 	}
-	for _, u := range usosPC {
-		etiqueta, identificador, carroNombre, err := s.infoPC.EtiquetaYCarroDe(ctx, u.EquipoID)
+	for _, u := range usosEquipo {
+		etiqueta, identificador, carroNombre, err := s.infoEquipo.EtiquetaYCarroDe(ctx, u.EquipoID)
 		if err != nil {
-			return fmt.Errorf("obteniendo datos de la PC %s: %w", u.EquipoID, err)
+			return fmt.Errorf("obteniendo datos del equipo %s: %w", u.EquipoID, err)
 		}
 		h, err := domain.NuevoHistoricoUsoEquipo(s.nuevoID(), anio, u.EquipoID, etiqueta, identificador, carroNombre, u.MinutosReservados, u.CantidadReservas)
 		if err != nil {

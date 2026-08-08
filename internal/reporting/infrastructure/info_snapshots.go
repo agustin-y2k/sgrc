@@ -43,7 +43,7 @@ func (i *InfoEquipoPostgres) EtiquetaYCarroDe(ctx context.Context, equipoID stri
 		if esIDInvalido(err) {
 			return "", 0, "", application.ErrIDInvalido
 		}
-		return "", 0, "", fmt.Errorf("obteniendo etiqueta/carro de la PC: %w", err)
+		return "", 0, "", fmt.Errorf("obteniendo etiqueta y carro del equipo: %w", err)
 	}
 	return etiqueta, identificador, carroNombre, nil
 }

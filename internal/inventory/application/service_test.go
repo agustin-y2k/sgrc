@@ -18,18 +18,18 @@ type fakeRepo struct {
 	equipos     map[string]*domain.Equipo
 	incidencias map[string]*domain.Incidencia
 	licencias   map[string]*domain.LicenciaSoftware
-	// errAlCrearLicenciaEnPC fuerza un fallo que NO es un duplicado, para
+	// errAlCrearLicenciaEnEquipo fuerza un fallo que NO es un duplicado, para
 	// probar que el lote corta ahí en vez de seguir como si nada.
-	errAlCrearLicenciaEnPC map[string]error
+	errAlCrearLicenciaEnEquipo map[string]error
 }
 
 func nuevoFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		carros:                 make(map[string]*domain.Carro),
-		equipos:                make(map[string]*domain.Equipo),
-		incidencias:            make(map[string]*domain.Incidencia),
-		licencias:              make(map[string]*domain.LicenciaSoftware),
-		errAlCrearLicenciaEnPC: make(map[string]error),
+		carros:                     make(map[string]*domain.Carro),
+		equipos:                    make(map[string]*domain.Equipo),
+		incidencias:                make(map[string]*domain.Incidencia),
+		licencias:                  make(map[string]*domain.LicenciaSoftware),
+		errAlCrearLicenciaEnEquipo: make(map[string]error),
 	}
 }
 
@@ -71,7 +71,7 @@ func (r *fakeRepo) CrearEquipo(ctx context.Context, equipo *domain.Equipo) error
 func (r *fakeRepo) BuscarEquipoPorID(ctx context.Context, id string) (*domain.Equipo, error) {
 	equipo, ok := r.equipos[id]
 	if !ok {
-		return nil, ErrPCNoEncontrada
+		return nil, ErrEquipoNoEncontrado
 	}
 	return equipo, nil
 }
@@ -118,7 +118,7 @@ func (r *fakeRepo) GuardarIncidencia(ctx context.Context, i *domain.Incidencia) 
 func (r *fakeRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error) {
 	var resultado []*domain.Incidencia
 	for _, i := range r.incidencias {
-		if i.PCID == equipoID {
+		if i.EquipoID == equipoID {
 			resultado = append(resultado, i)
 		}
 	}
@@ -126,7 +126,7 @@ func (r *fakeRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID stri
 }
 
 func (r *fakeRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
-	if err := r.errAlCrearLicenciaEnPC[l.EquipoID]; err != nil {
+	if err := r.errAlCrearLicenciaEnEquipo[l.EquipoID]; err != nil {
 		return err
 	}
 	// Mismo criterio que el índice funcional de la migración 012: única por
@@ -211,7 +211,7 @@ func (r *fakeRepo) conUbicacion(l *domain.LicenciaSoftware) *LicenciaConUbicacio
 	u := &LicenciaConUbicacion{Licencia: l}
 	if equipo, ok := r.equipos[l.EquipoID]; ok {
 		u.Identificador = equipo.Identificador
-		u.EquipoDadoDeBaja = equipo.DadaDeBaja
+		u.EquipoDadoDeBaja = equipo.DadoDeBaja
 		u.CarroID = equipo.CarroID
 		if carro, ok := r.carros[equipo.CarroID]; ok {
 			u.CarroNombre = carro.Nombre
@@ -236,7 +236,7 @@ type fakeValidadorReservas struct {
 	errTieneFuturas error
 }
 
-func (f *fakeValidadorReservas) CancelarReservasFuturasDePC(ctx context.Context, equipoID, motivo string) (int, int, error) {
+func (f *fakeValidadorReservas) CancelarReservasFuturasDeEquipo(ctx context.Context, equipoID, motivo string) (int, int, error) {
 	f.llamado = true
 	f.veces++
 	f.motivoRecibido = motivo
@@ -425,7 +425,7 @@ func TestEditarEquipo_UnaEquipoDeCarroSiPuedeQuedarSinNombre(t *testing.T) {
 	}
 }
 
-// ── CambiarEstadoPC + cascada ───────────────────────────────────────────
+// ── CambiarEstadoEquipo + cascada ───────────────────────────────────────
 
 func TestCambiarEstadoEquipo_AMantenimiento_DisparaCascada(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -474,7 +474,7 @@ func TestCambiarEstadoEquipo_TransicionInvalida_NoLlegaALaCascada(t *testing.T) 
 	_, err := svc.CambiarEstadoEquipo(context.Background(), "pc1", domain.EstadoDisponible, nil)
 
 	if !errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida) {
-		t.Fatalf("esperaba ErrTransicionEstadoPCInvalida, obtuve %v", err)
+		t.Fatalf("esperaba ErrTransicionEstadoEquipoInvalida, obtuve %v", err)
 	}
 	if validador.llamado {
 		t.Error("una transición inválida no debería disparar ninguna cascada")
@@ -513,10 +513,12 @@ func TestCambiarEstadoEquipo_SinMotivo_UsaMensajePorDefecto(t *testing.T) {
 		t.Error("esperaba un mensaje generado por defecto, no vacío")
 	}
 	// Es la RAZÓN, no el aviso entero: el "Tu reserva fue cancelada:" lo
-	// antepone notification. Nombra la PC porque el docente recibe un
-	// aviso por cada una y sin el identificador no sabe cuál se le cayó
-	// (RF-05.3).
-	esperado := "la PC 27 pasó a FUERA_DE_SERVICIO"
+	// antepone notification. Nombra el equipo porque el docente recibe un
+	// aviso por cada uno y sin eso no sabe cuál se le cayó (RF-05.3).
+	//
+	// Sin artículo a propósito: la etiqueta puede ser "PC 27" o "Proyector
+	// Epson", y no hay un artículo que sirva para las dos.
+	esperado := "PC 27 pasó a FUERA_DE_SERVICIO"
 	if validador.motivoRecibido != esperado {
 		t.Errorf("motivo incorrecto:\n  esperado %q\n  obtenido %q", esperado, validador.motivoRecibido)
 	}
@@ -535,7 +537,7 @@ func TestCambiarEstadoEquipo_ErrorEnCascada_SePropaga(t *testing.T) {
 	}
 }
 
-// ── DarDeBajaPC ─────────────────────────────────────────────────────────
+// ── DarDeBajaEquipo ─────────────────────────────────────────────────────
 
 func TestDarDeBajaEquipo_DisparaLaMismaCascada(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -554,20 +556,20 @@ func TestDarDeBajaEquipo_DisparaLaMismaCascada(t *testing.T) {
 	if res.ReservasCanceladas != 1 {
 		t.Errorf("resultado incorrecto: %+v", res)
 	}
-	if !repo.equipos["pc1"].DadaDeBaja {
+	if !repo.equipos["pc1"].DadoDeBaja {
 		t.Error("la PC debería quedar marcada como dada de baja")
 	}
 }
 
 func TestDarDeBajaEquipo_DosVeces_Error(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", DadaDeBaja: true}
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", DadoDeBaja: true}
 	svc := servicioSimple(repo)
 
 	_, err := svc.DarDeBajaEquipo(context.Background(), "pc1")
 
-	if !errors.Is(err, domain.ErrPCYaDadaDeBaja) {
-		t.Fatalf("esperaba ErrPCYaDadaDeBaja, obtuve %v", err)
+	if !errors.Is(err, domain.ErrEquipoYaDadoDeBaja) {
+		t.Fatalf("esperaba ErrEquipoYaDadoDeBaja, obtuve %v", err)
 	}
 }
 
@@ -680,7 +682,7 @@ func TestCambiarEstadoEquipo_MismoEstadoSinNadaPendiente_SigueSiendoError(t *tes
 	_, err := svc.CambiarEstadoEquipo(context.Background(), "pc1", domain.EstadoEnMantenimiento, nil)
 
 	if !errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida) {
-		t.Fatalf("esperaba ErrTransicionEstadoPCInvalida, obtuve %v", err)
+		t.Fatalf("esperaba ErrTransicionEstadoEquipoInvalida, obtuve %v", err)
 	}
 	if validador.llamado {
 		t.Error("sin cascada pendiente no hay que volver a cancelar nada")
@@ -699,7 +701,7 @@ func TestCambiarEstadoEquipo_DesdeTerminalConReservasVivas_SigueSiendoError(t *t
 	_, err := svc.CambiarEstadoEquipo(context.Background(), "pc1", domain.EstadoEnMantenimiento, nil)
 
 	if !errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida) {
-		t.Fatalf("esperaba ErrTransicionEstadoPCInvalida, obtuve %v", err)
+		t.Fatalf("esperaba ErrTransicionEstadoEquipoInvalida, obtuve %v", err)
 	}
 	if validador.llamado {
 		t.Error("una transición inválida no debería disparar ninguna cascada")
@@ -717,7 +719,7 @@ func TestCambiarEstadoEquipo_MismoEstadoQueNoDisparaCascada_SigueSiendoError(t *
 	_, err := svc.CambiarEstadoEquipo(context.Background(), "pc1", domain.EstadoDisponible, nil)
 
 	if !errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida) {
-		t.Fatalf("esperaba ErrTransicionEstadoPCInvalida, obtuve %v", err)
+		t.Fatalf("esperaba ErrTransicionEstadoEquipoInvalida, obtuve %v", err)
 	}
 	if validador.llamado {
 		t.Error("DISPONIBLE no saca la PC de circulación: no hay cascada que completar")
@@ -726,7 +728,7 @@ func TestCambiarEstadoEquipo_MismoEstadoQueNoDisparaCascada_SigueSiendoError(t *
 
 func TestDarDeBajaEquipo_ReintentoConCascadaPendiente_LaCompleta(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Identificador: 27, DadaDeBaja: true}
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Identificador: 27, DadoDeBaja: true}
 	validador := &fakeValidadorReservas{tieneFuturas: true, canceladas: 5, notificados: 1}
 	svc := nuevoServicioDeTest(repo, validador)
 
@@ -738,9 +740,9 @@ func TestDarDeBajaEquipo_ReintentoConCascadaPendiente_LaCompleta(t *testing.T) {
 	if resultado.ReservasCanceladas != 5 {
 		t.Errorf("esperaba 5 reservas canceladas, obtuve %d", resultado.ReservasCanceladas)
 	}
-	// El motivo tiene que seguir nombrando la PC aunque sea un reintento —
-	// es lo que el docente lee en la notificación (RF-05.3).
-	if validador.motivoRecibido != "la PC 27 fue dada de baja del inventario" {
+	// El motivo tiene que seguir nombrando el equipo aunque sea un reintento
+	// — es lo que el docente lee en la notificación (RF-05.3).
+	if validador.motivoRecibido != "PC 27 fue dado de baja del inventario" {
 		t.Errorf("motivo inesperado en el reintento: %q", validador.motivoRecibido)
 	}
 }

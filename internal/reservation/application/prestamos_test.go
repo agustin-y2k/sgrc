@@ -13,11 +13,11 @@ import (
 // las 12:00 UTC.
 var mediodiaDeTest = time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC)
 
-// servicioConValidador deja tocar qué PCs están fuera del inventario, que
+// servicioConValidador deja tocar qué equipos están fuera del inventario, que
 // es lo único que el servicio le pregunta a inventory antes de entregar.
 func servicioConValidador(repo Repo, validador *fakeValidadorEquipo) *Service {
 	svc := nuevoServicioDeTest(repo)
-	svc.validadorPC = validador
+	svc.validadorEquipo = validador
 	return svc
 }
 
@@ -197,7 +197,7 @@ func TestEntregarPorReserva_SinReservas(t *testing.T) {
 	_, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{EntregadoPor: "admin1"})
 
 	if !errors.Is(err, ErrSinEquipos) {
-		t.Errorf("esperaba ErrSinPCs, obtuve %v", err)
+		t.Errorf("esperaba ErrSinEquipos, obtuve %v", err)
 	}
 }
 
@@ -242,7 +242,7 @@ func TestEntregarSuelta_NombreVacio(t *testing.T) {
 	}
 }
 
-// TestEntregarSuelta_AvisaSiLaPCTieneReservaEncima: no impide la entrega.
+// TestEntregarSuelta_AvisaSiElEquipoTieneReservaEncima: no impide la entrega.
 // El sistema no sabe cuánto va a durar un trámite, así que decidir por el
 // Admin sería peor que darle el dato.
 func TestEntregarSuelta_AvisaSiLaEquipoTieneReservaEncima(t *testing.T) {
@@ -315,7 +315,7 @@ func TestRecibirEquipos_VariasDeUnaVez(t *testing.T) {
 	}
 }
 
-// TestRecibirPCs_FaltoUna: el caso que planteó la escuela. Devolver tres de
+// TestRecibirEquipos_FaltoUno: el caso que planteó la escuela. Devolver tres de
 // cuatro no necesita nada especial — la cuarta simplemente sigue abierta.
 func TestRecibirEquipos_FaltoUna(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -370,7 +370,7 @@ func TestRecibirEquipos_ObservacionesYQuienRecibio(t *testing.T) {
 	}
 }
 
-// TestRecibirPCs_DosVecesSeInforma: dos Admin en el mostrador o un doble
+// TestRecibirEquipos_DosVecesSeInforma: dos Admin en el mostrador o un doble
 // clic. Lo que el Admin quería —que la máquina figure adentro— ya pasó, así
 // que se informa en vez de fallar.
 func TestRecibirEquipos_DosVecesSeInforma(t *testing.T) {

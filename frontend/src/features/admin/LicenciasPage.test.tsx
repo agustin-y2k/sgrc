@@ -58,7 +58,7 @@ describe("LicenciasPage", () => {
           reservable: true,
           freezado: false,
           estado: "DISPONIBLE",
-          dadaDeBaja: false,
+          dadoDeBaja: false,
           fechaAlta: "2026-01-01T00:00:00Z",
         },
       ],

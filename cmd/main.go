@@ -336,13 +336,13 @@ func main() {
 	// antes de poder referenciarla al construir esos otros Service.
 	reservationRepo := reservationinfra.NewPostgresRepo(pool)
 	validadorMateria := reservationinfra.NewValidadorMateriaPostgres(pool)
-	validadorPC := reservationinfra.NewValidadorEquipoPostgres(pool)
+	validadorEquipo := reservationinfra.NewValidadorEquipoPostgres(pool)
 	obtenedorNombre := reservationinfra.NewObtenedorNombrePostgres(pool)
 
 	reservationSvc := reservationapp.NewService(
 		reservationRepo,
 		validadorMateria,
-		validadorPC,
+		validadorEquipo,
 		obtenedorNombre,
 		reservationinfra.NuevoID,
 		ahora,
@@ -436,12 +436,12 @@ func main() {
 	// reportingSvc (junto con reservationSvc, ya armado más arriba) en un
 	// adaptador para su puerto ArchivadorHistorico — ver más abajo.
 	reportingRepo := reportinginfra.NewPostgresRepo(pool)
-	infoPC := reportinginfra.NewInfoEquipoPostgres(pool)
+	infoEquipo := reportinginfra.NewInfoEquipoPostgres(pool)
 	infoUsuario := reportinginfra.NewInfoUsuarioPostgres(pool)
 
 	reportingSvc := reportingapp.NewService(
 		reportingRepo,
-		infoPC,
+		infoEquipo,
 		infoUsuario,
 		reportinginfra.NuevoID,
 	)
@@ -600,7 +600,7 @@ func main() {
 				if resumen.HizoAlgo() {
 					log.Printf("barrido: %d recordatorios, %d reservas liberadas, "+
 						"%d avisos de equipo faltante, %d reclamos de devolución, %d avisos de cierre",
-						resumen.Recordatorios, resumen.Liberadas, resumen.AvisosDePCFaltante,
+						resumen.Recordatorios, resumen.Liberadas, resumen.AvisosDeEquipoFaltante,
 						resumen.Reclamos, resumen.AvisosDeCierre)
 				}
 			}

@@ -55,7 +55,7 @@ function EquiposDelCarro({ carroId }: { carroId: string }) {
     )
   }
 
-  const equipos = (data?.data ?? []).filter((equipo) => !equipo.dadaDeBaja)
+  const equipos = (data?.data ?? []).filter((equipo) => !equipo.dadoDeBaja)
   if (equipos.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">Este carro no tiene equipos activas.</p>

@@ -34,8 +34,8 @@ type fakeRepo struct {
 	identificadorDeEquipo map[string]int
 	contactoDeUsuario     map[string][2]string // usuarioID → {nombre, email}
 	// Las marcas del barrido, que en la base son columnas.
-	recordatorioEnviado map[string]time.Time
-	avisoPCNoDisponible map[string]time.Time
+	recordatorioEnviado     map[string]time.Time
+	avisoEquipoNoDisponible map[string]time.Time
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -46,10 +46,10 @@ func nuevoFakeRepo() *fakeRepo {
 		prestamos:      make(map[string]*domain.Prestamo),
 		pcsDadasDeBaja: make(map[string]bool),
 
-		identificadorDeEquipo: make(map[string]int),
-		contactoDeUsuario:     make(map[string][2]string),
-		recordatorioEnviado:   make(map[string]time.Time),
-		avisoPCNoDisponible:   make(map[string]time.Time),
+		identificadorDeEquipo:   make(map[string]int),
+		contactoDeUsuario:       make(map[string][2]string),
+		recordatorioEnviado:     make(map[string]time.Time),
+		avisoEquipoNoDisponible: make(map[string]time.Time),
 	}
 }
 
@@ -100,7 +100,7 @@ func (r *fakeRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]Reser
 			}
 			_, v.RecordatorioEnviado = r.recordatorioEnviado[*res.ReservaGrupoID]
 		}
-		_, v.AvisoPCNoDisponibleEnviado = r.avisoPCNoDisponible[res.ID]
+		_, v.AvisoEquipoNoDisponibleEnviado = r.avisoEquipoNoDisponible[res.ID]
 
 		for _, p := range r.prestamos {
 			if p.EquipoID == res.EquipoID && p.EstaAbierto() {
@@ -170,7 +170,7 @@ func (r *fakeRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID string
 }
 
 func (r *fakeRepo) MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
-	r.avisoPCNoDisponible[reservaID] = ahora
+	r.avisoEquipoNoDisponible[reservaID] = ahora
 	return nil
 }
 
@@ -237,7 +237,7 @@ func (r *fakeRepo) EnTransaccion(ctx context.Context, fn func(Repo) error) error
 func (r *fakeRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) error {
 	for _, existente := range r.prestamos {
 		if existente.EquipoID == p.EquipoID && existente.EstaAbierto() {
-			return ErrPCYaPrestada
+			return ErrEquipoYaPrestado
 		}
 	}
 	copia := *p
@@ -482,9 +482,6 @@ func (r *fakeRepo) CrearReglaRecurrencia(ctx context.Context, regla *domain.Regl
 	r.reglas[regla.ID] = regla
 	return nil
 }
-func (r *fakeRepo) AsignarPCsARegla(ctx context.Context, reglaID string, equipoIDs []string) error {
-	return nil
-}
 func (r *fakeRepo) ListarGruposFuturosDeRegla(ctx context.Context, reglaID string, desde time.Time) ([]*domain.ReservaGrupo, error) {
 	var resultado []*domain.ReservaGrupo
 	for _, g := range r.grupos {
@@ -676,7 +673,7 @@ func TestCrearReserva_SinEquipos_Error(t *testing.T) {
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, nil)
 
 	if !errors.Is(err, ErrSinEquipos) {
-		t.Fatalf("esperaba ErrSinPCs, obtuve %v", err)
+		t.Fatalf("esperaba ErrSinEquipos, obtuve %v", err)
 	}
 }
 
@@ -699,8 +696,8 @@ func TestCrearReserva_EquipoNoDisponible_Error(t *testing.T) {
 	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
-	if !errors.Is(err, ErrPCNoDisponible) {
-		t.Fatalf("esperaba ErrPCNoDisponible, obtuve %v", err)
+	if !errors.Is(err, ErrEquipoNoDisponible) {
+		t.Fatalf("esperaba ErrEquipoNoDisponible, obtuve %v", err)
 	}
 }
 
@@ -1377,8 +1374,8 @@ func TestBloquearParaEvaluacion_EquipoNoDisponible_Error(t *testing.T) {
 	_, err := svc.BloquearParaEvaluacion(context.Background(), []string{"pc1"}, nil,
 		fecha(2026, 3, 9), 9*time.Hour, 12*time.Hour, "motivo")
 
-	if !errors.Is(err, ErrPCNoDisponible) {
-		t.Fatalf("esperaba ErrPCNoDisponible, obtuve %v", err)
+	if !errors.Is(err, ErrEquipoNoDisponible) {
+		t.Fatalf("esperaba ErrEquipoNoDisponible, obtuve %v", err)
 	}
 }
 
@@ -1630,7 +1627,7 @@ func TestObtenerReservaGrupo_OK(t *testing.T) {
 	}
 }
 
-// ── CancelarReservasFuturasDePC (cascada hacia inventory) ───────────────
+// ── CancelarReservasFuturasDeEquipo (cascada hacia inventory) ───────────────
 
 func TestCancelarReservasFuturasDeEquipo_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -2038,7 +2035,7 @@ func TestCrearReservaRecurrente_RangoSinNingunaOcurrencia_Rechazado(t *testing.T
 	}
 }
 
-// ── TieneReservasFuturasDePC (lo que usa el reintento de inventory) ─────
+// ── TieneReservasFuturasDeEquipo (lo que usa el reintento de inventory) ─
 
 func TestTieneReservasFuturasDeEquipo_ConReservaConfirmada_True(t *testing.T) {
 	repo := nuevoFakeRepo()

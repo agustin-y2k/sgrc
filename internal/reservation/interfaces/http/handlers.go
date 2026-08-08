@@ -349,7 +349,7 @@ func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 
 // GET /api/reservation/equipos/{equipoId}/calendario?desde&hasta — RF-04.4.
 // Cualquier usuario autenticado puede consultarlo: un docente necesita ver
-// qué PCs están libres antes de elegir cuáles reservar.
+// qué equipos están libres antes de elegir cuáles reservar.
 func (h *Handler) CalendarioDeEquipo(c *fiber.Ctx) error {
 	equipoID := c.Params("equipoId")
 

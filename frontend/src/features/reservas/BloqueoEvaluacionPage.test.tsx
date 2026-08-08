@@ -30,7 +30,7 @@ function equipo(over: Partial<Equipo> = {}): Equipo {
     reservable: true,
     freezado: false,
     estado: "DISPONIBLE",
-    dadaDeBaja: false,
+    dadoDeBaja: false,
     fechaAlta: "2026-01-01",
     ...over,
   }
@@ -114,7 +114,7 @@ describe("BloqueoEvaluacionPage", () => {
 
   it("no muestra los equipos dados de baja", async () => {
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
-      data: [equipo(), equipo({ id: "pc2", identificador: 2, dadaDeBaja: true })],
+      data: [equipo(), equipo({ id: "pc2", identificador: 2, dadoDeBaja: true })],
     })
     renderPagina()
 

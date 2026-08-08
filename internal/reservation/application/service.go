@@ -19,16 +19,16 @@ import (
 type Service struct {
 	repo             Repo
 	validadorMateria ValidadorMateria
-	validadorPC      ValidadorEquipo
+	validadorEquipo  ValidadorEquipo
 	obtenedorNombre  ObtenedorNombreDocente
 	nuevoID          IDGenerator
 	ahora            func() time.Time
 	bus              eventbus.EventBus
 }
 
-func NewService(repo Repo, validadorMateria ValidadorMateria, validadorPC ValidadorEquipo, obtenedorNombre ObtenedorNombreDocente, nuevoID IDGenerator, ahora func() time.Time, bus eventbus.EventBus) *Service {
+func NewService(repo Repo, validadorMateria ValidadorMateria, validadorEquipo ValidadorEquipo, obtenedorNombre ObtenedorNombreDocente, nuevoID IDGenerator, ahora func() time.Time, bus eventbus.EventBus) *Service {
 	return &Service{
-		repo: repo, validadorMateria: validadorMateria, validadorPC: validadorPC,
+		repo: repo, validadorMateria: validadorMateria, validadorEquipo: validadorEquipo,
 		obtenedorNombre: obtenedorNombre, nuevoID: nuevoID, ahora: ahora, bus: bus,
 	}
 }
@@ -61,7 +61,7 @@ type destinatario struct {
 // Emite UN evento por docente y motivo, no uno por Reserva. Bloquear tres
 // PCs de una misma clase para una evaluación le dejaba al docente tres
 // avisos idénticos en la campana: para él es una sola cosa —"me sacaron la
-// clase"— y lo que necesita saber es qué PCs, no cuántas filas se tocaron.
+// clase"— y lo que necesita saber es qué equipos, no cuántas filas se tocaron.
 // El armado de la frase vive en notification; acá solo se junta el dato.
 func (s *Service) publicarCancelaciones(ctx context.Context, pendientes []cancelacionPendiente) {
 	// El orden de los lotes sigue el de la primera cancelación de cada
@@ -139,7 +139,7 @@ func (s *Service) etiquetasDeLosEquipos(ctx context.Context, grupos map[destinat
 		}
 	}
 
-	etiquetas, err := s.validadorPC.EtiquetasDeEquipos(ctx, equipoIDs)
+	etiquetas, err := s.validadorEquipo.EtiquetasDeEquipos(ctx, equipoIDs)
 	if err != nil {
 		log.Printf("reservation: no se pudieron resolver las etiquetas de los equipos para el aviso: %v", err)
 		return map[string]string{}
@@ -167,12 +167,12 @@ func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string,
 	}
 
 	for _, equipoID := range equipoIDs {
-		disponible, err := s.validadorPC.EquipoDisponibleParaReservar(ctx, equipoID)
+		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, equipoID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("validando PC %s: %w", equipoID, err)
 		}
 		if !disponible {
-			return nil, nil, ErrPCNoDisponible
+			return nil, nil, ErrEquipoNoDisponible
 		}
 	}
 
@@ -474,12 +474,12 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 	}
 
 	for _, equipoID := range equipoIDs {
-		disponible, err := s.validadorPC.EquipoDisponibleParaReservar(ctx, equipoID)
+		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, equipoID)
 		if err != nil {
 			return nil, fmt.Errorf("validando PC %s: %w", equipoID, err)
 		}
 		if !disponible {
-			return nil, ErrPCNoDisponible
+			return nil, ErrEquipoNoDisponible
 		}
 	}
 
@@ -655,12 +655,12 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string
 	}
 
 	for _, equipoID := range equipoIDs {
-		disponible, err := s.validadorPC.EquipoDisponibleParaReservar(ctx, equipoID)
+		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, equipoID)
 		if err != nil {
 			return nil, fmt.Errorf("validando PC %s: %w", equipoID, err)
 		}
 		if !disponible {
-			return nil, ErrPCNoDisponible
+			return nil, ErrEquipoNoDisponible
 		}
 	}
 
@@ -683,7 +683,7 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string
 		for _, equipoID := range equipoIDs {
 			futuras, err := repo.ListarReservasFuturasDeEquipo(ctx, equipoID, fecha)
 			if err != nil {
-				return fmt.Errorf("listando reservas de la PC %s: %w", equipoID, err)
+				return fmt.Errorf("listando reservas del equipo %s: %w", equipoID, err)
 			}
 
 			for _, r := range futuras {
@@ -1059,12 +1059,12 @@ func (s *Service) CambiarEquipoDeReserva(ctx context.Context, reservaID, pcNuevo
 			return nil // no hay nada que cambiar
 		}
 
-		disponible, err := s.validadorPC.EquipoDisponibleParaReservar(ctx, pcNuevoID)
+		disponible, err := s.validadorEquipo.EquipoDisponibleParaReservar(ctx, pcNuevoID)
 		if err != nil {
-			return fmt.Errorf("verificando la PC nueva: %w", err)
+			return fmt.Errorf("verificando el equipo nuevo: %w", err)
 		}
 		if !disponible {
-			return ErrPCNoDisponible
+			return ErrEquipoNoDisponible
 		}
 		if err := s.verificarSinSolapamiento(ctx, []string{pcNuevoID}, r.Fecha, r.HoraInicio, r.HoraFin); err != nil {
 			return err

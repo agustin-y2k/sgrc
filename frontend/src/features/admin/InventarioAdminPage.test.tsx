@@ -25,7 +25,7 @@ function equipo(over: Partial<Equipo> = {}): Equipo {
     reservable: true,
     freezado: false,
     estado: "DISPONIBLE",
-    dadaDeBaja: false,
+    dadoDeBaja: false,
     fechaAlta: "2026-01-01T00:00:00Z",
     ...over,
   }
@@ -168,7 +168,7 @@ describe("InventarioAdminPage", () => {
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
       data: [
         equipo({ id: "pc1", identificador: 1 }),
-        equipo({ id: "pc2", identificador: 2, dadaDeBaja: true }),
+        equipo({ id: "pc2", identificador: 2, dadoDeBaja: true }),
       ],
     })
     const user = userEvent.setup()

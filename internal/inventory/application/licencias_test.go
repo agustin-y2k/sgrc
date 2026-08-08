@@ -16,8 +16,8 @@ func dia(anio int, mes time.Month, d int) time.Time {
 	return time.Date(anio, mes, d, 0, 0, 0, 0, time.UTC)
 }
 
-// repoConCarroYPCs deja el inventario mínimo para poder cargar licencias.
-func repoConCarroYPCs(cantidad int) *fakeRepo {
+// repoConCarroYEquipos deja el inventario mínimo para poder cargar licencias.
+func repoConCarroYEquipos(cantidad int) *fakeRepo {
 	repo := nuevoFakeRepo()
 	repo.carros["carro-1"] = &domain.Carro{ID: "carro-1", Nombre: "Carro 1"}
 	for i := 1; i <= cantidad; i++ {
@@ -30,7 +30,7 @@ func repoConCarroYPCs(cantidad int) *fakeRepo {
 // ── Alta masiva ─────────────────────────────────────────────────────────
 
 func TestCrearLicencias_UnaPorCadaEquipo(t *testing.T) {
-	repo := repoConCarroYPCs(3)
+	repo := repoConCarroYEquipos(3)
 	svc := servicioSimple(repo)
 
 	resultado, err := svc.CrearLicencias(context.Background(), NuevaLicenciaParams{
@@ -59,7 +59,7 @@ func TestCrearLicencias_UnaPorCadaEquipo(t *testing.T) {
 func TestCrearLicencias_LasQueYaLaTenianSeSalteanYSeInforman(t *testing.T) {
 	// El caso real: se agregaron dos PCs al carro y el Admin marca las
 	// cuatro para no tener que acordarse de cuáles faltaban.
-	repo := repoConCarroYPCs(4)
+	repo := repoConCarroYEquipos(4)
 	svc := servicioSimple(repo)
 	ctx := context.Background()
 
@@ -88,11 +88,11 @@ func TestCrearLicencias_LasQueYaLaTenianSeSalteanYSeInforman(t *testing.T) {
 // duplicado no aborta: si algo se rompe en el medio, volver a mandar el
 // mismo request termina el trabajo sin duplicar nada.
 func TestCrearLicencias_ElLoteEsReintentable(t *testing.T) {
-	repo := repoConCarroYPCs(3)
+	repo := repoConCarroYEquipos(3)
 	svc := servicioSimple(repo)
 	ctx := context.Background()
 	fallaDeRed := errors.New("se cayó la conexión")
-	repo.errAlCrearLicenciaEnPC["equipo-3"] = fallaDeRed
+	repo.errAlCrearLicenciaEnEquipo["equipo-3"] = fallaDeRed
 
 	params := NuevaLicenciaParams{
 		EquipoIDs: []string{"equipo-1", "equipo-2", "equipo-3"}, Nombre: "AutoCAD 2027", DiasDuracion: 30, DiasAviso: 1,
@@ -105,7 +105,7 @@ func TestCrearLicencias_ElLoteEsReintentable(t *testing.T) {
 	}
 
 	// Se arregla lo que fallaba y se reintenta el MISMO request.
-	delete(repo.errAlCrearLicenciaEnPC, "equipo-3")
+	delete(repo.errAlCrearLicenciaEnEquipo, "equipo-3")
 	resultado, err := svc.CrearLicencias(ctx, params)
 
 	if err != nil {
@@ -127,13 +127,13 @@ func TestCrearLicencias_SinEquipos(t *testing.T) {
 		EquipoIDs: nil, Nombre: "AutoCAD 2027", DiasDuracion: 30, DiasAviso: 1,
 	})
 
-	if !errors.Is(err, ErrSinPCs) {
-		t.Errorf("esperaba ErrSinPCs, obtuve %v", err)
+	if !errors.Is(err, ErrSinEquipos) {
+		t.Errorf("esperaba ErrSinEquipos, obtuve %v", err)
 	}
 }
 
 func TestCrearLicencias_NombreInvalidoNoCreaNinguna(t *testing.T) {
-	repo := repoConCarroYPCs(3)
+	repo := repoConCarroYEquipos(3)
 	svc := servicioSimple(repo)
 
 	_, err := svc.CrearLicencias(context.Background(), NuevaLicenciaParams{
@@ -181,7 +181,7 @@ func TestCrearLicencias_VencimientoDeclarado(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
-			repo := repoConCarroYPCs(1)
+			repo := repoConCarroYEquipos(1)
 			svc := servicioSimple(repo)
 
 			resultado, err := svc.CrearLicencias(context.Background(), NuevaLicenciaParams{
@@ -214,7 +214,7 @@ func TestCrearLicencias_VencimientoAmbiguo(t *testing.T) {
 	// por el Admin cuál de las dos cosas que dijo es la verdadera.
 	quedan := 12
 	venceEl := dia(2026, time.March, 15)
-	repo := repoConCarroYPCs(1)
+	repo := repoConCarroYEquipos(1)
 	svc := servicioSimple(repo)
 
 	_, err := svc.CrearLicencias(context.Background(), NuevaLicenciaParams{
@@ -232,7 +232,7 @@ func TestCrearLicencias_VencimientoAmbiguo(t *testing.T) {
 
 func TestCrearLicencias_QuedanDiasNegativo(t *testing.T) {
 	quedan := -5
-	svc := servicioSimple(repoConCarroYPCs(1))
+	svc := servicioSimple(repoConCarroYEquipos(1))
 
 	_, err := svc.CrearLicencias(context.Background(), NuevaLicenciaParams{
 		EquipoIDs: []string{"equipo-1"}, Nombre: "AutoCAD 2027", DiasDuracion: 30, DiasAviso: 1,
@@ -258,7 +258,7 @@ func licenciaCargada(t *testing.T, repo *fakeRepo, id, equipoID string, vencimie
 }
 
 func TestRenovarLicencias_SinFechaDeRenovacionUsaHoy(t *testing.T) {
-	repo := repoConCarroYPCs(2)
+	repo := repoConCarroYEquipos(2)
 	licenciaCargada(t, repo, "lic-1", "equipo-1", dia(2026, time.January, 2))
 	licenciaCargada(t, repo, "lic-2", "equipo-2", dia(2026, time.January, 2))
 	svc := servicioSimple(repo)
@@ -283,7 +283,7 @@ func TestRenovarLicencias_SinFechaDeRenovacionUsaHoy(t *testing.T) {
 
 func TestRenovarLicencias_ConFechaPasada(t *testing.T) {
 	// "Las renové el 28 de diciembre y recién hoy lo cargo."
-	repo := repoConCarroYPCs(1)
+	repo := repoConCarroYEquipos(1)
 	licenciaCargada(t, repo, "lic-1", "equipo-1", dia(2026, time.January, 2))
 	svc := servicioSimple(repo)
 	renovadaEl := dia(2025, time.December, 28)
@@ -308,7 +308,7 @@ func TestRenovarLicencias_ConFechaPasada(t *testing.T) {
 // impide usar "Renovar" como atajo para sacarse de encima una licencia que
 // nadie verificó.
 func TestRenovarLicencias_LasSinFechaSeInformanNoSeInventan(t *testing.T) {
-	repo := repoConCarroYPCs(2)
+	repo := repoConCarroYEquipos(2)
 	licenciaCargada(t, repo, "lic-1", "equipo-1", dia(2026, time.January, 2))
 	sinFecha, err := domain.NuevaLicencia("lic-2", "equipo-2", "AutoCAD 2027", 30, 1, hoyDeTest)
 	if err != nil {
@@ -346,7 +346,7 @@ func TestRenovarLicencias_SinIDs(t *testing.T) {
 // ── Edición ─────────────────────────────────────────────────────────────
 
 func TestEditarLicencia_CambiarDuracionNoMueveElVencimiento(t *testing.T) {
-	repo := repoConCarroYPCs(1)
+	repo := repoConCarroYEquipos(1)
 	l := licenciaCargada(t, repo, "lic-1", "equipo-1", dia(2026, time.January, 20))
 	vencimientoOriginal := *l.FechaVencimiento
 	svc := servicioSimple(repo)
@@ -371,7 +371,7 @@ func TestEditarLicencia_CambiarDuracionNoMueveElVencimiento(t *testing.T) {
 // "recalcular": cambiar la duración y pedir explícitamente que el
 // vencimiento se rehaga desde la última renovación conocida.
 func TestEditarLicencia_DuracionYRecalculoEnElMismoRequest(t *testing.T) {
-	repo := repoConCarroYPCs(1)
+	repo := repoConCarroYEquipos(1)
 	l := licenciaCargada(t, repo, "lic-1", "equipo-1", dia(2026, time.January, 20))
 	renovadaEl := dia(2025, time.December, 21)
 	l.RenovadaEl(renovadaEl, "admin-1", hoyDeTest)
@@ -396,7 +396,7 @@ func TestEditarLicencia_DuracionYRecalculoEnElMismoRequest(t *testing.T) {
 func TestEditarLicencia_CargarLaFechaPorPrimeraVez(t *testing.T) {
 	// El camino que sí puede darle fecha a una licencia sin verificar: hay
 	// que decir CÓMO se sabe.
-	repo := repoConCarroYPCs(1)
+	repo := repoConCarroYEquipos(1)
 	sinFecha, err := domain.NuevaLicencia("lic-1", "equipo-1", "AutoCAD 2027", 30, 1, hoyDeTest)
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
@@ -427,7 +427,7 @@ func TestEditarLicencia_NoEncontrada(t *testing.T) {
 }
 
 func TestBorrarLicencia(t *testing.T) {
-	repo := repoConCarroYPCs(1)
+	repo := repoConCarroYEquipos(1)
 	licenciaCargada(t, repo, "lic-1", "equipo-1", dia(2026, time.January, 20))
 	svc := servicioSimple(repo)
 	ctx := context.Background()

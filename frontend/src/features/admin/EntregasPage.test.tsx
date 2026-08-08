@@ -79,7 +79,7 @@ describe("EntregasPage", () => {
           reservable: true,
           freezado: false,
           estado: "DISPONIBLE",
-          dadaDeBaja: false,
+          dadoDeBaja: false,
           fechaAlta: "2026-01-01T00:00:00Z",
         },
       ],
@@ -272,7 +272,7 @@ describe("EntregasPage", () => {
    * El aviso de reserva próxima no impide la entrega: el sistema no sabe
    * cuánto va a durar un trámite, así que la decisión es del Admin.
    */
-  it("avisa si el equipo entregada suelta tiene una reserva encima", async () => {
+  it("avisa si el equipo entregado suelta tiene una reserva encima", async () => {
     const user = userEvent.setup()
     vi.mocked(reservasApi.entregarSuelta).mockResolvedValue({
       entregadas: [prestamo()],

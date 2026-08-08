@@ -51,7 +51,7 @@ func nuevoFakeRepo() *fakeRepo {
 func (r *fakeRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) error {
 	for _, existente := range r.prestamos {
 		if existente.EquipoID == p.EquipoID && existente.EstaAbierto() {
-			return application.ErrPCYaPrestada
+			return application.ErrEquipoYaPrestado
 		}
 	}
 	copia := *p
@@ -276,9 +276,6 @@ func (r *fakeRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Ti
 }
 
 func (r *fakeRepo) CrearReglaRecurrencia(ctx context.Context, regla *domain.ReglaRecurrencia) error {
-	return nil
-}
-func (r *fakeRepo) AsignarPCsARegla(ctx context.Context, reglaID string, equipoIDs []string) error {
 	return nil
 }
 func (r *fakeRepo) ListarGruposFuturosDeRegla(ctx context.Context, reglaID string, desde time.Time) ([]*domain.ReservaGrupo, error) {
@@ -672,7 +669,7 @@ func TestHTTP_ListarReservas_UnDocenteSoloVeLasSuyas(t *testing.T) {
 
 // El listado tiene que traer los nombres resueltos y no los UUID de equipo_id y
 // materia_id: con los UUID, "Mis reservas" no puede decir de qué PC ni de
-// qué materia es cada tarjeta, y una reserva de ocho PCs se ve como ocho
+// qué materia es cada tarjeta, y una reserva de ocho equipos se ve como ocho
 // filas idénticas.
 func TestHTTP_ListarReservas_TraeNombresResueltos(t *testing.T) {
 	repo := nuevoFakeRepo()

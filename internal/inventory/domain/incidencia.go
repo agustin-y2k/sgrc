@@ -57,7 +57,7 @@ var ErrDescripcionVacia = errors.New("la descripción de la incidencia no puede 
 // valor en sí sea uno de los cuatro conocidos (ParseEstadoIncidencia).
 type Incidencia struct {
 	ID            string
-	PCID          string
+	EquipoID      string
 	ReportadoPor  *string
 	Descripcion   string
 	Gravedad      Gravedad
@@ -77,7 +77,7 @@ func NuevaIncidencia(id, equipoID, reportadoPor, descripcion string, gravedad Gr
 	}
 	return &Incidencia{
 		ID:           id,
-		PCID:         equipoID,
+		EquipoID:     equipoID,
 		ReportadoPor: reportadoPorPtr,
 		Descripcion:  descripcion,
 		Gravedad:     gravedad,

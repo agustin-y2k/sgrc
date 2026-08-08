@@ -40,7 +40,7 @@ function equipo(over: Partial<Equipo>): Equipo {
     reservable: true,
     freezado: false,
     estado: "DISPONIBLE",
-    dadaDeBaja: false,
+    dadoDeBaja: false,
     fechaAlta: "2026-01-01T00:00:00Z",
     ...over,
   }
@@ -87,12 +87,12 @@ describe("InventarioPage", () => {
     expect(inventoryApi.listarEquiposDeCarro).toHaveBeenCalledWith("c1")
   })
 
-  // RF-03.4: un equipo dada de baja deja de listarse como reservable.
+  // RF-03.4: un equipo dado de baja deja de listarse como reservable.
   it("no muestra los equipos dados de baja", async () => {
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
       data: [
         equipo({ id: "pc1", identificador: 1 }),
-        equipo({ id: "pc2", identificador: 2, dadaDeBaja: true }),
+        equipo({ id: "pc2", identificador: 2, dadoDeBaja: true }),
       ],
     })
     const user = userEvent.setup()

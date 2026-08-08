@@ -538,7 +538,7 @@ func TestRegisterEventHandlers_Cierre_AvisaALosAdminsYAlProximo(t *testing.T) {
 	}
 }
 
-// TestListaDePCs_OrdenNatural: con sort.Strings, "PC 12" iba antes que
+// TestEquiposDeLasCanceladas_OrdenNatural: con sort.Strings, "PC 12" iba antes que
 // "PC 3" porque compara carácter por carácter. El docente lee la lista de
 // sus máquinas, y verlas desordenadas hace dudar de si son las suyas.
 //
@@ -549,7 +549,7 @@ func TestListaDeEquipos_OrdenNatural(t *testing.T) {
 	}
 
 	if got := equiposDeLasCanceladas(reservas); got != "PC 3, PC 7, PC 12" {
-		t.Errorf("listaDePCs = %q, esperaba orden natural", got)
+		t.Errorf("equiposDeLasCanceladas = %q, esperaba orden natural", got)
 	}
 }
 
@@ -560,6 +560,6 @@ func TestListaDeEquipos_ConUnEquipoSuelto(t *testing.T) {
 	}
 
 	if got := equiposDeLasCanceladas(reservas); got != "PC 3, Proyector Epson" {
-		t.Errorf("listaDePCs = %q", got)
+		t.Errorf("equiposDeLasCanceladas = %q", got)
 	}
 }

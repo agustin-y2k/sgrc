@@ -355,7 +355,7 @@ func TestPostgresRepo_Licencia_MarcarAvisosSacaDeLasCandidatas(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_Licencia_PCDadaDeBajaNoAvisa: renovarle la licencia a una
+// TestPostgresRepo_Licencia_EquipoDadoDeBajaNoAvisa: renovarle la licencia a una
 // máquina que ya no está en el inventario no le sirve a nadie.
 func TestPostgresRepo_Licencia_EquipoDadaDeBajaNoAvisa(t *testing.T) {
 	pool := levantarPostgresDeTest(t)

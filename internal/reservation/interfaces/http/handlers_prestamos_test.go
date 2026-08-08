@@ -70,7 +70,7 @@ func TestHTTP_EntregarSuelta_SinNombre(t *testing.T) {
 	}
 }
 
-// TestHTTP_EntregarSuelta_PCYaAfuera: 201 con el detalle en el cuerpo, no
+// TestHTTP_EntregarSuelta_EquipoYaAfuera: 201 con el detalle en el cuerpo, no
 // 409. El lote se procesó; un conflicto obligaría a la pantalla a deshacer
 // las máquinas que sí se entregaron.
 func TestHTTP_EntregarSuelta_EquipoYaAfuera(t *testing.T) {

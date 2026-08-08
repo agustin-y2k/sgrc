@@ -39,7 +39,7 @@ func (r *PostgresRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoft
 		l.AvisadoPrevioPara, l.AvisadoVencimientoPara, l.CreadaEn)
 	if err != nil {
 		// Acá el UNIQUE es uno solo (equipo_id + lower(nombre)), así que a
-		// diferencia de CrearPC no hay ambigüedad sobre cuál se violó.
+		// diferencia de CrearEquipo no hay ambigüedad sobre cuál se violó.
 		if esViolacionUnica(err) {
 			return application.ErrLicenciaDuplicada
 		}

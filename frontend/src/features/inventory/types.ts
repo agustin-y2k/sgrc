@@ -40,7 +40,7 @@ export type Equipo = {
   sistemaOperativo?: string
   softwareInstalado?: string
   estado: EstadoEquipo
-  dadaDeBaja: boolean
+  dadoDeBaja: boolean
   fechaBaja?: string
   fechaAlta: string
 }

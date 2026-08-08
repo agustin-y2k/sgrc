@@ -18,7 +18,7 @@ type Repo interface {
 	// escrituras que haga sobre el Repo que recibe, o no queda ninguna.
 	// Lo necesitan todas las operaciones que tocan más de una fila —
 	// crear un grupo con N reservas, cancelar una serie recurrente
-	// completa, bloquear varias PCs para una evaluación — porque a mitad
+	// completa, bloquear varios equipos para una evaluación — porque a mitad
 	// de camino puede saltar la constraint EXCLUDE y RF-04.5 exige que en
 	// ese caso no quede nada creado.
 	EnTransaccion(ctx context.Context, fn func(Repo) error) error
@@ -100,7 +100,7 @@ type Repo interface {
 	PrestamosAVigilar(ctx context.Context) ([]PrestamoParaVigilar, error)
 
 	// ProximaReservaDeEquipo es a quién le va a faltar esa máquina, con el
-	// contacto resuelto. Existe aparte de ListarReservasFuturasDePC porque
+	// contacto resuelto. Existe aparte de ListarReservasFuturasDeEquipo porque
 	// el corte de fin de jornada necesita MANDARLE UN CORREO al docente, y
 	// esa consulta devuelve reservas peladas: sin dirección, el aviso no
 	// puede salir. Devuelve nil si no hay ninguna.
@@ -130,7 +130,7 @@ type Repo interface {
 	CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) ([]BloqueCalendario, error)
 
 	// ListarEquiposDisponiblesEn implementa el "tildar casillas" de RF-04.2:
-	// qué PCs están libres para un día y franja horaria concretos. Sin
+	// qué equipos están libres para un día y franja horaria concretos. Sin
 	// esto el frontend tendría que pedir el calendario de cada PC por
 	// separado y cruzarlo a mano.
 	ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoDisponible, error)
@@ -179,7 +179,7 @@ type BloqueCalendario struct {
 // curso.
 //
 // Sin esto, "Mis reservas" solo podía mostrar fecha y horario — el DTO
-// devolvía equipo_id y materia_id como UUIDs, así que una reserva de ocho PCs
+// devolvía equipo_id y materia_id como UUIDs, así que una reserva de ocho equipos
 // se veía como ocho tarjetas idénticas e indistinguibles. Mismo criterio
 // que BloqueCalendario: un JOIN de solo lectura, sin importar el domain/
 // de inventory ni el de academic.
@@ -243,7 +243,7 @@ type ValidadorMateria interface {
 type ValidadorEquipo interface {
 	EquipoDisponibleParaReservar(ctx context.Context, equipoID string) (bool, error)
 
-	// EquipoEstaEnInventario es más laxo que PCDisponibleParaReservar: solo
+	// EquipoEstaEnInventario es más laxo que EquipoDisponibleParaReservar: solo
 	// exige que la PC exista y no esté dada de baja, sin mirar su estado.
 	//
 	// Es lo que corresponde para ENTREGAR una máquina, que no es lo mismo
@@ -264,7 +264,7 @@ type ValidadorEquipo interface {
 	//
 	// Es una lectura de una columna, así que la resuelve el propio
 	// infrastructure/ de este paquete con SQL directo sobre `pc`, igual que
-	// PCDisponibleParaReservar — no hace falta pasar por inventory, que es
+	// EquipoDisponibleParaReservar — no hace falta pasar por inventory, que es
 	// lo que sí corresponde cuando hay reglas de negocio en juego (ver el
 	// comentario de las cascadas al final de service.go).
 	EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error)
@@ -347,8 +347,8 @@ type ReservaParaVigilar struct {
 	DocenteNombre string
 	DocenteEmail  string
 
-	RecordatorioEnviado        bool
-	AvisoPCNoDisponibleEnviado bool
+	RecordatorioEnviado            bool
+	AvisoEquipoNoDisponibleEnviado bool
 
 	// EquipoAfuera: hay un préstamo sin devolver sobre esa máquina. Es lo que
 	// distingue "el docente no vino" de "el docente vino y se la llevó", y

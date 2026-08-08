@@ -63,15 +63,15 @@ func NewVigilante(repo Repo, bus eventbus.EventBus, ahora func() time.Time, cfg 
 // ResumenDelBarrido es lo que hizo esta pasada. Se loguea: es la única forma
 // de saber que el barrido está vivo sin mirar la base.
 type ResumenDelBarrido struct {
-	Recordatorios      int
-	Liberadas          int
-	AvisosDePCFaltante int
-	Reclamos           int
-	AvisosDeCierre     int
+	Recordatorios          int
+	Liberadas              int
+	AvisosDeEquipoFaltante int
+	Reclamos               int
+	AvisosDeCierre         int
 }
 
 func (r ResumenDelBarrido) HizoAlgo() bool {
-	return r.Recordatorios+r.Liberadas+r.AvisosDePCFaltante+r.Reclamos+r.AvisosDeCierre > 0
+	return r.Recordatorios+r.Liberadas+r.AvisosDeEquipoFaltante+r.Reclamos+r.AvisosDeCierre > 0
 }
 
 // Barrer corre las cinco pasadas. El orden importa en un solo punto: los
@@ -92,7 +92,7 @@ func (v *Vigilante) Barrer(ctx context.Context) (ResumenDelBarrido, error) {
 	avisadas := map[string]bool{}
 
 	resumen.Recordatorios = v.recordar(ctx, reservas, ahora, avisadas)
-	resumen.AvisosDePCFaltante = v.avisarEquiposQueNoVolvieron(ctx, reservas, ahora, avisadas)
+	resumen.AvisosDeEquipoFaltante = v.avisarEquiposQueNoVolvieron(ctx, reservas, ahora, avisadas)
 	resumen.Liberadas = v.liberarNoRetiradas(ctx, reservas, ahora)
 
 	prestamos, err := v.repo.PrestamosAVigilar(ctx)
@@ -137,7 +137,7 @@ func (v *Vigilante) recordar(ctx context.Context, reservas []ReservaParaVigilar,
 			// La advertencia de la máquina que no volvió viaja DENTRO del
 			// recordatorio: si el docente igual va a recibir un correo por
 			// esta clase, mandarle dos es el bombardeo que se quiso evitar.
-			if v.pcDemorada(r, ahora) && !r.AvisoPCNoDisponibleEnviado {
+			if v.pcDemorada(r, ahora) && !r.AvisoEquipoNoDisponibleEnviado {
 				aviso.EquiposSinDevolver = append(aviso.EquiposSinDevolver, r.Etiqueta)
 				v.marcarAvisoDeEquipo(ctx, r.ReservaID, ahora, avisadas)
 			}
@@ -182,7 +182,7 @@ func (v *Vigilante) avisarEquiposQueNoVolvieron(ctx context.Context, reservas []
 		var faltantes []string
 		var reservaIDs []string
 		for _, r := range grupo {
-			if r.AvisoPCNoDisponibleEnviado || avisadas[r.ReservaID] {
+			if r.AvisoEquipoNoDisponibleEnviado || avisadas[r.ReservaID] {
 				continue
 			}
 			if v.pcDemorada(r, ahora) {

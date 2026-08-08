@@ -47,7 +47,7 @@ func (h *Handler) ListarLicenciasPorEquipo(c *fiber.Ctx) error {
 }
 
 // POST /api/inventory/licencias (Admin) — alta de la misma licencia en
-// varias PCs de una vez.
+// varios equipos de una vez.
 //
 // Responde 201 aunque alguna se haya salteado: el lote se procesó, y qué
 // pasó con cada PC está en el cuerpo. Un 409 acá obligaría a la pantalla a

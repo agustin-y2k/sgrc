@@ -945,7 +945,7 @@ func TestCrearReserva_ConflictoAMitadDelLote_NoDejaGrupoParcial(t *testing.T) {
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	svc := application.NewService(repo,
-		validadorMateriaOK{}, validadorPCOK{}, nombreDocenteFijo{}, NuevoID,
+		validadorMateriaOK{}, validadorEquipoOK{}, nombreDocenteFijo{}, NuevoID,
 		func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	_, _, err := svc.CrearReserva(ctx, materiaID, docenteID, false, fecha,
@@ -983,7 +983,7 @@ func TestCrearReservaRecurrente_ConflictoEnUnaFecha_NoDejaReglaNiGrupos(t *testi
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	svc := application.NewService(repo,
-		validadorMateriaOK{}, validadorPCOK{}, nombreDocenteFijo{}, NuevoID,
+		validadorMateriaOK{}, validadorEquipoOK{}, nombreDocenteFijo{}, NuevoID,
 		func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	// Lunes 3, 10 y 17 de mayo de 2027. Se ocupa de antemano el del medio,
@@ -1039,20 +1039,20 @@ func (validadorMateriaOK) MateriaAceptaReservas(context.Context, string) (bool, 
 	return true, nil
 }
 
-type validadorPCOK struct{}
+type validadorEquipoOK struct{}
 
-func (validadorPCOK) EquipoDisponibleParaReservar(context.Context, string) (bool, error) {
+func (validadorEquipoOK) EquipoDisponibleParaReservar(context.Context, string) (bool, error) {
 	return true, nil
 }
 
-func (validadorPCOK) EquipoEstaEnInventario(context.Context, string) (bool, error) {
+func (validadorEquipoOK) EquipoEstaEnInventario(context.Context, string) (bool, error) {
 	return true, nil
 }
 
 // Estos tests no miran los avisos, así que alcanza con no romper el
 // contrato: la etiqueta real la resuelve ValidadorEquipoPostgres, que tiene su
 // propio test contra la base.
-func (validadorPCOK) EtiquetasDeEquipos(context.Context, []string) (map[string]string, error) {
+func (validadorEquipoOK) EtiquetasDeEquipos(context.Context, []string) (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
@@ -1073,12 +1073,12 @@ func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testi
 	libre := crearEquipoDeCarroDeTest(t, pool)
 	ocupada := crearEquipoDeCarroDeTest(t, pool)
 	enMantenimiento := crearEquipoDeCarroDeTest(t, pool)
-	dadaDeBaja := crearEquipoDeCarroDeTest(t, pool)
+	dadoDeBaja := crearEquipoDeCarroDeTest(t, pool)
 
 	if _, err := pool.Exec(ctx, `UPDATE equipo SET estado='EN_MANTENIMIENTO' WHERE id=$1`, enMantenimiento); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE equipo SET dado_de_baja=true WHERE id=$1`, dadaDeBaja); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE equipo SET dado_de_baja=true WHERE id=$1`, dadoDeBaja); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1122,7 +1122,7 @@ func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testi
 	if contiene(disponibles, enMantenimiento) {
 		t.Error("una PC EN_MANTENIMIENTO no es reservable (RF-03.3)")
 	}
-	if contiene(disponibles, dadaDeBaja) {
+	if contiene(disponibles, dadoDeBaja) {
 		t.Error("una PC dada de baja no es reservable (RF-03.4)")
 	}
 

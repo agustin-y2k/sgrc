@@ -14,11 +14,11 @@ import (
 )
 
 type fakeRepo struct {
-	usoPCs           []domain.ResumenUsoEquipo
-	usoDocentes      []domain.ResumenUsoDocente
-	historicoPC      []*domain.HistoricoUsoEquipo
-	incidenciasPC    []domain.ResumenIncidenciasEquipo
-	incidenciasCarro []domain.ResumenIncidenciasCarro
+	usoEquipos        []domain.ResumenUsoEquipo
+	usoDocentes       []domain.ResumenUsoDocente
+	historicoEquipo   []*domain.HistoricoUsoEquipo
+	incidenciasEquipo []domain.ResumenIncidenciasEquipo
+	incidenciasCarro  []domain.ResumenIncidenciasCarro
 }
 
 func (r *fakeRepo) GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.HistoricoUsoEquipo) error {
@@ -28,21 +28,21 @@ func (r *fakeRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain.His
 	return nil
 }
 func (r *fakeRepo) ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error) {
-	return r.historicoPC, nil
+	return r.historicoEquipo, nil
 }
 func (r *fakeRepo) ListarHistoricoUsoDocentePorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoDocente, error) {
 	return nil, nil
 }
 func (r *fakeRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoEquipo, error) {
-	return r.usoPCs, nil
+	return r.usoEquipos, nil
 }
 func (r *fakeRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoDocente, error) {
 	return r.usoDocentes, nil
 }
 
-type fakeInfoPC struct{}
+type fakeInfoEquipo struct{}
 
-func (f *fakeInfoPC) EtiquetaYCarroDe(ctx context.Context, equipoID string) (string, int, string, error) {
+func (f *fakeInfoEquipo) EtiquetaYCarroDe(ctx context.Context, equipoID string) (string, int, string, error) {
 	return "PC 1", 1, "Carro 1", nil
 }
 
@@ -63,7 +63,7 @@ var testSecret = []byte("un-secreto-de-test-bastante-largo")
 
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	contadorID = 0
-	svc := application.NewService(repo, &fakeInfoPC{}, &fakeInfoUsuario{}, idSecuencial)
+	svc := application.NewService(repo, &fakeInfoEquipo{}, &fakeInfoUsuario{}, idSecuencial)
 	h := NewHandler(svc)
 
 	app := fiber.New()
@@ -83,10 +83,10 @@ func tokenPara(id, rol string) string {
 	return registroDePrueba.Token(testSecret, id, rol)
 }
 
-// ── ReporteUsoPCs / ReporteUsoDocentes ──────────────────────────────────
+// ── ReporteUsoEquipos / ReporteUsoDocentes ──────────────────────────────
 
 func TestHTTP_ReporteUsoEquipos_ComoAdmin_OK(t *testing.T) {
-	repo := &fakeRepo{usoPCs: []domain.ResumenUsoEquipo{{EquipoID: "pc1", CantidadReservas: 5, MinutosReservados: 300}}}
+	repo := &fakeRepo{usoEquipos: []domain.ResumenUsoEquipo{{EquipoID: "pc1", CantidadReservas: 5, MinutosReservados: 300}}}
 	app := nuevaAppDeTest(repo)
 
 	req := httptest.NewRequest("GET", "/api/reporting/ciclos/ciclo1/uso-equipos", nil)
@@ -138,10 +138,10 @@ func TestHTTP_ReporteUsoDocentes_ComoAdmin_OK(t *testing.T) {
 	}
 }
 
-// ── HistoricoUsoPCs / HistoricoUsoDocentes ──────────────────────────────
+// ── HistoricoUsoEquipos / HistoricoUsoDocentes ──────────────────────────
 
 func TestHTTP_HistoricoUsoEquipos_ComoAdmin_OK(t *testing.T) {
-	repo := &fakeRepo{historicoPC: []*domain.HistoricoUsoEquipo{{ID: "h1", Anio: 2025, EquipoID: "pc1"}}}
+	repo := &fakeRepo{historicoEquipo: []*domain.HistoricoUsoEquipo{{ID: "h1", Anio: 2025, EquipoID: "pc1"}}}
 	app := nuevaAppDeTest(repo)
 
 	req := httptest.NewRequest("GET", "/api/reporting/historico/2025/uso-equipos", nil)
@@ -181,7 +181,7 @@ func TestHTTP_HistoricoUsoDocentes_ComoDocente_403(t *testing.T) {
 }
 
 func (r *fakeRepo) CalcularIncidenciasPorEquipo(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasEquipo, error) {
-	return r.incidenciasPC, nil
+	return r.incidenciasEquipo, nil
 }
 
 func (r *fakeRepo) CalcularIncidenciasPorCarro(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasCarro, error) {

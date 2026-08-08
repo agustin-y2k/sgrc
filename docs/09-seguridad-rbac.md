@@ -85,11 +85,11 @@ de la base al verificar la cuenta (§1).
 | Promover un docente a Admin | ✅ | ❌ |
 | Quitarle el rol Admin a otro Admin | ✅ | ❌ |
 | Crear/editar carros | ✅ | ❌ |
-| Registrar/editar PCs, dar de baja una PC | ✅ | ❌ |
-| Ver inventario (carros/PCs, incl. software instalado y freezado) | ✅ | ✅ |
-| Cambiar estado de PC | ✅ | ❌ |
+| Registrar/editar equipos, dar de baja un equipo | ✅ | ❌ |
+| Ver inventario (carros y equipos, incl. software instalado y freezado) | ✅ | ✅ |
+| Cambiar estado de un equipo | ✅ | ❌ |
 | Registrar incidencia | ✅ | ✅ solo reportar |
-| Ver el historial de incidencias de una PC | ✅ | ✅ |
+| Ver el historial de incidencias de un equipo | ✅ | ✅ |
 | Cambiar estado de incidencia / marcar envío a DGE | ✅ | ❌ |
 | Aprobar cuentas de docentes | ✅ | ❌ |
 | Resetear contraseña de un usuario | ✅ | ❌ |
@@ -99,13 +99,13 @@ de la base al verificar la cuenta (§1).
 | Gestionar ciclos, cursos, materias (crear, editar, eliminar sin reservas) | ✅ | ❌ |
 | Archivar y clonar ciclo lectivo | ✅ | ❌ |
 | Asignar docentes a materias | ✅ | ❌ |
-| Ver calendario de PC | ✅ | ✅ |
+| Ver calendario de un equipo | ✅ | ✅ |
 | Reservar para cualquier materia | ✅ | ❌ |
 | Reservar para materia asignada | ✅ | ✅ solo asignadas |
-| Cancelar reserva propia (una PC o el grupo completo) | ✅ | ✅ |
+| Cancelar reserva propia (un equipo o el grupo completo) | ✅ | ✅ |
 | Cancelar reserva ajena (con motivo) | ✅ | ❌ |
 | Ver una reserva puntual (`GET /grupos/{id}`) | ✅ | ✅ solo propias |
-| Bloquear PCs para evaluación | ✅ | ❌ |
+| Bloquear equipos para evaluación | ✅ | ❌ |
 | Ver reportes (activos e históricos) | ✅ | ❌ |
 | Ver notificaciones propias | ✅ | ✅ |
 | Configurar mi horario de disponibilidad | ✅ | ❌ |

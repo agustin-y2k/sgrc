@@ -41,7 +41,7 @@ func (v *ValidadorMateriaPostgres) DocenteEstaAsignado(ctx context.Context, mate
 	return existe, nil
 }
 
-// ── ValidadorPC (puerto hacia inventory) ────────────────────────────────
+// ── ValidadorEquipo (puerto hacia inventory) ────────────────────────────
 
 var _ application.ValidadorEquipo = (*ValidadorEquipoPostgres)(nil)
 
@@ -57,10 +57,10 @@ func NewValidadorEquipoPostgres(pool *pgxpool.Pool) *ValidadorEquipoPostgres {
 
 func (v *ValidadorEquipoPostgres) EquipoDisponibleParaReservar(ctx context.Context, equipoID string) (bool, error) {
 	var estado string
-	var dadaDeBaja, reservable bool
+	var dadoDeBaja, reservable bool
 	err := v.pool.QueryRow(ctx,
 		`SELECT estado, dado_de_baja, reservable FROM equipo WHERE id = $1`, equipoID,
-	).Scan(&estado, &dadaDeBaja, &reservable)
+	).Scan(&estado, &dadoDeBaja, &reservable)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil // no existe → no disponible, pero no es un error
@@ -73,16 +73,16 @@ func (v *ValidadorEquipoPostgres) EquipoDisponibleParaReservar(ctx context.Conte
 	// `reservable` es la mitad que agrega la 015: la lista de disponibles ya
 	// lo filtra, pero un pedido armado a mano no pasa por esa lista, y sin
 	// este chequeo se podría reservar un cargador igual.
-	return estado == "DISPONIBLE" && !dadaDeBaja && reservable, nil
+	return estado == "DISPONIBLE" && !dadoDeBaja && reservable, nil
 }
 
 // EquipoEstaEnInventario: existe y no está dada de baja, sin mirar el estado.
 // Ver el comentario del puerto: entregar no es lo mismo que reservar.
 func (v *ValidadorEquipoPostgres) EquipoEstaEnInventario(ctx context.Context, equipoID string) (bool, error) {
-	var dadaDeBaja bool
+	var dadoDeBaja bool
 	err := v.pool.QueryRow(ctx,
 		`SELECT dado_de_baja FROM equipo WHERE id = $1`, equipoID,
-	).Scan(&dadaDeBaja)
+	).Scan(&dadoDeBaja)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
@@ -92,10 +92,10 @@ func (v *ValidadorEquipoPostgres) EquipoEstaEnInventario(ctx context.Context, eq
 		}
 		return false, fmt.Errorf("verificando si el equipo está en el inventario: %w", err)
 	}
-	return !dadaDeBaja, nil
+	return !dadoDeBaja, nil
 }
 
-// IdentificadoresDePCs: el número visible de cada PC, para los avisos de
+// EtiquetasDeEquipos: cómo se nombra cada equipo, para los avisos de
 // cancelación. Una sola consulta con = ANY en vez de una por PC — un
 // bloqueo por evaluación sobre un carro entero puede tocar treinta.
 func (v *ValidadorEquipoPostgres) EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error) {
