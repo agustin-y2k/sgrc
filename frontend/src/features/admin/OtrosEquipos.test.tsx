@@ -39,6 +39,11 @@ describe("OtrosEquipos", () => {
     vi.clearAllMocks()
     vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.crearEquipoSuelto).mockResolvedValue(equipo())
+    vi.mocked(adminApi.editarEquipo).mockResolvedValue(undefined)
+    vi.mocked(adminApi.darDeBajaEquipo).mockResolvedValue({
+      reservasCanceladas: 0,
+      docentesNotificados: 0,
+    })
   })
 
   it("muestra los equipos con y sin carro por igual", async () => {
@@ -134,6 +139,119 @@ describe("OtrosEquipos", () => {
       "CARGADOR",
       "PROYECTOR",
     ])
+  })
+
+  /**
+   * Sin esto, un cargador cargado con el nombre mal escrito quedaba así para
+   * siempre: la única salida era darlo de baja y volver a crearlo, que además
+   * le corta el historial de préstamos.
+   */
+  it("corrige lo que se cargó mal", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Editar" }))
+    const nombre = screen.getByLabelText("¿Cómo lo llaman?")
+    await user.clear(nombre)
+    await user.type(nombre, "Proyector del SUM")
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+
+    expect(adminApi.editarEquipo).toHaveBeenCalledWith("eq1", {
+      tipo: "PROYECTOR",
+      nombre: "Proyector del SUM",
+      reservable: true,
+    })
+  })
+
+  it("el formulario arranca con lo que el equipo ya tenía", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Editar" }))
+
+    expect(screen.getByLabelText("¿Qué es?")).toHaveValue("PROYECTOR")
+    expect(screen.getByLabelText("¿Cómo lo llaman?")).toHaveValue("Proyector Epson")
+    expect(screen.getByRole("checkbox", { name: /Se puede reservar/ })).toBeChecked()
+  })
+
+  /**
+   * Destildar "se puede reservar" no cancela las reservas que ya existen —el
+   * backend solo lo saca de la lista de libres—. Si la pantalla no lo dice,
+   * el Admin cree que las canceló.
+   */
+  it("avisa que quitar lo reservable no toca las reservas ya hechas", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Editar" }))
+    await user.click(screen.getByRole("checkbox", { name: /Se puede reservar/ }))
+
+    expect(screen.getByText(/Las reservas que ya tenga siguen en pie/)).toBeInTheDocument()
+  })
+
+  it("da de baja pidiendo confirmación primero", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Dar de baja" }))
+    expect(adminApi.darDeBajaEquipo).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole("button", { name: "Confirmar baja" }))
+    expect(adminApi.darDeBajaEquipo).toHaveBeenCalledWith("eq1")
+  })
+
+  /**
+   * El backend rechaza la baja de algo que está afuera: dejaría el préstamo
+   * abierto sin ninguna pantalla desde donde cerrarlo. La advertencia dice de
+   * antemano cuál es la salida, para no toparse con el error.
+   */
+  it("advierte qué pasa si el equipo está prestado", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Dar de baja" }))
+
+    expect(screen.getByText(/marcá primero que volvió/)).toBeInTheDocument()
+  })
+
+  /**
+   * Dar de baja un proyector reservado cancela clases de otros. El backend ya
+   * devuelve la cuenta; no mostrarla dejaba al Admin sin saber qué se llevó
+   * puesto.
+   */
+  it("dice cuántas reservas se cancelaron al dar de baja", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(adminApi.darDeBajaEquipo).mockResolvedValue({
+      reservasCanceladas: 3,
+      docentesNotificados: 2,
+    })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Dar de baja" }))
+    await user.click(screen.getByRole("button", { name: "Confirmar baja" }))
+
+    expect(
+      await screen.findByText(/Se cancelaron 3 reservas y se avisó a 2 docentes/)
+    ).toBeInTheDocument()
+  })
+
+  // Sin reservas afectadas no hay nada que informar: un cartel que dice
+  // "se cancelaron 0 reservas" es ruido en el caso normal.
+  it("no dice nada si la baja no canceló ninguna reserva", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Dar de baja" }))
+    await user.click(screen.getByRole("button", { name: "Confirmar baja" }))
+
+    expect(screen.queryByText(/Se cancelaron/)).not.toBeInTheDocument()
   })
 
   it("explica el estado cuando no hay ninguno", async () => {

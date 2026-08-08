@@ -439,12 +439,20 @@ func (r *fakeRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoID st
 // El filtro temporal (que la reserva no haya terminado) NO se reproduce acá
 // —lo verifica el test de infrastructure contra Postgres—, así que los tests
 // de este paquete usan fechas futuras a propósito.
+// Filtra igual que el repo real: solo CONFIRMADA y solo lo que todavía no
+// terminó. Sin esas dos condiciones el fake es más permisivo que la base, y
+// un test que dependa de ellas pasa acá y falla en producción — que es
+// exactamente al revés de para qué sirve un fake.
 func (r *fakeRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipoID string, desde time.Time) ([]*domain.Reserva, error) {
 	var resultado []*domain.Reserva
 	for _, res := range r.reservas {
-		if res.EquipoID == equipoID {
-			resultado = append(resultado, res)
+		if res.EquipoID != equipoID || res.Estado != domain.ReservaConfirmada {
+			continue
 		}
+		if domain.YaTermino(res.Fecha, res.HoraFin, desde) {
+			continue
+		}
+		resultado = append(resultado, res)
 	}
 	sort.Slice(resultado, func(i, j int) bool {
 		if !resultado[i].Fecha.Equal(resultado[j].Fecha) {
@@ -514,10 +522,26 @@ type fakeValidadorEquipo struct {
 	// fueraDelInventario: PCs dadas de baja. Es lo único que distingue
 	// "no se puede reservar" de "no se puede ni entregar".
 	fueraDelInventario map[string]bool
+	// Los dos contadores existen para poder afirmar que la validación de un
+	// lote es UNA consulta y no una por equipo.
+	vecesNoReservables    int
+	vecesDisponibleDeAUna int
 }
 
 func (f *fakeValidadorEquipo) EquipoDisponibleParaReservar(ctx context.Context, equipoID string) (bool, error) {
+	f.vecesDisponibleDeAUna++
 	return f.disponible, nil
+}
+
+// EquiposNoReservables: la versión de lote, coherente con la de a una. El
+// fake tiene que respetar esa coherencia o los tests que usan una y otra
+// dirían cosas distintas sobre el mismo equipo.
+func (f *fakeValidadorEquipo) EquiposNoReservables(ctx context.Context, equipoIDs []string) ([]string, error) {
+	f.vecesNoReservables++
+	if f.disponible {
+		return nil, nil
+	}
+	return equipoIDs, nil
 }
 
 // EquipoEstaEnInventario es más laxo: una PC en mantenimiento no se puede
@@ -2088,5 +2112,79 @@ func TestTieneReservasFuturasDeEquipo_DespuesDeLaCascada_False(t *testing.T) {
 	}
 	if tiene {
 		t.Error("después de la cascada no queda nada pendiente: esperaba false")
+	}
+}
+
+// ── Tamaño del lote ─────────────────────────────────────────────────────
+
+// El pedido lo arma el cliente, así que el tamaño del lote es entrada como
+// cualquier otra. Sin tope, mandar diez mil identificadores hace que el
+// servidor intente diez mil filas en una transacción.
+func TestCrearReserva_DemasiadosEquipos_SeRechaza(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo)
+
+	muchos := make([]string, MaxEquiposPorOperacion+1)
+	for i := range muchos {
+		muchos[i] = fmt.Sprintf("pc%d", i)
+	}
+
+	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+		fecha(2026, time.March, 3), 8*time.Hour, 9*time.Hour, muchos)
+
+	if !errors.Is(err, ErrDemasiadosEquipos) {
+		t.Fatalf("esperaba ErrDemasiadosEquipos, obtuve %v", err)
+	}
+	// Se corta ANTES de tocar la base: validar el tamaño después de haber
+	// consultado por cada elemento sería llegar tarde.
+	if len(repo.reservas) != 0 {
+		t.Error("no tendría que haber creado ninguna reserva")
+	}
+}
+
+// El tope no puede molestar al uso real: un carro entero tiene que entrar.
+func TestCrearReserva_UnCarroEnteroEntraSinProblema(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo)
+
+	carro := make([]string, 64)
+	for i := range carro {
+		carro[i] = fmt.Sprintf("pc%d", i)
+	}
+
+	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+		fecha(2026, time.March, 3), 8*time.Hour, 9*time.Hour, carro)
+
+	if err != nil {
+		t.Fatalf("64 equipos tienen que entrar: %v", err)
+	}
+	if len(reservas) != 64 {
+		t.Errorf("esperaba 64 reservas, obtuve %d", len(reservas))
+	}
+}
+
+// La validación de disponibilidad pasó a ser una sola consulta de lote: con
+// un bucle, un bloqueo sobre un carro entero eran 64 idas a la base antes de
+// escribir la primera fila.
+func TestCrearReserva_ValidaLaDisponibilidadEnUnaSolaConsulta(t *testing.T) {
+	repo := nuevoFakeRepo()
+	validador := &fakeValidadorEquipo{disponible: true}
+	svc := servicioConValidador(repo, validador)
+
+	carro := make([]string, 64)
+	for i := range carro {
+		carro[i] = fmt.Sprintf("pc%d", i)
+	}
+
+	if _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+		fecha(2026, time.March, 3), 8*time.Hour, 9*time.Hour, carro); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if validador.vecesNoReservables != 1 {
+		t.Errorf("esperaba 1 consulta de lote, hubo %d", validador.vecesNoReservables)
+	}
+	if validador.vecesDisponibleDeAUna != 0 {
+		t.Errorf("no tendría que preguntar de a una: %d veces", validador.vecesDisponibleDeAUna)
 	}
 }

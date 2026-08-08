@@ -47,13 +47,23 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
       }),
     onSuccess: async (respuesta) => {
       const noSalieron = respuesta.noEntregadas ?? []
-      setResumen(
+      const partes = [
         noSalieron.length === 0
-          ? `Salieron ${respuesta.entregadas.length} computadora(s).`
+          ? `Salieron ${respuesta.entregadas.length} equipo(s).`
           : `Salieron ${respuesta.entregadas.length}. No salieron ${noSalieron.length}: ${noSalieron
               .map((n) => n.detalle)
-              .join("; ")}`
-      )
+              .join("; ")}`,
+      ]
+      // Solo llega cuando se entregó contra una reserva ya liberada: en el
+      // rato que el equipo estuvo libre, otro pudo reservarlo. No impide la
+      // entrega —el que llegó tarde igual necesita la máquina— pero el Admin
+      // tiene que saber que se la está sacando a alguien.
+      for (const a of respuesta.avisos ?? []) {
+        partes.push(
+          `Ojo: ese equipo tiene reserva ${a.fecha} de ${a.horaInicio} a ${a.horaFin}${a.docente ? ` (${a.docente})` : ""}.`
+        )
+      }
+      setResumen(partes.join(" "))
       setMarcadas(new Set())
       setNombreAlternativo("")
       await queryClient.invalidateQueries({ queryKey: PRESTAMOS_KEY })

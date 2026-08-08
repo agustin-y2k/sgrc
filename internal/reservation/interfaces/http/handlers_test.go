@@ -308,6 +308,16 @@ func (f *fakeValidadorEquipo) EquipoDisponibleParaReservar(ctx context.Context, 
 	return f.disponible, nil
 }
 
+// EquiposNoReservables: la versión de lote, coherente con la de a una. El
+// fake tiene que respetar esa coherencia o los tests que usan una y otra
+// dirían cosas distintas sobre el mismo equipo.
+func (f *fakeValidadorEquipo) EquiposNoReservables(ctx context.Context, equipoIDs []string) ([]string, error) {
+	if f.disponible {
+		return nil, nil
+	}
+	return equipoIDs, nil
+}
+
 // EquipoEstaEnInventario es más laxo: una PC en mantenimiento no se puede
 // reservar pero sí se le puede entregar al técnico.
 func (f *fakeValidadorEquipo) EquipoEstaEnInventario(ctx context.Context, equipoID string) (bool, error) {

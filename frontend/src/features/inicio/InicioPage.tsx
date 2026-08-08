@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth } from "@/features/auth/AuthContext"
@@ -17,6 +18,7 @@ import { useNoLeidas } from "@/features/notificaciones/useNoLeidas"
 import * as reservasApi from "@/features/reservas/api"
 import { agruparReservas, hoyISO } from "@/features/reservas/types"
 import { formatearFechaLargaCapitalizada } from "@/lib/fechas"
+import { getErrorMessage } from "@/lib/api-client"
 import type { GrupoDeReservas } from "@/features/reservas/types"
 
 /**
@@ -50,7 +52,13 @@ function Indicador({
   a,
   destacado,
 }: {
-  valor: number
+  /**
+   * null cuando la consulta que lo alimenta falló. No es lo mismo que cero:
+   * "no hay nada afuera" y "no pude preguntar qué hay afuera" llevan a
+   * decisiones distintas en el mostrador, y mostrar 0 en el segundo caso es
+   * afirmar algo que el sistema no sabe.
+   */
+  valor: number | null
   rotulo: string
   detalle: string
   a: string
@@ -67,7 +75,9 @@ function Indicador({
           : "bg-superficie hover:bg-muted",
       ].join(" ")}
     >
-      <p className="text-3xl font-semibold tabular-nums">{valor}</p>
+      <p className="text-3xl font-semibold tabular-nums">
+        {valor ?? <span className="text-muted-foreground">—</span>}
+      </p>
       <p className="mt-0.5 text-sm font-medium">{rotulo}</p>
       <p className="text-muted-foreground text-xs">{detalle}</p>
     </Link>
@@ -113,7 +123,7 @@ export function InicioPage() {
 
   // Desde hoy en adelante: lo que ya pasó no ayuda a nadie a organizarse.
   // El backend ya limita al docente a sus propias reservas.
-  const { data: reservas } = useQuery({
+  const { data: reservas, error: errorReservas } = useQuery({
     queryKey: ["reservas", "proximas", hoy],
     queryFn: () => reservasApi.listarReservas({ desde: hoy }),
   })
@@ -121,7 +131,7 @@ export function InicioPage() {
   // Lo que está afuera del laboratorio: alimenta el indicador y el
   // formulario de entrega suelta, que necesita saber qué máquinas NO
   // ofrecer. Solo para Admin — un docente no tiene por qué verlo.
-  const { data: prestamos } = useQuery({
+  const { data: prestamos, error: errorPrestamos } = useQuery({
     queryKey: PRESTAMOS_KEY,
     queryFn: reservasApi.listarPrestamosAbiertos,
     enabled: esAdmin,
@@ -129,7 +139,7 @@ export function InicioPage() {
   })
 
   // Solo un Admin puede listar usuarios; para un docente ni se pregunta.
-  const { data: pendientes } = useQuery({
+  const { data: pendientes, error: errorPendientes } = useQuery({
     queryKey: ["admin", "usuarios", "PENDIENTE"],
     queryFn: () => adminApi.listarUsuarios({ estado: "PENDIENTE" }),
     enabled: esAdmin,
@@ -145,12 +155,21 @@ export function InicioPage() {
     )
     .slice(0, 5)
 
-  const deHoy = grupos.filter((g) => g.fecha === hoy).length
-  const cuentasPendientes = pendientes?.meta.total ?? 0
+  // Cada número sale en null si su consulta falló, para que el indicador
+  // muestre "—" en vez de un cero inventado. Sin esto, un fallo de red se
+  // leía como "no hay ninguna computadora afuera del laboratorio".
+  const deHoy = errorReservas ? null : grupos.filter((g) => g.fecha === hoy).length
+  const cuentasPendientes = errorPendientes ? null : (pendientes?.meta.total ?? 0)
 
   const afuera = prestamos?.data ?? []
-  const sinDevolverAHorario = afuera.filter((p) => p.demorado).length
+  const sinDevolverAHorario = errorPrestamos
+    ? null
+    : afuera.filter((p) => p.demorado).length
   const yaAfuera = useMemo(() => new Set(afuera.map((p) => p.equipoId)), [afuera])
+
+  // Un solo aviso para las tres: al que está en el mostrador le importa que
+  // lo que ve puede estar incompleto, no cuál de las consultas falló.
+  const algoFallo = errorReservas ?? errorPrestamos ?? errorPendientes
 
   return (
     <div className="grid gap-6">
@@ -166,13 +185,26 @@ export function InicioPage() {
         </p>
       </div>
 
+      {/* Lo que esta pantalla NO puede hacer es callarse un fallo: sin este
+          aviso, una consulta caída se leía como "no hay nada" —ninguna clase
+          hoy, ninguna computadora afuera— y eso manda al Admin a cerrar el
+          laboratorio con ocho máquinas todavía prestadas. */}
+      {algoFallo && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            No se pudo consultar todo: lo que ves acá puede estar incompleto. Probá
+            recargar. ({getErrorMessage(algoFallo)})
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Dos columnas en un teléfono y no una sola: son números cortos, y
           apilados obligaban a bajar para ver el último. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Indicador
           valor={deHoy}
           rotulo={deHoy === 1 ? "clase hoy" : "clases hoy"}
-          detalle="Con Equipos reservadas"
+          detalle={errorReservas ? "No se pudo consultar" : "Con equipos reservados"}
           a="/reservas"
         />
         {/* Para el Admin, "afuera" reemplaza a "próximas": lo que viene ya
@@ -181,21 +213,23 @@ export function InicioPage() {
             laboratorio. */}
         {esAdmin ? (
           <Indicador
-            valor={afuera.length}
+            valor={errorPrestamos ? null : afuera.length}
             rotulo="afuera"
             detalle={
-              sinDevolverAHorario > 0
-                ? `${sinDevolverAHorario} sin devolver a horario`
-                : "Computadoras entregadas"
+              errorPrestamos
+                ? "No se pudo consultar"
+                : sinDevolverAHorario
+                  ? `${sinDevolverAHorario} sin devolver a horario`
+                  : "Equipos entregados"
             }
             a="/admin/entregas"
-            destacado={sinDevolverAHorario > 0}
+            destacado={!!sinDevolverAHorario}
           />
         ) : (
           <Indicador
-            valor={grupos.length}
+            valor={errorReservas ? null : grupos.length}
             rotulo="próximas"
-            detalle="Reservas por venir"
+            detalle={errorReservas ? "No se pudo consultar" : "Reservas por venir"}
             a="/reservas"
           />
         )}
@@ -203,9 +237,9 @@ export function InicioPage() {
           <Indicador
             valor={cuentasPendientes}
             rotulo="por aprobar"
-            detalle="Cuentas de docentes"
+            detalle={errorPendientes ? "No se pudo consultar" : "Cuentas de docentes"}
             a="/admin/aprobacion"
-            destacado={cuentasPendientes > 0}
+            destacado={!!cuentasPendientes && cuentasPendientes > 0}
           />
         )}
         <Indicador

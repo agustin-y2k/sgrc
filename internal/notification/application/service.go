@@ -10,6 +10,7 @@ import (
 
 	"github.com/ramiro/sgrc/internal/notification/domain"
 	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"strings"
 )
 
 type Service struct {
@@ -40,6 +41,17 @@ func (s *Service) NotificarUsuario(ctx context.Context, usuarioID, mensaje strin
 // NotificarATodosLosAdmins implementa el patrón que usan RF-05.4/05.5/05.6
 // — un evento le llega a TODOS los Admin en estado APROBADA, no a uno
 // solo. Devuelve cuántas notificaciones se crearon.
+//
+// Un fallo no corta a los que faltan: se intenta con todos y los errores se
+// juntan para el final. Cortando en el primero, un problema puntual con un
+// Admin —su cuenta borrada entre el listado y la inserción, por ejemplo—
+// dejaba a los siguientes sin enterarse de una cuenta esperando aprobación
+// o de una máquina que no volvió. Es el mismo criterio que ya usaba el envío
+// de correos (ver enviarATodosLosAdmins en correos.go): que uno falle no es
+// razón para que los otros tres se queden sin el aviso.
+//
+// El error se devuelve igual, así que el suscriptor lo registra en el log y
+// queda constancia de a quién no se le pudo avisar.
 func (s *Service) NotificarATodosLosAdmins(ctx context.Context, mensaje string, tipo domain.Tipo, ref domain.Referencias) (int, error) {
 	adminIDs, err := s.listadorAdmins.IDsDeAdminsAprobados(ctx)
 	if err != nil {
@@ -47,11 +59,17 @@ func (s *Service) NotificarATodosLosAdmins(ctx context.Context, mensaje string, 
 	}
 
 	creadas := 0
+	var fallidos []string
 	for _, adminID := range adminIDs {
 		if _, err := s.NotificarUsuario(ctx, adminID, mensaje, tipo, ref); err != nil {
-			return creadas, err
+			fallidos = append(fallidos, fmt.Sprintf("%s (%v)", adminID, err))
+			continue
 		}
 		creadas++
+	}
+	if len(fallidos) > 0 {
+		return creadas, fmt.Errorf("no se pudo notificar a %d de %d admins: %s",
+			len(fallidos), len(adminIDs), strings.Join(fallidos, "; "))
 	}
 	return creadas, nil
 }
