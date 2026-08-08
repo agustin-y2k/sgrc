@@ -12,11 +12,17 @@ vi.mock("@/features/admin/api")
 vi.mock("@/features/inventory/api")
 
 function pc(over: Partial<PC> = {}): PC {
+  // La etiqueta la resuelve el backend a partir del identificador; acá se
+  // deriva del override para que no queden inconsistentes.
+  const identificador = over.identificador ?? 1
   return {
     id: "pc1",
     carroId: "c1",
     identificador: 1,
     numeroSerie: "5CD1234ABC",
+    etiqueta: `PC ${identificador}`,
+    tipo: "PC",
+    reservable: true,
     freezado: false,
     estado: "DISPONIBLE",
     dadaDeBaja: false,

@@ -92,11 +92,11 @@ func (s *Service) ArchivarSnapshotDeCiclo(ctx context.Context, cicloID string, a
 		return fmt.Errorf("calculando uso de PCs: %w", err)
 	}
 	for _, u := range usosPC {
-		identificador, carroNombre, err := s.infoPC.IdentificadorYCarroDe(ctx, u.PCID)
+		etiqueta, identificador, carroNombre, err := s.infoPC.EtiquetaYCarroDe(ctx, u.PCID)
 		if err != nil {
 			return fmt.Errorf("obteniendo datos de la PC %s: %w", u.PCID, err)
 		}
-		h, err := domain.NuevoHistoricoUsoPC(s.nuevoID(), anio, u.PCID, identificador, carroNombre, u.MinutosReservados, u.CantidadReservas)
+		h, err := domain.NuevoHistoricoUsoPC(s.nuevoID(), anio, u.PCID, etiqueta, identificador, carroNombre, u.MinutosReservados, u.CantidadReservas)
 		if err != nil {
 			return err
 		}

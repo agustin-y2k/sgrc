@@ -6,7 +6,7 @@ import (
 )
 
 func TestNuevoHistoricoUsoPC_OK(t *testing.T) {
-	h, err := NuevoHistoricoUsoPC("id1", 2026, "pc1", 27, "Carro 1", 900, 12)
+	h, err := NuevoHistoricoUsoPC("id1", 2026, "pc1", "PC 27", 27, "Carro 1", 900, 12)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -16,14 +16,14 @@ func TestNuevoHistoricoUsoPC_OK(t *testing.T) {
 }
 
 func TestNuevoHistoricoUsoPC_MinutosNegativos_Error(t *testing.T) {
-	_, err := NuevoHistoricoUsoPC("id1", 2026, "pc1", 27, "Carro 1", -30, 5)
+	_, err := NuevoHistoricoUsoPC("id1", 2026, "pc1", "PC 27", 27, "Carro 1", -30, 5)
 	if !errors.Is(err, ErrValorNegativo) {
 		t.Fatalf("esperaba ErrValorNegativo, obtuve %v", err)
 	}
 }
 
 func TestNuevoHistoricoUsoPC_CantidadNegativa_Error(t *testing.T) {
-	_, err := NuevoHistoricoUsoPC("id1", 2026, "pc1", 27, "Carro 1", 30, -1)
+	_, err := NuevoHistoricoUsoPC("id1", 2026, "pc1", "PC 27", 27, "Carro 1", 30, -1)
 	if !errors.Is(err, ErrValorNegativo) {
 		t.Fatalf("esperaba ErrValorNegativo, obtuve %v", err)
 	}
@@ -32,7 +32,7 @@ func TestNuevoHistoricoUsoPC_CantidadNegativa_Error(t *testing.T) {
 func TestNuevoHistoricoUsoPC_Cero_OK(t *testing.T) {
 	// Caso límite: una PC que existía pero nunca se reservó en todo el
 	// año — cantidad y minutos en cero, no debería ser un error.
-	h, err := NuevoHistoricoUsoPC("id1", 2026, "pc1", 27, "Carro 1", 0, 0)
+	h, err := NuevoHistoricoUsoPC("id1", 2026, "pc1", "PC 27", 27, "Carro 1", 0, 0)
 	if err != nil {
 		t.Fatalf("cero no debería ser un error: %v", err)
 	}

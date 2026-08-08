@@ -14,29 +14,34 @@ import (
 
 var ErrValorNegativo = errors.New("la cantidad de reservas y los minutos no pueden ser negativos")
 
-// HistoricoUsoPC es el snapshot permanente de cuánto se usó una PC en un
+// HistoricoUsoPC es el snapshot permanente de cuánto se usó un equipo en un
 // año lectivo ya archivado (RF-02.4/06.3) — se crea una única vez, en el
-// momento de archivar, y nunca se vuelve a modificar. IdentificadorSnapshot
-// y CarroNombreSnapshot quedan "congelados" tal como estaban en ese
-// momento, porque la PC puede moverse de carro o renumerarse después, y
-// el histórico no debe cambiar retroactivamente.
+// momento de archivar, y nunca se vuelve a modificar. EtiquetaSnapshot,
+// IdentificadorSnapshot y CarroNombreSnapshot quedan "congelados" tal como
+// estaban en ese momento, porque la PC puede moverse de carro o renumerarse
+// después, y el histórico no debe cambiar retroactivamente.
 type HistoricoUsoPC struct {
-	ID                    string
-	Anio                  int
-	PCID                  string
+	ID   string
+	Anio int
+	PCID string
+	// EtiquetaSnapshot es lo que se muestra: "PC 3" o "Proyector Epson". Los
+	// dos de abajo van en 0 y "" si el equipo no estaba en ningún carro
+	// (015) — un proyector archivado se leía como "PC 0 ()".
+	EtiquetaSnapshot      string
 	IdentificadorSnapshot int
 	CarroNombreSnapshot   string
 	MinutosReservados     int
 	CantidadReservas      int
 }
 
-func NuevoHistoricoUsoPC(id string, anio int, pcID string, identificadorSnapshot int, carroNombreSnapshot string, minutosReservados, cantidadReservas int) (*HistoricoUsoPC, error) {
+func NuevoHistoricoUsoPC(id string, anio int, pcID, etiquetaSnapshot string, identificadorSnapshot int, carroNombreSnapshot string, minutosReservados, cantidadReservas int) (*HistoricoUsoPC, error) {
 	if minutosReservados < 0 || cantidadReservas < 0 {
 		return nil, fmt.Errorf("%w: cantidad=%d minutos=%d", ErrValorNegativo, cantidadReservas, minutosReservados)
 	}
 	return &HistoricoUsoPC{
-		ID: id, Anio: anio, PCID: pcID, IdentificadorSnapshot: identificadorSnapshot,
-		CarroNombreSnapshot: carroNombreSnapshot, MinutosReservados: minutosReservados, CantidadReservas: cantidadReservas,
+		ID: id, Anio: anio, PCID: pcID, EtiquetaSnapshot: etiquetaSnapshot,
+		IdentificadorSnapshot: identificadorSnapshot,
+		CarroNombreSnapshot:   carroNombreSnapshot, MinutosReservados: minutosReservados, CantidadReservas: cantidadReservas,
 	}, nil
 }
 
@@ -72,7 +77,11 @@ func NuevoHistoricoUsoDocente(id string, anio int, usuarioID *string, nombreDoce
 // esos datos como snapshot (ver HistoricoUsoPC) — acá se resuelven en vivo
 // con un JOIN, para que ambos reportes se muestren igual.
 type ResumenUsoPC struct {
-	PCID              string
+	PCID string
+	// Etiqueta es cómo se nombra al equipo en el reporte: "PC 3" o
+	// "Proyector Epson". Identificador va en 0 y CarroNombre vacío en lo que
+	// no está en ningún carro (015).
+	Etiqueta          string
 	Identificador     int
 	CarroNombre       string
 	CantidadReservas  int
@@ -92,7 +101,9 @@ type ResumenUsoDocente struct {
 // se elimina (sobrevive al archivado de cualquier ciclo, ver RF-02.4), así
 // que siempre se resuelve con una query directa.
 type ResumenIncidenciasPC struct {
-	PCID          string
+	PCID string
+	// Ver ResumenUsoPC.Etiqueta.
+	Etiqueta      string
 	Identificador int
 	CarroNombre   string
 	Total         int

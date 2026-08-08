@@ -141,6 +141,7 @@ func (h *Handler) EditarPC(c *fiber.Ctx) error {
 	params := application.EditarPCParams{
 		CarroID: req.CarroID, Freezado: req.Freezado, CPU: req.CPU,
 		RAM: req.RAM, SistemaOperativo: req.SistemaOperativo, SoftwareInstalado: req.SoftwareInstalado,
+		Tipo: req.Tipo, Nombre: req.Nombre, Reservable: req.Reservable,
 	}
 	if err := h.svc.EditarPC(c.UserContext(), id, params); err != nil {
 		return mapearError(err)
@@ -264,4 +265,44 @@ func (h *Handler) EditarIncidencia(c *fiber.Ctx) error {
 		return mapearError(err)
 	}
 	return c.SendStatus(fiber.StatusOK)
+}
+
+// ── Equipos que no están en ningún carro (RF-03.15) ─────────────────────
+
+// POST /api/inventory/equipos (Admin) — un proyector, un cargador, una
+// notebook suelta.
+//
+// Es una ruta aparte de /carros/{id}/pcs y no un campo opcional suyo porque
+// lo que se carga es distinto: acá no hay carro ni identificador, y lo que
+// identifica al equipo es el nombre.
+func (h *Handler) CrearEquipo(c *fiber.Ctx) error {
+	var req crearEquipoRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+
+	equipo, err := h.svc.CrearEquipo(c.UserContext(), req.Tipo, req.Nombre, req.Reservable)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(toPCResponse(equipo))
+}
+
+// GET /api/inventory/equipos (cualquier autenticado) — lo prestable que no
+// está en ningún carro.
+//
+// Lo puede ver cualquiera por el mismo motivo que los carros y las PCs
+// (RF-03.7): un docente necesita saber que existe un proyector antes de
+// pedirlo o de reservarlo.
+func (h *Handler) ListarEquiposSueltos(c *fiber.Ctx) error {
+	equipos, err := h.svc.ListarEquiposSueltos(c.UserContext())
+	if err != nil {
+		return mapearError(err)
+	}
+
+	data := make([]pcResponse, len(equipos))
+	for i, e := range equipos {
+		data[i] = toPCResponse(e)
+	}
+	return c.JSON(fiber.Map{"data": data})
 }

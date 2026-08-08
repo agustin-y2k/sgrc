@@ -42,8 +42,8 @@ func (r *fakeRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID strin
 
 type fakeInfoPC struct{}
 
-func (f *fakeInfoPC) IdentificadorYCarroDe(ctx context.Context, pcID string) (int, string, error) {
-	return 1, "Carro 1", nil
+func (f *fakeInfoPC) EtiquetaYCarroDe(ctx context.Context, pcID string) (string, int, string, error) {
+	return "PC 1", 1, "Carro 1", nil
 }
 
 type fakeInfoUsuario struct{}

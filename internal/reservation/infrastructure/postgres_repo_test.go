@@ -5,6 +5,7 @@ package infrastructure
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1049,10 +1050,10 @@ func (validadorPCOK) PCEstaEnInventario(context.Context, string) (bool, error) {
 }
 
 // Estos tests no miran los avisos, así que alcanza con no romper el
-// contrato: el identificador real lo resuelve ValidadorPCPostgres, que tiene
-// su propio test contra la base.
-func (validadorPCOK) IdentificadoresDePCs(context.Context, []string) (map[string]int, error) {
-	return map[string]int{}, nil
+// contrato: la etiqueta real la resuelve ValidadorPCPostgres, que tiene su
+// propio test contra la base.
+func (validadorPCOK) EtiquetasDeEquipos(context.Context, []string) (map[string]string, error) {
+	return map[string]string{}, nil
 }
 
 type nombreDocenteFijo struct{}
@@ -1316,41 +1317,145 @@ func TestPostgresRepo_ReservasFuturasDePC_ExcluyenLasQueYaTerminaronHoy(t *testi
 	}
 }
 
-// El aviso de cancelación nombra las PCs por su número visible ("PC 7"), no
-// por su UUID: esa traducción es una consulta y por eso se verifica contra
-// la base, no con un fake.
-func TestValidadorPCPostgres_IdentificadoresDePCs(t *testing.T) {
+// El aviso de cancelación nombra los equipos como los reconoce la gente
+// ("PC 7", "Proyector Epson"), no por su UUID: esa traducción es una
+// consulta y por eso se verifica contra la base, no con un fake.
+func TestValidadorPCPostgres_EtiquetasDeEquipos(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	validador := NewValidadorPCPostgres(pool)
 	ctx := context.Background()
 
-	pc1 := crearPCDeTest(t, pool)
-	pc2 := crearPCDeTest(t, pool)
+	pc := crearPCDeTest(t, pool)
+	// Un equipo suelto: sin carro, sin número, con nombre (015).
+	proyector := NuevoID()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO pc (id, tipo, nombre, reservable) VALUES ($1, 'PROYECTOR', 'Proyector Epson', true)`,
+		proyector); err != nil {
+		t.Fatalf("no se pudo crear el equipo suelto: %v", err)
+	}
 
-	identificadores, err := validador.IdentificadoresDePCs(ctx, []string{pc1, pc2})
+	etiquetas, err := validador.EtiquetasDeEquipos(ctx, []string{pc, proyector})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if len(identificadores) != 2 {
-		t.Fatalf("esperaba 2 identificadores, obtuve %d: %v", len(identificadores), identificadores)
+	if len(etiquetas) != 2 {
+		t.Fatalf("esperaba 2 etiquetas, obtuve %d: %v", len(etiquetas), etiquetas)
 	}
-	if identificadores[pc1] == 0 || identificadores[pc2] == 0 {
-		t.Errorf("los identificadores no pueden ser 0: %v", identificadores)
+	// Una PC de carro se nombra por su número; el proyector, por su nombre.
+	// Sin esto último el aviso diría "PC 0", que es lo que sale de formatear
+	// un identificador que no existe.
+	if !strings.HasPrefix(etiquetas[pc], "PC ") {
+		t.Errorf("una PC de carro se nombra por su número: %q", etiquetas[pc])
+	}
+	if etiquetas[proyector] != "Proyector Epson" {
+		t.Errorf("un equipo suelto se nombra por su nombre: %q", etiquetas[proyector])
 	}
 
-	// Una PC que no existe simplemente no aparece: el aviso sale igual, sin
-	// nombrarla, en vez de fallar.
-	conFantasma, err := validador.IdentificadoresDePCs(ctx, []string{pc1, "00000000-0000-0000-0000-000000000000"})
+	// Un equipo que no existe simplemente no aparece: el aviso sale igual,
+	// sin nombrarlo, en vez de fallar.
+	conFantasma, err := validador.EtiquetasDeEquipos(ctx, []string{pc, "00000000-0000-0000-0000-000000000000"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	if len(conFantasma) != 1 {
-		t.Errorf("esperaba solo la PC existente, obtuve %v", conFantasma)
+		t.Errorf("esperaba solo la que existe, obtuve %v", conFantasma)
+	}
+}
+
+// crearEquipoSueltoDeTest: algo prestable que NO está en ningún carro (015),
+// como el proyector. Sin carro, sin identificador y sin número de serie.
+func crearEquipoSueltoDeTest(t *testing.T, pool *pgxpool.Pool, nombre string) string {
+	t.Helper()
+	pcID := NuevoID()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO pc (id, tipo, nombre, reservable, estado) VALUES ($1, 'PROYECTOR', $2, true, 'DISPONIBLE')`,
+		pcID, nombre,
+	); err != nil {
+		t.Fatalf("no se pudo crear equipo suelto de prueba: %v", err)
+	}
+	return pcID
+}
+
+// El peor modo de falla de la 015: ListarReservas hacía INNER JOIN a carro,
+// así que la reserva de un proyector no se veía distinta — desaparecía de la
+// consulta entera, total paginado incluido. El docente la creaba, recibía la
+// confirmación y después no la encontraba para cancelarla.
+func TestPostgresRepo_ListarReservas_TraeLasDeUnEquipoSinCarro(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	materiaID := crearMateriaDeTest(t, pool)
+	equipoID := crearEquipoSueltoDeTest(t, pool, "Proyector Epson")
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+
+	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatalf("creando grupo: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace", nil,
+		fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, res); err != nil {
+		t.Fatalf("creando reserva: %v", err)
 	}
 
-	// Lista vacía: ni siquiera consulta.
-	vacio, err := validador.IdentificadoresDePCs(ctx, nil)
-	if err != nil || len(vacio) != 0 {
-		t.Errorf("con lista vacía esperaba un mapa vacío sin error: %v, %v", vacio, err)
+	filas, total, err := repo.ListarReservas(ctx, application.FiltroReservas{
+		PCID:   &equipoID,
+		Pagina: paginacion.Pagina{Numero: 1, Tamanio: 10},
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(filas) != 1 || total != 1 {
+		t.Fatalf("esperaba 1 fila y total 1; obtuve %d y %d", len(filas), total)
+	}
+	if filas[0].Etiqueta != "Proyector Epson" {
+		t.Errorf("esperaba la etiqueta del equipo, obtuve %q", filas[0].Etiqueta)
+	}
+	// Los dos campos viejos quedan vacíos, no en basura: una pantalla que
+	// arme el rótulo con ellos escribe "PC 0 · " y se nota en el acto.
+	if filas[0].PCIdentificador != 0 || filas[0].CarroNombre != "" {
+		t.Errorf("esperaba identificador 0 y carro vacío, obtuve %d y %q",
+			filas[0].PCIdentificador, filas[0].CarroNombre)
+	}
+}
+
+// Una PC de carro tiene que seguir trayendo las tres cosas: la etiqueta
+// nueva no reemplaza al identificador ni al carro, que otras pantallas usan.
+func TestPostgresRepo_ListarReservas_LaPCDeCarroSigueTrayendoTodo(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	materiaID := crearMateriaDeTest(t, pool)
+	pcID := crearPCDeTest(t, pool)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+
+	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatalf("creando grupo: %v", err)
+	}
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pcID, materiaID, "Ada Lovelace", nil,
+		fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err := repo.CrearReserva(ctx, res); err != nil {
+		t.Fatalf("creando reserva: %v", err)
+	}
+
+	filas, _, err := repo.ListarReservas(ctx, application.FiltroReservas{
+		PCID:   &pcID,
+		Pagina: paginacion.Pagina{Numero: 1, Tamanio: 10},
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(filas) != 1 {
+		t.Fatalf("esperaba 1 fila, obtuve %d", len(filas))
+	}
+	if filas[0].Etiqueta != "PC 1" || filas[0].PCIdentificador != 1 || filas[0].CarroNombre == "" {
+		t.Errorf("esperaba PC 1 con carro, obtuve %q / %d / %q",
+			filas[0].Etiqueta, filas[0].PCIdentificador, filas[0].CarroNombre)
 	}
 }

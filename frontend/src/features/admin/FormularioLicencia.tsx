@@ -252,7 +252,7 @@ export function SelectorDePCs({
   seleccionadas,
   onChange,
 }: {
-  pcs: { id: string; identificador: number; carroNombre: string }[]
+  pcs: { id: string; etiqueta: string; carroNombre: string }[]
   seleccionadas: Set<string>
   onChange: (s: Set<string>) => void
 }) {
@@ -292,7 +292,7 @@ export function SelectorDePCs({
               checked={seleccionadas.has(pc.id)}
               onChange={() => alternar(pc.id)}
             />
-            PC {pc.identificador}
+            {pc.etiqueta}
             <span className="text-muted-foreground">({pc.carroNombre})</span>
           </label>
         ))}

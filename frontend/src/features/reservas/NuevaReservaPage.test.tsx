@@ -32,6 +32,7 @@ const pcs: PCDisponible[] = [
   {
     pcId: "pc1",
     identificador: 1,
+    etiqueta: "PC 1",
     carroId: "car1",
     carroNombre: "Carro 1",
     freezado: false,
@@ -40,6 +41,7 @@ const pcs: PCDisponible[] = [
   {
     pcId: "pc2",
     identificador: 7,
+    etiqueta: "PC 7",
     carroId: "car2",
     carroNombre: "Carro 2",
     freezado: true,
@@ -135,6 +137,36 @@ describe("NuevaReservaPage", () => {
     // RF-03.7: el software es el dato que define la elección.
     expect(screen.getByText("AutoCAD 2027")).toBeInTheDocument()
     expect(reservasApi.pcsDisponibles).toHaveBeenCalledWith(FECHA, "08:00", "09:00")
+  })
+
+  /**
+   * El proyector (015) es reservable pero no está en ningún carro. Con el
+   * rótulo armado a partir del identificador se ofrecía como "PC undefined",
+   * y con `carroNombre` vacío caía bajo un título en blanco: el docente veía
+   * una casilla sin saber qué estaba tildando.
+   */
+  it("ofrece lo que no está en ningún carro bajo su propio título", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.pcsDisponibles).mockResolvedValue({
+      data: [
+        ...pcs,
+        {
+          pcId: "eq1",
+          etiqueta: "Proyector Epson",
+          tipo: "PROYECTOR",
+          carroId: "",
+          carroNombre: "",
+          freezado: false,
+        },
+      ],
+    })
+    renderPagina()
+    await completarFranja(user)
+
+    expect(
+      await screen.findByRole("checkbox", { name: /Proyector Epson/ })
+    ).toBeInTheDocument()
+    expect(screen.getByText("Otros equipos")).toBeInTheDocument()
   })
 
   // RF-04.2: "la lista no está restringida a un solo carro, puede combinar

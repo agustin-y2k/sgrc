@@ -63,10 +63,10 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 // falta.
 func (r *PostgresRepo) GuardarHistoricoUsoPC(ctx context.Context, h *domain.HistoricoUsoPC) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO historico_uso_pc (id, anio, pc_id, identificador_snapshot, carro_nombre_snapshot, minutos_reservados, cantidad_reservas)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO historico_uso_pc (id, anio, pc_id, etiqueta_snapshot, identificador_snapshot, carro_nombre_snapshot, minutos_reservados, cantidad_reservas)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (anio, pc_id) DO NOTHING
-	`, h.ID, h.Anio, h.PCID, h.IdentificadorSnapshot, h.CarroNombreSnapshot, h.MinutosReservados, h.CantidadReservas)
+	`, h.ID, h.Anio, h.PCID, h.EtiquetaSnapshot, h.IdentificadorSnapshot, h.CarroNombreSnapshot, h.MinutosReservados, h.CantidadReservas)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -93,8 +93,14 @@ func (r *PostgresRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain
 
 func (r *PostgresRepo) ListarHistoricoUsoPCPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoPC, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, anio, pc_id, identificador_snapshot, carro_nombre_snapshot, minutos_reservados, cantidad_reservas
-		FROM historico_uso_pc WHERE anio = $1 ORDER BY identificador_snapshot
+		SELECT id, anio, pc_id, etiqueta_snapshot,
+		       COALESCE(identificador_snapshot, 0), COALESCE(carro_nombre_snapshot, ''),
+		       minutos_reservados, cantidad_reservas
+		FROM historico_uso_pc WHERE anio = $1
+		-- Las PCs de carro primero y por número; los equipos sueltos después,
+		-- juntos y por nombre. pc_id cierra el orden: el identificador se
+		-- repite entre carros y es NULL en los sueltos (015).
+		ORDER BY identificador_snapshot NULLS LAST, etiqueta_snapshot, pc_id
 	`, anio)
 	if err != nil {
 		return nil, fmt.Errorf("listando histórico de uso de PC: %w", err)
@@ -104,7 +110,7 @@ func (r *PostgresRepo) ListarHistoricoUsoPCPorAnio(ctx context.Context, anio int
 	var resultado []*domain.HistoricoUsoPC
 	for rows.Next() {
 		var h domain.HistoricoUsoPC
-		if err := rows.Scan(&h.ID, &h.Anio, &h.PCID, &h.IdentificadorSnapshot, &h.CarroNombreSnapshot, &h.MinutosReservados, &h.CantidadReservas); err != nil {
+		if err := rows.Scan(&h.ID, &h.Anio, &h.PCID, &h.EtiquetaSnapshot, &h.IdentificadorSnapshot, &h.CarroNombreSnapshot, &h.MinutosReservados, &h.CantidadReservas); err != nil {
 			return nil, fmt.Errorf("escaneando fila de histórico de PC: %w", err)
 		}
 		resultado = append(resultado, &h)
@@ -177,11 +183,15 @@ func (r *PostgresRepo) CalcularUsoPCsDeCiclo(ctx context.Context, cicloID string
 	condFechas, args := filtroFechas("fecha", desde, hasta, args)
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT r.pc_id, p.identificador, ca.nombre,
+		SELECT r.pc_id, COALESCE(p.nombre, 'PC ' || p.identificador),
+		       COALESCE(p.identificador, 0), COALESCE(ca.nombre, ''),
 		       COUNT(*), COALESCE(SUM(`+expresionMinutosDe("r")+`), 0) AS minutos
 		FROM reserva r
 		JOIN pc p ON p.id = r.pc_id
-		JOIN carro ca ON ca.id = p.carro_id
+		-- LEFT desde la 015: un proyector reservable no está en ningún carro,
+		-- y con INNER JOIN sus reservas no figuraban en el reporte de uso —
+		-- el equipo más peleado de la escuela podía aparecer como sin usar.
+		LEFT JOIN carro ca ON ca.id = p.carro_id
 		WHERE (
 			r.materia_id IN (
 				SELECT m.id FROM materia m JOIN curso c ON c.id = m.curso_id WHERE c.ciclo_lectivo_id = $1
@@ -197,7 +207,7 @@ func (r *PostgresRepo) CalcularUsoPCsDeCiclo(ctx context.Context, cicloID string
 			)
 		)
 		AND r.estado != 'CANCELADA'`+condFechasPrefijo("r", condFechas)+`
-		GROUP BY r.pc_id, p.identificador, ca.nombre
+		GROUP BY r.pc_id, p.nombre, p.identificador, ca.nombre
 		-- Del más usado al menos usado, que es la pregunta que trae a
 		-- alguien a este reporte. Sin ORDER BY, Postgres devuelve las filas
 		-- en el orden en que salen del hash de agregación: no es aleatorio,
@@ -206,8 +216,10 @@ func (r *PostgresRepo) CalcularUsoPCsDeCiclo(ctx context.Context, cicloID string
 		-- Los otros cuatro reportes de este archivo ya ordenaban; estos dos
 		-- eran la excepción.
 		-- El identificador desempata para que dos PCs con el mismo uso no se
-		-- intercambien de lugar entre llamadas.
-		ORDER BY minutos DESC, p.identificador
+		-- intercambien de lugar entre llamadas. No alcanza solo: se repite
+		-- entre carros y es NULL en los equipos sueltos (015), así que
+		-- r.pc_id cierra el orden.
+		ORDER BY minutos DESC, p.identificador NULLS LAST, r.pc_id
 	`, args...)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -220,7 +232,7 @@ func (r *PostgresRepo) CalcularUsoPCsDeCiclo(ctx context.Context, cicloID string
 	var resultado []domain.ResumenUsoPC
 	for rows.Next() {
 		var u domain.ResumenUsoPC
-		if err := rows.Scan(&u.PCID, &u.Identificador, &u.CarroNombre, &u.CantidadReservas, &u.MinutosReservados); err != nil {
+		if err := rows.Scan(&u.PCID, &u.Etiqueta, &u.Identificador, &u.CarroNombre, &u.CantidadReservas, &u.MinutosReservados); err != nil {
 			return nil, fmt.Errorf("escaneando fila de uso de PC: %w", err)
 		}
 		resultado = append(resultado, u)
@@ -278,7 +290,8 @@ func (r *PostgresRepo) CalcularIncidenciasPorPC(ctx context.Context, desde, hast
 	condFechas, args := filtroFechas("i.fecha", desde, hasta, args)
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, p.identificador, ca.nombre,
+		SELECT p.id, COALESCE(p.nombre, 'PC ' || p.identificador),
+		       COALESCE(p.identificador, 0), COALESCE(ca.nombre, ''),
 		       COUNT(i.id),
 		       COUNT(*) FILTER (WHERE i.estado = 'ABIERTA'),
 		       COUNT(*) FILTER (WHERE i.estado = 'EN_REPARACION'),
@@ -287,10 +300,12 @@ func (r *PostgresRepo) CalcularIncidenciasPorPC(ctx context.Context, desde, hast
 		       COUNT(*) FILTER (WHERE i.gravedad = 'GRAVE')
 		FROM incidencia i
 		JOIN pc p ON p.id = i.pc_id
-		JOIN carro ca ON ca.id = p.carro_id
+		-- LEFT desde la 015: al proyector también se le rompe la lámpara, y
+		-- con INNER JOIN sus incidencias no llegaban a este reporte.
+		LEFT JOIN carro ca ON ca.id = p.carro_id
 		WHERE 1=1`+condFechas+`
-		GROUP BY p.id, p.identificador, ca.nombre
-		ORDER BY COUNT(i.id) DESC, p.identificador
+		GROUP BY p.id, p.nombre, p.identificador, ca.nombre
+		ORDER BY COUNT(i.id) DESC, p.identificador NULLS LAST, p.id
 	`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("calculando incidencias por PC: %w", err)
@@ -300,7 +315,7 @@ func (r *PostgresRepo) CalcularIncidenciasPorPC(ctx context.Context, desde, hast
 	var resultado []domain.ResumenIncidenciasPC
 	for rows.Next() {
 		var x domain.ResumenIncidenciasPC
-		if err := rows.Scan(&x.PCID, &x.Identificador, &x.CarroNombre,
+		if err := rows.Scan(&x.PCID, &x.Etiqueta, &x.Identificador, &x.CarroNombre,
 			&x.Total, &x.Abiertas, &x.EnReparacion, &x.EnviadasDGE, &x.Resueltas, &x.Graves); err != nil {
 			return nil, fmt.Errorf("escaneando incidencias por PC: %w", err)
 		}
@@ -320,6 +335,10 @@ func (r *PostgresRepo) CalcularIncidenciasPorCarro(ctx context.Context, desde, h
 		       COUNT(*) FILTER (WHERE i.gravedad = 'GRAVE')
 		FROM incidencia i
 		JOIN pc p ON p.id = i.pc_id
+		-- INNER a propósito, al revés que los otros dos reportes: este agrupa
+		-- POR CARRO, y un equipo suelto no está en ninguno. Sumarlo pediría
+		-- inventar un carro "Sueltos" que no existe ni en la base ni en el
+		-- pasillo. Sus incidencias se ven en el reporte por equipo.
 		JOIN carro ca ON ca.id = p.carro_id
 		WHERE 1=1`+condFechas+`
 		GROUP BY ca.id, ca.nombre

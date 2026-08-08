@@ -35,6 +35,22 @@ func esViolacionUnica(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == codigoViolacionUnica
 }
 
+// nombreDeConstraint devuelve qué constraint se violó, o "" si no fue una
+// violación de Postgres.
+//
+// Hasta la 015 la tabla `pc` tenía dos UNIQUE y se devolvía siempre el error
+// más común porque distinguirlos pedía justamente esto. Ahora son tres —se
+// sumó el nombre único entre los equipos sueltos— y "ya existe una PC con
+// ese identificador" sería una respuesta absurda para alguien que está
+// cargando un segundo cargador con el mismo nombre.
+func nombreDeConstraint(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.ConstraintName
+	}
+	return ""
+}
+
 func esIDInvalido(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == codigoTextoInvalido

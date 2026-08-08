@@ -376,7 +376,11 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 	desde := `
 		FROM reserva res
 		JOIN pc p ON p.id = res.pc_id
-		JOIN carro ca ON ca.id = p.carro_id
+		-- LEFT desde la 015: un proyector reservable no está en ningún carro,
+		-- y con INNER JOIN su reserva no desaparecía de la pantalla — se caía
+		-- de la consulta entera, incluido el total paginado. El docente veía
+		-- que la reserva se hizo y después no la encontraba para cancelarla.
+		LEFT JOIN carro ca ON ca.id = p.carro_id
 		LEFT JOIN reserva_grupo rg ON rg.id = res.reserva_grupo_id
 		LEFT JOIN materia m ON m.id = res.materia_id
 		LEFT JOIN curso cu ON cu.id = m.curso_id
@@ -409,7 +413,9 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 
 	query := `
 		SELECT ` + columnasReservaConPrefijo("res") + `,
-		       p.identificador, ca.nombre,
+		       COALESCE(p.identificador, 0),
+		       COALESCE(p.nombre, 'PC ' || p.identificador),
+		       COALESCE(ca.nombre, ''),
 		       COALESCE(m.nombre, ''), COALESCE(cu.nombre, ''),
 		       rg.regla_recurrencia_id,
 		       COUNT(*) OVER() AS total` + desde
@@ -417,9 +423,13 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 	// El ORDER BY es determinista hasta la última columna a propósito: con
 	// un orden ambiguo, dos filas empatadas pueden salir en distinto orden
 	// entre dos consultas y una misma reserva aparecer dos veces (o ninguna)
-	// al pasar de página. (fecha, hora_inicio, identificador de PC) es único
-	// por la constraint EXCLUDE.
-	query += " ORDER BY res.fecha, res.hora_inicio, p.identificador"
+	// al pasar de página.
+	//
+	// El identificador NO alcanza para desempatar: se repite entre carros
+	// distintos, y desde la 015 es NULL en todo lo que no está en un carro
+	// —los equipos sueltos empatarían todos entre sí—. res.pc_id cierra el
+	// orden, que es lo único único de verdad acá.
+	query += " ORDER BY res.fecha, res.hora_inicio, p.identificador NULLS LAST, res.pc_id"
 
 	argsPagina := append(append([]any{}, args...), f.Pagina.Limit(), f.Pagina.Offset())
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(argsPagina)-1, len(argsPagina))
@@ -448,7 +458,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 			&res.ID, &res.ReservaGrupoID, &res.PCID, &res.MateriaID, &res.NombreDocenteSnapshot,
 			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr,
 			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
-			&detalle.PCIdentificador, &detalle.CarroNombre,
+			&detalle.PCIdentificador, &detalle.Etiqueta, &detalle.CarroNombre,
 			&detalle.MateriaNombre, &detalle.CursoNombre,
 			&detalle.ReglaRecurrenciaID,
 			&total,
@@ -576,11 +586,20 @@ func columnasReservaConPrefijo(alias string) string {
 // lectura, mismo criterio que los validadores de este paquete.
 func (r *PostgresRepo) ListarPCsDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.PCDisponible, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT p.id, p.identificador, c.id, c.nombre, p.freezado, COALESCE(p.software_instalado, '')
+		SELECT p.id, COALESCE(p.identificador, 0),
+		       COALESCE(p.nombre, 'PC ' || p.identificador),
+		       p.tipo,
+		       COALESCE(c.id::text, ''), COALESCE(c.nombre, ''),
+		       p.freezado, COALESCE(p.software_instalado, '')
 		FROM pc p
-		JOIN carro c ON c.id = p.carro_id
+		LEFT JOIN carro c ON c.id = p.carro_id
 		WHERE p.estado = 'DISPONIBLE'
 		  AND p.dada_de_baja = false
+		  -- Desde la 015: un cargador no se planifica, se pide en el
+		  -- momento. Sin este filtro aparecería en la lista cada vez que un
+		  -- docente va a reservar, y la primera vez que alguien reserve uno
+		  -- sin querer hay que explicarlo.
+		  AND p.reservable = true
 		  AND NOT EXISTS (
 			SELECT 1 FROM reserva res
 			WHERE res.pc_id = p.id
@@ -589,7 +608,9 @@ func (r *PostgresRepo) ListarPCsDisponiblesEn(ctx context.Context, fecha time.Ti
 			  AND tsrange(res.fecha + res.hora_inicio, res.fecha + res.hora_fin)
 			      && tsrange($1::date + $2::time, $1::date + $3::time)
 		  )
-		ORDER BY c.nombre, p.identificador
+		-- Los equipos sueltos van al final: lo habitual es reservar PCs de
+		-- un carro, y el proyector no tiene por qué colarse entre ellas.
+		ORDER BY p.carro_id IS NULL, c.nombre, p.identificador, p.nombre
 	`, fecha, duracionComoHora(horaInicio), duracionComoHora(horaFin))
 	if err != nil {
 		return nil, fmt.Errorf("listando PCs disponibles: %w", err)
@@ -599,7 +620,8 @@ func (r *PostgresRepo) ListarPCsDisponiblesEn(ctx context.Context, fecha time.Ti
 	var resultado []application.PCDisponible
 	for rows.Next() {
 		var pc application.PCDisponible
-		if err := rows.Scan(&pc.PCID, &pc.Identificador, &pc.CarroID, &pc.CarroNombre,
+		if err := rows.Scan(&pc.PCID, &pc.Identificador, &pc.Etiqueta, &pc.Tipo,
+			&pc.CarroID, &pc.CarroNombre,
 			&pc.Freezado, &pc.SoftwareInstalado); err != nil {
 			return nil, fmt.Errorf("escaneando PC disponible: %w", err)
 		}

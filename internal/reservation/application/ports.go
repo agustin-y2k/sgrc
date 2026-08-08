@@ -83,6 +83,37 @@ type Repo interface {
 	// a lo más viejo.
 	ListarPrestamosDePC(ctx context.Context, pcID string, limite int) ([]*PrestamoDetallado, error)
 
+	// ── El barrido (RF-08.10 a RF-08.13) ────────────────────────────
+	//
+	// ReservasAVigilar trae las reservas CONFIRMADA de hoy y mañana, con el
+	// contacto del docente y el estado de custodia de cada PC ya resueltos.
+	// El filtro es grueso: qué corresponde hacer con cada una lo decide el
+	// dominio (CorrespondeRecordar, CorrespondeLiberar…), para que la regla
+	// no exista en dos lugares.
+	//
+	// Mañana también, y no solo hoy, porque el recordatorio sale una hora
+	// antes: una clase a las 8 de mañana no necesita nada hoy, pero la
+	// consulta no tiene por qué saberlo — lo decide el dominio, y el costo
+	// de traer un día más es despreciable.
+	ReservasAVigilar(ctx context.Context, hoy time.Time) ([]ReservaParaVigilar, error)
+	// PrestamosAVigilar son todos los abiertos, con ubicación y contacto.
+	PrestamosAVigilar(ctx context.Context) ([]PrestamoParaVigilar, error)
+
+	// ProximaReservaDePC es a quién le va a faltar esa máquina, con el
+	// contacto resuelto. Existe aparte de ListarReservasFuturasDePC porque
+	// el corte de fin de jornada necesita MANDARLE UN CORREO al docente, y
+	// esa consulta devuelve reservas peladas: sin dirección, el aviso no
+	// puede salir. Devuelve nil si no hay ninguna.
+	ProximaReservaDePC(ctx context.Context, pcID string, desde time.Time) (*ProximaReserva, error)
+
+	// Las cuatro marcas de idempotencia. Cada una toca UNA columna: el
+	// barrido no puede pisar nada que un Admin haya cambiado desde la
+	// pantalla mientras el correo salía.
+	MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error
+	MarcarAvisoPCNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error
+	MarcarDemoraAvisada(ctx context.Context, prestamoID string, ahora time.Time) error
+	MarcarCierreAvisado(ctx context.Context, prestamoID string, jornada time.Time) error
+
 	// ListarReservas devuelve las reservas que matcheen el filtro, con los
 	// nombres de PC, carro, materia y curso ya resueltos. Es lo que
 	// necesita un docente para ver sus propias reservas: sin esto la única
@@ -153,11 +184,17 @@ type BloqueCalendario struct {
 // que BloqueCalendario: un JOIN de solo lectura, sin importar el domain/
 // de inventory ni el de academic.
 type ReservaDetallada struct {
-	Reserva         *domain.Reserva
+	Reserva *domain.Reserva
+	// PCIdentificador va en 0 y CarroNombre vacío en un equipo suelto: un
+	// proyector no está en ningún carro. Lo que se muestra es Etiqueta.
 	PCIdentificador int
 	CarroNombre     string
-	MateriaNombre   string
-	CursoNombre     string
+	// Etiqueta es cómo se nombra al equipo en pantalla: "PC 3" o "Proyector
+	// Epson". La resuelve el repositorio para que la misma cosa no se vea
+	// distinta según la pantalla.
+	Etiqueta      string
+	MateriaNombre string
+	CursoNombre   string
 	// ReglaRecurrenciaID viene del ReservaGrupo, no de la Reserva. Es lo
 	// único que distingue una reserva recurrente de una puntual, y de eso
 	// depende si tiene sentido ofrecer "cancelar esta y las siguientes"
@@ -169,8 +206,17 @@ type ReservaDetallada struct {
 // RF-03.7 dice que el docente necesita para elegir (software instalado,
 // freezado) sin tener que pedirlos a inventory por separado.
 type PCDisponible struct {
-	PCID              string
-	Identificador     int
+	PCID string
+	// Identificador va en 0 para un equipo suelto (un proyector no es
+	// "PC 3"). Lo que se muestra es Etiqueta.
+	Identificador int
+	// Etiqueta es cómo se lo nombra: "PC 3" o "Proyector Epson". Se resuelve
+	// del lado del servidor para que la misma máquina no se vea distinta
+	// según la pantalla, y para que un proyector no salga rotulado "PC 0".
+	Etiqueta string
+	// Tipo distingue una PC de un proyector. Texto libre (015).
+	Tipo string
+	// CarroID y CarroNombre vacíos en un equipo suelto.
 	CarroID           string
 	CarroNombre       string
 	Freezado          bool
@@ -207,16 +253,21 @@ type ValidadorPC interface {
 	// está en el inventario.
 	PCEstaEnInventario(ctx context.Context, pcID string) (bool, error)
 
-	// IdentificadoresDePCs traduce los UUID de PC al número visible que la
-	// gente reconoce ("PC 7"), para poder decir en un aviso cuáles se
-	// cancelaron. Los que no existan simplemente no aparecen en el mapa.
+	// EtiquetasDeEquipos traduce los UUID al nombre con el que la gente
+	// reconoce cada cosa ("PC 7", "Proyector Epson"), para poder decir en un
+	// aviso cuáles se cancelaron. Los que no existan simplemente no
+	// aparecen en el mapa.
+	//
+	// Devuelve texto y no un número desde la 015: lo prestable puede no
+	// tener identificador, y un proyector rotulado "PC 0" es lo que sale de
+	// formatear uno que no existe.
 	//
 	// Es una lectura de una columna, así que la resuelve el propio
 	// infrastructure/ de este paquete con SQL directo sobre `pc`, igual que
 	// PCDisponibleParaReservar — no hace falta pasar por inventory, que es
 	// lo que sí corresponde cuando hay reglas de negocio en juego (ver el
 	// comentario de las cascadas al final de service.go).
-	IdentificadoresDePCs(ctx context.Context, pcIDs []string) (map[string]int, error)
+	EtiquetasDeEquipos(ctx context.Context, pcIDs []string) (map[string]string, error)
 }
 
 // ObtenedorNombreDocente es el puerto hacia auth — solo necesitamos el
@@ -238,12 +289,97 @@ type IDGenerator func() string
 // decir qué computadora no sirve para nada, y es exactamente lo que el papel
 // sí anota.
 type PrestamoDetallado struct {
-	Prestamo        *domain.Prestamo
+	Prestamo *domain.Prestamo
+	// PCIdentificador va en 0 para un equipo suelto. Lo que se muestra es
+	// Etiqueta: un proyector rotulado "PC 0" es lo que sale de formatear un
+	// identificador que no existe.
 	PCIdentificador int
-	CarroNombre     string
+	Etiqueta        string
+	// CarroNombre vacío en un equipo suelto.
+	CarroNombre string
 	// MateriaNombre solo en los préstamos que salieron contra una reserva.
 	// Nil en los espontáneos —no hay materia— y también en los que la
 	// tenían pero cuya reserva ya se borró al archivar el ciclo lectivo
 	// (RF-02.4): el préstamo sobrevive, la reserva no.
 	MateriaNombre *string
+}
+
+// ══════════════════════════════════════════════════════════════════
+// El barrido (RF-08.10 a RF-08.13)
+// ══════════════════════════════════════════════════════════════════
+//
+// Son DOS consultas y no cinco a propósito. Los cinco avisos del barrido
+// —recordar, liberar, reclamar al que no devolvió, avisarle al docente
+// siguiente y el corte de fin de jornada— miran las mismas dos cosas: las
+// reservas confirmadas de hoy y las máquinas que están afuera. Partirlo en
+// una consulta por aviso significaría releer lo mismo cinco veces por
+// barrido y, peor, dejar que cada una filtrara con un criterio apenas
+// distinto.
+
+// ReservaParaVigilar es una reserva confirmada con todo lo que el barrido
+// necesita: para decidir, y para poder avisar sin volver a la base.
+//
+// El contacto del docente viaja resuelto porque el correo lo manda
+// notification, que no puede importar el domain de auth (docs/06 §3): o
+// viaja en el evento, o habría que agregar otro puerto de lectura para algo
+// que esta consulta ya tiene a mano.
+type ReservaParaVigilar struct {
+	ReservaID string
+	GrupoID   *string
+	PCID      string
+	// PCIdentificador es el número visible ("PC 7"), que es lo que el
+	// docente reconoce.
+	PCIdentificador int
+	// Etiqueta es cómo se nombra al equipo en un aviso: "PC 7" o "Proyector
+	// Epson". Un proyector rotulado "PC 0" es lo que sale de formatear un
+	// identificador que no existe.
+	Etiqueta   string
+	Fecha      time.Time
+	HoraInicio time.Duration
+	HoraFin    time.Duration
+	// Tipo distingue la clase de un docente de un bloqueo por evaluación
+	// estatal. Importa: un bloqueo no lo retira nadie, así que ni se
+	// recuerda ni se libera.
+	Tipo          domain.TipoReserva
+	MateriaNombre *string
+
+	DocenteID     *string
+	DocenteNombre string
+	DocenteEmail  string
+
+	RecordatorioEnviado        bool
+	AvisoPCNoDisponibleEnviado bool
+
+	// PCAfuera: hay un préstamo sin devolver sobre esa máquina. Es lo que
+	// distingue "el docente no vino" de "el docente vino y se la llevó", y
+	// también lo que impide liberar una reserva cuya PC está en manos de
+	// alguien.
+	PCAfuera bool
+	// PCDeboVolverA es la hora en que esa máquina tenía que estar de vuelta.
+	// nil si está adentro, o si salió sin hora pactada.
+	PCDeboVolverA *time.Time
+}
+
+// PrestamoParaVigilar es un préstamo abierto con la ubicación de la máquina
+// y el contacto de quien la tiene, cuando esa persona tiene cuenta.
+type PrestamoParaVigilar struct {
+	Prestamo        *domain.Prestamo
+	PCIdentificador int
+	// Etiqueta: "PC 7" o "Proyector Epson". Es lo que va en el reclamo.
+	Etiqueta    string
+	CarroNombre string
+	// Email vacío si quien se la llevó no tiene cuenta en el sistema — el
+	// caso normal de un préstamo para un trámite. Sin correo no se le puede
+	// reclamar a esa persona, pero el reclamo a los Admin sale igual.
+	Email string
+}
+
+// ProximaReserva es la siguiente reserva de una PC, con lo justo para poder
+// avisarle a su docente.
+type ProximaReserva struct {
+	UsuarioID  string
+	Email      string
+	Nombre     string
+	Fecha      time.Time
+	HoraInicio time.Duration
 }

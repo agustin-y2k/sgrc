@@ -72,6 +72,16 @@ type Prestamo struct {
 	DevueltoEn    *time.Time
 	RecibidoPor   *string
 	Observaciones string
+
+	// Marcas del barrido (RF-08.12/08.13). Guardan CUÁNDO salió cada aviso,
+	// no un booleano: lo primero que se pregunta cuando alguien dice "a mí
+	// no me llegó" es a qué hora fue.
+	//
+	// AvisadoCierrePara es una FECHA y no un instante porque el corte de fin
+	// de jornada se repite mientras la máquina siga afuera: lo que hay que
+	// recordar es "de este día ya avisé".
+	AvisadoDemoraEn   *time.Time
+	AvisadoCierrePara *time.Time
 }
 
 // DatosDeEntrega son los datos de una entrega. Es un struct y no una lista
@@ -170,4 +180,18 @@ func (p *Prestamo) MinutosDeDemora(ahora time.Time) int {
 		return 0
 	}
 	return int(ahora.Sub(*p.DevolucionEstimada).Minutes())
+}
+
+// ExcedioLaDemora dice si ya pasó la hora de devolución MÁS el margen que
+// la escuela tolera antes de reclamar.
+//
+// No es lo mismo que Demorado: esa marca la pantalla en rojo apenas se pasa
+// la hora, y esto dispara un correo. Diez minutos de diferencia entre las
+// dos es a propósito — quien está guardando las cosas no tiene por qué
+// recibir un reclamo por llegar un minuto tarde al mostrador.
+func (p *Prestamo) ExcedioLaDemora(margen time.Duration, ahora time.Time) bool {
+	if !p.EstaAbierto() || p.DevolucionEstimada == nil {
+		return false
+	}
+	return !ahora.Before(p.DevolucionEstimada.Add(margen))
 }

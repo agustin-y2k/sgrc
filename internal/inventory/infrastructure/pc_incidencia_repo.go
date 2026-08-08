@@ -13,26 +13,18 @@ import (
 
 // ── PC ──────────────────────────────────────────────────────────────────
 
-const columnasPC = `id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dada_de_baja, fecha_baja, fecha_alta`
+const columnasPC = `id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dada_de_baja, fecha_baja, fecha_alta, tipo, nombre, reservable`
 
 func (r *PostgresRepo) CrearPC(ctx context.Context, pc *domain.PC) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO pc (id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dada_de_baja, fecha_alta)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`, pc.ID, pc.CarroID, pc.Identificador, pc.NumeroSerie, pc.Freezado,
+		INSERT INTO pc (id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dada_de_baja, fecha_alta, tipo, nombre, reservable)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+	`, pc.ID, nullIfEmpty(pc.CarroID), nullSiCero(pc.Identificador), nullIfEmpty(pc.NumeroSerie), pc.Freezado,
 		nullIfEmpty(pc.CPU), nullIfEmpty(pc.RAM), nullIfEmpty(pc.SistemaOperativo), nullIfEmpty(pc.SoftwareInstalado),
-		string(pc.Estado), pc.DadaDeBaja, pc.FechaAlta)
+		string(pc.Estado), pc.DadaDeBaja, pc.FechaAlta, pc.Tipo, nullIfEmpty(pc.Nombre), pc.Reservable)
 	if err != nil {
 		if esViolacionUnica(err) {
-			// No podemos distinguir cuál de las dos UNIQUE constraints
-			// (carro_id+identificador, o numero_serie global) disparó sin
-			// parsear el nombre de la constraint del error de Postgres.
-			// application/ ya no tiene forma de saber cuál era la
-			// intención sin esa info, así que devolvemos el más común en
-			// la práctica (identificador duplicado) — si hace falta
-			// distinguir con precisión más adelante, ahí se parsea
-			// pgErr.ConstraintName.
-			return application.ErrIdentificadorDuplicado
+			return errorDeUnicidadDePC(err)
 		}
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
@@ -52,13 +44,15 @@ func (r *PostgresRepo) BuscarPCPorID(ctx context.Context, id string) (*domain.PC
 
 func escanearPC(row pgx.Row) (*domain.PC, error) {
 	var pc domain.PC
-	var cpu, ram, so, software *string
+	var cpu, ram, so, software, carroID, numeroSerie, nombre *string
+	var identificador *int
 	var estadoStr string
 
 	err := row.Scan(
-		&pc.ID, &pc.CarroID, &pc.Identificador, &pc.NumeroSerie, &pc.Freezado,
+		&pc.ID, &carroID, &identificador, &numeroSerie, &pc.Freezado,
 		&cpu, &ram, &so, &software,
 		&estadoStr, &pc.DadaDeBaja, &pc.FechaBaja, &pc.FechaAlta,
+		&pc.Tipo, &nombre, &pc.Reservable,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -87,6 +81,20 @@ func escanearPC(row pgx.Row) (*domain.PC, error) {
 	if software != nil {
 		pc.SoftwareInstalado = *software
 	}
+	// Los cuatro que desde la 015 pueden faltar: un proyector no tiene carro
+	// ni número ni serie, y una PC de carro no tiene nombre.
+	if carroID != nil {
+		pc.CarroID = *carroID
+	}
+	if identificador != nil {
+		pc.Identificador = *identificador
+	}
+	if numeroSerie != nil {
+		pc.NumeroSerie = *numeroSerie
+	}
+	if nombre != nil {
+		pc.Nombre = *nombre
+	}
 
 	return &pc, nil
 }
@@ -96,14 +104,16 @@ func (r *PostgresRepo) GuardarPC(ctx context.Context, pc *domain.PC) error {
 		UPDATE pc SET
 			carro_id=$2, identificador=$3, numero_serie=$4, freezado=$5,
 			cpu=$6, ram=$7, sistema_operativo=$8, software_instalado=$9,
-			estado=$10, dada_de_baja=$11, fecha_baja=$12
+			estado=$10, dada_de_baja=$11, fecha_baja=$12,
+			tipo=$13, nombre=$14, reservable=$15
 		WHERE id=$1
-	`, pc.ID, pc.CarroID, pc.Identificador, pc.NumeroSerie, pc.Freezado,
+	`, pc.ID, nullIfEmpty(pc.CarroID), nullSiCero(pc.Identificador), nullIfEmpty(pc.NumeroSerie), pc.Freezado,
 		nullIfEmpty(pc.CPU), nullIfEmpty(pc.RAM), nullIfEmpty(pc.SistemaOperativo), nullIfEmpty(pc.SoftwareInstalado),
-		string(pc.Estado), pc.DadaDeBaja, pc.FechaBaja)
+		string(pc.Estado), pc.DadaDeBaja, pc.FechaBaja,
+		pc.Tipo, nullIfEmpty(pc.Nombre), pc.Reservable)
 	if err != nil {
 		if esViolacionUnica(err) {
-			return application.ErrIdentificadorDuplicado
+			return errorDeUnicidadDePC(err)
 		}
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
@@ -237,6 +247,32 @@ func (r *PostgresRepo) ListarIncidenciasPorPC(ctx context.Context, pcID string) 
 	return resultado, errorDeFilas(rows)
 }
 
+// errorDeUnicidadDePC traduce cuál de las tres restricciones de unicidad de
+// `pc` se violó. Sin esto, cargar un segundo "Cargador 1" respondía "ya
+// existe una PC con ese identificador", que no le dice nada a quien está
+// dando de alta un cargador.
+func errorDeUnicidadDePC(err error) error {
+	switch nombreDeConstraint(err) {
+	case "ux_equipo_suelto_nombre":
+		return application.ErrNombreDeEquipoDuplicado
+	case "pc_numero_serie_key":
+		return application.ErrNumeroSerieDuplicado
+	default:
+		// UNIQUE (carro_id, identificador), que es el caso habitual.
+		return application.ErrIdentificadorDuplicado
+	}
+}
+
+// nullSiCero es lo mismo que nullIfEmpty pero para el identificador: desde
+// la 015 un equipo suelto no tiene número, y guardar 0 lo haría chocar
+// contra el CHECK de la 001 (identificador > 0) además de mentir.
+func nullSiCero(n int) *int {
+	if n == 0 {
+		return nil
+	}
+	return &n
+}
+
 // nullIfEmpty convierte un string vacío en nil para que se guarde como
 // NULL en columnas opcionales (cpu, ram, sistema_operativo,
 // software_instalado) en vez de una cadena vacía — son cosas distintas:
@@ -246,4 +282,30 @@ func nullIfEmpty(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// ListarEquiposSueltos: lo prestable que NO está en ningún carro — el
+// proyector, los cargadores, las notebooks de otro modelo.
+//
+// Es una consulta aparte y no un filtro de ListarPCsPorCarro porque no
+// responde la misma pregunta: aquella arma la ficha de un carro, y esta es
+// la sección "Otros equipos" del inventario, que existe justamente porque
+// estas cosas no pertenecen a ninguno.
+func (r *PostgresRepo) ListarEquiposSueltos(ctx context.Context) ([]*domain.PC, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+columnasPC+` FROM pc WHERE carro_id IS NULL ORDER BY tipo, nombre`)
+	if err != nil {
+		return nil, fmt.Errorf("listando equipos sueltos: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []*domain.PC
+	for rows.Next() {
+		pc, err := escanearPC(rows)
+		if err != nil {
+			return nil, fmt.Errorf("escaneando fila de equipo: %w", err)
+		}
+		resultado = append(resultado, pc)
+	}
+	return resultado, errorDeFilas(rows)
 }

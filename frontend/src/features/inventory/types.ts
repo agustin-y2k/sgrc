@@ -12,9 +12,28 @@ export type Carro = {
 
 export type PC = {
   id: string
-  carroId: string
-  identificador: number
-  numeroSerie: string
+  /**
+   * Los tres pueden faltar desde la 015: la escuela también presta un
+   * proyector, cargadores y notebooks sueltas, que no están en ningún carro,
+   * no son "PC 3" y pueden no traer número de serie.
+   */
+  carroId?: string
+  identificador?: number
+  numeroSerie?: string
+  /**
+   * Cómo se lo nombra en cualquier pantalla: "PC 3" o "Proyector Epson". Lo
+   * resuelve el backend para que la misma cosa no se vea distinta según
+   * dónde se la mire, y para que un proyector no salga rotulado "PC 0".
+   */
+  etiqueta: string
+  /** Texto libre: la lista de cosas que presta una escuela no es la de otra. */
+  tipo: string
+  nombre?: string
+  /**
+   * Si aparece en la lista de equipos libres al reservar. El proyector sí;
+   * un cargador se presta en el momento y nadie planifica con él.
+   */
+  reservable: boolean
   freezado: boolean
   cpu?: string
   ram?: string
@@ -112,6 +131,9 @@ export type Licencia = {
   estado: EstadoLicencia
 
   /** Ubicación. Solo viene en el listado general, no en el de una PC. */
+  /** Cómo se nombra el equipo: "PC 3" o "Notebook chica". */
+  etiqueta?: string
+  /** 0 en un equipo suelto; el carro, vacío. Lo que se muestra es `etiqueta`. */
   pcIdentificador?: number
   carroId?: string
   carroNombre?: string

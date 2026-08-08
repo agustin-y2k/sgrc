@@ -16,6 +16,10 @@ flowchart LR
         UC_AprobarDoc[Aprobar cuentas docentes]
         UC_BajaDoc[Dar de baja a un docente]
         UC_Inventario[Gestionar carros y PCs - crear, editar, dar de baja]
+        UC_OtrosEquipos[Registrar equipos sueltos - proyector, cargadores]
+        UC_Licencias[Llevar el vencimiento de las licencias]
+        UC_Mostrador[Atender el mostrador]
+        UC_Entregar[Entregar y recibir equipos]
         UC_Incidencia[Registrar incidencia]
         UC_CambioEstadoPC[Cambiar estado de PC]
         UC_Calendario[Ver calendario de PC]
@@ -32,10 +36,15 @@ flowchart LR
     ADM --> UC_Ciclo & UC_CursoMat & UC_Clonar & UC_AsigDoc & UC_AprobarDoc & UC_BajaDoc
     ADM --> UC_Inventario & UC_CambioEstadoPC & UC_Reservar & UC_ReservarRec & UC_Cancelar & UC_Bloquear & UC_Reportes
     ADM --> UC_Horario & UC_VerDisp
+    ADM --> UC_OtrosEquipos & UC_Licencias & UC_Mostrador & UC_Entregar
 
     DOC --> UC_Incidencia & UC_Calendario & UC_Reservar & UC_ReservarRec & UC_Cancelar & UC_Notif & UC_VerDisp
 
     SYS --> UC_Vencer[Finalizar reservas vencidas]
+    SYS --> UC_Recordar[Recordar la reserva una hora antes]
+    SYS --> UC_Liberar[Liberar la reserva que nadie retiró]
+    SYS --> UC_Reclamar[Reclamar un equipo que no volvió]
+    SYS --> UC_AvisarLic[Avisar el vencimiento de una licencia]
 
     UC_Reservar -.include.-> UC_ValidSolap[Validar solapamiento por PC]
     UC_ReservarRec -.include.-> UC_ValidSolap
@@ -44,6 +53,13 @@ flowchart LR
     UC_CambioEstadoPC -.include.-> UC_CancelPuntual
     UC_BajaDoc -.include.-> UC_RevisarReservas[Revisar reservas huérfanas]
     UC_Cancelar -.extend.-> UC_OpcionRecur[¿Esta fecha / Esta y siguientes?]
+    UC_Mostrador -.include.-> UC_Entregar
+    UC_Liberar -.include.-> UC_AvisarDocente[Avisar al docente que la perdió]
+    UC_Reclamar -.include.-> UC_AvisarDocente
+
+    %% Un equipo suelto no es un caso aparte una vez cargado: se entrega, se
+    %% reclama y —si es reservable— se reserva por los mismos caminos que una
+    %% PC de carro. Por eso UC_OtrosEquipos no cuelga de nada más.
 ```
 
 ## Especificación de casos de uso críticos
@@ -153,7 +169,36 @@ flowchart LR
   3. Admin edita los datos de una PC en cualquier momento.
   4. Admin cambia la disponibilidad de una PC (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` — ver cascada de cancelación más arriba).
   5. Admin puede dar de baja una PC del inventario (soft delete: deja de listarse y de poder reservarse, pero su historial de incidencias y reservas pasadas se conserva).
+  6. Lo que se presta y **no está en ningún carro** —un proyector, cargadores— se carga aparte; ver el UC siguiente.
 - **Visibilidad:** el listado de carros/PCs (incluyendo `software_instalado` y `freezado`) es visible para **cualquier usuario autenticado**, no solo Admin — un docente lo necesita para elegir bien qué PCs reservar (ej: cuáles tienen la versión de AutoCAD que su clase requiere).
+
+### UC: Registrar equipos que no son computadoras de un carro
+- **Actor:** Admin
+- **Motivo:** la escuela también presta un proyector, dos cargadores y dos notebooks de otro modelo. De todo eso, solo el proyector podría llegar a reservarse; el resto sale siempre de forma espontánea. Y la lista cambia de escuela en escuela.
+- **Flujo:**
+  1. Admin abre **Otros equipos**, una sección aparte dentro del inventario —no cuelga de ningún carro porque no pertenece a ninguno—.
+  2. Carga el equipo con **qué es** (tipo, texto libre con sugerencias de los ya cargados) y **cómo lo llaman** (nombre, obligatorio).
+  3. Decide si **se puede reservar con anticipación**. Por defecto no.
+  4. Desde ese momento el equipo se entrega, se recibe y se reclama en las mismas pantallas que las computadoras.
+- **Reglas que no son obvias:**
+  - No tienen identificador ni número de serie: "PC 3" no significa nada para un cargador, y un cargador puede no traer serie de fábrica. El **nombre** es lo único que los distingue, y es **único** entre ellos sin distinguir mayúsculas — dos filas llamadas "Cargador" serían indistinguibles justo donde hay que elegir cuál se está prestando.
+  - El tipo es **texto libre y no una lista cerrada**: otra escuela tiene proyector pero quizá no cargadores, y agregar "impresora 3D" no puede pedir tocar el sistema. El formulario sugiere los tipos ya usados para no terminar con "PROYECTOR" y "Proyector" como dos cosas distintas.
+  - Lo **no reservable no aparece** en la lista de equipos libres al reservar. Sin esa marca, los dos cargadores serían ruido cada vez que un docente arma una reserva, y la primera vez que alguien reserve un cargador sin querer habría que explicarlo.
+  - Puertas adentro **son la misma entidad que las PCs**, y eso no es un detalle de implementación: es lo que hace que el proyector quede prestable, reclamable, liberable y —si es reservable— reservable, sin una línea nueva en ninguno de esos flujos. El costo asumido es que la tabla se sigue llamando `pc`; ver el encabezado de la migración 015.
+
+### UC: Atender el mostrador (pantalla de inicio del Admin)
+- **Actor:** Admin
+- **Motivo:** el Admin pasa el día en el laboratorio con gente esperando del otro lado. Lo que necesita ver sin buscar es qué clase está pasando ahora, qué viene después, qué computadoras están afuera y cuáles volvieron.
+- **Qué muestra la pantalla de inicio:**
+  1. **Ahora en el laboratorio**: las clases en curso, con cada máquina marcada como *entregada*, *sin retirar* o *liberada*, y el botón para entregarlas.
+  2. **Lo que sigue hoy**: las clases por empezar, que también se pueden entregar antes de hora.
+  3. **Afuera del laboratorio**: todo lo que está prestado —venga de una reserva o de un préstamo suelto— con el botón para marcar que volvió.
+  4. **Entregar sin reserva**, a un clic.
+- **Reglas que no son obvias:**
+  - *Entregada* o *sin retirar* **no sale de la reserva**: sale de cruzar sus PCs contra lo que está prestado ahora. La custodia es de la máquina, no de la reserva — la misma computadora puede estar afuera por un préstamo suelto.
+  - La devolución se marca en **una sola lista**, sin importar por qué salió la máquina: quien la recibe no tiene por qué acordarse de cómo se entregó.
+  - El panel **se refresca solo cada minuto**: el mostrador lo atienden varios Admin, y si uno recibe una computadora la pantalla del otro tiene que enterarse sin apretar recargar.
+  - Los **bloqueos por evaluación no aparecen**: no los retira nadie.
 
 ### UC: Entregar y recibir computadoras
 - **Actor:** Admin
@@ -171,6 +216,32 @@ flowchart LR
   - **Sin hora de devolución no se reclama nada**: "vengo en un rato" es una respuesta válida.
   - **Se puede entregar una PC en mantenimiento** (llevarla al técnico es un préstamo); no una dada de baja.
 - **Visibilidad:** solo Admin, incluidas las lecturas. Que un docente pudiera marcarse la entrega a sí mismo convertiría el registro en una declaración en vez de en una constancia.
+
+### UC: Liberar la reserva que nadie retiró
+- **Actor:** el reloj (nadie lo dispara)
+- **Motivo:** una máquina reservada que nadie vino a buscar bloquea el horario para todos los demás. Antes, la única forma de recuperarla era que alguien se acordara de cancelar la reserva.
+- **Flujo:**
+  1. Una hora antes de la clase, al docente le llega un recordatorio con el horario, sus PCs y la regla: si no las retira, a los 40 minutos quedan libres.
+  2. Si el sistema ya sabe que una de esas máquinas no volvió al laboratorio, la advertencia va **adentro de ese mismo correo**.
+  3. Pasados los 40 minutos del inicio, cada PC que nadie haya retirado pasa a `NO_RETIRADA` y deja de bloquear el horario. El docente recibe el aviso.
+  4. Si retiró algunas, solo se liberan las otras. Si no retiró ninguna, el grupo entero queda `NO_RETIRADA`.
+- **Reglas que no son obvias:**
+  - **Liberar no es prohibir.** Si el docente llega a los cincuenta minutos y las máquinas siguen ahí, se le entregan igual — como préstamo, que es otra cosa que la reserva. El correo lo dice con todas las letras, porque si no el docente asume que ya no puede usarlas y se va.
+  - **Una PC que está afuera no se libera**: si el docente vino y se la llevó, la reserva está cumplida aunque nadie haya apretado nada más.
+  - **Una clase más corta que el plazo de gracia no se libera nunca.** Liberar los últimos minutos no le sirve a nadie.
+  - `NO_RETIRADA` **no es una cancelación**: nadie la decidió, y el reporte de uso deja de contarla como una clase dada.
+
+### UC: Reclamar una computadora que no volvió
+- **Actor:** el reloj
+- **Flujo:**
+  1. A los 10 minutos de la hora de devolución, a todos los Admin les llega la lista de lo que no volvió, y a quien la tiene —si tiene cuenta— un recordatorio aparte.
+  2. Al docente de la próxima reserva de esa máquina se le avisa en `max(momento de la detección, inicio de su reserva − 1 hora)`.
+  3. Al cierre de la jornada, lo que siga afuera vuelve a listarse, diciendo a quién le va a faltar mañana.
+- **Reglas que no son obvias:**
+  - **Si la máquina vuelve antes de que corresponda avisar, el aviso no sale nunca.** Es lo que evita que una demora de quince minutos le genere un correo a alguien que reservó para dentro de tres horas.
+  - **Un préstamo sin hora pactada nunca se reclama**: "vengo en un rato" es una respuesta válida. Esas máquinas aparecen recién en el corte de fin de jornada.
+  - **A quien tiene la máquina se le habla como a un colega**, no como a un deudor: el texto empieza aceptando que quizá ya la devolvió y todavía no la registraron.
+  - Con una reserva contigua, el correo al docente siguiente llega tarde igual — ya está yendo al laboratorio. Lo que resuelve ese caso es el reclamo al Admin.
 
 ### UC: Llevar el vencimiento de las licencias de software
 - **Actor:** Admin (y el reloj: el aviso no lo dispara nadie)

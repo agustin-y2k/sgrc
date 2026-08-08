@@ -1,7 +1,18 @@
 // Espeja internal/reservation/interfaces/http/dto.go y el
 // materiaReservableResponse de academic.
 
-export type EstadoReserva = "CONFIRMADA" | "CANCELADA" | "FINALIZADA"
+export type EstadoReserva =
+  | "CONFIRMADA"
+  | "CANCELADA"
+  | "FINALIZADA"
+  /**
+   * RF-08.10 — pasaron los minutos de gracia y nadie vino a buscar esa
+   * máquina, así que dejó de estar reservada.
+   *
+   * No es una cancelación: nadie la decidió. Y liberar no es prohibir — si
+   * la computadora sigue en el laboratorio, un Admin se la entrega igual.
+   */
+  | "NO_RETIRADA"
 export type TipoReserva = "NORMAL" | "EVALUACION_ESTATAL"
 
 // La semana lectiva es de lunes a viernes: el backend rechaza reservar un
@@ -96,6 +107,9 @@ export type Reserva = {
  * prometer datos que no llegan.
  */
 export type ReservaDetallada = Reserva & {
+  /** Cómo se nombra el equipo: "PC 3" o "Proyector Epson". */
+  etiqueta: string
+  /** 0 en un equipo suelto; el carro, vacío. Lo que se muestra es `etiqueta`. */
   pcIdentificador: number
   carroNombre: string
   /** Vacío en los bloqueos por evaluación estatal, que no tienen materia. */
@@ -205,7 +219,11 @@ export type MateriaReservable = {
 /** RF-04.2: una PC libre en la franja consultada. */
 export type PCDisponible = {
   pcId: string
-  identificador: number
+  /** 0 en un equipo suelto. Lo que se muestra es `etiqueta`. */
+  identificador?: number
+  /** "PC 3" o "Proyector Epson". */
+  etiqueta: string
+  tipo?: string
   carroId: string
   carroNombre: string
   freezado: boolean
@@ -298,6 +316,8 @@ export type Prestamo = {
 
   /** Ubicación. Solo viene en los listados. */
   pcIdentificador?: number
+  /** "PC 3" o "Proyector Epson". La resuelve el backend. */
+  etiqueta?: string
   carroNombre?: string
   /** Solo en préstamos que salieron contra una reserva. */
   materiaNombre?: string

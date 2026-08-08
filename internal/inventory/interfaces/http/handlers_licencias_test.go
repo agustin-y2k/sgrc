@@ -339,3 +339,100 @@ func TestHTTP_Licencias_SoloAdmin(t *testing.T) {
 		}
 	}
 }
+
+// ── Equipos que no están en ningún carro (RF-03.15) ─────────────────────
+
+func TestHTTP_CrearEquipo_ProyectorReservable(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoRequest{
+		Tipo: "PROYECTOR", Nombre: "Proyector Epson", Reservable: true,
+	}, "ADMIN")
+
+	if codigo != fiber.StatusCreated {
+		t.Fatalf("esperaba 201, obtuve %d: %s", codigo, cuerpo)
+	}
+	var resp pcResponse
+	if err := json.Unmarshal(cuerpo, &resp); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	// Sin carro, sin número y sin serie: los tres campos ni siquiera viajan.
+	if resp.CarroID != "" || resp.Identificador != 0 || resp.NumeroSerie != "" {
+		t.Errorf("un proyector no tiene carro ni número ni serie: %+v", resp)
+	}
+	// Y se nombra por su nombre, no "PC 0".
+	if resp.Etiqueta != "Proyector Epson" || !resp.Reservable {
+		t.Errorf("etiqueta=%q reservable=%v", resp.Etiqueta, resp.Reservable)
+	}
+}
+
+func TestHTTP_CrearEquipo_CargadorNoReservable(t *testing.T) {
+	repo := nuevoFakeRepo()
+	app := nuevaAppDeTest(repo)
+
+	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoRequest{
+		Tipo: "CARGADOR", Nombre: "Cargador 1", Reservable: false,
+	}, "ADMIN")
+
+	if codigo != fiber.StatusCreated {
+		t.Fatalf("esperaba 201, obtuve %d: %s", codigo, cuerpo)
+	}
+	var resp pcResponse
+	if err := json.Unmarshal(cuerpo, &resp); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if resp.Reservable {
+		t.Error("un cargador se presta en el momento; nadie planifica con él")
+	}
+}
+
+func TestHTTP_CrearEquipo_SinNombre(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	codigo, _ := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoRequest{
+		Tipo: "CARGADOR", Nombre: "   ",
+	}, "ADMIN")
+
+	// Sin nombre no hay forma de señalarlo en la lista de entregas, que es
+	// justo donde hay que elegir cuál se está prestando.
+	if codigo != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", codigo)
+	}
+}
+
+func TestHTTP_ListarEquiposSueltos(t *testing.T) {
+	repo := nuevoFakeRepo()
+	app := nuevaAppDeTest(repo)
+	pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoRequest{
+		Tipo: "PROYECTOR", Nombre: "Proyector Epson", Reservable: true,
+	}, "ADMIN")
+
+	// Un docente también los puede ver: necesita saber que existe un
+	// proyector antes de pedirlo (RF-03.7).
+	codigo, cuerpo := pedir(t, app, "GET", "/api/inventory/equipos", nil, "DOCENTE")
+
+	if codigo != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
+	}
+	var resp struct {
+		Data []pcResponse `json:"data"`
+	}
+	if err := json.Unmarshal(cuerpo, &resp); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if len(resp.Data) != 1 || resp.Data[0].Nombre != "Proyector Epson" {
+		t.Errorf("listado: %+v", resp.Data)
+	}
+}
+
+func TestHTTP_CrearEquipo_SoloAdmin(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	codigo, _ := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoRequest{
+		Tipo: "CARGADOR", Nombre: "Cargador 1",
+	}, "DOCENTE")
+
+	if codigo != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", codigo)
+	}
+}

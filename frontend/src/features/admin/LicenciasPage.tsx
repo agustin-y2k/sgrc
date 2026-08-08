@@ -129,7 +129,7 @@ function FilaDeLicencia({
             className="mt-1"
             checked={marcada}
             disabled={sinFecha}
-            aria-label={`Seleccionar ${licencia.nombre} de la PC ${licencia.pcIdentificador}`}
+            aria-label={`Seleccionar ${licencia.nombre} de ${licencia.etiqueta}`}
             onChange={(e) => onMarcar(e.target.checked)}
           />
           <div className="min-w-0">
@@ -140,7 +140,7 @@ function FilaDeLicencia({
               </EstadoBadge>
             </p>
             <p className="text-muted-foreground text-sm break-words">
-              PC {licencia.pcIdentificador}
+              {licencia.etiqueta}
               {licencia.carroNombre && ` · ${licencia.carroNombre}`} ·{" "}
               {textoDelContador(licencia)}
               {licencia.fechaVencimiento &&
@@ -190,7 +190,7 @@ function FilaDeLicencia({
       {borrando && (
         <div className="grid gap-2 rounded-md border border-dashed p-3">
           <p className="text-sm">
-            ¿Quitar la licencia de {licencia.nombre} de la PC {licencia.pcIdentificador}?
+            ¿Quitar la licencia de {licencia.nombre} de {licencia.etiqueta}?
             Deja de aparecer en la lista y de avisar. No toca la máquina.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -282,7 +282,7 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
   })
 
   const pcs = useMemo(() => {
-    const lista: { id: string; identificador: number; carroNombre: string }[] = []
+    const lista: { id: string; etiqueta: string; carroNombre: string }[] = []
     ;(carros?.data ?? []).forEach((carro, i) => {
       const pcsDelCarro = consultasDePCs[i]?.data?.data ?? []
       pcsDelCarro
@@ -290,7 +290,7 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
         .forEach((pc) =>
           lista.push({
             id: pc.id,
-            identificador: pc.identificador,
+            etiqueta: pc.etiqueta,
             carroNombre: carro.nombre,
           })
         )
