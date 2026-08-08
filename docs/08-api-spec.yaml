@@ -2581,6 +2581,14 @@ paths:
                 horaFin: { type: string, example: "12:00" }
       responses:
         "201": { description: Bloque agregado }
+        "409":
+          description: |
+            Ese horario se pisa con otro bloque del mismo día (RF-07.7). El
+            mensaje nombra cuál. Dos bloques que se tocan en el borde —uno
+            termina 12:00 y el otro empieza 12:00— no se consideran solapados.
+          content:
+            text/plain:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/availability/mi-horario/{id}:
     patch:
@@ -2604,6 +2612,14 @@ paths:
                 horaFin: { type: string }
       responses:
         "200": { description: Bloque actualizado }
+        "409":
+          description: |
+            Ese horario se pisa con otro bloque del mismo día (RF-07.7). El
+            mensaje nombra cuál. Dos bloques que se tocan en el borde —uno
+            termina 12:00 y el otro empieza 12:00— no se consideran solapados.
+          content:
+            text/plain:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
     delete:
       tags: [availability]
       summary: Eliminar un bloque de mi horario semanal (Admin)

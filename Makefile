@@ -1,4 +1,4 @@
-.PHONY: test lint build docker-build run dev rebuild dev-down run-prod stop restart down logs ps migrate backup seed-admin seed-datos coverage-report
+.PHONY: test lint build docker-build run dev rebuild dev-down run-prod stop restart down logs ps migrate psql backup seed-admin seed-datos coverage-report
 
 test:
 	go test ./... -coverprofile=coverage.out
@@ -107,6 +107,27 @@ else
 	@docker compose exec -T postgres sh -c \
 		'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < $(ARCHIVO)
 	@echo "Aplicada: $(ARCHIVO)"
+endif
+
+# Abre una consola SQL contra la base, para mirar cuando algo se pone raro.
+#
+# Existe porque el comando a mano tiene una trampa: POSTGRES_USER vive en el
+# .env, que el shell de afuera NO lee. Escrito de la forma obvia
+# —`psql -U "$POSTGRES_USER"`— la variable llega vacía y psql intenta entrar
+# con el usuario del sistema, fallando con `role "root" does not exist`, que
+# no menciona ni el .env ni la variable. Las comillas SIMPLES de abajo son lo
+# que hace que se expanda adentro del contenedor, donde sí existe. Mismo
+# truco que migrate y backup.
+#
+#   make psql
+#   make psql SQL="SELECT count(*) FROM equipo;"
+psql:
+ifdef SQL
+	@echo '$(SQL)' | docker compose exec -T postgres sh -c \
+		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+else
+	@docker compose exec postgres sh -c \
+		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 endif
 
 # La base es lo único que no se puede reconstruir: el código y las imágenes
