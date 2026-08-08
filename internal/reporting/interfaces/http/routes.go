@@ -24,4 +24,10 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// archivado, así que siempre se resuelven en vivo.
 	reporting.Get("/incidencias/equipos", autenticado, soloAdmin, h.ReporteIncidenciasPorEquipo)
 	reporting.Get("/incidencias/carros", autenticado, soloAdmin, h.ReporteIncidenciasPorCarro)
+	reporting.Get("/incidencias/categorias", autenticado, soloAdmin, h.ReporteIncidenciasPorCategoria)
+
+	// RF-06.5: el estado del parque HOY. No dependen del ciclo lectivo ni
+	// aceptan rango de fechas — describen la situación actual, no un período.
+	reporting.Get("/inventario/estado", autenticado, soloAdmin, h.ReporteEstadoDelInventario)
+	reporting.Get("/inventario/fuera-de-circulacion", autenticado, soloAdmin, h.ReporteEquiposFueraDeCirculacion)
 }

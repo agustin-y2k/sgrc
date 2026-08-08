@@ -608,3 +608,175 @@ func TestCalcularUsoEquiposDeCiclo_RespetaElRangoDeFechas(t *testing.T) {
 		t.Fatalf("con desde=julio esperaba 1 reserva / 120 min: %+v", filtrado)
 	}
 }
+
+// ── RF-06.5: el estado del parque de equipos ────────────────────────────
+
+func insertarIncidenciaConCategoria(t *testing.T, pool *pgxpool.Pool, equipoID, categoria, descripcion, estado string, fecha time.Time) {
+	t.Helper()
+	var cat any
+	if categoria != "" {
+		cat = categoria
+	}
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO incidencia (id, equipo_id, descripcion, categoria, gravedad, estado, fecha)
+		VALUES ($1, $2, $3, $4, 'GRAVE', $5, $6)
+	`, NuevoID(), equipoID, descripcion, cat, estado, fecha)
+	if err != nil {
+		t.Fatalf("no se pudo insertar incidencia de prueba: %v", err)
+	}
+}
+
+func ponerEnEstado(t *testing.T, pool *pgxpool.Pool, equipoID, estado string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE equipo SET estado = $2 WHERE id = $1`, equipoID, estado); err != nil {
+		t.Fatalf("no se pudo cambiar el estado del equipo: %v", err)
+	}
+}
+
+// El número que se lleva a pedir presupuesto: cuántas máquinas hay y cuántas
+// están fuera de circulación.
+func TestEstadoDelInventario_CuentaPorEstadoYExcluyeLasDadasDeBaja(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+
+	disponible := crearCarroYEquipoDeTest(t, pool, 1)
+	roto := crearCarroYEquipoDeTest(t, pool, 2)
+	irreparable := crearCarroYEquipoDeTest(t, pool, 3)
+	baja := crearCarroYEquipoDeTest(t, pool, 4)
+	ponerEnEstado(t, pool, roto, "EN_MANTENIMIENTO")
+	ponerEnEstado(t, pool, irreparable, "FUERA_DE_SERVICIO")
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE equipo SET dado_de_baja = true WHERE id = $1`, baja); err != nil {
+		t.Fatalf("no se pudo dar de baja: %v", err)
+	}
+
+	filas, err := repo.EstadoDelInventario(context.Background())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	var disp, mant, fuera, total int
+	for _, f := range filas {
+		disp += f.Disponibles
+		mant += f.EnMantenimiento
+		fuera += f.FueraDeServicio
+		total += f.Total
+	}
+	if disp != 1 || mant != 1 || fuera != 1 {
+		t.Errorf("conteo incorrecto: %d disponibles, %d en mantenimiento, %d fuera de servicio", disp, mant, fuera)
+	}
+	// El dado de baja no cuenta: ya no es parte del parque, y sumarlo
+	// inflaría el número con máquinas que nadie espera recuperar.
+	if total != 3 {
+		t.Errorf("el total tiene que excluir los dados de baja, obtuve %d", total)
+	}
+	_ = disponible
+}
+
+// La lista que se manda al service: qué está afuera y qué se sabe de cada uno.
+func TestEquiposFueraDeCirculacion_TraeLaUltimaIncidenciaDeCadaUno(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	equipo := crearCarroYEquipoDeTest(t, pool, 7)
+	ponerEnEstado(t, pool, equipo, "EN_MANTENIMIENTO")
+	insertarIncidenciaConCategoria(t, pool, equipo, "pantalla", "vieja", "RESUELTA", time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC))
+	insertarIncidenciaConCategoria(t, pool, equipo, "batería", "no carga", "ABIERTA", time.Date(2026, time.June, 1, 0, 0, 0, 0, time.UTC))
+
+	filas, err := repo.EquiposFueraDeCirculacion(ctx)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(filas) != 1 {
+		t.Fatalf("esperaba 1 equipo fuera de circulación, obtuve %d", len(filas))
+	}
+	// La MÁS RECIENTE, no cualquiera: lo que importa es por qué está afuera
+	// ahora, no la falla que ya se resolvió.
+	if filas[0].Categoria != "batería" || filas[0].UltimaFalla != "no carga" {
+		t.Errorf("esperaba la incidencia más reciente, obtuve %+v", filas[0])
+	}
+	if filas[0].Estado != "EN_MANTENIMIENTO" {
+		t.Errorf("estado incorrecto: %q", filas[0].Estado)
+	}
+}
+
+// Sacar una máquina de circulación sin reportar ninguna falla es posible, y
+// esa fila tiene que aparecer igual: que nadie haya escrito qué tiene es
+// justamente lo que hay que ver.
+func TestEquiposFueraDeCirculacion_ApareceAunqueNoTengaIncidencias(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+
+	equipo := crearCarroYEquipoDeTest(t, pool, 9)
+	ponerEnEstado(t, pool, equipo, "FUERA_DE_SERVICIO")
+
+	filas, err := repo.EquiposFueraDeCirculacion(context.Background())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(filas) != 1 {
+		t.Fatalf("esperaba 1, obtuve %d", len(filas))
+	}
+	if filas[0].Categoria != "" || filas[0].UltimaFalla != "" {
+		t.Errorf("sin incidencias, esos campos van vacíos: %+v", filas[0])
+	}
+}
+
+// El texto libre no puede fragmentar la estadística: "Batería" y "batería"
+// son la misma falla escrita por dos personas distintas.
+func TestCalcularIncidenciasPorCategoria_AgrupaSinDistinguirMayusculas(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+
+	uno := crearCarroYEquipoDeTest(t, pool, 11)
+	otro := crearCarroYEquipoDeTest(t, pool, 12)
+	insertarIncidenciaConCategoria(t, pool, uno, "batería", "x", "ABIERTA", time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC))
+	insertarIncidenciaConCategoria(t, pool, otro, "Batería", "y", "RESUELTA", time.Date(2026, time.March, 2, 0, 0, 0, 0, time.UTC))
+
+	filas, err := repo.CalcularIncidenciasPorCategoria(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(filas) != 1 {
+		t.Fatalf("las dos escrituras son la misma categoría, obtuve %d filas: %+v", len(filas), filas)
+	}
+	if filas[0].Total != 2 || filas[0].Abiertas != 1 {
+		t.Errorf("conteo incorrecto: %+v", filas[0])
+	}
+	// Dos máquinas distintas alcanzadas: veinte baterías sobre veinte
+	// máquinas es un problema de lote; veinte sobre una es una máquina para
+	// dar de baja.
+	if filas[0].EquiposAlcanzados != 2 {
+		t.Errorf("esperaba 2 equipos alcanzados, obtuve %d", filas[0].EquiposAlcanzados)
+	}
+}
+
+// Las que nadie pudo diagnosticar se cuentan aparte en vez de desaparecer:
+// cuántas fallas no tienen diagnóstico es uno de los números que importan.
+func TestCalcularIncidenciasPorCategoria_LasSinClasificarSeCuentanAparte(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+
+	equipo := crearCarroYEquipoDeTest(t, pool, 13)
+	insertarIncidenciaConCategoria(t, pool, equipo, "", "no enciende", "ABIERTA", time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC))
+	insertarIncidenciaConCategoria(t, pool, equipo, "teclado", "falta una tecla", "ABIERTA", time.Date(2026, time.March, 2, 0, 0, 0, 0, time.UTC))
+
+	filas, err := repo.CalcularIncidenciasPorCategoria(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(filas) != 2 {
+		t.Fatalf("esperaba 2 filas (teclado y sin clasificar), obtuve %d", len(filas))
+	}
+	var sinClasificar bool
+	for _, f := range filas {
+		if f.Categoria == "" && f.Total == 1 {
+			sinClasificar = true
+		}
+	}
+	if !sinClasificar {
+		t.Errorf("falta la fila de las sin clasificar: %+v", filas)
+	}
+}

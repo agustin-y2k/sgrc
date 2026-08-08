@@ -12,6 +12,9 @@ import (
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
+	estadoInventario   []domain.EstadoDelInventario
+	fueraDeCirculacion []domain.EquipoFueraDeCirculacion
+	porCategoria       []domain.ResumenPorCategoriaDeFalla
 	historicoEquipo    map[string]*domain.HistoricoUsoEquipo
 	historicoDocente   map[string]*domain.HistoricoUsoDocente
 	usoEquipos         []domain.ResumenUsoEquipo
@@ -275,4 +278,16 @@ func (r *fakeRepo) CalcularIncidenciasPorEquipo(ctx context.Context, desde, hast
 
 func (r *fakeRepo) CalcularIncidenciasPorCarro(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasCarro, error) {
 	return r.incidenciasCarro, r.errIncidencias
+}
+
+func (r *fakeRepo) EstadoDelInventario(ctx context.Context) ([]domain.EstadoDelInventario, error) {
+	return r.estadoInventario, nil
+}
+
+func (r *fakeRepo) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.EquipoFueraDeCirculacion, error) {
+	return r.fueraDeCirculacion, nil
+}
+
+func (r *fakeRepo) CalcularIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error) {
+	return r.porCategoria, nil
 }

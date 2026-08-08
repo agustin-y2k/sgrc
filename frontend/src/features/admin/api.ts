@@ -16,9 +16,12 @@ import type {
   VencimientoDeclarado,
 } from "@/features/inventory/types"
 import type {
+  EquipoFueraDeCirculacion,
+  EstadoDelInventario,
   HistoricoUsoDocente,
   HistoricoUsoEquipo,
   ResultadoCascada,
+  ResumenPorCategoriaDeFalla,
   ResumenIncidenciasCarro,
   ResumenIncidenciasEquipo,
   ResumenUsoDocente,
@@ -227,6 +230,28 @@ export function reporteIncidenciasPorEquipo(desde?: string, hasta?: string) {
 export function reporteIncidenciasPorCarro(desde?: string, hasta?: string) {
   return apiFetch<RespuestaLista<ResumenIncidenciasCarro>>(
     conRango("/api/reporting/incidencias/carros", desde, hasta)
+  )
+}
+
+/**
+ * RF-06.5 — los dos primeros describen la situación de AHORA y por eso no
+ * aceptan rango de fechas: "cuántas estaban rotas en marzo" no se puede
+ * responder con el estado actual.
+ */
+export function reporteEstadoDelInventario() {
+  return apiFetch<RespuestaLista<EstadoDelInventario>>("/api/reporting/inventario/estado")
+}
+
+export function reporteEquiposFueraDeCirculacion() {
+  return apiFetch<RespuestaLista<EquipoFueraDeCirculacion>>(
+    "/api/reporting/inventario/fuera-de-circulacion"
+  )
+}
+
+/** Este sí acepta fechas: la pregunta es qué se rompió en un período. */
+export function reporteIncidenciasPorCategoria(desde?: string, hasta?: string) {
+  return apiFetch<RespuestaLista<ResumenPorCategoriaDeFalla>>(
+    conRango("/api/reporting/incidencias/categorias", desde, hasta)
   )
 }
 

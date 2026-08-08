@@ -43,9 +43,22 @@ export function reportarIncidencia(req: {
   equipoId: string
   descripcion: string
   gravedad: GravedadIncidencia
+  /** Opcional: quien reporta no siempre sabe qué es lo que falla. */
+  categoria?: string
 }) {
   return apiFetch<Incidencia>("/api/inventory/incidencias", {
     method: "POST",
     body: req,
   })
+}
+
+/**
+ * Las categorías de falla ya usadas, para sugerirlas al reportar una nueva.
+ *
+ * Es lo que hace que el texto libre converja: sin la lista a la vista,
+ * "batería" y "Bateria" nacen como dos categorías distintas y la estadística
+ * se fragmenta desde el primer día.
+ */
+export function listarCategoriasDeFalla() {
+  return apiFetch<RespuestaLista<string>>("/api/inventory/incidencias/categorias")
 }

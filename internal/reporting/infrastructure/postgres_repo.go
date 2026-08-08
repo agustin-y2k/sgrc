@@ -359,3 +359,135 @@ func (r *PostgresRepo) CalcularIncidenciasPorCarro(ctx context.Context, desde, h
 	}
 	return resultado, errorDeFilas(rows)
 }
+
+// ── Estado del parque de equipos (RF-06.5) ──────────────────────────────
+
+// EstadoDelInventario cuenta equipos por estado, agrupados por carro.
+//
+// Los dados de baja quedan afuera de todo: ya no son parte del parque, y
+// contarlos como "fuera de servicio" inflaría el número que la escuela usa
+// para pedir presupuesto con máquinas que ya nadie espera recuperar.
+//
+// LEFT JOIN a carro para que los equipos sueltos (015) aparezcan igual, en su
+// propia fila: un proyector roto también sale de circulación.
+func (r *PostgresRepo) EstadoDelInventario(ctx context.Context) ([]domain.EstadoDelInventario, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT COALESCE(c.id::text, ''), COALESCE(c.nombre, ''),
+		       COUNT(*) FILTER (WHERE e.estado = 'DISPONIBLE'),
+		       COUNT(*) FILTER (WHERE e.estado = 'EN_MANTENIMIENTO'),
+		       COUNT(*) FILTER (WHERE e.estado = 'FUERA_DE_SERVICIO'),
+		       COUNT(*)
+		FROM equipo e
+		LEFT JOIN carro c ON c.id = e.carro_id
+		WHERE e.dado_de_baja = false
+		GROUP BY c.id, c.nombre
+		-- Los sueltos al final: el carro es la unidad con la que se piensa el
+		-- inventario, y lo que no está en ninguno se lee como el resto.
+		ORDER BY c.nombre IS NULL, c.nombre
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("calculando el estado del inventario: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []domain.EstadoDelInventario
+	for rows.Next() {
+		var e domain.EstadoDelInventario
+		if err := rows.Scan(&e.CarroID, &e.CarroNombre, &e.Disponibles,
+			&e.EnMantenimiento, &e.FueraDeServicio, &e.Total); err != nil {
+			return nil, fmt.Errorf("escaneando estado del inventario: %w", err)
+		}
+		resultado = append(resultado, e)
+	}
+	return resultado, errorDeFilas(rows)
+}
+
+// EquiposFueraDeCirculacion lista lo que hoy no se puede reservar, con la
+// última incidencia de cada máquina.
+//
+// DISTINCT ON resuelve "la más reciente de cada equipo" en una sola pasada;
+// con una subconsulta correlacionada serían tantas consultas como equipos
+// listados. El LEFT JOIN es lo que deja aparecer a los que NO tienen ninguna
+// incidencia cargada — que es un caso a mostrar, no a esconder: alguien sacó
+// la máquina de circulación sin escribir por qué.
+func (r *PostgresRepo) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.EquipoFueraDeCirculacion, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT e.id,
+		       COALESCE(e.nombre, 'PC ' || e.identificador),
+		       COALESCE(c.nombre, ''),
+		       e.estado,
+		       COALESCE(ult.categoria, ''),
+		       COALESCE(ult.descripcion, ''),
+		       COALESCE(ult.estado, '')
+		FROM equipo e
+		LEFT JOIN carro c ON c.id = e.carro_id
+		LEFT JOIN LATERAL (
+			SELECT i.categoria, i.descripcion, i.estado
+			FROM incidencia i
+			WHERE i.equipo_id = e.id
+			ORDER BY i.fecha DESC
+			LIMIT 1
+		) ult ON true
+		WHERE e.dado_de_baja = false
+		  AND e.estado IN ('EN_MANTENIMIENTO', 'FUERA_DE_SERVICIO')
+		ORDER BY e.estado, c.nombre IS NULL, c.nombre, e.identificador NULLS LAST, e.id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("listando equipos fuera de circulación: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []domain.EquipoFueraDeCirculacion
+	for rows.Next() {
+		var e domain.EquipoFueraDeCirculacion
+		if err := rows.Scan(&e.EquipoID, &e.Etiqueta, &e.CarroNombre, &e.Estado,
+			&e.Categoria, &e.UltimaFalla, &e.EstadoIncidencia); err != nil {
+			return nil, fmt.Errorf("escaneando equipo fuera de circulación: %w", err)
+		}
+		resultado = append(resultado, e)
+	}
+	return resultado, errorDeFilas(rows)
+}
+
+// CalcularIncidenciasPorCategoria responde "qué se rompe acá".
+//
+// Agrupa por lower(categoria) y no por el texto tal cual: la categoría es
+// libre (017), así que "Batería" y "batería" son la misma falla escrita por
+// dos personas distintas. Se muestra MIN(categoria) como etiqueta, que es
+// estable entre corridas.
+//
+// Las no clasificadas caen todas en una fila con categoría vacía en vez de
+// quedar afuera: cuántas fallas nadie pudo diagnosticar es uno de los
+// números que el reporte tiene que dar.
+func (r *PostgresRepo) CalcularIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error) {
+	args := []any{}
+	condFechas, args := filtroFechas("i.fecha", desde, hasta, args)
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT COALESCE(MIN(i.categoria), ''),
+		       COUNT(*),
+		       COUNT(*) FILTER (WHERE i.estado = 'ABIERTA'),
+		       COUNT(DISTINCT i.equipo_id)
+		FROM incidencia i
+		WHERE 1=1`+condFechas+`
+		GROUP BY lower(i.categoria)
+		-- De lo más frecuente a lo menos, que es la pregunta que trae a
+		-- alguien acá. El segundo criterio desempata para que dos categorías
+		-- con la misma cuenta no se intercambien entre llamadas.
+		ORDER BY COUNT(*) DESC, lower(i.categoria) NULLS LAST
+	`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("calculando incidencias por categoría: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []domain.ResumenPorCategoriaDeFalla
+	for rows.Next() {
+		var x domain.ResumenPorCategoriaDeFalla
+		if err := rows.Scan(&x.Categoria, &x.Total, &x.Abiertas, &x.EquiposAlcanzados); err != nil {
+			return nil, fmt.Errorf("escaneando incidencias por categoría: %w", err)
+		}
+		resultado = append(resultado, x)
+	}
+	return resultado, errorDeFilas(rows)
+}

@@ -176,7 +176,7 @@ flowchart LR
 
 ### UC: Registrar equipos que no son computadoras de un carro
 - **Actor:** Admin
-- **Motivo:** la escuela también presta un proyector, dos cargadores y dos notebooks de otro modelo. De todo eso, solo el proyector podría llegar a reservarse; el resto sale siempre de forma espontánea. Y la lista cambia de escuela en escuela.
+- **Motivo:** una institución no presta solo las computadoras de sus carros: también proyectores, cargadores, notebooks de otro modelo. Parte de eso se planifica con anticipación y parte se pide en el momento, y qué hay en esa lista cambia de una institución a otra.
 - **Flujo:**
   1. Admin abre **Otros equipos**, una sección aparte dentro del inventario —no cuelga de ningún carro porque no pertenece a ninguno—.
   2. Carga el equipo con **qué es** (tipo, texto libre con sugerencias de los ya cargados) y **cómo lo llaman** (nombre, obligatorio).
@@ -186,7 +186,7 @@ flowchart LR
 - **Reglas que no son obvias:**
   - No tienen identificador ni número de serie: "PC 3" no significa nada para un cargador, y un cargador puede no traer serie de fábrica. El **nombre** es lo único que los distingue, y es **único** entre ellos sin distinguir mayúsculas — dos filas llamadas "Cargador" serían indistinguibles justo donde hay que elegir cuál se está prestando.
   - El tipo es **texto libre y no una lista cerrada**: otra escuela tiene proyector pero quizá no cargadores, y agregar "impresora 3D" no puede pedir tocar el sistema. El formulario sugiere los tipos ya usados para no terminar con "PROYECTOR" y "Proyector" como dos cosas distintas.
-  - Lo **no reservable no aparece** en la lista de equipos libres al reservar. Sin esa marca, los dos cargadores serían ruido cada vez que un docente arma una reserva, y la primera vez que alguien reserve un cargador sin querer habría que explicarlo.
+  - Lo **no reservable no aparece** en la lista de equipos libres al reservar. Sin esa marca, todo lo que se presta en el momento —cargadores, adaptadores— sería ruido cada vez que un docente arma una reserva, y la primera vez que alguien reserve uno sin querer habría que explicarlo.
   - **Quitar la marca de reservable no cancela nada**: el equipo deja de ofrecerse al armar una reserva, pero las que ya existen siguen en pie. Alguien contaba con el proyector esa hora, y cancelárselo sin avisar por un cambio de configuración sería peor que dejarlo.
   - **Dar de baja algo que está prestado deja el préstamo abierto**: el equipo sale del inventario pero sigue en la lista de lo que falta volver. La pantalla lo advierte antes de confirmar, que es cuando todavía se puede marcar la devolución primero.
   - Puertas adentro **son la misma entidad que las PCs**, y eso no es un detalle de implementación: es lo que hace que el proyector quede prestable, reclamable, liberable y —si es reservable— reservable, sin una línea nueva en ninguno de esos flujos. La tabla se llamó `pc` mientras tanto, y la 016 saldó ese renombre; ver el encabezado de las dos migraciones.

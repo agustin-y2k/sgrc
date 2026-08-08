@@ -64,11 +64,17 @@ type crearIncidenciaRequest struct {
 	EquipoID    string `json:"equipoId"`
 	Descripcion string `json:"descripcion"`
 	Gravedad    string `json:"gravedad"` // LEVE | MODERADA | GRAVE
+	// Categoria es opcional: quien reporta la falla no siempre sabe qué es.
+	// Se completa después, cuando alguien pudo diagnosticarla.
+	Categoria string `json:"categoria,omitempty"`
 }
 
 type editarIncidenciaRequest struct {
 	Estado           *string `json:"estado,omitempty"`
 	MarcarEnviadaDGE bool    `json:"marcarEnviadaDGE"`
+	// Categoria: mandarla vacía la devuelve a "sin clasificar"; omitirla no
+	// la toca.
+	Categoria *string `json:"categoria,omitempty"`
 }
 
 // ── Responses ───────────────────────────────────────────────────────────
@@ -127,10 +133,12 @@ func toCascadaResponse(r *application.ResultadoCascada) cascadaResponse {
 }
 
 type incidenciaResponse struct {
-	ID            string     `json:"id"`
-	EquipoID      string     `json:"equipoId"`
-	ReportadoPor  *string    `json:"reportadoPor,omitempty"`
-	Descripcion   string     `json:"descripcion"`
+	ID           string  `json:"id"`
+	EquipoID     string  `json:"equipoId"`
+	ReportadoPor *string `json:"reportadoPor,omitempty"`
+	Descripcion  string  `json:"descripcion"`
+	// Categoria vacía significa que todavía no se diagnosticó.
+	Categoria     string     `json:"categoria,omitempty"`
 	Gravedad      string     `json:"gravedad"`
 	Fecha         time.Time  `json:"fecha"`
 	EnviadoDGE    bool       `json:"enviadoDge"`
@@ -141,7 +149,8 @@ type incidenciaResponse struct {
 func toIncidenciaResponse(i *domain.Incidencia) incidenciaResponse {
 	return incidenciaResponse{
 		ID: i.ID, EquipoID: i.EquipoID, ReportadoPor: i.ReportadoPor, Descripcion: i.Descripcion,
-		Gravedad: string(i.Gravedad), Fecha: i.Fecha, EnviadoDGE: i.EnviadoDGE,
+		Categoria: i.Categoria,
+		Gravedad:  string(i.Gravedad), Fecha: i.Fecha, EnviadoDGE: i.EnviadoDGE,
 		FechaEnvioDGE: i.FechaEnvioDGE, Estado: string(i.Estado),
 	}
 }

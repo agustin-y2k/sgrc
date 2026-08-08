@@ -22,17 +22,12 @@ import { OtrosEquipos } from "@/features/admin/OtrosEquipos"
 import { PrestamosDeEquipo } from "@/features/admin/PrestamosDeEquipo"
 import * as inventoryApi from "@/features/inventory/api"
 import type { ResultadoCascada } from "@/features/admin/types"
+import { ETIQUETA_ESTADO_EQUIPO } from "@/features/inventory/types"
 import type { Carro, EstadoEquipo, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 
 const CARROS_KEY = ["carros"]
-
-const ETIQUETA_ESTADO: Record<EstadoEquipo, string> = {
-  DISPONIBLE: "Disponible",
-  EN_MANTENIMIENTO: "En mantenimiento",
-  FUERA_DE_SERVICIO: "Fuera de servicio",
-}
 
 type CambioEstado = {
   equipo: Equipo
@@ -124,7 +119,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                   <Badge
                     variant={equipo.estado === "DISPONIBLE" ? "secondary" : "destructive"}
                   >
-                    {ETIQUETA_ESTADO[equipo.estado]}
+                    {ETIQUETA_ESTADO_EQUIPO[equipo.estado]}
                   </Badge>
                 </p>
                 <p className="text-muted-foreground text-sm break-words">
@@ -143,7 +138,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                         size="sm"
                         onClick={() => setCambiando({ equipo, nuevoEstado: e, motivo: "" })}
                       >
-                        → {ETIQUETA_ESTADO[e]}
+                        → {ETIQUETA_ESTADO_EQUIPO[e]}
                       </Button>
                     ))}
                   <Button variant="outline" size="sm" onClick={() => setEditando(equipo.id)}>
@@ -194,7 +189,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                 {cambiando.nuevoEstado !== "DISPONIBLE" ? (
                   <p className="text-destructive text-sm">
                     Pasar el equipo {equipo.identificador} a{" "}
-                    {ETIQUETA_ESTADO[cambiando.nuevoEstado].toLowerCase()} cancela todas
+                    {ETIQUETA_ESTADO_EQUIPO[cambiando.nuevoEstado].toLowerCase()} cancela todas
                     sus reservas futuras y avisa a cada docente. Si más adelante vuelve a
                     estar disponible, esas reservas no se restauran solas.
                   </p>

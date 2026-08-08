@@ -112,3 +112,62 @@ func toResumenIncidenciasCarroResponse(x domain.ResumenIncidenciasCarro) resumen
 		Total: x.Total, Abiertas: x.Abiertas, Graves: x.Graves,
 	}
 }
+
+// ── RF-06.5: el estado del parque de equipos ────────────────────────────
+
+type estadoDelInventarioResponse struct {
+	// carroId y carroNombre vacíos en la fila de los equipos que no están en
+	// ningún carro.
+	CarroID         string `json:"carroId,omitempty"`
+	CarroNombre     string `json:"carroNombre,omitempty"`
+	Disponibles     int    `json:"disponibles"`
+	EnMantenimiento int    `json:"enMantenimiento"`
+	FueraDeServicio int    `json:"fueraDeServicio"`
+	// total excluye los dados de baja: el porcentaje que importa es sobre lo
+	// que la institución todavía tiene.
+	Total int `json:"total"`
+}
+
+func toEstadoDelInventarioResponse(e domain.EstadoDelInventario) estadoDelInventarioResponse {
+	return estadoDelInventarioResponse{
+		CarroID: e.CarroID, CarroNombre: e.CarroNombre,
+		Disponibles: e.Disponibles, EnMantenimiento: e.EnMantenimiento,
+		FueraDeServicio: e.FueraDeServicio, Total: e.Total,
+	}
+}
+
+type equipoFueraDeCirculacionResponse struct {
+	EquipoID    string `json:"equipoId"`
+	Etiqueta    string `json:"etiqueta"`
+	CarroNombre string `json:"carroNombre,omitempty"`
+	Estado      string `json:"estado"`
+	// Los tres siguientes salen de la última incidencia y pueden faltar: una
+	// máquina se puede sacar de circulación sin haber reportado ninguna
+	// falla, y ese hueco es un dato — nadie escribió qué tiene.
+	Categoria        string `json:"categoria,omitempty"`
+	UltimaFalla      string `json:"ultimaFalla,omitempty"`
+	EstadoIncidencia string `json:"estadoIncidencia,omitempty"`
+}
+
+func toEquipoFueraDeCirculacionResponse(e domain.EquipoFueraDeCirculacion) equipoFueraDeCirculacionResponse {
+	return equipoFueraDeCirculacionResponse{
+		EquipoID: e.EquipoID, Etiqueta: e.Etiqueta, CarroNombre: e.CarroNombre,
+		Estado: e.Estado, Categoria: e.Categoria, UltimaFalla: e.UltimaFalla,
+		EstadoIncidencia: e.EstadoIncidencia,
+	}
+}
+
+type resumenPorCategoriaResponse struct {
+	// categoria vacía es la fila de las que nadie pudo diagnosticar.
+	Categoria         string `json:"categoria,omitempty"`
+	Total             int    `json:"total"`
+	Abiertas          int    `json:"abiertas"`
+	EquiposAlcanzados int    `json:"equiposAlcanzados"`
+}
+
+func toResumenPorCategoriaResponse(x domain.ResumenPorCategoriaDeFalla) resumenPorCategoriaResponse {
+	return resumenPorCategoriaResponse{
+		Categoria: x.Categoria, Total: x.Total,
+		Abiertas: x.Abiertas, EquiposAlcanzados: x.EquiposAlcanzados,
+	}
+}

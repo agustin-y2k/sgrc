@@ -121,3 +121,67 @@ type ResumenIncidenciasCarro struct {
 	Abiertas    int
 	Graves      int
 }
+
+// ── Estado del parque de equipos (RF-06.5) ──────────────────────────────
+
+// EstadoDelInventario es cuántos equipos hay en cada estado, en total y por
+// carro. Es el número que se lleva a pedir presupuesto: "de sesenta y cuatro
+// máquinas, doce están fuera de circulación".
+//
+// A diferencia del resto de este paquete, no mira un ciclo lectivo ni un
+// rango de fechas: es una foto de AHORA. Un equipo roto lo está hoy,
+// independientemente del año en que se reportó la falla.
+type EstadoDelInventario struct {
+	// CarroID y CarroNombre vacíos en la fila de los equipos sueltos, que no
+	// cuelgan de ningún carro (015). Se los cuenta igual: un proyector roto
+	// también sale del inventario disponible.
+	CarroID     string
+	CarroNombre string
+
+	Disponibles     int
+	EnMantenimiento int
+	FueraDeServicio int
+	// Total NO es la suma de los tres: excluye los dados de baja, que ya no
+	// son parte del parque. Se expone porque el porcentaje que importa es
+	// sobre lo que la escuela todavía tiene.
+	Total int
+}
+
+// EquipoFueraDeCirculacion es una máquina que hoy no se puede reservar, con
+// lo último que se sabe de por qué.
+//
+// La distinción entre los dos estados NO es qué tan rota está, sino QUIÉN
+// puede arreglarla: EN_MANTENIMIENTO es lo que la institución resuelve por
+// su cuenta, FUERA_DE_SERVICIO lo que no —sin repuestos, sin autorización,
+// sin quien sepa—. La misma falla puede caer en cualquiera de los dos según
+// la escuela y el momento, así que el reporte no infiere nada del tipo de
+// falla: informa el estado que alguien decidió y la categoría por separado.
+type EquipoFueraDeCirculacion struct {
+	EquipoID    string
+	Etiqueta    string
+	CarroNombre string
+	Estado      string
+
+	// Lo que sigue sale de la ÚLTIMA incidencia cargada, y puede estar vacío:
+	// una máquina se puede pasar a mantenimiento sin haber reportado ninguna
+	// falla, y ese hueco es un dato en sí mismo — nadie escribió qué tiene.
+	Categoria        string
+	UltimaFalla      string
+	EstadoIncidencia string
+}
+
+// ResumenPorCategoriaDeFalla responde "qué se rompe acá": cuántas incidencias
+// de cada tipo, y cuántos equipos distintos alcanzó.
+//
+// Las dos cuentas dicen cosas distintas y por eso van las dos: veinte
+// incidencias de batería sobre veinte máquinas es un problema de lote; veinte
+// sobre la misma máquina es una máquina para dar de baja.
+type ResumenPorCategoriaDeFalla struct {
+	// Categoria vacía es la fila de "sin clasificar", que se cuenta aparte en
+	// vez de esconderse: cuántas fallas nadie pudo diagnosticar es
+	// justamente uno de los números que importan.
+	Categoria         string
+	Total             int
+	Abiertas          int
+	EquiposAlcanzados int
+}
