@@ -99,7 +99,7 @@ func (r *PostgresRepo) ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio
 		FROM historico_uso_equipo WHERE anio = $1
 		-- Las PCs de carro primero y por número; los equipos sueltos después,
 		-- juntos y por nombre. equipo_id cierra el orden: el identificador se
-		-- repite entre carros y es NULL en los sueltos (015).
+		-- repite entre carros y es NULL en los sueltos.
 		ORDER BY identificador_snapshot NULLS LAST, etiqueta_snapshot, equipo_id
 	`, anio)
 	if err != nil {
@@ -188,7 +188,7 @@ func (r *PostgresRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID st
 		       COUNT(*), COALESCE(SUM(`+expresionMinutosDe("r")+`), 0) AS minutos
 		FROM reserva r
 		JOIN equipo p ON p.id = r.equipo_id
-		-- LEFT desde la 015: un proyector reservable no está en ningún carro,
+		-- LEFT: un proyector reservable no está en ningún carro,
 		-- y con INNER JOIN sus reservas no figuraban en el reporte de uso —
 		-- el equipo más peleado de la escuela podía aparecer como sin usar.
 		LEFT JOIN carro ca ON ca.id = p.carro_id
@@ -217,7 +217,7 @@ func (r *PostgresRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID st
 		-- eran la excepción.
 		-- El identificador desempata para que dos PCs con el mismo uso no se
 		-- intercambien de lugar entre llamadas. No alcanza solo: se repite
-		-- entre carros y es NULL en los equipos sueltos (015), así que
+		-- entre carros y es NULL en los equipos sueltos, así que
 		-- r.equipo_id cierra el orden.
 		ORDER BY minutos DESC, p.identificador NULLS LAST, r.equipo_id
 	`, args...)
@@ -295,12 +295,12 @@ func (r *PostgresRepo) CalcularIncidenciasPorEquipo(ctx context.Context, desde, 
 		       COUNT(i.id),
 		       COUNT(*) FILTER (WHERE i.estado = 'ABIERTA'),
 		       COUNT(*) FILTER (WHERE i.estado = 'EN_REPARACION'),
-		       COUNT(*) FILTER (WHERE i.estado = 'ENVIADA_DGE'),
+		       COUNT(*) FILTER (WHERE i.estado = 'ENVIADA_A_SOPORTE'),
 		       COUNT(*) FILTER (WHERE i.estado = 'RESUELTA'),
 		       COUNT(*) FILTER (WHERE i.gravedad = 'GRAVE')
 		FROM incidencia i
 		JOIN equipo p ON p.id = i.equipo_id
-		-- LEFT desde la 015: al proyector también se le rompe la lámpara, y
+		-- LEFT: al proyector también se le rompe la lámpara, y
 		-- con INNER JOIN sus incidencias no llegaban a este reporte.
 		LEFT JOIN carro ca ON ca.id = p.carro_id
 		WHERE 1=1`+condFechas+`
@@ -316,7 +316,7 @@ func (r *PostgresRepo) CalcularIncidenciasPorEquipo(ctx context.Context, desde, 
 	for rows.Next() {
 		var x domain.ResumenIncidenciasEquipo
 		if err := rows.Scan(&x.EquipoID, &x.Etiqueta, &x.Identificador, &x.CarroNombre,
-			&x.Total, &x.Abiertas, &x.EnReparacion, &x.EnviadasDGE, &x.Resueltas, &x.Graves); err != nil {
+			&x.Total, &x.Abiertas, &x.EnReparacion, &x.EnviadasASoporte, &x.Resueltas, &x.Graves); err != nil {
 			return nil, fmt.Errorf("escaneando incidencias por PC: %w", err)
 		}
 		resultado = append(resultado, x)
@@ -368,7 +368,7 @@ func (r *PostgresRepo) CalcularIncidenciasPorCarro(ctx context.Context, desde, h
 // contarlos como "fuera de servicio" inflaría el número que la escuela usa
 // para pedir presupuesto con máquinas que ya nadie espera recuperar.
 //
-// LEFT JOIN a carro para que los equipos sueltos (015) aparezcan igual, en su
+// LEFT JOIN a carro para que los equipos sueltos aparezcan igual, en su
 // propia fila: un proyector roto también sale de circulación.
 func (r *PostgresRepo) EstadoDelInventario(ctx context.Context) ([]domain.EstadoDelInventario, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -452,7 +452,7 @@ func (r *PostgresRepo) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.
 // CalcularIncidenciasPorCategoria responde "qué se rompe acá".
 //
 // Agrupa por lower(categoria) y no por el texto tal cual: la categoría es
-// libre (017), así que "Batería" y "batería" son la misma falla escrita por
+// libre, así que "Batería" y "batería" son la misma falla escrita por
 // dos personas distintas. Se muestra MIN(categoria) como etiqueta, que es
 // estable entre corridas.
 //

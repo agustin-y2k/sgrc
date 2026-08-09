@@ -56,7 +56,7 @@ var ErrTransicionReservaInvalida = errors.New("transición de estado de reserva 
 // bloqueo administrativo — este último no pertenece a ningún ReservaGrupo ni
 // Materia (RF-04.7), y lleva su propio motivo.
 //
-// El bloqueo se llamó `EVALUACION_ESTATAL` hasta la 019, y era un caso
+// El bloqueo se llamó `EVALUACION_ESTATAL` en versiones anteriores, y era un caso
 // concreto usado como categoría: un Admin se toma el laboratorio por una
 // evaluación, pero también por una jornada docente, una capacitación o una
 // obra en el aula. Lo que tienen en común no es la evaluación, es que
@@ -117,7 +117,7 @@ type Reserva struct {
 
 	// MotivoBloqueo: por qué se tomó el equipo. Solo en los TipoBloqueo, y
 	// ahí es obligatorio; vacío en las normales, que ya dicen para qué son
-	// por su materia (019).
+	// por su materia.
 	MotivoBloqueo string
 }
 

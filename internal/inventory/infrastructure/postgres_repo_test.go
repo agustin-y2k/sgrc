@@ -250,7 +250,7 @@ func TestPostgresRepo_Incidencia_CrearYListar(t *testing.T) {
 	}
 }
 
-func TestPostgresRepo_GuardarIncidencia_MarcarEnviadaDGE(t *testing.T) {
+func TestPostgresRepo_GuardarIncidencia_MarcarEnviadaASoporte(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
@@ -264,7 +264,7 @@ func TestPostgresRepo_GuardarIncidencia_MarcarEnviadaDGE(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	inc.MarcarEnviadaDGE(time.Now().UTC().Truncate(time.Microsecond))
+	inc.MarcarEnviadaASoporte(time.Now().UTC().Truncate(time.Microsecond))
 	if err := repo.GuardarIncidencia(ctx, inc); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -273,8 +273,8 @@ func TestPostgresRepo_GuardarIncidencia_MarcarEnviadaDGE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if !recargada.EnviadoDGE || recargada.Estado != domain.IncidenciaEnviadaDGE {
-		t.Errorf("no se persistió el envío a DGE: %+v", recargada)
+	if !recargada.EnviadoASoporte || recargada.Estado != domain.IncidenciaEnviadaASoporte {
+		t.Errorf("no se persistió el envío a soporte: %+v", recargada)
 	}
 }
 
@@ -308,7 +308,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 	}
 }
 
-// ── Equipos sueltos (015) ───────────────────────────────────────────────
+// ── Equipos sueltos ───────────────────────────────────────────────
 
 func crearEquipoSueltoDeTest(t *testing.T, repo *PostgresRepo, tipo, nombre string, reservable bool) *domain.Equipo {
 	t.Helper()
@@ -323,7 +323,8 @@ func crearEquipoSueltoDeTest(t *testing.T, repo *PostgresRepo, tipo, nombre stri
 }
 
 // Lo que solo una base de verdad puede confirmar: que las tres columnas que
-// la 015 aflojó aceptan NULL y vuelven vacías, no como un cero o un error de
+// Las columnas que un equipo suelto no usa aceptan NULL y vuelven vacías,
+// no como un cero o un error de
 // escaneo. Un proyector sin carro, sin identificador y sin número de serie es
 // exactamente la fila que antes era imposible.
 func TestPostgresRepo_EquipoSuelto_GuardarYRecuperar(t *testing.T) {
@@ -415,7 +416,7 @@ func TestPostgresRepo_EquipoSuelto_NombreSeReusaTrasLaBaja(t *testing.T) {
 // El listado de la sección "Otros equipos": trae lo que no cuelga de ningún
 // carro y nada más. Si se colara una PC de carro, el proyector aparecería
 // junto a las 64 computadoras y la sección perdería sentido.
-func TestPostgresRepo_ListarEquiposSueltos_NoTraeLasDeCarro(t *testing.T) {
+func TestPostgresRepo_ListarEquipos_ConFiltroNoTraeLasDeCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
@@ -425,7 +426,7 @@ func TestPostgresRepo_ListarEquiposSueltos_NoTraeLasDeCarro(t *testing.T) {
 	crearEquipoSueltoDeTest(t, repo, "PROYECTOR", "Proyector Epson", true)
 	crearEquipoSueltoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
 
-	sueltos, err := repo.ListarEquiposSueltos(ctx)
+	sueltos, err := repo.ListarEquipos(ctx, true)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -440,5 +441,32 @@ func TestPostgresRepo_ListarEquiposSueltos_NoTraeLasDeCarro(t *testing.T) {
 	// Ordenados por tipo y después por nombre: CARGADOR antes que PROYECTOR.
 	if len(nombres) != 2 || nombres[0] != "Cargador 1" || nombres[1] != "Proyector Epson" {
 		t.Errorf("esperaba [Cargador 1, Proyector Epson], obtuve %v", nombres)
+	}
+}
+
+// Sin filtro, ListarEquipos es el inventario entero: lo de los carros y lo
+// suelto en una sola consulta. Es lo que evita que una pantalla que necesita
+// todo lo prestable haga una consulta por carro más otra por los sueltos.
+func TestPostgresRepo_ListarEquipos_SinFiltroTraeTodo(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	carro := crearCarroDeTest(t, repo, "Carro 1")
+	crearEquipoDeCarroDeTest(t, repo, carro.ID, 3, "SERIE-EQ-3")
+	crearEquipoSueltoDeTest(t, repo, "PROYECTOR", "Proyector Epson", true)
+
+	todos, err := repo.ListarEquipos(ctx, false)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(todos) != 2 {
+		t.Fatalf("esperaba el equipo de carro y el suelto, obtuve %d", len(todos))
+	}
+
+	// Los sueltos primero: el carro es la unidad con la que se piensa el
+	// inventario, y lo que no está en ninguno se lee aparte.
+	if todos[0].EstaEnUnCarro() {
+		t.Errorf("esperaba el suelto primero, vino %+v", todos[0])
 	}
 }

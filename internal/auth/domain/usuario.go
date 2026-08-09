@@ -167,7 +167,7 @@ type Usuario struct {
 
 	// VersionSesion es el contador que permite echar a las sesiones
 	// abiertas cuando la contraseña cambia (ver InvalidarSesiones y
-	// migrations/010). Viaja dentro del JWT y el middleware lo compara
+	// migrations/001_esquema_inicial.sql). Viaja dentro del JWT y el middleware lo compara
 	// contra el de la fila en cada request.
 	VersionSesion int
 }
@@ -199,7 +199,7 @@ func (u *Usuario) PuedeIngresarConPassword() bool { return u.PasswordHash != "" 
 // PuedeIngresarConGoogle indica si la cuenta está vinculada a una cuenta
 // de Google. Una misma cuenta puede tener las dos formas de ingreso: un
 // docente que se registró con contraseña y después entra con Google
-// conserva las dos (ver migrations/008_login_con_google.sql).
+// conserva las dos (ver migrations/001_esquema_inicial.sql).
 func (u *Usuario) PuedeIngresarConGoogle() bool { return u.GoogleSub != "" }
 
 // CambiarEstado aplica una transición si es válida, o devuelve

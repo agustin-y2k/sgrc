@@ -90,13 +90,16 @@ func (r *fakeRepo) ListarEquiposPorCarro(ctx context.Context, carroID string) ([
 	return resultado, nil
 }
 
-// ListarEquiposSueltos: lo prestable que no está en ningún carro (015).
-func (r *fakeRepo) ListarEquiposSueltos(ctx context.Context) ([]*domain.Equipo, error) {
+// ListarEquipos: el inventario, o solo lo que no está en ningún carro.
+// El filtro se aplica acá igual que en la base: un fake más permisivo que el
+// repositorio real hace pasar en la máquina lo que falla en producción.
+func (r *fakeRepo) ListarEquipos(ctx context.Context, soloSueltos bool) ([]*domain.Equipo, error) {
 	var resultado []*domain.Equipo
 	for _, equipo := range r.equipos {
-		if !equipo.EstaEnUnCarro() {
-			resultado = append(resultado, equipo)
+		if soloSueltos && equipo.EstaEnUnCarro() {
+			continue
 		}
+		resultado = append(resultado, equipo)
 	}
 	return resultado, nil
 }
@@ -400,7 +403,7 @@ func TestEditarEquipo_MoverDeCarro(t *testing.T) {
 }
 
 // Editar es la otra puerta por la que se escriben tipo y nombre, además del
-// alta. Sin validar acá, un nombre vacío llegaría hasta el CHECK de la 015 y
+// alta. Sin validar acá, un nombre vacío llegaría hasta el CHECK de la base y
 // volvería como un 500 en vez del 400 que corresponde — y dejaría un equipo
 // suelto sin lo único que lo distingue en la lista de entregas.
 func TestEditarEquipo_EquipoSueltoNoPuedeQuedarSinNombre(t *testing.T) {
@@ -664,20 +667,20 @@ func TestCrearIncidencia_DescripcionVacia_Error(t *testing.T) {
 	}
 }
 
-func TestEditarIncidencia_MarcarEnviadaDGE(t *testing.T) {
+func TestEditarIncidencia_MarcarEnviadaASoporte(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.incidencias["i1"] = &domain.Incidencia{ID: "i1", Estado: domain.IncidenciaEnReparacion}
 	svc := servicioSimple(repo)
 
-	err := svc.EditarIncidencia(context.Background(), "i1", EditarIncidenciaParams{MarcarEnviadaDGE: true})
+	err := svc.EditarIncidencia(context.Background(), "i1", EditarIncidenciaParams{MarcarEnviadaASoporte: true})
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if !repo.incidencias["i1"].EnviadoDGE {
-		t.Error("EnviadoDGE debería quedar true")
+	if !repo.incidencias["i1"].EnviadoASoporte {
+		t.Error("EnviadoASoporte debería quedar true")
 	}
-	if repo.incidencias["i1"].Estado != domain.IncidenciaEnviadaDGE {
+	if repo.incidencias["i1"].Estado != domain.IncidenciaEnviadaASoporte {
 		t.Errorf("estado incorrecto: %s", repo.incidencias["i1"].Estado)
 	}
 }

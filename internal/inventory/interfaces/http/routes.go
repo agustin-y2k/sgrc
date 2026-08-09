@@ -24,23 +24,36 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 
 	// Equipo — las computadoras de un carro y todo lo demás que se presta.
 	//
-	// /equipos/sueltos va ANTES que /equipos/:id, y eso no es cosmético:
-	// Fiber resuelve por orden de registro, así que al revés el :id se
-	// tragaría la palabra "sueltos" y el listado devolvería un 404 buscando
-	// un equipo con ese ID.
-	inventory.Post("/equipos/sueltos", autenticado, soloAdmin, h.CrearEquipo)
-	inventory.Get("/equipos/sueltos", autenticado, h.ListarEquiposSueltos)
-
+	// `/equipos` es UNA colección con filtros en la query, y no varias rutas
+	// con la condición metida en el path. La versión anterior era
+	// `/equipos/sueltos`, y el problema no era de purismo: Fiber resuelve por
+	// orden de registro, así que un segmento literal tiene que ganarle a
+	// `/:id` o el parámetro se traga la palabra y el listado devuelve un 404
+	// buscando un equipo con ese ID. Es una trampa que no avisa —compila,
+	// arranca, y falla en tiempo de ejecución— y que ya se cobró dos rutas.
+	// Con `?enCarro=false` no hay orden que respetar.
+	//
+	// A qué colección se hace POST decide dónde nace el equipo: en
+	// `/carros/{id}/equipos` nace adentro de ese carro, en `/equipos` nace
+	// suelto. Eso es también lo que cambia qué datos lleva —un equipo de
+	// carro tiene identificador y número de serie, uno suelto tiene nombre—,
+	// así que son dos cuerpos distintos y no uno con campos opcionales.
+	inventory.Get("/equipos", autenticado, h.ListarEquipos)
+	inventory.Post("/equipos", autenticado, soloAdmin, h.CrearEquipo)
 	inventory.Post("/carros/:carroId/equipos", autenticado, soloAdmin, h.CrearEquipoDeCarro)
 	inventory.Get("/carros/:carroId/equipos", autenticado, h.ListarEquiposPorCarro)
 	inventory.Patch("/equipos/:id", autenticado, soloAdmin, h.EditarEquipo)
 	inventory.Patch("/equipos/:id/estado", autenticado, soloAdmin, h.CambiarEstadoEquipo)
 	inventory.Delete("/equipos/:id", autenticado, soloAdmin, h.DarDeBajaEquipo)
 
+	// Las categorías de falla ya usadas son su propia colección y no algo
+	// colgado de `/incidencias`: no son incidencias, son el vocabulario con
+	// el que se las clasifica. Como sibling tampoco compite con
+	// `/incidencias/:id`, que es el otro caso del orden de registro.
+	inventory.Get("/categorias-de-falla", autenticado, h.ListarCategoriasDeFalla)
+
 	// Incidencia
 	inventory.Post("/incidencias", autenticado, h.CrearIncidencia)
-	// Antes de /incidencias/:id, que si no se traga la palabra "categorias".
-	inventory.Get("/incidencias/categorias", autenticado, h.ListarCategoriasDeFalla)
 	inventory.Get("/equipos/:equipoId/incidencias", autenticado, h.ListarIncidenciasPorEquipo)
 	inventory.Patch("/incidencias/:id", autenticado, soloAdmin, h.EditarIncidencia)
 

@@ -17,7 +17,7 @@ import "time"
 type ReservaCancelada struct {
 	ReservaID string
 	// Etiqueta es cómo el docente reconoce el equipo: "PC 7", "Proyector
-	// Epson". No es el UUID ni el número pelado — desde la 015 lo que se
+	// Epson". No es el UUID ni el número pelado — lo que se
 	// reserva puede no tener número, y "PC 0" es lo que sale de formatear
 	// uno que no existe.
 	//
@@ -53,7 +53,7 @@ type LicenciaPorVencer struct {
 	LicenciaID string
 	Nombre     string
 	// Etiqueta es cómo se nombra al equipo: "PC 3" o "Notebook chica".
-	// Identificador va en 0 en un equipo suelto (015), así que un aviso
+	// Identificador va en 0 en un equipo suelto, así que un aviso
 	// armado con él manda a buscar una "PC 0" que no existe.
 	Etiqueta         string
 	Identificador    int
@@ -103,7 +103,7 @@ func (a AvisoDeLicencias) Total() int {
 type DatosDeRecuperacion struct {
 	Email  string
 	Nombre string
-	// Codigo en claro. En la base solo está su hash (migración 009).
+	// Codigo en claro. En la base solo está su hash.
 	Codigo string
 	// MinutosDeVigencia viaja armado para que el texto del correo no tenga
 	// que conocer la constante del dominio de auth.
@@ -154,7 +154,7 @@ type RecordatorioDeReserva struct {
 	Fecha         time.Time
 	HoraInicio    time.Duration
 	// Equipos son las etiquetas ("PC 3", "Proyector Epson"), no los UUID
-	// ni los números: desde la 015 lo reservable puede no tener número.
+	// ni los números: lo reservable puede no tener número.
 	Equipos []string
 	// EquiposSinDevolver son los de esa misma reserva que en este momento
 	// están afuera y pasados de hora. Van ADENTRO del recordatorio y no en

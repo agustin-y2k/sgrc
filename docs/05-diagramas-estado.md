@@ -9,7 +9,7 @@ stateDiagram-v2
     EN_MANTENIMIENTO --> DISPONIBLE: Reparación resuelta
     EN_MANTENIMIENTO --> FUERA_DE_SERVICIO: Daño irreparable
     DISPONIBLE --> FUERA_DE_SERVICIO: Falla crítica
-    FUERA_DE_SERVICIO --> [*]: Enviada a DGE / Baja definitiva
+    FUERA_DE_SERVICIO --> [*]: Enviada a soporte / Baja definitiva
     DISPONIBLE --> DADA_DE_BAJA: Admin la elimina del inventario (soft delete)
     EN_MANTENIMIENTO --> DADA_DE_BAJA: Admin la elimina del inventario
     FUERA_DE_SERVICIO --> DADA_DE_BAJA: Admin la elimina del inventario

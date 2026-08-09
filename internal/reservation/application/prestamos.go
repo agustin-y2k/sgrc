@@ -92,7 +92,7 @@ type EntregaPorReservaParams struct {
 	//
 	// NO reemplaza al docente: él sigue siendo el responsable, porque es
 	// quien reservó y a quien se le reclama si las máquinas no vuelven. Esto
-	// se anota AL LADO, y es opcional (018). Vacío = las retiró él.
+	// se anota AL LADO, y es opcional. Vacío = las retiró él.
 	RetiradoPor  string
 	EntregadoPor string
 }

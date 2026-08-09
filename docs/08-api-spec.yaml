@@ -365,7 +365,7 @@ components:
         fecha: { type: string, format: date-time }
         enviadoDGE: { type: boolean }
         fechaEnvioDGE: { type: string, format: date-time, nullable: true }
-        estado: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_DGE, RESUELTA] }
+        estado: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_A_SOPORTE, RESUELTA] }
 
     # ── Reservations ──
     ReservaRequest:
@@ -1473,19 +1473,40 @@ paths:
         "201": { description: PC registrada }
         "409": { description: Ya existe una PC con ese identificador en el carro, o el número de serie ya está registrado en otra PC }
 
-  /api/inventory/equipos/sueltos:
+  /api/inventory/equipos:
     get:
       tags: [inventory]
-      summary: Listar lo prestable que no está en ningún carro (RF-03.15, todos los usuarios autenticados)
+      summary: Listar el inventario, entero o solo lo que no está en ningún carro (RF-03.15, todos los usuarios autenticados)
       description: |
-        El proyector, los cargadores, las notebooks sueltas. Lo ve cualquier
-        autenticado por el mismo motivo que los carros y las PCs (RF-03.7): un
-        docente necesita saber que existe un proyector antes de pedirlo.
+        Sin filtro devuelve todo el inventario, que es lo que necesita una
+        pantalla que ofrezca lo prestable sin recorrer carro por carro.
 
-        Comparten entidad —y esquema de respuesta— con las PCs de carro, y eso
-        es deliberado: "qué hay afuera del laboratorio" (RF-08) tiene que ser
-        una sola lista. Ver el encabezado de la migración 015.
+        Con `enCarro=false`, solo el proyector, los cargadores, las notebooks
+        sueltas. Solo se reconoce el valor exacto `false`: cualquier otra cosa
+        devuelve el inventario entero, porque de un filtro mal escrito es
+        mejor ver de más que de menos — ver de menos se confunde con "no hay
+        ninguno".
+
+        Lo ve cualquier autenticado por el mismo motivo que los carros y las
+        PCs (RF-03.7): un docente necesita saber que existe un proyector antes
+        de pedirlo.
+
+        Los equipos sueltos comparten entidad —y esquema de respuesta— con las
+        PCs de carro, y eso es deliberado: "qué hay afuera del laboratorio"
+        (RF-08) tiene que ser una sola lista. Ver el encabezado de la
+        esta tabla compartida.
+
+        Reemplaza a `/equipos/sueltos`. La condición estaba en el path, y eso
+        obliga a registrar el segmento literal antes que `/{id}` o el
+        parámetro se lo traga; es una trampa que compila, arranca y falla en
+        tiempo de ejecución.
       security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: enCarro
+          required: false
+          schema: { type: string, enum: ["false"] }
+          description: "`false` deja solo los equipos que no pertenecen a ningún carro."
       responses:
         "200":
           content:
@@ -1500,9 +1521,12 @@ paths:
       tags: [inventory]
       summary: Registrar un equipo suelto (RF-03.15, Admin)
       description: |
-        Ruta aparte de `/carros/{carroId}/equipos` y no un campo opcional suyo
-        porque lo que se carga es distinto: acá no hay carro, ni identificador,
-        ni número de serie, y lo que identifica al equipo es el nombre.
+        A qué colección se hace POST decide dónde nace el equipo: acá nace
+        suelto, en `/carros/{carroId}/equipos` nace adentro de ese carro.
+
+        Son dos colecciones y no una con un campo opcional porque lo que se
+        carga es distinto: acá no hay carro, ni identificador, ni número de
+        serie, y lo que identifica al equipo es el nombre.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -1676,7 +1700,7 @@ paths:
                   description: |
                     Opcional (RF-03.5): quien reporta no siempre sabe qué
                     falla. Texto libre; conviene tomarla de
-                    `/api/inventory/incidencias/categorias` para no crear
+                    `/api/inventory/categorias-de-falla` para no crear
                     variantes de una categoría que ya existe.
                   example: batería
                 gravedad: { type: string, enum: [LEVE, MODERADA, GRAVE] }
@@ -1700,7 +1724,7 @@ paths:
             schema:
               type: object
               properties:
-                estado: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_DGE, RESUELTA] }
+                estado: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_A_SOPORTE, RESUELTA] }
                 categoria:
                   type: string
                   maxLength: 50
@@ -2376,7 +2400,7 @@ paths:
         resto de una recurrencia u otras PCs del mismo grupo siguen vigentes. Los
         grupos afectados pasan a PARCIALMENTE_CANCELADA o CANCELADA según corresponda.
 
-        Hasta la migración 019 esta operación se llamaba "bloqueo por evaluación
+        En versiones anteriores esta operación se llamaba "bloqueo por evaluación
         estatal" y vivía en `/bloqueos-evaluacion`. Era un caso concreto usado como
         categoría, y el nombre viejo aparecía hasta en el aviso que recibía el
         docente al que le cancelaban la clase.
@@ -2584,7 +2608,7 @@ paths:
                         total: { type: integer }
                         abiertas: { type: integer }
                         enReparacion: { type: integer }
-                        enviadasDge: { type: integer }
+                        enviadasASoporte: { type: integer }
                         resueltas: { type: integer }
                         graves: { type: integer }
 
@@ -2802,7 +2826,7 @@ paths:
                         abiertas: { type: integer }
                         graves: { type: integer }
 
-  /api/inventory/incidencias/categorias:
+  /api/inventory/categorias-de-falla:
     get:
       tags: [inventory]
       summary: Categorías de falla ya usadas (RF-03.5)
@@ -2816,6 +2840,11 @@ paths:
 
         No requiere ser Admin: la usa la misma pantalla donde un docente
         reporta la falla.
+
+        Es una colección propia y no `/incidencias/categorias`: no son
+        incidencias, son el vocabulario con el que se las clasifica. Como
+        hermana tampoco compite con `/incidencias/{id}` por el orden de
+        registro de las rutas.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -2898,7 +2927,7 @@ paths:
                         estado: { type: string, enum: [EN_MANTENIMIENTO, FUERA_DE_SERVICIO] }
                         categoria: { type: string, description: "Ausente si no se diagnosticó" }
                         ultimaFalla: { type: string, description: "Descripción de la incidencia más reciente" }
-                        estadoIncidencia: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_DGE, RESUELTA] }
+                        estadoIncidencia: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_A_SOPORTE, RESUELTA] }
 
   /api/reporting/incidencias/categorias:
     get:

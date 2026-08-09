@@ -145,7 +145,7 @@ make run-prod          # docker compose up --build
 ```
 
 La primera vez tarda unos minutos: compila el binario Go, compila la SPA y
-crea la base aplicando todo lo de `migrations/`.
+crea la base aplicando el esquema de `migrations/`.
 
 Cuando termina, el primer Admin ya está creado con el `SEED_ADMIN_EMAIL` y el
 `SEED_ADMIN_PASSWORD` del `.env`. Entrá con esa cuenta y **cambiale la
@@ -225,8 +225,8 @@ Con los archivos nuevos ya en el servidor:
 make run-prod          # reconstruye las imágenes y reemplaza los contenedores
 ```
 
-Si la actualización trae **migraciones nuevas** (archivos nuevos en
-`migrations/`), hay que aplicarlas a mano: ver §5.
+Si la actualización trae **cambios en el esquema** (archivos nuevos en
+`migrations/`), hay que aplicarlos a mano: ver §5.
 
 ---
 
@@ -278,15 +278,25 @@ docker compose logs sgrc-app | grep -i "correo\|email"
 
 ---
 
-## 5. Migraciones
+## 5. El esquema de la base
 
-Los archivos de `migrations/` se aplican **solos la primera vez**, cuando la
-base se crea vacía. Sobre una base que ya existe **no corren solas**: hay que
-aplicarlas a mano, en orden, cuando llega una nueva.
+`migrations/001_esquema_inicial.sql` es el esquema completo del sistema. Se
+aplica **solo, una vez**, cuando la base se crea vacía: Postgres ejecuta lo
+que encuentre en ese directorio la primera vez que inicializa el volumen.
+
+Es un archivo único y no una cadena de parches incrementales. La razón es
+para quién está escrito: alguien que adopta el proyecto necesita entender qué
+tablas hay y por qué son así, y eso se lee de corrido en un archivo — no
+reconstruyéndolo mentalmente a partir de veinte migraciones sucesivas, la
+mitad de las cuales renombran lo que hizo la otra mitad. La historia de cómo
+se llegó a este esquema está en el historial de git, que es donde corresponde.
+
+**Sobre una base que ya existe no corre solo.** Si hay que aplicarlo a mano —
+por ejemplo para levantar una instalación nueva contra una base ya creada:
 
 ```bash
 docker compose exec -T postgres sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < migrations/005_dia_semana_lectivo.sql
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < migrations/001_esquema_inicial.sql
 ```
 
 > **Ojo con las comillas.** `POSTGRES_USER` y `POSTGRES_DB` viven en el
@@ -300,13 +310,16 @@ docker compose exec -T postgres sh -c \
 o, más corto:
 
 ```bash
-make migrate ARCHIVO=migrations/005_dia_semana_lectivo.sql
+make migrate ARCHIVO=migrations/001_esquema_inicial.sql
 ```
 
-Cada migración es transaccional: o se aplica entera o no se aplica nada. Las
-que endurecen una regla revisan primero si hay datos que quedarían afuera y
-**abortan diciendo exactamente qué filas son**, sin tocar nada — la decisión
-de qué hacer con esos datos es de quien administra, no de la migración.
+> **Cuando el esquema cambie.** Este proyecto todavía no lleva registro en la
+> base de qué se aplicó: mientras haya un solo archivo no hace falta, porque
+> la pregunta "¿ya corrió?" se responde mirando si existen las tablas. En
+> cuanto se agregue una segunda migración conviene incorporar una herramienta
+> que lleve ese registro (`golang-migrate`, `goose` o equivalente): sin ella,
+> saber qué falta aplicar depende de que alguien se acuerde, y eso falla justo
+> cuando hay varias instalaciones o pasa el tiempo entre despliegues.
 
 Para ver cuáles se aplicaron hay que mirar la base; el proyecto no lleva una
 tabla de versiones de esquema (a esta escala, la lista de archivos y el
@@ -446,7 +459,7 @@ que cambia es qué datos hay adentro:
 
 |  | Producción (servidor de la escuela) | Desarrollo (`make run`) |
 |---|---|---|
-| Tablas | Las crea Postgres al arrancar con el volumen vacío, aplicando `migrations/` | Igual |
+| Tablas | Las crea Postgres al arrancar con el volumen vacío, aplicando el esquema de `migrations/` | Igual |
 | Primer Admin | Lo siembra la app (`SEED_ADMIN_*` del `.env`) | Igual |
 | Datos | **Ninguno**: ni ciclo, ni carros, ni equipos. El Admin arma todo desde la interfaz | Ciclo, curso, materia, un docente aprobado y un carro con 8 PCs |
 

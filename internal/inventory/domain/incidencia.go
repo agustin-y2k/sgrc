@@ -29,17 +29,17 @@ func ParseGravedad(s string) (Gravedad, error) {
 type EstadoIncidencia string
 
 const (
-	IncidenciaAbierta      EstadoIncidencia = "ABIERTA"
-	IncidenciaEnReparacion EstadoIncidencia = "EN_REPARACION"
-	IncidenciaEnviadaDGE   EstadoIncidencia = "ENVIADA_DGE"
-	IncidenciaResuelta     EstadoIncidencia = "RESUELTA"
+	IncidenciaAbierta         EstadoIncidencia = "ABIERTA"
+	IncidenciaEnReparacion    EstadoIncidencia = "EN_REPARACION"
+	IncidenciaEnviadaASoporte EstadoIncidencia = "ENVIADA_A_SOPORTE"
+	IncidenciaResuelta        EstadoIncidencia = "RESUELTA"
 )
 
 var ErrEstadoIncidenciaInvalido = errors.New("estado de incidencia inválido")
 
 func ParseEstadoIncidencia(s string) (EstadoIncidencia, error) {
 	switch EstadoIncidencia(s) {
-	case IncidenciaAbierta, IncidenciaEnReparacion, IncidenciaEnviadaDGE, IncidenciaResuelta:
+	case IncidenciaAbierta, IncidenciaEnReparacion, IncidenciaEnviadaASoporte, IncidenciaResuelta:
 		return EstadoIncidencia(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrEstadoIncidenciaInvalido, s)
@@ -52,19 +52,19 @@ var ErrDescripcionVacia = errors.New("la descripción de la incidencia no puede 
 // diferencia de Usuario/PC, docs/01-requisitos.md no define una máquina de
 // estados estricta para EstadoIncidencia — cualquier transición entre los
 // cuatro valores es válida (un Admin puede, por ejemplo, volver de
-// ENVIADA_DGE a EN_REPARACION si vuelve antes de lo esperado). Por eso acá
+// ENVIADA_A_SOPORTE a EN_REPARACION si vuelve antes de lo esperado). Por eso acá
 // no hay un PuedeTransicionarA como en Usuario/PC — solo se valida que el
 // valor en sí sea uno de los cuatro conocidos (ParseEstadoIncidencia).
 type Incidencia struct {
-	ID            string
-	EquipoID      string
-	ReportadoPor  *string
-	Descripcion   string
-	Gravedad      Gravedad
-	Fecha         time.Time
-	EnviadoDGE    bool
-	FechaEnvioDGE *time.Time
-	Estado        EstadoIncidencia
+	ID                 string
+	EquipoID           string
+	ReportadoPor       *string
+	Descripcion        string
+	Gravedad           Gravedad
+	Fecha              time.Time
+	EnviadoASoporte    bool
+	FechaEnvioASoporte *time.Time
+	Estado             EstadoIncidencia
 	// Categoria es QUÉ tipo de falla es, en texto libre ("batería",
 	// "pantalla"). Vacía mientras no se haya podido diagnosticar, que es un
 	// estado real y no un dato faltante: una máquina que no enciende tiene
@@ -119,9 +119,11 @@ func NuevaIncidencia(id, equipoID, reportadoPor, descripcion, categoria string, 
 	}, nil
 }
 
-// MarcarEnviadaDGE registra el envío a soporte técnico DGE (RF-03.6).
-func (i *Incidencia) MarcarEnviadaDGE(fecha time.Time) {
-	i.EnviadoDGE = true
-	i.FechaEnvioDGE = &fecha
-	i.Estado = IncidenciaEnviadaDGE
+// MarcarEnviadaASoporte registra que el equipo se mandó a reparar afuera
+// (RF-03.6). A dónde depende de la institución: un organismo educativo, un
+// proveedor, un taller.
+func (i *Incidencia) MarcarEnviadaASoporte(fecha time.Time) {
+	i.EnviadoASoporte = true
+	i.FechaEnvioASoporte = &fecha
+	i.Estado = IncidenciaEnviadaASoporte
 }

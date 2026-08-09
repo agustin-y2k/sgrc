@@ -399,7 +399,7 @@ func TestPostgresRepo_ReservasFuturasDeEquipo_VienenOrdenadas(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_Prestamo_QuienRetiraSobreviveALaVueltaDeLaBase (018)
+// TestPostgresRepo_Prestamo_QuienRetiraSobreviveALaVueltaDeLaBase
 //
 // Quien responde y quien vino a buscar el equipo son dos columnas distintas,
 // y las dos tienen que volver de la base como se guardaron. Es el dato que

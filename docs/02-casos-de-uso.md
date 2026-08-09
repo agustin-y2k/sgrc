@@ -194,7 +194,7 @@ flowchart LR
   - Lo **no reservable no aparece** en la lista de equipos libres al reservar. Sin esa marca, todo lo que se presta en el momento —cargadores, adaptadores— sería ruido cada vez que un docente arma una reserva, y la primera vez que alguien reserve uno sin querer habría que explicarlo.
   - **Quitar la marca de reservable no cancela nada**: el equipo deja de ofrecerse al armar una reserva, pero las que ya existen siguen en pie. Alguien contaba con el proyector esa hora, y cancelárselo sin avisar por un cambio de configuración sería peor que dejarlo.
   - **Dar de baja algo que está prestado deja el préstamo abierto**: el equipo sale del inventario pero sigue en la lista de lo que falta volver. La pantalla lo advierte antes de confirmar, que es cuando todavía se puede marcar la devolución primero.
-  - Puertas adentro **son la misma entidad que las PCs**, y eso no es un detalle de implementación: es lo que hace que el proyector quede prestable, reclamable, liberable y —si es reservable— reservable, sin una línea nueva en ninguno de esos flujos. La tabla se llamó `pc` mientras tanto, y la 016 saldó ese renombre; ver el encabezado de las dos migraciones.
+  - Puertas adentro **son la misma entidad que las PCs**, y eso no es un detalle de implementación: es lo que hace que el proyector quede prestable, reclamable, liberable y —si es reservable— reservable, sin una línea nueva en ninguno de esos flujos. La tabla se llamó `pc` mientras solo guardaba computadoras; hoy se llama `equipo`.
 
 ### UC: Atender el mostrador (pantalla de inicio del Admin)
 - **Actor:** Admin

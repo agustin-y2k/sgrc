@@ -99,6 +99,10 @@ type EventBus interface {
 
 `reservation` publica eventos como `reserva.cancelada`; `notification` y `reporting` se suscriben en el arranque (`main.go`). La entrega es en memoria — sin persistencia de mensajes ni garantías at-least-once, que no hacen falta con un solo proceso (si el proceso muere, todo se reinicia junto).
 
+**Los filtros van en la query, no en el path.** Fiber resuelve las rutas por orden de registro, así que un segmento literal (`/equipos/sueltos`) tiene que registrarse **antes** que el parámetro que lo puede tragar (`/equipos/:id`). Si se invierte, la ruta literal deja de existir y el handler del `:id` responde un 404 buscando un equipo llamado "sueltos": compila, arranca y falla recién en tiempo de ejecución, contra una base real. Ya pasó dos veces —`/equipos/sueltos` y `/incidencias/categorias`—, y las dos veces la solución fue un comentario pidiendo que nadie reordene las líneas.
+
+La convención evita el problema en vez de documentarlo: **una condición sobre una colección es un query param** (`/equipos?enCarro=false`), y **un concepto distinto es una colección hermana** (`/categorias-de-falla`, que no son incidencias sino el vocabulario con el que se las clasifica). Lo que sí puede ir en el path es una relación real de pertenencia: `/carros/{id}/equipos` son los equipos DE ese carro.
+
 **`Publish` corre en la goroutine de quien publica.** Eso no es un detalle: significa que un suscriptor lento se traduce directamente en un request HTTP lento. Por eso los handlers de `notification` no hacen su trabajo adentro del handler, sino que lo lanzan en su propia goroutine con un contexto y un timeout propios (el del request se cancela apenas se responde). Es lo que hace que registrar un docente no espere a que se abra una conexión SMTP contra Gmail, y lo que permite que cancelar una recurrencia de 40 fechas × 5 PCs no haga 200 `INSERT` en serie dentro del request. Un `sync.WaitGroup` en `main.go` registra las entregas en curso para que el apagado ordenado no se las lleve puestas.
 
 **Un mismo evento puede tener varios suscriptores, y se usa.** `docente.registro.pendiente` tiene dos: el que escribe el aviso interno y el que manda el mail (RF-05.8). Están registrados por separado a propósito — el aviso interno es la fuente de verdad y el correo una copia, así que un fallo de SMTP no puede impedir que el aviso se escriba. `Publish` además recupera el panic de cada handler por separado, así que uno roto no se lleva a los demás.
@@ -123,7 +127,7 @@ flowchart TB
         CF[Cloudflare Tunnel]
     end
 
-    subgraph Huawei["Huawei RH1288 V3 — Ubuntu 24.04"]
+    subgraph Servidor["Servidor de la institución — Linux"]
         subgraph App["sgrc-app (binario Go único)"]
             AUTH[auth]
             ACAD[academic]
@@ -156,7 +160,7 @@ flowchart TB
         CFT[Cloudflare Tunnel]
     end
 
-    subgraph Huawei["Huawei RH1288 V3 — Ubuntu 24.04 — 8 GB RAM / 6 cores"]
+    subgraph Servidor["Servidor de la institución — Linux"]
         subgraph Docker["Red Docker: sgrc-net"]
             CFTD[cloudflared]
             NG[frontend — nginx + SPA compilada]

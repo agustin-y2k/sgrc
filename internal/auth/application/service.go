@@ -321,7 +321,7 @@ func (s *Service) LoginConGoogle(ctx context.Context, idToken string) (*LoginRes
 // Cuando aparece por email, se trata de un docente que ya tenía cuenta con
 // contraseña y ahora entra con Google: se le agrega el sub y conserva la
 // contraseña — las dos formas de ingreso conviven (ver
-// migrations/008_login_con_google.sql). Vincular por email es seguro
+// migrations/001_esquema_inicial.sql). Vincular por email es seguro
 // justamente porque identidadDeGoogle ya exigió email_verified: sin eso,
 // alguien podría poner la dirección de un docente en su propio perfil de
 // Google y quedarse con su cuenta.
