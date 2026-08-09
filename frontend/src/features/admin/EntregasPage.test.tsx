@@ -345,7 +345,7 @@ describe("EntregasPage", () => {
       paginada([
         reserva({
           id: "bloq1",
-          tipo: "EVALUACION_ESTATAL",
+          tipo: "BLOQUEO",
           materiaNombre: undefined,
           nombreDocenteSnapshot: undefined,
         }),

@@ -411,27 +411,48 @@ components:
 
     Reserva:
       type: object
-      description: "Una PC puntual dentro de un ReservaGrupo (o una fila EVALUACION_ESTATAL suelta, sin grupo)."
+      description: "Una PC puntual dentro de un ReservaGrupo (o una fila BLOQUEO suelta, sin grupo)."
       properties:
         id: { type: string, format: uuid }
-        reservaGrupoId: { type: string, format: uuid, nullable: true, description: "NULL solo para tipo EVALUACION_ESTATAL" }
+        reservaGrupoId: { type: string, format: uuid, nullable: true, description: "NULL solo para tipo BLOQUEO" }
         equipoId: { type: string, format: uuid }
         etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Solo en los listados detallados. Es lo que se muestra: identificador va en 0 y carroNombre vacío si el equipo no está en ningún carro" }
         identificador: { type: integer }
         estado: { type: string, enum: [CONFIRMADA, CANCELADA, FINALIZADA, NO_RETIRADA] }
-        tipo: { type: string, enum: [NORMAL, EVALUACION_ESTATAL] }
+        tipo: { type: string, enum: [NORMAL, BLOQUEO] }
+        motivoBloqueo:
+          type: string
+          nullable: true
+          example: Jornada docente
+          description: |
+            Por qué se tomó el equipo. Solo en los BLOQUEO, y ahí va siempre:
+            es obligatorio al crearlos. Las pantallas lo muestran en el lugar
+            donde una clase muestra su materia.
         motivoCancelacion: { type: string, nullable: true }
         canceladaEn: { type: string, format: date-time, nullable: true }
         creadaEn: { type: string, format: date-time }
 
     BloqueoRequest:
       type: object
-      required: [carroId, fecha, horaInicio, horaFin]
+      required: [equipoIds, fecha, horaInicio, horaFin, motivo]
       properties:
-        carroId: { type: string, format: uuid }
+        equipoIds: { type: array, minItems: 1, items: { type: string, format: uuid }, description: "Los equipos a bloquear. Pueden ser de carros distintos." }
         fecha: { type: string, format: date }
         horaInicio: { type: string, example: "08:00" }
         horaFin: { type: string, example: "18:00" }
+        motivo:
+          type: string
+          maxLength: 500
+          example: Jornada docente
+          description: |
+            Obligatorio. Texto libre: el sistema no puede prever por qué una
+            institución se toma el laboratorio —una evaluación, una jornada
+            docente, una capacitación, una obra en el aula—.
+
+            Se aparta del criterio de los otros textos libres del sistema, que
+            sí admiten vacío, porque un bloqueo le cancela la clase a otra
+            persona. Se guarda en cada bloqueo y viaja tal cual al aviso de
+            los docentes afectados, sin envolverlo en ninguna categoría.
 
     # ── Notifications ──
     Notificacion:
@@ -2344,14 +2365,21 @@ paths:
         "403": { description: No es tu reserva y no sos Admin }
         "404": { description: No encontrada }
 
-  /api/reservation/bloqueos-evaluacion:
+  /api/reservation/bloqueos:
     post:
       tags: [reservations]
-      summary: Bloquear equipos de un carro para evaluación estatal, en un rango horario definido (Admin)
+      summary: Bloquear equipos en un rango horario definido, indicando por qué (Admin)
       description: |
+        Un Admin toma los equipos para otra cosa, por el motivo que sea.
+
         Cancela solo las Reserva puntuales en conflicto dentro del rango exacto — el
         resto de una recurrencia u otras PCs del mismo grupo siguen vigentes. Los
         grupos afectados pasan a PARCIALMENTE_CANCELADA o CANCELADA según corresponda.
+
+        Hasta la migración 019 esta operación se llamaba "bloqueo por evaluación
+        estatal" y vivía en `/bloqueos-evaluacion`. Era un caso concreto usado como
+        categoría, y el nombre viejo aparecía hasta en el aviso que recibía el
+        docente al que le cancelaban la clase.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -2371,7 +2399,7 @@ paths:
         "400":
           description: |
             El bloque ya terminó. RF-04.7 NO tiene las otras dos restricciones de una
-            reserva normal: una evaluación estatal puede caer sábado o domingo y durar
+            reserva normal: un bloqueo puede caer sábado o domingo y durar
             lo que el Admin decida — es excepcional por naturaleza.
 
   # ══════════════════════════════

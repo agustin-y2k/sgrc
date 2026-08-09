@@ -626,15 +626,15 @@ func TestEntregarDevolverYEntregarDeNuevo(t *testing.T) {
 // TestEntregarPorReserva_BloqueoDeEvaluacionNoRompeElLote
 //
 // Un bloqueo por evaluación estatal (RF-04.7) no tiene docente:
-// NuevaReservaEvaluacion no recibe nombre, así que NombreDocenteSnapshot es
+// NuevaReservaBloqueo no recibe nombre, así que NombreDocenteSnapshot es
 // nil. Sin nombre, NuevoPrestamo devolvía ErrNombreDestinatarioVacio, y como
 // ese error corta el lote entero, entregar cinco máquinas fallaba con un 400
 // porque una de las reservas era un bloqueo — sin entregar ninguna.
 func TestEntregarPorReserva_BloqueoDeEvaluacionNoRompeElLote(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(t, repo, "res1", "pc1")
-	bloqueo, err := domain.NuevaReservaEvaluacion("bloq1", "pc2", nil,
-		fecha(2026, time.March, 2), 8*time.Hour, 9*time.Hour, mediodiaDeTest.Add(-24*time.Hour))
+	bloqueo, err := domain.NuevaReservaBloqueo("bloq1", "pc2", nil,
+		fecha(2026, time.March, 2), 8*time.Hour, 9*time.Hour, "Jornada docente", mediodiaDeTest.Add(-24*time.Hour))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -661,8 +661,8 @@ func TestEntregarPorReserva_BloqueoDeEvaluacionNoRompeElLote(t *testing.T) {
 // examen.
 func TestEntregarPorReserva_BloqueoConNombreSiSeEntrega(t *testing.T) {
 	repo := nuevoFakeRepo()
-	bloqueo, err := domain.NuevaReservaEvaluacion("bloq1", "pc1", nil,
-		fecha(2026, time.March, 2), 8*time.Hour, 9*time.Hour, mediodiaDeTest.Add(-24*time.Hour))
+	bloqueo, err := domain.NuevaReservaBloqueo("bloq1", "pc1", nil,
+		fecha(2026, time.March, 2), 8*time.Hour, 9*time.Hour, "Jornada docente", mediodiaDeTest.Add(-24*time.Hour))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}

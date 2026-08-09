@@ -75,7 +75,7 @@ function agruparPorClase(reservas: ReservaDetallada[]): ReservaDelDia[] {
     }
     porGrupo.set(clave, {
       clave,
-      materia: r.materiaNombre ?? "Bloqueo por evaluación",
+      materia: r.materiaNombre ?? r.motivoBloqueo ?? "Bloqueado",
       curso: r.cursoNombre,
       docente: r.nombreDocenteSnapshot ?? "",
       horaInicio: r.horaInicio,
@@ -229,7 +229,7 @@ export function PanelDelLaboratorio() {
     const ahora = minutosDeAhora()
     // Los bloqueos por evaluación no se entregan a nadie: nadie viene a
     // buscarlos, los crea un Admin para sacar máquinas de circulación.
-    const delDia = (reservas?.data ?? []).filter((r) => r.tipo !== "EVALUACION_ESTATAL")
+    const delDia = (reservas?.data ?? []).filter((r) => r.tipo !== "BLOQUEO")
     const clases = agruparPorClase(delDia)
 
     return {

@@ -214,13 +214,13 @@ func (h *Handler) CancelarOcurrenciaRecurrente(c *fiber.Ctx) error {
 }
 
 // POST /api/reservation/bloqueos-evaluacion (Admin)
-func (h *Handler) BloquearParaEvaluacion(c *fiber.Ctx) error {
+func (h *Handler) BloquearEquipos(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
 		return err
 	}
 
-	var req bloquearEvaluacionRequest
+	var req bloquearRequest
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
@@ -239,17 +239,18 @@ func (h *Handler) BloquearParaEvaluacion(c *fiber.Ctx) error {
 	}
 
 	usuarioID := claims.UserID
-	res, err := h.svc.BloquearParaEvaluacion(c.UserContext(), req.EquipoIDs, &usuarioID, fecha, horaInicio, horaFin, req.Motivo)
+	res, err := h.svc.BloquearEquipos(c.UserContext(), req.EquipoIDs, &usuarioID, fecha, horaInicio, horaFin, req.Motivo)
 	if err != nil {
 		return mapearError(err)
 	}
 	h.auditar(c, claims.UserID, audit.BloqueoEvaluacionCreado, "reserva", nil, map[string]any{
-		"pcIds":               req.EquipoIDs,
+		"equipoIds":           req.EquipoIDs,
 		"fecha":               req.Fecha,
+		"motivo":              req.Motivo,
 		"reservasCanceladas":  res.ReservasCanceladas,
 		"docentesNotificados": res.DocentesNotificados,
 	})
-	return c.Status(fiber.StatusCreated).JSON(toBloquearEvaluacionResponse(res))
+	return c.Status(fiber.StatusCreated).JSON(toBloquearResponse(res))
 }
 
 // GET /api/reservation/grupos/{id} — la reserva propia; un Admin puede ver

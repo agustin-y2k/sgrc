@@ -13,7 +13,7 @@ import (
 	"github.com/ramiro/sgrc/internal/reservation/domain"
 )
 
-const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, creado_por, creada_en, cancelado_por, motivo_cancelacion, cancelada_en`
+const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en, cancelado_por, motivo_cancelacion, cancelada_en`
 
 // condicionNoTerminada arma "esta reserva todavía no terminó respecto del
 // instante dado", comparando la hora de pared de la reserva contra la hora
@@ -47,11 +47,11 @@ func condicionNoTerminada(placeholderFecha, placeholderHora string) string {
 
 func (r *PostgresRepo) CrearReserva(ctx context.Context, res *domain.Reserva) error {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO reserva (id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, creado_por, creada_en)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		INSERT INTO reserva (id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`, res.ID, res.ReservaGrupoID, res.EquipoID, res.MateriaID, res.NombreDocenteSnapshot, res.Fecha,
 		duracionComoHora(res.HoraInicio), duracionComoHora(res.HoraFin),
-		string(res.Estado), string(res.Tipo), res.CreadoPor, res.CreadaEn)
+		string(res.Estado), string(res.Tipo), nullSiVacio(res.MotivoBloqueo), res.CreadoPor, res.CreadaEn)
 	if err != nil {
 		// La constraint EXCLUDE (anti-solapamiento) es la garantía real
 		// contra condiciones de carrera — application.verificarSinSolapamiento
@@ -80,10 +80,11 @@ func escanearReserva(row pgx.Row) (*domain.Reserva, error) {
 	var res domain.Reserva
 	var horaInicio, horaFin time.Time
 	var estadoStr, tipoStr string
+	var motivoBloqueo *string
 
 	err := row.Scan(
 		&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
-		&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr,
+		&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
 		&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
 	)
 	if err != nil {
@@ -94,6 +95,10 @@ func escanearReserva(row pgx.Row) (*domain.Reserva, error) {
 			return nil, application.ErrIDInvalido
 		}
 		return nil, fmt.Errorf("escaneando reserva: %w", err)
+	}
+
+	if motivoBloqueo != nil {
+		res.MotivoBloqueo = *motivoBloqueo
 	}
 
 	estado, err := domain.ParseEstadoReserva(estadoStr)
@@ -318,7 +323,7 @@ func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, ciclo
 		WHERE c.ciclo_lectivo_id = $1
 	`
 	bloqueosDelCiclo := `
-		tipo = 'EVALUACION_ESTATAL'
+		tipo = 'BLOQUEO'
 		AND EXTRACT(YEAR FROM fecha) = (SELECT anio FROM ciclo_lectivo WHERE id = $1)
 	`
 
@@ -449,6 +454,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		var res domain.Reserva
 		var horaInicio, horaFin time.Time
 		var estadoStr, tipoStr string
+		var motivoBloqueo *string
 		var detalle application.ReservaDetallada
 
 		// COUNT(*) OVER() cuenta las filas que matchean el WHERE, antes del
@@ -456,7 +462,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		// podría además ver un estado distinto de la tabla.
 		if err := rows.Scan(
 			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
-			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr,
+			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
 			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
 			&detalle.Identificador, &detalle.Etiqueta, &detalle.CarroNombre,
 			&detalle.MateriaNombre, &detalle.CursoNombre,
@@ -464,6 +470,9 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 			&total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("escaneando fila de reserva: %w", err)
+		}
+		if motivoBloqueo != nil {
+			res.MotivoBloqueo = *motivoBloqueo
 		}
 
 		res.HoraInicio = horaComoDuracion(horaInicio)
@@ -536,15 +545,19 @@ func (r *PostgresRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, 
 		var res domain.Reserva
 		var horaInicio, horaFin time.Time
 		var estadoStr, tipoStr string
+		var motivoBloqueo *string
 		var materiaNombre, cursoNombre string
 
 		if err := rows.Scan(
 			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
-			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr,
+			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
 			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
 			&materiaNombre, &cursoNombre,
 		); err != nil {
 			return nil, fmt.Errorf("escaneando bloque del calendario: %w", err)
+		}
+		if motivoBloqueo != nil {
+			res.MotivoBloqueo = *motivoBloqueo
 		}
 
 		estado, err := domain.ParseEstadoReserva(estadoStr)
@@ -570,6 +583,11 @@ func (r *PostgresRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, 
 // columnasReservaConPrefijo devuelve la lista de columnas calificada con
 // el alias de tabla — hace falta en las consultas con JOIN, donde "id" a
 // secas sería ambiguo.
+//
+// Parte por ", ", así que columnasReserva tiene que ser una lista de nombres
+// pelados: una expresión con coma adentro —un COALESCE, por ejemplo— se
+// partiría al medio y saldría SQL inválido. Por eso motivo_bloqueo se escanea
+// como puntero en vez de coalescerse en la consulta.
 func columnasReservaConPrefijo(alias string) string {
 	columnas := strings.Split(columnasReserva, ", ")
 	for i, c := range columnas {

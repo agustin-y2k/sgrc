@@ -242,7 +242,7 @@ classDiagram
 | `EstadoEquipo` | `DISPONIBLE`, `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` |
 | `EstadoReservaGrupo` | `CONFIRMADA`, `PARCIALMENTE_CANCELADA`, `CANCELADA`, `FINALIZADA`, `NO_RETIRADA` |
 | `EstadoReserva` (por PC) | `CONFIRMADA`, `CANCELADA`, `FINALIZADA`, `NO_RETIRADA` |
-| `TipoReserva` | `NORMAL`, `EVALUACION_ESTATAL` |
+| `TipoReserva` | `NORMAL`, `BLOQUEO` |
 | `Gravedad` | `LEVE`, `MODERADA`, `GRAVE` |
 | `EstadoIncidencia` | `ABIERTA`, `EN_REPARACION`, `ENVIADA_DGE`, `RESUELTA` |
 | `EstadoNotif` | `NO_LEIDA`, `LEIDA` |
@@ -253,8 +253,8 @@ classDiagram
 
 ## Notas de diseño
 
-- **`ReservaGrupo` vs `Reserva`**: un docente selecciona varias PCs de una lista (tildando casillas) hasta juntar la cantidad que necesita para su clase, en una sola operación. `ReservaGrupo` es esa operación (una materia, fecha, horario); `Reserva` es cada PC dentro de ella. Las cancelaciones en cascada (evaluación estatal, PC fuera de servicio) actúan sobre filas `Reserva` puntuales — el `ReservaGrupo` solo pasa a `CANCELADA` si terminan canceladas **todas** sus PCs; si queda alguna en pie, pasa a `PARCIALMENTE_CANCELADA`.
-- **`Reserva` de tipo `EVALUACION_ESTATAL` no pertenece a ningún `ReservaGrupo` ni `Materia`**: es un bloqueo administrativo sobre PCs puntuales, no la reserva de un docente para dar clase.
+- **`ReservaGrupo` vs `Reserva`**: un docente selecciona varias PCs de una lista (tildando casillas) hasta juntar la cantidad que necesita para su clase, en una sola operación. `ReservaGrupo` es esa operación (una materia, fecha, horario); `Reserva` es cada PC dentro de ella. Las cancelaciones en cascada (bloqueo administrativo, PC fuera de servicio) actúan sobre filas `Reserva` puntuales — el `ReservaGrupo` solo pasa a `CANCELADA` si terminan canceladas **todas** sus PCs; si queda alguna en pie, pasa a `PARCIALMENTE_CANCELADA`.
+- **`Reserva` de tipo `BLOQUEO` no pertenece a ningún `ReservaGrupo` ni `Materia`**: es un bloqueo administrativo sobre PCs puntuales, no la reserva de un docente para dar clase.
 - **`Equipo.freezado`**: atributo informativo (Deep Freeze instalado), sin efecto funcional sobre reservas. Vive a nivel de PC, no de `Carro` — cada PC de un mismo carro puede tener o no Deep Freeze instalado.
 - **`ReglaRecurrencia` no guarda sus PCs**: una recurrencia semanal reserva varias PCs a la vez, igual que una reserva puntual, pero eso vive en los `ReservaGrupo` que la regla materializa (uno por ocurrencia), cada uno con sus `Reserva`. Existió una tabla puente `regla_recurrencia_pc` que solo se escribía y nunca se leía: se eliminó en la migración `002` (ver `07-modelo-datos.md`). Cancelar "esta y las siguientes" (RF-04.6) resuelve por `reserva_grupo.regla_recurrencia_id`.
 - **`Usuario.estado = BAJA`**: distingue una cuenta que estuvo activa y se dio de baja de una que nunca fue aprobada (`RECHAZADA`). Al dar de baja a un docente, sus reservas futuras **no se cancelan automáticamente** salvo que la materia quede sin ningún otro docente asignado (ver `01-requisitos.md` RF-02.8).

@@ -357,7 +357,8 @@ describe("MisReservasPage", () => {
       reserva({
         id,
         reservaGrupoId: undefined,
-        tipo: "EVALUACION_ESTATAL",
+        tipo: "BLOQUEO",
+        motivoBloqueo: "Jornada docente",
         creadoPor: "admin1",
         materiaNombre: undefined,
         cursoNombre: undefined,
@@ -375,7 +376,7 @@ describe("MisReservasPage", () => {
       // Una tarjeta, no tres: antes bloquear tres equipos se veía como tres
       // bloqueos distintos.
       expect(
-        await screen.findByText(/Bloqueo por evaluación · 3 equipos/)
+        await screen.findByText(/Jornada docente · 3 equipos/)
       ).toBeInTheDocument()
       expect(screen.getAllByRole("button", { name: "Levantar bloqueo" })).toHaveLength(1)
       expect(screen.getByText("PC 1 · Carro 1")).toBeInTheDocument()
@@ -429,7 +430,7 @@ describe("MisReservasPage", () => {
       )
       renderPagina()
 
-      expect(await screen.findAllByText(/Bloqueo por evaluación · 1 equipo/)).toHaveLength(2)
+      expect(await screen.findAllByText(/Jornada docente · 1 equipo/)).toHaveLength(2)
     })
   })
 
