@@ -77,7 +77,7 @@ func (v *ValidadorReservasPostgres) TieneReservasDeCiclo(ctx context.Context, ci
 			WHERE c.ciclo_lectivo_id = $1
 		) OR EXISTS(
 			SELECT 1 FROM reserva
-			WHERE tipo = 'EVALUACION_ESTATAL'
+			WHERE tipo = 'BLOQUEO'
 			  AND EXTRACT(YEAR FROM fecha) = (SELECT anio FROM ciclo_lectivo WHERE id = $1)
 		)
 	`, cicloID).Scan(&existe)

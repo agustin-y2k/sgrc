@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import * as inventoryApi from "@/features/inventory/api"
 import type { Carro, Equipo } from "@/features/inventory/types"
 import * as reservasApi from "@/features/reservas/api"
-import { hoyISO, type ResultadoBloqueoEvaluacion } from "@/features/reservas/types"
+import { hoyISO, type ResultadoBloqueo } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 
@@ -29,8 +29,13 @@ function esBloqueable(equipo: Equipo): boolean {
 }
 
 /**
- * RF-04.7 — un Admin bloquea equipos para una evaluación estatal en una fecha y
- * un rango horario conocidos de antemano.
+ * RF-04.7 — un Admin toma equipos en una fecha y un rango horario conocidos
+ * de antemano, por el motivo que sea.
+ *
+ * Se llamó "bloqueo por evaluación estatal" hasta la 019, y era un caso
+ * concreto usado como categoría: el laboratorio también se toma por una
+ * jornada docente, una capacitación o una obra en el aula. El sistema no
+ * puede prever la lista, así que el motivo es texto libre y obligatorio.
  *
  * El endpoint existía desde el principio sin ninguna pantalla que lo
  * llamara. Es la operación más destructiva que puede hacer un Admin sin
@@ -39,7 +44,7 @@ function esBloqueable(equipo: Equipo): boolean {
  * pantalla insiste en mostrar qué se va a llevar puesto ANTES de confirmar,
  * que es lo que la API por sí sola no ofrece.
  */
-export function BloqueoEvaluacionPage() {
+export function BloquearEquiposPage() {
   const queryClient = useQueryClient()
   const [fecha, setFecha] = useState("")
   const [horaInicio, setHoraInicio] = useState("")
@@ -47,7 +52,7 @@ export function BloqueoEvaluacionPage() {
   const [motivo, setMotivo] = useState("")
   const [seleccionadas, setSeleccionadas] = useState<string[]>([])
   const [confirmando, setConfirmando] = useState(false)
-  const [resultado, setResultado] = useState<ResultadoBloqueoEvaluacion | null>(null)
+  const [resultado, setResultado] = useState<ResultadoBloqueo | null>(null)
 
   const franjaCompleta = Boolean(fecha && horaInicio && horaFin && horaFin > horaInicio)
 
@@ -82,8 +87,8 @@ export function BloqueoEvaluacionPage() {
   })
 
   const bloquear = useMutation({
-    mutationFn: (req: Parameters<typeof reservasApi.bloquearParaEvaluacion>[0]) =>
-      reservasApi.bloquearParaEvaluacion(req),
+    mutationFn: (req: Parameters<typeof reservasApi.bloquearEquipos>[0]) =>
+      reservasApi.bloquearEquipos(req),
     onSuccess: async (res) => {
       setResultado(res)
       setConfirmando(false)
@@ -115,9 +120,9 @@ export function BloqueoEvaluacionPage() {
     (equipo) => seleccionadas.includes(equipo.id) && estaOcupada(equipo)
   )
 
-  // El backend no valida el motivo: lo intercala tal cual en el aviso a cada
-  // docente ("…bloqueo por evaluación estatal (%s)"), así que vacío deja un
-  // paréntesis hueco en la notificación. Se exige acá.
+  // El motivo lo exige también el dominio desde la 019, así que mandarlo
+  // vacío da un 400 y no un bloqueo mudo. Se pide igual acá para que el botón
+  // diga por qué no se puede apretar, en vez de fallar después.
   const puedeBloquear = franjaCompleta && motivo.trim() !== "" && seleccionadas.length > 0
 
   function alternar(equipoId: string, tildada: boolean) {
@@ -141,8 +146,8 @@ export function BloqueoEvaluacionPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <EncabezadoDePagina
-        titulo="Bloqueo por evaluación estatal"
-        descripcion="Reserva los equipos para una evaluación y cancela las reservas de docentes que se superpongan. Los docentes afectados reciben un aviso con el motivo."
+        titulo="Bloquear equipos"
+        descripcion="Toma los equipos para otra cosa —una evaluación, una jornada, una capacitación— y cancela las reservas de docentes que se superpongan. Los docentes afectados reciben un aviso con el motivo."
       />
 
       {carrosQuery.error && (
@@ -174,8 +179,8 @@ export function BloqueoEvaluacionPage() {
             <div className="grid gap-2">
               <Label htmlFor="fecha">Fecha</Label>
               {/* Sin aviso de fin de semana a propósito: RF-04.7 está
-                  exceptuada de la semana lectiva — una evaluación estatal es
-                  excepcional por naturaleza y la fecha la pone el Admin. */}
+                  exceptuada de la semana lectiva — un bloqueo es excepcional
+                  por naturaleza y la fecha la pone el Admin. */}
               <Input
                 id="fecha"
                 type="date"
@@ -205,15 +210,20 @@ export function BloqueoEvaluacionPage() {
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor="motivo">Motivo</Label>
+            <Label htmlFor="motivo">¿Por qué se bloquean?</Label>
             <Input
               id="motivo"
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Evaluación Aprender 2026"
+              placeholder="Ej.: evaluación Aprender, jornada docente, obra en el aula"
             />
+            {/* Va tal cual: al calendario, a "Mis reservas" y al aviso de
+                cancelación. No se lo envuelve en ninguna categoría, porque el
+                sistema no sabe de qué clase de cosa se trata. */}
             <p className="text-muted-foreground text-sm">
-              Es lo que van a leer los docentes en el aviso de cancelación.
+              Queda guardado en el bloqueo y es lo que van a leer los docentes
+              en el aviso de cancelación. Aparece también en el calendario del
+              equipo, así que sirve aunque no se cancele ninguna reserva.
             </p>
           </div>
         </CardContent>

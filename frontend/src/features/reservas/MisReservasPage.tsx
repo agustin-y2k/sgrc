@@ -53,8 +53,8 @@ function useConfirmacionDeLlegada(): string | null {
  */
 function claveDeTarjeta(grupo: GrupoDeReservas): string {
   if (grupo.grupoId) return grupo.grupoId
-  if (grupo.esBloqueoEvaluacion) {
-    return `evaluacion:${grupo.creadoPor ?? "sistema"}:${grupo.fecha}:${grupo.horaInicio}:${grupo.horaFin}`
+  if (grupo.esBloqueo) {
+    return `bloqueo:${grupo.creadoPor ?? "sistema"}:${grupo.fecha}:${grupo.horaInicio}:${grupo.horaFin}`
   }
   return grupo.reservas[0].id
 }
@@ -215,7 +215,7 @@ export function MisReservasPage() {
                     <p className="font-medium">
                       {grupo.materiaNombre
                         ? `${grupo.materiaNombre} — ${grupo.cursoNombre}`
-                        : `Bloqueo por evaluación · ${grupo.reservas.length} equipo${grupo.reservas.length === 1 ? "" : "s"}`}
+                        : `${grupo.motivoBloqueo ?? "Bloqueado"} · ${grupo.reservas.length} equipo${grupo.reservas.length === 1 ? "" : "s"}`}
                     </p>
                     <p className="text-sm">
                       {/* Capitaliza la función y no la clase `capitalize`:
@@ -243,7 +243,7 @@ export function MisReservasPage() {
                         {/* Cambiar de máquina no tiene sentido en un bloqueo
                             por evaluación: ahí los equipos se eligen a mano y no
                             hay un docente esperando una en particular. */}
-                        {!grupo.esBloqueoEvaluacion && (
+                        {!grupo.esBloqueo && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -261,7 +261,7 @@ export function MisReservasPage() {
                             setCancelando({ grupo, soloEsta: true, motivo: "" })
                           }
                         >
-                          {grupo.esBloqueoEvaluacion ? "Levantar bloqueo" : "Cancelar"}
+                          {grupo.esBloqueo ? "Levantar bloqueo" : "Cancelar"}
                         </Button>
                       </>
                     )}
@@ -312,7 +312,7 @@ export function MisReservasPage() {
                 {enCurso && cancelando && (
                   <div className="grid gap-3 rounded-md border p-3">
                     <p className="text-sm">
-                      {grupo.esBloqueoEvaluacion
+                      {grupo.esBloqueo
                         ? `Se libera${cancelables.length === 1 ? "" : "n"} ${cancelables.length} equipo${cancelables.length === 1 ? "" : "s"} de este bloqueo. Vuelven a estar disponibles para reservar.`
                         : `Se ${cancelables.length === 1 ? "cancela" : "cancelan"} los ${cancelables.length} equipo${cancelables.length === 1 ? "" : "s"} de esta reserva.`}
                     </p>

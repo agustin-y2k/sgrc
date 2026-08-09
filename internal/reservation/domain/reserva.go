@@ -3,12 +3,12 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
 // EstadoReserva es el estado de una PC puntual dentro de un ReservaGrupo
-// (o de un bloqueo de evaluación estatal, que no pertenece a ningún
-// grupo). Más simple que EstadoReservaGrupo — no hay "parcial" a este
+// (o de un bloqueo administrativo, que no pertenece a ningún grupo). Más simple que EstadoReservaGrupo — no hay "parcial" a este
 // nivel, una Reserva individual está confirmada, cancelada, o finalizada.
 type EstadoReserva string
 
@@ -52,21 +52,40 @@ func (e EstadoReserva) PuedeTransicionarA(nuevo EstadoReserva) bool {
 
 var ErrTransicionReservaInvalida = errors.New("transición de estado de reserva inválida")
 
-// TipoReserva distingue una reserva normal (docente/materia) de un
-// bloqueo administrativo por evaluación estatal — este último no
-// pertenece a ningún ReservaGrupo ni Materia (RF-04.7).
+// TipoReserva distingue la reserva de un docente para su clase de un
+// bloqueo administrativo — este último no pertenece a ningún ReservaGrupo ni
+// Materia (RF-04.7), y lleva su propio motivo.
+//
+// El bloqueo se llamó `EVALUACION_ESTATAL` hasta la 019, y era un caso
+// concreto usado como categoría: un Admin se toma el laboratorio por una
+// evaluación, pero también por una jornada docente, una capacitación o una
+// obra en el aula. Lo que tienen en común no es la evaluación, es que
+// alguien decidió que ese rato el equipo se usa para otra cosa.
 type TipoReserva string
 
 const (
-	TipoNormal            TipoReserva = "NORMAL"
-	TipoEvaluacionEstatal TipoReserva = "EVALUACION_ESTATAL"
+	TipoNormal  TipoReserva = "NORMAL"
+	TipoBloqueo TipoReserva = "BLOQUEO"
 )
 
-var ErrTipoReservaInvalido = errors.New("tipo de reserva inválido")
+// MaxLargoMotivoBloqueo coincide con lo que se acepta en un motivo de
+// cancelación: los dos son la misma clase de texto —una explicación corta
+// que va a leer un docente— y tener dos topes distintos solo sorprende.
+const MaxLargoMotivoBloqueo = 500
+
+var (
+	ErrTipoReservaInvalido = errors.New("tipo de reserva inválido")
+
+	// ErrMotivoBloqueoVacio: un bloqueo cancela las clases de otros, así que
+	// el porqué no es opcional. Quien tiene la autoridad para tomarse el
+	// laboratorio puede escribir para qué.
+	ErrMotivoBloqueoVacio = errors.New("hay que indicar por qué se bloquean los equipos")
+	ErrMotivoBloqueoLargo = fmt.Errorf("el motivo no puede tener más de %d caracteres", MaxLargoMotivoBloqueo)
+)
 
 func ParseTipoReserva(s string) (TipoReserva, error) {
 	switch TipoReserva(s) {
-	case TipoNormal, TipoEvaluacionEstatal:
+	case TipoNormal, TipoBloqueo:
 		return TipoReserva(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrTipoReservaInvalido, s)
@@ -95,6 +114,11 @@ type Reserva struct {
 	CanceladoPor          *string
 	MotivoCancelacion     *string
 	CanceladaEn           *time.Time
+
+	// MotivoBloqueo: por qué se tomó el equipo. Solo en los TipoBloqueo, y
+	// ahí es obligatorio; vacío en las normales, que ya dicen para qué son
+	// por su materia (019).
+	MotivoBloqueo string
 }
 
 // NuevaReservaNormal crea una Reserva perteneciente a un ReservaGrupo
@@ -122,20 +146,28 @@ func NuevaReservaNormal(id, reservaGrupoID, equipoID, materiaID string, nombreDo
 
 // NuevaReservaEvaluacion crea un bloqueo administrativo sobre una PC
 // puntual, sin pertenecer a ningún ReservaGrupo ni Materia (RF-04.7).
-func NuevaReservaEvaluacion(id, equipoID string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) (*Reserva, error) {
+func NuevaReservaBloqueo(id, equipoID string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, motivo string, ahora time.Time) (*Reserva, error) {
 	if horaFin <= horaInicio {
 		return nil, ErrRangoHorarioInvalido
 	}
+	motivo = strings.TrimSpace(motivo)
+	if motivo == "" {
+		return nil, ErrMotivoBloqueoVacio
+	}
+	if len([]rune(motivo)) > MaxLargoMotivoBloqueo {
+		return nil, ErrMotivoBloqueoLargo
+	}
 	return &Reserva{
-		ID:         id,
-		EquipoID:   equipoID,
-		Fecha:      fecha,
-		HoraInicio: horaInicio,
-		HoraFin:    horaFin,
-		Estado:     ReservaConfirmada,
-		Tipo:       TipoEvaluacionEstatal,
-		CreadoPor:  creadoPor,
-		CreadaEn:   ahora,
+		ID:            id,
+		EquipoID:      equipoID,
+		Fecha:         fecha,
+		HoraInicio:    horaInicio,
+		HoraFin:       horaFin,
+		Estado:        ReservaConfirmada,
+		Tipo:          TipoBloqueo,
+		MotivoBloqueo: motivo,
+		CreadoPor:     creadoPor,
+		CreadaEn:      ahora,
 	}, nil
 }
 

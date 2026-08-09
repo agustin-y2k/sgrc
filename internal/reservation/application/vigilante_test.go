@@ -480,8 +480,8 @@ func TestBarrer_SinNadaQueHacerNoPublicaNada(t *testing.T) {
 func TestBarrer_NoLiberaUnBloqueoPorEvaluacion(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.identificadorDeEquipo["pc1"] = 1
-	bloqueo, err := domain.NuevaReservaEvaluacion("bloq1", "pc1", nil,
-		aLas(0, 0), 8*time.Hour, 9*time.Hour, aLas(0, 0).AddDate(0, 0, -1))
+	bloqueo, err := domain.NuevaReservaBloqueo("bloq1", "pc1", nil,
+		aLas(0, 0), 8*time.Hour, 9*time.Hour, "Jornada docente", aLas(0, 0).AddDate(0, 0, -1))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}

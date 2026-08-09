@@ -666,22 +666,28 @@ func (s *Service) CancelarOcurrenciaRecurrente(ctx context.Context, reservaGrupo
 	return totalCancelado, nil
 }
 
-// ── Bloqueo por evaluación estatal (RF-04.7) ───────────────────────────
+// ── Bloqueo administrativo de equipos (RF-04.7) ────────────────────────
 
-// ResultadoBloqueoEvaluacion agrupa lo que devuelve BloquearParaEvaluacion.
-type ResultadoBloqueoEvaluacion struct {
+// ResultadoBloqueo agrupa lo que devuelve BloquearEquipos.
+type ResultadoBloqueo struct {
 	Bloqueos            []*domain.Reserva
 	ReservasCanceladas  int
 	DocentesNotificados int
 }
 
-// BloquearParaEvaluacion implementa RF-04.7: un Admin bloquea una o más
-// PCs en un rango horario definido para una evaluación estatal. Cualquier
-// Reserva NORMAL que se superponga con ese rango, en esas PCs, se cancela
-// en cascada (nunca cancela otro bloqueo de evaluación existente — dos
-// evaluaciones no deberían solaparse en la práctica, y si pasara, no es
-// este método el que debe resolverlo).
-func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, motivoBloqueo string) (*ResultadoBloqueoEvaluacion, error) {
+// BloquearEquipos implementa RF-04.7: un Admin toma una o más máquinas en un
+// rango horario definido, por el motivo que sea —una evaluación, una jornada
+// docente, una obra en el aula—. Cualquier Reserva NORMAL que se superponga
+// con ese rango, en esos equipos, se cancela en cascada.
+//
+// Nunca cancela otro bloqueo existente: dos bloqueos no deberían solaparse
+// en la práctica, y si pasara, no es este método el que debe resolverlo.
+//
+// El motivo es obligatorio y se guarda en cada bloqueo (019), no solo en el
+// texto de las cancelaciones: un bloqueo que no pisó ninguna reserva —lo
+// habitual, porque se suele avisar con tiempo— tiene que poder explicarse
+// igual cuando alguien mire el calendario y encuentre el rato ocupado.
+func (s *Service) BloquearEquipos(ctx context.Context, equipoIDs []string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, motivoBloqueo string) (*ResultadoBloqueo, error) {
 	if err := verificarCantidadDeEquipos(equipoIDs); err != nil {
 		return nil, err
 	}
@@ -693,11 +699,11 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string
 	// fila que solo sirve para ensuciar los reportes.
 	//
 	// El tope de duración, en cambio, NO se aplica acá — mismo criterio que
-	// EsDiaLectivo, que tampoco se le impone a RF-04.7: una evaluación estatal
-	// es excepcional por naturaleza y es el Admin quien decide cuánto dura, así
+	// EsDiaLectivo, que tampoco se le impone a RF-04.7: un bloqueo es
+	// excepcional por naturaleza y es el Admin quien decide cuánto dura, así
 	// que tomarse el laboratorio un día entero es una decisión suya, no un
 	// error. Lo que sí sigue valiendo es que la hora de fin sea posterior a la
-	// de inicio (domain.NuevaReservaEvaluacion).
+	// de inicio (domain.NuevaReservaBloqueo).
 	if domain.YaTermino(fecha, horaFin, ahora) {
 		return nil, domain.ErrReservaEnElPasado
 	}
@@ -740,7 +746,12 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string
 				// pone el suscriptor de notification. Este texto también
 				// es el que se guarda en motivo_cancelacion y el que
 				// "Mis reservas" muestra al lado de la PC afectada.
-				motivoCascada := fmt.Sprintf("bloqueo por evaluación estatal (%s)", motivoBloqueo)
+				// El motivo va tal cual, sin envolverlo en una categoría: si
+				// el Admin escribió "jornada docente", eso es lo que el
+				// docente cancelado tiene que leer. Antes iba adentro de
+				// "bloqueo por evaluación estatal (%s)", que contradecía al
+				// propio texto cuando no era una evaluación.
+				motivoCascada := fmt.Sprintf("los equipos quedaron bloqueados: %s", motivoBloqueo)
 				if err := r.Cancelar(creadoPor, motivoCascada, ahora); err != nil {
 					return err
 				}
@@ -759,7 +770,7 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string
 				}
 			}
 
-			bloqueo, err := domain.NuevaReservaEvaluacion(s.nuevoID(), equipoID, creadoPor, fecha, horaInicio, horaFin, ahora)
+			bloqueo, err := domain.NuevaReservaBloqueo(s.nuevoID(), equipoID, creadoPor, fecha, horaInicio, horaFin, motivoBloqueo, ahora)
 			if err != nil {
 				return err
 			}
@@ -767,7 +778,7 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string
 				if errors.Is(err, ErrSolapamiento) {
 					return err
 				}
-				return fmt.Errorf("creando bloqueo de evaluación para el equipo %s: %w", equipoID, err)
+				return fmt.Errorf("creando el bloqueo del equipo %s: %w", equipoID, err)
 			}
 			bloqueos = append(bloqueos, bloqueo)
 		}
@@ -779,7 +790,7 @@ func (s *Service) BloquearParaEvaluacion(ctx context.Context, equipoIDs []string
 
 	s.publicarCancelaciones(ctx, pendientes)
 
-	return &ResultadoBloqueoEvaluacion{
+	return &ResultadoBloqueo{
 		Bloqueos:            bloqueos,
 		ReservasCanceladas:  reservasCanceladas,
 		DocentesNotificados: len(docentesAfectados),

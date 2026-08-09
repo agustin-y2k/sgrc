@@ -90,8 +90,8 @@ function ProximaReserva({ grupo, hoy }: { grupo: GrupoDeReservas; hoy: string })
     <li className="border-border flex flex-col gap-0.5 border-b py-2.5 last:border-0 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
       <div className="min-w-0">
         <p className="font-medium">
-          {grupo.esBloqueoEvaluacion
-            ? "Bloqueo por evaluación"
+          {grupo.esBloqueo
+            ? (grupo.motivoBloqueo ?? "Bloqueado")
             : (grupo.materiaNombre ?? "Reserva")}
           {grupo.cursoNombre && (
             <span className="text-muted-foreground font-normal">
@@ -355,7 +355,7 @@ export function InicioPage() {
                   <Link to="/admin/licencias">Licencias de software</Link>
                 </Button>
                 <Button asChild variant="outline" className="justify-start">
-                  <Link to="/admin/bloqueo-evaluacion">Bloqueo por evaluación</Link>
+                  <Link to="/admin/bloquear-equipos">Bloquear equipos</Link>
                 </Button>
               </>
             ) : (

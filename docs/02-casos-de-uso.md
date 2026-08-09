@@ -88,15 +88,20 @@ flowchart LR
 - **Ocurrencia de recurrencia:** popup "¿Solo esta fecha? / ¿Esta y siguientes?" → aplica sobre el/los `ReservaGrupo` con `regla_recurrencia_id` y `fecha >= hoy` (cancela 1 fecha o todas las siguientes, con sus PCs).
 - **Admin cancela una PC puntual ajena:** motivo obligatorio → marca esa `Reserva` `CANCELADA` + genera notificación interna al docente + recalcula estado del grupo.
 
-### UC: Bloquear PCs para evaluación estatal
+### UC: Bloquear equipos
 - **Actor:** Admin
+- **Motivo:** a veces el laboratorio se usa para otra cosa y las clases que había encima no pueden darse. Puede ser una evaluación, una jornada docente, una capacitación o una obra en el aula — **el sistema no sabe cuál y no tiene por qué**, así que pregunta.
 - **Precondición:** rango de fecha/hora **definido** de antemano.
 - **Flujo:**
-  1. Admin selecciona carro (cualquiera, sin restricción), rango fecha/hora.
-  2. Sistema identifica las `Reserva` `CONFIRMADA` en conflicto sobre las PCs de ese carro, dentro de ese rango exacto.
+  1. Admin elige los equipos (de cualquier carro, sin restricción), el rango fecha/hora y escribe **por qué**.
+  2. Sistema identifica las `Reserva` `CONFIRMADA` en conflicto sobre esos equipos, dentro de ese rango exacto.
   3. Cancela cada `Reserva` puntual afectada y recalcula el estado de cada `ReservaGrupo` al que pertenecía.
-  4. Genera notificación interna para cada docente afectado, detallando qué PCs puntuales se cancelaron.
-  5. Crea filas `Reserva` tipo `EVALUACION_ESTATAL` (sin `materia_id` ni `reserva_grupo_id`) sobre todas las PCs del carro para ese rango.
+  4. Genera notificación interna para cada docente afectado, detallando qué PCs puntuales se cancelaron y con el motivo tal como lo escribió el Admin.
+  5. Crea filas `Reserva` tipo `BLOQUEO` (sin `materia_id` ni `reserva_grupo_id`, con `motivo_bloqueo`) sobre los equipos elegidos para ese rango.
+- **Reglas que no son obvias:**
+  - **El motivo es obligatorio**, a diferencia de los otros textos libres del sistema. Un bloqueo le cancela la clase a otra persona: quien tiene la autoridad para hacerlo puede escribir para qué.
+  - **Se guarda en el bloqueo, no solo en el aviso.** Lo más común es bloquear con anticipación, cuando todavía no hay ninguna reserva que cancelar — y ahí el motivo es lo único que explica el rato ocupado que después alguien encuentra en el calendario.
+  - La pantalla muestra **qué se va a llevar puesto antes de confirmar**. Es la operación más destructiva que un Admin puede hacer sin darse cuenta: las reservas canceladas no se restauran solas.
 
 ### UC: Cambiar estado de un equipo (con cancelación en cascada)
 - **Actor:** Admin
@@ -106,7 +111,7 @@ flowchart LR
   2. Sistema busca las `Reserva` `CONFIRMADA` de esa PC puntual con fecha/hora aún no transcurrida.
   3. Cancela cada una (`CANCELADA`, `motivo_cancelacion` = el ingresado o uno generado por defecto) y recalcula el estado de cada `ReservaGrupo` afectado.
   4. Genera notificación interna para cada docente afectado, detallando que fue esa PC puntual (no necesariamente toda su reserva).
-- **Diferencia con el bloqueo de evaluación (RF-04.7):** acá el alcance es una sola PC, la duración es indefinida (no un rango horario acotado), y el motivo es opcional.
+- **Diferencia con el bloqueo administrativo (RF-04.7):** acá el alcance es una sola PC, la duración es indefinida (no un rango horario acotado), y el motivo es opcional.
 - **Al volver la PC a `DISPONIBLE`:** las reservas canceladas no se restauran automáticamente — quien las necesite debe volver a reservar.
 - **Al terminar, la pantalla dice cuántas reservas se cancelaron y a cuántos docentes se avisó** (RF-03.19). Antes de confirmar solo se puede advertir que va a pasar; el número real recién se sabe después, y sin él quien apretó el botón no distingue entre haber cancelado una clase o veinte. Con cero no se muestra nada.
 

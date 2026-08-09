@@ -260,9 +260,9 @@ func TestHTTP_Prestamos_SoloAdmin(t *testing.T) {
 // docente sale como razón por PC, no como un 400 que tumba el lote.
 func TestHTTP_EntregarPorReserva_BloqueoSinDocente(t *testing.T) {
 	repo := nuevoFakeRepo()
-	bloqueo, err := domain.NuevaReservaEvaluacion("bloq1", "pc1", nil,
+	bloqueo, err := domain.NuevaReservaBloqueo("bloq1", "pc1", nil,
 		time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour,
-		time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC))
+		"Jornada docente", time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}

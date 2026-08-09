@@ -82,7 +82,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
         // equipos sueltos, y no hay nadie esperando para retirarlas. Si alguien
         // tiene que llevárselas para una mesa de examen, es una entrega
         // suelta con el nombre escrito a mano.
-        r.tipo !== "EVALUACION_ESTATAL" &&
+        r.tipo !== "BLOQUEO" &&
         !yaAfuera.has(r.equipoId)
     )
   }, [data, yaAfuera])
@@ -142,7 +142,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-medium">
-                    {primera.materiaNombre ?? "Bloqueo por evaluación"}
+                    {primera.materiaNombre ?? primera.motivoBloqueo ?? "Bloqueado"}
                     {primera.cursoNombre && ` · ${primera.cursoNombre}`}
                   </p>
                   <p className="text-muted-foreground text-sm">

@@ -528,12 +528,12 @@ func TestHTTP_CancelarOcurrenciaRecurrente_OtroDocente_403(t *testing.T) {
 	}
 }
 
-// ── BloquearParaEvaluacion — solo Admin ─────────────────────────────────
+// ── BloquearEquipos — solo Admin ─────────────────────────────────
 
-func TestHTTP_BloquearParaEvaluacion_ComoDocente_403(t *testing.T) {
+func TestHTTP_BloquearEquipos_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/reservation/bloqueos-evaluacion", jsonBody(bloquearEvaluacionRequest{
+	req := httptest.NewRequest("POST", "/api/reservation/bloqueos", jsonBody(bloquearRequest{
 		EquipoIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00", Motivo: "Evaluación",
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -545,10 +545,10 @@ func TestHTTP_BloquearParaEvaluacion_ComoDocente_403(t *testing.T) {
 	}
 }
 
-func TestHTTP_BloquearParaEvaluacion_ComoAdmin_OK(t *testing.T) {
+func TestHTTP_BloquearEquipos_ComoAdmin_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/reservation/bloqueos-evaluacion", jsonBody(bloquearEvaluacionRequest{
+	req := httptest.NewRequest("POST", "/api/reservation/bloqueos", jsonBody(bloquearRequest{
 		EquipoIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00", Motivo: "Evaluación",
 	}))
 	req.Header.Set("Content-Type", "application/json")

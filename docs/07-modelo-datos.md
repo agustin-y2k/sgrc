@@ -39,7 +39,7 @@ erDiagram
     CODIGO_RECUPERACION { uuid id; uuid usuario_id; string codigo_hash; timestamp creado_en; timestamp expira_en; timestamp usado_en; int intentos }
 ```
 
-> **Reservas agrupadas por PC:** un docente no reserva una PC por vez como operaciones independientes — selecciona varias PCs de una lista (como tildar casillas) hasta completar la cantidad que necesita para su clase, en una sola operación. Eso exige separar "la reserva que hace el docente" (`RESERVA_GRUPO`: una materia, una fecha, un horario) de "cada PC dentro de esa reserva" (`RESERVA`: una fila por PC). Cancelaciones en cascada (evaluación estatal, PC fuera de servicio) actúan sobre filas `RESERVA` individuales — nunca sobre todo el grupo salvo que termine afectando a todas sus PCs.
+> **Reservas agrupadas por PC:** un docente no reserva una PC por vez como operaciones independientes — selecciona varias PCs de una lista (como tildar casillas) hasta completar la cantidad que necesita para su clase, en una sola operación. Eso exige separar "la reserva que hace el docente" (`RESERVA_GRUPO`: una materia, una fecha, un horario) de "cada PC dentro de esa reserva" (`RESERVA`: una fila por PC). Cancelaciones en cascada (bloqueo administrativo, PC fuera de servicio) actúan sobre filas `RESERVA` individuales — nunca sobre todo el grupo salvo que termine afectando a todas sus PCs.
 
 ## 2. Una sola base de datos: `sgrc_db`
 
@@ -318,7 +318,7 @@ CREATE INDEX idx_reserva_grupo_regla ON reserva_grupo(regla_recurrencia_id) WHER
 ```
 
 ### `reserva` (modificada)
-Ahora es "una PC dentro de un grupo de reserva" para las reservas normales, o una fila administrativa suelta para bloqueos de evaluación estatal (que no pertenecen a ningún `reserva_grupo` de un docente).
+Ahora es "una PC dentro de un grupo de reserva" para las reservas normales, o una fila administrativa suelta para bloqueos administrativos (que no pertenecen a ningún `reserva_grupo` de un docente).
 
 | Campo | Tipo | Restricciones |
 |---|---|---|
@@ -331,7 +331,8 @@ Ahora es "una PC dentro de un grupo de reserva" para las reservas normales, o un
 | hora_inicio | TIME | NOT NULL |
 | hora_fin | TIME | NOT NULL, CHECK (hora_fin > hora_inicio) |
 | estado | VARCHAR(15) | NOT NULL DEFAULT 'CONFIRMADA', CHECK IN ('CONFIRMADA','CANCELADA','FINALIZADA') |
-| tipo | VARCHAR(20) | NOT NULL DEFAULT 'NORMAL', CHECK IN ('NORMAL','EVALUACION_ESTATAL') |
+| tipo | VARCHAR(20) | NOT NULL DEFAULT 'NORMAL', CHECK IN ('NORMAL','BLOQUEO') |
+| motivo_bloqueo | TEXT | NULL en las NORMAL; NOT NULL y no vacío en las BLOQUEO (CHECK de coherencia) |
 | creado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 | cancelado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
@@ -342,11 +343,14 @@ Ahora es "una PC dentro de un grupo de reserva" para las reservas normales, o un
 
 ```sql
 -- Invariante: NORMAL siempre pertenece a un grupo y a una materia;
--- EVALUACION_ESTATAL nunca pertenece a un grupo de docente ni a una materia.
+-- BLOQUEO nunca pertenece a un grupo de docente ni a una materia, y
+-- siempre dice por qué (019).
 ALTER TABLE reserva ADD CONSTRAINT chk_reserva_tipo_coherente CHECK (
-  (tipo = 'NORMAL' AND reserva_grupo_id IS NOT NULL AND materia_id IS NOT NULL)
+  (tipo = 'NORMAL' AND reserva_grupo_id IS NOT NULL AND materia_id IS NOT NULL
+   AND motivo_bloqueo IS NULL)
   OR
-  (tipo = 'EVALUACION_ESTATAL' AND reserva_grupo_id IS NULL AND materia_id IS NULL)
+  (tipo = 'BLOQUEO' AND reserva_grupo_id IS NULL AND materia_id IS NULL
+   AND motivo_bloqueo IS NOT NULL AND btrim(motivo_bloqueo) <> '')
 );
 
 -- fecha/hora se duplican de reserva_grupo hacia reserva a propósito:
@@ -374,7 +378,11 @@ CREATE INDEX idx_reserva_materia ON reserva(materia_id) WHERE materia_id IS NOT 
 CREATE INDEX idx_reserva_creado_por ON reserva(creado_por);
 ```
 
-> **Por qué `EVALUACION_ESTATAL` no lleva `materia_id` ni `reserva_grupo_id`:** un bloqueo de evaluación no es la reserva de un docente para dar clase — es un bloqueo administrativo sobre PCs concretas en un rango horario. No tiene sentido forzarlo a pertenecer a una materia.
+> **Por qué `BLOQUEO` no lleva `materia_id` ni `reserva_grupo_id`:** no es la reserva de un docente para dar clase — es un Admin tomando equipos concretos en un rango horario. No tiene sentido forzarlo a pertenecer a una materia.
+>
+> **Y por qué en cambio SÍ lleva `motivo_bloqueo`, obligatorio:** ese es el lugar donde una reserva normal tiene su materia. Sin él, un bloqueo es un rato ocupado sin explicación — y el caso más común es bloquear con anticipación, cuando todavía no hay ninguna reserva que cancelar y por lo tanto ningún `motivo_cancelacion` donde el porqué pudiera quedar escrito. El `CHECK` lo exige en los dos sentidos: obligatorio en los `BLOQUEO`, prohibido en las `NORMAL`, para que no haya dos lugares donde decir para qué es una clase.
+>
+> El tipo se llamó `EVALUACION_ESTATAL` hasta la migración 019. Era un caso concreto usado como categoría: el laboratorio también se toma por una jornada docente, una capacitación o una obra en el aula, y el nombre viejo llegaba hasta el aviso que recibía el docente al que le cancelaban la clase.
 
 ### `prestamo`
 La custodia física de una PC: quién la tiene ahora — migración `013`. Ver RF-08.
@@ -524,7 +532,7 @@ Archivar un ciclo lectivo **no es un soft-delete de las reservas** — es un bor
 **Al archivar un ciclo lectivo:**
 1. Se preservan (`archivado = true`, sin borrar): `curso`, `materia`, `docente_materia` — esto es lo que evita recrear "1°A" + "Matemáticas" + "el titular es Fulano" el año que viene.
 2. Antes de borrar nada, se calcula y persiste un **snapshot histórico agregado** (ver `historico_uso_equipo` / `historico_uso_docente` abajo) con las estadísticas del año que termina.
-3. Se **eliminan físicamente** (`DELETE`, no `UPDATE archivado=true`): todos los `reserva_grupo`, `reserva`, `regla_recurrencia` cuya `materia_id` pertenece a un curso de ese ciclo, más los bloqueos por evaluación estatal (`reserva` con `tipo = EVALUACION_ESTATAL`) del año de ese ciclo — no tienen materia, así que hay que ubicarlos por año.
+3. Se **eliminan físicamente** (`DELETE`, no `UPDATE archivado=true`): todos los `reserva_grupo`, `reserva`, `regla_recurrencia` cuya `materia_id` pertenece a un curso de ese ciclo, más los bloqueos administrativos (`reserva` con `tipo = BLOQUEO`) del año de ese ciclo — no tienen materia, así que hay que ubicarlos por año.
 4. `incidencia` **no se toca** — pertenece a la `equipo`, no al ciclo lectivo ni a ninguna materia; el historial de incidencias es independiente del calendario académico.
 
 ### `historico_uso_equipo` (nueva — permanente, uno por PC por año)
