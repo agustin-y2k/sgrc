@@ -24,6 +24,7 @@ func esViolacionUnica(err error) bool {
 }
 
 const columnasPrestamo = `id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre, ` +
+	`COALESCE(retirado_por, ''), ` +
 	`motivo, devolucion_estimada, entregado_por, entregado_en, devuelto_en, recibido_por, observaciones, ` +
 	`avisado_demora_en, avisado_cierre_para`
 
@@ -31,6 +32,7 @@ const columnasPrestamo = `id, equipo_id, reserva_id, entregado_a_usuario_id, ent
 // salió contra una reserva, el nombre de la materia. Prefijadas porque la
 // consulta hace JOIN.
 const columnasPrestamoDetallado = `p.id, p.equipo_id, p.reserva_id, p.entregado_a_usuario_id, p.entregado_a_nombre, ` +
+	`COALESCE(p.retirado_por, ''), ` +
 	`p.motivo, p.devolucion_estimada, p.entregado_por, p.entregado_en, p.devuelto_en, p.recibido_por, p.observaciones, ` +
 	`p.avisado_demora_en, p.avisado_cierre_para, ` +
 	`COALESCE(eq.identificador, 0), COALESCE(eq.nombre, 'PC ' || eq.identificador), COALESCE(c.nombre, ''), m.nombre`
@@ -54,12 +56,13 @@ func (r *PostgresRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) er
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO prestamo (
 			id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre,
-			motivo, devolucion_estimada, entregado_por, entregado_en, devuelto_en,
-			recibido_por, observaciones
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			retirado_por, motivo, devolucion_estimada, entregado_por, entregado_en,
+			devuelto_en, recibido_por, observaciones
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`, p.ID, p.EquipoID, p.ReservaID, p.EntregadoAUsuarioID, p.EntregadoANombre,
-		nullSiVacio(p.Motivo), p.DevolucionEstimada, p.EntregadoPor, p.EntregadoEn,
-		p.DevueltoEn, p.RecibidoPor, nullSiVacio(p.Observaciones))
+		nullSiVacio(p.RetiradoPor), nullSiVacio(p.Motivo), p.DevolucionEstimada,
+		p.EntregadoPor, p.EntregadoEn, p.DevueltoEn, p.RecibidoPor,
+		nullSiVacio(p.Observaciones))
 	if err != nil {
 		// El único índice único de la tabla es ux_prestamo_abierto, así que
 		// no hay ambigüedad sobre cuál se violó: alguien intentó entregar
@@ -97,7 +100,7 @@ func escanearPrestamo(row pgx.Row) (*domain.Prestamo, error) {
 
 	err := row.Scan(
 		&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
-		&motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
+		&p.RetiradoPor, &motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 		&p.DevueltoEn, &p.RecibidoPor, &observaciones,
 		&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
 	)
@@ -188,7 +191,7 @@ func escanearPrestamosDetallados(rows pgx.Rows) ([]*application.PrestamoDetallad
 
 		err := rows.Scan(
 			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
-			&motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
+			&p.RetiradoPor, &motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
 			&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
 			&d.Identificador, &d.Etiqueta, &d.CarroNombre, &d.MateriaNombre,

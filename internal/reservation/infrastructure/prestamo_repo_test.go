@@ -398,3 +398,61 @@ func TestPostgresRepo_ReservasFuturasDeEquipo_VienenOrdenadas(t *testing.T) {
 		t.Errorf("la primera es del %v; tiene que ser la más próxima (3 de marzo)", futuras[0].Fecha)
 	}
 }
+
+// TestPostgresRepo_Prestamo_QuienRetiraSobreviveALaVueltaDeLaBase (018)
+//
+// Quien responde y quien vino a buscar el equipo son dos columnas distintas,
+// y las dos tienen que volver de la base como se guardaron. Es el dato que
+// permite reclamarle al docente aunque las máquinas hayan salido en manos de
+// un alumno.
+func TestPostgresRepo_Prestamo_QuienRetiraSobreviveALaVueltaDeLaBase(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	datos := entregaDeTest(equipoID)
+	datos.RetiradoPor = "Juan (alumno de 5°A)"
+	p := crearPrestamoDeTest(t, repo, datos, ahora)
+
+	vuelto, err := repo.BuscarPrestamoPorID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if vuelto.EntregadoANombre != "Ana Pérez" {
+		t.Errorf("responsable = %q, esperaba a quien responde", vuelto.EntregadoANombre)
+	}
+	if vuelto.RetiradoPor != "Juan (alumno de 5°A)" {
+		t.Errorf("retiradoPor = %q, esperaba a quien vino a buscarlo", vuelto.RetiradoPor)
+	}
+
+	// Y el listado del mostrador tiene que traerlo también: es donde se lee.
+	abiertos, err := repo.ListarPrestamosAbiertos(ctx)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(abiertos) != 1 || abiertos[0].Prestamo.RetiradoPor != "Juan (alumno de 5°A)" {
+		t.Errorf("el listado de afuera debería traer quién retiró: %+v", abiertos)
+	}
+}
+
+// No anotar a quién retira es el caso normal, no un dato que falte: vacío
+// significa que lo retiró la misma persona que responde por él.
+func TestPostgresRepo_Prestamo_SinAnotarQuienRetira(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	p := crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
+
+	vuelto, err := repo.BuscarPrestamoPorID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if vuelto.RetiradoPor != "" {
+		t.Errorf("retiradoPor = %q, esperaba vacío", vuelto.RetiradoPor)
+	}
+}

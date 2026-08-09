@@ -285,7 +285,7 @@ func TestHTTP_EntregarPorReserva_BloqueoSinDocente(t *testing.T) {
 
 	// Con un nombre a mano sí sale.
 	codigo, cuerpo = pedirPrestamos(t, app, "POST", "/api/reservation/prestamos/por-reserva",
-		entregarPorReservaRequest{ReservaIDs: []string{"bloq1"}, NombreAlternativo: "Mesa de examen"}, "ADMIN")
+		entregarPorReservaRequest{ReservaIDs: []string{"bloq1"}, RetiradoPor: "Mesa de examen"}, "ADMIN")
 	if codigo != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
 	}

@@ -291,8 +291,9 @@ components:
         id: { type: string, format: uuid }
         equipoId: { type: string, format: uuid }
         reservaId: { type: string, format: uuid, nullable: true, description: "Ausente = préstamo espontáneo, sin reserva detrás" }
-        entregadoAUsuarioId: { type: string, format: uuid, nullable: true, description: "Solo si esa persona tiene cuenta en el sistema" }
-        entregadoANombre: { type: string, maxLength: 200, description: "Va siempre, aunque haya cuenta: es un snapshot, para que el registro siga diciendo quién se llevó la máquina si esa cuenta se elimina" }
+        entregadoAUsuarioId: { type: string, format: uuid, nullable: true, description: "Solo si quien responde tiene cuenta en el sistema" }
+        entregadoANombre: { type: string, maxLength: 200, description: "Quién RESPONDE por el equipo — contra una reserva, siempre el docente. Va siempre, aunque haya cuenta: es un snapshot, para que el registro siga diciendo de quién era la responsabilidad si esa cuenta se elimina" }
+        retiradoPor: { type: string, maxLength: 200, nullable: true, description: "Quién vino físicamente a buscarlo, si no fue quien responde. Ausente es el caso normal y significa que lo retiró esa misma persona (RF-08.19)" }
         motivo: { type: string, nullable: true }
         devolucionEstimada:
           type: string
@@ -332,7 +333,7 @@ components:
             type: object
             properties:
               equipoId: { type: string, format: uuid }
-              razon: { type: string, enum: [YA_ENTREGADA, FUERA_DEL_INVENTARIO, RESERVA_CANCELADA, SIN_DESTINATARIO], description: "SIN_DESTINATARIO: la reserva no tiene docente (bloqueo por evaluación). Se resuelve mandando nombreAlternativo." }
+              razon: { type: string, enum: [YA_ENTREGADA, FUERA_DEL_INVENTARIO, RESERVA_CANCELADA, SIN_DESTINATARIO], description: "SIN_DESTINATARIO: la reserva no tiene docente (bloqueo por evaluación). Se resuelve mandando retiradoPor, que en ese caso pasa a ser el responsable: no hay docente a quien anteponerle." }
               detalle: { type: string }
         avisos:
           type: array
@@ -1823,15 +1824,21 @@ paths:
                   type: array
                   minItems: 1
                   items: { type: string, format: uuid }
-                nombreAlternativo:
+                retiradoPor:
                   type: string
                   maxLength: 200
                   example: "Juan (alumno de 5°A)"
                   description: |
-                    Quién vino a buscarlas, si no fue el docente de la
-                    reserva. En ese caso el préstamo NO queda atado a la
-                    cuenta del docente: los avisos de devolución le llegarían
-                    a quien no tiene la máquina.
+                    Quién vino físicamente a buscarlas, si no fue el docente
+                    de la reserva. Es opcional: hay instituciones que quieren
+                    poder reconstruir quién pasó por el mostrador y otras a
+                    las que ese dato les sobra.
+
+                    NO cambia de quién es la responsabilidad. El préstamo
+                    queda a nombre del docente y atado a su cuenta, porque él
+                    reservó y a él se le reclama si los equipos no vuelven;
+                    quien los retira muchas veces ni siquiera tiene cuenta en
+                    el sistema. Ver RF-08.19.
       responses:
         "200":
           description: Lote procesado

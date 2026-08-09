@@ -16,6 +16,7 @@ const MaxLargoNombreDestinatario = 200
 var (
 	ErrNombreDestinatarioVacio = errors.New("hay que anotar a quién se le entrega la computadora")
 	ErrNombreDestinatarioLargo = fmt.Errorf("el nombre no puede tener más de %d caracteres", MaxLargoNombreDestinatario)
+	ErrRetiradoPorLargo        = fmt.Errorf("el nombre de quien retira no puede tener más de %d caracteres", MaxLargoNombreDestinatario)
 
 	// ErrPrestamoYaDevuelto: se intentó recibir dos veces la misma máquina.
 	// Pasa de verdad —dos Admin en el mostrador, o un doble clic— y tiene
@@ -56,10 +57,16 @@ type Prestamo struct {
 	// excepción.
 	ReservaID *string
 
-	// EntregadoANombre va siempre; EntregadoAUsuarioID solo si esa persona
-	// tiene cuenta. Ver DatosDeEntrega.
+	// EntregadoANombre es quién RESPONDE por el equipo, y va siempre;
+	// EntregadoAUsuarioID solo si esa persona tiene cuenta. Ver
+	// DatosDeEntrega.
 	EntregadoAUsuarioID *string
 	EntregadoANombre    string
+
+	// RetiradoPor es quién vino físicamente a buscarlo, cuando no fue quien
+	// responde. Vacío es el caso normal y significa que lo retiró esa misma
+	// persona — no un dato que falte.
+	RetiradoPor string
 
 	Motivo string
 	// DevolucionEstimada nil = no se pactó hora. Sin ella no se le puede
@@ -95,8 +102,15 @@ type DatosDeEntrega struct {
 	// una preceptora, alguien de secretaría, un alumno. Es el caso normal
 	// de un préstamo para un trámite.
 	UsuarioID *string
-	Nombre    string
-	Motivo    string
+	// Nombre es quien responde por el equipo. Contra una reserva es el
+	// docente y no se elige: es quien tiene que devolverlo y a quien se le
+	// reclama, sin importar por manos de quién salió del laboratorio.
+	Nombre string
+	// RetiradoPor es opcional: quién vino a buscarlo, si no fue quien
+	// responde. Anotar al alumno le sirve a una institución y a otra le
+	// sobra, así que se ofrece y no se exige (018).
+	RetiradoPor string
+	Motivo      string
 	// DevolucionEstimada: en una entrega contra reserva sale del fin de esa
 	// reserva; en una espontánea es opcional a propósito. "Vengo en un
 	// rato" es la respuesta honesta, y una hora inventada solo generaría
@@ -122,12 +136,21 @@ func NuevoPrestamo(id string, d DatosDeEntrega, ahora time.Time) (*Prestamo, err
 		return nil, ErrNombreDestinatarioLargo
 	}
 
+	// Mismo tratamiento para quien retira: es un nombre tipeado en el
+	// mostrador y comparte columna de largo con el otro. Vacío no es un
+	// error — es el caso normal.
+	retiradoPor := NormalizarNombreDestinatario(d.RetiradoPor)
+	if len([]rune(retiradoPor)) > MaxLargoNombreDestinatario {
+		return nil, ErrRetiradoPorLargo
+	}
+
 	p := &Prestamo{
 		ID:                  id,
 		EquipoID:            d.EquipoID,
 		ReservaID:           d.ReservaID,
 		EntregadoAUsuarioID: d.UsuarioID,
 		EntregadoANombre:    nombre,
+		RetiradoPor:         retiradoPor,
 		Motivo:              strings.TrimSpace(d.Motivo),
 		DevolucionEstimada:  d.DevolucionEstimada,
 		EntregadoEn:         ahora,

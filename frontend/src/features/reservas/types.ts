@@ -292,7 +292,10 @@ export type Prestamo = {
   reservaId?: string
 
   entregadoAUsuarioId?: string
+  /** Quién RESPONDE por el equipo: contra una reserva, siempre el docente. */
   entregadoANombre: string
+  /** Quién vino a buscarlo, si no fue quien responde. Ausente = fue él. */
+  retiradoPor?: string
   motivo?: string
 
   /** ISO 8601. Ausente = no se pactó hora; no se le reclama nada. */

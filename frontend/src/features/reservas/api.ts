@@ -135,8 +135,11 @@ export function historialDePrestamosDeEquipo(equipoId: string) {
  */
 export function entregarPorReserva(req: {
   reservaIds: string[]
-  /** Quién vino a buscarlas, si no fue el docente de la reserva. */
-  nombreAlternativo?: string
+  /**
+   * Quién vino a buscarlas, si no fue el docente de la reserva. Se anota AL
+   * LADO del docente y no en su lugar: él reservó y él responde (RF-08.19).
+   */
+  retiradoPor?: string
 }) {
   return apiFetch<ResultadoEntrega>("/api/reservation/prestamos/por-reserva", {
     method: "POST",

@@ -130,8 +130,13 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
                     </EstadoBadge>
                   )}
                 </p>
+                {/* El nombre que va primero es el de quien RESPONDE por la
+                    máquina, que contra una reserva es siempre el docente. Si
+                    la vino a buscar otro, se dice al lado y no en su lugar:
+                    a quien hay que reclamarle no cambió. */}
                 <p className="text-muted-foreground text-sm break-words">
                   {p.entregadoANombre}
+                  {p.retiradoPor && ` · retiró ${p.retiradoPor}`}
                   {p.materiaNombre && ` · ${p.materiaNombre}`}
                   {p.motivo && ` · ${p.motivo}`}
                 </p>

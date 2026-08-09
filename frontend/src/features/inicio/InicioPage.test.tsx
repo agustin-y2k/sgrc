@@ -87,6 +87,7 @@ describe("InicioPage", () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([]))
     vi.mocked(adminApi.listarUsuarios).mockResolvedValue(paginada([]))
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({ data: [] })
+    vi.mocked(adminApi.reporteEstadoDelInventario).mockResolvedValue({ data: [] })
   })
 
   afterEach(() => {
@@ -205,5 +206,75 @@ describe("InicioPage", () => {
       const pendientes = (await screen.findByText("3")).closest("a")
       expect(pendientes).toHaveTextContent("por aprobar")
     })
+  })
+
+  /**
+   * El título viejo decía "Ahora en el laboratorio" sobre una lista de
+   * clases en curso — justo las máquinas que se están yendo. Y daba por
+   * sentado que la clase se da ahí, que el sistema no sabe: puede darse en
+   * el aula del docente. Lo que la tarjeta lista es la entrega.
+   */
+  it("el panel del mostrador habla de la entrega, no de dónde se da la clase", async () => {
+    mockUsuario(ADMIN)
+    renderInicio()
+
+    expect(await screen.findByText("Para entregar ahora")).toBeInTheDocument()
+    expect(screen.queryByText("Ahora en el laboratorio")).not.toBeInTheDocument()
+  })
+
+  // "Afuera del laboratorio" ya estaba; faltaba la pregunta dada vuelta.
+  it("a un Admin le dice con cuántos equipos cuenta acá", async () => {
+    mockUsuario(ADMIN)
+    vi.mocked(adminApi.reporteEstadoDelInventario).mockResolvedValue({
+      data: [
+        {
+          carroId: "c1",
+          carroNombre: "Carro 1",
+          disponibles: 13,
+          enMantenimiento: 0,
+          fueraDeServicio: 0,
+          total: 13,
+        },
+      ],
+    })
+    renderInicio()
+
+    expect(await screen.findByText("13 de 13 equipos")).toBeInTheDocument()
+  })
+
+  // Es información de mostrador: un docente no opera entregas.
+  it("a un docente no le pregunta por el estado del inventario", async () => {
+    mockUsuario(DOCENTE)
+    renderInicio()
+
+    await screen.findByText(/Reservá los equipos/)
+    expect(adminApi.reporteEstadoDelInventario).not.toHaveBeenCalled()
+  })
+
+  /**
+   * El orden es la funcionalidad: entregar y recibir se opera todo el día con
+   * gente esperando, y los contadores se miran una vez. Con el mostrador
+   * debajo de ellos, lo que reemplaza al papel quedaba a un scroll de
+   * distancia en la pantalla que el Admin tiene abierta siempre.
+   */
+  it("al Admin le pone el mostrador antes que los contadores", async () => {
+    mockUsuario(ADMIN)
+    renderInicio()
+
+    const mostrador = await screen.findByText("Para entregar ahora")
+    const contador = screen.getByText("por aprobar")
+    expect(
+      mostrador.compareDocumentPosition(contador) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  // Bajarlos no es sacarlos: una cuenta pendiente es un docente que no puede
+  // trabajar, y nadie la va a buscar si ninguna pantalla la nombra.
+  it("los contadores siguen estando, solo que abajo", async () => {
+    mockUsuario(ADMIN)
+    renderInicio()
+
+    expect(await screen.findByText("por aprobar")).toBeInTheDocument()
+    expect(screen.getByText("sin leer")).toBeInTheDocument()
   })
 })

@@ -26,7 +26,7 @@ import { getErrorMessage } from "@/lib/api-client"
 export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
   const queryClient = useQueryClient()
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
-  const [nombreAlternativo, setNombreAlternativo] = useState("")
+  const [retiradoPor, setRetiradoPor] = useState("")
   const [resumen, setResumen] = useState<string | null>(null)
 
   const hoy = hoyISO()
@@ -43,7 +43,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
     mutationFn: (ids: string[]) =>
       reservasApi.entregarPorReserva({
         reservaIds: ids,
-        nombreAlternativo: nombreAlternativo.trim() || undefined,
+        retiradoPor: retiradoPor.trim() || undefined,
       }),
     onSuccess: async (respuesta) => {
       const noSalieron = respuesta.noEntregadas ?? []
@@ -65,7 +65,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
       }
       setResumen(partes.join(" "))
       setMarcadas(new Set())
-      setNombreAlternativo("")
+      setRetiradoPor("")
       await queryClient.invalidateQueries({ queryKey: PRESTAMOS_KEY })
     },
   })
@@ -184,15 +184,19 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
         {marcadas.size > 0 && (
           <div className="grid gap-2 rounded-md border border-dashed p-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="nombre-alternativo">¿Se las llevó otra persona?</Label>
+              <Label htmlFor="retirado-por">¿Quién las retira? (opcional)</Label>
               <Input
-                id="nombre-alternativo"
-                value={nombreAlternativo}
-                onChange={(e) => setNombreAlternativo(e.target.value)}
+                id="retirado-por"
+                value={retiradoPor}
+                onChange={(e) => setRetiradoPor(e.target.value)}
                 placeholder="Ej.: Juan (alumno de 5°A)"
               />
+              {/* El docente queda como responsable pase lo que pase: él
+                  reservó y a él se le reclama. Esto es solo quién pasó por el
+                  mostrador, y por eso se puede dejar vacío. */}
               <p className="text-muted-foreground text-xs">
-                Dejalo vacío si las retiró el docente de la reserva.
+                Las máquinas quedan igual a cargo del docente de la reserva.
+                Dejalo vacío si no hace falta anotar quién vino a buscarlas.
               </p>
             </div>
             <div>
@@ -200,7 +204,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                 disabled={entregar.isPending}
                 onClick={() => entregar.mutate([...marcadas])}
               >
-                Entregar {marcadas.size} computadora(s)
+                Entregar {marcadas.size} equipo(s)
               </Button>
             </div>
           </div>
