@@ -51,7 +51,7 @@ Las claves públicas se cachean respetando el `max-age` que declara Google, acot
 
 **Una falla de red al buscar las claves no se reporta como token inválido.** Devuelve 500, no 401: culpar al usuario por un problema nuestro deja el incidente sin rastro de la causa.
 
-**Vincular por email es seguro solo porque antes se exigió `email_verified`.** Un docente que ya tenía cuenta con contraseña y entra con Google queda vinculado a su misma cuenta y **conserva la contraseña** — las dos formas de ingreso conviven (`migrations/008_login_con_google.sql`). Una cuenta en `BAJA` no se vincula: RF-02.9 la hace terminal y no se reactiva por la puerta de atrás.
+**Vincular por email es seguro solo porque antes se exigió `email_verified`.** Un docente que ya tenía cuenta con contraseña y entra con Google queda vinculado a su misma cuenta y **conserva la contraseña** — las dos formas de ingreso conviven (`usuario.password_hash` y `usuario.google_sub`, con el CHECK `chk_usuario_credencial` exigiendo al menos una). Una cuenta en `BAJA` no se vincula: RF-02.9 la hace terminal y no se reactiva por la puerta de atrás.
 
 **Una cuenta creada con Google queda `PENDIENTE` igual que cualquier otra.** Tener una cuenta de Google válida prueba quién sos, no que la escuela te conozca.
 
@@ -90,7 +90,7 @@ de la base al verificar la cuenta (§1).
 | Cambiar estado de un equipo | ✅ | ❌ |
 | Registrar incidencia | ✅ | ✅ solo reportar |
 | Ver el historial de incidencias de un equipo | ✅ | ✅ |
-| Cambiar estado de incidencia / marcar envío a DGE | ✅ | ❌ |
+| Cambiar estado de incidencia / marcar envío a soporte | ✅ | ❌ |
 | Aprobar cuentas de docentes | ✅ | ❌ |
 | Resetear contraseña de un usuario | ✅ | ❌ |
 | Dar de baja a un docente (permanente) | ✅ | ❌ |

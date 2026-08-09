@@ -32,7 +32,7 @@ type crearEquipoDeCarroRequest struct {
 }
 
 // crearEquipoSueltoRequest: algo prestable que no es una computadora de un carro
-// (015) — un proyector, un cargador, una notebook suelta.
+// — un proyector, un cargador, una notebook suelta.
 type crearEquipoSueltoRequest struct {
 	// Tipo es texto libre: la lista de cosas que presta una escuela no es la
 	// misma que la de otra.
@@ -70,8 +70,8 @@ type crearIncidenciaRequest struct {
 }
 
 type editarIncidenciaRequest struct {
-	Estado           *string `json:"estado,omitempty"`
-	MarcarEnviadaDGE bool    `json:"marcarEnviadaDGE"`
+	Estado                *string `json:"estado,omitempty"`
+	MarcarEnviadaASoporte bool    `json:"marcarEnviadaASoporte"`
 	// Categoria: mandarla vacía la devuelve a "sin clasificar"; omitirla no
 	// la toca.
 	Categoria *string `json:"categoria,omitempty"`
@@ -91,7 +91,7 @@ func toCarroResponse(c *domain.Carro) carroResponse {
 
 type equipoResponse struct {
 	ID string `json:"id"`
-	// Los tres pueden faltar desde la 015: un proyector no está en ningún
+	// Los tres pueden faltar: un proyector no está en ningún
 	// carro, no es "PC 3" y puede no traer número de serie.
 	CarroID       string `json:"carroId,omitempty"`
 	Identificador int    `json:"identificador,omitempty"`
@@ -138,19 +138,19 @@ type incidenciaResponse struct {
 	ReportadoPor *string `json:"reportadoPor,omitempty"`
 	Descripcion  string  `json:"descripcion"`
 	// Categoria vacía significa que todavía no se diagnosticó.
-	Categoria     string     `json:"categoria,omitempty"`
-	Gravedad      string     `json:"gravedad"`
-	Fecha         time.Time  `json:"fecha"`
-	EnviadoDGE    bool       `json:"enviadoDge"`
-	FechaEnvioDGE *time.Time `json:"fechaEnvioDge,omitempty"`
-	Estado        string     `json:"estado"`
+	Categoria          string     `json:"categoria,omitempty"`
+	Gravedad           string     `json:"gravedad"`
+	Fecha              time.Time  `json:"fecha"`
+	EnviadoASoporte    bool       `json:"enviadoASoporte"`
+	FechaEnvioASoporte *time.Time `json:"fechaEnvioASoporte,omitempty"`
+	Estado             string     `json:"estado"`
 }
 
 func toIncidenciaResponse(i *domain.Incidencia) incidenciaResponse {
 	return incidenciaResponse{
 		ID: i.ID, EquipoID: i.EquipoID, ReportadoPor: i.ReportadoPor, Descripcion: i.Descripcion,
 		Categoria: i.Categoria,
-		Gravedad:  string(i.Gravedad), Fecha: i.Fecha, EnviadoDGE: i.EnviadoDGE,
-		FechaEnvioDGE: i.FechaEnvioDGE, Estado: string(i.Estado),
+		Gravedad:  string(i.Gravedad), Fecha: i.Fecha, EnviadoASoporte: i.EnviadoASoporte,
+		FechaEnvioASoporte: i.FechaEnvioASoporte, Estado: string(i.Estado),
 	}
 }

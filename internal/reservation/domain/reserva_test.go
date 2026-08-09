@@ -219,7 +219,7 @@ func TestValidarVentanaTemporal(t *testing.T) {
 	}
 }
 
-// ── El motivo del bloqueo (019) ─────────────────────────────────────────
+// ── El motivo del bloqueo ─────────────────────────────────────────
 
 // Un bloqueo cancela las clases de otros, así que el porqué no es opcional.
 // Sin motivo, quien mira el calendario y encuentra el rato ocupado no tiene

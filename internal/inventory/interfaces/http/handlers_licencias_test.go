@@ -345,7 +345,7 @@ func TestHTTP_Licencias_SoloAdmin(t *testing.T) {
 func TestHTTP_CrearEquipo_ProyectorReservable(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos/sueltos", crearEquipoSueltoRequest{
+	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoSueltoRequest{
 		Tipo: "PROYECTOR", Nombre: "Proyector Epson", Reservable: true,
 	}, "ADMIN")
 
@@ -370,7 +370,7 @@ func TestHTTP_CrearEquipo_CargadorNoReservable(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
 
-	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos/sueltos", crearEquipoSueltoRequest{
+	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoSueltoRequest{
 		Tipo: "CARGADOR", Nombre: "Cargador 1", Reservable: false,
 	}, "ADMIN")
 
@@ -389,7 +389,7 @@ func TestHTTP_CrearEquipo_CargadorNoReservable(t *testing.T) {
 func TestHTTP_CrearEquipo_SinNombre(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	codigo, _ := pedir(t, app, "POST", "/api/inventory/equipos/sueltos", crearEquipoSueltoRequest{
+	codigo, _ := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoSueltoRequest{
 		Tipo: "CARGADOR", Nombre: "   ",
 	}, "ADMIN")
 
@@ -400,16 +400,16 @@ func TestHTTP_CrearEquipo_SinNombre(t *testing.T) {
 	}
 }
 
-func TestHTTP_ListarEquiposSueltos(t *testing.T) {
+func TestHTTP_ListarEquipos_SoloLosSueltos(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
-	pedir(t, app, "POST", "/api/inventory/equipos/sueltos", crearEquipoSueltoRequest{
+	pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoSueltoRequest{
 		Tipo: "PROYECTOR", Nombre: "Proyector Epson", Reservable: true,
 	}, "ADMIN")
 
 	// Un docente también los puede ver: necesita saber que existe un
 	// proyector antes de pedirlo (RF-03.7).
-	codigo, cuerpo := pedir(t, app, "GET", "/api/inventory/equipos/sueltos", nil, "DOCENTE")
+	codigo, cuerpo := pedir(t, app, "GET", "/api/inventory/equipos?enCarro=false", nil, "DOCENTE")
 
 	if codigo != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
@@ -428,11 +428,66 @@ func TestHTTP_ListarEquiposSueltos(t *testing.T) {
 func TestHTTP_CrearEquipo_SoloAdmin(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	codigo, _ := pedir(t, app, "POST", "/api/inventory/equipos/sueltos", crearEquipoSueltoRequest{
+	codigo, _ := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoSueltoRequest{
 		Tipo: "CARGADOR", Nombre: "Cargador 1",
 	}, "DOCENTE")
 
 	if codigo != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d", codigo)
+	}
+}
+
+// Sin filtro, `/equipos` es el inventario entero. Es lo que necesita
+// cualquier pantalla que ofrezca todo lo prestable sin recorrer carro por
+// carro — la entrega sin reserva, por ejemplo.
+func TestHTTP_ListarEquipos_SinFiltroTraeTodo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["equipo-1"] = &domain.Equipo{
+		ID: "equipo-1", CarroID: "carro-1", Identificador: 1, Estado: domain.EstadoDisponible,
+	}
+	repo.equipos["equipo-2"] = &domain.Equipo{
+		ID: "equipo-2", Nombre: "Proyector Epson", Tipo: "PROYECTOR", Estado: domain.EstadoDisponible,
+	}
+	app := nuevaAppDeTest(repo)
+
+	codigo, cuerpo := pedir(t, app, "GET", "/api/inventory/equipos", nil, "DOCENTE")
+
+	if codigo != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
+	}
+	var resp struct {
+		Data []equipoResponse `json:"data"`
+	}
+	if err := json.Unmarshal(cuerpo, &resp); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if len(resp.Data) != 2 {
+		t.Errorf("esperaba el equipo de carro y el suelto, obtuve %+v", resp.Data)
+	}
+}
+
+// Un valor que no es exactamente "false" no filtra nada. De un parámetro mal
+// escrito es mejor ver de más que de menos: ver de menos se confunde con "no
+// hay ninguno", y eso en el mostrador termina en "no tenemos proyector".
+func TestHTTP_ListarEquipos_FiltroMalEscritoNoEsconde(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["equipo-1"] = &domain.Equipo{
+		ID: "equipo-1", CarroID: "carro-1", Identificador: 1, Estado: domain.EstadoDisponible,
+	}
+	app := nuevaAppDeTest(repo)
+
+	codigo, cuerpo := pedir(t, app, "GET", "/api/inventory/equipos?enCarro=0", nil, "DOCENTE")
+
+	if codigo != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
+	}
+	var resp struct {
+		Data []equipoResponse `json:"data"`
+	}
+	if err := json.Unmarshal(cuerpo, &resp); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if len(resp.Data) != 1 {
+		t.Errorf("un filtro que no se entiende no debería esconder nada: %+v", resp.Data)
 	}
 }

@@ -90,13 +90,16 @@ func (r *fakeRepo) ListarEquiposPorCarro(ctx context.Context, carroID string) ([
 	return resultado, nil
 }
 
-// ListarEquiposSueltos: lo prestable que no está en ningún carro (015).
-func (r *fakeRepo) ListarEquiposSueltos(ctx context.Context) ([]*domain.Equipo, error) {
+// ListarEquipos: el inventario, o solo lo que no está en ningún carro.
+// El filtro se aplica acá igual que en la base: un fake más permisivo que el
+// repositorio real hace pasar en la máquina lo que falla en producción.
+func (r *fakeRepo) ListarEquipos(ctx context.Context, soloSueltos bool) ([]*domain.Equipo, error) {
 	var resultado []*domain.Equipo
 	for _, equipo := range r.equipos {
-		if !equipo.EstaEnUnCarro() {
-			resultado = append(resultado, equipo)
+		if soloSueltos && equipo.EstaEnUnCarro() {
+			continue
 		}
+		resultado = append(resultado, equipo)
 	}
 	return resultado, nil
 }
@@ -495,7 +498,7 @@ func TestHTTP_EditarIncidencia_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("PATCH", "/api/inventory/incidencias/i1",
-		jsonBody(editarIncidenciaRequest{MarcarEnviadaDGE: true}))
+		jsonBody(editarIncidenciaRequest{MarcarEnviadaASoporte: true}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 

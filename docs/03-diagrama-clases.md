@@ -42,12 +42,12 @@ classDiagram
         +estaEnUnCarro() boolean
     }
 
-    %% Equipo no es solo una computadora: desde la 015 también son el proyector
+    %% Equipo no es solo una computadora: también son el proyector
     %% y los cargadores, que no cuelgan de ningún carro (carroId, identificador
     %% y numeroSerie quedan vacíos y los nombra `nombre`). Comparten entidad
     %% para que "qué hay afuera del laboratorio" sea una sola lista.
     %% `etiqueta()` resuelve cómo se lo nombra: "PC 3" o el nombre. Se llamó
-    %% PC hasta la 016, que saldó el renombre.
+    %% Se llamó PC en versiones anteriores.
 
     class LicenciaSoftware {
         +UUID id
@@ -244,7 +244,7 @@ classDiagram
 | `EstadoReserva` (por PC) | `CONFIRMADA`, `CANCELADA`, `FINALIZADA`, `NO_RETIRADA` |
 | `TipoReserva` | `NORMAL`, `BLOQUEO` |
 | `Gravedad` | `LEVE`, `MODERADA`, `GRAVE` |
-| `EstadoIncidencia` | `ABIERTA`, `EN_REPARACION`, `ENVIADA_DGE`, `RESUELTA` |
+| `EstadoIncidencia` | `ABIERTA`, `EN_REPARACION`, `ENVIADA_A_SOPORTE`, `RESUELTA` |
 | `EstadoNotif` | `NO_LEIDA`, `LEIDA` |
 | `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `LICENCIA_POR_VENCER`, `RESERVA_POR_COMENZAR`, `RESERVA_NO_RETIRADA`, `PC_SIN_DEVOLVER` |
 | `EstadoLicencia` | `SIN_FECHA`, `VENCIDA`, `POR_VENCER`, `VIGENTE` — **derivado**, nunca una columna: se calcula contra la fecha de hoy |

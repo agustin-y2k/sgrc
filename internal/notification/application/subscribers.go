@@ -418,7 +418,7 @@ func equiposDeLasCanceladas(reservas []eventbus.ReservaCancelada) string {
 // orden numérico: "PC 3" antes que "PC 12", y "Proyector Epson" donde le
 // toque alfabéticamente.
 //
-// Hace falta desde que las etiquetas son texto (015): antes eran enteros y
+// Hace falta desde que las etiquetas son texto: antes eran enteros y
 // el orden salía solo.
 func menorEnOrdenNatural(a, b string) bool {
 	prefijoA, numeroA := partirEtiqueta(a)

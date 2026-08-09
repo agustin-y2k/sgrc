@@ -67,7 +67,7 @@ func GenerarPasswordTemporal() (string, error) {
 // Seis dígitos son un millón de combinaciones, poco por sí solo — lo que lo
 // hace seguro es el resto: quince minutos de vigencia, cinco intentos, un
 // solo código vigente por persona y rate limit en el endpoint (ver
-// domain.CodigoRecuperacion y migrations/009).
+// domain.CodigoRecuperacion y migrations/001_esquema_inicial.sql).
 func GenerarCodigoRecuperacion() (string, error) {
 	const digitos = "0123456789"
 	longitud := domain.LongitudCodigoRecuperacion

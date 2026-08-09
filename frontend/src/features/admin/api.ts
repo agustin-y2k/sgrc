@@ -127,7 +127,9 @@ export function crearEquipoSuelto(req: {
   nombre: string
   reservable: boolean
 }) {
-  return apiFetch<Equipo>("/api/inventory/equipos/sueltos", { method: "POST", body: req })
+  // A qué colección se hace POST decide dónde nace el equipo: acá nace
+  // suelto, en /carros/{id}/equipos nace adentro de ese carro.
+  return apiFetch<Equipo>("/api/inventory/equipos", { method: "POST", body: req })
 }
 
 export function editarEquipo(
@@ -168,11 +170,11 @@ export function darDeBajaEquipo(id: string) {
 // puede hacer cualquier usuario autenticado. Editarlas es solo de Admin.
 export function editarIncidencia(
   id: string,
-  req: { estado?: Incidencia["estado"]; marcarEnviadaDGE?: boolean }
+  req: { estado?: Incidencia["estado"]; marcarEnviadaASoporte?: boolean }
 ) {
   return apiFetch<void>(`/api/inventory/incidencias/${id}`, {
     method: "PATCH",
-    body: { estado: req.estado, marcarEnviadaDGE: req.marcarEnviadaDGE ?? false },
+    body: { estado: req.estado, marcarEnviadaASoporte: req.marcarEnviadaASoporte ?? false },
   })
 }
 

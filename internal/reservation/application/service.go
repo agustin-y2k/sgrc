@@ -121,7 +121,7 @@ func (s *Service) publicarCancelaciones(ctx context.Context, pendientes []cancel
 // "Proyector Epson") a partir de su UUID, para que el aviso diga cuáles
 // fueron.
 //
-// Devuelve etiquetas y no números desde la 015: lo que se reserva puede no
+// Devuelve etiquetas y no números: lo que se reserva puede no
 // tener número, y "PC 0" es lo que sale de formatear uno que no existe.
 //
 // Si la consulta falla NO se aborta nada: el evento sale igual sin el
@@ -683,7 +683,7 @@ type ResultadoBloqueo struct {
 // Nunca cancela otro bloqueo existente: dos bloqueos no deberían solaparse
 // en la práctica, y si pasara, no es este método el que debe resolverlo.
 //
-// El motivo es obligatorio y se guarda en cada bloqueo (019), no solo en el
+// El motivo es obligatorio y se guarda en cada bloqueo, no solo en el
 // texto de las cancelaciones: un bloqueo que no pisó ninguna reserva —lo
 // habitual, porque se suele avisar con tiempo— tiene que poder explicarse
 // igual cuando alguien mire el calendario y encuentre el rato ocupado.

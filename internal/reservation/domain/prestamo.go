@@ -108,7 +108,7 @@ type DatosDeEntrega struct {
 	Nombre string
 	// RetiradoPor es opcional: quién vino a buscarlo, si no fue quien
 	// responde. Anotar al alumno le sirve a una institución y a otra le
-	// sobra, así que se ofrece y no se exige (018).
+	// sobra, así que se ofrece y no se exige.
 	RetiradoPor string
 	Motivo      string
 	// DevolucionEstimada: en una entrega contra reserva sale del fin de esa
@@ -127,7 +127,7 @@ type DatosDeEntrega struct {
 // registrarla. Eso es un dato correcto, no un error.
 func NuevoPrestamo(id string, d DatosDeEntrega, ahora time.Time) (*Prestamo, error) {
 	// Normalizar antes de validar: un nombre de puros espacios pasaría el
-	// "no vacío" y chocaría contra el CHECK de la 013 como un 500.
+	// "no vacío" y chocaría contra el CHECK de la base como un 500.
 	nombre := NormalizarNombreDestinatario(d.Nombre)
 	if nombre == "" {
 		return nil, ErrNombreDestinatarioVacio

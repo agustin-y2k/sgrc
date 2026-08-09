@@ -214,7 +214,7 @@ type EquipoDisponible struct {
 	// del lado del servidor para que la misma máquina no se vea distinta
 	// según la pantalla, y para que un proyector no salga rotulado "PC 0".
 	Etiqueta string
-	// Tipo distingue una PC de un proyector. Texto libre (015).
+	// Tipo distingue una PC de un proyector. Texto libre.
 	Tipo string
 	// CarroID y CarroNombre vacíos en un equipo suelto.
 	CarroID           string
@@ -273,7 +273,7 @@ type ValidadorEquipo interface {
 	// aviso cuáles se cancelaron. Los que no existan simplemente no
 	// aparecen en el mapa.
 	//
-	// Devuelve texto y no un número desde la 015: lo prestable puede no
+	// Devuelve texto y no un número: lo prestable puede no
 	// tener identificador, y un proyector rotulado "PC 0" es lo que sale de
 	// formatear uno que no existe.
 	//

@@ -12,7 +12,7 @@ import (
 )
 
 // Persistencia de los códigos de recuperación de contraseña
-// (migrations/009_recuperacion_de_password.sql).
+// (migrations/001_esquema_inicial.sql).
 
 const columnasCodigo = `id, usuario_id, codigo_hash, creado_en, expira_en, usado_en, intentos`
 

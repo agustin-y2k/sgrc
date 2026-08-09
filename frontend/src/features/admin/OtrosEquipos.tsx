@@ -267,7 +267,7 @@ export function OtrosEquipos() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: EQUIPOS_KEY,
-    queryFn: inventoryApi.listarEquiposSueltos,
+    queryFn: () => inventoryApi.listarEquipos({ soloSueltos: true }),
   })
 
   const equipos = (data?.data ?? []).filter((e) => !e.dadoDeBaja)

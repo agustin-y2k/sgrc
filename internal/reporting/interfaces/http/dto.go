@@ -7,7 +7,7 @@ import "github.com/ramiro/sgrc/internal/reporting/domain"
 type resumenUsoEquipoResponse struct {
 	EquipoID string `json:"equipoId"`
 	// Etiqueta es lo que se muestra: "PC 3" o "Proyector Epson". Los dos de
-	// abajo van en 0 y "" cuando el equipo no está en ningún carro (015).
+	// abajo van en 0 y "" cuando el equipo no está en ningún carro.
 	Etiqueta          string `json:"etiqueta"`
 	Identificador     int    `json:"identificador"`
 	CarroNombre       string `json:"carroNombre"`
@@ -42,7 +42,7 @@ type historicoUsoEquipoResponse struct {
 	EquipoID string `json:"equipoId"`
 	// Cómo se llamaba el equipo el día que se archivó el ciclo: "PC 3" o
 	// "Proyector Epson". Los dos de abajo van en 0 y "" si no estaba en
-	// ningún carro (015).
+	// ningún carro.
 	EtiquetaSnapshot      string `json:"etiquetaSnapshot"`
 	IdentificadorSnapshot int    `json:"identificadorSnapshot"`
 	CarroNombreSnapshot   string `json:"carroNombreSnapshot"`
@@ -79,22 +79,22 @@ func toHistoricoUsoDocenteResponse(h *domain.HistoricoUsoDocente) historicoUsoDo
 type resumenIncidenciasEquipoResponse struct {
 	EquipoID string `json:"equipoId"`
 	// Ver resumenUsoEquipoResponse.Etiqueta.
-	Etiqueta      string `json:"etiqueta"`
-	Identificador int    `json:"identificador"`
-	CarroNombre   string `json:"carroNombre"`
-	Total         int    `json:"total"`
-	Abiertas      int    `json:"abiertas"`
-	EnReparacion  int    `json:"enReparacion"`
-	EnviadasDGE   int    `json:"enviadasDge"`
-	Resueltas     int    `json:"resueltas"`
-	Graves        int    `json:"graves"`
+	Etiqueta         string `json:"etiqueta"`
+	Identificador    int    `json:"identificador"`
+	CarroNombre      string `json:"carroNombre"`
+	Total            int    `json:"total"`
+	Abiertas         int    `json:"abiertas"`
+	EnReparacion     int    `json:"enReparacion"`
+	EnviadasASoporte int    `json:"enviadasASoporte"`
+	Resueltas        int    `json:"resueltas"`
+	Graves           int    `json:"graves"`
 }
 
 func toResumenIncidenciasEquipoResponse(x domain.ResumenIncidenciasEquipo) resumenIncidenciasEquipoResponse {
 	return resumenIncidenciasEquipoResponse{
 		EquipoID: x.EquipoID, Etiqueta: x.Etiqueta, Identificador: x.Identificador, CarroNombre: x.CarroNombre,
 		Total: x.Total, Abiertas: x.Abiertas, EnReparacion: x.EnReparacion,
-		EnviadasDGE: x.EnviadasDGE, Resueltas: x.Resueltas, Graves: x.Graves,
+		EnviadasASoporte: x.EnviadasASoporte, Resueltas: x.Resueltas, Graves: x.Graves,
 	}
 }
 

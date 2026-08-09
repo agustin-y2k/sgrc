@@ -80,7 +80,7 @@ export type ResumenIncidenciasEquipo = {
   total: number
   abiertas: number
   enReparacion: number
-  enviadasDge: number
+  enviadasASoporte: number
   resueltas: number
   graves: number
 }

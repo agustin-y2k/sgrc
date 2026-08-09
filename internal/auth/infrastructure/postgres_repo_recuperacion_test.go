@@ -1,6 +1,6 @@
 //go:build integration
 
-// Tests de la persistencia de los códigos de recuperación (migración 009)
+// Tests de la persistencia de los códigos de recuperación
 // contra Postgres real.
 //
 // Van acá y no contra un fake porque lo que hay que verificar es
@@ -290,7 +290,7 @@ func TestCodigoRecuperacion_SeVanConLaCuenta(t *testing.T) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// Versión de sesión (migración 010)
+// Versión de sesión
 // ══════════════════════════════════════════════════════════════════
 
 func TestVersionSesion_ArrancaEnCeroYSePersiste(t *testing.T) {
@@ -303,7 +303,8 @@ func TestVersionSesion_ArrancaEnCeroYSePersiste(t *testing.T) {
 		t.Fatalf("creando: %v", err)
 	}
 
-	// El DEFAULT 0 de la columna es lo que hace que desplegar la 010 no
+	// El DEFAULT 0 de la columna es lo que hace que una cuenta creada antes de
+	// que existiera el contador no
 	// desloguee a nadie: coincide con el claim ausente en los tokens que ya
 	// estaban emitidos.
 	leido, err := repo.BuscarPorID(ctx, u.ID)

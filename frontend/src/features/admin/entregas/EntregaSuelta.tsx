@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -50,41 +50,38 @@ export function EntregaSuelta({
     queryFn: inventoryApi.listarCarros,
   })
 
-  const consultasDeEquipos = useQueries({
-    queries: (carros?.data ?? []).map((c) => ({
-      queryKey: ["equipos", c.id],
-      queryFn: () => inventoryApi.listarEquiposDeCarro(c.id),
-    })),
+  // Todo el inventario en UNA consulta. Antes eran una por carro más otra
+  // por los sueltos, y el listado se armaba juntando las respuestas; el
+  // endpoint sin filtro lo resuelve de una. Los carros se siguen pidiendo,
+  // pero solo para poder decir de dónde sale cada equipo.
+  const { data: todos } = useQuery({
+    queryKey: ["equipos"],
+    queryFn: () => inventoryApi.listarEquipos(),
   })
 
-  // Los equipos que no están en ningún carro: el proyector, los cargadores,
-  // las notebooks sueltas. La mayoría de los préstamos espontáneos son
-  // justamente de estas cosas, así que van primero.
-  const { data: sueltos } = useQuery({
-    queryKey: ["equipos-sueltos"],
-    queryFn: inventoryApi.listarEquiposSueltos,
-  })
+  const nombreDeCarro = useMemo(
+    () => new Map((carros?.data ?? []).map((c) => [c.id, c.nombre])),
+    [carros]
+  )
 
   // Se ofrece todo lo que esté en el inventario y no esté ya afuera. No se
   // filtra por estado a propósito: llevarle al técnico un equipo en
   // mantenimiento es justamente un préstamo, y prohibirlo obligaría a
   // sacarla del sistema para poder anotarlo. Tampoco por `reservable`: un
   // cargador no se reserva pero sí se presta — es el caso principal.
-  const equipos = useMemo(() => {
-    const lista: { id: string; etiqueta: string; donde: string }[] = []
-
-    ;(sueltos?.data ?? [])
-      .filter((eq) => !eq.dadoDeBaja && !yaAfuera.has(eq.id))
-      .forEach((eq) => lista.push({ id: eq.id, etiqueta: eq.etiqueta, donde: eq.tipo }))
-
-    ;(carros?.data ?? []).forEach((carro, i) => {
-      const equiposDelCarro = consultasDeEquipos[i]?.data?.data ?? []
-      equiposDelCarro
-        .filter((equipo) => !equipo.dadoDeBaja && !yaAfuera.has(equipo.id))
-        .forEach((equipo) => lista.push({ id: equipo.id, etiqueta: equipo.etiqueta, donde: carro.nombre }))
-    })
-    return lista
-  }, [carros, consultasDeEquipos, sueltos, yaAfuera])
+  const equipos = useMemo(
+    () =>
+      (todos?.data ?? [])
+        .filter((eq) => !eq.dadoDeBaja && !yaAfuera.has(eq.id))
+        .map((eq) => ({
+          id: eq.id,
+          etiqueta: eq.etiqueta,
+          // De dónde sale: el carro si pertenece a uno, y si no su tipo
+          // ("PROYECTOR"), que es lo único que ubica a un equipo suelto.
+          donde: eq.carroId ? (nombreDeCarro.get(eq.carroId) ?? "") : eq.tipo,
+        })),
+    [todos, nombreDeCarro, yaAfuera]
+  )
 
   const entregar = useMutation({
     mutationFn: () =>

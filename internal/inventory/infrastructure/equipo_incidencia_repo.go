@@ -81,7 +81,7 @@ func escanearEquipo(row pgx.Row) (*domain.Equipo, error) {
 	if software != nil {
 		pc.SoftwareInstalado = *software
 	}
-	// Los cuatro que desde la 015 pueden faltar: un proyector no tiene carro
+	// Los cuatro que pueden faltar: un proyector no tiene carro
 	// ni número ni serie, y una PC de carro no tiene nombre.
 	if carroID != nil {
 		pc.CarroID = *carroID
@@ -152,17 +152,17 @@ func (r *PostgresRepo) ListarEquiposPorCarro(ctx context.Context, carroID string
 
 // ── Incidencia ──────────────────────────────────────────────────────────
 
-// COALESCE en la categoría: la columna es NULL-able (017) y el dominio la
+// COALESCE en la categoría: la columna es NULL-able y el dominio la
 // representa con una cadena vacía, que es lo mismo —sin clasificar— sin
 // obligar a un puntero en todo el paso.
-const columnasIncidencia = `id, equipo_id, reportado_por, descripcion, COALESCE(categoria, ''), gravedad, fecha, enviado_dge, fecha_envio_dge, estado`
+const columnasIncidencia = `id, equipo_id, reportado_por, descripcion, COALESCE(categoria, ''), gravedad, fecha, enviado_a_soporte, fecha_envio_a_soporte, estado`
 
 func (r *PostgresRepo) CrearIncidencia(ctx context.Context, i *domain.Incidencia) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO incidencia (id, equipo_id, reportado_por, descripcion, categoria, gravedad, fecha, enviado_dge, estado)
+		INSERT INTO incidencia (id, equipo_id, reportado_por, descripcion, categoria, gravedad, fecha, enviado_a_soporte, estado)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`, i.ID, i.EquipoID, i.ReportadoPor, i.Descripcion, nullIfEmpty(i.Categoria),
-		string(i.Gravedad), i.Fecha, i.EnviadoDGE, string(i.Estado))
+		string(i.Gravedad), i.Fecha, i.EnviadoASoporte, string(i.Estado))
 	if err != nil {
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
@@ -186,7 +186,7 @@ func escanearIncidencia(row pgx.Row) (*domain.Incidencia, error) {
 
 	err := row.Scan(
 		&i.ID, &i.EquipoID, &i.ReportadoPor, &i.Descripcion, &i.Categoria, &gravedadStr,
-		&i.Fecha, &i.EnviadoDGE, &i.FechaEnvioDGE, &estadoStr,
+		&i.Fecha, &i.EnviadoASoporte, &i.FechaEnvioASoporte, &estadoStr,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -215,10 +215,10 @@ func escanearIncidencia(row pgx.Row) (*domain.Incidencia, error) {
 func (r *PostgresRepo) GuardarIncidencia(ctx context.Context, i *domain.Incidencia) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE incidencia SET
-			descripcion=$2, categoria=$3, gravedad=$4, enviado_dge=$5, fecha_envio_dge=$6, estado=$7
+			descripcion=$2, categoria=$3, gravedad=$4, enviado_a_soporte=$5, fecha_envio_a_soporte=$6, estado=$7
 		WHERE id=$1
-	`, i.ID, i.Descripcion, nullIfEmpty(i.Categoria), string(i.Gravedad), i.EnviadoDGE,
-		i.FechaEnvioDGE, string(i.Estado))
+	`, i.ID, i.Descripcion, nullIfEmpty(i.Categoria), string(i.Gravedad), i.EnviadoASoporte,
+		i.FechaEnvioASoporte, string(i.Estado))
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -300,8 +300,8 @@ func errorDeUnicidadDeEquipo(err error) error {
 }
 
 // nullSiCero es lo mismo que nullIfEmpty pero para el identificador: desde
-// la 015 un equipo suelto no tiene número, y guardar 0 lo haría chocar
-// contra el CHECK de la 001 (identificador > 0) además de mentir.
+// Un equipo suelto no tiene número, y guardar 0 lo haría chocar
+// contra el CHECK de la base (identificador > 0) además de mentir.
 func nullSiCero(n int) *int {
 	if n == 0 {
 		return nil
@@ -320,18 +320,26 @@ func nullIfEmpty(s string) *string {
 	return &s
 }
 
-// ListarEquiposSueltos: lo prestable que NO está en ningún carro — el
-// proyector, los cargadores, las notebooks de otro modelo.
+// ListarEquipos: el inventario entero, o solo lo que no está en ningún carro
+// —el proyector, los cargadores, las notebooks de otro modelo—.
 //
 // Es una consulta aparte y no un filtro de ListarEquiposPorCarro porque no
-// responde la misma pregunta: aquella arma la ficha de un carro, y esta es
-// la sección "Otros equipos" del inventario, que existe justamente porque
-// estas cosas no pertenecen a ninguno.
-func (r *PostgresRepo) ListarEquiposSueltos(ctx context.Context) ([]*domain.Equipo, error) {
+// responde la misma pregunta: aquella arma la ficha de un carro, y esta
+// atraviesa el inventario.
+//
+// El orden pone los sueltos primero (los de carro tienen carro_id, que no es
+// NULL) y después ordena por tipo y nombre. En los de carro `nombre` es NULL,
+// así que el desempate real entre ellos lo da el identificador.
+func (r *PostgresRepo) ListarEquipos(ctx context.Context, soloSueltos bool) ([]*domain.Equipo, error) {
+	filtro := ""
+	if soloSueltos {
+		filtro = " WHERE carro_id IS NULL"
+	}
 	rows, err := r.pool.Query(ctx,
-		`SELECT `+columnasEquipo+` FROM equipo WHERE carro_id IS NULL ORDER BY tipo, nombre`)
+		`SELECT `+columnasEquipo+` FROM equipo`+filtro+
+			` ORDER BY carro_id NULLS FIRST, tipo, nombre, identificador`)
 	if err != nil {
-		return nil, fmt.Errorf("listando equipos sueltos: %w", err)
+		return nil, fmt.Errorf("listando equipos: %w", err)
 	}
 	defer rows.Close()
 

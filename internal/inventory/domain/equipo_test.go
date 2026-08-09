@@ -293,7 +293,7 @@ func TestEtiqueta(t *testing.T) {
 }
 
 // Una PC de carro creada con NuevoEquipoDeCarro tiene que quedar reservable y de tipo
-// PC: es lo que hace que la 015 no cambie nada de lo que ya existía.
+// PC: es lo que hace que sumar equipos sueltos no cambie nada de lo que ya existía.
 func TestNuevaEquipo_NaceReservableYDeTipoEquipo(t *testing.T) {
 	p, err := NuevoEquipoDeCarro("equipo-1", "carro-1", 3, "5CD1234ABC", false, time.Now())
 

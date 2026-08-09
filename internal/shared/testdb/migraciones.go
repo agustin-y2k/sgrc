@@ -3,11 +3,13 @@
 // Package testdb da a los tests de integración de cada paquete una única
 // forma de construir el esquema.
 //
-// Lee el directorio completo en vez de nombrar los archivos, para que
-// agregar una migración no requiera acordarse de tocar los siete harnesses
-// de integración. Si alguno quedara apuntando a un esquema viejo, sus tests
+// Lee el directorio completo en vez de nombrar los archivos, para que un
+// cambio de esquema no requiera acordarse de tocar los ocho harnesses de
+// integración. Si alguno quedara apuntando a un archivo viejo, sus tests
 // pasarían en verde mientras producción corre otra cosa — la peor forma de
-// fallar.
+// fallar. (Pasó: un harness nombraba `001_init.sql` y sobrevivió hasta que
+// ese archivo dejó de existir; ahí falló ruidosamente, que es lo bueno de no
+// tener alternativa silenciosa.)
 package testdb
 
 import (
@@ -18,9 +20,10 @@ import (
 	"strings"
 )
 
-// SQLDeMigraciones devuelve el contenido de todas las migraciones
-// concatenadas en orden lexicográfico (001_, 002_, …), que es el mismo
-// orden en que las aplica docker-entrypoint-initdb.d en producción.
+// SQLDeMigraciones devuelve el contenido de `migrations/` concatenado en
+// orden lexicográfico, que es el mismo orden en que lo aplica
+// docker-entrypoint-initdb.d en producción. Hoy es un solo archivo con el
+// esquema completo; el orden importa el día que haya más de uno.
 //
 // dirRelativo es la ruta al directorio migrations/ desde el paquete que
 // llama (típicamente "../../../migrations").

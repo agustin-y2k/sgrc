@@ -37,7 +37,7 @@ function renderSeccion() {
 describe("OtrosEquipos", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.crearEquipoSuelto).mockResolvedValue(equipo())
     vi.mocked(adminApi.editarEquipo).mockResolvedValue(undefined)
     vi.mocked(adminApi.darDeBajaEquipo).mockResolvedValue({
@@ -47,7 +47,7 @@ describe("OtrosEquipos", () => {
   })
 
   it("muestra los equipos con y sin carro por igual", async () => {
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
       data: [
         equipo(),
         equipo({
@@ -71,7 +71,7 @@ describe("OtrosEquipos", () => {
    * aparecería entre las máquinas libres cada vez que alguien va a reservar.
    */
   it("distingue lo reservable de lo que solo se presta", async () => {
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
       data: [
         equipo(),
         equipo({ id: "eq2", nombre: "Cargador 1", etiqueta: "Cargador 1", reservable: false }),
@@ -123,7 +123,7 @@ describe("OtrosEquipos", () => {
 
   it("ofrece los tipos que ya existen", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
       data: [equipo(), equipo({ id: "eq2", tipo: "CARGADOR", nombre: "Cargador 1" })],
     })
     renderSeccion()
@@ -148,7 +148,7 @@ describe("OtrosEquipos", () => {
    */
   it("corrige lo que se cargó mal", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
     renderSeccion()
 
     await user.click(await screen.findByRole("button", { name: "Editar" }))
@@ -166,7 +166,7 @@ describe("OtrosEquipos", () => {
 
   it("el formulario arranca con lo que el equipo ya tenía", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
     renderSeccion()
 
     await user.click(await screen.findByRole("button", { name: "Editar" }))
@@ -183,7 +183,7 @@ describe("OtrosEquipos", () => {
    */
   it("avisa que quitar lo reservable no toca las reservas ya hechas", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
     renderSeccion()
 
     await user.click(await screen.findByRole("button", { name: "Editar" }))
@@ -194,7 +194,7 @@ describe("OtrosEquipos", () => {
 
   it("da de baja pidiendo confirmación primero", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
     renderSeccion()
 
     await user.click(await screen.findByRole("button", { name: "Dar de baja" }))
@@ -211,7 +211,7 @@ describe("OtrosEquipos", () => {
    */
   it("advierte qué pasa si el equipo está prestado", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
     renderSeccion()
 
     await user.click(await screen.findByRole("button", { name: "Dar de baja" }))
@@ -226,7 +226,7 @@ describe("OtrosEquipos", () => {
    */
   it("dice cuántas reservas se cancelaron al dar de baja", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
     vi.mocked(adminApi.darDeBajaEquipo).mockResolvedValue({
       reservasCanceladas: 3,
       docentesNotificados: 2,
@@ -245,7 +245,7 @@ describe("OtrosEquipos", () => {
   // "se cancelaron 0 reservas" es ruido en el caso normal.
   it("no dice nada si la baja no canceló ninguna reserva", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
     renderSeccion()
 
     await user.click(await screen.findByRole("button", { name: "Dar de baja" }))

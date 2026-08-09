@@ -4,7 +4,7 @@
  * Existe porque un reporte que no se puede sacar del sistema termina
  * saliendo igual, en una captura de pantalla pegada en un correo. Lo que se
  * pide de estos números —mandarlos a Dirección, adjuntarlos a un pedido a
- * la DGE, sumarlos con los de otro año— se hace en una planilla, y el
+ * un organismo, sumarlos con los de otro año— se hace en una planilla, y el
  * camino más corto hasta una planilla es un archivo.
  */
 

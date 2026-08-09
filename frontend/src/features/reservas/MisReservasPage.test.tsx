@@ -444,7 +444,7 @@ describe("MisReservasPage", () => {
   })
 
   /**
-   * El proyector (015) se reserva pero no está en ningún carro. La pantalla
+   * El proyector se reserva pero no está en ningún carro. La pantalla
    * armaba el rótulo con identificador y carro, así que una reserva suya se
    * leía "PC 0 · " — y con el INNER JOIN del repo ni siquiera llegaba acá.
    */

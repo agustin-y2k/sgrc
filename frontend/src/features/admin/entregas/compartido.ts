@@ -24,7 +24,7 @@ export function hora(iso: string): string {
 
 /**
  * Por la etiqueta que resuelve el servidor y no armándola acá: desde que se
- * prestan proyectores y cargadores (015) no todo lo que sale del laboratorio
+ * prestan proyectores y cargadores no todo lo que sale del laboratorio
  * tiene número, y "Equipo" a secas no le dice a nadie qué está devolviendo.
  */
 export function nombreDeEquipo(p: Prestamo): string {

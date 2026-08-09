@@ -1330,7 +1330,7 @@ func TestValidadorEquipoPostgres_EtiquetasDeEquipos(t *testing.T) {
 	ctx := context.Background()
 
 	equipo := crearEquipoDeCarroDeTest(t, pool)
-	// Un equipo suelto: sin carro, sin número, con nombre (015).
+	// Un equipo suelto: sin carro, sin número, con nombre.
 	proyector := NuevoID()
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO equipo (id, tipo, nombre, reservable) VALUES ($1, 'PROYECTOR', 'Proyector Epson', true)`,
@@ -1366,7 +1366,7 @@ func TestValidadorEquipoPostgres_EtiquetasDeEquipos(t *testing.T) {
 	}
 }
 
-// crearEquipoSueltoDeTest: algo prestable que NO está en ningún carro (015),
+// crearEquipoSueltoDeTest: algo prestable que NO está en ningún carro,
 // como el proyector. Sin carro, sin identificador y sin número de serie.
 func crearEquipoSueltoDeTest(t *testing.T, pool *pgxpool.Pool, nombre string) string {
 	t.Helper()
@@ -1380,7 +1380,7 @@ func crearEquipoSueltoDeTest(t *testing.T, pool *pgxpool.Pool, nombre string) st
 	return equipoID
 }
 
-// El peor modo de falla de la 015: ListarReservas hacía INNER JOIN a carro,
+// El peor modo de falla al sumar los equipos sueltos: ListarReservas hacía INNER JOIN a carro,
 // así que la reserva de un proyector no se veía distinta — desaparecía de la
 // consulta entera, total paginado incluido. El docente la creaba, recibía la
 // confirmación y después no la encontraba para cancelarla.
@@ -1464,7 +1464,7 @@ func TestPostgresRepo_ListarReservas_LaEquipoDeCarroSigueTrayendoTodo(t *testing
 	}
 }
 
-// TestPostgresRepo_Bloqueo_ElMotivoVuelveDeLaBase (019)
+// TestPostgresRepo_Bloqueo_ElMotivoVuelveDeLaBase
 //
 // El motivo del bloqueo vive en la fila del bloqueo y no solo en el texto de
 // las cancelaciones que disparó. Sin eso, un bloqueo que no pisó ninguna
@@ -1509,7 +1509,7 @@ func TestPostgresRepo_Bloqueo_ElMotivoVuelveDeLaBase(t *testing.T) {
 	}
 }
 
-// El CHECK de la 019 no deja que exista un bloqueo sin motivo, ni siquiera
+// El CHECK `chk_reserva_tipo_coherente` no deja que exista un bloqueo sin motivo, ni siquiera
 // escribiendo directo en la base. La regla vale para el sistema entero y no
 // solo para el camino que pasa por el dominio.
 func TestPostgresRepo_Bloqueo_SinMotivoLoRechazaLaBase(t *testing.T) {
