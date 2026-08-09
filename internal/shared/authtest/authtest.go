@@ -31,7 +31,7 @@ import (
 type Registro struct {
 	roles       map[string]string
 	dadosDeBaja map[string]bool
-	// versiones hace de columna usuario.version_sesion (migración 010).
+	// versiones hace de columna usuario.version_sesion.
 	// Ausente = 0, que es lo mismo que dice el DEFAULT de la columna.
 	versiones map[string]int
 }

@@ -87,7 +87,7 @@ describe("CalendarioEquipoPage", () => {
 
     // Lo que trae a alguien al calendario es "¿por qué no puedo
     // reservar acá?". El motivo lo responde; "evaluación estatal" mentía
-    // cada vez que el bloqueo era por otra cosa (019).
+    // cada vez que el bloqueo era por otra cosa.
     expect(await screen.findByText("Jornada docente")).toBeInTheDocument()
     expect(screen.queryByText("Evaluación estatal")).not.toBeInTheDocument()
   })

@@ -57,7 +57,10 @@ describe("BotonGoogle", () => {
       // solo encima del formulario.
       auto_select: false,
     })
-    expect(renderButton).toHaveBeenCalled()
+    // renderButton vive en OTRO useEffect, disparado por el estado que deja
+    // el primero: cuando initialize ya corrió, todavía falta un ciclo de
+    // render. Sin waitFor esta línea gana la carrera una de cada tres veces.
+    await waitFor(() => expect(renderButton).toHaveBeenCalled())
     await waitFor(() =>
       expect(screen.getByTestId("boton-google")).not.toHaveClass("hidden")
     )

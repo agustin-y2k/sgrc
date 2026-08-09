@@ -38,7 +38,7 @@ function incidencia(over: Partial<Incidencia> = {}): Incidencia {
     descripcion: "No arranca",
     gravedad: "GRAVE",
     fecha: "2026-08-01T10:00:00Z",
-    enviadoDge: false,
+    enviadoASoporte: false,
     estado: "ABIERTA",
     ...over,
   }
@@ -351,33 +351,33 @@ describe("InventarioAdminPage", () => {
 
     expect(adminApi.editarIncidencia).toHaveBeenCalledWith("i1", {
       estado: "RESUELTA",
-      marcarEnviadaDGE: undefined,
+      marcarEnviadaASoporte: undefined,
     })
   })
 
-  // RF-03.6: el envío a DGE guarda la fecha, por eso es su propia acción y
+  // RF-03.6: el envío a soporte guarda la fecha, por eso es su propia acción y
   // no un estado más.
-  it("marca una incidencia como enviada a DGE", async () => {
+  it("marca una incidencia como enviada a soporte técnico", async () => {
     const user = userEvent.setup()
     renderPagina()
     await abrirCarro(user)
     await user.click(await screen.findByRole("button", { name: "Incidencias" }))
 
-    await user.click(await screen.findByRole("button", { name: "Marcar enviada a DGE" }))
+    await user.click(await screen.findByRole("button", { name: "Marcar enviada a soporte" }))
 
     expect(adminApi.editarIncidencia).toHaveBeenCalledWith("i1", {
       estado: undefined,
-      marcarEnviadaDGE: true,
+      marcarEnviadaASoporte: true,
     })
   })
 
-  it("una incidencia ya enviada a DGE muestra la fecha y no vuelve a ofrecerlo", async () => {
+  it("una incidencia ya enviada a soporte muestra la fecha y no vuelve a ofrecerlo", async () => {
     vi.mocked(inventoryApi.listarIncidenciasDeEquipo).mockResolvedValue({
       data: [
         incidencia({
-          estado: "ENVIADA_DGE",
-          enviadoDge: true,
-          fechaEnvioDge: "2026-08-02T10:00:00Z",
+          estado: "ENVIADA_A_SOPORTE",
+          enviadoASoporte: true,
+          fechaEnvioASoporte: "2026-08-02T10:00:00Z",
         }),
       ],
     })
@@ -386,9 +386,9 @@ describe("InventarioAdminPage", () => {
     await abrirCarro(user)
     await user.click(await screen.findByRole("button", { name: "Incidencias" }))
 
-    expect(await screen.findByText(/enviada a DGE el 02\/08\/2026/)).toBeInTheDocument()
+    expect(await screen.findByText(/enviada a soporte el 02\/08\/2026/)).toBeInTheDocument()
     expect(
-      screen.queryByRole("button", { name: "Marcar enviada a DGE" })
+      screen.queryByRole("button", { name: "Marcar enviada a soporte" })
     ).not.toBeInTheDocument()
   })
 

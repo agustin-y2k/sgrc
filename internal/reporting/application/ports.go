@@ -46,7 +46,7 @@ type Repo interface {
 // importa internal/inventory directamente.
 type InfoEquipoParaSnapshot interface {
 	// Devuelve la etiqueta siempre; identificador en 0 y carro vacío si el
-	// equipo no está en ningún carro (015).
+	// equipo no está en ningún carro.
 	EtiquetaYCarroDe(ctx context.Context, equipoID string) (etiqueta string, identificador int, carroNombre string, err error)
 }
 

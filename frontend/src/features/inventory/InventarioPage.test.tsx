@@ -140,7 +140,7 @@ describe("InventarioPage", () => {
       descripcion: "No arranca",
       gravedad: "GRAVE",
       fecha: "2026-08-03T10:00:00Z",
-      enviadoDge: false,
+      enviadoASoporte: false,
       estado: "ABIERTA",
     })
     const user = userEvent.setup()
@@ -257,7 +257,7 @@ describe("InventarioPage", () => {
       descripcion: "No enciende",
       gravedad: "MODERADA",
       fecha: "2026-08-03T10:00:00Z",
-      enviadoDge: false,
+      enviadoASoporte: false,
       estado: "ABIERTA",
     })
     const user = userEvent.setup()

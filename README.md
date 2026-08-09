@@ -179,15 +179,15 @@ cp .env.example .env   # completar los valores reales
 make run-prod          # docker compose up --build
 ```
 
-Todo corre en contenedores: `sgrc-app` (el binario Go), `postgres` (con las migraciones aplicadas automáticamente la primera vez que el volumen está vacío), `frontend` (nginx sirviendo la interfaz compilada) y `cloudflared`.
+Todo corre en contenedores: `sgrc-app` (el binario Go), `postgres` (con el esquema aplicado automáticamente la primera vez que el volumen está vacío), `frontend` (nginx sirviendo la interfaz compilada) y `cloudflared`.
 
 El contenedor de la API se autochequea contra su propio `/health`, que a su vez consulta la base: `docker compose ps` muestra `healthy` solo si la API puede llegar a Postgres.
 
-En **producción la base arranca vacía a propósito**: las migraciones crean las tablas, la aplicación siembra el primer administrador y ahí termina. Ni carros, ni equipos, ni ciclo lectivo — eso lo carga el administrador desde la interfaz.
+En **producción la base arranca vacía a propósito**: el esquema crea las tablas, la aplicación siembra el primer administrador y ahí termina. Ni carros, ni equipos, ni ciclo lectivo — eso lo carga el administrador desde la interfaz.
 
 En **desarrollo**, `make run` levanta además un servicio que siembra datos de prueba (un ciclo, una materia, un docente y un carro con PCs) apenas la API queda sana, así que `docker compose down -v && make run` deja el sistema usable sin pasos extra.
 
-> **[`docs/11-operacion.md`](docs/11-operacion.md) es el manual completo**: qué completar en el `.env`, cómo parar y reiniciar, cómo leer los registros cuando algo falla, cómo aplicar una migración sobre una base que ya existe (no corren solas) y cómo sacar una copia de seguridad.
+> **[`docs/11-operacion.md`](docs/11-operacion.md) es el manual completo**: qué completar en el `.env`, cómo parar y reiniciar, cómo leer los registros cuando algo falla, cómo aplicar el esquema sobre una base que ya existe (no corre solo) y cómo sacar una copia de seguridad.
 
 El compose base **no publica ningún puerto al host**: en producción el único camino de entrada es el túnel. Para desarrollo, `docker-compose.dev.yml` expone la API (`8080`), Postgres (`5432`) y la interfaz compilada (`8081`), y se aplica explícitamente:
 
@@ -225,7 +225,7 @@ sgrc/
 │   ├── reporting/        ← reportes y estadísticas históricas
 │   ├── availability/     ← disponibilidad de los administradores
 │   └── shared/           ← bus de eventos, middleware, seguridad, auditoría, paginación
-├── migrations/           ← SQL versionado, se aplica al crear el volumen de Postgres
+├── migrations/           ← el esquema de la base, se aplica al crear el volumen de Postgres
 ├── frontend/             ← interfaz web (ver frontend/README.md)
 ├── docs/                 ← documentación y capturas
 ├── docker-compose.yml

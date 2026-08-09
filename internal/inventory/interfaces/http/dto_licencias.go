@@ -126,7 +126,7 @@ type licenciaResponse struct {
 	// sabe de qué máquina se está hablando.
 	//
 	// Etiqueta es lo que se muestra: "PC 3" o "Notebook chica". Los dos de
-	// abajo van vacíos cuando el equipo no está en ningún carro (015).
+	// abajo van vacíos cuando el equipo no está en ningún carro.
 	Etiqueta         string `json:"etiqueta,omitempty"`
 	Identificador    int    `json:"identificador,omitempty"`
 	CarroID          string `json:"carroId,omitempty"`

@@ -9,9 +9,10 @@
 El SGRC atiende a **una sola institución educativa**: decenas de usuarios
 (docentes y un puñado de Admins), un inventario de carros y PCs del orden de
 las centenas, y una carga de reservas concentrada en el horario escolar. Corre
-sobre un **único servidor Huawei RH1288 V3** (Ubuntu Server 24.04, 8 GB de RAM
-compartidos, 6 cores) expuesto por Cloudflare Tunnel, y **no hay un equipo de
-DevOps** detrás: el mantenimiento queda en manos de quien desarrolla.
+sobre un **único servidor**, típicamente hardware que la institución ya tiene
+y comparte con otros usos —del orden de unos pocos cores y algunos GB de RAM—,
+expuesto mediante un túnel inverso. Y **no hay un equipo de DevOps** detrás: el
+mantenimiento queda en manos de quien desarrolla.
 
 Al mismo tiempo, el sistema tiene dominios razonablemente separables —
 autenticación, gestión académica, inventario, reservas, notificaciones y

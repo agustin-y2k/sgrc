@@ -31,10 +31,10 @@ func TestParseGravedad_Invalido(t *testing.T) {
 
 func TestParseEstadoIncidencia_Validos(t *testing.T) {
 	casos := map[string]EstadoIncidencia{
-		"ABIERTA":       IncidenciaAbierta,
-		"EN_REPARACION": IncidenciaEnReparacion,
-		"ENVIADA_DGE":   IncidenciaEnviadaDGE,
-		"RESUELTA":      IncidenciaResuelta,
+		"ABIERTA":           IncidenciaAbierta,
+		"EN_REPARACION":     IncidenciaEnReparacion,
+		"ENVIADA_A_SOPORTE": IncidenciaEnviadaASoporte,
+		"RESUELTA":          IncidenciaResuelta,
 	}
 	for entrada, esperado := range casos {
 		got, err := ParseEstadoIncidencia(entrada)
@@ -89,19 +89,19 @@ func TestNuevaIncidencia_SinReportadoPor_QuedaNil(t *testing.T) {
 	}
 }
 
-func TestMarcarEnviadaDGE_OK(t *testing.T) {
+func TestMarcarEnviadaASoporte_OK(t *testing.T) {
 	i, _ := NuevaIncidencia("id1", "pc1", "usuario1", "Falla", "", GravedadGrave, time.Now())
 	fecha := time.Now()
 
-	i.MarcarEnviadaDGE(fecha)
+	i.MarcarEnviadaASoporte(fecha)
 
-	if !i.EnviadoDGE {
-		t.Error("EnviadoDGE debería quedar true")
+	if !i.EnviadoASoporte {
+		t.Error("EnviadoASoporte debería quedar true")
 	}
-	if i.FechaEnvioDGE == nil || !i.FechaEnvioDGE.Equal(fecha) {
-		t.Error("FechaEnvioDGE debería quedar seteada")
+	if i.FechaEnvioASoporte == nil || !i.FechaEnvioASoporte.Equal(fecha) {
+		t.Error("FechaEnvioASoporte debería quedar seteada")
 	}
-	if i.Estado != IncidenciaEnviadaDGE {
-		t.Errorf("estado debería quedar ENVIADA_DGE: %s", i.Estado)
+	if i.Estado != IncidenciaEnviadaASoporte {
+		t.Errorf("estado debería quedar ENVIADA_A_SOPORTE: %s", i.Estado)
 	}
 }

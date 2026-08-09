@@ -12,7 +12,7 @@ import (
 	"github.com/ramiro/sgrc/internal/auth/domain"
 )
 
-// Lo que agregó migrations/008_login_con_google.sql solo se puede probar
+// Lo que agregó migrations/001_esquema_inicial.sql solo se puede probar
 // contra Postgres de verdad: que password_hash pueda ser NULL, que
 // google_sub sea único, y que el CHECK impida una cuenta sin ninguna forma
 // de entrar. Un fake en memoria no tiene ninguna de esas reglas.

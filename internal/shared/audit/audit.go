@@ -28,7 +28,7 @@ const (
 	ReservaCanceladaPorAdmin   = "RESERVA_CANCELADA_POR_ADMIN"
 	BloqueoEvaluacionCreado    = "BLOQUEO_EVALUACION_CREADO"
 	// Las tres cadenas siguen diciendo PC aunque la entidad pase a llamarse
-	// equipo (016). La auditoría es un registro histórico: estos valores ya
+	// equipo. La auditoría es un registro histórico: estos valores ya
 	// están escritos en filas de la base, y reescribirlos para que digan otra
 	// cosa es exactamente lo que un log de auditoría no debe permitir. Lo que
 	// se renombró es el identificador de Go, que sí es código.
@@ -41,7 +41,7 @@ const (
 	CicloClonado               = "CICLO_CLONADO"
 )
 
-// Entrada es una fila de audit_log (ver migrations/001_init.sql).
+// Entrada es una fila de audit_log (ver migrations/001_esquema_inicial.sql).
 // UsuarioID es siempre el actor que ejecutó la acción — nunca la entidad
 // afectada (ej: en CUENTA_BAJA, UsuarioID es el Admin que dio de baja, y
 // EntidadID es la cuenta dada de baja).

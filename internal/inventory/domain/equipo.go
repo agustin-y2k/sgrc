@@ -92,7 +92,7 @@ func NormalizarNumeroSerie(s string) string {
 // ningún flujo de reservas ni de negocio.
 type Equipo struct {
 	ID string
-	// CarroID vacío = no está en ningún carro. Desde la 015 esto es
+	// CarroID vacío = no está en ningún carro. Esto es
 	// legítimo: un proyector o un cargador no pertenecen a ninguno.
 	CarroID string
 	// Identificador 0 y NumeroSerie vacío = no aplica. "PC 3" no significa
@@ -125,7 +125,7 @@ func NuevoEquipoDeCarro(id, carroID string, identificador int, numeroSerie strin
 	}
 	// Normalizar antes de validar: si no, un número de serie de puros
 	// espacios pasaría el "no vacío" y llegaría a la base a chocar contra
-	// el CHECK de la 011, que responde 500 en vez de explicar qué falta.
+	// el CHECK `chk_equipo_identificable`, que responde 500 en vez de explicar qué falta.
 	serie := NormalizarNumeroSerie(numeroSerie)
 	if serie == "" {
 		return nil, ErrNumeroSerieInvalido
@@ -189,7 +189,7 @@ func (p *Equipo) MoverACarro(nuevoCarroID string) {
 const (
 	// TipoPC es el tipo por defecto: una computadora de un carro.
 	TipoPC = "PC"
-	// MaxLargoTipoEquipo y MaxLargoNombreEquipo coinciden con la 015.
+	// MaxLargoTipoEquipo y MaxLargoNombreEquipo coinciden con los VARCHAR de la tabla.
 	MaxLargoTipoEquipo   = 50
 	MaxLargoNombreEquipo = 100
 )
@@ -204,7 +204,7 @@ var (
 // NormalizarTextoDeEquipo recorta los bordes y colapsa los espacios
 // internos, sin tocar la caja: "Proyector Epson" se muestra tal cual se
 // escribió. La unicidad sin distinguir mayúsculas la da el índice funcional
-// de la 015, igual que con el nombre de una licencia.
+// de la base, igual que con el nombre de una licencia.
 func NormalizarTextoDeEquipo(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
@@ -214,7 +214,7 @@ func NormalizarTextoDeEquipo(s string) string {
 //
 // Están separadas de NuevoEquipo porque el alta no es el único lugar que los
 // escribe: el PATCH de una PC también puede cambiarlos, y sin pasar por acá
-// un `"nombre": ""` llegaría hasta el CHECK de la 015 y volvería como un 500
+// un `"nombre": ""` llegaría hasta el CHECK `equipo_nombre_check` y volvería como un 500
 // en vez de como el 400 que es.
 func TipoDeEquipoValido(tipo string) (string, error) {
 	tipo = NormalizarTextoDeEquipo(tipo)

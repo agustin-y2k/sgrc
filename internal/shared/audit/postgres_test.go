@@ -4,7 +4,6 @@ package audit
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -13,15 +12,22 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/ramiro/sgrc/internal/shared/testdb"
 )
 
 func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
 
-	sqlBytes, err := os.ReadFile("../../../migrations/001_init.sql")
+	// Por el helper compartido y no leyendo un archivo por nombre: este
+	// harness apuntaba a `001_init.sql` y se rompió cuando el esquema pasó a
+	// estar en un solo archivo. Nombrar el archivo hace que un test quede
+	// construyendo un esquema viejo sin que nada lo avise — el modo de falla
+	// que testdb existe para evitar.
+	sqlEsquema, err := testdb.SQLDeMigraciones("../../../migrations")
 	if err != nil {
-		t.Fatalf("no se pudo leer la migración: %v", err)
+		t.Fatalf("no se pudo leer el esquema: %v", err)
 	}
 
 	contenedor, err := postgres.Run(ctx,
@@ -55,7 +61,7 @@ func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 
-	if _, err := pool.Exec(ctx, string(sqlBytes)); err != nil {
+	if _, err := pool.Exec(ctx, sqlEsquema); err != nil {
 		t.Fatalf("no se pudo aplicar la migración: %v", err)
 	}
 

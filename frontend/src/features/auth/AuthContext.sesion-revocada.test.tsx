@@ -9,7 +9,7 @@ import * as tokenStore from "@/lib/token-store"
 vi.mock("@/features/auth/api")
 vi.mock("@/lib/token-store")
 
-// Revocación de sesión desde el backend (migración 010).
+// Revocación de sesión desde el backend.
 //
 // El backend puede rechazar el token en CUALQUIER request, no solo en el
 // GET /me del arranque: la cuenta se dio de baja (RF-02.8), o alguien

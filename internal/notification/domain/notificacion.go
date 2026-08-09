@@ -58,8 +58,8 @@ const (
 	TipoReservaNoRetirada Tipo = "RESERVA_NO_RETIRADA"
 	// TipoEquipoSinDevolver: para los Admin — una máquina no volvió a horario.
 	// Lleva a la pantalla de entregas, no a la de reservas.
-	// El valor sigue diciendo PC aunque la entidad se llame equipo (016): lo
-	// enumera un CHECK de la 014 y ya hay notificaciones guardadas con él.
+	// El valor sigue diciendo PC aunque la entidad se llame equipo: lo
+	// enumera un CHECK de la base y ya hay notificaciones guardadas con él.
 	// Cambiarlo obligaría a migrar filas históricas para no ganar nada.
 	TipoEquipoSinDevolver Tipo = "PC_SIN_DEVOLVER"
 )

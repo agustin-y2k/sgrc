@@ -243,7 +243,7 @@ func (h *Handler) ListarIncidenciasPorEquipo(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/inventory/incidencias/categorias (cualquier autenticado)
+// GET /api/inventory/categorias-de-falla (cualquier autenticado)
 //
 // Las categorías de falla ya usadas, para sugerirlas al reportar una nueva.
 // Lo puede ver cualquiera por el mismo motivo que el inventario: un docente
@@ -270,8 +270,8 @@ func (h *Handler) EditarIncidencia(c *fiber.Ctx) error {
 	}
 
 	params := application.EditarIncidenciaParams{
-		MarcarEnviadaDGE: req.MarcarEnviadaDGE,
-		Categoria:        req.Categoria,
+		MarcarEnviadaASoporte: req.MarcarEnviadaASoporte,
+		Categoria:             req.Categoria,
 	}
 	if req.Estado != nil {
 		estado, err := domain.ParseEstadoIncidencia(*req.Estado)
@@ -289,12 +289,12 @@ func (h *Handler) EditarIncidencia(c *fiber.Ctx) error {
 
 // ── Equipos que no están en ningún carro (RF-03.15) ─────────────────────
 
-// POST /api/inventory/equipos/sueltos (Admin) — un proyector, un cargador, una
+// POST /api/inventory/equipos (Admin) — un proyector, un cargador, una
 // notebook suelta.
 //
-// Es una ruta aparte de /carros/{id}/equipos y no un campo opcional suyo
-// lo que se carga es distinto: acá no hay carro ni identificador, y lo que
-// identifica al equipo es el nombre.
+// Es una colección aparte de /carros/{id}/equipos y no un campo opcional
+// suyo porque lo que se carga es distinto: acá no hay carro ni
+// identificador, y lo que identifica al equipo es el nombre.
 func (h *Handler) CrearEquipo(c *fiber.Ctx) error {
 	var req crearEquipoSueltoRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -308,14 +308,27 @@ func (h *Handler) CrearEquipo(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toEquipoResponse(equipo))
 }
 
-// GET /api/inventory/equipos/sueltos (cualquier autenticado) — lo prestable que no
-// está en ningún carro.
+// GET /api/inventory/equipos (cualquier autenticado) — todo el inventario.
+//
+// Acepta `?enCarro=false` para quedarse solo con lo que no está en ningún
+// carro: un proyector, un cargador, una notebook suelta. Sin el filtro
+// devuelve todo, que es lo que necesita cualquier pantalla que ofrezca el
+// inventario completo sin recorrer carro por carro.
 //
 // Lo puede ver cualquiera por el mismo motivo que los carros y las PCs
 // (RF-03.7): un docente necesita saber que existe un proyector antes de
 // pedirlo o de reservarlo.
-func (h *Handler) ListarEquiposSueltos(c *fiber.Ctx) error {
-	equipos, err := h.svc.ListarEquiposSueltos(c.UserContext())
+func (h *Handler) ListarEquipos(c *fiber.Ctx) error {
+	// Solo se reconoce el valor exacto "false". Cualquier otra cosa —vacío,
+	// "0", una errata— devuelve el inventario entero: de un filtro mal
+	// escrito es mejor ver de más que de menos, porque ver de menos se
+	// confunde con "no hay ninguno".
+	var soloSueltos bool
+	if c.Query("enCarro") == "false" {
+		soloSueltos = true
+	}
+
+	equipos, err := h.svc.ListarEquipos(c.UserContext(), soloSueltos)
 	if err != nil {
 		return mapearError(err)
 	}

@@ -19,7 +19,7 @@ import { getErrorMessage } from "@/lib/api-client"
 const ETIQUETA_ESTADO_INCIDENCIA: Record<EstadoIncidencia, string> = {
   ABIERTA: "Abierta",
   EN_REPARACION: "En reparación",
-  ENVIADA_DGE: "Enviada a DGE",
+  ENVIADA_A_SOPORTE: "Enviada a soporte técnico",
   RESUELTA: "Resuelta",
 }
 
@@ -50,12 +50,12 @@ export function IncidenciasDeEquipo({ equipoId }: { equipoId: string }) {
     mutationFn: ({
       incidencia,
       estado,
-      marcarEnviadaDGE,
+      marcarEnviadaASoporte,
     }: {
       incidencia: Incidencia
       estado?: EstadoIncidencia
-      marcarEnviadaDGE?: boolean
-    }) => adminApi.editarIncidencia(incidencia.id, { estado, marcarEnviadaDGE }),
+      marcarEnviadaASoporte?: boolean
+    }) => adminApi.editarIncidencia(incidencia.id, { estado, marcarEnviadaASoporte }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: incidenciasKey })
       // Los reportes de RF-06 agregan por estado: si no se invalidan, el
@@ -103,9 +103,9 @@ export function IncidenciasDeEquipo({ equipoId }: { equipoId: string }) {
 
           <p className="text-muted-foreground text-xs">
             Reportada el {formatearFecha(i.fecha)}
-            {i.enviadoDge &&
-              i.fechaEnvioDge &&
-              ` · enviada a DGE el ${formatearFecha(i.fechaEnvioDge)}`}
+            {i.enviadoASoporte &&
+              i.fechaEnvioASoporte &&
+              ` · enviada a soporte el ${formatearFecha(i.fechaEnvioASoporte)}`}
           </p>
 
           {/* El backend no impone una máquina de estados: acepta cualquiera
@@ -127,19 +127,19 @@ export function IncidenciasDeEquipo({ equipoId }: { equipoId: string }) {
                   → {ETIQUETA_ESTADO_INCIDENCIA[e]}
                 </Button>
               ))}
-            {/* RF-03.6: marcar el envío a soporte técnico de DGE guarda la
+            {/* RF-03.6: marcar el envío a soporte técnico guarda la
                 fecha, que es el dato que después hay que poder mostrar. Por
                 eso es un botón aparte y no un estado más del grupo de
-                arriba: el backend, con marcarEnviadaDGE, además de mover el
+                arriba: el backend, con marcarEnviadaASoporte, además de mover el
                 estado registra el día. */}
-            {!i.enviadoDge && (
+            {!i.enviadoASoporte && (
               <Button
                 variant="outline"
                 size="sm"
                 disabled={editar.isPending}
-                onClick={() => editar.mutate({ incidencia: i, marcarEnviadaDGE: true })}
+                onClick={() => editar.mutate({ incidencia: i, marcarEnviadaASoporte: true })}
               >
-                Marcar enviada a DGE
+                Marcar enviada a soporte
               </Button>
             )}
           </div>
