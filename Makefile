@@ -79,7 +79,7 @@ ps:
 # Aplica una migración sobre una base que ya existe: las de /migrations solo
 # corren solas la primera vez, con el volumen vacío.
 #
-#   make migrate ARCHIVO=migrations/005_dia_semana_lectivo.sql
+#   make migrate ARCHIVO=migrations/001_esquema_inicial.sql
 #
 # ON_ERROR_STOP hace que psql devuelva un código de salida distinto de cero
 # si la migración aborta; sin eso, una migración que se corta a propósito
@@ -98,7 +98,7 @@ ps:
 migrate:
 ifndef ARCHIVO
 	@echo "Falta indicar el archivo. Uso:"
-	@echo "  make migrate ARCHIVO=migrations/005_dia_semana_lectivo.sql"
+	@echo "  make migrate ARCHIVO=migrations/001_esquema_inicial.sql"
 	@echo ""
 	@echo "Migraciones disponibles:"
 	@ls -1 migrations/*.sql | sed 's/^/  /'

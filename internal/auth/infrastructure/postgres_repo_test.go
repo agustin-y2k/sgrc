@@ -29,7 +29,7 @@ import (
 
 // levantarPostgresDeTest arranca un contenedor Postgres efímero, le
 // aplica la migración real del proyecto (docs/07-modelo-datos.md /
-// migrations/001_init.sql) y devuelve un pool conectado. Se destruye solo
+// migrations/001_esquema_inicial.sql) y devuelve un pool conectado. Se destruye solo
 // al terminar el test (t.Cleanup).
 func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 	t.Helper()

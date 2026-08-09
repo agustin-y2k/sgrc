@@ -48,7 +48,7 @@ type bloquearRequest struct {
 	HoraInicio string   `json:"horaInicio"`
 	HoraFin    string   `json:"horaFin"`
 	// Motivo es obligatorio: el bloqueo cancela las clases de otros, y desde
-	// la 019 se guarda en cada bloqueo, no solo en el aviso de cancelación.
+	// se guarda en cada bloqueo, no solo en el aviso de cancelación.
 	Motivo string `json:"motivo"`
 }
 
@@ -241,7 +241,7 @@ type equipoDisponibleResponse struct {
 	// identificador que no existe.
 	Identificador int    `json:"identificador,omitempty"`
 	Etiqueta      string `json:"etiqueta"`
-	// Tipo distingue una PC de un proyector (015). Texto libre.
+	// Tipo distingue una PC de un proyector. Texto libre.
 	Tipo string `json:"tipo,omitempty"`
 	// CarroID y CarroNombre vacíos en un equipo suelto.
 	CarroID           string `json:"carroId,omitempty"`

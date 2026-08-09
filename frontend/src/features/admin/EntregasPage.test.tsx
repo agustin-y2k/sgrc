@@ -79,11 +79,11 @@ describe("EntregasPage", () => {
     vi.mocked(reservasApi.entregarPorReserva).mockResolvedValue({ entregadas: [] })
     vi.mocked(reservasApi.entregarSuelta).mockResolvedValue({ entregadas: [] })
     vi.mocked(reservasApi.recibirEquipos).mockResolvedValue({ recibidos: [] })
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({ data: [] })
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
       data: [{ id: "c1", nombre: "Carro 1" }],
     })
-    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+    // Una sola consulta trae todo el inventario: la de carro y las sueltas.
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
       data: [
         {
           id: "pc1",
@@ -448,7 +448,7 @@ describe("EntregasPage", () => {
    */
   it("ofrece también los equipos que no están en ningún carro", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
       data: [equipoSuelto()],
     })
     renderPagina()
@@ -464,7 +464,7 @@ describe("EntregasPage", () => {
   // presta, y ese es su caso principal.
   it("ofrece lo que no se puede reservar pero sí prestar", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
       data: [equipoSuelto({ id: "eq2", nombre: "Cargador", etiqueta: "Cargador", reservable: false })],
     })
     renderPagina()
@@ -478,7 +478,7 @@ describe("EntregasPage", () => {
   // una computadora de un carro.
   it("no ofrece un equipo suelto que ya está afuera", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
       data: [equipoSuelto()],
     })
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
@@ -493,5 +493,22 @@ describe("EntregasPage", () => {
     expect(
       screen.queryByRole("checkbox", { name: /^Proyector Epson/ })
     ).not.toBeInTheDocument()
+  })
+
+  /**
+   * El listado sale de UNA consulta al inventario, no de una por carro más
+   * otra por los sueltos. Con ocho carros eran nueve idas al servidor para
+   * dibujar una lista de casillas, y bastaba con que una fallara para que
+   * faltaran equipos sin que nada lo dijera.
+   */
+  it("arma la lista con una sola consulta al inventario", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+    await screen.findByRole("checkbox", { name: /^PC 3/ })
+
+    expect(inventoryApi.listarEquipos).toHaveBeenCalledTimes(1)
+    expect(inventoryApi.listarEquiposDeCarro).not.toHaveBeenCalled()
   })
 })

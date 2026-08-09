@@ -60,7 +60,7 @@ export type GravedadIncidencia = "LEVE" | "MODERADA" | "GRAVE"
  * cualquier estado puede pasar a cualquier otro. La pantalla ofrece el
  * recorrido esperado sin bloquear el resto.
  */
-export type EstadoIncidencia = "ABIERTA" | "EN_REPARACION" | "ENVIADA_DGE" | "RESUELTA"
+export type EstadoIncidencia = "ABIERTA" | "EN_REPARACION" | "ENVIADA_A_SOPORTE" | "RESUELTA"
 
 export type Incidencia = {
   id: string
@@ -72,8 +72,8 @@ export type Incidencia = {
   gravedad: GravedadIncidencia
   /** ISO 8601 */
   fecha: string
-  enviadoDge: boolean
-  fechaEnvioDge?: string
+  enviadoASoporte: boolean
+  fechaEnvioASoporte?: string
   estado: EstadoIncidencia
 }
 

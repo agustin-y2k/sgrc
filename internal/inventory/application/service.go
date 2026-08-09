@@ -84,7 +84,7 @@ type EditarEquipoParams struct {
 	RAM               *string
 	SistemaOperativo  *string
 	SoftwareInstalado *string
-	// Los tres de la 015. Tipo y Nombre solo tienen sentido en un equipo
+	// Los tres de un equipo suelto. Tipo y Nombre solo tienen sentido en un equipo
 	// suelto; Reservable, en cualquiera.
 	Tipo       *string
 	Nombre     *string
@@ -125,7 +125,7 @@ func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params Edit
 	if params.Nombre != nil {
 		nombre, err := domain.NombreDeEquipoValido(*params.Nombre)
 		// Un equipo suelto no puede quedarse sin nombre: es lo único que lo
-		// distingue, y la 015 lo exige en la base. En una PC de carro el
+		// distingue, y el índice `ux_equipo_suelto_nombre` lo exige en la base. En una PC de carro el
 		// nombre no cumple ninguna función, así que vaciarlo sí es legítimo.
 		if err != nil && (*params.Nombre != "" || !pc.EstaEnUnCarro()) {
 			return err
@@ -272,7 +272,7 @@ func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*Result
 
 	// Minúscula y sin prefijo: esto se lee después de "Tu reserva fue
 	// cancelada: " (ver motivoPorDefecto).
-	// Por la etiqueta y no por el identificador: desde la 015 lo que se da de
+	// Por la etiqueta y no por el identificador: lo que se da de
 	// baja puede ser un proyector, que no tiene número — el docente recibía
 	// "la PC 0 fue dada de baja" y se quedaba sin saber qué perdió.
 	motivo := fmt.Sprintf("%s fue dado de baja del inventario", pc.Etiqueta())
@@ -291,7 +291,7 @@ func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*Result
 // puede saber qué se le cayó (RF-05.3).
 //
 // Por Etiqueta() y no por el identificador, que va en 0 en todo lo que no
-// está en un carro (015).
+// está en un carro.
 func motivoPorDefecto(pc *domain.Equipo, nuevo domain.EstadoEquipo, motivo *string) string {
 	if motivo != nil && *motivo != "" {
 		return *motivo
@@ -322,8 +322,8 @@ func (s *Service) CrearEquipo(ctx context.Context, tipo, nombre string, reservab
 	return equipo, nil
 }
 
-func (s *Service) ListarEquiposSueltos(ctx context.Context) ([]*domain.Equipo, error) {
-	return s.repo.ListarEquiposSueltos(ctx)
+func (s *Service) ListarEquipos(ctx context.Context, soloSueltos bool) ([]*domain.Equipo, error) {
+	return s.repo.ListarEquipos(ctx, soloSueltos)
 }
 
 // ── Incidencia ──────────────────────────────────────────────────────────
@@ -341,8 +341,8 @@ func (s *Service) CrearIncidencia(ctx context.Context, equipoID, reportadoPor, d
 
 // EditarIncidenciaParams — nil significa "no tocar ese campo".
 type EditarIncidenciaParams struct {
-	Estado           *domain.EstadoIncidencia
-	MarcarEnviadaDGE bool
+	Estado                *domain.EstadoIncidencia
+	MarcarEnviadaASoporte bool
 	// Categoria se puede completar DESPUÉS, y ese es su caso principal: la
 	// falla se reporta el día que aparece —"no enciende"— y el diagnóstico
 	// llega cuando alguien pudo abrirla. Una cadena vacía la devuelve a "sin
@@ -356,8 +356,8 @@ func (s *Service) EditarIncidencia(ctx context.Context, incidenciaID string, par
 		return err
 	}
 
-	if params.MarcarEnviadaDGE {
-		i.MarcarEnviadaDGE(s.ahora())
+	if params.MarcarEnviadaASoporte {
+		i.MarcarEnviadaASoporte(s.ahora())
 	} else if params.Estado != nil {
 		i.Estado = *params.Estado
 	}

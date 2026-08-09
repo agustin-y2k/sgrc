@@ -19,7 +19,7 @@ type entregarPorReservaRequest struct {
 	// esto reemplaza lo anota.
 	//
 	// No cambia de quién es la responsabilidad: el préstamo queda igual a
-	// nombre del docente, que es quien reservó (018).
+	// nombre del docente, que es quien reservó.
 	RetiradoPor string `json:"retiradoPor,omitempty"`
 }
 

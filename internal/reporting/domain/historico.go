@@ -1,7 +1,7 @@
 // Package domain contiene los tipos de RF-06 — el snapshot histórico
 // permanente que se crea una sola vez al archivar un ciclo lectivo
 // (HistoricoUsoEquipo/HistoricoUsoDocente, uno por año — ver
-// migrations/001_init.sql, están indexados por `anio`, no por el UUID del
+// migrations/001_esquema_inicial.sql, están indexados por `anio`, no por el UUID del
 // ciclo), y los resúmenes "en vivo" que se calculan al vuelo para un
 // ciclo todavía activo (ResumenUsoEquipo/ResumenUsoDocente, sin persistencia
 // propia — son resultados de consulta, no entidades).
@@ -26,7 +26,7 @@ type HistoricoUsoEquipo struct {
 	EquipoID string
 	// EtiquetaSnapshot es lo que se muestra: "PC 3" o "Proyector Epson". Los
 	// dos de abajo van en 0 y "" si el equipo no estaba en ningún carro
-	// (015) — un proyector archivado se leía como "PC 0 ()".
+	// — un proyector archivado se leía como "PC 0 ()".
 	EtiquetaSnapshot      string
 	IdentificadorSnapshot int
 	CarroNombreSnapshot   string
@@ -80,7 +80,7 @@ type ResumenUsoEquipo struct {
 	EquipoID string
 	// Etiqueta es cómo se nombra al equipo en el reporte: "PC 3" o
 	// "Proyector Epson". Identificador va en 0 y CarroNombre vacío en lo que
-	// no está en ningún carro (015).
+	// no está en ningún carro.
 	Etiqueta          string
 	Identificador     int
 	CarroNombre       string
@@ -103,15 +103,15 @@ type ResumenUsoDocente struct {
 type ResumenIncidenciasEquipo struct {
 	EquipoID string
 	// Ver ResumenUsoEquipo.Etiqueta.
-	Etiqueta      string
-	Identificador int
-	CarroNombre   string
-	Total         int
-	Abiertas      int
-	EnReparacion  int
-	EnviadasDGE   int
-	Resueltas     int
-	Graves        int
+	Etiqueta         string
+	Identificador    int
+	CarroNombre      string
+	Total            int
+	Abiertas         int
+	EnReparacion     int
+	EnviadasASoporte int
+	Resueltas        int
+	Graves           int
 }
 
 type ResumenIncidenciasCarro struct {
@@ -133,7 +133,7 @@ type ResumenIncidenciasCarro struct {
 // independientemente del año en que se reportó la falla.
 type EstadoDelInventario struct {
 	// CarroID y CarroNombre vacíos en la fila de los equipos sueltos, que no
-	// cuelgan de ningún carro (015). Se los cuenta igual: un proyector roto
+	// cuelgan de ningún carro. Se los cuenta igual: un proyector roto
 	// también sale del inventario disponible.
 	CarroID     string
 	CarroNombre string

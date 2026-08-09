@@ -71,7 +71,7 @@ export const TONO_GRAVEDAD: Record<string, Tono> = {
 export const TONO_INCIDENCIA: Record<string, Tono> = {
   ABIERTA: "peligro",
   EN_REPARACION: "alerta",
-  ENVIADA_DGE: "info",
+  ENVIADA_A_SOPORTE: "info",
   RESUELTA: "exito",
 }
 

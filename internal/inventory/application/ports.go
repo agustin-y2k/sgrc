@@ -18,9 +18,9 @@ type Repo interface {
 	BuscarEquipoPorID(ctx context.Context, id string) (*domain.Equipo, error)
 	GuardarEquipo(ctx context.Context, pc *domain.Equipo) error
 	ListarEquiposPorCarro(ctx context.Context, carroID string) ([]*domain.Equipo, error)
-	// ListarEquiposSueltos: lo prestable que no está en ningún carro
-	// (RF-03.15) — el proyector, los cargadores.
-	ListarEquiposSueltos(ctx context.Context) ([]*domain.Equipo, error)
+	// ListarEquipos: el inventario. Con soloSueltos, únicamente lo prestable
+	// que no está en ningún carro (RF-03.15) — el proyector, los cargadores.
+	ListarEquipos(ctx context.Context, soloSueltos bool) ([]*domain.Equipo, error)
 
 	CrearIncidencia(ctx context.Context, i *domain.Incidencia) error
 	BuscarIncidenciaPorID(ctx context.Context, id string) (*domain.Incidencia, error)
@@ -67,7 +67,7 @@ type LicenciaConUbicacion struct {
 	Licencia *domain.LicenciaSoftware
 	// Etiqueta es cómo se nombra al equipo: "PC 3" o "Notebook chica". Se
 	// muestra esto y no el identificador, que va en 0 —y CarroNombre vacío—
-	// cuando el equipo no está en ningún carro (015).
+	// cuando el equipo no está en ningún carro.
 	Etiqueta         string
 	Identificador    int
 	EquipoDadoDeBaja bool

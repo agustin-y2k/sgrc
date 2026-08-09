@@ -33,7 +33,7 @@ type Repo interface {
 	ContarAdminsAprobados(ctx context.Context) (int, error)
 	Eliminar(ctx context.Context, id string) error
 
-	// ── Recuperación de contraseña (migración 009) ──────────────────
+	// ── Recuperación de contraseña ──────────────────
 	//
 	// CrearCodigoRecuperacion invalida los códigos anteriores de esa
 	// persona y guarda el nuevo, de forma atómica. Las dos cosas van

@@ -7,7 +7,7 @@ import (
 	"github.com/ramiro/sgrc/internal/auth/domain"
 )
 
-// Revocación de sesiones (migración 010).
+// Revocación de sesiones.
 //
 // Los tres caminos por los que una contraseña cambia tienen que cerrar las
 // sesiones abiertas de esa cuenta. Lo que se verifica acá es que

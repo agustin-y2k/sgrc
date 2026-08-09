@@ -45,7 +45,7 @@ const columnasPrestamoDetallado = `p.id, p.equipo_id, p.reserva_id, p.entregado_
 const joinsDelPrestamo = `
 	FROM prestamo p
 	JOIN equipo eq ON eq.id = p.equipo_id
-	-- LEFT desde la 015: un proyector o un cargador no están en ningún
+	-- LEFT: un proyector o un cargador no están en ningún
 	-- carro, y con INNER JOIN desaparecían del listado de lo que está
 	-- afuera — justo la lista que no puede tener agujeros.
 	LEFT JOIN carro c ON c.id = eq.carro_id

@@ -300,7 +300,7 @@ describe("BloquearEquiposPage", () => {
 
   /**
    * El motivo no es solo el texto del aviso de cancelación: queda guardado en
-   * el bloqueo (019). Es lo que permite explicar un rato ocupado que no pisó
+   * el bloqueo. Es lo que permite explicar un rato ocupado que no pisó
    * ninguna reserva, que es el caso más común porque se suele avisar con
    * tiempo.
    */

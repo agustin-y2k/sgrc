@@ -140,7 +140,7 @@ describe("NuevaReservaPage", () => {
   })
 
   /**
-   * El proyector (015) es reservable pero no está en ningún carro. Con el
+   * El proyector es reservable pero no está en ningún carro. Con el
    * rótulo armado a partir del identificador se ofrecía como "Equipo undefined",
    * y con `carroNombre` vacío caía bajo un título en blanco: el docente veía
    * una casilla sin saber qué estaba tildando.

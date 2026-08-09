@@ -18,7 +18,7 @@ import { getErrorMessage } from "@/lib/api-client"
  * "ayer 08:15" es más útil que "hace 19 horas" cuando lo que se canceló es
  * una clase con horario.
  *
- * `creadaEn` es un instante real desde la migración 003 — antes las
+ * `creadaEn` es un instante real — antes las
  * columnas TIMESTAMP guardaban hora de pared y se serializaban con sufijo
  * Z, así que esto habría mostrado tres horas de menos.
  */

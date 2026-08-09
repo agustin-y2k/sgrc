@@ -1092,7 +1092,7 @@ func TestBloquearEquipos_ElMotivoNoTraeElPrefijoDelAviso(t *testing.T) {
 		}
 		// El motivo del Admin va tal cual, sin envolverlo en una categoría:
 		// si escribió "jornada docente", el docente cancelado tiene que leer
-		// eso y no "evaluación estatal" (019).
+		// eso y no "evaluación estatal".
 		if motivo != "los equipos quedaron bloqueados: Aprender 2026" {
 			t.Errorf("motivo inesperado: %q", motivo)
 		}
