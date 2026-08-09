@@ -470,3 +470,76 @@ func TestPostgresRepo_ListarEquipos_SinFiltroTraeTodo(t *testing.T) {
 		t.Errorf("esperaba el suelto primero, vino %+v", todos[0])
 	}
 }
+
+// ── Qué error sale de cada restricción de unicidad ──────────────────────
+//
+// Estos tres tests solo tienen sentido contra Postgres: lo que se está
+// verificando es que el nombre de constraint que reporta la base sea el que
+// el repositorio busca. Un fake no puede fallar en eso — devuelve el error
+// que uno le programó — y por eso el desajuste real sobrevivió sin que nada
+// se pusiera en rojo.
+
+// El número de serie es único en toda la institución. Este es el caso que
+// estaba roto: el switch buscaba `pc_numero_serie_key` y la constraint se
+// llama `equipo_numero_serie_key` desde que la tabla se renombró, así que
+// quien cargaba un serie repetido recibía el error del IDENTIFICADOR — otro
+// campo, otro problema, y a buscarlo donde no estaba.
+func TestPostgresRepo_CrearEquipo_SerieRepetido_DiceQueEsElSerie(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	carro := crearCarroDeTest(t, repo, "Carro 1")
+	crearEquipoDeCarroDeTest(t, repo, carro.ID, 1, "SERIE-REPETIDA")
+
+	otro, err := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 2, "SERIE-REPETIDA", false,
+		time.Now().UTC().Truncate(time.Microsecond))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+
+	err = repo.CrearEquipo(context.Background(), otro)
+
+	if !errors.Is(err, application.ErrNumeroSerieDuplicado) {
+		t.Errorf("err = %v, esperaba ErrNumeroSerieDuplicado", err)
+	}
+}
+
+// El identificador es el número del zócalo: se repite ENTRE carros y es único
+// dentro de uno.
+func TestPostgresRepo_CrearEquipo_IdentificadorRepetido_DiceQueEsElIdentificador(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	carro := crearCarroDeTest(t, repo, "Carro 1")
+	crearEquipoDeCarroDeTest(t, repo, carro.ID, 1, "SERIE-A")
+
+	otro, err := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 1, "SERIE-B", false,
+		time.Now().UTC().Truncate(time.Microsecond))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+
+	err = repo.CrearEquipo(context.Background(), otro)
+
+	if !errors.Is(err, application.ErrIdentificadorDuplicado) {
+		t.Errorf("err = %v, esperaba ErrIdentificadorDuplicado", err)
+	}
+}
+
+// Entre los equipos sueltos el nombre es lo único que distingue uno de otro,
+// así que dos "Cargador 1" tienen que rebotar nombrando el nombre.
+func TestPostgresRepo_CrearEquipo_NombreSueltoRepetido_DiceQueEsElNombre(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	crearEquipoSueltoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
+
+	otro, err := domain.NuevoEquipoSuelto(NuevoID(), "CARGADOR", "cargador 1", false,
+		time.Now().UTC().Truncate(time.Microsecond))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+
+	err = repo.CrearEquipo(context.Background(), otro)
+
+	if !errors.Is(err, application.ErrNombreDeEquipoDuplicado) {
+		t.Errorf("err = %v, esperaba ErrNombreDeEquipoDuplicado", err)
+	}
+}

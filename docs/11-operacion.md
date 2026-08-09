@@ -573,14 +573,13 @@ falsificar el header con la IP del cliente.
    Los de `.env.example` dicen `cambiar_...` y el backend **se niega a
    arrancar** con un `JWT_SECRET` de menos de 32 bytes.
 2. **`FRONTEND_ORIGIN`** con el dominio real (§9.3).
-3. **`APP_ENV=production`**.
-4. **`VITE_API_URL` vacío.** Se parece a `FRONTEND_ORIGIN` pero no se comporta
+3. **`VITE_API_URL` vacío.** Se parece a `FRONTEND_ORIGIN` pero no se comporta
    igual: vacío es lo correcto, porque el navegador pide `/api/...` al mismo
    host que le sirvió la página.
-5. **El ingress del túnel apunta a `http://frontend:80`** — se configura en el
+4. **El ingress del túnel apunta a `http://frontend:80`** — se configura en el
    panel de Cloudflare, no en el repo.
-6. `make run-prod`, y comprobar que `sgrc-app` queda `healthy` (§1.3).
-7. Entrar con el Admin sembrado y **cambiarle la contraseña**.
+5. `make run-prod`, y comprobar que `sgrc-app` queda `healthy` (§1.3).
+6. Entrar con el Admin sembrado y **cambiarle la contraseña**.
 
 ### 9.3 Cuando tengas el dominio comprado
 

@@ -345,12 +345,25 @@ export function ReportesPage() {
             filasIncidenciasEquipo.length > 0
               ? () =>
                   descargarCSV(`incidencias-por-equipo${rango}`, [
-                    ["Equipo", "Carro", "Total", "Abiertas", "Graves", "% del total"],
+                    [
+                      "Equipo",
+                      "Carro",
+                      "Total",
+                      "Abiertas",
+                      "En reparación",
+                      "En soporte",
+                      "Resueltas",
+                      "Graves",
+                      "% del total",
+                    ],
                     ...filasIncidenciasEquipo.map((x) => [
                       x.etiqueta,
                       x.carroNombre,
                       x.total,
                       x.abiertas,
+                      x.enReparacion,
+                      x.enviadasASoporte,
+                      x.resueltas,
                       x.graves,
                       formatearPorcentaje(proporcion(x.total, totalIncidenciasEquipo)),
                     ]),
@@ -370,6 +383,14 @@ export function ReportesPage() {
                   <TableHead>Carro</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Abiertas</TableHead>
+                  {/* El desglose por estado lo devuelve el backend desde
+                      siempre y esta tabla lo tiraba. Es la diferencia entre
+                      "12 incidencias" y "12, de las cuales 3 sin tocar, 2 en
+                      el taller y 7 resueltas": lo segundo dice si el problema
+                      está atendido o esperando. */}
+                  <TableHead className="text-right">En reparación</TableHead>
+                  <TableHead className="text-right">En soporte</TableHead>
+                  <TableHead className="text-right">Resueltas</TableHead>
                   <TableHead className="text-right">Graves</TableHead>
                   <TableHead>Del total</TableHead>
                 </TableRow>
@@ -381,6 +402,9 @@ export function ReportesPage() {
                     <TableCell>{x.carroNombre}</TableCell>
                     <TableCell className="text-right">{x.total}</TableCell>
                     <TableCell className="text-right">{x.abiertas}</TableCell>
+                    <TableCell className="text-right">{x.enReparacion}</TableCell>
+                    <TableCell className="text-right">{x.enviadasASoporte}</TableCell>
+                    <TableCell className="text-right">{x.resueltas}</TableCell>
                     <TableCell className="text-right">
                       {x.graves > 0 ? (
                         <Badge variant="destructive">{x.graves}</Badge>
