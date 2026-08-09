@@ -246,7 +246,7 @@ classDiagram
 | `Gravedad` | `LEVE`, `MODERADA`, `GRAVE` |
 | `EstadoIncidencia` | `ABIERTA`, `EN_REPARACION`, `ENVIADA_A_SOPORTE`, `RESUELTA` |
 | `EstadoNotif` | `NO_LEIDA`, `LEIDA` |
-| `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `LICENCIA_POR_VENCER`, `RESERVA_POR_COMENZAR`, `RESERVA_NO_RETIRADA`, `PC_SIN_DEVOLVER` |
+| `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `LICENCIA_POR_VENCER`, `RESERVA_POR_COMENZAR`, `RESERVA_NO_RETIRADA`, `EQUIPO_SIN_DEVOLVER` |
 | `EstadoLicencia` | `SIN_FECHA`, `VENCIDA`, `POR_VENCER`, `VIGENTE` — **derivado**, nunca una columna: se calcula contra la fecha de hoy |
 | `DiaSemana` | `LUNES`…`VIERNES` (la semana lectiva es de lunes a viernes) |
 | `TipoExcepcionHorario` | `NO_DISPONIBLE`, `HORARIO_MODIFICADO` |

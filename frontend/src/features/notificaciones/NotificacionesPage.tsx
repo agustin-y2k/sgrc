@@ -166,7 +166,7 @@ export function NotificacionesPage() {
                       <Link to="/reservas">Ver mis reservas</Link>
                     </Button>
                   )}
-                  {n.tipo === "PC_SIN_DEVOLVER" && (
+                  {n.tipo === "EQUIPO_SIN_DEVOLVER" && (
                     <Button asChild variant="outline" size="sm">
                       <Link to="/admin/entregas">Ver entregas</Link>
                     </Button>
