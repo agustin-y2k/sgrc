@@ -14,10 +14,13 @@ import (
 // llevarse tres de las cinco que reservó.
 type entregarPorReservaRequest struct {
 	ReservaIDs []string `json:"reservaIds"`
-	// NombreAlternativo: quién vino a buscarlas, si no fue el docente de la
+	// RetiradoPor: quién vino a buscarlas, si no fue el docente de la
 	// reserva. Pasa seguido —manda a un alumno o a un colega— y el papel que
 	// esto reemplaza lo anota.
-	NombreAlternativo string `json:"nombreAlternativo,omitempty"`
+	//
+	// No cambia de quién es la responsabilidad: el préstamo queda igual a
+	// nombre del docente, que es quien reservó (018).
+	RetiradoPor string `json:"retiradoPor,omitempty"`
 }
 
 // entregarSueltaRequest es el préstamo sin reserva: "necesito una compu para
@@ -28,7 +31,9 @@ type entregarSueltaRequest struct {
 	// Quien pide una máquina para un trámite muchas veces no la tiene.
 	Nombre    string  `json:"nombre"`
 	UsuarioID *string `json:"usuarioId,omitempty"`
-	Motivo    string  `json:"motivo,omitempty"`
+	// RetiradoPor opcional: si la pide una persona y la viene a buscar otra.
+	RetiradoPor string `json:"retiradoPor,omitempty"`
+	Motivo      string `json:"motivo,omitempty"`
 	// DevolucionEstimada opcional, ISO 8601. Sin ella no se le reclama nada:
 	// "vengo en un rato" es la respuesta honesta.
 	DevolucionEstimada *time.Time `json:"devolucionEstimada,omitempty"`
@@ -50,8 +55,12 @@ type prestamoResponse struct {
 	EquipoID  string  `json:"equipoId"`
 	ReservaID *string `json:"reservaId,omitempty"`
 
+	// entregadoANombre es quién RESPONDE por el equipo; retiradoPor, quién
+	// vino a buscarlo si no fue esa misma persona. Ausente es el caso
+	// normal y significa que lo retiró quien responde.
 	EntregadoAUsuarioID *string `json:"entregadoAUsuarioId,omitempty"`
 	EntregadoANombre    string  `json:"entregadoANombre"`
+	RetiradoPor         string  `json:"retiradoPor,omitempty"`
 	Motivo              string  `json:"motivo,omitempty"`
 
 	DevolucionEstimada *time.Time `json:"devolucionEstimada,omitempty"`
@@ -84,6 +93,7 @@ func toPrestamoResponse(p *domain.Prestamo, ahora time.Time) prestamoResponse {
 		ID: p.ID, EquipoID: p.EquipoID, ReservaID: p.ReservaID,
 		EntregadoAUsuarioID: p.EntregadoAUsuarioID,
 		EntregadoANombre:    p.EntregadoANombre,
+		RetiradoPor:         p.RetiradoPor,
 		Motivo:              p.Motivo,
 		DevolucionEstimada:  p.DevolucionEstimada,
 		EntregadoPor:        p.EntregadoPor,

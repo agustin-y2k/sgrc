@@ -148,7 +148,7 @@ describe("PanelDelLaboratorio", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1", "res2"],
-      nombreAlternativo: undefined,
+      retiradoPor: undefined,
     })
   })
 
@@ -166,22 +166,25 @@ describe("PanelDelLaboratorio", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res2"],
-      nombreAlternativo: undefined,
+      retiradoPor: undefined,
     })
   })
 
-  it("registra que se las llevó otra persona", async () => {
+  it("anota quién retira sin cambiar de quién es la responsabilidad", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
     renderPanel()
 
-    await user.click(await screen.findByRole("button", { name: "Se las lleva otro" }))
-    await user.type(screen.getByLabelText(/otra persona/), "Juan (alumno)")
+    await user.click(await screen.findByRole("button", { name: "Anotar quién las retira" }))
+    await user.type(screen.getByLabelText(/Quién las retira/), "Juan (alumno)")
+    // El mostrador lo dice sin que haya que abrir nada: anotar al alumno no
+    // le saca la responsabilidad al docente.
+    expect(screen.getByText(/Quedan igual a cargo de Ada Lovelace/)).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: /Entregar todas \(1\)/ }))
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
-      nombreAlternativo: "Juan (alumno)",
+      retiradoPor: "Juan (alumno)",
     })
   })
 
