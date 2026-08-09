@@ -657,7 +657,7 @@ CREATE TABLE notificacion (
         'LICENCIA_POR_VENCER',
         'RESERVA_POR_COMENZAR',
         'RESERVA_NO_RETIRADA',
-        'PC_SIN_DEVOLVER'
+        'EQUIPO_SIN_DEVOLVER'
     ))
 );
 
