@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event"
 
 import { EntregasPage } from "@/features/admin/EntregasPage"
 import * as inventoryApi from "@/features/inventory/api"
+import type { Equipo } from "@/features/inventory/types"
 import * as reservasApi from "@/features/reservas/api"
 import type { Prestamo, ReservaDetallada } from "@/features/reservas/types"
 import { paginada } from "@/test/respuestas"
@@ -42,6 +43,21 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
     materiaNombre: "Matemáticas",
     cursoNombre: "5°A",
     etiqueta: `PC ${over.identificador ?? 3}`,
+    ...over,
+  }
+}
+
+function equipoSuelto(over: Partial<Equipo> = {}): Equipo {
+  return {
+    id: "eq1",
+    nombre: "Proyector Epson",
+    etiqueta: "Proyector Epson",
+    tipo: "PROYECTOR",
+    reservable: true,
+    freezado: false,
+    estado: "DISPONIBLE",
+    dadoDeBaja: false,
+    fechaAlta: "2026-01-01T00:00:00Z",
     ...over,
   }
 }
@@ -190,11 +206,11 @@ describe("EntregasPage", () => {
     renderPagina()
 
     await user.click(await screen.findByRole("button", { name: "Marcar todas" }))
-    await user.click(screen.getByRole("button", { name: /Entregar 2 computadora/ }))
+    await user.click(screen.getByRole("button", { name: /Entregar 2 equipo/ }))
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1", "res2"],
-      nombreAlternativo: undefined,
+      retiradoPor: undefined,
     })
   })
 
@@ -211,26 +227,49 @@ describe("EntregasPage", () => {
     renderPagina()
 
     await user.click(await screen.findByRole("checkbox", { name: /^PC 4/ }))
-    await user.click(screen.getByRole("button", { name: /Entregar 1 computadora/ }))
+    await user.click(screen.getByRole("button", { name: /Entregar 1 equipo/ }))
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res2"],
-      nombreAlternativo: undefined,
+      retiradoPor: undefined,
     })
   })
 
-  it("registra que se las llevó otra persona", async () => {
+  /**
+   * El docente manda a un alumno, que es lo habitual. Se anota quién vino,
+   * pero el responsable sigue siendo él: reservó él y a él se le reclama si
+   * los equipos no vuelven. La pantalla lo dice para que nadie crea que
+   * escribir ese nombre le pasa la responsabilidad al alumno.
+   */
+  it("anota quién retira sin cambiar de quién es la responsabilidad", async () => {
     const user = userEvent.setup()
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
     renderPagina()
 
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
-    await user.type(screen.getByLabelText(/otra persona/), "Juan (alumno)")
-    await user.click(screen.getByRole("button", { name: /Entregar 1 computadora/ }))
+    await user.type(screen.getByLabelText(/Quién las retira/), "Juan (alumno)")
+    expect(screen.getByText(/quedan igual a cargo del docente/i)).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: /Entregar 1 equipo/ }))
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
-      nombreAlternativo: "Juan (alumno)",
+      retiradoPor: "Juan (alumno)",
+    })
+  })
+
+  // Es opcional: a una institución le sirve anotar al alumno y a otra le
+  // sobra. Obligarlo llevaría a que se escriba cualquier cosa para seguir.
+  it("se puede entregar sin anotar quién retira", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
+    renderPagina()
+
+    await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
+    await user.click(screen.getByRole("button", { name: /Entregar 1 equipo/ }))
+
+    expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
+      reservaIds: ["res1"],
+      retiradoPor: undefined,
     })
   })
 
@@ -258,7 +297,7 @@ describe("EntregasPage", () => {
     await user.type(screen.getByLabelText("¿A quién?"), "Marta (secretaría)")
     await user.type(screen.getByLabelText(/Para qué/), "trámite")
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
-    await user.click(screen.getByRole("button", { name: /^Entregar 1 computadora/ }))
+    await user.click(screen.getByRole("button", { name: /^Entregar 1 equipo/ }))
 
     expect(reservasApi.entregarSuelta).toHaveBeenCalledWith({
       equipoIds: ["pc1"],
@@ -291,7 +330,7 @@ describe("EntregasPage", () => {
     await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
     await user.type(screen.getByLabelText("¿A quién?"), "Marta")
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
-    await user.click(screen.getByRole("button", { name: /^Entregar 1 computadora/ }))
+    await user.click(screen.getByRole("button", { name: /^Entregar 1 equipo/ }))
 
     expect(await screen.findByText(/tiene reserva 2026-08-07 de 10:00 a 11:00/)).toBeInTheDocument()
   })
@@ -365,9 +404,94 @@ describe("EntregasPage", () => {
     renderPagina()
 
     await user.click(await screen.findByRole("button", { name: "Marcar todas" }))
-    await user.click(screen.getByRole("button", { name: /Entregar 1 computadora/ }))
+    await user.click(screen.getByRole("button", { name: /Entregar 1 equipo/ }))
 
     expect(await screen.findByText(/Grace Hopper/)).toBeInTheDocument()
     expect(screen.getByText(/tiene reserva/)).toBeInTheDocument()
+  })
+
+  /**
+   * Los dos nombres, y en este orden: primero quien responde, después quien
+   * pasó a buscarlo. Con uno solo, quien lee la lista no sabe a quién
+   * reclamarle.
+   */
+  it("la lista de afuera nombra a quien responde y a quien retiró", async () => {
+    vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
+      data: [
+        prestamo({
+          entregadoANombre: "Ada Lovelace",
+          retiradoPor: "Juan (alumno)",
+        }),
+      ],
+    })
+    renderPagina()
+
+    expect(await screen.findByText(/Ada Lovelace · retiró Juan \(alumno\)/)).toBeInTheDocument()
+  })
+
+  // Sin nadie anotado no se inventa un renglón: lo retiró quien responde.
+  it("no dice nada de quién retiró cuando no se anotó", async () => {
+    vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
+      data: [prestamo({ entregadoANombre: "Ada Lovelace" })],
+    })
+    renderPagina()
+
+    expect(await screen.findByText(/Ada Lovelace/)).toBeInTheDocument()
+    expect(screen.queryByText(/retiró/)).not.toBeInTheDocument()
+  })
+
+  /**
+   * Lo que más se presta de forma espontánea no son las computadoras de un
+   * carro: es el proyector, el cargador, la notebook suelta (RF-03.16). Si
+   * la entrega sin reserva solo ofreciera los carros, justamente el caso
+   * principal habría que seguir anotándolo en papel.
+   */
+  it("ofrece también los equipos que no están en ningún carro", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({
+      data: [equipoSuelto()],
+    })
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+
+    expect(
+      await screen.findByRole("checkbox", { name: /^Proyector Epson/ })
+    ).toBeInTheDocument()
+  })
+
+  // No se filtra por `reservable`: un cargador no se reserva pero sí se
+  // presta, y ese es su caso principal.
+  it("ofrece lo que no se puede reservar pero sí prestar", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({
+      data: [equipoSuelto({ id: "eq2", nombre: "Cargador", etiqueta: "Cargador", reservable: false })],
+    })
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+
+    expect(await screen.findByRole("checkbox", { name: /^Cargador/ })).toBeInTheDocument()
+  })
+
+  // Un equipo suelto que ya salió no se puede volver a entregar, igual que
+  // una computadora de un carro.
+  it("no ofrece un equipo suelto que ya está afuera", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposSueltos).mockResolvedValue({
+      data: [equipoSuelto()],
+    })
+    vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
+      data: [prestamo({ equipoId: "eq1", etiqueta: "Proyector Epson" })],
+    })
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+
+    // El único que queda con ese nombre es el de "Afuera del laboratorio",
+    // que empieza con "Seleccionar": el de la lista de entrega no está.
+    expect(
+      screen.queryByRole("checkbox", { name: /^Proyector Epson/ })
+    ).not.toBeInTheDocument()
   })
 })

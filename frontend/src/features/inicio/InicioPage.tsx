@@ -9,6 +9,7 @@ import { useAuth } from "@/features/auth/AuthContext"
 import * as adminApi from "@/features/admin/api"
 import { EntregaSuelta } from "@/features/admin/entregas/EntregaSuelta"
 import { LoQueEstaAfuera } from "@/features/admin/entregas/LoQueEstaAfuera"
+import { EnElLaboratorio } from "@/features/admin/entregas/EnElLaboratorio"
 import { PanelDelLaboratorio } from "@/features/admin/entregas/PanelDelLaboratorio"
 import {
   PRESTAMOS_KEY,
@@ -180,7 +181,7 @@ export function InicioPage() {
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
           {esAdmin
-            ? "Qué está pasando en el laboratorio ahora mismo."
+            ? "Qué hay que entregar ahora, qué falta que vuelva y con qué se cuenta."
             : "Reservá los equipos para tus clases y mirá cómo venís esta semana."}
         </p>
       </div>
@@ -198,8 +199,56 @@ export function InicioPage() {
         </Alert>
       )}
 
+      {/* El mostrador va PRIMERO, arriba incluso de los contadores: es lo
+          único de esta pantalla que se opera con gente esperando del otro
+          lado, y reemplaza al papel donde se anotaba qué salió y qué volvió.
+          Cuántas cuentas esperan aprobación y cuántos avisos hay sin leer son
+          cosas que se miran una vez al día; entregar y recibir, todo el día.
+          Por eso los contadores quedan abajo y no arriba. */}
+      {esAdmin && (
+        <>
+          <PanelDelLaboratorio />
+          {/* "Afuera" y "acá" son la misma pregunta dada vuelta, así que van
+              enfrentadas: a la izquierda lo que salió, arriba a la derecha con
+              qué se cuenta si alguien golpea la puerta ahora. */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <LoQueEstaAfuera compacto />
+            <div className="grid content-start gap-4">
+              <EnElLaboratorio />
+              {entregandoSuelta ? (
+                <EntregaSuelta
+                  yaAfuera={yaAfuera}
+                  onCerrar={() => setEntregandoSuelta(false)}
+                />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Entregar sin reserva</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid gap-2">
+                    <p className="text-muted-foreground text-sm">
+                      Para cuando piden una computadora en el momento — un trámite, algo
+                      puntual. La persona no necesita tener cuenta en el sistema.
+                    </p>
+                    <div>
+                      <Button onClick={() => setEntregandoSuelta(true)}>
+                        Entregar sin reserva
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Dos columnas en un teléfono y no una sola: son números cortos, y
-          apilados obligaban a bajar para ver el último. */}
+          apilados obligaban a bajar para ver el último.
+
+          Para el Admin esto va DEBAJO del mostrador (ver arriba). Sigue acá
+          y no se saca: una cuenta pendiente es un docente que no puede
+          trabajar, y nadie va a entrar a buscarla si nada se la nombra. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Indicador
           valor={deHoy}
@@ -251,40 +300,6 @@ export function InicioPage() {
         />
       </div>
 
-      {/* El panel del mostrador va ARRIBA de "lo que viene": es lo que el
-          Admin mira todo el día, con gente esperando del otro lado. Lo de
-          más abajo se consulta; esto se opera. */}
-      {esAdmin && (
-        <>
-          <PanelDelLaboratorio />
-          <div className="grid gap-4 lg:grid-cols-2">
-            <LoQueEstaAfuera compacto />
-            {entregandoSuelta ? (
-              <EntregaSuelta
-                yaAfuera={yaAfuera}
-                onCerrar={() => setEntregandoSuelta(false)}
-              />
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Entregar sin reserva</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-2">
-                  <p className="text-muted-foreground text-sm">
-                    Para cuando piden una computadora en el momento — un trámite, algo
-                    puntual. La persona no necesita tener cuenta en el sistema.
-                  </p>
-                  <div>
-                    <Button onClick={() => setEntregandoSuelta(true)}>
-                      Entregar sin reserva
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </>
-      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">

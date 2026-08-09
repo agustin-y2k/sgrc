@@ -86,11 +86,15 @@ type ResultadoEntrega struct {
 // llevarse tres de las cinco que reservó.
 type EntregaPorReservaParams struct {
 	ReservaIDs []string
-	// NombreAlternativo: quién se las llevó, si no fue el docente de la
+	// RetiradoPor: quién vino a buscarlas, si no fue el docente de la
 	// reserva. Pasa seguido —manda a un alumno o a un colega— y el papel lo
-	// anota, así que el sistema también. Vacío = el docente de la reserva.
-	NombreAlternativo string
-	EntregadoPor      string
+	// anota, así que el sistema también.
+	//
+	// NO reemplaza al docente: él sigue siendo el responsable, porque es
+	// quien reservó y a quien se le reclama si las máquinas no vuelven. Esto
+	// se anota AL LADO, y es opcional (018). Vacío = las retiró él.
+	RetiradoPor  string
+	EntregadoPor string
 }
 
 // EntregarPorReserva registra que las máquinas de una reserva salieron.
@@ -123,9 +127,20 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 		}
 
 		vence := domain.InstanteDePared(reserva.Fecha, reserva.HoraFin, ahora.Location())
-		nombre := params.NombreAlternativo
-		if nombre == "" && reserva.NombreDocenteSnapshot != nil {
+
+		// Quien responde es SIEMPRE el docente de la reserva: él la hizo y a
+		// él se le reclama. Que haya mandado a un alumno cambia quién pasó
+		// por el mostrador, no de quién son las máquinas.
+		nombre := ""
+		if reserva.NombreDocenteSnapshot != nil {
 			nombre = *reserva.NombreDocenteSnapshot
+		}
+		retiradoPor := params.RetiradoPor
+		// Un bloqueo por evaluación no tiene docente, así que no hay a quién
+		// hacer responsable: ahí el nombre que se escribe a mano SÍ es el
+		// responsable, y no queda nadie "al lado" a quien anotar.
+		if nombre == "" {
+			nombre, retiradoPor = retiradoPor, ""
 		}
 		// Un bloqueo por evaluación estatal no tiene docente: lo crea un
 		// Admin sobre PCs sueltas y NombreDocenteSnapshot queda en nil. Sin
@@ -145,19 +160,17 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 			continue
 		}
 
+		// UsuarioID se queda apuntando al docente aunque las haya retirado
+		// otro: los avisos de "no volvieron" tienen que llegarle a quien
+		// responde, y quien retira muchas veces ni cuenta tiene.
 		datos := domain.DatosDeEntrega{
 			EquipoID:           reserva.EquipoID,
 			ReservaID:          &reserva.ID,
 			UsuarioID:          reserva.CreadoPor,
 			Nombre:             nombre,
+			RetiradoPor:        retiradoPor,
 			DevolucionEstimada: &vence,
 			EntregadoPor:       params.EntregadoPor,
-		}
-		// Si se la llevó otra persona, el usuario de la reserva ya no es
-		// quien tiene la máquina: dejarlo apuntando al docente haría que los
-		// avisos de devolución le lleguen a quien no la tiene.
-		if params.NombreAlternativo != "" {
-			datos.UsuarioID = nil
 		}
 
 		prestamo, noEntregada, err := s.registrarEntrega(ctx, datos, ahora)
@@ -203,7 +216,11 @@ type EntregaSueltaParams struct {
 	// significaría anotar el préstamo a nombre de otro.
 	Nombre    string
 	UsuarioID *string
-	Motivo    string
+	// RetiradoPor: si la pide una persona y la viene a buscar otra. Mismo
+	// criterio que en la entrega contra reserva — opcional, y no cambia
+	// quién responde.
+	RetiradoPor string
+	Motivo      string
 	// DevolucionEstimada opcional: "vengo en un rato" es la respuesta
 	// honesta, y una hora inventada solo generaría reclamos falsos.
 	DevolucionEstimada *time.Time
@@ -223,6 +240,7 @@ func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams
 			EquipoID:           equipoID,
 			UsuarioID:          params.UsuarioID,
 			Nombre:             params.Nombre,
+			RetiradoPor:        params.RetiradoPor,
 			Motivo:             params.Motivo,
 			DevolucionEstimada: params.DevolucionEstimada,
 			EntregadoPor:       params.EntregadoPor,
