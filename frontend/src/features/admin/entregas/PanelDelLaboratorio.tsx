@@ -23,8 +23,14 @@ import { hoyISO, type ReservaDetallada } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 
 /**
- * Lo que está pasando ahora en el laboratorio: qué clase está en curso, qué
- * viene después, y qué máquinas hay que entregar.
+ * La cola del mostrador: qué clase está en curso, qué viene después, y qué
+ * máquinas hay que entregarle a cada docente.
+ *
+ * El sistema NO sabe dónde se da la clase — puede ser en el laboratorio o
+ * puede ser que el docente se lleve las máquinas a su aula, y eso cambia de
+ * una institución a otra. Lo único que sabe es que alguien reservó equipos
+ * de tal a tal hora y viene a buscarlos, así que los títulos hablan de la
+ * entrega y no de un lugar.
  *
  * Es la mitad del mostrador que mira hacia adelante (la otra —qué hay
  * afuera y qué volvió— es LoQueEstaAfuera). Las dos juntas son la pantalla
@@ -93,7 +99,7 @@ function Clase({
   enCurso: boolean
 }) {
   const queryClient = useQueryClient()
-  const [nombreAlternativo, setNombreAlternativo] = useState("")
+  const [retiradoPor, setRetiradoPor] = useState("")
   const [abriendoNombre, setAbriendoNombre] = useState(false)
 
   const sinRetirar = clase.reservas.filter(
@@ -106,10 +112,10 @@ function Clase({
     mutationFn: (ids: string[]) =>
       reservasApi.entregarPorReserva({
         reservaIds: ids,
-        nombreAlternativo: nombreAlternativo.trim() || undefined,
+        retiradoPor: retiradoPor.trim() || undefined,
       }),
     onSuccess: async () => {
-      setNombreAlternativo("")
+      setRetiradoPor("")
       setAbriendoNombre(false)
       await queryClient.invalidateQueries({ queryKey: PRESTAMOS_KEY })
       await queryClient.invalidateQueries({ queryKey: ["reservas"] })
@@ -161,13 +167,18 @@ function Clase({
         <div className="grid gap-2">
           {abriendoNombre && (
             <div className="grid gap-1.5">
-              <Label htmlFor={`quien-${clase.clave}`}>¿Se las lleva otra persona?</Label>
+              <Label htmlFor={`quien-${clase.clave}`}>¿Quién las retira? (opcional)</Label>
               <Input
                 id={`quien-${clase.clave}`}
-                value={nombreAlternativo}
-                onChange={(e) => setNombreAlternativo(e.target.value)}
+                value={retiradoPor}
+                onChange={(e) => setRetiradoPor(e.target.value)}
                 placeholder="Ej.: Juan (alumno de 5°A)"
               />
+              {/* Anotarlo no cambia de quién son: el docente reservó y él
+                  responde. Es solo quién pasó por el mostrador. */}
+              <p className="text-muted-foreground text-xs">
+                Quedan igual a cargo de {clase.docente}.
+              </p>
             </div>
           )}
           <div className="flex flex-wrap gap-2">
@@ -181,7 +192,7 @@ function Clase({
             </Button>
             {!abriendoNombre && (
               <Button variant="outline" size="sm" onClick={() => setAbriendoNombre(true)}>
-                Se las lleva otro
+                Anotar quién las retira
               </Button>
             )}
           </div>
@@ -234,7 +245,7 @@ export function PanelDelLaboratorio() {
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Ahora en el laboratorio</CardTitle>
+          <CardTitle>Para entregar ahora</CardTitle>
           <CardDescription>
             {enCurso.length === 0
               ? "No hay ninguna clase en curso."

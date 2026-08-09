@@ -18,8 +18,13 @@ import * as reservasApi from "@/features/reservas/api"
 import { getErrorMessage } from "@/lib/api-client"
 
 /**
- * Entregar una computadora sin reserva detrás: "necesito una compu para
- * hacer un trámite".
+ * Entregar algo sin reserva detrás: "necesito una compu para hacer un
+ * trámite", "me llevo el proyector".
+ *
+ * Ofrece TODO el inventario que no esté afuera, no solo las computadoras de
+ * los carros: desde la 015 lo que más se presta de forma espontánea son
+ * justamente los equipos sueltos —un proyector, un cargador—, así que van
+ * primero en la lista.
  *
  * Vive suelto porque se usa desde dos lados — el panel del laboratorio y la
  * pantalla de entregas—: es de las cosas que más se hacen en el mostrador y
@@ -92,7 +97,7 @@ export function EntregaSuelta({
     onSuccess: async (respuesta) => {
       const avisos = respuesta.avisos ?? []
       const noSalieron = respuesta.noEntregadas ?? []
-      const partes = [`Salieron ${respuesta.entregadas.length} computadora(s).`]
+      const partes = [`Salieron ${respuesta.entregadas.length} equipo(s).`]
       if (noSalieron.length > 0) {
         partes.push(`No salieron ${noSalieron.length}: ${noSalieron.map((n) => n.detalle).join("; ")}`)
       }
@@ -117,8 +122,9 @@ export function EntregaSuelta({
       <CardHeader>
         <CardTitle>Entregar sin reserva</CardTitle>
         <CardDescription>
-          Para cuando piden una computadora en el momento — un trámite, algo puntual. No
-          hace falta que la persona tenga cuenta en el sistema.
+          Para cuando piden algo en el momento — una computadora para un trámite, el
+          proyector para una charla. No hace falta que la persona tenga cuenta en el
+          sistema.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -169,11 +175,11 @@ export function EntregaSuelta({
           </div>
 
           <div className="grid gap-2">
-            <Label>¿Qué computadoras?</Label>
+            <Label>¿Qué equipos?</Label>
             <div className="grid max-h-56 gap-1 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
               {equipos.length === 0 && (
                 <p className="text-muted-foreground text-sm">
-                  No hay computadoras disponibles para entregar.
+                  No hay equipos disponibles para entregar.
                 </p>
               )}
               {equipos.map((equipo) => (
@@ -208,7 +214,7 @@ export function EntregaSuelta({
 
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={entregar.isPending || seleccionadas.size === 0}>
-              Entregar {seleccionadas.size} computadora(s)
+              Entregar {seleccionadas.size} equipo(s)
             </Button>
             <Button type="button" variant="outline" onClick={onCerrar}>
               Cerrar

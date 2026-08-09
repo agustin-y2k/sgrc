@@ -193,15 +193,20 @@ flowchart LR
 
 ### UC: Atender el mostrador (pantalla de inicio del Admin)
 - **Actor:** Admin
-- **Motivo:** el Admin pasa el día en el laboratorio con gente esperando del otro lado. Lo que necesita ver sin buscar es qué clase está pasando ahora, qué viene después, qué computadoras están afuera y cuáles volvieron.
+- **Motivo:** el Admin pasa el día en el laboratorio con gente esperando del otro lado. Lo que necesita ver sin buscar es a quién le tiene que entregar ahora, qué viene después, qué computadoras están afuera, cuáles volvieron y con cuántas cuenta si alguien golpea la puerta.
 - **Qué muestra la pantalla de inicio:**
-  1. **Ahora en el laboratorio**: las clases en curso, con cada máquina marcada como *entregada*, *sin retirar* o *liberada*, y el botón para entregarlas.
+  1. **Para entregar ahora**: las clases en curso, con cada máquina marcada como *entregada*, *sin retirar* o *liberada*, y el botón para entregarlas.
   2. **Lo que sigue hoy**: las clases por empezar, que también se pueden entregar antes de hora.
   3. **Afuera del laboratorio**: todo lo que está prestado —venga de una reserva o de un préstamo suelto— con el botón para marcar que volvió.
-  4. **Entregar sin reserva**, a un clic.
+  4. **En el laboratorio ahora**: cuántos equipos del inventario están físicamente acá —el total sin los dados de baja, menos lo que está afuera— y cuántos de los que están acá no se pueden entregar por estar fuera de circulación.
+  5. **Entregar sin reserva**, a un clic.
 - **Reglas que no son obvias:**
+  - **El sistema no sabe dónde se da la clase**, y por eso ningún título lo afirma. Una reserva dice que alguien necesita N equipos de tal a tal hora; si la clase se da en el laboratorio o el docente se lleva las máquinas a su aula cambia de una institución a otra y el sistema funciona igual en los dos casos. Lo que sí sabe es que la máquina **salió**, y sobre eso hablan las tarjetas: se entrega, está afuera, volvió.
+  - **"Estar acá" no es "poder entregarse"**: una computadora en mantenimiento está en el laboratorio y no se le da a nadie. Por eso el conteo de presencia y el de circulación se muestran en renglones distintos en vez de mezclarse en un total que después nadie sabe leer.
   - *Entregada* o *sin retirar* **no sale de la reserva**: sale de cruzar sus PCs contra lo que está prestado ahora. La custodia es de la máquina, no de la reserva — la misma computadora puede estar afuera por un préstamo suelto.
   - La devolución se marca en **una sola lista**, sin importar por qué salió la máquina: quien la recibe no tiene por qué acordarse de cómo se entregó.
+  - **El mostrador va antes que los contadores** de cuentas por aprobar y avisos sin leer. Es una decisión de orden, no de contenido: esto se opera con alguien esperando del otro lado, y aquello se mira una vez al día. Los contadores siguen en la pantalla, más abajo — una cuenta pendiente es un docente que no puede trabajar y nadie la va a buscar si nada la nombra.
+  - **Entregar contra una reserva y entregar sin ella son el mismo camino** puertas adentro: escriben el mismo préstamo, aparecen en la misma lista de "afuera" y se reciben con la misma operación. Lo único que cambia es lo que se sabe de antemano — contra reserva, la hora de devolución sale del fin de la clase y el destinatario es el docente; suelta, las dos cosas se escriben (y la hora puede no existir).
   - El panel **se refresca solo cada minuto**: el mostrador lo atienden varios Admin, y si uno recibe una computadora la pantalla del otro tiene que enterarse sin apretar recargar.
   - Los **bloqueos por evaluación no aparecen**: no los retira nadie.
 
@@ -211,7 +216,7 @@ flowchart LR
 - **Flujo (contra una reserva):**
   1. Admin ve las reservas del día que todavía no se retiraron.
   2. Marca las PCs que entrega —pueden ser algunas, no necesariamente todas— y confirma. La hora en que deben volver sale del fin de la reserva.
-  3. Si las vino a buscar otra persona (un alumno, un colega), lo anota.
+  3. Si las vino a buscar otra persona (un alumno, un colega), lo anota. Es opcional, y no cambia de quién son: el docente que reservó sigue siendo el responsable.
   4. Cuando vuelven, Admin las recibe. Puede recibir varias juntas o de a una, y anotar observaciones ("volvió sin el cargador").
 - **Flujo (espontáneo):** alguien pide una computadora en el momento para un trámite. Admin elige la máquina, escribe a quién y para qué, y opcionalmente cuándo la devuelve. Si esa PC tiene una reserva próxima, el sistema lo avisa pero no lo impide.
 - **Reglas que no son obvias:**

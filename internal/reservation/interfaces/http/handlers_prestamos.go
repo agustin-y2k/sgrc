@@ -66,9 +66,9 @@ func (h *Handler) EntregarPorReserva(c *fiber.Ctx) error {
 	}
 
 	resultado, err := h.svc.EntregarPorReserva(c.UserContext(), application.EntregaPorReservaParams{
-		ReservaIDs:        req.ReservaIDs,
-		NombreAlternativo: req.NombreAlternativo,
-		EntregadoPor:      claims.UserID,
+		ReservaIDs:   req.ReservaIDs,
+		RetiradoPor:  req.RetiradoPor,
+		EntregadoPor: claims.UserID,
 	})
 	if err != nil {
 		return mapearError(err)
@@ -92,6 +92,7 @@ func (h *Handler) EntregarSuelta(c *fiber.Ctx) error {
 		EquipoIDs:          req.EquipoIDs,
 		Nombre:             req.Nombre,
 		UsuarioID:          req.UsuarioID,
+		RetiradoPor:        req.RetiradoPor,
 		Motivo:             req.Motivo,
 		DevolucionEstimada: req.DevolucionEstimada,
 		EntregadoPor:       claims.UserID,

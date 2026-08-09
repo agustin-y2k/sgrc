@@ -72,27 +72,58 @@ func TestEntregarPorReserva_TomaLaHoraDeDevolucionDeLaReserva(t *testing.T) {
 }
 
 // TestEntregarPorReserva_SeLasLlevoOtraPersona: el docente manda a un alumno
-// o a un colega. El papel lo anota, así que el sistema también.
+// o a un colega, que es lo habitual. El papel lo anota, así que el sistema
+// también — pero AL LADO del docente, no en su lugar.
+//
+// El responsable es quien reservó: es a quien se le reclama si los equipos
+// no vuelven, y muchas veces quien los retira ni siquiera tiene cuenta.
+// Reemplazarlo dejaba el registro diciendo que las tenía alguien a quien el
+// sistema no puede avisarle nada.
 func TestEntregarPorReserva_SeLasLlevoOtraPersona(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(t, repo, "res1", "pc1")
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, NombreAlternativo: "Juan (alumno)", EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, RetiradoPor: "Juan (alumno)", EntregadoPor: "admin1",
 	})
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	p := resultado.Entregadas[0]
-	if p.EntregadoANombre != "Juan (alumno)" {
-		t.Errorf("nombre = %q, esperaba el de quien vino a buscarlas", p.EntregadoANombre)
+	if p.EntregadoANombre != "Ada Lovelace" {
+		t.Errorf("responsable = %q, esperaba el docente de la reserva", p.EntregadoANombre)
 	}
-	// El usuario de la reserva NO queda como quien la tiene: si no, los
-	// avisos de devolución le llegarían a quien no se la llevó.
-	if p.EntregadoAUsuarioID != nil {
-		t.Errorf("no debería quedar atado al docente de la reserva: %v", *p.EntregadoAUsuarioID)
+	if p.RetiradoPor != "Juan (alumno)" {
+		t.Errorf("retiradoPor = %q, esperaba a quien vino a buscarlas", p.RetiradoPor)
+	}
+	// Y el aviso de "no volvieron" tiene que llegarle al docente, que es
+	// quien responde — no a un alumno que probablemente no tenga cuenta.
+	if p.EntregadoAUsuarioID == nil || *p.EntregadoAUsuarioID != "docente1" {
+		t.Errorf("usuario = %v, esperaba el de la reserva", p.EntregadoAUsuarioID)
+	}
+}
+
+// Anotar quién retira es OPCIONAL: a una institución le sirve para
+// reconstruir quién pasó por el mostrador y a otra le sobra. Vacío significa
+// que las retiró el propio docente, no que falte un dato.
+func TestEntregarPorReserva_SinAnotarQuienRetira(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaDeTest(t, repo, "res1", "pc1")
+	svc := nuevoServicioDeTest(repo)
+
+	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
+		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+	})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	p := resultado.Entregadas[0]
+	if p.EntregadoANombre != "Ada Lovelace" || p.RetiradoPor != "" {
+		t.Errorf("esperaba responsable Ada y retiradoPor vacío, obtuve %q / %q",
+			p.EntregadoANombre, p.RetiradoPor)
 	}
 }
 
@@ -342,6 +373,96 @@ func TestEntregarSuelta_SinReservasEncimaNoAvisaNada(t *testing.T) {
 
 // ── Devolución ──────────────────────────────────────────────────────────
 
+// TestEntregaYDevolucion_ElCaminoEsElMismoConReservaYSinElla recorre el ciclo
+// completo por los dos caminos y verifica que terminen en el mismo lugar:
+// entregar, figurar afuera, marcar la devolución, dejar de figurar.
+//
+// Es la garantía que sostiene que el mostrador tenga UNA sola lista de
+// devolución. Si la entrega contra reserva escribiera en otro lado, o si
+// "qué hay afuera" filtrara por origen, la máquina de una clase quedaría
+// entregada para siempre sin que ninguna pantalla lo mostrara — y quien la
+// recibe no tiene por qué acordarse de cómo salió.
+func TestEntregaYDevolucion_ElCaminoEsElMismoConReservaYSinElla(t *testing.T) {
+	ctx := context.Background()
+	repo := nuevoFakeRepo()
+	reservaDeTest(t, repo, "res1", "pc1")
+	svc := nuevoServicioDeTest(repo)
+
+	porReserva, err := svc.EntregarPorReserva(ctx, EntregaPorReservaParams{
+		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	suelta, err := svc.EntregarSuelta(ctx, EntregaSueltaParams{
+		EquipoIDs: []string{"pc2"}, Nombre: "Secretaría", EntregadoPor: "admin1",
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	// Las dos salen en la MISMA lista, que es la que dibuja "Afuera del
+	// laboratorio" con su botón de recibir.
+	abiertos, err := svc.ListarPrestamosAbiertos(ctx)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(abiertos) != 2 {
+		t.Fatalf("esperaba las dos afuera, obtuve %d", len(abiertos))
+	}
+
+	// Y las dos se reciben con la misma operación, en un solo lote: quien
+	// las recibe no distingue de dónde vino cada una.
+	resultado, err := svc.RecibirEquipos(ctx,
+		[]string{porReserva.Entregadas[0].ID, suelta.Entregadas[0].ID}, "admin2", "")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.Recibidos) != 2 {
+		t.Fatalf("esperaba 2 devoluciones, obtuve %d", len(resultado.Recibidos))
+	}
+
+	abiertos, err = svc.ListarPrestamosAbiertos(ctx)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(abiertos) != 0 {
+		t.Errorf("no debería quedar nada afuera, quedaron %d", len(abiertos))
+	}
+}
+
+// La única diferencia entre los dos caminos está en lo que se sabe de
+// antemano, y conviene fijarla: contra una reserva la hora de devolución sale
+// del fin de la clase y no se pide, mientras que una entrega espontánea puede
+// no tener ninguna — "vengo en un rato" es la respuesta honesta, y una hora
+// inventada solo generaría reclamos falsos.
+func TestEntregaYDevolucion_SoloLaDeReservaTraeHoraSinPedirla(t *testing.T) {
+	ctx := context.Background()
+	repo := nuevoFakeRepo()
+	reservaDeTest(t, repo, "res1", "pc1")
+	svc := nuevoServicioDeTest(repo)
+
+	porReserva, err := svc.EntregarPorReserva(ctx, EntregaPorReservaParams{
+		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	suelta, err := svc.EntregarSuelta(ctx, EntregaSueltaParams{
+		EquipoIDs: []string{"pc2"}, Nombre: "Secretaría", EntregadoPor: "admin1",
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if porReserva.Entregadas[0].DevolucionEstimada == nil {
+		t.Error("la entrega contra reserva debería traer la hora del fin de la clase")
+	}
+	if suelta.Entregadas[0].DevolucionEstimada != nil {
+		t.Error("una entrega espontánea sin hora pactada no debería inventar una")
+	}
+}
+
 func TestRecibirEquipos_VariasDeUnaVez(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
@@ -549,7 +670,7 @@ func TestEntregarPorReserva_BloqueoConNombreSiSeEntrega(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"bloq1"}, NombreAlternativo: "Mesa de examen", EntregadoPor: "admin1",
+		ReservaIDs: []string{"bloq1"}, RetiradoPor: "Mesa de examen", EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -557,6 +678,13 @@ func TestEntregarPorReserva_BloqueoConNombreSiSeEntrega(t *testing.T) {
 	}
 	if len(resultado.Entregadas) != 1 {
 		t.Fatalf("con nombre tiene que poder entregarse: %+v", resultado)
+	}
+	// Un bloqueo no tiene docente, así que no hay a quién hacer responsable:
+	// el nombre escrito a mano ES el responsable, y no queda nadie "al lado".
+	p := resultado.Entregadas[0]
+	if p.EntregadoANombre != "Mesa de examen" || p.RetiradoPor != "" {
+		t.Errorf("esperaba responsable \"Mesa de examen\" sin retiradoPor, obtuve %q / %q",
+			p.EntregadoANombre, p.RetiradoPor)
 	}
 }
 
