@@ -17,7 +17,7 @@ import { DisponibilidadPage } from "@/features/disponibilidad/DisponibilidadPage
 import { InicioPage } from "@/features/inicio/InicioPage"
 import { InventarioPage } from "@/features/inventory/InventarioPage"
 import { NotificacionesPage } from "@/features/notificaciones/NotificacionesPage"
-import { BloqueoEvaluacionPage } from "@/features/reservas/BloqueoEvaluacionPage"
+import { BloquearEquiposPage } from "@/features/reservas/BloquearEquiposPage"
 import { MisReservasPage } from "@/features/reservas/MisReservasPage"
 import { NuevaReservaPage } from "@/features/reservas/NuevaReservaPage"
 import { AdminRoute } from "@/routes/AdminRoute"
@@ -62,8 +62,8 @@ const router = createBrowserRouter([
               { path: "/admin/entregas", element: <EntregasPage /> },
               { path: "/admin/reportes", element: <ReportesPage /> },
               {
-                path: "/admin/bloqueo-evaluacion",
-                element: <BloqueoEvaluacionPage />,
+                path: "/admin/bloquear-equipos",
+                element: <BloquearEquiposPage />,
               },
             ],
           },

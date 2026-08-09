@@ -30,7 +30,7 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
 function grupo(reservas: ReservaDetallada[]): GrupoDeReservas {
   return {
     grupoId: "grupo1",
-    esBloqueoEvaluacion: false,
+    esBloqueo: false,
     esRecurrente: false,
     fecha: "2026-08-11",
     horaInicio: "08:00",

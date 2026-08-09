@@ -29,7 +29,10 @@ function BloqueOcupado({ bloque }: { bloque: BloqueCalendario }) {
   const fin = aMinutos(bloque.horaFin)
   const minutosBase = HORA_DESDE * 60
 
-  const esEvaluacion = bloque.tipo === "EVALUACION_ESTATAL"
+  const esBloqueo = bloque.tipo === "BLOQUEO"
+  // Los bloqueos anteriores a la 019 no tienen motivo guardado, así que el
+  // rótulo no puede depender de que venga: "Bloqueado" dice lo que se sabe.
+  const motivo = bloque.motivoBloqueo || "Bloqueado"
   const alto = ((fin - inicio) / 60) * ALTO_POR_HORA_REM
   const desplazamiento = ((inicio - minutosBase) / 60) * ALTO_POR_HORA_REM
 
@@ -37,21 +40,24 @@ function BloqueOcupado({ bloque }: { bloque: BloqueCalendario }) {
     <div
       className={
         "absolute inset-x-0.5 overflow-hidden rounded-md border px-1.5 py-1 text-xs leading-tight " +
-        (esEvaluacion
+        (esBloqueo
           ? "border-destructive/40 bg-destructive/10 text-destructive"
           : "border-primary/30 bg-primary/10")
       }
       style={{ top: `${desplazamiento}rem`, height: `${alto}rem` }}
       title={
-        esEvaluacion
-          ? `Evaluación estatal · ${bloque.horaInicio}–${bloque.horaFin}`
+        esBloqueo
+          ? `${motivo} · ${bloque.horaInicio}–${bloque.horaFin}`
           : `${bloque.materiaNombre} (${bloque.cursoNombre}) · ${bloque.docente} · ${bloque.horaInicio}–${bloque.horaFin}`
       }
     >
+      {/* En un bloqueo, el motivo ocupa el lugar que en una clase tiene la
+          materia: es lo que responde "¿por qué no puedo reservar acá?", que
+          es exactamente lo que trae a alguien a mirar el calendario. */}
       <p className="truncate font-medium">
-        {esEvaluacion ? "Evaluación estatal" : bloque.materiaNombre}
+        {esBloqueo ? motivo : bloque.materiaNombre}
       </p>
-      {!esEvaluacion && (
+      {!esBloqueo && (
         <>
           <p className="truncate opacity-80">{bloque.cursoNombre}</p>
           <p className="truncate opacity-80">{bloque.docente}</p>
@@ -197,7 +203,7 @@ export function CalendarioEquipoPage() {
         </span>
         <span className="flex items-center gap-1.5">
           <span className="border-destructive/40 bg-destructive/10 inline-block size-3 rounded border" />
-          Bloqueo por evaluación estatal
+          Bloqueado por un Admin
         </span>
         <Badge variant="outline">Los huecos en blanco están libres</Badge>
       </div>

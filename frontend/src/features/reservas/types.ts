@@ -13,7 +13,14 @@ export type EstadoReserva =
    * la computadora sigue en el laboratorio, un Admin se la entrega igual.
    */
   | "NO_RETIRADA"
-export type TipoReserva = "NORMAL" | "EVALUACION_ESTATAL"
+/**
+ * NORMAL: la reserva de un docente para su clase.
+ * BLOQUEO: un Admin se tomó el equipo para otra cosa y canceló lo que
+ * hubiera encima. Se llamó EVALUACION_ESTATAL hasta la 019, y era un caso
+ * concreto usado como categoría — también se bloquea por una jornada
+ * docente, una capacitación o una obra en el aula.
+ */
+export type TipoReserva = "NORMAL" | "BLOQUEO"
 
 // La semana lectiva es de lunes a viernes: el backend rechaza reservar un
 // sábado o un domingo (domain.ErrDiaNoLectivo).
@@ -89,6 +96,11 @@ export type Reserva = {
   horaFin: string
   estado: EstadoReserva
   tipo: TipoReserva
+  /**
+   * Por qué se tomaron los equipos. Solo viene en los BLOQUEO, y ahí viene
+   * siempre: es obligatorio al crearlos porque cancelan clases ajenas.
+   */
+  motivoBloqueo?: string
   creadoPor?: string
   canceladoPor?: string
   motivoCancelacion?: string
@@ -112,7 +124,7 @@ export type ReservaDetallada = Reserva & {
   /** 0 en un equipo suelto; el carro, vacío. Lo que se muestra es `etiqueta`. */
   identificador: number
   carroNombre: string
-  /** Vacío en los bloqueos por evaluación estatal, que no tienen materia. */
+  /** Vacío en los bloqueos administrativos, que no tienen materia. */
   materiaNombre?: string
   cursoNombre?: string
   /**
@@ -138,7 +150,9 @@ export type GrupoDeReservas = {
    * —no es la reserva de nadie— pero sí es UNA operación del Admin, así que
    * se junta en una sola tarjeta.
    */
-  esBloqueoEvaluacion: boolean
+  esBloqueo: boolean
+  /** Por qué se tomaron los equipos. Solo en los bloqueos. */
+  motivoBloqueo?: string
   fecha: string
   horaInicio: string
   horaFin: string
@@ -167,8 +181,8 @@ export type GrupoDeReservas = {
  */
 function claveDeAgrupacion(r: ReservaDetallada): string {
   if (r.reservaGrupoId) return r.reservaGrupoId
-  if (r.tipo === "EVALUACION_ESTATAL") {
-    return `evaluacion:${r.creadoPor ?? "sistema"}:${r.fecha}:${r.horaInicio}:${r.horaFin}`
+  if (r.tipo === "BLOQUEO") {
+    return `bloqueo:${r.creadoPor ?? "sistema"}:${r.fecha}:${r.horaInicio}:${r.horaFin}`
   }
   return `sin-grupo:${r.id}`
 }
@@ -190,7 +204,8 @@ export function agruparReservas(reservas: ReservaDetallada[]): GrupoDeReservas[]
     }
     grupos.set(clave, {
       grupoId: r.reservaGrupoId,
-      esBloqueoEvaluacion: r.tipo === "EVALUACION_ESTATAL",
+      esBloqueo: r.tipo === "BLOQUEO",
+      motivoBloqueo: r.motivoBloqueo,
       fecha: r.fecha,
       horaInicio: r.horaInicio,
       horaFin: r.horaFin,
@@ -249,18 +264,19 @@ export type CrearReservaRecurrenteRequest = {
 }
 
 /**
- * RF-04.7 — bloqueo por evaluación estatal.
+ * RF-04.7 — bloqueo administrativo de equipos.
  *
  * A diferencia de una reserva no lleva materia (el bloqueo no es de nadie)
  * y sí lleva `motivo`, que es lo que el backend intercala en el aviso a
  * cada docente afectado: "Tu reserva fue cancelada: bloqueo por evaluación
  * estatal (…)".
  */
-export type BloquearEvaluacionRequest = {
+export type BloquearRequest = {
   equipoIds: string[]
   fecha: string
   horaInicio: string
   horaFin: string
+  /** Obligatorio: el bloqueo cancela las clases de otros (RF-04.7). */
   motivo: string
 }
 
@@ -269,7 +285,7 @@ export type BloquearEvaluacionRequest = {
  * llevó puesta la cascada y a cuántos docentes se les avisó. Es la única
  * devolución que tiene de una operación destructiva.
  */
-export type ResultadoBloqueoEvaluacion = {
+export type ResultadoBloqueo = {
   bloqueos: Reserva[]
   reservasCanceladas: number
   docentesNotificados: number

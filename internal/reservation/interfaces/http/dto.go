@@ -42,12 +42,14 @@ type cancelarOcurrenciaRequest struct {
 	SoloEsta bool   `json:"soloEsta"`
 }
 
-type bloquearEvaluacionRequest struct {
+type bloquearRequest struct {
 	EquipoIDs  []string `json:"equipoIds"`
 	Fecha      string   `json:"fecha"`
 	HoraInicio string   `json:"horaInicio"`
 	HoraFin    string   `json:"horaFin"`
-	Motivo     string   `json:"motivo"`
+	// Motivo es obligatorio: el bloqueo cancela las clases de otros, y desde
+	// la 019 se guarda en cada bloqueo, no solo en el aviso de cancelación.
+	Motivo string `json:"motivo"`
 }
 
 // ── Responses ───────────────────────────────────────────────────────────
@@ -77,20 +79,23 @@ func toReservaGrupoResponse(g *domain.ReservaGrupo) reservaGrupoResponse {
 }
 
 type reservaResponse struct {
-	ID                    string     `json:"id"`
-	ReservaGrupoID        *string    `json:"reservaGrupoId,omitempty"`
-	EquipoID              string     `json:"equipoId"`
-	MateriaID             *string    `json:"materiaId,omitempty"`
-	NombreDocenteSnapshot *string    `json:"nombreDocenteSnapshot,omitempty"`
-	Fecha                 string     `json:"fecha"`
-	HoraInicio            string     `json:"horaInicio"`
-	HoraFin               string     `json:"horaFin"`
-	Estado                string     `json:"estado"`
-	Tipo                  string     `json:"tipo"`
-	CreadoPor             *string    `json:"creadoPor,omitempty"`
-	CanceladoPor          *string    `json:"canceladoPor,omitempty"`
-	MotivoCancelacion     *string    `json:"motivoCancelacion,omitempty"`
-	CanceladaEn           *time.Time `json:"canceladaEn,omitempty"`
+	ID                    string  `json:"id"`
+	ReservaGrupoID        *string `json:"reservaGrupoId,omitempty"`
+	EquipoID              string  `json:"equipoId"`
+	MateriaID             *string `json:"materiaId,omitempty"`
+	NombreDocenteSnapshot *string `json:"nombreDocenteSnapshot,omitempty"`
+	Fecha                 string  `json:"fecha"`
+	HoraInicio            string  `json:"horaInicio"`
+	HoraFin               string  `json:"horaFin"`
+	Estado                string  `json:"estado"`
+	Tipo                  string  `json:"tipo"`
+	// MotivoBloqueo solo viene en los BLOQUEO — una reserva normal ya dice
+	// para qué es por su materia.
+	MotivoBloqueo     string     `json:"motivoBloqueo,omitempty"`
+	CreadoPor         *string    `json:"creadoPor,omitempty"`
+	CanceladoPor      *string    `json:"canceladoPor,omitempty"`
+	MotivoCancelacion *string    `json:"motivoCancelacion,omitempty"`
+	CanceladaEn       *time.Time `json:"canceladaEn,omitempty"`
 }
 
 func toReservaResponse(r *domain.Reserva) reservaResponse {
@@ -102,6 +107,7 @@ func toReservaResponse(r *domain.Reserva) reservaResponse {
 		HoraFin:               formatHora(r.HoraFin),
 		Estado:                string(r.Estado),
 		Tipo:                  string(r.Tipo),
+		MotivoBloqueo:         r.MotivoBloqueo,
 		CreadoPor:             r.CreadoPor,
 		CanceladoPor:          r.CanceladoPor,
 		MotivoCancelacion:     r.MotivoCancelacion,
@@ -156,18 +162,18 @@ type cancelarOcurrenciaResponse struct {
 	ReservasCanceladas int `json:"reservasCanceladas"`
 }
 
-type bloquearEvaluacionResponse struct {
+type bloquearResponse struct {
 	Bloqueos            []reservaResponse `json:"bloqueos"`
 	ReservasCanceladas  int               `json:"reservasCanceladas"`
 	DocentesNotificados int               `json:"docentesNotificados"`
 }
 
-func toBloquearEvaluacionResponse(res *application.ResultadoBloqueoEvaluacion) bloquearEvaluacionResponse {
+func toBloquearResponse(res *application.ResultadoBloqueo) bloquearResponse {
 	bloqueos := make([]reservaResponse, len(res.Bloqueos))
 	for i, b := range res.Bloqueos {
 		bloqueos[i] = toReservaResponse(b)
 	}
-	return bloquearEvaluacionResponse{
+	return bloquearResponse{
 		Bloqueos: bloqueos, ReservasCanceladas: res.ReservasCanceladas, DocentesNotificados: res.DocentesNotificados,
 	}
 }
@@ -178,8 +184,9 @@ type listarReservasResponse struct {
 }
 
 // bloqueCalendarioResponse es lo que RF-04.4 pide mostrar de cada bloque
-// ocupado: horario, docente y materia. Para un bloqueo por evaluación
-// estatal materia/curso vienen vacíos y el tipo lo aclara.
+// ocupado: horario, docente y materia. En un bloqueo administrativo
+// materia/curso vienen vacíos, y en su lugar va el motivo — quien mira el
+// calendario y encuentra el rato ocupado necesita saber por qué.
 type bloqueCalendarioResponse struct {
 	ReservaID     string `json:"reservaId"`
 	Fecha         string `json:"fecha"`
@@ -190,6 +197,7 @@ type bloqueCalendarioResponse struct {
 	Docente       string `json:"docente"`
 	MateriaNombre string `json:"materiaNombre,omitempty"`
 	CursoNombre   string `json:"cursoNombre,omitempty"`
+	MotivoBloqueo string `json:"motivoBloqueo,omitempty"`
 }
 
 type calendarioEquipoResponse struct {
@@ -210,6 +218,7 @@ func toBloqueCalendarioResponse(b application.BloqueCalendario) bloqueCalendario
 		Docente:       deref(b.Reserva.NombreDocenteSnapshot),
 		MateriaNombre: b.MateriaNombre,
 		CursoNombre:   b.CursoNombre,
+		MotivoBloqueo: b.Reserva.MotivoBloqueo,
 	}
 }
 

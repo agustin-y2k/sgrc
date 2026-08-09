@@ -197,7 +197,7 @@ describe("PanelDelLaboratorio", () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
       paginada([
         reserva({
-          tipo: "EVALUACION_ESTATAL",
+          tipo: "BLOQUEO",
           materiaNombre: undefined,
           nombreDocenteSnapshot: undefined,
         }),

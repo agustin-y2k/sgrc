@@ -60,7 +60,7 @@ const ENLACES_ADMIN: Enlace[] = [
   { a: "/admin/reportes", texto: "Reportes" },
   // RF-04.7. Último: es lo que menos se usa y lo que más rompe si se entra
   // sin querer.
-  { a: "/admin/bloqueo-evaluacion", texto: "Bloqueo por evaluación" },
+  { a: "/admin/bloquear-equipos", texto: "Bloquear equipos" },
 ]
 
 function claseDeEnlace({ isActive }: { isActive: boolean }): string {
