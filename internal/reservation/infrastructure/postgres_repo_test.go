@@ -885,14 +885,14 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *tes
 
 	// Un bloqueo de evaluación del mismo año, en otra franja para no chocar
 	// con la constraint EXCLUDE.
-	bloqueo, _ := domain.NuevaReservaEvaluacion(NuevoID(), equipo, nil, fecha, 14*time.Hour, 16*time.Hour, ahora)
+	bloqueo, _ := domain.NuevaReservaBloqueo(NuevoID(), equipo, nil, fecha, 14*time.Hour, 16*time.Hour, "Jornada docente", ahora)
 	if err := repo.CrearReserva(ctx, bloqueo); err != nil {
 		t.Fatalf("no se pudo crear el bloqueo: %v", err)
 	}
 
 	// Un bloqueo de OTRO año — no debe tocarse.
-	bloqueoOtroAnio, _ := domain.NuevaReservaEvaluacion(NuevoID(), equipo,
-		nil, time.Date(anio+1, 3, 9, 0, 0, 0, 0, time.UTC), 14*time.Hour, 16*time.Hour, ahora)
+	bloqueoOtroAnio, _ := domain.NuevaReservaBloqueo(NuevoID(), equipo,
+		nil, time.Date(anio+1, 3, 9, 0, 0, 0, 0, time.UTC), 14*time.Hour, 16*time.Hour, "Jornada docente", ahora)
 	if err := repo.CrearReserva(ctx, bloqueoOtroAnio); err != nil {
 		t.Fatalf("no se pudo crear el bloqueo de otro año: %v", err)
 	}
@@ -916,7 +916,7 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *tes
 
 	var bloqueosRestantes int
 	if err := pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM reserva WHERE tipo = 'EVALUACION_ESTATAL'`).Scan(&bloqueosRestantes); err != nil {
+		`SELECT COUNT(*) FROM reserva WHERE tipo = 'BLOQUEO'`).Scan(&bloqueosRestantes); err != nil {
 		t.Fatal(err)
 	}
 	if bloqueosRestantes != 1 {
@@ -1461,5 +1461,83 @@ func TestPostgresRepo_ListarReservas_LaEquipoDeCarroSigueTrayendoTodo(t *testing
 	if filas[0].Etiqueta != "PC 1" || filas[0].Identificador != 1 || filas[0].CarroNombre == "" {
 		t.Errorf("esperaba PC 1 con carro, obtuve %q / %d / %q",
 			filas[0].Etiqueta, filas[0].Identificador, filas[0].CarroNombre)
+	}
+}
+
+// TestPostgresRepo_Bloqueo_ElMotivoVuelveDeLaBase (019)
+//
+// El motivo del bloqueo vive en la fila del bloqueo y no solo en el texto de
+// las cancelaciones que disparó. Sin eso, un bloqueo que no pisó ninguna
+// reserva —lo habitual— queda como un rato ocupado sin explicación, y al
+// archivar el ciclo el motivo se perdía del todo con la reserva cancelada.
+func TestPostgresRepo_Bloqueo_ElMotivoVuelveDeLaBase(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	ahora := time.Now().UTC()
+
+	bloqueo, err := domain.NuevaReservaBloqueo(NuevoID(), equipoID, nil, fecha,
+		8*time.Hour, 10*time.Hour, "Jornada docente", ahora)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, bloqueo); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	vuelto, err := repo.BuscarReservaPorID(ctx, bloqueo.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if vuelto.Tipo != domain.TipoBloqueo {
+		t.Errorf("tipo = %q, esperaba BLOQUEO", vuelto.Tipo)
+	}
+	if vuelto.MotivoBloqueo != "Jornada docente" {
+		t.Errorf("motivo = %q, esperaba el que se guardó", vuelto.MotivoBloqueo)
+	}
+
+	// Y en el calendario del equipo, que es donde alguien va a mirar por qué
+	// no puede reservar esa franja.
+	bloques, err := repo.CalendarioDeEquipo(ctx, equipoID, fecha, fecha)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(bloques) != 1 || bloques[0].Reserva.MotivoBloqueo != "Jornada docente" {
+		t.Errorf("el calendario debería traer el motivo: %+v", bloques)
+	}
+}
+
+// El CHECK de la 019 no deja que exista un bloqueo sin motivo, ni siquiera
+// escribiendo directo en la base. La regla vale para el sistema entero y no
+// solo para el camino que pasa por el dominio.
+func TestPostgresRepo_Bloqueo_SinMotivoLoRechazaLaBase(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	ctx := context.Background()
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO reserva (id, equipo_id, fecha, hora_inicio, hora_fin, estado, tipo)
+		VALUES ($1, $2, DATE '2026-03-09', TIME '08:00', TIME '10:00', 'CONFIRMADA', 'BLOQUEO')
+	`, NuevoID(), equipoID)
+	if err == nil {
+		t.Fatal("la base debería rechazar un bloqueo sin motivo")
+	}
+}
+
+// Y al revés: una reserva normal no lleva motivo de bloqueo. Un segundo lugar
+// donde escribir para qué es la clase se desincroniza de la materia solo.
+func TestPostgresRepo_ReservaNormal_NoAceptaMotivoDeBloqueo(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	ctx := context.Background()
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO reserva (id, equipo_id, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo)
+		VALUES ($1, $2, DATE '2026-03-09', TIME '08:00', TIME '10:00', 'CONFIRMADA', 'NORMAL', 'algo')
+	`, NuevoID(), equipoID)
+	if err == nil {
+		t.Fatal("la base debería rechazar una reserva normal con motivo de bloqueo")
 	}
 }

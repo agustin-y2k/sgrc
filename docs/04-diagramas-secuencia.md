@@ -181,7 +181,7 @@ sequenceDiagram
     FE-->>U: ✅ Cancelada(s)
 ```
 
-## 5. Bloqueo de equipos para evaluación estatal
+## 5. Bloqueo administrativo de equipos
 
 ```mermaid
 sequenceDiagram
@@ -193,15 +193,15 @@ sequenceDiagram
     participant DB as sgrc_db
 
     ADM->>FE: Selecciona carro, rango fecha/hora (definido)
-    FE->>RES: POST /api/reservations/bloqueo-evaluacion (JWT)
+    FE->>RES: POST /api/reservation/bloqueos (JWT)
     RES->>DB: SELECT equipos del carro
     RES->>DB: SELECT reserva CONFIRMADA en conflicto (solo esas equipos, ese rango exacto)
     DB-->>RES: [reserva puntuales con reserva_grupo_id, docenteId]
     loop por cada reserva en conflicto
-        RES->>DB: UPDATE reserva SET estado=CANCELADA, motivo='Evaluación estatal'
+        RES->>DB: UPDATE reserva SET estado=CANCELADA, motivo_cancelacion='los equipos quedaron bloqueados: {motivo}'
         RES->>DB: Recalcular estado de reserva_grupo (PARCIALMENTE_CANCELADA o CANCELADA)
     end
-    RES->>DB: INSERT reserva tipo EVALUACION_ESTATAL (sin materia_id ni reserva_grupo_id) por cada equipo del carro
+    RES->>DB: INSERT reserva tipo BLOQUEO con motivo_bloqueo (sin materia_id ni reserva_grupo_id) por cada equipo
     RES->>EB: Publish("reserva.cancelada", { usuarioId, reservaId, motivo }) por reserva
     EB->>NOTIF: Subscribe handler ejecuta en la misma goroutine/worker
     NOTIF->>DB: INSERT notificación por docente, detallando qué equipos puntuales se cancelaron
@@ -246,7 +246,7 @@ sequenceDiagram
     FE-->>ADM: ✅ Equipo actualizado. N reservas canceladas y docentes notificados.
 ```
 
-> Duración **indefinida** (a diferencia del bloqueo de evaluación, que tiene rango definido): se cancelan todas las reservas futuras de ese equipo puntual, sin fecha de corte. Cuando el equipo vuelve a `DISPONIBLE`, nada se restaura automáticamente.
+> Duración **indefinida** (a diferencia del bloqueo administrativo, que tiene rango definido): se cancelan todas las reservas futuras de ese equipo puntual, sin fecha de corte. Cuando el equipo vuelve a `DISPONIBLE`, nada se restaura automáticamente.
 
 ## 6b. Dar de baja un equipo del inventario (soft delete)
 

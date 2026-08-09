@@ -1,7 +1,7 @@
 import type { PaginacionMeta } from "@/components/Paginador"
 import { apiFetch } from "@/lib/api-client"
 import type {
-  BloquearEvaluacionRequest,
+  BloquearRequest,
   CrearReservaRecurrenteRequest,
   CrearReservaRequest,
   MateriaReservable,
@@ -9,7 +9,7 @@ import type {
   Prestamo,
   Reserva,
   ReservaDetallada,
-  ResultadoBloqueoEvaluacion,
+  ResultadoBloqueo,
   ResultadoDevolucion,
   ResultadoEntrega,
 } from "@/features/reservas/types"
@@ -85,7 +85,7 @@ export function cancelarReserva(reservaId: string, motivo: string) {
 }
 
 /**
- * RF-04.7 — bloquea equipos para una evaluación estatal y cancela en cascada
+ * RF-04.7 — toma equipos para otra cosa y cancela en cascada
  * las reservas que se solapen.
  *
  * Es destructivo e irreversible: las reservas canceladas no se restauran
@@ -94,8 +94,8 @@ export function cancelarReserva(reservaId: string, motivo: string) {
  *
  * Rechaza con 409 si alguna Equipo no está DISPONIBLE o está dada de baja.
  */
-export function bloquearParaEvaluacion(req: BloquearEvaluacionRequest) {
-  return apiFetch<ResultadoBloqueoEvaluacion>("/api/reservation/bloqueos-evaluacion", {
+export function bloquearEquipos(req: BloquearRequest) {
+  return apiFetch<ResultadoBloqueo>("/api/reservation/bloqueos", {
     method: "POST",
     body: req,
   })

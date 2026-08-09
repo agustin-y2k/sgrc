@@ -49,8 +49,9 @@ const calendarioMock: CalendarioEquipo = {
       horaInicio: "14:00",
       horaFin: "16:00",
       estado: "CONFIRMADA",
-      tipo: "EVALUACION_ESTATAL",
+      tipo: "BLOQUEO",
       docente: "",
+      motivoBloqueo: "Jornada docente",
     },
   ],
 }
@@ -80,11 +81,15 @@ describe("CalendarioEquipoPage", () => {
 
   // Un bloqueo por evaluación estatal no tiene materia ni docente: se
   // muestra distinto en vez de dejar campos vacíos.
-  it("distingue el bloqueo por evaluación estatal", async () => {
+  it("un bloqueo se rotula con su motivo, no con una categoría fija", async () => {
     vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
     renderCalendario()
 
-    expect(await screen.findByText("Evaluación estatal")).toBeInTheDocument()
+    // Lo que trae a alguien al calendario es "¿por qué no puedo
+    // reservar acá?". El motivo lo responde; "evaluación estatal" mentía
+    // cada vez que el bloqueo era por otra cosa (019).
+    expect(await screen.findByText("Jornada docente")).toBeInTheDocument()
+    expect(screen.queryByText("Evaluación estatal")).not.toBeInTheDocument()
   })
 
   it("pide el calendario de la semana en curso, de lunes a sábado", async () => {

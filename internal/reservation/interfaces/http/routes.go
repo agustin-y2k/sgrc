@@ -30,7 +30,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	reservation.Patch("/reservas/:id/equipo", autenticado, h.CambiarEquipoDeReserva)
 	reservation.Post("/grupos/:id/cancelar", autenticado, h.CancelarOcurrenciaRecurrente)
 	reservation.Get("/grupos/:id", autenticado, h.ObtenerReservaGrupo)
-	reservation.Post("/bloqueos-evaluacion", autenticado, soloAdmin, h.BloquearParaEvaluacion)
+	reservation.Post("/bloqueos", autenticado, soloAdmin, h.BloquearEquipos)
 
 	// RF-04.4: el calendario de una PC lo puede ver cualquier usuario
 	// autenticado. Vive bajo /api/reservation aunque conceptualmente sea

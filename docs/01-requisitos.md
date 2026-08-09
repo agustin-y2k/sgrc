@@ -31,8 +31,8 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 - **Materia**: asignatura propia de un curso específico (no catálogo: 1°A tiene SU Matemáticas).
 - **DocenteMateria**: vínculo informativo docente↔materia con rol TITULAR/SUPLENTE. Sin incumbencia en permisos del sistema.
 - **ReservaGrupo**: la reserva tal como la hace un docente — una materia, una fecha, un horario. Un docente selecciona varias PCs de una lista (tildando casillas) hasta juntar la cantidad que necesita; esa operación completa es un `ReservaGrupo`.
-- **Reserva**: cada PC individual dentro de un `ReservaGrupo`. Las cancelaciones en cascada (evaluación estatal, PC fuera de servicio) actúan sobre `Reserva` puntuales, nunca sobre el grupo completo salvo que terminen afectando a todas sus PCs.
-- **Bloqueo de evaluación estatal**: el admin bloquea PCs de un carro completo en un **rango horario definido**, cancelando automáticamente las `Reserva` en conflicto y notificando a los docentes afectados.
+- **Reserva**: cada PC individual dentro de un `ReservaGrupo`. Las cancelaciones en cascada (bloqueo administrativo, PC fuera de servicio) actúan sobre `Reserva` puntuales, nunca sobre el grupo completo salvo que terminen afectando a todas sus PCs.
+- **Bloqueo administrativo de equipos**: el admin bloquea PCs de un carro completo en un **rango horario definido**, cancelando automáticamente las `Reserva` en conflicto y notificando a los docentes afectados.
 - **Horario de disponibilidad (Admin)**: patrón semanal recurrente que cada Admin carga para indicar cuándo está presente en el laboratorio. Puramente informativo — no afecta permisos ni funcionalidad.
 
 ## 5. Requerimientos funcionales
@@ -113,7 +113,7 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 
 ### RF-04 — Reservas
 
-> **Semana lectiva: lunes a viernes.** El sistema rechaza reservar un sábado o un domingo, tanto puntual (RF-04.2) como recurrente (RF-04.5) — el selector de día de una recurrencia solo ofrece de lunes a viernes. Los **feriados y el receso de invierno no se modelan**: si alguien reserva un feriado, se cancela a mano. Los bloqueos por evaluación estatal (RF-04.7) quedan exceptuados de esta restricción: son excepcionales por naturaleza y es el Admin quien decide cuándo.
+> **Semana lectiva: lunes a viernes.** El sistema rechaza reservar un sábado o un domingo, tanto puntual (RF-04.2) como recurrente (RF-04.5) — el selector de día de una recurrencia solo ofrece de lunes a viernes. Los **feriados y el receso de invierno no se modelan**: si alguien reserva un feriado, se cancela a mano. Los bloqueos administrativos (RF-04.7) quedan exceptuados de esta restricción: son excepcionales por naturaleza y es el Admin quien decide cuándo.
 
 - RF-04.1: Pueden reservar para una materia: docentes asignados a ella (vía DocenteMateria) y cualquier `ADMIN`, siempre que la materia **no esté archivada** (`archivado=false`) — una materia de un ciclo ya cerrado no admite reservas nuevas aunque el registro se conserve.
 - RF-04.2: Un docente reserva **una o varias PCs en una sola operación**: selecciona PCs de una lista (como tildar casillas) hasta juntar la cantidad que necesita para su clase — la lista no está restringida a un solo carro, puede combinar PCs de carros distintos en la misma reserva. El sistema crea un `ReservaGrupo` (materia, fecha, horario) con una `Reserva` por cada PC elegida, sin importar de qué carro venga cada una.
@@ -121,21 +121,25 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 - RF-04.4: Cualquier usuario autenticado puede ver el calendario completo de una PC (bloques con nombre del docente, materia y horario).
 - RF-04.5: Un `ReservaGrupo` puede ser recurrente (mismo día/horario/conjunto de PCs en un rango de fechas). El sistema valida todas las ocurrencias (todas las fechas × todas las PCs elegidas) antes de crear alguna. Si hay conflicto, informa cuáles son y no crea ninguna.
 - RF-04.6: Al cancelar un `ReservaGrupo` recurrente, el usuario elige: "solo esta fecha" o "esta fecha y todas las siguientes" — aplicado a todas las PCs del grupo en esa fecha (o rango).
-- RF-04.7: `ADMIN` puede bloquear PCs de cualquier carro para evaluación estatal en un **rango horario definido** (fecha + hora inicio + hora fin conocidos de antemano). Las `Reserva` puntuales en conflicto se cancelan automáticamente — el `ReservaGrupo` al que pertenecían pasa a `PARCIALMENTE_CANCELADA` si conserva otras PCs confirmadas, o a `CANCELADA` si todas sus PCs quedaron afectadas. Los docentes reciben notificación interna detallando qué PCs puntuales se cancelaron.
+- RF-04.7: `ADMIN` puede **bloquear** equipos de cualquier carro en un **rango horario definido** (fecha + hora inicio + hora fin conocidos de antemano), indicando **por qué**. Las `Reserva` puntuales en conflicto se cancelan automáticamente — el `ReservaGrupo` al que pertenecían pasa a `PARCIALMENTE_CANCELADA` si conserva otras PCs confirmadas, o a `CANCELADA` si todas sus PCs quedaron afectadas. Los docentes reciben notificación interna detallando qué PCs puntuales se cancelaron.
+  - **El motivo es texto libre y obligatorio.** El sistema no puede prever por qué una institución se toma el laboratorio: una evaluación, una jornada docente, una capacitación, una obra en el aula, un acto. Lo que esos casos tienen en común no es la evaluación —el tipo se llamó `EVALUACION_ESTATAL` hasta la migración 019 y era un caso concreto usado como categoría—, sino que alguien con autoridad decidió que ese rato el equipo se usa para otra cosa.
+  - Se aparta del criterio de otros textos libres del sistema (el tipo de equipo, la categoría de falla) en que **acá no puede quedar vacío**. La diferencia es a quién le cuesta: una falla sin clasificar es trabajo pendiente de quien la reporta, mientras que un bloqueo sin motivo le cancela la clase a otra persona. Quien tiene la autoridad para eso puede escribir para qué.
+  - El motivo **se guarda en el bloqueo**, no solo en el aviso de cancelación. Un bloqueo que no pisó ninguna reserva —lo habitual, porque se suele avisar con tiempo— tiene que poder explicarse igual: aparece en el calendario del equipo, en "Mis reservas" y en el mostrador, en el lugar donde una clase muestra su materia. Antes vivía únicamente en el texto de las reservas canceladas, así que se perdía del todo al archivar el ciclo (RF-02.4).
+  - Va **tal cual lo escribió el Admin**, sin envolverlo en ninguna categoría: si escribió "jornada docente", eso es lo que lee el docente al que le cancelaron la clase.
 - RF-04.8: Al cancelar **manualmente** una `Reserva` puntual ajena, el admin ingresa motivo obligatorio (texto libre) y el docente recibe notificación interna. Si esa era la única PC confirmada del grupo, el grupo pasa a `CANCELADA`; si no, a `PARCIALMENTE_CANCELADA`.
 - RF-04.9: Historial de reservas: dentro de un ciclo lectivo activo, nunca se eliminan — se marcan `CANCELADA` o `FINALIZADA` (a nivel `Reserva` y `ReservaGrupo`). Se eliminan físicamente únicamente cuando se archiva el ciclo lectivo de su materia (ver RF-02.4), y solo después de calcular el snapshot histórico agregado.
 - RF-04.10: Toda operación de lote —reservar, reservar en serie, bloquear para evaluación, entregar, recibir— tiene un **tope de 200 equipos**. No sale de ninguna regla de la escuela: el pedido lo arma el cliente, y sin tope mandar diez mil identificadores hace que el servidor intente diez mil filas en una transacción. El valor está muy por encima de cualquier inventario escolar razonable —el pedido legítimo más grande es bloquear un carro entero— así que frena el pedido absurdo sin poder molestar a uno legítimo. La disponibilidad de todo el lote **se valida en una sola consulta**, no una por equipo: con un carro grande, preguntar de a uno eran decenas de idas a la base antes de escribir la primera fila.
 
 > **Nota — tres mecanismos de cancelación, todos a nivel de PC puntual, no confundir:**
 > 1. **Cancelación manual de una PC puntual** (RF-04.8): el admin elige una `Reserva` específica y tipea un motivo obligatorio.
-> 2. **Cascada por bloqueo de evaluación estatal** (RF-04.7): rango horario **definido** de antemano. Motivo generado por el sistema, no requiere texto libre. Solo afecta las PCs y fechas dentro de ese rango — el resto de una recurrencia sigue viva.
+> 2. **Cascada por bloqueo administrativo** (RF-04.7): rango horario **definido** de antemano. Motivo generado por el sistema, no requiere texto libre. Solo afecta las PCs y fechas dentro de ese rango — el resto de una recurrencia sigue viva.
 > 3. **Cascada por PC individual fuera de servicio o dada de baja** (RF-03.8/RF-03.9): duración **indefinida** (no se sabe cuándo, ni si, la PC vuelve a estar disponible). Cancela todas las reservas futuras de esa PC puntual, sin fecha de corte, y no las restaura automáticamente al volver a `DISPONIBLE`.
 >
 > En los tres casos, la cancelación es siempre a nivel de una `Reserva` (PC + fecha puntual) — el `ReservaGrupo` solo se marca `CANCELADA` como consecuencia de que **todas** sus PCs quedaron afectadas, nunca como acción directa.
 
 ### RF-05 — Notificaciones internas
 - RF-05.1: Notificación cuando una `Reserva` (PC puntual) propia es cancelada manualmente por un admin (con motivo tipeado) — ver RF-04.8.
-- RF-05.2: Notificación cuando una o más `Reserva` propias son canceladas por bloqueo de evaluación estatal — ver RF-04.7. El mensaje detalla qué PC(s) puntual(es) se vieron afectadas, no "toda tu reserva" si el grupo sigue parcialmente vigente.
+- RF-05.2: Notificación cuando una o más `Reserva` propias son canceladas por bloqueo administrativo — ver RF-04.7. El mensaje detalla qué PC(s) puntual(es) se vieron afectadas, no "toda tu reserva" si el grupo sigue parcialmente vigente.
 - RF-05.3: Notificación cuando una `Reserva` propia es cancelada porque esa PC individual pasó a `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` o fue dada de baja del inventario — ver RF-03.8/RF-03.9.
 
 > **Un aviso por operación, no por fila.** Las cancelaciones en cascada
@@ -220,9 +224,9 @@ Ninguno de los tres siguientes depende del ciclo lectivo: el parque de equipos y
 
 > **Ninguno de estos avisos depende de que el barrido corra a una hora exacta.** Cada uno deja su marca en la fila, así que correrlo cada cinco minutos, reiniciar el contenedor o estar caído dos horas cambia *cuándo* sale el aviso, nunca *cuántas veces*.
 
-> **El barrido entero ignora los bloqueos por evaluación estatal (RF-04.7).** No los retira nadie —los crea un `ADMIN` para sacar máquinas de circulación—, así que no hay a quién recordarle ni a quién avisarle, y sobre todo **no se liberan**: hacerlo dejaría que otro docente reserve una computadora que está en una mesa de examen, con el examen en curso.
+> **El barrido entero ignora los bloqueos administrativos (RF-04.7).** No los retira nadie —los crea un `ADMIN` para sacar máquinas de circulación—, así que no hay a quién recordarle ni a quién avisarle, y sobre todo **no se liberan**: hacerlo dejaría que otro docente reserve una computadora que está en una mesa de examen, con el examen en curso.
 
-> **Un bloqueo por evaluación estatal (RF-04.7) no tiene docente**, así que no puede entregarse sin decir a nombre de quién: se informa por PC —no corta el lote— y con un nombre escrito a mano sí se entrega. Alguien tiene que retirar las máquinas de una mesa de examen.
+> **Un bloqueo administrativo (RF-04.7) no tiene docente**, así que no puede entregarse sin decir a nombre de quién: se informa por PC —no corta el lote— y con un nombre escrito a mano sí se entrega. Alguien tiene que retirar las máquinas de una mesa de examen.
 
 > **Se puede entregar una PC en `EN_MANTENIMIENTO` o `FUERA_DE_SERVICIO`**, a diferencia de reservarla: llevarle una máquina rota al técnico es justamente un préstamo, y prohibirlo obligaría a sacarla del inventario para poder anotarlo. Lo único que se rechaza es entregar una PC **dada de baja**.
 

@@ -202,7 +202,7 @@ func (r *PostgresRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID st
 			-- usada. Se los ata al ciclo por el año de la fecha, que es lo
 			-- único que los relaciona con un ciclo lectivo.
 			OR (
-				r.tipo = 'EVALUACION_ESTATAL'
+				r.tipo = 'BLOQUEO'
 				AND EXTRACT(YEAR FROM r.fecha) = (SELECT anio FROM ciclo_lectivo WHERE id = $1)
 			)
 		)

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event"
 
 import * as inventoryApi from "@/features/inventory/api"
 import type { Carro, Equipo } from "@/features/inventory/types"
-import { BloqueoEvaluacionPage } from "@/features/reservas/BloqueoEvaluacionPage"
+import { BloquearEquiposPage } from "@/features/reservas/BloquearEquiposPage"
 import * as reservasApi from "@/features/reservas/api"
 import type { EquipoDisponible } from "@/features/reservas/types"
 import { ApiError } from "@/lib/api-client"
@@ -51,22 +51,25 @@ function renderPagina() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
-      <BloqueoEvaluacionPage />
+      <BloquearEquiposPage />
     </QueryClientProvider>
   )
 }
 
 /** Completa fecha, horario y motivo, que es lo que habilita el botón. */
-async function completarFranja(user: ReturnType<typeof userEvent.setup>) {
+async function completarFranja(
+  user: ReturnType<typeof userEvent.setup>,
+  motivo = "Aprender 2026"
+) {
   await user.type(await screen.findByLabelText("Fecha"), FECHA)
   await user.selectOptions(screen.getByLabelText("Hora de inicio: hora"), "08")
   await user.selectOptions(screen.getByLabelText("Hora de inicio: minutos"), "00")
   await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "10")
   await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
-  await user.type(screen.getByLabelText("Motivo"), "Aprender 2026")
+  await user.type(screen.getByLabelText("¿Por qué se bloquean?"), motivo)
 }
 
-describe("BloqueoEvaluacionPage", () => {
+describe("BloquearEquiposPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({ data: [CARRO] })
@@ -77,7 +80,7 @@ describe("BloqueoEvaluacionPage", () => {
     vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
       data: [disponible("pc1", 1), disponible("pc2", 2)],
     })
-    vi.mocked(reservasApi.bloquearParaEvaluacion).mockResolvedValue({
+    vi.mocked(reservasApi.bloquearEquipos).mockResolvedValue({
       bloqueos: [],
       reservasCanceladas: 0,
       docentesNotificados: 0,
@@ -189,7 +192,7 @@ describe("BloqueoEvaluacionPage", () => {
     await user.click(screen.getByRole("button", { name: "Revisar bloqueo" }))
 
     await screen.findByRole("button", { name: "Confirmar bloqueo" })
-    expect(reservasApi.bloquearParaEvaluacion).not.toHaveBeenCalled()
+    expect(reservasApi.bloquearEquipos).not.toHaveBeenCalled()
   })
 
   it("bloquea los equipos elegidas al confirmar", async () => {
@@ -203,7 +206,7 @@ describe("BloqueoEvaluacionPage", () => {
     await user.click(screen.getByRole("button", { name: "Confirmar bloqueo" }))
 
     await waitFor(() => {
-      expect(reservasApi.bloquearParaEvaluacion).toHaveBeenCalledWith({
+      expect(reservasApi.bloquearEquipos).toHaveBeenCalledWith({
         equipoIds: ["pc1", "pc2"],
         fecha: FECHA,
         horaInicio: "08:00",
@@ -230,7 +233,7 @@ describe("BloqueoEvaluacionPage", () => {
 
     expect(screen.getByRole("button", { name: "Revisar bloqueo" })).toBeDisabled()
 
-    await user.type(screen.getByLabelText("Motivo"), "Aprender 2026")
+    await user.type(screen.getByLabelText("¿Por qué se bloquean?"), "Aprender 2026")
     expect(screen.getByRole("button", { name: "Revisar bloqueo" })).toBeEnabled()
   })
 
@@ -258,7 +261,7 @@ describe("BloqueoEvaluacionPage", () => {
   })
 
   it("informa cuántas reservas se cancelaron y a cuántos docentes se avisó", async () => {
-    vi.mocked(reservasApi.bloquearParaEvaluacion).mockResolvedValue({
+    vi.mocked(reservasApi.bloquearEquipos).mockResolvedValue({
       bloqueos: [],
       reservasCanceladas: 3,
       docentesNotificados: 2,
@@ -279,7 +282,7 @@ describe("BloqueoEvaluacionPage", () => {
   })
 
   it("muestra el error del backend", async () => {
-    vi.mocked(reservasApi.bloquearParaEvaluacion).mockRejectedValue(
+    vi.mocked(reservasApi.bloquearEquipos).mockRejectedValue(
       new ApiError(409, "el equipo no está disponible para reservar")
     )
     const user = userEvent.setup()
@@ -293,5 +296,33 @@ describe("BloqueoEvaluacionPage", () => {
     expect(
       await screen.findByText("el equipo no está disponible para reservar")
     ).toBeInTheDocument()
+  })
+
+  /**
+   * El motivo no es solo el texto del aviso de cancelación: queda guardado en
+   * el bloqueo (019). Es lo que permite explicar un rato ocupado que no pisó
+   * ninguna reserva, que es el caso más común porque se suele avisar con
+   * tiempo.
+   */
+  it("manda el motivo tal como se escribió, sin categoría fija", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await completarFranja(user, "Jornada docente")
+    await user.click(await screen.findByRole("checkbox", { name: /^PC 1/ }))
+    await user.click(screen.getByRole("button", { name: /Revisar/ }))
+    await user.click(await screen.findByRole("button", { name: /Confirmar/ }))
+
+    expect(reservasApi.bloquearEquipos).toHaveBeenCalledWith(
+      expect.objectContaining({ motivo: "Jornada docente" })
+    )
+  })
+
+  // La pantalla no puede sugerir que el bloqueo es siempre una evaluación:
+  // el sistema no sabe de qué se trata y una escuela que bloquea por una
+  // jornada leería algo que no es.
+  it("no dice que el bloqueo sea una evaluación", async () => {
+    renderPagina()
+    expect(await screen.findByText("Bloquear equipos")).toBeInTheDocument()
+    expect(screen.queryByText(/evaluación estatal/i)).not.toBeInTheDocument()
   })
 })

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -44,7 +45,7 @@ func TestReserva_TodasLasCombinaciones(t *testing.T) {
 }
 
 func TestParseTipoReserva_Validos(t *testing.T) {
-	casos := map[string]TipoReserva{"NORMAL": TipoNormal, "EVALUACION_ESTATAL": TipoEvaluacionEstatal}
+	casos := map[string]TipoReserva{"NORMAL": TipoNormal, "BLOQUEO": TipoBloqueo}
 	for entrada, esperado := range casos {
 		got, err := ParseTipoReserva(entrada)
 		if err != nil || got != esperado {
@@ -81,13 +82,13 @@ func TestNuevaReservaNormal_RangoInvalido_Error(t *testing.T) {
 	}
 }
 
-func TestNuevaReservaEvaluacion_OK(t *testing.T) {
+func TestNuevaReservaBloqueo_OK(t *testing.T) {
 	creadoPor := "admin1"
-	r, err := NuevaReservaEvaluacion("id1", "pc1", &creadoPor, time.Now(), 10*time.Hour, 12*time.Hour, time.Now())
+	r, err := NuevaReservaBloqueo("id1", "pc1", &creadoPor, time.Now(), 10*time.Hour, 12*time.Hour, "Jornada docente", time.Now())
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if r.Tipo != TipoEvaluacionEstatal {
+	if r.Tipo != TipoBloqueo {
 		t.Errorf("tipo incorrecto: %s", r.Tipo)
 	}
 	if r.ReservaGrupoID != nil || r.MateriaID != nil {
@@ -96,7 +97,7 @@ func TestNuevaReservaEvaluacion_OK(t *testing.T) {
 }
 
 func TestCancelar_OK(t *testing.T) {
-	r, _ := NuevaReservaEvaluacion("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, time.Now())
+	r, _ := NuevaReservaBloqueo("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, "Jornada docente", time.Now())
 	canceladoPor := "admin1"
 	ahora := time.Now()
 
@@ -117,7 +118,7 @@ func TestCancelar_OK(t *testing.T) {
 }
 
 func TestCancelar_YaCancelada_Error(t *testing.T) {
-	r, _ := NuevaReservaEvaluacion("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, time.Now())
+	r, _ := NuevaReservaBloqueo("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, "Jornada docente", time.Now())
 	_ = r.Cancelar(nil, "primera", time.Now())
 
 	err := r.Cancelar(nil, "segunda", time.Now())
@@ -128,7 +129,7 @@ func TestCancelar_YaCancelada_Error(t *testing.T) {
 }
 
 func TestFinalizar_OK(t *testing.T) {
-	r, _ := NuevaReservaEvaluacion("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, time.Now())
+	r, _ := NuevaReservaBloqueo("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, "Jornada docente", time.Now())
 
 	err := r.Finalizar()
 
@@ -141,7 +142,7 @@ func TestFinalizar_OK(t *testing.T) {
 }
 
 func TestFinalizar_DesdeCancelada_Error(t *testing.T) {
-	r, _ := NuevaReservaEvaluacion("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, time.Now())
+	r, _ := NuevaReservaBloqueo("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, "Jornada docente", time.Now())
 	_ = r.Cancelar(nil, "motivo", time.Now())
 
 	err := r.Finalizar()
@@ -215,5 +216,65 @@ func TestValidarVentanaTemporal(t *testing.T) {
 		if !errors.Is(err, c.esperado) {
 			t.Errorf("%s: obtuve %v, esperaba %v", c.nombre, err, c.esperado)
 		}
+	}
+}
+
+// ── El motivo del bloqueo (019) ─────────────────────────────────────────
+
+// Un bloqueo cancela las clases de otros, así que el porqué no es opcional.
+// Sin motivo, quien mira el calendario y encuentra el rato ocupado no tiene
+// dónde averiguar por qué, y el docente cancelado recibe un aviso hueco.
+func TestNuevaReservaBloqueo_SinMotivo_Error(t *testing.T) {
+	_, err := NuevaReservaBloqueo("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, "", time.Now())
+	if !errors.Is(err, ErrMotivoBloqueoVacio) {
+		t.Errorf("err = %v, esperaba ErrMotivoBloqueoVacio", err)
+	}
+}
+
+// Los espacios no alcanzan para pasar: si no, el CHECK de la base lo
+// rechazaría como un 500 en vez de como un mensaje que se puede leer.
+func TestNuevaReservaBloqueo_MotivoDeEspacios_Error(t *testing.T) {
+	_, err := NuevaReservaBloqueo("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, "   ", time.Now())
+	if !errors.Is(err, ErrMotivoBloqueoVacio) {
+		t.Errorf("err = %v, esperaba ErrMotivoBloqueoVacio", err)
+	}
+}
+
+func TestNuevaReservaBloqueo_MotivoLargo_Error(t *testing.T) {
+	largo := strings.Repeat("a", MaxLargoMotivoBloqueo+1)
+	_, err := NuevaReservaBloqueo("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, largo, time.Now())
+	if !errors.Is(err, ErrMotivoBloqueoLargo) {
+		t.Errorf("err = %v, esperaba ErrMotivoBloqueoLargo", err)
+	}
+}
+
+// El motivo se guarda recortado y tal cual lo escribió el Admin: no se lo
+// envuelve en ninguna categoría, porque el sistema no sabe de qué clase de
+// cosa se trata — puede ser una evaluación, una jornada docente o una obra.
+func TestNuevaReservaBloqueo_GuardaElMotivoRecortado(t *testing.T) {
+	r, err := NuevaReservaBloqueo("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour,
+		"  Jornada docente  ", time.Now())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if r.MotivoBloqueo != "Jornada docente" {
+		t.Errorf("motivo = %q, esperaba el texto recortado", r.MotivoBloqueo)
+	}
+	if r.Tipo != TipoBloqueo {
+		t.Errorf("tipo = %q, esperaba BLOQUEO", r.Tipo)
+	}
+}
+
+// Una reserva normal NO lleva motivo: ya dice para qué es por su materia, y
+// un segundo lugar donde escribir lo mismo se desincroniza solo.
+func TestNuevaReservaNormal_NoLlevaMotivoDeBloqueo(t *testing.T) {
+	creadoPor := "docente1"
+	r, err := NuevaReservaNormal("id1", "grupo1", "pc1", "materia1", "Ada Lovelace", &creadoPor,
+		time.Now(), 10*time.Hour, 12*time.Hour, time.Now())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if r.MotivoBloqueo != "" {
+		t.Errorf("motivo = %q, esperaba vacío", r.MotivoBloqueo)
 	}
 }

@@ -850,7 +850,7 @@ func TestCancelarReserva_DeBloqueoEvaluacion_NoTocaNingunGrupo(t *testing.T) {
 	// Un bloqueo de evaluación no pertenece a ningún ReservaGrupo — cancelarlo
 	// no debe intentar buscar/actualizar ningún grupo (ni panickear).
 	repo := nuevoFakeRepo()
-	repo.reservas["r1"] = &domain.Reserva{ID: "r1", Estado: domain.ReservaConfirmada, Tipo: domain.TipoEvaluacionEstatal}
+	repo.reservas["r1"] = &domain.Reserva{ID: "r1", Estado: domain.ReservaConfirmada, Tipo: domain.TipoBloqueo}
 	svc := nuevoServicioDeTest(repo)
 
 	err := svc.CancelarReserva(context.Background(), "r1", nil, "motivo")
@@ -900,7 +900,7 @@ func TestCancelarReserva_PublicaEventoReservaCancelada(t *testing.T) {
 // RF-05.1/05.2/05.3: bloquear tres PCs de una misma reserva le dejaba al
 // docente tres avisos idénticos. Es una sola noticia para él —"me sacaron la
 // clase"— así que sale un evento con las tres PCs adentro.
-func TestBloquearParaEvaluacion_UnSoloEventoPorDocente(t *testing.T) {
+func TestBloquearEquipos_UnSoloEventoPorDocente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
@@ -919,7 +919,7 @@ func TestBloquearParaEvaluacion_UnSoloEventoPorDocente(t *testing.T) {
 	})
 
 	admin := "admin1"
-	res, err := svc.BloquearParaEvaluacion(context.Background(), []string{"pc1", "pc2", "pc3"}, &admin,
+	res, err := svc.BloquearEquipos(context.Background(), []string{"pc1", "pc2", "pc3"}, &admin,
 		fecha(2026, 3, 9), 10*time.Hour, 12*time.Hour, "Mesa de examen")
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -953,7 +953,7 @@ func TestBloquearParaEvaluacion_UnSoloEventoPorDocente(t *testing.T) {
 
 // Dos docentes afectados por el mismo bloqueo reciben un aviso cada uno, no
 // uno con las reservas del otro adentro.
-func TestBloquearParaEvaluacion_UnEventoPorCadaDocente(t *testing.T) {
+func TestBloquearEquipos_UnEventoPorCadaDocente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
@@ -977,7 +977,7 @@ func TestBloquearParaEvaluacion_UnEventoPorCadaDocente(t *testing.T) {
 	})
 
 	admin := "admin1"
-	if _, err := svc.BloquearParaEvaluacion(context.Background(), []string{"pc1", "pc2"}, &admin,
+	if _, err := svc.BloquearEquipos(context.Background(), []string{"pc1", "pc2"}, &admin,
 		fecha(2026, 3, 9), 10*time.Hour, 12*time.Hour, "Mesa de examen"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -1065,7 +1065,7 @@ func TestCancelarReserva_ElDocenteCancelaLaPropia_NoPublicaEvento(t *testing.T) 
 // El motivo viaja sin el "Tu reserva fue cancelada:" — esa frase la pone
 // el suscriptor de notification. Si el servicio también la pusiera, el
 // aviso saldría con el prefijo repetido.
-func TestBloquearParaEvaluacion_ElMotivoNoTraeElPrefijoDelAviso(t *testing.T) {
+func TestBloquearEquipos_ElMotivoNoTraeElPrefijoDelAviso(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
@@ -1079,7 +1079,7 @@ func TestBloquearParaEvaluacion_ElMotivoNoTraeElPrefijoDelAviso(t *testing.T) {
 	svc.bus.Subscribe("reserva.cancelada", func(e eventbus.Evento) { recibido <- e })
 
 	admin := "admin1"
-	if _, err := svc.BloquearParaEvaluacion(context.Background(), []string{"pc1"}, &admin,
+	if _, err := svc.BloquearEquipos(context.Background(), []string{"pc1"}, &admin,
 		fecha(2026, 3, 9), 9*time.Hour, 11*time.Hour, "Aprender 2026"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -1090,7 +1090,10 @@ func TestBloquearParaEvaluacion_ElMotivoNoTraeElPrefijoDelAviso(t *testing.T) {
 		if strings.Contains(motivo, "Tu reserva fue cancelada") {
 			t.Errorf("el motivo no debe traer el prefijo del aviso: %q", motivo)
 		}
-		if motivo != "bloqueo por evaluación estatal (Aprender 2026)" {
+		// El motivo del Admin va tal cual, sin envolverlo en una categoría:
+		// si escribió "jornada docente", el docente cancelado tiene que leer
+		// eso y no "evaluación estatal" (019).
+		if motivo != "los equipos quedaron bloqueados: Aprender 2026" {
 			t.Errorf("motivo inesperado: %q", motivo)
 		}
 	case <-time.After(time.Second):
@@ -1103,7 +1106,7 @@ func TestCancelarReserva_BloqueoEvaluacionCancelado_NoPublicaEvento(t *testing.T
 	// que notificar de la misma forma — no debería publicar nada (o al
 	// menos no debería panickear al no tener a quién avisar).
 	repo := nuevoFakeRepo()
-	repo.reservas["r1"] = &domain.Reserva{ID: "r1", Estado: domain.ReservaConfirmada, Tipo: domain.TipoEvaluacionEstatal, CreadoPor: nil}
+	repo.reservas["r1"] = &domain.Reserva{ID: "r1", Estado: domain.ReservaConfirmada, Tipo: domain.TipoBloqueo, CreadoPor: nil}
 	svc := nuevoServicioDeTest(repo)
 
 	publicado := false
@@ -1286,11 +1289,11 @@ func TestCancelarOcurrenciaRecurrente_NoExiste_Error(t *testing.T) {
 
 // ── BloquearParaEvaluacion ──────────────────────────────────────────────
 
-func TestBloquearParaEvaluacion_SinConflictos_OK(t *testing.T) {
+func TestBloquearEquipos_SinConflictos_OK(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 	creadoPor := "admin1"
 
-	res, err := svc.BloquearParaEvaluacion(context.Background(), []string{"pc1", "pc2"}, &creadoPor,
+	res, err := svc.BloquearEquipos(context.Background(), []string{"pc1", "pc2"}, &creadoPor,
 		fecha(2026, 3, 9), 10*time.Hour, 12*time.Hour, "Evaluación provincial")
 
 	if err != nil {
@@ -1303,17 +1306,17 @@ func TestBloquearParaEvaluacion_SinConflictos_OK(t *testing.T) {
 		t.Errorf("sin conflictos no debería cancelar nada: %+v", res)
 	}
 	for _, b := range res.Bloqueos {
-		if b.Tipo != domain.TipoEvaluacionEstatal {
+		if b.Tipo != domain.TipoBloqueo {
 			t.Errorf("tipo incorrecto: %s", b.Tipo)
 		}
 	}
 }
 
-func TestBloquearParaEvaluacion_EnElPasado_Error(t *testing.T) {
+func TestBloquearEquipos_EnElPasado_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 	creadoPor := "admin1"
 
-	_, err := svc.BloquearParaEvaluacion(context.Background(), []string{"pc1"}, &creadoPor,
+	_, err := svc.BloquearEquipos(context.Background(), []string{"pc1"}, &creadoPor,
 		fecha(2026, 2, 27), 10*time.Hour, 12*time.Hour, "Evaluación provincial")
 
 	if !errors.Is(err, domain.ErrReservaEnElPasado) {
@@ -1324,11 +1327,11 @@ func TestBloquearParaEvaluacion_EnElPasado_Error(t *testing.T) {
 // El tope de duración no alcanza a RF-04.7: si el Admin necesita el
 // laboratorio el día entero para una evaluación, es su decisión — mismo
 // criterio que la exención de EsDiaLectivo.
-func TestBloquearParaEvaluacion_DiaEntero_SeAcepta(t *testing.T) {
+func TestBloquearEquipos_DiaEntero_SeAcepta(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 	creadoPor := "admin1"
 
-	res, err := svc.BloquearParaEvaluacion(context.Background(), []string{"pc1"}, &creadoPor,
+	res, err := svc.BloquearEquipos(context.Background(), []string{"pc1"}, &creadoPor,
 		fecha(2026, 3, 9), 0, 23*time.Hour+59*time.Minute, "Evaluación provincial")
 
 	if err != nil {
@@ -1339,7 +1342,7 @@ func TestBloquearParaEvaluacion_DiaEntero_SeAcepta(t *testing.T) {
 	}
 }
 
-func TestBloquearParaEvaluacion_CancelaReservaQueSeSolapa(t *testing.T) {
+func TestBloquearEquipos_CancelaReservaQueSeSolapa(t *testing.T) {
 	repo := nuevoFakeRepo()
 	docenteAfectado := "docente-afectado"
 	repo.reservas["existente"] = &domain.Reserva{
@@ -1350,7 +1353,7 @@ func TestBloquearParaEvaluacion_CancelaReservaQueSeSolapa(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 	creadoPor := "admin1"
 
-	res, err := svc.BloquearParaEvaluacion(context.Background(), []string{"pc1"}, &creadoPor,
+	res, err := svc.BloquearEquipos(context.Background(), []string{"pc1"}, &creadoPor,
 		fecha(2026, 3, 9), 9*time.Hour, 12*time.Hour, "Evaluación provincial")
 
 	if err != nil {
@@ -1367,17 +1370,17 @@ func TestBloquearParaEvaluacion_CancelaReservaQueSeSolapa(t *testing.T) {
 	}
 }
 
-func TestBloquearParaEvaluacion_NoCancelaOtroBloqueoDeEvaluacion(t *testing.T) {
+func TestBloquearEquipos_NoCancelaOtroBloqueoDeEvaluacion(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.reservas["otro-bloqueo"] = &domain.Reserva{
 		ID: "otro-bloqueo", EquipoID: "pc1", Fecha: fecha(2026, 3, 9),
 		HoraInicio: 10 * time.Hour, HoraFin: 11 * time.Hour,
-		Estado: domain.ReservaConfirmada, Tipo: domain.TipoEvaluacionEstatal,
+		Estado: domain.ReservaConfirmada, Tipo: domain.TipoBloqueo,
 	}
 	svc := nuevoServicioDeTest(repo)
 	creadoPor := "admin1"
 
-	res, err := svc.BloquearParaEvaluacion(context.Background(), []string{"pc1"}, &creadoPor,
+	res, err := svc.BloquearEquipos(context.Background(), []string{"pc1"}, &creadoPor,
 		fecha(2026, 3, 9), 9*time.Hour, 12*time.Hour, "Evaluación provincial")
 
 	if err != nil {
@@ -1391,11 +1394,11 @@ func TestBloquearParaEvaluacion_NoCancelaOtroBloqueoDeEvaluacion(t *testing.T) {
 	}
 }
 
-func TestBloquearParaEvaluacion_EquipoNoDisponible_Error(t *testing.T) {
+func TestBloquearEquipos_EquipoNoDisponible_Error(t *testing.T) {
 	svc := NewService(nuevoFakeRepo(), &fakeValidadorMateria{asignado: true}, &fakeValidadorEquipo{disponible: false},
 		&fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
 
-	_, err := svc.BloquearParaEvaluacion(context.Background(), []string{"pc1"}, nil,
+	_, err := svc.BloquearEquipos(context.Background(), []string{"pc1"}, nil,
 		fecha(2026, 3, 9), 9*time.Hour, 12*time.Hour, "motivo")
 
 	if !errors.Is(err, ErrEquipoNoDisponible) {
@@ -1960,7 +1963,7 @@ func TestCancelarReserva_EstadoDelGrupoSeGuardaDentroDeLaTransaccion(t *testing.
 	}
 }
 
-func TestBloquearParaEvaluacion_SiFallaElBloqueoNoQuedaNingunGrupoTocado(t *testing.T) {
+func TestBloquearEquipos_SiFallaElBloqueoNoQuedaNingunGrupoTocado(t *testing.T) {
 	base := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(base)
 
@@ -1978,7 +1981,7 @@ func TestBloquearParaEvaluacion_SiFallaElBloqueoNoQuedaNingunGrupoTocado(t *test
 	base.errCrearReserva = ErrSolapamiento
 
 	admin := "admin1"
-	_, err = svc.BloquearParaEvaluacion(context.Background(), []string{"pc1"}, &admin,
+	_, err = svc.BloquearEquipos(context.Background(), []string{"pc1"}, &admin,
 		fecha(2026, 3, 9), 8*time.Hour, 10*time.Hour, "prueba estatal")
 	if !errors.Is(err, ErrSolapamiento) {
 		t.Fatalf("esperaba ErrSolapamiento, obtuve %v", err)
