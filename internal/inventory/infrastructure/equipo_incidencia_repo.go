@@ -283,15 +283,23 @@ func (r *PostgresRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID 
 	return resultado, errorDeFilas(rows)
 }
 
-// errorDeUnicidadDeEquipo traduce cuál de las tres restricciones de unicidad de
-// `pc` se violó. Sin esto, cargar un segundo "Cargador 1" respondía "ya
-// existe una PC con ese identificador", que no le dice nada a quien está
-// dando de alta un cargador.
+// errorDeUnicidadDeEquipo traduce cuál de las tres restricciones de unicidad
+// de `equipo` se violó. Sin esto, cargar un segundo "Cargador 1" respondía
+// "ya existe un equipo con ese identificador", que no le dice nada a quien
+// está dando de alta un cargador.
+//
+// Los nombres tienen que ser EXACTAMENTE los que genera Postgres. Este switch
+// buscó `pc_numero_serie_key` mucho después de que la tabla se renombrara a
+// `equipo`: el case no entraba nunca, y quien cargaba un número de serie
+// repetido recibía el error del identificador — otro campo, otro problema. No
+// se notó porque el único test que lo cubría usaba un repositorio falso que
+// devolvía el error correcto por su cuenta. Por eso el test de esto vive en
+// las pruebas de integración, contra Postgres.
 func errorDeUnicidadDeEquipo(err error) error {
 	switch nombreDeConstraint(err) {
 	case "ux_equipo_suelto_nombre":
 		return application.ErrNombreDeEquipoDuplicado
-	case "pc_numero_serie_key":
+	case "equipo_numero_serie_key":
 		return application.ErrNumeroSerieDuplicado
 	default:
 		// UNIQUE (carro_id, identificador), que es el caso habitual.

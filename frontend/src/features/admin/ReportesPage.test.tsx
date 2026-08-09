@@ -442,4 +442,47 @@ describe("ReportesPage", () => {
     expect(await screen.findByText(/15 incidencias en 2 tipos de falla/)).toBeInTheDocument()
     expect(screen.getByText("batería")).toBeInTheDocument()
   })
+
+  /**
+   * El backend devuelve el desglose por estado desde siempre y la tabla lo
+   * tiraba. Sin él, "12 incidencias" no dice si el problema está atendido o
+   * esperando a que alguien lo mire — que es lo único que cambia qué hacer.
+   */
+  it("desglosa las incidencias por estado, no solo el total", async () => {
+    vi.mocked(adminApi.reporteIncidenciasPorEquipo).mockResolvedValue({
+      data: [
+        {
+          equipoId: "pc1",
+          etiqueta: "PC 7",
+          identificador: 7,
+          carroNombre: "Carro 1",
+          total: 12,
+          abiertas: 3,
+          enReparacion: 2,
+          enviadasASoporte: 1,
+          resueltas: 6,
+          graves: 4,
+        },
+      ],
+    })
+    renderPagina()
+
+    // Por celda y no con toHaveTextContent: buscar "2" en la fila entera lo
+    // encuentra adentro de "12" y el test pasaría sin dibujar nada.
+    const fila = (await screen.findByText("PC 7")).closest("tr")!
+    const celdas = [...fila.querySelectorAll("td")].map((c) => c.textContent)
+
+    expect(celdas).toEqual([
+      "PC 7",
+      "Carro 1",
+      "12",
+      "3",
+      // Los tres que antes se calculaban y no llegaban a la pantalla.
+      "2",
+      "1",
+      "6",
+      "4",
+      expect.stringContaining("%"),
+    ])
+  })
 })
