@@ -79,7 +79,7 @@ describe("InventarioPage", () => {
     const user = userEvent.setup()
     renderInventario()
 
-    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
 
     expect(await screen.findByText("PC 1")).toBeInTheDocument()
     expect(screen.getByText("AutoCAD 2027")).toBeInTheDocument()
@@ -98,7 +98,7 @@ describe("InventarioPage", () => {
     const user = userEvent.setup()
     renderInventario()
 
-    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
 
     expect(await screen.findByText("PC 1")).toBeInTheDocument()
     expect(screen.queryByText("PC 2")).not.toBeInTheDocument()
@@ -111,7 +111,7 @@ describe("InventarioPage", () => {
     const user = userEvent.setup()
     renderInventario()
 
-    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
 
     expect(await screen.findByText("Fuera de servicio")).toBeInTheDocument()
   })
@@ -121,7 +121,7 @@ describe("InventarioPage", () => {
     const user = userEvent.setup()
     renderInventario()
 
-    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
     await user.click(await screen.findByRole("link", { name: "Ver calendario" }))
 
     expect(await screen.findByText("Calendario")).toBeInTheDocument()
@@ -146,7 +146,7 @@ describe("InventarioPage", () => {
     const user = userEvent.setup()
     renderInventario()
 
-    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
     await user.click(await screen.findByRole("button", { name: "Reportar problema" }))
 
     await user.type(screen.getByLabelText(/¿Qué le pasa\?/), "No arranca")
@@ -169,7 +169,7 @@ describe("InventarioPage", () => {
     const user = userEvent.setup()
     renderInventario()
 
-    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
     await user.click(await screen.findByRole("button", { name: "Reportar problema" }))
 
     expect(screen.getByText(/no saca el equipo de circulación/)).toBeInTheDocument()
@@ -180,7 +180,7 @@ describe("InventarioPage", () => {
     const user = userEvent.setup()
     renderInventario()
 
-    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
     await user.click(await screen.findByRole("button", { name: "Reportar problema" }))
 
     expect(screen.getByRole("button", { name: "Reportar" })).toBeDisabled()
@@ -206,7 +206,7 @@ describe("InventarioPage", () => {
     const user = userEvent.setup()
     renderInventario()
 
-    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
     await user.click(await screen.findByRole("button", { name: "Reportar problema" }))
     await user.type(screen.getByLabelText(/¿Qué le pasa\?/), "No carga")
     await user.type(screen.getByLabelText(/¿Qué es lo que falla\?/), "batería")
@@ -230,7 +230,7 @@ describe("InventarioPage", () => {
     const user = userEvent.setup()
     renderInventario()
 
-    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
     await user.click(await screen.findByRole("button", { name: "Reportar problema" }))
 
     // El datalist no expone sus opciones por rol accesible, así que se lee
@@ -263,7 +263,7 @@ describe("InventarioPage", () => {
     const user = userEvent.setup()
     renderInventario()
 
-    await user.click(await screen.findByRole("button", { name: "Ver Equipos" }))
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
     await user.click(await screen.findByRole("button", { name: "Reportar problema" }))
     await user.type(screen.getByLabelText(/¿Qué le pasa\?/), "No enciende")
 

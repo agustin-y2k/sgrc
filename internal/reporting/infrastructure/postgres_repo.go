@@ -91,6 +91,20 @@ func (r *PostgresRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain
 	return nil
 }
 
+// BorrarHistoricoDocentesSinCuenta corre antes de escribir el snapshot del
+// año (ver application.CalcularSnapshotAnual): esas filas no las cubre el
+// ON CONFLICT, así que se rehacen enteras en cada intento en vez de
+// acumularse. Son las de los docentes cuya cuenta ya no existe, y su
+// contenido depende solo de las reservas, que en ese momento siguen vivas.
+func (r *PostgresRepo) BorrarHistoricoDocentesSinCuenta(ctx context.Context, anio int) error {
+	_, err := r.pool.Exec(ctx,
+		`DELETE FROM historico_uso_docente WHERE anio = $1 AND usuario_id IS NULL`, anio)
+	if err != nil {
+		return fmt.Errorf("borrando histórico de docentes sin cuenta: %w", err)
+	}
+	return nil
+}
+
 func (r *PostgresRepo) ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, anio, equipo_id, etiqueta_snapshot,
@@ -196,9 +210,9 @@ func (r *PostgresRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID st
 			r.materia_id IN (
 				SELECT m.id FROM materia m JOIN curso c ON c.id = m.curso_id WHERE c.ciclo_lectivo_id = $1
 			)
-			-- Los bloqueos por evaluación estatal (RF-04.7) no tienen materia,
-			-- así que el filtro de arriba no los alcanza. Igual ocupan la PC:
-			-- sin esto, una máquina muy usada para exámenes figura como poco
+			-- Los bloqueos administrativos (RF-04.7) no tienen materia, así que
+			-- el filtro de arriba no los alcanza. Igual ocupan el equipo: sin
+			-- esto, una máquina muy usada para exámenes figura como poco
 			-- usada. Se los ata al ciclo por el año de la fecha, que es lo
 			-- único que los relaciona con un ciclo lectivo.
 			OR (
@@ -206,7 +220,11 @@ func (r *PostgresRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID st
 				AND EXTRACT(YEAR FROM r.fecha) = (SELECT anio FROM ciclo_lectivo WHERE id = $1)
 			)
 		)
-		AND r.estado != 'CANCELADA'`+condFechasPrefijo("r", condFechas)+`
+		-- NO_RETIRADA queda afuera junto con CANCELADA (RF-08.10): nadie fue a
+		-- buscar esa máquina, así que no fue una clase dada. Contarla infla
+		-- justamente el número con el que se pide presupuesto — un carro que
+		-- nadie retira nunca aparecería como el más usado de la institución.
+		AND r.estado NOT IN ('CANCELADA','NO_RETIRADA')`+condFechasPrefijo("r", condFechas)+`
 		GROUP BY r.equipo_id, p.nombre, p.identificador, ca.nombre
 		-- Del más usado al menos usado, que es la pregunta que trae a
 		-- alguien a este reporte. Sin ORDER BY, Postgres devuelve las filas
@@ -244,17 +262,27 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 	args := []any{cicloID}
 	condFechas, args := filtroFechas("fecha", desde, hasta, args)
 
+	// El JOIN a usuario va LEFT y no se filtra por creado_por IS NOT NULL: al
+	// eliminar definitivamente una cuenta (RF-01.9) esa columna queda en NULL,
+	// y con INNER las reservas de esa persona desaparecían del reporte y de
+	// los totales del año. El nombre sale entonces del snapshot que la fila
+	// guarda justamente para eso.
+	//
+	// Se agrupa también por nombre_docente_snapshot: sin eso, todas las
+	// cuentas eliminadas caerían en un único renglón sin nombre, porque en un
+	// GROUP BY los NULL se juntan entre sí.
 	rows, err := r.pool.Query(ctx, `
-		SELECT r.creado_por, MAX(u.nombre || ' ' || u.apellido) AS docente,
+		SELECT r.creado_por,
+		       COALESCE(MAX(u.nombre || ' ' || u.apellido), r.nombre_docente_snapshot, '') AS docente,
 		       COUNT(*), COALESCE(SUM(`+expresionMinutosDe("r")+`), 0) AS minutos
 		FROM reserva r
-		JOIN usuario u ON u.id = r.creado_por
+		LEFT JOIN usuario u ON u.id = r.creado_por
 		WHERE r.materia_id IN (
 			SELECT m.id FROM materia m JOIN curso c ON c.id = m.curso_id WHERE c.ciclo_lectivo_id = $1
 		)
-		AND r.estado != 'CANCELADA'
-		AND r.creado_por IS NOT NULL`+condFechasPrefijo("r", condFechas)+`
-		GROUP BY r.creado_por
+		-- Ver CalcularUsoEquiposDeCiclo: una clase que nadie retiró no cuenta.
+		AND r.estado NOT IN ('CANCELADA','NO_RETIRADA')`+condFechasPrefijo("r", condFechas)+`
+		GROUP BY r.creado_por, r.nombre_docente_snapshot
 		-- Mismo criterio que CalcularUsoEquiposDeCiclo; el nombre desempata.
 		ORDER BY minutos DESC, docente
 	`, args...)

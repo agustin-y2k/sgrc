@@ -34,6 +34,13 @@ const formatoFechaSQL = "2006-01-02"
 // propósito — si la máquina salió por una entrega espontánea en vez de
 // contra la reserva, igual está afuera y la franja no se puede liberar.
 //
+// La subconsulta de la última entrega mira lo contrario, y por eso es una
+// subconsulta y no otro JOIN: pregunta si ESTE DOCENTE vino a buscar algo de
+// ESTA reserva, así que se cruza por reserva_id y sube al grupo. Una máquina
+// prestada a otra persona para un trámite no dice nada sobre si el docente
+// fue a dar su clase, y es esa diferencia la que decide si el aviso de
+// RF-08.20 sale y con qué plazo se libera el resto.
+//
 // El rango de fechas es grueso (hoy y mañana) porque la ventana fina la
 // decide el dominio. Traer un día de más no cuesta nada; que la consulta
 // tenga su propia idea de "una hora antes" sí, porque sería la segunda copia
@@ -49,8 +56,13 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 			COALESCE(u.email, ''),
 			g.recordatorio_enviado_en IS NOT NULL,
 			res.avisado_equipo_no_disponible_en IS NOT NULL,
+			g.aviso_sin_retirar_en IS NOT NULL,
 			p.id IS NOT NULL,
-			p.devolucion_estimada
+			p.devolucion_estimada,
+			(SELECT max(pe.entregado_en)
+			   FROM prestamo pe
+			   JOIN reserva r2 ON r2.id = pe.reserva_id
+			  WHERE r2.reserva_grupo_id = res.reserva_grupo_id)
 		FROM reserva res
 		JOIN equipo eq ON eq.id = res.equipo_id
 		LEFT JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
@@ -74,8 +86,8 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 			&v.ReservaID, &v.GrupoID, &v.EquipoID, &v.Identificador,
 			&v.Fecha, &v.HoraInicio, &v.HoraFin, &tipo, &v.MateriaNombre, &v.Etiqueta,
 			&v.DocenteID, &v.DocenteNombre, &v.DocenteEmail,
-			&v.RecordatorioEnviado, &v.AvisoEquipoNoDisponibleEnviado,
-			&v.EquipoAfuera, &v.EquipoDebioVolverA,
+			&v.RecordatorioEnviado, &v.AvisoEquipoNoDisponibleEnviado, &v.AvisoSinRetirarEnviado,
+			&v.EquipoAfuera, &v.EquipoDebioVolverA, &v.UltimaEntregaDelGrupo,
 		); err != nil {
 			return nil, fmt.Errorf("escaneando reserva a vigilar: %w", err)
 		}
@@ -149,6 +161,11 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 func (r *PostgresRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
 	return r.marcar(ctx, `UPDATE reserva_grupo SET recordatorio_enviado_en=$2 WHERE id=$1`,
 		grupoID, ahora, "recordatorio")
+}
+
+func (r *PostgresRepo) MarcarAvisoSinRetirarEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
+	return r.marcar(ctx, `UPDATE reserva_grupo SET aviso_sin_retirar_en=$2 WHERE id=$1`,
+		grupoID, ahora, "aviso de no retiro")
 }
 
 func (r *PostgresRepo) MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {

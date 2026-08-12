@@ -104,9 +104,9 @@ func TestRequerida_ElMensajeExplicaPorQueSeCayoLaSesion(t *testing.T) {
 }
 
 func TestRequerida_TokenSinElClaimSirveMientrasLaCuentaEsteEnCero(t *testing.T) {
-	// Los tokens emitidos ANTES de la migración 010 no llevan el claim, así
-	// que al deserializar quedan en 0 — igual que el DEFAULT de la columna.
-	// Es lo que hace que desplegar esto NO desloguee a toda la escuela.
+	// Un token sin el claim queda en 0 al deserializar — igual que el DEFAULT
+	// de la columna. Es lo que hace que una cuenta que nunca cambió su
+	// contraseña no necesite un claim para seguir siendo válida.
 	aut := Autenticacion{Secret: testSecret, Vigente: cuentaEnVersion(0)}
 
 	// tokenValido es el helper viejo: firma sin VersionSesion.

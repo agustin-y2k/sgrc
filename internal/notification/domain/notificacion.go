@@ -56,6 +56,12 @@ const (
 	// TipoReservaNoRetirada: pasaron los minutos de gracia y esas máquinas
 	// dejaron de estar reservadas (RF-08.10).
 	TipoReservaNoRetirada Tipo = "RESERVA_NO_RETIRADA"
+	// TipoPedidoDeLiberacion: otro docente necesita un equipo que esta
+	// persona tiene reservado (RF-04.12). Es el único de esta lista que NO
+	// anuncia un cambio: la reserva sigue intacta y la decisión es suya, así
+	// que la pantalla no puede ofrecerle el mismo botón que a una
+	// cancelación.
+	TipoPedidoDeLiberacion Tipo = "PEDIDO_DE_LIBERACION"
 	// TipoEquipoSinDevolver: para los Admin — una máquina no volvió a horario.
 	// Lleva a la pantalla de entregas, no a la de reservas.
 	TipoEquipoSinDevolver Tipo = "EQUIPO_SIN_DEVOLVER"
@@ -66,7 +72,8 @@ var ErrTipoInvalido = errors.New("tipo de notificación inválido")
 func ParseTipo(s string) (Tipo, error) {
 	switch Tipo(s) {
 	case TipoGeneral, TipoDocentePendiente, TipoReservaCancelada, TipoLicenciaPorVencer,
-		TipoReservaPorComenzar, TipoReservaNoRetirada, TipoEquipoSinDevolver:
+		TipoReservaPorComenzar, TipoReservaNoRetirada, TipoEquipoSinDevolver,
+		TipoPedidoDeLiberacion:
 		return Tipo(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrTipoInvalido, s)

@@ -42,7 +42,7 @@ var (
 //	VenceEl     "vence el 3 de septiembre" → esa fecha
 //
 // Los tres nil significan "todavía no sé", que es un estado legítimo y el
-// que tiene una licencia recién cargada. Ver la migración 012.
+// que tiene una licencia recién cargada (RF-03.13).
 type VencimientoDeclarado struct {
 	RenovadaEl *time.Time
 	QuedanDias *int

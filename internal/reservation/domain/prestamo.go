@@ -47,9 +47,9 @@ func NormalizarNombreDestinatario(s string) string {
 //   - préstamo que sobrevive a su reserva: la clase terminó a las 9:00 y a
 //     las 9:20 las máquinas siguen afuera.
 //
-// Un préstamo está ABIERTO mientras DevueltoEn sea nil. Que una PC no pueda
-// tener dos abiertos a la vez lo garantiza el índice único parcial de la
-// migración 013, no este tipo: el dominio no ve las demás filas.
+// Un préstamo está ABIERTO mientras DevueltoEn sea nil. Que un equipo no
+// pueda tener dos abiertos a la vez lo garantiza el índice único parcial de
+// la base, no este tipo: el dominio no ve las demás filas.
 type Prestamo struct {
 	ID       string
 	EquipoID string

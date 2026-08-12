@@ -322,11 +322,10 @@ func crearEquipoSueltoDeTest(t *testing.T, repo *PostgresRepo, tipo, nombre stri
 	return eq
 }
 
-// Lo que solo una base de verdad puede confirmar: que las tres columnas que
-// Las columnas que un equipo suelto no usa aceptan NULL y vuelven vacías,
-// no como un cero o un error de
-// escaneo. Un proyector sin carro, sin identificador y sin número de serie es
-// exactamente la fila que antes era imposible.
+// Lo que solo una base de verdad puede confirmar: las tres columnas que un
+// equipo suelto no usa aceptan NULL y vuelven vacías, no como un cero ni como
+// un error de escaneo. Un proyector sin carro, sin identificador y sin número
+// de serie es una fila perfectamente válida.
 func TestPostgresRepo_EquipoSuelto_GuardarYRecuperar(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

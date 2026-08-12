@@ -160,8 +160,9 @@ export function NuevaReservaPage() {
 
       {crear.error && (
         <Alert variant="destructive" className="mb-4">
-          {/* RF-04.3: el backend informa qué equipos puntuales están ocupados;
-              se muestra su mensaje tal cual en vez de uno genérico. */}
+          {/* RF-04.3: el mensaje del backend nombra qué equipo choca, en qué
+              fecha y con quién. Se muestra tal cual: uno genérico obligaría a
+              destildar de a uno para encontrar el ocupado. */}
           <AlertDescription>{getErrorMessage(crear.error)}</AlertDescription>
         </Alert>
       )}

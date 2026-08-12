@@ -23,10 +23,12 @@ func toResumenUsoEquipoResponse(u domain.ResumenUsoEquipo) resumenUsoEquipoRespo
 }
 
 type resumenUsoDocenteResponse struct {
-	UsuarioID         string `json:"usuarioId"`
-	NombreDocente     string `json:"nombreDocente"`
-	CantidadReservas  int    `json:"cantidadReservas"`
-	MinutosReservados int    `json:"minutosReservados"`
+	// UsuarioID ausente = la cuenta se eliminó definitivamente (RF-01.9).
+	// El nombre sigue estando; lo que no hay es a quién apuntar.
+	UsuarioID         *string `json:"usuarioId,omitempty"`
+	NombreDocente     string  `json:"nombreDocente"`
+	CantidadReservas  int     `json:"cantidadReservas"`
+	MinutosReservados int     `json:"minutosReservados"`
 }
 
 func toResumenUsoDocenteResponse(u domain.ResumenUsoDocente) resumenUsoDocenteResponse {

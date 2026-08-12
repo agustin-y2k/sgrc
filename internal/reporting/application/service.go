@@ -109,18 +109,29 @@ func (s *Service) ArchivarSnapshotDeCiclo(ctx context.Context, cicloID string, a
 	if err != nil {
 		return fmt.Errorf("calculando uso de docentes: %w", err)
 	}
+	// Las filas de cuentas ya eliminadas se rehacen enteras en cada intento.
+	// El ON CONFLICT de las otras se apoya en UNIQUE (anio, usuario_id), y
+	// para Postgres dos NULL son distintos: sin esta limpieza previa, un
+	// archivado reintentado duplicaría a cada docente sin cuenta.
+	if err := s.repo.BorrarHistoricoDocentesSinCuenta(ctx, anio); err != nil {
+		return fmt.Errorf("limpiando el histórico de docentes sin cuenta: %w", err)
+	}
 	for _, u := range usosDocente {
-		nombre, err := s.infoUsuario.NombreCompletoDe(ctx, u.UsuarioID)
-		if err != nil {
-			return fmt.Errorf("obteniendo nombre del docente %s: %w", u.UsuarioID, err)
+		nombre := u.NombreDocente
+		if u.UsuarioID != nil {
+			// Con la cuenta viva, el nombre canónico es el de auth: si la
+			// persona corrigió su apellido, el histórico guarda el bueno.
+			nombre, err = s.infoUsuario.NombreCompletoDe(ctx, *u.UsuarioID)
+			if err != nil {
+				return fmt.Errorf("obteniendo nombre del docente %s: %w", *u.UsuarioID, err)
+			}
 		}
-		usuarioID := u.UsuarioID
-		h, err := domain.NuevoHistoricoUsoDocente(s.nuevoID(), anio, &usuarioID, nombre, u.CantidadReservas, u.MinutosReservados)
+		h, err := domain.NuevoHistoricoUsoDocente(s.nuevoID(), anio, u.UsuarioID, nombre, u.CantidadReservas, u.MinutosReservados)
 		if err != nil {
 			return err
 		}
 		if err := s.repo.GuardarHistoricoUsoDocente(ctx, h); err != nil {
-			return fmt.Errorf("guardando histórico de docente %s: %w", u.UsuarioID, err)
+			return fmt.Errorf("guardando histórico del docente %q: %w", nombre, err)
 		}
 	}
 

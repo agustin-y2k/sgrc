@@ -13,9 +13,9 @@ export type Carro = {
 export type Equipo = {
   id: string
   /**
-   * Los tres pueden faltar desde la 015: la escuela también presta un
-   * proyector, cargadores y notebooks sueltas, que no están en ningún carro,
-   * no son "PC 3" y pueden no traer número de serie.
+   * Los tres pueden faltar: una institución también presta proyectores,
+   * cargadores y notebooks sueltas, que no están en ningún carro, no son
+   * "PC 3" y pueden no traer número de serie.
    */
   carroId?: string
   identificador?: number

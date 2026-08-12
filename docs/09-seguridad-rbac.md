@@ -14,13 +14,13 @@
 
 - **Cambiar la contraseña cierra las sesiones abiertas** (RF-01.11). El punto anterior verifica el *estado* de la cuenta, que no cambia al cambiar una contraseña; sin algo más, la sesión de quien hubiera entrado con la contraseña vieja sobreviviría hasta que expire su token — hasta una hora. Eso vaciaría de sentido al caso que motiva cambiarla: alguien sospecha que entraron a su cuenta y quiere cortar ese acceso ya.
 
-  Cada cuenta lleva un contador (`usuario.version_sesion`, migración `010`) que viaja dentro del token como el claim `vs`. El middleware lo compara contra el de la fila en el mismo request en el que ya consulta el estado, así que **no cuesta ninguna consulta extra**. Cambiar la contraseña incrementa el contador y todo token anterior deja de valer en el request siguiente. Los tres caminos lo hacen: el cambio voluntario (RF-01.7), el reset asistido por un Admin (RF-01.6) y la recuperación por autoservicio (RF-01.10).
+  Cada cuenta lleva un contador (`usuario.version_sesion`) que viaja dentro del token como el claim `vs`. El middleware lo compara contra el de la fila en el mismo request en el que ya consulta el estado, así que **no cuesta ninguna consulta extra**. Cambiar la contraseña incrementa el contador y todo token anterior deja de valer en el request siguiente. Los tres caminos lo hacen: el cambio voluntario (RF-01.7), el reset asistido por un Admin (RF-01.6) y la recuperación por autoservicio (RF-01.10).
 
   El orden importa y está escrito en el código: en `CambiarPassword` se incrementa **antes** de firmar el token nuevo. Al revés, quien acaba de cambiar su contraseña recibiría un token con la versión vieja y quedaría afuera por su propio cambio exitoso.
 
   Es un entero y no una marca de tiempo ("invalidar todo lo emitido antes de X"). `iat` en un JWT tiene resolución de **segundos**, así que comparado contra un `now()` con microsegundos el token recién firmado se rechaza a sí mismo; redondear al segundo lo arregla pero deja una ventana en la que las sesiones abiertas en ese mismo segundo sobreviven. Con un contador no hay nada que redondear.
 
-  El `DEFAULT 0` de la columna coincide con el claim ausente, así que **aplicar la migración no desloguea a nadie**: los tokens vigentes siguen valiendo hasta expirar, y recién el primer cambio de contraseña de cada cuenta invalida los suyos.
+  El `DEFAULT 0` de la columna coincide con el claim ausente: un token emitido sin el claim sigue valiendo hasta expirar, y recién el primer cambio de contraseña de esa cuenta invalida los suyos.
 
   Dar de baja o rechazar una cuenta **no** toca el contador: eso lo resuelve el chequeo de estado, y mezclar las dos cosas daría dos formas de expresar lo mismo.
 
@@ -30,7 +30,7 @@
 
   Un "cuenta no habilitada" genérico para los tres haría que quien se acaba de registrar y quien fue rechazado leyeran lo mismo, sin saber si tienen que esperar, insistir o hablar con alguien.
 
-- **El login tarda lo mismo exista o no la cuenta.** Devolver sin hashear nada cuando el email no existe deja el mensaje de error igual pero no el reloj, y medir el tiempo de respuesta alcanza para enumerar quién tiene cuenta en la escuela. Por eso ese camino corre un `argon2id` contra un hash de descarte que no le pertenece a nadie. El hash se calcula una sola vez por proceso: recalcularlo en cada intento habría igualado los tiempos, pero convertiría un endpoint sin autenticar en una forma de gastar 64 MB por request.
+- **El login tarda lo mismo exista o no la cuenta.** Devolver sin hashear nada cuando el email no existe deja el mensaje de error igual pero no el reloj, y medir el tiempo de respuesta alcanza para enumerar quién tiene cuenta en la institución. Por eso ese camino corre un `argon2id` contra un hash de descarte que no le pertenece a nadie. El hash se calcula una sola vez por proceso: recalcularlo en cada intento habría igualado los tiempos, pero convertiría un endpoint sin autenticar en una forma de gastar 64 MB por request.
 
 ## 1.1 Ingreso con cuenta de Google
 
@@ -53,9 +53,9 @@ Las claves públicas se cachean respetando el `max-age` que declara Google, acot
 
 **Vincular por email es seguro solo porque antes se exigió `email_verified`.** Un docente que ya tenía cuenta con contraseña y entra con Google queda vinculado a su misma cuenta y **conserva la contraseña** — las dos formas de ingreso conviven (`usuario.password_hash` y `usuario.google_sub`, con el CHECK `chk_usuario_credencial` exigiendo al menos una). Una cuenta en `BAJA` no se vincula: RF-02.9 la hace terminal y no se reactiva por la puerta de atrás.
 
-**Una cuenta creada con Google queda `PENDIENTE` igual que cualquier otra.** Tener una cuenta de Google válida prueba quién sos, no que la escuela te conozca.
+**Una cuenta creada con Google queda `PENDIENTE` igual que cualquier otra.** Tener una cuenta de Google válida prueba quién sos, no que la institución te conozca.
 
-**El login con contraseña no revela que una cuenta entra con Google.** Una cuenta sin `password_hash` recibe exactamente el mismo error y consume exactamente el mismo tiempo que un email inexistente (mismo argumento que el párrafo anterior de §1). Decir "esta cuenta entra con Google" sería más amable, pero convertiría el endpoint en un oráculo de qué direcciones tienen cuenta en la escuela y con qué la abrieron. La pantalla de login tiene el botón de Google al lado, que es donde esa persona encuentra la salida.
+**El login con contraseña no revela que una cuenta entra con Google.** Una cuenta sin `password_hash` recibe exactamente el mismo error y consume exactamente el mismo tiempo que un email inexistente (mismo argumento que el párrafo anterior de §1). Decir "esta cuenta entra con Google" sería más amable, pero convertiría el endpoint en un oráculo de qué direcciones tienen cuenta en la institución y con qué la abrieron. La pantalla de login tiene el botón de Google al lado, que es donde esa persona encuentra la salida.
 
 **Es lo único que carga código de un tercero.** La biblioteca de Google (`accounts.google.com/gsi/client`) no se puede empaquetar en el bundle: la URL es parte del contrato, porque el script se comunica con esa misma página, y el botón se dibuja en un iframe de ese origen. La CSP del HTML lo habilita explícitamente en `script-src`, `frame-src` y `connect-src` (ver §4) — si eso se quita, el botón deja de aparecer sin más síntoma que su ausencia.
 
@@ -102,11 +102,16 @@ de la base al verificar la cuenta (§1).
 | Ver calendario de un equipo | ✅ | ✅ |
 | Reservar para cualquier materia | ✅ | ❌ |
 | Reservar para materia asignada | ✅ | ✅ solo asignadas |
-| Cancelar reserva propia (un equipo o el grupo completo) | ✅ | ✅ |
+| Cancelar una reserva propia (un equipo o el grupo completo) | ✅ | ✅ |
 | Cancelar reserva ajena (con motivo) | ✅ | ❌ |
-| Ver una reserva puntual (`GET /grupos/{id}`) | ✅ | ✅ solo propias |
-| Bloquear equipos para evaluación | ✅ | ❌ |
+| Ver el detalle de un grupo de reserva (`GET /grupos/{id}`) | ✅ | ✅ solo propias |
+| Ver quién tiene tomado un equipo en una franja (RF-04.11) | ✅ | ✅ |
+| Pedirle a otro que libere un equipo reservado (RF-04.12) | ✅ | ✅ solo ajenas |
+| Bloquear equipos con un motivo (RF-04.7) | ✅ | ❌ |
 | Ver reportes (activos e históricos) | ✅ | ❌ |
+| Cambiar el equipo de una reserva (RF-08.14) | ✅ | ✅ solo propias |
+| Entregar y recibir equipos, y ver qué está prestado (RF-08) | ✅ | ❌ |
+| Gestionar licencias de software (RF-03.11 a RF-03.14) | ✅ | ❌ |
 | Ver notificaciones propias | ✅ | ✅ |
 | Configurar mi horario de disponibilidad | ✅ | ❌ |
 | Ver disponibilidad de Admins | ✅ | ✅ |
@@ -156,7 +161,7 @@ Dos decisiones dentro de esa política merecen quedar escritas:
 
 ### Por qué el login se limita también por cuenta
 
-Limitar solo por IP falla en las dos direcciones. Los docentes que entran desde el wifi de la escuela salen todos por la misma IP NAT y se consumen la cuota entre ellos; y quien prueba contraseñas contra una cuenta puntual esquiva el límite cambiando de red. La cuenta atacada es lo único constante, así que se limita por las dos cosas a la vez.
+Limitar solo por IP falla en las dos direcciones. Los docentes que entran desde el wifi de la institución salen todos por la misma IP NAT y se consumen la cuota entre ellos; y quien prueba contraseñas contra una cuenta puntual esquiva el límite cambiando de red. La cuenta atacada es lo único constante, así que se limita por las dos cosas a la vez.
 
 Las ventanas son por minuto y no por segundo: `5 req/s` son 18.000 intentos por hora, que no frena a nadie.
 
@@ -164,7 +169,7 @@ Las ventanas son por minuto y no por segundo: `5 req/s` son 18.000 intentos por 
 
 `POST /api/auth/password/olvide` responde **202 con el mismo cuerpo pase lo que pase**: exista la cuenta o no, esté aprobada o no, tenga contraseña o entre con Google. La pantalla tampoco lo desmiente — pasa al paso del código en todos los casos.
 
-Es la única forma de que el formulario no sea un padrón. Es un endpoint público, sin autenticar y sin captcha: si distinguiera "te mandamos el código" de "ese email no existe", cualquiera podría ir probando direcciones y quedarse con la lista de los docentes de la escuela, que después sirve para phishing dirigido con el nombre real de la institución.
+Es la única forma de que el formulario no sea un padrón. Es un endpoint público, sin autenticar y sin captcha: si distinguiera "te mandamos el código" de "ese email no existe", cualquiera podría ir probando direcciones y quedarse con la lista de los docentes de la institución, que después sirve para phishing dirigido con el nombre real de la institución.
 
 Por el mismo motivo el **tiempo de respuesta** también tiene que ser indistinguible, y eso obligó a una decisión que se lee rara en el código: el código de recuperación se genera y se **hashea con argon2 antes de buscar la cuenta**, aunque quizás no haya a quién mandárselo. El hash cuesta cientos de milisegundos, mucho más que todo el resto de la operación; calculándolo recién después de encontrar la cuenta, un email registrado tardaría notoriamente más que uno inexistente y medir esa diferencia desde afuera es trivial. Es la misma idea que `consumirTiempoDeVerificacion` en el login (§1), aplicada del lado de la escritura.
 
@@ -177,7 +182,7 @@ Un millón de combinaciones no es mucho por sí solo. Lo que hace seguro al cód
 - **15 minutos de vigencia.** Acota la ventana de cualquier ataque y la de un código olvidado en una casilla abierta en la sala de profesores.
 - **5 intentos por código.** Al quinto fallo el código se quema y hay que pedir otro. La probabilidad de acertar a ciegas queda en 5 en 1.000.000.
 - **Un solo código vigente por persona.** Pedir uno nuevo invalida el anterior, en el mismo statement que inserta el nuevo (un CTE, ver `postgres_repo_recuperacion.go`). Sin esto el tope de intentos sería esquivable pidiendo veinte códigos y probando cinco veces con cada uno.
-- **Rate limit por email, no solo por IP.** El límite por IP no frena a quien cambia de red, y acá hay algo más que adivinar códigos: pedir el código manda un mail a una casilla ajena, así que sin tope por cuenta el formulario es un botón para inundar de correo a un docente — y para quemarle la reputación al Gmail de la escuela, que tiene su propio límite diario.
+- **Rate limit por email, no solo por IP.** El límite por IP no frena a quien cambia de red, y acá hay algo más que adivinar códigos: pedir el código manda un mail a una casilla ajena, así que sin tope por cuenta el formulario es un botón para inundar de correo a un docente — y para quemarle la reputación a la casilla saliente, que tiene su propio límite diario.
 
 Además el código se guarda **hasheado con argon2**, igual que una contraseña. Si la base se filtrara (un backup, un dump de soporte), un código en claro sería una cuenta abierta hasta que expire.
 
@@ -187,7 +192,7 @@ Dos cosas más que valen para el correo en sí. El mail del código es el **úni
 
 El tráfico llega Cloudflare → `cloudflared` → `nginx` → `sgrc-app`, así que la IP del socket es siempre la de un contenedor. Sin configurar `ProxyHeader`, el rate limiting por IP degrada a un balde único para toda la institución y `audit_log.ip_origen` guarda la IP de nginx en cada fila — presente, pero inútil para saber quién hizo qué.
 
-Se usa `CF-Connecting-IP` y no `X-Forwarded-For` porque Cloudflare la **sobrescribe** siempre con la IP real del cliente: no es falsificable mientras el único camino hasta la app sea el túnel. De ahí que el compose de producción no publique el `8080` al host — ese atajo desde la LAN de la escuela permitiría inventar el header. `TRUSTED_PROXIES` vacío degrada a usar la IP del socket, que es el default correcto: se pierde la IP real, no se gana una falsificable.
+Se usa `CF-Connecting-IP` y no `X-Forwarded-For` porque Cloudflare la **sobrescribe** siempre con la IP real del cliente: no es falsificable mientras el único camino hasta la app sea el túnel. De ahí que el compose de producción no publique el `8080` al host — ese atajo desde la LAN de la institución permitiría inventar el header. `TRUSTED_PROXIES` vacío degrada a usar la IP del socket, que es el default correcto: se pierde la IP real, no se gana una falsificable.
 
 ### Por qué el cambio de contraseña devuelve un token nuevo
 
@@ -199,17 +204,22 @@ Las únicas dos rutas que aceptan un token con la contraseña temporal sin cambi
 
 ```sql
 CREATE TABLE audit_log (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    usuario_id UUID NOT NULL,
-    accion VARCHAR(100) NOT NULL,
-    entidad VARCHAR(50) NOT NULL,
-    entidad_id UUID,
-    detalle JSONB,
-    ip_origen INET,
-    creado_en TIMESTAMP NOT NULL DEFAULT now()
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id  UUID NOT NULL,          -- sin FK: lo que hizo una cuenta
+    accion      VARCHAR(100) NOT NULL,  -- sobrevive a su eliminación
+    entidad     VARCHAR(50) NOT NULL,
+    entidad_id  UUID,
+    detalle     JSONB,
+    ip_origen   INET,
+    creado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_audit_usuario ON audit_log(usuario_id, creado_en DESC);
+CREATE INDEX idx_audit_usuario ON audit_log (usuario_id, creado_en DESC);
 ```
+
+`accion` es texto libre y no un enum a propósito: los valores guardados son el
+nombre que tenía una operación **en su momento**. Si el sistema renombra algo,
+las filas viejas conservan el nombre viejo — reescribir un registro de
+auditoría es precisamente lo que un registro de auditoría no debe permitir.
 
 Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `ROL_DEGRADADO_A_DOCENTE`, `PASSWORD_RESETEADA`, `PASSWORD_RECUPERADA_POR_EMAIL`, `DOCENTE_REMOVIDO_DE_MATERIA`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_CREADO`, `EQUIPO_ESTADO_CAMBIADO`, `EQUIPO_DADO_DE_BAJA`, `EQUIPO_MOVIDO_DE_CARRO`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`.
 

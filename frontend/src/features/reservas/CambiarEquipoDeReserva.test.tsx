@@ -79,7 +79,7 @@ describe("CambiarEquipoDeReserva", () => {
     await user.selectOptions(screen.getByLabelText("¿Por cuál?"), "pc9")
     await user.click(screen.getByRole("button", { name: "Cambiar" }))
 
-    expect(reservasApi.cambiarEquipoDeReserva).toHaveBeenCalledWith("res1", "pc9")
+    expect(reservasApi.cambiarEquipoDeReserva).toHaveBeenCalledWith("res1", "pc9", true)
     expect(onListo).toHaveBeenCalled()
   })
 
@@ -87,7 +87,14 @@ describe("CambiarEquipoDeReserva", () => {
     renderComponente()
 
     await screen.findByLabelText("¿Por cuál?")
-    expect(reservasApi.equiposDisponibles).toHaveBeenCalledWith("2026-08-11", "08:00", "09:00")
+    expect(reservasApi.equiposDisponibles).toHaveBeenCalledWith(
+      "2026-08-11",
+      "08:00",
+      "09:00",
+      // Sin serie: una reserva suelta no pregunta alcance, así que no hay
+      // ninguna fecha futura contra la que cruzar (RF-08.14).
+      undefined
+    )
   })
 
   /**
@@ -112,7 +119,7 @@ describe("CambiarEquipoDeReserva", () => {
     await user.selectOptions(screen.getByLabelText("¿Por cuál?"), "pc9")
     await user.click(screen.getByRole("button", { name: "Cambiar" }))
 
-    expect(reservasApi.cambiarEquipoDeReserva).toHaveBeenCalledWith("res2", "pc9")
+    expect(reservasApi.cambiarEquipoDeReserva).toHaveBeenCalledWith("res2", "pc9", true)
   })
 
   it("no ofrece cambiar las que ya no están confirmadas", async () => {

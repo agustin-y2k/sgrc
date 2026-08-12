@@ -858,10 +858,9 @@ func (s *Service) PromoverAAdmin(ctx context.Context, usuarioID string) error {
 }
 
 // DegradarADocente es la inversa de PromoverAAdmin: le saca los permisos de
-// Admin a alguien que sigue siendo docente de la escuela, sin cerrarle la
-// cuenta. Hasta que existió, la única forma de sacar a un Admin era darle
-// de baja la cuenta entera —perdiendo sus materias y cancelándole las
-// reservas— por un cambio que era solo de permisos.
+// Admin a alguien que sigue siendo docente, sin cerrarle la cuenta. Existe
+// porque la alternativa —dar de baja la cuenta entera— pierde sus materias y
+// le cancela las reservas, que es demasiado para un cambio de permisos.
 //
 // A diferencia de promover, esta sí necesita transacción: es la única
 // operación además de la baja que puede reducir la cantidad de Admins, así

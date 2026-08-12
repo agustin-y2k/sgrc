@@ -87,9 +87,9 @@ func TestNuevaEquipo_IdentificadorInvalido_Error(t *testing.T) {
 	}
 }
 
-// El número de serie es texto porque el de fábrica trae letras. Este es el
-// caso que no entraba cuando la columna era BIGINT (ver migración 011), y
-// es el primero que se prueba al cargar el inventario.
+// El número de serie es texto porque el de fábrica trae letras. Con un tipo
+// numérico este caso no entra, y es el primero que aparece al cargar el
+// inventario real.
 func TestNuevaEquipo_NumeroSerieConLetras_OK(t *testing.T) {
 	equipo, err := NuevoEquipoDeCarro("id1", "carro1", 1, "5CD1234ABC", false, time.Now())
 	if err != nil {
@@ -133,7 +133,7 @@ func TestNuevaEquipo_NumeroSerieDemasiadoLargo_Error(t *testing.T) {
 	if !errors.Is(err, ErrNumeroSerieLargo) {
 		t.Fatalf("esperaba ErrNumeroSerieLargo, obtuve %v", err)
 	}
-	// El tope exacto sí entra: es el VARCHAR(50) de la migración 011.
+	// El tope exacto sí entra: es el VARCHAR(50) de la columna.
 	if _, err := NuevoEquipoDeCarro("id1", "carro1", 1, strings.Repeat("A", MaxLargoNumeroSerie), false, time.Now()); err != nil {
 		t.Fatalf("el largo máximo debería entrar: %v", err)
 	}

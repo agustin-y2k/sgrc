@@ -38,9 +38,15 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// leer reservas sin romper el límite de dominio.
 	reservation.Get("/equipos/:equipoId/calendario", autenticado, h.CalendarioDeEquipo)
 
-	// RF-04.2: la lista de equipos libres en una franja, de la que el docente
-	// tilda las que necesita.
+	// RF-04.2 y RF-04.11: las dos mitades de la franja — los equipos libres,
+	// de los que el docente tilda los que necesita, y los que ya tiene
+	// alguien, con quién los tiene.
 	reservation.Get("/equipos-disponibles", autenticado, h.ListarEquiposDisponibles)
+
+	// RF-04.12: pedirle al que lo tiene que lo libere. No cambia ninguna
+	// reserva —es un mensaje— y por eso lo puede hacer cualquier autenticado
+	// sin más permiso que estar aprobado.
+	reservation.Post("/reservas/:id/pedido-de-liberacion", autenticado, h.PedirLiberacionDeReserva)
 
 	// RF-08: entregas y devoluciones. Todo solo Admin — quien entrega y
 	// recibe las máquinas es quien hoy escribe el papel. Que un docente

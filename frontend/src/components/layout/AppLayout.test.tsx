@@ -103,8 +103,11 @@ describe("AppLayout", () => {
     expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "Aprobación" })).not.toBeInTheDocument()
     // RF-04.7 es solo de Admin y cancela reservas ajenas: que no se filtre.
+    // El nombre tiene que ser el que la barra usa de verdad (ver
+    // ENLACES_ADMIN): con uno viejo la aserción da verdadera siempre y el
+    // enlace se podría filtrar sin que nadie se entere.
     expect(
-      screen.queryByRole("link", { name: "Bloqueo por evaluación" })
+      screen.queryByRole("link", { name: "Bloquear equipos" })
     ).not.toBeInTheDocument()
   })
 

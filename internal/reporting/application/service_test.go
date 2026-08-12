@@ -26,6 +26,7 @@ type fakeRepo struct {
 	incidenciasEquipo  []domain.ResumenIncidenciasEquipo
 	incidenciasCarro   []domain.ResumenIncidenciasCarro
 	errIncidencias     error
+	borradosSinCuenta  []int
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -47,6 +48,16 @@ func (r *fakeRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain.His
 		return r.errGuardarDoc
 	}
 	r.historicoDocente[h.ID] = h
+	return nil
+}
+
+func (r *fakeRepo) BorrarHistoricoDocentesSinCuenta(ctx context.Context, anio int) error {
+	r.borradosSinCuenta = append(r.borradosSinCuenta, anio)
+	for id, h := range r.historicoDocente {
+		if h.Anio == anio && h.UsuarioID == nil {
+			delete(r.historicoDocente, id)
+		}
+	}
 	return nil
 }
 func (r *fakeRepo) ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error) {
@@ -108,6 +119,10 @@ func (f *fakeInfoUsuario) NombreCompletoDe(ctx context.Context, usuarioID string
 	return f.nombre, nil
 }
 
+// ptr es azúcar para los campos opcionales de los resúmenes: UsuarioID es
+// *string porque una cuenta eliminada deja la referencia en nil.
+func ptr(s string) *string { return &s }
+
 var contadorID int
 
 func idSecuencial() string {
@@ -151,7 +166,7 @@ func TestReporteUsoEquipos_ErrorDelRepo_SePropaga(t *testing.T) {
 
 func TestReporteUsoDocentes_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usoDocentes = []domain.ResumenUsoDocente{{UsuarioID: "docente1", CantidadReservas: 3, MinutosReservados: 270}}
+	repo.usoDocentes = []domain.ResumenUsoDocente{{UsuarioID: ptr("docente1"), CantidadReservas: 3, MinutosReservados: 270}}
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.ReporteUsoDocentes(context.Background(), "ciclo1", nil, nil)
@@ -159,7 +174,7 @@ func TestReporteUsoDocentes_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if len(resultado) != 1 || resultado[0].UsuarioID != "docente1" {
+	if len(resultado) != 1 || resultado[0].UsuarioID == nil || *resultado[0].UsuarioID != "docente1" {
 		t.Fatalf("resultado incorrecto: %+v", resultado)
 	}
 }
@@ -191,7 +206,7 @@ func TestArchivarSnapshotDeCiclo_OK(t *testing.T) {
 		{EquipoID: "pc2", CantidadReservas: 0, MinutosReservados: 0},
 	}
 	repo.usoDocentes = []domain.ResumenUsoDocente{
-		{UsuarioID: "docente1", CantidadReservas: 6, MinutosReservados: 540},
+		{UsuarioID: ptr("docente1"), CantidadReservas: 6, MinutosReservados: 540},
 	}
 	svc := nuevoServicioDeTest(repo)
 
@@ -290,4 +305,62 @@ func (r *fakeRepo) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.Equi
 
 func (r *fakeRepo) CalcularIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error) {
 	return r.porCategoria, nil
+}
+
+// Una cuenta eliminada definitivamente (RF-01.9) deja creado_por en NULL, y
+// el repositorio devuelve esa fila con UsuarioID nil y el nombre congelado.
+// El snapshot la tiene que guardar igual: si no, las horas de esa persona
+// desaparecen del año y los totales dejan de cerrar.
+func TestArchivarSnapshotDeCiclo_DocenteSinCuenta_SeGuardaConElNombreCongelado(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usoDocentes = []domain.ResumenUsoDocente{
+		{UsuarioID: nil, NombreDocente: "Grace Hopper", CantidadReservas: 4, MinutosReservados: 360},
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	if err := svc.ArchivarSnapshotDeCiclo(context.Background(), "ciclo1", 2026); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if len(repo.historicoDocente) != 1 {
+		t.Fatalf("esperaba 1 histórico guardado, hay %d", len(repo.historicoDocente))
+	}
+	for _, h := range repo.historicoDocente {
+		if h.UsuarioID != nil {
+			t.Errorf("esperaba UsuarioID nil, obtuve %v", *h.UsuarioID)
+		}
+		// El nombre NO sale del puerto hacia auth —esa cuenta ya no existe—
+		// sino del snapshot que viaja en la reserva.
+		if h.NombreDocenteSnapshot != "Grace Hopper" {
+			t.Errorf("esperaba el nombre congelado, obtuve %q", h.NombreDocenteSnapshot)
+		}
+		if h.MinutosTotales != 360 {
+			t.Errorf("esperaba 360 minutos, obtuve %d", h.MinutosTotales)
+		}
+	}
+}
+
+// El archivado se puede reintentar (la cascada cruza tres paquetes sin una
+// transacción común). Para las filas con usuario_id NULL el ON CONFLICT de
+// la base no sirve —Postgres no considera iguales a dos NULL— así que el
+// servicio las borra antes de reescribirlas.
+func TestArchivarSnapshotDeCiclo_Reintentado_NoDuplicaDocentesSinCuenta(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usoDocentes = []domain.ResumenUsoDocente{
+		{UsuarioID: nil, NombreDocente: "Grace Hopper", CantidadReservas: 4, MinutosReservados: 360},
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	for i := 0; i < 3; i++ {
+		if err := svc.ArchivarSnapshotDeCiclo(context.Background(), "ciclo1", 2026); err != nil {
+			t.Fatalf("intento %d: %v", i+1, err)
+		}
+	}
+
+	if len(repo.historicoDocente) != 1 {
+		t.Fatalf("tres intentos tienen que dejar 1 fila, hay %d", len(repo.historicoDocente))
+	}
+	if len(repo.borradosSinCuenta) != 3 {
+		t.Errorf("esperaba una limpieza por intento, hubo %d", len(repo.borradosSinCuenta))
+	}
 }

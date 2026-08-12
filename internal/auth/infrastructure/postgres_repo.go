@@ -129,12 +129,11 @@ const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambia
 
 // BuscarPorEmail compara contra lower(email) y no contra la columna pelada.
 //
-// application ya normaliza el email antes de llamar acá, y la migración 004
-// dejó todas las filas en minúsculas, así que un `email = $1` alcanzaría hoy.
-// Se usa lower() igual por dos razones: la comparación deja de depender de
-// que nadie inserte una fila a mano con otra capitalización, y es exactamente
-// la expresión del índice idx_usuario_email_lower, así que sigue resolviendo
-// por índice en vez de escanear la tabla.
+// application ya normaliza el email antes de llamar acá, así que un
+// `email = $1` alcanzaría. Se usa lower() igual por dos razones: la
+// comparación deja de depender de que nadie inserte una fila a mano con otra
+// capitalización, y es exactamente la expresión del índice
+// idx_usuario_email_lower, así que resuelve por índice en vez de escanear.
 func (r *PostgresRepo) BuscarPorEmail(ctx context.Context, email string) (*domain.Usuario, error) {
 	row := r.db.QueryRow(ctx, `SELECT `+columnasUsuario+` FROM usuario WHERE lower(email) = lower($1)`, email)
 	return escanearUsuario(row)

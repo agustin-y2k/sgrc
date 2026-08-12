@@ -120,7 +120,7 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
           )}
 
           <Seccion
-            titulo={`Uso por Equipo en ${anioElegido}`}
+            titulo={`Uso por equipo en ${anioElegido}`}
             resumen={
               filasHistoricoEquipos.length > 0 &&
               `${filasHistoricoEquipos.length} Equipos · ${sumar(filasHistoricoEquipos, (h) => h.cantidadReservas)} reservas · ${formatearDuracion(totalMinutosHistoricoEquipos)} en total`

@@ -48,9 +48,9 @@ var diaSemanaAGoWeekday = map[DiaSemana]time.Weekday{
 var ErrDiaNoLectivo = errors.New("no se puede reservar un sábado o un domingo")
 
 // EsDiaLectivo dice si una fecha cae dentro de la semana lectiva. Se aplica
-// a las reservas (RF-04.2 y RF-04.5), no a los bloqueos por evaluación
-// estatal (RF-04.7): una evaluación es excepcional por naturaleza y es el
-// Admin quien decide cuándo, así que no se le impone la restricción.
+// a las reservas (RF-04.2 y RF-04.5), no a los bloqueos administrativos
+// (RF-04.7): un bloqueo es excepcional por naturaleza y es el Admin quien
+// decide cuándo, así que no se le impone la restricción.
 func EsDiaLectivo(fecha time.Time) bool {
 	switch fecha.Weekday() {
 	case time.Saturday, time.Sunday:

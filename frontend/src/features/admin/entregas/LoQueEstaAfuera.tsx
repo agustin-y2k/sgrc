@@ -59,7 +59,7 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
       const yaEstaban = respuesta.noRecibidos?.length ?? 0
       setResumen(
         yaEstaban === 0
-          ? `Volvieron ${respuesta.recibidos.length} computadora(s).`
+          ? `Volvieron ${respuesta.recibidos.length} equipo(s).`
           : `Volvieron ${respuesta.recibidos.length}. ${yaEstaban} ya figuraba(n) adentro.`
       )
       setMarcados(new Set())
@@ -84,8 +84,8 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
         <CardTitle>Afuera del laboratorio</CardTitle>
         <CardDescription>
           {prestamos.length === 0
-            ? "No hay ninguna computadora entregada."
-            : `${prestamos.length} computadora(s) entregada(s)${demorados > 0 ? `, ${demorados} sin devolver a horario` : ""}. Marcá acá cuando vuelvan.`}
+            ? "No hay ningún equipo entregado."
+            : `${prestamos.length} equipo(s) entregado(s)${demorados > 0 ? `, ${demorados} sin devolver a horario` : ""}. Marcá acá cuando vuelvan.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">

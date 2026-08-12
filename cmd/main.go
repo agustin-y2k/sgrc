@@ -129,6 +129,23 @@ func origenDelFrontend() string {
 	return origen
 }
 
+// remitenteDeCorreo es la dirección desde la que salen los avisos, para
+// publicarla en la configuración pública (GET /api/auth/config).
+//
+// Lee las mismas variables que el enviador y con la misma precedencia
+// (SMTP_FROM, y si falta el usuario, que es lo que exige Gmail). Sin correo
+// configurado devuelve vacío, y las pantallas que la nombran simplemente no
+// dicen de dónde va a llegar.
+func remitenteDeCorreo() string {
+	if strings.TrimSpace(os.Getenv("SMTP_HOST")) == "" {
+		return ""
+	}
+	if desde := strings.TrimSpace(os.Getenv("SMTP_FROM")); desde != "" {
+		return desde
+	}
+	return strings.TrimSpace(os.Getenv("SMTP_USER"))
+}
+
 // timeoutHealth acota el ping a Postgres. Un healthcheck que se cuelga es
 // peor que uno que falla: el orquestador se queda esperando en vez de
 // reiniciar, y con el pool saturado el chequeo pasa a ser otra conexión más
@@ -138,10 +155,10 @@ const timeoutHealth = 2 * time.Second
 // handlerHealth responde si el proceso puede hacer su trabajo, no solo si
 // está vivo.
 //
-// La versión anterior devolvía {"status":"ok"} sin tocar el pool: con
-// Postgres apagado seguía respondiendo 200, así que el único chequeo
-// automático posible daba por sano a un proceso que no podía atender ni un
-// login. Un healthcheck que no puede fallar no es un healthcheck.
+// Consulta el pool en vez de responder {"status":"ok"} a secas: con
+// Postgres apagado, un health que no toca la base sigue devolviendo 200 y da
+// por sano a un proceso que no puede atender ni un login. Un healthcheck que
+// no puede fallar no es un healthcheck.
 //
 // El 503 es deliberado: es lo que hace que Docker (y cualquier proxy que
 // mire el estado) trate al contenedor como no disponible en vez de mandarle
@@ -213,11 +230,27 @@ func horaAvisoLicencias() int {
 func configDeVigilancia() reservationapp.ConfigDeVigilancia {
 	cfg := reservationapp.ConfigDeVigilanciaPorDefecto()
 
+	if v := minutosDeEntorno("RETIRO_AVISO_MINUTOS"); v > 0 {
+		cfg.DemoraDelAvisoDeNoRetiro = v
+	}
 	if v := minutosDeEntorno("RETIRO_GRACIA_MINUTOS"); v > 0 {
 		cfg.GraciaDeRetiro = v
 	}
+	if v := minutosDeEntorno("RETIRO_PARCIAL_GRACIA_MINUTOS"); v > 0 {
+		cfg.GraciaTrasEntregaParcial = v
+	}
 	if v := minutosDeEntorno("DEVOLUCION_DEMORA_MINUTOS"); v > 0 {
 		cfg.DemoraParaReclamar = v
+	}
+
+	// El aviso tiene que llegar ANTES de que la reserva se libere, o no es un
+	// aviso: sería un correo diciéndole al docente que a los X minutos pierde
+	// unas máquinas que ya perdió. Es configuración incoherente y se trata
+	// como tal — no arranca.
+	if cfg.DemoraDelAvisoDeNoRetiro >= cfg.GraciaDeRetiro {
+		log.Fatalf("RETIRO_AVISO_MINUTOS (%v) tiene que ser menor que RETIRO_GRACIA_MINUTOS (%v): "+
+			"el aviso de que la reserva va a quedar libre sale antes de que quede libre, "+
+			"no después", cfg.DemoraDelAvisoDeNoRetiro, cfg.GraciaDeRetiro)
 	}
 	if crudo := strings.TrimSpace(os.Getenv("CIERRE_JORNADA")); crudo != "" {
 		hora, err := strconv.Atoi(crudo)
@@ -429,7 +462,10 @@ func main() {
 		verificadorGoogle,
 		correoHabilitado,
 	)
-	authHandler := authhttp.NewHandler(authSvc, auditor, googleClientID)
+	// La dirección del remitente sale de la misma variable que usa el
+	// enviador, no de una copia: si la instalación cambia de casilla, las
+	// pantallas que la nombran cambian con ella.
+	authHandler := authhttp.NewHandler(authSvc, auditor, googleClientID, remitenteDeCorreo())
 
 	// ── reporting ─────────────────────────────────────────────────
 	// Se arma ANTES que academic a propósito: academic necesita envolver
@@ -598,10 +634,10 @@ func main() {
 					continue
 				}
 				if resumen.HizoAlgo() {
-					log.Printf("barrido: %d recordatorios, %d reservas liberadas, "+
+					log.Printf("barrido: %d recordatorios, %d avisos de no retiro, %d reservas liberadas, "+
 						"%d avisos de equipo faltante, %d reclamos de devolución, %d avisos de cierre",
-						resumen.Recordatorios, resumen.Liberadas, resumen.AvisosDeEquipoFaltante,
-						resumen.Reclamos, resumen.AvisosDeCierre)
+						resumen.Recordatorios, resumen.AvisosDeNoRetiro, resumen.Liberadas,
+						resumen.AvisosDeEquipoFaltante, resumen.Reclamos, resumen.AvisosDeCierre)
 				}
 			}
 		}

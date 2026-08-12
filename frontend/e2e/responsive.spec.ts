@@ -31,7 +31,7 @@ const RUTAS = [
   "/admin/academico",
   "/admin/inventario",
   "/admin/reportes",
-  "/admin/bloqueo-evaluacion",
+  "/admin/bloquear-equipos",
 ]
 
 // 320 es el teléfono más angosto que sigue en uso; 1024 y 1180 son los dos

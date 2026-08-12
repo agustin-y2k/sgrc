@@ -2,7 +2,7 @@
 #
 # Siembra datos mínimos para poder USAR el sistema recién levantado:
 # un ciclo lectivo, un curso, una materia, un docente aprobado y asignado
-# a esa materia, y un carro con ocho PCs.
+# a esa materia, y un carro con ocho equipos.
 #
 # Para qué hace falta: `cmd/main.go` siembra el primer Admin y nada más
 # (ver `make seed-admin`). Sin ciclo no hay cursos, sin cursos no hay
@@ -33,7 +33,7 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-cambiar_inmediatamente}"
 DOCENTE_EMAIL="${DOCENTE_EMAIL:-docente@escuela.edu.ar}"
 DOCENTE_PASSWORD="${DOCENTE_PASSWORD:-docente_password_123}"
 ANIO="${ANIO:-$(date +%Y)}"
-CANTIDAD_PCS="${CANTIDAD_PCS:-8}"
+CANTIDAD_EQUIPOS="${CANTIDAD_EQUIPOS:-8}"
 
 # ── Guardas ───────────────────────────────────────────────────────────
 #
@@ -145,18 +145,18 @@ echo "→ asignación del docente a la materia"
 api POST "/api/academic/materias/$MATERIA/docentes" \
   "{\"usuarioId\":\"$DOCENTE\",\"rol\":\"TITULAR\"}" >/dev/null || true
 
-echo "→ carro y $CANTIDAD_PCS PCs"
+echo "→ carro y $CANTIDAD_EQUIPOS equipos"
 CARRO=$(reusar_o_crear "Carro 1" \
   "/api/inventory/carros" \
   "/api/inventory/carros" \
   '{"nombre":"Carro 1","descripcion":"Laboratorio de informática"}')
 
-PCS_EXISTENTES=$(api GET "/api/inventory/carros/$CARRO/pcs" | grep -o '"identificador":' | wc -l)
+EQUIPOS_EXISTENTES=$(api GET "/api/inventory/carros/$CARRO/equipos" | grep -o '"identificador":' | wc -l)
 i=1
-while [ "$i" -le "$CANTIDAD_PCS" ]; do
-  # El identificador es único dentro del carro: si la PC ya está, el
-  # backend responde 409 y se sigue con la siguiente.
-  api POST "/api/inventory/carros/$CARRO/pcs" \
+while [ "$i" -le "$CANTIDAD_EQUIPOS" ]; do
+  # El identificador es único dentro del carro: si el equipo ya está, el
+  # backend responde 409 y se sigue con el siguiente.
+  api POST "/api/inventory/carros/$CARRO/equipos" \
     "{\"identificador\":$i,\"numeroSerie\":\"5CD100${i}ABC\",\"freezado\":true,\"cpu\":\"i5\",\"ram\":\"8GB\",\"sistemaOperativo\":\"Windows 10\",\"softwareInstalado\":\"AutoCAD 2027, Office\"}" >/dev/null || true
   i=$((i + 1))
 done
@@ -167,7 +167,7 @@ Listo.
   Admin    $ADMIN_EMAIL / $ADMIN_PASSWORD
   Docente  $DOCENTE_EMAIL / $DOCENTE_PASSWORD
   Ciclo    $ANIO · curso 1°A · materia Programación
-  Carro 1  $CANTIDAD_PCS PCs disponibles (había $PCS_EXISTENTES antes de correr esto)
+  Carro 1  $CANTIDAD_EQUIPOS equipos disponibles (había $EQUIPOS_EXISTENTES antes de correr esto)
 
 La semana lectiva es de lunes a viernes: al reservar, elegí un día hábil.
 RESUMEN

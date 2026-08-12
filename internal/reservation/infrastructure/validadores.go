@@ -70,9 +70,9 @@ func (v *ValidadorEquipoPostgres) EquipoDisponibleParaReservar(ctx context.Conte
 		}
 		return false, fmt.Errorf("verificando disponibilidad del equipo: %w", err)
 	}
-	// `reservable` es la mitad que agrega la 015: la lista de disponibles ya
-	// lo filtra, pero un pedido armado a mano no pasa por esa lista, y sin
-	// este chequeo se podría reservar un cargador igual.
+	// `reservable` no es redundante con la lista de disponibles, que ya lo
+	// filtra: un pedido armado a mano no pasa por esa lista, y sin este
+	// chequeo se podría reservar un cargador igual (RF-03.16).
 	return estado == "DISPONIBLE" && !dadoDeBaja && reservable, nil
 }
 
@@ -145,7 +145,7 @@ func (v *ValidadorEquipoPostgres) EquipoEstaEnInventario(ctx context.Context, eq
 
 // EtiquetasDeEquipos: cómo se nombra cada equipo, para los avisos de
 // cancelación. Una sola consulta con = ANY en vez de una por PC — un
-// bloqueo por evaluación sobre un carro entero puede tocar todas las suyas.
+// bloqueo administrativo sobre un carro entero puede tocar todas las suyas.
 func (v *ValidadorEquipoPostgres) EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error) {
 	etiquetas := make(map[string]string, len(equipoIDs))
 	if len(equipoIDs) == 0 {

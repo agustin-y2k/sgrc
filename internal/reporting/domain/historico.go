@@ -89,7 +89,11 @@ type ResumenUsoEquipo struct {
 }
 
 type ResumenUsoDocente struct {
-	UsuarioID         string
+	// UsuarioID es nil cuando la cuenta se eliminó definitivamente
+	// (RF-01.9): la FK quedó en SET NULL y lo único que sobrevive es el
+	// nombre congelado en la reserva. Sus horas se cuentan igual — el
+	// reporte del año tiene que cerrar aunque alguien se haya ido.
+	UsuarioID         *string
 	NombreDocente     string
 	CantidadReservas  int
 	MinutosReservados int

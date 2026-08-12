@@ -25,9 +25,9 @@ func horaDelDia(d time.Duration) string {
 // listaDeEquipos enumera "PC 1, PC 2 y Proyector Epson". La conjunción final
 // no es un capricho: sin ella se lee como una tabla, y esto es una frase.
 //
-// Recibe etiquetas ya resueltas y no números: desde la 015 lo que se reserva
-// puede no tener número, y "PC 0" es lo que sale de formatear uno que no
-// existe.
+// Recibe etiquetas ya resueltas y no números: lo que se reserva puede no
+// tener número —un proyector no es "PC 3"— y "PC 0" es lo que sale de
+// formatear uno que no existe (RF-03.17).
 func listaDeEquipos(nombres []string) string {
 	switch len(nombres) {
 	case 0:
@@ -112,42 +112,89 @@ func (m *Mensajero) textoDeEquipoNoDisponible(a eventbus.EquipoNoDisponibleParaR
 }
 
 // ══════════════════════════════════════════════════════════════════
-// Tu reserva se liberó
+// Alguien te pide un equipo que tenés reservado
 // ══════════════════════════════════════════════════════════════════
+//
+// Es el único aviso de esta familia que NO anuncia un cambio. Todos los demás
+// —cancelada, liberada, tu máquina no volvió— le cuentan al docente algo que
+// ya le pasó a su reserva, así que si este no dice en la primera línea que la
+// reserva sigue siendo suya, se lee como una cancelación más.
 
-func mensajeDeReservasLiberadas(a eventbus.ReservasLiberadas) string {
-	if a.TodaLaReserva {
-		return fmt.Sprintf("Tu reserva de las %s para %s quedó libre: pasaron %d minutos y no "+
-			"se retiró ninguna computadora",
-			horaDelDia(a.HoraInicio), a.MateriaNombre, a.MinutosDeGracia)
-	}
-	return fmt.Sprintf("%s de tu reserva de las %s quedaron libres: pasaron %d minutos y no se retiraron",
-		listaDeEquipos(a.Equipos), horaDelDia(a.HoraInicio), a.MinutosDeGracia)
+func mensajeDePedidoDeLiberacion(a eventbus.PedidoDeLiberacion) string {
+	return fmt.Sprintf("%s necesita %s, que tenés reservada el %s de %s a %s. "+
+		"Tu reserva sigue como está: la decisión es tuya",
+		a.SolicitanteNombre, a.Etiqueta, formatearFecha(a.Fecha),
+		horaDelDia(a.HoraInicio), horaDelDia(a.HoraFin))
 }
 
-func (m *Mensajero) textoDeReservasLiberadas(a eventbus.ReservasLiberadas) (asunto, cuerpo string) {
-	asunto = "Tu reserva quedó libre"
+func (m *Mensajero) textoDePedidoDeLiberacion(a eventbus.PedidoDeLiberacion) (asunto, cuerpo string) {
+	asunto = fmt.Sprintf("%s necesita una computadora que tenés reservada", a.SolicitanteNombre)
 
-	if a.TodaLaReserva {
-		cuerpo = saludo(a.Nombre) +
-			fmt.Sprintf("Tu reserva de hoy a las %s para %s (%s) quedó libre: pasaron %d "+
-				"minutos del horario de inicio y no se retiró ninguna computadora, así que "+
-				"volvieron a estar disponibles para el resto.",
-				horaDelDia(a.HoraInicio), a.MateriaNombre, listaDeEquipos(a.Equipos),
-				a.MinutosDeGracia)
-	} else {
-		cuerpo = saludo(a.Nombre) +
-			fmt.Sprintf("%s de tu reserva de hoy a las %s para %s quedaron libres: pasaron %d "+
-				"minutos y no se retiraron, así que volvieron a estar disponibles para el resto.",
-				listaDeEquipos(a.Equipos), horaDelDia(a.HoraInicio), a.MateriaNombre,
-				a.MinutosDeGracia)
+	cuerpo = saludo(a.Nombre) +
+		fmt.Sprintf("%s necesita %s para el %s de %s a %s, que es la franja en la que la "+
+			"tenés reservada%s.",
+			a.SolicitanteNombre, a.Etiqueta, formatearFecha(a.Fecha),
+			horaDelDia(a.HoraInicio), horaDelDia(a.HoraFin), paraLaMateria(a.MateriaNombre))
+
+	if a.Mensaje != "" {
+		// Va tal cual y entre comillas: es la parte del pedido que explica
+		// para qué la necesita, y reformularla sería ponerle palabras en la
+		// boca a quien pidió.
+		cuerpo += fmt.Sprintf("\n\nTe dejó este mensaje:\n\n  «%s»", a.Mensaje)
 	}
 
-	// Liberar no es prohibir, y decirlo importa: sin esta línea el docente
-	// que llegó tarde asume que ya no puede usarlas y se va.
-	cuerpo += "\n\nEsto no quiere decir que no las puedas usar: si todavía están en el " +
-		"laboratorio, pedíselas a un administrador y te las entrega igual. Lo único que " +
-		"pasó es que dejaron de estar guardadas a tu nombre."
+	// Lo primero que hay que despejar: no se le sacó nada.
+	cuerpo += "\n\nTu reserva no cambió y nadie la va a cambiar por vos: esto es un pedido, " +
+		"no un aviso de cancelación. Si podés arreglarte sin esa máquina, entrá al sistema y " +
+		"cambiala por otra libre o cancelá esa reserva, y queda disponible. Si la necesitás, " +
+		"no tenés que hacer nada."
+	cuerpo += m.enlace("Tus reservas están en:")
+	cuerpo += firma
+	return asunto, cuerpo
+}
+
+// paraLaMateria arma el " para Matemáticas" del medio de la frase, o nada si
+// la reserva no tiene materia a la vista. Sin esto, una materia vacía dejaba
+// un "para ." colgando.
+func paraLaMateria(nombre string) string {
+	if strings.TrimSpace(nombre) == "" {
+		return ""
+	}
+	return " para " + nombre
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Todavía no retiraste las máquinas
+// ══════════════════════════════════════════════════════════════════
+//
+// Este aviso sale mientras todavía se puede hacer algo, no cuando la reserva
+// ya se liberó. Por eso el texto está escrito en futuro y termina ofreciendo
+// las tres salidas que le quedan al docente: ir, cambiar la máquina o
+// cancelar. Un aviso que solo constata no le sirve a nadie.
+
+func mensajeDeReservaSinRetirar(a eventbus.ReservaSinRetirar) string {
+	return fmt.Sprintf("Todavía no retiraste %s de tu reserva de las %s para %s: a los %d "+
+		"minutos del horario de inicio quedan libres para otro docente",
+		listaDeEquipos(a.Equipos), horaDelDia(a.HoraInicio), a.MateriaNombre, a.MinutosDeGracia)
+}
+
+func (m *Mensajero) textoDeReservaSinRetirar(a eventbus.ReservaSinRetirar) (asunto, cuerpo string) {
+	asunto = "Todavía no retiraste tus computadoras"
+
+	cuerpo = saludo(a.Nombre) +
+		fmt.Sprintf("Tu clase de %s empezó a las %s y todavía nadie pasó a buscar %s.",
+			a.MateriaNombre, horaDelDia(a.HoraInicio), listaDeEquipos(a.Equipos))
+
+	cuerpo += fmt.Sprintf("\n\nA los %d minutos del horario de inicio, lo que no se haya "+
+		"retirado queda libre para que lo use otro docente. Si vas en camino no hace falta "+
+		"que hagas nada; si no vas a poder ir, o si preferís cambiar alguna máquina por otra, "+
+		"desde el sistema podés hacerlo ahora.", a.MinutosDeGracia)
+
+	// Liberar no es prohibir, y decirlo acá evita el llamado del docente que
+	// llegó tarde y cree que ya no puede usar nada.
+	cuerpo += "\n\nY si llegás más tarde y las computadoras siguen en el laboratorio, " +
+		"pedíselas a un administrador: te las entrega igual. Lo único que cambia es que " +
+		"dejan de estar guardadas a tu nombre."
 	cuerpo += m.enlace("Tus reservas están en:")
 	cuerpo += firma
 	return asunto, cuerpo

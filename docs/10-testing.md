@@ -52,12 +52,12 @@ la cobertura actual es:
 
 | Capa | Cobertura |
 |---|---|
-| `domain/` de los 7 paquetes | 94–100% |
-| `application/` de los 7 paquetes | 66–88% |
+| `domain/` de los 7 paquetes | 89–100% |
+| `application/` de los 7 paquetes | 62–90% |
 
-Lo que se busca cubrir siempre: las tres cascadas de cancelación (evaluación
-estatal, PC fuera de servicio, materia sin docente), el archivado de ciclo
-—donde el orden de los pasos es lo único que evita perder datos— y las
+Lo que se busca cubrir siempre: las tres cascadas de cancelación (bloqueo
+administrativo, equipo fuera de servicio, materia sin docente), el archivado de
+ciclo —donde el orden de los pasos es lo único que evita perder datos— y las
 transiciones de estado inválidas.
 
 Reportes:
@@ -78,7 +78,7 @@ make coverage-report   # genera coverage.html navegable
 
 Se prueba **por pantalla y por rol**, no por componente aislado: lo que
 importa es que un docente no vea acciones de Admin y que un formulario no
-deje mandar algo que el backend va a rechazar.
+deje mandar algo que el backend va a rechazar. Son 418 tests en 40 archivos.
 
 Dos criterios que ya evitaron falsos verdes:
 
@@ -89,13 +89,12 @@ Dos criterios que ya evitaron falsos verdes:
 - **Orden estable en los fakes.** Los dobles de prueba que devuelven páginas
   ordenan explícitamente: sobre un `map` el orden cambia entre corridas y un
   test de paginación pasa o falla al azar.
-- **El ancho se mide, no se mira.** `e2e/responsive.spec.ts` recorre las doce
-  pantallas a 320, 375, 768, 1024, 1180 y 1440px y falla si el documento es
-  más ancho que la ventana, nombrando al elemento culpable. Existe por un
-  caso real: la barra de navegación con los diez ítems de Admin medía 1190px,
-  así que en un portátil de 1024 toda la página quedaba con scroll
-  horizontal. No se ve en una captura y vuelve solo cada vez que se agrega un
-  ítem al menú.
+- **El ancho se mide, no se mira.** `e2e/responsive.spec.ts` recorre las
+  pantallas a 320, 375, 768, 1024, 1180 y 1440px y falla si el documento es más
+  ancho que la ventana, nombrando al elemento culpable. El caso que cubre es la
+  barra de navegación completa de un Admin: no desborda en un monitor de
+  desarrollo, sí en un portátil de 1024, no se ve en una captura, y vuelve sola
+  cada vez que se agrega un ítem al menú.
 
 ```bash
 cd frontend
@@ -123,9 +122,9 @@ Vale tenerlo escrito, porque es donde hay que mirar a mano:
 - **El túnel de Cloudflare** no se prueba automáticamente: es lo único del
   camino de producción que no se puede ensayar en local. nginx y el build de
   producción sí, porque los E2E van contra `:8081`.
-- **Las migraciones sobre datos existentes** se prueban a mano, con una copia
-  de la base. Las que abortan al encontrar datos fuera de la regla nueva son
-  justamente el caso que hay que ensayar antes de aplicarlas en el servidor.
+- **El esquema sobre una base que ya existe.** `migrations/` se aplica solo
+  sobre una base vacía; llevar una instalación en marcha a un esquema nuevo se
+  ensaya a mano, contra una copia, antes de tocar el servidor.
 
 ---
 
