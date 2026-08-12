@@ -19,7 +19,7 @@ sequenceDiagram
     alt Email libre
         AUTH->>DB: INSERT usuario (estado=PENDIENTE,<br/>curso_solicitado, materia_solicitada)
         AUTH->>EB: Publish("docente.registro.pendiente", { usuarioId, nombre, apellido })
-        EB->>NOTIF: Subscribe handler ejecuta en la misma goroutine/worker
+        EB->>NOTIF: Publish es sincrónico; el handler se va a su propia goroutine
         NOTIF->>DB: SELECT usuario WHERE rol=ADMIN AND estado=APROBADA
         NOTIF->>DB: INSERT notificación tipo=DOCENTE_PENDIENTE para cada Admin (RF-05.6)
         AUTH-->>FE: 201 Cuenta creada, pendiente de aprobación
@@ -87,7 +87,7 @@ sequenceDiagram
 
 > El JWT se emite igual con la contraseña temporal — `debeCambiarPassword` es una bandera que el frontend usa para bloquear la navegación hasta que se cambie, no una restricción a nivel de token.
 
-## 2. Reservar equipos (una o varias, en un solo grupo)
+## 2. Reservar equipos (uno o varios, en un solo grupo)
 
 ```mermaid
 sequenceDiagram
@@ -98,11 +98,13 @@ sequenceDiagram
     participant DB as sgrc_db
 
     U->>FE: Selecciona materia, fecha, horario
+    Note over FE: Antes de la franja no hay lista que mostrar
     FE->>RES: GET /api/reservation/equipos-disponibles?fecha&horaInicio&horaFin
-    RES->>INV: Listar equipos DISPONIBLE sin solapamiento en ese horario
-    INV-->>FE: Lista de equipos para tildar
-    U->>FE: Tilda los equipos que necesita (una o varias)
-    FE->>RES: POST /api/reservations { materiaId, fecha, horaInicio, horaFin, equipoIds: [...] }
+    RES->>INV: Listar equipos DISPONIBLE y reservables
+    RES->>DB: SELECT reservas y bloqueos que pisan esa franja
+    RES-->>FE: { data: libres para tildar, ocupados: con docente/materia/franja o motivo }
+    U->>FE: Tilda los equipos que necesita (uno o varios)
+    FE->>RES: POST /api/reservation/reservas { materiaId, fecha, horaInicio, horaFin, equipoIds: [...] }
     RES->>RES: Verifica permiso sobre la materia (rol + docente_materia)
     RES->>DB: INSERT reserva_grupo (CONFIRMADA)
     loop por cada equipoId
@@ -110,20 +112,54 @@ sequenceDiagram
     end
     alt Todos los equipos sin solapamiento
         DB-->>RES: OK
-        RES-->>FE: 201 { reservaGrupoId, pcsConfirmadas: N }
+        RES-->>FE: 201 { reservaGrupoId, equiposConfirmados: N }
         FE-->>U: ✅ Reserva confirmada (N equipos)
     else Algún equipo con solapamiento
         DB-->>RES: Constraint violation en ese equipo puntual
         RES->>DB: SELECT reserva en conflicto para ese equipo
         RES->>DB: ROLLBACK — no se confirma ningún equipo del grupo
-        RES-->>FE: 409 { conflictos: [{ equipoId, docente, materia, horario }] }
-        FE-->>U: ❌ PC-07 ocupada por [nombre] - destildá ese equipo y reintentá
+        RES-->>FE: 409 "no se pudo reservar: PC 7 ya está reservado el 13/03 de 10:00 a 12:00 (Ada Lovelace)"
+        FE-->>U: ❌ El mensaje dice cuál destildar; se recarga la lista de libres
     end
 ```
 
-> La creación es transaccional: si un solo equipo del grupo tiene solapamiento, no se confirma ninguna — el usuario ve exactamente cuál equipo falló y puede destildarla sin perder el resto de la selección.
+> La creación es transaccional: si un solo equipo del grupo tiene solapamiento, no se confirma ninguno. El cuerpo del 409 es texto plano —el backend usa el `ErrorHandler` por defecto de Fiber— pero ese texto **nombra el choque**: qué equipo, qué día, qué franja y con quién. El dato lo trae la misma consulta que lo detectó, así que no cuesta nada más.
 
-## 3. Reserva recurrente (una o varias equipos)
+> **La misma consulta responde las dos mitades.** Saber qué está libre en una franja exige leer las reservas y bloqueos que la pisan; devolver también quién tiene cada equipo tomado no agrega ninguna ida a la base, solo deja de descartar lo que ya se leyó (RF-04.11).
+
+## 2b. Pedirle equipos a quien los tiene reservados (RF-04.12)
+
+```mermaid
+sequenceDiagram
+    actor U as Docente que necesita el equipo
+    participant FE as Frontend
+    participant RES as reservation (paquete)
+    participant EB as eventbus
+    participant NOT as notification (paquete)
+    actor D as Docente dueño de la reserva
+
+    U->>FE: En la lista de la franja, "pedir" sobre un equipo tomado
+    FE->>RES: POST /api/reservation/reservas/{id}/pedido-de-liberacion { mensaje? }
+    RES->>RES: ¿La reserva está CONFIRMADA y su franja todavía no empezó?
+    RES->>NOT: ¿Ya hay un pedido de este solicitante por esta reserva hoy?
+    alt Ya pidió hoy, o la reserva no admite pedido
+        RES-->>FE: 409 "ya le pediste esos equipos hoy" / "esa reserva ya empezó"
+        FE-->>U: ❌ No se manda nada
+    else Pedido válido
+        RES->>EB: reserva.pedido-de-liberacion
+        EB->>NOT: notificación interna al dueño (PEDIDO_DE_LIBERACION)
+        EB->>NOT: copia por correo (fuera del request)
+        NOT-->>D: 🔔 + ✉️ "Fulano necesita PC 3 y PC 4 el jueves de 10 a 12"
+        RES-->>FE: 202 Pedido enviado
+        FE-->>U: ✅ "Le avisamos. La reserva sigue siendo de él hasta que decida"
+    end
+```
+
+> **El pedido no escribe nada sobre las reservas.** No hay tabla propia, no hay estado que resolver y quien pidió no queda con prioridad sobre el equipo: si el dueño lo libera, vuelve a la lista de libres para todos. La única fila que se crea es la notificación, y de paso es la que sostiene la regla de "un pedido por reserva, por solicitante y por día".
+
+> **El acuerdo ocurre afuera.** Lo que el sistema aporta es que el pedido llegue a alguien que quizá no se cruce con quien pide; lo que sigue —negociar, ceder, decir que no— no tiene por qué pasar por acá, y modelarlo costaría un flujo de aceptación con caducidad, carrera contra terceros y una pantalla de pendientes.
+
+## 3. Reserva recurrente (uno o varios equipos)
 
 ```mermaid
 sequenceDiagram
@@ -132,10 +168,10 @@ sequenceDiagram
     participant RES as reservation (paquete)
     participant DB as sgrc_db
 
-    U->>FE: Materia, equipos elegidas, día semana, horario, rango fechas
-    FE->>RES: POST /api/reservations/recurrentes { materiaId, equipoIds: [...], diaSemana, ... }
+    U->>FE: Materia, equipos elegidos, día de semana, horario, rango de fechas
+    FE->>RES: POST /api/reservation/reservas/recurrentes { materiaId, equipoIds: [...], diaSemana, ... }
     RES->>RES: Calcula todas las ocurrencias (cada fecha × cada equipo elegido)
-    RES->>DB: SELECT solapamientos para TODAS las fechas x equipos
+    RES->>DB: UNA consulta: todos los equipos × todas las fechas, un rango horario
     alt Sin conflictos
         DB-->>RES: []
         RES->>DB: INSERT regla_recurrencia
@@ -146,11 +182,11 @@ sequenceDiagram
             end
         end
         RES-->>FE: 201 { reglaRecurrenciaId, fechasCreadas: [...] }
-        FE-->>U: ✅ N fechas × M equipos creadas
+        FE-->>U: ✅ N fechas × M equipos creados
     else Con conflictos
-        DB-->>RES: [{ fecha, equipoId, docente, materia, horario }, ...]
-        RES-->>FE: 409 { conflictos: [...] }
-        FE-->>U: ❌ Tabla de conflictos (por fecha y equipo) — resolver antes de continuar
+        DB-->>RES: [{ equipo, fecha, horario, docente }, ...]
+        RES-->>FE: 409 nombrando qué equipo choca y en qué fecha
+        FE-->>U: ❌ No se creó ninguna ocurrencia
     end
 ```
 
@@ -167,16 +203,16 @@ sequenceDiagram
     FE-->>U: Popup "¿Solo esta fecha o esta y siguientes?"
     alt Solo esta fecha
         U->>FE: "Solo esta"
-        FE->>RES: DELETE /api/reservations/grupos/{reservaGrupoId}
+        FE->>RES: POST /api/reservation/grupos/{reservaGrupoId}/cancelar { soloEsta: true }
         RES->>DB: UPDATE reserva SET estado=CANCELADA WHERE reserva_grupo_id={id}
         RES->>DB: UPDATE reserva_grupo SET estado=CANCELADA WHERE id={id}
     else Esta fecha y siguientes
         U->>FE: "Esta y siguientes"
-        FE->>RES: DELETE /api/reservations/recurrentes/{reglaId}?desde={fecha}
+        FE->>RES: POST /api/reservation/grupos/{reservaGrupoId}/cancelar { soloEsta: false }
         RES->>DB: SELECT reserva_grupo WHERE regla_recurrencia_id={reglaId} AND fecha >= {fecha}
         RES->>DB: UPDATE reserva SET estado=CANCELADA WHERE reserva_grupo_id IN (...)
         RES->>DB: UPDATE reserva_grupo SET estado=CANCELADA WHERE id IN (...)
-        RES-->>FE: 200 { gruposCancelados: N }
+        RES-->>FE: 200 { reservasCanceladas: N }
     end
     FE-->>U: ✅ Cancelada(s)
 ```
@@ -192,28 +228,27 @@ sequenceDiagram
     participant NOTIF as notification (paquete)
     participant DB as sgrc_db
 
-    ADM->>FE: Selecciona carro, rango fecha/hora (definido)
+    ADM->>FE: Selecciona los equipos, el rango fecha/hora y escribe el motivo
     FE->>RES: POST /api/reservation/bloqueos (JWT)
-    RES->>DB: SELECT equipos del carro
-    RES->>DB: SELECT reserva CONFIRMADA en conflicto (solo esas equipos, ese rango exacto)
-    DB-->>RES: [reserva puntuales con reserva_grupo_id, docenteId]
+    RES->>DB: SELECT reserva CONFIRMADA en conflicto (solo esos equipos, ese rango exacto)
+    DB-->>RES: [reservas puntuales con reserva_grupo_id, docenteId]
     loop por cada reserva en conflicto
         RES->>DB: UPDATE reserva SET estado=CANCELADA, motivo_cancelacion='los equipos quedaron bloqueados: {motivo}'
         RES->>DB: Recalcular estado de reserva_grupo (PARCIALMENTE_CANCELADA o CANCELADA)
     end
     RES->>DB: INSERT reserva tipo BLOQUEO con motivo_bloqueo (sin materia_id ni reserva_grupo_id) por cada equipo
     RES->>EB: Publish("reserva.cancelada", { usuarioId, reservaId, motivo }) por reserva
-    EB->>NOTIF: Subscribe handler ejecuta en la misma goroutine/worker
+    EB->>NOTIF: Publish es sincrónico; el handler se va a su propia goroutine
     NOTIF->>DB: INSERT notificación por docente, detallando qué equipos puntuales se cancelaron
-    RES-->>FE: 201 { bloqueoId, reservasCanceladas: N, docentesNotificados: N }
-    FE-->>ADM: ✅ equipos bloqueadas. N reservas puntuales canceladas.
+    RES-->>FE: 201 { bloqueos: [...], reservasCanceladas: N, docentesNotificados: N }
+    FE-->>ADM: ✅ Equipos bloqueados. N reservas puntuales canceladas.
 ```
 
 > Solo se cancelan las `Reserva` (equipo + fecha) que caen dentro del rango exacto del bloqueo. El resto de una recurrencia, o del mismo `ReservaGrupo` en otro horario, sigue vigente.
 
 > **Un solo tipo de evento para los tres orígenes.** RF-05.1, 05.2 y 05.3 son,
 > de punta a punta, la misma notificación con distinto motivo: cancelación
-> manual de un Admin, bloqueo por evaluación, o equipo fuera de servicio. El
+> manual de un Admin, bloqueo administrativo, o equipo fuera de servicio. El
 > motivo ya viene armado desde `reservation`, así que `notification` no
 > necesita saber de dónde vino. Los eventos se publican **después del
 > commit**: si la transacción se deshace, nadie recibe el aviso de una
@@ -232,15 +267,15 @@ sequenceDiagram
 
     ADM->>FE: Cambia estado del equipo a EN_MANTENIMIENTO/FUERA_DE_SERVICIO (+ motivo opcional)
     FE->>INV: PATCH /api/inventory/equipos/{id}/estado
-    INV->>DB: UPDATE pc SET estado=...
+    INV->>DB: UPDATE equipo SET estado=...
     INV->>DB: SELECT reserva CONFIRMADA de ese equipo puntual con fecha/hora futura
-    DB-->>INV: [reserva puntuales con reserva_grupo_id, docenteId]
+    DB-->>INV: [reservas puntuales con reserva_grupo_id, docenteId]
     loop por cada reserva afectada
         INV->>DB: UPDATE reserva SET estado=CANCELADA, cancelado_por=admin, motivo_cancelacion=(ingresado o por defecto)
         INV->>DB: Recalcular estado de reserva_grupo (PARCIALMENTE_CANCELADA o CANCELADA)
     end
     INV->>EB: Publish("reserva.cancelada", { usuarioId, reservaId, motivo }) por reserva
-    EB->>NOTIF: Subscribe handler ejecuta en la misma goroutine/worker
+    EB->>NOTIF: Publish es sincrónico; el handler se va a su propia goroutine
     NOTIF->>DB: INSERT notificación por docente, detallando que fue ese equipo puntual
     INV-->>FE: 200 { estado, reservasCanceladas: N, docentesNotificados: N }
     FE-->>ADM: ✅ Equipo actualizado. N reservas canceladas y docentes notificados.
@@ -259,9 +294,9 @@ sequenceDiagram
 
     ADM->>FE: Elimina un equipo del inventario
     FE->>INV: DELETE /api/inventory/equipos/{id}
-    INV->>DB: UPDATE pc SET dado_de_baja=true, fecha_baja=now(), estado=FUERA_DE_SERVICIO
+    INV->>DB: UPDATE equipo SET dado_de_baja=true, fecha_baja=now(), estado=FUERA_DE_SERVICIO
     Note over INV,DB: Soft delete: no se borra la fila — incidencia y reserva la referencian por FK
-    INV-->>FE: 200 { dadaDeBaja: true }
+    INV-->>FE: 200 { reservasCanceladas: N, docentesNotificados: N }
     FE-->>ADM: ✅ Equipo dado de baja. Ya no aparece en listados activos ni puede reservarse.
 ```
 
@@ -287,7 +322,8 @@ sequenceDiagram
     RES->>DB: DELETE reserva WHERE reserva_grupo_id IN (SELECT id FROM reserva_grupo WHERE materia_id IN [...])
     RES->>DB: DELETE reserva_grupo WHERE materia_id IN [...]
     RES->>DB: DELETE regla_recurrencia WHERE materia_id IN [...]
-    Note over RES,DB: incidencia NO se toca — pertenece a el equipo, no al ciclo
+    RES->>DB: DELETE reserva WHERE tipo='BLOQUEO' AND año(fecha) = año del ciclo
+    Note over RES,DB: incidencia y prestamo NO se tocan — no dependen del ciclo
     ACAD->>DB: UPDATE curso SET archivado=true WHERE ciclo_lectivo_id
     ACAD->>DB: UPDATE materia SET archivado=true WHERE curso_id IN [...]
     ACAD->>DB: UPDATE ciclo_lectivo SET archivado=true, activo=false
@@ -333,7 +369,7 @@ sequenceDiagram
     end
     AUTH->>ACAD: EliminarDocenteMateria(usuarioId) — recién ahora, después de resolver el destino de las reservas
     ACAD->>DB: DELETE FROM docente_materia WHERE usuario_id={usuarioId}
-    EB->>NOTIF: Subscribe handlers ejecutan en la misma goroutine/worker
+    EB->>NOTIF: Publish es sincrónico; los handlers se van a su propia goroutine
     NOTIF->>DB: INSERT notificación(es) a todos los ADMIN (aviso informativo o cancelación aplicada)
     AUTH-->>FE: 200
     FE-->>ADM: ✅ Docente dado de baja. Revisar notificaciones si hay materias afectadas.
@@ -372,27 +408,67 @@ sequenceDiagram
     else estado == BAJA
         AUTH->>DB: DELETE FROM usuario WHERE id={id}
         Note over AUTH,DB: docente_materia y notificaciones propias caen en CASCADE.<br/>reserva_grupo.creado_por, reserva.creado_por/cancelado_por,<br/>incidencia.reportado_por, usuario.aprobado_por quedan en NULL (SET NULL).
-        AUTH-->>FE: 200 { eliminado: true }
+        AUTH-->>FE: 200 sin cuerpo
     end
     FE-->>ADM: ✅ Cuenta eliminada. El email queda libre para un registro nuevo.
 ```
 
-## 9. Liberar reservas vencidas (job interno)
+## 9. Los barridos periódicos (sin proceso externo)
+
+Hay **tres barridos**, cada uno en su propia goroutine arrancada por
+`cmd/main.go` con un `time.Ticker` y registrada en un `sync.WaitGroup` para que
+el apagado ordenado los espere. Ninguno necesita cron ni un proceso aparte.
 
 ```mermaid
 sequenceDiagram
-    participant CRON as Scheduler interno (goroutine + ticker)
-    participant RES as reservation (paquete)
+    participant T1 as ticker 5 min
+    participant T2 as ticker 5 min
+    participant T3 as ticker 1 h
+    participant RES as reservation
+    participant INV as inventory
+    participant EB as eventbus
     participant DB as sgrc_db
 
     loop cada 5 minutos
-        CRON->>RES: Trigger (time.Ticker, sin proceso externo)
-        RES->>DB: UPDATE reserva SET estado=FINALIZADA WHERE estado=CONFIRMADA AND (fecha+hora_fin) < now()
-        RES->>DB: Recalcular estado de reserva_grupo afectados (FINALIZADA si ningún equipo quedó cancelada)
+        T1->>RES: FinalizarVencidas
+        RES->>DB: UPDATE reserva SET estado=FINALIZADA<br/>WHERE estado=CONFIRMADA AND (fecha+hora_fin) < now()
+        RES->>DB: Recalcular estado de los reserva_grupo afectados
+    end
+
+    loop cada 5 minutos
+        T2->>RES: Vigilante.Barrer (RF-08.10 a 08.13, 08.20)
+        RES->>DB: recordatorios pendientes, reservas sin retirar,<br/>préstamos demorados, corte de jornada
+        RES->>EB: reserva.recordatorio, reserva.sin-retirar,<br/>prestamo.demorado, prestamo.sin-devolver.cierre
+        RES->>DB: marcar cada fila como avisada
+        RES->>DB: liberar lo que venció su plazo (sin publicar nada)
+    end
+
+    loop cada hora, solo a partir de LICENCIAS_HORA_AVISO
+        T3->>INV: AvisadorDeLicencias.Barrer (RF-03.14)
+        INV->>DB: SELECT licencias que entraron en su ventana de aviso
+        INV->>EB: licencia.por-vencer (todas juntas, un solo aviso)
+        INV->>DB: marcar avisado_previo_para / avisado_vencimiento_para
     end
 ```
 
-> El job corre como una goroutine que arranca junto con `main.go` (`time.NewTicker(5 * time.Minute)`), sin pieza de infraestructura adicional ni proceso externo.
+> **`FinalizarVencidas` va por lotes**, cada uno en su propia transacción, con
+> corte por falta de progreso y un tope de lotes por ciclo del ticker: el
+> primer barrido de una base con años de reservas no puede quedarse tomando un
+> lock encima de la tabla que usa el resto del sistema.
+
+> **Ningún aviso depende de que el barrido corra a una hora exacta.** Cada uno
+> deja su marca en la fila, así que reiniciar el proceso o estar caído dos
+> horas cambia *cuándo* sale el aviso, nunca *cuántas veces* (RF-08).
+
+> **El aviso y la liberación son dos momentos distintos** (RF-08.20 y RF-08.10).
+> A los 15 minutos del inicio, si no salió ninguna máquina de esa reserva, el
+> barrido publica `reserva.sin-retirar` y marca `aviso_sin_retirar_en`: ese es el
+> único aviso, y llega cuando el docente todavía puede ir, cambiar la máquina o
+> cancelar. **Liberar no publica nada** — ni a los 40 sin retiro, ni a los 15 de
+> una entrega parcial. Es el único punto del barrido donde una reserva cambia de
+> estado sin que salga un aviso, y es a propósito: el correo ya salió antes, y
+> repetirlo al liberar sería un segundo mensaje por la misma clase para contar
+> algo que ya no se puede cambiar.
 
 ## 10. Ver disponibilidad de Admins
 
@@ -405,19 +481,19 @@ sequenceDiagram
 
     U->>FE: Abre la vista de disponibilidad
     FE->>AVAIL: GET /api/availability/admins
-    loop por cada Admin
-        AVAIL->>DB: SELECT excepción de hoy (usuario_id, fecha=hoy)
-        alt Existe excepción NO_DISPONIBLE
-            AVAIL->>AVAIL: disponibleAhora = false
-        else Existe excepción HORARIO_MODIFICADO
-            AVAIL->>AVAIL: comparar hora actual vs horario de la excepción
-        else Sin excepción hoy
-            AVAIL->>DB: SELECT bloques de horario_admin para el día de semana de hoy
-            AVAIL->>AVAIL: comparar hora actual vs esos bloques
-        end
+    AVAIL->>DB: SELECT admins con rol=ADMIN y estado=APROBADA
+    AVAIL->>DB: SELECT bloques de horario_admin de TODOS esos ids
+    AVAIL->>DB: SELECT excepciones de TODOS esos ids con fecha = hoy
+    loop en memoria, por cada Admin
+        AVAIL->>AVAIL: excepción de hoy si existe (siempre pisa al patrón),<br/>si no, los bloques de este día de semana
     end
     AVAIL-->>FE: 200 [{ admin, disponibleAhora, horarioSemanal }, ...]
     FE-->>U: Lista de Admins con su estado y horario de referencia
 ```
+
+> **Dos consultas en total, no dos por Admin.** Resolverlo dentro del bucle
+> serían 2N viajes a la base para armar una pantalla que mira cualquier
+> docente; el cálculo en sí no toca la base, así que se traen los dos conjuntos
+> de una vez y se cruzan en memoria.
 
 > Puramente informativo (RF-07.6): este cálculo no habilita ni bloquea ninguna otra acción del sistema — es solo para que el docente sepa cuándo pasar por el laboratorio.

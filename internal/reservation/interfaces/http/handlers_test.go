@@ -33,6 +33,10 @@ type fakeRepo struct {
 	reservas       map[string]*domain.Reserva
 	prestamos      map[string]*domain.Prestamo
 	pcsDisponibles []application.EquipoDisponible
+	pcsOcupadas    []application.EquipoOcupado
+	datosDelPedido *application.ReservaParaPedido
+	yaPidio        bool
+	solapamientos  []application.Solapamiento
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -45,8 +49,8 @@ func nuevoFakeRepo() *fakeRepo {
 
 // ── Préstamos ───────────────────────────────────────────────────────────
 //
-// Reproduce el índice único parcial de la 013 —una PC no puede tener dos
-// préstamos abiertos— porque de eso depende un código de respuesta (409).
+// Reproduce el índice único parcial ux_prestamo_abierto —un equipo no puede
+// tener dos préstamos abiertos— porque de eso depende un 409.
 
 func (r *fakeRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) error {
 	for _, existente := range r.prestamos {
@@ -119,6 +123,9 @@ func (r *fakeRepo) ProximaReservaDeEquipo(ctx context.Context, equipoID string, 
 	return nil, nil
 }
 func (r *fakeRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
+	return nil
+}
+func (r *fakeRepo) MarcarAvisoSinRetirarEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
 	return nil
 }
 func (r *fakeRepo) MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
@@ -262,6 +269,9 @@ func (r *fakeRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoID st
 func (r *fakeRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipoID string, desde time.Time) ([]*domain.Reserva, error) {
 	return nil, nil
 }
+func (r *fakeRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []string, fechas []time.Time, horaInicio, horaFin time.Duration) ([]application.Solapamiento, error) {
+	return r.solapamientos, nil
+}
 func (r *fakeRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID string, desde time.Time) ([]*domain.Reserva, error) {
 	return nil, nil
 }
@@ -273,6 +283,24 @@ func (r *fakeRepo) ListarReservasConfirmadasVencidas(ctx context.Context, ahora 
 }
 func (r *fakeRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoDisponible, error) {
 	return r.pcsDisponibles, nil
+}
+func (r *fakeRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoOcupado, error) {
+	return r.pcsOcupadas, nil
+}
+func (r *fakeRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID string) ([]application.EquipoDisponible, error) {
+	return r.pcsDisponibles, nil
+}
+func (r *fakeRepo) ReservasDeLaSerieDesde(ctx context.Context, reservaID string) ([]*domain.Reserva, error) {
+	return nil, nil
+}
+func (r *fakeRepo) DatosParaPedirLiberacion(ctx context.Context, reservaID string) (*application.ReservaParaPedido, error) {
+	if r.datosDelPedido == nil {
+		return nil, application.ErrReservaNoEncontrada
+	}
+	return r.datosDelPedido, nil
+}
+func (r *fakeRepo) YaPidioLiberacionHoy(ctx context.Context, reservaID, solicitanteID string, dia time.Time) (bool, error) {
+	return r.yaPidio, nil
 }
 
 func (r *fakeRepo) CrearReglaRecurrencia(ctx context.Context, regla *domain.ReglaRecurrencia) error {
@@ -616,7 +644,7 @@ func TestHTTP_ObtenerReservaGrupo_ComoAdmin_VeLaDeCualquiera(t *testing.T) {
 	}
 }
 
-// Un bloqueo por evaluación no tiene ReservaGrupo, pero si alguna vez
+// Un bloqueo administrativo no tiene ReservaGrupo, pero si alguna vez
 // existiera un grupo sin creador, "de nadie" no puede significar "de todos".
 func TestHTTP_ObtenerReservaGrupo_SinCreador_403ParaDocente(t *testing.T) {
 	repo := nuevoFakeRepo()

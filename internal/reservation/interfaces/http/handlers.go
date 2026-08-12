@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"log"
 	"strings"
 
@@ -213,7 +214,7 @@ func (h *Handler) CancelarOcurrenciaRecurrente(c *fiber.Ctx) error {
 	return c.JSON(cancelarOcurrenciaResponse{ReservasCanceladas: n})
 }
 
-// POST /api/reservation/bloqueos-evaluacion (Admin)
+// POST /api/reservation/bloqueos (Admin)
 func (h *Handler) BloquearEquipos(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -243,7 +244,7 @@ func (h *Handler) BloquearEquipos(c *fiber.Ctx) error {
 	if err != nil {
 		return mapearError(err)
 	}
-	h.auditar(c, claims.UserID, audit.BloqueoEvaluacionCreado, "reserva", nil, map[string]any{
+	h.auditar(c, claims.UserID, audit.BloqueoCreado, "reserva", nil, map[string]any{
 		"equipoIds":           req.EquipoIDs,
 		"fecha":               req.Fecha,
 		"motivo":              req.Motivo,
@@ -397,7 +398,26 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "horaFin: "+err.Error())
 	}
 
-	equipos, err := h.svc.ListarEquiposDisponiblesEn(c.UserContext(), fecha, horaInicio, horaFin)
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	// Con serieDesdeGrupoId, los libres son los que están libres en TODAS las
+	// fechas que le quedan a esa serie (RF-08.14): ofrecer los de hoy y
+	// rechazar el cambio cuando choca en la tercera fecha es hacerle adivinar
+	// al docente. Los ocupados siguen siendo los de la franja consultada.
+	var equipos []application.EquipoDisponible
+	if grupoID := strings.TrimSpace(c.Query("serieDesdeGrupoId")); grupoID != "" {
+		equipos, err = h.svc.ListarEquiposLibresEnLaSerie(c.UserContext(), grupoID)
+	} else {
+		equipos, err = h.svc.ListarEquiposDisponiblesEn(c.UserContext(), fecha, horaInicio, horaFin)
+	}
+	if err != nil {
+		return mapearError(err)
+	}
+
+	ocupados, err := h.svc.ListarEquiposOcupadosEn(c.UserContext(), fecha, horaInicio, horaFin, claims.UserID)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -406,7 +426,11 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 	for i, p := range equipos {
 		data[i] = toEquipoDisponibleResponse(p)
 	}
-	return c.JSON(equiposDisponiblesResponse{Data: data})
+	tomados := make([]equipoOcupadoResponse, len(ocupados))
+	for i, o := range ocupados {
+		tomados[i] = toEquipoOcupadoResponse(o)
+	}
+	return c.JSON(equiposDisponiblesResponse{Data: data, Ocupados: tomados})
 }
 
 // PATCH /api/reservation/reservas/{id}/equipo — cambiar una reserva de máquina.
@@ -414,6 +438,11 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 // Existe para que "elegí otra" no obligue a cancelar y volver a reservar,
 // que arma un grupo nuevo y parte la clase en dos tarjetas. Es de quien
 // tenga la reserva, o de un Admin.
+//
+// `soloEsta` es un puntero para poder distinguir "no lo mandaron" de
+// "mandaron false", y el que falta se toma como true: un cliente viejo que no
+// conoce el campo pide cambiar UNA reserva, no la serie entera hasta fin de
+// año. Ante la duda, el cambio más chico.
 func (h *Handler) CambiarEquipoDeReserva(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -427,11 +456,50 @@ func (h *Handler) CambiarEquipoDeReserva(c *fiber.Ctx) error {
 	if strings.TrimSpace(req.EquipoID) == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "hay que indicar el equipo nuevo")
 	}
+	soloEsta := req.SoloEsta == nil || *req.SoloEsta
 
 	reserva, err := h.svc.CambiarEquipoDeReserva(c.UserContext(), c.Params("id"), req.EquipoID,
-		claims.UserID, claims.Rol == "ADMIN")
+		claims.UserID, claims.Rol == "ADMIN", soloEsta)
 	if err != nil {
 		return mapearError(err)
 	}
 	return c.JSON(toReservaResponse(reserva))
 }
+
+// POST /api/reservation/reservas/{id}/pedido-de-liberacion — RF-04.12.
+//
+// Le manda al dueño de esa reserva un aviso y un correo diciendo que otro
+// docente necesita ese equipo. No cambia ninguna reserva: es un mensaje.
+//
+// Responde 202 y no 201 porque no se crea ningún recurso que el cliente
+// pueda después consultar o borrar — lo único que queda es la notificación
+// del otro lado.
+func (h *Handler) PedirLiberacionDeReserva(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	var req pedirLiberacionRequest
+	// El cuerpo es opcional: pedir sin explicar nada es válido.
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&req); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+		}
+	}
+	mensaje := strings.TrimSpace(req.Mensaje)
+	if len([]rune(mensaje)) > maxMensajeDelPedido {
+		return fiber.NewError(fiber.StatusBadRequest,
+			fmt.Sprintf("el mensaje no puede pasar de %d caracteres", maxMensajeDelPedido))
+	}
+
+	if err := h.svc.PedirLiberacionDeReserva(c.UserContext(), c.Params("id"), claims.UserID, mensaje); err != nil {
+		return mapearError(err)
+	}
+	return c.SendStatus(fiber.StatusAccepted)
+}
+
+// maxMensajeDelPedido acota el texto libre del pedido. No sale de ninguna
+// regla del dominio: sale de que el destino es el cuerpo de un correo, y de
+// que un pedido de dos páginas no lo lee nadie.
+const maxMensajeDelPedido = 500

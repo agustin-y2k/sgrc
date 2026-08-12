@@ -42,12 +42,24 @@ func aLas(hora, minuto int) time.Time {
 
 func repoConClase(t *testing.T, equipos ...string) *fakeRepo {
 	t.Helper()
+	return repoConClaseDe(t, 8*time.Hour, 9*time.Hour, equipos...)
+}
+
+// repoConClaseCorta arma una clase de media hora: más corta que los cuarenta
+// minutos de gracia, así que no se libera nunca y no hay nada que anunciarle.
+func repoConClaseCorta(t *testing.T) *fakeRepo {
+	t.Helper()
+	return repoConClaseDe(t, 8*time.Hour, 8*time.Hour+30*time.Minute, "pc1")
+}
+
+func repoConClaseDe(t *testing.T, horaInicio, horaFin time.Duration, equipos ...string) *fakeRepo {
+	t.Helper()
 	repo := nuevoFakeRepo()
 	repo.contactoDeUsuario[docenteAda] = [2]string{"Ada Lovelace", "ada@escuela.edu.ar"}
 
 	creadoPor := docenteAda
 	grupo, err := domain.NuevoReservaGrupo(grupoDeClase, "materia1", &creadoPor, "Ada Lovelace",
-		aLas(0, 0), 8*time.Hour, 9*time.Hour, nil, aLas(0, 0).AddDate(0, 0, -1))
+		aLas(0, 0), horaInicio, horaFin, nil, aLas(0, 0).AddDate(0, 0, -1))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -56,7 +68,7 @@ func repoConClase(t *testing.T, equipos ...string) *fakeRepo {
 	for i, equipoID := range equipos {
 		repo.identificadorDeEquipo[equipoID] = i + 1
 		r, err := domain.NuevaReservaNormal("res-"+equipoID, grupoDeClase, equipoID, "materia1",
-			"Ada Lovelace", &creadoPor, aLas(0, 0), 8*time.Hour, 9*time.Hour,
+			"Ada Lovelace", &creadoPor, aLas(0, 0), horaInicio, horaFin,
 			aLas(0, 0).AddDate(0, 0, -1))
 		if err != nil {
 			t.Fatalf("error de dominio inesperado: %v", err)
@@ -142,6 +154,97 @@ func TestBarrer_RecordatorioTardioSaleIgual(t *testing.T) {
 	}
 }
 
+// ── El aviso de "todavía no las retiraste" (RF-08.20) ───────────────────
+
+func TestBarrer_AvisaALos15DeEmpezada(t *testing.T) {
+	repo := repoConClase(t, "pc1", "pc2")
+	bus := &busEspia{}
+
+	if r := barrer(t, vigilanteALas(repo, bus, 8, 10)); r.AvisosDeNoRetiro != 0 {
+		t.Fatalf("a los 10 minutos todavía no: %+v", r)
+	}
+	if r := barrer(t, vigilanteALas(repo, bus, 8, 15)); r.AvisosDeNoRetiro != 1 {
+		t.Fatalf("a los 15 sí: %+v", r)
+	}
+
+	eventos := bus.de("reserva.sin-retirar")
+	if len(eventos) != 1 {
+		t.Fatalf("esperaba 1 aviso, hubo %d", len(eventos))
+	}
+	aviso := eventos[0].Payload.(eventbus.ReservaSinRetirar)
+	// Un aviso por clase con las dos máquinas adentro, no uno por máquina.
+	if len(aviso.Equipos) != 2 {
+		t.Errorf("el aviso tiene que traer las dos PCs: %+v", aviso.Equipos)
+	}
+	if aviso.Email != "ada@escuela.edu.ar" || aviso.UsuarioID != docenteAda {
+		t.Errorf("falta el contacto del docente: %+v", aviso)
+	}
+	// El dato accionable: a los cuántos minutos las pierde, no a los cuántos
+	// se le avisó.
+	if aviso.MinutosDeGracia != 40 {
+		t.Errorf("minutosDeGracia = %d, esperaba 40", aviso.MinutosDeGracia)
+	}
+}
+
+func TestBarrer_ElAvisoDeNoRetiroSaleUnaSolaVez(t *testing.T) {
+	repo := repoConClase(t, "pc1")
+	bus := &busEspia{}
+	v := vigilanteALas(repo, bus, 8, 15)
+
+	barrer(t, v)
+	for i := 0; i < 10; i++ {
+		if r := barrer(t, v); r.AvisosDeNoRetiro != 0 {
+			t.Fatalf("corrida %d: volvió a avisar", i+2)
+		}
+	}
+	if len(bus.de("reserva.sin-retirar")) != 1 {
+		t.Errorf("salieron %d avisos, esperaba 1", len(bus.de("reserva.sin-retirar")))
+	}
+}
+
+// TestBarrer_SiRetiroAlgunaNoSeLeAvisaNada: vino al mostrador y eligió qué se
+// llevaba. Avisarle de su propia decisión es ruido.
+func TestBarrer_SiRetiroAlgunaNoSeLeAvisaNada(t *testing.T) {
+	repo := repoConClase(t, "pc1", "pc2")
+	entregarContraLaReserva(t, repo, "pr1", "pc1", aLas(8, 5))
+	bus := &busEspia{}
+
+	if r := barrer(t, vigilanteALas(repo, bus, 8, 15)); r.AvisosDeNoRetiro != 0 {
+		t.Fatalf("retiró una: no hay nada que avisarle: %+v", r)
+	}
+}
+
+// TestBarrer_NoAvisaSiLaClaseEsMasCortaQueLaGracia: esa reserva no se libera
+// nunca, así que anunciarle que va a quedar libre sería mentirle.
+func TestBarrer_NoAvisaSiLaClaseEsMasCortaQueLaGracia(t *testing.T) {
+	repo := repoConClaseCorta(t)
+	bus := &busEspia{}
+
+	if r := barrer(t, vigilanteALas(repo, bus, 8, 20)); r.AvisosDeNoRetiro != 0 {
+		t.Fatalf("una clase de media hora no se libera: no hay nada que anunciar: %+v", r)
+	}
+}
+
+// TestBarrer_SiVuelveDespuesDeLaGraciaLiberaSinAvisar: el proceso estuvo caído
+// y volvió a las 8:45. El aviso llegaría anunciando algo que ya pasó, así que
+// no sale: mejor callarse que mentir.
+func TestBarrer_SiVuelveDespuesDeLaGraciaLiberaSinAvisar(t *testing.T) {
+	repo := repoConClase(t, "pc1")
+	bus := &busEspia{}
+
+	resumen := barrer(t, vigilanteALas(repo, bus, 8, 45))
+
+	if resumen.AvisosDeNoRetiro != 0 {
+		t.Errorf("el aviso no puede salir junto con la liberación: %+v", resumen)
+	}
+	if resumen.Liberadas != 1 {
+		t.Errorf("pero liberar sí libera: %+v", resumen)
+	}
+	if len(bus.de("reserva.sin-retirar")) != 0 {
+		t.Error("no tiene que salir ningún aviso de no retiro")
+	}
+}
+
 // ── La liberación ───────────────────────────────────────────────────────
 
 func TestBarrer_LiberaALos40Minutos(t *testing.T) {
@@ -151,6 +254,7 @@ func TestBarrer_LiberaALos40Minutos(t *testing.T) {
 	if r := barrer(t, vigilanteALas(repo, bus, 8, 30)); r.Liberadas != 0 {
 		t.Fatalf("a los 30 minutos todavía no: %+v", r)
 	}
+	publicadosAntesDeLiberar := len(bus.publicados)
 
 	resumen := barrer(t, vigilanteALas(repo, bus, 8, 40))
 
@@ -167,19 +271,21 @@ func TestBarrer_LiberaALos40Minutos(t *testing.T) {
 		t.Errorf("el grupo quedó en %s", repo.grupos[grupoDeClase].Estado)
 	}
 
-	eventos := bus.de("reserva.no-retirada")
-	if len(eventos) != 1 {
-		t.Fatalf("esperaba 1 aviso, hubo %d", len(eventos))
-	}
-	aviso := eventos[0].Payload.(eventbus.ReservasLiberadas)
-	if !aviso.TodaLaReserva || len(aviso.Equipos) != 2 {
-		t.Errorf("el aviso tiene que decir que no retiró nada: %+v", aviso)
+	// Liberar no publica nada: el aviso al docente ya salió a los 15 minutos
+	// (RF-08.20), cuando todavía podía hacer algo.
+	if len(bus.publicados) != publicadosAntesDeLiberar {
+		t.Errorf("la barrida que liberó publicó %d eventos y no tenía que publicar ninguno: %+v",
+			len(bus.publicados)-publicadosAntesDeLiberar, bus.publicados[publicadosAntesDeLiberar:])
 	}
 }
 
 // TestBarrer_NoLiberaLaQueSeLlevaron es la condición que separa "el docente
 // no vino" de "el docente vino": si la máquina está afuera, la reserva está
 // cumplida aunque nadie haya apretado nada más.
+//
+// Acá el préstamo es ESPONTÁNEO (sin reserva detrás): alguien se llevó la pc1
+// para un trámite. Por eso sigue corriendo el plazo largo — que esa máquina
+// esté afuera no dice nada sobre si el docente vino a dar su clase.
 func TestBarrer_NoLiberaLaQueSeLlevaron(t *testing.T) {
 	repo := repoConClase(t, "pc1", "pc2")
 	// Se llevó la primera.
@@ -205,9 +311,71 @@ func TestBarrer_NoLiberaLaQueSeLlevaron(t *testing.T) {
 	if repo.grupos[grupoDeClase].Estado != domain.GrupoConfirmada {
 		t.Errorf("el grupo quedó en %s, esperaba CONFIRMADA", repo.grupos[grupoDeClase].Estado)
 	}
-	aviso := bus.de("reserva.no-retirada")[0].Payload.(eventbus.ReservasLiberadas)
-	if aviso.TodaLaReserva {
-		t.Error("retiró una: el aviso no puede decir que no retiró nada")
+}
+
+// entregarContraLaReserva registra que el docente pasó por el mostrador y se
+// llevó esa máquina de su propia reserva, que es lo que dispara el plazo
+// corto.
+func entregarContraLaReserva(t *testing.T, repo *fakeRepo, prestamoID, equipoID string, cuando time.Time) {
+	t.Helper()
+	reservaID := "res-" + equipoID
+	p, err := domain.NuevoPrestamo(prestamoID, domain.DatosDeEntrega{
+		EquipoID: equipoID, ReservaID: &reservaID, Nombre: "Ada",
+	}, cuando)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	repo.prestamos[p.ID] = p
+}
+
+// TestBarrer_TrasEntregaParcialLiberaALos15DeLaEntrega: el docente vino 8:05 y
+// se llevó una de las dos. La otra no espera hasta las 8:40 — el sistema ya no
+// tiene nada que averiguar, así que la suelta a los quince minutos de esa
+// entrega.
+func TestBarrer_TrasEntregaParcialLiberaALos15DeLaEntrega(t *testing.T) {
+	repo := repoConClase(t, "pc1", "pc2")
+	entregarContraLaReserva(t, repo, "pr1", "pc1", aLas(8, 5))
+	bus := &busEspia{}
+
+	if r := barrer(t, vigilanteALas(repo, bus, 8, 15)); r.Liberadas != 0 {
+		t.Fatalf("a los 10 minutos de la entrega todavía no: %+v", r)
+	}
+	publicadosAntesDeLiberar := len(bus.publicados)
+
+	resumen := barrer(t, vigilanteALas(repo, bus, 8, 20))
+
+	if resumen.Liberadas != 1 {
+		t.Fatalf("esperaba 1 liberada a los 15 de la entrega, obtuve %d", resumen.Liberadas)
+	}
+	if repo.reservas["res-pc2"].Estado != domain.ReservaNoRetirada {
+		t.Errorf("res-pc2 quedó en %s", repo.reservas["res-pc2"].Estado)
+	}
+	// Vino a dar la clase: el grupo sigue confirmado.
+	if repo.grupos[grupoDeClase].Estado != domain.GrupoConfirmada {
+		t.Errorf("el grupo quedó en %s, esperaba CONFIRMADA", repo.grupos[grupoDeClase].Estado)
+	}
+	// Y sobre todo: ni un correo ni una campana. Lo decidió él en el mostrador.
+	if len(bus.publicados) != publicadosAntesDeLiberar {
+		t.Errorf("la entrega parcial libera en silencio, se publicó: %+v",
+			bus.publicados[publicadosAntesDeLiberar:])
+	}
+}
+
+// TestBarrer_ElPlazoCortoCuentaDesdeLaUltimaEntrega: mientras el Admin sigue
+// anotando, el docente sigue en el mostrador.
+func TestBarrer_ElPlazoCortoCuentaDesdeLaUltimaEntrega(t *testing.T) {
+	repo := repoConClase(t, "pc1", "pc2", "pc3")
+	entregarContraLaReserva(t, repo, "pr1", "pc1", aLas(8, 5))
+	entregarContraLaReserva(t, repo, "pr2", "pc2", aLas(8, 12))
+	bus := &busEspia{}
+
+	// 8:20 son quince minutos de la PRIMERA entrega, pero solo ocho de la
+	// última: la pc3 todavía es suya.
+	if r := barrer(t, vigilanteALas(repo, bus, 8, 20)); r.Liberadas != 0 {
+		t.Fatalf("el plazo corre desde la última entrega: %+v", r)
+	}
+	if r := barrer(t, vigilanteALas(repo, bus, 8, 27)); r.Liberadas != 1 {
+		t.Fatalf("a los quince de la última entrega sí: %+v", r)
 	}
 }
 
@@ -231,8 +399,8 @@ func TestBarrer_LiberarEsIdempotente(t *testing.T) {
 			t.Fatalf("corrida %d: volvió a liberar", i+2)
 		}
 	}
-	if len(bus.de("reserva.no-retirada")) != 1 {
-		t.Errorf("salieron %d avisos, esperaba 1", len(bus.de("reserva.no-retirada")))
+	if repo.reservas["res-pc1"].Estado != domain.ReservaNoRetirada {
+		t.Errorf("res-pc1 quedó en %s", repo.reservas["res-pc1"].Estado)
 	}
 }
 
@@ -470,14 +638,14 @@ func TestBarrer_SinNadaQueHacerNoPublicaNada(t *testing.T) {
 	}
 }
 
-// TestBarrer_NoLiberaUnBloqueoPorEvaluacion
+// TestBarrer_NoLiberaUnBloqueoAdministrativo
 //
-// Un bloqueo por evaluación estatal (RF-04.7) no es una reserva que alguien
+// Un bloqueo administrativo (RF-04.7) no es una reserva que alguien
 // venga a retirar: es un Admin sacando máquinas de circulación para una mesa
 // de examen. Liberarlo a los cuarenta minutos dejaría que otro docente
 // reserve una computadora que está siendo usada en un examen, con el examen
 // en curso.
-func TestBarrer_NoLiberaUnBloqueoPorEvaluacion(t *testing.T) {
+func TestBarrer_NoLiberaUnBloqueoAdministrativo(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.identificadorDeEquipo["pc1"] = 1
 	bloqueo, err := domain.NuevaReservaBloqueo("bloq1", "pc1", nil,
@@ -491,7 +659,7 @@ func TestBarrer_NoLiberaUnBloqueoPorEvaluacion(t *testing.T) {
 	resumen := barrer(t, vigilanteALas(repo, bus, 8, 45))
 
 	if resumen.Liberadas != 0 {
-		t.Fatalf("un bloqueo por evaluación no se libera: %+v", resumen)
+		t.Fatalf("un bloqueo administrativo no se libera: %+v", resumen)
 	}
 	if repo.reservas["bloq1"].Estado != domain.ReservaConfirmada {
 		t.Errorf("el bloqueo quedó en %s", repo.reservas["bloq1"].Estado)

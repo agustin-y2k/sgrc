@@ -215,7 +215,7 @@ func nuevaAppDeTestConGoogle(repo *fakeRepo, verificador application.Verificador
 		verificador,
 		true, // con correo: habilita la recuperación por autoservicio
 	)
-	h := NewHandler(svc, fakeAuditor{}, clientID)
+	h := NewHandler(svc, fakeAuditor{}, clientID, "avisos@escuela.edu.ar")
 
 	app := fiber.New()
 	RegisterRoutes(app, h, registroDePrueba.Autenticacion(testSecret))

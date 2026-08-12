@@ -22,10 +22,15 @@ type Handler struct {
 	// que es de donde el frontend lo lee para dibujar el botón de Google.
 	// Vacío = este despliegue no tiene el ingreso con Google configurado.
 	googleClientID string
+	// remitenteDeCorreo se publica en el mismo lugar y por la misma razón:
+	// las pantallas donde alguien espera un correo tienen que poder decir de
+	// qué dirección va a llegar.
+	remitenteDeCorreo string
 }
 
-func NewHandler(svc *application.Service, auditor audit.Auditor, googleClientID string) *Handler {
-	return &Handler{svc: svc, auditor: auditor, googleClientID: googleClientID}
+func NewHandler(svc *application.Service, auditor audit.Auditor, googleClientID, remitenteDeCorreo string) *Handler {
+	return &Handler{svc: svc, auditor: auditor, googleClientID: googleClientID,
+		remitenteDeCorreo: remitenteDeCorreo}
 }
 
 // auditar registra una entrada de auditoría sin abortar la respuesta HTTP
@@ -97,6 +102,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 func (h *Handler) Config(c *fiber.Ctx) error {
 	return c.JSON(configPublicaResponse{
 		GoogleClientID:       h.googleClientID,
+		RemitenteDeCorreo:    h.remitenteDeCorreo,
 		RecuperacionPorEmail: h.svc.RecuperacionPorEmailDisponible(),
 	})
 }

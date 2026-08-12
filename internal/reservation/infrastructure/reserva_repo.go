@@ -157,7 +157,7 @@ func (r *PostgresRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoI
 
 // ListarReservasFuturasDeEquipo: todas las reservas CONFIRMADA de una PC que
 // todavía no terminaron en el instante `desde`. Usado tanto para el chequeo
-// anticipado de solapamiento como para el bloqueo por evaluación (RF-04.7) y
+// anticipado de solapamiento como para el bloqueo administrativo (RF-04.7) y
 // la cascada de cancelación de inventory/academic.
 func (r *PostgresRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipoID string, desde time.Time) ([]*domain.Reserva, error) {
 	// ORDER BY: quien llama puede necesitar LA PRÓXIMA, no una cualquiera.
@@ -186,6 +186,60 @@ func (r *PostgresRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipo
 			return nil, fmt.Errorf("escaneando fila de reserva: %w", err)
 		}
 		resultado = append(resultado, res)
+	}
+	return resultado, errorDeFilas(rows)
+}
+
+// BuscarSolapamientos resuelve el pre-chequeo del lote entero en una
+// consulta: todos los equipos contra todas las fechas, con un único rango
+// horario. Ver el puerto en application/ports.go para por qué.
+//
+// El solapamiento se expresa como `hora_inicio < fin AND hora_fin > inicio`,
+// que es la misma condición que la constraint EXCLUDE con `&&` sobre
+// tsrange: rangos semiabiertos, así que dos bloques que se tocan en el borde
+// —uno termina 10:00 y el otro empieza 10:00— NO se pisan. Es el caso más
+// común de todos y tiene que poder reservarse.
+//
+// Se une a equipo y carro para traer la etiqueta ya resuelta (RF-03.17). El
+// JOIN a carro va LEFT: un proyector no está en ninguno, y con INNER
+// desaparecería del resultado justo cuando es el que choca.
+func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []string, fechas []time.Time, horaInicio, horaFin time.Duration) ([]application.Solapamiento, error) {
+	if len(equipoIDs) == 0 || len(fechas) == 0 {
+		return nil, nil
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT res.equipo_id,
+		       COALESCE(e.nombre, 'PC ' || e.identificador, ''),
+		       res.fecha, res.hora_inicio, res.hora_fin,
+		       COALESCE(res.nombre_docente_snapshot, ''),
+		       COALESCE(res.motivo_bloqueo, '')
+		FROM reserva res
+		JOIN equipo e ON e.id = res.equipo_id
+		LEFT JOIN carro c ON c.id = e.carro_id
+		WHERE res.equipo_id = ANY($1)
+		  AND res.fecha = ANY($2)
+		  AND res.estado = 'CONFIRMADA'
+		  AND res.hora_inicio < $4 AND res.hora_fin > $3
+		ORDER BY res.fecha, res.hora_inicio, e.identificador NULLS LAST, res.equipo_id
+	`, equipoIDs, fechas, duracionComoHora(horaInicio), duracionComoHora(horaFin))
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("buscando solapamientos: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []application.Solapamiento
+	for rows.Next() {
+		var s application.Solapamiento
+		var inicio, fin time.Time
+		if err := rows.Scan(&s.EquipoID, &s.Etiqueta, &s.Fecha, &inicio, &fin, &s.Docente, &s.MotivoBloqueo); err != nil {
+			return nil, fmt.Errorf("escaneando solapamiento: %w", err)
+		}
+		s.HoraInicio, s.HoraFin = horaComoDuracion(inicio), horaComoDuracion(fin)
+		resultado = append(resultado, s)
 	}
 	return resultado, errorDeFilas(rows)
 }
@@ -306,7 +360,7 @@ func (r *PostgresRepo) ListarGruposFuturosDeRegla(ctx context.Context, reglaID s
 //  2. regla_recurrencia de las materias del ciclo. RF-02.4 las nombra
 //     explícitamente: sin este paso quedan huérfanas para siempre,
 //     apuntando a materias archivadas.
-//  3. Los bloqueos por evaluación estatal del año del ciclo. No tienen
+//  3. Los bloqueos administrativos del año del ciclo. No tienen
 //     materia (RF-04.7), así que la subconsulta de arriba no los alcanza y
 //     se acumularían ciclo tras ciclo. Se los ubica por año de la fecha,
 //     que es lo único que los ata a un ciclo lectivo.
@@ -358,7 +412,7 @@ func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, ciclo
 	if _, err := r.db.Exec(ctx,
 		`DELETE FROM reserva WHERE `+bloqueosDelCiclo, cicloID,
 	); err != nil {
-		return 0, 0, fmt.Errorf("eliminando bloqueos de evaluación del ciclo: %w", err)
+		return 0, 0, fmt.Errorf("eliminando bloqueos administrativos del ciclo: %w", err)
 	}
 
 	return int(tag.RowsAffected()), reservasEliminadas, nil
@@ -371,8 +425,8 @@ func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, ciclo
 // Devuelve los nombres de PC, carro, materia y curso ya resueltos: es un
 // listado para mostrar en pantalla, y sin ellos una reserva de varios equipos
 // se ve como N filas idénticas. Los JOIN son de solo lectura, igual que en
-// CalendarioDeEquipo. El de materia/curso es LEFT porque los bloqueos por
-// evaluación estatal no tienen materia.
+// CalendarioDeEquipo. El de materia/curso es LEFT porque los bloqueos
+// administrativos no tienen materia.
 func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroReservas) ([]application.ReservaDetallada, int, error) {
 	// El FROM y el WHERE se arman una sola vez y los comparten las dos
 	// consultas posibles (la página y, si hace falta, el conteo suelto):
@@ -381,10 +435,10 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 	desde := `
 		FROM reserva res
 		JOIN equipo p ON p.id = res.equipo_id
-		-- LEFT desde la 015: un proyector reservable no está en ningún carro,
-		-- y con INNER JOIN su reserva no desaparecía de la pantalla — se caía
-		-- de la consulta entera, incluido el total paginado. El docente veía
-		-- que la reserva se hizo y después no la encontraba para cancelarla.
+		-- LEFT: un proyector reservable no está en ningún carro, y con INNER
+		-- su reserva no aparece sin carro — se cae de la consulta entera,
+		-- incluido el total paginado. El docente vería que la reserva se hizo
+		-- y después no la encontraría para cancelarla.
 		LEFT JOIN carro ca ON ca.id = p.carro_id
 		LEFT JOIN reserva_grupo rg ON rg.id = res.reserva_grupo_id
 		LEFT JOIN materia m ON m.id = res.materia_id
@@ -431,9 +485,9 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 	// al pasar de página.
 	//
 	// El identificador NO alcanza para desempatar: se repite entre carros
-	// distintos, y desde la 015 es NULL en todo lo que no está en un carro
-	// —los equipos sueltos empatarían todos entre sí—. res.equipo_id cierra el
-	// orden, que es lo único único de verdad acá.
+	// distintos y es NULL en todo lo que no está en uno —los equipos sueltos
+	// empatarían todos entre sí—. res.equipo_id cierra el orden, que es lo
+	// único único de verdad acá.
 	query += " ORDER BY res.fecha, res.hora_inicio, p.identificador NULLS LAST, res.equipo_id"
 
 	argsPagina := append(append([]any{}, args...), f.Pagina.Limit(), f.Pagina.Offset())
@@ -517,7 +571,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 
 // CalendarioDeEquipo implementa RF-04.4. El LEFT JOIN hacia materia/curso es
 // de solo lectura (mismo criterio que los validadores de este paquete
-// hacia academic): tiene que ser LEFT porque los bloqueos por evaluación
+// hacia academic): tiene que ser LEFT porque los bloqueos administrativos
 // estatal no tienen materia asociada y también ocupan la PC, así que
 // también deben verse en el calendario.
 func (r *PostgresRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) ([]application.BloqueCalendario, error) {
@@ -596,6 +650,244 @@ func columnasReservaConPrefijo(alias string) string {
 	return strings.Join(columnas, ", ")
 }
 
+// ReservasDeLaSerieDesde: la misma máquina en las ocurrencias que le quedan a
+// la serie, de esta fecha en adelante (RF-08.14).
+//
+// Devuelve vacío cuando el grupo no tiene regla de recurrencia, porque la
+// comparación con NULL no matchea nada. Eso es lo correcto y no un descuido:
+// en una reserva suelta "esta y las siguientes" no significa nada distinto de
+// "solo esta", y quien llama ya tiene esa reserva en la mano.
+func (r *PostgresRepo) ReservasDeLaSerieDesde(ctx context.Context, reservaID string) ([]*domain.Reserva, error) {
+	rows, err := r.db.Query(ctx, `
+		WITH origen AS (
+			SELECT res.equipo_id, g.regla_recurrencia_id, g.fecha
+			FROM reserva res
+			JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
+			WHERE res.id = $1
+		)
+		SELECT `+prefijar(columnasReserva, "res")+`
+		FROM reserva res
+		JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
+		JOIN origen o ON true
+		WHERE res.estado = 'CONFIRMADA'
+		  AND res.equipo_id = o.equipo_id
+		  AND g.regla_recurrencia_id IS NOT NULL
+		  AND g.regla_recurrencia_id = o.regla_recurrencia_id
+		  AND g.fecha >= o.fecha
+		ORDER BY g.fecha
+	`, reservaID)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("listando las reservas de la serie: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []*domain.Reserva
+	for rows.Next() {
+		res, err := escanearReserva(rows)
+		if err != nil {
+			return nil, fmt.Errorf("escaneando reserva de la serie: %w", err)
+		}
+		resultado = append(resultado, res)
+	}
+	return resultado, errorDeFilas(rows)
+}
+
+// prefijar califica una lista de columnas con el alias de su tabla, para
+// poder reusar `columnasReserva` en una consulta con JOIN sin que "id" quede
+// ambiguo.
+func prefijar(columnas, alias string) string {
+	partes := strings.Split(columnas, ", ")
+	for i, c := range partes {
+		partes[i] = alias + "." + c
+	}
+	return strings.Join(partes, ", ")
+}
+
+// DatosParaPedirLiberacion resuelve en una consulta las cuatro condiciones del
+// pedido (RF-04.12) y los datos del aviso.
+func (r *PostgresRepo) DatosParaPedirLiberacion(ctx context.Context, reservaID string) (*application.ReservaParaPedido, error) {
+	row := r.db.QueryRow(ctx, `
+		SELECT res.estado, res.tipo, res.fecha, res.hora_inicio, res.hora_fin,
+		       COALESCE(eq.nombre, 'PC ' || eq.identificador),
+		       COALESCE(m.nombre, ''),
+		       g.creado_por,
+		       COALESCE(u.nombre || ' ' || u.apellido, res.nombre_docente_snapshot, ''),
+		       COALESCE(u.email, '')
+		FROM reserva res
+		JOIN equipo eq ON eq.id = res.equipo_id
+		LEFT JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
+		LEFT JOIN materia m ON m.id = res.materia_id
+		LEFT JOIN usuario u ON u.id = g.creado_por
+		WHERE res.id = $1
+	`, reservaID)
+
+	var p application.ReservaParaPedido
+	var estado, tipo string
+	var inicio, fin time.Time
+	if err := row.Scan(&estado, &tipo, &p.Fecha, &inicio, &fin,
+		&p.Etiqueta, &p.MateriaNombre, &p.DuenoID, &p.DuenoNombre, &p.DuenoEmail); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, application.ErrReservaNoEncontrada
+		}
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("leyendo la reserva para el pedido: %w", err)
+	}
+
+	estadoParseado, err := domain.ParseEstadoReserva(estado)
+	if err != nil {
+		return nil, fmt.Errorf("estado inválido en la base para la reserva %s: %w", reservaID, err)
+	}
+	p.Estado = estadoParseado
+	p.EsBloqueo = tipo == string(domain.TipoBloqueo)
+	p.HoraInicio = horaComoDuracion(inicio)
+	p.HoraFin = horaComoDuracion(fin)
+	return &p, nil
+}
+
+// YaPidioLiberacionHoy mira las notificaciones ya emitidas en vez de una
+// tabla propia: el pedido no es una entidad, y la fila que igual se escribe
+// alcanza para saber que salió.
+//
+// `sobre_usuario_id` es de quién HABLA el aviso, y en este caso eso es quien
+// pide — el aviso le llega al dueño y trata sobre el otro docente. Es el
+// mismo uso que en "hay una cuenta esperando aprobación", y cae sobre el
+// índice que ya existe para esa columna.
+func (r *PostgresRepo) YaPidioLiberacionHoy(ctx context.Context, reservaID, solicitanteID string, dia time.Time) (bool, error) {
+	var existe bool
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM notificacion
+			WHERE tipo = 'PEDIDO_DE_LIBERACION'
+			  AND reserva_id = $1
+			  AND sobre_usuario_id = $2
+			  AND creada_en >= $3::date
+			  AND creada_en < $3::date + 1
+		)
+	`, reservaID, solicitanteID, dia.Format(formatoFechaSQL)).Scan(&existe)
+	if err != nil {
+		if esIDInvalido(err) {
+			return false, application.ErrIDInvalido
+		}
+		return false, fmt.Errorf("verificando si ya se pidió esa reserva hoy: %w", err)
+	}
+	return existe, nil
+}
+
+// ListarEquiposOcupadosEn es la otra mitad de la franja (RF-04.11): del mismo
+// universo que la consulta de abajo —DISPONIBLE, reservable, no dado de baja—
+// los que YA tiene alguien, con quién los tiene.
+//
+// El JOIN con reserva es interno y no un LEFT: acá interesa exactamente lo
+// contrario que en la otra consulta. Y no puede devolver dos filas para el
+// mismo equipo, porque la constraint EXCLUDE ya garantiza que dos reservas
+// confirmadas no se pisen sobre la misma máquina.
+func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoOcupado, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT p.id,
+		       COALESCE(p.nombre, 'PC ' || p.identificador),
+		       COALESCE(c.nombre, ''),
+		       res.id, res.tipo, res.hora_inicio, res.hora_fin,
+		       g.creado_por,
+		       COALESCE(u.nombre || ' ' || u.apellido, res.nombre_docente_snapshot, ''),
+		       COALESCE(m.nombre, ''),
+		       COALESCE(res.motivo_bloqueo, '')
+		FROM equipo p
+		JOIN reserva res ON res.equipo_id = p.id
+		 AND res.estado = 'CONFIRMADA'
+		 AND res.fecha = $1
+		 AND tsrange(res.fecha + res.hora_inicio, res.fecha + res.hora_fin)
+		     && tsrange($1::date + $2::time, $1::date + $3::time)
+		LEFT JOIN carro c ON c.id = p.carro_id
+		LEFT JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
+		LEFT JOIN materia m ON m.id = res.materia_id
+		LEFT JOIN usuario u ON u.id = g.creado_por
+		WHERE p.estado = 'DISPONIBLE'
+		  AND p.dado_de_baja = false
+		  AND p.reservable = true
+		ORDER BY p.carro_id IS NULL, c.nombre, p.identificador, p.nombre
+	`, fecha, duracionComoHora(horaInicio), duracionComoHora(horaFin))
+	if err != nil {
+		return nil, fmt.Errorf("listando equipos ocupados: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []application.EquipoOcupado
+	for rows.Next() {
+		var oc application.EquipoOcupado
+		var tipo string
+		var inicio, fin time.Time
+		if err := rows.Scan(&oc.EquipoID, &oc.Etiqueta, &oc.CarroNombre,
+			&oc.ReservaID, &tipo, &inicio, &fin,
+			&oc.DocenteID, &oc.DocenteNombre, &oc.MateriaNombre, &oc.Motivo); err != nil {
+			return nil, fmt.Errorf("escaneando equipo ocupado: %w", err)
+		}
+		oc.EsBloqueo = tipo == string(domain.TipoBloqueo)
+		oc.HoraInicio = horaComoDuracion(inicio)
+		oc.HoraFin = horaComoDuracion(fin)
+		resultado = append(resultado, oc)
+	}
+	return resultado, errorDeFilas(rows)
+}
+
+// ListarEquiposLibresEnLaSerie: los equipos libres en TODAS las ocurrencias
+// que le quedan a la serie de ese grupo (RF-08.14).
+//
+// El NOT EXISTS se evalúa contra el conjunto entero de fechas y no contra una:
+// un equipo que está libre en catorce martes y ocupado en el decimoquinto no
+// sirve, porque el cambio en serie es todo o nada. Resolverlo acá y no
+// preguntando fecha por fecha es lo que evita tantas idas a la base como
+// fechas tenga la serie.
+//
+// Un grupo sin recurrencia devuelve los libres de su propia franja: es el
+// mismo caso con una sola fecha.
+func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID string) ([]application.EquipoDisponible, error) {
+	rows, err := r.db.Query(ctx, `
+		WITH origen AS (
+			SELECT fecha, hora_inicio, hora_fin, regla_recurrencia_id
+			FROM reserva_grupo WHERE id = $1
+		),
+		ocurrencias AS (
+			SELECT g.fecha, g.hora_inicio, g.hora_fin
+			FROM reserva_grupo g, origen o
+			WHERE g.estado IN ('CONFIRMADA','PARCIALMENTE_CANCELADA')
+			  AND g.fecha >= o.fecha
+			  AND (
+				(o.regla_recurrencia_id IS NOT NULL AND g.regla_recurrencia_id = o.regla_recurrencia_id)
+				OR g.id = $1
+			  )
+		)
+		SELECT p.id, COALESCE(p.identificador, 0),
+		       COALESCE(p.nombre, 'PC ' || p.identificador),
+		       p.tipo,
+		       COALESCE(c.id::text, ''), COALESCE(c.nombre, ''),
+		       p.freezado, COALESCE(p.software_instalado, '')
+		FROM equipo p
+		LEFT JOIN carro c ON c.id = p.carro_id
+		WHERE p.estado = 'DISPONIBLE'
+		  AND p.dado_de_baja = false
+		  AND p.reservable = true
+		  AND NOT EXISTS (
+			SELECT 1 FROM reserva res JOIN ocurrencias oc ON oc.fecha = res.fecha
+			WHERE res.equipo_id = p.id
+			  AND res.estado = 'CONFIRMADA'
+			  AND tsrange(res.fecha + res.hora_inicio, res.fecha + res.hora_fin)
+			      && tsrange(oc.fecha + oc.hora_inicio, oc.fecha + oc.hora_fin)
+		  )
+		ORDER BY p.carro_id IS NULL, c.nombre, p.identificador, p.nombre
+	`, grupoID)
+	if err != nil {
+		return nil, fmt.Errorf("listando equipos libres en la serie: %w", err)
+	}
+	defer rows.Close()
+
+	return escanearEquiposDisponibles(rows)
+}
+
 // ListarEquiposDisponiblesEn implementa RF-04.2: las PCs que se pueden
 // reservar en una franja concreta. El NOT EXISTS usa el mismo criterio de
 // solapamiento que la constraint EXCLUDE de la migración (tsrange con
@@ -613,10 +905,10 @@ func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha tim
 		LEFT JOIN carro c ON c.id = p.carro_id
 		WHERE p.estado = 'DISPONIBLE'
 		  AND p.dado_de_baja = false
-		  -- Desde la 015: un cargador no se planifica, se pide en el
-		  -- momento. Sin este filtro aparecería en la lista cada vez que un
-		  -- docente va a reservar, y la primera vez que alguien reserve uno
-		  -- sin querer hay que explicarlo.
+		  -- RF-03.16: un cargador no se planifica, se pide en el momento. Sin
+		  -- este filtro aparecería en la lista cada vez que un docente va a
+		  -- reservar, y la primera vez que alguien reserve uno sin querer hay
+		  -- que explicarlo.
 		  AND p.reservable = true
 		  AND NOT EXISTS (
 			SELECT 1 FROM reserva res
@@ -635,6 +927,10 @@ func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha tim
 	}
 	defer rows.Close()
 
+	return escanearEquiposDisponibles(rows)
+}
+
+func escanearEquiposDisponibles(rows pgx.Rows) ([]application.EquipoDisponible, error) {
 	var resultado []application.EquipoDisponible
 	for rows.Next() {
 		var pc application.EquipoDisponible

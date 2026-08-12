@@ -27,6 +27,13 @@ async function llenarFormulario(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("RegistroPage", () => {
+  beforeEach(() => {
+    // AvisoDeSpam (RF-05.8) pregunta el remitente al montarse. El automock
+    // devuelve undefined, y encadenar sobre eso revienta dentro del efecto:
+    // sin este mock fallan todos los casos de la pantalla, no el del aviso.
+    vi.mocked(authApi.configPublica).mockResolvedValue({ googleClientId: "" })
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
   })

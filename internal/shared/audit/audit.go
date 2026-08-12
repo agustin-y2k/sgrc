@@ -26,15 +26,12 @@ const (
 	PasswordRecuperadaPorEmail = "PASSWORD_RECUPERADA_POR_EMAIL"
 	DocenteRemovidoDeMateria   = "DOCENTE_REMOVIDO_DE_MATERIA"
 	ReservaCanceladaPorAdmin   = "RESERVA_CANCELADA_POR_ADMIN"
-	BloqueoEvaluacionCreado    = "BLOQUEO_CREADO"
-	// Estas tres decían PC mientras hubo filas guardadas con ese valor:
-	// reescribir un registro de auditoría es lo que un registro de auditoría
-	// no debe permitir. Al consolidarse el esquema esas filas dejaron de
-	// existir —toda instalación arranca vacía—, así que el motivo se cayó y
-	// el valor pasó a decir lo mismo que la entidad.
-	//
-	// El criterio sigue en pie hacia adelante: una vez que haya auditoría
-	// guardada en una instalación real, estos valores no se tocan más.
+	BloqueoCreado              = "BLOQUEO_CREADO"
+	// Los VALORES de estas constantes no se renombran nunca, aunque el
+	// sistema renombre la entidad: lo guardado es el nombre que la operación
+	// tenía cuando ocurrió, y reescribir un registro de auditoría es
+	// precisamente lo que un registro de auditoría no debe permitir. El
+	// identificador de Go sí se puede cambiar — no viaja a ningún lado.
 	EquipoEstadoCambiado       = "EQUIPO_ESTADO_CAMBIADO"
 	EquipoDadoDeBaja           = "EQUIPO_DADO_DE_BAJA"
 	EquipoMovidoDeCarro        = "EQUIPO_MOVIDO_DE_CARRO"

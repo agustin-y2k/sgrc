@@ -16,9 +16,9 @@ export type EstadoReserva =
 /**
  * NORMAL: la reserva de un docente para su clase.
  * BLOQUEO: un Admin se tomó el equipo para otra cosa y canceló lo que
- * hubiera encima. Se llamó EVALUACION_ESTATAL hasta la 019, y era un caso
- * concreto usado como categoría — también se bloquea por una jornada
- * docente, una capacitación o una obra en el aula.
+ * hubiera encima. El motivo va en texto libre: se bloquea por una
+ * evaluación, una jornada docente, una capacitación o una obra en el aula, y
+ * el sistema no puede prever la lista.
  */
 export type TipoReserva = "NORMAL" | "BLOQUEO"
 
@@ -69,7 +69,7 @@ export const MAX_HORAS_RESERVA = 8
 
 /**
  * Avisa en el formulario en vez de esperar el 400 de
- * domain.ErrDuracionExcesiva. No aplica a los bloqueos por evaluación
+ * domain.ErrDuracionExcesiva. No aplica a los bloqueos administrativos
  * estatal, que están exceptuados del tope.
  */
 export function excedeDuracionMaxima(horaInicio: string, horaFin: string): boolean {
@@ -146,7 +146,7 @@ export type GrupoDeReservas = {
   /** Ausente si la reserva no pertenece a ningún grupo. */
   grupoId?: string
   /**
-   * Un bloqueo por evaluación (RF-04.7). No tiene ReservaGrupo en la base
+   * Un bloqueo administrativo (RF-04.7). No tiene ReservaGrupo en la base
    * —no es la reserva de nadie— pero sí es UNA operación del Admin, así que
    * se junta en una sola tarjeta.
    */
@@ -168,7 +168,7 @@ export type GrupoDeReservas = {
  * La clave por la que dos filas `reserva` caen en la misma tarjeta.
  *
  * Una reserva normal trae su `reservaGrupoId`: es lo que el docente vivió
- * como "una reserva". Un bloqueo por evaluación NO tiene grupo en la base
+ * como "una reserva". Un bloqueo administrativo NO tiene grupo en la base
  * —no pertenece a nadie ni a ninguna materia— pero para el Admin que lo
  * creó sí fue una sola operación: eligió varias equipos, una fecha y un
  * horario, y apretó confirmar una vez. Mostrarlo como una tarjeta por Equipo
@@ -245,6 +245,35 @@ export type EquipoDisponible = {
   softwareInstalado?: string
 }
 
+/**
+ * RF-04.11: un equipo que ya tiene dueño en esa franja. No se tilda; está
+ * para poder ir a hablarle o mandarle un pedido.
+ *
+ * De la otra persona llega el nombre y nunca el email: el correo lo manda el
+ * servidor.
+ */
+export type EquipoOcupado = {
+  equipoId: string
+  etiqueta: string
+  carroNombre?: string
+  /** Lo que después recibe el pedido de liberación. */
+  reservaId?: string
+  /** Vacío en un bloqueo administrativo, que no tiene docente detrás. */
+  docenteNombre?: string
+  materiaNombre?: string
+  /** Solo en un bloqueo: el texto que escribió el Admin (RF-04.7). */
+  motivo?: string
+  /** De la reserva que lo ocupa, que puede no coincidir con la franja pedida. */
+  horaInicio: string
+  horaFin: string
+  /**
+   * Lo decide el servidor: false en un bloqueo, en una reserva propia y si
+   * esa franja ya empezó. La pantalla no replica la regla — dos copias de
+   * una regla terminan discrepando.
+   */
+  puedePedirse: boolean
+}
+
 export type CrearReservaRequest = {
   materiaId: string
   fecha: string
@@ -268,7 +297,7 @@ export type CrearReservaRecurrenteRequest = {
  *
  * A diferencia de una reserva no lleva materia (el bloqueo no es de nadie)
  * y sí lleva `motivo`, que es lo que el backend intercala en el aviso a
- * cada docente afectado: "Tu reserva fue cancelada: bloqueo por evaluación
+ * cada docente afectado: "Tu reserva fue cancelada: bloqueo administrativo
  * estatal (…)".
  */
 export type BloquearRequest = {
@@ -351,7 +380,7 @@ export type RazonNoEntregada =
   | "YA_ENTREGADA"
   | "FUERA_DEL_INVENTARIO"
   | "RESERVA_CANCELADA"
-  /** La reserva no dice a nombre de quién: es un bloqueo por evaluación. */
+  /** La reserva no dice a nombre de quién: es un bloqueo administrativo. */
   | "SIN_DESTINATARIO"
 
 export type EquipoNoEntregada = {

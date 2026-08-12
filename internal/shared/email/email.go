@@ -9,7 +9,9 @@ package email
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -193,6 +195,11 @@ func (e *EnviadorSMTP) armarMensaje(para, asunto, cuerpo string) []byte {
 	escribirCabecera("To", para)
 	escribirCabecera("Subject", mime.QEncoding.Encode("utf-8", asunto))
 	escribirCabecera("Date", e.ahora().Format(time.RFC1123Z))
+	// Gmail le pone uno al mensaje que no lo trae, así que con él configurado
+	// esta línea no cambia nada. Existe por los demás servidores: varios lo
+	// dejan salir sin Message-ID, y un correo sin él es de las cosas que un
+	// filtro de spam mira para decidir que lo armó un programa mal hecho.
+	escribirCabecera("Message-ID", e.mensajeID())
 	escribirCabecera("MIME-Version", "1.0")
 	escribirCabecera("Content-Type", `text/plain; charset="utf-8"`)
 	escribirCabecera("Content-Transfer-Encoding", "quoted-printable")
@@ -208,6 +215,36 @@ func (e *EnviadorSMTP) armarMensaje(para, asunto, cuerpo string) []byte {
 	_ = qp.Close()
 
 	return []byte(sb.String())
+}
+
+// mensajeID arma el identificador único de este correo, con el formato del
+// RFC 5322: <algo-irrepetible@dominio>.
+//
+// La parte de la izquierda combina el instante con doce bytes al azar. El
+// instante solo no alcanza: dos avisos del mismo barrido salen dentro del
+// mismo nanosegundo con más frecuencia de la que uno esperaría, y dos correos
+// distintos con el mismo Message-ID hacen que algunos clientes muestren uno
+// solo.
+//
+// El dominio sale del remitente, que es lo que corresponde: el Message-ID
+// pertenece a quien lo emite. Si la dirección viniera sin arroba —no debería,
+// la configuración lo valida— cae al host del servidor SMTP, que también es
+// un dominio real.
+func (e *EnviadorSMTP) mensajeID() string {
+	var azar [12]byte
+	if _, err := rand.Read(azar[:]); err != nil {
+		// crypto/rand no falla en la práctica, pero si fallara un correo sin
+		// Message-ID es peor que uno con la parte azarosa en cero: el
+		// instante ya lo hace único salvo empate exacto.
+		log.Printf("email: no se pudo generar la parte azarosa del Message-ID: %v", err)
+	}
+
+	dominio := e.cfg.Host
+	if _, despues, hay := strings.Cut(e.cfg.Desde, "@"); hay && despues != "" {
+		dominio = despues
+	}
+
+	return fmt.Sprintf("<%d.%s@%s>", e.ahora().UnixNano(), hex.EncodeToString(azar[:]), dominio)
 }
 
 // normalizarSaltos pasa el cuerpo a CRLF: los textos del código se escriben

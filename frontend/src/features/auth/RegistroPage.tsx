@@ -6,6 +6,7 @@ import { z } from "zod"
 
 import { PantallaDeAcceso } from "@/components/layout/PantallaDeAcceso"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AvisoDeSpam } from "@/components/AvisoDeSpam"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -101,13 +102,18 @@ export function RegistroPage() {
             <CardTitle>Cuenta creada</CardTitle>
             <CardDescription>
               Tu cuenta quedó pendiente de aprobación de un Admin. Vas a poder iniciar
-              sesión una vez que te aprueben.
+              sesión una vez que te aprueben, y te avisamos por correo cuando pase.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="grid gap-3">
             <Button asChild className="w-full">
               <Link to="/login">Volver al login</Link>
             </Button>
+            {/* Este es el primer correo que esta persona recibe del sistema,
+                o sea el de mayor riesgo de terminar en spam. Y es el mejor
+                momento para pedirle que marque el remitente: le sirve para
+                todos los que vengan después. */}
+            <AvisoDeSpam>El aviso puede caer en spam.</AvisoDeSpam>
           </CardContent>
         </Card>
       </PantallaDeAcceso>

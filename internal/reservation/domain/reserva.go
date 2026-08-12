@@ -56,11 +56,12 @@ var ErrTransicionReservaInvalida = errors.New("transición de estado de reserva 
 // bloqueo administrativo — este último no pertenece a ningún ReservaGrupo ni
 // Materia (RF-04.7), y lleva su propio motivo.
 //
-// El bloqueo se llamó `EVALUACION_ESTATAL` en versiones anteriores, y era un caso
-// concreto usado como categoría: un Admin se toma el laboratorio por una
-// evaluación, pero también por una jornada docente, una capacitación o una
-// obra en el aula. Lo que tienen en común no es la evaluación, es que
-// alguien decidió que ese rato el equipo se usa para otra cosa.
+// El tipo no nombra el motivo, y no es un descuido: un Admin se toma el
+// laboratorio por una evaluación, por una jornada docente, por una
+// capacitación o por una obra en el aula. Lo que esos casos tienen en común
+// no es ninguna categoría, es que alguien con autoridad decidió que ese rato
+// el equipo se usa para otra cosa. Por eso el motivo va en texto libre y
+// obligatorio, en MotivoBloqueo.
 type TipoReserva string
 
 const (
@@ -123,7 +124,7 @@ type Reserva struct {
 
 // NuevaReservaNormal crea una Reserva perteneciente a un ReservaGrupo
 // (RF-04.1) — reservaGrupoID y materiaID son obligatorios acá, a
-// diferencia de un bloqueo de evaluación.
+// diferencia de un bloqueo administrativo.
 func NuevaReservaNormal(id, reservaGrupoID, equipoID, materiaID string, nombreDocenteSnapshot string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) (*Reserva, error) {
 	if horaFin <= horaInicio {
 		return nil, ErrRangoHorarioInvalido
@@ -144,7 +145,7 @@ func NuevaReservaNormal(id, reservaGrupoID, equipoID, materiaID string, nombreDo
 	}, nil
 }
 
-// NuevaReservaEvaluacion crea un bloqueo administrativo sobre una PC
+// NuevaReservaDeBloqueo crea un bloqueo administrativo sobre una PC
 // puntual, sin pertenecer a ningún ReservaGrupo ni Materia (RF-04.7).
 func NuevaReservaBloqueo(id, equipoID string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, motivo string, ahora time.Time) (*Reserva, error) {
 	if horaFin <= horaInicio {
@@ -173,7 +174,7 @@ func NuevaReservaBloqueo(id, equipoID string, creadoPor *string, fecha time.Time
 
 // Cancelar aplica la transición y deja registro de quién canceló, cuándo,
 // y por qué (RF-04.4/04.5/04.6 — motivo obligatorio en todos los casos,
-// aunque algunos lo generen el propio sistema, ej. cascada de evaluación).
+// aunque algunos lo generen el propio sistema, ej. cascada de un bloqueo).
 func (r *Reserva) Cancelar(canceladoPor *string, motivo string, ahora time.Time) error {
 	if err := r.cambiarEstado(ReservaCancelada); err != nil {
 		return err
@@ -250,6 +251,15 @@ func YaTermino(fecha time.Time, horaFin time.Duration, ahora time.Time) bool {
 	return !horaDePared(fecha, horaFin).After(horaDePared(ahora, horaDelDia(ahora)))
 }
 
+// YaEmpezo es la mitad de arriba de lo mismo: la franja ya arrancó. Lo usa el
+// pedido de liberación (RF-04.12), que no tiene sentido sobre una clase en
+// curso — el docente ya está usando esas máquinas.
+//
+// Misma comparación de hora de pared que YaTermino, y por la misma razón.
+func YaEmpezo(fecha time.Time, horaInicio time.Duration, ahora time.Time) bool {
+	return !horaDePared(fecha, horaInicio).After(horaDePared(ahora, horaDelDia(ahora)))
+}
+
 func horaDePared(fecha time.Time, hora time.Duration) time.Time {
 	y, m, d := fecha.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Add(hora)
@@ -275,7 +285,7 @@ func horaDelDia(t time.Time) time.Duration {
 }
 
 // ValidarVentanaTemporal reúne las tres reglas que todo bloque tiene que
-// cumplir, sea una reserva normal o un bloqueo por evaluación: rango
+// cumplir, sea una reserva normal o un bloqueo administrativo: rango
 // horario coherente, duración acotada y que no esté en el pasado.
 func ValidarVentanaTemporal(fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) error {
 	if horaFin <= horaInicio {

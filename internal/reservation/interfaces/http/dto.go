@@ -222,8 +222,8 @@ func toBloqueCalendarioResponse(b application.BloqueCalendario) bloqueCalendario
 	}
 }
 
-// deref: nombre_docente_snapshot es nullable en la base (los bloqueos por
-// evaluación estatal no tienen docente).
+// deref: nombre_docente_snapshot es nullable en la base (los bloqueos
+// administrativos no tienen docente).
 func deref(s *string) string {
 	if s == nil {
 		return ""
@@ -252,6 +252,44 @@ type equipoDisponibleResponse struct {
 
 type equiposDisponiblesResponse struct {
 	Data []equipoDisponibleResponse `json:"data"`
+	// Ocupados: la otra mitad de la franja (RF-04.11). Van aparte de `data`
+	// y no mezclados: son los que NO se pueden tildar, y lo que se muestra
+	// de ellos es otra cosa —quién los tiene y hasta cuándo—.
+	Ocupados []equipoOcupadoResponse `json:"ocupados"`
+}
+
+// equipoOcupadoResponse: un equipo que ya tiene dueño en esa franja. Se
+// muestra para poder ir a hablarle o mandarle un pedido (RF-04.12), no para
+// tildarlo. De la otra persona va el nombre y nunca el email.
+type equipoOcupadoResponse struct {
+	EquipoID    string `json:"equipoId"`
+	Etiqueta    string `json:"etiqueta"`
+	CarroNombre string `json:"carroNombre,omitempty"`
+	// ReservaID es lo que después recibe el pedido de liberación.
+	ReservaID string `json:"reservaId,omitempty"`
+	// DocenteNombre vacío en un bloqueo administrativo, que no tiene docente
+	// detrás; ahí lo que explica la franja es el motivo.
+	DocenteNombre string `json:"docenteNombre,omitempty"`
+	MateriaNombre string `json:"materiaNombre,omitempty"`
+	Motivo        string `json:"motivo,omitempty"`
+	// HoraInicio y HoraFin son las de la reserva que lo ocupa, que pueden no
+	// coincidir con la franja consultada.
+	HoraInicio string `json:"horaInicio"`
+	HoraFin    string `json:"horaFin"`
+	// PuedePedirse lo decide el servidor: false en un bloqueo, en una
+	// reserva propia y si esa franja ya empezó. La pantalla no replica la
+	// regla, porque dos copias de una regla terminan discrepando.
+	PuedePedirse bool `json:"puedePedirse"`
+}
+
+func toEquipoOcupadoResponse(o application.EquipoOcupado) equipoOcupadoResponse {
+	return equipoOcupadoResponse{
+		EquipoID: o.EquipoID, Etiqueta: o.Etiqueta, CarroNombre: o.CarroNombre,
+		ReservaID: o.ReservaID, DocenteNombre: o.DocenteNombre,
+		MateriaNombre: o.MateriaNombre, Motivo: o.Motivo,
+		HoraInicio: formatHora(o.HoraInicio), HoraFin: formatHora(o.HoraFin),
+		PuedePedirse: o.PuedePedirse,
+	}
 }
 
 func toEquipoDisponibleResponse(p application.EquipoDisponible) equipoDisponibleResponse {
@@ -266,4 +304,18 @@ func toEquipoDisponibleResponse(p application.EquipoDisponible) equipoDisponible
 // tocan, es la misma clase.
 type cambiarEquipoRequest struct {
 	EquipoID string `json:"equipoId"`
+	// SoloEsta: mismo nombre y mismo significado que al cancelar una
+	// ocurrencia (RF-04.6). Son las dos operaciones que un docente hace
+	// sobre una serie ya creada, y tienen que preguntar igual.
+	//
+	// El default de Go es false, así que el cuerpo sin este campo cambia la
+	// serie entera. Es a propósito que el handler lo trate al revés: ver
+	// CambiarEquipoDeReserva.
+	SoloEsta *bool `json:"soloEsta"`
+}
+
+// pedirLiberacionRequest — RF-04.12. Solo el texto libre: qué reserva se pide
+// va en la URL, y quién pide sale del token.
+type pedirLiberacionRequest struct {
+	Mensaje string `json:"mensaje"`
 }
