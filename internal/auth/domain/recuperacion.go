@@ -42,7 +42,7 @@ var (
 // CodigoRecuperacion es un código de un solo uso, con vencimiento y tope de
 // intentos, que habilita a cambiar la contraseña de una cuenta sin conocer
 // la anterior. La entidad guarda el HASH, nunca el código: en claro solo lo
-// conoce quien recibió el mail (ver migración 009).
+// conoce quien recibió el mail.
 type CodigoRecuperacion struct {
 	ID         string
 	UsuarioID  string

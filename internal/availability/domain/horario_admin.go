@@ -17,12 +17,11 @@ import (
 // docs/06-arquitectura.md §3).
 type DiaSemana string
 
-// La semana lectiva de la escuela es de lunes a viernes: si no hay clase,
-// publicar un horario de presencia ese día no le sirve a nadie. SABADO
-// estaba acá de antes de esa decisión —reservation ya lo había sacado en la
-// migración 002— así que availability aceptaba un día que el resto del
-// sistema no reconoce, y el frontend tenía que esquivar esas filas al
-// mostrarlas. La migración 005 pone el mismo límite en la base.
+// La semana lectiva es de lunes a viernes: si no hay clase, publicar un
+// horario de presencia ese día no le sirve a nadie. El mismo límite está en
+// el CHECK de la columna, para que valga también contra cualquier cosa que
+// escriba directo en la base. Una institución que trabaje sábados amplía los
+// dos a la vez.
 const (
 	Lunes     DiaSemana = "LUNES"
 	Martes    DiaSemana = "MARTES"

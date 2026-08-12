@@ -157,7 +157,7 @@ export function InventarioPage() {
                     aria-expanded={abierto}
                     onClick={() => setCarroAbierto(abierto ? null : carro.id)}
                   >
-                    {abierto ? "Ocultar equipos" : "Ver Equipos"}
+                    {abierto ? "Ocultar equipos" : "Ver equipos"}
                   </Button>
                 </CardTitle>
                 {carro.descripcion && (

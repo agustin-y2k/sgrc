@@ -30,8 +30,11 @@ function BloqueOcupado({ bloque }: { bloque: BloqueCalendario }) {
   const minutosBase = HORA_DESDE * 60
 
   const esBloqueo = bloque.tipo === "BLOQUEO"
-  // Los bloqueos anteriores a la 019 no tienen motivo guardado, así que el
-  // rótulo no puede depender de que venga: "Bloqueado" dice lo que se sabe.
+  // En un bloqueo el motivo viene siempre —es obligatorio al crearlo y lo
+  // sostiene un CHECK en la base— pero el campo es opcional en el tipo
+  // porque no existe en las reservas normales, y TypeScript no puede
+  // estrecharlo por `esBloqueo`. El respaldo cubre lo que el tipo permite:
+  // sin él, un `undefined` se leería tal cual dentro del title.
   const motivo = bloque.motivoBloqueo || "Bloqueado"
   const alto = ((fin - inicio) / 60) * ALTO_POR_HORA_REM
   const desplazamiento = ((inicio - minutosBase) / 60) * ALTO_POR_HORA_REM

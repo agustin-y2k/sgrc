@@ -101,12 +101,12 @@ func TestPostgresRepo_CrearYBuscarPorID_OK(t *testing.T) {
 	}
 }
 
-// Regresión de la migración 003. Con las columnas en TIMESTAMP sin zona,
-// escribir un instante en la hora de la escuela y leerlo de vuelta lo
-// corría tres horas: Postgres guardaba la hora de pared y pgx la
-// interpretaba como UTC. El síntoma llegaba hasta la interfaz — el listado
-// de notificaciones (RF-05) mostraba cada aviso tres horas antes de
-// cuando había ocurrido.
+// Los instantes van en TIMESTAMPTZ y este test lo sostiene. Con una columna
+// sin zona, escribir un instante en la hora local y leerlo de vuelta lo corre
+// tantas horas como el desfasaje: Postgres guarda la hora de pared y el
+// driver la interpreta como UTC. El síntoma llega hasta la interfaz — el
+// listado de notificaciones (RF-05) mostraría cada aviso a una hora que no
+// es.
 //
 // El test escribe con offset -03:00 a propósito, que es lo que hace el
 // proceso real (APP_TIMEZONE), y compara instantes: si la columna volviera

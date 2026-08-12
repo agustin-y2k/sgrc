@@ -22,9 +22,8 @@ import { getErrorMessage } from "@/lib/api-client"
  * trámite", "me llevo el proyector".
  *
  * Ofrece TODO el inventario que no esté afuera, no solo las computadoras de
- * los carros: desde la 015 lo que más se presta de forma espontánea son
- * justamente los equipos sueltos —un proyector, un cargador—, así que van
- * primero en la lista.
+ * los carros: lo que más se presta en el momento son justamente los equipos
+ * sueltos —un proyector, un cargador—, así que van primero en la lista.
  *
  * Vive suelto porque se usa desde dos lados — el panel del laboratorio y la
  * pantalla de entregas—: es de las cosas que más se hacen en el mostrador y
@@ -50,10 +49,10 @@ export function EntregaSuelta({
     queryFn: inventoryApi.listarCarros,
   })
 
-  // Todo el inventario en UNA consulta. Antes eran una por carro más otra
-  // por los sueltos, y el listado se armaba juntando las respuestas; el
-  // endpoint sin filtro lo resuelve de una. Los carros se siguen pidiendo,
-  // pero solo para poder decir de dónde sale cada equipo.
+  // Todo el inventario en UNA consulta: el endpoint sin filtro ya devuelve
+  // los de carro y los sueltos juntos, así que no hace falta pedir carro por
+  // carro y unir las respuestas. Los carros se siguen pidiendo, pero solo
+  // para poder decir de dónde sale cada equipo.
   const { data: todos } = useQuery({
     queryKey: ["equipos"],
     queryFn: () => inventoryApi.listarEquipos(),

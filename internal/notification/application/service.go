@@ -84,8 +84,7 @@ func (s *Service) NotificarATodosLosAdmins(ctx context.Context, mensaje string, 
 // manda a una lista donde esa persona ya no está.
 //
 // Devuelve cuántas cerró. No es un error que sean cero: puede que el aviso
-// ya estuviera leído, o que la cuenta sea anterior a que las notificaciones
-// supieran de quién hablaban (ver migración 007).
+// ya estuviera leído, o que nunca hubiera existido uno sobre esa cuenta.
 func (s *Service) CerrarAvisosSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo) (int, error) {
 	pendientes, err := s.repo.ListarNoLeidasSobreUsuario(ctx, sobreUsuarioID, tipo)
 	if err != nil {

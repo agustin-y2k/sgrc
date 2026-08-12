@@ -211,10 +211,10 @@ export function ReportesPage() {
       <div className="grid gap-4">
         {/* RF-06.1 */}
         <Seccion
-          titulo="Uso por Equipo"
+          titulo="Uso por equipo"
           resumen={
             filasUsoEquipos.length > 0 &&
-            `${filasUsoEquipos.length} ${filasUsoEquipos.length === 1 ? "Equipo usada" : "Equipos usadas"} · ${totalReservasEquipos} reservas · ${formatearDuracion(totalMinutosEquipos)} en total`
+            `${filasUsoEquipos.length} ${filasUsoEquipos.length === 1 ? "equipo usado" : "equipos usados"} · ${totalReservasEquipos} reservas · ${formatearDuracion(totalMinutosEquipos)} en total`
           }
           alDescargar={
             filasUsoEquipos.length > 0
@@ -309,7 +309,9 @@ export function ReportesPage() {
               </TableHeader>
               <TableBody>
                 {filasUsoDocentes.map((u) => (
-                  <TableRow key={u.usuarioId}>
+                  // El nombre completa la key: una cuenta eliminada no trae
+                  // usuarioId, y dos docentes borrados compartirían key.
+                  <TableRow key={`${u.usuarioId ?? ""}·${u.nombreDocente}`}>
                     <TableCell className="font-medium">{u.nombreDocente}</TableCell>
                     <TableCell className="text-right">{u.cantidadReservas}</TableCell>
                     <TableCell className="text-right">

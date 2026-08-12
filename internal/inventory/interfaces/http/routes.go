@@ -25,13 +25,12 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// Equipo — las computadoras de un carro y todo lo demás que se presta.
 	//
 	// `/equipos` es UNA colección con filtros en la query, y no varias rutas
-	// con la condición metida en el path. La versión anterior era
-	// `/equipos/sueltos`, y el problema no era de purismo: Fiber resuelve por
-	// orden de registro, así que un segmento literal tiene que ganarle a
-	// `/:id` o el parámetro se traga la palabra y el listado devuelve un 404
-	// buscando un equipo con ese ID. Es una trampa que no avisa —compila,
-	// arranca, y falla en tiempo de ejecución— y que ya se cobró dos rutas.
-	// Con `?enCarro=false` no hay orden que respetar.
+	// con la condición metida en el path. No es purismo: con una ruta como
+	// `/equipos/sueltos`, Fiber resuelve por orden de registro, así que el
+	// segmento literal tiene que ganarle a `/:id` o el parámetro se traga la
+	// palabra y el listado devuelve un 404 buscando un equipo con ese ID. Es
+	// una trampa que no avisa: compila, arranca y falla en tiempo de
+	// ejecución. Con `?enCarro=false` no hay orden que respetar.
 	//
 	// A qué colección se hace POST decide dónde nace el equipo: en
 	// `/carros/{id}/equipos` nace adentro de ese carro, en `/equipos` nace

@@ -53,7 +53,7 @@ func (v *ValidadorReservasPostgres) TieneReservasCurso(ctx context.Context, curs
 // TieneReservasDeCiclo cubre las TRES cosas que el archivado borra y que
 // pueden quedar colgadas si falla a mitad de camino: los reserva_grupo de
 // las materias del ciclo, las regla_recurrencia de esas materias, y los
-// bloqueos por evaluación estatal, que no tienen materia y se atan al ciclo
+// bloqueos administrativos, que no tienen materia y se atan al ciclo
 // por el año de su fecha (mismo criterio que EliminarReservasYGruposDeCiclo
 // en reservation/infrastructure).
 //

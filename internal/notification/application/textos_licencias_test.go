@@ -135,9 +135,9 @@ func TestMensajeDeLicencias_SinCarroNoDejaParentesisVacio(t *testing.T) {
 	}
 }
 
-// El caso de la 015: una notebook suelta también puede tener AutoCAD, y no
-// tiene número. Armar el aviso con el identificador mandaba al Admin a
-// buscar una "PC 0" que no existe.
+// Un equipo suelto también puede tener software licenciado, y no tiene
+// número. Armar el aviso con el identificador mandaría al Admin a buscar una
+// "PC 0" que no existe.
 func TestMensajeDeLicencias_EquipoSueltoSeNombraPorSuNombre(t *testing.T) {
 	aviso := eventbus.AvisoDeLicencias{
 		PorVencer: []eventbus.LicenciaPorVencer{{

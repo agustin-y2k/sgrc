@@ -252,7 +252,7 @@ describe("ReportesPage", () => {
   it("muestra el total de cada tabla como contexto de las filas", async () => {
     renderPagina()
 
-    expect(await screen.findByText(/1 Equipo usada/)).toBeInTheDocument()
+    expect(await screen.findByText(/1 equipo usado/)).toBeInTheDocument()
     expect(screen.getByText(/2h 30min en total/)).toBeInTheDocument()
   })
 
@@ -325,7 +325,7 @@ describe("ReportesPage", () => {
     // un componente aparte que dispara sus consultas un instante después.
     // Sin esperar el total, el test contaba solo las dos del ciclo activo.
     await waitFor(() => {
-      // Uso por Equipo, uso por docente y las dos del histórico. Las de
+      // Uso por equipo, uso por docente y las dos del histórico. Las de
       // incidencias no aparecen: en este escenario vienen vacías.
       expect(screen.getAllByRole("button", { name: "Descargar CSV" })).toHaveLength(4)
     })

@@ -39,7 +39,7 @@ const (
 	// que ya no está vigente.
 	NoEntregadaReservaCancelada RazonNoEntregada = "RESERVA_CANCELADA"
 	// NoEntregadaSinDestinatario: la reserva no dice a nombre de quién
-	// entregar. Pasa con los bloqueos por evaluación estatal (RF-04.7), que
+	// entregar. Pasa con los bloqueos administrativos (RF-04.7), que
 	// no tienen docente: los crea un Admin sobre PCs sueltas. Se resuelve
 	// escribiendo el nombre de quien las retira.
 	NoEntregadaSinDestinatario RazonNoEntregada = "SIN_DESTINATARIO"
@@ -136,13 +136,13 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 			nombre = *reserva.NombreDocenteSnapshot
 		}
 		retiradoPor := params.RetiradoPor
-		// Un bloqueo por evaluación no tiene docente, así que no hay a quién
+		// Un bloqueo administrativo no tiene docente, así que no hay a quién
 		// hacer responsable: ahí el nombre que se escribe a mano SÍ es el
 		// responsable, y no queda nadie "al lado" a quien anotar.
 		if nombre == "" {
 			nombre, retiradoPor = retiradoPor, ""
 		}
-		// Un bloqueo por evaluación estatal no tiene docente: lo crea un
+		// Un bloqueo administrativo no tiene docente: lo crea un
 		// Admin sobre PCs sueltas y NombreDocenteSnapshot queda en nil. Sin
 		// esta rama, NuevoPrestamo devolvía ErrNombreDestinatarioVacio, y ese
 		// error corta el lote entero — así que entregar cinco máquinas
@@ -155,7 +155,7 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 			resultado.NoEntregadas = append(resultado.NoEntregadas, EquipoNoEntregado{
 				EquipoID: reserva.EquipoID,
 				Razon:    NoEntregadaSinDestinatario,
-				Detalle:  "esa reserva no tiene docente (es un bloqueo por evaluación): escribí a nombre de quién se entrega",
+				Detalle:  "esa reserva no tiene docente (es un bloqueo administrativo): escribí a nombre de quién se entrega",
 			})
 			continue
 		}

@@ -38,11 +38,11 @@ func esViolacionUnica(err error) bool {
 // nombreDeConstraint devuelve qué constraint se violó, o "" si no fue una
 // violación de Postgres.
 //
-// Hasta la 015 la tabla `pc` tenía dos UNIQUE y se devolvía siempre el error
-// más común porque distinguirlos pedía justamente esto. Ahora son tres —se
-// sumó el nombre único entre los equipos sueltos— y "ya existe una PC con
-// ese identificador" sería una respuesta absurda para alguien que está
-// cargando un segundo cargador con el mismo nombre.
+// La tabla `equipo` tiene tres restricciones de unicidad —identificador
+// dentro del carro, número de serie, y nombre entre los equipos sueltos— y
+// hace falta distinguirlas: "ya existe un equipo con ese identificador" es
+// una respuesta absurda para alguien que está cargando un segundo cargador
+// con el mismo nombre.
 func nombreDeConstraint(err error) string {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {

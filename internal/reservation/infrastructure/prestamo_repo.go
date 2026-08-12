@@ -12,9 +12,9 @@ import (
 	"github.com/ramiro/sgrc/internal/reservation/domain"
 )
 
-// codigoViolacionUnica: SQLSTATE 23505. Es el primero de este paquete —
-// reservation no tenía ningún UNIQUE hasta la migración 013, su constraint
-// característica es el EXCLUDE de anti-solapamiento, que usa otro código
+// codigoViolacionUnica: SQLSTATE 23505. Es el único UNIQUE de este paquete —
+// el préstamo abierto por equipo—; la constraint característica de
+// reservation es el EXCLUDE de anti-solapamiento, que usa otro código
 // (23P01, ver esViolacionExclusion).
 const codigoViolacionUnica = "23505"
 

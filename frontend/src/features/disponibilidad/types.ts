@@ -8,9 +8,9 @@ export type RespuestaLista<T> = { data: T[] }
  * (docs/06-arquitectura.md §3): son dos conceptos que hoy coinciden pero no
  * tienen por qué moverse juntos.
  *
- * Solo lunes a viernes: la semana lectiva de la escuela. El backend ya
- * coincide —availability sacó SABADO de su enum y la migración 005 puso el
- * CHECK en la base— así que no hace falta prever días fuera de esta lista.
+ * Solo lunes a viernes: la semana lectiva. El backend impone lo mismo, en su
+ * enum y en el CHECK de la columna, así que no hace falta prever días fuera
+ * de esta lista.
  */
 export type DiaSemana = "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES"
 

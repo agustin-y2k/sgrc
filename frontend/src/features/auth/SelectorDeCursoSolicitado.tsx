@@ -11,14 +11,13 @@ import {
  * El curso que un docente declara al registrarse, con los mismos dos
  * desplegables que usa el Admin para crear un curso (SelectorDeCurso).
  *
- * Antes era un campo de texto libre con el placeholder "Ej.: 5°A", y eso
- * dejaba que cada docente escribiera el mismo curso de una forma distinta:
- * "5A", "5º A" (con el ordinal masculino, que NO es el `°` que valida el
- * sistema), "quinto A". El Admin recibía un texto que después tenía que
- * traducir a mano al curso real. Con los desplegables, lo que llega es
- * exactamente el nombre canónico que ya existe del otro lado.
+ * Son desplegables y no un campo de texto: escrito a mano, cada docente
+ * nombra el mismo curso distinto —"5A", "5º A" (con el ordinal masculino,
+ * que NO es el `°` que valida el sistema), "quinto A"— y el Admin recibe un
+ * texto que tiene que traducir al curso real. Con los desplegables, lo que
+ * llega es exactamente el nombre canónico que ya existe del otro lado.
  *
- * La diferencia con el del Admin es que acá el curso es OEquipoIONAL, y esa
+ * La diferencia con el del Admin es que acá el curso es OPCIONAL, y esa
  * diferencia es la razón de que sea un componente aparte en vez de una
  * prop del otro. Un desplegable siempre tiene algo elegido, así que sin una
  * opción vacía todos los registros llegarían diciendo "1°A" —incluido el de

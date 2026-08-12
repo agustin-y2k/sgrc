@@ -844,7 +844,7 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo(t *testing.T) {
 
 // RF-02.4 nombra tres cosas a borrar al archivar: ReservaGrupo, Reserva y
 // ReglaRecurrencia. La tercera no se borraba nunca — las reglas quedaban
-// huérfanas apuntando a materias archivadas. Los bloqueos por evaluación
+// huérfanas apuntando a materias archivadas. Los bloqueos administrativos
 // (RF-04.7) tampoco: no tienen materia, así que la subconsulta del ciclo no
 // los alcanzaba y se acumulaban año tras año.
 func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *testing.T) {
@@ -853,7 +853,7 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *tes
 	ctx := context.Background()
 
 	// El año del ciclo tiene que coincidir con el de las fechas: es lo único
-	// que ata un bloqueo de evaluación a un ciclo lectivo.
+	// que ata un bloqueo administrativo a un ciclo lectivo.
 	const anio = 2026
 	cicloID, cursoID, materiaID := NuevoID(), NuevoID(), NuevoID()
 	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
@@ -883,7 +883,7 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *tes
 	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipo, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
 	repo.CrearReserva(ctx, res)
 
-	// Un bloqueo de evaluación del mismo año, en otra franja para no chocar
+	// Un bloqueo administrativo del mismo año, en otra franja para no chocar
 	// con la constraint EXCLUDE.
 	bloqueo, _ := domain.NuevaReservaBloqueo(NuevoID(), equipo, nil, fecha, 14*time.Hour, 16*time.Hour, "Jornada docente", ahora)
 	if err := repo.CrearReserva(ctx, bloqueo); err != nil {
@@ -901,7 +901,7 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *tes
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	// La reserva del grupo + el bloqueo de evaluación de ese año.
+	// La reserva del grupo + el bloqueo administrativo de ese año.
 	if reservasEliminadas != 2 {
 		t.Errorf("esperaba 2 reservas eliminadas (1 del grupo + 1 bloqueo), obtuve %d", reservasEliminadas)
 	}
@@ -1429,7 +1429,7 @@ func TestPostgresRepo_ListarReservas_TraeLasDeUnEquipoSinCarro(t *testing.T) {
 
 // Una PC de carro tiene que seguir trayendo las tres cosas: la etiqueta
 // nueva no reemplaza al identificador ni al carro, que otras pantallas usan.
-func TestPostgresRepo_ListarReservas_LaEquipoDeCarroSigueTrayendoTodo(t *testing.T) {
+func TestPostgresRepo_ListarReservas_ElEquipoDeCarroSigueTrayendoTodo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
@@ -1539,5 +1539,82 @@ func TestPostgresRepo_ReservaNormal_NoAceptaMotivoDeBloqueo(t *testing.T) {
 	`, NuevoID(), equipoID)
 	if err == nil {
 		t.Fatal("la base debería rechazar una reserva normal con motivo de bloqueo")
+	}
+}
+
+// El pre-chequeo del lote: una sola consulta para todos los equipos y todas
+// las fechas, que además dice QUÉ chocó. Solo se puede probar contra la base
+// —la condición de solapamiento y la resolución de la etiqueta son SQL— y es
+// justo donde un `<=` de más convierte dos clases consecutivas en un choque.
+func TestPostgresRepo_BuscarSolapamientos_LoteCompleto(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	materiaID := crearMateriaDeTest(t, pool)
+	pc1 := crearEquipoDeCarroDeTest(t, pool)
+	pc2 := crearEquipoDeCarroDeTest(t, pool)
+	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	otroLunes := lunes.AddDate(0, 0, 7)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	// Ocupa pc1 el segundo lunes, de 10 a 12.
+	g := nuevoReservaGrupoDeTest(materiaID, otroLunes, 10*time.Hour, 12*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
+		t.Fatalf("no se pudo crear el grupo: %v", err)
+	}
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pc1, materiaID, "Ada Lovelace", nil, otroLunes, 10*time.Hour, 12*time.Hour, ahora)
+	if err := repo.CrearReserva(context.Background(), res); err != nil {
+		t.Fatalf("no se pudo crear la reserva: %v", err)
+	}
+
+	// Una serie de dos lunes sobre los dos equipos, de 11 a 13.
+	conflictos, err := repo.BuscarSolapamientos(context.Background(),
+		[]string{pc1, pc2}, []time.Time{lunes, otroLunes}, 11*time.Hour, 13*time.Hour)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if len(conflictos) != 1 {
+		t.Fatalf("esperaba un solo choque, obtuve %+v", conflictos)
+	}
+	c := conflictos[0]
+	if c.EquipoID != pc1 {
+		t.Errorf("esperaba el choque en pc1, obtuve %s", c.EquipoID)
+	}
+	if c.Docente != "Ada Lovelace" {
+		t.Errorf("esperaba el nombre de quien la tiene, obtuve %q", c.Docente)
+	}
+	// La etiqueta ya resuelta: quien reserva no sabe qué es un UUID.
+	if !strings.HasPrefix(c.Etiqueta, "PC ") {
+		t.Errorf("esperaba una etiqueta legible, obtuve %q", c.Etiqueta)
+	}
+	if c.HoraInicio != 10*time.Hour || c.HoraFin != 12*time.Hour {
+		t.Errorf("horario incorrecto: %v–%v", c.HoraInicio, c.HoraFin)
+	}
+}
+
+// Los bordes que se tocan no se pisan, igual que la constraint EXCLUDE. Es
+// el caso más común que existe: la clase de 8 a 10 y la de 10 a 12.
+func TestPostgresRepo_BuscarSolapamientos_BordeQueSeToca_NoCuenta(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	materiaID := crearMateriaDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 10*time.Hour)
+	repo.CrearReservaGrupo(context.Background(), g)
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 10*time.Hour, ahora)
+	if err := repo.CrearReserva(context.Background(), res); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	conflictos, err := repo.BuscarSolapamientos(context.Background(),
+		[]string{equipoID}, []time.Time{fecha}, 10*time.Hour, 12*time.Hour)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(conflictos) != 0 {
+		t.Fatalf("una reserva contigua no es un choque: %+v", conflictos)
 	}
 }

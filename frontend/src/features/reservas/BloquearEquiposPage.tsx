@@ -32,17 +32,16 @@ function esBloqueable(equipo: Equipo): boolean {
  * RF-04.7 — un Admin toma equipos en una fecha y un rango horario conocidos
  * de antemano, por el motivo que sea.
  *
- * Se llamó "bloqueo por evaluación estatal" hasta la 019, y era un caso
- * concreto usado como categoría: el laboratorio también se toma por una
- * jornada docente, una capacitación o una obra en el aula. El sistema no
- * puede prever la lista, así que el motivo es texto libre y obligatorio.
+ * El motivo es texto libre y obligatorio: el laboratorio se toma por una
+ * evaluación, una jornada docente, una capacitación o una obra en el aula, y
+ * el sistema no puede prever la lista. Ese texto es el que lee el docente al
+ * que le cancelaron la clase.
  *
- * El endpoint existía desde el principio sin ninguna pantalla que lo
- * llamara. Es la operación más destructiva que puede hacer un Admin sin
- * darse cuenta: cancela las reservas ajenas que se solapen, no se
- * restauran solas, y el docente se entera por una notificación. Por eso la
- * pantalla insiste en mostrar qué se va a llevar puesto ANTES de confirmar,
- * que es lo que la API por sí sola no ofrece.
+ * Es la operación más destructiva que puede hacer un Admin sin darse cuenta:
+ * cancela las reservas ajenas que se solapen, no se restauran solas, y el
+ * docente se entera por una notificación. Por eso la pantalla insiste en
+ * mostrar qué se va a llevar puesto ANTES de confirmar, que es lo que la API
+ * por sí sola no ofrece.
  */
 export function BloquearEquiposPage() {
   const queryClient = useQueryClient()
@@ -120,9 +119,9 @@ export function BloquearEquiposPage() {
     (equipo) => seleccionadas.includes(equipo.id) && estaOcupada(equipo)
   )
 
-  // El motivo lo exige también el dominio desde la 019, así que mandarlo
-  // vacío da un 400 y no un bloqueo mudo. Se pide igual acá para que el botón
-  // diga por qué no se puede apretar, en vez de fallar después.
+  // El motivo lo exige también el dominio, así que mandarlo vacío da un 400
+  // y no un bloqueo mudo. Se pide igual acá para que el botón diga por qué no
+  // se puede apretar, en vez de fallar después.
   const puedeBloquear = franjaCompleta && motivo.trim() !== "" && seleccionadas.length > 0
 
   function alternar(equipoId: string, tildada: boolean) {

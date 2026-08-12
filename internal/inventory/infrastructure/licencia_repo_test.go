@@ -446,11 +446,11 @@ func TestPostgresRepo_Licencia_CandidatasNoDependenDeLaZonaDeLaSesion(t *testing
 	}
 }
 
-// Las dos consultas de licencias hacían INNER JOIN a carro. Desde la 015 eso
-// es un agujero silencioso: una notebook suelta puede tener AutoCAD igual que
-// las del carro, y su licencia no aparecía en la pantalla NI era candidata a
-// aviso — se vencía sin que nadie se enterara, que es exactamente lo que esta
-// funcionalidad existe para evitar.
+// Las dos consultas de licencias unen a carro con LEFT. Con INNER sería un
+// agujero silencioso: un equipo suelto puede tener software licenciado igual
+// que los del carro, y su licencia no llegaría a la pantalla NI sería
+// candidata a aviso — se vencería sin que nadie se enterara, que es
+// exactamente lo que esta funcionalidad existe para evitar.
 func TestPostgresRepo_Licencia_DeUnEquipoSinCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

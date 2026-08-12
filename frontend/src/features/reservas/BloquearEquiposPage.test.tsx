@@ -217,8 +217,10 @@ describe("BloquearEquiposPage", () => {
   })
 
   /**
-   * El backend no valida el motivo: lo intercala tal cual en el aviso a
-   * cada docente, así que vacío deja "…evaluación estatal ()".
+   * El motivo se intercala tal cual en el aviso a cada docente, así que un
+   * bloqueo sin motivo le cancela la clase a alguien sin decirle por qué. Lo
+   * exigen los dos lados: acá para que el botón explique por qué no se puede
+   * apretar, y el backend para que valga igual sin pasar por esta pantalla.
    */
   it("exige un motivo", async () => {
     const user = userEvent.setup()
@@ -317,12 +319,13 @@ describe("BloquearEquiposPage", () => {
     )
   })
 
-  // La pantalla no puede sugerir que el bloqueo es siempre una evaluación:
-  // el sistema no sabe de qué se trata y una escuela que bloquea por una
-  // jornada leería algo que no es.
-  it("no dice que el bloqueo sea una evaluación", async () => {
+  // La pantalla no puede sugerir que el bloqueo es siempre lo mismo: el
+  // sistema no sabe de qué se trata, así que nombra varios casos como
+  // ejemplo y ninguno como categoría.
+  it("presenta el motivo como texto libre, sin una categoría fija", async () => {
     renderPagina()
     expect(await screen.findByText("Bloquear equipos")).toBeInTheDocument()
-    expect(screen.queryByText(/evaluación estatal/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/una jornada/i)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/jornada docente/i)).toBeInTheDocument()
   })
 })

@@ -78,7 +78,7 @@ type Incidencia struct {
 	Categoria string
 }
 
-// MaxLargoCategoriaFalla lo fija la columna (VARCHAR(50) en la 017).
+// MaxLargoCategoriaFalla lo fija la columna: VARCHAR(50).
 const MaxLargoCategoriaFalla = 50
 
 // ErrCategoriaFallaLarga: el largo se valida acá y no solo en la base para

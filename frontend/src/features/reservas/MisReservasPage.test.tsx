@@ -341,12 +341,12 @@ describe("MisReservasPage", () => {
     })
   })
 
-  // ── Bloqueos por evaluación (RF-04.7) ────────────────────────────────
+  // ── Bloqueos administrativos (RF-04.7) ────────────────────────────────
   //
   // No tienen ReservaGrupo en la base —no son la reserva de nadie— pero para
   // el Admin que los creó fueron UNA operación: eligió varias equipos, una
   // fecha y un horario, y confirmó una vez.
-  describe("bloqueos por evaluación", () => {
+  describe("bloqueos administrativos", () => {
     // Los ve el Admin que los creó: al docente el backend le fuerza el
     // filtro por creador, así que nunca le aparecen.
     beforeEach(() => {
