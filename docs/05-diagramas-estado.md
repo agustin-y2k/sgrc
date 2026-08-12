@@ -5,29 +5,37 @@
 ```mermaid
 stateDiagram-v2
     [*] --> DISPONIBLE: Alta de equipo
-    DISPONIBLE --> EN_MANTENIMIENTO: Admin registra incidencia
-    EN_MANTENIMIENTO --> DISPONIBLE: Reparación resuelta
-    EN_MANTENIMIENTO --> FUERA_DE_SERVICIO: Daño irreparable
-    DISPONIBLE --> FUERA_DE_SERVICIO: Falla crítica
-    FUERA_DE_SERVICIO --> [*]: Enviada a soporte / Baja definitiva
-    DISPONIBLE --> DADA_DE_BAJA: Admin la elimina del inventario (soft delete)
-    EN_MANTENIMIENTO --> DADA_DE_BAJA: Admin la elimina del inventario
-    FUERA_DE_SERVICIO --> DADA_DE_BAJA: Admin la elimina del inventario
+    DISPONIBLE --> EN_MANTENIMIENTO: Admin lo saca de circulación (reparable acá)
+    DISPONIBLE --> FUERA_DE_SERVICIO: Admin lo saca de circulación (no reparable acá)
+    EN_MANTENIMIENTO --> DISPONIBLE: Admin lo devuelve a circulación
+    EN_MANTENIMIENTO --> FUERA_DE_SERVICIO: Admin cambia el diagnóstico
+    FUERA_DE_SERVICIO --> EN_MANTENIMIENTO: Admin cambia el diagnóstico
+    FUERA_DE_SERVICIO --> DISPONIBLE: Admin lo devuelve a circulación
+    DISPONIBLE --> DADA_DE_BAJA: Admin lo elimina del inventario (soft delete)
+    EN_MANTENIMIENTO --> DADA_DE_BAJA: Admin lo elimina del inventario
+    FUERA_DE_SERVICIO --> DADA_DE_BAJA: Admin lo elimina del inventario
     DADA_DE_BAJA --> [*]
 ```
 
-> `DADA_DE_BAJA` es independiente del campo `estado` (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO`) — es el flag `equipo.dado_de_baja`, no un cuarto valor de ese enum. Se muestra acá junto al resto porque es, en la práctica, un estado terminal más del ciclo de vida del equipo.
+> **El estado lo decide una persona, no el sistema.** Registrar una incidencia
+> no cambia el estado del equipo, y la categoría de la falla tampoco: la
+> diferencia entre `EN_MANTENIMIENTO` y `FUERA_DE_SERVICIO` no es qué se rompió
+> sino **si la institución puede repararlo** —si tiene el repuesto, el
+> conocimiento o la autorización—, y eso no se deduce de un diagnóstico
+> (RF-03.5).
 
-> Los tránsitos hacia `EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` son de duración **indefinida** y disparan cancelación en cascada de las reservas futuras de ese equipo puntual (RF-03.6). El regreso a `DISPONIBLE` no restaura nada automáticamente.
+> `DADA_DE_BAJA` es independiente del campo `estado` (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO`) — es el flag `equipo.dado_de_baja`, no un cuarto valor de ese enum. Se muestra acá junto al resto porque es, en la práctica, el estado terminal del ciclo de vida del equipo. Dar de baja fija además `estado = FUERA_DE_SERVICIO`, y **no se permite sobre un equipo prestado** (RF-03.20): primero hay que registrar que volvió.
+
+> Los tránsitos hacia `EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` son de duración **indefinida** y disparan cancelación en cascada de las reservas futuras de ese equipo puntual (RF-03.8). El regreso a `DISPONIBLE` no restaura nada automáticamente.
 
 ## Estado de una Reserva (un equipo puntual)
 
 ```mermaid
 stateDiagram-v2
     [*] --> CONFIRMADA: Creada sin solapamiento
-    CONFIRMADA --> CANCELADA: Docente/Admin cancela, o cascada (evaluación / equipo fuera de servicio)
+    CONFIRMADA --> CANCELADA: Docente/Admin cancela, o cascada (bloqueo administrativo / equipo fuera de servicio)
     CONFIRMADA --> FINALIZADA: Job automático (hora_fin pasó)
-    CONFIRMADA --> NO_RETIRADA: Barrido — pasaron los minutos de gracia y el equipo no se retiró
+    CONFIRMADA --> NO_RETIRADA: Barrido — el equipo no se retiró (40 min desde el inicio si no salió ninguno; 15 desde la entrega si el docente se llevó otros)
     CANCELADA --> [*]
     FINALIZADA --> [*]
     NO_RETIRADA --> [*]
@@ -49,7 +57,7 @@ stateDiagram-v2
     NO_RETIRADA --> [*]
 ```
 
-> `PARCIALMENTE_CANCELADA` es clave: un grupo de reserva con varios equipos no pasa a `CANCELADA` solo porque una de ellas se vio afectada por una evaluación o una avería — pasa a `CANCELADA` únicamente cuando **todos** sus equipos quedaron sin confirmar.
+> `PARCIALMENTE_CANCELADA` es clave: un grupo con varios equipos no pasa a `CANCELADA` solo porque uno de ellos se vio afectado por un bloqueo administrativo o una avería — pasa a `CANCELADA` únicamente cuando **todos** sus equipos quedaron sin confirmar.
 
 ## Estado de cuenta de Usuario
 
@@ -69,11 +77,17 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ACTIVO: Admin crea ciclo
+    [*] --> ACTIVO: Admin crea el ciclo
     ACTIVO --> ARCHIVADO: Admin archiva (fin de año)
     ARCHIVADO --> [*]
-    ACTIVO --> ACTIVO: Admin clona desde ciclo anterior
+    ARCHIVADO --> ACTIVO: nace el ciclo del año siguiente, con los cursos y materias clonados
 ```
+
+> **Solo puede haber un ciclo `ACTIVO` a la vez**, y lo garantiza un índice
+> único parcial en la base (RF-02.1). Archivar y clonar son un solo paso: el
+> ciclo que se cierra deja de ser activo y el del año siguiente nace en la
+> misma operación, con sus cursos y materias copiados y sin asignaciones de
+> docentes.
 
 ## Préstamo de un Equipo
 
@@ -86,19 +100,28 @@ son cosas distintas, ver RF-08 y `07-modelo-datos.md`.
 
 > **`NO_RETIRADA` no es `CANCELADA`, y la diferencia importa.** Una
 > cancelación la decidió alguien y pide saber quién y por qué; una reserva no
-> retirada se explica sola. Además, el reporte de uso (RF-06.1) puede dejar de
-> contarla como una clase dada, que es lo que hacía cuando todo lo no
-> cancelado terminaba en `FINALIZADA`.
+> retirada se explica sola. Y sobre todo, la franja **deja de bloquear**: el
+> `EXCLUDE` de anti-solapamiento solo mira las `CONFIRMADA`, así que liberar
+> una reserva es un cambio de estado y nada más.
 >
 > **`NO_RETIRADA` es terminal y no vuelve a `CONFIRMADA`**, aunque el docente
-> aparezca a los cincuenta minutos: liberar no es prohibir. Si las máquinas
+> aparezca pasado el plazo de gracia: liberar no es prohibir. Si las máquinas
 > siguen ahí se le entregan igual, y eso queda registrado como un *préstamo*,
 > que es otra cosa que la reserva.
 >
 > **A nivel `ReservaGrupo` solo se marca si NINGUNO de sus equipos se retiró.** Si
 > el docente vino y se llevó tres de cinco, el grupo sigue `CONFIRMADA`: vino
-> a dar la clase, y lo que pasó con las otras dos se ve fila por fila.
-- Equipo en `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` o `dado_de_baja=true` rechaza nuevas reservas.
+> a dar la clase, y lo que pasó con los otros dos se ve fila por fila.
+>
+> **La misma transición sale de dos plazos, y ninguno avisa** (RF-08.10). Si no se
+> retiró nada, se espera desde el inicio de la clase (40 min por defecto); si el
+> docente se llevó una parte, lo que dejó cae a los 15 minutos de esa entrega. En
+> los dos casos la liberación es **silenciosa**: el aviso al docente ya salió a
+> los 15 minutos del inicio (RF-08.20), cuando todavía podía ir a buscarlas,
+> cambiar la máquina o cancelar. Es la única transición del sistema que no genera
+> ninguna notificación, y la razón es esa.
+
+- Equipo en `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` o `dado_de_baja=true` rechaza nuevas reservas. **Entregarlo sí se permite** salvo que esté dado de baja: llevarle una máquina rota al técnico es justamente un préstamo (RF-08).
 - `Reserva` `CANCELADA` o `FINALIZADA` es inmutable; lo mismo aplica a `ReservaGrupo`. Ambas se eliminan físicamente al archivar el ciclo lectivo de su materia (no antes).
 - Cursos y materias con `archivado=true` no aparecen en vistas activas; a diferencia de las reservas, ellos **sí** se preservan (nunca se eliminan) para no recrearlos el año siguiente.
 - Un usuario con `estado=PENDIENTE`, `RECHAZADA` o `BAJA` no puede operar en el sistema aunque intente autenticarse. `BAJA` es terminal — no hay reactivación.

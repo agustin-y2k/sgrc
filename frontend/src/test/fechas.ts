@@ -1,7 +1,7 @@
 /**
  * Fechas relativas a hoy para los tests de formularios.
  *
- * Los inputs de fecha de reserva y de bloqueo por evaluación tienen
+ * Los inputs de fecha de reserva y de bloqueo administrativo tienen
  * `min={hoyISO()}`, porque el backend rechaza un bloque que ya terminó
  * (domain.ErrReservaEnElPasado). jsdom implementa la validación de
  * restricciones, así que un valor por debajo del `min` no bloquea el tipeo

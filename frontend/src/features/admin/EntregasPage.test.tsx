@@ -336,11 +336,11 @@ describe("EntregasPage", () => {
   })
 
   /**
-   * Un bloqueo por evaluación estatal no tiene docente: lo crea un Admin
+   * Un bloqueo administrativo no tiene docente: lo crea un Admin
    * sobre equipos sueltas y no hay nadie esperando para retirarlas. Ofrecerlo
    * para entregar terminaba en un 400 que además tumbaba el lote entero.
    */
-  it("no ofrece los bloqueos por evaluación para entregar", async () => {
+  it("no ofrece los bloqueos administrativos para entregar", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
       paginada([
         reserva({
@@ -376,7 +376,7 @@ describe("EntregasPage", () => {
     renderPagina()
 
     expect(
-      await screen.findByText("No hay ninguna computadora entregada.")
+      await screen.findByText("No hay ningún equipo entregado.")
     ).toBeInTheDocument()
   })
 

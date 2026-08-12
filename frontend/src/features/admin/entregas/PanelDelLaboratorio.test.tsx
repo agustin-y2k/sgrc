@@ -189,11 +189,11 @@ describe("PanelDelLaboratorio", () => {
   })
 
   /**
-   * Un bloqueo por evaluación no lo retira nadie: lo crea un Admin para
+   * Un bloqueo administrativo no lo retira nadie: lo crea un Admin para
    * sacar máquinas de circulación, así que ofrecerlo para entregar no
    * significa nada.
    */
-  it("no muestra los bloqueos por evaluación", async () => {
+  it("no muestra los bloqueos administrativos", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
       paginada([
         reserva({

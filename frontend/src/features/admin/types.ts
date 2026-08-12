@@ -21,9 +21,16 @@ export type ResumenUsoEquipo = {
   minutosReservados: number
 }
 
-/** RF-06.2 */
+/**
+ * RF-06.2
+ *
+ * `usuarioId` es opcional por lo mismo que en `HistoricoUsoDocente`: si la
+ * cuenta se eliminó definitivamente (RF-01.9), sus reservas conservan el
+ * nombre congelado y sus horas siguen contando, pero ya no hay cuenta a la
+ * que apuntar. No sirve como key de una lista.
+ */
 export type ResumenUsoDocente = {
-  usuarioId: string
+  usuarioId?: string
   nombreDocente: string
   cantidadReservas: number
   minutosReservados: number

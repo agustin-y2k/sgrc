@@ -23,9 +23,8 @@ func NewInfoEquipoPostgres(pool *pgxpool.Pool) *InfoEquipoPostgres {
 	return &InfoEquipoPostgres{pool: pool}
 }
 
-// El JOIN a carro es LEFT desde la 015: un proyector no está en ninguno, y
-// con INNER esta consulta devolvía "no encontrada" y abortaba el archivado
-// del ciclo entero.
+// El JOIN a carro va LEFT: un proyector no está en ninguno, y con INNER esta
+// consulta responde "no encontrada" y aborta el archivado del ciclo entero.
 func (i *InfoEquipoPostgres) EtiquetaYCarroDe(ctx context.Context, equipoID string) (string, int, string, error) {
 	var etiqueta, carroNombre string
 	var identificador int

@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router"
 import { z } from "zod"
 
 import { PantallaDeAcceso } from "@/components/layout/PantallaDeAcceso"
+import { AvisoDeSpam } from "@/components/AvisoDeSpam"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -126,7 +127,7 @@ export function RecuperarPasswordPage() {
           </CardTitle>
           <CardDescription>
             {emailEnviado
-              ? `Si ${emailEnviado} corresponde a una cuenta habilitada, te llegó un código. Revisá también la carpeta de spam.`
+              ? `Si ${emailEnviado} corresponde a una cuenta habilitada, te llegó un código.`
               : "Te mandamos un código a tu email para que puedas elegir una contraseña nueva."}
           </CardDescription>
         </CardHeader>
@@ -208,6 +209,10 @@ export function RecuperarPasswordPage() {
                       <FormDescription>
                         Los 6 números que te llegaron por mail. Vencen a los 15 minutos.
                       </FormDescription>
+                      {/* El caso más urgente de los tres: el código vence a
+                          los 15 minutos, así que buscarlo en spam es contra
+                          reloj. */}
+                      <AvisoDeSpam>Si no lo ves, fijate en la carpeta de spam.</AvisoDeSpam>
                       <FormMessage />
                     </FormItem>
                   )}

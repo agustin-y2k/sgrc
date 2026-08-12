@@ -15,6 +15,11 @@ import (
 type Repo interface {
 	GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.HistoricoUsoEquipo) error
 	GuardarHistoricoUsoDocente(ctx context.Context, h *domain.HistoricoUsoDocente) error
+	// BorrarHistoricoDocentesSinCuenta limpia las filas de un año cuyo
+	// usuario_id es NULL, para poder reescribirlas. El ON CONFLICT que hace
+	// idempotente al resto del snapshot no las alcanza: la constraint es
+	// UNIQUE (anio, usuario_id) y Postgres no considera iguales a dos NULL.
+	BorrarHistoricoDocentesSinCuenta(ctx context.Context, anio int) error
 	// Los históricos se listan por año (no por ciclo — ver el comentario
 	// en domain/historico.go sobre por qué esa tabla usa `anio`).
 	ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error)

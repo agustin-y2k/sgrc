@@ -3,6 +3,7 @@ package application
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -21,11 +22,15 @@ var (
 	// estado DISPONIBLE.
 	ErrEquipoNoDisponible = errors.New("el equipo no está disponible para reservar")
 
-	// ErrSolapamiento: alguna de los equipos pedidos ya tiene una reserva
+	// ErrSolapamiento: alguno de los equipos pedidos ya tiene una reserva
 	// confirmada que se superpone con el horario pedido. Se intenta
 	// detectar esto ANTES de golpear la constraint de la base
 	// (mejor mensaje), pero la constraint EXCLUDE sigue siendo la
 	// garantía real ante condiciones de carrera.
+	//
+	// El pre-chequeo devuelve un *ErrorDeSolapamiento, que envuelve a este y
+	// agrega qué equipo chocó contra qué. La constraint devuelve este pelado:
+	// ahí el conflicto lo detectó la base y no tenemos el detalle a mano.
 	ErrSolapamiento = errors.New("uno o más equipos ya tienen una reserva en ese horario")
 
 	// ErrSinEquipos: una reserva necesita al menos una PC.
@@ -66,11 +71,11 @@ var (
 
 	ErrPrestamoNoEncontrado = errors.New("no se encontró ese registro de entrega")
 
-	// ErrEquipoYaPrestado: el índice único parcial de la migración 013 impide
-	// dos préstamos abiertos sobre la misma PC. Es la garantía que el papel
-	// no puede dar — entregar dos veces la misma máquina porque dos Admin
-	// la anotaron a la vez no lo detecta nadie hasta que aparece un docente
-	// sin computadora.
+	// ErrEquipoYaPrestado: un índice único parcial impide dos préstamos
+	// abiertos sobre el mismo equipo. Es la garantía que el papel no puede
+	// dar — entregar dos veces la misma máquina porque dos Admin la anotaron
+	// a la vez no lo detecta nadie hasta que aparece un docente sin
+	// computadora.
 	ErrEquipoYaPrestado = errors.New("ese equipo ya figura entregado y todavía no volvió")
 
 	// ErrEquipoDadoDeBaja: no se entrega una máquina que salió del inventario.
@@ -82,6 +87,24 @@ var (
 	// El Admin puede tocar cualquiera.
 	ErrReservaAjena = errors.New("esa reserva es de otra persona")
 
+	// Los tres del pedido de liberación (RF-04.12).
+
+	// ErrReservaPropia: no tiene sentido pedirse a uno mismo que libere.
+	ErrReservaPropia = errors.New("esa reserva es tuya: no hay a quién pedirle")
+
+	// ErrReservaSinDueño: un bloqueo administrativo no tiene docente detrás,
+	// así que no hay a quién hacerle el pedido. Lo que corresponde ahí es
+	// hablar con un Admin, que es quien lo puso.
+	ErrReservaSinDueño = errors.New("esa franja la tomó un administrador: no hay docente a quien pedirle")
+
+	// ErrPedidoRepetido: ya se pidió por esa reserva hoy. El segundo correo
+	// idéntico no agrega información, es presión.
+	ErrPedidoRepetido = errors.New("ya le pediste esos equipos hoy")
+
+	// ErrReservaYaEmpezada: pedirle a alguien que libere una franja que ya
+	// está usando llega tarde — está dando la clase con esas máquinas.
+	ErrReservaYaEmpezada = errors.New("esa reserva ya empezó")
+
 	ErrIDInvalido = errors.New("el ID indicado no tiene un formato válido")
 
 	// ErrReferenciaInexistente: SQLSTATE 23503 (foreign_key_violation) — el
@@ -91,3 +114,43 @@ var (
 	// más común de toda la API para cualquier ID válido-pero-inexistente.
 	ErrReferenciaInexistente = errors.New("alguno de los datos referenciados no existe")
 )
+
+// maxConflictosEnElMensaje acota cuántos se nombran. Bloquear un carro
+// entero contra una semana de clases puede dar decenas de choques, y un
+// error de veinte renglones no lo lee nadie: los primeros alcanzan para
+// entender qué pasó, y el resto se resume en un "y N más".
+const maxConflictosEnElMensaje = 5
+
+// ErrorDeSolapamiento dice QUÉ chocó, no solo que algo chocó.
+//
+// El pre-chequeo ya tiene esa información en la mano cuando decide rechazar
+// el pedido —la trajo de la misma consulta con la que la detectó— así que
+// tirarla obligaba al docente a adivinar cuál de los ocho equipos que tildó
+// estaba ocupado.
+//
+// Envuelve a ErrSolapamiento para que el mapeo a HTTP siga funcionando con
+// errors.Is: el código de estado no cambia, solo el texto.
+type ErrorDeSolapamiento struct {
+	Conflictos []Solapamiento
+}
+
+func (e *ErrorDeSolapamiento) Unwrap() error { return ErrSolapamiento }
+
+func (e *ErrorDeSolapamiento) Error() string {
+	if len(e.Conflictos) == 0 {
+		return ErrSolapamiento.Error()
+	}
+
+	partes := make([]string, 0, maxConflictosEnElMensaje)
+	for _, c := range e.Conflictos {
+		if len(partes) == maxConflictosEnElMensaje {
+			break
+		}
+		partes = append(partes, c.describir())
+	}
+	if sobran := len(e.Conflictos) - len(partes); sobran > 0 {
+		partes = append(partes, fmt.Sprintf("y %d más", sobran))
+	}
+
+	return "no se pudo reservar: " + strings.Join(partes, "; ")
+}

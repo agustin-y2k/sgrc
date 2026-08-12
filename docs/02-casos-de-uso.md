@@ -15,18 +15,19 @@ flowchart LR
         UC_AsigDoc[Asignar docentes a materias]
         UC_AprobarDoc[Aprobar cuentas docentes]
         UC_BajaDoc[Dar de baja a un docente]
-        UC_Inventario[Gestionar carros y PCs - crear, editar, dar de baja]
+        UC_Inventario[Gestionar carros y equipos - crear, editar, dar de baja]
         UC_OtrosEquipos[Registrar equipos sueltos - proyector, cargadores]
         UC_Licencias[Llevar el vencimiento de las licencias]
         UC_Mostrador[Atender el mostrador]
         UC_Entregar[Entregar y recibir equipos]
         UC_Incidencia[Registrar incidencia]
         UC_CambioEstadoEquipo[Cambiar estado de un equipo]
-        UC_Calendario[Ver calendario de PC]
-        UC_Reservar[Reservar PCs - una o varias]
-        UC_ReservarRec[Reservar PCs recurrente]
+        UC_Calendario[Ver calendario de un equipo]
+        UC_Reservar[Reservar equipos - uno o varios]
+        UC_Pedir[Pedirle equipos a quien los tiene reservados]
+        UC_ReservarRec[Reservar equipos en serie]
         UC_Cancelar[Cancelar reserva]
-        UC_Bloquear[Bloquear PCs - evaluación]
+        UC_Bloquear[Bloquear equipos con un motivo]
         UC_Notif[Ver notificaciones]
         UC_Reportes[Ver reportes]
         UC_Horario[Configurar horario de disponibilidad]
@@ -39,6 +40,8 @@ flowchart LR
     ADM --> UC_OtrosEquipos & UC_Licencias & UC_Mostrador & UC_Entregar
 
     DOC --> UC_Incidencia & UC_Calendario & UC_Reservar & UC_ReservarRec & UC_Cancelar & UC_Notif & UC_VerDisp
+    DOC --> UC_Pedir
+    ADM --> UC_Pedir
 
     SYS --> UC_Vencer[Finalizar reservas vencidas]
     SYS --> UC_Recordar[Recordar la reserva una hora antes]
@@ -46,47 +49,81 @@ flowchart LR
     SYS --> UC_Reclamar[Reclamar un equipo que no volvió]
     SYS --> UC_AvisarLic[Avisar el vencimiento de una licencia]
 
-    UC_Reservar -.include.-> UC_ValidSolap[Validar solapamiento por PC]
+    UC_Reservar -.include.-> UC_ValidSolap[Validar solapamiento por equipo]
     UC_ReservarRec -.include.-> UC_ValidSolap
-    UC_ReservarRec -.include.-> UC_MaterializarOcurrencias[Materializar ocurrencias x PCs]
-    UC_Bloquear -.include.-> UC_CancelPuntual[Cancelar PCs en conflicto + notificar]
+    UC_ReservarRec -.include.-> UC_MaterializarOcurrencias[Materializar ocurrencias x equipos]
+    UC_Bloquear -.include.-> UC_CancelPuntual[Cancelar reservas en conflicto + notificar]
     UC_CambioEstadoEquipo -.include.-> UC_CancelPuntual
     UC_BajaDoc -.include.-> UC_RevisarReservas[Revisar reservas huérfanas]
     UC_Cancelar -.extend.-> UC_OpcionRecur[¿Esta fecha / Esta y siguientes?]
+    UC_Reservar -.extend.-> UC_Pedir
     UC_Mostrador -.include.-> UC_Entregar
     UC_Liberar -.include.-> UC_AvisarDocente[Avisar al docente que la perdió]
     UC_Reclamar -.include.-> UC_AvisarDocente
 
     %% Un equipo suelto no es un caso aparte una vez cargado: se entrega, se
     %% reclama y —si es reservable— se reserva por los mismos caminos que una
-    %% PC de carro. Por eso UC_OtrosEquipos no cuelga de nada más.
+    %% computadora de carro. Por eso UC_OtrosEquipos no cuelga de nada más.
 ```
 
 ## Especificación de casos de uso críticos
 
-### UC: Reservar PCs (una o varias)
+### UC: Reservar equipos (uno o varios)
 - **Actores:** Docente (asignado a la materia), Admin
 - **Precondición:** Usuario autenticado con JWT, cuenta en estado `APROBADA`.
 - **Flujo:**
-  1. Usuario selecciona materia, fecha, hora inicio y fin.
-  2. Sistema muestra la lista de PCs disponibles en ese horario; el usuario tilda una o varias (como marcar casillas) hasta juntar la cantidad que necesita.
-  3. Sistema verifica que el usuario tiene permiso para reservar en esa materia.
-  4. Sistema verifica estado `DISPONIBLE` de cada PC elegida y ausencia de solapamiento (constraint `EXCLUDE` por PC).
-  5. Crea un `ReservaGrupo` `CONFIRMADA` con snapshot del nombre del docente, y una `Reserva` por cada PC elegida.
-- **Error solapamiento:** HTTP 409 con detalle por PC en conflicto (nombre, materia, horario) — el usuario puede destildar esas PCs puntuales y confirmar con el resto.
+  1. Usuario selecciona materia, fecha, hora de inicio y de fin. **Hasta acá no se le ofrece ningún equipo**: cuáles hay para elegir depende de la franja, así que antes no hay lista que mostrar.
+  2. Sistema muestra la franja completa: los equipos **libres** para tildar —solo los `DISPONIBLE`, no dados de baja y reservables— y, aparte, los que están **tomados**, con quién los tiene, para qué materia y en qué horario. Los tomados no se tildan.
+  3. El usuario tilda los que necesita. Si le falta alguno de los tomados, puede pedírselo a quien lo tiene (UC siguiente) y seguir con otra franja o con menos equipos mientras tanto.
+  4. Sistema verifica que el usuario tiene permiso para reservar en esa materia.
+  5. Sistema valida la disponibilidad **de todo el lote en una sola consulta** y deja que la constraint `EXCLUDE` resuelva el solapamiento por equipo.
+  6. Crea un `ReservaGrupo` `CONFIRMADA` con snapshot del nombre del docente, y una `Reserva` por cada equipo elegido.
+- **Error de solapamiento:** HTTP 409 nombrando qué equipo choca, en qué fecha y franja, y con quién. No se crea ninguna fila. La pantalla muestra ese texto y vuelve a pedir la franja, donde el equipo que chocó ya aparece del lado de los tomados.
+- **Por qué se muestran los tomados:** sin ellos, "no hay equipos libres" y "los tiene alguien con quien puedo hablar" se ven igual, y la segunda tiene salida. El dato ya era público —está en el calendario de cada equipo—, pero ahí no es donde se decide.
 
-### UC: Reservar PCs recurrente
+### UC: Reservar equipos en serie (recurrente)
 - **Flujo:**
-  1. Usuario indica materia, conjunto de PCs, día de semana, horario, rango de fechas.
-  2. Sistema calcula todas las ocurrencias (cada fecha × cada PC elegida).
-  3. Valida **todas** contra solapamientos. Si alguna falla → devuelve lista de conflictos (fecha + PC), no crea ninguna.
-  4. Si todas OK → crea `ReglaRecurrencia` + N `ReservaGrupo` materializados (uno por fecha), cada uno con su set de `Reserva` por PC.
+  1. Usuario indica materia, conjunto de equipos, día de semana, horario y rango de fechas.
+  2. Sistema calcula todas las ocurrencias (cada fecha × cada equipo elegido), solo de lunes a viernes.
+  3. Valida **todas** contra solapamientos. Si alguna falla → devuelve la lista de conflictos (fecha + equipo) y no crea ninguna.
+  4. Si todas pasan → crea la `ReglaRecurrencia` y N `ReservaGrupo` materializados (uno por fecha), cada uno con sus `Reserva`.
 
-### UC: Cancelar reserva
-- **PC puntual dentro de un grupo:** marca esa `Reserva` como `CANCELADA`, libera el horario de esa PC. El `ReservaGrupo` pasa a `PARCIALMENTE_CANCELADA` si conserva otras PCs confirmadas, o a `CANCELADA` si esa era la última.
-- **Grupo completo (todas sus PCs a la vez), a pedido del usuario:** cancela todas las `Reserva` del grupo de una vez → grupo `CANCELADA`.
-- **Ocurrencia de recurrencia:** popup "¿Solo esta fecha? / ¿Esta y siguientes?" → aplica sobre el/los `ReservaGrupo` con `regla_recurrencia_id` y `fecha >= hoy` (cancela 1 fecha o todas las siguientes, con sus PCs).
-- **Admin cancela una PC puntual ajena:** motivo obligatorio → marca esa `Reserva` `CANCELADA` + genera notificación interna al docente + recalcula estado del grupo.
+### UC: Pedirle equipos a quien los tiene reservados
+- **Actores:** Docente, Admin
+- **Motivo:** dos docentes que necesitan las mismas máquinas a la misma hora es un problema que se arregla hablando, y el sistema no tiene por qué decidirlo. Lo único que el pasillo no garantiza es que el pedido llegue: pueden no cruzarse, no tener el teléfono del otro, o descubrirlo la noche anterior.
+- **Precondición:** el equipo está tomado por una `Reserva` `CONFIRMADA` de otra persona, cuya franja **todavía no empezó**.
+- **Flujo:**
+  1. En la lista de la franja, el usuario elige uno o más equipos tomados por el mismo docente y aprieta pedir.
+  2. Opcionalmente escribe un texto ("es para una evaluación, tengo el aula tomada a esa hora").
+  3. Sistema le manda al dueño una notificación interna y una copia por correo: quién pide, para qué materia, qué equipos, qué franja y ese texto.
+  4. Los dos lo arreglan por fuera del sistema. Si el dueño accede, libera esos equipos con lo que ya existe: los cambia por otros libres (RF-08.14) o cancela esas `Reserva`.
+  5. Al liberarse, el equipo vuelve a aparecer entre los libres de esa franja y quien lo pidió lo reserva como cualquier otro.
+- **Reglas que no son obvias:**
+  - **El pedido no toca ninguna reserva.** Es un mensaje. Nada queda "reservado a la espera de respuesta", y quien pidió no tiene prioridad sobre el equipo cuando se libera.
+  - **No hay aceptar ni rechazar en el sistema.** Un pedido con estado obliga a resolver qué pasa si el dueño acepta y otro ya tomó el equipo, cuándo caduca sin respuesta, y qué se ve mientras tanto: tres problemas nuevos para intermediar un acuerdo de treinta segundos.
+  - **Un pedido por reserva, por solicitante y por día.** El segundo correo idéntico es presión, no aviso: se rechaza avisando que ya se pidió.
+  - **A un bloqueo administrativo no se le pide nada**: no tiene docente detrás. Se muestra con su motivo y sin la acción.
+  - **Nadie ve el correo de nadie.** El envío lo hace el sistema; en pantalla figura el nombre, que es el mismo dato que ya publica el calendario.
+
+### UC: Cancelar una reserva
+- **Un equipo puntual dentro de un grupo:** marca esa `Reserva` como `CANCELADA` y libera su franja. El `ReservaGrupo` pasa a `PARCIALMENTE_CANCELADA` si conserva otros equipos confirmados, o a `CANCELADA` si ese era el último.
+- **El grupo completo, a pedido del usuario:** cancela todas sus `Reserva` de una vez → grupo `CANCELADA`.
+- **Una ocurrencia de una serie:** el sistema pregunta "¿solo esta fecha o esta y las siguientes?" y aplica sobre los `ReservaGrupo` de la misma regla con `fecha >= hoy`.
+- **Un Admin cancela algo ajeno:** motivo obligatorio → marca la `Reserva` `CANCELADA`, notifica al docente con ese texto y recalcula el estado del grupo.
+
+### UC: Cambiar la máquina de una reserva (RF-08.14)
+- **Actores:** Docente (sobre las suyas), Admin (sobre cualquiera)
+- **Motivo:** la alternativa —cancelar esa reserva y hacer otra— arma un `ReservaGrupo` nuevo, así que la misma clase termina mostrada como dos tarjetas separadas.
+- **Flujo:**
+  1. El usuario elige cuál de sus máquinas cambia.
+  2. **Si la reserva es parte de una serie**, el sistema pregunta el alcance, igual que al cancelar: "solo esta fecha" o "esta y todas las siguientes".
+  3. Sistema ofrece los equipos libres **para el alcance elegido**: en esa franja si es una sola fecha, o libres en **todas** las fechas que faltan si es la serie.
+  4. El usuario elige el reemplazo y confirma.
+  5. Sistema valida **todas** las ocurrencias del alcance antes de tocar ninguna. Si el equipo nuevo choca en alguna fecha, no cambia nada y dice en cuál.
+- **Reglas que no son obvias:**
+  - **La serie llega hasta su final, no hasta una fecha elegida.** Es el mismo alcance que la cancelación; dos pantallas parecidas con opciones distintas confunden más de lo que agregan.
+  - **No toca las ocurrencias pasadas**, aunque el alcance diga "y las siguientes": lo que ya se dio no se reescribe.
+  - Solo se cambia una reserva `CONFIRMADA`. Una cancelada, finalizada o liberada por no retiro ya no reserva nada.
 
 ### UC: Bloquear equipos
 - **Actor:** Admin
@@ -96,7 +133,7 @@ flowchart LR
   1. Admin elige los equipos (de cualquier carro, sin restricción), el rango fecha/hora y escribe **por qué**.
   2. Sistema identifica las `Reserva` `CONFIRMADA` en conflicto sobre esos equipos, dentro de ese rango exacto.
   3. Cancela cada `Reserva` puntual afectada y recalcula el estado de cada `ReservaGrupo` al que pertenecía.
-  4. Genera notificación interna para cada docente afectado, detallando qué PCs puntuales se cancelaron y con el motivo tal como lo escribió el Admin.
+  4. Genera notificación interna para cada docente afectado, detallando qué equipos puntuales se cancelaron y con el motivo tal como lo escribió el Admin.
   5. Crea filas `Reserva` tipo `BLOQUEO` (sin `materia_id` ni `reserva_grupo_id`, con `motivo_bloqueo`) sobre los equipos elegidos para ese rango.
 - **Reglas que no son obvias:**
   - **El motivo es obligatorio**, a diferencia de los otros textos libres del sistema. Un bloqueo le cancela la clase a otra persona: quien tiene la autoridad para hacerlo puede escribir para qué.
@@ -105,22 +142,22 @@ flowchart LR
 
 ### UC: Cambiar estado de un equipo (con cancelación en cascada)
 - **Actor:** Admin
-- **Precondición:** La PC tiene `Reserva` `CONFIRMADA` futuras.
+- **Precondición:** El equipo tiene `Reserva` `CONFIRMADA` futuras.
 - **Flujo:**
-  1. Admin cambia el estado de la PC a `EN_MANTENIMIENTO` o `FUERA_DE_SERVICIO`, opcionalmente con un motivo. Esta condición es indefinida — no hay fecha de fin conocida.
-  2. Sistema busca las `Reserva` `CONFIRMADA` de esa PC puntual con fecha/hora aún no transcurrida.
+  1. Admin cambia el estado del equipo a `EN_MANTENIMIENTO` o `FUERA_DE_SERVICIO`, opcionalmente con un motivo. Esta condición es indefinida — no hay fecha de fin conocida.
+  2. Sistema busca las `Reserva` `CONFIRMADA` de ese equipo puntual con fecha/hora aún no transcurrida.
   3. Cancela cada una (`CANCELADA`, `motivo_cancelacion` = el ingresado o uno generado por defecto) y recalcula el estado de cada `ReservaGrupo` afectado.
-  4. Genera notificación interna para cada docente afectado, detallando que fue esa PC puntual (no necesariamente toda su reserva).
-- **Diferencia con el bloqueo administrativo (RF-04.7):** acá el alcance es una sola PC, la duración es indefinida (no un rango horario acotado), y el motivo es opcional.
-- **Al volver la PC a `DISPONIBLE`:** las reservas canceladas no se restauran automáticamente — quien las necesite debe volver a reservar.
+  4. Genera notificación interna para cada docente afectado, detallando que fue ese equipo puntual (no necesariamente toda su reserva).
+- **Diferencia con el bloqueo administrativo (RF-04.7):** acá el alcance es un solo equipo, la duración es indefinida (no un rango horario acotado), y el motivo es opcional.
+- **Al volver el equipo a `DISPONIBLE`:** las reservas canceladas no se restauran automáticamente — quien las necesite debe volver a reservar.
 - **Al terminar, la pantalla dice cuántas reservas se cancelaron y a cuántos docentes se avisó** (RF-03.19). Antes de confirmar solo se puede advertir que va a pasar; el número real recién se sabe después, y sin él quien apretó el botón no distingue entre haber cancelado una clase o veinte. Con cero no se muestra nada.
 
 ### UC: Archivar y clonar ciclo lectivo
 - **Actor:** Admin
 - **Flujo:**
   1. Admin archiva ciclo actual: `curso` y `materia` de ese ciclo pasan a `archivado=true` (se preservan, para no recrearlos).
-  2. Antes de tocar las reservas, el sistema calcula un snapshot agregado (uso por PC, uso por docente de ese año) y lo guarda en `historico_uso_equipo` / `historico_uso_docente` (permanentes).
-  3. El sistema **elimina físicamente** todos los `ReservaGrupo`, `Reserva`, `ReglaRecurrencia` y `ReglaRecurrenciaPc` de las materias de ese ciclo. `Incidencia` no se toca (es de la PC, no del ciclo).
+  2. Antes de tocar las reservas, el sistema calcula un snapshot agregado (uso por equipo, uso por docente de ese año) y lo guarda en `historico_uso_equipo` / `historico_uso_docente` (permanentes).
+  3. El sistema **elimina físicamente** todos los `ReservaGrupo`, `Reserva` y `ReglaRecurrencia` de las materias de ese ciclo, más los bloqueos administrativos de ese año. `Incidencia` y `Prestamo` no se tocan: no dependen del ciclo lectivo.
   4. Sistema ofrece clonar estructura al nuevo ciclo (año+1): crea `curso` + `materia` nuevos (sin `archivado`). No clona: `DocenteMateria`.
   5. Admin puede ajustar la estructura clonada antes de activar el nuevo ciclo.
 - **Por qué se conserva la estructura académica pero no las reservas:** recrear "1°A" + "Matemáticas" + "el titular es Fulano" cada año es el trabajo tedioso que la clonación evita. Las reservas puntuales de un año que ya terminó no tienen valor operativo — solo estadístico, y ese valor queda cubierto por el snapshot histórico.
@@ -168,16 +205,16 @@ flowchart LR
      - **No queda ningún docente** → se cancelan los `ReservaGrupo` futuros de esa materia y se notifica al `ADMIN`.
 - **Diferencia con la baja completa:** misma política de cascada (RF-02.10), pero acá el docente conserva su cuenta y el resto de sus materias — solo se ve afectado el vínculo puntual que se removió.
 
-### UC: Gestionar inventario (carros y PCs)
+### UC: Gestionar el inventario de carros
 - **Actor:** Admin
 - **Flujo:**
   1. Admin crea un carro (nombre, descripción) y lo edita cuando lo necesite.
-  2. Admin registra PCs dentro de un carro (identificador, `freezado`, CPU, RAM, SO, software instalado — incluyendo detalle como versión de AutoCAD).
-  3. Admin edita los datos de una PC en cualquier momento.
-  4. Admin cambia la disponibilidad de un equipo (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` — ver cascada de cancelación más arriba).
-  5. Admin puede dar de baja una PC del inventario (soft delete: deja de listarse y de poder reservarse, pero su historial de incidencias y reservas pasadas se conserva).
-  6. Lo que se presta y **no está en ningún carro** —un proyector, cargadores— se carga aparte; ver el UC siguiente.
-- **Visibilidad:** el listado de carros/PCs (incluyendo `software_instalado` y `freezado`) es visible para **cualquier usuario autenticado**, no solo Admin — un docente lo necesita para elegir bien qué PCs reservar (ej: cuáles tienen la versión de AutoCAD que su clase requiere).
+  2. Admin registra equipos dentro de un carro: identificador de zócalo, número de serie, `freezado`, CPU, RAM, sistema operativo y software instalado.
+  3. Admin edita los datos de un equipo en cualquier momento, y puede moverlo a otro carro.
+  4. Admin cambia el estado de circulación (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` — ver la cascada de cancelación más arriba).
+  5. Admin puede dar de baja un equipo (soft delete: deja de listarse y de poder reservarse, pero su historial de incidencias, préstamos y reservas se conserva).
+  6. Lo que se presta y **no está en ningún carro** se carga aparte; ver el UC siguiente.
+- **Visibilidad:** el listado de carros y equipos —incluidos `software_instalado` y `freezado`— lo ve **cualquier usuario autenticado**, no solo Admin: un docente lo necesita para elegir qué reservar, por ejemplo cuáles tienen instalada la versión del programa que su clase requiere.
 
 ### UC: Registrar equipos que no son computadoras de un carro
 - **Actor:** Admin
@@ -190,11 +227,11 @@ flowchart LR
   5. Puede **editarlo** después —corregir el nombre, cambiar si se reserva— o **darlo de baja** si se rompió o se perdió.
 - **Reglas que no son obvias:**
   - No tienen identificador ni número de serie: "PC 3" no significa nada para un cargador, y un cargador puede no traer serie de fábrica. El **nombre** es lo único que los distingue, y es **único** entre ellos sin distinguir mayúsculas — dos filas llamadas "Cargador" serían indistinguibles justo donde hay que elegir cuál se está prestando.
-  - El tipo es **texto libre y no una lista cerrada**: otra escuela tiene proyector pero quizá no cargadores, y agregar "impresora 3D" no puede pedir tocar el sistema. El formulario sugiere los tipos ya usados para no terminar con "PROYECTOR" y "Proyector" como dos cosas distintas.
+  - El tipo es **texto libre y no una lista cerrada**: otra institución tiene proyector pero quizá no cargadores, y agregar "impresora 3D" no puede pedir tocar el sistema. El formulario sugiere los tipos ya usados para no terminar con "PROYECTOR" y "Proyector" como dos cosas distintas.
   - Lo **no reservable no aparece** en la lista de equipos libres al reservar. Sin esa marca, todo lo que se presta en el momento —cargadores, adaptadores— sería ruido cada vez que un docente arma una reserva, y la primera vez que alguien reserve uno sin querer habría que explicarlo.
   - **Quitar la marca de reservable no cancela nada**: el equipo deja de ofrecerse al armar una reserva, pero las que ya existen siguen en pie. Alguien contaba con el proyector esa hora, y cancelárselo sin avisar por un cambio de configuración sería peor que dejarlo.
   - **Dar de baja algo que está prestado deja el préstamo abierto**: el equipo sale del inventario pero sigue en la lista de lo que falta volver. La pantalla lo advierte antes de confirmar, que es cuando todavía se puede marcar la devolución primero.
-  - Puertas adentro **son la misma entidad que las PCs**, y eso no es un detalle de implementación: es lo que hace que el proyector quede prestable, reclamable, liberable y —si es reservable— reservable, sin una línea nueva en ninguno de esos flujos. La tabla se llamó `pc` mientras solo guardaba computadoras; hoy se llama `equipo`.
+  - Puertas adentro **son la misma entidad `equipo` que las computadoras**, y eso no es un detalle de implementación: es lo que hace que el proyector quede prestable, reclamable, liberable y —si es reservable— reservable, sin una línea nueva en ninguno de esos flujos.
 
 ### UC: Atender el mostrador (pantalla de inicio del Admin)
 - **Actor:** Admin
@@ -208,45 +245,50 @@ flowchart LR
 - **Reglas que no son obvias:**
   - **El sistema no sabe dónde se da la clase**, y por eso ningún título lo afirma. Una reserva dice que alguien necesita N equipos de tal a tal hora; si la clase se da en el laboratorio o el docente se lleva las máquinas a su aula cambia de una institución a otra y el sistema funciona igual en los dos casos. Lo que sí sabe es que la máquina **salió**, y sobre eso hablan las tarjetas: se entrega, está afuera, volvió.
   - **"Estar acá" no es "poder entregarse"**: una computadora en mantenimiento está en el laboratorio y no se le da a nadie. Por eso el conteo de presencia y el de circulación se muestran en renglones distintos en vez de mezclarse en un total que después nadie sabe leer.
-  - *Entregada* o *sin retirar* **no sale de la reserva**: sale de cruzar sus PCs contra lo que está prestado ahora. La custodia es de la máquina, no de la reserva — la misma computadora puede estar afuera por un préstamo suelto.
+  - *Entregada* o *sin retirar* **no sale de la reserva**: sale de cruzar sus equipos contra lo que está prestado ahora. La custodia es del equipo, no de la reserva — el mismo puede estar afuera por un préstamo suelto.
   - La devolución se marca en **una sola lista**, sin importar por qué salió la máquina: quien la recibe no tiene por qué acordarse de cómo se entregó.
   - **El mostrador va antes que los contadores** de cuentas por aprobar y avisos sin leer. Es una decisión de orden, no de contenido: esto se opera con alguien esperando del otro lado, y aquello se mira una vez al día. Los contadores siguen en la pantalla, más abajo — una cuenta pendiente es un docente que no puede trabajar y nadie la va a buscar si nada la nombra.
   - **Entregar contra una reserva y entregar sin ella son el mismo camino** puertas adentro: escriben el mismo préstamo, aparecen en la misma lista de "afuera" y se reciben con la misma operación. Lo único que cambia es lo que se sabe de antemano — contra reserva, la hora de devolución sale del fin de la clase y el destinatario es el docente; suelta, las dos cosas se escriben (y la hora puede no existir).
   - El panel **se refresca solo cada minuto**: el mostrador lo atienden varios Admin, y si uno recibe una computadora la pantalla del otro tiene que enterarse sin apretar recargar.
-  - Los **bloqueos por evaluación no aparecen**: no los retira nadie.
+  - Los **bloqueos administrativos no aparecen**: no los retira nadie.
 
-### UC: Entregar y recibir computadoras
+### UC: Entregar y recibir equipos
 - **Actor:** Admin
-- **Motivo:** hoy esto se anota en un papel. El papel no puede impedir que la misma máquina figure entregada dos veces, ni avisar que alguien devolvió y nadie tachó el renglón.
+- **Motivo:** lo habitual es anotarlo en un papel, y el papel no puede impedir que la misma máquina figure entregada dos veces ni detectar que alguien devolvió y nadie tachó el renglón.
 - **Flujo (contra una reserva):**
-  1. Admin ve las reservas del día que todavía no se retiraron.
-  2. Marca las PCs que entrega —pueden ser algunas, no necesariamente todas— y confirma. La hora en que deben volver sale del fin de la reserva.
+  1. Admin ve las reservas del día cuyos equipos todavía no se retiraron.
+  2. Marca los equipos que entrega —pueden ser algunos, no necesariamente todos— y confirma. La hora en que deben volver sale del fin de la reserva.
   3. Si las vino a buscar otra persona (un alumno, un colega), lo anota. Es opcional, y no cambia de quién son: el docente que reservó sigue siendo el responsable.
   4. Cuando vuelven, Admin las recibe. Puede recibir varias juntas o de a una, y anotar observaciones ("volvió sin el cargador").
-- **Flujo (espontáneo):** alguien pide una computadora en el momento para un trámite. Admin elige la máquina, escribe a quién y para qué, y opcionalmente cuándo la devuelve. Si esa PC tiene una reserva próxima, el sistema lo avisa pero no lo impide.
+- **Flujo (espontáneo):** alguien pide un equipo en el momento para un trámite. Admin elige la máquina, escribe a quién y para qué, y opcionalmente cuándo la devuelve. Si ese equipo tiene una reserva próxima, el sistema lo avisa pero no lo impide.
 - **Reglas que no son obvias:**
-  - **Una PC no puede tener dos entregas abiertas** (garantía de la base, no del código de pantalla).
-  - **Dónde está cada máquina se deriva**, no se guarda: no hay estado "prestada" en la PC.
+  - **Un equipo no puede tener dos entregas abiertas** (garantía de la base, no del código de pantalla).
+  - **Dónde está cada máquina se deriva**, no se guarda: no hay estado "prestado" en el equipo.
   - **Quien recibe la computadora no necesita tener cuenta**: el nombre se escribe a mano, porque quien viene a hacer un trámite muchas veces no es un docente.
   - **Sin hora de devolución no se reclama nada**: "vengo en un rato" es una respuesta válida.
-  - **Se puede entregar una PC en mantenimiento** (llevarla al técnico es un préstamo); no una dada de baja.
+  - **Se puede entregar un equipo en mantenimiento** (llevarlo al técnico es un préstamo); no uno dado de baja.
 - **Visibilidad:** solo Admin, incluidas las lecturas. Que un docente pudiera marcarse la entrega a sí mismo convertiría el registro en una declaración en vez de en una constancia.
 
 ### UC: Liberar la reserva que nadie retiró
 - **Actor:** el reloj (nadie lo dispara)
-- **Motivo:** una máquina reservada que nadie vino a buscar bloquea el horario para todos los demás. Antes, la única forma de recuperarla era que alguien se acordara de cancelar la reserva.
+- **Motivo:** una máquina reservada que nadie vino a buscar bloquea el horario para todos los demás, y sin un plazo automático la única forma de recuperarla es que alguien se acuerde de cancelar la reserva.
 - **Flujo:**
-  1. Una hora antes de la clase, al docente le llega un recordatorio con el horario, sus PCs y la regla: si no las retira, a los 40 minutos quedan libres.
+  1. Una hora antes de la clase, al docente le llega un recordatorio con el horario, sus equipos y la regla: si no los retira, pasado el plazo de gracia quedan libres.
   2. Si el sistema ya sabe que una de esas máquinas no volvió al laboratorio, la advertencia va **adentro de ese mismo correo**.
-  3. Pasados los 40 minutos del inicio, cada PC que nadie haya retirado pasa a `NO_RETIRADA` y deja de bloquear el horario. El docente recibe el aviso.
-  4. Si retiró algunas, solo se liberan las otras. Si no retiró ninguna, el grupo entero queda `NO_RETIRADA`.
+  3. **A los 15 minutos del inicio, si no se retiró ninguna**, le llega el segundo y último aviso: todavía nadie las fue a buscar, a los 40 quedan libres. Le quedan veinticinco minutos para ir, cambiar la máquina o cancelar.
+  4. **Si no se retiró ninguna:** pasado el plazo de gracia desde el inicio, cada equipo pasa a `NO_RETIRADA`, deja de bloquear el horario y el grupo entero queda `NO_RETIRADA`. **Sin ningún aviso**: ya salió el de los 15.
+  5. **Si el docente vino y se llevó algunas:** las que dejó se liberan a los 15 minutos de esa entrega —la última, si el Admin anotó en varias tandas— y el grupo sigue como está: vino a dar la clase.
 - **Reglas que no son obvias:**
-  - **Liberar no es prohibir.** Si el docente llega a los cincuenta minutos y las máquinas siguen ahí, se le entregan igual — como préstamo, que es otra cosa que la reserva. El correo lo dice con todas las letras, porque si no el docente asume que ya no puede usarlas y se va.
-  - **Una PC que está afuera no se libera**: si el docente vino y se la llevó, la reserva está cumplida aunque nadie haya apretado nada más.
+  - **El aviso llega cuando todavía se puede hacer algo, no cuando ya pasó.** Mandarlo junto con la liberación era informarle al docente de un hecho consumado; a los 15 minutos el mismo texto le sirve para decidir. Por eso el momento se movió y no se sumó un segundo correo: dos avisos por la misma clase son el bombardeo que el resto del sistema evita.
+  - **Los dos plazos de liberación no son el mismo caso con distinto número.** Sin retiro, el sistema no sabe si el docente está por llegar y espera más. Con entrega parcial no hay nada que averiguar —estuvo en el mostrador y eligió qué se llevaba—, así que seguir esperando es guardar máquinas para nadie.
+  - **El plazo corto reemplaza al largo, no compite con él.** Casi siempre cae antes; si el Admin anota la entrega sobre el final de la gracia, cae unos minutos después, y corresponde: el docente recién estuvo en el mostrador. Si la anota pasada la gracia, lo que quedó ya se liberó por el camino normal.
+  - **Una clase más corta que el plazo de gracia no recibe el aviso de los 15**: esa reserva no se va a liberar nunca, y anunciarle lo contrario es mentirle.
+  - **Liberar no es prohibir.** Si el docente llega tarde y las máquinas siguen ahí, se le entregan igual — como préstamo, que es otra cosa que la reserva. El correo lo dice con todas las letras, porque si no el docente asume que ya no puede usarlas y se va.
+  - **Un equipo que está afuera no se libera**: si el docente vino y se lo llevó, la reserva está cumplida aunque nadie haya apretado nada más.
   - **Una clase más corta que el plazo de gracia no se libera nunca.** Liberar los últimos minutos no le sirve a nadie.
   - `NO_RETIRADA` **no es una cancelación**: nadie la decidió, y el reporte de uso deja de contarla como una clase dada.
 
-### UC: Reclamar una computadora que no volvió
+### UC: Reclamar un equipo que no volvió
 - **Actor:** el reloj
 - **Flujo:**
   1. A los 10 minutos de la hora de devolución, a todos los Admin les llega la lista de lo que no volvió, y a quien la tiene —si tiene cuenta— un recordatorio aparte.
@@ -260,9 +302,9 @@ flowchart LR
 
 ### UC: Llevar el vencimiento de las licencias de software
 - **Actor:** Admin (y el reloj: el aviso no lo dispara nadie)
-- **Motivo:** una PC del carro tiene AutoCAD con licencia que vence cada 30 días. Cuando vence, el programa deja de abrir. Sin contador, el Admin se entera el día que un docente no puede dar la clase.
+- **Motivo:** hay software de aula con licencia que vence cada pocas semanas —un CAD, una suite de diseño— y que al vencer deja de abrir. Sin contador, el Admin se entera el día que un docente no puede dar la clase.
 - **Flujo:**
-  1. Admin carga una licencia (software, días que dura la renovación, días de anticipación del aviso) **sobre varias PCs de una vez** — el mismo AutoCAD está en las ocho máquinas del carro, y pueden ser de carros distintos. Se crea una licencia por PC, cada una con su propio contador.
+  1. Admin carga una licencia (software, días que dura la renovación, días de anticipación del aviso) **sobre varios equipos de una vez** — el mismo programa suele estar en todas las máquinas de un carro, y pueden ser de carros distintos. Se crea una licencia por equipo, cada una con su propio contador.
   2. Al declarar el vencimiento elige **cómo lo sabe**: la fecha en que se renovó, los días que le quedan según la propia máquina, o la fecha de vencimiento. También puede **no declararlo**: la licencia queda "a verificar" hasta que alguien se siente delante del equipo.
   3. La pantalla muestra los días que faltan, primero las que no tienen fecha y después de la más vencida a la que más le falta.
   4. Al renovar, Admin aprieta *Renovar* (o marca varias y las renueva juntas). Si la renovación fue otro día —"la renové el martes y lo cargo el jueves"— indica esa fecha y el contador arranca ahí, no hoy.
@@ -273,7 +315,7 @@ flowchart LR
   - **Una licencia sin fecha no avisa nada**, y no se puede "renovar": renovar corre un contador que ya existe, y cargar la fecha por primera vez exige decir cómo se sabe. Sin esa distinción, el botón *Renovar* sería la forma cómoda de sacarse de encima el aviso poniéndole treinta días que nadie confirmó.
   - **Cambiar los días de duración no mueve el vencimiento vigente** (aplica a la próxima renovación); recalcularlo es una acción aparte.
   - Queda registrado **quién fijó el vencimiento y cuándo lo cargó**, que no es lo mismo que cuándo se renovó — es lo que responde "¿esto ya lo hizo alguien?" sin tener que preguntar.
-- **Visibilidad:** solo Admin, a diferencia del inventario. El docente elige PC por `software_instalado`, que sigue siendo texto libre y visible para todos; el vencimiento es trabajo administrativo y no le sirve para decidir nada.
+- **Visibilidad:** solo Admin, a diferencia del inventario. El docente elige equipo por `software_instalado`, que sigue siendo texto libre y visible para todos; el vencimiento es trabajo administrativo y no le sirve para decidir nada.
 
 ### UC: Resetear contraseña de un usuario
 - **Actor:** Admin
@@ -294,12 +336,12 @@ flowchart LR
      - **Sin reservas** → se elimina (hard delete).
      - **Con reservas** → rechaza la eliminación; la única forma de sacarlo de circulación es archivar el ciclo completo (ver UC de archivado).
 
-### UC: Mover una PC de carro
+### UC: Mover un equipo de carro
 - **Actor:** Admin
 - **Flujo:**
-  1. Admin reorganiza el inventario físico y actualiza el `carroId` de una PC.
+  1. Admin reorganiza el inventario físico y actualiza el `carroId` del equipo.
   2. Sistema valida que el identificador siga siendo único dentro del carro destino.
-  3. Las reservas existentes de esa PC no se ven afectadas — siguen apuntando a la misma PC, solo cambia su carro.
+  3. Las reservas existentes no se ven afectadas: apuntan al equipo, no al carro. El histórico de años cerrados tampoco cambia, porque guarda el nombre del carro congelado.
 
 ### UC: Configurar horario de disponibilidad (Admin)
 - **Actor:** Admin

@@ -147,8 +147,8 @@ func (r *fakeRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware
 	if err := r.errAlCrearLicenciaEnEquipo[l.EquipoID]; err != nil {
 		return err
 	}
-	// Mismo criterio que el índice funcional de la migración 012: única por
-	// PC sin distinguir mayúsculas.
+	// Mismo criterio que el índice funcional ux_licencia_equipo_nombre: única
+	// por equipo, sin distinguir mayúsculas.
 	for _, existente := range r.licencias {
 		if existente.EquipoID == l.EquipoID && strings.EqualFold(existente.Nombre, l.Nombre) {
 			return ErrLicenciaDuplicada

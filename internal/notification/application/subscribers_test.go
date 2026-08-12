@@ -148,7 +148,7 @@ func TestRegisterEventHandlers_ReservaCancelada_VariasEquipos_UnSoloAviso(t *tes
 		Tipo: "reserva.cancelada",
 		Payload: eventbus.CancelacionesDeUsuario{
 			UsuarioID: "docente1",
-			Motivo:    "bloqueo por evaluación estatal (Aprender 2026)",
+			Motivo:    "bloqueo administrativo (Aprender 2026)",
 			Reservas: []eventbus.ReservaCancelada{
 				{ReservaID: "r1", Etiqueta: "PC 7", Fecha: fecha(2026, 9, 10)},
 				{ReservaID: "r2", Etiqueta: "PC 3", Fecha: fecha(2026, 9, 10)},
@@ -161,7 +161,7 @@ func TestRegisterEventHandlers_ReservaCancelada_VariasEquipos_UnSoloAviso(t *tes
 
 	for _, n := range repo.notificaciones {
 		// Las PCs salen ordenadas, no en el orden en que se cancelaron.
-		esperado := "Se cancelaron 3 de tus reservas del 10/09/2026 (PC 3, PC 7, PC 12): bloqueo por evaluación estatal (Aprender 2026)"
+		esperado := "Se cancelaron 3 de tus reservas del 10/09/2026 (PC 3, PC 7, PC 12): bloqueo administrativo (Aprender 2026)"
 		if n.Mensaje != esperado {
 			t.Errorf("mensaje incorrecto:\n  esperado %q\n  obtenido %q", esperado, n.Mensaje)
 		}
@@ -206,7 +206,7 @@ func TestRegisterEventHandlers_ReservaCancelada_VariasFechas(t *testing.T) {
 // sin nombrar las PCs.
 // Sin etiquetas resueltas el aviso sale igual, sin el detalle: perder la
 // notificación por no poder adornarla sería mucho peor. Dice "equipos" y no
-// "PCs" porque desde la 015 lo cancelado puede ser un proyector.
+// "PCs" porque lo cancelado puede ser un proyector.
 func TestRegisterEventHandlers_ReservaCancelada_SinIdentificadores(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
@@ -247,7 +247,7 @@ func TestRegisterEventHandlers_ReservaCancelada_NoRepiteElPrefijo(t *testing.T) 
 		Tipo: "reserva.cancelada",
 		Payload: eventbus.CancelacionesDeUsuario{
 			UsuarioID: "docente1",
-			Motivo:    "bloqueo por evaluación estatal (Aprender 2026)",
+			Motivo:    "bloqueo administrativo (Aprender 2026)",
 			Reservas: []eventbus.ReservaCancelada{
 				{ReservaID: "r1", Etiqueta: "PC 7", Fecha: fecha(2026, 9, 10)},
 			},
@@ -256,7 +256,7 @@ func TestRegisterEventHandlers_ReservaCancelada_NoRepiteElPrefijo(t *testing.T) 
 
 	esperarNotificaciones(t, repo, 1)
 
-	esperado := "Tu reserva del 10/09/2026 (PC 7) fue cancelada: bloqueo por evaluación estatal (Aprender 2026)"
+	esperado := "Tu reserva del 10/09/2026 (PC 7) fue cancelada: bloqueo administrativo (Aprender 2026)"
 	for _, n := range repo.notificaciones {
 		if n.Mensaje != esperado {
 			t.Errorf("mensaje incorrecto:\n  esperado %q\n  obtenido %q", esperado, n.Mensaje)
@@ -450,7 +450,7 @@ func TestRegisterEventHandlers_Recordatorio_VaSoloAlDocente(t *testing.T) {
 	}
 }
 
-// Un bloqueo por evaluación estatal no tiene docente: no hay a quién
+// Un bloqueo administrativo no tiene docente: no hay a quién
 // avisarle, y una notificación sin destinatario no existe.
 func TestRegisterEventHandlers_Recordatorio_SinDocenteNoNotifica(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -467,15 +467,15 @@ func TestRegisterEventHandlers_Recordatorio_SinDocenteNoNotifica(t *testing.T) {
 	}
 }
 
-func TestRegisterEventHandlers_ReservaLiberada_TipoPropio(t *testing.T) {
+func TestRegisterEventHandlers_ReservaSinRetirar_TipoPropio(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1"}})
 	bus := eventbus.NewInMemoryEventBus()
 	RegisterEventHandlersSincronos(bus, svc)
 
-	bus.Publish(eventbus.Evento{Tipo: "reserva.no-retirada", Payload: eventbus.ReservasLiberadas{
+	bus.Publish(eventbus.Evento{Tipo: "reserva.sin-retirar", Payload: eventbus.ReservaSinRetirar{
 		UsuarioID: "docente1", MateriaNombre: "Matemáticas", HoraInicio: 8 * time.Hour,
-		Equipos: []string{"PC 1"}, TodaLaReserva: true, MinutosDeGracia: 40,
+		Equipos: []string{"PC 1"}, MinutosDeGracia: 40,
 	}})
 
 	esperarNotificaciones(t, repo, 1)
@@ -483,8 +483,9 @@ func TestRegisterEventHandlers_ReservaLiberada_TipoPropio(t *testing.T) {
 		if n.Tipo != domain.TipoReservaNoRetirada {
 			t.Errorf("tipo = %q, esperaba %q", n.Tipo, domain.TipoReservaNoRetirada)
 		}
+		// El plazo es el dato accionable del aviso: dice cuánto tiempo queda.
 		if !strings.Contains(n.Mensaje, "40") {
-			t.Errorf("el aviso tiene que decir por qué se liberó: %q", n.Mensaje)
+			t.Errorf("el aviso tiene que decir a los cuántos minutos quedan libres: %q", n.Mensaje)
 		}
 	}
 }
@@ -542,7 +543,7 @@ func TestRegisterEventHandlers_Cierre_AvisaALosAdminsYAlProximo(t *testing.T) {
 // "PC 3" porque compara carácter por carácter. El docente lee la lista de
 // sus máquinas, y verlas desordenadas hace dudar de si son las suyas.
 //
-// Antes de la 015 esto no podía pasar: las etiquetas eran enteros.
+// Con etiquetas numéricas el orden salía solo; con texto hay que ordenarlo.
 func TestListaDeEquipos_OrdenNatural(t *testing.T) {
 	reservas := []eventbus.ReservaCancelada{
 		{Etiqueta: "PC 12"}, {Etiqueta: "PC 3"}, {Etiqueta: "PC 7"},

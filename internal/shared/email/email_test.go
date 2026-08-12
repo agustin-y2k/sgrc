@@ -45,6 +45,47 @@ func TestArmarMensaje_NombreDelRemitenteCodificadoYConLaDireccion(t *testing.T) 
 	}
 }
 
+func TestArmarMensaje_LlevaMessageIDConElDominioDelRemitente(t *testing.T) {
+	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.edu.ar", "Hola", "hola"))
+
+	if !strings.Contains(msg, "Message-ID: <") || !strings.Contains(msg, "@gmail.com>") {
+		t.Errorf("esperaba un Message-ID con el dominio del remitente, obtuve:\n%s", msg)
+	}
+}
+
+func TestArmarMensaje_DosMensajesNoCompartenMessageID(t *testing.T) {
+	// El reloj está fijo a propósito: si el ID dependiera solo del instante,
+	// dos avisos de la misma barrida saldrían con el mismo, y hay clientes
+	// que en ese caso muestran uno solo.
+	e := enviadorDePrueba()
+	uno := extraerCabecera(t, string(e.armarMensaje("ana@escuela.edu.ar", "Hola", "hola")), "Message-ID")
+	otro := extraerCabecera(t, string(e.armarMensaje("beto@escuela.edu.ar", "Hola", "hola")), "Message-ID")
+
+	if uno == otro {
+		t.Errorf("dos correos salieron con el mismo Message-ID: %s", uno)
+	}
+}
+
+func TestArmarMensaje_SinArrobaEnElRemitenteCaeAlHost(t *testing.T) {
+	e := NewEnviadorSMTP(Config{Host: "smtp.gmail.com", Desde: "escuela"}, nil)
+	msg := string(e.armarMensaje("ana@escuela.edu.ar", "Hola", "hola"))
+
+	if !strings.Contains(msg, "@smtp.gmail.com>") {
+		t.Errorf("esperaba el host como dominio del Message-ID, obtuve:\n%s", msg)
+	}
+}
+
+func extraerCabecera(t *testing.T, mensaje, clave string) string {
+	t.Helper()
+	for _, linea := range strings.Split(mensaje, "\r\n") {
+		if valor, hay := strings.CutPrefix(linea, clave+": "); hay {
+			return valor
+		}
+	}
+	t.Fatalf("no encontré la cabecera %q en:\n%s", clave, mensaje)
+	return ""
+}
+
 func TestArmarMensaje_SinNombreDeRemitenteVaSoloLaDireccion(t *testing.T) {
 	e := NewEnviadorSMTP(Config{Host: "smtp.gmail.com", Desde: "escuela@gmail.com"}, nil)
 	msg := string(e.armarMensaje("ana@escuela.edu.ar", "Hola", "hola"))

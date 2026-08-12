@@ -210,7 +210,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 			return
 		}
 		if payload.UsuarioID == "" {
-			return // un bloqueo por evaluación no tiene a quién avisarle
+			return // un bloqueo administrativo no tiene a quién avisarle
 		}
 		mensaje := mensajeDeRecordatorio(payload)
 		entregar("reserva.recordatorio", func(ctx context.Context) error {
@@ -237,17 +237,43 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		})
 	})
 
-	bus.Subscribe("reserva.no-retirada", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.ReservasLiberadas)
+	// RF-04.12. La referencia a la reserva y a quien pide no es decorativa:
+	// es lo que sostiene la regla de un pedido por reserva, por solicitante y
+	// por día, que se verifica preguntando si esta fila ya existe.
+	bus.Subscribe("reserva.pedido-de-liberacion", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PedidoDeLiberacion)
 		if !ok {
-			log.Printf("notification: payload inesperado para reserva.no-retirada: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para reserva.pedido-de-liberacion: %+v", e.Payload)
 			return
 		}
 		if payload.UsuarioID == "" {
 			return
 		}
-		mensaje := mensajeDeReservasLiberadas(payload)
-		entregar("reserva.no-retirada", func(ctx context.Context) error {
+		mensaje := mensajeDePedidoDeLiberacion(payload)
+		reservaID, solicitanteID := payload.ReservaID, payload.SolicitanteID
+		entregar("reserva.pedido-de-liberacion", func(ctx context.Context) error {
+			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
+				domain.TipoPedidoDeLiberacion, domain.Referencias{
+					ReservaID: &reservaID,
+					// SobreUsuarioID es de quién HABLA el aviso: le llega al
+					// dueño y trata sobre el otro docente.
+					SobreUsuarioID: &solicitanteID,
+				})
+			return err
+		})
+	})
+
+	bus.Subscribe("reserva.sin-retirar", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.ReservaSinRetirar)
+		if !ok {
+			log.Printf("notification: payload inesperado para reserva.sin-retirar: %+v", e.Payload)
+			return
+		}
+		if payload.UsuarioID == "" {
+			return
+		}
+		mensaje := mensajeDeReservaSinRetirar(payload)
+		entregar("reserva.sin-retirar", func(ctx context.Context) error {
 			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
 				domain.TipoReservaNoRetirada, domain.Referencias{})
 			return err
@@ -306,9 +332,9 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		}
 	})
 
-	// RF-05.1/05.2/05.3: una reserva puntual se canceló (manual,
-	// evaluación estatal, o cambio de estado de PC) — el mismo evento
-	// cubre los tres casos, el motivo ya viene armado desde reservation.
+	// RF-05.1/05.2/05.3: una reserva puntual se canceló (manual, bloqueo
+	// administrativo, o cambio de estado del equipo) — el mismo evento cubre
+	// los tres casos, el motivo ya viene armado desde reservation.
 	bus.Subscribe("reserva.cancelada", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.CancelacionesDeUsuario)
 		if !ok {
@@ -364,7 +390,7 @@ func mensajeDeCancelacion(p eventbus.CancelacionesDeUsuario) string {
 }
 
 // fechaUnica dice si todas las cancelaciones caen el mismo día — el caso
-// habitual (un bloqueo por evaluación, varios equipos de la misma clase), y el
+// habitual (un bloqueo administrativo, varios equipos de la misma clase), y el
 // que permite nombrar la fecha una sola vez en vez de repetirla por PC.
 func fechaUnica(reservas []eventbus.ReservaCancelada) (time.Time, bool) {
 	primera := reservas[0].Fecha
@@ -418,8 +444,8 @@ func equiposDeLasCanceladas(reservas []eventbus.ReservaCancelada) string {
 // orden numérico: "PC 3" antes que "PC 12", y "Proyector Epson" donde le
 // toque alfabéticamente.
 //
-// Hace falta desde que las etiquetas son texto: antes eran enteros y
-// el orden salía solo.
+// Hace falta porque las etiquetas son texto: con enteros el orden salía
+// solo, pero "PC 12" es menor que "PC 3" alfabéticamente.
 func menorEnOrdenNatural(a, b string) bool {
 	prefijoA, numeroA := partirEtiqueta(a)
 	prefijoB, numeroB := partirEtiqueta(b)

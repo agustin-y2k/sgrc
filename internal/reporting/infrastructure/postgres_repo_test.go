@@ -203,7 +203,7 @@ func TestPostgresRepo_CalcularUsoDocentesDeCiclo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if len(resultado) != 1 || resultado[0].UsuarioID != docenteID {
+	if len(resultado) != 1 || resultado[0].UsuarioID == nil || *resultado[0].UsuarioID != docenteID {
 		t.Fatalf("resultado incorrecto: %+v", resultado)
 	}
 	if resultado[0].MinutosReservados != 90 {
@@ -264,7 +264,7 @@ func TestPostgresRepo_CalcularUsoDocentesDeCiclo_OrdenaDeMayorAMenor(t *testing.
 	if len(resultado) != 2 {
 		t.Fatalf("esperaba 2 docentes, obtuve %d: %+v", len(resultado), resultado)
 	}
-	if resultado[0].UsuarioID != reservaMucho {
+	if resultado[0].UsuarioID == nil || *resultado[0].UsuarioID != reservaMucho {
 		t.Errorf("el de más horas tiene que venir primero; llegó %+v", resultado)
 	}
 }
@@ -316,8 +316,9 @@ func TestPostgresRepo_GuardarYListarHistoricoUsoEquipo(t *testing.T) {
 	}
 }
 
-// Lo que la 015 hizo posible archivar: un proyector, que no tiene número ni
-// carro. Sin la etiqueta congelada el reporte del año pasado decía "PC 0 ()".
+// Un equipo suelto también se archiva: un proyector no tiene número ni
+// carro, y sin la etiqueta congelada el reporte del año pasado diría
+// "PC 0 ()".
 func TestPostgresRepo_HistoricoUsoEquipo_DeUnEquipoSinCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -778,5 +779,75 @@ func TestCalcularIncidenciasPorCategoria_LasSinClasificarSeCuentanAparte(t *test
 	}
 	if !sinClasificar {
 		t.Errorf("falta la fila de las sin clasificar: %+v", filas)
+	}
+}
+
+// ── Lo que solo se puede probar contra la base ──────────────────────────
+
+// Eliminar definitivamente una cuenta (RF-01.9) deja creado_por en NULL por
+// la FK ON DELETE SET NULL. Con un INNER JOIN a usuario, las reservas de esa
+// persona desaparecían del reporte y sus horas del total del año — aunque la
+// fila guarda nombre_docente_snapshot justamente para sobrevivir a eso.
+func TestPostgresRepo_CalcularUsoDocentes_CuentaEliminada_SigueContando(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	cicloID, materiaID := crearCicloDeTest(t, pool)
+	equipoID := crearCarroYEquipoDeTest(t, pool, 31)
+	docenteID := crearUsuarioDeTest(t, pool)
+
+	insertarReservaDeTest(t, pool, materiaID, equipoID, docenteID, "08:00", "10:00", "FINALIZADA")
+
+	// El hard delete de RF-01.9, tal cual lo hace auth.
+	if _, err := pool.Exec(context.Background(), `DELETE FROM usuario WHERE id = $1`, docenteID); err != nil {
+		t.Fatalf("no se pudo eliminar el usuario: %v", err)
+	}
+
+	resultado, err := repo.CalcularUsoDocentesDeCiclo(context.Background(), cicloID, nil, nil)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if len(resultado) != 1 {
+		t.Fatalf("la cuenta eliminada tiene que seguir en el reporte, obtuve %+v", resultado)
+	}
+	if resultado[0].UsuarioID != nil {
+		t.Errorf("esperaba UsuarioID nil, obtuve %q", *resultado[0].UsuarioID)
+	}
+	if resultado[0].NombreDocente != "Ada Lovelace" {
+		t.Errorf("esperaba el nombre congelado de la reserva, obtuve %q", resultado[0].NombreDocente)
+	}
+	if resultado[0].MinutosReservados != 120 {
+		t.Errorf("esperaba 120 minutos, obtuve %d", resultado[0].MinutosReservados)
+	}
+}
+
+// RF-08.10: una reserva que nadie retiró no fue una clase dada. Contarla
+// como uso infla el número con el que se justifica comprar equipos — un
+// carro que nadie va a buscar figuraría como el más usado.
+func TestPostgresRepo_CalcularUso_NoRetiradaNoCuenta(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	cicloID, materiaID := crearCicloDeTest(t, pool)
+	equipoID := crearCarroYEquipoDeTest(t, pool, 32)
+	docenteID := crearUsuarioDeTest(t, pool)
+
+	insertarReservaDeTest(t, pool, materiaID, equipoID, docenteID, "08:00", "09:00", "FINALIZADA")  // 60 min, cuenta
+	insertarReservaDeTest(t, pool, materiaID, equipoID, docenteID, "10:00", "12:00", "NO_RETIRADA") // no cuenta
+	insertarReservaDeTest(t, pool, materiaID, equipoID, docenteID, "14:00", "16:00", "CANCELADA")   // tampoco
+
+	equipos, err := repo.CalcularUsoEquiposDeCiclo(context.Background(), cicloID, nil, nil)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(equipos) != 1 || equipos[0].MinutosReservados != 60 || equipos[0].CantidadReservas != 1 {
+		t.Errorf("esperaba 1 reserva de 60 min, obtuve %+v", equipos)
+	}
+
+	docentes, err := repo.CalcularUsoDocentesDeCiclo(context.Background(), cicloID, nil, nil)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(docentes) != 1 || docentes[0].MinutosReservados != 60 || docentes[0].CantidadReservas != 1 {
+		t.Errorf("esperaba 1 reserva de 60 min, obtuve %+v", docentes)
 	}
 }

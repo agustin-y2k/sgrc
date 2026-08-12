@@ -34,8 +34,8 @@ import { getErrorMessage } from "@/lib/api-client"
  *
  * Es la mitad del mostrador que mira hacia adelante (la otra —qué hay
  * afuera y qué volvió— es LoQueEstaAfuera). Las dos juntas son la pantalla
- * de inicio del Admin, porque son las preguntas que se hace todo el día y
- * que antes exigían entrar a otra sección para responder.
+ * de inicio del Admin: son las preguntas que se hace todo el día, y tenerlas
+ * que buscar en otra sección es lo que hace que nadie las mire.
  *
  * "Entregada" o "sin retirar" no sale de la reserva: sale de cruzar sus equipos
  * contra lo que está prestado ahora. La custodia es de la máquina, no de la
@@ -227,7 +227,7 @@ export function PanelDelLaboratorio() {
 
   const { enCurso, siguientes, terminadas } = useMemo(() => {
     const ahora = minutosDeAhora()
-    // Los bloqueos por evaluación no se entregan a nadie: nadie viene a
+    // Los bloqueos administrativos no se entregan a nadie: nadie viene a
     // buscarlos, los crea un Admin para sacar máquinas de circulación.
     const delDia = (reservas?.data ?? []).filter((r) => r.tipo !== "BLOQUEO")
     const clases = agruparPorClase(delDia)

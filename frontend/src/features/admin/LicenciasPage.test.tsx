@@ -46,7 +46,9 @@ describe("LicenciasPage", () => {
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
       data: [{ id: "c1", nombre: "Carro 1" }],
     })
-    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+    // El inventario entero, en una sola consulta: la lista incluye lo que no
+    // está en ningún carro, que también puede tener software licenciado.
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
       data: [
         {
           id: "pc1",
@@ -55,6 +57,17 @@ describe("LicenciasPage", () => {
           numeroSerie: "5CD1234ABC",
           etiqueta: "PC 3",
           tipo: "PC",
+          reservable: true,
+          freezado: false,
+          estado: "DISPONIBLE",
+          dadoDeBaja: false,
+          fechaAlta: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "suelto1",
+          etiqueta: "Notebook de dirección",
+          nombre: "Notebook de dirección",
+          tipo: "NOTEBOOK",
           reservable: true,
           freezado: false,
           estado: "DISPONIBLE",
@@ -190,14 +203,14 @@ describe("LicenciasPage", () => {
     })
   })
 
-  it("carga la misma licencia en varias equipos de una vez", async () => {
+  it("carga la misma licencia en varios equipos de una vez", async () => {
     const user = userEvent.setup()
     renderPagina()
 
     await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
     await user.type(screen.getByLabelText("Software"), "SolidWorks")
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
-    await user.click(screen.getByRole("button", { name: /Cargar en 1 Equipo/ }))
+    await user.click(screen.getByRole("button", { name: /Cargar en 1 equipo/ }))
 
     expect(adminApi.crearLicencias).toHaveBeenCalledWith({
       equipoIds: ["pc1"],
@@ -217,7 +230,7 @@ describe("LicenciasPage", () => {
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
     await user.selectOptions(screen.getByLabelText("¿Cuándo vence?"), "quedan-dias")
     await user.type(screen.getByLabelText("Días que le quedan"), "12")
-    await user.click(screen.getByRole("button", { name: /Cargar en 1 Equipo/ }))
+    await user.click(screen.getByRole("button", { name: /Cargar en 1 equipo/ }))
 
     expect(adminApi.crearLicencias).toHaveBeenCalledWith(
       expect.objectContaining({ quedanDias: 12 })
@@ -237,6 +250,23 @@ describe("LicenciasPage", () => {
     expect(screen.getByLabelText("¿Cuándo vence?")).toHaveValue("sin-fecha")
   })
 
+  /**
+   * RF-03.11 no distingue: una licencia se carga sobre cualquier equipo. El
+   * formulario armaba su lista recorriendo los carros, así que lo que no
+   * está en ninguno —una notebook suelta con un CAD licenciado— no aparecía
+   * nunca, aunque la API lo aceptaba igual.
+   */
+  it("ofrece también los equipos que no están en ningún carro", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
+
+    expect(
+      await screen.findByRole("checkbox", { name: /Notebook de dirección/ })
+    ).toBeInTheDocument()
+  })
+
   it("informa cuáles equipos ya tenían la licencia, sin tratarlo como error", async () => {
     const user = userEvent.setup()
     vi.mocked(adminApi.crearLicencias).mockResolvedValue({
@@ -248,7 +278,7 @@ describe("LicenciasPage", () => {
     await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
     await user.type(screen.getByLabelText("Software"), "SolidWorks")
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
-    await user.click(screen.getByRole("button", { name: /Cargar en 1 Equipo/ }))
+    await user.click(screen.getByRole("button", { name: /Cargar en 1 equipo/ }))
 
     expect(await screen.findByText(/2 ya la tenían/)).toBeInTheDocument()
   })

@@ -79,17 +79,16 @@ describe("CalendarioEquipoPage", () => {
     expect(screen.getByText("08:00–09:30")).toBeInTheDocument()
   })
 
-  // Un bloqueo por evaluación estatal no tiene materia ni docente: se
+  // Un bloqueo administrativo no tiene materia ni docente: se
   // muestra distinto en vez de dejar campos vacíos.
   it("un bloqueo se rotula con su motivo, no con una categoría fija", async () => {
     vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
     renderCalendario()
 
-    // Lo que trae a alguien al calendario es "¿por qué no puedo
-    // reservar acá?". El motivo lo responde; "evaluación estatal" mentía
-    // cada vez que el bloqueo era por otra cosa.
+    // Lo que trae a alguien al calendario es "¿por qué no puedo reservar
+    // acá?". El motivo que escribió el Admin lo responde; cualquier rótulo
+    // fijo mentiría en cuanto el bloqueo fuera por otra cosa.
     expect(await screen.findByText("Jornada docente")).toBeInTheDocument()
-    expect(screen.queryByText("Evaluación estatal")).not.toBeInTheDocument()
   })
 
   it("pide el calendario de la semana en curso, de lunes a sábado", async () => {

@@ -92,7 +92,7 @@ func TestNuevaReservaBloqueo_OK(t *testing.T) {
 		t.Errorf("tipo incorrecto: %s", r.Tipo)
 	}
 	if r.ReservaGrupoID != nil || r.MateriaID != nil {
-		t.Error("un bloqueo de evaluación no debería tener ReservaGrupoID ni MateriaID")
+		t.Error("un bloqueo administrativo no debería tener ReservaGrupoID ni MateriaID")
 	}
 }
 

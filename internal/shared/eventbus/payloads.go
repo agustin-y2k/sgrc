@@ -28,7 +28,7 @@ type ReservaCancelada struct {
 }
 
 // CancelacionesDeUsuario junta TODO lo que se le canceló a una persona en
-// una misma operación: un bloqueo por evaluación sobre tres PCs de su clase
+// una misma operación: un bloqueo administrativo sobre tres PCs de su clase
 // es una sola noticia para ella, no tres.
 //
 // El motivo es uno solo por lote a propósito: agrupar cancelaciones con
@@ -183,12 +183,50 @@ type EquipoNoDisponibleParaReserva struct {
 	Equipos       []string
 }
 
-// ReservasLiberadas: las PCs que el docente no retiró y que dejaron de estar
-// reservadas para él.
+// PedidoDeLiberacion: un docente le pide a otro que le libere un equipo que
+// tiene reservado (RF-04.12).
 //
-// Se agrupa por docente y clase, como las cancelaciones: liberar tres
-// máquinas de una misma reserva es una sola noticia.
-type ReservasLiberadas struct {
+// Es el único aviso de esta familia que NO anuncia un cambio: la reserva de
+// quien lo recibe sigue intacta y la decisión es suya. El texto tiene que
+// dejarlo claro en la primera línea o se lee como una cancelación, que es lo
+// que dicen todos los demás avisos sobre una reserva propia.
+type PedidoDeLiberacion struct {
+	// El dueño de la reserva, que es quien recibe el aviso.
+	UsuarioID string
+	Email     string
+	Nombre    string
+
+	// Quien pide. El ID va para poder registrar de quién habla el aviso
+	// (sobre_usuario_id), que es lo que sostiene la regla de un pedido por
+	// reserva, por solicitante y por día.
+	SolicitanteID     string
+	SolicitanteNombre string
+
+	// La reserva pedida, dicha como la reconoce su dueño: qué máquina, para
+	// qué materia y en qué franja.
+	ReservaID     string
+	Etiqueta      string
+	MateriaNombre string
+	Fecha         time.Time
+	HoraInicio    time.Duration
+	HoraFin       time.Duration
+
+	// Mensaje es lo que escribió quien pide, si escribió algo. Viaja tal
+	// cual: es la parte del pedido que explica para qué las necesita, y
+	// reformularla sería ponerle palabras en la boca.
+	Mensaje string
+}
+
+// ReservaSinRetirar: la clase ya empezó y nadie vino a buscar las máquinas.
+//
+// Es un aviso PREVIO a la liberación, no la constancia de una liberación ya
+// hecha: sale a los quince minutos justamente para que el docente todavía
+// pueda ir, cambiar la máquina o cancelar (RF-08.20). Liberar, después, no
+// publica nada.
+//
+// Se agrupa por docente y clase, como las cancelaciones: una reserva de tres
+// máquinas es una sola noticia.
+type ReservaSinRetirar struct {
 	UsuarioID     string
 	Email         string
 	Nombre        string
@@ -196,10 +234,10 @@ type ReservasLiberadas struct {
 	Fecha         time.Time
 	HoraInicio    time.Duration
 	Equipos       []string
-	// TodaLaReserva: no retiró ninguna. Cambia el texto —"tu reserva" en vez
-	// de "tres de tus máquinas"— y es la diferencia entre no haber ido y
-	// haber ido a buscar solo algunas.
-	TodaLaReserva   bool
+	// MinutosDeGracia es a los cuántos minutos quedan libres. Va en el
+	// payload para que el texto no tenga que conocer la configuración del
+	// despliegue, y porque es el dato accionable del aviso: dice cuánto
+	// tiempo queda.
 	MinutosDeGracia int
 }
 

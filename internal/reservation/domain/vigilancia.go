@@ -19,6 +19,17 @@ const (
 	// AntelacionDelRecordatorio: una hora antes. Alcanza para que el docente
 	// llegue, avise, o modifique la reserva antes de que empiece.
 	AntelacionDelRecordatorio = time.Hour
+	// DemoraDelAvisoDeNoRetiroPorDefecto: quince minutos después de que
+	// empezó la clase. Es el momento en que el aviso todavía sirve para
+	// algo — quedan veinticinco minutos para ir, cambiar la máquina o
+	// cancelar. Mandarlo junto con la liberación era contarle al docente un
+	// hecho consumado.
+	DemoraDelAvisoDeNoRetiroPorDefecto = 15 * time.Minute
+	// GraciaTrasEntregaParcialPorDefecto: quince minutos desde que el Admin
+	// anotó la entrega. Es un plazo distinto y más corto que el de arriba
+	// porque responde a otra pregunta: ahí el sistema no sabe si el docente
+	// va a venir, acá ya vino y eligió qué se llevaba.
+	GraciaTrasEntregaParcialPorDefecto = 15 * time.Minute
 	// DemoraParaReclamarPorDefecto: diez minutos después de la hora en que
 	// la máquina tenía que volver. Es un margen para el que está guardando
 	// las cosas, no una tolerancia de verdad.
@@ -55,6 +66,58 @@ func CorrespondeLiberar(fecha time.Time, horaInicio, horaFin time.Duration, grac
 		return false
 	}
 	return !horaDePared(ahora, horaDelDia(ahora)).Before(horaDePared(fecha, horaInicio).Add(gracia))
+}
+
+// PuedeLlegarALiberarse dice si a esta reserva le puede llegar a correr el
+// plazo de gracia, o sea si la clase sigue en curso cuando ese plazo se
+// cumple.
+//
+// Existe porque el aviso de RF-08.20 sale ANTES que la liberación y tiene que
+// saber de antemano lo que CorrespondeLiberar descubre sobre la marcha: una
+// clase más corta que la gracia no se libera nunca. Sin esta pregunta, a esa
+// reserva le llegaría un correo anunciándole algo que no va a pasar.
+func PuedeLlegarALiberarse(horaInicio, horaFin, gracia time.Duration) bool {
+	return horaFin > horaInicio+gracia
+}
+
+// CorrespondeAvisarNoRetiro dice si ya es hora de avisarle al docente que
+// todavía no vino a buscar las máquinas y que pasada la gracia quedan libres
+// (RF-08.20).
+//
+// La otra mitad de la condición —que efectivamente no se haya retirado
+// ninguna— la pone quien llama, que es quien ve los préstamos.
+//
+// Igual que el recordatorio, el límite de arriba es que la clase no haya
+// terminado y no que no haya empezado: si el proceso estuvo caído, el aviso
+// sale tarde en vez de perderse.
+func CorrespondeAvisarNoRetiro(fecha time.Time, horaInicio, horaFin, demora, gracia time.Duration, ahora time.Time) bool {
+	if !PuedeLlegarALiberarse(horaInicio, horaFin, gracia) {
+		return false
+	}
+	if YaTermino(fecha, horaFin, ahora) {
+		return false
+	}
+	return !horaDePared(ahora, horaDelDia(ahora)).Before(horaDePared(fecha, horaInicio).Add(demora))
+}
+
+// CorrespondeLiberarTrasEntregaParcial es el plazo corto: el docente vino, se
+// llevó una parte, y lo que dejó deja de estar guardado a su nombre pasados
+// unos minutos desde esa entrega (RF-08.10).
+//
+// Cuenta desde la entrega y no desde el inicio de la clase, y eso **reemplaza**
+// al plazo largo en vez de competir con él. En la práctica cae antes; si el
+// Admin anota la entrega sobre el final de la gracia, cae después, y está
+// bien que así sea: el docente estuvo en el mostrador recién, y darle sus
+// quince minutos completos para volver por el resto es la razón de ser del
+// plazo.
+//
+// El tope sigue siendo el mismo que el del plazo largo — una clase terminada
+// no se libera, la marca FINALIZADA el barrido de vencimiento.
+func CorrespondeLiberarTrasEntregaParcial(fecha time.Time, horaFin time.Duration, entregadoEn time.Time, gracia time.Duration, ahora time.Time) bool {
+	if YaTermino(fecha, horaFin, ahora) {
+		return false
+	}
+	return !ahora.Before(entregadoEn.Add(gracia))
 }
 
 // CorrespondeAvisarEquipoNoDisponible resuelve la regla del docente siguiente:
