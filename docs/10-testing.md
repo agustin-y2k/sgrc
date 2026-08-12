@@ -95,6 +95,21 @@ Dos criterios que ya evitaron falsos verdes:
   barra de navegación completa de un Admin: no desborda en un monitor de
   desarrollo, sí en un portátil de 1024, no se ve en una captura, y vuelve sola
   cada vez que se agrega un ítem al menú.
+- **Lo que se toca, también.** `e2e/tactil.spec.ts` mide en un teléfono el alto
+  de cada control a la vista —cuerpo, barra, menú desplegado y pie— y falla por
+  debajo de 44px (24px si el enlace va embebido en una frase, que no puede
+  crecer sin partir el renglón). Mismo tipo de defecto que el anterior: un botón
+  con el tamaño `sm` del sistema de diseño son 28px —la mitad del ancho de un
+  dedo—, se ve perfecto en una captura y solo molesta con el teléfono en la
+  mano. El menú se mide en un test aparte porque sus enlaces no existen en el
+  DOM hasta que alguien lo abre.
+- **El contraste se calcula, no se opina.** Los tokens del proyecto son
+  `oklch(…)` y los botones tintados componen su color con un alpha, así que el
+  color efectivo no se puede deducir leyendo el CSS: hay que pintarlo. El
+  botón `destructive` medía 3.62:1 en claro y 4.3:1 en oscuro —por debajo del
+  4.5:1 de WCAG AA— y se veía "un poco pálido", que es exactamente el tipo de
+  juicio que no sirve para decidir. Al medirlo se corrige una vez y queda
+  arreglado en las dos variantes de tema a la vez.
 
 ```bash
 cd frontend

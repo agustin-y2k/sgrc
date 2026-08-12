@@ -19,11 +19,15 @@ export function PieDeAutoria({ className = "" }: { className?: string }) {
     >
       <p>
         SGRC v{__VERSION__} — software libre bajo licencia{" "}
+        {/* `inline-block py-1`: el enlace va embebido en la frase, así que no
+            puede crecer a 44px sin partir el renglón, pero con el texto en
+            `xs` quedaba en 16px de alto — por debajo de los 24px que pide
+            WCAG 2.5.8 para un blanco táctil. */}
         <a
           href="https://opensource.org/licenses/MIT"
           target="_blank"
           rel="noreferrer"
-          className="hover:text-foreground underline underline-offset-2"
+          className="hover:text-foreground inline-block py-1 underline underline-offset-2"
         >
           MIT
         </a>

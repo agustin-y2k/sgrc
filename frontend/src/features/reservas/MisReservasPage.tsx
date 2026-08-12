@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { Link, useLocation, useNavigate } from "react-router"
 
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
@@ -10,12 +10,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
 import * as reservasApi from "@/features/reservas/api"
 import { agruparReservas } from "@/features/reservas/types"
 import { CambiarEquipoDeReserva } from "@/features/reservas/CambiarEquipoDeReserva"
+import { CancelarReserva } from "@/features/reservas/CancelarReserva"
 import type { EstadoReserva, GrupoDeReservas } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 
@@ -72,13 +71,6 @@ function EstadoDeReserva({ estado }: { estado: EstadoReserva }) {
   return <EstadoBadge tono={TONO_RESERVA[estado]}>{ETIQUETA_RESERVA[estado]}</EstadoBadge>
 }
 
-type Cancelacion = {
-  grupo: GrupoDeReservas
-  /** RF-04.6: true = solo esta fecha; false = esta y todas las siguientes. */
-  soloEsta: boolean
-  motivo: string
-}
-
 /**
  * Estado del grupo a partir del de sus reservas.
  *
@@ -98,10 +90,10 @@ function estadoDelGrupo(grupo: GrupoDeReservas): EstadoReserva {
 
 export function MisReservasPage() {
   const { user } = useAuth()
-  const queryClient = useQueryClient()
   const [incluirCanceladas, setIncluirCanceladas] = useState(false)
   const [pagina, setPagina] = useState(1)
-  const [cancelando, setCancelando] = useState<Cancelacion | null>(null)
+  /** La tarjeta con el panel de cancelación abierto, si hay alguna. */
+  const [cancelando, setCancelando] = useState<string | null>(null)
   const [cambiandoEquipo, setCambiandoEquipo] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
@@ -109,39 +101,7 @@ export function MisReservasPage() {
     queryFn: () => reservasApi.listarReservas({ incluirCanceladas, page: pagina }),
   })
 
-  const cancelar = useMutation({
-    // RF-04.6: la elección se aplica "a todas los equipos del grupo en esa
-    // fecha (o rango)", así que las dos ramas cancelan el grupo entero —
-    // lo único que cambia es si además alcanza a las fechas siguientes.
-    // Antes "solo esta fecha" llamaba a cancelarReserva y liberaba una
-    // solo equipo, que no es lo que dice el requisito ni lo que sugiere el
-    // texto de la opción.
-    mutationFn: async ({ grupo, soloEsta, motivo }: Cancelacion): Promise<void> => {
-      if (grupo.grupoId) {
-        await reservasApi.cancelarGrupo(grupo.grupoId, motivo, soloEsta)
-        return
-      }
-      // Un bloqueo administrativo son N filas `reserva` sueltas, sin grupo
-      // que las una en la base. Se cancelan TODAS: la tarjeta representa la
-      // operación completa, y liberar solo un equipo dejaría el aula a medio
-      // bloquear sin que nada lo diga. En serie y no en paralelo para que un
-      // fallo a mitad de camino sea un error claro y no una carrera.
-      for (const r of grupo.reservas.filter((x) => x.estado === "CONFIRMADA")) {
-        await reservasApi.cancelarReserva(r.id, motivo)
-      }
-    },
-    onSuccess: async () => {
-      setCancelando(null)
-      await queryClient.invalidateQueries({ queryKey: RESERVAS_KEY })
-    },
-  })
-
   const grupos = agruparReservas(data?.data ?? [])
-
-  // RF-04.8: el motivo solo es obligatorio si la reserva es de otra
-  // persona, que es el caso de un Admin cancelando la de un docente.
-  const esAjena = cancelando ? cancelando.grupo.creadoPor !== user?.id : false
-  const motivoFalta = esAjena && cancelando?.motivo.trim() === ""
   const confirmacion = useConfirmacionDeLlegada()
 
   return (
@@ -185,11 +145,6 @@ export function MisReservasPage() {
           <AlertDescription>{getErrorMessage(error)}</AlertDescription>
         </Alert>
       )}
-      {cancelar.error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{getErrorMessage(cancelar.error)}</AlertDescription>
-        </Alert>
-      )}
 
       {isLoading && <p className="text-muted-foreground">Cargando…</p>}
       {!isLoading && grupos.length === 0 && (
@@ -202,10 +157,8 @@ export function MisReservasPage() {
           // La clave no puede ser grupoId: un bloqueo administrativo no
           // tiene grupo, y el panel de confirmación no se abriría nunca —
           // apretar "Cancelar" no haría absolutamente nada.
-          const enCurso =
-            cancelando !== null && claveDeTarjeta(cancelando.grupo) === clave
+          const enCurso = cancelando === clave
           const estado = estadoDelGrupo(grupo)
-          const cancelables = grupo.reservas.filter((r) => r.estado === "CONFIRMADA")
 
           return (
             <Card key={clave}>
@@ -257,9 +210,7 @@ export function MisReservasPage() {
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() =>
-                            setCancelando({ grupo, soloEsta: true, motivo: "" })
-                          }
+                          onClick={() => setCancelando(clave)}
                         >
                           {grupo.esBloqueo ? "Levantar bloqueo" : "Cancelar"}
                         </Button>
@@ -306,89 +257,14 @@ export function MisReservasPage() {
                   ))}
 
                 {cambiandoEquipo === clave && (
-                  <CambiarEquipoDeReserva grupo={grupo} onListo={() => setCambiandoEquipo(null)} />
+                  <CambiarEquipoDeReserva
+                    grupo={grupo}
+                    onListo={() => setCambiandoEquipo(null)}
+                  />
                 )}
 
-                {enCurso && cancelando && (
-                  <div className="grid gap-3 rounded-md border p-3">
-                    <p className="text-sm">
-                      {grupo.esBloqueo
-                        ? `Se libera${cancelables.length === 1 ? "" : "n"} ${cancelables.length} equipo${cancelables.length === 1 ? "" : "s"} de este bloqueo. Vuelven a estar disponibles para reservar.`
-                        : `Se ${cancelables.length === 1 ? "cancela" : "cancelan"} los ${cancelables.length} equipo${cancelables.length === 1 ? "" : "s"} de esta reserva.`}
-                    </p>
-
-                    {/* RF-04.6: elegir entre esta fecha o esta y las
-                        siguientes solo tiene sentido si es recurrente. */}
-                    {grupo.esRecurrente && (
-                      <div className="grid gap-1.5">
-                        <span className="text-sm font-medium">¿Qué querés cancelar?</span>
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="radio"
-                            name={`alcance-${clave}`}
-                            checked={cancelando.soloEsta}
-                            onChange={() =>
-                              setCancelando({ ...cancelando, soloEsta: true })
-                            }
-                          />
-                          Solo esta fecha
-                        </label>
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="radio"
-                            name={`alcance-${clave}`}
-                            checked={!cancelando.soloEsta}
-                            onChange={() =>
-                              setCancelando({ ...cancelando, soloEsta: false })
-                            }
-                          />
-                          Esta fecha y todas las siguientes
-                        </label>
-                      </div>
-                    )}
-
-                    <div className="grid gap-1.5">
-                      <Label htmlFor={`motivo-${clave}`}>
-                        Motivo {esAjena ? "(obligatorio)" : "(opcional)"}
-                      </Label>
-                      <Input
-                        id={`motivo-${clave}`}
-                        value={cancelando.motivo}
-                        onChange={(e) =>
-                          setCancelando({ ...cancelando, motivo: e.target.value })
-                        }
-                        placeholder={
-                          esAjena
-                            ? "El docente va a recibir este texto en la notificación"
-                            : ""
-                        }
-                      />
-                      {motivoFalta && (
-                        <p className="text-destructive text-sm">
-                          Al cancelar la reserva de otra persona el motivo es obligatorio.
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={motivoFalta || cancelar.isPending}
-                        onClick={() => cancelar.mutate(cancelando)}
-                      >
-                        Confirmar cancelación
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={cancelar.isPending}
-                        onClick={() => setCancelando(null)}
-                      >
-                        Volver
-                      </Button>
-                    </div>
-                  </div>
+                {enCurso && (
+                  <CancelarReserva grupo={grupo} onListo={() => setCancelando(null)} />
                 )}
               </CardContent>
             </Card>
