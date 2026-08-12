@@ -46,7 +46,7 @@ function useConfirmacionDeLlegada(): string | null {
 }
 
 /**
- * Identifica una tarjeta del listado. Un bloqueo por evaluación no tiene
+ * Identifica una tarjeta del listado. Un bloqueo administrativo no tiene
  * grupo en la base, así que se lo identifica por la operación que lo creó
  * (ver claveDeAgrupacion en types.ts) — usar el id de su primera reserva
  * rompía apenas ese equipo se cancelaba y la tarjeta pasaba a empezar por otra.
@@ -114,14 +114,14 @@ export function MisReservasPage() {
     // fecha (o rango)", así que las dos ramas cancelan el grupo entero —
     // lo único que cambia es si además alcanza a las fechas siguientes.
     // Antes "solo esta fecha" llamaba a cancelarReserva y liberaba una
-    // sola Equipo, que no es lo que dice el requisito ni lo que sugiere el
+    // solo equipo, que no es lo que dice el requisito ni lo que sugiere el
     // texto de la opción.
     mutationFn: async ({ grupo, soloEsta, motivo }: Cancelacion): Promise<void> => {
       if (grupo.grupoId) {
         await reservasApi.cancelarGrupo(grupo.grupoId, motivo, soloEsta)
         return
       }
-      // Un bloqueo por evaluación son N filas `reserva` sueltas, sin grupo
+      // Un bloqueo administrativo son N filas `reserva` sueltas, sin grupo
       // que las una en la base. Se cancelan TODAS: la tarjeta representa la
       // operación completa, y liberar solo un equipo dejaría el aula a medio
       // bloquear sin que nada lo diga. En serie y no en paralelo para que un
@@ -150,7 +150,7 @@ export function MisReservasPage() {
         titulo={user?.rol === "ADMIN" ? "Reservas" : "Mis reservas"}
         descripcion={
           user?.rol === "ADMIN"
-            ? "Todas las reservas del sistema y los bloqueos por evaluación."
+            ? "Todas las reservas del sistema y los bloqueos administrativos."
             : "Tus reservas. Cada tarjeta es una clase, con todas sus equipos adentro."
         }
         accion={
@@ -199,9 +199,9 @@ export function MisReservasPage() {
       <div className="grid gap-3">
         {grupos.map((grupo) => {
           const clave = claveDeTarjeta(grupo)
-          // Antes exigía grupoId, así que en un bloqueo por evaluación el
-          // panel de confirmación NUNCA se abría: apretar "Cancelar" no
-          // hacía absolutamente nada.
+          // La clave no puede ser grupoId: un bloqueo administrativo no
+          // tiene grupo, y el panel de confirmación no se abriría nunca —
+          // apretar "Cancelar" no haría absolutamente nada.
           const enCurso =
             cancelando !== null && claveDeTarjeta(cancelando.grupo) === clave
           const estado = estadoDelGrupo(grupo)
@@ -226,7 +226,7 @@ export function MisReservasPage() {
                         {grupo.horaInicio}–{grupo.horaFin}
                       </span>
                     </p>
-                    {/* Un bloqueo por evaluación no es de ningún docente: la
+                    {/* Un bloqueo administrativo no es de ningún docente: la
                         línea con el guion suelto no decía nada. */}
                     {(grupo.nombreDocenteSnapshot || grupo.esRecurrente) && (
                       <p className="text-muted-foreground text-sm">
@@ -396,7 +396,7 @@ export function MisReservasPage() {
         })}
       </div>
 
-      {/* El paginador cuenta reservas (una fila por Equipo), no las tarjetas
+      {/* El paginador cuenta reservas (una fila por equipo), no las tarjetas
           agrupadas que se ven arriba: es lo que pagina el backend, y
           contarlo de otra forma daría un total que no cierra con las
           páginas. */}

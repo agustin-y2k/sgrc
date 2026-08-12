@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
-// Topes de LicenciaSoftware. Los tres coinciden con los CHECK de la
-// migración 012: se validan acá además de en la base para que un valor
-// fuera de rango salga como un 400 con explicación y no como el 500 pelado
-// de una violación de constraint.
+// Topes de LicenciaSoftware. Los tres coinciden con los CHECK de la tabla:
+// se validan acá además de en la base para que un valor fuera de rango salga
+// como un 400 con explicación y no como el 500 pelado de una violación de
+// constraint.
 const (
 	MaxLargoNombreLicencia = 100
 	// MaxDiasDuracion son diez años. No es un límite del negocio sino un
@@ -44,8 +44,8 @@ var (
 // A diferencia de NumeroSerie y de email, el nombre NO se pasa a mayúsculas
 // ni a minúsculas: es un nombre propio que se muestra en la pantalla y en
 // los correos, y "AUTOCAD 2027" o "autocad 2027" se leen mal. La unicidad
-// sin distinguir mayúsculas la da el índice funcional de la migración 012
-// —lower(nombre)— sin tocar lo que se ve.
+// sin distinguir mayúsculas la da un índice funcional sobre lower(nombre),
+// sin tocar lo que se ve.
 func NormalizarNombreLicencia(s string) string {
 	return strings.TrimSpace(s)
 }
@@ -84,8 +84,8 @@ type LicenciaSoftware struct {
 	DiasDuracion int
 	DiasAviso    int
 
-	// FechaVencimiento nil = "a verificar", no "no vence nunca". Ver la
-	// migración 012 para por qué existe ese estado.
+	// FechaVencimiento nil = "a verificar", no "no vence nunca": es el estado
+	// real de una licencia cargada antes de poder mirar la máquina (RF-03.13).
 	FechaVencimiento *time.Time
 	// UltimaRenovacion es cuándo se renovó de verdad, que puede no ser
 	// cuándo se cargó. Queda nil si el vencimiento se fijó por otro camino

@@ -158,7 +158,7 @@ func TestPostgresRepo_VariasCuentasSinGoogle_Conviven(t *testing.T) {
 	}
 }
 
-// El CHECK de la migración 008: una cuenta sin contraseña Y sin Google no
+// El CHECK chk_usuario_credencial: una cuenta sin contraseña Y sin Google no
 // se puede entrar de ninguna forma, así que la base no la acepta. Es la
 // red de contención por si alguna vez un camino de código deja las dos
 // vacías.

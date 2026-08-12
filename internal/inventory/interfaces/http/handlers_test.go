@@ -327,9 +327,9 @@ func TestHTTP_CrearEquipo_OK(t *testing.T) {
 	}
 }
 
-// El número de serie es texto: sin esto, cargar la primera PC con el código
-// que dice la etiqueta era imposible (ver migración 011). La respuesta trae
-// la forma canónica, que puede no ser lo que se tipeó.
+// El número de serie es texto: con un tipo numérico no se podría cargar el
+// código que dice la etiqueta. La respuesta trae la forma canónica, que
+// puede no ser lo que se tipeó.
 func TestHTTP_CrearEquipo_NumeroSerieAlfanumerico_SeNormaliza(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 

@@ -51,8 +51,8 @@ func (e EstadoEquipo) PuedeTransicionarA(nuevo EstadoEquipo) bool {
 
 var ErrTransicionEstadoEquipoInvalida = errors.New("transición de estado de equipo inválida")
 
-// MaxLargoNumeroSerie es el tope del VARCHAR(50) de la migración 011. Se
-// valida acá además de en la base para que el error salga como un 400 con
+// MaxLargoNumeroSerie es el tope del VARCHAR(50) de la columna. Se valida
+// acá además de en la base para que el error salga como un 400 con
 // explicación y no como un 500 de Postgres.
 const MaxLargoNumeroSerie = 50
 
@@ -63,8 +63,8 @@ var (
 	ErrIdentificadorInvalido = errors.New("el identificador del equipo debe ser un entero positivo")
 	// El número de serie NO es un número, aunque se llame así: es el código
 	// de fábrica de la etiqueta y casi siempre trae letras ("5CD1234ABC").
-	// Hasta la migración 011 la columna era BIGINT, y la primera PC que
-	// alguien cargaba con el código real no entraba.
+	// Por eso la columna es texto: con un tipo numérico, la primera máquina
+	// cargada con el código que dice su etiqueta no entra.
 	ErrNumeroSerieInvalido = errors.New("el número de serie no puede estar vacío")
 	ErrNumeroSerieLargo    = fmt.Errorf("el número de serie no puede tener más de %d caracteres", MaxLargoNumeroSerie)
 	ErrEquipoYaDadoDeBaja  = errors.New("el equipo ya está dado de baja")
@@ -180,11 +180,11 @@ func (p *Equipo) MoverACarro(nuevoCarroID string) {
 
 // ── Equipos que no son PCs de un carro (RF-03.15) ───────────────────────
 //
-// La escuela también presta un proyector, cargadores y notebooks sueltas.
-// Viven en esta misma entidad y no en una aparte porque "qué hay afuera del
-// laboratorio" tiene que ser UNA sola lista: con dos tipos de cosa, el
-// préstamo necesitaría dos referencias, el mostrador dos consultas y el
-// barrido dos recorridos. Ver la migración 015.
+// Una institución también presta proyectores, cargadores y notebooks
+// sueltas. Viven en esta misma entidad y no en una aparte porque "qué hay
+// afuera del laboratorio" tiene que ser UNA sola lista: con dos tipos de
+// cosa, el préstamo necesitaría dos referencias, el mostrador dos consultas
+// y el barrido dos recorridos (RF-03.15).
 
 const (
 	// TipoPC es el tipo por defecto: una computadora de un carro.

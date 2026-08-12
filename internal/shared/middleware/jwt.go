@@ -26,7 +26,7 @@ type Claims struct {
 	DebeCambiarPassword bool `json:"dcp,omitempty"`
 	// VersionSesion es la versión que tenía la cuenta al emitirse este
 	// token. Si no coincide con la de la fila, el token es de antes del
-	// último cambio de contraseña y no vale más (RF-01.11, migración 010).
+	// último cambio de contraseña y no vale más (RF-01.11).
 	//
 	// `omitempty` deja el claim afuera cuando vale 0, que es el valor de
 	// toda cuenta que nunca cambió su contraseña y el DEFAULT de la columna.

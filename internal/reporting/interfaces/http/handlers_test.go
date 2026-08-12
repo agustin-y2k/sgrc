@@ -30,6 +30,9 @@ func (r *fakeRepo) GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.Hist
 func (r *fakeRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain.HistoricoUsoDocente) error {
 	return nil
 }
+func (r *fakeRepo) BorrarHistoricoDocentesSinCuenta(ctx context.Context, anio int) error {
+	return nil
+}
 func (r *fakeRepo) ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error) {
 	return r.historicoEquipo, nil
 }
@@ -54,6 +57,10 @@ type fakeInfoUsuario struct{}
 func (f *fakeInfoUsuario) NombreCompletoDe(ctx context.Context, usuarioID string) (string, error) {
 	return "Ada Lovelace", nil
 }
+
+// ptr es azúcar para los campos opcionales de los resúmenes: UsuarioID es
+// *string porque una cuenta eliminada deja la referencia en nil.
+func ptr(s string) *string { return &s }
 
 var contadorID int
 
@@ -126,7 +133,7 @@ func TestHTTP_ReporteUsoEquipos_SinToken_401(t *testing.T) {
 }
 
 func TestHTTP_ReporteUsoDocentes_ComoAdmin_OK(t *testing.T) {
-	repo := &fakeRepo{usoDocentes: []domain.ResumenUsoDocente{{UsuarioID: "docente1", CantidadReservas: 3, MinutosReservados: 180}}}
+	repo := &fakeRepo{usoDocentes: []domain.ResumenUsoDocente{{UsuarioID: ptr("docente1"), CantidadReservas: 3, MinutosReservados: 180}}}
 	app := nuevaAppDeTest(repo)
 
 	req := httptest.NewRequest("GET", "/api/reporting/ciclos/ciclo1/uso-docentes", nil)

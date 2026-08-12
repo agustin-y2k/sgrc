@@ -149,11 +149,10 @@ export function AltaDeEquipo({ carroId }: { carroId: string }) {
   // solo se chequea la forma.
   //
   // Y son dos formas distintas, aunque los dos campos se llamen "número":
-  // el identificador es el que la escuela pinta en la máquina —"PC 1",
-  // "PC 2"— y sí es un entero. El número de serie es el código de fábrica
-  // de la etiqueta, y casi siempre trae letras ("5CD1234ABC"): exigirle
-  // dígitos era lo que hacía imposible cargar la primera Equipo con el dato
-  // real (ver migración 011).
+  // el identificador es el número del zócalo del carro —"PC 1", "PC 2"— y
+  // sí es un entero. El número de serie es el código de fábrica de la
+  // etiqueta y casi siempre trae letras ("5CD1234ABC"): exigirle dígitos
+  // haría imposible cargar el dato real.
   const identificadorValido = /^\d+$/.test(campos.identificador.trim())
   const serieValida = campos.numeroSerie.trim() !== ""
 
@@ -213,7 +212,7 @@ export function AltaDeEquipo({ carroId }: { carroId: string }) {
           type="submit"
           disabled={!identificadorValido || !serieValida || crear.isPending}
         >
-          {crear.isPending ? "Agregando…" : "Agregar Equipo"}
+          {crear.isPending ? "Agregando…" : "Agregar al carro"}
         </Button>
       </div>
     </form>

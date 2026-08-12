@@ -201,7 +201,7 @@ describe("InventarioAdminPage", () => {
     // impedía cargar un equipo con el dato real de la etiqueta.
     await user.type(screen.getByLabelText("Número de serie"), "PF2K9L3M")
     await user.type(screen.getByLabelText("Software instalado"), "AutoCAD 2027")
-    await user.click(screen.getByRole("button", { name: "Agregar Equipo" }))
+    await user.click(screen.getByRole("button", { name: "Agregar al carro" }))
 
     expect(adminApi.crearEquipoDeCarro).toHaveBeenCalledWith("c1", {
       identificador: 7,
@@ -226,7 +226,7 @@ describe("InventarioAdminPage", () => {
     await user.type(screen.getByLabelText("Número de serie"), "PF2K9L3M")
 
     expect(screen.getByText(/número entero/)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Agregar Equipo" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Agregar al carro" })).toBeDisabled()
   })
 
   // Y el número de serie NO: la regla vale en la otra dirección, y esta es
@@ -241,7 +241,7 @@ describe("InventarioAdminPage", () => {
     await user.type(screen.getByLabelText("Número de serie"), "5CD1234ABC")
 
     expect(screen.queryByText(/número entero/)).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Agregar Equipo" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Agregar al carro" })).toBeEnabled()
   })
 
   // ── Edición de Equipos (RF-03.4 / RF-03.10) ──────────────────────────────

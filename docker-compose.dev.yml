@@ -4,11 +4,11 @@
 #
 # o, más corto, `make run`.
 #
-# Antes esto se llamaba docker-compose.override.yml, que Docker Compose
-# carga solo. Como el deploy hace `git pull` + `docker compose up` en el
-# servidor, el archivo llegaba y se aplicaba también en producción: el
-# Postgres de la escuela terminaba con el 5432 publicado al host, justo lo
-# contrario de lo que decía su propio comentario.
+# El nombre importa: un `docker-compose.override.yml` lo carga Compose solo,
+# sin que nadie lo pida. Como el despliegue es `git pull` + `docker compose
+# up`, un archivo así llega al servidor y se aplica también ahí — y este
+# publica Postgres al host, justo lo que producción no debe hacer. Con un
+# nombre que exige `-f`, aplicarlo es siempre una decisión explícita.
 services:
   # La API al host para poder pegarle con curl y para el proxy de Vite
   # (frontend/vite.config.ts apunta a localhost:8080).

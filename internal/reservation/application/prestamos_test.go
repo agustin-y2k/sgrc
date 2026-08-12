@@ -331,7 +331,7 @@ func TestEntregarSuelta_NombreVacio(t *testing.T) {
 // TestEntregarSuelta_AvisaSiElEquipoTieneReservaEncima: no impide la entrega.
 // El sistema no sabe cuánto va a durar un trámite, así que decidir por el
 // Admin sería peor que darle el dato.
-func TestEntregarSuelta_AvisaSiLaEquipoTieneReservaEncima(t *testing.T) {
+func TestEntregarSuelta_AvisaSiElEquipoTieneReservaEncima(t *testing.T) {
 	repo := nuevoFakeRepo()
 	r := reservaDeTest(t, repo, "res1", "pc1")
 	// La reserva tiene que ser futura respecto del reloj del test.
@@ -623,14 +623,14 @@ func TestEntregarDevolverYEntregarDeNuevo(t *testing.T) {
 
 // ── Regresiones encontradas al revisar ──────────────────────────────────
 
-// TestEntregarPorReserva_BloqueoDeEvaluacionNoRompeElLote
+// TestEntregarPorReserva_BloqueoSinDocenteNoRompeElLote
 //
-// Un bloqueo por evaluación estatal (RF-04.7) no tiene docente:
+// Un bloqueo administrativo (RF-04.7) no tiene docente:
 // NuevaReservaBloqueo no recibe nombre, así que NombreDocenteSnapshot es
 // nil. Sin nombre, NuevoPrestamo devolvía ErrNombreDestinatarioVacio, y como
 // ese error corta el lote entero, entregar cinco máquinas fallaba con un 400
 // porque una de las reservas era un bloqueo — sin entregar ninguna.
-func TestEntregarPorReserva_BloqueoDeEvaluacionNoRompeElLote(t *testing.T) {
+func TestEntregarPorReserva_BloqueoSinDocenteNoRompeElLote(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(t, repo, "res1", "pc1")
 	bloqueo, err := domain.NuevaReservaBloqueo("bloq1", "pc2", nil,

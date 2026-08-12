@@ -200,7 +200,7 @@ export function CamposComunesDeLicencia({
           list={sugerencias && sugerencias.length > 0 ? listaId : undefined}
           required
         />
-        {/* El datalist ofrece los nombres que ya existen. La unicidad por Equipo
+        {/* El datalist ofrece los nombres que ya existen. La unicidad por equipo
             ignora mayúsculas, pero nada impide cargar "AutoCAD 2027" en una
             máquina y "Autocad 2027" en otra: ahí serían dos programas
             distintos en la lista, con dos contadores que nadie relaciona. */}
@@ -293,7 +293,9 @@ export function SelectorDeEquipos({
               onChange={() => alternar(equipo.id)}
             />
             {equipo.etiqueta}
-            <span className="text-muted-foreground">({equipo.carroNombre})</span>
+            {equipo.carroNombre && (
+              <span className="text-muted-foreground">({equipo.carroNombre})</span>
+            )}
           </label>
         ))}
       </div>

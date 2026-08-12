@@ -107,7 +107,7 @@ type licenciaResponse struct {
 	DiasDuracion int    `json:"diasDuracion"`
 	DiasAviso    int    `json:"diasAviso"`
 
-	// FechaVencimiento ausente = a verificar. Ver la migración 012.
+	// FechaVencimiento ausente = a verificar, no "no vence nunca" (RF-03.13).
 	FechaVencimiento *string `json:"fechaVencimiento,omitempty"`
 	UltimaRenovacion *string `json:"ultimaRenovacion,omitempty"`
 

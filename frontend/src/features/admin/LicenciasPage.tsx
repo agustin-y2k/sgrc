@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { EstadoBadge, TONO_LICENCIA } from "@/components/EstadoBadge"
@@ -271,32 +271,34 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
     queryFn: inventoryApi.listarCarros,
   })
 
-  // Una consulta por carro: hacen falta los equipos de TODOS para poder cargar
-  // la misma licencia en máquinas de carros distintos, que es uno de los
-  // casos que el requerimiento nombra explícitamente.
-  const consultasDeEquipos = useQueries({
-    queries: (carros?.data ?? []).map((c) => ({
-      queryKey: ["equipos", c.id],
-      queryFn: () => inventoryApi.listarEquiposDeCarro(c.id),
-    })),
+  // El inventario completo en una sola consulta, y no los equipos de cada
+  // carro por separado. Dos razones, y la primera es un defecto:
+  //
+  //   1. Recorriendo carros, lo que no está en ninguno NO aparecía nunca —
+  //      una notebook suelta con software licenciado no se podía cargar
+  //      desde acá, aunque la API la acepta igual (RF-03.11 no distingue).
+  //   2. De paso deja de ser 1 + N peticiones.
+  //
+  // Los carros se siguen pidiendo, pero solo para traducir carroId a nombre:
+  // este listado trae la etiqueta ya resuelta y el id del carro, no su
+  // nombre, y "PC 2" a secas no distingue entre dos carros.
+  const { data: todosLosEquipos } = useQuery({
+    queryKey: ["equipos"],
+    queryFn: () => inventoryApi.listarEquipos(),
   })
 
   const equipos = useMemo(() => {
-    const lista: { id: string; etiqueta: string; carroNombre: string }[] = []
-    ;(carros?.data ?? []).forEach((carro, i) => {
-      const equiposDelCarro = consultasDeEquipos[i]?.data?.data ?? []
-      equiposDelCarro
-        .filter((equipo) => !equipo.dadoDeBaja)
-        .forEach((equipo) =>
-          lista.push({
-            id: equipo.id,
-            etiqueta: equipo.etiqueta,
-            carroNombre: carro.nombre,
-          })
-        )
-    })
-    return lista
-  }, [carros, consultasDeEquipos])
+    const nombreDeCarro = new Map((carros?.data ?? []).map((c) => [c.id, c.nombre]))
+    return (todosLosEquipos?.data ?? [])
+      .filter((equipo) => !equipo.dadoDeBaja)
+      .map((equipo) => ({
+        id: equipo.id,
+        etiqueta: equipo.etiqueta,
+        // Vacío en los sueltos: no cuelgan de ningún carro, y el formulario
+        // omite el paréntesis en vez de mostrarlo vacío (RF-03.17).
+        carroNombre: (equipo.carroId && nombreDeCarro.get(equipo.carroId)) || "",
+      }))
+  }, [carros, todosLosEquipos])
 
   const crear = useMutation({
     mutationFn: () =>
@@ -376,7 +378,7 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
 
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={crear.isPending || seleccionadas.size === 0}>
-              Cargar en {seleccionadas.size} Equipo(s)
+              Cargar en {seleccionadas.size} equipo(s)
             </Button>
             <Button
               type="button"

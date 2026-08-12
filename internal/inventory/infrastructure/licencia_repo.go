@@ -19,8 +19,8 @@ const columnasLicencia = `id, equipo_id, nombre, dias_duracion, dias_aviso, fech
 // columnasLicenciaConUbicacion agrega cómo se llama el equipo y dónde está.
 // Van prefijadas con l./p./c. porque la consulta hace JOIN.
 //
-// Los COALESCE son por la 015: una notebook suelta con AutoCAD no tiene
-// carro ni identificador, y sin ellos el escaneo a string/int reventaba.
+// Los COALESCE están porque un equipo suelto con software licenciado no
+// tiene carro ni identificador, y sin ellos el escaneo a string/int revienta.
 const columnasLicenciaConUbicacion = `l.id, l.equipo_id, l.nombre, l.dias_duracion, l.dias_aviso, l.fecha_vencimiento, ` +
 	`l.ultima_renovacion, l.vencimiento_fijado_por, l.vencimiento_fijado_en, ` +
 	`l.avisado_previo_para, l.avisado_vencimiento_para, l.creada_en, ` +
@@ -199,9 +199,9 @@ func (r *PostgresRepo) ListarLicenciasPorEquipo(ctx context.Context, equipoID st
 // que dos licencias que vencen el mismo día salgan siempre en el mismo
 // orden — sin él, Postgres puede devolverlas alternadas entre corridas y la
 // tabla parece moverse sola.
-// Los COALESCE del orden son por la 015: con c.nombre y p.identificador en
-// NULL, los equipos sueltos empatarían todos entre sí y la lista se movería
-// sola entre corridas. Ordenados por nombre quedan juntos y estables.
+// Los COALESCE del orden hacen falta porque con c.nombre y p.identificador
+// en NULL los equipos sueltos empatarían todos entre sí y la lista se
+// movería sola entre corridas. Ordenados por nombre quedan juntos y estables.
 const ordenDeLaPantalla = `ORDER BY l.fecha_vencimiento IS NOT NULL, l.fecha_vencimiento, ` +
 	`COALESCE(c.nombre, ''), COALESCE(p.identificador, 0), COALESCE(p.nombre, ''), l.nombre`
 
@@ -210,9 +210,9 @@ func (r *PostgresRepo) ListarLicencias(ctx context.Context) ([]*application.Lice
 		SELECT `+columnasLicenciaConUbicacion+`
 		FROM licencia_software l
 		JOIN equipo p ON p.id = l.equipo_id
-		-- LEFT desde la 015: una notebook suelta puede tener AutoCAD igual
-		-- que las del carro, y con INNER JOIN su licencia no aparecía en la
-		-- pantalla — se vencía sin que nadie la viera.
+		-- LEFT: un equipo suelto puede tener software licenciado igual que los
+		-- del carro, y con INNER su licencia no llega a la pantalla — se vence
+		-- sin que nadie la vea.
 		LEFT JOIN carro c ON c.id = p.carro_id
 	`+ordenDeLaPantalla)
 	if err != nil {

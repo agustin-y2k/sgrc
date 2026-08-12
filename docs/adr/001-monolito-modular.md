@@ -19,7 +19,7 @@ autenticación, gestión académica, inventario, reservas, notificaciones y
 reportes — con reglas de negocio propias en cada uno. Esa separación hace
 tentador el salto a microservicios, y existe la posibilidad concreta (no
 inmediata, pero tampoco descartable) de que el proyecto se extienda a más de
-una escuela.
+una institución.
 
 La decisión es cómo estructurar el sistema para que esa separación de dominios
 sea real y verificable, sin pagar por adelantado la complejidad operativa de
@@ -101,7 +101,7 @@ propio.
 servicio, bases separadas, un broker, orquestación, observabilidad distribuida,
 consistencia eventual en relaciones que hoy son FKs — y el beneficio
 (aislamiento de fallos, escalado independiente, despliegue por equipo) no aplica
-a una escuela con decenas de usuarios, un servidor y una sola persona
+a una institución con decenas de usuarios, un servidor y una sola persona
 desarrollando. Sería complejidad accidental sin un problema que la justifique.
 
 ### Monolito plano (sin límites de paquete)

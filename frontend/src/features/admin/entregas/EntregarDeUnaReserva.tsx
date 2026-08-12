@@ -78,7 +78,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
     return reservas.filter(
       (r) =>
         r.estado === "CONFIRMADA" &&
-        // Un bloqueo por evaluación no tiene docente: lo crea un Admin sobre
+        // Un bloqueo administrativo no tiene docente: lo crea un Admin sobre
         // equipos sueltos, y no hay nadie esperando para retirarlas. Si alguien
         // tiene que llevárselas para una mesa de examen, es una entrega
         // suelta con el nombre escrito a mano.
@@ -173,7 +173,12 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                       }}
                     />
                     {r.etiqueta}
-                    <span className="text-muted-foreground">({r.carroNombre})</span>
+                    {/* El carro solo desambigua: "PC 2" existe en cada uno.
+                        Un equipo suelto no tiene, y sin esta guarda el rótulo
+                        quedaba en "Proyector 1 ()" — ver RF-03.17. */}
+                    {r.carroNombre && (
+                      <span className="text-muted-foreground">({r.carroNombre})</span>
+                    )}
                   </label>
                 ))}
               </div>
