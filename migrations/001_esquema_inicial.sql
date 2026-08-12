@@ -438,6 +438,14 @@ CREATE TABLE reserva_grupo (
     -- llegó" es a qué hora fue.
     recordatorio_enviado_en  TIMESTAMPTZ,
 
+    -- Cuándo salió el aviso de "todavía no las retiraste" (RF-08.20), el que
+    -- avisa que pasados los minutos de gracia la reserva queda libre. Es una
+    -- columna aparte de la anterior y no un contador porque son dos avisos
+    -- con condiciones distintas: el recordatorio sale siempre, una hora
+    -- antes; este solo si a los quince minutos del inicio no salió ninguna
+    -- máquina de esta reserva.
+    aviso_sin_retirar_en     TIMESTAMPTZ,
+
     CHECK (hora_fin > hora_inicio)
 );
 
@@ -448,6 +456,12 @@ CREATE INDEX idx_reserva_grupo_regla      ON reserva_grupo (regla_recurrencia_id
 -- El barrido de recordatorios: las que todavía no se avisaron.
 CREATE INDEX idx_grupo_sin_recordar
     ON reserva_grupo (fecha, hora_inicio) WHERE recordatorio_enviado_en IS NULL AND estado = 'CONFIRMADA';
+
+-- Y el mismo patrón para el aviso de no retiro, por la misma razón: el
+-- barrido corre cada cinco minutos y no puede recorrer la tabla entera para
+-- descartar las que ya avisó.
+CREATE INDEX idx_grupo_sin_aviso_retiro
+    ON reserva_grupo (fecha, hora_inicio) WHERE aviso_sin_retirar_en IS NULL AND estado = 'CONFIRMADA';
 
 -- La ocupación de UN equipo en UNA franja. Es la unidad que protege la
 -- constraint de anti-solapamiento.
@@ -657,7 +671,8 @@ CREATE TABLE notificacion (
         'LICENCIA_POR_VENCER',
         'RESERVA_POR_COMENZAR',
         'RESERVA_NO_RETIRADA',
-        'EQUIPO_SIN_DEVOLVER'
+        'EQUIPO_SIN_DEVOLVER',
+        'PEDIDO_DE_LIBERACION'
     ))
 );
 

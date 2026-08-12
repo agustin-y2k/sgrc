@@ -112,6 +112,16 @@ type configPublicaResponse struct {
 	// el frontend no muestra el botón.
 	GoogleClientID string `json:"googleClientId"`
 
+	// RemitenteDeCorreo es la dirección desde la que salen los avisos.
+	// Vacía si este despliegue no manda correos.
+	//
+	// La publica el servidor porque es lo único que convierte "revisá spam"
+	// en algo accionable: lo que resuelve el problema de verdad es que la
+	// persona marque ese remitente como conocido una vez. Escribirla a mano
+	// en el frontend la dejaría desactualizada en la primera instalación
+	// que use otra casilla.
+	RemitenteDeCorreo string `json:"remitenteDeCorreo,omitempty"`
+
 	// false = no hay SMTP configurado, así que el sistema no puede mandar
 	// el código de recuperación a ningún lado y la pantalla de login no
 	// muestra el enlace "olvidé mi contraseña". Mismo criterio que el botón

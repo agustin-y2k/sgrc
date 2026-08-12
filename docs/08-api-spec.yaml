@@ -19,7 +19,7 @@ tags:
   - name: academic
     description: Ciclos lectivos, cursos, materias, asignaciones de docentes
   - name: inventory
-    description: Carros, PCs e incidencias
+    description: Carros, equipos, incidencias y licencias de software
   - name: reservations
     description: Reservas simples, recurrentes y bloqueos
   - name: notifications
@@ -41,7 +41,7 @@ components:
 
   # Paginación (internal/shared/paginacion). Solo la usan los tres listados
   # que crecen con el uso: reservas, notificaciones y usuarios. Los demás
-  # —ciclos, cursos, materias, carros, PCs— están acotados por el propio
+  # —ciclos, cursos, materias, carros, equipos— están acotados por el propio
   # dominio (los carga un Admin a mano) y se devuelven completos.
   parameters:
     page:
@@ -69,7 +69,8 @@ components:
       description: |
         Mensaje de error en texto plano. Ejemplos reales:
         "credenciales inválidas", "email ya registrado",
-        "uno o más equipos ya tienen una reserva en ese horario".
+        "no se pudo reservar: PC 7 ya está reservado el 13/03 de 10:00 a
+        12:00 (Ada Lovelace)".
 
     ResultadoCascada:
       type: object
@@ -208,7 +209,7 @@ components:
         id: { type: string, format: uuid }
         etiqueta: { type: string, example: "PC 27", description: "Cómo se lo nombra en pantallas y correos: 'PC {identificador}' si está en un carro, el nombre si no. La resuelve el servidor para que la misma cosa no se vea distinta según dónde se la mire (RF-03.17)" }
         tipo: { type: string, maxLength: 50, example: "PROYECTOR", description: "Texto libre. 'PC' en las computadoras de un carro" }
-        nombre: { type: string, maxLength: 100, nullable: true, example: "Proyector Epson", description: "Solo en equipos sueltos: es lo único que los distingue, y es único entre ellos sin distinguir mayúsculas. Ausente en las PCs de un carro" }
+        nombre: { type: string, maxLength: 100, nullable: true, example: "Proyector Epson", description: "Solo en equipos sueltos: es lo único que los distingue, y es único entre ellos sin distinguir mayúsculas. Ausente en las computadoras de un carro" }
         reservable: { type: boolean, description: "Si aparece en la lista de equipos libres al reservar (RF-03.16). Un proyector sí; un cargador no, se presta en el momento" }
         carroId: { type: string, format: uuid, nullable: true, description: "Ausente en un equipo suelto: un proyector no está en ningún carro" }
         identificador: { type: integer, nullable: true, description: "Único dentro del carro, no globalmente — puede repetirse en otro carro. Ausente en un equipo suelto", example: 27 }
@@ -222,17 +223,37 @@ components:
         dadoDeBaja: { type: boolean, description: "Soft delete: si es true, no aparece en listados activos ni puede reservarse" }
         fechaBaja: { type: string, format: date-time, nullable: true }
 
+    EquipoOcupado:
+      type: object
+      description: |
+        Un equipo que ya tiene dueño en la franja consultada (RF-04.11). Se muestra
+        para que el docente pueda ir a hablarle o mandarle un pedido, no para tildarlo.
+        Lo que se publica de la otra persona es su nombre — el mismo dato que ya trae el
+        calendario de cualquier equipo (RF-04.4)—, nunca su dirección de correo.
+      properties:
+        equipoId: { type: string, format: uuid }
+        etiqueta: { type: string, example: "PC 27" }
+        carroNombre: { type: string, nullable: true, description: "Ausente en un equipo suelto" }
+        reservaId: { type: string, format: uuid, nullable: true, description: "La Reserva que lo ocupa. Es lo que se le pasa al pedido de liberación. Ausente si lo ocupa un bloqueo administrativo" }
+        docenteNombre: { type: string, nullable: true, description: "Quién lo tiene. Ausente en un bloqueo administrativo, que no tiene docente detrás" }
+        materiaNombre: { type: string, nullable: true }
+        horaInicio: { type: string, example: "10:00", description: "De la reserva que lo ocupa, que puede no coincidir con la franja consultada" }
+        horaFin: { type: string, example: "12:00" }
+        motivo: { type: string, nullable: true, description: "Solo en un bloqueo administrativo: el texto que escribió el Admin (RF-04.7)" }
+        puedePedirse: { type: boolean, description: "false en un bloqueo administrativo, en una reserva propia, y si la franja de esa reserva ya empezó. Lo decide el servidor para que la pantalla no tenga que replicar la regla" }
+
     Licencia:
       type: object
       description: |
-        Licencia de software con vencimiento periódico, instalada en una PC
-        puntual (RF-03.11). Hay una por (PC, software): el mismo AutoCAD en las
-        ocho PCs de un carro son ocho licencias, cada una con su contador — el
-        caso a cubrir es que una quede sin renovar mientras las demás sí.
+        Licencia de software con vencimiento periódico, instalada en un equipo
+        puntual (RF-03.11). Hay una por (equipo, software): el mismo programa en
+        todas las máquinas de un carro son tantas licencias como máquinas, cada
+        una con su contador — el caso a cubrir es que una quede sin renovar
+        mientras las demás sí.
       properties:
         id: { type: string, format: uuid }
         equipoId: { type: string, format: uuid }
-        nombre: { type: string, maxLength: 100, example: "AutoCAD 2027", description: "Se guarda sin espacios al borde, respetando mayúsculas. Único por PC ignorando la caja." }
+        nombre: { type: string, maxLength: 100, example: "AutoCAD 2027", description: "Se guarda sin espacios al borde, respetando mayúsculas. Único por equipo, ignorando la caja." }
         diasDuracion: { type: integer, minimum: 1, maximum: 3650, description: "Cuánto dura una renovación. Es el paso del botón Renovar, no una propiedad inmutable: puede cambiar de 30 a 60." }
         diasAviso: { type: integer, minimum: 0, maximum: 365, default: 1, description: "Con cuánta antelación avisar. 0 = avisar recién el día que vence." }
         fechaVencimiento:
@@ -333,7 +354,7 @@ components:
             type: object
             properties:
               equipoId: { type: string, format: uuid }
-              razon: { type: string, enum: [YA_ENTREGADA, FUERA_DEL_INVENTARIO, RESERVA_CANCELADA, SIN_DESTINATARIO], description: "SIN_DESTINATARIO: la reserva no tiene docente (bloqueo por evaluación). Se resuelve mandando retiradoPor, que en ese caso pasa a ser el responsable: no hay docente a quien anteponerle." }
+              razon: { type: string, enum: [YA_ENTREGADA, FUERA_DEL_INVENTARIO, RESERVA_CANCELADA, SIN_DESTINATARIO], description: "SIN_DESTINATARIO: la reserva es un bloqueo administrativo y no tiene docente. Se resuelve mandando retiradoPor, que en ese caso pasa a ser el responsable: no hay docente a quien anteponerle." }
               detalle: { type: string }
         avisos:
           type: array
@@ -372,7 +393,7 @@ components:
       type: object
       required: [equipoIds, materiaId, fecha, horaInicio, horaFin]
       properties:
-        equipoIds: { type: array, items: { type: string, format: uuid }, minItems: 1, description: "Una o varias PCs elegidas de la lista de disponibles" }
+        equipoIds: { type: array, items: { type: string, format: uuid }, minItems: 1, description: "Uno o varios equipos elegidos de la lista de disponibles" }
         materiaId: { type: string, format: uuid }
         fecha: { type: string, format: date }
         horaInicio: { type: string, pattern: '^\d{2}:\d{2}$', example: "10:00" }
@@ -392,7 +413,7 @@ components:
 
     ReservaGrupo:
       type: object
-      description: "La reserva tal como la ve el docente — una materia, fecha y horario, con una o varias PCs."
+      description: "La reserva tal como la ve el docente — una materia, fecha y horario, con uno o varios equipos."
       properties:
         id: { type: string, format: uuid }
         materiaId: { type: string, format: uuid }
@@ -407,11 +428,11 @@ components:
         esRecurrente: { type: boolean }
         reglaRecurrenciaId: { type: string, format: uuid, nullable: true }
         creadaEn: { type: string, format: date-time }
-        reservas: { type: array, items: { $ref: '#/components/schemas/Reserva' }, description: "Detalle por PC" }
+        reservas: { type: array, items: { $ref: '#/components/schemas/Reserva' }, description: "Detalle por equipo" }
 
     Reserva:
       type: object
-      description: "Una PC puntual dentro de un ReservaGrupo (o una fila BLOQUEO suelta, sin grupo)."
+      description: "La ocupación de UN equipo en UNA franja, dentro de un ReservaGrupo (o una fila BLOQUEO suelta, sin grupo)."
       properties:
         id: { type: string, format: uuid }
         reservaGrupoId: { type: string, format: uuid, nullable: true, description: "NULL solo para tipo BLOQUEO" }
@@ -461,17 +482,22 @@ components:
         id: { type: string, format: uuid }
         mensaje: { type: string }
         estado: { type: string, enum: [NO_LEIDA, LEIDA] }
-        reservaId: { type: string, format: uuid, nullable: true, description: "Apunta a la PC puntual (Reserva), no al grupo" }
+        reservaId: { type: string, format: uuid, nullable: true, description: "Apunta a la Reserva puntual, no al grupo" }
         creadaEn: { type: string, format: date-time }
         tipo:
           type: string
-          enum: [GENERAL, DOCENTE_PENDIENTE, RESERVA_CANCELADA]
+          enum: [GENERAL, DOCENTE_PENDIENTE, RESERVA_CANCELADA, LICENCIA_POR_VENCER, RESERVA_POR_COMENZAR, RESERVA_NO_RETIRADA, EQUIPO_SIN_DEVOLVER, PEDIDO_DE_LIBERACION]
           description: |
             De qué se trata el aviso, para que la interfaz pueda ofrecer la
             acción que corresponde sin interpretar el texto del mensaje. Un
             aviso de cancelación agrupa TODO lo que se le canceló a esa
-            persona en una misma operación: bloquear tres PCs de una clase
+            persona en una misma operación: bloquear tres equipos de una clase
             genera una notificación con las tres, no tres avisos.
+
+            PEDIDO_DE_LIBERACION es el único de esta lista que **no anuncia un
+            cambio**: la reserva del destinatario sigue intacta y la decisión es
+            suya (RF-04.12). La pantalla no puede ofrecerle el mismo botón que a
+            un aviso de cancelación.
 
     # ── Availability ──
     BloqueHorarioAdmin:
@@ -884,9 +910,9 @@ paths:
     get:
       summary: Estado del servicio
       description: |
-        Verifica que el proceso pueda llegar a Postgres, no solo que esté vivo:
-        antes respondía 200 con la base caída, así que el HEALTHCHECK del
-        contenedor daba por sano a un proceso que no podía atender ni un login.
+        Verifica que el proceso pueda llegar a Postgres, no solo que esté vivo.
+        Un health que responde 200 con la base caída da por sano a un proceso
+        que no puede atender ni un login.
 
         Sin autenticación: lo consume el HEALTHCHECK del contenedor (el propio
         binario, con `sgrc-app healthcheck` — ver cmd/healthcheck.go).
@@ -1487,18 +1513,17 @@ paths:
         mejor ver de más que de menos — ver de menos se confunde con "no hay
         ninguno".
 
-        Lo ve cualquier autenticado por el mismo motivo que los carros y las
-        PCs (RF-03.7): un docente necesita saber que existe un proyector antes
-        de pedirlo.
+        Lo ve cualquier autenticado por el mismo motivo que los carros y sus
+        equipos (RF-03.7): un docente necesita saber que existe un proyector
+        antes de pedirlo.
 
         Los equipos sueltos comparten entidad —y esquema de respuesta— con las
-        PCs de carro, y eso es deliberado: "qué hay afuera del laboratorio"
-        (RF-08) tiene que ser una sola lista. Ver el encabezado de la
-        esta tabla compartida.
+        computadoras de carro, y eso es deliberado: "qué hay afuera del
+        laboratorio" (RF-08) tiene que ser una sola lista.
 
-        Reemplaza a `/equipos/sueltos`. La condición estaba en el path, y eso
-        obliga a registrar el segmento literal antes que `/{id}` o el
-        parámetro se lo traga; es una trampa que compila, arranca y falla en
+        La condición va en la query y no en el path: un segmento literal como
+        `/equipos/sueltos` obliga a registrarlo antes que `/{id}` o el
+        parámetro se lo traga, y es una trampa que compila, arranca y falla en
         tiempo de ejecución.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -1571,14 +1596,14 @@ paths:
             schema:
               type: object
               properties:
-                carroId: { type: string, format: uuid, description: "Mueve la PC a otro carro (RF-03.10). El identificador debe seguir siendo único en el carro destino." }
+                carroId: { type: string, format: uuid, description: "Mueve el equipo a otro carro (RF-03.10). El identificador debe seguir siendo único en el carro destino." }
                 freezado: { type: boolean }
                 cpu: { type: string }
                 ram: { type: string }
                 sistemaOperativo: { type: string }
                 softwareInstalado: { type: string }
                 tipo: { type: string, maxLength: 50, description: "RF-03.15" }
-                nombre: { type: string, maxLength: 100, description: "RF-03.15. En un equipo suelto no puede quedar vacío: es lo único que lo distingue. En una PC de carro sí, porque ahí no cumple ninguna función" }
+                nombre: { type: string, maxLength: 100, description: "RF-03.15. En un equipo suelto no puede quedar vacío: es lo único que lo distingue. En una computadora de carro sí, porque ahí no cumple ninguna función" }
                 reservable: { type: boolean, description: "RF-03.16" }
       responses:
         "200": { description: PC actualizada }
@@ -1752,6 +1777,14 @@ paths:
         Es de quien tenga la reserva, o de un Admin. Solo se puede cambiar
         una reserva CONFIRMADA: una cancelada, finalizada o liberada por no
         retiro ya no reserva nada.
+
+        Si la reserva pertenece a una serie recurrente, `alcance` decide hasta
+        dónde llega el cambio — la misma pregunta que hace la cancelación
+        (RF-04.6). Con ESTA_Y_SIGUIENTES se validan **todas** las ocurrencias
+        que faltan antes de tocar ninguna: si el equipo nuevo choca en alguna
+        fecha no se cambia nada y el 409 dice en cuál. Cambiar catorce martes y
+        fallar en el decimoquinto dejaría la serie repartida entre dos máquinas
+        sin que nadie lo pidiera.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -1767,16 +1800,27 @@ paths:
               required: [equipoId]
               properties:
                 equipoId: { type: string, format: uuid, description: "La máquina nueva. Tiene que estar DISPONIBLE y libre en esa franja." }
+                alcance:
+                  type: string
+                  enum: [SOLO_ESTA, ESTA_Y_SIGUIENTES]
+                  default: SOLO_ESTA
+                  description: |
+                    Solo tiene efecto si la reserva pertenece a una serie recurrente; en una
+                    reserva suelta, ESTA_Y_SIGUIENTES no cambia nada respecto de SOLO_ESTA.
+                    El alcance llega hasta el final de la serie y nunca toca ocurrencias
+                    pasadas: lo que ya se dio no se reescribe.
       responses:
         "200":
-          description: Reserva actualizada
+          description: |
+            Reserva actualizada. Con ESTA_Y_SIGUIENTES devuelve la ocurrencia sobre la
+            que se pidió el cambio; las demás se cambiaron en la misma transacción.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Reserva' }
-        "400": { description: Falta la PC nueva }
+        "400": { description: Falta la PC nueva, o el alcance no es uno de los dos valores }
         "403": { description: La reserva es de otra persona y quien pide no es Admin }
         "404": { description: La reserva no existe }
-        "409": { description: La reserva ya no está vigente, o la PC nueva no está disponible o ya tiene reserva en esa franja }
+        "409": { description: "La reserva ya no está vigente, o la PC nueva no está disponible o ya tiene reserva en esa franja. Con ESTA_Y_SIGUIENTES el mensaje nombra la fecha del choque y no se cambia ninguna ocurrencia" }
 
   /api/reservation/prestamos:
     get:
@@ -1840,7 +1884,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ResultadoEntrega' }
-        "400": { description: Sin PCs o sin nombre }
+        "400": { description: Sin equipos o sin nombre }
 
   /api/reservation/prestamos/por-reserva:
     post:
@@ -2042,8 +2086,8 @@ paths:
                   equiposQueYaLaTenian:
                     type: array
                     items: { type: string, format: uuid }
-                    description: "No es un error: marcar las diez PCs del carro cuando ocho ya estaban cargadas tiene que funcionar."
-        "400": { description: Sin PCs, nombre o días inválidos, o vencimiento declarado de más de una forma }
+                    description: "No es un error: marcar todo un carro cuando algunas ya estaban cargadas tiene que funcionar."
+        "400": { description: Sin equipos, nombre o días inválidos, o vencimiento declarado de más de una forma }
 
   /api/inventory/licencias/renovar:
     post:
@@ -2178,13 +2222,23 @@ paths:
   /api/reservation/equipos-disponibles:
     get:
       tags: [reservations]
-      summary: Listar equipos disponibles para tildar en un horario dado
+      summary: Qué se puede tildar y qué está tomado en un horario dado
       description: |
-        Devuelve PCs de todos los carros por defecto — un docente puede combinar PCs
-        de carros distintos en la misma reserva (no hay restricción de "un solo carro
-        por ReservaGrupo"). El filtro carroId es opcional, para cuando el usuario
-        quiere ver solo las PCs de un carro puntual. Excluye PCs con dado_de_baja=true
-        o estado != DISPONIBLE.
+        Devuelve equipos de todos los carros por defecto — un docente puede combinar
+        equipos de carros distintos en la misma reserva (no hay restricción de "un solo
+        carro por ReservaGrupo"), más los equipos sueltos marcados como reservables.
+        El filtro carroId es opcional, para ver solo los de un carro puntual. Excluye
+        los dados de baja, los que no están DISPONIBLE y los no reservables.
+
+        Responde las dos mitades de la franja (RF-04.11): `data` son los libres, para
+        tildar, y `ocupados` los que ya tiene alguien, con quién los tiene. Los ocupados
+        no son un extra: sin ellos, "no hay nada libre" y "los tiene alguien con quien
+        puedo hablar" se ven igual en pantalla, y solo la segunda tiene salida. No
+        cuestan una consulta más — saber qué está libre ya exige leer las reservas y
+        bloqueos que pisan la franja.
+
+        Los equipos que no están DISPONIBLE, los no reservables y los dados de baja no
+        aparecen en ninguna de las dos listas: no los tiene nadie a quien pedírselos.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: query
@@ -2202,6 +2256,15 @@ paths:
         - in: query
           name: carroId
           schema: { type: string, format: uuid, description: "Opcional — filtra a un solo carro si se especifica" }
+        - in: query
+          name: serieDesdeGrupoId
+          schema: { type: string, format: uuid }
+          description: |
+            Opcional, para cambiar la máquina de una serie completa (RF-08.14). Con este
+            parámetro, `data` son los equipos libres en **todas** las fechas que le quedan
+            a la serie de ese grupo, no solo en la franja consultada. Ofrecer los libres de
+            hoy y rechazar el cambio después, cuando choca en la tercera fecha, es hacerle
+            adivinar al docente. Los `ocupados` siguen siendo los de la franja consultada.
       responses:
         "200":
           content:
@@ -2209,7 +2272,54 @@ paths:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/Equipo' } }
+                  data: { type: array, items: { $ref: '#/components/schemas/Equipo' }, description: "Libres en esa franja: son los que se pueden tildar" }
+                  ocupados: { type: array, items: { $ref: '#/components/schemas/EquipoOcupado' }, description: "Tomados en esa franja, con quién los tiene. No se tildan" }
+
+  /api/reservation/reservas/{id}/pedido-de-liberacion:
+    post:
+      tags: [reservation]
+      summary: Pedirle a quien tiene la reserva que libere ese equipo (RF-04.12)
+      description: |
+        Le manda al dueño de la reserva un aviso interno con copia por correo: quién
+        pide, para qué materia, qué equipo, de qué franja y un texto libre opcional.
+
+        **No cambia ninguna reserva.** Es un mensaje, no una operación sobre los datos:
+        nada queda tomado a la espera de respuesta y quien pide no gana prioridad si el
+        equipo se libera. Si el dueño accede, libera con lo que ya existe — cambia el
+        equipo por otro libre (PATCH /reservas/{id}/equipo) o cancela esa reserva.
+
+        No hay aceptar ni rechazar. Un pedido con estado obliga a resolver qué pasa si
+        el dueño acepta y otro ya tomó el equipo, cuándo caduca sin respuesta y qué se
+        ve mientras tanto: mucha maquinaria para intermediar un acuerdo que se cierra
+        hablando. Lo que el sistema garantiza es lo único que el pasillo no puede — que
+        el pedido llegue.
+
+        El correo del dueño no se expone: el envío lo hace el servidor.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+          description: "La Reserva (equipo puntual) que se pide, no el grupo"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mensaje: { type: string, maxLength: 500, description: "Opcional. Para qué lo necesita, en palabras del que pide. Viaja tal cual al aviso y al correo" }
+      responses:
+        "202":
+          description: |
+            Pedido enviado. Es 202 y no 201 porque no se crea ningún recurso que el
+            cliente pueda después consultar o borrar: lo único que queda es la
+            notificación del otro lado.
+        "400": { description: El mensaje excede el máximo }
+        "403": { description: La reserva es propia — no hay a quién pedirle }
+        "404": { description: La reserva no existe }
+        "409": { description: "Ya se pidió por esa reserva hoy; o la reserva no está CONFIRMADA; o su franja ya empezó; o es un bloqueo administrativo, que no tiene docente a quien pedirle" }
 
   /api/reservation/reservas:
     get:
@@ -2272,10 +2382,10 @@ paths:
           description: |
             Una o más PCs elegidas tienen solapamiento — no se crea ninguna.
 
-            El cuerpo es el mensaje en texto plano, sin el detalle de cuáles
-            chocaron: el backend usa el ErrorHandler por defecto de Fiber (ver
-            ErrorResponse). La pantalla vuelve a pedir la lista de libres, que
-            para entonces ya no las incluye.
+            El cuerpo es texto plano (el backend usa el ErrorHandler por
+            defecto de Fiber, ver ErrorResponse), pero nombra el choque: qué
+            equipo, qué día, qué franja y con quién. Con muchos conflictos se
+            listan los primeros y el resto se resume en "y N más".
           content:
             text/plain:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -2397,13 +2507,12 @@ paths:
         Un Admin toma los equipos para otra cosa, por el motivo que sea.
 
         Cancela solo las Reserva puntuales en conflicto dentro del rango exacto — el
-        resto de una recurrencia u otras PCs del mismo grupo siguen vigentes. Los
+        resto de una recurrencia u otros equipos del mismo grupo siguen vigentes. Los
         grupos afectados pasan a PARCIALMENTE_CANCELADA o CANCELADA según corresponda.
 
-        En versiones anteriores esta operación se llamaba "bloqueo por evaluación
-        estatal" y vivía en `/bloqueos-evaluacion`. Era un caso concreto usado como
-        categoría, y el nombre viejo aparecía hasta en el aviso que recibía el
-        docente al que le cancelaban la clase.
+        El motivo es texto libre y obligatorio: el sistema no puede prever por qué
+        una institución se toma el laboratorio, y ese texto es el que lee el docente
+        al que le cancelaron la clase.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -2417,8 +2526,8 @@ paths:
               schema:
                 type: object
                 properties:
-                  bloqueoIds: { type: array, items: { type: string, format: uuid } }
-                  reservasCanceladas: { type: integer, description: "PCs puntuales canceladas, no grupos completos" }
+                  bloqueos: { type: array, items: { $ref: '#/components/schemas/Reserva' } }
+                  reservasCanceladas: { type: integer, description: "Reservas puntuales canceladas, no grupos completos" }
                   docentesNotificados: { type: integer }
         "400":
           description: |
@@ -2471,19 +2580,20 @@ paths:
     get:
       tags: [reports]
       summary: Reporte de uso por equipo (Admin)
+      description: |
+        `desde` y `hasta` son opcionales e independientes (RF-06.1): omitir los
+        dos devuelve el ciclo entero. Los bloqueos administrativos cuentan como
+        uso —ocupan el equipo igual— y se atan al ciclo por el año de la fecha,
+        porque no tienen materia. Lo que NO cuenta es `NO_RETIRADA`: una clase
+        que nadie fue a buscar no es una clase dada (RF-08.10).
       security: [{ bearerAuth: [] }]
       parameters:
         - in: query
           name: desde
-          required: true
           schema: { type: string, format: date }
         - in: query
           name: hasta
-          required: true
           schema: { type: string, format: date }
-        - in: query
-          name: carroId
-          schema: { type: string, format: uuid }
       responses:
         "200":
           content:
@@ -2507,12 +2617,19 @@ paths:
     get:
       tags: [reports]
       summary: Reporte de uso por docente (Admin)
+      description: |
+        Mismo rango opcional que uso-equipos, y mismo criterio de estados.
+
+        `cantidadReservas` cuenta filas `reserva`, o sea equipos-hora: un
+        docente que reservó ocho equipos para una clase suma ocho, no una.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: query
-          name: anioMes
-          required: true
-          schema: { type: string, example: "2025-08" }
+          name: desde
+          schema: { type: string, format: date }
+        - in: query
+          name: hasta
+          schema: { type: string, format: date }
       responses:
         "200":
           content:
@@ -2525,10 +2642,17 @@ paths:
                     items:
                       type: object
                       properties:
-                        usuarioId: { type: string, format: uuid }
+                        usuarioId:
+                          type: string
+                          format: uuid
+                          description: |
+                            Ausente si la cuenta se eliminó definitivamente
+                            (RF-01.9). Sus horas siguen contando y el nombre
+                            sobrevive congelado en la reserva; lo que no hay es
+                            cuenta a la que apuntar. No sirve como clave única.
                         nombreDocente: { type: string }
                         cantidadReservas: { type: integer }
-                        minutosTotales: { type: integer }
+                        minutosReservados: { type: integer }
 
   /api/reporting/historico/{anio}/uso-equipos:
     get:

@@ -20,8 +20,8 @@ func recordatorioDePrueba() eventbus.RecordatorioDeReserva {
 }
 
 func TestListaDeEquipos(t *testing.T) {
-	// "PC 1, PC 2, PC 3" se lee como una tabla; esto es una frase. Y desde
-	// la 015 lo que se reserva puede no ser una PC: la lista mezcla.
+	// "PC 1, PC 2, PC 3" se lee como una tabla; esto es una frase. Y lo que
+	// se reserva puede no ser una computadora: la lista mezcla.
 	casos := map[string][]string{
 		"":                       {},
 		"PC 1":                   {"PC 1"},
@@ -84,45 +84,53 @@ func TestCorreo_Recordatorio_SinEmailNoMandaNada(t *testing.T) {
 	}
 }
 
-// TestCorreo_ReservaLiberada_DiceQueTodaviaLasPuedeUsar es la línea que
-// evita que el docente que llegó tarde asuma que ya no puede usarlas y se
-// vaya: liberar no es prohibir.
-func TestCorreo_ReservaLiberada_DiceQueTodaviaLasPuedeUsar(t *testing.T) {
+// TestCorreo_ReservaSinRetirar_OfreceLasSalidasQueQuedan: el aviso sale
+// mientras todavía se puede hacer algo, así que tiene que decir qué. Un correo
+// que solo constata no le sirve a nadie.
+func TestCorreo_ReservaSinRetirar_OfreceLasSalidasQueQuedan(t *testing.T) {
 	bus, enviador := mensajeroDePrueba()
 
-	bus.Publish(eventbus.Evento{Tipo: "reserva.no-retirada", Payload: eventbus.ReservasLiberadas{
+	bus.Publish(eventbus.Evento{Tipo: "reserva.sin-retirar", Payload: eventbus.ReservaSinRetirar{
 		UsuarioID: "docente1", Email: "ada@escuela.edu.ar", Nombre: "Ada",
 		MateriaNombre: "Matemáticas", HoraInicio: 8 * time.Hour,
-		Equipos: []string{"PC 1", "PC 2"}, TodaLaReserva: true, MinutosDeGracia: 40,
+		Equipos: []string{"PC 1", "PC 2"}, MinutosDeGracia: 40,
 	}})
 
 	if len(enviador.enviados) != 1 {
 		t.Fatalf("esperaba 1 mail, hubo %d", len(enviador.enviados))
 	}
 	cuerpo := enviador.enviados[0].cuerpo
-	if !strings.Contains(cuerpo, "no quiere decir que no las puedas usar") {
+	// El plazo es el dato accionable: dice cuánto tiempo le queda.
+	if !strings.Contains(cuerpo, "40") {
+		t.Errorf("tiene que decir a los cuántos minutos quedan libres:\n%s", cuerpo)
+	}
+	// Liberar no es prohibir: sin esta línea, el docente que llega tarde
+	// asume que ya no puede usarlas y se va.
+	if !strings.Contains(cuerpo, "te las entrega igual") {
 		t.Errorf("falta la aclaración de que liberar no es prohibir:\n%s", cuerpo)
 	}
-	if !strings.Contains(cuerpo, "40") {
-		t.Errorf("tiene que decir por qué se liberó:\n%s", cuerpo)
+	if !strings.Contains(cuerpo, "PC 1 y PC 2") {
+		t.Errorf("tiene que nombrar las máquinas:\n%s", cuerpo)
 	}
 }
 
-func TestMensajeDeReservasLiberadas_DistingueTodaLaReservaDeAlgunas(t *testing.T) {
-	base := eventbus.ReservasLiberadas{
+// El aviso NO puede estar escrito como si ya hubiera pasado: sale a los quince
+// minutos justamente para que el docente todavía pueda ir, cambiar una máquina
+// o cancelar.
+func TestMensajeDeReservaSinRetirar_HablaEnFuturo(t *testing.T) {
+	mensaje := mensajeDeReservaSinRetirar(eventbus.ReservaSinRetirar{
 		MateriaNombre: "Matemáticas", HoraInicio: 8 * time.Hour,
 		Equipos: []string{"PC 1", "PC 2"}, MinutosDeGracia: 40,
-	}
+	})
 
-	base.TodaLaReserva = true
-	if !strings.Contains(mensajeDeReservasLiberadas(base), "Tu reserva de las 08:00") {
-		t.Errorf("con toda la reserva: %q", mensajeDeReservasLiberadas(base))
+	if !strings.Contains(mensaje, "Todavía no retiraste") {
+		t.Errorf("el aviso avisa, no constata: %q", mensaje)
 	}
-
-	base.TodaLaReserva = false
-	completo := mensajeDeReservasLiberadas(base)
-	if !strings.Contains(completo, "PC 1 y PC 2") {
-		t.Errorf("con algunas tiene que nombrarlas: %q", completo)
+	if strings.Contains(mensaje, "quedó libre") || strings.Contains(mensaje, "quedaron libres") {
+		t.Errorf("todavía no se liberó nada: %q", mensaje)
+	}
+	if !strings.Contains(mensaje, "PC 1 y PC 2") {
+		t.Errorf("tiene que nombrar las máquinas: %q", mensaje)
 	}
 }
 

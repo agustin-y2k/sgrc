@@ -6,6 +6,7 @@ import type {
   CrearReservaRequest,
   MateriaReservable,
   EquipoDisponible,
+  EquipoOcupado,
   Prestamo,
   Reserva,
   ReservaDetallada,
@@ -24,12 +25,38 @@ export function misMaterias() {
   return apiFetch<RespuestaLista<MateriaReservable>>("/api/academic/mis-materias")
 }
 
-/** RF-04.2 — los equipos libres en esa franja, de cualquier carro. */
-export function equiposDisponibles(fecha: string, horaInicio: string, horaFin: string) {
+/**
+ * RF-04.2 y RF-04.11 — las dos mitades de la franja: los equipos libres para
+ * tildar y los que ya tiene alguien, con quién los tiene.
+ *
+ * Con `serieDesdeGrupoId`, los libres son los que están libres en TODAS las
+ * fechas que le quedan a esa serie (RF-08.14): es lo que evita ofrecer una
+ * máquina que después va a chocar en la tercera fecha.
+ */
+export function equiposDisponibles(
+  fecha: string,
+  horaInicio: string,
+  horaFin: string,
+  serieDesdeGrupoId?: string
+) {
   const params = new URLSearchParams({ fecha, horaInicio, horaFin })
-  return apiFetch<RespuestaLista<EquipoDisponible>>(
+  if (serieDesdeGrupoId) params.set("serieDesdeGrupoId", serieDesdeGrupoId)
+  return apiFetch<RespuestaLista<EquipoDisponible> & { ocupados?: EquipoOcupado[] }>(
     `/api/reservation/equipos-disponibles?${params}`
   )
+}
+
+/**
+ * RF-04.12 — pedirle al docente que tiene esa reserva que libere el equipo.
+ *
+ * No cambia ninguna reserva: manda un aviso y un correo. El acuerdo lo
+ * cierran ellos.
+ */
+export function pedirLiberacion(reservaId: string, mensaje: string) {
+  return apiFetch<void>(`/api/reservation/reservas/${reservaId}/pedido-de-liberacion`, {
+    method: "POST",
+    body: { mensaje },
+  })
 }
 
 /**
@@ -182,10 +209,18 @@ export function recibirEquipos(req: { prestamoIds: string[]; observaciones?: str
  * y deja la misma clase mostrada como dos tarjetas separadas.
  *
  * Es de quien tenga la reserva, o de un Admin.
+ *
+ * `soloEsta` es la misma pregunta que al cancelar una ocurrencia (RF-04.6):
+ * con false, el cambio alcanza a todas las fechas que le quedan a la serie.
+ * Se manda siempre explícito para no depender del default del servidor.
  */
-export function cambiarEquipoDeReserva(reservaId: string, equipoId: string) {
+export function cambiarEquipoDeReserva(
+  reservaId: string,
+  equipoId: string,
+  soloEsta = true
+) {
   return apiFetch<Reserva>(`/api/reservation/reservas/${reservaId}/equipo`, {
     method: "PATCH",
-    body: { equipoId },
+    body: { equipoId, soloEsta },
   })
 }

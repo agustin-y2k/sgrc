@@ -1,6 +1,6 @@
 // Package application orquesta los casos de uso de RF-04 (reservas). Esta
 // primera parte cubre la reserva simple (RF-04.1) y la cancelación
-// individual (RF-04.4) — recurrencia, bloqueo por evaluación y el job de
+// individual (RF-04.4) — recurrencia, bloqueo administrativo y el job de
 // vencimiento se agregan en pasos siguientes dentro de la misma capa.
 package application
 
@@ -55,8 +55,8 @@ type destinatario struct {
 // publicarCancelaciones emite los eventos acumulados durante una
 // transacción — se llama SIEMPRE después del commit (RF-05.1/05.2/05.3 son,
 // de punta a punta, el mismo evento con distinto motivo según de dónde vino
-// la cascada: cancelación manual, bloqueo por evaluación, cambio de estado
-// de PC). Una reserva sin docente asociado (un bloqueo de evaluación
+// la cascada: cancelación manual, bloqueo administrativo, cambio de estado
+// de PC). Una reserva sin docente asociado (un bloqueo administrativo
 // cancelado, caso raro) no tiene a quién notificar y se saltea.
 //
 // Emite UN evento por docente y motivo, no uno por Reserva. Bloquear tres
@@ -149,7 +149,7 @@ func (s *Service) etiquetasDeLosEquipos(ctx context.Context, grupos map[destinat
 }
 
 // MaxEquiposPorOperacion es el tope de equipos que puede llevar un solo
-// pedido —reservar, reservar en serie, bloquear para evaluación, entregar—.
+// pedido —reservar, reservar en serie, bloquear equipos, entregar—.
 //
 // El valor no sale de ninguna regla del dominio: sale de que tiene que estar
 // muy por encima de cualquier inventario escolar razonable y aun así ser
@@ -195,7 +195,7 @@ func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string,
 		return nil, nil, err
 	}
 
-	if err := s.verificarSinSolapamiento(ctx, equipoIDs, fecha, horaInicio, horaFin); err != nil {
+	if err := s.verificarSinSolapamiento(ctx, equipoIDs, []time.Time{fecha}, horaInicio, horaFin); err != nil {
 		return nil, nil, err
 	}
 
@@ -252,10 +252,10 @@ func (s *Service) verificarPuedeReservar(ctx context.Context, materiaID, usuario
 // verificarEquiposReservables valida de una sola vez que todo lo pedido se
 // pueda reservar, y nombra lo que no.
 //
-// Antes era un bucle con una consulta por equipo. Con un puñado de máquinas
-// daba igual; con un bloqueo por evaluación sobre un carro entero son tantas
-// idas a la base como equipos tenga ese carro, antes de escribir una sola
-// fila — y eso lo dispara el uso normal, no un abuso.
+// Va en una sola consulta y no en un bucle: con un bloqueo administrativo
+// sobre un carro entero, preguntar de a uno son tantas idas a la base como
+// equipos tenga ese carro, todas antes de escribir una sola fila. Y eso lo
+// dispara el uso normal, no un abuso.
 func (s *Service) verificarEquiposReservables(ctx context.Context, equipoIDs []string) error {
 	noReservables, err := s.validadorEquipo.EquiposNoReservables(ctx, equipoIDs)
 	if err != nil {
@@ -321,25 +321,23 @@ func (s *Service) materializarGrupo(ctx context.Context, repo Repo, materiaID st
 // error que esperar la constraint EXCLUDE de la base) — no reemplaza esa
 // constraint, que sigue siendo la garantía real ante condiciones de
 // carrera entre dos pedidos simultáneos.
-func (s *Service) verificarSinSolapamiento(ctx context.Context, equipoIDs []string, fecha time.Time, horaInicio, horaFin time.Duration) error {
-	for _, equipoID := range equipoIDs {
-		futuras, err := s.repo.ListarReservasFuturasDeEquipo(ctx, equipoID, fecha)
-		if err != nil {
-			return fmt.Errorf("verificando solapamiento: %w", err)
-		}
-		for _, f := range futuras {
-			if f.Estado != domain.ReservaConfirmada {
-				continue
-			}
-			if !mismaFecha(f.Fecha, fecha) {
-				continue
-			}
-			if f.SolapaCon(horaInicio, horaFin) {
-				return ErrSolapamiento
-			}
-		}
+//
+// Recibe TODAS las fechas del pedido, no una: una serie recurrente comparte
+// horario y equipos con todas sus ocurrencias, así que el choque se busca de
+// una sola vez en vez de una consulta por equipo y por fecha.
+//
+// El error que devuelve nombra qué chocó. Quien tildó ocho equipos necesita
+// saber cuál destildar, y el dato lo trajo la misma consulta que detectó el
+// problema.
+func (s *Service) verificarSinSolapamiento(ctx context.Context, equipoIDs []string, fechas []time.Time, horaInicio, horaFin time.Duration) error {
+	conflictos, err := s.repo.BuscarSolapamientos(ctx, equipoIDs, fechas, horaInicio, horaFin)
+	if err != nil {
+		return fmt.Errorf("verificando solapamiento: %w", err)
 	}
-	return nil
+	if len(conflictos) == 0 {
+		return nil
+	}
+	return &ErrorDeSolapamiento{Conflictos: conflictos}
 }
 
 func mismaFecha(a, b time.Time) bool {
@@ -441,7 +439,7 @@ func (s *Service) actualizarEstadoGrupo(ctx context.Context, repo Repo, grupoID 
 	// repo, NO s.repo: esta función corre SIEMPRE dentro de la transacción
 	// que abrió quien la llama. Escribir por s.repo usaba otra conexión del
 	// pool, así que el estado del grupo se commiteaba solo — un rollback
-	// posterior (ej. el INSERT del bloqueo de evaluación choca contra la
+	// posterior (ej. el INSERT del bloqueo administrativo choca contra la
 	// constraint EXCLUDE en la PC 3 de 5) devolvía las Reserva a CONFIRMADA
 	// y dejaba sus ReservaGrupo marcados CANCELADA para siempre.
 	return repo.GuardarReservaGrupo(ctx, grupo)
@@ -477,6 +475,99 @@ func (s *Service) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Tim
 		return nil, domain.ErrRangoHorarioInvalido
 	}
 	return s.repo.ListarEquiposDisponiblesEn(ctx, fecha, horaInicio, horaFin)
+}
+
+// ListarEquiposOcupadosEn devuelve la otra mitad de la franja (RF-04.11): lo
+// que ya tiene alguien, con quién lo tiene, para que "no hay nada libre" y
+// "los tiene alguien con quien puedo hablar" dejen de verse igual.
+//
+// PuedePedirse lo decide acá y no la pantalla: son tres condiciones —que no
+// sea un bloqueo, que no sea propia y que la franja no haya empezado— y
+// replicarlas del otro lado garantiza que en algún momento las dos versiones
+// dejen de coincidir.
+func (s *Service) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, quien string) ([]EquipoOcupado, error) {
+	if horaFin <= horaInicio {
+		return nil, domain.ErrRangoHorarioInvalido
+	}
+	ocupados, err := s.repo.ListarEquiposOcupadosEn(ctx, fecha, horaInicio, horaFin)
+	if err != nil {
+		return nil, err
+	}
+
+	ahora := s.ahora()
+	for i := range ocupados {
+		oc := &ocupados[i]
+		oc.PuedePedirse = !oc.EsBloqueo &&
+			oc.DocenteID != nil && *oc.DocenteID != quien &&
+			!domain.YaEmpezo(fecha, oc.HoraInicio, ahora)
+	}
+	return ocupados, nil
+}
+
+// ListarEquiposLibresEnLaSerie: los equipos libres en todas las fechas que le
+// quedan a la serie, para cambiar la máquina de una recurrencia entera
+// (RF-08.14).
+func (s *Service) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID string) ([]EquipoDisponible, error) {
+	return s.repo.ListarEquiposLibresEnLaSerie(ctx, grupoID)
+}
+
+// PedirLiberacionDeReserva le avisa al dueño de una reserva que otro docente
+// necesita ese equipo (RF-04.12).
+//
+// **No toca ninguna reserva.** Lo único que hace es publicar el evento que
+// después se convierte en una notificación y un correo. No hay estado que
+// mantener, ni aceptación, ni caducidad: el acuerdo se cierra hablando, y lo
+// único que el pasillo no garantiza —que el pedido llegue— es lo que hace el
+// sistema.
+func (s *Service) PedirLiberacionDeReserva(ctx context.Context, reservaID, solicitanteID, mensaje string) error {
+	pedido, err := s.repo.DatosParaPedirLiberacion(ctx, reservaID)
+	if err != nil {
+		return err
+	}
+
+	if pedido.Estado != domain.ReservaConfirmada {
+		return ErrReservaNoModificable
+	}
+	if pedido.EsBloqueo || pedido.DuenoID == nil {
+		return ErrReservaSinDueño
+	}
+	if *pedido.DuenoID == solicitanteID {
+		return ErrReservaPropia
+	}
+	if domain.YaEmpezo(pedido.Fecha, pedido.HoraInicio, s.ahora()) {
+		return ErrReservaYaEmpezada
+	}
+
+	yaPidio, err := s.repo.YaPidioLiberacionHoy(ctx, reservaID, solicitanteID, s.ahora())
+	if err != nil {
+		return err
+	}
+	if yaPidio {
+		return ErrPedidoRepetido
+	}
+
+	nombreSolicitante, err := s.obtenedorNombre.NombreCompletoDe(ctx, solicitanteID)
+	if err != nil {
+		// El nombre de quien pide es el dato central del aviso: sin él, al
+		// dueño le llega un pedido anónimo y no sabe con quién hablar.
+		return fmt.Errorf("resolviendo el nombre de quien pide: %w", err)
+	}
+
+	s.bus.Publish(eventbus.Evento{Tipo: "reserva.pedido-de-liberacion", Payload: eventbus.PedidoDeLiberacion{
+		UsuarioID:         *pedido.DuenoID,
+		Email:             pedido.DuenoEmail,
+		Nombre:            pedido.DuenoNombre,
+		SolicitanteID:     solicitanteID,
+		SolicitanteNombre: nombreSolicitante,
+		ReservaID:         reservaID,
+		Etiqueta:          pedido.Etiqueta,
+		MateriaNombre:     pedido.MateriaNombre,
+		Fecha:             pedido.Fecha,
+		HoraInicio:        pedido.HoraInicio,
+		HoraFin:           pedido.HoraFin,
+		Mensaje:           mensaje,
+	}})
+	return nil
 }
 
 // ObtenerReservaGrupo es un passthrough directo al repo — mismo criterio
@@ -565,11 +656,11 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 	}
 
 	// Se verifica el solapamiento de TODAS las fechas antes de crear nada
-	// — así una falla en la fecha 5 de 10 no deja 4 grupos ya creados.
-	for _, fecha := range fechas {
-		if err := s.verificarSinSolapamiento(ctx, equipoIDs, fecha, horaInicio, horaFin); err != nil {
-			return nil, err
-		}
+	// — así una falla en la fecha 5 de 10 no deja 4 grupos ya creados. Va en
+	// una sola consulta: la serie comparte horario y equipos, así que
+	// preguntar fecha por fecha eran tantas idas a la base como ocurrencias.
+	if err := s.verificarSinSolapamiento(ctx, equipoIDs, fechas, horaInicio, horaFin); err != nil {
+		return nil, err
 	}
 
 	nombreDocente, err := s.obtenedorNombre.NombreCompletoDe(ctx, usuarioID)
@@ -746,11 +837,11 @@ func (s *Service) BloquearEquipos(ctx context.Context, equipoIDs []string, cread
 				// pone el suscriptor de notification. Este texto también
 				// es el que se guarda en motivo_cancelacion y el que
 				// "Mis reservas" muestra al lado de la PC afectada.
-				// El motivo va tal cual, sin envolverlo en una categoría: si
-				// el Admin escribió "jornada docente", eso es lo que el
-				// docente cancelado tiene que leer. Antes iba adentro de
-				// "bloqueo por evaluación estatal (%s)", que contradecía al
-				// propio texto cuando no era una evaluación.
+				// El motivo va tal cual, sin envolverlo en ninguna categoría:
+				// si el Admin escribió "jornada docente", eso es exactamente
+				// lo que el docente cancelado tiene que leer. Meterlo dentro
+				// de una etiqueta fija la contradiría en cuanto el motivo no
+				// coincidiera con ella.
 				motivoCascada := fmt.Sprintf("los equipos quedaron bloqueados: %s", motivoBloqueo)
 				if err := r.Cancelar(creadoPor, motivoCascada, ahora); err != nil {
 					return err
@@ -1027,7 +1118,7 @@ func (s *Service) CancelarReservasFuturasDeMateria(ctx context.Context, materiaI
 }
 
 // cancelarEnCascada centraliza lo que ya hacían por separado
-// BloquearParaEvaluacion y estos dos métodos: cancelar cada reserva
+// BloquearEquipos y estos dos métodos: cancelar cada reserva
 // CONFIRMADA de la lista (sin "cancelado por" — son cascadas disparadas
 // por el sistema, no por un click puntual de un usuario sobre esa reserva
 // en particular) y recalcular el ReservaGrupo padre de cada una.
@@ -1092,7 +1183,7 @@ var ErrReservaNoModificable = errors.New("esa reserva ya no está vigente")
 // Se apoya en la constraint EXCLUDE para el anti-solapamiento, igual que
 // crear: se valida antes para dar un mensaje mejor, pero la garantía real
 // ante dos pedidos simultáneos es la de la base.
-func (s *Service) CambiarEquipoDeReserva(ctx context.Context, reservaID, pcNuevoID string, quien string, esAdmin bool) (*domain.Reserva, error) {
+func (s *Service) CambiarEquipoDeReserva(ctx context.Context, reservaID, pcNuevoID string, quien string, esAdmin bool, soloEsta bool) (*domain.Reserva, error) {
 	var cambiada *domain.Reserva
 
 	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
@@ -1119,19 +1210,59 @@ func (s *Service) CambiarEquipoDeReserva(ctx context.Context, reservaID, pcNuevo
 		if !disponible {
 			return ErrEquipoNoDisponible
 		}
-		if err := s.verificarSinSolapamiento(ctx, []string{pcNuevoID}, r.Fecha, r.HoraInicio, r.HoraFin); err != nil {
+
+		aCambiar, err := s.reservasDelAlcance(ctx, repo, r, soloEsta)
+		if err != nil {
 			return err
 		}
 
-		r.EquipoID = pcNuevoID
-		if err := repo.GuardarReserva(ctx, r); err != nil {
+		// Todas las fechas contra el equipo nuevo, en una sola consulta y
+		// ANTES de tocar ninguna: cambiar catorce martes y fallar en el
+		// decimoquinto dejaría la serie repartida entre dos máquinas sin que
+		// nadie lo haya pedido. El mensaje del rechazo dice en qué fecha
+		// chocó, que es lo que distingue este caso del de una sola.
+		fechas := make([]time.Time, 0, len(aCambiar))
+		for _, res := range aCambiar {
+			fechas = append(fechas, res.Fecha)
+		}
+		if err := s.verificarSinSolapamiento(ctx, []string{pcNuevoID}, fechas, r.HoraInicio, r.HoraFin); err != nil {
 			return err
 		}
-		cambiada = r
+
+		for _, res := range aCambiar {
+			res.EquipoID = pcNuevoID
+			if err := repo.GuardarReserva(ctx, res); err != nil {
+				return err
+			}
+			if res.ID == reservaID {
+				cambiada = res
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	return cambiada, nil
+}
+
+// reservasDelAlcance traduce "solo esta" / "esta y las siguientes" a la lista
+// concreta de filas a mover.
+//
+// Una reserva que no pertenece a ninguna serie devuelve siempre una sola, sin
+// importar el alcance pedido: ahí las dos opciones significan lo mismo, y
+// rechazar el pedido por eso sería inventar un error para el caso más común.
+func (s *Service) reservasDelAlcance(ctx context.Context, repo Repo, r *domain.Reserva, soloEsta bool) ([]*domain.Reserva, error) {
+	if soloEsta {
+		return []*domain.Reserva{r}, nil
+	}
+
+	serie, err := repo.ReservasDeLaSerieDesde(ctx, r.ID)
+	if err != nil {
+		return nil, err
+	}
+	if len(serie) == 0 {
+		return []*domain.Reserva{r}, nil
+	}
+	return serie, nil
 }

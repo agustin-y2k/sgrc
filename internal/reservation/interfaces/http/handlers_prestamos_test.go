@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/ramiro/sgrc/internal/reservation/application"
 	"github.com/ramiro/sgrc/internal/reservation/domain"
 )
 
@@ -372,5 +373,119 @@ func TestHTTP_CambiarEquipoDeReserva_YaLiberada(t *testing.T) {
 
 	if codigo != fiber.StatusConflict {
 		t.Fatalf("esperaba 409, obtuve %d", codigo)
+	}
+}
+
+// El cuerpo sin `soloEsta` tiene que cambiar UNA reserva y no la serie entera
+// hasta fin de año: ante la duda, el cambio más chico.
+func TestHTTP_CambiarEquipoDeReserva_SinAlcanceEsSoloEsta(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaEnRepo(t, repo, "res1", "pc1", "admin1")
+	app := nuevaAppDeTest(repo)
+
+	codigo, cuerpo := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/equipo",
+		map[string]string{"equipoId": "pc9"}, "ADMIN")
+
+	if codigo != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
+	}
+	if repo.reservas["res1"].EquipoID != "pc9" {
+		t.Errorf("la PC quedó en %q", repo.reservas["res1"].EquipoID)
+	}
+}
+
+// ── Pedirle a otro que libere (RF-04.12) ────────────────────────────────
+
+func datosDePedido(dueno string) *application.ReservaParaPedido {
+	duenoID := dueno
+	return &application.ReservaParaPedido{
+		Estado:        domain.ReservaConfirmada,
+		DuenoID:       &duenoID,
+		DuenoNombre:   "Ada Lovelace",
+		DuenoEmail:    "ada@escuela.edu.ar",
+		Etiqueta:      "PC 3",
+		MateriaNombre: "Matemáticas",
+		// Pasado mañana respecto del reloj fijo de los tests: la franja
+		// todavía no empezó.
+		Fecha:      time.Date(2026, 3, 4, 0, 0, 0, 0, time.UTC),
+		HoraInicio: 10 * time.Hour,
+		HoraFin:    12 * time.Hour,
+	}
+}
+
+func TestHTTP_PedirLiberacion(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.datosDelPedido = datosDePedido("otro-docente")
+	app := nuevaAppDeTest(repo)
+
+	codigo, cuerpo := pedirPrestamos(t, app, "POST",
+		"/api/reservation/reservas/res1/pedido-de-liberacion",
+		pedirLiberacionRequest{Mensaje: "La necesito para una evaluación"}, "DOCENTE")
+
+	if codigo != fiber.StatusAccepted {
+		t.Fatalf("esperaba 202, obtuve %d: %s", codigo, cuerpo)
+	}
+}
+
+// Pedirse a uno mismo no tiene sentido: no hay a quién avisarle.
+func TestHTTP_PedirLiberacion_ReservaPropia(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.datosDelPedido = datosDePedido("admin1") // el mismo que manda el pedido
+	app := nuevaAppDeTest(repo)
+
+	codigo, _ := pedirPrestamos(t, app, "POST",
+		"/api/reservation/reservas/res1/pedido-de-liberacion",
+		pedirLiberacionRequest{}, "DOCENTE")
+
+	if codigo != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", codigo)
+	}
+}
+
+// El segundo correo idéntico es presión, no aviso.
+func TestHTTP_PedirLiberacion_RepetidoElMismoDia(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.datosDelPedido = datosDePedido("otro-docente")
+	repo.yaPidio = true
+	app := nuevaAppDeTest(repo)
+
+	codigo, _ := pedirPrestamos(t, app, "POST",
+		"/api/reservation/reservas/res1/pedido-de-liberacion",
+		pedirLiberacionRequest{}, "DOCENTE")
+
+	if codigo != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", codigo)
+	}
+}
+
+// A un bloqueo administrativo no se le pide nada: no tiene docente detrás.
+func TestHTTP_PedirLiberacion_SobreUnBloqueo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	datos := datosDePedido("otro-docente")
+	datos.EsBloqueo = true
+	datos.DuenoID = nil
+	repo.datosDelPedido = datos
+	app := nuevaAppDeTest(repo)
+
+	codigo, _ := pedirPrestamos(t, app, "POST",
+		"/api/reservation/reservas/res1/pedido-de-liberacion",
+		pedirLiberacionRequest{}, "DOCENTE")
+
+	if codigo != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", codigo)
+	}
+}
+
+// Pedir sin escribir nada es válido: el texto libre es opcional.
+func TestHTTP_PedirLiberacion_SinCuerpo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.datosDelPedido = datosDePedido("otro-docente")
+	app := nuevaAppDeTest(repo)
+
+	codigo, cuerpo := pedirPrestamos(t, app, "POST",
+		"/api/reservation/reservas/res1/pedido-de-liberacion", nil, "DOCENTE")
+
+	if codigo != fiber.StatusAccepted {
+		t.Fatalf("esperaba 202, obtuve %d: %s", codigo, cuerpo)
 	}
 }

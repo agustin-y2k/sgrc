@@ -147,17 +147,35 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
-	bus.Subscribe("reserva.no-retirada", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.ReservasLiberadas)
+	// El pedido de un docente a otro (RF-04.12) es de los que más necesitan
+	// el correo: la clase suele ser de esta semana, y un aviso que espera a
+	// que el dueño entre al sistema llega después de la clase.
+	bus.Subscribe("reserva.pedido-de-liberacion", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PedidoDeLiberacion)
 		if !ok {
-			log.Printf("correo: payload inesperado para reserva.no-retirada: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para reserva.pedido-de-liberacion: %+v", e.Payload)
 			return
 		}
 		if payload.Email == "" {
 			return
 		}
-		asunto, cuerpo := m.textoDeReservasLiberadas(payload)
-		enviar("por mail la reserva liberada", func(ctx context.Context) error {
+		asunto, cuerpo := m.textoDePedidoDeLiberacion(payload)
+		enviar("por mail el pedido de liberación", func(ctx context.Context) error {
+			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+		})
+	})
+
+	bus.Subscribe("reserva.sin-retirar", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.ReservaSinRetirar)
+		if !ok {
+			log.Printf("correo: payload inesperado para reserva.sin-retirar: %+v", e.Payload)
+			return
+		}
+		if payload.Email == "" {
+			return
+		}
+		asunto, cuerpo := m.textoDeReservaSinRetirar(payload)
+		enviar("por mail el aviso de no retiro", func(ctx context.Context) error {
 			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
 		})
 	})

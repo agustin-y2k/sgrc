@@ -25,7 +25,12 @@ func mapearError(err error) error {
 		// sola máquina como operación atómica.
 		errors.Is(err, application.ErrEquipoYaPrestado),
 		errors.Is(err, application.ErrEquipoDadoDeBaja),
-		errors.Is(err, application.ErrReservaNoModificable):
+		errors.Is(err, application.ErrReservaNoModificable),
+		// Los tres del pedido de liberación: la reserva está, pero en un
+		// estado que no admite el pedido (RF-04.12).
+		errors.Is(err, application.ErrReservaSinDueño),
+		errors.Is(err, application.ErrPedidoRepetido),
+		errors.Is(err, application.ErrReservaYaEmpezada):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, application.ErrSinEquipos),
@@ -50,7 +55,10 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrPrestamoYaDevuelto):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, application.ErrReservaAjena):
+	case errors.Is(err, application.ErrReservaAjena),
+		// Pedirse a uno mismo no es un conflicto de estado sino de permiso:
+		// sobre la reserva propia esta acción no existe.
+		errors.Is(err, application.ErrReservaPropia):
 		return fiber.NewError(fiber.StatusForbidden, err.Error())
 
 	default:

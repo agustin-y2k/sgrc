@@ -24,8 +24,7 @@ export type Usuario = {
    * contraseña (`tienePassword: false`), y ofrecerle "cambiar contraseña"
    * sería mandarla a un 409.
    *
-   * Opcionales en el tipo porque las respuestas guardadas de antes de la
-   * migración 008 no las traen.
+   * Opcionales en el tipo: el backend los omite cuando no aplican.
    */
   tienePassword?: boolean
   vinculadaAGoogle?: boolean
@@ -42,6 +41,12 @@ export type ConfigPublica = {
    * antes de esta versión no lo trae.
    */
   recuperacionPorEmail?: boolean
+  /**
+   * Desde qué dirección salen los avisos. Vacía si este despliegue no manda
+   * correos. La usan las pantallas donde alguien espera uno, para poder
+   * decirle a quién agregar a sus contactos (RF-05.8).
+   */
+  remitenteDeCorreo?: string
 }
 
 /** POST /api/auth/password/olvide — paso 1 de la recuperación. */

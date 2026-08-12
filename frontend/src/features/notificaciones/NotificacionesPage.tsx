@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router"
 
+import { AvisoDeSpam } from "@/components/AvisoDeSpam"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { Paginador } from "@/components/Paginador"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -18,9 +19,10 @@ import { getErrorMessage } from "@/lib/api-client"
  * "ayer 08:15" es más útil que "hace 19 horas" cuando lo que se canceló es
  * una clase con horario.
  *
- * `creadaEn` es un instante real — antes las
- * columnas TIMESTAMP guardaban hora de pared y se serializaban con sufijo
- * Z, así que esto habría mostrado tres horas de menos.
+ * `creadaEn` es un instante real (`TIMESTAMPTZ`), así que convertirlo a la
+ * zona del navegador da la hora correcta. Con una columna sin zona, lo
+ * guardado sería hora de pared servida con sufijo Z y esto mostraría el
+ * desfasaje de la zona como si fuera parte del dato.
  */
 function formatearFecha(iso: string): string {
   const fecha = new Date(iso)
@@ -38,8 +40,8 @@ function formatearFecha(iso: string): string {
  * RF-05: notificaciones internas.
  *
  * Es el único lugar donde se ve el motivo con el que un Admin canceló una
- * reserva ajena (RF-04.8, motivo obligatorio), qué Equipos puntuales se
- * cancelaron por un bloqueo de evaluación (RF-05.2) o porque un equipo pasó a
+ * reserva ajena (RF-04.8, motivo obligatorio), qué equipos puntuales se
+ * cancelaron por un bloqueo administrativo (RF-05.2) o porque un equipo pasó a
  * fuera de servicio (RF-05.3). Sin esta pantalla el backend guardaba todo
  * eso y nadie podía leerlo.
  */
@@ -93,6 +95,12 @@ export function NotificacionesPage() {
           ) : undefined
         }
       />
+
+      {/* El único lugar donde este texto puede ser permanente sin volverse
+          ruido: quien está acá ya vino a leer avisos. */}
+      <div className="mb-4">
+        <AvisoDeSpam>Algunos de estos avisos también te llegan por correo.</AvisoDeSpam>
+      </div>
 
       <label className="mb-4 flex items-center gap-2 text-sm">
         <input

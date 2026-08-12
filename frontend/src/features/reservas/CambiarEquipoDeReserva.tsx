@@ -32,14 +32,35 @@ export function CambiarEquipoDeReserva({
   const cambiables = grupo.reservas.filter((r) => r.estado === "CONFIRMADA")
   const [reservaID, setReservaID] = useState(cambiables[0]?.id ?? "")
   const [equipoID, setEquipoID] = useState("")
+  // RF-08.14: el alcance solo se pregunta si hay serie. En una reserva
+  // suelta las dos opciones significan lo mismo, y ofrecer la pregunta
+  // igual haría dudar sobre algo que no tiene consecuencias.
+  const [soloEsta, setSoloEsta] = useState(true)
+
+  // Con la serie elegida, los equipos que se ofrecen son los libres en TODAS
+  // las fechas que faltan: ofrecer los de esta y rechazar el cambio cuando
+  // choca en la tercera es hacerle adivinar al docente.
+  const serieDesdeGrupoId = !soloEsta && grupo.esRecurrente ? grupo.grupoId : undefined
 
   const { data, isLoading } = useQuery({
-    queryKey: ["equipos-disponibles", grupo.fecha, grupo.horaInicio, grupo.horaFin],
-    queryFn: () => reservasApi.equiposDisponibles(grupo.fecha, grupo.horaInicio, grupo.horaFin),
+    queryKey: [
+      "equipos-disponibles",
+      grupo.fecha,
+      grupo.horaInicio,
+      grupo.horaFin,
+      serieDesdeGrupoId ?? "",
+    ],
+    queryFn: () =>
+      reservasApi.equiposDisponibles(
+        grupo.fecha,
+        grupo.horaInicio,
+        grupo.horaFin,
+        serieDesdeGrupoId
+      ),
   })
 
   const cambiar = useMutation({
-    mutationFn: () => reservasApi.cambiarEquipoDeReserva(reservaID, equipoID),
+    mutationFn: () => reservasApi.cambiarEquipoDeReserva(reservaID, equipoID, soloEsta),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["reservas"] })
       onListo()
@@ -99,6 +120,47 @@ export function CambiarEquipoDeReserva({
           )}
         </div>
       </div>
+
+      {grupo.esRecurrente && (
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-sm font-medium">¿Hasta cuándo?</legend>
+          <div className="flex items-start gap-2">
+            <input
+              type="radio"
+              id={`alcance-esta-${grupo.grupoId ?? reservaID}`}
+              name={`alcance-cambio-${grupo.grupoId ?? reservaID}`}
+              className="mt-1"
+              checked={soloEsta}
+              onChange={() => setSoloEsta(true)}
+            />
+            <Label htmlFor={`alcance-esta-${grupo.grupoId ?? reservaID}`} className="font-normal">
+              Solo esta fecha
+            </Label>
+          </div>
+          <div className="flex items-start gap-2">
+            <input
+              type="radio"
+              id={`alcance-siguientes-${grupo.grupoId ?? reservaID}`}
+              name={`alcance-cambio-${grupo.grupoId ?? reservaID}`}
+              className="mt-1"
+              checked={!soloEsta}
+              onChange={() => setSoloEsta(false)}
+            />
+            <Label
+              htmlFor={`alcance-siguientes-${grupo.grupoId ?? reservaID}`}
+              className="font-normal"
+            >
+              Esta fecha y todas las siguientes
+            </Label>
+          </div>
+          {!soloEsta && (
+            <p className="text-muted-foreground text-xs">
+              Solo se ofrecen las computadoras libres en todas las fechas que faltan. Si
+              alguna fecha choca, no se cambia ninguna.
+            </p>
+          )}
+        </fieldset>
+      )}
 
       {cambiar.error && (
         <Alert variant="destructive">

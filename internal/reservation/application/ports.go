@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/ramiro/sgrc/internal/reservation/domain"
@@ -18,7 +19,7 @@ type Repo interface {
 	// escrituras que haga sobre el Repo que recibe, o no queda ninguna.
 	// Lo necesitan todas las operaciones que tocan más de una fila —
 	// crear un grupo con N reservas, cancelar una serie recurrente
-	// completa, bloquear varios equipos para una evaluación — porque a mitad
+	// completa, bloquear varios equipos por un rato — porque a mitad
 	// de camino puede saltar la constraint EXCLUDE y RF-04.5 exige que en
 	// ese caso no quede nada creado.
 	EnTransaccion(ctx context.Context, fn func(Repo) error) error
@@ -33,10 +34,24 @@ type Repo interface {
 	ListarReservasPorGrupo(ctx context.Context, reservaGrupoID string) ([]*domain.Reserva, error)
 
 	// ListarReservasFuturasDeEquipo: usado tanto por la cascada de inventory
-	// (cambio de estado / baja de una PC) como por el bloqueo de
-	// evaluación — todas las Reserva CONFIRMADA de una PC a partir de
-	// cierta fecha/hora.
+	// (cambio de estado / baja de un equipo) como por el bloqueo
+	// administrativo (RF-04.7) — todas las Reserva CONFIRMADA de un equipo a
+	// partir de cierta fecha/hora.
 	ListarReservasFuturasDeEquipo(ctx context.Context, equipoID string, desde time.Time) ([]*domain.Reserva, error)
+
+	// BuscarSolapamientos resuelve el pre-chequeo de TODO el lote —todos los
+	// equipos contra todas las fechas— en una sola consulta, y devuelve qué
+	// chocó contra qué.
+	//
+	// Es una sola porque el horario es el mismo para toda la serie: una
+	// recurrencia semanal de un cuatrimestre sobre ocho equipos son ocho
+	// listas de fechas y un único rango horario, no cuarenta consultas por
+	// equipo. Preguntar de a uno era el grueso del costo de crear una
+	// recurrencia, y todo antes de escribir la primera fila.
+	//
+	// No reemplaza a la constraint EXCLUDE, que sigue siendo la garantía ante
+	// dos pedidos simultáneos: esto existe para poder decir cuál chocó.
+	BuscarSolapamientos(ctx context.Context, equipoIDs []string, fechas []time.Time, horaInicio, horaFin time.Duration) ([]Solapamiento, error)
 
 	// ListarReservasFuturasDeMateria: usado por la cascada de auth
 	// (dar de baja al único docente de una materia, RF-02.8) — todas las
@@ -106,10 +121,11 @@ type Repo interface {
 	// puede salir. Devuelve nil si no hay ninguna.
 	ProximaReservaDeEquipo(ctx context.Context, equipoID string, desde time.Time) (*ProximaReserva, error)
 
-	// Las cuatro marcas de idempotencia. Cada una toca UNA columna: el
+	// Las cinco marcas de idempotencia. Cada una toca UNA columna: el
 	// barrido no puede pisar nada que un Admin haya cambiado desde la
 	// pantalla mientras el correo salía.
 	MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error
+	MarcarAvisoSinRetirarEnviado(ctx context.Context, grupoID string, ahora time.Time) error
 	MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error
 	MarcarDemoraAvisada(ctx context.Context, prestamoID string, ahora time.Time) error
 	MarcarCierreAvisado(ctx context.Context, prestamoID string, jornada time.Time) error
@@ -125,7 +141,7 @@ type Repo interface {
 
 	// CalendarioDeEquipo implementa RF-04.4 — los bloques ocupados de una PC en
 	// un rango de fechas, con el nombre del docente y de la materia para
-	// poder mostrarlos. Devuelve también los bloqueos por evaluación
+	// poder mostrarlos. Devuelve también los bloqueos administrativos
 	// estatal (que no tienen materia).
 	CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) ([]BloqueCalendario, error)
 
@@ -134,6 +150,46 @@ type Repo interface {
 	// esto el frontend tendría que pedir el calendario de cada PC por
 	// separado y cruzarlo a mano.
 	ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoDisponible, error)
+
+	// ListarEquiposOcupadosEn es la otra mitad de la misma pregunta
+	// (RF-04.11): qué equipos de ese universo ya tiene alguien en esa
+	// franja, y quién. Sin esto, "no hay nada libre" y "los tiene alguien
+	// con quien puedo hablar" se ven igual en pantalla, y solo la segunda
+	// tiene salida.
+	//
+	// Es una consulta aparte y no un OUTER JOIN de la anterior porque las
+	// dos listas se muestran en lugares distintos y con columnas distintas:
+	// mezclarlas obligaría a que cada fila cargue los campos de la otra en
+	// nulo.
+	ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoOcupado, error)
+
+	// ListarEquiposLibresEnLaSerie: los equipos libres en TODAS las fechas
+	// que le quedan a la serie de ese grupo, de esa fecha en adelante
+	// (RF-08.14). Ofrecer los libres de hoy y rechazar el cambio cuando
+	// choca en la tercera fecha es hacerle adivinar al docente.
+	ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID string) ([]EquipoDisponible, error)
+
+	// ReservasDeLaSerieDesde: la misma máquina, en todas las ocurrencias que
+	// le quedan a la serie a partir de esta (RF-08.14). Devuelve vacío si la
+	// reserva no pertenece a ninguna serie — ahí "esta y las siguientes" es
+	// lo mismo que "solo esta".
+	ReservasDeLaSerieDesde(ctx context.Context, reservaID string) ([]*domain.Reserva, error)
+
+	// DatosParaPedirLiberacion trae, en una sola consulta, todo lo que el
+	// pedido de RF-04.12 necesita decidir y decir: en qué estado está la
+	// reserva, de quién es, con qué contacto, qué máquina y de qué franja.
+	DatosParaPedirLiberacion(ctx context.Context, reservaID string) (*ReservaParaPedido, error)
+
+	// YaPidioLiberacionHoy sostiene la regla de un pedido por reserva, por
+	// solicitante y por día (RF-04.12).
+	//
+	// Se responde mirando las notificaciones ya emitidas y no una tabla
+	// propia: un pedido es un mensaje, no una entidad, y la fila que ya se
+	// escribe alcanza. La consulta cruza el límite de módulos por la base
+	// —lee `notificacion` desde reservation— con el mismo criterio que el
+	// JOIN contra `usuario` del barrido: es una lectura de tres columnas,
+	// no una regla de negocio de notification.
+	YaPidioLiberacionHoy(ctx context.Context, reservaID, solicitanteID string, dia time.Time) (bool, error)
 
 	CrearReglaRecurrencia(ctx context.Context, regla *domain.ReglaRecurrencia) error
 	// ListarGruposFuturosDeRegla: los ReservaGrupo de una regla recurrente
@@ -223,6 +279,63 @@ type EquipoDisponible struct {
 	SoftwareInstalado string
 }
 
+// EquipoOcupado es un equipo que ya tiene dueño en la franja consultada
+// (RF-04.11). Se muestra para poder ir a hablarle o mandarle un pedido, no
+// para tildarlo.
+//
+// De la otra persona viaja el nombre y nunca el email: es el mismo dato que
+// ya publica el calendario de cualquier equipo (RF-04.4), y para el pedido no
+// hace falta más — el correo lo manda el servidor.
+type EquipoOcupado struct {
+	EquipoID    string
+	Etiqueta    string
+	CarroNombre string
+	// ReservaID es la fila que lo ocupa: es lo que después recibe el pedido
+	// de liberación.
+	ReservaID string
+	// EsBloqueo: lo tomó un Admin (RF-04.7). No tiene docente detrás, así
+	// que no hay a quién pedirle nada — lo que se muestra es el motivo.
+	EsBloqueo bool
+	// DocenteID es de quién es la reserva. Sirve para no ofrecerle a alguien
+	// pedirse a sí mismo. nil en un bloqueo, o si la cuenta se eliminó.
+	DocenteID     *string
+	DocenteNombre string
+	MateriaNombre string
+	Motivo        string
+	// HoraInicio y HoraFin son las de la reserva que lo ocupa, que pueden no
+	// coincidir con la franja consultada: alguien que necesita el equipo de
+	// 10 a 12 tiene que poder ver que quien lo tiene lo usa de 8 a 11.
+	HoraInicio time.Duration
+	HoraFin    time.Duration
+	// PuedePedirse lo decide el servidor para que la pantalla no tenga que
+	// replicar la regla: false en un bloqueo, en una reserva propia y si esa
+	// franja ya empezó.
+	PuedePedirse bool
+}
+
+// ReservaParaPedido es lo que hace falta para resolver un pedido de
+// liberación (RF-04.12): las cuatro condiciones que pueden rechazarlo y los
+// datos con los que se arma el aviso.
+//
+// Va en una sola consulta porque son cuatro tablas —reserva, grupo, materia,
+// usuario— y pedirlas por separado sería resolver a mano un JOIN para una
+// operación que no escribe nada.
+type ReservaParaPedido struct {
+	Estado    domain.EstadoReserva
+	EsBloqueo bool
+	// DuenoID nil en un bloqueo administrativo, o si la cuenta del docente
+	// se eliminó. En los dos casos no hay a quién pedirle.
+	DuenoID     *string
+	DuenoNombre string
+	DuenoEmail  string
+
+	Etiqueta      string
+	MateriaNombre string
+	Fecha         time.Time
+	HoraInicio    time.Duration
+	HoraFin       time.Duration
+}
+
 // ValidadorMateria es el puerto hacia academic — confirma que un docente
 // está efectivamente asignado a la materia antes de dejarlo reservar para
 // ella (RF-04.1). Nunca se importa internal/academic directamente.
@@ -249,7 +362,7 @@ type ValidadorEquipo interface {
 	// baja o no son reservables). Lista vacía = están todos bien.
 	//
 	// Existe porque reservar es una operación de LOTE: un docente tilda varias
-	// máquinas y un bloqueo por evaluación puede tomar un carro entero.
+	// máquinas y un bloqueo administrativo puede tomar un carro entero.
 	// Preguntando de a una, bloquear un carro son tantas consultas como
 	// equipos tenga, antes de escribir la primera fila — y eso lo dispara el
 	// uso normal, no un abuso.
@@ -352,7 +465,7 @@ type ReservaParaVigilar struct {
 	Fecha      time.Time
 	HoraInicio time.Duration
 	HoraFin    time.Duration
-	// Tipo distingue la clase de un docente de un bloqueo por evaluación
+	// Tipo distingue la clase de un docente de un bloqueo administrativo
 	// estatal. Importa: un bloqueo no lo retira nadie, así que ni se
 	// recuerda ni se libera.
 	Tipo          domain.TipoReserva
@@ -364,6 +477,10 @@ type ReservaParaVigilar struct {
 
 	RecordatorioEnviado            bool
 	AvisoEquipoNoDisponibleEnviado bool
+	// AvisoSinRetirarEnviado: ya salió el aviso de "todavía no las
+	// retiraste" (RF-08.20). Vive en el grupo, como el recordatorio: es uno
+	// por clase, no uno por equipo.
+	AvisoSinRetirarEnviado bool
 
 	// EquipoAfuera: hay un préstamo sin devolver sobre esa máquina. Es lo que
 	// distingue "el docente no vino" de "el docente vino y se la llevó", y
@@ -373,6 +490,18 @@ type ReservaParaVigilar struct {
 	// EquipoDebioVolverA es la hora en que esa máquina tenía que estar de vuelta.
 	// nil si está adentro, o si salió sin hora pactada.
 	EquipoDebioVolverA *time.Time
+
+	// UltimaEntregaDelGrupo es cuándo se entregó por última vez alguna
+	// máquina CONTRA ESTA RESERVA. Es el dato que distingue "el docente no
+	// vino" de "vino y se llevó una parte", y de ahí sale el plazo corto de
+	// liberación (RF-08.10) y el silencio del aviso (RF-08.20).
+	//
+	// Se mira por reserva y no por equipo, al revés que EquipoAfuera: una
+	// máquina prestada a otra persona por un trámite no dice nada sobre si
+	// este docente vino a dar su clase. Y no filtra por devuelto_en, porque
+	// lo que importa es que la entrega ocurrió: que ya la haya devuelto no
+	// lo vuelve un docente que no vino.
+	UltimaEntregaDelGrupo *time.Time
 }
 
 // PrestamoParaVigilar es un préstamo abierto con la ubicación de la máquina
@@ -397,4 +526,45 @@ type ProximaReserva struct {
 	Nombre     string
 	Fecha      time.Time
 	HoraInicio time.Duration
+}
+
+// Solapamiento es una reserva confirmada que pisa lo que se está por crear.
+//
+// Existe aparte de domain.Reserva porque lo que hace falta acá es explicarle
+// el choque a quien reserva, no operar sobre la fila: la etiqueta del equipo
+// ya resuelta y el nombre de quien la tiene, en vez de dos UUID.
+type Solapamiento struct {
+	EquipoID   string
+	Etiqueta   string
+	Fecha      time.Time
+	HoraInicio time.Duration
+	HoraFin    time.Duration
+	// Docente es el nombre congelado de quien reservó. Vacío en un bloqueo
+	// administrativo, que no es la clase de nadie.
+	Docente string
+	// MotivoBloqueo solo viene en los bloqueos. Es lo que ocupa el lugar que
+	// en una clase tiene la materia, así que es lo que hay que mostrar.
+	MotivoBloqueo string
+}
+
+// describir arma el fragmento que se lee dentro del mensaje de error.
+func (s Solapamiento) describir() string {
+	etiqueta := s.Etiqueta
+	if etiqueta == "" {
+		etiqueta = "un equipo"
+	}
+	quien := s.Docente
+	if quien == "" {
+		quien = s.MotivoBloqueo
+	}
+	texto := fmt.Sprintf("%s ya está reservado el %s de %s a %s",
+		etiqueta, s.Fecha.Format("02/01"), formatearHora(s.HoraInicio), formatearHora(s.HoraFin))
+	if quien != "" {
+		texto += " (" + quien + ")"
+	}
+	return texto
+}
+
+func formatearHora(d time.Duration) string {
+	return fmt.Sprintf("%02d:%02d", int(d.Hours()), int(d.Minutes())%60)
 }

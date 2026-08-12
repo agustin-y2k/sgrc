@@ -1,7 +1,7 @@
 # Operación — SGRC
 
-Cómo se pone en marcha el sistema, cómo se para, cómo se reinicia y qué
-hacer cuando algo no anda. Todo desde el servidor de la escuela, con Docker
+Cómo se pone en marcha el sistema, cómo se para, cómo se reinicia y qué hacer
+cuando algo no anda. Todo desde el servidor de la institución, con Docker
 Compose — no hace falta tener Go ni Node instalados para operarlo.
 
 Los comandos largos tienen su atajo en el `Makefile`; abajo aparecen los dos,
@@ -44,7 +44,7 @@ Los crea `make run` / `make dev` mediante el servicio `seed-datos` (§7).
 
 Esa contraseña de docente está escrita en `scripts/sembrar-datos-de-prueba.sh`
 y es pública. Por eso el script **se niega a correr contra algo que no sea
-local**: en el servidor de la escuela ese usuario no existe.
+local**: en el servidor de producción ese usuario no existe.
 
 ### Y si compré el dominio, ¿qué toco?
 
@@ -103,10 +103,11 @@ notificaciones. Lo que **no** funciona es el "olvidé mi contraseña" — el
 enlace ni aparece en la pantalla de ingreso, y hay que resetear a mano desde
 `/admin/usuarios` cada vez que un docente se olvide la suya.
 
-Se usa el Gmail de la escuela, con una **contraseña de aplicación**, que no es
-la contraseña con la que se entra a Gmail:
+Sirve cualquier servidor SMTP que hable STARTTLS en el puerto 587. El ejemplo
+usa una cuenta de Gmail institucional con una **contraseña de aplicación**, que
+no es la contraseña con la que se entra a Gmail:
 
-1. En la cuenta de la escuela, activá la verificación en dos pasos:
+1. En la cuenta de la institución, activá la verificación en dos pasos:
    <https://myaccount.google.com/signinoptions/twosv>. Sin eso el paso
    siguiente no existe.
 2. Entrá a <https://myaccount.google.com/apppasswords> y creá una. Google la
@@ -116,18 +117,18 @@ la contraseña con la que se entra a Gmail:
    ```
    SMTP_HOST=smtp.gmail.com
    SMTP_PORT=587
-   SMTP_USER=la-cuenta-de-la-escuela@gmail.com
+   SMTP_USER=la-cuenta-de-la-institucion@gmail.com
    SMTP_PASSWORD=abcd efgh ijkl mnop
-   SMTP_FROM=la-cuenta-de-la-escuela@gmail.com
-   SMTP_FROM_NAME=Nombre de la escuela
+   SMTP_FROM=la-cuenta-de-la-institucion@gmail.com
+   SMTP_FROM_NAME=Nombre de la institución
    ```
 
 4. `make restart` y mirá el log: tiene que decir
    `correo saliente habilitado vía smtp.gmail.com`.
 
-Es gratis y el límite es de ~500 destinatarios por día, de sobra. Lo que
-cambió en 2022 es que Gmail exige contraseña de aplicación, no que el SMTP
-haya dejado de ser gratuito.
+El límite de Gmail es de unos 500 destinatarios por día, de sobra para avisos.
+Gmail exige contraseña de aplicación desde 2022; el envío por SMTP en sí sigue
+siendo gratuito.
 
 > **Ojo con dejarlo a medias.** Con `SMTP_HOST` puesto pero sin `SMTP_FROM`/
 > `SMTP_USER` o sin `SMTP_PASSWORD`, el proceso **no arranca** y dice qué
@@ -137,6 +138,24 @@ haya dejado de ser gratuito.
 Para probarlo de punta a punta sin tocar ninguna cuenta real: entrá a
 `/recuperar-password`, poné tu propio email y fijate si llega el código
 (revisá spam la primera vez).
+
+> **Que los correos no caigan en spam depende de tres cosas, y dos son de
+> despliegue.** La primera ya está resuelta por salir a través de una casilla
+> del proveedor: SPF, DKIM y DMARC los firma él, y la reputación de la IP
+> saliente es suya y no del servidor de la institución. Las otras dos hay que
+> cuidarlas acá:
+>
+> - **`FRONTEND_ORIGIN` tiene que ser un dominio con HTTPS.** Va tal cual
+>   adentro del cuerpo de cada correo, y un enlace a una IP cruda sobre HTTP
+>   (`http://192.168.1.50:8081`) es de los disparadores más directos que tiene
+>   un filtro de spam. Si el sistema solo se usa dentro de la red interna,
+>   conviene dejar la variable vacía: sin ella los correos salen sin enlace, que
+>   es mejor que salir con uno que los hunde.
+> - **Los rebotes duros se corrigen, no se acumulan.** Una cuenta creada con la
+>   dirección mal escrita (RF-01.3 la deja escribir a mano) rebota en cada
+>   aviso, y acumular rebotes es de las pocas cosas que arruinan la reputación
+>   de un remitente. Cuando el log diga `destinatario rechazado`, corregí esa
+>   dirección en la cuenta en vez de esperar que se resuelva sola.
 
 ### 1.2 Levantar todo
 
@@ -157,8 +176,9 @@ contraseña**.
 docker compose ps
 ```
 
-`sgrc-app` tiene que figurar **`healthy`**. No es un adorno: ese estado sale
-de que el proceso consultó Postgres y respondió. Si dice `unhealthy` o
+`sgrc-app` tiene que figurar **`healthy`**. No es un adorno: ese estado sale de
+que el proceso consultó Postgres y respondió. Lo ejecuta el propio binario
+(`sgrc-app healthcheck`), porque la imagen es `scratch` y no trae `curl`. Si dice `unhealthy` o
 `starting` por más de un minuto, mirá los logs (§4).
 
 ### 1.4 Cargar el inventario
@@ -241,7 +261,7 @@ docker compose logs --tail=100 postgres
 Qué buscar en el arranque de `sgrc-app`:
 
 ```
-zona horaria de la escuela: America/Argentina/Buenos_Aires (ahora: ...)
+zona horaria: America/Argentina/Buenos_Aires (ahora: ...)
 conectado a sgrc_db
 admin inicial: cuenta ... lista            ← solo si hizo falta sembrarlo
 correo saliente habilitado vía smtp.gmail.com
@@ -321,23 +341,30 @@ make migrate ARCHIVO=migrations/001_esquema_inicial.sql
 > saber qué falta aplicar depende de que alguien se acuerde, y eso falla justo
 > cuando hay varias instalaciones o pasa el tiempo entre despliegues.
 
-Para ver cuáles se aplicaron hay que mirar la base; el proyecto no lleva una
-tabla de versiones de esquema (a esta escala, la lista de archivos y el
-orden alcanzan).
-
-### Entregas y devoluciones
-
-La **013** agrega `prestamo` (RF-08). No toca datos existentes ni puede
-abortar: crea una tabla vacía.
-
-La **014** agrega el estado `NO_RETIRADA` y las marcas de los avisos. Tampoco
-toca datos: amplía CHECK y agrega columnas nulas.
+### El barrido de entregas y devoluciones
 
 El barrido corre dentro del mismo proceso, cada cinco minutos, sin cron ni
-nada que instalar. Tres variables opcionales lo ajustan:
-`RETIRO_GRACIA_MINUTOS` (40), `DEVOLUCION_DEMORA_MINUTOS` (10) y
+nada que instalar. Cinco variables opcionales lo ajustan:
+`RETIRO_AVISO_MINUTOS` (15), `RETIRO_GRACIA_MINUTOS` (40),
+`RETIRO_PARCIAL_GRACIA_MINUTOS` (15), `DEVOLUCION_DEMORA_MINUTOS` (10) y
 `CIERRE_JORNADA` (18). Un valor mal escrito **impide levantar**, a propósito:
 descubrirlo tres horas después porque un aviso no salió es peor.
+
+Las tres primeras se leen juntas, porque son tres momentos de la misma clase y
+dos de ellas valen 15 por defecto sin ser lo mismo:
+
+| Variable | Desde cuándo cuenta | Qué hace |
+|---|---|---|
+| `RETIRO_AVISO_MINUTOS` (15) | el inicio de la clase | **Avisa** al docente que todavía no las retiró y que a los 40 quedan libres. Es el único aviso de esta etapa (RF-08.20) |
+| `RETIRO_GRACIA_MINUTOS` (40) | el inicio de la clase | **Libera**, en silencio, si no se retiró ninguna |
+| `RETIRO_PARCIAL_GRACIA_MINUTOS` (15) | la última **entrega** | **Libera**, en silencio, lo que el docente dejó cuando vino a buscar una parte |
+
+Las dos de liberación no avisan nada: el correo ya salió a los 15 minutos del
+inicio, cuando el docente todavía podía ir, cambiar la máquina o cancelar.
+Mandar otro al liberar sería un segundo mensaje por la misma clase para contar
+un hecho consumado. Si se sube `RETIRO_AVISO_MINUTOS` por encima de
+`RETIRO_GRACIA_MINUTOS`, el aviso pierde su razón de ser —llegaría con la
+reserva ya liberada—, así que esa combinación se rechaza al arrancar.
 
 **Ningún aviso depende de que el barrido corra a una hora exacta.** Cada uno
 deja su marca en la fila, así que reiniciar el contenedor o estar caído dos
@@ -345,7 +372,7 @@ horas cambia *cuándo* sale, nunca *cuántas veces*. En el log se ve una línea
 por barrida que hizo algo:
 
 ```
-barrido: 2 recordatorios, 1 reservas liberadas, 0 avisos de equipo faltante, ...
+barrido: 2 recordatorios, 3 avisos de no retiro, 1 reservas liberadas, 0 avisos de equipo faltante, ...
 ```
 
 Si al entregar aparece "ese equipo ya figura entregado y todavía no
@@ -353,14 +380,10 @@ volvió", no es un error del sistema: es el índice único haciendo su trabajo.
 La máquina figura afuera, y lo que corresponde es recibirla primero — o
 averiguar quién la tiene, que la pantalla de entregas lo dice.
 
-### Aviso de licencias de software
-
-La **012** agrega `licencia_software` (RF-03.11 a RF-03.14). No toca datos
-existentes ni puede abortar: crea una tabla vacía y amplía el `CHECK` de
-`notificacion.tipo`.
+### El aviso de licencias de software
 
 El aviso corre dentro del mismo proceso, sin cron ni nada que instalar. Sale
-a partir de `LICENCIAS_HORA_AVISO` (0-23, hora de la escuela; por defecto
+a partir de `LICENCIAS_HORA_AVISO` (0-23, hora local de la institución; por defecto
 `7`). Es un "no antes de", no un horario exacto: el barrido pasa cada hora y
 la primera pasada después de esa hora manda el mail; las siguientes no
 encuentran nada porque cada licencia queda marcada con la fecha de
@@ -428,14 +451,15 @@ significar que se perdió lo que había.
 
 ### Tres tablas que crecen y nunca se limpian
 
-`notificacion`, `auditoria` y `horario_admin_excepcion` **no se borran
-nunca**, a propósito. Cada aviso, cada acción sensible y cada "hoy no vengo"
-queda para siempre, y el backup los arrastra.
+`notificacion`, `audit_log` y `codigo_recuperacion` **no se borran nunca**, a
+propósito. Cada aviso, cada acción sensible y cada pedido de
+recuperación de contraseña queda para siempre, y el backup los arrastra.
 
 No hay ninguna purga automática, y es deliberado: la auditoría existe
 justamente para poder reconstruir qué pasó cuando alguien reclama algo de
 hace meses, y un proceso que borra sin que nadie mire es peor que una tabla
-grande. En una escuela de este tamaño esto crece muy despacio.
+grande. A la escala de una institución educativa esto crece muy despacio: son filas de
+texto corto, no archivos.
 
 Para ver cuánto pesan:
 
@@ -457,11 +481,11 @@ ciclos lectivos atrás). No lo hagas a ojo sobre producción.
 Son **la misma base con distinto contenido**, no dos esquemas distintos. Lo
 que cambia es qué datos hay adentro:
 
-|  | Producción (servidor de la escuela) | Desarrollo (`make run`) |
+|  | Producción | Desarrollo (`make run`) |
 |---|---|---|
 | Tablas | Las crea Postgres al arrancar con el volumen vacío, aplicando el esquema de `migrations/` | Igual |
 | Primer Admin | Lo siembra la app (`SEED_ADMIN_*` del `.env`) | Igual |
-| Datos | **Ninguno**: ni ciclo, ni carros, ni equipos. El Admin arma todo desde la interfaz | Ciclo, curso, materia, un docente aprobado y un carro con 8 PCs |
+| Datos | **Ninguno**: ni ciclo, ni carros, ni equipos. El Admin arma todo desde la interfaz | Un ciclo, un curso, una materia, un docente aprobado y un carro con equipos |
 
 El sistema no inventa datos en producción a propósito: un carro llamado
 "Carro 1" que nadie cargó es peor que la pantalla vacía, porque parece real.
@@ -479,7 +503,7 @@ tenés una base recién creada y usable, sin pasos extra.
 
 Tres cosas de ese servicio:
 
-- **Vive solo en el overlay de desarrollo.** En el servidor no existe:
+- **Vive solo en el overlay de desarrollo.** En producción no existe:
   `make run-prod` no lo levanta.
 - **Le pega a la API como cualquier cliente**, no escribe en la base por
   debajo. Todo lo que crea pasa por las mismas validaciones que usaría una
@@ -506,7 +530,7 @@ docker compose down -v   # borra el volumen: se pierde TODO
 make run                 # tablas nuevas + Admin + datos de prueba
 ```
 
-En el servidor de la escuela ese `-v` no se usa nunca sin un backup (§6).
+En producción ese `-v` no se usa nunca sin un backup (§6).
 
 ### Dónde se abre en local
 
@@ -549,7 +573,7 @@ deploy.
 
 No hay dos versiones del proyecto ni una rama distinta: **es el mismo código
 con otro `.env` y sin el overlay de desarrollo**. Lo único que cambia entre
-tu máquina y el servidor de la escuela es eso.
+tu máquina y el servidor es eso.
 
 ### 9.1 Qué cambia, exactamente
 
@@ -562,7 +586,7 @@ tu máquina y el servidor de la escuela es eso.
 | Entrada | `http://localhost:8081` | El dominio, vía Cloudflare Tunnel |
 
 Que en producción no se publique ningún puerto es a propósito: publicar el
-5432 abriría la base a toda la LAN de la escuela, y publicar el 80 del
+5432 abriría la base a toda la LAN de la institución, y publicar el 80 del
 frontend daría un camino que se saltea el túnel — y con él, la posibilidad de
 falsificar el header con la IP del cliente.
 
