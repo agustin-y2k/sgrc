@@ -117,11 +117,27 @@ func escanearReserva(row pgx.Row) (*domain.Reserva, error) {
 	return &res, nil
 }
 
+// GuardarReserva persiste los campos mutables de una reserva ya creada.
+//
+// `equipo_id` está en la lista porque cambiar de máquina (RF-08.14) es una de
+// las cosas que le pasan a una reserva viva, no solo cancelarla o
+// finalizarla. Faltaba, y el modo en que fallaba es el que hay que tener
+// presente al tocar este UPDATE: el servicio modificaba la reserva en
+// memoria, esta función escribía todo menos el equipo, el UPDATE afectaba su
+// fila igual —así que no había error— y la respuesta salía con el equipo
+// nuevo. El cambio se veía aplicado en pantalla y no existía en la base.
+//
+// Enumerar columnas a mano tiene ese riesgo: lo que no está en la lista se
+// pierde en silencio. Si mañana `Reserva` gana otro campo mutable, va acá.
+//
+// Para los demás llamadores —las cancelaciones y la finalización— escribir el
+// equipo no cambia nada: traen la reserva leída de la base y no lo tocan, así
+// que reescriben el mismo valor.
 func (r *PostgresRepo) GuardarReserva(ctx context.Context, res *domain.Reserva) error {
 	tag, err := r.db.Exec(ctx, `
-		UPDATE reserva SET estado=$2, cancelado_por=$3, motivo_cancelacion=$4, cancelada_en=$5
+		UPDATE reserva SET equipo_id=$2, estado=$3, cancelado_por=$4, motivo_cancelacion=$5, cancelada_en=$6
 		WHERE id=$1
-	`, res.ID, string(res.Estado), res.CanceladoPor, res.MotivoCancelacion, res.CanceladaEn)
+	`, res.ID, res.EquipoID, string(res.Estado), res.CanceladoPor, res.MotivoCancelacion, res.CanceladaEn)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido

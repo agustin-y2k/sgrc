@@ -34,3 +34,31 @@ export function formatearFechaLargaCapitalizada(iso: string): string {
   const texto = formatearFechaLarga(iso)
   return texto.charAt(0).toUpperCase() + texto.slice(1)
 }
+
+/**
+ * "Hoy", "Mañana", o la fecha larga.
+ *
+ * Los dos primeros días son los que se miran, y leer "Hoy" es más rápido y
+ * más seguro que leer "miércoles 12 de agosto" y compararlo mentalmente con
+ * el día que uno cree que es. Del tercero en adelante la fecha sí es el
+ * dato: "en tres días" obligaría a contar.
+ *
+ * `hoy` se pasa y no se lee del reloj acá para que la pantalla entera hable
+ * del mismo día: consultada dos veces alrededor de la medianoche, una misma
+ * lista podría rotular "Hoy" y "Mañana" la misma fecha.
+ */
+export function etiquetaDeDia(iso: string, hoy: string): string {
+  if (iso === hoy) return "Hoy"
+  const referencia = aFechaLocal(hoy)
+  if (referencia) {
+    const manana = new Date(
+      referencia.getFullYear(),
+      referencia.getMonth(),
+      referencia.getDate() + 1
+    )
+    const mes = String(manana.getMonth() + 1).padStart(2, "0")
+    const dia = String(manana.getDate()).padStart(2, "0")
+    if (iso === `${manana.getFullYear()}-${mes}-${dia}`) return "Mañana"
+  }
+  return formatearFechaLargaCapitalizada(iso)
+}

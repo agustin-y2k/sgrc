@@ -15,10 +15,11 @@ import {
   PRESTAMOS_KEY,
   REFRESCO_DEL_MOSTRADOR,
 } from "@/features/admin/entregas/compartido"
+import { InicioDocente } from "@/features/inicio/InicioDocente"
 import { useNoLeidas } from "@/features/notificaciones/useNoLeidas"
 import * as reservasApi from "@/features/reservas/api"
 import { agruparReservas, hoyISO } from "@/features/reservas/types"
-import { formatearFechaLargaCapitalizada } from "@/lib/fechas"
+import { etiquetaDeDia } from "@/lib/fechas"
 import { getErrorMessage } from "@/lib/api-client"
 import type { GrupoDeReservas } from "@/features/reservas/types"
 
@@ -30,19 +31,26 @@ import type { GrupoDeReservas } from "@/features/reservas/types"
  * esperándome?"— y ofrece el atajo a lo que venía a hacer, en vez de un
  * párrafo que explique dónde queda cada sección.
  *
- * Cada tarjeta lleva a una pantalla que ya existe. Nada de esto es una
- * función nueva del sistema: es un índice de lo que ya hay.
+ * Los dos roles entran acá pero no vienen a lo mismo, y por eso el cuerpo se
+ * bifurca: un Admin abre esto para operar el mostrador —qué entregar ahora,
+ * qué falta que vuelva— y lo tiene abierto todo el día; un docente entra de
+ * a ratos, a reservar o a mirar qué le toca. Lo del docente vive en
+ * `InicioDocente`, escrito para quien no conoce cómo está dividido el
+ * sistema.
+ *
+ * Este archivo es el dueño de las consultas: las dos vistas se alimentan de
+ * las mismas reservas, y pedirlas por separado sería la misma pregunta hecha
+ * dos veces.
  */
+
+/** Cuántas clases resume el panel del Admin antes de mandar al listado. */
+const MAX_PROXIMAS = 5
 
 function saludo(ahora: Date): string {
   const hora = ahora.getHours()
   if (hora < 13) return "Buen día"
   if (hora < 20) return "Buenas tardes"
   return "Buenas noches"
-}
-
-function etiquetaDeDia(fechaISO: string, hoy: string): string {
-  return fechaISO === hoy ? "Hoy" : formatearFechaLargaCapitalizada(fechaISO)
 }
 
 /** Un número grande con su rótulo, que además es un enlace. */
@@ -146,15 +154,17 @@ export function InicioPage() {
     enabled: esAdmin,
   })
 
+  // Sin cortar: cada vista decide cuántas muestra, pero los contadores se
+  // calculan sobre todas. Cortando acá, un docente con más clases que el
+  // corte leía "5 próximas" para siempre, y las de hoy se contaban sobre una
+  // lista ya truncada.
   const grupos = agruparReservas(
     (reservas?.data ?? []).filter((r) => r.estado === "CONFIRMADA")
+  ).sort((a, b) =>
+    a.fecha === b.fecha
+      ? a.horaInicio.localeCompare(b.horaInicio)
+      : a.fecha.localeCompare(b.fecha)
   )
-    .sort((a, b) =>
-      a.fecha === b.fecha
-        ? a.horaInicio.localeCompare(b.horaInicio)
-        : a.fecha.localeCompare(b.fecha)
-    )
-    .slice(0, 5)
 
   // Cada número sale en null si su consulta falló, para que el indicador
   // muestre "—" en vez de un cero inventado. Sin esto, un fallo de red se
@@ -182,7 +192,7 @@ export function InicioPage() {
         <p className="text-muted-foreground mt-1 text-sm">
           {esAdmin
             ? "Qué hay que entregar ahora, qué falta que vuelva y con qué se cuenta."
-            : "Reservá los equipos para tus clases y mirá cómo venís esta semana."}
+            : "Acá tenés todo a mano: lo que ya reservaste y todo lo que podés hacer."}
         </p>
       </div>
 
@@ -205,7 +215,7 @@ export function InicioPage() {
           Cuántas cuentas esperan aprobación y cuántos avisos hay sin leer son
           cosas que se miran una vez al día; entregar y recibir, todo el día.
           Por eso los contadores quedan abajo y no arriba. */}
-      {esAdmin && (
+      {esAdmin ? (
         <>
           <PanelDelLaboratorio />
           {/* "Afuera" y "acá" son la misma pregunta dada vuelta, así que van
@@ -240,108 +250,94 @@ export function InicioPage() {
               )}
             </div>
           </div>
-        </>
-      )}
 
-      {/* Dos columnas en un teléfono y no una sola: son números cortos, y
-          apilados obligaban a bajar para ver el último.
+          {/* Dos columnas en un teléfono y no una sola: son números cortos, y
+              apilados obligaban a bajar para ver el último.
 
-          Para el Admin esto va DEBAJO del mostrador (ver arriba). Sigue acá
-          y no se saca: una cuenta pendiente es un docente que no puede
-          trabajar, y nadie va a entrar a buscarla si nada se la nombra. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Indicador
-          valor={deHoy}
-          rotulo={deHoy === 1 ? "clase hoy" : "clases hoy"}
-          detalle={errorReservas ? "No se pudo consultar" : "Con equipos reservados"}
-          a="/reservas"
-        />
-        {/* Para el Admin, "afuera" reemplaza a "próximas": lo que viene ya
-            se lo dice el panel del mostrador con detalle, y lo que no puede
-            faltarle de un vistazo es cuántas máquinas están fuera del
-            laboratorio. */}
-        {esAdmin ? (
-          <Indicador
-            valor={errorPrestamos ? null : afuera.length}
-            rotulo="afuera"
-            detalle={
-              errorPrestamos
-                ? "No se pudo consultar"
-                : sinDevolverAHorario
-                  ? `${sinDevolverAHorario} sin devolver a horario`
-                  : "Equipos entregados"
-            }
-            a="/admin/entregas"
-            destacado={!!sinDevolverAHorario}
-          />
-        ) : (
-          <Indicador
-            valor={errorReservas ? null : grupos.length}
-            rotulo="próximas"
-            detalle={errorReservas ? "No se pudo consultar" : "Reservas por venir"}
-            a="/reservas"
-          />
-        )}
-        {esAdmin && (
-          <Indicador
-            valor={cuentasPendientes}
-            rotulo="por aprobar"
-            detalle={errorPendientes ? "No se pudo consultar" : "Cuentas de docentes"}
-            a="/admin/aprobacion"
-            destacado={!!cuentasPendientes && cuentasPendientes > 0}
-          />
-        )}
-        <Indicador
-          valor={noLeidas}
-          rotulo="sin leer"
-          detalle="Avisos del sistema"
-          a="/notificaciones"
-          destacado={noLeidas > 0}
-        />
-      </div>
+              Van DEBAJO del mostrador (ver arriba), pero no se sacan: una
+              cuenta pendiente es un docente que no puede trabajar, y nadie va
+              a entrar a buscarla si nada se la nombra. */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Indicador
+              valor={deHoy}
+              rotulo={deHoy === 1 ? "clase hoy" : "clases hoy"}
+              detalle={errorReservas ? "No se pudo consultar" : "Con equipos reservados"}
+              a="/reservas"
+            />
+            {/* "Afuera" y no "próximas": lo que viene ya se lo dice el panel
+                del mostrador con detalle, y lo que no puede faltarle de un
+                vistazo es cuántas máquinas están fuera del laboratorio. */}
+            <Indicador
+              valor={errorPrestamos ? null : afuera.length}
+              rotulo="afuera"
+              detalle={
+                errorPrestamos
+                  ? "No se pudo consultar"
+                  : sinDevolverAHorario
+                    ? `${sinDevolverAHorario} sin devolver a horario`
+                    : "Equipos entregados"
+              }
+              a="/admin/entregas"
+              destacado={!!sinDevolverAHorario}
+            />
+            <Indicador
+              valor={cuentasPendientes}
+              rotulo="por aprobar"
+              detalle={errorPendientes ? "No se pudo consultar" : "Cuentas de docentes"}
+              a="/admin/aprobacion"
+              destacado={!!cuentasPendientes && cuentasPendientes > 0}
+            />
+            <Indicador
+              valor={noLeidas}
+              rotulo="sin leer"
+              detalle="Avisos del sistema"
+              a="/notificaciones"
+              destacado={noLeidas > 0}
+            />
+          </div>
 
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                <CardTitle>Lo que viene</CardTitle>
+                <Button asChild size="sm">
+                  <Link to="/reservas/nueva">Nueva reserva</Link>
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {grupos.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    No tenés reservas próximas. Cuando crees una, va a aparecer acá con el
+                    día, el horario y los equipos.
+                  </p>
+                ) : (
+                  <ul>
+                    {/* Un resumen, no la agenda entera: para operar el
+                        mostrador alcanza con lo que sigue, y el listado
+                        completo está a un clic. */}
+                    {grupos.slice(0, MAX_PROXIMAS).map((g) => (
+                      <ProximaReserva
+                        key={`${g.grupoId ?? g.fecha}-${g.horaInicio}-${g.reservas[0]?.id}`}
+                        grupo={g}
+                        hoy={hoy}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-            <CardTitle>Lo que viene</CardTitle>
-            <Button asChild size="sm">
-              <Link to="/reservas/nueva">Nueva reserva</Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {grupos.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                No tenés reservas próximas. Cuando crees una, va a aparecer acá con el
-                día, el horario y los equipos.
-              </p>
-            ) : (
-              <ul>
-                {grupos.map((g) => (
-                  <ProximaReserva
-                    key={`${g.grupoId ?? g.fecha}-${g.horaInicio}-${g.reservas[0]?.id}`}
-                    grupo={g}
-                    hoy={hoy}
-                  />
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Accesos rápidos</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            <Button asChild variant="outline" className="justify-start">
-              <Link to="/inventario">Ver carros y equipos</Link>
-            </Button>
-            <Button asChild variant="outline" className="justify-start">
-              <Link to="/disponibilidad">Disponibilidad de Admins</Link>
-            </Button>
-            {esAdmin ? (
-              <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Accesos rápidos</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-2">
+                <Button asChild variant="outline" className="justify-start">
+                  <Link to="/inventario">Ver carros y equipos</Link>
+                </Button>
+                <Button asChild variant="outline" className="justify-start">
+                  <Link to="/disponibilidad">Disponibilidad de Admins</Link>
+                </Button>
                 <Button asChild variant="outline" className="justify-start">
                   <Link to="/admin/academico">Ciclos, cursos y materias</Link>
                 </Button>
@@ -357,15 +353,18 @@ export function InicioPage() {
                 <Button asChild variant="outline" className="justify-start">
                   <Link to="/admin/bloquear-equipos">Bloquear equipos</Link>
                 </Button>
-              </>
-            ) : (
-              <Button asChild variant="outline" className="justify-start">
-                <Link to="/reservas">Mis reservas</Link>
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      ) : (
+        <InicioDocente
+          grupos={grupos}
+          hoy={hoy}
+          noLeidas={noLeidas}
+          hayError={errorReservas !== null}
+        />
+      )}
     </div>
   )
 }
