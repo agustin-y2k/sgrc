@@ -1,11 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router"
 
 import * as adminApi from "@/features/admin/api"
 import { useAuth } from "@/features/auth/AuthContext"
 import type { Usuario } from "@/features/auth/types"
 import { InicioPage } from "@/features/inicio/InicioPage"
+import * as inventoryApi from "@/features/inventory/api"
+import type { Equipo } from "@/features/inventory/types"
 import * as notificacionesApi from "@/features/notificaciones/api"
 import * as reservasApi from "@/features/reservas/api"
 import type { ReservaDetallada } from "@/features/reservas/types"
@@ -13,6 +16,7 @@ import { paginada } from "@/test/respuestas"
 
 vi.mock("@/features/reservas/api")
 vi.mock("@/features/admin/api")
+vi.mock("@/features/inventory/api")
 vi.mock("@/features/notificaciones/api")
 vi.mock("@/features/auth/AuthContext")
 
@@ -80,6 +84,22 @@ function renderInicio() {
   )
 }
 
+function equipo(over: Partial<Equipo> = {}): Equipo {
+  return {
+    id: "pc1",
+    carroId: "c1",
+    identificador: 1,
+    etiqueta: "PC 1",
+    tipo: "notebook",
+    reservable: true,
+    freezado: false,
+    estado: "DISPONIBLE",
+    dadoDeBaja: false,
+    fechaAlta: "2026-01-01T00:00:00Z",
+    ...over,
+  }
+}
+
 describe("InicioPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -88,13 +108,20 @@ describe("InicioPage", () => {
     vi.mocked(adminApi.listarUsuarios).mockResolvedValue(paginada([]))
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.reporteEstadoDelInventario).mockResolvedValue({ data: [] })
+    vi.mocked(reservasApi.cancelarGrupo).mockResolvedValue({ reservasCanceladas: 1 })
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({ data: [] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
+      data: [{ id: "c1", nombre: "Carro 1" }],
+    })
+    vi.mocked(inventoryApi.listarCategoriasDeFalla).mockResolvedValue({ data: [] })
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it("muestra las próximas reservas agrupadas en una sola línea por clase", async () => {
+  it("muestra las próximas reservas agrupadas en una sola tarjeta por clase", async () => {
     mockUsuario(DOCENTE)
     // Dos equipos de la MISMA reserva: para el docente fue una sola clase.
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
@@ -103,11 +130,16 @@ describe("InicioPage", () => {
     renderInicio()
 
     expect(await screen.findByText(/Matemática/)).toBeInTheDocument()
-    expect(screen.getByText("2 equipos")).toBeInTheDocument()
+    expect(screen.getByText("2 computadoras reservadas")).toBeInTheDocument()
     expect(screen.getAllByText(/Matemática/)).toHaveLength(1)
   })
 
-  it("cuenta como 'clase hoy' solo lo de hoy", async () => {
+  /**
+   * Un docente no lee un "1" grande arriba de la palabra "hoy" y sabe qué
+   * hacer con eso: lee el día de su clase. La fecha se rotula "Hoy" o
+   * "Mañana" porque son los dos días sobre los que se decide algo.
+   */
+  it("rotula la clase por el día, no por un contador", async () => {
     mockUsuario(DOCENTE)
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
       paginada([
@@ -117,33 +149,120 @@ describe("InicioPage", () => {
     )
     renderInicio()
 
-    // Una hoy, dos próximas en total.
-    expect(await screen.findByText("clase hoy")).toBeInTheDocument()
-    const hoyEnlace = screen.getByText("clase hoy").closest("a")
-    expect(hoyEnlace).toHaveTextContent("1")
-    const proximas = screen.getByText("próximas").closest("a")
-    expect(proximas).toHaveTextContent("2")
+    expect(await screen.findByText(/^Hoy/)).toBeInTheDocument()
+    expect(screen.queryByText("clases hoy")).not.toBeInTheDocument()
+    expect(screen.queryByText("próximas")).not.toBeInTheDocument()
   })
 
-  it("no cuenta las canceladas", async () => {
+  it("no muestra las canceladas", async () => {
     mockUsuario(DOCENTE)
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
       paginada([reserva({ estado: "CANCELADA" })])
     )
     renderInicio()
 
-    expect(await screen.findByText(/No tenés reservas próximas/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/No tenés ninguna clase con computadoras reservadas/)
+    ).toBeInTheDocument()
+  })
+
+  /**
+   * Con la consulta caída, el estado vacío es una afirmación falsa: el
+   * docente cierra la pantalla creyendo que perdió la reserva.
+   */
+  it("si no pudo consultar las reservas, no dice que no hay ninguna", async () => {
+    mockUsuario(DOCENTE)
+    vi.mocked(reservasApi.listarReservas).mockRejectedValue(new Error("se cayó la red"))
+    renderInicio()
+
+    expect(
+      await screen.findByText(/No se pudieron consultar tus reservas/)
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/No tenés ninguna clase con computadoras reservadas/)
+    ).not.toBeInTheDocument()
+  })
+
+  it("dice cuántos avisos sin leer hay, en una frase", async () => {
+    mockUsuario(DOCENTE)
+    vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(
+      paginada([], { total: 3, pageSize: 50 })
+    )
+    renderInicio()
+
+    expect(await screen.findByText("Tenés 3 avisos sin leer")).toBeInTheDocument()
   })
 
   it("a un docente no le pregunta por las cuentas pendientes", async () => {
     mockUsuario(DOCENTE)
     renderInicio()
 
-    expect(await screen.findByText(/No tenés reservas próximas/)).toBeInTheDocument()
+    expect(await screen.findByText("Tus próximas clases")).toBeInTheDocument()
     // El endpoint es solo de Admin: pedirlo desde un docente sería un 403
     // en cada carga del home.
     expect(adminApi.listarUsuarios).not.toHaveBeenCalled()
     expect(screen.queryByText("por aprobar")).not.toBeInTheDocument()
+  })
+
+  /**
+   * Lo que sigue es la razón de ser de la pantalla para un docente: las tres
+   * cosas que puede necesitar hacer se hacen acá, sin tener que saber en qué
+   * sección del sistema vive cada una.
+   */
+  describe("resolver sin salir del inicio", () => {
+    it("cancela una clase", async () => {
+      mockUsuario(DOCENTE)
+      vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
+      const user = userEvent.setup()
+      renderInicio()
+
+      await user.click(await screen.findByRole("button", { name: "Cancelar esta clase" }))
+      await user.click(screen.getByRole("button", { name: "Confirmar cancelación" }))
+
+      expect(reservasApi.cancelarGrupo).toHaveBeenCalledWith("grupo1", "", true)
+    })
+
+    it("cambia una computadora de una reserva ya hecha", async () => {
+      mockUsuario(DOCENTE)
+      vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
+      const user = userEvent.setup()
+      renderInicio()
+
+      await user.click(
+        await screen.findByRole("button", { name: "Cambiar una computadora" })
+      )
+
+      expect(await screen.findByLabelText("¿Cuál cambiás?")).toBeInTheDocument()
+      expect(reservasApi.equiposDisponibles).toHaveBeenCalled()
+    })
+
+    it("reporta que una computadora no anda", async () => {
+      mockUsuario(DOCENTE)
+      const user = userEvent.setup()
+      renderInicio()
+
+      await user.click(await screen.findByText("Avisar que una no anda"))
+      await user.selectOptions(await screen.findByLabelText("¿Cuál es?"), "pc1")
+
+      // El formulario de reporte es el mismo del inventario, y nombra el
+      // equipo por su etiqueta.
+      expect(await screen.findByText("Reportar un problema en PC 1")).toBeInTheDocument()
+    })
+  })
+
+  /**
+   * "Inventario", "Disponibilidad": nombres de secciones del sistema. Un
+   * docente que no sabe cómo está dividido no puede elegir entre ellos, pero
+   * sí entre cosas que quiere hacer.
+   */
+  it("nombra los atajos por lo que se hace, no por la sección", async () => {
+    mockUsuario(DOCENTE)
+    renderInicio()
+
+    expect(await screen.findByText("Ver las computadoras")).toBeInTheDocument()
+    expect(screen.getByText("Quién te puede ayudar")).toBeInTheDocument()
+    expect(screen.getByText("Cambiar mi contraseña")).toBeInTheDocument()
+    expect(screen.queryByText("Accesos rápidos")).not.toBeInTheDocument()
   })
 
   it("a un Admin le muestra cuántas cuentas esperan aprobación", async () => {
@@ -174,7 +293,9 @@ describe("InicioPage", () => {
       )
       renderInicio()
 
-      expect(await screen.findByText(/lo que ves acá puede estar incompleto/i)).toBeInTheDocument()
+      expect(
+        await screen.findByText(/lo que ves acá puede estar incompleto/i)
+      ).toBeInTheDocument()
 
       const afuera = screen.getByText("afuera").closest("a")
       expect(afuera).toHaveTextContent("—")
@@ -247,7 +368,7 @@ describe("InicioPage", () => {
     mockUsuario(DOCENTE)
     renderInicio()
 
-    await screen.findByText(/Reservá los equipos/)
+    await screen.findByText("Tus próximas clases")
     expect(adminApi.reporteEstadoDelInventario).not.toHaveBeenCalled()
   })
 

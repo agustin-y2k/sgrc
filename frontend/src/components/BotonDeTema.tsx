@@ -52,6 +52,10 @@ export function BotonDeTema() {
     <Button
       variant="ghost"
       size="sm"
+      // 44px en un teléfono (WCAG 2.5.5): es un botón de un solo ícono, y con
+      // el tamaño `sm` quedaba en 28px. En pantalla grande vuelve a su
+      // tamaño, donde se apunta con el mouse y la barra no puede engordar.
+      className="size-11 sm:size-7"
       onClick={alternar}
       // El texto es la etiqueta accesible: el botón es solo un ícono, y sin
       // esto un lector de pantalla anuncia "botón" a secas.
