@@ -233,6 +233,21 @@ flowchart LR
   - **Dar de baja algo que está prestado deja el préstamo abierto**: el equipo sale del inventario pero sigue en la lista de lo que falta volver. La pantalla lo advierte antes de confirmar, que es cuando todavía se puede marcar la devolución primero.
   - Puertas adentro **son la misma entidad `equipo` que las computadoras**, y eso no es un detalle de implementación: es lo que hace que el proyector quede prestable, reclamable, liberable y —si es reservable— reservable, sin una línea nueva en ninguno de esos flujos.
 
+### UC: Ver qué me toca y resolverlo (pantalla de inicio del docente)
+- **Actor:** Docente
+- **Motivo:** un docente entra de a ratos y a hacer una cosa, y no tiene por qué saber cómo está dividido el sistema. Enfrentado a una pantalla que nombra secciones —"Inventario", "Disponibilidad"— tiene que entrar a cada una a averiguar qué hay adentro, que es justamente la navegación a ciegas que hay que evitar. La pantalla tiene que decirle qué puede hacer, en sus palabras, y dejarlo hacerlo.
+- **Qué muestra la pantalla de inicio:**
+  1. **Los avisos sin leer**, si hay, dichos en una frase y con el botón al lado. Cuando no hay, no aparece nada: un "0 sin leer" permanente se aprende a ignorar, y entonces tampoco se ve el día que dice tres.
+  2. **Reservar computadoras**: la única acción principal, arriba y a ancho completo.
+  3. **Sus próximas clases**, con el día rotulado "Hoy" o "Mañana", la franja, la materia y qué equipos le tocan. Sobre cada una, **cambiar una computadora** y **cancelar la clase**, que se resuelven sin salir de la pantalla.
+  4. **Todo lo demás**, en tarjetas iguales nombradas por la tarea: ver las computadoras, avisar que una no anda, ver todas sus reservas, quién lo puede ayudar, sus avisos, cambiar su contraseña.
+- **Reglas que no son obvias:**
+  - **Cambiar y cancelar son los mismos paneles que en "Mis reservas"**, no una copia. Las reglas que traen consigo —el alcance de una serie recurrente, el motivo obligatorio cuando la reserva es ajena— valen igual desde acá sin volver a escribirlas.
+  - Se abre **uno de los dos paneles por vez**: los dos hablan de la misma reserva, y abiertos juntos se leen como un solo formulario largo con dos botones de confirmar.
+  - **Solo se listan unas pocas clases**, no la agenda entera: el listado completo está a un clic, y una agenda larga acá abajo empuja los atajos fuera de la vista.
+  - Para **avisar que un equipo no anda** hay que elegir cuál, que es el paso que en el inventario está implícito porque allá se llega con el carro ya abierto. La lista se pide entera y se agrupa por carro en el navegador: preguntar primero el carro y después el equipo son dos preguntas para alguien que ya sabe qué máquina tuvo adelante.
+  - **Un fallo de consulta no se dice como "no tenés reservas".** Si la consulta falló, la pantalla lo dice y no muestra el estado vacío.
+
 ### UC: Atender el mostrador (pantalla de inicio del Admin)
 - **Actor:** Admin
 - **Motivo:** el Admin pasa el día en el laboratorio con gente esperando del otro lado. Lo que necesita ver sin buscar es a quién le tiene que entregar ahora, qué viene después, qué computadoras están afuera, cuáles volvieron y con cuántas cuenta si alguien golpea la puerta.

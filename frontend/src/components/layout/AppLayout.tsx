@@ -75,6 +75,17 @@ function claseDeEnlace({ isActive }: { isActive: boolean }): string {
 }
 
 /**
+ * Lo mismo, para el menú desplegable del teléfono: ahí cada enlace se toca
+ * con el pulgar y necesita los 44px de WCAG 2.5.5, que con el `py-1.5` de la
+ * barra no llegaba (32px). En la barra de escritorio se apunta con el mouse
+ * y agrandar los ítems la haría desbordar, que es el problema que persigue
+ * `e2e/responsive.spec.ts` — por eso son dos clases y no una.
+ */
+function claseDeEnlaceMovil(estado: { isActive: boolean }): string {
+  return `${claseDeEnlace(estado)} flex min-h-11 items-center`
+}
+
+/**
  * El grupo "Administración" de la barra de escritorio.
  *
  * Es un desplegable escrito a mano y no una primitiva de Radix por dos
@@ -178,8 +189,10 @@ export function AppLayout() {
   // pantalla a la que se acaba de entrar.
   const cerrarMenu = () => setMenuAbierto(false)
 
-  const avisos = (
-    <NavLink to="/notificaciones" className={claseDeEnlace} onClick={cerrarMenu}>
+  // Recibe la clase porque el mismo enlace se dibuja en la barra y en el
+  // menú del teléfono, y ahí el alto mínimo no es el mismo.
+  const avisos = (clase: (estado: { isActive: boolean }) => string) => (
+    <NavLink to="/notificaciones" className={clase} onClick={cerrarMenu}>
       <span className="flex items-center gap-1.5">
         Avisos
         {/* RF-05.7: las notificaciones tienen que verse al ingresar. El
@@ -203,9 +216,11 @@ export function AppLayout() {
           obligaba a subir hasta el principio de la página. */}
       <header className="bg-superficie/90 border-border sticky top-0 z-20 border-b backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+          {/* `min-h-11` solo en el teléfono, por el blanco táctil: en la
+              barra de escritorio el alto lo fija el contenido. */}
           <Link
             to="/"
-            className="flex shrink-0 items-center gap-2 font-semibold"
+            className="flex min-h-11 shrink-0 items-center gap-2 font-semibold sm:min-h-0"
             onClick={cerrarMenu}
           >
             <span
@@ -239,7 +254,7 @@ export function AppLayout() {
                   {e.texto}
                 </NavLink>
               ))}
-              {avisos}
+              {avisos(claseDeEnlace)}
             </div>
             {esAdmin && <MenuAdministracion />}
           </nav>
@@ -284,10 +299,12 @@ export function AppLayout() {
               Salir
             </Button>
 
+            {/* `h-11` en el teléfono: es el control que abre todo lo demás,
+                así que es el último que puede quedar chico para un dedo. */}
             <Button
               variant="outline"
               size="sm"
-              className="lg:hidden"
+              className="h-11 px-4 lg:hidden"
               aria-expanded={menuAbierto}
               aria-controls="menu-principal"
               onClick={() => setMenuAbierto((abierto) => !abierto)}
@@ -312,11 +329,16 @@ export function AppLayout() {
             className="border-border grid gap-0.5 border-t px-4 py-2 lg:hidden"
           >
             {enlaces.map((e) => (
-              <NavLink key={e.a} to={e.a} className={claseDeEnlace} onClick={cerrarMenu}>
+              <NavLink
+                key={e.a}
+                to={e.a}
+                className={claseDeEnlaceMovil}
+                onClick={cerrarMenu}
+              >
                 {e.texto}
               </NavLink>
             ))}
-            {avisos}
+            {avisos(claseDeEnlaceMovil)}
 
             {/* En el teléfono el grupo va desplegado bajo un título en vez
                 de detrás de otro clic: el menú ya es una lista vertical que
@@ -338,7 +360,7 @@ export function AppLayout() {
                   <NavLink
                     key={e.a}
                     to={e.a}
-                    className={claseDeEnlace}
+                    className={claseDeEnlaceMovil}
                     onClick={cerrarMenu}
                   >
                     {e.texto}
@@ -349,12 +371,17 @@ export function AppLayout() {
 
             <NavLink
               to="/cambiar-password"
-              className={claseDeEnlace}
+              className={claseDeEnlaceMovil}
               onClick={cerrarMenu}
             >
               Mi cuenta
             </NavLink>
-            <Button variant="outline" size="sm" className="mt-1" onClick={handleLogout}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-1 h-11"
+              onClick={handleLogout}
+            >
               Cerrar sesión
             </Button>
           </nav>

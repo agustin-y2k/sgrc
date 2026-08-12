@@ -40,8 +40,9 @@ SGRC resuelve los cuatro: **impide el solapamiento a nivel de base de datos** (n
 | **Ver quién tiene lo que falta** | Los equipos ya tomados en esa franja aparecen con el nombre de quien los reservó. "No hay nada libre" y "los tiene alguien con quien puedo hablar" son situaciones distintas, y solo la segunda tiene salida. |
 | **Pedirle equipos a otro docente** | Un botón le manda al que los tiene un aviso y un correo: quién los necesita, para qué materia y a qué hora. No le saca nada ni espera respuesta del sistema — el acuerdo lo cierran ellos. Lo que el sistema garantiza es que el pedido llegue aunque no se crucen. |
 | **Reservas que se repiten** | "Todos los martes de 15 a 17, hasta fin de año." El sistema valida la serie completa antes de crear nada: si alguna fecha choca, dice cuáles y no crea ninguna. |
-| **Ver qué tiene por delante** | La pantalla de inicio responde "¿qué tengo hoy?" y "¿hay algo esperándome?" apenas se entra. |
-| **Reportar un equipo con problemas** | Desde el inventario, indicando la gravedad y qué falla. El aviso le llega al equipo de administración. |
+| **Ver qué tiene por delante** | La pantalla de inicio responde "¿qué tengo hoy?" y "¿hay algo esperándome?" apenas se entra. Muestra sus próximas clases con el día en palabras, y sobre cada una puede cambiar de máquina o cancelar sin ir a ninguna otra pantalla. |
+| **Llegar a todo sin conocer el sistema** | Debajo, un atajo por cada cosa que puede hacer, nombrado por la tarea y no por la sección —"Ver las computadoras", no "Inventario"— con una línea que dice para qué sirve. Está pensado para quien no usa una computadora todos los días. |
+| **Reportar un equipo con problemas** | Desde el inventario o desde la pantalla de inicio, indicando la gravedad y qué falla. El aviso le llega al equipo de administración. |
 | **Cancelar** | Una fecha suelta o toda la serie de aquí en adelante. |
 | **Cambiar de máquina** | Si una de las que reservó no está, la cambia por otra libre en la misma franja sin partir la clase en dos reservas. Si la reserva se repite todas las semanas, elige si el cambio es solo por esa fecha o de ahí hasta el final de la serie. |
 
