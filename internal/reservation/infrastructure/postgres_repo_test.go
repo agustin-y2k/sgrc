@@ -383,6 +383,86 @@ func TestPostgresRepo_GuardarReserva_Cancelar(t *testing.T) {
 	}
 }
 
+// TestPostgresRepo_GuardarReserva_CambiarDeEquipo cubre RF-08.14 en el único
+// lugar donde podía fallar.
+//
+// El UPDATE de GuardarReserva enumera las columnas a mano, y el equipo se
+// había quedado afuera. Nada lo delataba: el UPDATE tocaba una fila, así que
+// no había error, y el servicio devolvía la reserva ya modificada en memoria
+// —con el equipo nuevo— mientras la base seguía con el viejo. El docente veía
+// el cambio aplicado, volvía al día siguiente y tenía la máquina de antes.
+//
+// Los tests de servicio y de handler no podían verlo: usan repositorios
+// falsos que guardan el objeto entero. Solo se ve contra la base, releyendo.
+func TestPostgresRepo_GuardarReserva_CambiarDeEquipo(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	materiaID := crearMateriaDeTest(t, pool)
+	equipoViejo := crearEquipoDeCarroDeTest(t, pool)
+	equipoNuevo := crearEquipoDeCarroDeTest(t, pool)
+	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	repo.CrearReservaGrupo(context.Background(), g)
+	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoViejo, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	repo.CrearReserva(context.Background(), res)
+
+	res.EquipoID = equipoNuevo
+	if err := repo.GuardarReserva(context.Background(), res); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	recargada, err := repo.BuscarReservaPorID(context.Background(), res.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if recargada.EquipoID != equipoNuevo {
+		t.Errorf("el equipo no se persistió: quedó en %s y se esperaba %s",
+			recargada.EquipoID, equipoNuevo)
+	}
+}
+
+// TestPostgresRepo_GuardarReserva_MoverAUnEquipoOcupado_LoRechazaLaBase: al
+// escribir el equipo, este UPDATE pasó a poder violar la constraint EXCLUDE
+// de anti-solapamiento, cosa que antes no podía. El servicio ya verifica
+// antes para dar un mensaje entendible, pero la garantía ante dos pedidos
+// simultáneos es de la base — y tiene que llegar como un error, no como una
+// doble reserva del mismo equipo en la misma franja.
+func TestPostgresRepo_GuardarReserva_MoverAUnEquipoOcupado_LoRechazaLaBase(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	materiaID := crearMateriaDeTest(t, pool)
+	equipoA := crearEquipoDeCarroDeTest(t, pool)
+	equipoB := crearEquipoDeCarroDeTest(t, pool)
+	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	// Dos reservas en la MISMA franja, cada una con su equipo.
+	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	repo.CrearReservaGrupo(ctx, g)
+	resA, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoA, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	repo.CrearReserva(ctx, resA)
+	resB, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoB, materiaID, "Grace", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	repo.CrearReserva(ctx, resB)
+
+	// Mover la primera al equipo que ya tiene la segunda.
+	resA.EquipoID = equipoB
+	if err := repo.GuardarReserva(ctx, resA); err == nil {
+		t.Fatal("la base tenía que rechazar el solapamiento y no lo hizo")
+	}
+
+	// Y el rechazo no puede dejar la fila a medias.
+	recargada, err := repo.BuscarReservaPorID(ctx, resA.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if recargada.EquipoID != equipoA {
+		t.Errorf("la reserva quedó movida pese al rechazo: %s", recargada.EquipoID)
+	}
+}
+
 // TestPostgresRepo_ReservaVencida_ApareceEnElListado confirma que la
 // comparación fecha+hora_fin funciona igual que la de la constraint
 // EXCLUDE: aritmética date+time, no comparación de texto. Comparar como
