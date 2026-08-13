@@ -297,6 +297,12 @@ func main() {
 		os.Exit(ejecutarHealthcheck(puertoHTTP()))
 	}
 
+	// Operación del esquema a mano: `sgrc-app migrate status` para ver en qué
+	// versión está la base. Tampoco arranca la aplicación.
+	if esInvocacionDeMigrate(os.Args) {
+		os.Exit(ejecutarMigrate(os.Args, buildDSN()))
+	}
+
 	// El contexto se cancela con SIGTERM (lo que manda `docker compose down`
 	// / un redeploy) o Ctrl-C. De él cuelgan el job de vencimiento y el
 	// apagado del servidor.
@@ -349,6 +355,13 @@ func main() {
 		log.Fatalf("postgres no responde: %v", err)
 	}
 	log.Println("conectado a sgrc_db")
+
+	// ── Esquema al día (ver cmd/migrate.go) ────────────────────────
+	// Antes del seed a propósito: el Admin inicial se escribe en una tabla
+	// que esta llamada puede estar creando recién ahora.
+	if err := aplicarMigraciones(ctx, dsn); err != nil {
+		log.Fatalf("no se pudo poner la base al día: %v", err)
+	}
 
 	// ── Seed del primer Admin (RF-01.4), idempotente ────────────────
 	if err := seedAdminSiHaceFalta(ctx, pool, os.Getenv); err != nil {

@@ -6,9 +6,19 @@
 -- educativa. Este archivo es el esquema completo: se aplica solo, sobre una
 -- base vacía, y deja el sistema listo para arrancar.
 --
--- Postgres lo ejecuta solo la primera vez que se crea el volumen, vía
--- docker-entrypoint-initdb.d (ver docker-compose.yml). Para aplicarlo a mano
--- sobre una base ya creada: `make migrate ARCHIVO=migrations/001_esquema_inicial.sql`.
+-- Lo aplica el binario al arrancar, con goose, contra una base vacía o ya
+-- creada: goose lleva la cuenta de qué migraciones corrieron en la tabla
+-- `goose_db_version` y no repite ninguna. Antes esto lo hacía Postgres vía
+-- docker-entrypoint-initdb.d, que corre UNA sola vez —cuando el volumen se
+-- crea— y por eso una base ya existente se quedaba en el esquema viejo sin
+-- que nada avisara. Ver `docs/11-operacion.md`.
+--
+-- Las dos anotaciones de goose que aparecen más abajo —la de subida y la de
+-- bajada— no son decorativas: parten el archivo en dos. Lo que va después de
+-- la primera se aplica; lo que va después de la segunda es cómo se deshace.
+-- Cuidado al comentar sobre ellas: goose lee TODAS las líneas que llevan su
+-- marca, así que escribirla de nuevo dentro de un comentario rompe el
+-- archivo con un error de anotación duplicada.
 --
 -- ── Cómo leerlo ────────────────────────────────────────────────────────
 --
@@ -37,6 +47,8 @@
 -- migración para anotar el primer caso no previsto. En cambio los estados
 -- —de una reserva, de un equipo, de una cuenta— son enums con CHECK: sobre
 -- ellos el sistema decide, así que un valor inesperado sería un error.
+
+-- +goose Up
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- Extensiones
@@ -790,3 +802,45 @@ CREATE TABLE audit_log (
 -- Sin FK a usuario a propósito: si una cuenta se elimina, lo que hizo tiene
 -- que seguir registrado.
 CREATE INDEX idx_audit_usuario ON audit_log (usuario_id, creado_en DESC);
+
+-- +goose Down
+
+-- Deshacer el esquema inicial es borrar la base entera: no hay estado
+-- anterior al que volver, porque esta migración ES el punto de partida.
+--
+-- Está escrito de verdad, y no vacío, porque un `down` que no hace nada y
+-- termina bien es peor que uno que no existe: goose lo marca como
+-- revertido, la tabla goose_db_version dice que la migración no está
+-- aplicada, y las tablas siguen ahí. La próxima corrida intentaría crear lo
+-- que ya existe y fallaría con un error que no menciona nada de esto.
+--
+-- Por eso mismo no hay un atajo en el Makefile para llegar acá, igual que
+-- no lo hay para `docker compose down -v`: destruye los datos y no se puede
+-- deshacer.
+--
+-- El orden es el inverso al de creación. CASCADE se encarga igual de las
+-- foreign keys, pero mantenerlo legible es lo que permite revisarlo.
+
+DROP TABLE IF EXISTS audit_log CASCADE;
+DROP TABLE IF EXISTS historico_uso_docente CASCADE;
+DROP TABLE IF EXISTS historico_uso_equipo CASCADE;
+DROP TABLE IF EXISTS horario_admin_excepcion CASCADE;
+DROP TABLE IF EXISTS horario_admin CASCADE;
+DROP TABLE IF EXISTS notificacion CASCADE;
+DROP TABLE IF EXISTS prestamo CASCADE;
+DROP TABLE IF EXISTS reserva CASCADE;
+DROP TABLE IF EXISTS reserva_grupo CASCADE;
+DROP TABLE IF EXISTS regla_recurrencia CASCADE;
+DROP TABLE IF EXISTS licencia_software CASCADE;
+DROP TABLE IF EXISTS incidencia CASCADE;
+DROP TABLE IF EXISTS equipo CASCADE;
+DROP TABLE IF EXISTS carro CASCADE;
+DROP TABLE IF EXISTS docente_materia CASCADE;
+DROP TABLE IF EXISTS materia CASCADE;
+DROP TABLE IF EXISTS curso CASCADE;
+DROP TABLE IF EXISTS ciclo_lectivo CASCADE;
+DROP TABLE IF EXISTS codigo_recuperacion CASCADE;
+DROP TABLE IF EXISTS usuario CASCADE;
+
+-- Las extensiones NO se borran: pgcrypto y btree_gist pueden estar en uso
+-- por otra cosa en la misma base, y volver a crearlas es gratis.

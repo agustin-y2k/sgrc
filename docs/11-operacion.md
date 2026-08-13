@@ -246,7 +246,9 @@ make run-prod          # reconstruye las imágenes y reemplaza los contenedores
 ```
 
 Si la actualización trae **cambios en el esquema** (archivos nuevos en
-`migrations/`), hay que aplicarlos a mano: ver §5.
+`migrations/`), no hay nada extra que hacer: el binario los aplica solo al
+arrancar. Conviene igual mirar el log —la línea empieza con `goose:`— y, si
+querés confirmarlo después, `make migrate-status`. El detalle está en §5.
 
 ---
 
@@ -300,9 +302,28 @@ docker compose logs sgrc-app | grep -i "correo\|email"
 
 ## 5. El esquema de la base
 
-`migrations/001_esquema_inicial.sql` es el esquema completo del sistema. Se
-aplica **solo, una vez**, cuando la base se crea vacía: Postgres ejecuta lo
-que encuentre en ese directorio la primera vez que inicializa el volumen.
+`migrations/001_esquema_inicial.sql` es el esquema completo del sistema. **Lo
+aplica sgrc-app al arrancar**, con [goose](https://github.com/pressly/goose):
+mira qué migraciones registró la tabla `goose_db_version`, aplica las que
+falten y sigue. Arrancar mil veces no cambia nada; arrancar contra una base
+vacía la deja lista; arrancar contra una base vieja la pone al día.
+
+En el log se ve así:
+
+```
+conectado a sgrc_db
+goose: successfully migrated database to version: 1     ← la primera vez
+goose: no migrations to run. current version: 1         ← las siguientes
+```
+
+> **Antes esto lo hacía Postgres** con los scripts de
+> `docker-entrypoint-initdb.d`, que corren **una sola vez**: cuando el volumen
+> se crea. Sobre una base ya existente no corría nada y nadie avisaba, así que
+> una actualización dejaba el binario nuevo hablando con el esquema viejo. Eso
+> se ve como un sistema que arranca perfecto y devuelve 500 en la primera
+> pantalla que toca una columna que no está — un error que no menciona ni el
+> esquema ni la migración faltante. Si algo así reaparece, `make migrate-status`
+> es la primera pregunta a hacer.
 
 Es un archivo único y no una cadena de parches incrementales. La razón es
 para quién está escrito: alguien que adopta el proyecto necesita entender qué
@@ -311,35 +332,53 @@ reconstruyéndolo mentalmente a partir de veinte migraciones sucesivas, la
 mitad de las cuales renombran lo que hizo la otra mitad. La historia de cómo
 se llegó a este esquema está en el historial de git, que es donde corresponde.
 
-**Sobre una base que ya existe no corre solo.** Si hay que aplicarlo a mano —
-por ejemplo para levantar una instalación nueva contra una base ya creada:
+### Mirar y forzar el estado
 
 ```bash
-docker compose exec -T postgres sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < migrations/001_esquema_inicial.sql
+make migrate-status   # qué está aplicado y qué falta
+make migrate          # aplica lo pendiente sin esperar al próximo arranque
 ```
 
-> **Ojo con las comillas.** `POSTGRES_USER` y `POSTGRES_DB` viven en el
-> `.env`, que la terminal NO lee: escritas entre comillas **dobles** se
-> expanden afuera, llegan vacías, y psql intenta entrar con el usuario del
-> sistema. El error que da —`role "root" does not exist`— no menciona ni el
-> `.env` ni la variable. Las comillas **simples** de abajo son lo que hace
-> que se expandan adentro del contenedor, que es donde existen.
+Los ejecuta el propio binario adentro del contenedor: la imagen es `scratch`,
+no tiene psql ni shell, y `sgrc-app` sí conoce las variables de conexión.
 
+No hay comando para **revertir**. Deshacer el esquema inicial borra las tablas
+y con ellas los datos; existe en el archivo de migración porque tiene que
+existir, pero no se llega ahí por accidente — el mismo criterio con el que
+`docker compose down -v` tampoco tiene atajo.
 
-o, más corto:
+### Agregar una migración
+
+Un archivo nuevo en `migrations/`, numerado después del último
+(`002_lo_que_sea.sql`), con las dos anotaciones de goose: la de subida
+—`Up`— antes de los cambios y la de bajada —`Down`— antes de cómo se
+deshacen. Dos cosas que muerden:
+
+- **Las anotaciones no se pueden nombrar en un comentario del mismo archivo.**
+  goose lee todas las líneas que llevan su marca, así que explicarlas
+  escribiéndolas de nuevo rompe el archivo con un error de anotación
+  duplicada.
+- **El esquema viaja compilado adentro del binario** (`go:embed`, ver
+  `migrations/embed.go`), porque la imagen final no tiene sistema de archivos
+  donde ponerlo. Por eso un archivo nuevo exige **reconstruir**: `make
+  run-prod` sí, `make restart` no.
+
+### Una base anterior a goose
+
+Una instalación donde el esquema se aplicó a mano —como se hacía antes— tiene
+las tablas pero no `goose_db_version`. Al arrancar, goose intenta crear lo que
+ya existe y el contenedor muere avisando. Hay que decirle que esa migración ya
+está aplicada:
 
 ```bash
-make migrate ARCHIVO=migrations/001_esquema_inicial.sql
+make psql SQL="CREATE TABLE IF NOT EXISTS goose_db_version (id SERIAL PRIMARY KEY, version_id BIGINT NOT NULL, is_applied BOOLEAN NOT NULL, tstamp TIMESTAMP NOT NULL DEFAULT now()); INSERT INTO goose_db_version (version_id, is_applied) VALUES (0, true), (1, true);"
 ```
 
-> **Cuando el esquema cambie.** Este proyecto todavía no lleva registro en la
-> base de qué se aplicó: mientras haya un solo archivo no hace falta, porque
-> la pregunta "¿ya corrió?" se responde mirando si existen las tablas. En
-> cuanto se agregue una segunda migración conviene incorporar una herramienta
-> que lleve ese registro (`golang-migrate`, `goose` o equivalente): sin ella,
-> saber qué falta aplicar depende de que alguien se acuerde, y eso falla justo
-> cuando hay varias instalaciones o pasa el tiempo entre despliegues.
+Antes de correrlo, **comprobá que el esquema realmente esté completo**
+(`make psql SQL="\dt"` y comparalo con el archivo de migración): marcar como
+aplicada una migración que no corrió entera deja el sistema en un estado que
+ninguna herramienta puede reparar sola. Ante la duda, y si no hay datos que
+perder, es más barato `docker compose down -v` y arrancar limpio.
 
 ### El barrido de entregas y devoluciones
 
