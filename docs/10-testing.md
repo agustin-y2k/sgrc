@@ -213,3 +213,16 @@ actualizaciones de Go, de npm y de las propias acciones del workflow, en
 Pull Requests contra `develop`. govulncheck avisa que hay un problema;
 Dependabot es lo que hace que la actualización sea una decisión de rutina y
 no una urgencia.
+
+**`main` está protegida**: los seis checks son obligatorios para entrar, no se
+puede forzar el historial ni borrar la rama, y hay que llegar con la rama al
+día respecto de `main`. En la práctica eso significa que un release va por
+Pull Request desde `develop` y no mergeando en local. `develop` queda sin
+proteger a propósito: el CI corre igual y avisa, sin volver ceremonia cada
+cambio del día a día.
+
+La protección **no se aplica a los administradores**, que es una decisión
+tomada y no un olvido: si el sistema se cae en la institución, hay que poder
+subir el arreglo sin esperar veinte minutos de suite de integración. Como
+guardarraíl sirve —el botón de merge avisa antes de dejar pasar algo en
+rojo—, pero no es un candado.
