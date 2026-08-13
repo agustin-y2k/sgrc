@@ -32,7 +32,7 @@ jobs:
 
       # La versión sale de go.mod y no de una constante acá: si el proyecto
       # sube de versión, CI la sigue sola.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -65,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -98,7 +98,7 @@ jobs:
       # mail.ParseAddress— simplemente porque el piso escrito era 1.25.0 y
       # setup-go instala exactamente eso. Al subir el piso hay que mirar que
       # el `golang:1.25-alpine` del Dockerfile lo siga cumpliendo.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -130,7 +130,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
