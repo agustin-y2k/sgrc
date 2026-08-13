@@ -1,0 +1,206 @@
+# Integración continua: corre en cada push a las ramas de trabajo y en cada
+# Pull Request lo mismo que `docs/10-testing.md` §5 pide correr a mano.
+#
+# Los jobs son cuatro y deliberadamente independientes: si el lint del backend
+# falla, igual querés ver si los tests del frontend pasan. Un solo job en
+# cadena corta la corrida en el primer error y esconde el resto.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Un push nuevo sobre la misma rama cancela la corrida anterior: lo que
+# importa es si la punta está verde, no cada commit intermedio de un push
+# múltiple.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend — build y tests rápidos
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # La versión sale de go.mod y no de una constante acá: si el proyecto
+      # sube de versión, CI la sigue sola.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # `./...` compila también los tests y el código que `make build` no
+      # toca (make build genera solo el binario de ./cmd).
+      - name: Compilar
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      # Un go.mod con dependencias que ya nadie importa, o un go.sum al que
+      # le falta una entrada, no rompe la compilación pero sí sorprende a
+      # quien clona el repo. `git diff --exit-code` falla si tidy cambió algo.
+      - name: go.mod ordenado
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      # Los de integración NO entran acá: están detrás del build tag
+      # `integration` y corren en su propio job.
+      - name: Tests
+        run: make test
+
+  lint:
+    name: Backend — golangci-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # Versión fija a propósito: el formato de .golangci.yml está atado a la
+      # línea mayor de la herramienta, así que "la última" puede romper la
+      # configuración en una corrida donde nadie tocó el repo. Subir de v1 a
+      # v2 fue cambiar las dos cosas en el mismo commit, y así hay que seguir.
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          # La misma que se verificó en local sobre este código: v2.12.2.
+          version: v2.12.2
+
+  vulnerabilidades:
+    name: Backend — govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # A propósito con la versión de go.mod y no con la última: govulncheck
+      # informa también las vulnerabilidades de la biblioteca estándar, y las
+      # que importan son las de la versión con la que se compila el binario
+      # que se despliega. Analizar con una más nueva las escondería.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # La herramienta sí va en su última versión, y no está pinneada como
+      # golangci-lint: acá no hay reproducibilidad que preservar —la base de
+      # datos de vulnerabilidades se consulta en vivo, así que la misma
+      # versión del binario da resultados distintos según el día—. Si algún
+      # día pide un Go más nuevo que el del proyecto, GOTOOLCHAIN en `auto`
+      # (el valor por defecto) se lo baja solo para construirla, sin cambiar
+      # con qué versión se analiza después el código.
+      - name: Instalar govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      # Falla el job solo si el código LLAMA a la función vulnerable. Una
+      # dependencia con un CVE que nadie invoca no rompe la corrida: si
+      # avisara por todo, se aprendería a ignorarlo.
+      - name: Buscar vulnerabilidades
+        run: govulncheck ./...
+
+  integracion:
+    name: Backend — integración (Postgres real)
+    runs-on: ubuntu-latest
+    # Cada paquete levanta su propio contenedor de Postgres y le aplica las
+    # migraciones: son varios minutos, no un ciclo corto. Sumados dan ~16
+    # minutos de trabajo; Go corre los paquetes en paralelo según los núcleos
+    # disponibles, así que en un runner chico se acerca a esa suma.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # testcontainers-go usa el Docker que el runner ya trae; no hay nada
+      # que configurar ni variables de entorno que pasarle (los tests crean
+      # su base, su usuario y su contraseña).
+      - name: Tests de integración
+        run: go test -tags integration ./... -timeout 25m
+
+  frontend:
+    name: Frontend — lint, build y tests
+    runs-on: ubuntu-latest
+    # Los tests de pantalla son ~450 y renderizan contra jsdom: tardan varios
+    # minutos, más de lo que sugiere el número.
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24: la misma versión mayor que compila la SPA en
+      # frontend/Dockerfile, para que un fallo de build aparezca acá y no al
+      # armar la imagen.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `npm ci` y no `npm install`: instala exactamente el package-lock.json
+      # y falla si está desincronizado con package.json.
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # `npm run build` es `tsc -b && vite build`: chequea tipos y además
+      # verifica que el bundle de producción se arme.
+      - name: Typecheck y build
+        run: npm run build
+
+      # `vitest` a secas queda en modo watch y colgaría el runner.
+      - name: Tests de pantalla
+        run: npx vitest run
+
+  imagenes:
+    name: Imágenes de Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Lo que se despliega son estas dos imágenes, no el binario que compila
+    # el job `backend`. Un Dockerfile roto —o un `npm ci` que falla sobre
+    # node:24-alpine y no sobre el Node del runner— aparecería recién al
+    # actualizar el servidor, que es el peor momento para enterarse.
+    #
+    # Se construyen y se descartan: no se publican a ningún registro. El
+    # servidor compila las suyas con `docker compose up --build`.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # `scope` distinto por imagen: comparten el cache de la corrida y sin
+      # eso una pisaría las capas de la otra en cada push.
+      - name: Backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend

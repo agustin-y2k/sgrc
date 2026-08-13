@@ -153,3 +153,56 @@ go test -tags integration ./...   # + Postgres real en contenedores (lento)
 cd frontend && npx vitest run       # tests de pantalla
 cd frontend && npx playwright test  # e2e contra el sistema levantado
 ```
+
+---
+
+## 6. Integración continua
+
+`.github/workflows/ci.yml` corre en cada push a `main` y a `develop`, y en
+cada Pull Request contra esas ramas, lo mismo que §5 salvo los E2E. Son seis
+jobs independientes —si uno falla, los demás igual terminan—:
+
+| Job | Qué corre |
+|---|---|
+| **Backend — build y tests rápidos** | `go build ./...`, `go vet ./...`, `go mod tidy` sin cambios, `make test` |
+| **Backend — golangci-lint** | `make lint`, con la versión de la herramienta fijada |
+| **Backend — govulncheck** | vulnerabilidades conocidas de las dependencias y de la biblioteca estándar |
+| **Backend — integración** | `go test -tags integration ./...` (Docker del runner) |
+| **Frontend — lint, build y tests** | `npm ci`, `npm run lint`, `npm run build`, `vitest run` |
+| **Imágenes de Docker** | `docker build` de las dos imágenes, sin publicarlas |
+
+Cuatro decisiones que conviene conocer antes de tocar el archivo:
+
+- **La versión de golangci-lint está fija.** El formato de `.golangci.yml`
+  está atado a la línea mayor de la herramienta —pasar de v1 a v2 cambió el
+  archivo entero y fusionó `gosimple` dentro de `staticcheck`—, así que
+  seguir "la última" rompería la configuración en una corrida donde nadie
+  tocó el repo. Se sube de versión cambiando las dos cosas en el mismo
+  commit.
+- **govulncheck analiza con la versión de Go de `go.mod`**, no con la última.
+  Informa también las vulnerabilidades de la biblioteca estándar, y las que
+  importan son las de la versión con la que se compila el binario que se
+  despliega. Falla solo si el código **llama** a la función vulnerable: una
+  dependencia con un CVE que nadie invoca no rompe la corrida, porque una
+  alarma que suena por todo se aprende a ignorar.
+- **Las imágenes se construyen y se descartan.** Lo que se despliega son
+  ellas, no el binario que compila el job de build: un Dockerfile roto, o un
+  `npm ci` que falla sobre `node:24-alpine` y no sobre el Node del runner,
+  aparecería recién al actualizar el servidor. No se publican a ningún
+  registro; el servidor sigue compilando las suyas con `docker compose up
+  --build`.
+- **Los E2E no corren en CI.** Necesitan el sistema entero levantado (nginx
+  con la SPA compilada, el backend y la base sembrada), y sus credenciales
+  salen del `.env`, que no está en el repositorio. Se corren a mano contra
+  `make run` antes de un release.
+
+`prettier --check` tampoco está en CI: el formato del código todavía no está
+normalizado y el chequeo fallaría en archivos que nadie tocó. Correr
+`npm run format` una vez y sumarlo al job de frontend es un cambio aparte,
+con su propio commit de formateo.
+
+`.github/dependabot.yml` completa lo anterior: propone semanalmente las
+actualizaciones de Go, de npm y de las propias acciones del workflow, en
+Pull Requests contra `develop`. govulncheck avisa que hay un problema;
+Dependabot es lo que hace que la actualización sea una decisión de rutina y
+no una urgencia.
