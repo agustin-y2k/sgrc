@@ -346,6 +346,19 @@ Hay dos caminos, y el sistema no depende de ninguno en particular porque lo
   base de datos ni nada del SGRC. Lo que no sirve es instalarlo en el mismo
   servidor que la aplicación.
 
+### Entender por qué algo anda mal
+
+Las dos secciones anteriores sirven para **enterarse** de que pasó algo. Para
+investigarlo hay una tercera pieza, opcional y también apagada por defecto:
+tableros de Prometheus y Grafana, en
+[`12-observabilidad.md`](12-observabilidad.md). Contestan qué ruta está
+lenta, qué se está rompiendo y desde cuándo.
+
+No reemplaza a las otras dos: corre en el mismo servidor, así que se apaga
+junto con lo que habría que vigilar.
+
+---
+
 | Síntoma | Causa habitual |
 |---|---|
 | `FRONTEND_ORIGIN está vacío` y el proceso no arranca | Falta completar esa variable en el `.env` (§1.1) |

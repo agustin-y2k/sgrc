@@ -1,0 +1,150 @@
+{
+  "uid": "sgrc-funcionamiento",
+  "title": "SGRC — funcionamiento",
+  "description": "Cómo se está portando el sistema: qué se pide, qué tarda, qué se rompe y si los barridos de fondo corren. Para números de uso (reservas por mes, equipo más pedido) hace falta el origen de datos de Postgres; ver docs/12-observabilidad.md.",
+  "tags": ["sgrc"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Hace cuánto que cada barrido no termina bien",
+      "description": "Si un número crece sin parar, esa goroutine dejó de correr. Reservas y entregas corren cada 5 minutos; licencias, cada hora.",
+      "datasource": { "type": "prometheus", "uid": "prometheus-sgrc" },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - sgrc_barrido_ultimo_exito_timestamp",
+          "legendFormat": "{{barrido}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 900 },
+              { "color": "red", "value": 3600 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Peticiones por minuto, por código de respuesta",
+      "description": "El pulso del sistema. Los 4xx suelen ser gente equivocándose; los 5xx son el sistema rompiéndose.",
+      "datasource": { "type": "prometheus", "uid": "prometheus-sgrc" },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (codigo) (rate(sgrc_peticiones_http_total[5m])) * 60",
+          "legendFormat": "{{codigo}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqpm", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Latencia: el 95% de las peticiones tarda menos que esto",
+      "description": "Por ruta. El promedio esconde justamente los casos lentos, que son los que hacen que alguien diga que el sistema no anda.",
+      "datasource": { "type": "prometheus", "uid": "prometheus-sgrc" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(8, histogram_quantile(0.95, sum by (le, ruta) (rate(sgrc_peticion_http_duracion_segundos_bucket[5m]))))",
+          "legendFormat": "{{ruta}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 0 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Errores del servidor (5xx) por minuto",
+      "datasource": { "type": "prometheus", "uid": "prometheus-sgrc" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (ruta) (rate(sgrc_peticiones_http_total{codigo=~\"5..\"}[5m])) * 60",
+          "legendFormat": "{{ruta}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 20 },
+          "color": { "mode": "fixed", "fixedColor": "red" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Conexiones a Postgres",
+      "description": "Si las esperas crecen, hay consultas haciendo cola por una conexión libre: se siente como lentitud aunque ninguna consulta sea lenta.",
+      "datasource": { "type": "prometheus", "uid": "prometheus-sgrc" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 13 },
+      "targets": [
+        { "refId": "A", "expr": "sgrc_pool_conexiones_en_uso", "legendFormat": "en uso" },
+        { "refId": "B", "expr": "sgrc_pool_conexiones_ociosas", "legendFormat": "ociosas" },
+        {
+          "refId": "C",
+          "expr": "rate(sgrc_pool_esperas_total[5m]) * 60",
+          "legendFormat": "esperas por minuto"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Memoria y goroutines del proceso",
+      "description": "El servidor de una institución suele estar compartido con otros usos. Una memoria que sube y nunca baja es una fuga.",
+      "datasource": { "type": "prometheus", "uid": "prometheus-sgrc" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 13 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_resident_memory_bytes{job=\"sgrc\"}",
+          "legendFormat": "memoria"
+        },
+        { "refId": "B", "expr": "go_goroutines{job=\"sgrc\"}", "legendFormat": "goroutines" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "goroutines" },
+            "properties": [{ "id": "unit", "value": "short" }]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-.PHONY: test lint build docker-build run dev rebuild dev-down run-prod stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report
+.PHONY: test lint build docker-build run dev rebuild dev-down run-prod stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report observabilidad observabilidad-stop
 
 test:
 	go test ./... -coverprofile=coverage.out
@@ -75,6 +75,22 @@ logs:
 
 ps:
 	docker compose ps
+
+# ── Observabilidad (el detalle está en docs/12-observabilidad.md) ─────
+
+# Levanta el sistema MÁS Prometheus y Grafana. Sin este comando, esos dos no
+# arrancan: están detrás de un profile del compose justamente para que quien
+# solo quiera usar el sistema no cargue con ellos.
+#
+# Grafana queda en http://localhost:3000 (usuario admin, contraseña del
+# .env). Desde otra máquina se llega por un túnel de SSH: publicarlo en la
+# red de la institución sería dejar un panel de administración a la vista.
+observabilidad:
+	docker compose --profile observabilidad up -d
+
+# Apaga solo los tableros y deja el sistema andando.
+observabilidad-stop:
+	docker compose --profile observabilidad stop prometheus grafana
 
 # ── Esquema de la base ────────────────────────────────────────────────
 #
