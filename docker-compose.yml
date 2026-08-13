@@ -40,11 +40,14 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d:ro
+    # El esquema NO se monta más en /docker-entrypoint-initdb.d: lo aplica
+    # sgrc-app al arrancar, con goose (ver cmd/migrate.go). Montarlo acá
+    # además haría que un volumen vacío recibiera las tablas dos veces —
+    # Postgres primero, goose después— y la segunda fallaría.
+    #
     # El `-h 127.0.0.1` no es decorativo: sin él, `pg_isready` pregunta por
     # el socket Unix, y la imagen oficial levanta ahí un servidor temporal
-    # mientras corre los scripts de docker-entrypoint-initdb.d. O sea que en
-    # el primer arranque —el único en que hay migraciones que aplicar— el
+    # mientras inicializa el cluster. O sea que en el primer arranque el
     # healthcheck daba "sano" con la base todavía inicializándose.
     #
     # Lo que rompía es el arranque desde cero, y solo ese: sgrc-app tiene
@@ -60,10 +63,10 @@ services:
     # no escucha ahí (listen_addresses vacío), así que "acepta conexiones
     # TCP" y "terminó de inicializar" pasan a ser lo mismo.
     #
-    # start_period cubre lo otro: aplicar las migraciones lleva su tiempo, y
-    # sin él esos fallos legítimos consumen los 5 reintentos y el contenedor
-    # queda marcado unhealthy para siempre. Durante el período de gracia los
-    # fallos no cuentan.
+    # start_period cubre lo otro: inicializar el cluster desde cero lleva su
+    # tiempo, y sin él esos fallos legítimos consumen los 5 reintentos y el
+    # contenedor queda marcado unhealthy para siempre. Durante el período de
+    # gracia los fallos no cuentan.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -85,6 +88,66 @@ services:
     networks:
       - sgrc-net
 
+  # ── Observabilidad (opcional) ─────────────────────────────────────
+  # Los dos servicios de abajo NO arrancan con `docker compose up`: están
+  # detrás de un profile, así que hay que pedirlos:
+  #
+  #   docker compose --profile observabilidad up -d
+  #
+  # Es a propósito. El sistema funciona perfectamente sin ellos, y quien
+  # clone el repositorio para probarlo no tiene por qué gastar ~400 MB de
+  # memoria en tableros que todavía no necesita. Ver docs/12-observabilidad.md.
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    profiles: [observabilidad]
+    mem_limit: 512m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      # Los dos topes existen porque esto corre en el servidor de una
+      # institución, no en infraestructura dedicada: sin ellos, la base de
+      # métricas crece hasta llenar el disco y el primero en enterarse es
+      # Postgres, que deja de poder escribir.
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=1GB
+    volumes:
+      - ./observabilidad/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observabilidad/alertas.yml:/etc/prometheus/alertas.yml:ro
+      - prometheus-datos:/prometheus
+    # Sin `ports`: nadie tiene que llegar a Prometheus desde afuera. Lo
+    # consulta Grafana por la red interna. Para mirarlo a mano está el túnel
+    # de SSH que se explica en la documentación.
+    restart: unless-stopped
+    networks:
+      - sgrc-net
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    profiles: [observabilidad]
+    mem_limit: 256m
+    depends_on:
+      - prometheus
+    environment:
+      # La contraseña sale del .env y no queda "admin/admin": los tableros
+      # muestran cómo se comporta el sistema por dentro, y esto va a estar
+      # escuchando en un servidor compartido.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-cambiar_en_el_env}
+      # Nadie se registra solo ni entra sin usuario.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./observabilidad/grafana/datasources.yml:/etc/grafana/provisioning/datasources/sgrc.yml:ro
+      - ./observabilidad/grafana/tableros.yml:/etc/grafana/provisioning/dashboards/sgrc.yml:ro
+      - ./observabilidad/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-datos:/var/lib/grafana
+    ports:
+      # SOLO a 127.0.0.1: se llega desde el propio servidor, o por un túnel
+      # de SSH desde otra máquina. Publicarlo en todas las interfaces dejaría
+      # un panel de administración expuesto en la red de la institución.
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    networks:
+      - sgrc-net
+
 networks:
   # Subred fija para poder nombrarla en TRUSTED_PROXIES: si Docker la
   # asignara sola, cambiaría entre despliegues y Fiber dejaría de confiar en
@@ -96,3 +159,6 @@ networks:
 
 volumes:
   pgdata:
+  # Se crean solo si se levanta el perfil de observabilidad.
+  prometheus-datos:
+  grafana-datos:

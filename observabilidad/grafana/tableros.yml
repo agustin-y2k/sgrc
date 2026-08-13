@@ -1,0 +1,15 @@
+# De dónde saca Grafana los tableros: del directorio montado, no de su base
+# interna. Así el tablero vive en el repositorio, se versiona con el resto
+# del código y una instalación nueva lo tiene desde el primer arranque.
+apiVersion: 1
+
+providers:
+  - name: SGRC
+    type: file
+    disableDeletion: true
+    # Los cambios hechos desde la interfaz de Grafana se pierden al
+    # reiniciar: la fuente de verdad es el archivo. Si un panel merece
+    # quedarse, se exporta su JSON y se commitea.
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

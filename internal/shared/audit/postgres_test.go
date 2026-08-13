@@ -25,11 +25,6 @@ func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 	// estar en un solo archivo. Nombrar el archivo hace que un test quede
 	// construyendo un esquema viejo sin que nada lo avise — el modo de falla
 	// que testdb existe para evitar.
-	sqlEsquema, err := testdb.SQLDeMigraciones("../../../migrations")
-	if err != nil {
-		t.Fatalf("no se pudo leer el esquema: %v", err)
-	}
-
 	contenedor, err := postgres.Run(ctx,
 		"postgres:16-alpine",
 		postgres.WithDatabase("sgrc_test"),
@@ -61,8 +56,8 @@ func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 
-	if _, err := pool.Exec(ctx, sqlEsquema); err != nil {
-		t.Fatalf("no se pudo aplicar la migración: %v", err)
+	if err := testdb.AplicarEsquema(ctx, connStr); err != nil {
+		t.Fatalf("no se pudo aplicar el esquema: %v", err)
 	}
 
 	return pool
