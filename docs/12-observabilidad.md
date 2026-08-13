@@ -137,7 +137,7 @@ No viene aprovisionado porque necesita un usuario de solo lectura, que hay
 que crear una vez. Abrí la consola con `make psql` y pegá esto adentro:
 
 ```sql
-CREATE ROLE grafana LOGIN PASSWORD 'una-contraseña-larga';
+CREATE ROLE grafana LOGIN PASSWORD 'cambiar_por_una_contrasena_larga';
 GRANT CONNECT ON DATABASE sgrc_db TO grafana;
 GRANT USAGE ON SCHEMA public TO grafana;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO grafana;
