@@ -1,37 +1,84 @@
+# Configuración en formato v2. La v1 quedó atrás cuando el proyecto pasó a
+# Go 1.25: el binario de la línea v1 trae un Go 1.23 adentro y no puede
+# cargar un módulo que pide más.
+version: "2"
+
 run:
-  timeout: 5m
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
+    - bodyclose
+    - errcheck
     - govet
+    - ineffassign
+    # En la v2, gosimple dejó de existir por separado: sus reglas viven
+    # adentro de staticcheck.
     - staticcheck
     - unused
-    - ineffassign
-    - errcheck
-    - gosimple
-    - bodyclose
-    - gofmt
   # misspell queda afuera a propósito: asume inglés (en-US) y el código
   # está comentado en español — sería puro ruido de falsos positivos.
 
-linters-settings:
-  errcheck:
-    # defer rows.Close() / resp.Body.Close() ya se revisan a mano en los
-    # repos Postgres — no vale la pena el ruido de chequear el error de
-    # un Close() en un defer de limpieza.
-    exclude-functions:
-      - (*database/sql.Rows).Close
-      - (*github.com/jackc/pgx/v5.Rows).Close
+  settings:
+    staticcheck:
+      # La v2 absorbió stylecheck (ST*) y quickfix (QF*), que la v1 no
+      # corría. Se apagan DOS REGLAS, no las dos familias: lo que traen de
+      # nuevo vale, y si mañana aparece otra queremos verla y decidirla.
+      checks:
+        - all
+        # ST1005 exige que los errores empiecen en minúscula, asumiendo el
+        # inglés. Acá los mensajes son frases en español que ve el usuario, y
+        # las tres que marca arrancan con "Google", que es un nombre propio.
+        # Mismo motivo por el que misspell quedó afuera.
+        - -ST1005
+        # QF1008 propone escribir `privada.N` en vez de `privada.PublicKey.N`
+        # porque el campo está embebido. En los tests de criptografía, decir
+        # de qué parte de la clave se habla es justamente lo que se quiere
+        # leer; ahorrar la palabra es más corto y menos claro.
+        - -QF1008
+    errcheck:
+      # defer rows.Close() / resp.Body.Close() ya se revisan a mano en los
+      # repos Postgres — no vale la pena el ruido de chequear el error de
+      # un Close() en un defer de limpieza.
+      exclude-functions:
+        - (*database/sql.Rows).Close
+        - (*github.com/jackc/pgx/v5.Rows).Close
 
-issues:
-  exclude-dirs:
-    - migrations
-  exclude-rules:
-    # Los tests de integración usan testcontainers y aceptan cierto ruido
-    # (variables de contexto ignoradas en fakes, etc.) que no vale la pena
-    # perseguir con la misma vara que el código de producción.
-    - path: _test\.go
-      linters:
-        - errcheck
+  exclusions:
+    generated: lax
+    # Los cuatro presets que reproducen las exclusiones que la v1 aplicaba
+    # sola. Sin ellos, la v2 empieza a reportar cosas que este código nunca
+    # tuvo que contestar, y el cambio de versión parecería haber introducido
+    # deuda que no existe.
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Los tests de integración usan testcontainers y aceptan cierto ruido
+      # (variables de contexto ignoradas en fakes, etc.) que no vale la pena
+      # perseguir con la misma vara que el código de producción.
+      - path: _test\.go
+        linters:
+          - errcheck
+    paths:
+      - migrations
+      - third_party$
+      - builtin$
+      - examples$
+
+# gofmt pasó de ser un linter a ser un formateador: sigue fallando la
+# corrida si un archivo está sin formatear, pero además `golangci-lint fmt`
+# lo arregla en el lugar.
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - migrations
+      - third_party$
+      - builtin$
+      - examples$
