@@ -1,0 +1,67 @@
+# Reglas de alerta.
+#
+# IMPORTANTE, para no llevarse una sorpresa: estas reglas se DISPARAN pero no
+# NOTIFICAN. Prometheus las muestra en su propia pantalla y Grafana las puede
+# graficar, pero para que llegue un correo o un mensaje hace falta otra pieza
+# (Alertmanager, o la alertas propias de Grafana con un SMTP configurado).
+#
+# No se incluye ninguna de las dos a propósito. Lo que hay que saber sí o sí
+# —el sistema no responde, un barrido dejó de correr— ya avisa por afuera y
+# sin depender de que el servidor esté sano: ver el monitor externo y el aviso
+# de vida en docs/11-operacion.md §4. Esto de acá es para investigar, no para
+# enterarse.
+
+groups:
+  - name: sgrc
+    rules:
+      # El equivalente interno del aviso de vida: hace más de 15 minutos que
+      # un barrido que corre cada 5 no termina bien. El umbral deja pasar dos
+      # fallos seguidos sin alertar, porque un Postgres que parpadea no es una
+      # emergencia; tres seguidos ya es un problema.
+      - alert: BarridoDetenido
+        expr: time() - sgrc_barrido_ultimo_exito_timestamp{barrido!="aviso-licencias"} > 900
+        for: 1m
+        labels:
+          gravedad: alta
+        annotations:
+          resumen: "El barrido {{ $labels.barrido }} no termina bien hace más de 15 minutos"
+          detalle: "Mirar los logs de sgrc-app. Si la goroutine murió, hay que reiniciar el contenedor."
+
+      # El de licencias corre cada hora, así que necesita su propio umbral.
+      - alert: BarridoDeLicenciasDetenido
+        expr: time() - sgrc_barrido_ultimo_exito_timestamp{barrido="aviso-licencias"} > 10800
+        for: 5m
+        labels:
+          gravedad: media
+        annotations:
+          resumen: "El aviso de licencias no corre hace más de 3 horas"
+
+      # Errores del servidor sostenidos. Un 500 aislado pasa; una tasa que se
+      # sostiene cinco minutos es algo roto.
+      - alert: ErroresDelServidor
+        expr: sum(rate(sgrc_peticiones_http_total{codigo=~"5.."}[5m])) > 0.1
+        for: 5m
+        labels:
+          gravedad: alta
+        annotations:
+          resumen: "Más de 6 errores por minuto sostenidos durante 5 minutos"
+
+      # El pool de conexiones no da abasto: hay consultas haciendo cola. Se
+      # siente como lentitud general aunque ninguna consulta sea lenta.
+      - alert: PoolDeConexionesSaturado
+        expr: rate(sgrc_pool_esperas_total[5m]) > 1
+        for: 10m
+        labels:
+          gravedad: media
+        annotations:
+          resumen: "Hay consultas esperando una conexión libre a Postgres"
+
+      # Lo más obvio y lo más útil: dejó de responder a las consultas de
+      # Prometheus. Puede ser el proceso caído o la red del compose.
+      - alert: BackendSinResponder
+        expr: up{job="sgrc"} == 0
+        for: 2m
+        labels:
+          gravedad: alta
+        annotations:
+          resumen: "Prometheus no puede consultar las métricas de sgrc-app"

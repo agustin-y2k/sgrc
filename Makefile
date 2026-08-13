@@ -1,4 +1,4 @@
-.PHONY: test lint build docker-build run dev rebuild dev-down run-prod stop restart down logs ps migrate psql backup seed-admin seed-datos coverage-report
+.PHONY: test lint build docker-build run dev rebuild dev-down run-prod stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report observabilidad observabilidad-stop
 
 test:
 	go test ./... -coverprofile=coverage.out
@@ -76,38 +76,46 @@ logs:
 ps:
 	docker compose ps
 
-# Aplica una migración sobre una base que ya existe: las de /migrations solo
-# corren solas la primera vez, con el volumen vacío.
+# ── Observabilidad (el detalle está en docs/12-observabilidad.md) ─────
+
+# Levanta el sistema MÁS Prometheus y Grafana. Sin este comando, esos dos no
+# arrancan: están detrás de un profile del compose justamente para que quien
+# solo quiera usar el sistema no cargue con ellos.
 #
-#   make migrate ARCHIVO=migrations/001_esquema_inicial.sql
+# Grafana queda en http://localhost:3000 (usuario admin, contraseña del
+# .env). Desde otra máquina se llega por un túnel de SSH: publicarlo en la
+# red de la institución sería dejar un panel de administración a la vista.
+observabilidad:
+	docker compose --profile observabilidad up -d
+
+# Apaga solo los tableros y deja el sistema andando.
+observabilidad-stop:
+	docker compose --profile observabilidad stop prometheus grafana
+
+# ── Esquema de la base ────────────────────────────────────────────────
 #
-# ON_ERROR_STOP hace que psql devuelva un código de salida distinto de cero
-# si la migración aborta; sin eso, una migración que se corta a propósito
-# (porque encontró datos que la regla nueva dejaría afuera) parecía exitosa.
+# Normalmente no hay nada que correr a mano: sgrc-app aplica las migraciones
+# pendientes cada vez que arranca, con goose, y anota lo aplicado en la tabla
+# goose_db_version (ver cmd/migrate.go). Después de un `make run-prod` la base
+# ya está al día.
 #
-# El usuario y la base salen del ENTORNO DEL CONTENEDOR de Postgres, que ya
-# los tiene (el compose se los pasa por `environment:`). Antes esta receta
-# hacía `. ./.env`, o sea ejecutaba el archivo como un script de shell, y
-# eso se rompe con cualquier valor que lleve espacios y no esté entrecomillado
-# — que es exactamente la forma en que Google entrega las contraseñas de
-# aplicación para SMTP ("abcd efgh ijkl mnop"). El resultado era un
-# `qdnm: not found` mientras se intentaba aplicar una migración: un error que
-# no menciona ni el .env ni la línea culpable. Compose parsea ese archivo con
-# sus propias reglas y tolera los espacios, así que el sistema arrancaba
-# perfecto y solo fallaban estos dos comandos.
+# Estos dos comandos son para mirar y para actuar sin reiniciar la aplicación.
+# Los ejecuta el propio binario adentro del contenedor: la imagen es `scratch`
+# y no tiene psql ni shell, así que `docker compose exec` invoca directamente
+# a /sgrc-app, que sí conoce las variables de conexión del entorno.
+
+# Qué migraciones están aplicadas y cuáles faltan.
+migrate-status:
+	@docker compose exec sgrc-app /sgrc-app migrate status
+
+# Aplica las pendientes contra la base en marcha. Sirve para poner al día una
+# instalación sin esperar al próximo reinicio; el arranque hace lo mismo.
+#
+# No hay atajo para revertir: `goose down` sobre el esquema inicial borra las
+# tablas y con ellas los datos. El mismo criterio que con `docker compose
+# down -v`, que tampoco lo tiene.
 migrate:
-ifndef ARCHIVO
-	@echo "Falta indicar el archivo. Uso:"
-	@echo "  make migrate ARCHIVO=migrations/001_esquema_inicial.sql"
-	@echo ""
-	@echo "Migraciones disponibles:"
-	@ls -1 migrations/*.sql | sed 's/^/  /'
-	@exit 1
-else
-	@docker compose exec -T postgres sh -c \
-		'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < $(ARCHIVO)
-	@echo "Aplicada: $(ARCHIVO)"
-endif
+	@docker compose exec sgrc-app /sgrc-app migrate up
 
 # Abre una consola SQL contra la base, para mirar cuando algo se pone raro.
 #
@@ -117,7 +125,7 @@ endif
 # con el usuario del sistema, fallando con `role "root" does not exist`, que
 # no menciona ni el .env ni la variable. Las comillas SIMPLES de abajo son lo
 # que hace que se expanda adentro del contenedor, donde sí existe. Mismo
-# truco que migrate y backup.
+# truco que backup.
 #
 #   make psql
 #   make psql SQL="SELECT count(*) FROM equipo;"

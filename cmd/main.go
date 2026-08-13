@@ -26,7 +26,9 @@ import (
 	_ "time/tzdata"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	academicapp "github.com/ramiro/sgrc/internal/academic/application"
 	academicinfra "github.com/ramiro/sgrc/internal/academic/infrastructure"
@@ -52,7 +54,9 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/audit"
 	"github.com/ramiro/sgrc/internal/shared/email"
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/ramiro/sgrc/internal/shared/metricas"
 	"github.com/ramiro/sgrc/internal/shared/middleware"
+	"github.com/ramiro/sgrc/internal/shared/monitoreo"
 	"github.com/ramiro/sgrc/internal/shared/security"
 )
 
@@ -297,6 +301,12 @@ func main() {
 		os.Exit(ejecutarHealthcheck(puertoHTTP()))
 	}
 
+	// Operación del esquema a mano: `sgrc-app migrate status` para ver en qué
+	// versión está la base. Tampoco arranca la aplicación.
+	if esInvocacionDeMigrate(os.Args) {
+		os.Exit(ejecutarMigrate(os.Args, buildDSN()))
+	}
+
 	// El contexto se cancela con SIGTERM (lo que manda `docker compose down`
 	// / un redeploy) o Ctrl-C. De él cuelgan el job de vencimiento y el
 	// apagado del servidor.
@@ -337,6 +347,29 @@ func main() {
 			"un Admin puede resetear contraseñas igual que antes")
 	}
 
+	// ── Aviso de vida de los barridos (ver internal/shared/monitoreo) ──
+	// Opcional: sin las variables configuradas el sistema arranca igual y
+	// no avisa a nadie. Se arma acá arriba, con el resto de la
+	// configuración, para que una URL mal escrita se vea al arrancar y no
+	// cinco minutos después, en el primer barrido.
+	avisadorDeVida, err := monitoreo.DesdeEntorno(os.Getenv)
+	if err != nil {
+		log.Fatalf("configuración de monitoreo inválida: %v (ver PING_URL_* en .env.example)", err)
+	}
+	if jobs := avisadorDeVida.JobsConAviso(); len(jobs) > 0 {
+		log.Printf("aviso de vida configurado para: %s", strings.Join(jobs, ", "))
+	} else {
+		log.Print("aviso de vida de los barridos deshabilitado: no hay PING_URL_* configuradas (ver .env.example). " +
+			"Si una goroutine de fondo muere, el sistema sigue respondiendo y nada lo avisa")
+	}
+
+	// ── Métricas del proceso (ver internal/shared/metricas) ────────
+	// Siempre activas: recolectar cuesta microsegundos y no sirven de nada
+	// el día que hacen falta si hubo que acordarse de encenderlas antes.
+	// Lo que es opcional es quién las consulta (el perfil de
+	// observabilidad del compose).
+	metricasDelProceso := metricas.Nuevo()
+
 	// ── Base de datos ──────────────────────────────────────────────
 	dsn := buildDSN()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -349,6 +382,17 @@ func main() {
 		log.Fatalf("postgres no responde: %v", err)
 	}
 	log.Println("conectado a sgrc_db")
+
+	// El estado del pool se lee en cada consulta de Prometheus, así que hay
+	// que enseñárselo recién cuando el pool existe.
+	metricasDelProceso.ObservarPool(pool)
+
+	// ── Esquema al día (ver cmd/migrate.go) ────────────────────────
+	// Antes del seed a propósito: el Admin inicial se escribe en una tabla
+	// que esta llamada puede estar creando recién ahora.
+	if err := aplicarMigraciones(ctx, dsn); err != nil {
+		log.Fatalf("no se pudo poner la base al día: %v", err)
+	}
 
 	// ── Seed del primer Admin (RF-01.4), idempotente ────────────────
 	if err := seedAdminSiHaceFalta(ctx, pool, os.Getenv); err != nil {
@@ -590,6 +634,18 @@ func main() {
 	// loguean pero no detienen el ticker — un fallo puntual (ej. Postgres
 	// momentáneamente no disponible) no debe tirar abajo el proceso
 	// entero ni dejar de reintentar en el siguiente ciclo.
+	// Las series de los tres barridos se crean acá, antes de que ninguno
+	// haya corrido: en Prometheus la ausencia de una métrica no dispara
+	// alertas, así que sin esto una goroutine que muere al arrancar —el peor
+	// caso— no alertaría nunca (ver internal/shared/metricas).
+	for _, barrido := range []string{
+		monitoreo.JobReservasVencidas,
+		monitoreo.JobBarridoEntregas,
+		monitoreo.JobAvisoLicencias,
+	} {
+		metricasDelProceso.InicializarBarrido(barrido)
+	}
+
 	var jobTerminado sync.WaitGroup
 	jobTerminado.Add(1)
 	go func() {
@@ -601,7 +657,12 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				n, err := reservationSvc.FinalizarVencidas(ctx)
+				var n int
+				err := metricasDelProceso.MedirBarrido(monitoreo.JobReservasVencidas, func() error {
+					var err error
+					n, err = reservationSvc.FinalizarVencidas(ctx)
+					return err
+				})
 				if err != nil {
 					log.Printf("job de vencimiento de reservas: %v", err)
 					continue
@@ -609,6 +670,7 @@ func main() {
 				if n > 0 {
 					log.Printf("job de vencimiento: %d reservas finalizadas", n)
 				}
+				avisadorDeVida.Vive(ctx, monitoreo.JobReservasVencidas)
 			}
 		}
 	}()
@@ -628,7 +690,12 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				resumen, err := vigilante.Barrer(ctx)
+				var resumen reservationapp.ResumenDelBarrido
+				err := metricasDelProceso.MedirBarrido(monitoreo.JobBarridoEntregas, func() error {
+					var err error
+					resumen, err = vigilante.Barrer(ctx)
+					return err
+				})
 				if err != nil {
 					log.Printf("barrido de reservas y entregas: %v", err)
 					continue
@@ -639,6 +706,7 @@ func main() {
 						resumen.Recordatorios, resumen.AvisosDeNoRetiro, resumen.Liberadas,
 						resumen.AvisosDeEquipoFaltante, resumen.Reclamos, resumen.AvisosDeCierre)
 				}
+				avisadorDeVida.Vive(ctx, monitoreo.JobBarridoEntregas)
 			}
 		}
 	}()
@@ -665,10 +733,24 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				// El aviso de vida va ANTES de la guarda de horario, y por
+				// eso llega también en las horas en que este job no hace
+				// nada. Lo que se vigila es que la goroutine siga viva: si
+				// solo avisara cuando manda correos, el silencio de la
+				// madrugada sería indistinguible del silencio de una
+				// goroutine muerta, y el chequeo tendría que esperar un día
+				// entero para alertar.
+				avisadorDeVida.Vive(ctx, monitoreo.JobAvisoLicencias)
+
 				if ahora().Hour() < horaDeAviso {
 					continue
 				}
-				n, err := avisadorDeLicencias.Barrer(ctx)
+				var n int
+				err := metricasDelProceso.MedirBarrido(monitoreo.JobAvisoLicencias, func() error {
+					var err error
+					n, err = avisadorDeLicencias.Barrer(ctx)
+					return err
+				})
 				if err != nil {
 					log.Printf("job de aviso de licencias: %v", err)
 					continue
@@ -708,7 +790,20 @@ func main() {
 	app.Use(middleware.SecurityHeaders())
 	app.Use(middleware.CORS(frontendOrigin))
 
+	// Va después de los de seguridad y antes de las rutas, para medir todo
+	// lo que efectivamente se atiende (ver internal/shared/metricas).
+	app.Use(metricasDelProceso.MiddlewareHTTP())
+
 	app.Get("/health", handlerHealth(pool, ahora))
+
+	// /metrics no se publica hacia internet: nginx solo proxea /api y
+	// /health, y el resto cae en la SPA (ver frontend/nginx.conf). Lo
+	// consulta Prometheus por la red interna de Docker, si está levantado
+	// el perfil de observabilidad; si no, nadie lo mira y no cuesta nada.
+	app.Get("/metrics", adaptor.HTTPHandler(promhttp.HandlerFor(
+		metricasDelProceso.Coleccionador(),
+		promhttp.HandlerOpts{},
+	)))
 
 	authhttp.RegisterRoutes(app, authHandler, autenticacion)
 	academichttp.RegisterRoutes(app, academicHandler, autenticacion)

@@ -137,9 +137,12 @@ Vale tenerlo escrito, porque es donde hay que mirar a mano:
 - **El túnel de Cloudflare** no se prueba automáticamente: es lo único del
   camino de producción que no se puede ensayar en local. nginx y el build de
   producción sí, porque los E2E van contra `:8081`.
-- **El esquema sobre una base que ya existe.** `migrations/` se aplica solo
-  sobre una base vacía; llevar una instalación en marcha a un esquema nuevo se
-  ensaya a mano, contra una copia, antes de tocar el servidor.
+- **El salto de una versión a la siguiente sobre datos reales.** Los tests de
+  integración aplican las migraciones con goose, igual que el binario, pero
+  siempre sobre una base vacía: lo que no se prueba es una instalación en
+  marcha —con datos que la migración nueva tiene que respetar— pasando de un
+  esquema al siguiente. Eso se sigue ensayando a mano, contra una copia
+  restaurada del backup, antes de tocar el servidor.
 
 ---
 

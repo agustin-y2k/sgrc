@@ -246,7 +246,9 @@ make run-prod          # reconstruye las imágenes y reemplaza los contenedores
 ```
 
 Si la actualización trae **cambios en el esquema** (archivos nuevos en
-`migrations/`), hay que aplicarlos a mano: ver §5.
+`migrations/`), no hay nada extra que hacer: el binario los aplica solo al
+arrancar. Conviene igual mirar el log —la línea empieza con `goose:`— y, si
+querés confirmarlo después, `make migrate-status`. El detalle está en §5.
 
 ---
 
@@ -263,9 +265,99 @@ Qué buscar en el arranque de `sgrc-app`:
 ```
 zona horaria: America/Argentina/Buenos_Aires (ahora: ...)
 conectado a sgrc_db
+goose: successfully migrated database to version: 1   ← o "no migrations to run"
 admin inicial: cuenta ... lista            ← solo si hizo falta sembrarlo
 correo saliente habilitado vía smtp.gmail.com
+aviso de vida configurado para: ...        ← si se configuró (ver abajo)
 ```
+
+### Enterarse cuando algo deja de correr
+
+El sistema tiene tres barridos de fondo —vencimiento de reservas, entregas y
+devoluciones, aviso de licencias— que corren en goroutines del mismo proceso.
+Si una **muere o se cuelga**, el proceso sigue vivo, la web responde y el
+healthcheck da verde: lo que deja de pasar se descubre semanas más tarde,
+cuando alguien pregunta por qué su reserva sigue abierta.
+
+Un aviso "cuando algo falla" no sirve para esto, porque una goroutine muerta
+tampoco puede avisar. Va al revés: **cada barrido le pega a una URL cada vez
+que termina bien, y el servicio externo alerta cuando ese aviso deja de
+llegar.** El silencio es la señal.
+
+Se activa poniendo las tres `PING_URL_*` del `.env` (ver `.env.example`, que
+detalla qué período configurar en cada una). Sirve cualquier servicio de
+*heartbeat* o *cron monitoring* que entregue una URL por chequeo; los hay
+gratuitos. Sin configurar, el sistema arranca igual y lo dice en el log.
+
+> **Esto no reemplaza un monitor externo del sitio**, y conviene tener los
+> dos. Si el túnel se cae, el sistema queda inalcanzable desde afuera con
+> todo sano adentro — y los avisos de los barridos van a seguir llegando
+> puntualmente, porque los barridos siguen corriendo. Para ese caso hace
+> falta algo que consulte el dominio **desde afuera de la institución**.
+
+### Enterarse cuando el sitio deja de responder
+
+No requiere configurar nada en el sistema: la aplicación ya expone lo que un
+monitor necesita, y cualquier servicio de *uptime* sirve.
+
+**El monitor no es parte del sistema y no hay que desplegar nada.** Es algo
+que, desde afuera, le pide una página al dominio cada cinco minutos y anota
+si contestó — como llamar a un teléfono para ver si suena. Quien llama no
+necesita una copia del teléfono. En la variante contratada, todo se hace
+llenando un formulario en la web del servicio: no se instala ni se levanta
+nada en ningún lado.
+
+Lo único imprescindible es que la consulta **salga desde fuera de la red de
+la institución**. Un monitor instalado en el mismo servidor no cubre este
+caso: si lo que se cae es el servidor —o el túnel—, el monitor se cae con
+él y el silencio se confunde con normalidad.
+
+Qué configurar en el servicio que se elija:
+
+| | |
+|---|---|
+| **URL** | `https://<el-dominio>/health` |
+| **Espera** | código `200`, y si permite verificar el cuerpo, que contenga `"status":"ok"` |
+| **Frecuencia** | cada 5 minutos alcanza y sobra; es lo que suelen dar los planes gratuitos |
+| **Alertar tras** | 2 fallos seguidos, no 1 |
+
+Los dos detalles que hacen la diferencia:
+
+- **`/health` y no la raíz del sitio.** nginx sirve la interfaz aunque el
+  backend esté muerto, así que `/` devuelve 200 con la base caída: un verde
+  que miente. `/health` hace un ping real a Postgres y responde 503 si no
+  contesta (ver `cmd/main.go`), así que cubre los tres eslabones de una vez
+  —túnel, nginx y base—.
+- **Dos fallos antes de alertar.** Actualizar el sistema reemplaza los
+  contenedores y deja unos segundos sin respuesta; con alerta al primer
+  fallo, cada despliegue manda una alarma y en un mes nadie las mira.
+
+Hay dos caminos, y el sistema no depende de ninguno en particular porque lo
+único que se necesita es que alguien consulte una URL:
+
+- **Un servicio contratado** (varios tienen plan gratuito suficiente para
+  esto). No se instala nada: se crea una cuenta, se carga la URL y listo. Los
+  chequeos salen de los servidores de ese servicio, que ya están fuera de la
+  institución.
+- **Autogestionado**, con alguna herramienta de código abierto de monitoreo.
+  Necesita **una máquina cualquiera que esté prendida y fuera de la red de la
+  escuela** —una computadora en una casa, una placa de bajo consumo, un
+  servidor virtual barato—. Ahí corre **solo el monitor**: unos pocos MB, sin
+  base de datos ni nada del SGRC. Lo que no sirve es instalarlo en el mismo
+  servidor que la aplicación.
+
+### Entender por qué algo anda mal
+
+Las dos secciones anteriores sirven para **enterarse** de que pasó algo. Para
+investigarlo hay una tercera pieza, opcional y también apagada por defecto:
+tableros de Prometheus y Grafana, en
+[`12-observabilidad.md`](12-observabilidad.md). Contestan qué ruta está
+lenta, qué se está rompiendo y desde cuándo.
+
+No reemplaza a las otras dos: corre en el mismo servidor, así que se apaga
+junto con lo que habría que vigilar.
+
+---
 
 | Síntoma | Causa habitual |
 |---|---|
@@ -300,9 +392,28 @@ docker compose logs sgrc-app | grep -i "correo\|email"
 
 ## 5. El esquema de la base
 
-`migrations/001_esquema_inicial.sql` es el esquema completo del sistema. Se
-aplica **solo, una vez**, cuando la base se crea vacía: Postgres ejecuta lo
-que encuentre en ese directorio la primera vez que inicializa el volumen.
+`migrations/001_esquema_inicial.sql` es el esquema completo del sistema. **Lo
+aplica sgrc-app al arrancar**, con [goose](https://github.com/pressly/goose):
+mira qué migraciones registró la tabla `goose_db_version`, aplica las que
+falten y sigue. Arrancar mil veces no cambia nada; arrancar contra una base
+vacía la deja lista; arrancar contra una base vieja la pone al día.
+
+En el log se ve así:
+
+```
+conectado a sgrc_db
+goose: successfully migrated database to version: 1     ← la primera vez
+goose: no migrations to run. current version: 1         ← las siguientes
+```
+
+> **Antes esto lo hacía Postgres** con los scripts de
+> `docker-entrypoint-initdb.d`, que corren **una sola vez**: cuando el volumen
+> se crea. Sobre una base ya existente no corría nada y nadie avisaba, así que
+> una actualización dejaba el binario nuevo hablando con el esquema viejo. Eso
+> se ve como un sistema que arranca perfecto y devuelve 500 en la primera
+> pantalla que toca una columna que no está — un error que no menciona ni el
+> esquema ni la migración faltante. Si algo así reaparece, `make migrate-status`
+> es la primera pregunta a hacer.
 
 Es un archivo único y no una cadena de parches incrementales. La razón es
 para quién está escrito: alguien que adopta el proyecto necesita entender qué
@@ -311,35 +422,53 @@ reconstruyéndolo mentalmente a partir de veinte migraciones sucesivas, la
 mitad de las cuales renombran lo que hizo la otra mitad. La historia de cómo
 se llegó a este esquema está en el historial de git, que es donde corresponde.
 
-**Sobre una base que ya existe no corre solo.** Si hay que aplicarlo a mano —
-por ejemplo para levantar una instalación nueva contra una base ya creada:
+### Mirar y forzar el estado
 
 ```bash
-docker compose exec -T postgres sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < migrations/001_esquema_inicial.sql
+make migrate-status   # qué está aplicado y qué falta
+make migrate          # aplica lo pendiente sin esperar al próximo arranque
 ```
 
-> **Ojo con las comillas.** `POSTGRES_USER` y `POSTGRES_DB` viven en el
-> `.env`, que la terminal NO lee: escritas entre comillas **dobles** se
-> expanden afuera, llegan vacías, y psql intenta entrar con el usuario del
-> sistema. El error que da —`role "root" does not exist`— no menciona ni el
-> `.env` ni la variable. Las comillas **simples** de abajo son lo que hace
-> que se expandan adentro del contenedor, que es donde existen.
+Los ejecuta el propio binario adentro del contenedor: la imagen es `scratch`,
+no tiene psql ni shell, y `sgrc-app` sí conoce las variables de conexión.
 
+No hay comando para **revertir**. Deshacer el esquema inicial borra las tablas
+y con ellas los datos; existe en el archivo de migración porque tiene que
+existir, pero no se llega ahí por accidente — el mismo criterio con el que
+`docker compose down -v` tampoco tiene atajo.
 
-o, más corto:
+### Agregar una migración
+
+Un archivo nuevo en `migrations/`, numerado después del último
+(`002_lo_que_sea.sql`), con las dos anotaciones de goose: la de subida
+—`Up`— antes de los cambios y la de bajada —`Down`— antes de cómo se
+deshacen. Dos cosas que muerden:
+
+- **Las anotaciones no se pueden nombrar en un comentario del mismo archivo.**
+  goose lee todas las líneas que llevan su marca, así que explicarlas
+  escribiéndolas de nuevo rompe el archivo con un error de anotación
+  duplicada.
+- **El esquema viaja compilado adentro del binario** (`go:embed`, ver
+  `migrations/embed.go`), porque la imagen final no tiene sistema de archivos
+  donde ponerlo. Por eso un archivo nuevo exige **reconstruir**: `make
+  run-prod` sí, `make restart` no.
+
+### Una base anterior a goose
+
+Una instalación donde el esquema se aplicó a mano —como se hacía antes— tiene
+las tablas pero no `goose_db_version`. Al arrancar, goose intenta crear lo que
+ya existe y el contenedor muere avisando. Hay que decirle que esa migración ya
+está aplicada:
 
 ```bash
-make migrate ARCHIVO=migrations/001_esquema_inicial.sql
+make psql SQL="CREATE TABLE IF NOT EXISTS goose_db_version (id SERIAL PRIMARY KEY, version_id BIGINT NOT NULL, is_applied BOOLEAN NOT NULL, tstamp TIMESTAMP NOT NULL DEFAULT now()); INSERT INTO goose_db_version (version_id, is_applied) VALUES (0, true), (1, true);"
 ```
 
-> **Cuando el esquema cambie.** Este proyecto todavía no lleva registro en la
-> base de qué se aplicó: mientras haya un solo archivo no hace falta, porque
-> la pregunta "¿ya corrió?" se responde mirando si existen las tablas. En
-> cuanto se agregue una segunda migración conviene incorporar una herramienta
-> que lleve ese registro (`golang-migrate`, `goose` o equivalente): sin ella,
-> saber qué falta aplicar depende de que alguien se acuerde, y eso falla justo
-> cuando hay varias instalaciones o pasa el tiempo entre despliegues.
+Antes de correrlo, **comprobá que el esquema realmente esté completo**
+(`make psql SQL="\dt"` y comparalo con el archivo de migración): marcar como
+aplicada una migración que no corrió entera deja el sistema en un estado que
+ninguna herramienta puede reparar sola. Ante la duda, y si no hay datos que
+perder, es más barato `docker compose down -v` y arrancar limpio.
 
 ### El barrido de entregas y devoluciones
 

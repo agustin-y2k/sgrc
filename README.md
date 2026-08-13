@@ -157,6 +157,8 @@ Un docente reserva desde el celular, camino al aula. Las doce pantallas se miden
 
 **Monolito modular, no microservicios.** Un solo binario Go y un solo Postgres, divididos en módulos que se comunican únicamente a través de interfaces: ningún módulo importa el dominio de otro. Para una institución con decenas de usuarios, la complejidad operativa de los microservicios no se justifica — pero los límites están puestos como si lo fueran, así que el día que haga falta dividir, no hay que reescribir la lógica. Hay un test automático que falla si alguien cruza un límite. El porqué completo está en [`docs/adr/001-monolito-modular.md`](docs/adr/001-monolito-modular.md).
 
+**SQL escrito a mano, sin ORM.** La regla más importante del sistema —dos personas no pueden reservar el mismo equipo en la misma franja— es una constraint de exclusión de PostgreSQL, y el repositorio traduce el error que devuelve a un error de dominio. Ese tipo de cosa, junto con las consultas que sostienen los reportes y la paginación, es lo que un ORM no expresa y terminaría igual en SQL crudo. El costo aceptado es escribir el escaneo de cada fila. El porqué completo, con las alternativas descartadas, está en [`docs/adr/002-sin-orm.md`](docs/adr/002-sin-orm.md).
+
 **El histórico sobrevive al borrado.** Al cerrar un año lectivo se eliminan sus reservas, pero antes el sistema guarda un resumen permanente con los nombres "congelados" tal como estaban. Un equipo que después se muda de carro, o un docente cuya cuenta se elimina, siguen apareciendo correctamente en el reporte del año que ya pasó.
 
 **Lo que la institución escribe es texto libre; lo que el sistema interpreta es un enum.** El tipo de un equipo, la categoría de una falla y el motivo de un bloqueo son texto libre, porque cada institución rompe, presta y se organiza distinto y una lista cerrada haría que el primer caso no previsto pidiera un cambio de esquema. Los estados —de una reserva, de un equipo, de una cuenta— son enums con `CHECK`, porque sobre ellos decide el sistema. El costo del texto libre se paga afuera de la base: el formulario sugiere los valores ya usados y los reportes agrupan sin distinguir mayúsculas.
@@ -275,6 +277,7 @@ Toda la documentación funcional y técnica vive en [`docs/`](docs).
 | [`01-requisitos.md`](docs/01-requisitos.md) | Todo lo que el sistema tiene que hacer, regla por regla | Cualquiera |
 | [`02-casos-de-uso.md`](docs/02-casos-de-uso.md) | Cada tarea contada como un recorrido, con diagramas | Cualquiera |
 | [`11-operacion.md`](docs/11-operacion.md) | **Puesta en marcha, arranque, parada, logs, esquema y copias de seguridad** | Quien opera el servidor |
+| [`12-observabilidad.md`](docs/12-observabilidad.md) | Tableros de Prometheus y Grafana, opcionales: qué se mide y qué contesta cada número | Quien opera el servidor |
 | [`03-diagrama-clases.md`](docs/03-diagrama-clases.md) | Modelo de dominio | Técnico |
 | [`04-diagramas-secuencia.md`](docs/04-diagramas-secuencia.md) | Los flujos críticos, paso a paso entre módulos | Técnico |
 | [`05-diagramas-estado.md`](docs/05-diagramas-estado.md) | Máquinas de estado de Equipo, Reserva, Usuario y Ciclo | Técnico |
