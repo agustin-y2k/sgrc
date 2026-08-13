@@ -198,7 +198,7 @@ jobs:
       # `scope` distinto por imagen: comparten el cache de la corrida y sin
       # eso una pisaría las capas de la otra en cada push.
       - name: Backend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -206,7 +206,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend
 
       - name: Frontend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           push: false
