@@ -1,0 +1,32 @@
+# Qué NO se le manda al demonio de Docker al construir la imagen del backend.
+#
+# Sin este archivo el contexto son ~350 MB, casi todos de frontend/node_modules,
+# que el build de Go no mira: se copian enteros por red local en cada corrida
+# antes de compilar una sola línea.
+#
+# Y algo menos visible: el Dockerfile hace `COPY . .` sobre la etapa de build,
+# así que el .env —con la contraseña de Postgres, el secreto de JWT y la del
+# SMTP— quedaba dentro de una capa intermedia. La imagen final es `scratch` y
+# no lo lleva, pero la capa existe igual en el cache de quien construyó.
+
+# El frontend se construye con su propio Dockerfile y su propio contexto.
+frontend/
+
+.git/
+.github/
+.vscode/
+.claude/
+
+# Secretos y datos.
+.env
+backup-sgrc-*.sql
+
+# Salidas de compilación y de tests, que se regeneran adentro.
+bin/
+coverage.out
+coverage.html
+
+# Documentación: no cambia el binario y las capturas pesan.
+docs/
+README.md
+LICENSE
