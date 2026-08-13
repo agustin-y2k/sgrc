@@ -265,9 +265,35 @@ Qué buscar en el arranque de `sgrc-app`:
 ```
 zona horaria: America/Argentina/Buenos_Aires (ahora: ...)
 conectado a sgrc_db
+goose: successfully migrated database to version: 1   ← o "no migrations to run"
 admin inicial: cuenta ... lista            ← solo si hizo falta sembrarlo
 correo saliente habilitado vía smtp.gmail.com
+aviso de vida configurado para: ...        ← si se configuró (ver abajo)
 ```
+
+### Enterarse cuando algo deja de correr
+
+El sistema tiene tres barridos de fondo —vencimiento de reservas, entregas y
+devoluciones, aviso de licencias— que corren en goroutines del mismo proceso.
+Si una **muere o se cuelga**, el proceso sigue vivo, la web responde y el
+healthcheck da verde: lo que deja de pasar se descubre semanas más tarde,
+cuando alguien pregunta por qué su reserva sigue abierta.
+
+Un aviso "cuando algo falla" no sirve para esto, porque una goroutine muerta
+tampoco puede avisar. Va al revés: **cada barrido le pega a una URL cada vez
+que termina bien, y el servicio externo alerta cuando ese aviso deja de
+llegar.** El silencio es la señal.
+
+Se activa poniendo las tres `PING_URL_*` del `.env` (ver `.env.example`, que
+detalla qué período configurar en cada una). Sirve cualquier servicio de
+*heartbeat* o *cron monitoring* que entregue una URL por chequeo; los hay
+gratuitos. Sin configurar, el sistema arranca igual y lo dice en el log.
+
+> **Esto no reemplaza un monitor externo del sitio**, y conviene tener los
+> dos. Si el túnel se cae, el sistema queda inalcanzable desde afuera con
+> todo sano adentro — y los avisos de los barridos van a seguir llegando
+> puntualmente, porque los barridos siguen corriendo. Para ese caso hace
+> falta algo que consulte el dominio **desde afuera de la institución**.
 
 | Síntoma | Causa habitual |
 |---|---|
