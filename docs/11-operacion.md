@@ -298,10 +298,19 @@ gratuitos. Sin configurar, el sistema arranca igual y lo dice en el log.
 ### Enterarse cuando el sitio deja de responder
 
 No requiere configurar nada en el sistema: la aplicación ya expone lo que un
-monitor necesita, y cualquier servicio de *uptime* sirve. Lo único
-imprescindible es que **corra fuera de la red de la institución**. Un
-monitor instalado en el mismo servidor no cubre este caso: si lo que se cae
-es el servidor —o el túnel—, el monitor se cae con él.
+monitor necesita, y cualquier servicio de *uptime* sirve.
+
+**El monitor no es parte del sistema y no hay que desplegar nada.** Es algo
+que, desde afuera, le pide una página al dominio cada cinco minutos y anota
+si contestó — como llamar a un teléfono para ver si suena. Quien llama no
+necesita una copia del teléfono. En la variante contratada, todo se hace
+llenando un formulario en la web del servicio: no se instala ni se levanta
+nada en ningún lado.
+
+Lo único imprescindible es que la consulta **salga desde fuera de la red de
+la institución**. Un monitor instalado en el mismo servidor no cubre este
+caso: si lo que se cae es el servidor —o el túnel—, el monitor se cae con
+él y el silencio se confunde con normalidad.
 
 Qué configurar en el servicio que se elija:
 
@@ -323,11 +332,19 @@ Los dos detalles que hacen la diferencia:
   contenedores y deja unos segundos sin respuesta; con alerta al primer
   fallo, cada despliegue manda una alarma y en un mes nadie las mira.
 
-Hay servicios con plan gratuito suficiente para esto —el sistema no depende
-de ninguno en particular, porque lo único que se necesita es que alguien
-consulte una URL—. Si se prefiere autogestionarlo, existen alternativas de
-código abierto que se instalan en otra máquina; lo que no sirve es
-instalarlas en el mismo servidor.
+Hay dos caminos, y el sistema no depende de ninguno en particular porque lo
+único que se necesita es que alguien consulte una URL:
+
+- **Un servicio contratado** (varios tienen plan gratuito suficiente para
+  esto). No se instala nada: se crea una cuenta, se carga la URL y listo. Los
+  chequeos salen de los servidores de ese servicio, que ya están fuera de la
+  institución.
+- **Autogestionado**, con alguna herramienta de código abierto de monitoreo.
+  Necesita **una máquina cualquiera que esté prendida y fuera de la red de la
+  escuela** —una computadora en una casa, una placa de bajo consumo, un
+  servidor virtual barato—. Ahí corre **solo el monitor**: unos pocos MB, sin
+  base de datos ni nada del SGRC. Lo que no sirve es instalarlo en el mismo
+  servidor que la aplicación.
 
 | Síntoma | Causa habitual |
 |---|---|
