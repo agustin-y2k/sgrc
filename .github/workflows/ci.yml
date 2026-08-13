@@ -193,7 +193,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # `scope` distinto por imagen: comparten el cache de la corrida y sin
       # eso una pisaría las capas de la otra en cada push.
