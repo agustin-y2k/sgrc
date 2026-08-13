@@ -40,11 +40,14 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d:ro
+    # El esquema NO se monta más en /docker-entrypoint-initdb.d: lo aplica
+    # sgrc-app al arrancar, con goose (ver cmd/migrate.go). Montarlo acá
+    # además haría que un volumen vacío recibiera las tablas dos veces —
+    # Postgres primero, goose después— y la segunda fallaría.
+    #
     # El `-h 127.0.0.1` no es decorativo: sin él, `pg_isready` pregunta por
     # el socket Unix, y la imagen oficial levanta ahí un servidor temporal
-    # mientras corre los scripts de docker-entrypoint-initdb.d. O sea que en
-    # el primer arranque —el único en que hay migraciones que aplicar— el
+    # mientras inicializa el cluster. O sea que en el primer arranque el
     # healthcheck daba "sano" con la base todavía inicializándose.
     #
     # Lo que rompía es el arranque desde cero, y solo ese: sgrc-app tiene
@@ -60,10 +63,10 @@ services:
     # no escucha ahí (listen_addresses vacío), así que "acepta conexiones
     # TCP" y "terminó de inicializar" pasan a ser lo mismo.
     #
-    # start_period cubre lo otro: aplicar las migraciones lleva su tiempo, y
-    # sin él esos fallos legítimos consumen los 5 reintentos y el contenedor
-    # queda marcado unhealthy para siempre. Durante el período de gracia los
-    # fallos no cuentan.
+    # start_period cubre lo otro: inicializar el cluster desde cero lleva su
+    # tiempo, y sin él esos fallos legítimos consumen los 5 reintentos y el
+    # contenedor queda marcado unhealthy para siempre. Durante el período de
+    # gracia los fallos no cuentan.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
