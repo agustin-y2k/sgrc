@@ -90,6 +90,14 @@ jobs:
       # informa también las vulnerabilidades de la biblioteca estándar, y las
       # que importan son las de la versión con la que se compila el binario
       # que se despliega. Analizar con una más nueva las escondería.
+      #
+      # Por eso la línea `go` de go.mod lleva el PARCHE (1.25.12) y no solo
+      # 1.25.0: es lo que hace esto un chequeo real. La primera corrida de
+      # este workflow falló con 26 vulnerabilidades de la biblioteca estándar
+      # —una de ellas alcanzable desde ValidarEmail, que llama a
+      # mail.ParseAddress— simplemente porque el piso escrito era 1.25.0 y
+      # setup-go instala exactamente eso. Al subir el piso hay que mirar que
+      # el `golang:1.25-alpine` del Dockerfile lo siga cumpliendo.
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
