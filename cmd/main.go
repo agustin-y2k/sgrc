@@ -53,6 +53,7 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/email"
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
 	"github.com/ramiro/sgrc/internal/shared/middleware"
+	"github.com/ramiro/sgrc/internal/shared/monitoreo"
 	"github.com/ramiro/sgrc/internal/shared/security"
 )
 
@@ -343,6 +344,22 @@ func main() {
 			"un Admin puede resetear contraseñas igual que antes")
 	}
 
+	// ── Aviso de vida de los barridos (ver internal/shared/monitoreo) ──
+	// Opcional: sin las variables configuradas el sistema arranca igual y
+	// no avisa a nadie. Se arma acá arriba, con el resto de la
+	// configuración, para que una URL mal escrita se vea al arrancar y no
+	// cinco minutos después, en el primer barrido.
+	avisadorDeVida, err := monitoreo.DesdeEntorno(os.Getenv)
+	if err != nil {
+		log.Fatalf("configuración de monitoreo inválida: %v (ver PING_URL_* en .env.example)", err)
+	}
+	if jobs := avisadorDeVida.JobsConAviso(); len(jobs) > 0 {
+		log.Printf("aviso de vida configurado para: %s", strings.Join(jobs, ", "))
+	} else {
+		log.Print("aviso de vida de los barridos deshabilitado: no hay PING_URL_* configuradas (ver .env.example). " +
+			"Si una goroutine de fondo muere, el sistema sigue respondiendo y nada lo avisa")
+	}
+
 	// ── Base de datos ──────────────────────────────────────────────
 	dsn := buildDSN()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -622,6 +639,7 @@ func main() {
 				if n > 0 {
 					log.Printf("job de vencimiento: %d reservas finalizadas", n)
 				}
+				avisadorDeVida.Vive(ctx, monitoreo.JobReservasVencidas)
 			}
 		}
 	}()
@@ -652,6 +670,7 @@ func main() {
 						resumen.Recordatorios, resumen.AvisosDeNoRetiro, resumen.Liberadas,
 						resumen.AvisosDeEquipoFaltante, resumen.Reclamos, resumen.AvisosDeCierre)
 				}
+				avisadorDeVida.Vive(ctx, monitoreo.JobBarridoEntregas)
 			}
 		}
 	}()
@@ -678,6 +697,15 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				// El aviso de vida va ANTES de la guarda de horario, y por
+				// eso llega también en las horas en que este job no hace
+				// nada. Lo que se vigila es que la goroutine siga viva: si
+				// solo avisara cuando manda correos, el silencio de la
+				// madrugada sería indistinguible del silencio de una
+				// goroutine muerta, y el chequeo tendría que esperar un día
+				// entero para alertar.
+				avisadorDeVida.Vive(ctx, monitoreo.JobAvisoLicencias)
+
 				if ahora().Hour() < horaDeAviso {
 					continue
 				}
