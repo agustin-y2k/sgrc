@@ -153,3 +153,76 @@ go test -tags integration ./...   # + Postgres real en contenedores (lento)
 cd frontend && npx vitest run       # tests de pantalla
 cd frontend && npx playwright test  # e2e contra el sistema levantado
 ```
+
+---
+
+## 6. Integración continua
+
+`.github/workflows/ci.yml` corre en cada push a `main` y a `develop`, y en
+cada Pull Request contra esas ramas, lo mismo que §5 salvo los E2E. Son seis
+jobs independientes —si uno falla, los demás igual terminan—:
+
+| Job | Qué corre |
+|---|---|
+| **Backend — build y tests rápidos** | `go build ./...`, `go vet ./...`, `go mod tidy` sin cambios, `make test` |
+| **Backend — golangci-lint** | `make lint`, con la versión de la herramienta fijada |
+| **Backend — govulncheck** | vulnerabilidades conocidas de las dependencias y de la biblioteca estándar |
+| **Backend — integración** | `go test -tags integration ./...` (Docker del runner) |
+| **Frontend — lint, build y tests** | `npm ci`, `npm run lint`, `npm run build`, `vitest run` |
+| **Imágenes de Docker** | `docker build` de las dos imágenes, sin publicarlas |
+
+Cuatro decisiones que conviene conocer antes de tocar el archivo:
+
+- **La versión de golangci-lint está fija.** El formato de `.golangci.yml`
+  está atado a la línea mayor de la herramienta —pasar de v1 a v2 cambió el
+  archivo entero y fusionó `gosimple` dentro de `staticcheck`—, así que
+  seguir "la última" rompería la configuración en una corrida donde nadie
+  tocó el repo. Se sube de versión cambiando las dos cosas en el mismo
+  commit.
+- **govulncheck analiza con la versión de Go de `go.mod`**, no con la última.
+  Informa también las vulnerabilidades de la biblioteca estándar, y las que
+  importan son las de la versión con la que se compila el binario que se
+  despliega. Falla solo si el código **llama** a la función vulnerable: una
+  dependencia con un CVE que nadie invoca no rompe la corrida, porque una
+  alarma que suena por todo se aprende a ignorar.
+- **Por eso la línea `go` de `go.mod` lleva el parche**, `1.25.12` y no
+  `1.25.0`: es el piso de versión con el que se acepta compilar este módulo,
+  y `setup-go` instala exactamente lo que ahí diga. Con `1.25.0` la corrida
+  encontró 26 vulnerabilidades de la biblioteca estándar, una alcanzable
+  desde `ValidarEmail`. Cuando ese piso suba hay que verificar que la imagen
+  `golang:1.25-alpine` del Dockerfile lo siga cumpliendo — hoy trae
+  exactamente `go1.25.12`.
+- **Las imágenes se construyen y se descartan.** Lo que se despliega son
+  ellas, no el binario que compila el job de build: un Dockerfile roto, o un
+  `npm ci` que falla sobre `node:24-alpine` y no sobre el Node del runner,
+  aparecería recién al actualizar el servidor. No se publican a ningún
+  registro; el servidor sigue compilando las suyas con `docker compose up
+  --build`.
+- **Los E2E no corren en CI.** Necesitan el sistema entero levantado (nginx
+  con la SPA compilada, el backend y la base sembrada), y sus credenciales
+  salen del `.env`, que no está en el repositorio. Se corren a mano contra
+  `make run` antes de un release.
+
+`prettier --check` tampoco está en CI: el formato del código todavía no está
+normalizado y el chequeo fallaría en archivos que nadie tocó. Correr
+`npm run format` una vez y sumarlo al job de frontend es un cambio aparte,
+con su propio commit de formateo.
+
+`.github/dependabot.yml` completa lo anterior: propone semanalmente las
+actualizaciones de Go, de npm y de las propias acciones del workflow, en
+Pull Requests contra `develop`. govulncheck avisa que hay un problema;
+Dependabot es lo que hace que la actualización sea una decisión de rutina y
+no una urgencia.
+
+**`main` está protegida**: los seis checks son obligatorios para entrar, no se
+puede forzar el historial ni borrar la rama, y hay que llegar con la rama al
+día respecto de `main`. En la práctica eso significa que un release va por
+Pull Request desde `develop` y no mergeando en local. `develop` queda sin
+proteger a propósito: el CI corre igual y avisa, sin volver ceremonia cada
+cambio del día a día.
+
+La protección **no se aplica a los administradores**, que es una decisión
+tomada y no un olvido: si el sistema se cae en la institución, hay que poder
+subir el arreglo sin esperar veinte minutos de suite de integración. Como
+guardarraíl sirve —el botón de merge avisa antes de dejar pasar algo en
+rojo—, pero no es un candado.

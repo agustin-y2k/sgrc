@@ -1,0 +1,43 @@
+# Actualizaciones de dependencias, una vez por semana.
+#
+# Existe por lo que pasó sin él: el proyecto acumuló cinco vulnerabilidades
+# alcanzables desde el código —dos de Fiber, una de pgx, una de jwt y una de
+# x/text— simplemente porque nadie mira las versiones hasta que algo falla.
+# Que las traiga un Pull Request obliga a decidir, y el CI dice si el cambio
+# rompe algo antes de mergear.
+version: 2
+updates:
+  # Las PRs van contra `develop`, no contra `main`: `main` recibe releases,
+  # no cambios sueltos. Sin esto, Dependabot apunta a la rama por defecto.
+  - package-ecosystem: gomod
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: npm
+    directory: /frontend
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps
+    groups:
+      # Las dependencias de desarrollo se agrupan en una sola PR: son
+      # muchas y ninguna viaja en el bundle que se sirve.
+      desarrollo:
+        dependency-type: development
+
+  # Las acciones del workflow también son dependencias, y son las que
+  # ejecutan con acceso al repositorio.
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
