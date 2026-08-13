@@ -1,0 +1,27 @@
+# Prometheus consulta las métricas del backend cada 30 segundos y las guarda.
+#
+# 30s y no 15s (el default habitual) porque acá no hay nada que cambie más
+# rápido que eso: el sistema atiende a unas decenas de personas en horario
+# escolar, y los barridos de fondo corren cada 5 minutos. Consultar el doble
+# de seguido solo duplicaría el disco usado.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/alertas.yml
+
+scrape_configs:
+  # El backend, por la red interna de Docker. No hace falta publicar ningún
+  # puerto: sgrc-app y prometheus están en la misma red del compose, y
+  # /metrics no sale a internet porque nginx no lo proxea.
+  - job_name: sgrc
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["sgrc-app:8080"]
+
+  # Prometheus se mide a sí mismo. Sirve para lo aburrido pero necesario:
+  # saber si se quedó sin memoria o dejó de recolectar.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

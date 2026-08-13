@@ -26,7 +26,9 @@ import (
 	_ "time/tzdata"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	academicapp "github.com/ramiro/sgrc/internal/academic/application"
 	academicinfra "github.com/ramiro/sgrc/internal/academic/infrastructure"
@@ -52,6 +54,7 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/audit"
 	"github.com/ramiro/sgrc/internal/shared/email"
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/ramiro/sgrc/internal/shared/metricas"
 	"github.com/ramiro/sgrc/internal/shared/middleware"
 	"github.com/ramiro/sgrc/internal/shared/monitoreo"
 	"github.com/ramiro/sgrc/internal/shared/security"
@@ -360,6 +363,13 @@ func main() {
 			"Si una goroutine de fondo muere, el sistema sigue respondiendo y nada lo avisa")
 	}
 
+	// ── Métricas del proceso (ver internal/shared/metricas) ────────
+	// Siempre activas: recolectar cuesta microsegundos y no sirven de nada
+	// el día que hacen falta si hubo que acordarse de encenderlas antes.
+	// Lo que es opcional es quién las consulta (el perfil de
+	// observabilidad del compose).
+	metricasDelProceso := metricas.Nuevo()
+
 	// ── Base de datos ──────────────────────────────────────────────
 	dsn := buildDSN()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -372,6 +382,10 @@ func main() {
 		log.Fatalf("postgres no responde: %v", err)
 	}
 	log.Println("conectado a sgrc_db")
+
+	// El estado del pool se lee en cada consulta de Prometheus, así que hay
+	// que enseñárselo recién cuando el pool existe.
+	metricasDelProceso.ObservarPool(pool)
 
 	// ── Esquema al día (ver cmd/migrate.go) ────────────────────────
 	// Antes del seed a propósito: el Admin inicial se escribe en una tabla
@@ -620,6 +634,18 @@ func main() {
 	// loguean pero no detienen el ticker — un fallo puntual (ej. Postgres
 	// momentáneamente no disponible) no debe tirar abajo el proceso
 	// entero ni dejar de reintentar en el siguiente ciclo.
+	// Las series de los tres barridos se crean acá, antes de que ninguno
+	// haya corrido: en Prometheus la ausencia de una métrica no dispara
+	// alertas, así que sin esto una goroutine que muere al arrancar —el peor
+	// caso— no alertaría nunca (ver internal/shared/metricas).
+	for _, barrido := range []string{
+		monitoreo.JobReservasVencidas,
+		monitoreo.JobBarridoEntregas,
+		monitoreo.JobAvisoLicencias,
+	} {
+		metricasDelProceso.InicializarBarrido(barrido)
+	}
+
 	var jobTerminado sync.WaitGroup
 	jobTerminado.Add(1)
 	go func() {
@@ -631,7 +657,12 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				n, err := reservationSvc.FinalizarVencidas(ctx)
+				var n int
+				err := metricasDelProceso.MedirBarrido(monitoreo.JobReservasVencidas, func() error {
+					var err error
+					n, err = reservationSvc.FinalizarVencidas(ctx)
+					return err
+				})
 				if err != nil {
 					log.Printf("job de vencimiento de reservas: %v", err)
 					continue
@@ -659,7 +690,12 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				resumen, err := vigilante.Barrer(ctx)
+				var resumen reservationapp.ResumenDelBarrido
+				err := metricasDelProceso.MedirBarrido(monitoreo.JobBarridoEntregas, func() error {
+					var err error
+					resumen, err = vigilante.Barrer(ctx)
+					return err
+				})
 				if err != nil {
 					log.Printf("barrido de reservas y entregas: %v", err)
 					continue
@@ -709,7 +745,12 @@ func main() {
 				if ahora().Hour() < horaDeAviso {
 					continue
 				}
-				n, err := avisadorDeLicencias.Barrer(ctx)
+				var n int
+				err := metricasDelProceso.MedirBarrido(monitoreo.JobAvisoLicencias, func() error {
+					var err error
+					n, err = avisadorDeLicencias.Barrer(ctx)
+					return err
+				})
 				if err != nil {
 					log.Printf("job de aviso de licencias: %v", err)
 					continue
@@ -749,7 +790,20 @@ func main() {
 	app.Use(middleware.SecurityHeaders())
 	app.Use(middleware.CORS(frontendOrigin))
 
+	// Va después de los de seguridad y antes de las rutas, para medir todo
+	// lo que efectivamente se atiende (ver internal/shared/metricas).
+	app.Use(metricasDelProceso.MiddlewareHTTP())
+
 	app.Get("/health", handlerHealth(pool, ahora))
+
+	// /metrics no se publica hacia internet: nginx solo proxea /api y
+	// /health, y el resto cae en la SPA (ver frontend/nginx.conf). Lo
+	// consulta Prometheus por la red interna de Docker, si está levantado
+	// el perfil de observabilidad; si no, nadie lo mira y no cuesta nada.
+	app.Get("/metrics", adaptor.HTTPHandler(promhttp.HandlerFor(
+		metricasDelProceso.Coleccionador(),
+		promhttp.HandlerOpts{},
+	)))
 
 	authhttp.RegisterRoutes(app, authHandler, autenticacion)
 	academichttp.RegisterRoutes(app, academicHandler, autenticacion)

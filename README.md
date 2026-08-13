@@ -277,6 +277,7 @@ Toda la documentación funcional y técnica vive en [`docs/`](docs).
 | [`01-requisitos.md`](docs/01-requisitos.md) | Todo lo que el sistema tiene que hacer, regla por regla | Cualquiera |
 | [`02-casos-de-uso.md`](docs/02-casos-de-uso.md) | Cada tarea contada como un recorrido, con diagramas | Cualquiera |
 | [`11-operacion.md`](docs/11-operacion.md) | **Puesta en marcha, arranque, parada, logs, esquema y copias de seguridad** | Quien opera el servidor |
+| [`12-observabilidad.md`](docs/12-observabilidad.md) | Tableros de Prometheus y Grafana, opcionales: qué se mide y qué contesta cada número | Quien opera el servidor |
 | [`03-diagrama-clases.md`](docs/03-diagrama-clases.md) | Modelo de dominio | Técnico |
 | [`04-diagramas-secuencia.md`](docs/04-diagramas-secuencia.md) | Los flujos críticos, paso a paso entre módulos | Técnico |
 | [`05-diagramas-estado.md`](docs/05-diagramas-estado.md) | Máquinas de estado de Equipo, Reserva, Usuario y Ciclo | Técnico |

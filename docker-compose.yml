@@ -88,6 +88,66 @@ services:
     networks:
       - sgrc-net
 
+  # ── Observabilidad (opcional) ─────────────────────────────────────
+  # Los dos servicios de abajo NO arrancan con `docker compose up`: están
+  # detrás de un profile, así que hay que pedirlos:
+  #
+  #   docker compose --profile observabilidad up -d
+  #
+  # Es a propósito. El sistema funciona perfectamente sin ellos, y quien
+  # clone el repositorio para probarlo no tiene por qué gastar ~400 MB de
+  # memoria en tableros que todavía no necesita. Ver docs/12-observabilidad.md.
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    profiles: [observabilidad]
+    mem_limit: 512m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      # Los dos topes existen porque esto corre en el servidor de una
+      # institución, no en infraestructura dedicada: sin ellos, la base de
+      # métricas crece hasta llenar el disco y el primero en enterarse es
+      # Postgres, que deja de poder escribir.
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=1GB
+    volumes:
+      - ./observabilidad/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observabilidad/alertas.yml:/etc/prometheus/alertas.yml:ro
+      - prometheus-datos:/prometheus
+    # Sin `ports`: nadie tiene que llegar a Prometheus desde afuera. Lo
+    # consulta Grafana por la red interna. Para mirarlo a mano está el túnel
+    # de SSH que se explica en la documentación.
+    restart: unless-stopped
+    networks:
+      - sgrc-net
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    profiles: [observabilidad]
+    mem_limit: 256m
+    depends_on:
+      - prometheus
+    environment:
+      # La contraseña sale del .env y no queda "admin/admin": los tableros
+      # muestran cómo se comporta el sistema por dentro, y esto va a estar
+      # escuchando en un servidor compartido.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-cambiame}
+      # Nadie se registra solo ni entra sin usuario.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./observabilidad/grafana/datasources.yml:/etc/grafana/provisioning/datasources/sgrc.yml:ro
+      - ./observabilidad/grafana/tableros.yml:/etc/grafana/provisioning/dashboards/sgrc.yml:ro
+      - ./observabilidad/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-datos:/var/lib/grafana
+    ports:
+      # SOLO a 127.0.0.1: se llega desde el propio servidor, o por un túnel
+      # de SSH desde otra máquina. Publicarlo en todas las interfaces dejaría
+      # un panel de administración expuesto en la red de la institución.
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    networks:
+      - sgrc-net
+
 networks:
   # Subred fija para poder nombrarla en TRUSTED_PROXIES: si Docker la
   # asignara sola, cambiaría entre despliegues y Fiber dejaría de confiar en
@@ -99,3 +159,6 @@ networks:
 
 volumes:
   pgdata:
+  # Se crean solo si se levanta el perfil de observabilidad.
+  prometheus-datos:
+  grafana-datos:

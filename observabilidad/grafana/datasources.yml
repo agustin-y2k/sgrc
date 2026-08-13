@@ -1,0 +1,21 @@
+# Grafana toma esta configuración al arrancar: no hay que cargar el origen
+# de datos a mano por la interfaz, que es un paso que siempre se olvida y
+# deja los tableros vacíos sin decir por qué.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    # El uid es fijo porque los tableros lo nombran. Si Grafana lo generara,
+    # cada instalación tendría uno distinto y el JSON del tablero dejaría de
+    # servir para otra escuela.
+    uid: prometheus-sgrc
+    editable: false
+
+# Para tableros de USO —reservas por mes, equipo más pedido, incidencias por
+# categoría— hace falta además el origen de datos de Postgres, que no se
+# configura acá a propósito: requiere un usuario de solo lectura que se crea
+# a mano. El procedimiento está en docs/12-observabilidad.md.
