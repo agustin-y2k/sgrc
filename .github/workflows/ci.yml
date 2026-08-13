@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # La versión sale de go.mod y no de una constante acá: si el proyecto
       # sube de versión, CI la sigue sola.
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # A propósito con la versión de go.mod y no con la última: govulncheck
       # informa también las vulnerabilidades de la biblioteca estándar, y las
@@ -128,7 +128,7 @@ jobs:
     # disponibles, así que en un runner chico se acerca a esa suma.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -151,7 +151,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Node 24: la misma versión mayor que compila la SPA en
       # frontend/Dockerfile, para que un fallo de build aparezca acá y no al
@@ -191,7 +191,7 @@ jobs:
     # Se construyen y se descartan: no se publican a ningún registro. El
     # servidor compila las suyas con `docker compose up --build`.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v3
 
