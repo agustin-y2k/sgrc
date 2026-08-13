@@ -295,6 +295,40 @@ gratuitos. Sin configurar, el sistema arranca igual y lo dice en el log.
 > puntualmente, porque los barridos siguen corriendo. Para ese caso hace
 > falta algo que consulte el dominio **desde afuera de la institución**.
 
+### Enterarse cuando el sitio deja de responder
+
+No requiere configurar nada en el sistema: la aplicación ya expone lo que un
+monitor necesita, y cualquier servicio de *uptime* sirve. Lo único
+imprescindible es que **corra fuera de la red de la institución**. Un
+monitor instalado en el mismo servidor no cubre este caso: si lo que se cae
+es el servidor —o el túnel—, el monitor se cae con él.
+
+Qué configurar en el servicio que se elija:
+
+| | |
+|---|---|
+| **URL** | `https://<el-dominio>/health` |
+| **Espera** | código `200`, y si permite verificar el cuerpo, que contenga `"status":"ok"` |
+| **Frecuencia** | cada 5 minutos alcanza y sobra; es lo que suelen dar los planes gratuitos |
+| **Alertar tras** | 2 fallos seguidos, no 1 |
+
+Los dos detalles que hacen la diferencia:
+
+- **`/health` y no la raíz del sitio.** nginx sirve la interfaz aunque el
+  backend esté muerto, así que `/` devuelve 200 con la base caída: un verde
+  que miente. `/health` hace un ping real a Postgres y responde 503 si no
+  contesta (ver `cmd/main.go`), así que cubre los tres eslabones de una vez
+  —túnel, nginx y base—.
+- **Dos fallos antes de alertar.** Actualizar el sistema reemplaza los
+  contenedores y deja unos segundos sin respuesta; con alerta al primer
+  fallo, cada despliegue manda una alarma y en un mes nadie las mira.
+
+Hay servicios con plan gratuito suficiente para esto —el sistema no depende
+de ninguno en particular, porque lo único que se necesita es que alguien
+consulte una URL—. Si se prefiere autogestionarlo, existen alternativas de
+código abierto que se instalan en otra máquina; lo que no sirve es
+instalarlas en el mismo servidor.
+
 | Síntoma | Causa habitual |
 |---|---|
 | `FRONTEND_ORIGIN está vacío` y el proceso no arranca | Falta completar esa variable en el `.env` (§1.1) |
