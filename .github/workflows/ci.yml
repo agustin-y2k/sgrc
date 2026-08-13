@@ -156,7 +156,7 @@ jobs:
       # Node 24: la misma versión mayor que compila la SPA en
       # frontend/Dockerfile, para que un fallo de build aparezca acá y no al
       # armar la imagen.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
