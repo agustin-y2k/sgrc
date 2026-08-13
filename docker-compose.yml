@@ -130,7 +130,7 @@ services:
       # La contraseña sale del .env y no queda "admin/admin": los tableros
       # muestran cómo se comporta el sistema por dentro, y esto va a estar
       # escuchando en un servidor compartido.
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-cambiame}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-cambiar_en_el_env}
       # Nadie se registra solo ni entra sin usuario.
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
