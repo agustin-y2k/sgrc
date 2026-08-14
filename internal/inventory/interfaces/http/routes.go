@@ -70,4 +70,14 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	inventory.Patch("/licencias/:id", autenticado, soloAdmin, h.EditarLicencia)
 	inventory.Delete("/licencias/:id", autenticado, soloAdmin, h.BorrarLicencia)
 	inventory.Get("/equipos/:equipoId/licencias", autenticado, soloAdmin, h.ListarLicenciasPorEquipo)
+
+	// Preferencia de materia por equipo (RF-03.21). El ABM es solo Admin,
+	// pero la lectura por equipo NO: la marca es lo que explica por qué la
+	// lista de reserva viene ordenada como viene, y el docente ya ve ese
+	// orden. Esconderle el motivo lo deja adivinando.
+	inventory.Get("/equipos/:equipoId/preferencias", autenticado, h.ListarPreferenciasDeEquipo)
+	inventory.Get("/materias-en-uso", autenticado, soloAdmin, h.ListarMateriasEnUso)
+	inventory.Post("/preferencias", autenticado, soloAdmin, h.MarcarPreferencia)
+	inventory.Patch("/preferencias/:id", autenticado, soloAdmin, h.EditarPreferencia)
+	inventory.Delete("/preferencias/:id", autenticado, soloAdmin, h.BorrarPreferencia)
 }

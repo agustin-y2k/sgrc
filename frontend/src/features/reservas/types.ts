@@ -243,7 +243,19 @@ export type EquipoDisponible = {
   carroNombre: string
   freezado: boolean
   softwareInstalado?: string
+  /**
+   * RF-03.21: en qué bloque cae el equipo para la materia que se está
+   * reservando. La lista ya viene ordenada por tramo; esto permite
+   * titularlos.
+   *
+   * No es un permiso: los tres tramos se reservan igual.
+   */
+  tramo: TramoPreferencia
+  /** "Preferente para Matemática de 3°B". Ausente en un equipo neutral. */
+  motivo?: string
 }
+
+export type TramoPreferencia = "PREFERENTE" | "NEUTRAL" | "DE_OTRA_MATERIA"
 
 /**
  * RF-04.11: un equipo que ya tiene dueño en esa franja. No se tilda; está
