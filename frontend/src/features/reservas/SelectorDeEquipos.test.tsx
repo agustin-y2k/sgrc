@@ -17,6 +17,7 @@ function libre(over: Partial<EquipoDisponible> = {}): EquipoDisponible {
     carroId: "c1",
     carroNombre: "Carro 1",
     freezado: false,
+    tramo: "NEUTRAL",
     ...over,
   }
 }
@@ -37,7 +38,9 @@ function ocupado(over: Partial<EquipoOcupado> = {}): EquipoOcupado {
 }
 
 function renderSelector(
-  respuesta: { data: EquipoDisponible[]; ocupados?: EquipoOcupado[] } = { data: [libre()] }
+  respuesta: { data: EquipoDisponible[]; ocupados?: EquipoOcupado[] } = {
+    data: [libre()],
+  }
 ) {
   vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue(respuesta)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -154,11 +157,16 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
     renderSelector({ data: [], ocupados: [ocupado()] })
 
     await user.click(await screen.findByRole("button", { name: "Pedírsela" }))
-    await user.type(screen.getByLabelText("¿Para qué la necesitás? (opcional)"), "Otra vez")
+    await user.type(
+      screen.getByLabelText("¿Para qué la necesitás? (opcional)"),
+      "Otra vez"
+    )
     await user.click(screen.getByRole("button", { name: "Enviar pedido" }))
 
     expect(await screen.findByText("ya le pediste esos equipos hoy")).toBeInTheDocument()
-    expect(screen.getByLabelText("¿Para qué la necesitás? (opcional)")).toHaveValue("Otra vez")
+    expect(screen.getByLabelText("¿Para qué la necesitás? (opcional)")).toHaveValue(
+      "Otra vez"
+    )
   })
 
   it("se puede volver atrás sin mandar nada", async () => {
@@ -208,7 +216,11 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
     renderSelector({
       data: [],
       ocupados: [
-        ocupado({ docenteNombre: undefined, materiaNombre: undefined, puedePedirse: false }),
+        ocupado({
+          docenteNombre: undefined,
+          materiaNombre: undefined,
+          puedePedirse: false,
+        }),
       ],
     })
 
@@ -245,5 +257,90 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
 
     await screen.findByText("Ya reservados en esa franja")
     expect(screen.getAllByRole("checkbox")).toHaveLength(1)
+  })
+})
+
+/**
+ * RF-03.21 — la lista se parte en bloques según qué materia prefiere cada
+ * equipo.
+ *
+ * Lo que se prueba es la decisión de fondo: los tramos son una ayuda de
+ * lectura y no una restricción, así que todos los equipos se pueden tildar
+ * igual y los títulos sólo aparecen cuando hay algo que distinguir.
+ */
+describe("SelectorDeEquipos, tramos de preferencia", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("titula los bloques cuando hay marcas de preferencia", async () => {
+    renderSelector({
+      data: [
+        libre({
+          equipoId: "pc1",
+          etiqueta: "PC 1",
+          tramo: "PREFERENTE",
+          motivo: "Preferente para Matemática de 3°B",
+        }),
+        libre({ equipoId: "pc2", etiqueta: "PC 2", tramo: "NEUTRAL" }),
+        libre({
+          equipoId: "pc3",
+          etiqueta: "PC 3",
+          tramo: "DE_OTRA_MATERIA",
+          motivo: "Preferente para Dibujo Técnico",
+        }),
+      ],
+    })
+
+    expect(await screen.findByText("Recomendados para esta materia")).toBeInTheDocument()
+    expect(screen.getByText("Los demás equipos")).toBeInTheDocument()
+    expect(screen.getByText("Preferentes de otra materia")).toBeInTheDocument()
+    // El motivo explica el orden. Sin él se ve que la lista cambió pero no
+    // qué la ordenó.
+    expect(screen.getByText("Preferente para Matemática de 3°B")).toBeInTheDocument()
+  })
+
+  /**
+   * "Preferentes de otra materia" se lee como una prohibición si no se
+   * aclara, y no lo es: la marca sólo ordena.
+   */
+  it("aclara que los de otra materia se pueden reservar igual", async () => {
+    renderSelector({
+      data: [
+        libre({ equipoId: "pc1", tramo: "NEUTRAL" }),
+        libre({ equipoId: "pc3", etiqueta: "PC 3", tramo: "DE_OTRA_MATERIA" }),
+      ],
+    })
+
+    expect(await screen.findByText(/Se pueden reservar igual/)).toBeInTheDocument()
+  })
+
+  it("deja tildar un equipo preferente de otra materia", async () => {
+    const user = userEvent.setup()
+    const { onCambio } = renderSelector({
+      data: [
+        libre({ equipoId: "pc1", tramo: "NEUTRAL" }),
+        libre({ equipoId: "pc3", etiqueta: "PC 3", tramo: "DE_OTRA_MATERIA" }),
+      ],
+    })
+
+    await user.click(await screen.findByRole("checkbox", { name: /PC 3/ }))
+
+    expect(onCambio).toHaveBeenCalledWith(["pc3"])
+  })
+
+  /**
+   * Es el caso normal mientras el inventario no tenga ninguna marca: sin
+   * nada que distinguir, ponerle un título al único bloque sería vocabulario
+   * nuevo que no dice nada.
+   */
+  it("sin marcas no muestra ningún título de tramo", async () => {
+    renderSelector({
+      data: [libre({ equipoId: "pc1" }), libre({ equipoId: "pc2", etiqueta: "PC 2" })],
+    })
+
+    expect(await screen.findByRole("checkbox", { name: /PC 1/ })).toBeInTheDocument()
+    expect(screen.queryByText("Los demás equipos")).not.toBeInTheDocument()
+    expect(screen.queryByText("Recomendados para esta materia")).not.toBeInTheDocument()
   })
 })

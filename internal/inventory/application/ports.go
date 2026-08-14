@@ -57,6 +57,25 @@ type Repo interface {
 	// que el job no pueda pisar una renovación que un Admin haya guardado
 	// entre la lectura y el envío del correo.
 	MarcarAvisosEnviados(ctx context.Context, l *domain.LicenciaSoftware) error
+
+	// Preferencias de materia por equipo (RF-03.21). No hay un "listar
+	// todas": se consultan siempre por equipo desde el inventario, y la otra
+	// mitad —qué equipos prefiere una materia— la resuelve reservation en la
+	// misma consulta que arma la lista de libres.
+	CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error
+	GuardarPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error
+	BuscarPreferenciaPorID(ctx context.Context, id string) (*domain.PreferenciaDeEquipo, error)
+	BorrarPreferencia(ctx context.Context, id string) error
+	ListarPreferenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.PreferenciaDeEquipo, error)
+
+	// NombresDeMateriaEnUso alimenta el selector del inventario: los nombres
+	// distintos de materia que existen en el sistema.
+	//
+	// Es lo que hace que el Admin ELIJA en vez de tipear, y por eso el nombre
+	// no se fragmenta aunque la marca se guarde como texto. Devuelve nombres
+	// y no materias porque la marca no distingue cursos salvo que se lo pida
+	// expresamente: "Matemáticas" aparece una vez, no una por cada 1°A, 2°B…
+	NombresDeMateriaEnUso(ctx context.Context) ([]string, error)
 }
 
 // LicenciaConUbicacion es una licencia más lo mínimo para saber DÓNDE está

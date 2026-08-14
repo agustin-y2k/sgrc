@@ -33,10 +33,12 @@ type fakeRepo struct {
 	reservas       map[string]*domain.Reserva
 	prestamos      map[string]*domain.Prestamo
 	pcsDisponibles []application.EquipoDisponible
-	pcsOcupadas    []application.EquipoOcupado
-	datosDelPedido *application.ReservaParaPedido
-	yaPidio        bool
-	solapamientos  []application.Solapamiento
+	// materiaRecibidaAlListar: para qué materia se pidió la lista (RF-03.21).
+	materiaRecibidaAlListar string
+	pcsOcupadas             []application.EquipoOcupado
+	datosDelPedido          *application.ReservaParaPedido
+	yaPidio                 bool
+	solapamientos           []application.Solapamiento
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -281,7 +283,8 @@ func (r *fakeRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, cicloID s
 func (r *fakeRepo) ListarReservasConfirmadasVencidas(ctx context.Context, ahora time.Time, limite int) ([]*domain.Reserva, error) {
 	return nil, nil
 }
-func (r *fakeRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoDisponible, error) {
+func (r *fakeRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]application.EquipoDisponible, error) {
+	r.materiaRecibidaAlListar = materiaID
 	return r.pcsDisponibles, nil
 }
 func (r *fakeRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoOcupado, error) {
@@ -434,6 +437,83 @@ func TestHTTP_CrearReserva_OK(t *testing.T) {
 	}
 	if resp.StatusCode != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d", resp.StatusCode)
+	}
+}
+
+// RF-03.21: la lista no tiene un orden único, se ordena PARA una materia. Si
+// el handler no le pasa materiaId al servicio, el ordenamiento entero no
+// ocurre y la pantalla se ve igual que antes sin ningún error visible.
+func TestHTTP_ListarEquiposDisponibles_PasaLaMateriaParaOrdenar(t *testing.T) {
+	repo := nuevoFakeRepo()
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET",
+		"/api/reservation/equipos-disponibles?fecha=2026-03-09&horaInicio=08:00&horaFin=09:00&materiaId=materia1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+	if repo.materiaRecibidaAlListar != "materia1" {
+		t.Errorf("el repo recibió la materia %q, esperaba materia1", repo.materiaRecibidaAlListar)
+	}
+}
+
+// Sin materia sigue funcionando: es lo que hace un Admin que todavía no
+// eligió una.
+func TestHTTP_ListarEquiposDisponibles_SinMateria_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET",
+		"/api/reservation/equipos-disponibles?fecha=2026-03-09&horaInicio=08:00&horaFin=09:00", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+	if repo.materiaRecibidaAlListar != "" {
+		t.Errorf("esperaba materia vacía, obtuve %q", repo.materiaRecibidaAlListar)
+	}
+}
+
+// El tramo y el motivo viajan al cliente: son lo que permite titular los
+// bloques y explicar por qué un equipo está donde está.
+func TestHTTP_ListarEquiposDisponibles_DevuelveTramoYMotivo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.pcsDisponibles = []application.EquipoDisponible{{
+		EquipoID: "pc1", Etiqueta: "PC 1",
+		Tramo:              application.TramoPreferente,
+		PreferenciaMateria: "Matemática", PreferenciaAnio: 3, PreferenciaDivision: "B",
+	}}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET",
+		"/api/reservation/equipos-disponibles?fecha=2026-03-09&horaInicio=08:00&horaFin=09:00&materiaId=materia1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var body equiposDisponiblesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Data) != 1 {
+		t.Fatalf("esperaba 1 equipo, obtuve %d", len(body.Data))
+	}
+	if body.Data[0].Tramo != "PREFERENTE" {
+		t.Errorf("tramo = %q, esperaba PREFERENTE", body.Data[0].Tramo)
+	}
+	if body.Data[0].Motivo != "Preferente para Matemática de 3°B" {
+		t.Errorf("motivo = %q", body.Data[0].Motivo)
 	}
 }
 

@@ -8,7 +8,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import * as reservasApi from "@/features/reservas/api"
-import type { EquipoDisponible, EquipoOcupado } from "@/features/reservas/types"
+import type {
+  EquipoDisponible,
+  EquipoOcupado,
+  TramoPreferencia,
+} from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 
 /**
@@ -23,6 +27,12 @@ type Props = {
   horaFin: string
   seleccionadas: string[]
   onCambio: (equipoIds: string[]) => void
+  /**
+   * RF-03.21: para qué materia se ordena la lista. Vacío mientras el docente
+   * todavía no la eligió, y también cuando reserva un Admin: ahí la lista
+   * sale con el orden de siempre.
+   */
+  materiaId?: string
 }
 
 /**
@@ -39,12 +49,16 @@ export function SelectorDeEquipos({
   horaFin,
   seleccionadas,
   onCambio,
+  materiaId,
 }: Props) {
   const franjaCompleta = Boolean(fecha && horaInicio && horaFin && horaFin > horaInicio)
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["equipos-disponibles", fecha, horaInicio, horaFin],
-    queryFn: () => reservasApi.equiposDisponibles(fecha, horaInicio, horaFin),
+    // La materia entra en la clave: cambiarla reordena la lista entera
+    // (RF-03.21), así que la respuesta cacheada de otra materia no sirve.
+    queryKey: ["equipos-disponibles", fecha, horaInicio, horaFin, materiaId ?? ""],
+    queryFn: () =>
+      reservasApi.equiposDisponibles({ fecha, horaInicio, horaFin, materiaId }),
     enabled: franjaCompleta,
   })
 
@@ -76,24 +90,17 @@ export function SelectorDeEquipos({
     )
   }
 
-  // Agrupadas por carro solo para que sea legible; la selección cruza carros.
-  //
-  // Lo que no está en ningún carro (015 — el proyector) va bajo su propio
-  // título: con `carroNombre` vacío caía en un grupo sin leyenda, y ahí no
-  // hay nada que le diga al docente qué está mirando.
-  const porCarro = new Map<string, EquipoDisponible[]>()
-  for (const equipo of equipos) {
-    const grupo = equipo.carroNombre || SIN_CARRO
-    const delCarro = porCarro.get(grupo)
-    if (delCarro) delCarro.push(equipo)
-    else porCarro.set(grupo, [equipo])
-  }
-
   function alternar(equipoId: string, tildada: boolean) {
     onCambio(
-      tildada ? [...seleccionadas, equipoId] : seleccionadas.filter((id) => id !== equipoId)
+      tildada
+        ? [...seleccionadas, equipoId]
+        : seleccionadas.filter((id) => id !== equipoId)
     )
   }
+
+  // La lista ya viene ordenada por tramo del servidor; acá sólo se corta en
+  // bloques respetando ese orden.
+  const tramos = agruparPorTramo(equipos)
 
   return (
     <div className="grid gap-4">
@@ -109,6 +116,98 @@ export function SelectorDeEquipos({
         </p>
       )}
 
+      {/* Con un solo tramo no hay nada que distinguir, así que la lista sale
+          como siempre. Es el caso normal mientras el inventario no tenga
+          ninguna marca cargada, y ponerle un título a un único bloque sería
+          agregar vocabulario nuevo sin decir nada. */}
+      {tramos.length <= 1 ? (
+        <EquiposPorCarro
+          equipos={equipos}
+          seleccionadas={seleccionadas}
+          alternar={alternar}
+        />
+      ) : (
+        tramos.map(([tramo, delTramo]) => (
+          <section key={tramo} className="grid gap-2">
+            <div>
+              <h3 className="text-sm font-medium">{TITULO_TRAMO[tramo]}</h3>
+              {AYUDA_TRAMO[tramo] && (
+                <p className="text-muted-foreground text-xs">{AYUDA_TRAMO[tramo]}</p>
+              )}
+            </div>
+            <EquiposPorCarro
+              equipos={delTramo}
+              seleccionadas={seleccionadas}
+              alternar={alternar}
+            />
+          </section>
+        ))
+      )}
+
+      {ocupados.length > 0 && <EquiposTomados ocupados={ocupados} />}
+    </div>
+  )
+}
+
+const TITULO_TRAMO: Record<TramoPreferencia, string> = {
+  PREFERENTE: "Recomendados para esta materia",
+  NEUTRAL: "Los demás equipos",
+  DE_OTRA_MATERIA: "Preferentes de otra materia",
+}
+
+/**
+ * La aclaración del último tramo no es decorativa: sin ella, "preferentes de
+ * otra materia" se lee como una prohibición, y no lo es. La marca sólo
+ * ordena la lista (RF-03.21).
+ */
+const AYUDA_TRAMO: Record<TramoPreferencia, string> = {
+  PREFERENTE: "",
+  NEUTRAL: "",
+  DE_OTRA_MATERIA:
+    "Se pueden reservar igual. Van al final porque otra materia los prefiere.",
+}
+
+/** El orden en que se muestran los bloques. */
+const ORDEN_TRAMOS: TramoPreferencia[] = ["PREFERENTE", "NEUTRAL", "DE_OTRA_MATERIA"]
+
+function agruparPorTramo(
+  equipos: EquipoDisponible[]
+): [TramoPreferencia, EquipoDisponible[]][] {
+  const porTramo = new Map<TramoPreferencia, EquipoDisponible[]>()
+  for (const equipo of equipos) {
+    const delTramo = porTramo.get(equipo.tramo)
+    if (delTramo) delTramo.push(equipo)
+    else porTramo.set(equipo.tramo, [equipo])
+  }
+  return ORDEN_TRAMOS.filter((t) => porTramo.has(t)).map((t) => [t, porTramo.get(t)!])
+}
+
+/**
+ * Agrupadas por carro solo para que sea legible; la selección cruza carros.
+ *
+ * Lo que no está en ningún carro (015 — el proyector) va bajo su propio
+ * título: con `carroNombre` vacío caía en un grupo sin leyenda, y ahí no
+ * hay nada que le diga al docente qué está mirando.
+ */
+function EquiposPorCarro({
+  equipos,
+  seleccionadas,
+  alternar,
+}: {
+  equipos: EquipoDisponible[]
+  seleccionadas: string[]
+  alternar: (equipoId: string, tildada: boolean) => void
+}) {
+  const porCarro = new Map<string, EquipoDisponible[]>()
+  for (const equipo of equipos) {
+    const grupo = equipo.carroNombre || SIN_CARRO
+    const delCarro = porCarro.get(grupo)
+    if (delCarro) delCarro.push(equipo)
+    else porCarro.set(grupo, [equipo])
+  }
+
+  return (
+    <>
       {[...porCarro.entries()].map(([carro, delCarro]) => (
         <fieldset key={carro} className="grid gap-2">
           <legend className="mb-1 text-sm font-medium">{carro}</legend>
@@ -134,6 +233,14 @@ export function SelectorDeEquipos({
                         </Badge>
                       )}
                     </Label>
+                    {/* Por qué está en este bloque, en palabras. Sin el
+                        motivo, el orden es un misterio: se ve que la lista
+                        cambió pero no qué la ordenó. */}
+                    {equipo.motivo && (
+                      <span className="text-muted-foreground text-xs">
+                        {equipo.motivo}
+                      </span>
+                    )}
                     {/* RF-03.7: el software es lo que define la elección. */}
                     {equipo.softwareInstalado && (
                       <span className="text-muted-foreground text-xs">
@@ -147,9 +254,7 @@ export function SelectorDeEquipos({
           </div>
         </fieldset>
       ))}
-
-      {ocupados.length > 0 && <EquiposTomados ocupados={ocupados} />}
-    </div>
+    </>
   )
 }
 
@@ -193,7 +298,10 @@ function EquipoTomado({ equipo }: { equipo: EquipoOcupado }) {
         <span className="text-sm font-medium">
           {equipo.etiqueta}
           {equipo.carroNombre && (
-            <span className="text-muted-foreground font-normal"> · {equipo.carroNombre}</span>
+            <span className="text-muted-foreground font-normal">
+              {" "}
+              · {equipo.carroNombre}
+            </span>
           )}
         </span>
         {/* Un bloqueo administrativo no tiene docente: lo que explica la

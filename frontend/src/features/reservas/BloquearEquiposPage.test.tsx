@@ -44,6 +44,7 @@ function disponible(equipoId: string, identificador: number): EquipoDisponible {
     carroId: "carro1",
     carroNombre: "Carro A",
     freezado: false,
+    tramo: "NEUTRAL",
   }
 }
 
@@ -106,7 +107,10 @@ describe("BloquearEquiposPage", () => {
    */
   it("no deja elegir un equipo que no está disponible", async () => {
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
-      data: [equipo(), equipo({ id: "pc2", identificador: 2, estado: "FUERA_DE_SERVICIO" })],
+      data: [
+        equipo(),
+        equipo({ id: "pc2", identificador: 2, estado: "FUERA_DE_SERVICIO" }),
+      ],
     })
     renderPagina()
 

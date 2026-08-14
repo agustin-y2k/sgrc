@@ -67,7 +67,11 @@ describe("api de reservas, lo que se manda", () => {
     it("manda la franja pedida", async () => {
       const fetchMock = fetchFalso()
 
-      await reservasApi.equiposDisponibles("2026-08-11", "08:00", "09:00")
+      await reservasApi.equiposDisponibles({
+        fecha: "2026-08-11",
+        horaInicio: "08:00",
+        horaFin: "09:00",
+      })
 
       const { url } = llamada(fetchMock)
       const params = new URLSearchParams(url.split("?")[1])
@@ -83,7 +87,11 @@ describe("api de reservas, lo que se manda", () => {
     it("no manda la serie cuando el cambio es de una sola fecha", async () => {
       const fetchMock = fetchFalso()
 
-      await reservasApi.equiposDisponibles("2026-08-11", "08:00", "09:00")
+      await reservasApi.equiposDisponibles({
+        fecha: "2026-08-11",
+        horaInicio: "08:00",
+        horaFin: "09:00",
+      })
 
       expect(llamada(fetchMock).url).not.toContain("serieDesdeGrupoId")
     })
@@ -93,10 +101,44 @@ describe("api de reservas, lo que se manda", () => {
     it("manda la serie cuando el cambio alcanza a las siguientes", async () => {
       const fetchMock = fetchFalso()
 
-      await reservasApi.equiposDisponibles("2026-08-11", "08:00", "09:00", "grupo1")
+      await reservasApi.equiposDisponibles({
+        fecha: "2026-08-11",
+        horaInicio: "08:00",
+        horaFin: "09:00",
+        serieDesdeGrupoId: "grupo1",
+      })
 
       const params = new URLSearchParams(llamada(fetchMock).url.split("?")[1])
       expect(params.get("serieDesdeGrupoId")).toBe("grupo1")
+    })
+
+    // RF-03.21: sin este parámetro la lista sale con el orden de siempre, y
+    // el ordenamiento por materia no ocurre sin que nada falle a la vista.
+    it("manda la materia para ordenar la lista", async () => {
+      const fetchMock = fetchFalso()
+
+      await reservasApi.equiposDisponibles({
+        fecha: "2026-08-11",
+        horaInicio: "08:00",
+        horaFin: "09:00",
+        materiaId: "materia1",
+      })
+
+      const params = new URLSearchParams(llamada(fetchMock).url.split("?")[1])
+      expect(params.get("materiaId")).toBe("materia1")
+    })
+
+    // Un Admin puede reservar sin materia: ahí el parámetro no viaja.
+    it("no manda la materia cuando no hay ninguna elegida", async () => {
+      const fetchMock = fetchFalso()
+
+      await reservasApi.equiposDisponibles({
+        fecha: "2026-08-11",
+        horaInicio: "08:00",
+        horaFin: "09:00",
+      })
+
+      expect(llamada(fetchMock).url).not.toContain("materiaId")
     })
   })
 
@@ -107,7 +149,10 @@ describe("api de reservas, lo que se manda", () => {
       await reservasApi.cambiarEquipoDeReserva("res1", "pc9", false)
 
       const { init } = llamada(fetchMock)
-      expect(JSON.parse(init.body as string)).toEqual({ equipoId: "pc9", soloEsta: false })
+      expect(JSON.parse(init.body as string)).toEqual({
+        equipoId: "pc9",
+        soloEsta: false,
+      })
     })
 
     // El alcance por defecto es el conservador: tocar una sola fecha.

@@ -18,6 +18,7 @@ erDiagram
     CARRO ||--o{ EQUIPO : contiene
     EQUIPO ||--o{ INCIDENCIA : registra
     EQUIPO ||--o{ LICENCIA_SOFTWARE : tiene
+    EQUIPO ||--o{ EQUIPO_PREFERENCIA : prefiere
     EQUIPO ||--o{ PRESTAMO : sale_en
     EQUIPO ||--o{ RESERVA : ocupa
     EQUIPO ||--o{ HISTORICO_USO_EQUIPO : resume
@@ -36,9 +37,10 @@ erDiagram
     EQUIPO { uuid id; uuid carro_id; int identificador; string nombre; string tipo; string numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool reservable; bool dado_de_baja; timestamptz fecha_baja; timestamptz fecha_alta }
     INCIDENCIA { uuid id; uuid equipo_id; uuid reportado_por; string descripcion; string categoria; string gravedad; timestamptz fecha; bool enviado_a_soporte; timestamptz fecha_envio_a_soporte; string estado }
     LICENCIA_SOFTWARE { uuid id; uuid equipo_id; string nombre; int dias_duracion; int dias_aviso; date fecha_vencimiento; date ultima_renovacion; uuid vencimiento_fijado_por; timestamptz vencimiento_fijado_en; date avisado_previo_para; date avisado_vencimiento_para; timestamptz creada_en }
+    EQUIPO_PREFERENCIA { uuid id; uuid equipo_id; string materia_nombre; string materia_norm; int anio; string division; int prioridad; timestamptz creada_en }
     CICLO_LECTIVO { uuid id; int anio; bool activo; bool archivado }
     CURSO { uuid id; uuid ciclo_lectivo_id; string nombre; bool activo; bool archivado }
-    MATERIA { uuid id; uuid curso_id; string nombre; bool activo; bool archivado }
+    MATERIA { uuid id; uuid curso_id; string nombre; string nombre_norm; bool activo; bool archivado }
     DOCENTE_MATERIA { uuid id; uuid usuario_id; uuid materia_id; string rol }
     REGLA_RECURRENCIA { uuid id; uuid materia_id; uuid creado_por; string dia_semana; time hora_inicio; time hora_fin; date fecha_inicio; date fecha_fin }
     RESERVA_GRUPO { uuid id; uuid materia_id; uuid creado_por; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; uuid regla_recurrencia_id; timestamptz creada_en; timestamptz recordatorio_enviado_en; timestamptz aviso_sin_retirar_en }
@@ -252,9 +254,17 @@ CREATE UNIQUE INDEX idx_ciclo_lectivo_activo_unico ON ciclo_lectivo (activo) WHE
 | id | UUID | PK |
 | curso_id | UUID | FK → curso.id **ON DELETE CASCADE**, NOT NULL |
 | nombre | VARCHAR(100) | NOT NULL |
+| nombre_norm | VARCHAR(100) | GENERATED ALWAYS AS `translate(lower(nombre), 'áéíóúüñ', 'aeiouun')` STORED |
 | activo | BOOLEAN | NOT NULL DEFAULT true |
 | archivado | BOOLEAN | NOT NULL DEFAULT false |
 | | | UNIQUE (curso_id, nombre) |
+
+> `nombre_norm` es la forma canónica del nombre —sin mayúsculas ni acentos—
+> contra la que se cruzan las marcas de preferencia de `equipo_preferencia`
+> (RF-03.21). Se resuelve con `translate()` y **no con `unaccent()`**: esa
+> función vive en una extensión, depende de un diccionario y por eso no es
+> IMMUTABLE, así que no se puede usar ni en una columna generada ni en un
+> índice.
 
 > **Edición y eliminación mientras el ciclo está activo (RF-02.11):** `nombre`
 > se puede editar en cualquier momento, revalidando el patrón y la unicidad. La
@@ -492,6 +502,55 @@ CREATE INDEX idx_licencia_vencimiento ON licencia_software (fecha_vencimiento)
 > `regla_recurrencia.creado_por`: sin política de borrado, eliminar
 > definitivamente a un usuario (RF-01.9) muere con un 500 arrastrado por esta
 > FK.
+
+### `equipo_preferencia`
+Qué materia prefiere cada equipo (RF-03.21). **Sólo ordena la lista al
+reservar**: no es un permiso, no oculta nada y no afecta ninguna reserva.
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| equipo_id | UUID | FK → equipo.id **ON DELETE CASCADE**, NOT NULL |
+| materia_nombre | VARCHAR(100) | NOT NULL, CHECK no vacío y sin espacios en los bordes |
+| materia_norm | VARCHAR(100) | GENERATED ALWAYS AS `translate(lower(materia_nombre), …)` STORED |
+| anio | SMALLINT | NULL, CHECK entre 1 y 6 |
+| division | CHAR(1) | NULL, CHECK `^[A-Z]$` |
+| prioridad | SMALLINT | NOT NULL DEFAULT 1, CHECK entre 1 y 9 |
+| creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+| | | CHECK `division IS NULL OR anio IS NOT NULL` |
+| | | UNIQUE **NULLS NOT DISTINCT** (equipo_id, materia_norm, anio, division) |
+
+```sql
+CREATE INDEX idx_equipo_preferencia_materia ON equipo_preferencia (materia_norm);
+CREATE INDEX idx_equipo_preferencia_equipo  ON equipo_preferencia (equipo_id);
+```
+
+> **El vínculo es por nombre y no una FK a `materia`.** `materia` es por curso y
+> `ArchivarYClonar` la recrea con UUID nuevo cada año (RF-02.5); `curso`
+> también. Una FK a cualquiera de las dos borraría todas las marcas el 31/12,
+> que es justo cuando el Admin espera que sigan puestas. Por lo mismo el año y
+> la división son **datos literales** y no una referencia a `curso`.
+>
+> El riesgo obvio de guardar texto —que el nombre se fragmente— se ataca por
+> dos lados: el Admin **elige de la lista de nombres que ya existen** en vez de
+> tipear (es el único que los escribe, porque quien se registra sólo los
+> sugiere), y el cruce va por la columna normalizada, así que "Matemática" y
+> "matematica" son la misma materia.
+
+> **`NULLS NOT DISTINCT` no es un detalle de estilo.** Con el `UNIQUE` normal de
+> SQL dos filas `(equipo, materia, NULL, NULL)` se consideran distintas entre
+> sí, así que la misma marca sin curso se podría cargar infinitas veces.
+> Disponible desde Postgres 15; este proyecto corre 16.
+
+> **Los tres alcances y cuál gana.** `(NULL, NULL)` vale para toda materia con
+> ese nombre; `(3, NULL)` para todo tercer año; `(3, 'B')` sólo para 3°B. Un
+> mismo equipo puede tener los tres, y al reservar **gana el más específico**;
+> a igual especificidad, la prioridad más fuerte. El rango de `anio` y el patrón
+> de `division` son los mismos del CHECK de `curso.nombre` (`^[1-6]°[A-Z]$`):
+> una institución con otra nomenclatura cambia los tres juntos.
+
+> **`ON DELETE CASCADE`** porque una marca no significa nada sin su equipo: dar
+> de baja la máquina se lleva sus marcas y no hay nada que preservar.
 
 ### `regla_recurrencia`
 El **patrón** temporal de una reserva que se repite: materia + día de semana +

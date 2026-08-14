@@ -36,6 +36,7 @@ const equipos: EquipoDisponible[] = [
     carroId: "car1",
     carroNombre: "Carro 1",
     freezado: false,
+    tramo: "NEUTRAL",
     softwareInstalado: "AutoCAD 2027",
   },
   {
@@ -45,6 +46,7 @@ const equipos: EquipoDisponible[] = [
     carroId: "car2",
     carroNombre: "Carro 2",
     freezado: true,
+    tramo: "NEUTRAL",
   },
 ]
 
@@ -136,7 +138,10 @@ describe("NuevaReservaPage", () => {
     expect(screen.getByText("Carro 2")).toBeInTheDocument()
     // RF-03.7: el software es el dato que define la elección.
     expect(screen.getByText("AutoCAD 2027")).toBeInTheDocument()
-    expect(reservasApi.equiposDisponibles).toHaveBeenCalledWith(FECHA, "08:00", "09:00")
+    // RF-03.21: la materia viaja para que la lista salga ordenada para ella.
+    expect(reservasApi.equiposDisponibles).toHaveBeenCalledWith(
+      expect.objectContaining({ fecha: FECHA, horaInicio: "08:00", horaFin: "09:00" })
+    )
   })
 
   /**
@@ -157,6 +162,7 @@ describe("NuevaReservaPage", () => {
           carroId: "",
           carroNombre: "",
           freezado: false,
+          tramo: "NEUTRAL",
         },
       ],
     })
