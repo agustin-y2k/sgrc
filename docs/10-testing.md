@@ -188,13 +188,13 @@ Cuatro decisiones que conviene conocer antes de tocar el archivo:
   despliega. Falla solo si el código **llama** a la función vulnerable: una
   dependencia con un CVE que nadie invoca no rompe la corrida, porque una
   alarma que suena por todo se aprende a ignorar.
-- **Por eso la línea `go` de `go.mod` lleva el parche**, `1.25.12` y no
+- **Por eso la línea `go` de `go.mod` lleva el parche**, `1.25.13` y no
   `1.25.0`: es el piso de versión con el que se acepta compilar este módulo,
   y `setup-go` instala exactamente lo que ahí diga. Con `1.25.0` la corrida
   encontró 26 vulnerabilidades de la biblioteca estándar, una alcanzable
   desde `ValidarEmail`. Cuando ese piso suba hay que verificar que la imagen
   `golang:1.25-alpine` del Dockerfile lo siga cumpliendo — hoy trae
-  exactamente `go1.25.12`.
+  exactamente `go1.25.13`.
 - **Las imágenes se construyen y se descartan.** Lo que se despliega son
   ellas, no el binario que compila el job de build: un Dockerfile roto, o un
   `npm ci` que falla sobre `node:24-alpine` y no sobre el Node del runner,
