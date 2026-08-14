@@ -95,11 +95,15 @@ func NewService(
 func (s *Service) RecuperacionPorEmailDisponible() bool { return s.correoHabilitado }
 
 // SolicitudDeAsignacion es lo que el docente declara al registrarse: qué
-// curso y qué materia va a dictar. Los dos son opcionales — quien no lo
-// sepa todavía puede registrarse igual y arreglarlo con el Admin.
+// curso y qué materia va a dictar, y si se ofrece como titular o suplente.
+// Los tres son opcionales — quien no lo sepa todavía puede registrarse igual
+// y arreglarlo con el Admin.
 type SolicitudDeAsignacion struct {
 	Curso   string
 	Materia string
+	// Rol es "TITULAR", "SUPLENTE" o vacío. Se valida en crearUsuario: es el
+	// único de los tres con una lista cerrada.
+	Rol string
 }
 
 // Registrar implementa RF-01.3: autorregistro de docente, queda PENDIENTE.
@@ -109,7 +113,7 @@ type SolicitudDeAsignacion struct {
 // sistema (y para que sepa si tiene que crearlos antes).
 func (s *Service) Registrar(ctx context.Context, nombre, apellido, email, password string, solicitud SolicitudDeAsignacion) (*domain.Usuario, error) {
 	u, err := s.crearUsuario(ctx, nombre, apellido, email, password, domain.RolDocente, domain.EstadoPendiente, nil,
-		strings.TrimSpace(solicitud.Curso), strings.TrimSpace(solicitud.Materia))
+		solicitud)
 	if err != nil {
 		return nil, err
 	}
@@ -140,15 +144,15 @@ func (s *Service) avisarQueHayUnDocentePendiente(u *domain.Usuario) {
 // sin pasar por PENDIENTE — queda APROBADA de inmediato, con
 // AprobadoPor apuntando a quien lo creó.
 func (s *Service) CrearAdmin(ctx context.Context, creadoPorID, nombre, apellido, email, password string) (*domain.Usuario, error) {
-	// Un Admin no declara curso ni materia: no se autorregistra para dictar,
-	// lo crea otro Admin ya aprobado.
-	return s.crearUsuario(ctx, nombre, apellido, email, password, domain.RolAdmin, domain.EstadoAprobada, &creadoPorID, "", "")
+	// Un Admin no declara curso, materia ni rol: no se autorregistra para
+	// dictar, lo crea otro Admin ya aprobado.
+	return s.crearUsuario(ctx, nombre, apellido, email, password, domain.RolAdmin, domain.EstadoAprobada, &creadoPorID, SolicitudDeAsignacion{})
 }
 
 // crearUsuario centraliza la validación y creación común a Registrar y
 // CrearAdmin — lo único que cambia entre los dos casos es el rol, el
 // estado inicial, y si hay que dejar registro de quién aprobó.
-func (s *Service) crearUsuario(ctx context.Context, nombre, apellido, email, password string, rol domain.Rol, estadoInicial domain.Estado, aprobadoPor *string, cursoSolicitado, materiaSolicitada string) (*domain.Usuario, error) {
+func (s *Service) crearUsuario(ctx context.Context, nombre, apellido, email, password string, rol domain.Rol, estadoInicial domain.Estado, aprobadoPor *string, solicitud SolicitudDeAsignacion) (*domain.Usuario, error) {
 	nombre = strings.TrimSpace(nombre)
 	apellido = strings.TrimSpace(apellido)
 	// El email se normaliza ANTES de buscarlo y de guardarlo, así la
@@ -164,6 +168,10 @@ func (s *Service) crearUsuario(ctx context.Context, nombre, apellido, email, pas
 	}
 	if len(password) < minPasswordLen {
 		return nil, ErrPasswordCorta
+	}
+	rolSolicitado, err := domain.NormalizarRolSolicitado(strings.TrimSpace(solicitud.Rol))
+	if err != nil {
+		return nil, err
 	}
 
 	existente, err := s.repo.BuscarPorEmail(ctx, email)
@@ -193,8 +201,9 @@ func (s *Service) crearUsuario(ctx context.Context, nombre, apellido, email, pas
 		Estado:        estadoInicial,
 		FechaRegistro: ahora,
 
-		CursoSolicitado:   cursoSolicitado,
-		MateriaSolicitada: materiaSolicitada,
+		CursoSolicitado:   strings.TrimSpace(solicitud.Curso),
+		MateriaSolicitada: strings.TrimSpace(solicitud.Materia),
+		RolSolicitado:     rolSolicitado,
 	}
 	if estadoInicial == domain.EstadoAprobada {
 		u.FechaAprobacion = &ahora
@@ -387,6 +396,10 @@ func (s *Service) RegistrarConGoogle(ctx context.Context, idToken, nombre, apell
 	if err := domain.ValidarEmail(email); err != nil {
 		return nil, err
 	}
+	rolSolicitado, err := domain.NormalizarRolSolicitado(strings.TrimSpace(solicitud.Rol))
+	if err != nil {
+		return nil, err
+	}
 
 	// Dos consultas y no una: alguien puede tener ya la cuenta vinculada
 	// (sub conocido) y volver a caer acá por un reintento del frontend, y
@@ -431,6 +444,7 @@ func (s *Service) RegistrarConGoogle(ctx context.Context, idToken, nombre, apell
 
 		CursoSolicitado:   strings.TrimSpace(solicitud.Curso),
 		MateriaSolicitada: strings.TrimSpace(solicitud.Materia),
+		RolSolicitado:     rolSolicitado,
 	}
 
 	if err := s.repo.Crear(ctx, u); err != nil {

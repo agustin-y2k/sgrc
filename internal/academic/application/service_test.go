@@ -174,6 +174,14 @@ func (r *fakeRepo) BuscarDocenteMateria(ctx context.Context, id string) (*domain
 	return dm, nil
 }
 
+func (r *fakeRepo) GuardarDocenteMateria(ctx context.Context, dm *domain.DocenteMateria) error {
+	if _, ok := r.docentesMateria[dm.ID]; !ok {
+		return ErrDocenteMateriaNoEncontrado
+	}
+	r.docentesMateria[dm.ID] = dm
+	return nil
+}
+
 func (r *fakeRepo) RemoverDocenteMateria(ctx context.Context, id string) error {
 	if _, ok := r.docentesMateria[id]; !ok {
 		return ErrDocenteMateriaNoEncontrado
@@ -727,6 +735,55 @@ func TestAsignarDocente_ErrorDelValidador_SePropaga(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("esperaba que el error del validador se propague")
+	}
+}
+
+func TestCambiarRolDocente_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "docente1", MateriaID: "m1", Rol: domain.RolTitular}
+	svc := servicioSimple(repo)
+
+	dm, err := svc.CambiarRolDocente(context.Background(), "dm1", domain.RolSuplente)
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if dm.Rol != domain.RolSuplente {
+		t.Errorf("esperaba SUPLENTE, obtuve %s", dm.Rol)
+	}
+	if repo.docentesMateria["dm1"].Rol != domain.RolSuplente {
+		t.Error("el cambio no se persistió")
+	}
+}
+
+func TestCambiarRolDocente_NoExiste_Error(t *testing.T) {
+	svc := servicioSimple(nuevoFakeRepo())
+
+	_, err := svc.CambiarRolDocente(context.Background(), "no-existe", domain.RolSuplente)
+
+	if !errors.Is(err, ErrDocenteMateriaNoEncontrado) {
+		t.Fatalf("esperaba ErrDocenteMateriaNoEncontrado, obtuve %v", err)
+	}
+}
+
+// El motivo por el que CambiarRolDocente existe: el otro camino para corregir
+// un rol —quitar y volver a asignar— pasa por la cascada de RF-02.8 y, si el
+// docente es el único de la materia, le cancela las reservas futuras.
+func TestCambiarRolDocente_NoDisparaLaCascadaDeReservas(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "docente1", MateriaID: "m1", Rol: domain.RolTitular}
+	cancelador := &fakeCanceladorReservas{canceladas: 4}
+	svc := servicioConCancelador(repo, cancelador, &fakeValidadorUsuario{valido: true})
+
+	if _, err := svc.CambiarRolDocente(context.Background(), "dm1", domain.RolSuplente); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if len(cancelador.materiasCanceladas) != 0 {
+		t.Errorf("no debería haber cancelado reservas, canceló las de %v", cancelador.materiasCanceladas)
+	}
+	if _, existe := repo.docentesMateria["dm1"]; !existe {
+		t.Error("la asignación tiene que seguir existiendo")
 	}
 }
 

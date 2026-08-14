@@ -19,6 +19,7 @@ export type Usuario = {
   /** Lo que declaró al registrarse (RF-01.3), para la pantalla de aprobación. */
   cursoSolicitado?: string
   materiaSolicitada?: string
+  rolSolicitado?: RolSolicitado
   /**
    * Cómo puede entrar esta cuenta. Una creada con Google no tiene
    * contraseña (`tienePassword: false`), y ofrecerle "cambiar contraseña"
@@ -78,7 +79,15 @@ export type GoogleRegistroRequest = GoogleLoginRequest & {
   apellido?: string
   cursoSolicitado?: string
   materiaSolicitada?: string
+  rolSolicitado?: RolSolicitado
 }
+
+/**
+ * Con qué rol se ofrece quien se registra. Es una sugerencia para el Admin,
+ * igual que el curso y la materia: el rol que rige es el que él carga en
+ * DocenteMateria al asignarlo.
+ */
+export type RolSolicitado = "TITULAR" | "SUPLENTE"
 
 export type LoginRequest = {
   email: string
@@ -102,6 +111,7 @@ export type RegistroRequest = {
    */
   cursoSolicitado?: string
   materiaSolicitada?: string
+  rolSolicitado?: RolSolicitado
 }
 
 export type CambiarPasswordRequest = {

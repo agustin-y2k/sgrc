@@ -60,6 +60,30 @@ func ParseEstado(s string) (Estado, error) {
 	}
 }
 
+// Los dos valores que admite RolSolicitado. Son literales y no un tipo
+// propio porque el dueño de esta lista es academic.RolDocente: acá se
+// declaran para poder validar lo que entra por el registro sin importar ese
+// paquete (docs/06-arquitectura.md §3).
+const (
+	RolSolicitadoTitular  = "TITULAR"
+	RolSolicitadoSuplente = "SUPLENTE"
+)
+
+// ErrRolSolicitadoInvalido se devuelve cuando el registro declara un rol que
+// no es titular ni suplente.
+var ErrRolSolicitadoInvalido = errors.New("rol solicitado inválido")
+
+// NormalizarRolSolicitado acepta el vacío —declararlo es opcional, igual que
+// el curso y la materia— y rechaza cualquier otra cosa.
+func NormalizarRolSolicitado(s string) (string, error) {
+	switch s {
+	case "", RolSolicitadoTitular, RolSolicitadoSuplente:
+		return s, nil
+	default:
+		return "", fmt.Errorf("%w: %q", ErrRolSolicitadoInvalido, s)
+	}
+}
+
 // PuedeTransicionarA implementa el diagrama de estados de Usuario
 // (docs/05-diagramas-estado.md): PENDIENTE puede ir a APROBADA o
 // RECHAZADA; APROBADA puede ir a BAJA; RECHAZADA y BAJA son terminales —
@@ -155,6 +179,16 @@ type Usuario struct {
 	// de intención para que el Admin sepa a qué asignarla, no un vínculo.
 	CursoSolicitado   string
 	MateriaSolicitada string
+
+	// RolSolicitado es si se ofrece como titular o como suplente. Vacío si
+	// no lo declaró o si la cuenta la creó un Admin.
+	//
+	// A diferencia de los dos de arriba tiene una lista cerrada —la misma de
+	// academic.RolDocente—, pero acá se valida contra literales propios en vez
+	// de importar ese paquete: auth no depende de academic (ver
+	// docs/06-arquitectura.md §3). Sigue siendo una declaración, no un
+	// vínculo: el rol que rige es el que el Admin carga en DocenteMateria.
+	RolSolicitado string
 
 	// GoogleSub es el claim `sub` del ID token de Google: el identificador
 	// estable de esa cuenta. Vacío en las cuentas que solo entran con

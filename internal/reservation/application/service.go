@@ -469,12 +469,17 @@ func (s *Service) CalendarioDeEquipo(ctx context.Context, equipoID string, desde
 	return s.repo.CalendarioDeEquipo(ctx, equipoID, desde, hasta)
 }
 
-// ListarEquiposDisponiblesEn implementa la selección de PCs de RF-04.2.
-func (s *Service) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoDisponible, error) {
+// ListarEquiposDisponiblesEn implementa la selección de PCs de RF-04.2,
+// ordenada para la materia que se está reservando (RF-03.21).
+//
+// materiaID vacío no es un error: un Admin puede reservar sin materia, y ahí
+// no hay ninguna preferencia que aplicar. La lista sale igual, con el orden
+// de siempre.
+func (s *Service) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]EquipoDisponible, error) {
 	if horaFin <= horaInicio {
 		return nil, domain.ErrRangoHorarioInvalido
 	}
-	return s.repo.ListarEquiposDisponiblesEn(ctx, fecha, horaInicio, horaFin)
+	return s.repo.ListarEquiposDisponiblesEn(ctx, fecha, horaInicio, horaFin, materiaID)
 }
 
 // ListarEquiposOcupadosEn devuelve la otra mitad de la franja (RF-04.11): lo

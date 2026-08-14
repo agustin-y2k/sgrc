@@ -411,7 +411,10 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 	if grupoID := strings.TrimSpace(c.Query("serieDesdeGrupoId")); grupoID != "" {
 		equipos, err = h.svc.ListarEquiposLibresEnLaSerie(c.UserContext(), grupoID)
 	} else {
-		equipos, err = h.svc.ListarEquiposDisponiblesEn(c.UserContext(), fecha, horaInicio, horaFin)
+		// materiaId es opcional: ordena la lista para esa materia (RF-03.21).
+		// Sin él —un Admin que todavía no eligió una— sale el orden de siempre.
+		equipos, err = h.svc.ListarEquiposDisponiblesEn(c.UserContext(), fecha, horaInicio, horaFin,
+			strings.TrimSpace(c.Query("materiaId")))
 	}
 	if err != nil {
 		return mapearError(err)

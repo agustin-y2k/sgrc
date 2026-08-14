@@ -6,11 +6,13 @@ import type {
   Rol,
 } from "@/features/auth/types"
 import type {
+  AltaDePreferencias,
   AltaMasivaLicencias,
   Carro,
   Incidencia,
   Licencia,
   Equipo,
+  PreferenciaDeEquipo,
   RenovacionLicencias,
   RespuestaLista,
   VencimientoDeclarado,
@@ -154,7 +156,11 @@ export function editarEquipo(
  * cascada sus reservas futuras. El motivo es opcional; si no se manda, el
  * backend arma uno por defecto para la notificación al docente.
  */
-export function cambiarEstadoEquipo(id: string, estado: Equipo["estado"], motivo?: string) {
+export function cambiarEstadoEquipo(
+  id: string,
+  estado: Equipo["estado"],
+  motivo?: string
+) {
   return apiFetch<ResultadoCascada>(`/api/inventory/equipos/${id}/estado`, {
     method: "PATCH",
     body: { estado, motivo },
@@ -174,7 +180,10 @@ export function editarIncidencia(
 ) {
   return apiFetch<void>(`/api/inventory/incidencias/${id}`, {
     method: "PATCH",
-    body: { estado: req.estado, marcarEnviadaASoporte: req.marcarEnviadaASoporte ?? false },
+    body: {
+      estado: req.estado,
+      marcarEnviadaASoporte: req.marcarEnviadaASoporte ?? false,
+    },
   })
 }
 
@@ -274,7 +283,9 @@ export function listarLicencias() {
 }
 
 export function listarLicenciasDeEquipo(equipoId: string) {
-  return apiFetch<RespuestaLista<Licencia>>(`/api/inventory/equipos/${equipoId}/licencias`)
+  return apiFetch<RespuestaLista<Licencia>>(
+    `/api/inventory/equipos/${equipoId}/licencias`
+  )
 }
 
 /**
@@ -285,12 +296,14 @@ export function listarLicenciasDeEquipo(equipoId: string) {
  * `equiposQueYaLaTenian`. Eso hace que reintentar el mismo request sea seguro:
  * completa lo que falta sin duplicar lo que ya entró.
  */
-export function crearLicencias(req: {
-  equipoIds: string[]
-  nombre: string
-  diasDuracion: number
-  diasAviso?: number
-} & VencimientoDeclarado) {
+export function crearLicencias(
+  req: {
+    equipoIds: string[]
+    nombre: string
+    diasDuracion: number
+    diasAviso?: number
+  } & VencimientoDeclarado
+) {
   return apiFetch<AltaMasivaLicencias>("/api/inventory/licencias", {
     method: "POST",
     body: req,
@@ -330,4 +343,61 @@ export function editarLicencia(
 
 export function borrarLicencia(id: string) {
   return apiFetch<void>(`/api/inventory/licencias/${id}`, { method: "DELETE" })
+}
+
+// ── Preferencia de materia por equipo (RF-03.21) ───────────────────────
+//
+// La marca dice que una máquina es preferente para una materia. SÓLO
+// ORDENA la lista al reservar: no restringe a nadie, no oculta el equipo y
+// no afecta ninguna reserva. Por eso ninguna de estas operaciones avisa de
+// cascadas ni pide confirmación — no hay nada que se pueda llevar puesto.
+
+export function listarPreferenciasDeEquipo(equipoId: string) {
+  return apiFetch<RespuestaLista<PreferenciaDeEquipo>>(
+    `/api/inventory/equipos/${equipoId}/preferencias`
+  )
+}
+
+/**
+ * Los nombres de materia que ya existen, para que el Admin ELIJA en vez de
+ * tipear: la marca se guarda como texto, y este selector es lo único que
+ * impide que "Matemática" y "Matematica" nazcan como dos marcas distintas.
+ */
+export function materiasEnUso() {
+  return apiFetch<RespuestaLista<string>>("/api/inventory/materias-en-uso")
+}
+
+/**
+ * La misma marca en varios equipos de una vez: el caso real es "estas ocho
+ * PCs son las de Dibujo Técnico".
+ *
+ * Responde 201 aunque alguna ya estuviera marcada; cuáles se saltearon viene
+ * en `equiposQueYaLaTenian`, igual que en el alta de licencias.
+ */
+export function marcarPreferencia(req: {
+  equipoIds: string[]
+  materiaNombre: string
+  anio?: number
+  division?: string
+  prioridad?: number
+}) {
+  return apiFetch<AltaDePreferencias>("/api/inventory/preferencias", {
+    method: "POST",
+    body: req,
+  })
+}
+
+/** La materia no se edita: apuntar a otra es otra marca. */
+export function editarPreferencia(
+  id: string,
+  req: { anio?: number; division?: string; prioridad?: number }
+) {
+  return apiFetch<PreferenciaDeEquipo>(`/api/inventory/preferencias/${id}`, {
+    method: "PATCH",
+    body: req,
+  })
+}
+
+export function borrarPreferencia(id: string) {
+  return apiFetch<void>(`/api/inventory/preferencias/${id}`, { method: "DELETE" })
 }

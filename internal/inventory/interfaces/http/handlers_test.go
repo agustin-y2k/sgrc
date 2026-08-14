@@ -28,18 +28,22 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
-	carros      map[string]*domain.Carro
-	equipos     map[string]*domain.Equipo
-	incidencias map[string]*domain.Incidencia
-	licencias   map[string]*domain.LicenciaSoftware
+	carros       map[string]*domain.Carro
+	equipos      map[string]*domain.Equipo
+	incidencias  map[string]*domain.Incidencia
+	licencias    map[string]*domain.LicenciaSoftware
+	preferencias map[string]*domain.PreferenciaDeEquipo
+	// nombresDeMateria es lo que ofrece el selector del formulario de marcas.
+	nombresDeMateria []string
 }
 
 func nuevoFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		carros:      make(map[string]*domain.Carro),
-		equipos:     make(map[string]*domain.Equipo),
-		incidencias: make(map[string]*domain.Incidencia),
-		licencias:   make(map[string]*domain.LicenciaSoftware),
+		carros:       make(map[string]*domain.Carro),
+		equipos:      make(map[string]*domain.Equipo),
+		incidencias:  make(map[string]*domain.Incidencia),
+		licencias:    make(map[string]*domain.LicenciaSoftware),
+		preferencias: make(map[string]*domain.PreferenciaDeEquipo),
 	}
 }
 
@@ -173,6 +177,52 @@ func (r *fakeRepo) BorrarLicencia(ctx context.Context, id string) error {
 	delete(r.licencias, id)
 	return nil
 }
+
+// ── Preferencias de materia (RF-03.21) ────────────────────────────────
+
+func (r *fakeRepo) CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {
+	r.preferencias[p.ID] = p
+	return nil
+}
+
+func (r *fakeRepo) GuardarPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {
+	if _, ok := r.preferencias[p.ID]; !ok {
+		return domain.ErrPreferenciaNoEncontr
+	}
+	r.preferencias[p.ID] = p
+	return nil
+}
+
+func (r *fakeRepo) BuscarPreferenciaPorID(ctx context.Context, id string) (*domain.PreferenciaDeEquipo, error) {
+	p, ok := r.preferencias[id]
+	if !ok {
+		return nil, domain.ErrPreferenciaNoEncontr
+	}
+	return p, nil
+}
+
+func (r *fakeRepo) BorrarPreferencia(ctx context.Context, id string) error {
+	if _, ok := r.preferencias[id]; !ok {
+		return domain.ErrPreferenciaNoEncontr
+	}
+	delete(r.preferencias, id)
+	return nil
+}
+
+func (r *fakeRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.PreferenciaDeEquipo, error) {
+	var resultado []*domain.PreferenciaDeEquipo
+	for _, p := range r.preferencias {
+		if p.EquipoID == equipoID {
+			resultado = append(resultado, p)
+		}
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {
+	return r.nombresDeMateria, nil
+}
+
 func (r *fakeRepo) ListarLicenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.LicenciaSoftware, error) {
 	var resultado []*domain.LicenciaSoftware
 	for _, l := range r.licencias {

@@ -64,11 +64,14 @@ describe("CambiarEquipoDeReserva", () => {
           carroId: "c1",
           carroNombre: "Carro 1",
           freezado: false,
+          tramo: "NEUTRAL",
           softwareInstalado: "AutoCAD 2027",
         },
       ],
     })
-    vi.mocked(reservasApi.cambiarEquipoDeReserva).mockResolvedValue(reserva({ equipoId: "pc9" }))
+    vi.mocked(reservasApi.cambiarEquipoDeReserva).mockResolvedValue(
+      reserva({ equipoId: "pc9" })
+    )
   })
 
   it("cambia la máquina sin tocar la clase", async () => {
@@ -88,12 +91,14 @@ describe("CambiarEquipoDeReserva", () => {
 
     await screen.findByLabelText("¿Por cuál?")
     expect(reservasApi.equiposDisponibles).toHaveBeenCalledWith(
-      "2026-08-11",
-      "08:00",
-      "09:00",
-      // Sin serie: una reserva suelta no pregunta alcance, así que no hay
-      // ninguna fecha futura contra la que cruzar (RF-08.14).
-      undefined
+      expect.objectContaining({
+        fecha: "2026-08-11",
+        horaInicio: "08:00",
+        horaFin: "09:00",
+        // Sin serie: una reserva suelta no pregunta alcance, así que no hay
+        // ninguna fecha futura contra la que cruzar (RF-08.14).
+        serieDesdeGrupoId: undefined,
+      })
     )
   })
 
@@ -105,7 +110,9 @@ describe("CambiarEquipoDeReserva", () => {
   it("muestra el software de cada opción", async () => {
     renderComponente()
 
-    expect(await screen.findByRole("option", { name: /AutoCAD 2027/ })).toBeInTheDocument()
+    expect(
+      await screen.findByRole("option", { name: /AutoCAD 2027/ })
+    ).toBeInTheDocument()
   })
 
   it("deja elegir cuál de las reservadas se cambia", async () => {

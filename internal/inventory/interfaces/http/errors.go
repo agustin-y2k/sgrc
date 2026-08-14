@@ -14,7 +14,8 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrCarroNoEncontrado),
 		errors.Is(err, application.ErrEquipoNoEncontrado),
 		errors.Is(err, application.ErrIncidenciaNoEncontrada),
-		errors.Is(err, application.ErrLicenciaNoEncontrada):
+		errors.Is(err, application.ErrLicenciaNoEncontrada),
+		errors.Is(err, domain.ErrPreferenciaNoEncontr):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 
 	case errors.Is(err, application.ErrIdentificadorDuplicado),
@@ -23,7 +24,11 @@ func mapearError(err error) error {
 		// esto solo salta al RENOMBRAR una licencia al nombre de otra que
 		// esa misma PC ya tiene.
 		errors.Is(err, application.ErrLicenciaDuplicada),
-		errors.Is(err, application.ErrNombreDeEquipoDuplicado):
+		errors.Is(err, application.ErrNombreDeEquipoDuplicado),
+		// Igual que las licencias: el alta masiva saltea los duplicados y los
+		// informa en el cuerpo; esto solo salta al EDITAR una marca hasta
+		// dejarla igual a otra del mismo equipo.
+		errors.Is(err, domain.ErrPreferenciaDuplicada):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida),
@@ -54,7 +59,14 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrDiasRestantesInvalido),
 		errors.Is(err, application.ErrSinEquipos),
 		errors.Is(err, application.ErrSinLicencias),
-		errors.Is(err, application.ErrVencimientoAmbiguo):
+		errors.Is(err, application.ErrVencimientoAmbiguo),
+		errors.Is(err, domain.ErrMateriaPreferidaVacia),
+		errors.Is(err, domain.ErrMateriaPreferidaLarga),
+		errors.Is(err, domain.ErrAnioPreferenciaInvalido),
+		errors.Is(err, domain.ErrDivisionPreferenciaInvalida),
+		errors.Is(err, domain.ErrDivisionSinAnio),
+		errors.Is(err, domain.ErrPrioridadInvalida),
+		errors.Is(err, domain.ErrSinEquiposParaPreferi):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 
 	default:

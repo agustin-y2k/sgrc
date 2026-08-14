@@ -1298,6 +1298,35 @@ func TestRegistrar_GuardaLaMateriaYElCursoSolicitados(t *testing.T) {
 	}
 }
 
+func TestRegistrar_GuardaElRolSolicitado(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo)
+
+	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+		SolicitudDeAsignacion{Curso: "5°A", Materia: "Programación", Rol: "SUPLENTE"})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if u.RolSolicitado != "SUPLENTE" {
+		t.Errorf("rolSolicitado = %q, esperaba SUPLENTE", u.RolSolicitado)
+	}
+}
+
+// A diferencia del curso y la materia —texto libre, porque nombran cosas que
+// quizás todavía no existen— el rol tiene una lista cerrada.
+func TestRegistrar_RolSolicitadoInvalido_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo)
+
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+		SolicitudDeAsignacion{Rol: "PROFESOR"})
+
+	if !errors.Is(err, domain.ErrRolSolicitadoInvalido) {
+		t.Fatalf("esperaba ErrRolSolicitadoInvalido, obtuve %v", err)
+	}
+}
+
 // Son opcionales: quien todavía no sabe qué va a dictar se registra igual y
 // lo arregla con el Admin.
 func TestRegistrar_SinSolicitud_NoFalla(t *testing.T) {

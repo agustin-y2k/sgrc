@@ -24,6 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import * as authApi from "@/features/auth/api"
 import { BotonGoogle } from "@/features/auth/BotonGoogle"
 import { RegistroConGoogle } from "@/features/auth/RegistroConGoogle"
@@ -46,6 +47,9 @@ const registroSchema = z.object({
   // crea una (MateriasDeCurso).
   cursoSolicitado: z.string().max(100).optional(),
   materiaSolicitada: z.string().max(100).optional(),
+  // El rol sí tiene lista cerrada —es la misma de DocenteMateria— así que
+  // es un desplegable y el backend lo valida. Vacío significa "no lo dijo".
+  rolSolicitado: z.enum(["TITULAR", "SUPLENTE"]).or(z.literal("")).optional(),
 })
 
 type RegistroValues = z.infer<typeof registroSchema>
@@ -75,6 +79,7 @@ export function RegistroPage() {
       password: "",
       cursoSolicitado: "",
       materiaSolicitada: "",
+      rolSolicitado: "",
     },
   })
 
@@ -87,6 +92,7 @@ export function RegistroPage() {
         // no son dos cosas distintas.
         cursoSolicitado: values.cursoSolicitado?.trim() || undefined,
         materiaSolicitada: values.materiaSolicitada?.trim() || undefined,
+        rolSolicitado: values.rolSolicitado || undefined,
       })
       setEnviado(true)
     } catch (err) {
@@ -244,6 +250,23 @@ export function RegistroPage() {
                         <FormLabel>Materia</FormLabel>
                         <FormControl>
                           <Input placeholder="Ej.: Programación" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="rolSolicitado"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rol</FormLabel>
+                        <FormControl>
+                          <Select {...field} value={field.value ?? ""}>
+                            <option value="">No lo sé todavía</option>
+                            <option value="TITULAR">Titular</option>
+                            <option value="SUPLENTE">Suplente</option>
+                          </Select>
                         </FormControl>
                         <FormMessage />
                       </FormItem>

@@ -18,6 +18,7 @@ import { AvisoDeCascada } from "@/features/admin/AvisoDeCascada"
 import { AltaDeEquipo, EdicionDeEquipo } from "@/features/admin/FormularioEquipo"
 import { IncidenciasDeEquipo } from "@/features/admin/IncidenciasDeEquipo"
 import { LicenciasDeEquipo } from "@/features/admin/LicenciasDeEquipo"
+import { PreferenciasDeEquipo } from "@/features/admin/PreferenciasDeEquipo"
 import { OtrosEquipos } from "@/features/admin/OtrosEquipos"
 import { PrestamosDeEquipo } from "@/features/admin/PrestamosDeEquipo"
 import * as inventoryApi from "@/features/inventory/api"
@@ -42,6 +43,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
   const [editando, setEditando] = useState<string | null>(null)
   const [viendoIncidencias, setViendoIncidencias] = useState<string | null>(null)
   const [viendoLicencias, setViendoLicencias] = useState<string | null>(null)
+  const [viendoPreferencias, setViendoPreferencias] = useState<string | null>(null)
   const [viendoEntregas, setViendoEntregas] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -49,7 +51,8 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
     queryFn: () => inventoryApi.listarEquiposDeCarro(carroId),
   })
 
-  const invalidar = () => queryClient.invalidateQueries({ queryKey: ["equipos", carroId] })
+  const invalidar = () =>
+    queryClient.invalidateQueries({ queryKey: ["equipos", carroId] })
 
   // Las dos operaciones cancelan reservas de otros docentes, así que las dos
   // tienen que decir cuántas. Se avisa DESPUÉS y con el número real: antes de
@@ -92,8 +95,8 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
 
       {equipos.length === 0 && (
         <p className="text-muted-foreground text-sm">
-          Este carro no tiene equipos activas. Agregá la primera con el formulario de abajo:
-          sin equipos cargados nadie puede reservar.
+          Este carro no tiene equipos activas. Agregá la primera con el formulario de
+          abajo: sin equipos cargados nadie puede reservar.
         </p>
       )}
 
@@ -103,6 +106,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
         const editandoEsta = editando === equipo.id
         const incidenciasAbiertas = viendoIncidencias === equipo.id
         const licenciasAbiertas = viendoLicencias === equipo.id
+        const preferenciasAbiertas = viendoPreferencias === equipo.id
         const entregasAbiertas = viendoEntregas === equipo.id
 
         return (
@@ -129,19 +133,31 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
               </div>
               {!cambiandoEsta && !bajandoEsta && !editandoEsta && (
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  {(["DISPONIBLE", "EN_MANTENIMIENTO", "FUERA_DE_SERVICIO"] as EstadoEquipo[])
+                  {(
+                    [
+                      "DISPONIBLE",
+                      "EN_MANTENIMIENTO",
+                      "FUERA_DE_SERVICIO",
+                    ] as EstadoEquipo[]
+                  )
                     .filter((e) => e !== equipo.estado)
                     .map((e) => (
                       <Button
                         key={e}
                         variant="outline"
                         size="sm"
-                        onClick={() => setCambiando({ equipo, nuevoEstado: e, motivo: "" })}
+                        onClick={() =>
+                          setCambiando({ equipo, nuevoEstado: e, motivo: "" })
+                        }
                       >
                         → {ETIQUETA_ESTADO_EQUIPO[e]}
                       </Button>
                     ))}
-                  <Button variant="outline" size="sm" onClick={() => setEditando(equipo.id)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditando(equipo.id)}
+                  >
                     Editar
                   </Button>
                   <Button
@@ -158,7 +174,9 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                     variant="outline"
                     size="sm"
                     aria-expanded={licenciasAbiertas}
-                    onClick={() => setViendoLicencias(licenciasAbiertas ? null : equipo.id)}
+                    onClick={() =>
+                      setViendoLicencias(licenciasAbiertas ? null : equipo.id)
+                    }
                   >
                     Licencias
                   </Button>
@@ -169,6 +187,16 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                     onClick={() => setViendoEntregas(entregasAbiertas ? null : equipo.id)}
                   >
                     Entregas
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-expanded={preferenciasAbiertas}
+                    onClick={() =>
+                      setViendoPreferencias(preferenciasAbiertas ? null : equipo.id)
+                    }
+                  >
+                    Preferencias
                   </Button>
                   <Button
                     variant="destructive"
@@ -189,9 +217,9 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                 {cambiando.nuevoEstado !== "DISPONIBLE" ? (
                   <p className="text-destructive text-sm">
                     Pasar el equipo {equipo.identificador} a{" "}
-                    {ETIQUETA_ESTADO_EQUIPO[cambiando.nuevoEstado].toLowerCase()} cancela todas
-                    sus reservas futuras y avisa a cada docente. Si más adelante vuelve a
-                    estar disponible, esas reservas no se restauran solas.
+                    {ETIQUETA_ESTADO_EQUIPO[cambiando.nuevoEstado].toLowerCase()} cancela
+                    todas sus reservas futuras y avisa a cada docente. Si más adelante
+                    vuelve a estar disponible, esas reservas no se restauran solas.
                   </p>
                 ) : (
                   <p className="text-muted-foreground text-sm">
@@ -227,7 +255,11 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
             )}
 
             {editandoEsta && (
-              <EdicionDeEquipo equipo={equipo} carros={carros} onListo={() => setEditando(null)} />
+              <EdicionDeEquipo
+                equipo={equipo}
+                carros={carros}
+                onListo={() => setEditando(null)}
+              />
             )}
 
             {incidenciasAbiertas && <IncidenciasDeEquipo equipoId={equipo.id} />}
@@ -236,11 +268,13 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
 
             {entregasAbiertas && <PrestamosDeEquipo equipoId={equipo.id} />}
 
+            {preferenciasAbiertas && <PreferenciasDeEquipo equipoId={equipo.id} />}
+
             {bajandoEsta && (
               <div className="grid gap-2 rounded-md border p-3">
                 <p className="text-destructive text-sm">
-                  Dar de baja el equipo {equipo.identificador} la saca del inventario y cancela
-                  sus reservas futuras. Su historial de incidencias se conserva.
+                  Dar de baja el equipo {equipo.identificador} la saca del inventario y
+                  cancela sus reservas futuras. Su historial de incidencias se conserva.
                 </p>
                 <div className="flex gap-2">
                   <Button

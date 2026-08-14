@@ -257,6 +257,24 @@ func escanearDocenteMateria(row pgx.Row) (*domain.DocenteMateria, error) {
 	return &dm, nil
 }
 
+// GuardarDocenteMateria actualiza solo el rol: el usuario y la materia de un
+// vínculo no se editan —cambiar cualquiera de los dos es otro vínculo, y el
+// camino para eso es quitar y volver a asignar.
+func (r *PostgresRepo) GuardarDocenteMateria(ctx context.Context, dm *domain.DocenteMateria) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE docente_materia SET rol = $2 WHERE id = $1`, dm.ID, string(dm.Rol))
+	if err != nil {
+		if esIDInvalido(err) {
+			return application.ErrIDInvalido
+		}
+		return fmt.Errorf("actualizando docente_materia: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return application.ErrDocenteMateriaNoEncontrado
+	}
+	return nil
+}
+
 func (r *PostgresRepo) RemoverDocenteMateria(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM docente_materia WHERE id = $1`, id)
 	if err != nil {

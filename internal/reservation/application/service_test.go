@@ -25,6 +25,8 @@ type fakeRepo struct {
 
 	errCrearReserva error
 	pcsDisponibles  []EquipoDisponible
+	// materiaRecibidaAlListar: para qué materia se pidió la lista (RF-03.21).
+	materiaRecibidaAlListar string
 	// pcsDadasDeBaja imita lo único que el servicio le pregunta a
 	// inventory antes de entregar una máquina.
 	pcsDadasDeBaja map[string]bool
@@ -568,7 +570,8 @@ func (r *fakeRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, cicloID s
 func (r *fakeRepo) ListarReservasConfirmadasVencidas(ctx context.Context, ahora time.Time, limite int) ([]*domain.Reserva, error) {
 	return nil, nil
 }
-func (r *fakeRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoDisponible, error) {
+func (r *fakeRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]EquipoDisponible, error) {
+	r.materiaRecibidaAlListar = materiaID
 	return r.pcsDisponibles, nil
 }
 

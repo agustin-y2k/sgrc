@@ -248,6 +248,13 @@ type equipoDisponibleResponse struct {
 	CarroNombre       string `json:"carroNombre,omitempty"`
 	Freezado          bool   `json:"freezado"`
 	SoftwareInstalado string `json:"softwareInstalado,omitempty"`
+	// Tramo parte la lista en tres bloques según qué materia prefiere este
+	// equipo (RF-03.21): PREFERENTE, NEUTRAL o DE_OTRA_MATERIA. La lista ya
+	// viene ordenada por tramo; el campo existe para poder titularlos.
+	Tramo string `json:"tramo"`
+	// Motivo es la frase que explica el tramo ("Preferente para Matemática
+	// de 3°B"), armada en el servidor. Vacío en un equipo neutral.
+	Motivo string `json:"motivo,omitempty"`
 }
 
 type equiposDisponiblesResponse struct {
@@ -297,6 +304,7 @@ func toEquipoDisponibleResponse(p application.EquipoDisponible) equipoDisponible
 		EquipoID: p.EquipoID, Identificador: p.Identificador, Etiqueta: p.Etiqueta, Tipo: p.Tipo,
 		CarroID: p.CarroID, CarroNombre: p.CarroNombre,
 		Freezado: p.Freezado, SoftwareInstalado: p.SoftwareInstalado,
+		Tramo: string(p.Tramo), Motivo: p.MotivoDePreferencia(),
 	}
 }
 

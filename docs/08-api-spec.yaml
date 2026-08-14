@@ -114,6 +114,15 @@ components:
           type: string
           maxLength: 100
           description: Igual que cursoSolicitado, para la materia.
+        rolSolicitado:
+          type: string
+          enum: [TITULAR, SUPLENTE]
+          description: |
+            Si se ofrece como titular o como suplente. También opcional, pero a
+            diferencia de los dos anteriores tiene lista cerrada —la misma de
+            DocenteMateria— y se valida: nombra algo que existe siempre. Sigue
+            siendo una declaración; el rol que rige es el que el Admin carga al
+            asignar (RF-02.6).
 
     LoginRequest:
       type: object
@@ -146,6 +155,10 @@ components:
         materiaSolicitada:
           type: string
           description: Ídem, para la materia.
+        rolSolicitado:
+          type: string
+          enum: [TITULAR, SUPLENTE]
+          description: Ídem, para el rol con el que se ofreció.
         tienePassword:
           type: boolean
           description: |
@@ -185,6 +198,25 @@ components:
         nombre: { type: string }
         activo: { type: boolean }
         archivado: { type: boolean }
+
+    PreferenciaDeEquipo:
+      type: object
+      description: |
+        Una marca del inventario que dice que un equipo es preferente para una materia
+        (RF-03.21). SÓLO ORDENA la lista al reservar: no restringe a nadie, no oculta el
+        equipo y no afecta ninguna reserva.
+
+        El vínculo con la materia es por NOMBRE y no por id porque `materia` se recrea
+        con id nuevo en cada ciclo lectivo: una referencia se perdería el 31/12, y la
+        marca del inventario tiene que sobrevivir al cambio de año.
+      properties:
+        id: { type: string, format: uuid }
+        equipoId: { type: string, format: uuid }
+        materiaNombre: { type: string, example: "Dibujo Técnico" }
+        anio: { type: integer, example: 3, description: "Ausente = toda materia con ese nombre, en cualquier curso" }
+        division: { type: string, example: "B", description: "Ausente = todas las divisiones de ese año. Nunca viene sin anio" }
+        prioridad: { type: integer, example: 1, description: "1 es la más fuerte" }
+        alcance: { type: string, example: "Dibujo Técnico de 3°B", description: "La frase ya armada. La resuelve el servidor para que no se reconstruya distinta en cada pantalla" }
 
     DocenteMateria:
       type: object
@@ -767,6 +799,7 @@ paths:
                 apellido: { type: string, maxLength: 100 }
                 cursoSolicitado: { type: string, maxLength: 100 }
                 materiaSolicitada: { type: string, maxLength: 100 }
+                rolSolicitado: { type: string, enum: [TITULAR, SUPLENTE] }
       responses:
         "201": { description: Cuenta creada, pendiente de aprobación }
         "400": { description: Cuerpo malformado, o falta el nombre tanto en el request como en el token }
@@ -1360,6 +1393,45 @@ paths:
         "409": { description: El usuario no está en estado APROBADA }
 
   /api/academic/materias/{materiaId}/docentes/{docenteMateriaId}:
+    patch:
+      tags: [academic]
+      summary: Cambiar el rol de un docente asignado (Admin)
+      description: |
+        Corrige el rol de una asignación existente (RF-02.6). Es el único camino
+        para pasar de titular a suplente o al revés: el otro —quitar y volver a
+        asignar— pasa por la cascada de RF-02.10 y, si es el único docente de la
+        materia, cancela todas sus reservas futuras.
+
+        No toca nada más que el rol. El usuario y la materia de un vínculo no se
+        editan: cambiar cualquiera de los dos es otro vínculo.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: materiaId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: docenteMateriaId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rol]
+              properties:
+                rol: { type: string, enum: [TITULAR, SUPLENTE] }
+      responses:
+        "200":
+          description: Rol actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocenteMateria" }
+        "400": { description: Rol inválido o cuerpo malformado }
+        "403": { description: Solo ADMIN }
+        "404": { description: La asignación no existe }
     delete:
       tags: [academic]
       summary: Remover docente de materia (Admin)
@@ -2219,6 +2291,176 @@ paths:
   # ══════════════════════════════
   # RESERVATIONS
   # ══════════════════════════════
+  /api/inventory/materias-en-uso:
+    get:
+      tags: [inventory]
+      summary: Nombres de materia que ya existen (Admin)
+      description: |
+        Alimenta el selector con el que se marca una preferencia (RF-03.21). Son los
+        nombres **distintos** que existen en el sistema, sin importar el curso ni el
+        ciclo — "Matemáticas" aparece una vez, no una por cada 1°A, 2°B…
+
+        Existe para que el Admin ELIJA en vez de tipear: la marca se guarda como texto,
+        y este selector es lo único que impide que "Matemática" y "Matematica" nazcan
+        como dos marcas distintas. Las variantes que sólo difieren en acentos o
+        mayúsculas se colapsan en una sola opción.
+
+        Incluye las materias de ciclos archivados: una marca del inventario sobrevive al
+        cierre del ciclo, así que la lista para editarla tiene que seguir mostrando ese
+        nombre.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Listado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: string }, example: ["Dibujo Técnico", "Matemática"] }
+
+  /api/inventory/equipos/{equipoId}/preferencias:
+    get:
+      tags: [inventory]
+      summary: Para qué materias es preferente un equipo
+      description: |
+        Las marcas de preferencia de ese equipo (RF-03.21), de la prioridad más fuerte
+        a la más débil.
+
+        **No es solo-Admin**, a diferencia de las licencias: la marca es lo que explica
+        por qué la lista al reservar viene ordenada como viene, y el docente ya ve ese
+        orden. Esconderle el motivo lo deja adivinando.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: equipoId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Listado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PreferenciaDeEquipo' } }
+
+  /api/inventory/preferencias:
+    post:
+      tags: [inventory]
+      summary: Marcar la misma preferencia en varios equipos (Admin)
+      description: |
+        La misma marca aplicada a un lote de equipos (RF-03.21): el caso real es "estas
+        ocho PCs son las de Dibujo Técnico". De a una serían ocho recorridas por el
+        mismo formulario.
+
+        Responde **201 aunque alguna ya estuviera marcada**; cuáles se saltearon viene
+        en `equiposQueYaLaTenian`, con el mismo criterio que el alta de licencias. Al
+        marcar un carro entero es esperable que alguna máquina ya lo estuviera, y
+        abortar el lote obligaría al Admin a averiguar cuál y destildarla. Eso hace que
+        reintentar el mismo request sea seguro.
+
+        **No toca ninguna reserva ni consulta si las hay.** La marca sólo ordena la
+        lista al reservar, así que marcar un equipo con reservas ya hechas no tiene
+        conflicto posible.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [equipoIds, materiaNombre]
+              properties:
+                equipoIds: { type: array, items: { type: string, format: uuid } }
+                materiaNombre:
+                  type: string
+                  maxLength: 100
+                  description: "Elegido de /api/inventory/materias-en-uso. El cruce ignora acentos y mayúsculas"
+                anio:
+                  type: integer
+                  minimum: 1
+                  maximum: 6
+                  description: "Opcional — ausente vale para toda materia con ese nombre, en cualquier curso"
+                division:
+                  type: string
+                  pattern: "^[A-Za-z]$"
+                  description: "Opcional — ausente vale para todas las divisiones de ese año. Sin `anio` es un 400: no existen 'todas las B'"
+                prioridad:
+                  type: integer
+                  minimum: 1
+                  maximum: 9
+                  default: 1
+                  description: "1 es la más fuerte. Ausente = 1, que es lo que espera quien marca una sola máquina y no piensa en escalones"
+      responses:
+        "201":
+          description: Lote procesado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  creadas: { type: array, items: { $ref: '#/components/schemas/PreferenciaDeEquipo' } }
+                  equiposQueYaLaTenian: { type: array, items: { type: string, format: uuid }, description: "Los que ya tenían esa misma marca con ese mismo alcance" }
+        "400": { description: Materia vacía, año o división fuera de rango, división sin año, prioridad fuera de rango, o lista de equipos vacía }
+        "403": { description: Solo ADMIN }
+
+  /api/inventory/preferencias/{id}:
+    patch:
+      tags: [inventory]
+      summary: Corregir el alcance y la prioridad de una marca (Admin)
+      description: |
+        **La materia no se edita**: apuntar a otra es otra marca, no una corrección de
+        esta. Dejarla editable haría que "corregir el año" y "cambiar de materia" fueran
+        la misma operación, y sólo la primera es una corrección.
+
+        Los campos ausentes se interpretan como "sin acotar": mandar el cuerpo sin
+        `anio` deja la marca valiendo para toda materia con ese nombre.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                anio: { type: integer, minimum: 1, maximum: 6 }
+                division: { type: string, pattern: "^[A-Za-z]$" }
+                prioridad: { type: integer, minimum: 1, maximum: 9, default: 1 }
+      responses:
+        "200":
+          description: Marca actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreferenciaDeEquipo' }
+        "400": { description: Alcance o prioridad inválidos }
+        "403": { description: Solo ADMIN }
+        "404": { description: La marca no existe }
+        "409": { description: El equipo ya tiene otra marca igual con ese mismo alcance }
+    delete:
+      tags: [inventory]
+      summary: Quitar una marca de preferencia (Admin)
+      description: |
+        Devuelve el equipo al orden neutral. **No hay ninguna cascada que avisar ni nada
+        que confirmar**: la marca sólo ordenaba la lista, así que sacarla no afecta
+        ninguna reserva.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Marca quitada }
+        "403": { description: Solo ADMIN }
+        "404": { description: La marca no existe }
+
   /api/reservation/equipos-disponibles:
     get:
       tags: [reservations]
@@ -2257,6 +2499,16 @@ paths:
           name: carroId
           schema: { type: string, format: uuid, description: "Opcional — filtra a un solo carro si se especifica" }
         - in: query
+          name: materiaId
+          schema: { type: string, format: uuid }
+          description: |
+            Opcional — para qué materia se ordena la lista (RF-03.21). La lista no tiene
+            un orden único: los equipos marcados como preferentes de esa materia van
+            arriba, los que prefiere otra van al final, y el resto en el medio. Sin este
+            parámetro —un Admin que reserva sin materia— sale el orden de siempre y todo
+            viene con `tramo: NEUTRAL`. Con `serieDesdeGrupoId` no hace falta: la materia
+            se saca del propio grupo.
+        - in: query
           name: serieDesdeGrupoId
           schema: { type: string, format: uuid }
           description: |
@@ -2272,7 +2524,26 @@ paths:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/Equipo' }, description: "Libres en esa franja: son los que se pueden tildar" }
+                  data:
+                    type: array
+                    description: |
+                      Libres en esa franja: son los que se pueden tildar. Vienen **ya
+                      ordenados** por tramo de preferencia (RF-03.21); `tramo` y `motivo`
+                      existen para poder titular los bloques y explicar el orden, no para
+                      reordenar del lado del cliente.
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/Equipo'
+                        - type: object
+                          properties:
+                            tramo:
+                              type: string
+                              enum: [PREFERENTE, NEUTRAL, DE_OTRA_MATERIA]
+                              description: "En qué bloque cae para la materia consultada. No es un permiso: los tres se pueden reservar igual"
+                            motivo:
+                              type: string
+                              example: "Preferente para Matemática de 3°B"
+                              description: "Por qué está en ese bloque, ya redactado. Ausente en un equipo neutral"
                   ocupados: { type: array, items: { $ref: '#/components/schemas/EquipoOcupado' }, description: "Tomados en esa franja, con quién los tiene. No se tildan" }
 
   /api/reservation/reservas/{id}/pedido-de-liberacion:
