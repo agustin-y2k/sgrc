@@ -97,6 +97,12 @@ CREATE TABLE usuario (
     -- asignarla, o para darse cuenta de que esa materia todavía no existe.
     curso_solicitado       VARCHAR(100),
     materia_solicitada     VARCHAR(100),
+    -- Si se ofrece como titular o como suplente. A diferencia de los dos de
+    -- arriba SÍ lleva CHECK: es la misma lista cerrada de docente_materia.rol
+    -- y nombra algo que existe siempre, mientras que un curso o una materia
+    -- pueden no existir todavía. Sigue siendo una declaración, no un vínculo:
+    -- el rol que rige es el que el ADMIN carga al asignar (RF-02.6).
+    rol_solicitado         VARCHAR(10) CHECK (rol_solicitado IN ('TITULAR','SUPLENTE')),
 
     -- Se incrementa para invalidar las sesiones abiertas de esta persona.
     -- Los tokens son stateless: sin este contador, cambiar una contraseña o

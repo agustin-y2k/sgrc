@@ -57,6 +57,16 @@ export function DocentesDeMateria({
     },
   })
 
+  // Cambiar el rol es su propio endpoint y no "quitar y volver a asignar":
+  // ese camino pasa por la cascada de RF-02.10 y, si es el único docente de
+  // la materia, le cancela las reservas futuras. Corregir un rol mal cargado
+  // no puede costar las clases ya reservadas.
+  const cambiarRol = useMutation({
+    mutationFn: ({ dm, rol }: { dm: DocenteMateria; rol: RolDocente }) =>
+      academicoApi.cambiarRolDocente(materia.id, dm.id, rol),
+    onSuccess: invalidar,
+  })
+
   const remover = useMutation({
     mutationFn: (dm: DocenteMateria) =>
       academicoApi.removerDocenteMateria(materia.id, dm.id),
@@ -76,7 +86,7 @@ export function DocentesDeMateria({
   const todos = usuarios?.data ?? []
   const yaAsignados = new Set(asignados.map((d) => d.usuarioId))
   const asignables = todos.filter((u) => !yaAsignados.has(u.id))
-  const error = asignar.error ?? remover.error
+  const error = asignar.error ?? remover.error ?? cambiarRol.error
 
   const nombreDe = (id: string) => {
     const u = todos.find((x) => x.id === id)
@@ -110,17 +120,35 @@ export function DocentesDeMateria({
             <li key={dm.id} className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm">
                 {nombreDe(dm.usuarioId)}{" "}
-                <Badge variant="outline">{ETIQUETA_ROL[dm.rol]}</Badge>
+                {soloLectura && <Badge variant="outline">{ETIQUETA_ROL[dm.rol]}</Badge>}
               </span>
               {!soloLectura && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={remover.isPending}
-                  onClick={() => remover.mutate(dm)}
-                >
-                  Quitar
-                </Button>
+                <span className="flex items-center gap-2">
+                  {/* El nombre accesible va por aria-label y no por un <Label>
+                      con texto: con varios docentes en la lista, repetir el
+                      nombre de cada uno en un nodo de texto oculto lo duplica
+                      en la pantalla para cualquiera que la lea por texto. */}
+                  <Select
+                    aria-label={`Rol de ${nombreDe(dm.usuarioId)}`}
+                    className="w-auto"
+                    value={dm.rol}
+                    disabled={cambiarRol.isPending}
+                    onChange={(e) =>
+                      cambiarRol.mutate({ dm, rol: e.target.value as RolDocente })
+                    }
+                  >
+                    <option value="TITULAR">{ETIQUETA_ROL.TITULAR}</option>
+                    <option value="SUPLENTE">{ETIQUETA_ROL.SUPLENTE}</option>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={remover.isPending}
+                    onClick={() => remover.mutate(dm)}
+                  >
+                    Quitar
+                  </Button>
+                </span>
               )}
             </li>
           ))}

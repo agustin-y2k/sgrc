@@ -25,6 +25,7 @@ const (
 	// permite reconstruir qué pasó si alguien reporta que no fue él.
 	PasswordRecuperadaPorEmail = "PASSWORD_RECUPERADA_POR_EMAIL"
 	DocenteRemovidoDeMateria   = "DOCENTE_REMOVIDO_DE_MATERIA"
+	DocenteRolCambiado         = "DOCENTE_ROL_CAMBIADO"
 	ReservaCanceladaPorAdmin   = "RESERVA_CANCELADA_POR_ADMIN"
 	BloqueoCreado              = "BLOQUEO_CREADO"
 	// Los VALORES de estas constantes no se renombran nunca, aunque el

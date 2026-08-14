@@ -22,6 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import * as authApi from "@/features/auth/api"
 import { SelectorDeCursoSolicitado } from "@/features/auth/SelectorDeCursoSolicitado"
 import { getErrorMessage } from "@/lib/api-client"
@@ -45,6 +46,7 @@ const registroGoogleSchema = z.object({
   apellido: z.string().min(1, "Requerido").max(100),
   cursoSolicitado: z.string().max(100).optional(),
   materiaSolicitada: z.string().max(100).optional(),
+  rolSolicitado: z.enum(["TITULAR", "SUPLENTE"]).or(z.literal("")).optional(),
 })
 
 type RegistroGoogleValues = z.infer<typeof registroGoogleSchema>
@@ -69,6 +71,7 @@ export function RegistroConGoogle({
       apellido: datos?.apellido ?? "",
       cursoSolicitado: "",
       materiaSolicitada: "",
+      rolSolicitado: "",
     },
   })
 
@@ -84,6 +87,7 @@ export function RegistroConGoogle({
         // cosas distintas.
         cursoSolicitado: values.cursoSolicitado?.trim() || undefined,
         materiaSolicitada: values.materiaSolicitada?.trim() || undefined,
+        rolSolicitado: values.rolSolicitado || undefined,
       })
       onRegistrado()
     } catch (err) {
@@ -174,6 +178,23 @@ export function RegistroConGoogle({
                       <FormLabel>Materia</FormLabel>
                       <FormControl>
                         <Input placeholder="Ej.: Programación" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="rolSolicitado"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Rol</FormLabel>
+                      <FormControl>
+                        <Select {...field} value={field.value ?? ""}>
+                          <option value="">No lo sé todavía</option>
+                          <option value="TITULAR">Titular</option>
+                          <option value="SUPLENTE">Suplente</option>
+                        </Select>
                       </FormControl>
                       <FormMessage />
                     </FormItem>

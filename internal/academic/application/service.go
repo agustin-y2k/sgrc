@@ -330,6 +330,31 @@ func (s *Service) AsignarDocente(ctx context.Context, materiaID, usuarioID strin
 	return dm, nil
 }
 
+// CambiarRolDocente pasa un vínculo existente de titular a suplente o al
+// revés, sin tocar nada más.
+//
+// Existe como operación propia y no como "quitar y volver a asignar" porque
+// ese camino pasa por RemoverDocenteMateria, que si el docente es el único de
+// la materia le cancela todas las reservas futuras (RF-02.8). Corregir un rol
+// mal cargado no es sacar a nadie de la materia y no puede costar las clases
+// ya reservadas.
+//
+// No revalida al usuario contra auth: el vínculo ya existe, y una cuenta que
+// mientras tanto dejó de estar aprobada es un problema de esa cuenta, no algo
+// que deba impedir corregir un rol.
+func (s *Service) CambiarRolDocente(ctx context.Context, docenteMateriaID string, rol domain.RolDocente) (*domain.DocenteMateria, error) {
+	dm, err := s.repo.BuscarDocenteMateria(ctx, docenteMateriaID)
+	if err != nil {
+		return nil, err
+	}
+
+	dm.Rol = rol
+	if err := s.repo.GuardarDocenteMateria(ctx, dm); err != nil {
+		return nil, err
+	}
+	return dm, nil
+}
+
 // RemoverDocenteMateria quita la asignación y, si con eso la materia se
 // queda sin ningún docente activo, cancela sus reservas futuras (RF-02.8) y
 // avisa a los Admin.

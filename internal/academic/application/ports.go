@@ -34,6 +34,7 @@ type Repo interface {
 	// DocenteMateria
 	AsignarDocente(ctx context.Context, dm *domain.DocenteMateria) error
 	BuscarDocenteMateria(ctx context.Context, id string) (*domain.DocenteMateria, error)
+	GuardarDocenteMateria(ctx context.Context, dm *domain.DocenteMateria) error
 	RemoverDocenteMateria(ctx context.Context, id string) error
 	ListarDocentesDeMateria(ctx context.Context, materiaID string) ([]*domain.DocenteMateria, error)
 

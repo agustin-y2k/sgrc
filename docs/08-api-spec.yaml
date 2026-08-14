@@ -114,6 +114,15 @@ components:
           type: string
           maxLength: 100
           description: Igual que cursoSolicitado, para la materia.
+        rolSolicitado:
+          type: string
+          enum: [TITULAR, SUPLENTE]
+          description: |
+            Si se ofrece como titular o como suplente. También opcional, pero a
+            diferencia de los dos anteriores tiene lista cerrada —la misma de
+            DocenteMateria— y se valida: nombra algo que existe siempre. Sigue
+            siendo una declaración; el rol que rige es el que el Admin carga al
+            asignar (RF-02.6).
 
     LoginRequest:
       type: object
@@ -146,6 +155,10 @@ components:
         materiaSolicitada:
           type: string
           description: Ídem, para la materia.
+        rolSolicitado:
+          type: string
+          enum: [TITULAR, SUPLENTE]
+          description: Ídem, para el rol con el que se ofreció.
         tienePassword:
           type: boolean
           description: |
@@ -767,6 +780,7 @@ paths:
                 apellido: { type: string, maxLength: 100 }
                 cursoSolicitado: { type: string, maxLength: 100 }
                 materiaSolicitada: { type: string, maxLength: 100 }
+                rolSolicitado: { type: string, enum: [TITULAR, SUPLENTE] }
       responses:
         "201": { description: Cuenta creada, pendiente de aprobación }
         "400": { description: Cuerpo malformado, o falta el nombre tanto en el request como en el token }
@@ -1360,6 +1374,45 @@ paths:
         "409": { description: El usuario no está en estado APROBADA }
 
   /api/academic/materias/{materiaId}/docentes/{docenteMateriaId}:
+    patch:
+      tags: [academic]
+      summary: Cambiar el rol de un docente asignado (Admin)
+      description: |
+        Corrige el rol de una asignación existente (RF-02.6). Es el único camino
+        para pasar de titular a suplente o al revés: el otro —quitar y volver a
+        asignar— pasa por la cascada de RF-02.10 y, si es el único docente de la
+        materia, cancela todas sus reservas futuras.
+
+        No toca nada más que el rol. El usuario y la materia de un vínculo no se
+        editan: cambiar cualquiera de los dos es otro vínculo.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: materiaId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: docenteMateriaId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rol]
+              properties:
+                rol: { type: string, enum: [TITULAR, SUPLENTE] }
+      responses:
+        "200":
+          description: Rol actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocenteMateria" }
+        "400": { description: Rol inválido o cuerpo malformado }
+        "403": { description: Solo ADMIN }
+        "404": { description: La asignación no existe }
     delete:
       tags: [academic]
       summary: Remover docente de materia (Admin)

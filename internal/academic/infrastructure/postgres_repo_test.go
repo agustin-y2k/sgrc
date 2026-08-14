@@ -4,6 +4,7 @@ package infrastructure
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -329,6 +330,54 @@ func TestPostgresRepo_AsignarYRemoverDocenteMateria_OK(t *testing.T) {
 	}
 	if len(docentesTrasRemover) != 0 {
 		t.Errorf("esperaba 0 docentes tras remover, obtuve %d", len(docentesTrasRemover))
+	}
+}
+
+func TestPostgresRepo_GuardarDocenteMateria_CambiaSoloElRol(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	ciclo, _ := domain.NuevoCicloLectivo(uuidNuevo(), 2026)
+	repo.CrearCiclo(ctx, ciclo)
+	curso, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, "1°A")
+	repo.CrearCurso(ctx, curso)
+	materia, _ := domain.NuevaMateria(uuidNuevo(), curso.ID, "Matemáticas")
+	repo.CrearMateria(ctx, materia)
+
+	usuarioID := insertarUsuarioDeTest(t, pool, "APROBADA")
+	dm := domain.NuevoDocenteMateria(uuidNuevo(), usuarioID, materia.ID, domain.RolTitular)
+	if err := repo.AsignarDocente(ctx, dm); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	dm.Rol = domain.RolSuplente
+	if err := repo.GuardarDocenteMateria(ctx, dm); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	guardado, err := repo.BuscarDocenteMateria(ctx, dm.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if guardado.Rol != domain.RolSuplente {
+		t.Errorf("rol = %s, esperaba SUPLENTE", guardado.Rol)
+	}
+	// El vínculo sigue siendo el mismo: cambiar el rol no puede ser una baja
+	// disfrazada (ver Service.CambiarRolDocente).
+	if guardado.UsuarioID != usuarioID || guardado.MateriaID != materia.ID {
+		t.Errorf("el vínculo cambió: %+v", guardado)
+	}
+}
+
+func TestPostgresRepo_GuardarDocenteMateria_NoExiste_Error(t *testing.T) {
+	repo := NewPostgresRepo(levantarPostgresDeTest(t))
+
+	err := repo.GuardarDocenteMateria(context.Background(),
+		domain.NuevoDocenteMateria(uuidNuevo(), uuidNuevo(), uuidNuevo(), domain.RolSuplente))
+
+	if !errors.Is(err, application.ErrDocenteMateriaNoEncontrado) {
+		t.Fatalf("esperaba ErrDocenteMateriaNoEncontrado, obtuve %v", err)
 	}
 }
 

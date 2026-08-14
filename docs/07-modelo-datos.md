@@ -30,7 +30,7 @@ erDiagram
     REGLA_RECURRENCIA ||--o{ RESERVA_GRUPO : materializa
     RESERVA_GRUPO ||--o{ RESERVA : contiene
 
-    USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; bool debe_cambiar_password; string rol; string estado; timestamptz fecha_registro; timestamptz fecha_aprobacion; uuid aprobado_por; string curso_solicitado; string materia_solicitada; int version_sesion }
+    USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; bool debe_cambiar_password; string rol; string estado; timestamptz fecha_registro; timestamptz fecha_aprobacion; uuid aprobado_por; string curso_solicitado; string materia_solicitada; string rol_solicitado; int version_sesion }
     CODIGO_RECUPERACION { uuid id; uuid usuario_id; string codigo_hash; timestamptz creado_en; timestamptz expira_en; timestamptz usado_en; int intentos }
     CARRO { uuid id; string nombre; string descripcion }
     EQUIPO { uuid id; uuid carro_id; int identificador; string nombre; string tipo; string numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool reservable; bool dado_de_baja; timestamptz fecha_baja; timestamptz fecha_alta }
@@ -106,6 +106,7 @@ El esquema distingue a propósito entre **instantes** y **hora de pared**:
 | aprobado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | curso_solicitado | VARCHAR(100) | NULL |
 | materia_solicitada | VARCHAR(100) | NULL |
+| rol_solicitado | VARCHAR(10) | NULL, CHECK IN (TITULAR, SUPLENTE) |
 | version_sesion | INTEGER | NOT NULL DEFAULT 0 |
 | | | CHECK `password_hash IS NOT NULL OR google_sub IS NOT NULL` |
 
@@ -146,6 +147,12 @@ CREATE INDEX        idx_usuario_estado       ON usuario (estado);
 > de una lista, y lo que declara puede no existir todavía en el sistema — de
 > hecho el Admin quizás lo tenga que crear al aprobarla (RF-02.6). Es una
 > declaración de intención, no un vínculo.
+>
+> `rol_solicitado` acompaña a esos dos y es la excepción que confirma la
+> regla: **sí lleva CHECK**, porque "titular o suplente" es una lista cerrada
+> que existe siempre —la misma de `docente_materia.rol`— y no nombra nada que
+> pueda faltar. Sigue siendo una declaración: el rol que rige es el que el
+> Admin carga en `docente_materia` al asignar.
 
 > **`BAJA` es distinto de `RECHAZADA`.** `RECHAZADA` es una solicitud de
 > registro que nunca se aprobó; `BAJA` es una cuenta que **estuvo** `APROBADA`
