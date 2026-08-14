@@ -850,6 +850,102 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 	return resultado, errorDeFilas(rows)
 }
 
+// ── El ordenamiento por preferencia de materia (RF-03.21) ──────────────
+//
+// Los cuatro fragmentos de acá abajo son las piezas de una misma consulta,
+// compartidas por las dos listas de equipos libres —la de una franja y la de
+// una serie— porque el docente tiene que ver el mismo orden en las dos. Lo
+// único que cambia entre ellas es de dónde sale la materia, y eso lo
+// resuelve cada una en su propio CTE `ctx_materia` (norm, anio, division).
+//
+// Todo se resuelve en SQL y no recorriendo la lista en Go a propósito: la
+// lista de libres ya es UNA consulta, y traer las marcas por separado para
+// cruzarlas después son tantas idas a la base como equipos tenga el
+// inventario (el mismo criterio de RF-04.10).
+//
+// `ctx_materia` vacío —un Admin reservando sin materia— es un caso normal y
+// no un borde: los dos CTE de acá abajo hacen JOIN contra él, así que sin
+// materia no hay ninguna marca que aplicar y la lista sale con el orden de
+// siempre.
+const sqlTramosDePreferencia = `
+		-- La marca que apunta a MI materia. DISTINCT ON deja una sola por
+		-- equipo: gana la más específica (año+división > año > sin curso) y,
+		-- a igual especificidad, la de prioridad más fuerte. Sin esto, un
+		-- equipo marcado para toda la materia Y para 3°B no tiene respuesta
+		-- definida cuando reserva 3°B.
+		propia AS (
+			SELECT DISTINCT ON (ep.equipo_id)
+			       ep.equipo_id, ep.prioridad, ep.materia_nombre, ep.anio, ep.division
+			FROM equipo_preferencia ep
+			JOIN ctx_materia cm ON true
+			WHERE ep.materia_norm = cm.norm
+			  AND (ep.anio     IS NULL OR ep.anio     = cm.anio)
+			  AND (ep.division IS NULL OR ep.division = cm.division)
+			ORDER BY ep.equipo_id,
+			         (ep.anio IS NOT NULL)::int + (ep.division IS NOT NULL)::int DESC,
+			         ep.prioridad
+		),
+		-- La marca de otro. Compartir el nombre de la materia no alcanza: una
+		-- marca de "Matemática de 3°B" es ajena para Matemática de 5°A, que es
+		-- exactamente para lo que el Admin acotó el alcance.
+		ajena AS (
+			SELECT DISTINCT ON (ep.equipo_id)
+			       ep.equipo_id, ep.prioridad, ep.materia_nombre, ep.anio, ep.division
+			FROM equipo_preferencia ep
+			JOIN ctx_materia cm ON true
+			WHERE NOT EXISTS (SELECT 1 FROM propia pr WHERE pr.equipo_id = ep.equipo_id)
+			  AND NOT (ep.materia_norm = cm.norm
+			           AND (ep.anio     IS NULL OR ep.anio     = cm.anio)
+			           AND (ep.division IS NULL OR ep.division = cm.division))
+			ORDER BY ep.equipo_id, ep.prioridad
+		)`
+
+// sqlColumnasDePreferencia: el tramo como número (0/1/2, el mismo orden en
+// que se muestran) más la marca que lo explica.
+const sqlColumnasDePreferencia = `
+		       CASE WHEN pr.equipo_id IS NOT NULL THEN 0
+		            WHEN aj.equipo_id IS NOT NULL THEN 2
+		            ELSE 1 END,
+		       COALESCE(pr.materia_nombre, aj.materia_nombre, ''),
+		       COALESCE(pr.anio, aj.anio, 0),
+		       COALESCE(pr.division, aj.division, '')`
+
+const sqlJoinsDePreferencia = `
+		LEFT JOIN propia pr ON pr.equipo_id = p.id
+		LEFT JOIN ajena  aj ON aj.equipo_id = p.id`
+
+// sqlOrdenDePreferencia: primero el tramo, después la prioridad dentro del
+// tramo, y recién ahí el orden de siempre como desempate.
+//
+// La prioridad ajena va NEGADA a propósito. Dentro de los míos, prioridad 1
+// es el más recomendado y va arriba; dentro de los ajenos es al revés:
+// cuanto más fuerte el reclamo de la otra materia, más abajo tiene que
+// quedar. Negando, el mismo ASC sirve para los dos casos.
+const sqlOrdenDePreferencia = `
+		-- Los equipos sueltos van al final de su tramo: lo habitual es
+		-- reservar PCs de un carro, y el proyector no tiene por qué colarse
+		-- entre ellas.
+		ORDER BY CASE WHEN pr.equipo_id IS NOT NULL THEN 0
+		              WHEN aj.equipo_id IS NOT NULL THEN 2
+		              ELSE 1 END,
+		         CASE WHEN pr.equipo_id IS NOT NULL THEN pr.prioridad
+		              WHEN aj.equipo_id IS NOT NULL THEN -aj.prioridad
+		              ELSE 0 END,
+		         p.carro_id IS NULL, c.nombre, p.identificador, p.nombre`
+
+// tramoDePreferencia traduce el número que ordena la consulta al valor que
+// viaja en la API. El número existe sólo para que el ORDER BY sea un entero.
+func tramoDePreferencia(n int) application.TramoPreferencia {
+	switch n {
+	case 0:
+		return application.TramoPreferente
+	case 2:
+		return application.TramoDeOtraMateria
+	default:
+		return application.TramoNeutral
+	}
+}
+
 // ListarEquiposLibresEnLaSerie: los equipos libres en TODAS las ocurrencias
 // que le quedan a la serie de ese grupo (RF-08.14).
 //
@@ -876,14 +972,29 @@ func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID
 				(o.regla_recurrencia_id IS NOT NULL AND g.regla_recurrencia_id = o.regla_recurrencia_id)
 				OR g.id = $1
 			  )
-		)
+		),
+		-- La materia sale del propio grupo: cambiar el equipo de una reserva
+		-- ya sabe para qué es, así que el ordenamiento de RF-03.21 no
+		-- necesita ningún dato extra del cliente.
+		ctx_materia AS (
+			SELECT m.nombre_norm AS norm,
+			       substring(cu.nombre from 1 for 1)::smallint AS anio,
+			       substring(cu.nombre from 3 for 1)           AS division
+			FROM reserva_grupo g
+			JOIN materia m  ON m.id = g.materia_id
+			JOIN curso   cu ON cu.id = m.curso_id
+			WHERE g.id = $1
+		),
+		`+sqlTramosDePreferencia+`
 		SELECT p.id, COALESCE(p.identificador, 0),
 		       COALESCE(p.nombre, 'PC ' || p.identificador),
 		       p.tipo,
 		       COALESCE(c.id::text, ''), COALESCE(c.nombre, ''),
-		       p.freezado, COALESCE(p.software_instalado, '')
+		       p.freezado, COALESCE(p.software_instalado, ''),
+		       `+sqlColumnasDePreferencia+`
 		FROM equipo p
 		LEFT JOIN carro c ON c.id = p.carro_id
+		`+sqlJoinsDePreferencia+`
 		WHERE p.estado = 'DISPONIBLE'
 		  AND p.dado_de_baja = false
 		  AND p.reservable = true
@@ -894,7 +1005,7 @@ func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID
 			  AND tsrange(res.fecha + res.hora_inicio, res.fecha + res.hora_fin)
 			      && tsrange(oc.fecha + oc.hora_inicio, oc.fecha + oc.hora_fin)
 		  )
-		ORDER BY p.carro_id IS NULL, c.nombre, p.identificador, p.nombre
+		`+sqlOrdenDePreferencia+`
 	`, grupoID)
 	if err != nil {
 		return nil, fmt.Errorf("listando equipos libres en la serie: %w", err)
@@ -910,15 +1021,26 @@ func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID
 // aritmética date+time), para que lo que se ofrece coincida exactamente
 // con lo que la base va a aceptar después. Consulta pc/carro de solo
 // lectura, mismo criterio que los validadores de este paquete.
-func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoDisponible, error) {
+func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]application.EquipoDisponible, error) {
 	rows, err := r.db.Query(ctx, `
+		WITH ctx_materia AS (
+			SELECT m.nombre_norm AS norm,
+			       substring(cu.nombre from 1 for 1)::smallint AS anio,
+			       substring(cu.nombre from 3 for 1)           AS division
+			FROM materia m
+			JOIN curso cu ON cu.id = m.curso_id
+			WHERE m.id = NULLIF($4, '')::uuid
+		),
+		`+sqlTramosDePreferencia+`
 		SELECT p.id, COALESCE(p.identificador, 0),
 		       COALESCE(p.nombre, 'PC ' || p.identificador),
 		       p.tipo,
 		       COALESCE(c.id::text, ''), COALESCE(c.nombre, ''),
-		       p.freezado, COALESCE(p.software_instalado, '')
+		       p.freezado, COALESCE(p.software_instalado, ''),
+		       `+sqlColumnasDePreferencia+`
 		FROM equipo p
 		LEFT JOIN carro c ON c.id = p.carro_id
+		`+sqlJoinsDePreferencia+`
 		WHERE p.estado = 'DISPONIBLE'
 		  AND p.dado_de_baja = false
 		  -- RF-03.16: un cargador no se planifica, se pide en el momento. Sin
@@ -934,10 +1056,8 @@ func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha tim
 			  AND tsrange(res.fecha + res.hora_inicio, res.fecha + res.hora_fin)
 			      && tsrange($1::date + $2::time, $1::date + $3::time)
 		  )
-		-- Los equipos sueltos van al final: lo habitual es reservar PCs de
-		-- un carro, y el proyector no tiene por qué colarse entre ellas.
-		ORDER BY p.carro_id IS NULL, c.nombre, p.identificador, p.nombre
-	`, fecha, duracionComoHora(horaInicio), duracionComoHora(horaFin))
+		`+sqlOrdenDePreferencia+`
+	`, fecha, duracionComoHora(horaInicio), duracionComoHora(horaFin), materiaID)
 	if err != nil {
 		return nil, fmt.Errorf("listando equipos disponibles: %w", err)
 	}
@@ -950,11 +1070,14 @@ func escanearEquiposDisponibles(rows pgx.Rows) ([]application.EquipoDisponible, 
 	var resultado []application.EquipoDisponible
 	for rows.Next() {
 		var pc application.EquipoDisponible
+		var tramo int
 		if err := rows.Scan(&pc.EquipoID, &pc.Identificador, &pc.Etiqueta, &pc.Tipo,
 			&pc.CarroID, &pc.CarroNombre,
-			&pc.Freezado, &pc.SoftwareInstalado); err != nil {
+			&pc.Freezado, &pc.SoftwareInstalado,
+			&tramo, &pc.PreferenciaMateria, &pc.PreferenciaAnio, &pc.PreferenciaDivision); err != nil {
 			return nil, fmt.Errorf("escaneando equipo disponible: %w", err)
 		}
+		pc.Tramo = tramoDePreferencia(tramo)
 		resultado = append(resultado, pc)
 	}
 	return resultado, errorDeFilas(rows)

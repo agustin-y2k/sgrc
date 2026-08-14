@@ -60,7 +60,8 @@ export type GravedadIncidencia = "LEVE" | "MODERADA" | "GRAVE"
  * cualquier estado puede pasar a cualquier otro. La pantalla ofrece el
  * recorrido esperado sin bloquear el resto.
  */
-export type EstadoIncidencia = "ABIERTA" | "EN_REPARACION" | "ENVIADA_A_SOPORTE" | "RESUELTA"
+export type EstadoIncidencia =
+  "ABIERTA" | "EN_REPARACION" | "ENVIADA_A_SOPORTE" | "RESUELTA"
 
 export type Incidencia = {
   id: string
@@ -189,4 +190,36 @@ export const ETIQUETA_ESTADO_EQUIPO: Record<EstadoEquipo, string> = {
   DISPONIBLE: "Disponible",
   EN_MANTENIMIENTO: "En mantenimiento",
   FUERA_DE_SERVICIO: "Fuera de servicio",
+}
+
+/**
+ * RF-03.21 — la marca que dice que un equipo es preferente para una materia.
+ *
+ * **Sólo ordena.** Al reservar, esa materia ve la máquina primero y las
+ * demás la ven al final; nadie queda excluido y ninguna reserva existente se
+ * ve afectada. Por eso marcar, cambiar o borrar no tiene consecuencias que
+ * haya que avisar.
+ *
+ * El vínculo con la materia es por NOMBRE y no por id porque `materia` se
+ * recrea con id nuevo en cada ciclo lectivo: una referencia se perdería el
+ * 31/12, y la marca del inventario tiene que sobrevivir al cambio de año.
+ */
+export type PreferenciaDeEquipo = {
+  id: string
+  equipoId: string
+  materiaNombre: string
+  /** Ausente = toda materia con ese nombre, en cualquier curso. */
+  anio?: number
+  /** Ausente = todas las divisiones de ese año. Nunca viene sin `anio`. */
+  division?: string
+  /** 1 es la más fuerte. */
+  prioridad: number
+  /** La frase ya armada: "Dibujo Técnico de 3°B". La resuelve el servidor. */
+  alcance: string
+}
+
+/** Igual que el alta de licencias: el lote se procesa y se informa qué se salteó. */
+export type AltaDePreferencias = {
+  creadas: PreferenciaDeEquipo[]
+  equiposQueYaLaTenian?: string[]
 }

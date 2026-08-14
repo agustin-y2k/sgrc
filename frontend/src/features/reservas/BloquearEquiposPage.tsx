@@ -81,7 +81,7 @@ export function BloquearEquiposPage() {
    */
   const libresQuery = useQuery({
     queryKey: ["equipos-disponibles", fecha, horaInicio, horaFin],
-    queryFn: () => reservasApi.equiposDisponibles(fecha, horaInicio, horaFin),
+    queryFn: () => reservasApi.equiposDisponibles({ fecha, horaInicio, horaFin }),
     enabled: franjaCompleta,
   })
 
@@ -103,7 +103,8 @@ export function BloquearEquiposPage() {
     carro,
     equipos: equiposQueries[i]?.data?.data ?? [],
   }))
-  const inventarioCargando = carrosQuery.isLoading || equiposQueries.some((q) => q.isLoading)
+  const inventarioCargando =
+    carrosQuery.isLoading || equiposQueries.some((q) => q.isLoading)
 
   // Mientras la consulta de libres no haya vuelto no se sabe nada: sin este
   // recaudo un `Set` vacío haría figurar TODAS los equipos como ocupadas.
@@ -220,9 +221,9 @@ export function BloquearEquiposPage() {
                 cancelación. No se lo envuelve en ninguna categoría, porque el
                 sistema no sabe de qué clase de cosa se trata. */}
             <p className="text-muted-foreground text-sm">
-              Queda guardado en el bloqueo y es lo que van a leer los docentes
-              en el aviso de cancelación. Aparece también en el calendario del
-              equipo, así que sirve aunque no se cancele ninguna reserva.
+              Queda guardado en el bloqueo y es lo que van a leer los docentes en el aviso
+              de cancelación. Aparece también en el calendario del equipo, así que sirve
+              aunque no se cancele ninguna reserva.
             </p>
           </div>
         </CardContent>
@@ -297,7 +298,8 @@ export function BloquearEquiposPage() {
       <div className="mt-4 grid gap-3">
         {seleccionadas.length > 0 && (
           <p className="text-sm">
-            {seleccionadas.length} Equipo{seleccionadas.length === 1 ? "" : "s"} seleccionada
+            {seleccionadas.length} Equipo{seleccionadas.length === 1 ? "" : "s"}{" "}
+            seleccionada
             {seleccionadas.length === 1 ? "" : "s"}.
           </p>
         )}
@@ -321,9 +323,9 @@ export function BloquearEquiposPage() {
             </p>
             {elegidasOcupadas.length > 0 ? (
               <p className="text-destructive text-sm">
-                {elegidasOcupadas.length} de esos equipos tienen una reserva en esa franja: se
-                va a cancelar y el docente va a recibir un aviso. Las reservas canceladas
-                no se recuperan aunque después se saque el bloqueo.
+                {elegidasOcupadas.length} de esos equipos tienen una reserva en esa
+                franja: se va a cancelar y el docente va a recibir un aviso. Las reservas
+                canceladas no se recuperan aunque después se saque el bloqueo.
               </p>
             ) : (
               <p className="text-muted-foreground text-sm">

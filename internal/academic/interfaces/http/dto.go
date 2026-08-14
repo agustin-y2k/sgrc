@@ -38,6 +38,12 @@ type asignarDocenteRequest struct {
 	Rol       string `json:"rol"` // TITULAR | SUPLENTE
 }
 
+// cambiarRolDocenteRequest solo lleva el rol: el usuario y la materia de un
+// vínculo no se editan (ver Service.CambiarRolDocente).
+type cambiarRolDocenteRequest struct {
+	Rol string `json:"rol"` // TITULAR | SUPLENTE
+}
+
 // ── Responses ───────────────────────────────────────────────────────────
 
 type cicloLectivoResponse struct {

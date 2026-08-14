@@ -97,6 +97,12 @@ CREATE TABLE usuario (
     -- asignarla, o para darse cuenta de que esa materia todavía no existe.
     curso_solicitado       VARCHAR(100),
     materia_solicitada     VARCHAR(100),
+    -- Si se ofrece como titular o como suplente. A diferencia de los dos de
+    -- arriba SÍ lleva CHECK: es la misma lista cerrada de docente_materia.rol
+    -- y nombra algo que existe siempre, mientras que un curso o una materia
+    -- pueden no existir todavía. Sigue siendo una declaración, no un vínculo:
+    -- el rol que rige es el que el ADMIN carga al asignar (RF-02.6).
+    rol_solicitado         VARCHAR(10) CHECK (rol_solicitado IN ('TITULAR','SUPLENTE')),
 
     -- Se incrementa para invalidar las sesiones abiertas de esta persona.
     -- Los tokens son stateless: sin este contador, cambiar una contraseña o
@@ -170,12 +176,24 @@ CREATE TABLE materia (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     curso_id   UUID NOT NULL REFERENCES curso(id) ON DELETE CASCADE,
     nombre     VARCHAR(100) NOT NULL,
+
+    -- La forma canónica del nombre —sin mayúsculas ni acentos— contra la que
+    -- se cruzan las marcas de preferencia de equipo_preferencia (RF-03.21).
+    --
+    -- Se resuelve con translate() y NO con unaccent(): esa función vive en una
+    -- extensión, depende de un diccionario y por eso no es IMMUTABLE, así que
+    -- no se puede usar ni en una columna generada ni en un índice. Las cinco
+    -- vocales acentuadas más ü y ñ cubren el castellano.
+    nombre_norm VARCHAR(100)
+                GENERATED ALWAYS AS (translate(lower(nombre), 'áéíóúüñ', 'aeiouun')) STORED,
+
     activo     BOOLEAN NOT NULL DEFAULT true,
     archivado  BOOLEAN NOT NULL DEFAULT false,
     UNIQUE (curso_id, nombre)
 );
 
 CREATE INDEX idx_materia_curso ON materia (curso_id);
+CREATE INDEX idx_materia_nombre_norm ON materia (nombre_norm);
 
 -- Quién dicta qué. Un docente puede tener varias materias y una materia
 -- varios docentes (titular y suplente).
@@ -393,6 +411,80 @@ CREATE UNIQUE INDEX ux_licencia_equipo_nombre ON licencia_software (equipo_id, l
 -- El barrido busca las que vencen pronto; las que están a verificar no
 -- entran, así que el índice es parcial.
 CREATE INDEX idx_licencia_vencimiento ON licencia_software (fecha_vencimiento) WHERE fecha_vencimiento IS NOT NULL;
+
+-- ── Qué materia prefiere cada equipo (RF-03.21) ────────────────────────
+--
+-- El ADMIN marca en el inventario que una máquina es preferente para una
+-- materia, y opcionalmente sólo para un año o para un año y división. Al
+-- reservar, esa materia la ve primero y las demás la ven al final.
+--
+-- La marca SÓLO ORDENA. No es un permiso, no oculta nada y no bloquea a
+-- nadie: cualquiera puede reservar cualquier equipo libre. Esa decisión es
+-- la que hace que marcar equipos con reservas ya hechas no tenga ningún
+-- conflicto posible —no hay nada que cancelar ni que revisar— y que borrar
+-- una marca sea gratis.
+--
+-- El vínculo con la materia es por NOMBRE y no una FK: `materia` es por curso
+-- y ArchivarYClonar la recrea con un UUID nuevo cada año (RF-02.5); `curso`
+-- también. Una FK a cualquiera de las dos borraría todas las marcas el 31/12,
+-- que es justo cuando el ADMIN espera que sigan puestas. Por lo mismo, el año
+-- y la división se guardan como número y letra sueltos.
+--
+-- El nombre no se fragmenta por tipeo porque el ADMIN es el único que lo
+-- escribe: quien se registra sólo lo SUGIERE en texto libre
+-- (usuario.materia_solicitada), y es el ADMIN quien crea la materia. Aun así
+-- el match va por nombre normalizado, para que "Matemática" y "matematica"
+-- sean la misma.
+CREATE TABLE equipo_preferencia (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    equipo_id       UUID NOT NULL REFERENCES equipo(id) ON DELETE CASCADE,
+
+    -- El nombre tal como lo eligió el ADMIN de la lista de materias que ya
+    -- existen. Se guarda con su capitalización porque es lo que se muestra
+    -- ("preferente para Dibujo Técnico"); el match usa la columna generada.
+    materia_nombre  VARCHAR(100) NOT NULL,
+    materia_norm    VARCHAR(100)
+                    GENERATED ALWAYS AS (translate(lower(materia_nombre), 'áéíóúüñ', 'aeiouun')) STORED,
+
+    -- El alcance, de menos a más específico:
+    --   (NULL, NULL) → toda materia con ese nombre, en cualquier curso
+    --   (3,    NULL) → sólo las de tercer año
+    --   (3,    'B')  → sólo 3°B
+    -- Los rangos son los mismos del CHECK de curso.nombre ('^[1-6]°[A-Z]$'):
+    -- una institución con otra nomenclatura cambia los dos juntos.
+    anio            SMALLINT CHECK (anio BETWEEN 1 AND 6),
+    division        CHAR(1)  CHECK (division ~ '^[A-Z]$'),
+
+    -- Cuál manda cuando una misma máquina es preferente de varias materias:
+    -- 1 es la más fuerte. Es un número y no un enum para que la escuela
+    -- defina sus propios rangos sin tocar código.
+    prioridad       SMALLINT NOT NULL DEFAULT 1 CHECK (prioridad BETWEEN 1 AND 9),
+
+    creada_en       TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    -- Una división sin año no significa nada: no existen "todas las B". El
+    -- alcance se abre de a un nivel.
+    CONSTRAINT chk_equipo_preferencia_alcance
+        CHECK (division IS NULL OR anio IS NOT NULL),
+    CONSTRAINT chk_equipo_preferencia_materia
+        CHECK (materia_nombre <> '' AND materia_nombre = btrim(materia_nombre)),
+
+    -- NULLS NOT DISTINCT no es un detalle: con el UNIQUE normal de SQL dos
+    -- filas (equipo, materia, NULL, NULL) se consideran distintas entre sí,
+    -- así que la misma marca se podría cargar infinitas veces.
+    CONSTRAINT ux_equipo_preferencia
+        UNIQUE NULLS NOT DISTINCT (equipo_id, materia_norm, anio, division)
+);
+
+COMMENT ON TABLE equipo_preferencia IS
+    'Marcas de preferencia del inventario (RF-03.21). Sólo ordenan la lista '
+    'al reservar: no restringen a nadie ni afectan ninguna reserva existente.';
+
+-- El ordenamiento entra por el nombre de la materia: para una reserva se
+-- conocen materia, año y división, y hay que encontrar qué equipos las
+-- prefieren. El panel del inventario entra por el otro lado.
+CREATE INDEX idx_equipo_preferencia_materia ON equipo_preferencia (materia_norm);
+CREATE INDEX idx_equipo_preferencia_equipo  ON equipo_preferencia (equipo_id);
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- Reservas (RF-04)
@@ -835,6 +927,7 @@ DROP TABLE IF EXISTS licencia_software CASCADE;
 DROP TABLE IF EXISTS incidencia CASCADE;
 DROP TABLE IF EXISTS equipo CASCADE;
 DROP TABLE IF EXISTS carro CASCADE;
+DROP TABLE IF EXISTS equipo_preferencia CASCADE;
 DROP TABLE IF EXISTS docente_materia CASCADE;
 DROP TABLE IF EXISTS materia CASCADE;
 DROP TABLE IF EXISTS curso CASCADE;

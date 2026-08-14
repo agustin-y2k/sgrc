@@ -33,14 +33,27 @@ export function misMaterias() {
  * fechas que le quedan a esa serie (RF-08.14): es lo que evita ofrecer una
  * máquina que después va a chocar en la tercera fecha.
  */
-export function equiposDisponibles(
-  fecha: string,
-  horaInicio: string,
-  horaFin: string,
+export function equiposDisponibles({
+  fecha,
+  horaInicio,
+  horaFin,
+  serieDesdeGrupoId,
+  materiaId,
+}: {
+  fecha: string
+  horaInicio: string
+  horaFin: string
   serieDesdeGrupoId?: string
-) {
+  /**
+   * RF-03.21: para qué materia se ordena la lista. Sin él la lista sale
+   * igual, con el orden de siempre — que es lo que corresponde cuando un
+   * Admin reserva sin materia.
+   */
+  materiaId?: string
+}) {
   const params = new URLSearchParams({ fecha, horaInicio, horaFin })
   if (serieDesdeGrupoId) params.set("serieDesdeGrupoId", serieDesdeGrupoId)
+  if (materiaId) params.set("materiaId", materiaId)
   return apiFetch<RespuestaLista<EquipoDisponible> & { ocupados?: EquipoOcupado[] }>(
     `/api/reservation/equipos-disponibles?${params}`
   )
@@ -148,7 +161,9 @@ export function listarPrestamosAbiertos() {
 
 /** El historial de entregas de una máquina, de lo más reciente a lo más viejo. */
 export function historialDePrestamosDeEquipo(equipoId: string) {
-  return apiFetch<RespuestaLista<Prestamo>>(`/api/reservation/equipos/${equipoId}/prestamos`)
+  return apiFetch<RespuestaLista<Prestamo>>(
+    `/api/reservation/equipos/${equipoId}/prestamos`
+  )
 }
 
 /**

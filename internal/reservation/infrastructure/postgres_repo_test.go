@@ -1188,7 +1188,7 @@ func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testi
 	}
 
 	// Franja que se superpone con la reserva existente.
-	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour+30*time.Minute, 11*time.Hour+30*time.Minute)
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour+30*time.Minute, 11*time.Hour+30*time.Minute, "")
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -1207,12 +1207,232 @@ func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testi
 
 	// Franja pegada al final de la reserva: hora_fin == hora_inicio NO
 	// solapa (mismo criterio que la constraint EXCLUDE).
-	pegada, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 11*time.Hour, 12*time.Hour)
+	pegada, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 11*time.Hour, 12*time.Hour, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !contiene(pegada, ocupada) {
 		t.Error("una franja que arranca justo cuando termina la anterior no solapa: la PC debería estar disponible")
+	}
+}
+
+// ── RF-03.21: la lista se ordena para la materia que se está reservando ─
+//
+// Es el corazón de la funcionalidad y se prueba contra la base porque ahí
+// vive: el tramo, la resolución de la marca más específica y el orden salen
+// todos de la misma consulta.
+
+// materiaEnCursoDeTest crea una materia con el nombre y el curso pedidos,
+// para poder probar el alcance por año y división.
+func materiaEnCursoDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria, nombreCurso string) string {
+	t.Helper()
+	ctx := context.Background()
+	anio := int(atomic.AddInt32(&contadorAnioDeTest, 1)) + 3000
+	cicloID, cursoID, materiaID := NuevoID(), NuevoID(), NuevoID()
+
+	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
+		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, $3)`, cursoID, cicloID, nombreCurso); err != nil {
+		t.Fatalf("no se pudo crear curso de prueba: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, $3)`, materiaID, cursoID, nombreMateria); err != nil {
+		t.Fatalf("no se pudo crear materia de prueba: %v", err)
+	}
+	return materiaID
+}
+
+func marcarPreferencia(t *testing.T, pool *pgxpool.Pool, equipoID, materia string, anio *int, division *string, prioridad int) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO equipo_preferencia (equipo_id, materia_nombre, anio, division, prioridad) VALUES ($1, $2, $3, $4, $5)`,
+		equipoID, materia, anio, division, prioridad)
+	if err != nil {
+		t.Fatalf("no se pudo marcar la preferencia: %v", err)
+	}
+}
+
+func TestListarEquiposDisponiblesEn_OrdenaPorPreferenciaDeMateria(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	// La materia que reserva: Matemática de 3°B.
+	materiaID := materiaEnCursoDeTest(t, pool, "Matemática", "3°B")
+
+	miPreferida := crearEquipoDeCarroDeTest(t, pool)
+	neutral := crearEquipoDeCarroDeTest(t, pool)
+	ajenaDebil := crearEquipoDeCarroDeTest(t, pool)
+	ajenaFuerte := crearEquipoDeCarroDeTest(t, pool)
+
+	tres, be := 3, "B"
+	// Sin acento y en minúscula a propósito: el match va por nombre
+	// normalizado, así que "matematica" tiene que encontrar a "Matemática".
+	marcarPreferencia(t, pool, miPreferida, "matematica", &tres, &be, 2)
+	marcarPreferencia(t, pool, ajenaDebil, "Dibujo Técnico", nil, nil, 3)
+	marcarPreferencia(t, pool, ajenaFuerte, "Dibujo Técnico", nil, nil, 1)
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, materiaID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	posicion := map[string]int{}
+	tramo := map[string]application.TramoPreferencia{}
+	for i, e := range disponibles {
+		posicion[e.EquipoID] = i
+		tramo[e.EquipoID] = e.Tramo
+	}
+
+	if tramo[miPreferida] != application.TramoPreferente {
+		t.Errorf("la marcada para mi materia debería ser PREFERENTE, es %s", tramo[miPreferida])
+	}
+	if tramo[neutral] != application.TramoNeutral {
+		t.Errorf("la que no prefiere nadie debería ser NEUTRAL, es %s", tramo[neutral])
+	}
+	if tramo[ajenaFuerte] != application.TramoDeOtraMateria {
+		t.Errorf("la de otra materia debería ser DE_OTRA_MATERIA, es %s", tramo[ajenaFuerte])
+	}
+
+	if !(posicion[miPreferida] < posicion[neutral]) {
+		t.Error("la preferente de mi materia va antes que la neutral")
+	}
+	if !(posicion[neutral] < posicion[ajenaDebil]) {
+		t.Error("la neutral va antes que las de otra materia")
+	}
+	// Dentro del tramo ajeno, cuanto más fuerte el reclamo de la otra
+	// materia, más abajo: prioridad 1 queda por debajo de prioridad 3.
+	if !(posicion[ajenaDebil] < posicion[ajenaFuerte]) {
+		t.Error("el reclamo ajeno más fuerte tiene que quedar más abajo")
+	}
+
+	for _, e := range disponibles {
+		if e.EquipoID == miPreferida && e.MotivoDePreferencia() != "Preferente para matematica de 3°B" {
+			t.Errorf("motivo inesperado: %q", e.MotivoDePreferencia())
+		}
+		if e.EquipoID == neutral && e.MotivoDePreferencia() != "" {
+			t.Errorf("una neutral no tiene motivo, tiene %q", e.MotivoDePreferencia())
+		}
+	}
+}
+
+// Compartir el nombre de la materia no alcanza cuando el Admin acotó el
+// alcance: la marca de "Matemática de 3°B" es ajena para Matemática de 5°A.
+func TestListarEquiposDisponiblesEn_LaMarcaAcotadaNoAplicaAOtroCurso(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	otroCurso := materiaEnCursoDeTest(t, pool, "Matemática", "5°A")
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+
+	tres, be := 3, "B"
+	marcarPreferencia(t, pool, equipoID, "Matemática", &tres, &be, 1)
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, otroCurso)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	for _, e := range disponibles {
+		if e.EquipoID != equipoID {
+			continue
+		}
+		if e.Tramo != application.TramoDeOtraMateria {
+			t.Errorf("esperaba DE_OTRA_MATERIA para un curso distinto, obtuve %s", e.Tramo)
+		}
+		return
+	}
+	t.Fatal("el equipo tendría que estar en la lista: la preferencia ordena, no oculta")
+}
+
+// La marca más específica gana: un equipo preferente de toda la materia Y de
+// 3°B en particular tiene que resolver por la de 3°B cuando reserva 3°B.
+func TestListarEquiposDisponiblesEn_GanaLaMarcaMasEspecifica(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	materiaID := materiaEnCursoDeTest(t, pool, "Matemática", "3°B")
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+
+	tres, be := 3, "B"
+	marcarPreferencia(t, pool, equipoID, "Matemática", nil, nil, 1)
+	marcarPreferencia(t, pool, equipoID, "Matemática", &tres, &be, 4)
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, materiaID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	for _, e := range disponibles {
+		if e.EquipoID != equipoID {
+			continue
+		}
+		if e.PreferenciaAnio != 3 || e.PreferenciaDivision != "B" {
+			t.Errorf("esperaba que ganara la marca de 3°B, obtuve %d°%s", e.PreferenciaAnio, e.PreferenciaDivision)
+		}
+		return
+	}
+	t.Fatal("el equipo tendría que estar en la lista")
+}
+
+// Un Admin puede reservar sin materia. Ahí no hay ninguna preferencia que
+// aplicar y la lista sale entera y neutral, con el orden de siempre.
+func TestListarEquiposDisponiblesEn_SinMateria_TodoNeutral(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, equipoID, "Dibujo Técnico", nil, nil, 1)
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, "")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	for _, e := range disponibles {
+		if e.Tramo != application.TramoNeutral {
+			t.Errorf("sin materia todo tiene que ser NEUTRAL, %s salió %s", e.Etiqueta, e.Tramo)
+		}
+	}
+}
+
+// Cambiar el equipo de una reserva usa el mismo orden: es la otra pantalla
+// donde se elige una máquina, y la materia sale del propio grupo.
+func TestListarEquiposLibresEnLaSerie_OrdenaPorPreferencia(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	materiaID := materiaEnCursoDeTest(t, pool, "Matemática", "3°B")
+	preferida := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, preferida, "Matemática", nil, nil, 1)
+	crearEquipoDeCarroDeTest(t, pool)
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	g := nuevoReservaGrupoDeTest(materiaID, fecha, 10*time.Hour, 11*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+
+	libres, err := repo.ListarEquiposLibresEnLaSerie(ctx, g.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(libres) == 0 {
+		t.Fatal("esperaba equipos libres")
+	}
+	if libres[0].EquipoID != preferida {
+		t.Errorf("la preferente de la materia del grupo tiene que ir primera, fue %s", libres[0].Etiqueta)
+	}
+	if libres[0].Tramo != application.TramoPreferente {
+		t.Errorf("esperaba PREFERENTE, obtuve %s", libres[0].Tramo)
 	}
 }
 

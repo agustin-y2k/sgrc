@@ -277,6 +277,41 @@ func (h *Handler) ListarDocentesDeMateria(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
+// PATCH /api/academic/materias/{materiaId}/docentes/{docenteMateriaId} (Admin)
+//
+// Es el único camino para corregir un rol. El otro —quitar y volver a
+// asignar— pasa por la cascada de RF-02.8 y puede cancelar las reservas
+// futuras de la materia.
+func (h *Handler) CambiarRolDocente(c *fiber.Ctx) error {
+	materiaID := c.Params("materiaId")
+	id := c.Params("docenteMateriaId")
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	var req cambiarRolDocenteRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+
+	rol, err := domain.ParseRolDocente(req.Rol)
+	if err != nil {
+		return mapearError(err)
+	}
+
+	dm, err := h.svc.CambiarRolDocente(c.UserContext(), id, rol)
+	if err != nil {
+		return mapearError(err)
+	}
+	h.auditar(c, claims.UserID, audit.DocenteRolCambiado, "docente_materia", &id, map[string]any{
+		"materiaId": materiaID,
+		"usuarioId": dm.UsuarioID,
+		"rol":       string(dm.Rol),
+	})
+	return c.JSON(toDocenteMateriaResponse(dm))
+}
+
 // DELETE /api/academic/materias/{materiaId}/docentes/{docenteMateriaId} (Admin)
 func (h *Handler) RemoverDocenteMateria(c *fiber.Ctx) error {
 	materiaID := c.Params("materiaId")

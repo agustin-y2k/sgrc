@@ -70,7 +70,13 @@ export function NuevaReservaPage() {
       const cuantosEquipos = `${equipoIds.length} ${equipoIds.length === 1 ? "equipo" : "equipos"}`
 
       if (modo === "simple") {
-        await reservasApi.crearReserva({ materiaId, fecha, horaInicio, horaFin, equipoIds })
+        await reservasApi.crearReserva({
+          materiaId,
+          fecha,
+          horaInicio,
+          horaFin,
+          equipoIds,
+        })
         return `Reserva confirmada para el ${formatearFechaLargaCapitalizada(fecha)}, de ${horaInicio} a ${horaFin}, con ${cuantosEquipos}.`
       }
 
@@ -315,6 +321,7 @@ export function NuevaReservaPage() {
                 horaFin={horaFin}
                 seleccionadas={equipoIds}
                 onCambio={setPcIds}
+                materiaId={materiaId}
               />
             </div>
 

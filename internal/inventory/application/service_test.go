@@ -15,10 +15,13 @@ import (
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
-	carros      map[string]*domain.Carro
-	equipos     map[string]*domain.Equipo
-	incidencias map[string]*domain.Incidencia
-	licencias   map[string]*domain.LicenciaSoftware
+	carros       map[string]*domain.Carro
+	equipos      map[string]*domain.Equipo
+	incidencias  map[string]*domain.Incidencia
+	licencias    map[string]*domain.LicenciaSoftware
+	preferencias map[string]*domain.PreferenciaDeEquipo
+	// nombresDeMateria es lo que el selector del inventario ofrece.
+	nombresDeMateria []string
 	// errAlCrearLicenciaEnEquipo fuerza un fallo que NO es un duplicado, para
 	// probar que el lote corta ahí en vez de seguir como si nada.
 	errAlCrearLicenciaEnEquipo map[string]error
@@ -30,6 +33,7 @@ func nuevoFakeRepo() *fakeRepo {
 		equipos:                    make(map[string]*domain.Equipo),
 		incidencias:                make(map[string]*domain.Incidencia),
 		licencias:                  make(map[string]*domain.LicenciaSoftware),
+		preferencias:               make(map[string]*domain.PreferenciaDeEquipo),
 		errAlCrearLicenciaEnEquipo: make(map[string]error),
 	}
 }
@@ -190,6 +194,76 @@ func (r *fakeRepo) ListarLicenciasPorEquipo(ctx context.Context, equipoID string
 		}
 	}
 	return resultado, nil
+}
+
+// ── Preferencias de materia (RF-03.21) ────────────────────────────────
+
+// mismaMarca replica el UNIQUE de la tabla: mismo equipo, misma materia
+// (sin distinguir acentos ni mayúsculas) y mismo alcance.
+func mismaMarca(a, b *domain.PreferenciaDeEquipo) bool {
+	igualPtr := func(x, y *int) bool {
+		if x == nil || y == nil {
+			return x == nil && y == nil
+		}
+		return *x == *y
+	}
+	igualStr := func(x, y *string) bool {
+		if x == nil || y == nil {
+			return x == nil && y == nil
+		}
+		return *x == *y
+	}
+	return a.EquipoID == b.EquipoID &&
+		strings.EqualFold(a.MateriaNombre, b.MateriaNombre) &&
+		igualPtr(a.Anio, b.Anio) && igualStr(a.Division, b.Division)
+}
+
+func (r *fakeRepo) CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {
+	for _, existente := range r.preferencias {
+		if mismaMarca(existente, p) {
+			return domain.ErrPreferenciaDuplicada
+		}
+	}
+	r.preferencias[p.ID] = p
+	return nil
+}
+
+func (r *fakeRepo) GuardarPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {
+	if _, ok := r.preferencias[p.ID]; !ok {
+		return domain.ErrPreferenciaNoEncontr
+	}
+	r.preferencias[p.ID] = p
+	return nil
+}
+
+func (r *fakeRepo) BuscarPreferenciaPorID(ctx context.Context, id string) (*domain.PreferenciaDeEquipo, error) {
+	p, ok := r.preferencias[id]
+	if !ok {
+		return nil, domain.ErrPreferenciaNoEncontr
+	}
+	return p, nil
+}
+
+func (r *fakeRepo) BorrarPreferencia(ctx context.Context, id string) error {
+	if _, ok := r.preferencias[id]; !ok {
+		return domain.ErrPreferenciaNoEncontr
+	}
+	delete(r.preferencias, id)
+	return nil
+}
+
+func (r *fakeRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.PreferenciaDeEquipo, error) {
+	var resultado []*domain.PreferenciaDeEquipo
+	for _, p := range r.preferencias {
+		if p.EquipoID == equipoID {
+			resultado = append(resultado, p)
+		}
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {
+	return r.nombresDeMateria, nil
 }
 
 func (r *fakeRepo) ListarLicencias(ctx context.Context) ([]*LicenciaConUbicacion, error) {

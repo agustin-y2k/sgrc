@@ -42,6 +42,12 @@ export function CambiarEquipoDeReserva({
   // choca en la tercera es hacerle adivinar al docente.
   const serieDesdeGrupoId = !soloEsta && grupo.esRecurrente ? grupo.grupoId : undefined
 
+  // La materia de la reserva que se está cambiando: es lo que ordena la
+  // lista (RF-03.21), para que cambiar de máquina ofrezca lo mismo que
+  // ofrecería reservar de cero. Con la serie elegida el backend la saca del
+  // propio grupo y este parámetro no hace falta.
+  const materiaId = cambiables.find((r) => r.id === reservaID)?.materiaId
+
   const { data, isLoading } = useQuery({
     queryKey: [
       "equipos-disponibles",
@@ -49,14 +55,16 @@ export function CambiarEquipoDeReserva({
       grupo.horaInicio,
       grupo.horaFin,
       serieDesdeGrupoId ?? "",
+      materiaId ?? "",
     ],
     queryFn: () =>
-      reservasApi.equiposDisponibles(
-        grupo.fecha,
-        grupo.horaInicio,
-        grupo.horaFin,
-        serieDesdeGrupoId
-      ),
+      reservasApi.equiposDisponibles({
+        fecha: grupo.fecha,
+        horaInicio: grupo.horaInicio,
+        horaFin: grupo.horaFin,
+        serieDesdeGrupoId,
+        materiaId,
+      }),
   })
 
   const cambiar = useMutation({
@@ -78,7 +86,9 @@ export function CambiarEquipoDeReserva({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="grid gap-1.5">
-          <Label htmlFor={`cambiar-de-${grupo.grupoId ?? reservaID}`}>¿Cuál cambiás?</Label>
+          <Label htmlFor={`cambiar-de-${grupo.grupoId ?? reservaID}`}>
+            ¿Cuál cambiás?
+          </Label>
           <Select
             id={`cambiar-de-${grupo.grupoId ?? reservaID}`}
             value={reservaID}
@@ -133,7 +143,10 @@ export function CambiarEquipoDeReserva({
               checked={soloEsta}
               onChange={() => setSoloEsta(true)}
             />
-            <Label htmlFor={`alcance-esta-${grupo.grupoId ?? reservaID}`} className="font-normal">
+            <Label
+              htmlFor={`alcance-esta-${grupo.grupoId ?? reservaID}`}
+              className="font-normal"
+            >
               Solo esta fecha
             </Label>
           </div>

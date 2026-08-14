@@ -86,12 +86,15 @@ export function AprobacionPage() {
                     tener que preguntarle por fuera del sistema a qué materia
                     y curso corresponde asignarlo (RF-02.6) — y si no existen
                     todavía, que el Admin sepa que los tiene que crear. */}
-                {(u.cursoSolicitado || u.materiaSolicitada) && (
+                {(u.cursoSolicitado || u.materiaSolicitada || u.rolSolicitado) && (
                   <div className="bg-muted/40 mb-3 rounded-md border p-3 text-sm">
                     <p className="mb-1 font-medium">Pidió dictar</p>
                     <p>
                       {u.materiaSolicitada || "—"}
                       {u.cursoSolicitado ? ` · ${u.cursoSolicitado}` : ""}
+                      {u.rolSolicitado
+                        ? ` · como ${u.rolSolicitado === "TITULAR" ? "titular" : "suplente"}`
+                        : ""}
                     </p>
                     <p className="text-muted-foreground mt-1 text-xs">
                       Es lo que escribió al registrarse, no una referencia: puede que el

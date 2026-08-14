@@ -149,6 +149,13 @@ func (r *fakeRepo) BuscarDocenteMateria(ctx context.Context, id string) (*domain
 	}
 	return dm, nil
 }
+func (r *fakeRepo) GuardarDocenteMateria(ctx context.Context, dm *domain.DocenteMateria) error {
+	if _, ok := r.docentesMateria[dm.ID]; !ok {
+		return application.ErrDocenteMateriaNoEncontrado
+	}
+	r.docentesMateria[dm.ID] = dm
+	return nil
+}
 func (r *fakeRepo) RemoverDocenteMateria(ctx context.Context, id string) error {
 	if _, ok := r.docentesMateria[id]; !ok {
 		return application.ErrDocenteMateriaNoEncontrado
@@ -439,6 +446,63 @@ func TestHTTP_AsignarDocente_OK(t *testing.T) {
 	}
 	if resp.StatusCode != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_CambiarRolDocente_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "u1", MateriaID: "m1", Rol: domain.RolTitular}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/academic/materias/m1/docentes/dm1",
+		jsonBody(cambiarRolDocenteRequest{Rol: "SUPLENTE"}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+
+	var body docenteMateriaResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Rol != "SUPLENTE" {
+		t.Errorf("rol = %q, esperaba SUPLENTE", body.Rol)
+	}
+}
+
+func TestHTTP_CambiarRolDocente_RolInvalido_400(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "u1", MateriaID: "m1", Rol: domain.RolTitular}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/academic/materias/m1/docentes/dm1",
+		jsonBody(cambiarRolDocenteRequest{Rol: "PROFESOR"}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_CambiarRolDocente_ComoDocente_403(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("PATCH", "/api/academic/materias/m1/docentes/dm1",
+		jsonBody(cambiarRolDocenteRequest{Rol: "SUPLENTE"}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
 	}
 }
 

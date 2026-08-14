@@ -110,7 +110,8 @@ func mapearError(err error) error {
 		// una cuenta que ya está en BAJA (RF-02.9: es terminal).
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, domain.ErrRolInvalido), errors.Is(err, domain.ErrEstadoInvalido):
+	case errors.Is(err, domain.ErrRolInvalido), errors.Is(err, domain.ErrEstadoInvalido),
+		errors.Is(err, domain.ErrRolSolicitadoInvalido):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 
 	case errors.Is(err, application.ErrIDInvalido),

@@ -149,7 +149,12 @@ type Repo interface {
 	// qué equipos están libres para un día y franja horaria concretos. Sin
 	// esto el frontend tendría que pedir el calendario de cada PC por
 	// separado y cruzarlo a mano.
-	ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoDisponible, error)
+	//
+	// materiaID entra en la firma por RF-03.21: la lista no tiene un orden
+	// único, se ordena PARA una materia (los equipos que la prefieren
+	// primero, los que prefieren a otra al final). Vacío es un caso normal
+	// —un Admin que reserva sin materia— y devuelve el orden de siempre.
+	ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]EquipoDisponible, error)
 
 	// ListarEquiposOcupadosEn es la otra mitad de la misma pregunta
 	// (RF-04.11): qué equipos de ese universo ya tiene alguien en esa
@@ -277,6 +282,51 @@ type EquipoDisponible struct {
 	CarroNombre       string
 	Freezado          bool
 	SoftwareInstalado string
+
+	// Tramo es en qué grupo cae este equipo para la materia que se está
+	// reservando (RF-03.21). Es lo que parte la lista en tres bloques.
+	Tramo TramoPreferencia
+	// PreferenciaMateria, PreferenciaAnio y PreferenciaDivision describen la
+	// marca que puso al equipo en su tramo — la de la materia propia si es
+	// preferente, la ajena más fuerte si no. Vacíos y 0 en un equipo neutral.
+	PreferenciaMateria  string
+	PreferenciaAnio     int
+	PreferenciaDivision string
+}
+
+// TramoPreferencia agrupa los equipos libres según qué materia los prefiere
+// (RF-03.21). No es un permiso: los tres tramos se pueden reservar igual, lo
+// único que cambia es el orden y el cartel.
+type TramoPreferencia string
+
+const (
+	// TramoPreferente: la marca del equipo apunta a la materia que se está
+	// reservando. Van primero.
+	TramoPreferente TramoPreferencia = "PREFERENTE"
+	// TramoNeutral: el equipo no es preferente de nadie. El orden de siempre.
+	TramoNeutral TramoPreferencia = "NEUTRAL"
+	// TramoDeOtraMateria: lo prefiere otra materia. Van al final, y cuanto
+	// más fuerte el reclamo ajeno, más abajo.
+	TramoDeOtraMateria TramoPreferencia = "DE_OTRA_MATERIA"
+)
+
+// MotivoDePreferencia arma el texto que explica por qué el equipo está donde
+// está: "Preferente para Matemática de 3°B".
+//
+// Se resuelve del lado del servidor y no en cada cliente por el mismo
+// criterio que Etiqueta: el alcance de una marca se arma con tres campos, y
+// reconstruir esa frase en cada pantalla es tres oportunidades de que digan
+// cosas distintas sobre el mismo dato.
+func (e EquipoDisponible) MotivoDePreferencia() string {
+	if e.PreferenciaMateria == "" {
+		return ""
+	}
+	motivo := "Preferente para " + e.PreferenciaMateria
+	if e.PreferenciaAnio == 0 {
+		return motivo
+	}
+	motivo += fmt.Sprintf(" de %d°", e.PreferenciaAnio)
+	return motivo + e.PreferenciaDivision
 }
 
 // EquipoOcupado es un equipo que ya tiene dueño en la franja consultada
