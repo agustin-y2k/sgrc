@@ -90,6 +90,24 @@ export function asignarDocente(materiaId: string, usuarioId: string, rol: RolDoc
 }
 
 /**
+ * Corrige el rol de un vínculo que ya existe.
+ *
+ * Es el único camino para cambiar de titular a suplente. El otro —quitar y
+ * volver a asignar— pasa por la cascada de RF-02.10 y, si el docente es el
+ * único de la materia, cancela sus reservas futuras.
+ */
+export function cambiarRolDocente(
+  materiaId: string,
+  docenteMateriaId: string,
+  rol: RolDocente
+) {
+  return apiFetch<DocenteMateria>(
+    `/api/academic/materias/${materiaId}/docentes/${docenteMateriaId}`,
+    { method: "PATCH", body: { rol } }
+  )
+}
+
+/**
  * RF-02.10 — si la materia queda sin ningún docente, el backend cancela
  * sus reservas futuras y avisa a todos los Admin. Si queda otro asignado,
  * no cancela nada.

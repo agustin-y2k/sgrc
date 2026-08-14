@@ -16,10 +16,11 @@ type registroRequest struct {
 	Apellido string `json:"apellido"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
-	// Qué va a dictar. Opcionales: quien todavía no lo sepa se registra
-	// igual y lo arregla con el Admin. Ver RF-01.3 / RF-02.6.
+	// Qué va a dictar y con qué rol. Opcionales: quien todavía no lo sepa se
+	// registra igual y lo arregla con el Admin. Ver RF-01.3 / RF-02.6.
 	CursoSolicitado   string `json:"cursoSolicitado,omitempty"`
 	MateriaSolicitada string `json:"materiaSolicitada,omitempty"`
+	RolSolicitado     string `json:"rolSolicitado,omitempty"` // TITULAR | SUPLENTE
 }
 
 type loginRequest struct {
@@ -46,6 +47,7 @@ type googleRegistroRequest struct {
 
 	CursoSolicitado   string `json:"cursoSolicitado,omitempty"`
 	MateriaSolicitada string `json:"materiaSolicitada,omitempty"`
+	RolSolicitado     string `json:"rolSolicitado,omitempty"` // TITULAR | SUPLENTE
 }
 
 type cambiarPasswordRequest struct {
@@ -141,9 +143,11 @@ type usuarioResponse struct {
 	FechaAprobacion     *time.Time `json:"fechaAprobacion,omitempty"`
 	DebeCambiarPassword bool       `json:"debeCambiarPassword"`
 	// Lo que declaró al registrarse (RF-01.3). Es lo que el Admin mira en la
-	// pantalla de aprobación para saber a qué materia y curso asignarlo.
+	// pantalla de aprobación para saber a qué materia y curso asignarlo, y
+	// con qué rol.
 	CursoSolicitado   string `json:"cursoSolicitado,omitempty"`
 	MateriaSolicitada string `json:"materiaSolicitada,omitempty"`
+	RolSolicitado     string `json:"rolSolicitado,omitempty"`
 
 	// Cómo puede entrar esta cuenta. Nunca se expone el google_sub en sí:
 	// alcanza con saber si el vínculo existe, y el identificador de la
@@ -170,6 +174,7 @@ func toUsuarioResponse(u *domain.Usuario) usuarioResponse {
 		DebeCambiarPassword: u.DebeCambiarPassword,
 		CursoSolicitado:     u.CursoSolicitado,
 		MateriaSolicitada:   u.MateriaSolicitada,
+		RolSolicitado:       u.RolSolicitado,
 		TienePassword:       u.PuedeIngresarConPassword(),
 		VinculadaAGoogle:    u.PuedeIngresarConGoogle(),
 	}

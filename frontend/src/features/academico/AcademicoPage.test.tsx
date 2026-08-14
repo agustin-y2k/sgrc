@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { AcademicoPage } from "@/features/academico/AcademicoPage"
@@ -318,11 +318,35 @@ describe("AcademicoPage", () => {
       await abrirDocentes(user)
 
       expect(await screen.findByText(/Ada Lovelace/)).toBeInTheDocument()
-      // "Titular" también es una opción del selector de rol, así que la
-      // aserción se acota a la fila del docente asignado.
-      expect(
-        within(screen.getByRole("listitem")).getByText("Titular")
-      ).toBeInTheDocument()
+      // El rol del asignado se muestra como el valor del selector con el que
+      // se corrige, no como un cartel aparte.
+      expect(screen.getByLabelText("Rol de Ada Lovelace")).toHaveValue("TITULAR")
+    })
+
+    // Cambiar el rol tiene su propio endpoint: quitar y volver a asignar
+    // pasa por la cascada de RF-02.10 y, si es el único docente, le cancela
+    // las reservas futuras a la materia.
+    it("corrige el rol sin quitar la asignación", async () => {
+      vi.mocked(academicoApi.listarDocentesDeMateria).mockResolvedValue({
+        data: [docenteMateria()],
+      })
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirDocentes(user)
+
+      await user.selectOptions(
+        await screen.findByLabelText("Rol de Ada Lovelace"),
+        "SUPLENTE"
+      )
+
+      await waitFor(() => {
+        expect(academicoApi.cambiarRolDocente).toHaveBeenCalledWith(
+          "materia1",
+          docenteMateria().id,
+          "SUPLENTE"
+        )
+      })
+      expect(academicoApi.removerDocenteMateria).not.toHaveBeenCalled()
     })
 
     it("no ofrece asignar a alguien que ya está asignado", async () => {

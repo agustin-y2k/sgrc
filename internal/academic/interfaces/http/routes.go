@@ -40,5 +40,6 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// DocenteMateria
 	academic.Post("/materias/:materiaId/docentes", autenticado, soloAdmin, h.AsignarDocente)
 	academic.Get("/materias/:materiaId/docentes", autenticado, h.ListarDocentesDeMateria)
+	academic.Patch("/materias/:materiaId/docentes/:docenteMateriaId", autenticado, soloAdmin, h.CambiarRolDocente)
 	academic.Delete("/materias/:materiaId/docentes/:docenteMateriaId", autenticado, soloAdmin, h.RemoverDocenteMateria)
 }
