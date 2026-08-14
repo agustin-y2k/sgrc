@@ -91,7 +91,7 @@ jobs:
       # que importan son las de la versión con la que se compila el binario
       # que se despliega. Analizar con una más nueva las escondería.
       #
-      # Por eso la línea `go` de go.mod lleva el PARCHE (1.25.12) y no solo
+      # Por eso la línea `go` de go.mod lleva el PARCHE (1.25.13) y no solo
       # 1.25.0: es lo que hace esto un chequeo real. La primera corrida de
       # este workflow falló con 26 vulnerabilidades de la biblioteca estándar
       # —una de ellas alcanzable desde ValidarEmail, que llama a
