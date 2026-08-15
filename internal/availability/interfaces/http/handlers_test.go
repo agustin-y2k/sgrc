@@ -290,7 +290,7 @@ func TestHTTP_AgregarBloque_DiaInvalido_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("POST", "/api/availability/mi-horario",
-		conBody(bloqueRequest{DiaSemana: "DOMINGO", HoraInicio: "08:00", HoraFin: "12:00"}))
+		conBody(bloqueRequest{DiaSemana: "FERIADO", HoraInicio: "08:00", HoraFin: "12:00"}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
 

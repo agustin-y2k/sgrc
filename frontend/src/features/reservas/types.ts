@@ -22,9 +22,17 @@ export type EstadoReserva =
  */
 export type TipoReserva = "NORMAL" | "BLOQUEO"
 
-// La semana lectiva es de lunes a viernes: el backend rechaza reservar un
-// sábado o un domingo (domain.ErrDiaNoLectivo).
-export type DiaSemana = "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES"
+// Los siete días. El sistema no supone qué días abre la institución: hay
+// escuelas de jornada extendida y albergue que dictan el fin de semana, y
+// antes ni siquiera podían expresar "todos los sábados".
+export type DiaSemana =
+  | "LUNES"
+  | "MARTES"
+  | "MIERCOLES"
+  | "JUEVES"
+  | "VIERNES"
+  | "SABADO"
+  | "DOMINGO"
 
 export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "LUNES", etiqueta: "Lunes" },
@@ -32,22 +40,9 @@ export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "MIERCOLES", etiqueta: "Miércoles" },
   { valor: "JUEVES", etiqueta: "Jueves" },
   { valor: "VIERNES", etiqueta: "Viernes" },
+  { valor: "SABADO", etiqueta: "Sábado" },
+  { valor: "DOMINGO", etiqueta: "Domingo" },
 ]
-
-/**
- * Espeja domain.EsDiaLectivo del backend, para avisar en el formulario en
- * vez de esperar el 400.
- *
- * Se construye la fecha con componentes locales a propósito: `new
- * Date("2026-08-08")` la interpreta como medianoche UTC, y al oeste de
- * Greenwich eso cae el día anterior — un sábado se leería como viernes.
- */
-export function esDiaLectivo(fechaISO: string): boolean {
-  const [anio, mes, dia] = fechaISO.split("-").map(Number)
-  if (!anio || !mes || !dia) return true // incompleta: que valide el backend
-  const diaSemana = new Date(anio, mes - 1, dia).getDay()
-  return diaSemana !== 0 && diaSemana !== 6
-}
 
 /**
  * Hoy en formato YYYY-MM-DD, para el `min` de los inputs de fecha: el

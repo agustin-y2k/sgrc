@@ -84,7 +84,7 @@ flowchart LR
 ### UC: Reservar equipos en serie (recurrente)
 - **Flujo:**
   1. Usuario indica materia, conjunto de equipos, día de semana, horario y rango de fechas.
-  2. Sistema calcula todas las ocurrencias (cada fecha × cada equipo elegido), solo de lunes a viernes.
+  2. Sistema calcula todas las ocurrencias (cada fecha × cada equipo elegido) para el día de semana elegido, que puede ser cualquiera de los siete.
   3. Valida **todas** contra solapamientos. Si alguna falla → devuelve la lista de conflictos (fecha + equipo) y no crea ninguna.
   4. Si todas pasan → crea la `ReglaRecurrencia` y N `ReservaGrupo` materializados (uno por fecha), cada uno con sus `Reserva`.
 

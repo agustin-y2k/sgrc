@@ -783,20 +783,31 @@ func TestCrearReserva_OK(t *testing.T) {
 	}
 }
 
-// La semana lectiva es de lunes a viernes: no se reserva el fin de semana.
-// El 2026-03-14 es sábado y el 2026-03-15 domingo.
-func TestCrearReserva_FinDeSemana_Error(t *testing.T) {
+// El fin de semana dejó de estar prohibido por el código. Antes esto
+// devolvía ErrDiaNoLectivo y dejaba afuera a las escuelas de jornada
+// extendida o albergue, que dictan sábados y domingos.
+//
+// Qué días abre cada institución se declara (ver JornadaInstitucional), y
+// mientras no haya jornada declarada no hay restricción: es lo único honesto
+// que puede hacer un sistema al que todavía no le dijeron en qué ámbito lo
+// instalaron. El 2026-03-14 es sábado y el 2026-03-15 domingo.
+func TestCrearReserva_FinDeSemana_SePuede(t *testing.T) {
 	for nombre, dia := range map[string]time.Time{
 		"sábado":  fecha(2026, 3, 14),
 		"domingo": fecha(2026, 3, 15),
 	} {
 		svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-		_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+		grupo, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 			dia, 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
-		if !errors.Is(err, domain.ErrDiaNoLectivo) {
-			t.Errorf("%s: esperaba ErrDiaNoLectivo, obtuve %v", nombre, err)
+		if err != nil {
+			t.Errorf("%s: esperaba que se pudiera reservar, obtuve %v", nombre, err)
+			continue
+		}
+		if grupo == nil || len(reservas) != 1 {
+			t.Errorf("%s: esperaba un grupo con una reserva, obtuve grupo=%v reservas=%d",
+				nombre, grupo, len(reservas))
 		}
 	}
 }

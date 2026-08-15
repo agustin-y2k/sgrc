@@ -43,7 +43,7 @@ describe("lunesDeLaSemana", () => {
 })
 
 describe("fechasDeLaSemana", () => {
-  it("devuelve los seis días hábiles, de lunes a sábado", () => {
+  it("devuelve los siete días, de lunes a domingo", () => {
     expect(fechasDeLaSemana(desdeFechaISO("2026-03-11"))).toEqual([
       "2026-03-09",
       "2026-03-10",
@@ -51,11 +51,12 @@ describe("fechasDeLaSemana", () => {
       "2026-03-12",
       "2026-03-13",
       "2026-03-14",
+      "2026-03-15",
     ])
   })
 
   it("cruza el fin de mes sin romperse", () => {
-    // 2026-03-30 es lunes; la semana termina el 4 de abril.
+    // 2026-03-30 es lunes; la semana termina el domingo 5 de abril.
     expect(fechasDeLaSemana(desdeFechaISO("2026-03-30"))).toEqual([
       "2026-03-30",
       "2026-03-31",
@@ -63,6 +64,7 @@ describe("fechasDeLaSemana", () => {
       "2026-04-02",
       "2026-04-03",
       "2026-04-04",
+      "2026-04-05",
     ])
   })
 })

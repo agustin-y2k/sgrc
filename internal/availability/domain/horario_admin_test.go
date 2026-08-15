@@ -20,7 +20,10 @@ func TestParseDiaSemana_Validos(t *testing.T) {
 }
 
 func TestParseDiaSemana_Invalido(t *testing.T) {
-	casos := []string{"", "lunes", "DOMINGO"} // DOMINGO no es válido acá tampoco
+	// Ojo con qué se elige de ejemplo inválido: hasta que los siete días
+	// entraron al enum, este caso usaba "DOMINGO", que hoy es válido. Un
+	// nombre de día real no sirve para probar el rechazo.
+	casos := []string{"", "lunes", "FERIADO"}
 	for _, c := range casos {
 		_, err := ParseDiaSemana(c)
 		if !errors.Is(err, ErrDiaSemanaInvalido) {
@@ -121,28 +124,37 @@ func TestDiaYHoraDe_MapeaCorrectamenteCadaDiaHabil(t *testing.T) {
 	}
 }
 
-func TestDiaYHoraDe_FinDeSemana_DiaSemanaVacia(t *testing.T) {
-	// 14 y 15 de marzo de 2026 son sábado y domingo. Ninguno es día hábil
-	// del sistema, así que no deben matchear ningún bloque cargado.
-	casos := map[string]time.Time{
-		"sábado":  time.Date(2026, time.March, 14, 10, 30, 0, 0, time.UTC),
-		"domingo": time.Date(2026, time.March, 15, 10, 30, 0, 0, time.UTC),
+func TestDiaYHoraDe_FinDeSemana_SeTraduceComoCualquierDia(t *testing.T) {
+	// 14 y 15 de marzo de 2026 son sábado y domingo. Los dos tienen que
+	// traducirse como cualquier otro día: si el fin de semana no se mapeara,
+	// DisponibleAhora respondería "no hay nadie" un sábado aunque el Admin
+	// hubiera cargado su horario, y no habría forma de corregirlo desde la
+	// aplicación. Que un sábado no haya nadie tiene que salir de que no hay
+	// bloques cargados, no de que el día no exista.
+	casos := map[string]struct {
+		fecha    time.Time
+		esperado DiaSemana
+	}{
+		"sábado":  {time.Date(2026, time.March, 14, 10, 30, 0, 0, time.UTC), Sabado},
+		"domingo": {time.Date(2026, time.March, 15, 10, 30, 0, 0, time.UTC), Domingo},
 	}
 
-	for nombre, fecha := range casos {
-		dia, _ := DiaYHoraDe(fecha)
-		if dia != DiaSemana("") {
-			t.Errorf("%s: esperaba DiaSemana vacía, obtuve %q", nombre, dia)
+	for nombre, caso := range casos {
+		dia, _ := DiaYHoraDe(caso.fecha)
+		if dia != caso.esperado {
+			t.Errorf("%s: esperaba %q, obtuve %q", nombre, caso.esperado, dia)
 		}
 	}
 }
 
-// El enum dejó de aceptar SABADO: availability era el último lugar donde
-// entraba, y creaba filas que ni el frontend ni el resto del backend
-// reconocen como un día del sistema.
-func TestParseDiaSemana_Sabado_Invalido(t *testing.T) {
-	if _, err := ParseDiaSemana("SABADO"); !errors.Is(err, ErrDiaSemanaInvalido) {
-		t.Fatalf("esperaba ErrDiaSemanaInvalido, obtuve %v", err)
+// Los siete días entran al enum. Las escuelas de jornada extendida o
+// albergue dictan el fin de semana, y antes un Admin de una de ellas no
+// podía siquiera declarar que ese día está.
+func TestParseDiaSemana_FinDeSemana_Valido(t *testing.T) {
+	for _, dia := range []string{"SABADO", "DOMINGO"} {
+		if _, err := ParseDiaSemana(dia); err != nil {
+			t.Errorf("ParseDiaSemana(%q): esperaba válido, obtuve %v", dia, err)
+		}
 	}
 }
 

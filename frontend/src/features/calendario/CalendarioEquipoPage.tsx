@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import * as calendarioApi from "@/features/calendario/api"
 import type { BloqueCalendario } from "@/features/calendario/types"
 import {
-  DIAS_HABILES,
+  DIAS_SEMANA,
   aFechaISO,
   aMinutos,
   desdeFechaISO,
@@ -151,7 +151,7 @@ export function CalendarioEquipoPage() {
         <div className="min-w-[44rem]">
           <div className="grid grid-cols-[3.5rem_repeat(6,1fr)] border-b">
             <div />
-            {DIAS_HABILES.map((dia, i) => (
+            {DIAS_SEMANA.map((dia, i) => (
               <div
                 key={dia}
                 className={

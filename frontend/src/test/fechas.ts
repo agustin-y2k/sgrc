@@ -17,16 +17,16 @@ function aISO(d: Date): string {
 }
 
 /**
- * Un día lectivo dentro de `dias` días. Si cae sábado o domingo se corre al
- * lunes siguiente: los formularios avisan del fin de semana y deshabilitan
- * el botón (RF-04.2), así que un test que cayera ahí fallaría según el día
- * en que se corriera.
+ * Una fecha dentro de `dias` días.
+ *
+ * Antes esto saltaba al lunes cuando caía en fin de semana, porque los
+ * formularios deshabilitaban el botón esos días y el test fallaba o no
+ * según el día en que se corriera. Ya no hace falta: el fin de semana es
+ * reservable como cualquier otro día, y saltearlo escondería justamente el
+ * caso que ahora interesa que funcione.
  */
-export function diaLectivoEnDias(dias: number): string {
+export function fechaFuturaEnDias(dias: number): string {
   const d = new Date()
   d.setDate(d.getDate() + dias)
-  while (d.getDay() === 0 || d.getDay() === 6) {
-    d.setDate(d.getDate() + 1)
-  }
   return aISO(d)
 }

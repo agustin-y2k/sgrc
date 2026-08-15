@@ -20,7 +20,6 @@ import { SelectorDeEquipos } from "@/features/reservas/SelectorDeEquipos"
 import {
   DIAS_SEMANA,
   MAX_HORAS_RESERVA,
-  esDiaLectivo,
   excedeDuracionMaxima,
   hoyISO,
   type DiaSemana,
@@ -109,9 +108,6 @@ export function NuevaReservaPage() {
   const fechaParaDisponibilidad = modo === "simple" ? fecha : fechaInicio
 
   const materiasDisponibles = materias?.data ?? []
-  // Solo aplica al modo simple: en recurrente el día lo fija el selector, que
-  // ya no ofrece sábado.
-  const fechaEnFinDeSemana = modo === "simple" && fecha !== "" && !esDiaLectivo(fecha)
   // El `min` de los inputs cubre la fecha; esto cubre el horario, que el
   // navegador no puede limitar solo.
   const duracionExcesiva = excedeDuracionMaxima(horaInicio, horaFin)
@@ -145,8 +141,7 @@ export function NuevaReservaPage() {
   const listoParaEnviar =
     faltantes.length === 0 &&
     horaFin > horaInicio &&
-    !duracionExcesiva &&
-    !fechaEnFinDeSemana
+    !duracionExcesiva
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -233,12 +228,6 @@ export function NuevaReservaPage() {
                   value={fecha}
                   onChange={(e) => setFecha(e.target.value)}
                 />
-                {fechaEnFinDeSemana && (
-                  <p className="text-destructive text-sm">
-                    La semana lectiva es de lunes a viernes: no se puede reservar un
-                    sábado ni un domingo.
-                  </p>
-                )}
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-3">

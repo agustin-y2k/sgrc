@@ -179,10 +179,6 @@ func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string,
 		return nil, nil, err
 	}
 
-	if !domain.EsDiaLectivo(fecha) {
-		return nil, nil, domain.ErrDiaNoLectivo
-	}
-
 	if err := domain.ValidarVentanaTemporal(fecha, horaInicio, horaFin, s.ahora()); err != nil {
 		return nil, nil, err
 	}
