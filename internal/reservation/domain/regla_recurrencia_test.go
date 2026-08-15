@@ -81,7 +81,9 @@ func TestNuevaReglaRecurrencia_RangoFechasInvalido_Error(t *testing.T) {
 }
 
 func TestNuevaReglaRecurrencia_RangoHorarioInvalido_Error(t *testing.T) {
-	_, err := NuevaReglaRecurrencia("id1", "materia1", "usuario1", Lunes, 10*time.Hour, 8*time.Hour,
+	// Solo la igualdad. Una serie nocturna —"todos los lunes de 22 a 1"— es
+	// válida y tiene su propio test más abajo.
+	_, err := NuevaReglaRecurrencia("id1", "materia1", "usuario1", Lunes, 8*time.Hour, 8*time.Hour,
 		fecha(2026, time.March, 1), fecha(2026, time.March, 10))
 
 	if !errors.Is(err, ErrRangoHorarioInvalido) {
@@ -191,5 +193,27 @@ func TestGenerarFechas_AnioBisiesto_29DeFebrero(t *testing.T) {
 
 	if len(fechas) != 1 || fechas[0].Day() != 29 || fechas[0].Month() != time.February {
 		t.Fatalf("esperaba el 29 de febrero de 2028, obtuve %v", fechas)
+	}
+}
+
+// Una serie recurrente nocturna: todos los lunes de 22:00 a 01:00. La regla
+// se guarda con el día en que EMPIEZA la clase, así que las ocurrencias
+// siguen cayendo en lunes aunque cada una termine un martes.
+func TestGenerarFechas_SerieNocturna(t *testing.T) {
+	regla, err := NuevaReglaRecurrencia("id1", "materia1", "usuario1", Lunes,
+		22*time.Hour, 1*time.Hour,
+		fecha(2026, time.March, 2), fecha(2026, time.March, 23))
+	if err != nil {
+		t.Fatalf("una serie nocturna es válida: %v", err)
+	}
+
+	fechas := regla.GenerarFechas()
+	if len(fechas) != 4 {
+		t.Fatalf("esperaba 4 lunes, obtuve %d", len(fechas))
+	}
+	for _, f := range fechas {
+		if f.Weekday() != time.Monday {
+			t.Errorf("%s cayó en %s", f.Format("2006-01-02"), f.Weekday())
+		}
 	}
 }

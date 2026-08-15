@@ -44,7 +44,7 @@ const (
 // perderse: a las 8:10 todavía sirve saber que hay una reserva a las 8 y
 // que a las 8:40 se libera. Después de que terminó ya no le sirve a nadie.
 func CorrespondeRecordar(fecha time.Time, horaInicio, horaFin time.Duration, antelacion time.Duration, ahora time.Time) bool {
-	if YaTermino(fecha, horaFin, ahora) {
+	if YaTermino(fecha, horaInicio, horaFin, ahora) {
 		return false
 	}
 	return !horaDePared(ahora, horaDelDia(ahora)).Before(horaDePared(fecha, horaInicio).Add(-antelacion))
@@ -62,7 +62,7 @@ func CorrespondeRecordar(fecha time.Time, horaInicio, horaFin time.Duration, ant
 // Que la máquina esté retirada o no NO se decide acá: el dominio no ve los
 // préstamos. Lo pregunta quien llama.
 func CorrespondeLiberar(fecha time.Time, horaInicio, horaFin time.Duration, gracia time.Duration, ahora time.Time) bool {
-	if YaTermino(fecha, horaFin, ahora) {
+	if YaTermino(fecha, horaInicio, horaFin, ahora) {
 		return false
 	}
 	return !horaDePared(ahora, horaDelDia(ahora)).Before(horaDePared(fecha, horaInicio).Add(gracia))
@@ -77,7 +77,11 @@ func CorrespondeLiberar(fecha time.Time, horaInicio, horaFin time.Duration, grac
 // clase más corta que la gracia no se libera nunca. Sin esta pregunta, a esa
 // reserva le llegaría un correo anunciándole algo que no va a pasar.
 func PuedeLlegarALiberarse(horaInicio, horaFin, gracia time.Duration) bool {
-	return horaFin > horaInicio+gracia
+	// Sobre la duración real y no sobre las horas crudas: una clase nocturna
+	// de 22:00 a 01:00 dura tres horas, pero `horaFin > horaInicio + gracia`
+	// daría 01:00 > 22:40 = falso, y el sistema concluiría que es más corta
+	// que la gracia y que nunca se libera.
+	return DuracionDe(horaInicio, horaFin) > gracia
 }
 
 // CorrespondeAvisarNoRetiro dice si ya es hora de avisarle al docente que
@@ -94,7 +98,7 @@ func CorrespondeAvisarNoRetiro(fecha time.Time, horaInicio, horaFin, demora, gra
 	if !PuedeLlegarALiberarse(horaInicio, horaFin, gracia) {
 		return false
 	}
-	if YaTermino(fecha, horaFin, ahora) {
+	if YaTermino(fecha, horaInicio, horaFin, ahora) {
 		return false
 	}
 	return !horaDePared(ahora, horaDelDia(ahora)).Before(horaDePared(fecha, horaInicio).Add(demora))
@@ -113,8 +117,8 @@ func CorrespondeAvisarNoRetiro(fecha time.Time, horaInicio, horaFin, demora, gra
 //
 // El tope sigue siendo el mismo que el del plazo largo — una clase terminada
 // no se libera, la marca FINALIZADA el barrido de vencimiento.
-func CorrespondeLiberarTrasEntregaParcial(fecha time.Time, horaFin time.Duration, entregadoEn time.Time, gracia time.Duration, ahora time.Time) bool {
-	if YaTermino(fecha, horaFin, ahora) {
+func CorrespondeLiberarTrasEntregaParcial(fecha time.Time, horaInicio, horaFin time.Duration, entregadoEn time.Time, gracia time.Duration, ahora time.Time) bool {
+	if YaTermino(fecha, horaInicio, horaFin, ahora) {
 		return false
 	}
 	return !ahora.Before(entregadoEn.Add(gracia))

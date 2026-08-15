@@ -564,9 +564,27 @@ horario + rango de fechas. No guarda los equipos — eso vive en los
 | creado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | dia_semana | VARCHAR(10) | NOT NULL, CHECK (`LUNES`…`VIERNES`) |
 | hora_inicio | TIME | NOT NULL |
-| hora_fin | TIME | NOT NULL, CHECK (hora_fin > hora_inicio) |
+| hora_fin | TIME | NOT NULL, CHECK (hora_fin <> hora_inicio) |
 | fecha_inicio | DATE | NOT NULL |
 | fecha_fin | DATE | NOT NULL, CHECK (fecha_fin >= fecha_inicio) |
+
+### Bloques que cruzan la medianoche
+
+Las escuelas nocturnas dictan de 22:00 a 01:00. Eso era inexpresable mientras el esquema exigía `hora_fin > hora_inicio`: había que partir la clase en dos reservas —una hasta las 23:59 y otra desde las 00:00 del día siguiente— que el sistema trataba como cosas sin relación. Cancelar una dejaba la otra viva, los reportes contaban dos clases donde hubo una, y el equipo figuraba devuelto a medianoche.
+
+La regla es la que cualquiera lee sin que se la expliquen:
+
+| | Significa |
+|---|---|
+| `hora_fin > hora_inicio` | termina el mismo día |
+| `hora_fin < hora_inicio` | **termina al día siguiente** |
+| `hora_fin = hora_inicio` | inválido — lo rechaza el CHECK |
+
+La igualdad podría querer decir "veinticuatro horas" y se rechaza igual: nadie escribe 08:00–08:00 buscando un día entero, y dejarlo pasar haría que el tope de duración contestara con un mensaje sobre las horas que no explica el verdadero problema, que es un tipeo.
+
+> **Dónde vive la regla.** En la función `fin_de_pared(fecha, hora_inicio, hora_fin)`, que usan la constraint `EXCLUDE` de `reserva`, los barridos y todos los listados. Es `IMMUTABLE` porque sin eso Postgres no la acepta dentro del índice de la constraint. Su gemelo en Go es `domain.FinDePared`, y **las dos tienen que decir lo mismo**: si divergen, la aplicación acepta reservas que la base rechaza o —peor— deja pasar solapamientos que creía haber chequeado.
+
+> **Lo que NO cruza la medianoche es `horario_admin`**, el horario de presencia de cada Admin. Es informativo y el cálculo de "¿hay alguien ahora?" es de un solo día; un Admin del turno noche declara dos tramos. La jornada de la institución sí cruza, porque contra ella se validan las reservas.
 
 ### `jornada_institucion`
 
@@ -577,7 +595,7 @@ Qué días y entre qué horas abre la escuela. Es la única tabla del sistema **
 | id | UUID | PK |
 | dia_semana | VARCHAR(10) | NOT NULL, CHECK entre los siete días |
 | hora_inicio | TIME | NOT NULL |
-| hora_fin | TIME | NOT NULL, CHECK (hora_fin > hora_inicio) |
+| hora_fin | TIME | NOT NULL, CHECK (hora_fin <> hora_inicio) |
 
 > **Tabla vacía y día sin filas significan cosas opuestas.** Vacía = la institución todavía no declaró su jornada, y entonces no hay restricción. Con filas cargadas, un día sin filas es un día en que la escuela no abre. Por eso la validación lee la tabla completa y no solo el día que le preguntan (ver `PermiteReserva` en `availability/domain`).
 
@@ -616,7 +634,7 @@ que todos pertenezcan al mismo carro**.
 | nombre_docente_snapshot | VARCHAR(200) | NOT NULL |
 | fecha | DATE | NOT NULL |
 | hora_inicio | TIME | NOT NULL |
-| hora_fin | TIME | NOT NULL, CHECK (hora_fin > hora_inicio) |
+| hora_fin | TIME | NOT NULL, CHECK (hora_fin <> hora_inicio) |
 | estado | VARCHAR(25) | NOT NULL DEFAULT 'CONFIRMADA', CHECK IN ('CONFIRMADA','PARCIALMENTE_CANCELADA','CANCELADA','FINALIZADA','NO_RETIRADA') |
 | regla_recurrencia_id | UUID | FK → regla_recurrencia.id **ON DELETE SET NULL**, NULL |
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
@@ -680,7 +698,7 @@ grupo ni materia.
 | nombre_docente_snapshot | VARCHAR(200) | NULL en los BLOQUEO |
 | fecha | DATE | NOT NULL |
 | hora_inicio | TIME | NOT NULL |
-| hora_fin | TIME | NOT NULL, CHECK (hora_fin > hora_inicio) |
+| hora_fin | TIME | NOT NULL, CHECK (hora_fin <> hora_inicio) |
 | estado | VARCHAR(15) | NOT NULL DEFAULT 'CONFIRMADA', CHECK IN ('CONFIRMADA','CANCELADA','FINALIZADA','NO_RETIRADA') |
 | tipo | VARCHAR(20) | NOT NULL DEFAULT 'NORMAL', CHECK IN ('NORMAL','BLOQUEO') |
 | motivo_bloqueo | TEXT | NULL en las NORMAL; NOT NULL y no vacío en las BLOQUEO |

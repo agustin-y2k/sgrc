@@ -252,17 +252,17 @@ describe("BloquearEquiposPage", () => {
     expect(screen.getByRole("button", { name: "Revisar bloqueo" })).toBeDisabled()
   })
 
-  it("avisa si la hora de fin no es posterior a la de inicio", async () => {
+  it("avisa si la hora de fin es igual a la de inicio", async () => {
     const user = userEvent.setup()
     renderPagina()
 
     await user.selectOptions(await screen.findByLabelText("Hora de inicio: hora"), "10")
     await user.selectOptions(screen.getByLabelText("Hora de inicio: minutos"), "00")
-    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "09")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "10")
     await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
 
     expect(
-      screen.getByText("La hora de fin tiene que ser posterior a la de inicio.")
+      screen.getByText("La hora de fin no puede ser igual a la de inicio.")
     ).toBeInTheDocument()
   })
 

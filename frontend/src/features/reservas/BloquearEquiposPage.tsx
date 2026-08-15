@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import * as inventoryApi from "@/features/inventory/api"
 import type { Carro, Equipo } from "@/features/inventory/types"
 import * as reservasApi from "@/features/reservas/api"
-import { hoyISO, type ResultadoBloqueo } from "@/features/reservas/types"
+import { cruzaMedianoche, hoyISO, type ResultadoBloqueo } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 
@@ -53,7 +53,7 @@ export function BloquearEquiposPage() {
   const [confirmando, setConfirmando] = useState(false)
   const [resultado, setResultado] = useState<ResultadoBloqueo | null>(null)
 
-  const franjaCompleta = Boolean(fecha && horaInicio && horaFin && horaFin > horaInicio)
+  const franjaCompleta = Boolean(fecha && horaInicio && horaFin && horaFin !== horaInicio)
 
   const carrosQuery = useQuery({
     queryKey: ["carros"],
@@ -178,9 +178,10 @@ export function BloquearEquiposPage() {
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="grid gap-2">
               <Label htmlFor="fecha">Fecha</Label>
-              {/* Sin aviso de fin de semana a propósito: RF-04.7 está
-                  exceptuada de la semana lectiva — un bloqueo es excepcional
-                  por naturaleza y la fecha la pone el Admin. */}
+              {/* Sin aviso de jornada a propósito: RF-04.7 está exceptuada —
+                  un bloqueo es excepcional por naturaleza y lo carga el Admin,
+                  que es quien declara la jornada. Impedirle bloquear un día
+                  que él mismo marcó cerrado sería discutirle un dato suyo. */}
               <Input
                 id="fecha"
                 type="date"
@@ -203,9 +204,19 @@ export function BloquearEquiposPage() {
             />
           </div>
 
-          {horaInicio && horaFin && horaFin <= horaInicio && (
+          {horaInicio && horaFin && horaFin === horaInicio && (
             <p className="text-destructive text-sm">
-              La hora de fin tiene que ser posterior a la de inicio.
+              La hora de fin no puede ser igual a la de inicio.
+            </p>
+          )}
+
+          {/* Un bloqueo también puede cruzar la medianoche — la obra en el
+              aula o la jornada docente no se detienen a las 00:00. Se avisa
+              por la misma razón que en la reserva: alguien que puso 01:00 sin
+              querer tiene que poder verlo antes de cancelar clases ajenas. */}
+          {cruzaMedianoche(horaInicio, horaFin) && (
+            <p className="text-muted-foreground text-sm">
+              Este bloqueo termina al día siguiente, a las {horaFin}.
             </p>
           )}
 

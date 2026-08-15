@@ -42,7 +42,7 @@ const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_doc
 // sesión. Mismo criterio que ListarEquiposDisponiblesEn, que ya usaba
 // `$1::date + $2::time`.
 func condicionNoTerminada(placeholderFecha, placeholderHora string) string {
-	return "(fecha + hora_fin) > (" + placeholderFecha + "::date + " + placeholderHora + "::time)"
+	return "fin_de_pared(fecha, hora_inicio, hora_fin) > (" + placeholderFecha + "::date + " + placeholderHora + "::time)"
 }
 
 func (r *PostgresRepo) CrearReserva(ctx context.Context, res *domain.Reserva) error {
@@ -210,11 +210,22 @@ func (r *PostgresRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipo
 // consulta: todos los equipos contra todas las fechas, con un único rango
 // horario. Ver el puerto en application/ports.go para por qué.
 //
-// El solapamiento se expresa como `hora_inicio < fin AND hora_fin > inicio`,
-// que es la misma condición que la constraint EXCLUDE con `&&` sobre
-// tsrange: rangos semiabiertos, así que dos bloques que se tocan en el borde
-// —uno termina 10:00 y el otro empieza 10:00— NO se pisan. Es el caso más
-// común de todos y tiene que poder reservarse.
+// El solapamiento se compara con `&&` sobre tsrange, exactamente igual que la
+// constraint EXCLUDE: rangos semiabiertos, así que dos bloques que se tocan
+// en el borde —uno termina 10:00 y el otro empieza 10:00— NO se pisan. Es el
+// caso más común de todos y tiene que poder reservarse.
+//
+// Antes esto comparaba las horas crudas (`hora_inicio < fin AND hora_fin >
+// inicio`), que era equivalente mientras ningún bloque cruzara la medianoche
+// y dejó de serlo cuando empezaron a existir las clases nocturnas. Fallaba de
+// las dos maneras: una reserva de 22:00 a 01:00 no encontraba nada porque
+// 01:00 es menor que casi todo, y una clase de la noche ANTERIOR que se mete
+// en esta madrugada quedaba fuera del filtro de fecha.
+//
+// De ahí el `- 1` en el rango de fechas: hay que mirar también el día de
+// antes, porque una reserva fechada ayer puede estar ocupando la máquina hoy
+// a las 00:30. El BETWEEN existe para que el índice siga sirviendo; la
+// condición fina la hace el EXISTS de abajo, fecha por fecha.
 //
 // Se une a equipo y carro para traer la etiqueta ya resuelta (RF-03.17). El
 // JOIN a carro va LEFT: un proyector no está en ninguno, y con INNER
@@ -234,9 +245,15 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 		JOIN equipo e ON e.id = res.equipo_id
 		LEFT JOIN carro c ON c.id = e.carro_id
 		WHERE res.equipo_id = ANY($1)
-		  AND res.fecha = ANY($2)
+		  AND res.fecha BETWEEN (SELECT min(f) - 1 FROM unnest($2::date[]) f)
+		                    AND (SELECT max(f)     FROM unnest($2::date[]) f)
 		  AND res.estado = 'CONFIRMADA'
-		  AND res.hora_inicio < $4 AND res.hora_fin > $3
+		  AND EXISTS (
+		        SELECT 1 FROM unnest($2::date[]) AS f
+		         WHERE tsrange(res.fecha + res.hora_inicio,
+		                       fin_de_pared(res.fecha, res.hora_inicio, res.hora_fin))
+		            && tsrange(f + $3::time, fin_de_pared(f, $3::time, $4::time))
+		      )
 		ORDER BY res.fecha, res.hora_inicio, e.identificador NULLS LAST, res.equipo_id
 	`, equipoIDs, fechas, duracionComoHora(horaInicio), duracionComoHora(horaFin))
 	if err != nil {
@@ -298,7 +315,7 @@ func (r *PostgresRepo) ListarReservasConfirmadasVencidas(ctx context.Context, ah
 	// primero se lleva el atraso más antiguo en vez de una franja al azar.
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
-		WHERE estado = 'CONFIRMADA' AND (fecha + hora_fin) < ($1::date + $2::time)
+		WHERE estado = 'CONFIRMADA' AND fin_de_pared(fecha, hora_inicio, hora_fin) < ($1::date + $2::time)
 		ORDER BY fecha, hora_fin, id
 		LIMIT $3
 	`, ahora, ahora, limite)
@@ -816,7 +833,7 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 		JOIN reserva res ON res.equipo_id = p.id
 		 AND res.estado = 'CONFIRMADA'
 		 AND res.fecha = $1
-		 AND tsrange(res.fecha + res.hora_inicio, res.fecha + res.hora_fin)
+		 AND tsrange(res.fecha + res.hora_inicio, fin_de_pared(res.fecha, res.hora_inicio, res.hora_fin))
 		     && tsrange($1::date + $2::time, $1::date + $3::time)
 		LEFT JOIN carro c ON c.id = p.carro_id
 		LEFT JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
@@ -1002,8 +1019,8 @@ func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID
 			SELECT 1 FROM reserva res JOIN ocurrencias oc ON oc.fecha = res.fecha
 			WHERE res.equipo_id = p.id
 			  AND res.estado = 'CONFIRMADA'
-			  AND tsrange(res.fecha + res.hora_inicio, res.fecha + res.hora_fin)
-			      && tsrange(oc.fecha + oc.hora_inicio, oc.fecha + oc.hora_fin)
+			  AND tsrange(res.fecha + res.hora_inicio, fin_de_pared(res.fecha, res.hora_inicio, res.hora_fin))
+			      && tsrange(oc.fecha + oc.hora_inicio, fin_de_pared(oc.fecha, oc.hora_inicio, oc.hora_fin))
 		  )
 		`+sqlOrdenDePreferencia+`
 	`, grupoID)
@@ -1053,7 +1070,7 @@ func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha tim
 			WHERE res.equipo_id = p.id
 			  AND res.estado = 'CONFIRMADA'
 			  AND res.fecha = $1
-			  AND tsrange(res.fecha + res.hora_inicio, res.fecha + res.hora_fin)
+			  AND tsrange(res.fecha + res.hora_inicio, fin_de_pared(res.fecha, res.hora_inicio, res.hora_fin))
 			      && tsrange($1::date + $2::time, $1::date + $3::time)
 		  )
 		`+sqlOrdenDePreferencia+`

@@ -76,7 +76,7 @@ type ReglaRecurrencia struct {
 }
 
 func NuevaReglaRecurrencia(id, materiaID, creadoPor string, diaSemana DiaSemana, horaInicio, horaFin time.Duration, fechaInicio, fechaFin time.Time) (*ReglaRecurrencia, error) {
-	if horaFin <= horaInicio {
+	if horaFin == horaInicio {
 		return nil, ErrRangoHorarioInvalido
 	}
 	if fechaFin.Before(fechaInicio) {

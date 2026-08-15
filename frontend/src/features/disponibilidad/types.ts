@@ -161,9 +161,16 @@ export function dentroDeLaJornada(
   const dia = diaDeLaFecha(fechaISO)
   if (dia === null) return true // fecha incompleta: que valide el backend
 
+  // Todo se mide desde la misma medianoche, así que el fin pasa de las 24
+  // horas cuando el tramo cruza: una jornada nocturna de 20:00 a 01:00 es
+  // [1200, 1500) en minutos. Comparar las horas crudas la leía al revés.
   const tramos = jornada
     .filter((b) => b.diaSemana === dia)
-    .map((b) => ({ desde: aMinutosDelDia(b.horaInicio), hasta: aMinutosDelDia(b.horaFin) }))
+    .map((b) => {
+      const desde = aMinutosDelDia(b.horaInicio)
+      const hasta = aMinutosDelDia(b.horaFin)
+      return { desde, hasta: hasta < desde ? hasta + 24 * 60 : hasta }
+    })
     .sort((a, b) => a.desde - b.desde)
   if (tramos.length === 0) return false
 
@@ -178,7 +185,8 @@ export function dentroDeLaJornada(
   }
 
   const desde = aMinutosDelDia(horaInicio)
-  const hasta = aMinutosDelDia(horaFin)
+  const crudoHasta = aMinutosDelDia(horaFin)
+  const hasta = crudoHasta < desde ? crudoHasta + 24 * 60 : crudoHasta
   return fusionados.some((t) => desde >= t.desde && hasta <= t.hasta)
 }
 
