@@ -498,7 +498,7 @@ func (s *Service) CalendarioDeEquipo(ctx context.Context, equipoID string, desde
 // no hay ninguna preferencia que aplicar. La lista sale igual, con el orden
 // de siempre.
 func (s *Service) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]EquipoDisponible, error) {
-	if horaFin <= horaInicio {
+	if horaFin == horaInicio {
 		return nil, domain.ErrRangoHorarioInvalido
 	}
 	return s.repo.ListarEquiposDisponiblesEn(ctx, fecha, horaInicio, horaFin, materiaID)
@@ -513,7 +513,7 @@ func (s *Service) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Tim
 // replicarlas del otro lado garantiza que en algún momento las dos versiones
 // dejen de coincidir.
 func (s *Service) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, quien string) ([]EquipoOcupado, error) {
-	if horaFin <= horaInicio {
+	if horaFin == horaInicio {
 		return nil, domain.ErrRangoHorarioInvalido
 	}
 	ocupados, err := s.repo.ListarEquiposOcupadosEn(ctx, fecha, horaInicio, horaFin)
@@ -833,9 +833,10 @@ func (s *Service) BloquearEquipos(ctx context.Context, equipoIDs []string, cread
 	// EsDiaLectivo, que tampoco se le impone a RF-04.7: un bloqueo es
 	// excepcional por naturaleza y es el Admin quien decide cuánto dura, así
 	// que tomarse el laboratorio un día entero es una decisión suya, no un
-	// error. Lo que sí sigue valiendo es que la hora de fin sea posterior a la
-	// de inicio (domain.NuevaReservaBloqueo).
-	if domain.YaTermino(fecha, horaFin, ahora) {
+	// error. Lo que sí sigue valiendo es que la hora de fin no sea IGUAL a la
+	// de inicio (domain.NuevaReservaBloqueo): un bloqueo puede cruzar la
+	// medianoche como cualquier otro, pero 08:00–08:00 es un tipeo.
+	if domain.YaTermino(fecha, horaInicio, horaFin, ahora) {
 		return nil, domain.ErrReservaEnElPasado
 	}
 

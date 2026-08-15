@@ -126,7 +126,7 @@ type Reserva struct {
 // (RF-04.1) — reservaGrupoID y materiaID son obligatorios acá, a
 // diferencia de un bloqueo administrativo.
 func NuevaReservaNormal(id, reservaGrupoID, equipoID, materiaID string, nombreDocenteSnapshot string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) (*Reserva, error) {
-	if horaFin <= horaInicio {
+	if horaFin == horaInicio {
 		return nil, ErrRangoHorarioInvalido
 	}
 	return &Reserva{
@@ -148,7 +148,7 @@ func NuevaReservaNormal(id, reservaGrupoID, equipoID, materiaID string, nombreDo
 // NuevaReservaDeBloqueo crea un bloqueo administrativo sobre una PC
 // puntual, sin pertenecer a ningún ReservaGrupo ni Materia (RF-04.7).
 func NuevaReservaBloqueo(id, equipoID string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, motivo string, ahora time.Time) (*Reserva, error) {
-	if horaFin <= horaInicio {
+	if horaFin == horaInicio {
 		return nil, ErrRangoHorarioInvalido
 	}
 	motivo = strings.TrimSpace(motivo)
@@ -213,8 +213,20 @@ func (r *Reserva) cambiarEstado(nuevo EstadoReserva) error {
 // otro rango dado — útil para validaciones en application/ antes de
 // llegar a la constraint de la base (da un error de negocio más claro que
 // esperar el 500/409 crudo de Postgres).
+// Los dos bloques se miden como offsets desde la MISMA medianoche, y por eso
+// el fin puede pasar de las 24 horas: 22:00–01:00 es [22h, 25h). Comparar
+// hora_fin cruda daría 01:00 < 22:00 y concluiría que no se pisan con nada,
+// que es justamente el bug que habilitaría reservar encima de una clase
+// nocturna.
+//
+// Solo compara bloques de la MISMA fecha, que es para lo que se usa (el
+// pre-chequeo al crear un grupo). Un bloque de la noche anterior que se
+// mete en esta madrugada lo detectan la constraint EXCLUDE de la base y la
+// consulta de solapamiento, que trabajan con instantes absolutos.
 func (r *Reserva) SolapaCon(horaInicio, horaFin time.Duration) bool {
-	return r.HoraInicio < horaFin && horaInicio < r.HoraFin
+	finPropio := r.HoraInicio + DuracionDe(r.HoraInicio, r.HoraFin)
+	finOtro := horaInicio + DuracionDe(horaInicio, horaFin)
+	return r.HoraInicio < finOtro && horaInicio < finPropio
 }
 
 // MaxDuracionReserva acota cuánto puede durar un solo bloque. No hay
@@ -247,8 +259,17 @@ var (
 // mientras que ahora viene en APP_TIMEZONE. Comparar los time.Time crudos
 // mezclaría las dos zonas y correría el límite del día tantas horas como el
 // offset de la escuela.
-func YaTermino(fecha time.Time, horaFin time.Duration, ahora time.Time) bool {
-	return !horaDePared(fecha, horaFin).After(horaDePared(ahora, horaDelDia(ahora)))
+// Recibe también horaInicio porque sin ella no se sabe de qué día es el fin:
+// un bloque de 22:00 a 01:00 termina la madrugada SIGUIENTE, y compararlo
+// contra "fecha + 01:00" lo daría por terminado veintiuna horas antes de que
+// empiece. Ese error no se ve como un error: la clase nocturna aparece
+// finalizada apenas se crea.
+func YaTermino(fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) bool {
+	fin := horaDePared(fecha, horaFin)
+	if CruzaMedianoche(horaInicio, horaFin) {
+		fin = fin.AddDate(0, 0, 1)
+	}
+	return !fin.After(horaDePared(ahora, horaDelDia(ahora)))
 }
 
 // YaEmpezo es la mitad de arriba de lo mismo: la franja ya arrancó. Lo usa el
@@ -284,17 +305,80 @@ func horaDelDia(t time.Time) time.Duration {
 		time.Duration(t.Second())*time.Second
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// Bloques que cruzan la medianoche
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Una escuela nocturna dicta de 22:00 a 01:00. Hasta acá eso era
+// inexpresable: el sistema exigía hora_fin > hora_inicio, así que la única
+// salida era partir la clase en dos reservas —una hasta las 23:59 y otra
+// desde las 00:00 del día siguiente— que el sistema trataba como dos cosas
+// sin relación. Cancelar una dejaba la otra viva, los reportes contaban dos
+// clases donde hubo una, y el equipo aparecía devuelto a medianoche.
+//
+// La regla es la que cualquiera lee sin que se la expliquen:
+//
+//	hora_fin > hora_inicio  → termina el mismo día (22:00–23:00)
+//	hora_fin < hora_inicio  → termina al día siguiente (22:00–01:00)
+//	hora_fin = hora_inicio  → inválido
+//
+// El caso de la igualdad podría significar "veinticuatro horas", y se
+// rechaza igual: nadie escribe 08:00–08:00 queriendo un día entero, y el
+// tope de duración lo rechazaría después con un mensaje sobre las horas que
+// no explicaría el verdadero problema, que es un tipeo.
+//
+// La misma regla vive en el esquema, en la función fin_de_pared() que usan
+// la constraint de anti-solapamiento y todas las consultas. Las dos tienen
+// que decir lo mismo: si divergen, la aplicación acepta reservas que la base
+// rechaza, o peor, deja pasar solapamientos que creía haber chequeado.
+
+// CruzaMedianoche dice si el bloque termina al día siguiente del que lo
+// nombra.
+func CruzaMedianoche(horaInicio, horaFin time.Duration) bool {
+	return horaFin < horaInicio
+}
+
+// DuracionDe es cuánto dura el bloque, cruce o no la medianoche. Para
+// 22:00–01:00 son tres horas, no menos veintiuna.
+func DuracionDe(horaInicio, horaFin time.Duration) time.Duration {
+	if CruzaMedianoche(horaInicio, horaFin) {
+		return 24*time.Hour - horaInicio + horaFin
+	}
+	return horaFin - horaInicio
+}
+
+// FinDePared es el instante en que el bloque termina de verdad: la fecha que
+// lo nombra más la hora de fin, más un día si cruzó la medianoche.
+//
+// Es la contracara de InicioDePared y el reemplazo de "fecha + hora_fin",
+// que era correcto mientras ningún bloque pudiera pasar de las 00:00 y ahora
+// devolvería un fin ANTERIOR al inicio.
+func FinDePared(fecha time.Time, horaInicio, horaFin time.Duration, loc *time.Location) time.Time {
+	fin := InstanteDePared(fecha, horaFin, loc)
+	if CruzaMedianoche(horaInicio, horaFin) {
+		return fin.AddDate(0, 0, 1)
+	}
+	return fin
+}
+
+// InicioDePared existe por simetría con FinDePared: en los lugares donde se
+// usan los dos juntos, ver "InstanteDePared" de un lado y "FinDePared" del
+// otro invita a leerlos como si hicieran cosas distintas.
+func InicioDePared(fecha time.Time, horaInicio time.Duration, loc *time.Location) time.Time {
+	return InstanteDePared(fecha, horaInicio, loc)
+}
+
 // ValidarVentanaTemporal reúne las tres reglas que todo bloque tiene que
 // cumplir, sea una reserva normal o un bloqueo administrativo: rango
 // horario coherente, duración acotada y que no esté en el pasado.
 func ValidarVentanaTemporal(fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) error {
-	if horaFin <= horaInicio {
+	if horaFin == horaInicio {
 		return ErrRangoHorarioInvalido
 	}
-	if horaFin-horaInicio > MaxDuracionReserva {
+	if DuracionDe(horaInicio, horaFin) > MaxDuracionReserva {
 		return ErrDuracionExcesiva
 	}
-	if YaTermino(fecha, horaFin, ahora) {
+	if YaTermino(fecha, horaInicio, horaFin, ahora) {
 		return ErrReservaEnElPasado
 	}
 	return nil

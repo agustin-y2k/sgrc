@@ -2649,6 +2649,10 @@ paths:
             mayor a 8 horas (un turno completo), o un día y horario fuera de la
             jornada declarada por la institución (ver GET /api/jornada). Sin jornada
             declarada, cualquier día y horario se aceptan.
+
+            Una horaFin MENOR que horaInicio no es un error: significa que la
+            reserva termina al día siguiente (22:00–01:00 es una clase nocturna de
+            tres horas). Lo que se rechaza es que sean iguales.
         "403": { description: Sin permiso para reservar en esa materia }
         "409":
           description: |

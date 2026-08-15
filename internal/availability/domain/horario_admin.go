@@ -82,7 +82,12 @@ func FechaSolo(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-var ErrRangoHorarioInvalido = errors.New("la hora de fin debe ser posterior a la hora de inicio")
+// Lo comparten el horario de los Admin y la jornada de la institución, con
+// una diferencia que conviene tener presente: la jornada puede cruzar la
+// medianoche (20:00–01:00) y el horario de un Admin no, porque el cálculo de
+// "¿hay alguien ahora?" es de un solo día. Para los dos, fin igual a inicio
+// es inválido.
+var ErrRangoHorarioInvalido = errors.New("la hora de fin no puede ser igual a la de inicio")
 
 // ErrBloqueSolapado: dos bloques del mismo día que se pisan.
 //

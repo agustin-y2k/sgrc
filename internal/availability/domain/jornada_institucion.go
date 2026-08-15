@@ -40,11 +40,28 @@ type BloqueJornada struct {
 // de lo que la persona cargó.
 var ErrBloqueJornadaSolapado = errors.New("ese bloque se superpone con otro del mismo día")
 
+// La jornada también cruza la medianoche: una nocturna abre de 20:00 a
+// 01:00. Misma regla que las reservas —hora_fin menor que hora_inicio
+// significa "termina al día siguiente"— y por la misma razón: si la jornada
+// no pudiera expresarlo, una escuela que dicta hasta la una de la mañana
+// tendría que declarar 20:00–23:59 y sus propias clases nocturnas quedarían
+// fuera de su propio horario.
 func NuevoBloqueJornada(id string, dia DiaSemana, horaInicio, horaFin time.Duration) (*BloqueJornada, error) {
-	if horaFin <= horaInicio {
+	if horaFin == horaInicio {
 		return nil, ErrRangoHorarioInvalido
 	}
 	return &BloqueJornada{ID: id, DiaSemana: dia, HoraInicio: horaInicio, HoraFin: horaFin}, nil
+}
+
+// FinRelativo es la hora de fin medida desde la medianoche del día que nombra
+// al tramo, así que pasa de las 24 horas cuando cruza: 20:00–01:00 es
+// [20h, 25h). Comparar hora_fin cruda daría 01:00 y pondría el fin antes del
+// inicio.
+func (b *BloqueJornada) FinRelativo() time.Duration {
+	if b.HoraFin < b.HoraInicio {
+		return b.HoraFin + 24*time.Hour
+	}
+	return b.HoraFin
 }
 
 // SolapaCon dice si dos tramos del mismo día se pisan. Tocarse no es
@@ -53,7 +70,7 @@ func (b *BloqueJornada) SolapaCon(otro *BloqueJornada) bool {
 	if b.DiaSemana != otro.DiaSemana {
 		return false
 	}
-	return b.HoraInicio < otro.HoraFin && otro.HoraInicio < b.HoraFin
+	return b.HoraInicio < otro.FinRelativo() && otro.HoraInicio < b.FinRelativo()
 }
 
 // PermiteReserva dice si un bloque (día + rango horario) cae dentro de la
@@ -85,56 +102,80 @@ func PermiteReserva(jornada []*BloqueJornada, dia DiaSemana, horaInicio, horaFin
 	// empiece dentro de uno: una reserva de 11:00 a 19:00 contra una jornada
 	// de 07:00–12:00 y 18:00–23:00 pediría el laboratorio durante seis horas
 	// en que la escuela está cerrada.
+	//
+	// Los dos extremos se miden desde la misma medianoche, así que pasan de
+	// las 24 horas cuando cruzan. Una clase de 22:00 a 01:00 es [22h, 25h) y
+	// entra en una jornada de 20:00 a 02:00, que es [20h, 26h).
+	finReserva := horaInicio + duracionDe(horaInicio, horaFin)
 	for _, t := range tramos {
-		if horaInicio >= t.HoraInicio && horaFin <= t.HoraFin {
+		if horaInicio >= t.desde && finReserva <= t.hasta {
 			return true
 		}
 	}
 	return false
 }
 
-// tramosDelDia devuelve los bloques de ese día, ordenados y con los
-// contiguos fusionados.
+// duracionDe es el gemelo de reservation/domain.DuracionDe. Está duplicado a
+// propósito: cada paquete tiene su propio dominio y ninguno importa el del
+// otro (docs/06-arquitectura.md §3). Son ocho líneas y la alternativa era un
+// paquete compartido de aritmética horaria, que acopla los dos dominios para
+// ahorrar menos de lo que cuesta.
+func duracionDe(horaInicio, horaFin time.Duration) time.Duration {
+	if horaFin < horaInicio {
+		return 24*time.Hour - horaInicio + horaFin
+	}
+	return horaFin - horaInicio
+}
+
+// tramo es un intervalo del día en horas desde la medianoche, con el fin
+// pudiendo pasar de 24: un tramo nocturno de 20:00 a 01:00 es [20h, 25h).
+//
+// Es un tipo aparte y no un BloqueJornada porque un tramo fusionado no es un
+// bloque: no tiene ID, no está en la base y nadie lo cargó. Reusar la
+// estructura invitaba a devolverlo por la API como si fuera uno.
+type tramo struct {
+	desde, hasta time.Duration
+}
+
+// tramosDelDia devuelve los tramos de ese día, ordenados y con los contiguos
+// fusionados.
 //
 // La fusión importa para el caso de borde: una escuela que carga 07:00–12:00
 // y 12:00–18:00 —dos turnos que se tocan— describe un día abierto de 7 a 18,
 // y una reserva de 11:00 a 13:00 tiene que poder hacerse. Sin fusionar, no
 // entraría entera en ninguno de los dos y se rechazaría sin motivo visible.
 //
+// Todo se mide en tiempo relativo a la medianoche del día del tramo, y por
+// eso el fin puede pasar de 24 horas. Comparar las horas crudas rompía con
+// los tramos nocturnos: 01:00 es menor que casi cualquier inicio, así que un
+// tramo de 20:00 a 01:00 se leía al revés y no fusionaba ni contenía nada.
+//
 // Los solapados no se contemplan acá porque se rechazan al cargarlos
 // (ErrBloqueJornadaSolapado); si alguno entrara igual escribiendo directo en
 // la base, este mismo código lo absorbe sin romperse.
-func tramosDelDia(jornada []*BloqueJornada, dia DiaSemana) []*BloqueJornada {
-	var delDia []*BloqueJornada
+func tramosDelDia(jornada []*BloqueJornada, dia DiaSemana) []tramo {
+	var delDia []tramo
 	for _, b := range jornada {
 		if b.DiaSemana == dia {
-			delDia = append(delDia, b)
+			delDia = append(delDia, tramo{desde: b.HoraInicio, hasta: b.FinRelativo()})
 		}
 	}
 	if len(delDia) == 0 {
 		return nil
 	}
 
-	sort.Slice(delDia, func(i, j int) bool { return delDia[i].HoraInicio < delDia[j].HoraInicio })
+	sort.Slice(delDia, func(i, j int) bool { return delDia[i].desde < delDia[j].desde })
 
-	fusionados := []*BloqueJornada{{
-		DiaSemana:  dia,
-		HoraInicio: delDia[0].HoraInicio,
-		HoraFin:    delDia[0].HoraFin,
-	}}
-	for _, b := range delDia[1:] {
-		ultimo := fusionados[len(fusionados)-1]
-		if b.HoraInicio <= ultimo.HoraFin {
-			if b.HoraFin > ultimo.HoraFin {
-				ultimo.HoraFin = b.HoraFin
+	fusionados := []tramo{delDia[0]}
+	for _, t := range delDia[1:] {
+		ultimo := &fusionados[len(fusionados)-1]
+		if t.desde <= ultimo.hasta {
+			if t.hasta > ultimo.hasta {
+				ultimo.hasta = t.hasta
 			}
 			continue
 		}
-		fusionados = append(fusionados, &BloqueJornada{
-			DiaSemana:  dia,
-			HoraInicio: b.HoraInicio,
-			HoraFin:    b.HoraFin,
-		})
+		fusionados = append(fusionados, t)
 	}
 	return fusionados
 }

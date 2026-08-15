@@ -156,18 +156,25 @@ func (r *PostgresRepo) ListarHistoricoUsoDocentePorAnio(ctx context.Context, ani
 // ── Agregaciones en vivo (consultan reserva/materia/curso directamente —
 // sin importar internal/reservation ni internal/academic) ─────────────
 
-// minutosPorRango convierte la diferencia hora_fin - hora_inicio (un
-// INTERVAL de Postgres) a minutos enteros. EXTRACT(EPOCH FROM ...)
-// devuelve segundos; /60 y redondeando da minutos — mismo criterio que
-// ROUND para evitar arrastrar decimales de segundo por horarios que no
-// caen en minutos exactos (no debería pasar en la práctica, pero
-// ROUND es más seguro que truncar).
+// expresionMinutosDe convierte la duración de una reserva a minutos enteros.
+// EXTRACT(EPOCH FROM ...) devuelve segundos; /60 y redondeando da minutos —
+// ROUND en vez de truncar para no arrastrar decimales de segundo por horarios
+// que no caen en minutos exactos (no debería pasar en la práctica, pero ROUND
+// es más seguro).
+//
+// La duración sale de fin_de_pared() menos el inicio, y NO de la resta
+// `hora_fin - hora_inicio`. Con una clase nocturna esa resta da NEGATIVO: una
+// de 22:00 a 01:00 aportaba −1260 minutos, así que una escuela nocturna no
+// habría visto un error sino un reporte de uso que baja cuanto más se usa el
+// laboratorio.
 //
 // Va calificada con el alias de tabla porque todas las consultas de uso
 // hacen JOIN (con pc/carro o con usuario, para traer los nombres) y ahí
 // las columnas sueltas serían ambiguas.
 func expresionMinutosDe(alias string) string {
-	return fmt.Sprintf(`ROUND(EXTRACT(EPOCH FROM (%s.hora_fin - %s.hora_inicio)) / 60)::INTEGER`, alias, alias)
+	return fmt.Sprintf(
+		`ROUND(EXTRACT(EPOCH FROM (fin_de_pared(%s.fecha, %s.hora_inicio, %s.hora_fin) - (%s.fecha + %s.hora_inicio))) / 60)::INTEGER`,
+		alias, alias, alias, alias, alias)
 }
 
 // condFechasPrefijo reescribe las condiciones de rango para que apunten a

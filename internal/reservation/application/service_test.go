@@ -537,7 +537,7 @@ func (r *fakeRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipoID s
 		if res.EquipoID != equipoID || res.Estado != domain.ReservaConfirmada {
 			continue
 		}
-		if domain.YaTermino(res.Fecha, res.HoraFin, desde) {
+		if domain.YaTermino(res.Fecha, res.HoraInicio, res.HoraFin, desde) {
 			continue
 		}
 		resultado = append(resultado, res)

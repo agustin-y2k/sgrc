@@ -66,7 +66,9 @@ func TestNuevoReservaGrupo_OK(t *testing.T) {
 }
 
 func TestNuevoReservaGrupo_RangoHorarioInvalido_Error(t *testing.T) {
-	_, err := NuevoReservaGrupo("id1", "materia1", nil, "Ada", time.Now(), 10*time.Hour, 8*time.Hour, nil, time.Now())
+	// Solo la igualdad es inválida: 10:00–08:00 significa que la clase termina
+	// al día siguiente, como en una escuela nocturna.
+	_, err := NuevoReservaGrupo("id1", "materia1", nil, "Ada", time.Now(), 8*time.Hour, 8*time.Hour, nil, time.Now())
 	if !errors.Is(err, ErrRangoHorarioInvalido) {
 		t.Fatalf("esperaba ErrRangoHorarioInvalido, obtuve %v", err)
 	}

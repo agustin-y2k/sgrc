@@ -59,7 +59,7 @@ export function JornadaPage() {
     onError: (e) => setError(getErrorMessage(e)),
   })
 
-  const rangoInvalido = horaFin <= horaInicio
+  const rangoInvalido = horaFin === horaInicio
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -114,7 +114,7 @@ export function JornadaPage() {
 
           {rangoInvalido && (
             <p className="text-destructive text-sm sm:col-span-4">
-              La hora de cierre tiene que ser posterior a la de apertura.
+              La hora de cierre no puede ser igual a la de apertura.
             </p>
           )}
         </CardContent>
@@ -160,7 +160,9 @@ export function JornadaPage() {
       )}
 
       <p className="text-muted-foreground mt-6 text-sm">
-        Se pueden cargar varios tramos en el mismo día: una escuela con turno mañana y
+        Una escuela nocturna declara, por ejemplo, 20:00–01:00: si la hora de cierre es
+        menor que la de apertura, el tramo termina al día siguiente. Además, se pueden
+        cargar varios tramos en el mismo día: una escuela con turno mañana y
         turno noche declara, por ejemplo, 07:00–12:00 y 18:00–23:00, y el mediodía queda
         cerrado. Los días sin ningún tramo son días en que la escuela no abre.
       </p>

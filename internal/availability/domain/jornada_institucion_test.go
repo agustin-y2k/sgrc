@@ -112,15 +112,38 @@ func TestPermiteReserva_NoMezclaDias(t *testing.T) {
 	}
 }
 
+// "Fin antes del inicio" dejó de ser un error: significa que el tramo cruza
+// la medianoche, que es como abre una escuela nocturna. Lo único inválido es
+// la igualdad, que sería un tramo de cero o de veinticuatro horas y en la
+// práctica es un tipeo.
 func TestNuevoBloqueJornada_RangoInvalido(t *testing.T) {
-	for nombre, caso := range map[string]struct{ desde, hasta int }{
-		"fin antes del inicio": {12, 8},
-		"fin igual al inicio":  {8, 8},
-	} {
-		_, err := NuevoBloqueJornada("id1", Lunes,
-			time.Duration(caso.desde)*time.Hour, time.Duration(caso.hasta)*time.Hour)
-		if !errors.Is(err, ErrRangoHorarioInvalido) {
-			t.Errorf("%s: esperaba ErrRangoHorarioInvalido, obtuve %v", nombre, err)
+	if _, err := NuevoBloqueJornada("id1", Lunes, 8*time.Hour, 8*time.Hour); !errors.Is(err, ErrRangoHorarioInvalido) {
+		t.Errorf("fin igual al inicio: esperaba ErrRangoHorarioInvalido, obtuve %v", err)
+	}
+	if _, err := NuevoBloqueJornada("id2", Lunes, 20*time.Hour, 1*time.Hour); err != nil {
+		t.Errorf("20:00–01:00 es una jornada nocturna válida, obtuve %v", err)
+	}
+}
+
+// Una nocturna abre de 20:00 a 01:00 y dicta de 22:00 a 00:30. Todo se mide
+// desde la misma medianoche: la clase es [22h, 24.5h) y la jornada [20h, 25h).
+func TestPermiteReserva_JornadaNocturna(t *testing.T) {
+	jornada := []*BloqueJornada{{DiaSemana: Martes, HoraInicio: 20 * time.Hour, HoraFin: 1 * time.Hour}}
+
+	casos := map[string]struct {
+		desde, hasta time.Duration
+		esperado     bool
+	}{
+		"clase que cruza la medianoche":     {22 * time.Hour, 30 * time.Minute, true},
+		"clase que termina justo al cierre": {23 * time.Hour, 1 * time.Hour, true},
+		"clase entera antes de medianoche":  {20 * time.Hour, 22 * time.Hour, true},
+		"empieza antes de abrir":            {19 * time.Hour, 23 * time.Hour, false},
+		"se pasa del cierre":                {23 * time.Hour, 2 * time.Hour, false},
+	}
+
+	for nombre, caso := range casos {
+		if got := PermiteReserva(jornada, Martes, caso.desde, caso.hasta); got != caso.esperado {
+			t.Errorf("%s: esperaba %v, obtuve %v", nombre, caso.esperado, got)
 		}
 	}
 }

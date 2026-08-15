@@ -23,6 +23,7 @@ import { SelectorDeEquipos } from "@/features/reservas/SelectorDeEquipos"
 import {
   DIAS_SEMANA,
   MAX_HORAS_RESERVA,
+  cruzaMedianoche,
   excedeDuracionMaxima,
   hoyISO,
   type DiaSemana,
@@ -130,7 +131,8 @@ export function NuevaReservaPage() {
   const bloquesDeJornada = jornada?.data ?? []
   const fueraDeLaJornada =
     fechaParaDisponibilidad !== "" &&
-    horaFin > horaInicio &&
+    horaInicio !== "" &&
+    horaFin !== horaInicio &&
     !dentroDeLaJornada(bloquesDeJornada, fechaParaDisponibilidad, horaInicio, horaFin)
 
   /**
@@ -161,7 +163,7 @@ export function NuevaReservaPage() {
 
   const listoParaEnviar =
     faltantes.length === 0 &&
-    horaFin > horaInicio &&
+    horaFin !== horaInicio &&
     !duracionExcesiva &&
     !fueraDeLaJornada
 
@@ -305,9 +307,19 @@ export function NuevaReservaPage() {
               />
             </div>
 
-            {horaInicio !== "" && horaFin !== "" && horaFin <= horaInicio && (
+            {horaInicio !== "" && horaFin !== "" && horaFin === horaInicio && (
               <p className="text-destructive text-sm">
-                La hora de fin tiene que ser posterior a la de inicio.
+                La hora de fin no puede ser igual a la de inicio.
+              </p>
+            )}
+
+            {/* Que la clase termine al día siguiente es válido y es lo normal
+                en una escuela nocturna, pero conviene decirlo: alguien que
+                puso 01:00 por error tiene que poder darse cuenta antes de
+                confirmar. */}
+            {cruzaMedianoche(horaInicio, horaFin) && (
+              <p className="text-muted-foreground text-sm">
+                Esta reserva termina al día siguiente, a las {horaFin}.
               </p>
             )}
 

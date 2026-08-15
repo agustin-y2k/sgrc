@@ -75,10 +75,23 @@ func TestNuevaReservaNormal_OK(t *testing.T) {
 	}
 }
 
+// Fin ANTES del inicio dejó de ser un error: significa que la clase termina
+// al día siguiente, que es como dicta una escuela nocturna. Lo único
+// inválido es la igualdad.
 func TestNuevaReservaNormal_RangoInvalido_Error(t *testing.T) {
-	_, err := NuevaReservaNormal("id1", "grupo1", "pc1", "materia1", "Ada", nil, time.Now(), 9*time.Hour, 8*time.Hour, time.Now())
+	_, err := NuevaReservaNormal("id1", "grupo1", "pc1", "materia1", "Ada", nil, time.Now(), 8*time.Hour, 8*time.Hour, time.Now())
 	if !errors.Is(err, ErrRangoHorarioInvalido) {
 		t.Fatalf("esperaba ErrRangoHorarioInvalido, obtuve %v", err)
+	}
+}
+
+func TestNuevaReservaNormal_CruzaMedianoche_OK(t *testing.T) {
+	r, err := NuevaReservaNormal("id1", "grupo1", "pc1", "materia1", "Ada", nil, time.Now(), 22*time.Hour, 1*time.Hour, time.Now())
+	if err != nil {
+		t.Fatalf("22:00–01:00 es una clase nocturna válida, obtuve %v", err)
+	}
+	if got := DuracionDe(r.HoraInicio, r.HoraFin); got != 3*time.Hour {
+		t.Errorf("esperaba 3h de duración, obtuve %v", got)
 	}
 }
 
@@ -205,7 +218,8 @@ func TestValidarVentanaTemporal(t *testing.T) {
 		{"termina justo ahora", dia(9), 10 * time.Hour, 12 * time.Hour, ErrReservaEnElPasado},
 		{"ayer", dia(8), 14 * time.Hour, 16 * time.Hour, ErrReservaEnElPasado},
 		{"años atrás", dia(1), 8 * time.Hour, 10 * time.Hour, ErrReservaEnElPasado},
-		{"fin antes que inicio", dia(10), 10 * time.Hour, 8 * time.Hour, ErrRangoHorarioInvalido},
+		{"fin igual al inicio", dia(10), 10 * time.Hour, 10 * time.Hour, ErrRangoHorarioInvalido},
+		{"cruza la medianoche", dia(10), 22 * time.Hour, 1 * time.Hour, nil},
 		{"duración justa en el tope", dia(10), 8 * time.Hour, 16 * time.Hour, nil},
 		{"un minuto pasado el tope", dia(10), 8 * time.Hour, 16*time.Hour + time.Minute, ErrDuracionExcesiva},
 		{"el día entero", dia(10), 0, 23*time.Hour + 59*time.Minute, ErrDuracionExcesiva},

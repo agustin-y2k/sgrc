@@ -63,6 +63,43 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- ═══════════════════════════════════════════════════════════════════════
+-- Bloques que cruzan la medianoche
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Cuándo termina de verdad un bloque, dado el día que lo nombra.
+--
+-- Las escuelas nocturnas dictan de 22:00 a 01:00, y eso antes era
+-- inexpresable: la base exigía hora_fin > hora_inicio. La regla es la que
+-- cualquiera lee sin que se la expliquen:
+--
+--   hora_fin > hora_inicio  → termina el mismo día
+--   hora_fin < hora_inicio  → termina al día siguiente
+--   hora_fin = hora_inicio  → inválido (lo rechazan los CHECK)
+--
+-- Existe como función y no repetida en cada consulta porque la usan la
+-- constraint de anti-solapamiento, los barridos y todos los listados: una
+-- copia que se olvide de sumar el día no rompe nada visible, simplemente
+-- deja de ver las clases nocturnas.
+--
+-- IMMUTABLE no es decorativo: sin eso Postgres no la acepta dentro del
+-- índice de la constraint EXCLUDE. Lo es de verdad — misma entrada, misma
+-- salida, sin leer nada de afuera.
+--
+-- El gemelo de esto en Go es domain.FinDePared. Las dos tienen que decir lo
+-- mismo: si divergen, la aplicación acepta reservas que la base rechaza o,
+-- peor, deja pasar solapamientos que creía haber chequeado.
+CREATE OR REPLACE FUNCTION fin_de_pared(fecha DATE, hora_inicio TIME, hora_fin TIME)
+RETURNS TIMESTAMP
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+PARALLEL SAFE
+AS $$
+    SELECT fecha + hora_fin
+         + CASE WHEN hora_fin < hora_inicio THEN INTERVAL '1 day' ELSE INTERVAL '0' END
+$$;
+
+-- ═══════════════════════════════════════════════════════════════════════
 -- Usuarios y acceso (RF-01, RF-02)
 -- ═══════════════════════════════════════════════════════════════════════
 
@@ -502,7 +539,10 @@ CREATE TABLE regla_recurrencia (
     fecha_inicio  DATE NOT NULL,
     fecha_fin     DATE NOT NULL,
 
-    CHECK (hora_fin > hora_inicio),
+    -- El fin puede ser MENOR que el inicio: eso significa que el bloque termina
+    -- al día siguiente (22:00–01:00). Lo que no puede es ser igual, que sería
+    -- un bloque de cero horas o de veinticuatro y en la práctica es un tipeo.
+    CHECK (hora_fin <> hora_inicio),
     CHECK (fecha_fin >= fecha_inicio),
     -- Los siete días. Qué días opera la institución NO se decide acá: se
     -- declara en jornada_institucion y se valida en la aplicación. Este
@@ -552,7 +592,10 @@ CREATE TABLE reserva_grupo (
     -- máquina de esta reserva.
     aviso_sin_retirar_en     TIMESTAMPTZ,
 
-    CHECK (hora_fin > hora_inicio)
+    -- El fin puede ser MENOR que el inicio: eso significa que el bloque termina
+    -- al día siguiente (22:00–01:00). Lo que no puede es ser igual, que sería
+    -- un bloque de cero horas o de veinticuatro y en la práctica es un tipeo.
+    CHECK (hora_fin <> hora_inicio)
 );
 
 CREATE INDEX idx_reserva_grupo_materia    ON reserva_grupo (materia_id);
@@ -607,7 +650,10 @@ CREATE TABLE reserva (
     -- disponible. Instante y no booleano, mismo criterio que el recordatorio.
     avisado_equipo_no_disponible_en TIMESTAMPTZ,
 
-    CHECK (hora_fin > hora_inicio),
+    -- El fin puede ser MENOR que el inicio: eso significa que el bloque termina
+    -- al día siguiente (22:00–01:00). Lo que no puede es ser igual, que sería
+    -- un bloque de cero horas o de veinticuatro y en la práctica es un tipeo.
+    CHECK (hora_fin <> hora_inicio),
 
     -- Las dos formas válidas de existir, y ninguna otra. Un BLOQUEO sin
     -- motivo deja de ser representable, que es lo que hace que la regla valga
@@ -650,10 +696,16 @@ COMMENT ON COLUMN reserva.motivo_bloqueo IS
 --
 -- El WHERE deja fuera las canceladas, finalizadas y no retiradas: una franja
 -- que se liberó tiene que poder volver a reservarse.
+--
+-- El fin sale de fin_de_pared() y no de `fecha + hora_fin`: con una clase
+-- nocturna, esa suma da un instante ANTERIOR al inicio, tsrange revienta con
+-- "range lower bound must be less than or equal to range upper bound" y la
+-- reserva no se puede ni insertar. Antes no pasaba porque ningún bloque podía
+-- cruzar las 00:00.
 ALTER TABLE reserva ADD CONSTRAINT no_solapamiento
     EXCLUDE USING gist (
         equipo_id WITH =,
-        tsrange(fecha + hora_inicio, fecha + hora_fin) WITH &&
+        tsrange(fecha + hora_inicio, fin_de_pared(fecha, hora_inicio, hora_fin)) WITH &&
     ) WHERE (estado = 'CONFIRMADA');
 
 CREATE INDEX idx_reserva_equipo_fecha ON reserva (equipo_id, fecha);
@@ -812,7 +864,10 @@ CREATE TABLE jornada_institucion (
     hora_inicio  TIME NOT NULL,
     hora_fin     TIME NOT NULL,
 
-    CHECK (hora_fin > hora_inicio),
+    -- El fin puede ser MENOR que el inicio: eso significa que el bloque termina
+    -- al día siguiente (22:00–01:00). Lo que no puede es ser igual, que sería
+    -- un bloque de cero horas o de veinticuatro y en la práctica es un tipeo.
+    CHECK (hora_fin <> hora_inicio),
     CONSTRAINT chk_jornada_dia_valido
         CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO','DOMINGO'))
 );
@@ -981,6 +1036,8 @@ DROP TABLE IF EXISTS curso CASCADE;
 DROP TABLE IF EXISTS ciclo_lectivo CASCADE;
 DROP TABLE IF EXISTS codigo_recuperacion CASCADE;
 DROP TABLE IF EXISTS usuario CASCADE;
+
+DROP FUNCTION IF EXISTS fin_de_pared(DATE, TIME, TIME);
 
 -- Las extensiones NO se borran: pgcrypto y btree_gist pueden estar en uso
 -- por otra cosa en la misma base, y volver a crearlas es gratis.
