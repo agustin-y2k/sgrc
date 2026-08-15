@@ -103,3 +103,16 @@ func toAdminDisponibilidadResponse(a application.AdminDisponibilidad) adminDispo
 		HorarioSemanal:  horario,
 	}
 }
+
+// toBloqueJornadaResponse reusa bloqueResponse: los dos tienen los mismos
+// cuatro campos y el mismo formato de hora. Se separa la función, no la
+// estructura — un DTO propio idéntico solo agregaría un lugar más donde
+// cambiar el formato de "HH:MM" y olvidarse del otro.
+func toBloqueJornadaResponse(b *domain.BloqueJornada) bloqueResponse {
+	return bloqueResponse{
+		ID:         b.ID,
+		DiaSemana:  string(b.DiaSemana),
+		HoraInicio: formatHora(b.HoraInicio),
+		HoraFin:    formatHora(b.HoraFin),
+	}
+}

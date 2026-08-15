@@ -47,6 +47,21 @@ type Repo interface {
 	// postear para la misma fecha reemplaza la excepción anterior
 	// (UNIQUE(usuario_id, fecha), ver docs/08-api-spec.yaml).
 	GuardarExcepcion(ctx context.Context, e *domain.Excepcion) error
+
+	// ── Jornada de la institución ──────────────────────────────────
+	// Sin usuarioID: la jornada no tiene dueño, describe a la escuela
+	// entera. Por eso estas cinco no llevan el acotamiento por titularidad
+	// que sí tienen las de arriba.
+
+	// ListarJornada devuelve TODOS los bloques, de todos los días. Los
+	// consumidores necesitan la jornada completa para distinguir "no la
+	// declararon" de "ese día no abre" (ver domain.PermiteReserva), y son
+	// pocas filas: una escuela declara su jornada una vez.
+	ListarJornada(ctx context.Context) ([]*domain.BloqueJornada, error)
+	CrearBloqueJornada(ctx context.Context, b *domain.BloqueJornada) error
+	BuscarBloqueJornada(ctx context.Context, id string) (*domain.BloqueJornada, error)
+	GuardarBloqueJornada(ctx context.Context, b *domain.BloqueJornada) error
+	EliminarBloqueJornada(ctx context.Context, id string) error
 }
 
 // AdminInfo es lo mínimo que se necesita de cada Admin para RF-07.2 —

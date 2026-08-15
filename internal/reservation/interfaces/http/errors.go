@@ -43,7 +43,7 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrRangoHorarioInvalido),
 		errors.Is(err, domain.ErrRangoFechasInvalido),
 		errors.Is(err, domain.ErrDiaSemanaInvalido),
-		errors.Is(err, domain.ErrDiaNoLectivo),
+		errors.Is(err, application.ErrFueraDeJornada),
 		errors.Is(err, domain.ErrReservaEnElPasado),
 		errors.Is(err, domain.ErrDuracionExcesiva),
 		errors.Is(err, domain.ErrNombreDestinatarioVacio),

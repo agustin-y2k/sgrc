@@ -6,28 +6,75 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import * as calendarioApi from "@/features/calendario/api"
+import * as disponibilidadApi from "@/features/disponibilidad/api"
+import { JORNADA_KEY } from "@/features/disponibilidad/api"
+import { diaDeLaFecha, diasDeLaJornada } from "@/features/disponibilidad/types"
 import type { BloqueCalendario } from "@/features/calendario/types"
 import {
-  DIAS_HABILES,
   aFechaISO,
   aMinutos,
   desdeFechaISO,
+  etiquetaDeDia,
   fechasDeLaSemana,
   formatearRangoSemana,
   sumarDias,
 } from "@/features/calendario/semana"
 import { getErrorMessage } from "@/lib/api-client"
 
-// La grilla arranca a las 7 y termina a las 22: cubre el horario escolar
-// sin desperdiciar alto en horas en las que nunca hay clase.
-const HORA_DESDE = 7
-const HORA_HASTA = 22
+// La grilla arranca a las 7 y termina a las 22 mientras no haya nada fuera de
+// esa franja: cubre el horario escolar típico sin desperdiciar alto en horas
+// en las que nunca hay clase.
+//
+// Son un piso y un techo por DEFECTO, no límites: una escuela nocturna dicta
+// hasta pasada la medianoche y con una grilla fija esas clases se dibujarían
+// afuera del recuadro, o sea en ninguna parte. El rango real lo decide
+// rangoHorarioVisible() a partir de lo que efectivamente hay esa semana.
+const HORA_DESDE_POR_DEFECTO = 7
+const HORA_HASTA_POR_DEFECTO = 22
 const ALTO_POR_HORA_REM = 3
 
-function BloqueOcupado({ bloque }: { bloque: BloqueCalendario }) {
+/**
+ * Parte un bloque que cruza la medianoche en los dos pedazos que se dibujan:
+ * lo que ocurre en su propio día y lo que se pasa al siguiente.
+ *
+ * El backend guarda la clase como una sola cosa —una reserva del lunes de
+ * 22:00 a 01:00— y así tiene que seguir siendo: es una clase, se cancela
+ * entera y se cuenta una vez. Pero un calendario tiene una columna por día,
+ * así que para dibujarla hay que cortarla por la medianoche. El corte es
+ * puramente visual y no viaja a ningún lado.
+ */
+function pedazosPorDia(b: BloqueCalendario): { fecha: string; bloque: BloqueCalendario }[] {
+  if (aMinutos(b.horaFin) > aMinutos(b.horaInicio)) {
+    return [{ fecha: b.fecha, bloque: b }]
+  }
+  const diaSiguiente = aFechaISO(sumarDias(desdeFechaISO(b.fecha), 1))
+  return [
+    { fecha: b.fecha, bloque: { ...b, horaFin: "24:00" } },
+    { fecha: diaSiguiente, bloque: { ...b, horaInicio: "00:00" } },
+  ]
+}
+
+/**
+ * De qué hora a qué hora dibujar, dado lo que hay que mostrar.
+ *
+ * Se estira hacia afuera —nunca hacia adentro— para que ningún bloque quede
+ * cortado: con una clase de 22:00 a 01:00 en la semana, la grilla llega hasta
+ * las 24 y el día siguiente arranca a las 0.
+ */
+function rangoHorarioVisible(bloques: BloqueCalendario[]): { desde: number; hasta: number } {
+  let desde = HORA_DESDE_POR_DEFECTO
+  let hasta = HORA_HASTA_POR_DEFECTO
+  for (const b of bloques) {
+    desde = Math.min(desde, Math.floor(aMinutos(b.horaInicio) / 60))
+    hasta = Math.max(hasta, Math.ceil(aMinutos(b.horaFin) / 60))
+  }
+  return { desde: Math.max(0, desde), hasta: Math.min(24, hasta) }
+}
+
+function BloqueOcupado({ bloque, horaDesde }: { bloque: BloqueCalendario; horaDesde: number }) {
   const inicio = aMinutos(bloque.horaInicio)
   const fin = aMinutos(bloque.horaFin)
-  const minutosBase = HORA_DESDE * 60
+  const minutosBase = horaDesde * 60
 
   const esBloqueo = bloque.tipo === "BLOQUEO"
   // En un bloqueo el motivo viene siempre —es obligatorio al crearlo y lo
@@ -79,9 +126,32 @@ export function CalendarioEquipoPage() {
   const { equipoId = "" } = useParams()
   const [referencia, setReferencia] = useState(() => new Date())
 
-  const dias = useMemo(() => fechasDeLaSemana(referencia), [referencia])
-  const desde = dias[0]
-  const hasta = dias[dias.length - 1]
+  const semana = useMemo(() => fechasDeLaSemana(referencia), [referencia])
+  // El rango que se le pide al backend es la semana COMPLETA, aunque después
+  // se dibujen menos columnas: si la escuela cambia su jornada, lo que ya
+  // estaba reservado un día que dejó de estar declarado sigue existiendo, y
+  // esconderlo de la consulta lo volvería invisible en vez de resuelto.
+  const desde = semana[0]
+  const hasta = semana[semana.length - 1]
+
+  // La jornada declarada decide qué días se dibujan. Una escuela de lunes a
+  // viernes ve cinco columnas; una albergue, siete. Sin jornada declarada se
+  // muestran los siete, porque no hay restricción que refleje.
+  const { data: jornada } = useQuery({
+    queryKey: JORNADA_KEY,
+    queryFn: disponibilidadApi.jornadaDeLaInstitucion,
+  })
+  const dias = useMemo(() => {
+    const declarados = new Set(diasDeLaJornada(jornada?.data ?? []))
+    const visibles = semana.filter((fecha) => {
+      const dia = diaDeLaFecha(fecha)
+      return dia !== null && declarados.has(dia)
+    })
+    // Una jornada que no cubra ningún día de esta semana dejaría la grilla
+    // sin columnas y la pantalla sin sentido. Es un caso de borde raro pero
+    // posible mientras alguien está cargando la jornada a medias.
+    return visibles.length > 0 ? visibles : semana
+  }, [semana, jornada])
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["calendario", equipoId, desde, hasta],
@@ -89,18 +159,27 @@ export function CalendarioEquipoPage() {
   })
 
   // Se agrupa por fecha una sola vez en vez de filtrar dentro de cada
-  // celda (que sería recorrer la lista completa seis veces).
+  // celda (que sería recorrer la lista completa una vez por columna).
+  //
+  // Un bloque que cruza la medianoche entra en DOS días, partido: la clase
+  // del lunes a las 22:00 ocupa el final del lunes y el principio del martes.
   const bloquesPorDia = useMemo(() => {
     const mapa = new Map<string, BloqueCalendario[]>()
     for (const b of data?.bloques ?? []) {
-      const delDia = mapa.get(b.fecha)
-      if (delDia) delDia.push(b)
-      else mapa.set(b.fecha, [b])
+      for (const { fecha, bloque } of pedazosPorDia(b)) {
+        const delDia = mapa.get(fecha)
+        if (delDia) delDia.push(bloque)
+        else mapa.set(fecha, [bloque])
+      }
     }
     return mapa
   }, [data])
 
-  const horas = Array.from({ length: HORA_HASTA - HORA_DESDE }, (_, i) => HORA_DESDE + i)
+  const rango = useMemo(
+    () => rangoHorarioVisible([...bloquesPorDia.values()].flat()),
+    [bloquesPorDia]
+  )
+  const horas = Array.from({ length: rango.hasta - rango.desde }, (_, i) => rango.desde + i)
   const hoy = aFechaISO(new Date())
 
   return (
@@ -149,25 +228,27 @@ export function CalendarioEquipoPage() {
           desbordar la página (RNF-07). */}
       <div className="overflow-x-auto">
         <div className="min-w-[44rem]">
-          <div className="grid grid-cols-[3.5rem_repeat(6,1fr)] border-b">
+          <div className="grid border-b"
+            style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}>
             <div />
-            {DIAS_HABILES.map((dia, i) => (
+            {dias.map((fecha) => (
               <div
-                key={dia}
+                key={fecha}
                 className={
                   "border-l px-2 py-1 text-center text-sm font-medium " +
-                  (dias[i] === hoy ? "text-primary" : "")
+                  (fecha === hoy ? "text-primary" : "")
                 }
               >
-                <div>{dia}</div>
+                <div>{etiquetaDeDia(fecha)}</div>
                 <div className="text-muted-foreground text-xs">
-                  {desdeFechaISO(dias[i]).getDate()}
+                  {desdeFechaISO(fecha).getDate()}
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-[3.5rem_repeat(6,1fr)]">
+          <div className="grid"
+            style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}>
             {/* Columna de horas */}
             <div>
               {horas.map((h) => (
@@ -191,7 +272,7 @@ export function CalendarioEquipoPage() {
                   />
                 ))}
                 {(bloquesPorDia.get(fecha) ?? []).map((b) => (
-                  <BloqueOcupado key={b.reservaId} bloque={b} />
+                  <BloqueOcupado key={`${b.reservaId}-${b.horaInicio}`} bloque={b} horaDesde={rango.desde} />
                 ))}
               </div>
             ))}

@@ -437,7 +437,7 @@ components:
       properties:
         equipoIds: { type: array, items: { type: string, format: uuid }, minItems: 1 }
         materiaId: { type: string, format: uuid }
-        diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES] }
+        diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO] }
         horaInicio: { type: string, example: "10:00" }
         horaFin: { type: string, example: "11:30" }
         fechaInicio: { type: string, format: date }
@@ -536,7 +536,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES] }
+        diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO] }
         horaInicio: { type: string, example: "08:00" }
         horaFin: { type: string, example: "12:00" }
 
@@ -2645,9 +2645,14 @@ paths:
               schema: { $ref: '#/components/schemas/ReservaGrupo' }
         "400":
           description: |
-            Fecha o rango horario rechazados: sábado o domingo (la semana lectiva es
-            de lunes a viernes), un bloque que ya terminó, o una duración mayor a 8
-            horas (un turno completo).
+            Fecha o rango horario rechazados: un bloque que ya terminó, una duración
+            mayor a 8 horas (un turno completo), o un día y horario fuera de la
+            jornada declarada por la institución (ver GET /api/jornada). Sin jornada
+            declarada, cualquier día y horario se aceptan.
+
+            Una horaFin MENOR que horaInicio no es un error: significa que la
+            reserva termina al día siguiente (22:00–01:00 es una clase nocturna de
+            tres horas). Lo que se rechaza es que sean iguales.
         "403": { description: Sin permiso para reservar en esa materia }
         "409":
           description: |
@@ -2802,9 +2807,9 @@ paths:
                   docentesNotificados: { type: integer }
         "400":
           description: |
-            El bloque ya terminó. RF-04.7 NO tiene las otras dos restricciones de una
-            reserva normal: un bloqueo puede caer sábado o domingo y durar
-            lo que el Admin decida — es excepcional por naturaleza.
+            El bloque ya terminó. RF-04.7 tampoco tiene el tope de duración de una
+            reserva normal: un bloqueo dura lo que el Admin decida — es excepcional
+            por naturaleza.
 
   # ══════════════════════════════
   # NOTIFICATIONS
@@ -3010,6 +3015,95 @@ paths:
   # ══════════════════════════════
   # AVAILABILITY
   # ══════════════════════════════
+  /api/jornada:
+    get:
+      tags: [availability]
+      summary: Ver la jornada de la institución
+      description: |
+        Qué días y en qué horas abre la escuela (RF-07.5).
+
+        La consulta cualquier usuario autenticado, no solo Admins: el formulario
+        de reserva la usa para avisar antes de mandar, y el calendario para saber
+        qué días dibujar.
+
+        **Una lista vacía significa que todavía no se declaró la jornada, NO que
+        la escuela esté cerrada.** Sin jornada declarada no hay restricción de día
+        ni de horario. Una vez declarada, un día sin tramos es un día en que la
+        escuela no abre.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/BloqueHorarioAdmin' } }
+    post:
+      tags: [availability]
+      summary: Agregar un tramo a la jornada (Admin)
+      description: |
+        Se pueden cargar varios tramos en el mismo día: una escuela con turno
+        mañana y turno noche declara 07:00–12:00 y 18:00–23:00, y el mediodía
+        queda cerrado. Una reserva tiene que entrar entera en un tramo.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [diaSemana, horaInicio, horaFin]
+              properties:
+                diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO] }
+                horaInicio: { type: string, example: "07:00" }
+                horaFin: { type: string, example: "12:00" }
+      responses:
+        "201": { description: Tramo agregado }
+        "409":
+          description: |
+            Ese tramo se pisa con otro del mismo día. El mensaje nombra cuál.
+            Dos tramos que se tocan en el borde —uno termina 12:00 y el otro
+            empieza 12:00— no se consideran solapados: describen un día abierto
+            de punta a punta.
+          content:
+            text/plain:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/jornada/{id}:
+    patch:
+      tags: [availability]
+      summary: Editar un tramo de la jornada (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO] }
+                horaInicio: { type: string, example: "07:00" }
+                horaFin: { type: string, example: "12:00" }
+      responses:
+        "200": { description: Tramo actualizado }
+        "404": { description: No existe }
+        "409": { description: Se pisa con otro tramo del mismo día }
+    delete:
+      tags: [availability]
+      summary: Quitar un tramo de la jornada (Admin)
+      description: |
+        Quitar el último tramo deja la jornada sin declarar, y con eso el sistema
+        vuelve a no restringir ningún día. Es coherente y reversible.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Tramo eliminado }
+        "404": { description: No existe }
+
   /api/availability/admins:
     get:
       tags: [availability]
@@ -3054,7 +3148,7 @@ paths:
               type: object
               required: [diaSemana, horaInicio, horaFin]
               properties:
-                diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES] }
+                diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO] }
                 horaInicio: { type: string, example: "08:00" }
                 horaFin: { type: string, example: "12:00" }
       responses:
@@ -3085,7 +3179,7 @@ paths:
             schema:
               type: object
               properties:
-                diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES] }
+                diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO] }
                 horaInicio: { type: string }
                 horaFin: { type: string }
       responses:

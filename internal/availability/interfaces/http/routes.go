@@ -26,4 +26,18 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 
 	availability.Post("/mi-excepcion", autenticado, soloAdmin, h.CargarExcepcion)
 	availability.Post("/no-disponible-ahora", autenticado, soloAdmin, h.MarcarNoDisponibleAhora)
+
+	// La jornada de la institución cuelga de /api/jornada y no de
+	// /api/availability, aunque la sirva este mismo handler: es un dato de
+	// la escuela, no la disponibilidad de una persona, y la URL es lo
+	// primero que lee quien intenta entender la API.
+	//
+	// El GET es para cualquier autenticado, no solo Admin: el formulario de
+	// reserva lo usa para avisar antes de mandar, y el calendario para saber
+	// qué días dibujar. Escribir sí es exclusivo de ADMIN.
+	jornada := app.Group("/api/jornada")
+	jornada.Get("/", autenticado, h.Jornada)
+	jornada.Post("/", autenticado, soloAdmin, h.AgregarBloqueDeJornada)
+	jornada.Patch("/:id", autenticado, soloAdmin, h.EditarBloqueDeJornada)
+	jornada.Delete("/:id", autenticado, soloAdmin, h.EliminarBloqueDeJornada)
 }

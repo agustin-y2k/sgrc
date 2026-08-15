@@ -394,7 +394,7 @@ var testSecret = []byte("un-secreto-de-test-bastante-largo")
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	contadorID = 0
 	svc := application.NewService(repo, &fakeValidadorMateria{asignado: true}, &fakeValidadorEquipo{disponible: true},
-		&fakeObtenedorNombre{}, idSecuencial, func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{}, idSecuencial, func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus())
 	h := NewHandler(svc, fakeAuditor{})
 
@@ -1014,4 +1014,14 @@ func TestHTTP_CancelarReservaPropia_SinMotivo_OK(t *testing.T) {
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200 al cancelar la propia sin motivo, obtuve %d", resp.StatusCode)
 	}
+}
+
+// fakeValidadorJornada: sin jornada declarada no hay restricción, que es el
+// comportamiento real y lo que estos tests necesitan.
+type fakeValidadorJornada struct {
+	permite bool
+}
+
+func (f *fakeValidadorJornada) PermiteReserva(_ context.Context, _ time.Time, _, _ time.Duration) (bool, error) {
+	return f.permite, nil
 }

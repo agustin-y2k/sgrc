@@ -202,3 +202,111 @@ func (s *Service) DisponibilidadDeTodosLosAdmins(ctx context.Context) ([]AdminDi
 	}
 	return resultado, nil
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Jornada de la institución
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Vive en este paquete y no en uno propio porque es el mismo concepto que
+// availability ya modela —días de la semana y tramos horarios— y porque
+// comparte con él las conversiones de hora de pared. Lo que NO comparte es
+// el dueño: el horario de un Admin es de esa persona, la jornada es de la
+// escuela. Por eso ninguna de estas funciones recibe usuarioID; quién puede
+// tocarla se resuelve en la ruta, que exige rol ADMIN.
+
+// Jornada devuelve la jornada declarada, completa. Una lista vacía significa
+// que la institución todavía no la declaró, y eso NO es lo mismo que una
+// escuela cerrada: sin jornada declarada no hay restricción de horario.
+func (s *Service) Jornada(ctx context.Context) ([]*domain.BloqueJornada, error) {
+	return s.repo.ListarJornada(ctx)
+}
+
+// AgregarBloqueDeJornada suma un tramo abierto a un día. Varios por día es
+// el caso previsto: turno mañana y turno noche, con el mediodía afuera.
+func (s *Service) AgregarBloqueDeJornada(ctx context.Context, dia domain.DiaSemana, horaInicio, horaFin time.Duration) (*domain.BloqueJornada, error) {
+	b, err := domain.NuevoBloqueJornada(s.nuevoID(), dia, horaInicio, horaFin)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.verificarJornadaSinSolape(ctx, b); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CrearBloqueJornada(ctx, b); err != nil {
+		return nil, fmt.Errorf("creando bloque de jornada: %w", err)
+	}
+	return b, nil
+}
+
+// EditarBloqueDeJornada acepta campos opcionales (PATCH parcial) y revalida
+// el rango resultante aunque se edite un solo extremo, igual que el horario
+// de los Admin.
+func (s *Service) EditarBloqueDeJornada(ctx context.Context, id string, dia *domain.DiaSemana, horaInicio, horaFin *time.Duration) (*domain.BloqueJornada, error) {
+	actual, err := s.repo.BuscarBloqueJornada(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	nuevo := *actual
+	if dia != nil {
+		nuevo.DiaSemana = *dia
+	}
+	if horaInicio != nil {
+		nuevo.HoraInicio = *horaInicio
+	}
+	if horaFin != nil {
+		nuevo.HoraFin = *horaFin
+	}
+	if nuevo.HoraFin <= nuevo.HoraInicio {
+		return nil, domain.ErrRangoHorarioInvalido
+	}
+	if err := s.verificarJornadaSinSolape(ctx, &nuevo); err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.GuardarBloqueJornada(ctx, &nuevo); err != nil {
+		return nil, fmt.Errorf("guardando bloque de jornada: %w", err)
+	}
+	return &nuevo, nil
+}
+
+func (s *Service) EliminarBloqueDeJornada(ctx context.Context, id string) error {
+	return s.repo.EliminarBloqueJornada(ctx, id)
+}
+
+// verificarJornadaSinSolape rechaza un tramo que pise a otro del mismo día,
+// nombrando cuál. Mismo criterio y mismo motivo que verificarSinSolape.
+//
+// Se excluye el propio bloque de la comparación: al editar, el tramo se pisa
+// consigo mismo y sin esto no habría forma de mover un extremo.
+func (s *Service) verificarJornadaSinSolape(ctx context.Context, b *domain.BloqueJornada) error {
+	existentes, err := s.repo.ListarJornada(ctx)
+	if err != nil {
+		return fmt.Errorf("verificando si el tramo se pisa con otro: %w", err)
+	}
+	for _, otro := range existentes {
+		if otro.ID == b.ID {
+			continue
+		}
+		if b.SolapaCon(otro) {
+			return fmt.Errorf("%w: %s de %s a %s", domain.ErrBloqueJornadaSolapado,
+				otro.DiaSemana, formatearHora(otro.HoraInicio), formatearHora(otro.HoraFin))
+		}
+	}
+	return nil
+}
+
+// PermiteReserva responde si un bloque cae dentro de la jornada declarada.
+// Lo consume reservation a través de un puerto (ver cmd/wiring_adapters.go):
+// availability no sabe que existen las reservas.
+//
+// `fecha` llega como el DATE de la reserva —medianoche, sin zona— y de ahí
+// sale el día de la semana. Las horas van aparte, como duraciones desde
+// medianoche, que es como las guarda la columna TIME.
+func (s *Service) PermiteReserva(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) (bool, error) {
+	jornada, err := s.repo.ListarJornada(ctx)
+	if err != nil {
+		return false, fmt.Errorf("leyendo la jornada de la institución: %w", err)
+	}
+	dia, _ := domain.DiaYHoraDe(fecha)
+	return domain.PermiteReserva(jornada, dia, horaInicio, horaFin), nil
+}

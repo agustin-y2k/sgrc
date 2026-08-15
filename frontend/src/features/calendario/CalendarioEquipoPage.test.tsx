@@ -10,7 +10,7 @@ import { ApiError } from "@/lib/api-client"
 
 vi.mock("@/features/calendario/api")
 
-// La semana del 9 al 14 de marzo de 2026 (lunes a sábado).
+// La semana del 9 al 15 de marzo de 2026 (lunes a domingo).
 const LUNES = new Date(2026, 2, 9, 10, 0, 0)
 
 function renderCalendario() {
@@ -30,7 +30,7 @@ function renderCalendario() {
 const calendarioMock: CalendarioEquipo = {
   equipoId: "pc1",
   desde: "2026-03-09",
-  hasta: "2026-03-14",
+  hasta: "2026-03-15",
   bloques: [
     {
       reservaId: "r1",
@@ -91,7 +91,7 @@ describe("CalendarioEquipoPage", () => {
     expect(await screen.findByText("Jornada docente")).toBeInTheDocument()
   })
 
-  it("pide el calendario de la semana en curso, de lunes a sábado", async () => {
+  it("pide el calendario de la semana en curso, de lunes a domingo", async () => {
     vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
     renderCalendario()
 
@@ -99,7 +99,7 @@ describe("CalendarioEquipoPage", () => {
     expect(calendarioApi.calendarioDeEquipo).toHaveBeenCalledWith(
       "pc1",
       "2026-03-09",
-      "2026-03-14"
+      "2026-03-15"
     )
   })
 
@@ -114,7 +114,7 @@ describe("CalendarioEquipoPage", () => {
     expect(calendarioApi.calendarioDeEquipo).toHaveBeenLastCalledWith(
       "pc1",
       "2026-03-16",
-      "2026-03-21"
+      "2026-03-22"
     )
   })
 
@@ -129,7 +129,7 @@ describe("CalendarioEquipoPage", () => {
     expect(calendarioApi.calendarioDeEquipo).toHaveBeenLastCalledWith(
       "pc1",
       "2026-03-02",
-      "2026-03-07"
+      "2026-03-08"
     )
   })
 

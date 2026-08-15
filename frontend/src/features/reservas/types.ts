@@ -22,9 +22,17 @@ export type EstadoReserva =
  */
 export type TipoReserva = "NORMAL" | "BLOQUEO"
 
-// La semana lectiva es de lunes a viernes: el backend rechaza reservar un
-// sábado o un domingo (domain.ErrDiaNoLectivo).
-export type DiaSemana = "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES"
+// Los siete días. El sistema no supone qué días abre la institución: hay
+// escuelas de jornada extendida y albergue que dictan el fin de semana, y
+// antes ni siquiera podían expresar "todos los sábados".
+export type DiaSemana =
+  | "LUNES"
+  | "MARTES"
+  | "MIERCOLES"
+  | "JUEVES"
+  | "VIERNES"
+  | "SABADO"
+  | "DOMINGO"
 
 export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "LUNES", etiqueta: "Lunes" },
@@ -32,22 +40,9 @@ export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "MIERCOLES", etiqueta: "Miércoles" },
   { valor: "JUEVES", etiqueta: "Jueves" },
   { valor: "VIERNES", etiqueta: "Viernes" },
+  { valor: "SABADO", etiqueta: "Sábado" },
+  { valor: "DOMINGO", etiqueta: "Domingo" },
 ]
-
-/**
- * Espeja domain.EsDiaLectivo del backend, para avisar en el formulario en
- * vez de esperar el 400.
- *
- * Se construye la fecha con componentes locales a propósito: `new
- * Date("2026-08-08")` la interpreta como medianoche UTC, y al oeste de
- * Greenwich eso cae el día anterior — un sábado se leería como viernes.
- */
-export function esDiaLectivo(fechaISO: string): boolean {
-  const [anio, mes, dia] = fechaISO.split("-").map(Number)
-  if (!anio || !mes || !dia) return true // incompleta: que valide el backend
-  const diaSemana = new Date(anio, mes - 1, dia).getDay()
-  return diaSemana !== 0 && diaSemana !== 6
-}
 
 /**
  * Hoy en formato YYYY-MM-DD, para el `min` de los inputs de fecha: el
@@ -67,20 +62,45 @@ export function hoyISO(): string {
 /** Espeja domain.MaxDuracionReserva: un turno completo. */
 export const MAX_HORAS_RESERVA = 8
 
+function minutosDelDia(hhmm: string): number | null {
+  const [h, m] = hhmm.split(":").map(Number)
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null
+}
+
+/**
+ * Cuánto dura la franja, en minutos, cruce o no la medianoche.
+ *
+ * Espejo de domain.DuracionDe. Para 22:00–01:00 son 180 minutos, no −1260:
+ * una resta cruda daba negativo, pasaba cualquier tope y hacía que una clase
+ * nocturna nunca se marcara como demasiado larga.
+ *
+ * Devuelve null con la hora incompleta, para que quien llame decida si eso es
+ * un error o simplemente "todavía no lo eligió".
+ */
+export function duracionEnMinutos(horaInicio: string, horaFin: string): number | null {
+  const inicio = minutosDelDia(horaInicio)
+  const fin = minutosDelDia(horaFin)
+  if (inicio === null || fin === null) return null
+  return fin < inicio ? 24 * 60 - inicio + fin : fin - inicio
+}
+
+/** Si la franja cruza la medianoche: la hora de fin cae al día siguiente. */
+export function cruzaMedianoche(horaInicio: string, horaFin: string): boolean {
+  const inicio = minutosDelDia(horaInicio)
+  const fin = minutosDelDia(horaFin)
+  if (inicio === null || fin === null) return false
+  return fin < inicio
+}
+
 /**
  * Avisa en el formulario en vez de esperar el 400 de
- * domain.ErrDuracionExcesiva. No aplica a los bloqueos administrativos
- * estatal, que están exceptuados del tope.
+ * domain.ErrDuracionExcesiva. No aplica a los bloqueos administrativos, que
+ * están exceptuados del tope.
  */
 export function excedeDuracionMaxima(horaInicio: string, horaFin: string): boolean {
-  const minutos = (hhmm: string): number | null => {
-    const [h, m] = hhmm.split(":").map(Number)
-    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null
-  }
-  const inicio = minutos(horaInicio)
-  const fin = minutos(horaFin)
-  if (inicio === null || fin === null) return false // incompleto: que valide el backend
-  return fin - inicio > MAX_HORAS_RESERVA * 60
+  const duracion = duracionEnMinutos(horaInicio, horaFin)
+  if (duracion === null) return false // incompleto: que valide el backend
+  return duracion > MAX_HORAS_RESERVA * 60
 }
 
 export type Reserva = {

@@ -8,11 +8,19 @@ export type RespuestaLista<T> = { data: T[] }
  * (docs/06-arquitectura.md §3): son dos conceptos que hoy coinciden pero no
  * tienen por qué moverse juntos.
  *
- * Solo lunes a viernes: la semana lectiva. El backend impone lo mismo, en su
- * enum y en el CHECK de la columna, así que no hace falta prever días fuera
- * de esta lista.
+ * Los siete días, igual que el enum del backend y el CHECK de la columna. Un
+ * Admin de una escuela que abre el sábado tiene que poder publicar que ese
+ * día está: antes el sistema no admitía nombrar el día, así que la respuesta
+ * "no hay nadie" era estructural y no había forma de corregirla.
  */
-export type DiaSemana = "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES"
+export type DiaSemana =
+  | "LUNES"
+  | "MARTES"
+  | "MIERCOLES"
+  | "JUEVES"
+  | "VIERNES"
+  | "SABADO"
+  | "DOMINGO"
 
 export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "LUNES", etiqueta: "Lunes" },
@@ -20,6 +28,8 @@ export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "MIERCOLES", etiqueta: "Miércoles" },
   { valor: "JUEVES", etiqueta: "Jueves" },
   { valor: "VIERNES", etiqueta: "Viernes" },
+  { valor: "SABADO", etiqueta: "Sábado" },
+  { valor: "DOMINGO", etiqueta: "Domingo" },
 ]
 
 const ETIQUETAS_DIA: Record<DiaSemana, string> = Object.fromEntries(
@@ -73,6 +83,8 @@ const ORDEN_DIA: Record<DiaSemana, number> = {
   MIERCOLES: 3,
   JUEVES: 4,
   VIERNES: 5,
+  SABADO: 6,
+  DOMINGO: 7,
 }
 
 /**
@@ -88,4 +100,97 @@ export function ordenarPorDia(bloques: BloqueHorario[]): BloqueHorario[] {
     const dia = ORDEN_DIA[a.diaSemana] - ORDEN_DIA[b.diaSemana]
     return dia !== 0 ? dia : a.horaInicio.localeCompare(b.horaInicio)
   })
+}
+
+// ── Jornada de la institución ─────────────────────────────────────────
+//
+// Espejo de domain.PermiteReserva del backend, para poder avisar en la
+// pantalla en vez de esperar el 400. La regla vive en el backend, que es
+// quien decide; esto solo se adelanta.
+
+/** Índice de JS (0 = domingo) a nuestro enum. */
+const DIA_DE_JS: DiaSemana[] = [
+  "DOMINGO",
+  "LUNES",
+  "MARTES",
+  "MIERCOLES",
+  "JUEVES",
+  "VIERNES",
+  "SABADO",
+]
+
+/**
+ * Día de la semana de una fecha "YYYY-MM-DD".
+ *
+ * Se construye con componentes locales a propósito: `new Date("2026-08-08")`
+ * la interpreta como medianoche UTC, y al oeste de Greenwich eso cae el día
+ * anterior — un sábado se leería como viernes.
+ */
+export function diaDeLaFecha(fechaISO: string): DiaSemana | null {
+  const [anio, mes, dia] = fechaISO.split("-").map(Number)
+  if (!anio || !mes || !dia) return null
+  return DIA_DE_JS[new Date(anio, mes - 1, dia).getDay()]
+}
+
+/**
+ * Los días en que la institución declaró que abre, en orden de semana.
+ *
+ * Con la jornada sin declarar devuelve los siete: no hay restricción, así
+ * que no hay ningún día que ocultar.
+ */
+export function diasDeLaJornada(jornada: BloqueHorario[]): DiaSemana[] {
+  if (jornada.length === 0) return DIAS_SEMANA.map((d) => d.valor)
+  const declarados = new Set(jornada.map((b) => b.diaSemana))
+  return DIAS_SEMANA.map((d) => d.valor).filter((d) => declarados.has(d))
+}
+
+/**
+ * Si un bloque cae dentro de la jornada. Mismas dos reglas que el backend:
+ * jornada vacía no restringe, y la reserva tiene que entrar entera en un
+ * tramo — con los tramos contiguos fusionados, para que 07:00–12:00 más
+ * 12:00–18:00 se comporten como un día abierto de 7 a 18.
+ */
+export function dentroDeLaJornada(
+  jornada: BloqueHorario[],
+  fechaISO: string,
+  horaInicio: string,
+  horaFin: string
+): boolean {
+  if (jornada.length === 0) return true
+
+  const dia = diaDeLaFecha(fechaISO)
+  if (dia === null) return true // fecha incompleta: que valide el backend
+
+  // Todo se mide desde la misma medianoche, así que el fin pasa de las 24
+  // horas cuando el tramo cruza: una jornada nocturna de 20:00 a 01:00 es
+  // [1200, 1500) en minutos. Comparar las horas crudas la leía al revés.
+  const tramos = jornada
+    .filter((b) => b.diaSemana === dia)
+    .map((b) => {
+      const desde = aMinutosDelDia(b.horaInicio)
+      const hasta = aMinutosDelDia(b.horaFin)
+      return { desde, hasta: hasta < desde ? hasta + 24 * 60 : hasta }
+    })
+    .sort((a, b) => a.desde - b.desde)
+  if (tramos.length === 0) return false
+
+  const fusionados = [tramos[0]]
+  for (const t of tramos.slice(1)) {
+    const ultimo = fusionados[fusionados.length - 1]
+    if (t.desde <= ultimo.hasta) {
+      ultimo.hasta = Math.max(ultimo.hasta, t.hasta)
+      continue
+    }
+    fusionados.push({ ...t })
+  }
+
+  const desde = aMinutosDelDia(horaInicio)
+  const crudoHasta = aMinutosDelDia(horaFin)
+  const hasta = crudoHasta < desde ? crudoHasta + 24 * 60 : crudoHasta
+  return fusionados.some((t) => desde >= t.desde && hasta <= t.hasta)
+}
+
+function aMinutosDelDia(hora: string): number {
+  const [h, m] = hora.split(":").map(Number)
+  return h * 60 + m
 }

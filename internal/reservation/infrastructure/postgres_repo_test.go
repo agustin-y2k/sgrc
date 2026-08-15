@@ -792,7 +792,7 @@ func TestPostgresRepo_CascadaService_CancelarReservasFuturasDeEquipo(t *testing.
 	}
 
 	svc := application.NewService(repo,
-		NewValidadorMateriaPostgres(pool), NewValidadorEquipoPostgres(pool), NewObtenedorNombrePostgres(pool),
+		NewValidadorMateriaPostgres(pool), NewValidadorEquipoPostgres(pool), jornadaLibre{}, NewObtenedorNombrePostgres(pool),
 		NuevoID, func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	canceladas, notificados, err := svc.CancelarReservasFuturasDeEquipo(context.Background(), equipoID, "PC dada de baja")
@@ -829,7 +829,7 @@ func TestPostgresRepo_CascadaService_CancelarReservasFuturasDeMateria(t *testing
 	}
 
 	svc := application.NewService(repo,
-		NewValidadorMateriaPostgres(pool), NewValidadorEquipoPostgres(pool), NewObtenedorNombrePostgres(pool),
+		NewValidadorMateriaPostgres(pool), NewValidadorEquipoPostgres(pool), jornadaLibre{}, NewObtenedorNombrePostgres(pool),
 		NuevoID, func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	canceladas, err := svc.CancelarReservasFuturasDeMateria(context.Background(), materiaID, "Docente dado de baja")
@@ -1020,7 +1020,7 @@ func TestCrearReserva_ConflictoAMitadDelLote_NoDejaGrupoParcial(t *testing.T) {
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	svc := application.NewService(repo,
-		validadorMateriaOK{}, validadorEquipoOK{}, nombreDocenteFijo{}, NuevoID,
+		validadorMateriaOK{}, validadorEquipoOK{}, jornadaLibre{}, nombreDocenteFijo{}, NuevoID,
 		func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	_, _, err := svc.CrearReserva(ctx, materiaID, docenteID, false, fecha,
@@ -1058,7 +1058,7 @@ func TestCrearReservaRecurrente_ConflictoEnUnaFecha_NoDejaReglaNiGrupos(t *testi
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	svc := application.NewService(repo,
-		validadorMateriaOK{}, validadorEquipoOK{}, nombreDocenteFijo{}, NuevoID,
+		validadorMateriaOK{}, validadorEquipoOK{}, jornadaLibre{}, nombreDocenteFijo{}, NuevoID,
 		func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	// Lunes 3, 10 y 17 de mayo de 2027. Se ocupa de antemano el del medio,
@@ -1912,4 +1912,112 @@ func TestPostgresRepo_BuscarSolapamientos_BordeQueSeToca_NoCuenta(t *testing.T) 
 	if len(conflictos) != 0 {
 		t.Fatalf("una reserva contigua no es un choque: %+v", conflictos)
 	}
+}
+
+// ── Clases que cruzan la medianoche ───────────────────────────────────
+//
+// Lo que hace falta para una escuela nocturna, y lo que ninguna cantidad de
+// tests de dominio puede garantizar: que el SQL y la constraint EXCLUDE de la
+// base entiendan que una clase del lunes a las 22:00 sigue ocupando la
+// máquina el martes a la 01:00.
+
+func TestPostgresRepo_ClaseNocturna_SePuedeCrear(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	materiaID := crearMateriaDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	g := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
+		t.Fatalf("el grupo nocturno no debería fallar: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, lunes, 22*time.Hour, 1*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("dominio: %v", err)
+	}
+	// Sin fin_de_pared(), tsrange recibiría un fin ANTERIOR al inicio y
+	// Postgres rechazaría el INSERT con "range lower bound must be less than
+	// or equal to range upper bound".
+	if err := repo.CrearReserva(context.Background(), res); err != nil {
+		t.Fatalf("una clase de 22:00 a 01:00 tiene que poder crearse: %v", err)
+	}
+}
+
+// El caso que hace la diferencia entre "anda" y "parece que anda": la segunda
+// reserva es de OTRA FECHA (el martes de madrugada) y aun así choca, porque
+// la del lunes todavía está ocupando esa máquina.
+func TestPostgresRepo_ClaseNocturna_ChocaConLaMadrugadaSiguiente(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	materiaID := crearMateriaDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	martes := lunes.AddDate(0, 0, 1)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	g1 := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	repo.CrearReservaGrupo(context.Background(), g1)
+	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, lunes, 22*time.Hour, 1*time.Hour, ahora)
+	if err := repo.CrearReserva(context.Background(), res1); err != nil {
+		t.Fatalf("la nocturna del lunes no debería fallar: %v", err)
+	}
+
+	// El martes de 00:30 a 02:00 pisa la última media hora de la clase del lunes.
+	g2 := nuevoReservaGrupoDeTest(materiaID, martes, 30*time.Minute, 2*time.Hour)
+	repo.CrearReservaGrupo(context.Background(), g2)
+	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, martes, 30*time.Minute, 2*time.Hour, ahora)
+
+	if err := repo.CrearReserva(context.Background(), res2); err != application.ErrSolapamiento {
+		t.Fatalf("esperaba ErrSolapamiento contra la nocturna del día anterior, obtuve %v", err)
+	}
+
+	// Y el pre-chequeo tiene que verlo ANTES de llegar a la constraint, o el
+	// docente recibiría un error de base en vez de un mensaje que nombre la
+	// máquina y a quién la tiene.
+	conflictos, err := repo.BuscarSolapamientos(context.Background(),
+		[]string{equipoID}, []time.Time{martes}, 30*time.Minute, 2*time.Hour)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(conflictos) != 1 {
+		t.Fatalf("esperaba 1 conflicto con la clase del lunes, obtuve %d: %+v", len(conflictos), conflictos)
+	}
+}
+
+// La contracara: a las 02:00 del martes la clase del lunes ya terminó, así
+// que la máquina está libre. Sin esto, "detectar el cruce" podría estar
+// bloqueando el día entero siguiente.
+func TestPostgresRepo_ClaseNocturna_DespuesDeQueTermina_Libre(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	materiaID := crearMateriaDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	martes := lunes.AddDate(0, 0, 1)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	g1 := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	repo.CrearReservaGrupo(context.Background(), g1)
+	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, lunes, 22*time.Hour, 1*time.Hour, ahora)
+	repo.CrearReserva(context.Background(), res1)
+
+	g2 := nuevoReservaGrupoDeTest(materiaID, martes, 1*time.Hour, 3*time.Hour)
+	repo.CrearReservaGrupo(context.Background(), g2)
+	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, martes, 1*time.Hour, 3*time.Hour, ahora)
+
+	if err := repo.CrearReserva(context.Background(), res2); err != nil {
+		t.Fatalf("de 01:00 a 03:00 arranca justo cuando la otra termina: %v", err)
+	}
+}
+
+// jornadaLibre hace de institución que todavía no declaró su jornada, que es
+// el estado en que no hay restricción horaria. Estos tests van contra
+// Postgres real para ejercitar el SQL de reservas; la jornada tiene sus
+// propios tests en availability y acá solo estorbaría.
+type jornadaLibre struct{}
+
+func (jornadaLibre) PermiteReserva(_ context.Context, _ time.Time, _, _ time.Duration) (bool, error) {
+	return true, nil
 }

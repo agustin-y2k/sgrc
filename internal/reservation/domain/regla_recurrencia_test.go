@@ -24,9 +24,10 @@ func TestParseDiaSemana_Validos(t *testing.T) {
 }
 
 func TestParseDiaSemana_Invalido(t *testing.T) {
-	// La semana lectiva es de lunes a viernes: sábado y domingo no son días
-	// sobre los que se pueda reservar.
-	casos := []string{"", "lunes", "SABADO", "DOMINGO"}
+	// Los siete días son válidos, así que lo que se rechaza es lo que no es
+	// un día: vacío, minúsculas y cualquier otra palabra. SABADO y DOMINGO
+	// estaban acá cuando la semana terminaba el viernes.
+	casos := []string{"", "lunes", "FERIADO"}
 	for _, c := range casos {
 		_, err := ParseDiaSemana(c)
 		if !errors.Is(err, ErrDiaSemanaInvalido) {
@@ -35,19 +36,37 @@ func TestParseDiaSemana_Invalido(t *testing.T) {
 	}
 }
 
-func TestEsDiaLectivo(t *testing.T) {
+// Una regla recurrente puede caer en sábado o en domingo. Antes el enum
+// frenaba en viernes, así que una escuela albergue no podía siquiera
+// expresar "todos los sábados de 9 a 11".
+//
+// El 1 y el 2 de agosto de 2026 son sábado y domingo, y agosto de 2026
+// arranca justo un sábado, así que el mes tiene cinco de cada uno.
+func TestGenerarFechas_FinDeSemana(t *testing.T) {
 	casos := map[string]struct {
-		fecha    time.Time
-		esLabora bool
+		dia      DiaSemana
+		esperado int
 	}{
-		"lunes":   {fecha(2026, time.August, 3), true},
-		"viernes": {fecha(2026, time.August, 7), true},
-		"sábado":  {fecha(2026, time.August, 8), false},
-		"domingo": {fecha(2026, time.August, 9), false},
+		"sábados":  {Sabado, 5},
+		"domingos": {Domingo, 5},
 	}
+
 	for nombre, caso := range casos {
-		if got := EsDiaLectivo(caso.fecha); got != caso.esLabora {
-			t.Errorf("EsDiaLectivo(%s) = %v, esperaba %v", nombre, got, caso.esLabora)
+		regla, err := NuevaReglaRecurrencia("id1", "materia1", "usuario1", caso.dia,
+			9*time.Hour, 11*time.Hour,
+			fecha(2026, time.August, 1), fecha(2026, time.August, 31))
+		if err != nil {
+			t.Fatalf("%s: %v", nombre, err)
+		}
+
+		fechas := regla.GenerarFechas()
+		if len(fechas) != caso.esperado {
+			t.Errorf("%s: esperaba %d ocurrencias, obtuve %d", nombre, caso.esperado, len(fechas))
+		}
+		for _, f := range fechas {
+			if got := diaSemanaAGoWeekday[caso.dia]; f.Weekday() != got {
+				t.Errorf("%s: %s cayó en %s", nombre, f.Format("2006-01-02"), f.Weekday())
+			}
 		}
 	}
 }
@@ -62,7 +81,9 @@ func TestNuevaReglaRecurrencia_RangoFechasInvalido_Error(t *testing.T) {
 }
 
 func TestNuevaReglaRecurrencia_RangoHorarioInvalido_Error(t *testing.T) {
-	_, err := NuevaReglaRecurrencia("id1", "materia1", "usuario1", Lunes, 10*time.Hour, 8*time.Hour,
+	// Solo la igualdad. Una serie nocturna —"todos los lunes de 22 a 1"— es
+	// válida y tiene su propio test más abajo.
+	_, err := NuevaReglaRecurrencia("id1", "materia1", "usuario1", Lunes, 8*time.Hour, 8*time.Hour,
 		fecha(2026, time.March, 1), fecha(2026, time.March, 10))
 
 	if !errors.Is(err, ErrRangoHorarioInvalido) {
@@ -172,5 +193,27 @@ func TestGenerarFechas_AnioBisiesto_29DeFebrero(t *testing.T) {
 
 	if len(fechas) != 1 || fechas[0].Day() != 29 || fechas[0].Month() != time.February {
 		t.Fatalf("esperaba el 29 de febrero de 2028, obtuve %v", fechas)
+	}
+}
+
+// Una serie recurrente nocturna: todos los lunes de 22:00 a 01:00. La regla
+// se guarda con el día en que EMPIEZA la clase, así que las ocurrencias
+// siguen cayendo en lunes aunque cada una termine un martes.
+func TestGenerarFechas_SerieNocturna(t *testing.T) {
+	regla, err := NuevaReglaRecurrencia("id1", "materia1", "usuario1", Lunes,
+		22*time.Hour, 1*time.Hour,
+		fecha(2026, time.March, 2), fecha(2026, time.March, 23))
+	if err != nil {
+		t.Fatalf("una serie nocturna es válida: %v", err)
+	}
+
+	fechas := regla.GenerarFechas()
+	if len(fechas) != 4 {
+		t.Fatalf("esperaba 4 lunes, obtuve %d", len(fechas))
+	}
+	for _, f := range fechas {
+		if f.Weekday() != time.Monday {
+			t.Errorf("%s cayó en %s", f.Format("2006-01-02"), f.Weekday())
+		}
 	}
 }

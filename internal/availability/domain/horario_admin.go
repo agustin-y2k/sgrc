@@ -17,24 +17,27 @@ import (
 // docs/06-arquitectura.md §3).
 type DiaSemana string
 
-// La semana lectiva es de lunes a viernes: si no hay clase, publicar un
-// horario de presencia ese día no le sirve a nadie. El mismo límite está en
-// el CHECK de la columna, para que valga también contra cualquier cosa que
-// escriba directo en la base. Una institución que trabaje sábados amplía los
-// dos a la vez.
+// Los siete días. Antes el enum frenaba en viernes, y con eso un Admin de
+// una escuela que abre el sábado no podía publicar que ese día está — no
+// porque no estuviera, sino porque el sistema no admitía nombrar el día.
+//
+// Qué días opera la institución es un dato que se declara (ver
+// JornadaInstitucional), no una constante del código.
 const (
 	Lunes     DiaSemana = "LUNES"
 	Martes    DiaSemana = "MARTES"
 	Miercoles DiaSemana = "MIERCOLES"
 	Jueves    DiaSemana = "JUEVES"
 	Viernes   DiaSemana = "VIERNES"
+	Sabado    DiaSemana = "SABADO"
+	Domingo   DiaSemana = "DOMINGO"
 )
 
 var ErrDiaSemanaInvalido = errors.New("día de la semana inválido")
 
 func ParseDiaSemana(s string) (DiaSemana, error) {
 	switch DiaSemana(s) {
-	case Lunes, Martes, Miercoles, Jueves, Viernes:
+	case Lunes, Martes, Miercoles, Jueves, Viernes, Sabado, Domingo:
 		return DiaSemana(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrDiaSemanaInvalido, s)
@@ -42,17 +45,24 @@ func ParseDiaSemana(s string) (DiaSemana, error) {
 }
 
 // goWeekdayADiaSemana traduce el time.Weekday de Go a nuestro enum, para
-// poder comparar "ahora" contra los bloques cargados. El fin de semana
-// queda sin mapeo a propósito: no son días hábiles del sistema, así que un
-// "ahora" en sábado o domingo nunca matchea ningún bloque semanal cargado —
-// DiaYHoraDe devuelve DiaSemana("") esos días, y DisponibleAhora responde
-// que no hay nadie disponible, que es la verdad.
+// poder comparar "ahora" contra los bloques cargados.
+//
+// Los siete días están mapeados. Antes el fin de semana quedaba afuera a
+// propósito y eso hacía que DisponibleAhora respondiera siempre "no hay
+// nadie" un sábado, sin importar qué hubiera cargado el Admin. Para una
+// escuela de lunes a viernes esa respuesta era correcta por accidente; para
+// una que abre el sábado era simplemente falsa, y no había forma de
+// corregirla desde la aplicación. Ahora la respuesta sale de los bloques que
+// el Admin haya cargado, que es de donde tenía que salir siempre: sin
+// bloques ese día, sigue diciendo que no hay nadie.
 var goWeekdayADiaSemana = map[time.Weekday]DiaSemana{
 	time.Monday:    Lunes,
 	time.Tuesday:   Martes,
 	time.Wednesday: Miercoles,
 	time.Thursday:  Jueves,
 	time.Friday:    Viernes,
+	time.Saturday:  Sabado,
+	time.Sunday:    Domingo,
 }
 
 // DiaYHoraDe traduce un instante real a los dos componentes que necesita
@@ -72,7 +82,12 @@ func FechaSolo(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-var ErrRangoHorarioInvalido = errors.New("la hora de fin debe ser posterior a la hora de inicio")
+// Lo comparten el horario de los Admin y la jornada de la institución, con
+// una diferencia que conviene tener presente: la jornada puede cruzar la
+// medianoche (20:00–01:00) y el horario de un Admin no, porque el cálculo de
+// "¿hay alguien ahora?" es de un solo día. Para los dos, fin igual a inicio
+// es inválido.
+var ErrRangoHorarioInvalido = errors.New("la hora de fin no puede ser igual a la de inicio")
 
 // ErrBloqueSolapado: dos bloques del mismo día que se pisan.
 //
