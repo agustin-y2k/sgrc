@@ -70,3 +70,18 @@ export function formatearRangoSemana(fecha: Date): string {
     `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`
   return `${fmt(lunes)} – ${fmt(domingo)}/${domingo.getFullYear()}`
 }
+
+/**
+ * "Lunes", "Sábado"… para una fecha "YYYY-MM-DD".
+ *
+ * Existe porque la cabecera del calendario dejó de poder indexar DIAS_SEMANA
+ * por posición: ahora se dibujan solo los días que la escuela declaró, así
+ * que la tercera columna no es necesariamente el miércoles. La etiqueta sale
+ * de la fecha misma, que es la única fuente que no se desalinea.
+ *
+ * El `(getDay() + 6) % 7` corre el origen del domingo (0 en JS) al lunes, que
+ * es donde empieza DIAS_SEMANA.
+ */
+export function etiquetaDeDia(fechaISO: string): string {
+  return DIAS_SEMANA[(desdeFechaISO(fechaISO).getDay() + 6) % 7]
+}

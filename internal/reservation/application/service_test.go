@@ -748,7 +748,7 @@ func nuevoServicioDeTest(repo Repo) *Service {
 		repo,
 		&fakeValidadorMateria{asignado: true},
 		&fakeValidadorEquipo{disponible: true},
-		&fakeObtenedorNombre{nombre: "Ada Lovelace"},
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada Lovelace"},
 		idSecuencial,
 		func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) }, // un lunes
 		eventbus.NewInMemoryEventBus(),                                           // el bus real — ya está probado, no hace falta fakearlo
@@ -809,6 +809,30 @@ func TestCrearReserva_FinDeSemana_SePuede(t *testing.T) {
 			t.Errorf("%s: esperaba un grupo con una reserva, obtuve grupo=%v reservas=%d",
 				nombre, grupo, len(reservas))
 		}
+	}
+}
+
+// Con jornada declarada, lo que cae afuera se rechaza. Es el reemplazo de la
+// regla vieja "lunes a viernes": misma consecuencia visible —un 400 con un
+// mensaje claro— pero originada en un dato que la institución cargó y puede
+// cambiar, no en una constante del código.
+func TestCrearReserva_FueraDeLaJornada_Error(t *testing.T) {
+	svc := NewService(
+		nuevoFakeRepo(),
+		&fakeValidadorMateria{asignado: true},
+		&fakeValidadorEquipo{disponible: true},
+		&fakeValidadorJornada{permite: false},
+		&fakeObtenedorNombre{nombre: "Ada Lovelace"},
+		idSecuencial,
+		func() time.Time { return fecha(2026, 3, 2) },
+		eventbus.NewInMemoryEventBus(),
+	)
+
+	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
+
+	if !errors.Is(err, ErrFueraDeJornada) {
+		t.Fatalf("esperaba ErrFueraDeJornada, obtuve %v", err)
 	}
 }
 
@@ -873,7 +897,7 @@ func TestCrearReserva_SinEquipos_Error(t *testing.T) {
 
 func TestCrearReserva_DocenteNoAsignado_Error(t *testing.T) {
 	svc := NewService(nuevoFakeRepo(), &fakeValidadorMateria{asignado: false}, &fakeValidadorEquipo{disponible: true},
-		&fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
 
 	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
@@ -885,7 +909,7 @@ func TestCrearReserva_DocenteNoAsignado_Error(t *testing.T) {
 
 func TestCrearReserva_EquipoNoDisponible_Error(t *testing.T) {
 	svc := NewService(nuevoFakeRepo(), &fakeValidadorMateria{asignado: true}, &fakeValidadorEquipo{disponible: false},
-		&fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
 
 	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
@@ -1174,7 +1198,7 @@ func TestPublicarCancelaciones_SinIdentificadores_ElAvisoSaleIgual(t *testing.T)
 	repo := nuevoFakeRepo()
 	svc := NewService(repo, &fakeValidadorMateria{asignado: true},
 		&fakeValidadorEquipo{disponible: true, errIdentificadores: errors.New("inventory caído")},
-		&fakeObtenedorNombre{nombre: "Ada"}, idSecuencial,
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada"}, idSecuencial,
 		func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus())
 
@@ -1319,7 +1343,7 @@ func TestCrearReservaRecurrente_OK(t *testing.T) {
 
 func TestCrearReservaRecurrente_DocenteNoAsignado_Error(t *testing.T) {
 	svc := NewService(nuevoFakeRepo(), &fakeValidadorMateria{asignado: false}, &fakeValidadorEquipo{disponible: true},
-		&fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
 
 	_, err := svc.CrearReservaRecurrente(context.Background(), "materia1", "docente1", false,
 		domain.Lunes, 14*time.Hour, 15*time.Hour, fecha(2026, 3, 2), fecha(2026, 3, 9), []string{"pc1"})
@@ -1566,7 +1590,7 @@ func TestBloquearEquipos_NoCancelaOtroBloqueoAdministrativo(t *testing.T) {
 
 func TestBloquearEquipos_EquipoNoDisponible_Error(t *testing.T) {
 	svc := NewService(nuevoFakeRepo(), &fakeValidadorMateria{asignado: true}, &fakeValidadorEquipo{disponible: false},
-		&fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
 
 	_, err := svc.BloquearEquipos(context.Background(), []string{"pc1"}, nil,
 		fecha(2026, 3, 9), 9*time.Hour, 12*time.Hour, "motivo")
@@ -1969,7 +1993,7 @@ func TestCrearReserva_UnAdminNoAsignadoPuedeReservar(t *testing.T) {
 	svc := NewService(repo,
 		&fakeValidadorMateria{asignado: false},
 		&fakeValidadorEquipo{disponible: true},
-		&fakeObtenedorNombre{nombre: "Admin Inicial"},
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Admin Inicial"},
 		idSecuencial,
 		func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus(),
@@ -1991,7 +2015,7 @@ func TestCrearReserva_UnDocenteNoAsignadoSigueSinPoder(t *testing.T) {
 	svc := NewService(repo,
 		&fakeValidadorMateria{asignado: false},
 		&fakeValidadorEquipo{disponible: true},
-		&fakeObtenedorNombre{nombre: "Ada"},
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada"},
 		idSecuencial,
 		func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus(),
@@ -2013,7 +2037,7 @@ func TestCrearReserva_MateriaArchivada_NoAdmiteReservas(t *testing.T) {
 	svc := NewService(repo,
 		&fakeValidadorMateria{asignado: true, archivada: true},
 		&fakeValidadorEquipo{disponible: true},
-		&fakeObtenedorNombre{nombre: "Ada"},
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada"},
 		idSecuencial,
 		func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus(),
@@ -2034,7 +2058,7 @@ func TestCrearReserva_UnAdminTampocoPuedeSobreMateriaArchivada(t *testing.T) {
 	svc := NewService(repo,
 		&fakeValidadorMateria{asignado: true, archivada: true},
 		&fakeValidadorEquipo{disponible: true},
-		&fakeObtenedorNombre{nombre: "Admin"},
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Admin"},
 		idSecuencial,
 		func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus(),
@@ -2053,7 +2077,7 @@ func TestCrearReservaRecurrente_MateriaArchivada_NoAdmiteReservas(t *testing.T) 
 	svc := NewService(repo,
 		&fakeValidadorMateria{asignado: true, archivada: true},
 		&fakeValidadorEquipo{disponible: true},
-		&fakeObtenedorNombre{nombre: "Ada"},
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada"},
 		idSecuencial,
 		func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus(),
@@ -2552,7 +2576,7 @@ func TestPedirLiberacionDeReserva_PublicaElAviso(t *testing.T) {
 	repo := nuevoFakeRepo()
 	bus := &busEspia{}
 	svc := NewService(repo, &fakeValidadorMateria{asignado: true}, &fakeValidadorEquipo{disponible: true},
-		&fakeObtenedorNombre{nombre: "Grace Hopper"}, idSecuencial,
+		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Grace Hopper"}, idSecuencial,
 		func() time.Time { return fecha(2026, 3, 2) }, bus)
 
 	repo.contactoDeUsuario["otro-docente"] = [2]string{"Ada Lovelace", "ada@escuela.edu.ar"}
@@ -2613,4 +2637,17 @@ func TestPedirLiberacionDeReserva_FranjaYaEmpezada(t *testing.T) {
 	if !errors.Is(err, ErrReservaYaEmpezada) {
 		t.Fatalf("esperaba ErrReservaYaEmpezada, obtuve: %v", err)
 	}
+}
+
+// fakeValidadorJornada hace de la jornada declarada por la institución.
+//
+// Por defecto permite todo, que es el comportamiento real cuando nadie
+// declaró una jornada — el caso de la enorme mayoría de los tests, que no
+// tienen nada que decir sobre horarios de apertura.
+type fakeValidadorJornada struct {
+	permite bool
+}
+
+func (f *fakeValidadorJornada) PermiteReserva(_ context.Context, _ time.Time, _, _ time.Duration) (bool, error) {
+	return f.permite, nil
 }

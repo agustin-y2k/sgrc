@@ -89,3 +89,58 @@ export function marcarNoDisponibleAhora() {
     method: "POST",
   })
 }
+
+// ── Jornada de la institución ─────────────────────────────────────────
+//
+// Vive en este archivo porque comparte el tipo BloqueHorario y las mismas
+// conversiones de "HH:MM", pero cuelga de /api/jornada y no de
+// /api/availability: es un dato de la escuela, no la disponibilidad de una
+// persona.
+
+/**
+ * La jornada declarada por la institución: qué días y en qué horas abre.
+ *
+ * La consulta cualquier autenticado, no solo Admins — el formulario de
+ * reserva la usa para avisar antes de mandar, y el calendario para saber qué
+ * días dibujar.
+ *
+ * Lista vacía significa que todavía no la declararon, y eso NO es una
+ * escuela cerrada: sin jornada no hay restricción de día ni de horario.
+ */
+/**
+ * Clave de react-query de la jornada. Se declara acá, y no en la pantalla que
+ * la edita, porque la consultan tres lugares —la pantalla del Admin, el
+ * formulario de reserva y el calendario— y una clave escrita a mano en cada
+ * uno se desincroniza el día que alguien la cambia en dos de los tres.
+ */
+export const JORNADA_KEY = ["jornada"]
+
+export function jornadaDeLaInstitucion() {
+  return apiFetch<RespuestaLista<BloqueHorario>>("/api/jornada")
+}
+
+export function agregarBloqueDeJornada(
+  diaSemana: DiaSemana,
+  horaInicio: string,
+  horaFin: string
+) {
+  return apiFetch<BloqueHorario>("/api/jornada", {
+    method: "POST",
+    body: { diaSemana, horaInicio, horaFin },
+  })
+}
+
+/** PATCH parcial, igual que el horario propio. */
+export function editarBloqueDeJornada(
+  id: string,
+  cambios: { diaSemana?: DiaSemana; horaInicio?: string; horaFin?: string }
+) {
+  return apiFetch<BloqueHorario>(`/api/jornada/${id}`, {
+    method: "PATCH",
+    body: cambios,
+  })
+}
+
+export function eliminarBloqueDeJornada(id: string) {
+  return apiFetch<void>(`/api/jornada/${id}`, { method: "DELETE" })
+}

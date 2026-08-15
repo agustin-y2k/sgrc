@@ -58,6 +58,10 @@ const ENLACES_ADMIN: Enlace[] = [
   // software con vencimiento tiene y cuándo hay que renovarlo.
   { a: "/admin/licencias", texto: "Licencias" },
   { a: "/admin/reportes", texto: "Reportes" },
+  // La jornada de la escuela: qué días y horas abre. Se configura una vez y
+  // casi no se toca, así que va abajo — pero antes de "Bloquear equipos",
+  // que es lo que más rompe si se entra sin querer.
+  { a: "/admin/jornada", texto: "Jornada de la escuela" },
   // RF-04.7. Último: es lo que menos se usa y lo que más rompe si se entra
   // sin querer.
   { a: "/admin/bloquear-equipos", texto: "Bloquear equipos" },

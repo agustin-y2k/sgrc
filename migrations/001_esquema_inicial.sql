@@ -786,6 +786,50 @@ CREATE INDEX idx_notif_usuario_estado ON notificacion (usuario_id, estado);
 CREATE INDEX idx_notif_sobre_usuario  ON notificacion (sobre_usuario_id, tipo) WHERE sobre_usuario_id IS NOT NULL;
 
 -- ═══════════════════════════════════════════════════════════════════════
+-- Jornada de la institución — normativo
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Qué días y entre qué horas abre la escuela. Es la única tabla del sistema
+-- sin dueño: describe a la institución entera, no a una persona.
+--
+-- Existe porque esto estaba hardcodeado. El código daba por sentado "lunes a
+-- viernes" y ninguna escuela podía decir lo contrario, lo cual dejaba afuera
+-- a las de jornada extendida o albergue —que dictan el fin de semana— y no
+-- decía nada de las horas.
+--
+-- Tabla VACÍA significa "todavía no lo declararon", y en ese caso no hay
+-- restricción: el sistema no supone un calendario que nadie le dijo. Con
+-- filas cargadas, un día sin filas es un día en que la escuela no abre. Las
+-- dos situaciones se ven parecidas y significan lo contrario, así que la
+-- validación mira la tabla completa y no solo el día que le preguntan (ver
+-- PermiteReserva en availability/domain).
+--
+-- Varias filas por día a propósito: una escuela con turno mañana y turno
+-- noche declara 07:00–12:00 y 18:00–23:00, y el mediodía queda afuera.
+CREATE TABLE jornada_institucion (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    dia_semana   VARCHAR(10) NOT NULL,
+    hora_inicio  TIME NOT NULL,
+    hora_fin     TIME NOT NULL,
+
+    CHECK (hora_fin > hora_inicio),
+    CONSTRAINT chk_jornada_dia_valido
+        CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO','DOMINGO'))
+);
+
+-- El solapamiento entre bloques del mismo día se rechaza en la aplicación,
+-- no con una constraint EXCLUDE. Es la misma decisión que en horario_admin,
+-- su tabla hermana, y por la misma razón: la tabla es chica y de escritura
+-- casi nula —una escuela declara su jornada una vez— así que la EXCLUDE
+-- compraría poco, y a cambio obligaría a un tipo de rango sobre TIME que
+-- Postgres no trae. La de `reserva` sí existe porque ahí hay concurrencia
+-- real entre docentes reservando la misma máquina.
+--
+-- Tocarse no es pisarse: 07:00–12:00 y 12:00–18:00 son contiguos y válidos.
+
+CREATE INDEX idx_jornada_dia ON jornada_institucion (dia_semana);
+
+-- ═══════════════════════════════════════════════════════════════════════
 -- Disponibilidad de los Admin (RF-07) — puramente informativo
 -- ═══════════════════════════════════════════════════════════════════════
 
@@ -920,6 +964,7 @@ DROP TABLE IF EXISTS historico_uso_docente CASCADE;
 DROP TABLE IF EXISTS historico_uso_equipo CASCADE;
 DROP TABLE IF EXISTS horario_admin_excepcion CASCADE;
 DROP TABLE IF EXISTS horario_admin CASCADE;
+DROP TABLE IF EXISTS jornada_institucion CASCADE;
 DROP TABLE IF EXISTS notificacion CASCADE;
 DROP TABLE IF EXISTS prestamo CASCADE;
 DROP TABLE IF EXISTS reserva CASCADE;
