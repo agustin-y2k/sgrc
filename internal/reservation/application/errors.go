@@ -154,3 +154,12 @@ func (e *ErrorDeSolapamiento) Error() string {
 
 	return "no se pudo reservar: " + strings.Join(partes, "; ")
 }
+
+// ErrFueraDeJornada: el día o el horario pedidos caen fuera de la jornada
+// que declaró la institución.
+//
+// Reemplaza a ErrDiaNoLectivo, que decía "no se puede reservar un sábado o
+// un domingo" para todo el mundo. La diferencia no es solo qué días abarca:
+// aquel era una regla del código y este es la consecuencia de un dato que
+// alguien cargó y puede cambiar.
+var ErrFueraDeJornada = errors.New("ese día y horario están fuera de la jornada de la institución")

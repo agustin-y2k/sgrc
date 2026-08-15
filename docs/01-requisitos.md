@@ -124,6 +124,12 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 
 ### RF-04 — Reservas
 
+> **La jornada de la institución (RF-07.5).** Un Admin declara qué días y en qué horas abre la escuela, desde *Jornada de la escuela*. Se pueden cargar **varios tramos por día** —una escuela con turno mañana y turno noche declara 07:00–12:00 y 18:00–23:00, y el mediodía queda cerrado—, y una reserva que caiga afuera se rechaza. **Mientras no se declare ninguna jornada no hay restricción**: el sistema no supone un calendario que nadie le dijo. Una vez declarada, un día sin tramos es un día en que la escuela no abre.
+>
+> No confundirla con el horario de disponibilidad de cada Admin (RF-07.1): aquel es de una persona y es informativo —sirve para saber a quién buscar—, este es de la institución y es normativo.
+>
+> **Cuándo se carga una reserva no está limitado**, solo para cuándo es. Un docente puede reservar un domingo a la noche desde su casa para el lunes: ese puede ser justamente el rato libre que tiene para organizarse.
+
 > **Los siete días de la semana son reservables.** El sistema no supone qué días opera la institución: hay escuelas de jornada extendida y albergue que dictan el fin de semana, y nocturnas cuyo horario no se parece al de la mañana. Qué días abre cada una se **declara** —no se hardcodea— y mientras no haya jornada declarada no hay restricción de día. Los **feriados y el receso no se modelan**: si alguien reserva un feriado, se cancela a mano. Los bloqueos administrativos (RF-04.7) nunca tuvieron restricción de día y siguen sin tenerla.
 
 - RF-04.1: Pueden reservar para una materia: docentes asignados a ella (vía DocenteMateria) y cualquier `ADMIN`, siempre que la materia **no esté archivada** (`archivado=false`) — una materia de un ciclo ya cerrado no admite reservas nuevas aunque el registro se conserve.

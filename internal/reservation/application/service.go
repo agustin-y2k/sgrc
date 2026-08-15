@@ -21,17 +21,39 @@ type Service struct {
 	repo             Repo
 	validadorMateria ValidadorMateria
 	validadorEquipo  ValidadorEquipo
+	validadorJornada ValidadorJornada
 	obtenedorNombre  ObtenedorNombreDocente
 	nuevoID          IDGenerator
 	ahora            func() time.Time
 	bus              eventbus.EventBus
 }
 
-func NewService(repo Repo, validadorMateria ValidadorMateria, validadorEquipo ValidadorEquipo, obtenedorNombre ObtenedorNombreDocente, nuevoID IDGenerator, ahora func() time.Time, bus eventbus.EventBus) *Service {
+func NewService(repo Repo, validadorMateria ValidadorMateria, validadorEquipo ValidadorEquipo, validadorJornada ValidadorJornada, obtenedorNombre ObtenedorNombreDocente, nuevoID IDGenerator, ahora func() time.Time, bus eventbus.EventBus) *Service {
 	return &Service{
 		repo: repo, validadorMateria: validadorMateria, validadorEquipo: validadorEquipo,
-		obtenedorNombre: obtenedorNombre, nuevoID: nuevoID, ahora: ahora, bus: bus,
+		validadorJornada: validadorJornada,
+		obtenedorNombre:  obtenedorNombre, nuevoID: nuevoID, ahora: ahora, bus: bus,
 	}
+}
+
+// verificarDentroDeLaJornada rechaza lo que cae fuera del horario declarado
+// por la institución (RF-04.2 y RF-04.5).
+//
+// NO se aplica a los bloqueos administrativos (RF-04.7): un bloqueo es
+// excepcional por naturaleza —una jornada docente, una obra en el aula— y lo
+// carga el Admin, que es justamente quien declara la jornada. Impedirle
+// bloquear un día que él mismo marcó como cerrado sería discutirle un dato
+// que le pertenece. Esa exención ya existía cuando la regla era "lunes a
+// viernes" y se mantiene igual.
+func (s *Service) verificarDentroDeLaJornada(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) error {
+	permite, err := s.validadorJornada.PermiteReserva(ctx, fecha, horaInicio, horaFin)
+	if err != nil {
+		return err
+	}
+	if !permite {
+		return ErrFueraDeJornada
+	}
+	return nil
 }
 
 // cancelacionPendiente es una notificación que quedó lista para publicarse
@@ -180,6 +202,10 @@ func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string,
 	}
 
 	if err := domain.ValidarVentanaTemporal(fecha, horaInicio, horaFin, s.ahora()); err != nil {
+		return nil, nil, err
+	}
+
+	if err := s.verificarDentroDeLaJornada(ctx, fecha, horaInicio, horaFin); err != nil {
 		return nil, nil, err
 	}
 
@@ -629,6 +655,19 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 	}
 
 	fechas := regla.GenerarFechas()
+
+	// La jornada se chequea una sola vez y no por ocurrencia: todas caen en
+	// el mismo día de la semana y en el mismo horario, así que o entran
+	// todas o no entra ninguna. Alcanza con preguntar por la primera.
+	//
+	// Va después de GenerarFechas y no antes porque sin fechas no hay nada
+	// que preguntar, y el mensaje de "no hay ocurrencias" es más útil que
+	// uno sobre la jornada.
+	if len(fechas) > 0 {
+		if err := s.verificarDentroDeLaJornada(ctx, fechas[0], horaInicio, horaFin); err != nil {
+			return nil, err
+		}
+	}
 
 	// El tope se aplica ANTES del pre-chequeo de solapamiento: ese chequeo
 	// hace una consulta por PC y por fecha, así que dejarlo correr sobre un

@@ -6,12 +6,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import * as calendarioApi from "@/features/calendario/api"
+import * as disponibilidadApi from "@/features/disponibilidad/api"
+import { JORNADA_KEY } from "@/features/disponibilidad/api"
+import { diaDeLaFecha, diasDeLaJornada } from "@/features/disponibilidad/types"
 import type { BloqueCalendario } from "@/features/calendario/types"
 import {
-  DIAS_SEMANA,
   aFechaISO,
   aMinutos,
   desdeFechaISO,
+  etiquetaDeDia,
   fechasDeLaSemana,
   formatearRangoSemana,
   sumarDias,
@@ -79,9 +82,32 @@ export function CalendarioEquipoPage() {
   const { equipoId = "" } = useParams()
   const [referencia, setReferencia] = useState(() => new Date())
 
-  const dias = useMemo(() => fechasDeLaSemana(referencia), [referencia])
-  const desde = dias[0]
-  const hasta = dias[dias.length - 1]
+  const semana = useMemo(() => fechasDeLaSemana(referencia), [referencia])
+  // El rango que se le pide al backend es la semana COMPLETA, aunque después
+  // se dibujen menos columnas: si la escuela cambia su jornada, lo que ya
+  // estaba reservado un día que dejó de estar declarado sigue existiendo, y
+  // esconderlo de la consulta lo volvería invisible en vez de resuelto.
+  const desde = semana[0]
+  const hasta = semana[semana.length - 1]
+
+  // La jornada declarada decide qué días se dibujan. Una escuela de lunes a
+  // viernes ve cinco columnas; una albergue, siete. Sin jornada declarada se
+  // muestran los siete, porque no hay restricción que refleje.
+  const { data: jornada } = useQuery({
+    queryKey: JORNADA_KEY,
+    queryFn: disponibilidadApi.jornadaDeLaInstitucion,
+  })
+  const dias = useMemo(() => {
+    const declarados = new Set(diasDeLaJornada(jornada?.data ?? []))
+    const visibles = semana.filter((fecha) => {
+      const dia = diaDeLaFecha(fecha)
+      return dia !== null && declarados.has(dia)
+    })
+    // Una jornada que no cubra ningún día de esta semana dejaría la grilla
+    // sin columnas y la pantalla sin sentido. Es un caso de borde raro pero
+    // posible mientras alguien está cargando la jornada a medias.
+    return visibles.length > 0 ? visibles : semana
+  }, [semana, jornada])
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["calendario", equipoId, desde, hasta],
@@ -149,25 +175,27 @@ export function CalendarioEquipoPage() {
           desbordar la página (RNF-07). */}
       <div className="overflow-x-auto">
         <div className="min-w-[44rem]">
-          <div className="grid grid-cols-[3.5rem_repeat(6,1fr)] border-b">
+          <div className="grid border-b"
+            style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}>
             <div />
-            {DIAS_SEMANA.map((dia, i) => (
+            {dias.map((fecha) => (
               <div
-                key={dia}
+                key={fecha}
                 className={
                   "border-l px-2 py-1 text-center text-sm font-medium " +
-                  (dias[i] === hoy ? "text-primary" : "")
+                  (fecha === hoy ? "text-primary" : "")
                 }
               >
-                <div>{dia}</div>
+                <div>{etiquetaDeDia(fecha)}</div>
                 <div className="text-muted-foreground text-xs">
-                  {desdeFechaISO(dias[i]).getDate()}
+                  {desdeFechaISO(fecha).getDate()}
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-[3.5rem_repeat(6,1fr)]">
+          <div className="grid"
+            style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}>
             {/* Columna de horas */}
             <div>
               {horas.map((h) => (

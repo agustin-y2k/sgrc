@@ -15,6 +15,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import * as disponibilidadApi from "@/features/disponibilidad/api"
+import { JORNADA_KEY } from "@/features/disponibilidad/api"
+import { dentroDeLaJornada } from "@/features/disponibilidad/types"
 import * as reservasApi from "@/features/reservas/api"
 import { SelectorDeEquipos } from "@/features/reservas/SelectorDeEquipos"
 import {
@@ -112,13 +115,31 @@ export function NuevaReservaPage() {
   // navegador no puede limitar solo.
   const duracionExcesiva = excedeDuracionMaxima(horaInicio, horaFin)
 
+  // La jornada declarada por la institución. Se consulta para avisar acá en
+  // vez de dejar que el backend conteste 400 después de completar todo el
+  // formulario: el error es el mismo, pero llega cuando ya no se puede
+  // corregir sin volver a empezar.
+  //
+  // Sin jornada declarada, dentroDeLaJornada devuelve true y este aviso no
+  // aparece nunca — que es exactamente lo que tiene que pasar mientras nadie
+  // haya dicho qué días abre la escuela.
+  const { data: jornada } = useQuery({
+    queryKey: JORNADA_KEY,
+    queryFn: disponibilidadApi.jornadaDeLaInstitucion,
+  })
+  const bloquesDeJornada = jornada?.data ?? []
+  const fueraDeLaJornada =
+    fechaParaDisponibilidad !== "" &&
+    horaFin > horaInicio &&
+    !dentroDeLaJornada(bloquesDeJornada, fechaParaDisponibilidad, horaInicio, horaFin)
+
   /**
    * Lo que todavía falta para poder confirmar, dicho en palabras.
    *
    * Un booleano que apague el botón y nada más no alcanza: en un formulario
    * de siete campos, un botón gris no dice cuál de los siete es el que
    * falta, y la persona no tiene forma de saber qué corregir. Algunos
-   * errores se explican abajo del campo (el fin de semana, la duración),
+   * errores se explican abajo del campo (la duración, la jornada de la escuela),
    * pero los más comunes —no elegí materia, no tildé ningún equipo— no tienen
    * dónde aparecer.
    *
@@ -141,7 +162,8 @@ export function NuevaReservaPage() {
   const listoParaEnviar =
     faltantes.length === 0 &&
     horaFin > horaInicio &&
-    !duracionExcesiva
+    !duracionExcesiva &&
+    !fueraDeLaJornada
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -292,6 +314,13 @@ export function NuevaReservaPage() {
             {duracionExcesiva && (
               <p className="text-destructive text-sm">
                 Una reserva no puede durar más de {MAX_HORAS_RESERVA} horas.
+              </p>
+            )}
+
+            {fueraDeLaJornada && (
+              <p className="text-destructive text-sm">
+                Ese día y horario quedan fuera de la jornada de la escuela. Consultá con
+                un Admin si el horario de la escuela cambió.
               </p>
             )}
 

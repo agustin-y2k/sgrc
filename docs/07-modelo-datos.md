@@ -568,6 +568,21 @@ horario + rango de fechas. No guarda los equipos — eso vive en los
 | fecha_inicio | DATE | NOT NULL |
 | fecha_fin | DATE | NOT NULL, CHECK (fecha_fin >= fecha_inicio) |
 
+### `jornada_institucion`
+
+Qué días y entre qué horas abre la escuela. Es la única tabla del sistema **sin dueño**: describe a la institución entera, no a una persona.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| dia_semana | VARCHAR(10) | NOT NULL, CHECK entre los siete días |
+| hora_inicio | TIME | NOT NULL |
+| hora_fin | TIME | NOT NULL, CHECK (hora_fin > hora_inicio) |
+
+> **Tabla vacía y día sin filas significan cosas opuestas.** Vacía = la institución todavía no declaró su jornada, y entonces no hay restricción. Con filas cargadas, un día sin filas es un día en que la escuela no abre. Por eso la validación lee la tabla completa y no solo el día que le preguntan (ver `PermiteReserva` en `availability/domain`).
+
+> **Varias filas por día a propósito**: turno mañana y turno noche, con el mediodía afuera. El solapamiento se rechaza en la aplicación —igual que en `horario_admin` y por la misma razón: tabla chica, escritura casi nula, y una constraint `EXCLUDE` sobre `TIME` exigiría un tipo de rango que Postgres no trae.
+
 > `dia_semana` admite los siete días. Lo sostiene un `CHECK` en la base y no
 > solo el enum de Go: sin él, cualquier `INSERT` que no pase por la aplicación
 > entra igual. Ojo con qué fija ese CHECK — el **vocabulario** del enum, no
