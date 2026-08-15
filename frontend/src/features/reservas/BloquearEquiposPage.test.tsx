@@ -8,14 +8,14 @@ import { BloquearEquiposPage } from "@/features/reservas/BloquearEquiposPage"
 import * as reservasApi from "@/features/reservas/api"
 import type { EquipoDisponible } from "@/features/reservas/types"
 import { ApiError } from "@/lib/api-client"
-import { diaLectivoEnDias } from "@/test/fechas"
+import { fechaFuturaEnDias } from "@/test/fechas"
 
 vi.mock("@/features/inventory/api")
 vi.mock("@/features/reservas/api")
 
 // Relativa a hoy: el input tiene min=hoy porque el backend rechaza bloquear
 // un horario que ya pasó (ver src/test/fechas.ts).
-const FECHA = diaLectivoEnDias(7)
+const FECHA = fechaFuturaEnDias(7)
 
 const CARRO: Carro = { id: "carro1", nombre: "Carro A" }
 

@@ -568,10 +568,12 @@ horario + rango de fechas. No guarda los equipos — eso vive en los
 | fecha_inicio | DATE | NOT NULL |
 | fecha_fin | DATE | NOT NULL, CHECK (fecha_fin >= fecha_inicio) |
 
-> `dia_semana` solo admite `LUNES` a `VIERNES` — la semana lectiva (RF-04). Lo
-> sostiene un `CHECK` en la base y no solo el enum de Go: sin él, cualquier
-> `INSERT` que no pase por la aplicación entra igual. Una institución que
-> trabaje sábados amplía este CHECK y el equivalente de `horario_admin`.
+> `dia_semana` admite los siete días. Lo sostiene un `CHECK` en la base y no
+> solo el enum de Go: sin él, cualquier `INSERT` que no pase por la aplicación
+> entra igual. Ojo con qué fija ese CHECK — el **vocabulario** del enum, no
+> los días que la escuela abre. Eso último se declara aparte y se valida en la
+> aplicación, porque cambia de una institución a otra y una constraint no es
+> el lugar para un dato de configuración.
 
 > **`creado_por` es nullable a propósito.** RF-01.9 permite eliminar
 > definitivamente una cuenta para liberar su email, y lo asociado a ella pierde

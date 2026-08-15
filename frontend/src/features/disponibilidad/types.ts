@@ -8,11 +8,19 @@ export type RespuestaLista<T> = { data: T[] }
  * (docs/06-arquitectura.md §3): son dos conceptos que hoy coinciden pero no
  * tienen por qué moverse juntos.
  *
- * Solo lunes a viernes: la semana lectiva. El backend impone lo mismo, en su
- * enum y en el CHECK de la columna, así que no hace falta prever días fuera
- * de esta lista.
+ * Los siete días, igual que el enum del backend y el CHECK de la columna. Un
+ * Admin de una escuela que abre el sábado tiene que poder publicar que ese
+ * día está: antes el sistema no admitía nombrar el día, así que la respuesta
+ * "no hay nadie" era estructural y no había forma de corregirla.
  */
-export type DiaSemana = "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES"
+export type DiaSemana =
+  | "LUNES"
+  | "MARTES"
+  | "MIERCOLES"
+  | "JUEVES"
+  | "VIERNES"
+  | "SABADO"
+  | "DOMINGO"
 
 export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "LUNES", etiqueta: "Lunes" },
@@ -20,6 +28,8 @@ export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "MIERCOLES", etiqueta: "Miércoles" },
   { valor: "JUEVES", etiqueta: "Jueves" },
   { valor: "VIERNES", etiqueta: "Viernes" },
+  { valor: "SABADO", etiqueta: "Sábado" },
+  { valor: "DOMINGO", etiqueta: "Domingo" },
 ]
 
 const ETIQUETAS_DIA: Record<DiaSemana, string> = Object.fromEntries(
@@ -73,6 +83,8 @@ const ORDEN_DIA: Record<DiaSemana, number> = {
   MIERCOLES: 3,
   JUEVES: 4,
   VIERNES: 5,
+  SABADO: 6,
+  DOMINGO: 7,
 }
 
 /**

@@ -12,23 +12,35 @@ import (
 // docs/06-arquitectura.md §3).
 type DiaSemana string
 
-// La semana lectiva de la escuela es de lunes a viernes, así que el enum no
-// incluye sábado ni domingo: no son días sobre los que se pueda reservar.
-// Los feriados y el receso de invierno NO se modelan — se resuelven a mano
-// (decisión tomada al revisar el dominio real, ver docs/01-requisitos.md).
+// La semana tiene siete días y el sistema no supone cuáles usa la
+// institución. Antes el enum frenaba en viernes y una regla fija rechazaba
+// sábados y domingos, lo cual dejaba afuera a dos clases de escuela que
+// existen y son mayoría en algunos lugares: las de jornada extendida o
+// albergue, que dictan el fin de semana, y las nocturnas, cuyo horario no se
+// parece al de la mañana.
+//
+// Qué días abre cada institución dejó de ser una constante del código y pasó
+// a ser un dato que el Admin declara (ver JornadaInstitucional en
+// availability). Sin jornada declarada no hay restricción: el sistema no
+// inventa un calendario que nadie le dijo.
+//
+// Los feriados y el receso NO se modelan — se resuelven a mano (ver
+// docs/01-requisitos.md).
 const (
 	Lunes     DiaSemana = "LUNES"
 	Martes    DiaSemana = "MARTES"
 	Miercoles DiaSemana = "MIERCOLES"
 	Jueves    DiaSemana = "JUEVES"
 	Viernes   DiaSemana = "VIERNES"
+	Sabado    DiaSemana = "SABADO"
+	Domingo   DiaSemana = "DOMINGO"
 )
 
 var ErrDiaSemanaInvalido = errors.New("día de la semana inválido")
 
 func ParseDiaSemana(s string) (DiaSemana, error) {
 	switch DiaSemana(s) {
-	case Lunes, Martes, Miercoles, Jueves, Viernes:
+	case Lunes, Martes, Miercoles, Jueves, Viernes, Sabado, Domingo:
 		return DiaSemana(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrDiaSemanaInvalido, s)
@@ -43,21 +55,8 @@ var diaSemanaAGoWeekday = map[DiaSemana]time.Weekday{
 	Miercoles: time.Wednesday,
 	Jueves:    time.Thursday,
 	Viernes:   time.Friday,
-}
-
-var ErrDiaNoLectivo = errors.New("no se puede reservar un sábado o un domingo")
-
-// EsDiaLectivo dice si una fecha cae dentro de la semana lectiva. Se aplica
-// a las reservas (RF-04.2 y RF-04.5), no a los bloqueos administrativos
-// (RF-04.7): un bloqueo es excepcional por naturaleza y es el Admin quien
-// decide cuándo, así que no se le impone la restricción.
-func EsDiaLectivo(fecha time.Time) bool {
-	switch fecha.Weekday() {
-	case time.Saturday, time.Sunday:
-		return false
-	default:
-		return true
-	}
+	Sabado:    time.Saturday,
+	Domingo:   time.Sunday,
 }
 
 var ErrRangoFechasInvalido = errors.New("la fecha de fin debe ser igual o posterior a la fecha de inicio")

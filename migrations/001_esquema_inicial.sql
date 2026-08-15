@@ -504,10 +504,12 @@ CREATE TABLE regla_recurrencia (
 
     CHECK (hora_fin > hora_inicio),
     CHECK (fecha_fin >= fecha_inicio),
-    -- La semana lectiva es de lunes a viernes. Una institución que dicte los
-    -- sábados amplía este CHECK y el equivalente de horario_admin.
-    CONSTRAINT chk_regla_recurrencia_dia_lectivo
-        CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES'))
+    -- Los siete días. Qué días opera la institución NO se decide acá: se
+    -- declara en jornada_institucion y se valida en la aplicación. Este
+    -- CHECK solo fija el vocabulario del enum, para que valga también
+    -- contra cualquier cosa que escriba directo en la base.
+    CONSTRAINT chk_regla_recurrencia_dia_valido
+        CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO','DOMINGO'))
 );
 
 -- Lo que el docente percibe como "una reserva": una materia, una fecha, un
@@ -798,8 +800,8 @@ CREATE TABLE horario_admin (
     hora_fin     TIME NOT NULL,
 
     CHECK (hora_fin > hora_inicio),
-    CONSTRAINT chk_horario_admin_dia_lectivo
-        CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES'))
+    CONSTRAINT chk_horario_admin_dia_valido
+        CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO','DOMINGO'))
 );
 
 CREATE INDEX idx_horario_admin_usuario ON horario_admin (usuario_id);

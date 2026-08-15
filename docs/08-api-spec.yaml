@@ -2645,9 +2645,9 @@ paths:
               schema: { $ref: '#/components/schemas/ReservaGrupo' }
         "400":
           description: |
-            Fecha o rango horario rechazados: sábado o domingo (la semana lectiva es
-            de lunes a viernes), un bloque que ya terminó, o una duración mayor a 8
-            horas (un turno completo).
+            Fecha o rango horario rechazados: un bloque que ya terminó, o una duración
+            mayor a 8 horas (un turno completo). El día de la semana no se rechaza:
+            los siete son reservables.
         "403": { description: Sin permiso para reservar en esa materia }
         "409":
           description: |
@@ -2802,9 +2802,9 @@ paths:
                   docentesNotificados: { type: integer }
         "400":
           description: |
-            El bloque ya terminó. RF-04.7 NO tiene las otras dos restricciones de una
-            reserva normal: un bloqueo puede caer sábado o domingo y durar
-            lo que el Admin decida — es excepcional por naturaleza.
+            El bloque ya terminó. RF-04.7 tampoco tiene el tope de duración de una
+            reserva normal: un bloqueo dura lo que el Admin decida — es excepcional
+            por naturaleza.
 
   # ══════════════════════════════
   # NOTIFICATIONS

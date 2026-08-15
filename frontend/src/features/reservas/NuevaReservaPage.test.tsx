@@ -7,15 +7,15 @@ import { NuevaReservaPage } from "@/features/reservas/NuevaReservaPage"
 import * as reservasApi from "@/features/reservas/api"
 import type { MateriaReservable, EquipoDisponible } from "@/features/reservas/types"
 import { ApiError } from "@/lib/api-client"
-import { diaLectivoEnDias } from "@/test/fechas"
+import { fechaFuturaEnDias } from "@/test/fechas"
 
 vi.mock("@/features/reservas/api")
 
 // Relativas a hoy y no constantes: los inputs de fecha tienen min=hoy, así
 // que una fecha fija deja de poder enviarse apenas queda atrás (ver
 // src/test/fechas.ts).
-const FECHA = diaLectivoEnDias(7)
-const FECHA_FIN = diaLectivoEnDias(120)
+const FECHA = fechaFuturaEnDias(7)
+const FECHA_FIN = fechaFuturaEnDias(120)
 
 const materias: MateriaReservable[] = [
   {
