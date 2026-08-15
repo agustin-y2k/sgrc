@@ -18,7 +18,9 @@ package main
 
 import (
 	"context"
+	"time"
 
+	availabilityapp "github.com/ramiro/sgrc/internal/availability/application"
 	reportingapp "github.com/ramiro/sgrc/internal/reporting/application"
 	reservationapp "github.com/ramiro/sgrc/internal/reservation/application"
 )
@@ -76,4 +78,21 @@ func (a *academicArchivadorHistoricoAdapter) GuardarSnapshotDeCiclo(ctx context.
 func (a *academicArchivadorHistoricoAdapter) EliminarReservasDeCiclo(ctx context.Context, cicloID string) error {
 	_, _, err := a.reservationSvc.EliminarReservasDeCiclo(ctx, cicloID)
 	return err
+}
+
+// reservationValidadorJornadaAdapter satisface
+// reservation/application.ValidadorJornada envolviendo
+// availability/application.Service — reservation/ nunca importa
+// availability/ directamente.
+//
+// Une las dos mitades del cambio que sacó "lunes a viernes" del código:
+// availability sabe qué días y horas declaró la institución, reservation
+// necesita saber si una reserva entra ahí, y ninguno de los dos tiene por
+// qué conocer al otro.
+type reservationValidadorJornadaAdapter struct {
+	availabilitySvc *availabilityapp.Service
+}
+
+func (a *reservationValidadorJornadaAdapter) PermiteReserva(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) (bool, error) {
+	return a.availabilitySvc.PermiteReserva(ctx, fecha, horaInicio, horaFin)
 }

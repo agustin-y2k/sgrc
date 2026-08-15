@@ -15,12 +15,15 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import * as disponibilidadApi from "@/features/disponibilidad/api"
+import { JORNADA_KEY } from "@/features/disponibilidad/api"
+import { dentroDeLaJornada } from "@/features/disponibilidad/types"
 import * as reservasApi from "@/features/reservas/api"
 import { SelectorDeEquipos } from "@/features/reservas/SelectorDeEquipos"
 import {
   DIAS_SEMANA,
   MAX_HORAS_RESERVA,
-  esDiaLectivo,
+  cruzaMedianoche,
   excedeDuracionMaxima,
   hoyISO,
   type DiaSemana,
@@ -109,12 +112,28 @@ export function NuevaReservaPage() {
   const fechaParaDisponibilidad = modo === "simple" ? fecha : fechaInicio
 
   const materiasDisponibles = materias?.data ?? []
-  // Solo aplica al modo simple: en recurrente el día lo fija el selector, que
-  // ya no ofrece sábado.
-  const fechaEnFinDeSemana = modo === "simple" && fecha !== "" && !esDiaLectivo(fecha)
   // El `min` de los inputs cubre la fecha; esto cubre el horario, que el
   // navegador no puede limitar solo.
   const duracionExcesiva = excedeDuracionMaxima(horaInicio, horaFin)
+
+  // La jornada declarada por la institución. Se consulta para avisar acá en
+  // vez de dejar que el backend conteste 400 después de completar todo el
+  // formulario: el error es el mismo, pero llega cuando ya no se puede
+  // corregir sin volver a empezar.
+  //
+  // Sin jornada declarada, dentroDeLaJornada devuelve true y este aviso no
+  // aparece nunca — que es exactamente lo que tiene que pasar mientras nadie
+  // haya dicho qué días abre la escuela.
+  const { data: jornada } = useQuery({
+    queryKey: JORNADA_KEY,
+    queryFn: disponibilidadApi.jornadaDeLaInstitucion,
+  })
+  const bloquesDeJornada = jornada?.data ?? []
+  const fueraDeLaJornada =
+    fechaParaDisponibilidad !== "" &&
+    horaInicio !== "" &&
+    horaFin !== horaInicio &&
+    !dentroDeLaJornada(bloquesDeJornada, fechaParaDisponibilidad, horaInicio, horaFin)
 
   /**
    * Lo que todavía falta para poder confirmar, dicho en palabras.
@@ -122,7 +141,7 @@ export function NuevaReservaPage() {
    * Un booleano que apague el botón y nada más no alcanza: en un formulario
    * de siete campos, un botón gris no dice cuál de los siete es el que
    * falta, y la persona no tiene forma de saber qué corregir. Algunos
-   * errores se explican abajo del campo (el fin de semana, la duración),
+   * errores se explican abajo del campo (la duración, la jornada de la escuela),
    * pero los más comunes —no elegí materia, no tildé ningún equipo— no tienen
    * dónde aparecer.
    *
@@ -144,9 +163,9 @@ export function NuevaReservaPage() {
 
   const listoParaEnviar =
     faltantes.length === 0 &&
-    horaFin > horaInicio &&
+    horaFin !== horaInicio &&
     !duracionExcesiva &&
-    !fechaEnFinDeSemana
+    !fueraDeLaJornada
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -233,12 +252,6 @@ export function NuevaReservaPage() {
                   value={fecha}
                   onChange={(e) => setFecha(e.target.value)}
                 />
-                {fechaEnFinDeSemana && (
-                  <p className="text-destructive text-sm">
-                    La semana lectiva es de lunes a viernes: no se puede reservar un
-                    sábado ni un domingo.
-                  </p>
-                )}
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-3">
@@ -294,15 +307,32 @@ export function NuevaReservaPage() {
               />
             </div>
 
-            {horaInicio !== "" && horaFin !== "" && horaFin <= horaInicio && (
+            {horaInicio !== "" && horaFin !== "" && horaFin === horaInicio && (
               <p className="text-destructive text-sm">
-                La hora de fin tiene que ser posterior a la de inicio.
+                La hora de fin no puede ser igual a la de inicio.
+              </p>
+            )}
+
+            {/* Que la clase termine al día siguiente es válido y es lo normal
+                en una escuela nocturna, pero conviene decirlo: alguien que
+                puso 01:00 por error tiene que poder darse cuenta antes de
+                confirmar. */}
+            {cruzaMedianoche(horaInicio, horaFin) && (
+              <p className="text-muted-foreground text-sm">
+                Esta reserva termina al día siguiente, a las {horaFin}.
               </p>
             )}
 
             {duracionExcesiva && (
               <p className="text-destructive text-sm">
                 Una reserva no puede durar más de {MAX_HORAS_RESERVA} horas.
+              </p>
+            )}
+
+            {fueraDeLaJornada && (
+              <p className="text-destructive text-sm">
+                Ese día y horario quedan fuera de la jornada de la escuela. Consultá con
+                un Admin si el horario de la escuela cambió.
               </p>
             )}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,8 @@ import (
 // que "no existe".
 
 type fakeRepo struct {
+	jornada map[string]*domain.BloqueJornada
+
 	bloques     map[string]*domain.BloqueHorario
 	excepciones map[string]*domain.Excepcion // clave: usuarioID + "|" + fecha AAAA-MM-DD
 
@@ -28,6 +31,7 @@ type fakeRepo struct {
 
 func nuevoFakeRepo() *fakeRepo {
 	return &fakeRepo{
+		jornada:     make(map[string]*domain.BloqueJornada),
 		bloques:     make(map[string]*domain.BloqueHorario),
 		excepciones: make(map[string]*domain.Excepcion),
 	}
@@ -572,4 +576,49 @@ func TestDisponibilidadDeTodosLosAdmins_ErrorDelListador_Propaga(t *testing.T) {
 	if !errors.Is(err, errListador) {
 		t.Fatalf("esperaba que el error del listador se propague, obtuve %v", err)
 	}
+}
+
+// ── Jornada de la institución ──────────────────────────────────────────
+
+func (r *fakeRepo) ListarJornada(_ context.Context) ([]*domain.BloqueJornada, error) {
+	var todos []*domain.BloqueJornada
+	for _, b := range r.jornada {
+		todos = append(todos, b)
+	}
+	sort.Slice(todos, func(i, j int) bool {
+		if todos[i].DiaSemana != todos[j].DiaSemana {
+			return todos[i].DiaSemana < todos[j].DiaSemana
+		}
+		return todos[i].HoraInicio < todos[j].HoraInicio
+	})
+	return todos, nil
+}
+
+func (r *fakeRepo) CrearBloqueJornada(_ context.Context, b *domain.BloqueJornada) error {
+	r.jornada[b.ID] = b
+	return nil
+}
+
+func (r *fakeRepo) BuscarBloqueJornada(_ context.Context, id string) (*domain.BloqueJornada, error) {
+	b, ok := r.jornada[id]
+	if !ok {
+		return nil, ErrBloqueNoEncontrado
+	}
+	return b, nil
+}
+
+func (r *fakeRepo) GuardarBloqueJornada(_ context.Context, b *domain.BloqueJornada) error {
+	if _, ok := r.jornada[b.ID]; !ok {
+		return ErrBloqueNoEncontrado
+	}
+	r.jornada[b.ID] = b
+	return nil
+}
+
+func (r *fakeRepo) EliminarBloqueJornada(_ context.Context, id string) error {
+	if _, ok := r.jornada[id]; !ok {
+		return ErrBloqueNoEncontrado
+	}
+	delete(r.jornada, id)
+	return nil
 }

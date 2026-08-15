@@ -51,7 +51,7 @@ export function SelectorDeEquipos({
   onCambio,
   materiaId,
 }: Props) {
-  const franjaCompleta = Boolean(fecha && horaInicio && horaFin && horaFin > horaInicio)
+  const franjaCompleta = Boolean(fecha && horaInicio && horaFin && horaFin !== horaInicio)
 
   const { data, isLoading, error } = useQuery({
     // La materia entra en la clave: cambiarla reordena la lista entera

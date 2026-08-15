@@ -63,6 +63,43 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- ═══════════════════════════════════════════════════════════════════════
+-- Bloques que cruzan la medianoche
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Cuándo termina de verdad un bloque, dado el día que lo nombra.
+--
+-- Las escuelas nocturnas dictan de 22:00 a 01:00, y eso antes era
+-- inexpresable: la base exigía hora_fin > hora_inicio. La regla es la que
+-- cualquiera lee sin que se la expliquen:
+--
+--   hora_fin > hora_inicio  → termina el mismo día
+--   hora_fin < hora_inicio  → termina al día siguiente
+--   hora_fin = hora_inicio  → inválido (lo rechazan los CHECK)
+--
+-- Existe como función y no repetida en cada consulta porque la usan la
+-- constraint de anti-solapamiento, los barridos y todos los listados: una
+-- copia que se olvide de sumar el día no rompe nada visible, simplemente
+-- deja de ver las clases nocturnas.
+--
+-- IMMUTABLE no es decorativo: sin eso Postgres no la acepta dentro del
+-- índice de la constraint EXCLUDE. Lo es de verdad — misma entrada, misma
+-- salida, sin leer nada de afuera.
+--
+-- El gemelo de esto en Go es domain.FinDePared. Las dos tienen que decir lo
+-- mismo: si divergen, la aplicación acepta reservas que la base rechaza o,
+-- peor, deja pasar solapamientos que creía haber chequeado.
+CREATE OR REPLACE FUNCTION fin_de_pared(fecha DATE, hora_inicio TIME, hora_fin TIME)
+RETURNS TIMESTAMP
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+PARALLEL SAFE
+AS $$
+    SELECT fecha + hora_fin
+         + CASE WHEN hora_fin < hora_inicio THEN INTERVAL '1 day' ELSE INTERVAL '0' END
+$$;
+
+-- ═══════════════════════════════════════════════════════════════════════
 -- Usuarios y acceso (RF-01, RF-02)
 -- ═══════════════════════════════════════════════════════════════════════
 
@@ -502,12 +539,17 @@ CREATE TABLE regla_recurrencia (
     fecha_inicio  DATE NOT NULL,
     fecha_fin     DATE NOT NULL,
 
-    CHECK (hora_fin > hora_inicio),
+    -- El fin puede ser MENOR que el inicio: eso significa que el bloque termina
+    -- al día siguiente (22:00–01:00). Lo que no puede es ser igual, que sería
+    -- un bloque de cero horas o de veinticuatro y en la práctica es un tipeo.
+    CHECK (hora_fin <> hora_inicio),
     CHECK (fecha_fin >= fecha_inicio),
-    -- La semana lectiva es de lunes a viernes. Una institución que dicte los
-    -- sábados amplía este CHECK y el equivalente de horario_admin.
-    CONSTRAINT chk_regla_recurrencia_dia_lectivo
-        CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES'))
+    -- Los siete días. Qué días opera la institución NO se decide acá: se
+    -- declara en jornada_institucion y se valida en la aplicación. Este
+    -- CHECK solo fija el vocabulario del enum, para que valga también
+    -- contra cualquier cosa que escriba directo en la base.
+    CONSTRAINT chk_regla_recurrencia_dia_valido
+        CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO','DOMINGO'))
 );
 
 -- Lo que el docente percibe como "una reserva": una materia, una fecha, un
@@ -550,7 +592,10 @@ CREATE TABLE reserva_grupo (
     -- máquina de esta reserva.
     aviso_sin_retirar_en     TIMESTAMPTZ,
 
-    CHECK (hora_fin > hora_inicio)
+    -- El fin puede ser MENOR que el inicio: eso significa que el bloque termina
+    -- al día siguiente (22:00–01:00). Lo que no puede es ser igual, que sería
+    -- un bloque de cero horas o de veinticuatro y en la práctica es un tipeo.
+    CHECK (hora_fin <> hora_inicio)
 );
 
 CREATE INDEX idx_reserva_grupo_materia    ON reserva_grupo (materia_id);
@@ -605,7 +650,10 @@ CREATE TABLE reserva (
     -- disponible. Instante y no booleano, mismo criterio que el recordatorio.
     avisado_equipo_no_disponible_en TIMESTAMPTZ,
 
-    CHECK (hora_fin > hora_inicio),
+    -- El fin puede ser MENOR que el inicio: eso significa que el bloque termina
+    -- al día siguiente (22:00–01:00). Lo que no puede es ser igual, que sería
+    -- un bloque de cero horas o de veinticuatro y en la práctica es un tipeo.
+    CHECK (hora_fin <> hora_inicio),
 
     -- Las dos formas válidas de existir, y ninguna otra. Un BLOQUEO sin
     -- motivo deja de ser representable, que es lo que hace que la regla valga
@@ -648,10 +696,16 @@ COMMENT ON COLUMN reserva.motivo_bloqueo IS
 --
 -- El WHERE deja fuera las canceladas, finalizadas y no retiradas: una franja
 -- que se liberó tiene que poder volver a reservarse.
+--
+-- El fin sale de fin_de_pared() y no de `fecha + hora_fin`: con una clase
+-- nocturna, esa suma da un instante ANTERIOR al inicio, tsrange revienta con
+-- "range lower bound must be less than or equal to range upper bound" y la
+-- reserva no se puede ni insertar. Antes no pasaba porque ningún bloque podía
+-- cruzar las 00:00.
 ALTER TABLE reserva ADD CONSTRAINT no_solapamiento
     EXCLUDE USING gist (
         equipo_id WITH =,
-        tsrange(fecha + hora_inicio, fecha + hora_fin) WITH &&
+        tsrange(fecha + hora_inicio, fin_de_pared(fecha, hora_inicio, hora_fin)) WITH &&
     ) WHERE (estado = 'CONFIRMADA');
 
 CREATE INDEX idx_reserva_equipo_fecha ON reserva (equipo_id, fecha);
@@ -784,6 +838,53 @@ CREATE INDEX idx_notif_usuario_estado ON notificacion (usuario_id, estado);
 CREATE INDEX idx_notif_sobre_usuario  ON notificacion (sobre_usuario_id, tipo) WHERE sobre_usuario_id IS NOT NULL;
 
 -- ═══════════════════════════════════════════════════════════════════════
+-- Jornada de la institución — normativo
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Qué días y entre qué horas abre la escuela. Es la única tabla del sistema
+-- sin dueño: describe a la institución entera, no a una persona.
+--
+-- Existe porque esto estaba hardcodeado. El código daba por sentado "lunes a
+-- viernes" y ninguna escuela podía decir lo contrario, lo cual dejaba afuera
+-- a las de jornada extendida o albergue —que dictan el fin de semana— y no
+-- decía nada de las horas.
+--
+-- Tabla VACÍA significa "todavía no lo declararon", y en ese caso no hay
+-- restricción: el sistema no supone un calendario que nadie le dijo. Con
+-- filas cargadas, un día sin filas es un día en que la escuela no abre. Las
+-- dos situaciones se ven parecidas y significan lo contrario, así que la
+-- validación mira la tabla completa y no solo el día que le preguntan (ver
+-- PermiteReserva en availability/domain).
+--
+-- Varias filas por día a propósito: una escuela con turno mañana y turno
+-- noche declara 07:00–12:00 y 18:00–23:00, y el mediodía queda afuera.
+CREATE TABLE jornada_institucion (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    dia_semana   VARCHAR(10) NOT NULL,
+    hora_inicio  TIME NOT NULL,
+    hora_fin     TIME NOT NULL,
+
+    -- El fin puede ser MENOR que el inicio: eso significa que el bloque termina
+    -- al día siguiente (22:00–01:00). Lo que no puede es ser igual, que sería
+    -- un bloque de cero horas o de veinticuatro y en la práctica es un tipeo.
+    CHECK (hora_fin <> hora_inicio),
+    CONSTRAINT chk_jornada_dia_valido
+        CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO','DOMINGO'))
+);
+
+-- El solapamiento entre bloques del mismo día se rechaza en la aplicación,
+-- no con una constraint EXCLUDE. Es la misma decisión que en horario_admin,
+-- su tabla hermana, y por la misma razón: la tabla es chica y de escritura
+-- casi nula —una escuela declara su jornada una vez— así que la EXCLUDE
+-- compraría poco, y a cambio obligaría a un tipo de rango sobre TIME que
+-- Postgres no trae. La de `reserva` sí existe porque ahí hay concurrencia
+-- real entre docentes reservando la misma máquina.
+--
+-- Tocarse no es pisarse: 07:00–12:00 y 12:00–18:00 son contiguos y válidos.
+
+CREATE INDEX idx_jornada_dia ON jornada_institucion (dia_semana);
+
+-- ═══════════════════════════════════════════════════════════════════════
 -- Disponibilidad de los Admin (RF-07) — puramente informativo
 -- ═══════════════════════════════════════════════════════════════════════
 
@@ -798,8 +899,8 @@ CREATE TABLE horario_admin (
     hora_fin     TIME NOT NULL,
 
     CHECK (hora_fin > hora_inicio),
-    CONSTRAINT chk_horario_admin_dia_lectivo
-        CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES'))
+    CONSTRAINT chk_horario_admin_dia_valido
+        CHECK (dia_semana IN ('LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO','DOMINGO'))
 );
 
 CREATE INDEX idx_horario_admin_usuario ON horario_admin (usuario_id);
@@ -918,6 +1019,7 @@ DROP TABLE IF EXISTS historico_uso_docente CASCADE;
 DROP TABLE IF EXISTS historico_uso_equipo CASCADE;
 DROP TABLE IF EXISTS horario_admin_excepcion CASCADE;
 DROP TABLE IF EXISTS horario_admin CASCADE;
+DROP TABLE IF EXISTS jornada_institucion CASCADE;
 DROP TABLE IF EXISTS notificacion CASCADE;
 DROP TABLE IF EXISTS prestamo CASCADE;
 DROP TABLE IF EXISTS reserva CASCADE;
@@ -934,6 +1036,8 @@ DROP TABLE IF EXISTS curso CASCADE;
 DROP TABLE IF EXISTS ciclo_lectivo CASCADE;
 DROP TABLE IF EXISTS codigo_recuperacion CASCADE;
 DROP TABLE IF EXISTS usuario CASCADE;
+
+DROP FUNCTION IF EXISTS fin_de_pared(DATE, TIME, TIME);
 
 -- Las extensiones NO se borran: pgcrypto y btree_gist pueden estar en uso
 -- por otra cosa en la misma base, y volver a crearlas es gratis.

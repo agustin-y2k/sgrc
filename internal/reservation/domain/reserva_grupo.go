@@ -62,7 +62,10 @@ var ErrTransicionGrupoInvalida = errors.New("transición de estado de reserva gr
 // ErrRangoHorarioInvalido: horaFin debe ser posterior a horaInicio — se
 // valida en dominio para las dos entidades (ReservaGrupo y Reserva) y
 // ReglaRecurrencia, así que se declara acá una sola vez y se reusa.
-var ErrRangoHorarioInvalido = errors.New("la hora de fin debe ser posterior a la hora de inicio")
+// El mensaje ya no dice "posterior": una clase nocturna de 22:00 a 01:00
+// tiene una hora de fin ANTERIOR, y eso es válido — significa que termina al
+// día siguiente. Lo único que se rechaza es que sean iguales.
+var ErrRangoHorarioInvalido = errors.New("la hora de fin no puede ser igual a la de inicio")
 
 // ReservaGrupo es la reserva tal como la percibe el docente — materia,
 // fecha, horario. Por debajo, una o más Reserva (una por PC) son las que
@@ -81,7 +84,7 @@ type ReservaGrupo struct {
 }
 
 func NuevoReservaGrupo(id, materiaID string, creadoPor *string, nombreDocenteSnapshot string, fecha time.Time, horaInicio, horaFin time.Duration, reglaRecurrenciaID *string, ahora time.Time) (*ReservaGrupo, error) {
-	if horaFin <= horaInicio {
+	if horaFin == horaInicio {
 		return nil, ErrRangoHorarioInvalido
 	}
 	return &ReservaGrupo{

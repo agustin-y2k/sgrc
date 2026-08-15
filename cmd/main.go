@@ -405,8 +405,28 @@ func main() {
 	// ── Auditoría (docs/09-seguridad-rbac.md §5) ────────────────────
 	auditor := audit.NewPostgresAuditor(pool)
 
+	// ── availability ─────────────────────────────────────────────
+	// RF-07 (disponibilidad de los Admin, informativa) más la jornada de la
+	// institución, que es normativa: dice qué días y en qué horas abre la
+	// escuela, y reservation valida contra ella.
+	//
+	// Se arma antes que reservation por esa segunda mitad — Go exige que la
+	// dependencia exista antes de referenciarla. Puede ir primero sin
+	// problema porque no depende de ningún paquete de dominio: solo del pool
+	// y de auth (vía ListadorAdmins, SQL directo sobre usuario) para RF-07.2.
+	availabilityRepo := availabilityinfra.NewPostgresRepo(pool)
+	availabilityListadorAdmins := availabilityinfra.NewListadorAdminsPostgres(pool)
+
+	availabilitySvc := availabilityapp.NewService(
+		availabilityRepo,
+		availabilityListadorAdmins,
+		availabilityinfra.NuevoID,
+		ahora,
+	)
+	availabilityHandler := availabilityhttp.NewHandler(availabilitySvc)
+
 	// ── reservation ───────────────────────────────────────────────
-	// Se arma PRIMERO a propósito: tanto auth (cascada de DarDeBaja,
+	// Se arma temprano a propósito: tanto auth (cascada de DarDeBaja,
 	// RF-02.8) como inventory (cascada de cambio de estado/baja de PC,
 	// RF-03.8/03.9) necesitan envolver reservationSvc en un adaptador
 	// para sus respectivos puertos — Go exige que la dependencia exista
@@ -420,6 +440,7 @@ func main() {
 		reservationRepo,
 		validadorMateria,
 		validadorEquipo,
+		&reservationValidadorJornadaAdapter{availabilitySvc: availabilitySvc},
 		obtenedorNombre,
 		reservationinfra.NuevoID,
 		ahora,
@@ -611,21 +632,6 @@ func main() {
 	notificationapp.RegisterEmailHandlersConEspera(bus, mensajero, &notificacionesPendientes)
 
 	notificationHandler := notificationhttp.NewHandler(notificationSvc)
-
-	// ── availability ─────────────────────────────────────────────
-	// RF-07, puramente informativo — no depende de ningún otro paquete de
-	// dominio, solo de auth (vía ListadorAdmins, SQL directo sobre
-	// usuario) para RF-07.2.
-	availabilityRepo := availabilityinfra.NewPostgresRepo(pool)
-	availabilityListadorAdmins := availabilityinfra.NewListadorAdminsPostgres(pool)
-
-	availabilitySvc := availabilityapp.NewService(
-		availabilityRepo,
-		availabilityListadorAdmins,
-		availabilityinfra.NuevoID,
-		ahora,
-	)
-	availabilityHandler := availabilityhttp.NewHandler(availabilitySvc)
 
 	// ── Job de vencimiento de reservas (RF-04.9) ────────────────────
 	// Corre como goroutine desde el arranque, sin infraestructura extra

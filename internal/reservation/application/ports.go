@@ -618,3 +618,21 @@ func (s Solapamiento) describir() string {
 func formatearHora(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", int(d.Hours()), int(d.Minutes())%60)
 }
+
+// ValidadorJornada es el puerto hacia availability, que sabe qué días y en
+// qué horas abre la institución (ver domain.PermiteReserva allá).
+//
+// reservation nunca importa internal/availability: el adaptador que une los
+// dos vive en cmd/wiring_adapters.go, igual que los de inventory y auth (ver
+// docs/06-arquitectura.md §3).
+//
+// Por qué un puerto y no una regla acá: la jornada es un dato de la
+// institución que alguien declara y edita, no una constante del dominio de
+// reservas. Antes esto era `EsDiaLectivo`, una función pura que devolvía
+// "lunes a viernes" y no había forma de contradecir.
+type ValidadorJornada interface {
+	// PermiteReserva responde si ese día y ese rango horario caen dentro de
+	// la jornada declarada. Sin jornada declarada devuelve true: el sistema
+	// no supone un calendario que nadie le dijo.
+	PermiteReserva(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) (bool, error)
+}

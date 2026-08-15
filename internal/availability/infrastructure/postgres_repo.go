@@ -316,3 +316,105 @@ func (r *PostgresRepo) GuardarExcepcion(ctx context.Context, e *domain.Excepcion
 	}
 	return nil
 }
+
+// ── BloqueJornada (jornada_institucion) ────────────────────────────────
+//
+// Sin usuario_id: la jornada describe a la institución, no a una persona.
+// Eso simplifica todo lo que en horario_admin existe para acotar por dueño —
+// acá un ID inexistente es simplemente un ID inexistente.
+
+const columnasJornada = `id, dia_semana, hora_inicio, hora_fin`
+
+// ListarJornada trae la jornada completa. El ORDER BY es por hora dentro del
+// día, no por nombre de día: 'DOMINGO' y 'JUEVES' ordenan alfabéticamente en
+// un orden que no se parece a la semana, así que el día lo acomoda quien
+// muestra (el frontend tiene su ORDEN_DIA). Lo que sí importa acá es que los
+// tramos de un mismo día salgan cronológicos.
+func (r *PostgresRepo) ListarJornada(ctx context.Context) ([]*domain.BloqueJornada, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+columnasJornada+` FROM jornada_institucion ORDER BY dia_semana, hora_inicio`)
+	if err != nil {
+		return nil, fmt.Errorf("listando la jornada de la institución: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []*domain.BloqueJornada
+	for rows.Next() {
+		b, err := escanearBloqueJornada(rows)
+		if err != nil {
+			return nil, fmt.Errorf("escaneando bloque de jornada: %w", err)
+		}
+		resultado = append(resultado, b)
+	}
+	return resultado, errorDeFilas(rows)
+}
+
+func (r *PostgresRepo) CrearBloqueJornada(ctx context.Context, b *domain.BloqueJornada) error {
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO jornada_institucion (`+columnasJornada+`) VALUES ($1, $2, $3, $4)`,
+		b.ID, string(b.DiaSemana), duracionComoHora(b.HoraInicio), duracionComoHora(b.HoraFin))
+	if err != nil {
+		if esIDInvalido(err) {
+			return application.ErrIDInvalido
+		}
+		return fmt.Errorf("insertando bloque de jornada: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) BuscarBloqueJornada(ctx context.Context, id string) (*domain.BloqueJornada, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT `+columnasJornada+` FROM jornada_institucion WHERE id = $1`, id)
+	return escanearBloqueJornada(row)
+}
+
+func (r *PostgresRepo) GuardarBloqueJornada(ctx context.Context, b *domain.BloqueJornada) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE jornada_institucion SET dia_semana = $2, hora_inicio = $3, hora_fin = $4 WHERE id = $1`,
+		b.ID, string(b.DiaSemana), duracionComoHora(b.HoraInicio), duracionComoHora(b.HoraFin))
+	if err != nil {
+		if esIDInvalido(err) {
+			return application.ErrIDInvalido
+		}
+		return fmt.Errorf("actualizando bloque de jornada: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return application.ErrBloqueNoEncontrado
+	}
+	return nil
+}
+
+func (r *PostgresRepo) EliminarBloqueJornada(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM jornada_institucion WHERE id = $1`, id)
+	if err != nil {
+		if esIDInvalido(err) {
+			return application.ErrIDInvalido
+		}
+		return fmt.Errorf("eliminando bloque de jornada: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return application.ErrBloqueNoEncontrado
+	}
+	return nil
+}
+
+func escanearBloqueJornada(row pgx.Row) (*domain.BloqueJornada, error) {
+	var b domain.BloqueJornada
+	var diaStr string
+	var horaInicio, horaFin time.Time
+
+	if err := row.Scan(&b.ID, &diaStr, &horaInicio, &horaFin); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, application.ErrBloqueNoEncontrado
+		}
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, err
+	}
+
+	b.DiaSemana = domain.DiaSemana(diaStr)
+	b.HoraInicio = horaComoDuracion(horaInicio)
+	b.HoraFin = horaComoDuracion(horaFin)
+	return &b, nil
+}

@@ -9,6 +9,7 @@ import { RecuperarPasswordPage } from "@/features/auth/RecuperarPasswordPage"
 import { RegistroPage } from "@/features/auth/RegistroPage"
 import { EntregasPage } from "@/features/admin/EntregasPage"
 import { InventarioAdminPage } from "@/features/admin/InventarioAdminPage"
+import { JornadaPage } from "@/features/admin/JornadaPage"
 import { LicenciasPage } from "@/features/admin/LicenciasPage"
 import { ReportesPage } from "@/features/admin/ReportesPage"
 import { UsuariosPage } from "@/features/admin/UsuariosPage"
@@ -61,6 +62,7 @@ const router = createBrowserRouter([
               { path: "/admin/licencias", element: <LicenciasPage /> },
               { path: "/admin/entregas", element: <EntregasPage /> },
               { path: "/admin/reportes", element: <ReportesPage /> },
+              { path: "/admin/jornada", element: <JornadaPage /> },
               {
                 path: "/admin/bloquear-equipos",
                 element: <BloquearEquiposPage />,

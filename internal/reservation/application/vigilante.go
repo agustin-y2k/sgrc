@@ -356,7 +356,7 @@ func (v *Vigilante) liberarNoRetiradas(ctx context.Context, reservas []ReservaPa
 // minutos para volver por el resto empiezan ahí.
 func (v *Vigilante) correspondeLiberar(primera ReservaParaVigilar, ahora time.Time) bool {
 	if primera.UltimaEntregaDelGrupo != nil {
-		return domain.CorrespondeLiberarTrasEntregaParcial(primera.Fecha, primera.HoraFin,
+		return domain.CorrespondeLiberarTrasEntregaParcial(primera.Fecha, primera.HoraInicio, primera.HoraFin,
 			*primera.UltimaEntregaDelGrupo, v.cfg.GraciaTrasEntregaParcial, ahora)
 	}
 	return domain.CorrespondeLiberar(primera.Fecha, primera.HoraInicio, primera.HoraFin,

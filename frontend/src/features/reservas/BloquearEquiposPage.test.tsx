@@ -8,14 +8,14 @@ import { BloquearEquiposPage } from "@/features/reservas/BloquearEquiposPage"
 import * as reservasApi from "@/features/reservas/api"
 import type { EquipoDisponible } from "@/features/reservas/types"
 import { ApiError } from "@/lib/api-client"
-import { diaLectivoEnDias } from "@/test/fechas"
+import { fechaFuturaEnDias } from "@/test/fechas"
 
 vi.mock("@/features/inventory/api")
 vi.mock("@/features/reservas/api")
 
 // Relativa a hoy: el input tiene min=hoy porque el backend rechaza bloquear
 // un horario que ya pasó (ver src/test/fechas.ts).
-const FECHA = diaLectivoEnDias(7)
+const FECHA = fechaFuturaEnDias(7)
 
 const CARRO: Carro = { id: "carro1", nombre: "Carro A" }
 
@@ -252,17 +252,17 @@ describe("BloquearEquiposPage", () => {
     expect(screen.getByRole("button", { name: "Revisar bloqueo" })).toBeDisabled()
   })
 
-  it("avisa si la hora de fin no es posterior a la de inicio", async () => {
+  it("avisa si la hora de fin es igual a la de inicio", async () => {
     const user = userEvent.setup()
     renderPagina()
 
     await user.selectOptions(await screen.findByLabelText("Hora de inicio: hora"), "10")
     await user.selectOptions(screen.getByLabelText("Hora de inicio: minutos"), "00")
-    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "09")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "10")
     await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
 
     expect(
-      screen.getByText("La hora de fin tiene que ser posterior a la de inicio.")
+      screen.getByText("La hora de fin no puede ser igual a la de inicio.")
     ).toBeInTheDocument()
   })
 

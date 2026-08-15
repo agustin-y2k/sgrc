@@ -216,3 +216,107 @@ func (h *Handler) MarcarNoDisponibleAhora(c *fiber.Ctx) error {
 	}
 	return c.Status(fiber.StatusCreated).JSON(toExcepcionResponse(excepcion))
 }
+
+// ── Jornada de la institución ──────────────────────────────────────────
+//
+// Sin claims: la jornada no tiene dueño. Quién puede tocarla lo decide la
+// ruta (rol ADMIN); acá no hay titularidad que resolver, así que un ID
+// inexistente es 404 y nada más.
+
+// GET /api/jornada — la jornada declarada por la institución. La leen
+// también los docentes: el formulario de reserva la usa para avisar antes
+// de mandar, y el calendario para saber qué días dibujar.
+//
+// Lista vacía = todavía no la declararon, que NO es lo mismo que una
+// escuela cerrada: sin jornada no hay restricción.
+func (h *Handler) Jornada(c *fiber.Ctx) error {
+	bloques, err := h.svc.Jornada(c.UserContext())
+	if err != nil {
+		return mapearError(err)
+	}
+
+	data := make([]bloqueResponse, len(bloques))
+	for i, b := range bloques {
+		data[i] = toBloqueJornadaResponse(b)
+	}
+	return c.JSON(fiber.Map{"data": data})
+}
+
+// POST /api/jornada (Admin) — suma un tramo abierto a un día. Varios por
+// día es el caso previsto: turno mañana y turno noche.
+func (h *Handler) AgregarBloqueDeJornada(c *fiber.Ctx) error {
+	var req bloqueRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+
+	dia, err := domain.ParseDiaSemana(req.DiaSemana)
+	if err != nil {
+		return mapearError(err)
+	}
+	horaInicio, err := parseHora(req.HoraInicio)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	horaFin, err := parseHora(req.HoraFin)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	bloque, err := h.svc.AgregarBloqueDeJornada(c.UserContext(), dia, horaInicio, horaFin)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(toBloqueJornadaResponse(bloque))
+}
+
+// PATCH /api/jornada/{id} (Admin) — parcial, como el horario de los Admin.
+func (h *Handler) EditarBloqueDeJornada(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	var req editarBloqueRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+
+	var dia *domain.DiaSemana
+	if req.DiaSemana != nil {
+		d, err := domain.ParseDiaSemana(*req.DiaSemana)
+		if err != nil {
+			return mapearError(err)
+		}
+		dia = &d
+	}
+	var horaInicio *time.Duration
+	if req.HoraInicio != nil {
+		hi, err := parseHora(*req.HoraInicio)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		}
+		horaInicio = &hi
+	}
+	var horaFin *time.Duration
+	if req.HoraFin != nil {
+		hf, err := parseHora(*req.HoraFin)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		}
+		horaFin = &hf
+	}
+
+	bloque, err := h.svc.EditarBloqueDeJornada(c.UserContext(), id, dia, horaInicio, horaFin)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toBloqueJornadaResponse(bloque))
+}
+
+// DELETE /api/jornada/{id} (Admin). Borrar el último tramo deja la jornada
+// sin declarar, y con eso el sistema vuelve a no restringir ningún día — es
+// coherente y es reversible, así que no se pide confirmación especial.
+func (h *Handler) EliminarBloqueDeJornada(c *fiber.Ctx) error {
+	if err := h.svc.EliminarBloqueDeJornada(c.UserContext(), c.Params("id")); err != nil {
+		return mapearError(err)
+	}
+	return c.SendStatus(fiber.StatusOK)
+}

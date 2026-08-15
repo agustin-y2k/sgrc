@@ -7,15 +7,15 @@ import { NuevaReservaPage } from "@/features/reservas/NuevaReservaPage"
 import * as reservasApi from "@/features/reservas/api"
 import type { MateriaReservable, EquipoDisponible } from "@/features/reservas/types"
 import { ApiError } from "@/lib/api-client"
-import { diaLectivoEnDias } from "@/test/fechas"
+import { fechaFuturaEnDias } from "@/test/fechas"
 
 vi.mock("@/features/reservas/api")
 
 // Relativas a hoy y no constantes: los inputs de fecha tienen min=hoy, así
 // que una fecha fija deja de poder enviarse apenas queda atrás (ver
 // src/test/fechas.ts).
-const FECHA = diaLectivoEnDias(7)
-const FECHA_FIN = diaLectivoEnDias(120)
+const FECHA = fechaFuturaEnDias(7)
+const FECHA_FIN = fechaFuturaEnDias(120)
 
 const materias: MateriaReservable[] = [
   {
@@ -204,17 +204,33 @@ describe("NuevaReservaPage", () => {
     expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
   })
 
-  it("avisa si la hora de fin no es posterior a la de inicio", async () => {
+  it("avisa si la hora de fin es igual a la de inicio", async () => {
     const user = userEvent.setup()
     renderPagina()
     await elegirMateria(user)
     await user.selectOptions(screen.getByLabelText("Hora de inicio: hora"), "10")
     await user.selectOptions(screen.getByLabelText("Hora de inicio: minutos"), "00")
-    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "09")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "10")
     await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
 
-    expect(screen.getByText(/tiene que ser posterior/)).toBeInTheDocument()
+    expect(screen.getByText(/no puede ser igual/)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+  })
+
+  // Una hora de fin MENOR que la de inicio ya no es un error: significa que la
+  // clase termina al día siguiente, que es como dicta una escuela nocturna.
+  // El formulario lo dice en vez de bloquearlo.
+  it("una franja que cruza la medianoche se puede confirmar, y lo avisa", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await elegirMateria(user)
+    await user.selectOptions(screen.getByLabelText("Hora de inicio: hora"), "22")
+    await user.selectOptions(screen.getByLabelText("Hora de inicio: minutos"), "00")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "01")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
+
+    expect(screen.getByText(/termina al día siguiente/)).toBeInTheDocument()
+    expect(screen.queryByText(/no puede ser igual/)).not.toBeInTheDocument()
   })
 
   // Espeja domain.MaxDuracionReserva: sin tope, un 00:00–23:59 bloqueaba la
