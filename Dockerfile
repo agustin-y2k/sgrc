@@ -3,9 +3,31 @@ FROM golang:1.25-alpine AS build
 RUN apk add --no-cache ca-certificates
 WORKDIR /src
 COPY go.mod go.sum* ./
-RUN go mod download
+# Las cachés de Go viven en un `type=cache` de BuildKit y no adentro de la
+# capa. Eso cambia qué pasa cuando el build falla a mitad de camino.
+#
+# Sin esto, una descarga interrumpida —un DNS que se cae bajo la ráfaga de
+# consultas, una red que corta— hace que BuildKit descarte la capa entera y
+# el reintento vuelva a bajar los más de doscientos módulos desde cero. En
+# una conexión inestable eso no converge nunca: alcanza con que UNA falle
+# para perder las otras doscientas. Con la caché, lo que se bajó sobrevive al
+# fallo y cada reintento arranca donde quedó el anterior.
+#
+# El mismo mount va en los dos pasos, y no es una repetición por prolijidad:
+# como el directorio no queda en la capa, sin él `go build` no encontraría
+# nada de lo que `go mod download` acaba de traer y lo bajaría de nuevo.
+#
+# La caché es del constructor, no de la imagen: no engorda el binario final
+# —que igual sale de `scratch`— pero sí ocupa disco en el servidor. Se limpia
+# con `docker builder prune` si algún día molesta.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/sgrc-app ./cmd
+# GOCACHE además del módulo: acá la que ahorra es la caché de compilación, que
+# hace que un cambio en un solo paquete no recompile todas las dependencias.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -o /out/sgrc-app ./cmd
 
 FROM scratch
 # Los certificados raíz. En scratch no hay ninguno, y Go los lee del disco:
