@@ -256,7 +256,12 @@ func (s *Service) EditarBloqueDeJornada(ctx context.Context, id string, dia *dom
 	if horaFin != nil {
 		nuevo.HoraFin = *horaFin
 	}
-	if nuevo.HoraFin <= nuevo.HoraInicio {
+	// Solo iguales es inválido, igual que en NuevoBloqueJornada: en la
+	// jornada, hora_fin menor que hora_inicio significa que el tramo termina
+	// al día siguiente. Acá decía `<=`, copiado del horario de los Admin —que
+	// no cruza la medianoche a propósito—, y eso dejaba crear el tramo de una
+	// nocturna (20:00–01:00) pero no editarlo nunca más.
+	if nuevo.HoraFin == nuevo.HoraInicio {
 		return nil, domain.ErrRangoHorarioInvalido
 	}
 	if err := s.verificarJornadaSinSolape(ctx, &nuevo); err != nil {

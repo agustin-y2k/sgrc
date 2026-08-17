@@ -580,6 +580,52 @@ func TestDisponibilidadDeTodosLosAdmins_ErrorDelListador_Propaga(t *testing.T) {
 
 // ── Jornada de la institución ──────────────────────────────────────────
 
+// Una nocturna que abre de 20:00 a 01:00 tiene que poder corregir la hora
+// después de haberla cargado. La validación del alta y la de la edición
+// tienen que decir lo mismo: la edición pedía hora_fin mayor que la de
+// inicio —regla del horario de los Admin, que no cruza la medianoche— y así
+// el tramo se podía crear pero no editar.
+func TestEditarBloqueDeJornada_CruzaLaMedianoche(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	b, err := svc.AgregarBloqueDeJornada(ctx, domain.Lunes, 20*time.Hour, 1*time.Hour)
+	if err != nil {
+		t.Fatalf("el alta tiene que aceptar el cruce: %v", err)
+	}
+
+	nuevoFin := 2 * time.Hour
+	editado, err := svc.EditarBloqueDeJornada(ctx, b.ID, nil, nil, &nuevoFin)
+
+	if err != nil {
+		t.Fatalf("la edición también tiene que aceptarlo: %v", err)
+	}
+	if editado.HoraFin != nuevoFin {
+		t.Errorf("esperaba fin a las 02:00, obtuve %v", editado.HoraFin)
+	}
+}
+
+// Iguales sigue siendo inválido: no describe ningún tramo, ni de cero horas
+// ni de veinticuatro.
+func TestEditarBloqueDeJornada_ExtremosIguales_SeRechaza(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	b, err := svc.AgregarBloqueDeJornada(ctx, domain.Lunes, 8*time.Hour, 12*time.Hour)
+	if err != nil {
+		t.Fatalf("el alta tiene que entrar: %v", err)
+	}
+
+	mismaHora := 8 * time.Hour
+	_, err = svc.EditarBloqueDeJornada(ctx, b.ID, nil, nil, &mismaHora)
+
+	if !errors.Is(err, domain.ErrRangoHorarioInvalido) {
+		t.Fatalf("esperaba ErrRangoHorarioInvalido, obtuve %v", err)
+	}
+}
+
 func (r *fakeRepo) ListarJornada(_ context.Context) ([]*domain.BloqueJornada, error) {
 	var todos []*domain.BloqueJornada
 	for _, b := range r.jornada {
