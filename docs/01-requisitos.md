@@ -126,6 +126,10 @@ ReservaGrupo (materia, fecha, horario — "la reserva" que percibe el docente)
 
 > **La jornada de la institución (RF-07.5).** Un Admin declara qué días y en qué horas abre la escuela, desde *Jornada de la escuela*. Se pueden cargar **varios tramos por día** —una escuela con turno mañana y turno noche declara 07:00–12:00 y 18:00–23:00, y el mediodía queda cerrado—, y una reserva que caiga afuera se rechaza. **Mientras no se declare ninguna jornada no hay restricción**: el sistema no supone un calendario que nadie le dijo. Una vez declarada, un día sin tramos es un día en que la escuela no abre.
 >
+> **El mismo tramo se declara para varios días a la vez**, con atajos para los repartos habituales (lunes a viernes, todos los días, fin de semana). Por dentro sigue siendo **un tramo por día**, y eso no es un detalle de implementación: **cualquier día se corrige o se quita por separado**, desde *Día por día*, sin desarmar el grupo. Agrupar es solo cómo se lee y cómo se carga —"lunes a viernes de 7:30 a 12:30" es una línea, no cinco—, y el agrupado se rehace solo cuando un día pasa a tener otro horario. Así se declara una escuela que abre de 8 a 12 y de 13 a 18 los lunes, miércoles, jueves y viernes, de 8 a 14 los martes, y no abre el fin de semana.
+>
+> Cada día se guarda por separado, así que uno puede quedar sin guardar —porque pisa otro tramo— y el resto entrar igual; la pantalla nombra cuáles fueron.
+>
 > No confundirla con el horario de disponibilidad de cada Admin (RF-07.1): aquel es de una persona y es informativo —sirve para saber a quién buscar—, este es de la institución y es normativo.
 >
 > **Cuándo se carga una reserva no está limitado**, solo para cuándo es. Un docente puede reservar un domingo a la noche desde su casa para el lunes: ese puede ser justamente el rato libre que tiene para organizarse.
