@@ -33,7 +33,7 @@ const ENLACES: Enlace[] = [
   // RF-07.2: lo ve cualquier usuario autenticado. Para un docente es "a
   // quién busco si necesito algo del laboratorio"; para un Admin es además
   // donde carga su propio horario.
-  { a: "/disponibilidad", texto: "Admins" },
+  { a: "/disponibilidad", texto: "Horario Admins" },
 ]
 
 /**
