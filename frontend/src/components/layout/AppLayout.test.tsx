@@ -117,7 +117,9 @@ describe("AppLayout", () => {
   it("un docente sí ve la disponibilidad de los Admins", async () => {
     renderLayout("DOCENTE")
 
-    expect(await screen.findByRole("link", { name: "Admins" })).toBeInTheDocument()
+    expect(
+      await screen.findByRole("link", { name: "Horario Admins" })
+    ).toBeInTheDocument()
   })
 
   // Aprobación queda suelta en la barra a propósito: es la única tarea de

@@ -552,6 +552,58 @@ func TestHTTP_DisponibilidadDeAdmins_ExcepcionDeHoyPisaElBloque(t *testing.T) {
 
 // ── Jornada de la institución ──────────────────────────────────────────
 
+// La ruta de edición existía sin que ninguna pantalla la usara, así que su
+// comportamiento no estaba fijado por ningún test. Estos dos cubren lo que
+// la pantalla necesita: que un Admin pueda mover un extremo, incluso hasta
+// cruzar la medianoche, y que un docente no pueda tocar la jornada de la
+// escuela aunque pueda leerla.
+func TestHTTP_EditarBloqueDeJornada_CruzaLaMedianoche_200(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.jornada["j1"] = &domain.BloqueJornada{
+		ID: "j1", DiaSemana: domain.Lunes, HoraInicio: 20 * time.Hour, HoraFin: 1 * time.Hour,
+	}
+	app := nuevaAppDeTest(repo)
+
+	nuevoFin := "02:00"
+	req := httptest.NewRequest("PATCH", "/api/jornada/j1",
+		conBody(editarBloqueRequest{HoraFin: &nuevoFin}))
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+	if repo.jornada["j1"].HoraFin != 2*time.Hour {
+		t.Errorf("no se actualizó el tramo: %+v", repo.jornada["j1"])
+	}
+}
+
+func TestHTTP_EditarBloqueDeJornada_Docente_403(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.jornada["j1"] = &domain.BloqueJornada{
+		ID: "j1", DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour,
+	}
+	app := nuevaAppDeTest(repo)
+
+	nuevoFin := "23:00"
+	req := httptest.NewRequest("PATCH", "/api/jornada/j1",
+		conBody(editarBloqueRequest{HoraFin: &nuevoFin}))
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	}
+	if repo.jornada["j1"].HoraFin != 12*time.Hour {
+		t.Error("la jornada no debería haberse tocado")
+	}
+}
+
 func (r *fakeRepo) ListarJornada(_ context.Context) ([]*domain.BloqueJornada, error) {
 	var todos []*domain.BloqueJornada
 	for _, b := range r.jornada {

@@ -31,6 +31,10 @@ const RUTAS = [
   "/admin/academico",
   "/admin/inventario",
   "/admin/reportes",
+  // Los siete días en una fila de botones, más los atajos: es la pantalla
+  // con más elementos en línea del sistema y la primera candidata a
+  // desbordar en un teléfono.
+  "/admin/jornada",
   "/admin/bloquear-equipos",
 ]
 

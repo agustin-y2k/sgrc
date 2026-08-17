@@ -3089,6 +3089,17 @@ paths:
                 horaFin: { type: string, example: "12:00" }
       responses:
         "200": { description: Tramo actualizado }
+        "400":
+          description: |
+            El tramo resultante empieza y termina a la misma hora. Que el fin
+            sea MENOR que el inicio no es un error: significa que cierra al día
+            siguiente (una nocturna declara 20:00–01:00), y la edición lo
+            acepta igual que el alta. La validación de las dos tiene que ser la
+            misma: pedir acá un fin posterior al inicio dejaría crear el tramo
+            de una nocturna y no corregirlo nunca más.
+          content:
+            text/plain:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         "404": { description: No existe }
         "409": { description: Se pisa con otro tramo del mismo día }
     delete:
