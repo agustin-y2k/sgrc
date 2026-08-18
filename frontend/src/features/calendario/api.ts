@@ -5,5 +5,7 @@ import type { CalendarioEquipo } from "@/features/calendario/types"
 // docente y materia ya resueltos por el backend.
 export function calendarioDeEquipo(equipoId: string, desde: string, hasta: string) {
   const params = new URLSearchParams({ desde, hasta })
-  return apiFetch<CalendarioEquipo>(`/api/reservation/equipos/${equipoId}/calendario?${params}`)
+  return apiFetch<CalendarioEquipo>(
+    `/api/reservation/equipos/${equipoId}/calendario?${params}`
+  )
 }

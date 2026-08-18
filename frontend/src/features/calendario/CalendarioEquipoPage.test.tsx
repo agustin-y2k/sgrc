@@ -19,7 +19,10 @@ function renderCalendario() {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/inventario/equipos/pc1/calendario"]}>
         <Routes>
-          <Route path="/inventario/equipos/:equipoId/calendario" element={<CalendarioEquipoPage />} />
+          <Route
+            path="/inventario/equipos/:equipoId/calendario"
+            element={<CalendarioEquipoPage />}
+          />
           <Route path="/inventario" element={<div>Inventario</div>} />
         </Routes>
       </MemoryRouter>
@@ -140,5 +143,22 @@ describe("CalendarioEquipoPage", () => {
     renderCalendario()
 
     expect(await screen.findByText(/formato YYYY-MM-DD/)).toBeInTheDocument()
+  })
+
+  // Con un error, la grilla no se dibuja. Antes se dibujaba igual, así que un
+  // equipo que no existe mostraba el cartel Y una semana entera vacía debajo:
+  // la pantalla se contradecía a sí misma.
+  it("con un error no dibuja la grilla vacía debajo del cartel", async () => {
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockRejectedValue(
+      new ApiError(404, "ese equipo no está en el inventario")
+    )
+    renderCalendario()
+
+    expect(await screen.findByText(/no está en el inventario/)).toBeInTheDocument()
+    // La leyenda es lo último de la grilla: si no está, no se dibujó nada.
+    expect(
+      screen.queryByText(/Los huecos en blanco están libres/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText("Reserva de clase")).not.toBeInTheDocument()
   })
 })

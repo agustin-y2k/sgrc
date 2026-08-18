@@ -16,7 +16,7 @@ import {
   desdeFechaISO,
   etiquetaDeDia,
   fechasDeLaSemana,
-  formatearRangoSemana,
+  formatearRangoVisible,
   sumarDias,
 } from "@/features/calendario/semana"
 import { getErrorMessage } from "@/lib/api-client"
@@ -43,7 +43,9 @@ const ALTO_POR_HORA_REM = 3
  * así que para dibujarla hay que cortarla por la medianoche. El corte es
  * puramente visual y no viaja a ningún lado.
  */
-function pedazosPorDia(b: BloqueCalendario): { fecha: string; bloque: BloqueCalendario }[] {
+function pedazosPorDia(
+  b: BloqueCalendario
+): { fecha: string; bloque: BloqueCalendario }[] {
   if (aMinutos(b.horaFin) > aMinutos(b.horaInicio)) {
     return [{ fecha: b.fecha, bloque: b }]
   }
@@ -61,7 +63,10 @@ function pedazosPorDia(b: BloqueCalendario): { fecha: string; bloque: BloqueCale
  * cortado: con una clase de 22:00 a 01:00 en la semana, la grilla llega hasta
  * las 24 y el día siguiente arranca a las 0.
  */
-function rangoHorarioVisible(bloques: BloqueCalendario[]): { desde: number; hasta: number } {
+function rangoHorarioVisible(bloques: BloqueCalendario[]): {
+  desde: number
+  hasta: number
+} {
   let desde = HORA_DESDE_POR_DEFECTO
   let hasta = HORA_HASTA_POR_DEFECTO
   for (const b of bloques) {
@@ -71,7 +76,13 @@ function rangoHorarioVisible(bloques: BloqueCalendario[]): { desde: number; hast
   return { desde: Math.max(0, desde), hasta: Math.min(24, hasta) }
 }
 
-function BloqueOcupado({ bloque, horaDesde }: { bloque: BloqueCalendario; horaDesde: number }) {
+function BloqueOcupado({
+  bloque,
+  horaDesde,
+}: {
+  bloque: BloqueCalendario
+  horaDesde: number
+}) {
   const inicio = aMinutos(bloque.horaInicio)
   const fin = aMinutos(bloque.horaFin)
   const minutosBase = horaDesde * 60
@@ -104,9 +115,7 @@ function BloqueOcupado({ bloque, horaDesde }: { bloque: BloqueCalendario; horaDe
       {/* En un bloqueo, el motivo ocupa el lugar que en una clase tiene la
           materia: es lo que responde "¿por qué no puedo reservar acá?", que
           es exactamente lo que trae a alguien a mirar el calendario. */}
-      <p className="truncate font-medium">
-        {esBloqueo ? motivo : bloque.materiaNombre}
-      </p>
+      <p className="truncate font-medium">{esBloqueo ? motivo : bloque.materiaNombre}</p>
       {!esBloqueo && (
         <>
           <p className="truncate opacity-80">{bloque.cursoNombre}</p>
@@ -179,7 +188,10 @@ export function CalendarioEquipoPage() {
     () => rangoHorarioVisible([...bloquesPorDia.values()].flat()),
     [bloquesPorDia]
   )
-  const horas = Array.from({ length: rango.hasta - rango.desde }, (_, i) => rango.desde + i)
+  const horas = Array.from(
+    { length: rango.hasta - rango.desde },
+    (_, i) => rango.desde + i
+  )
   const hoy = aFechaISO(new Date())
 
   return (
@@ -188,7 +200,9 @@ export function CalendarioEquipoPage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Calendario del equipo</h1>
           <p className="text-muted-foreground text-sm">
-            {formatearRangoSemana(referencia)}
+            {/* El rango que se dibuja, no la semana entera: con una escuela
+                de lunes a viernes el rótulo prometía dos días que no están. */}
+            {formatearRangoVisible(dias)}
           </p>
         </div>
         {/* flex-wrap: los cuatro botones no entran en una línea en un
@@ -224,73 +238,88 @@ export function CalendarioEquipoPage() {
       )}
       {isLoading && <p className="text-muted-foreground">Cargando calendario…</p>}
 
-      {/* La grilla scrollea horizontalmente en pantallas angostas en vez de
+      {/* Con un error no se dibuja la grilla. Antes se dibujaba igual, así que
+          un equipo que no existe mostraba el cartel Y una semana entera vacía
+          debajo: la pantalla se contradecía a sí misma. */}
+      {!error && (
+        <>
+          {/* La grilla scrollea horizontalmente en pantallas angostas en vez de
           desbordar la página (RNF-07). */}
-      <div className="overflow-x-auto">
-        <div className="min-w-[44rem]">
-          <div className="grid border-b"
-            style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}>
-            <div />
-            {dias.map((fecha) => (
+          <div className="overflow-x-auto">
+            <div className="min-w-[44rem]">
               <div
-                key={fecha}
-                className={
-                  "border-l px-2 py-1 text-center text-sm font-medium " +
-                  (fecha === hoy ? "text-primary" : "")
-                }
+                className="grid border-b"
+                style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}
               >
-                <div>{etiquetaDeDia(fecha)}</div>
-                <div className="text-muted-foreground text-xs">
-                  {desdeFechaISO(fecha).getDate()}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid"
-            style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}>
-            {/* Columna de horas */}
-            <div>
-              {horas.map((h) => (
-                <div
-                  key={h}
-                  className="text-muted-foreground border-b pr-2 text-right text-xs"
-                  style={{ height: `${ALTO_POR_HORA_REM}rem` }}
-                >
-                  {String(h).padStart(2, "0")}:00
-                </div>
-              ))}
-            </div>
-
-            {dias.map((fecha) => (
-              <div key={fecha} className="relative border-l">
-                {horas.map((h) => (
+                <div />
+                {dias.map((fecha) => (
                   <div
-                    key={h}
-                    className="border-b"
-                    style={{ height: `${ALTO_POR_HORA_REM}rem` }}
-                  />
-                ))}
-                {(bloquesPorDia.get(fecha) ?? []).map((b) => (
-                  <BloqueOcupado key={`${b.reservaId}-${b.horaInicio}`} bloque={b} horaDesde={rango.desde} />
+                    key={fecha}
+                    className={
+                      "border-l px-2 py-1 text-center text-sm font-medium " +
+                      (fecha === hoy ? "text-primary" : "")
+                    }
+                  >
+                    <div>{etiquetaDeDia(fecha)}</div>
+                    <div className="text-muted-foreground text-xs">
+                      {desdeFechaISO(fecha).getDate()}
+                    </div>
+                  </div>
                 ))}
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
-        <span className="flex items-center gap-1.5">
-          <span className="border-primary/30 bg-primary/10 inline-block size-3 rounded border" />
-          Reserva de clase
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="border-destructive/40 bg-destructive/10 inline-block size-3 rounded border" />
-          Bloqueado por un Admin
-        </span>
-        <Badge variant="outline">Los huecos en blanco están libres</Badge>
-      </div>
+              <div
+                className="grid"
+                style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}
+              >
+                {/* Columna de horas */}
+                <div>
+                  {horas.map((h) => (
+                    <div
+                      key={h}
+                      className="text-muted-foreground border-b pr-2 text-right text-xs"
+                      style={{ height: `${ALTO_POR_HORA_REM}rem` }}
+                    >
+                      {String(h).padStart(2, "0")}:00
+                    </div>
+                  ))}
+                </div>
+
+                {dias.map((fecha) => (
+                  <div key={fecha} className="relative border-l">
+                    {horas.map((h) => (
+                      <div
+                        key={h}
+                        className="border-b"
+                        style={{ height: `${ALTO_POR_HORA_REM}rem` }}
+                      />
+                    ))}
+                    {(bloquesPorDia.get(fecha) ?? []).map((b) => (
+                      <BloqueOcupado
+                        key={`${b.reservaId}-${b.horaInicio}`}
+                        bloque={b}
+                        horaDesde={rango.desde}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
+            <span className="flex items-center gap-1.5">
+              <span className="border-primary/30 bg-primary/10 inline-block size-3 rounded border" />
+              Reserva de clase
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="border-destructive/40 bg-destructive/10 inline-block size-3 rounded border" />
+              Bloqueado por un Admin
+            </span>
+            <Badge variant="outline">Los huecos en blanco están libres</Badge>
+          </div>
+        </>
+      )}
     </div>
   )
 }

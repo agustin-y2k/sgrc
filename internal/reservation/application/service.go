@@ -488,6 +488,23 @@ func (s *Service) CalendarioDeEquipo(ctx context.Context, equipoID string, desde
 	if hasta.Before(desde) {
 		return nil, domain.ErrRangoFechasInvalido
 	}
+
+	// Se pregunta si el equipo existe antes de traer sus bloques. Sin esto, un
+	// id inventado devolvía 200 con la lista vacía y la pantalla dibujaba la
+	// semana entera: "no existe" y "está libre" se veían igual.
+	//
+	// EquipoEstaEnInventario y no EquipoDisponibleParaReservar: una máquina en
+	// mantenimiento sí tiene calendario —lo que ya está reservado sigue ahí, y
+	// es justo lo que hay que mirar para reprogramarlo—; lo que no tiene
+	// calendario es algo que no está en el inventario.
+	enInventario, err := s.validadorEquipo.EquipoEstaEnInventario(ctx, equipoID)
+	if err != nil {
+		return nil, fmt.Errorf("verificando el equipo del calendario: %w", err)
+	}
+	if !enInventario {
+		return nil, ErrEquipoNoEncontrado
+	}
+
 	return s.repo.CalendarioDeEquipo(ctx, equipoID, desde, hasta)
 }
 

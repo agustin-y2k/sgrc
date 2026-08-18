@@ -83,6 +83,16 @@ var (
 	// una PC rota al técnico es justamente un préstamo.
 	ErrEquipoDadoDeBaja = errors.New("ese equipo está dado de baja del inventario")
 
+	// ErrEquipoNoEncontrado: la dirección nombra un equipo que no está en el
+	// inventario.
+	//
+	// Hace falta para el calendario, que hasta ahora no preguntaba: devolvía
+	// 200 con la lista de bloques vacía, así que la pantalla dibujaba la
+	// grilla completa y no había forma de distinguir "este equipo no existe"
+	// de "este equipo está libre toda la semana". Es un 404 y no un 400: la
+	// dirección está bien formada, lo que no hay es el recurso.
+	ErrEquipoNoEncontrado = errors.New("ese equipo no está en el inventario")
+
 	// ErrReservaAjena: RF-04.4 — un docente solo toca sus propias reservas.
 	// El Admin puede tocar cualquiera.
 	ErrReservaAjena = errors.New("esa reserva es de otra persona")
