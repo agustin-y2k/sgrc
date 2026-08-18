@@ -1,7 +1,38 @@
 services:
   sgrc-app:
     build: .
-    mem_limit: 256m
+    # 1g, contra los 256m que había: cada verificación de contraseña con
+    # argon2id reserva 64 MB mientras dura
+    # (internal/shared/security/argon2.go), así que unos pocos logins
+    # simultáneos llegaban al tope y el kernel mataba el proceso — cuatro
+    # personas entrando a la vez alcanzaban, y el contenedor no volvía solo.
+    #
+    # Quien pone el techo de verdad es maxHashesEnParalelo (3 × 64 MB = 192
+    # MB); esto es el colchón para el resto del proceso. Con 1g el peor caso
+    # medido —390 MiB con 8 logins a la vez— usa menos de la mitad, y queda
+    # margen para un reporte grande o varias descargas de CSV en simultáneo.
+    # En un servidor de 7,4 GiB no le quita nada a nadie.
+    mem_limit: 1g
+    environment:
+      # El runtime de Go no ve el mem_limit del contenedor: sin esto, el
+      # recolector se guía por su propia idea de cuánta memoria hay
+      # (la del host, 7,4 GiB) y recién apura cuando el cgroup ya está al
+      # borde — o sea, cuando el kernel está por matar el proceso. Con el
+      # límite declarado, el GC trabaja ANTES de rozar el techo: pasa de
+      # "que el kernel resuelva" a "que el proceso se contenga".
+      #
+      # 800MiB es ~80% de mem_limit. El margen que queda no es de más: es
+      # para lo que el GC no controla —el heap de C de Postgres no, pero sí
+      # los buffers de red y las pilas de las goroutines— y para el pico
+      # entre que el GC decide y termina. Si se mueve mem_limit, este va
+      # detrás, siempre por debajo.
+      GOMEMLIMIT: 800MiB
+    # Que vuelva solo. Un contenedor muerto por un pico de memoria o por un
+    # reinicio del servidor dejaba el sistema caído hasta que alguien
+    # entrara por SSH a levantarlo, y desde afuera eso no se distingue de
+    # "internet anda mal": el túnel responde, la SPA carga, y todo lo que
+    # pasa por /api falla.
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -20,6 +51,7 @@ services:
   frontend:
     build: ./frontend
     mem_limit: 128m
+    restart: unless-stopped
     # service_healthy y no el depends_on pelado: nginx arrancaba apenas el
     # contenedor de la API existía, aunque todavía estuviera conectando a
     # Postgres, así que los primeros requests a /api volvían 502. La
@@ -34,6 +66,7 @@ services:
   postgres:
     image: postgres:16-alpine
     mem_limit: 512m
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
