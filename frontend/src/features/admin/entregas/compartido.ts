@@ -1,4 +1,5 @@
 import type { Prestamo } from "@/features/reservas/types"
+import { formatearHora } from "@/lib/fechas"
 
 /**
  * Lo que comparten la pantalla de entregas y el panel del laboratorio.
@@ -19,7 +20,7 @@ export function textoDeDemora(minutos: number): string {
 }
 
 export function hora(iso: string): string {
-  return new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })
+  return formatearHora(iso)
 }
 
 /**

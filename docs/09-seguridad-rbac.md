@@ -200,6 +200,14 @@ Se usa `CF-Connecting-IP` y no `X-Forwarded-For` porque Cloudflare la **sobrescr
 
 Las únicas dos rutas que aceptan un token con la contraseña temporal sin cambiar son `GET /api/auth/me` y `POST /api/auth/cambiar-password` — justamente las que hacen falta para salir de esa situación. Se marcan explícitamente con `JWTAuthPermitiendoPasswordVencida`; todo lo demás usa `JWTAuth`, que ya incluye la restricción, de modo que una ruta nueva queda protegida por omisión.
 
+### Por qué la contraseña actual equivocada responde 400 y no 401
+
+Un 401 significa "el que hace este pedido no está autenticado", y un cliente que recibe uno con un token que venía usando entiende que su sesión dejó de valer: la descarta y manda a iniciar sesión de nuevo. Es el comportamiento correcto, y el que necesita el sistema para los dos casos que lo motivan — una cuenta dada de baja (RF-02.8) y las sesiones que se cierran al cambiar la contraseña (RF-01.11).
+
+Por eso `POST /api/auth/cambiar-password` **no** puede responder 401 cuando lo que está mal es el campo `passwordActual`. Quien llega hasta ese handler está perfectamente autenticado —su token se validó para dejarlo pasar— y lo que vino mal es un dato del cuerpo. Devolver 401 ahí le cerraba la sesión a alguien que se equivocó tipeando, y lo dejaba en el login leyendo "credenciales inválidas" sin ninguna pista de qué había pasado.
+
+La distinción vive en el error de dominio (`ErrPasswordActualIncorrecta`, separado de `ErrCredencialesInvalidas`) y no en el handler, para que ningún camino nuevo hacia el mismo chequeo se lleve puesto el código equivocado.
+
 ## 5. Tabla de auditoría
 
 ```sql

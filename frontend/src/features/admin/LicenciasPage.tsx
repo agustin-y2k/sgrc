@@ -190,8 +190,8 @@ function FilaDeLicencia({
       {borrando && (
         <div className="grid gap-2 rounded-md border border-dashed p-3">
           <p className="text-sm">
-            ¿Quitar la licencia de {licencia.nombre} de {licencia.etiqueta}?
-            Deja de aparecer en la lista y de avisar. No toca la máquina.
+            ¿Quitar la licencia de {licencia.nombre} de {licencia.etiqueta}? Deja de
+            aparecer en la lista y de avisar. No toca la máquina.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -313,8 +313,8 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
       const yaEstaban = respuesta.equiposQueYaLaTenian?.length ?? 0
       setResumen(
         yaEstaban === 0
-          ? `Se cargó en ${respuesta.creadas.length} Equipo(s).`
-          : `Se cargó en ${respuesta.creadas.length} Equipo(s). ${yaEstaban} ya la tenían y se dejaron como estaban.`
+          ? `Se cargó en ${respuesta.creadas.length} equipo(s).`
+          : `Se cargó en ${respuesta.creadas.length} equipo(s). ${yaEstaban} ya la tenían y se dejaron como estaban.`
       )
       setCampos({ ...LICENCIA_VACIA, vencimiento: VENCIMIENTO_VACIO })
       setSeleccionadas(new Set())
@@ -335,8 +335,9 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
       <CardHeader>
         <CardTitle>Cargar una licencia</CardTitle>
         <CardDescription>
-          Se carga el mismo software en todas los equipos que elijas, de uno o varios carros.
-          Cada máquina lleva su propio contador: si alguna queda sin renovar, se ve.
+          Se carga el mismo software en todos los equipos que elijas, de uno o varios
+          carros. Cada máquina lleva su propio contador: si alguna queda sin renovar, se
+          ve.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -398,13 +399,7 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
 }
 
 /** La barra de renovación masiva: aparece solo cuando hay algo marcado. */
-function RenovacionMasiva({
-  ids,
-  onListo,
-}: {
-  ids: string[]
-  onListo: () => void
-}) {
+function RenovacionMasiva({ ids, onListo }: { ids: string[]; onListo: () => void }) {
   const queryClient = useQueryClient()
   const [renovadaEl, setRenovadaEl] = useState("")
   const [resumen, setResumen] = useState<string | null>(null)
@@ -545,7 +540,10 @@ export function LicenciasPage() {
           )}
 
           {marcadas.size > 0 && (
-            <RenovacionMasiva ids={[...marcadas]} onListo={() => setMarcadas(new Set())} />
+            <RenovacionMasiva
+              ids={[...marcadas]}
+              onListo={() => setMarcadas(new Set())}
+            />
           )}
 
           {/* El orden lo decide el backend: primero las que no tienen fecha

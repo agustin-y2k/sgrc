@@ -18,7 +18,8 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrPreferenciaNoEncontr):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 
-	case errors.Is(err, application.ErrIdentificadorDuplicado),
+	case errors.Is(err, application.ErrNombreCarroDuplicado),
+		errors.Is(err, application.ErrIdentificadorDuplicado),
 		errors.Is(err, application.ErrNumeroSerieDuplicado),
 		// El alta masiva saltea los duplicados y los informa en el cuerpo;
 		// esto solo salta al RENOMBRAR una licencia al nombre de otra que

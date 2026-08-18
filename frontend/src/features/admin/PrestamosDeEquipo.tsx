@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import * as reservasApi from "@/features/reservas/api"
 import type { Prestamo } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
+import { formatearFechaCortaYHora } from "@/lib/fechas"
 
 /**
  * RF-08.8 — el historial de entregas de una máquina, dentro de su ficha.
@@ -17,12 +18,7 @@ import { getErrorMessage } from "@/lib/api-client"
  */
 
 function cuando(iso: string): string {
-  return new Date(iso).toLocaleString("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatearFechaCortaYHora(iso)
 }
 
 function estadoDelPrestamo(p: Prestamo) {

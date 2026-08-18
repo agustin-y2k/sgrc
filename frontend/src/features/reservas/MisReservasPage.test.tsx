@@ -226,7 +226,7 @@ describe("MisReservasPage", () => {
       )
     })
 
-    // RF-04.6: la elección se aplica "a todas los equipos del grupo en esa fecha
+    // RF-04.6: la elección se aplica "a todos los equipos del grupo en esa fecha
     // (o rango)". Antes "solo esta fecha" llamaba a cancelarReserva y
     // liberaba UNA sola Equipo, que no es lo que dice el requisito ni lo que
     // sugiere el texto de la opción.
@@ -291,8 +291,25 @@ describe("MisReservasPage", () => {
       await user.click(await screen.findByRole("button", { name: "Cancelar" }))
 
       expect(
-        screen.getByText(/se cancelan los 2 equipos de esta reserva/i)
+        screen.getByText(/se cancelan 2 equipos de esta reserva/i)
       ).toBeInTheDocument()
+    })
+
+    // El caso de uno solo es el más común —una clase con una máquina— y era
+    // justamente el que salía mal: "Se cancela los 1 equipo de esta
+    // reserva". El verbo se pluralizaba bien y el artículo había quedado
+    // fijo, así que la prueba de dos equipos pasaba y nadie lo veía.
+    it("con un solo equipo, el aviso está bien escrito", async () => {
+      vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+        paginada([reserva({ id: "r1", identificador: 3 })])
+      )
+      const user = userEvent.setup()
+      renderPagina()
+
+      await user.click(await screen.findByRole("button", { name: "Cancelar" }))
+
+      expect(screen.getByText(/se cancela 1 equipo de esta reserva/i)).toBeInTheDocument()
+      expect(screen.queryByText(/los 1 equipo/i)).not.toBeInTheDocument()
     })
   })
 
@@ -375,9 +392,7 @@ describe("MisReservasPage", () => {
 
       // Una tarjeta, no tres: antes bloquear tres equipos se veía como tres
       // bloqueos distintos.
-      expect(
-        await screen.findByText(/Jornada docente · 3 equipos/)
-      ).toBeInTheDocument()
+      expect(await screen.findByText(/Jornada docente · 3 equipos/)).toBeInTheDocument()
       expect(screen.getAllByRole("button", { name: "Levantar bloqueo" })).toHaveLength(1)
       expect(screen.getByText("PC 1 · Carro 1")).toBeInTheDocument()
       expect(screen.getByText("PC 3 · Carro 1")).toBeInTheDocument()
@@ -402,7 +417,7 @@ describe("MisReservasPage", () => {
 
     // Liberar solo un equipo dejaría el aula a medio bloquear sin que nada lo
     // diga: la tarjeta representa la operación completa.
-    it("libera todas los equipos del bloqueo, no solo la primera", async () => {
+    it("libera todos los equipos del bloqueo, no solo el primero", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([bloqueo("b1", 1), bloqueo("b2", 2), bloqueo("b3", 3)])
       )

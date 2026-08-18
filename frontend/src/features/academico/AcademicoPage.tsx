@@ -196,7 +196,7 @@ export function AcademicoPage() {
                     <ul className="text-muted-foreground grid gap-1 text-sm">
                       <li>
                         · Antes de borrarlas se guardan las estadísticas del año (uso por
-                        Equipo y por docente), que quedan disponibles para siempre.
+                        equipo y por docente), que quedan disponibles para siempre.
                       </li>
                       <li>
                         · Los cursos y materias se conservan archivados, con sus docentes

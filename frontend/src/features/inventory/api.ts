@@ -47,7 +47,9 @@ export function listarEquiposDeCarro(carroId: string) {
 // estado, marcar el envío a soporte) sí es de Admin y vive en features/admin.
 
 export function listarIncidenciasDeEquipo(equipoId: string) {
-  return apiFetch<RespuestaLista<Incidencia>>(`/api/inventory/equipos/${equipoId}/incidencias`)
+  return apiFetch<RespuestaLista<Incidencia>>(
+    `/api/inventory/equipos/${equipoId}/incidencias`
+  )
 }
 
 export function reportarIncidencia(req: {

@@ -95,7 +95,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
 
       {equipos.length === 0 && (
         <p className="text-muted-foreground text-sm">
-          Este carro no tiene equipos activas. Agregá la primera con el formulario de
+          Este carro no tiene equipos activos. Agregá el primero con el formulario de
           abajo: sin equipos cargados nadie puede reservar.
         </p>
       )}
@@ -111,12 +111,16 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
 
         return (
           <div key={equipo.id} className="grid gap-2 rounded-md border p-3">
-            {/* Misma razón que en la cabecera del carro: identificador y
-                número de serie arriba, la fila de botones abajo. Acá son
-                cinco, así que en un teléfono se envuelven igual — pero
-                empiezan siempre en el mismo borde izquierdo y no donde
-                termine el texto de arriba. */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            {/* Identificador y número de serie arriba, la fila de botones
+                abajo, SIEMPRE — no lado a lado a partir de `sm`.
+
+                Antes lo eran, y con cinco botones entraba. Hoy son ocho y el
+                renglón de botones mide más que la tarjeta: como no podía
+                encogerse, se quedaba con todo el ancho y al texto le tocaba
+                un carácter, así que "N° serie 5CD1..." bajaba en vertical
+                letra por letra. Al lado de una fila de botones que crece con
+                cada función nueva, ningún texto está a salvo. */}
+            <div className="grid gap-2">
               <div className="min-w-0">
                 <p className="font-medium">
                   {equipo.etiqueta}{" "}
@@ -132,7 +136,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                 </p>
               </div>
               {!cambiandoEsta && !bajandoEsta && !editandoEsta && (
-                <div className="flex shrink-0 flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
                   {(
                     [
                       "DISPONIBLE",

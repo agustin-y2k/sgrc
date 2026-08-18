@@ -130,7 +130,7 @@ export function cancelarReserva(reservaId: string, motivo: string) {
  *
  * Es destructivo e irreversible: las reservas canceladas no se restauran
  * si después se borra el bloqueo. El backend lo hace todo en una sola
- * transacción, así que o se bloquean todas los equipos o ninguna.
+ * transacción, así que o se bloquean todos los equipos o ninguno.
  *
  * Rechaza con 409 si alguna Equipo no está DISPONIBLE o está dada de baja.
  */
@@ -168,7 +168,7 @@ export function historialDePrestamosDeEquipo(equipoId: string) {
 
 /**
  * Entregar las máquinas de una reserva. Se mandan las reservas puntuales
- * (una por Equipo), no el grupo: el docente puede llevarse tres de las cinco.
+ * (una por equipo), no el grupo: el docente puede llevarse tres de las cinco.
  *
  * La hora de devolución no se manda — sale del fin de la reserva.
  *

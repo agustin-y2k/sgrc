@@ -811,7 +811,7 @@ func (s *Service) CambiarPassword(ctx context.Context, usuarioID, passwordActual
 		return "", fmt.Errorf("verificando password actual: %w", err)
 	}
 	if !ok {
-		return "", ErrCredencialesInvalidas
+		return "", ErrPasswordActualIncorrecta
 	}
 
 	if len(passwordNueva) < minPasswordLen {

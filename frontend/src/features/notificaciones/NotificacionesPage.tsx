@@ -13,6 +13,7 @@ import * as notificacionesApi from "@/features/notificaciones/api"
 import type { Notificacion } from "@/features/notificaciones/types"
 import { NOTIFICACIONES_KEY } from "@/features/notificaciones/useNoLeidas"
 import { getErrorMessage } from "@/lib/api-client"
+import { formatearFechaYHora } from "@/lib/fechas"
 
 /**
  * Fecha y hora en la zona del navegador. Importa el "cuándo" concreto:
@@ -25,15 +26,7 @@ import { getErrorMessage } from "@/lib/api-client"
  * desfasaje de la zona como si fuera parte del dato.
  */
 function formatearFecha(iso: string): string {
-  const fecha = new Date(iso)
-  if (Number.isNaN(fecha.getTime())) return iso
-  return fecha.toLocaleString("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatearFechaYHora(iso)
 }
 
 /**

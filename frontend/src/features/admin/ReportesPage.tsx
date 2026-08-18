@@ -219,7 +219,7 @@ export function ReportesPage() {
           alDescargar={
             filasUsoEquipos.length > 0
               ? () =>
-                  descargarCSV(`uso-por-pc_${sufijo}`, [
+                  descargarCSV(`uso-por-equipo_${sufijo}`, [
                     ["Equipo", "Carro", "Reservas", "Minutos reservados", "% del total"],
                     ...filasUsoEquipos.map((u) => [
                       u.etiqueta,
@@ -260,7 +260,10 @@ export function ReportesPage() {
                       {formatearDuracion(u.minutosReservados)}
                     </TableCell>
                     <TableCell>
-                      <Proporcion parte={u.minutosReservados} total={totalMinutosEquipos} />
+                      <Proporcion
+                        parte={u.minutosReservados}
+                        total={totalMinutosEquipos}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -491,19 +494,22 @@ export function ReportesPage() {
           alDescargar={
             filasInventario.length > 0
               ? () =>
-                  descargarCSV(
-                    `estado-inventario_${sufijo}.csv`,
+                  descargarCSV(`estado-inventario_${sufijo}.csv`, [
                     [
-                      ["Carro", "Disponibles", "En mantenimiento", "Fuera de servicio", "Total"],
-                      ...filasInventario.map((f) => [
-                        f.carroNombre || "Sin carro",
-                        f.disponibles,
-                        f.enMantenimiento,
-                        f.fueraDeServicio,
-                        f.total,
-                      ]),
-                    ]
-                  )
+                      "Carro",
+                      "Disponibles",
+                      "En mantenimiento",
+                      "Fuera de servicio",
+                      "Total",
+                    ],
+                    ...filasInventario.map((f) => [
+                      f.carroNombre || "Sin carro",
+                      f.disponibles,
+                      f.enMantenimiento,
+                      f.fueraDeServicio,
+                      f.total,
+                    ]),
+                  ])
               : undefined
           }
         >
@@ -554,19 +560,16 @@ export function ReportesPage() {
           alDescargar={
             filasFuera.length > 0
               ? () =>
-                  descargarCSV(
-                    `equipos-fuera-de-circulacion_${sufijo}.csv`,
-                    [
-                      ["Equipo", "Carro", "Estado", "Falla", "Detalle"],
-                      ...filasFuera.map((f) => [
-                        f.etiqueta,
-                        f.carroNombre ?? "",
-                        ETIQUETA_ESTADO_EQUIPO[f.estado] ?? f.estado,
-                        f.categoria ?? "Sin diagnosticar",
-                        f.ultimaFalla ?? "",
-                      ]),
-                    ]
-                  )
+                  descargarCSV(`equipos-fuera-de-circulacion_${sufijo}.csv`, [
+                    ["Equipo", "Carro", "Estado", "Falla", "Detalle"],
+                    ...filasFuera.map((f) => [
+                      f.etiqueta,
+                      f.carroNombre ?? "",
+                      ETIQUETA_ESTADO_EQUIPO[f.estado] ?? f.estado,
+                      f.categoria ?? "Sin diagnosticar",
+                      f.ultimaFalla ?? "",
+                    ]),
+                  ])
               : undefined
           }
         >
@@ -616,18 +619,15 @@ export function ReportesPage() {
           alDescargar={
             filasCategoria.length > 0
               ? () =>
-                  descargarCSV(
-                    `incidencias-por-categoria_${sufijo}.csv`,
-                    [
-                      ["Falla", "Total", "Abiertas", "Equipos alcanzados"],
-                      ...filasCategoria.map((f) => [
-                        f.categoria || "Sin diagnosticar",
-                        f.total,
-                        f.abiertas,
-                        f.equiposAlcanzados,
-                      ]),
-                    ]
-                  )
+                  descargarCSV(`incidencias-por-categoria_${sufijo}.csv`, [
+                    ["Falla", "Total", "Abiertas", "Equipos alcanzados"],
+                    ...filasCategoria.map((f) => [
+                      f.categoria || "Sin diagnosticar",
+                      f.total,
+                      f.abiertas,
+                      f.equiposAlcanzados,
+                    ]),
+                  ])
               : undefined
           }
         >

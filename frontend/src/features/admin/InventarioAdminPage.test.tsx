@@ -74,7 +74,9 @@ describe("InventarioAdminPage", () => {
     })
     vi.mocked(adminApi.crearCarro).mockResolvedValue({ id: "c2", nombre: "Carro 2" })
     vi.mocked(adminApi.editarCarro).mockResolvedValue(undefined)
-    vi.mocked(adminApi.crearEquipoDeCarro).mockResolvedValue(equipo({ id: "pc9", identificador: 9 }))
+    vi.mocked(adminApi.crearEquipoDeCarro).mockResolvedValue(
+      equipo({ id: "pc9", identificador: 9 })
+    )
     vi.mocked(adminApi.editarEquipo).mockResolvedValue(undefined)
     vi.mocked(adminApi.editarIncidencia).mockResolvedValue(undefined)
     vi.mocked(inventoryApi.listarIncidenciasDeEquipo).mockResolvedValue({
@@ -196,7 +198,7 @@ describe("InventarioAdminPage", () => {
     renderPagina()
     await abrirCarro(user)
 
-    await user.type(await screen.findByLabelText("Identificador"), "7")
+    await user.type(await screen.findByLabelText("Número de máquina"), "7")
     // Con letras: es como son los de fábrica, y exigirle dígitos era lo que
     // impedía cargar un equipo con el dato real de la etiqueta.
     await user.type(screen.getByLabelText("Número de serie"), "PF2K9L3M")
@@ -214,18 +216,19 @@ describe("InventarioAdminPage", () => {
     })
   })
 
-  // El identificador SÍ es entero: es el número pintado en la máquina, lo
-  // elige la escuela. Sin este chequeo, Number("siete") manda NaN y el
-  // backend responde un 400 que no dice cuál de los dos campos está mal.
+  // El número de máquina SÍ es entero: es el que está pintado en la máquina
+  // y nombra el zócalo que ocupa en el carro. Sin este chequeo,
+  // Number("siete") manda NaN y el backend responde un 400 que no dice cuál
+  // de los dos campos está mal.
   it("no deja agregar un equipo con identificador no numérico", async () => {
     const user = userEvent.setup()
     renderPagina()
     await abrirCarro(user)
 
-    await user.type(await screen.findByLabelText("Identificador"), "siete")
+    await user.type(await screen.findByLabelText("Número de máquina"), "siete")
     await user.type(screen.getByLabelText("Número de serie"), "PF2K9L3M")
 
-    expect(screen.getByText(/número entero/)).toBeInTheDocument()
+    expect(screen.getByText(/va sin letras/)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Agregar al carro" })).toBeDisabled()
   })
 
@@ -237,10 +240,10 @@ describe("InventarioAdminPage", () => {
     renderPagina()
     await abrirCarro(user)
 
-    await user.type(await screen.findByLabelText("Identificador"), "7")
+    await user.type(await screen.findByLabelText("Número de máquina"), "7")
     await user.type(screen.getByLabelText("Número de serie"), "5CD1234ABC")
 
-    expect(screen.queryByText(/número entero/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/va sin letras/)).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Agregar al carro" })).toBeEnabled()
   })
 
@@ -277,7 +280,9 @@ describe("InventarioAdminPage", () => {
     })
     const user = userEvent.setup()
     renderPagina()
-    await user.click((await screen.findAllByRole("button", { name: "Gestionar equipos" }))[0])
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Gestionar equipos" }))[0]
+    )
 
     await user.click(await screen.findByRole("button", { name: "Editar" }))
     await user.selectOptions(screen.getByLabelText("Carro"), "c2")
@@ -301,7 +306,7 @@ describe("InventarioAdminPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Editar" }))
 
-    expect(screen.queryByLabelText("Identificador")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Número de máquina")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Número de serie")).not.toBeInTheDocument()
   })
 
@@ -363,7 +368,9 @@ describe("InventarioAdminPage", () => {
     await abrirCarro(user)
     await user.click(await screen.findByRole("button", { name: "Incidencias" }))
 
-    await user.click(await screen.findByRole("button", { name: "Marcar enviada a soporte" }))
+    await user.click(
+      await screen.findByRole("button", { name: "Marcar enviada a soporte" })
+    )
 
     expect(adminApi.editarIncidencia).toHaveBeenCalledWith("i1", {
       estado: undefined,
@@ -386,7 +393,9 @@ describe("InventarioAdminPage", () => {
     await abrirCarro(user)
     await user.click(await screen.findByRole("button", { name: "Incidencias" }))
 
-    expect(await screen.findByText(/enviada a soporte el 02\/08\/2026/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/enviada a soporte el 02\/08\/2026/)
+    ).toBeInTheDocument()
     expect(
       screen.queryByRole("button", { name: "Marcar enviada a soporte" })
     ).not.toBeInTheDocument()
