@@ -456,3 +456,188 @@ func TestPostgresRepo_Prestamo_SinAnotarQuienRetira(t *testing.T) {
 		t.Errorf("retiradoPor = %q, esperaba vacío", vuelto.RetiradoPor)
 	}
 }
+
+// PrestamosAVigilar es la consulta que alimenta el barrido de fondo: el
+// reclamo por devolución demorada y el aviso de cierre de jornada.
+//
+// Tiene test propio, y contra Postgres real, por cómo se rompió: comparte
+// `columnasPrestamoDetallado` con las consultas del mostrador, alguien le
+// agregó `retirado_por` a esa constante, actualizó el Scan de un consumidor y
+// no el del otro. pgx cortó con "number of field descriptions must equal
+// number of destinations, got 20 and 19" y el barrido murió en cada pasada
+// —cada cinco minutos, durante meses— sin que nadie recibiera un aviso de una
+// computadora que no volvió.
+//
+// Ningún test con un repo falso podía verlo: el error lo produce Postgres al
+// contar las columnas. Por eso este mira los campos que vienen DE la consulta,
+// y no solo que no falle: si mañana se agrega otra columna a la constante y se
+// olvida acá, el Scan vuelve a desalinearse y esto lo dice.
+func TestPostgresRepo_PrestamosAVigilar_TraeTodasLasColumnas(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	materiaID := crearMateriaDeTest(t, pool)
+	equipo := crearEquipoDeCarroDeTest(t, pool)
+
+	grupo := nuevoReservaGrupoDeTest(materiaID, ahora, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	reserva, err := domain.NuevaReservaNormal(NuevoID(), grupo.ID, equipo, materiaID,
+		"Ada Lovelace", nil, ahora, 8*time.Hour, 9*time.Hour, ahora.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, reserva); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	vence := ahora.Add(time.Hour)
+	d := entregaDeTest(equipo)
+	d.ReservaID = &reserva.ID
+	d.DevolucionEstimada = &vence
+	// El campo que faltaba en el Scan. Va con valor para que una fila que lo
+	// trae vacío no oculte el desalineamiento.
+	d.RetiradoPor = "Ayudante de laboratorio"
+	creado := crearPrestamoDeTest(t, repo, d, ahora)
+
+	aVigilar, err := repo.PrestamosAVigilar(ctx)
+	if err != nil {
+		t.Fatalf("el barrido no puede fallar leyendo lo que está afuera: %v", err)
+	}
+	if len(aVigilar) != 1 {
+		t.Fatalf("esperaba 1 préstamo abierto, obtuve %d", len(aVigilar))
+	}
+
+	p := aVigilar[0]
+	if p.Prestamo.ID != creado.ID {
+		t.Errorf("esperaba el préstamo %s, obtuve %s", creado.ID, p.Prestamo.ID)
+	}
+	// Cada uno de estos sale de una columna distinta: si el Scan se corre un
+	// lugar, alguno queda con el valor del vecino.
+	if p.Prestamo.RetiradoPor != "Ayudante de laboratorio" {
+		t.Errorf("retirado_por llegó como %q", p.Prestamo.RetiradoPor)
+	}
+	if p.Prestamo.EntregadoANombre != "Ana Pérez" {
+		t.Errorf("entregado_a_nombre llegó como %q", p.Prestamo.EntregadoANombre)
+	}
+	if p.Prestamo.DevolucionEstimada == nil || !p.Prestamo.DevolucionEstimada.Equal(vence) {
+		t.Errorf("devolucion_estimada llegó como %v", p.Prestamo.DevolucionEstimada)
+	}
+	if p.Prestamo.DevueltoEn != nil {
+		t.Errorf("un préstamo abierto no puede traer devuelto_en: %v", p.Prestamo.DevueltoEn)
+	}
+	if p.Identificador != 1 || p.Etiqueta == "" || p.CarroNombre == "" {
+		t.Errorf("falta la ubicación: identificador %d, etiqueta %q, carro %q",
+			p.Identificador, p.Etiqueta, p.CarroNombre)
+	}
+}
+
+// La contracara: lo devuelto no se vigila. Sin esto, "traer todo" podría
+// estar reclamándole a alguien una máquina que ya entregó.
+func TestPostgresRepo_PrestamosAVigilar_IgnoraLoDevuelto(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	equipo := crearEquipoDeCarroDeTest(t, pool)
+	adminID := crearUsuarioDeTest(t, pool, "ADMIN", "APROBADA")
+	p := crearPrestamoDeTest(t, repo, entregaDeTest(equipo), ahora)
+	if err := p.Devolver(adminID, "", ahora.Add(time.Hour)); err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.GuardarPrestamo(ctx, p); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	aVigilar, err := repo.PrestamosAVigilar(ctx)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(aVigilar) != 0 {
+		t.Fatalf("lo devuelto no se vigila, obtuve %d", len(aVigilar))
+	}
+}
+
+// ReservasAVigilar es la PRIMERA de las dos consultas del barrido, así que
+// cuando falla no corre nada: ni los recordatorios, ni el aviso de no retiro,
+// ni la liberación, ni los reclamos de devolución.
+//
+// Falló durante meses de una forma que se esconde sola: hora_inicio y hora_fin
+// son columnas TIME, pgx las entrega como time.Time, y el Scan las recibía
+// sobre los time.Duration del struct. Con la tabla vacía —o sin reservas de
+// hoy ni de mañana— el Scan no se ejecuta y la consulta parece sana; alcanza
+// UNA reserva del día para que el barrido entero muera.
+//
+// De ahí que este test cree la reserva antes de mirar, y que compare las horas
+// además de contar filas: es el par de campos que estaba mal convertido.
+func TestPostgresRepo_ReservasAVigilar_ConvierteLasHoras(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	hoy := time.Date(ahora.Year(), ahora.Month(), ahora.Day(), 0, 0, 0, 0, time.UTC)
+
+	materiaID := crearMateriaDeTest(t, pool)
+	equipo := crearEquipoDeCarroDeTest(t, pool)
+
+	const inicio = 8*time.Hour + 30*time.Minute
+	const fin = 10 * time.Hour
+
+	grupo := nuevoReservaGrupoDeTest(materiaID, hoy, inicio, fin)
+	if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	reserva, err := domain.NuevaReservaNormal(NuevoID(), grupo.ID, equipo, materiaID,
+		"Ada Lovelace", nil, hoy, inicio, fin, ahora.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, reserva); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	aVigilar, err := repo.ReservasAVigilar(ctx, hoy)
+	if err != nil {
+		t.Fatalf("el barrido no puede fallar leyendo las reservas del día: %v", err)
+	}
+	if len(aVigilar) != 1 {
+		t.Fatalf("esperaba la reserva de hoy, obtuve %d", len(aVigilar))
+	}
+
+	v := aVigilar[0]
+	if v.HoraInicio != inicio {
+		t.Errorf("hora_inicio llegó como %v, esperaba %v", v.HoraInicio, inicio)
+	}
+	if v.HoraFin != fin {
+		t.Errorf("hora_fin llegó como %v, esperaba %v", v.HoraFin, fin)
+	}
+	if v.ReservaID != reserva.ID || v.EquipoID != equipo {
+		t.Errorf("la fila no corresponde a la reserva creada: %+v", v)
+	}
+	// Sin docente ni etiqueta el aviso no se puede redactar.
+	if v.DocenteNombre == "" || v.Etiqueta == "" {
+		t.Errorf("falta con qué armar el aviso: docente %q, equipo %q", v.DocenteNombre, v.Etiqueta)
+	}
+}
+
+// La otra mitad del modo de falla: sin reservas del día la consulta no
+// escanea nada y no puede decir si la conversión está bien. Este test fija
+// que ese caso siga siendo silencioso y vacío, no un error.
+func TestPostgresRepo_ReservasAVigilar_SinReservasDelDia(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	hoy := time.Date(2027, 5, 3, 0, 0, 0, 0, time.UTC)
+
+	aVigilar, err := repo.ReservasAVigilar(ctx, hoy)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(aVigilar) != 0 {
+		t.Fatalf("esperaba ninguna, obtuve %d", len(aVigilar))
+	}
+}
