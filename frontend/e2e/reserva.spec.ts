@@ -1,6 +1,13 @@
 import { test, expect, type Page } from "@playwright/test"
 
-import { DOCENTE_EMAIL, DOCENTE_PASSWORD, etiquetaDeReserva, login } from "./helpers"
+import {
+  DOCENTE_EMAIL,
+  DOCENTE_PASSWORD,
+  etiquetaDeReserva,
+  jornadaDeclarada,
+  login,
+  type TramoDeJornada,
+} from "./helpers"
 
 /**
  * Flujo E2E completo de docs/10-testing.md: login → reservar →
@@ -20,48 +27,135 @@ test.skip(
 )
 
 /**
- * Fecha y franja horaria propias de cada corrida.
+ * Fecha y franja horaria propias de cada corrida, dentro de lo que la
+ * escuela declaró abierto.
  *
- * Hacen falta porque el test cancela su reserva pero **no puede borrarla**
- * —la API no expone borrado de reservas, y no debería—, así que cada corrida
- * deja una fila CANCELADA. Con fecha y horario fijos, la corrida siguiente
- * encontraba dos tarjetas idénticas al marcar "mostrar también las
- * canceladas" y fallaba por ambigüedad, no por un problema del sistema.
+ * Son propias de cada corrida porque el test cancela su reserva pero **no
+ * puede borrarla** —la API no expone borrado de reservas, y no debería—, así
+ * que cada corrida deja una fila CANCELADA. Con fecha y horario fijos, la
+ * corrida siguiente encontraba dos tarjetas idénticas al marcar "mostrar
+ * también las canceladas" y fallaba por ambigüedad, no por un problema del
+ * sistema.
  *
- * Se varían **dos ejes con períodos distintos** en vez de uno solo: la
- * franja tiene 24 valores posibles (la grilla de 5 minutos que ofrece el
- * selector, dentro de una banda poco habitual), así que variando solo eso
- * dos corridas separadas por 24 segundos volvían a chocar. Combinando día y
- * franja, el par se repite recién después de 37 × 24 = 888 segundos, y dos
- * corridas seguidas nunca coinciden.
+ * Y van dentro de la jornada porque el backend rechaza lo de afuera. Antes
+ * esto elegía siempre una franja entre las 05:00 y las 07:00 —una banda poco
+ * habitual, justamente para no chocar con reservas de verdad—, lo que
+ * funciona mientras la jornada esté sin declarar (el estado de un entorno
+ * recién sembrado, en el que no hay restricción horaria) y falla apenas
+ * alguien carga el horario real de la escuela: ninguna abre a las cinco de
+ * la mañana. El flujo crítico dejaba de probarse justo en la instalación más
+ * parecida a la de producción.
+ *
+ * Se siguen variando **dos ejes con períodos distintos** en vez de uno solo:
+ * el día dentro de la ventana de candidatos y el arranque dentro del tramo.
+ * Con un solo eje, dos corridas separadas por pocos segundos volvían a
+ * chocar; combinándolos, el par tarda en repetirse mucho más que cualquier
+ * par de corridas seguidas.
  */
-function huellaDeEstaCorrida(): { fecha: string; inicio: string; fin: string } {
+
+/** Los días como los nombra la API, en el orden de Date.getDay(). */
+const DIA_DE_LA_API = [
+  "DOMINGO",
+  "LUNES",
+  "MARTES",
+  "MIERCOLES",
+  "JUEVES",
+  "VIERNES",
+  "SABADO",
+]
+
+/** Lo que dura la reserva del test, y la grilla que ofrece el selector. */
+const DURACION_MINUTOS = 30
+const PASO_MINUTOS = 5
+
+function aMinutos(hhmm: string): number {
+  const [hora, minutos] = hhmm.split(":").map(Number)
+  return hora * 60 + minutos
+}
+
+function aHHMM(minutos: number): string {
+  const h = String(Math.floor(minutos / 60)).padStart(2, "0")
+  const m = String(minutos % 60).padStart(2, "0")
+  return `${h}:${m}`
+}
+
+/**
+ * Los arranques posibles de una reserva de 30 minutos dentro de un tramo,
+ * sobre la grilla de 5 del selector.
+ *
+ * Un tramo que cierra al día siguiente (una escuela nocturna, 20:00–01:00)
+ * se aprovecha solo hasta la medianoche: reservar cruzándola es un caso
+ * legítimo y tiene sus propios tests, pero no es lo que este ejercita.
+ */
+function arranquesPosibles(tramo: TramoDeJornada): number[] {
+  const inicio = aMinutos(tramo.horaInicio)
+  const finDeclarado = aMinutos(tramo.horaFin)
+  const fin = finDeclarado > inicio ? finDeclarado : 24 * 60
+
+  const arranques: number[] = []
+  const primero = Math.ceil(inicio / PASO_MINUTOS) * PASO_MINUTOS
+  for (let m = primero; m + DURACION_MINUTOS <= fin; m += PASO_MINUTOS) {
+    arranques.push(m)
+  }
+  return arranques
+}
+
+/**
+ * Sin jornada declarada no hay restricción horaria, así que se conserva la
+ * banda de siempre: entre las 05:00 y las 07:00, poco habitual a propósito
+ * para no pisarse con reservas reales del entorno.
+ */
+function bandaSinJornada(): number[] {
+  return Array.from({ length: 24 }, (_, i) => 5 * 60 + i * PASO_MINUTOS)
+}
+
+function huellaDeEstaCorrida(jornada: TramoDeJornada[]): {
+  fecha: string
+  inicio: string
+  fin: string
+} {
   const ahora = new Date()
   const segundos = ahora.getHours() * 3600 + ahora.getMinutes() * 60 + ahora.getSeconds()
 
-  const dia = new Date()
-  dia.setDate(dia.getDate() + 14 + (segundos % 37))
-  // La semana lectiva es de lunes a viernes: el backend rechaza el resto.
-  while (dia.getDay() === 0 || dia.getDay() === 6) {
-    dia.setDate(dia.getDate() + 1)
-  }
-  const mes = String(dia.getMonth() + 1).padStart(2, "0")
-  const nroDia = String(dia.getDate()).padStart(2, "0")
+  // Los días de la ventana en los que se puede reservar. Con jornada, los
+  // que tengan algún tramo donde entren 30 minutos; sin jornada, los de
+  // lunes a viernes, que es lo que asumía la versión anterior.
+  const candidatos: { dia: Date; arranques: number[] }[] = []
+  for (let corrimiento = 14; corrimiento <= 50; corrimiento++) {
+    const dia = new Date()
+    dia.setDate(dia.getDate() + corrimiento)
 
-  // Minutos múltiplo de 5: es la grilla del selector (el backend acepta
-  // cualquiera, los horarios son libres).
-  const desdeLas5 = 5 * 60 + (Math.floor(segundos / 37) % 24) * 5
-  const hhmm = (m: number) =>
-    `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`
+    if (jornada.length === 0) {
+      if (dia.getDay() === 0 || dia.getDay() === 6) continue
+      candidatos.push({ dia, arranques: bandaSinJornada() })
+      continue
+    }
+
+    const arranques = jornada
+      .filter((tramo) => tramo.diaSemana === DIA_DE_LA_API[dia.getDay()])
+      .flatMap(arranquesPosibles)
+    if (arranques.length > 0) candidatos.push({ dia, arranques })
+  }
+
+  if (candidatos.length === 0) {
+    throw new Error(
+      "la jornada declarada no deja ningún tramo de 30 minutos en las próximas semanas — " +
+        "revisá el horario de la escuela en /admin/jornada, o fijá la fecha con E2E_FECHA_RESERVA"
+    )
+  }
+
+  const elegido = candidatos[segundos % candidatos.length]
+  const inicio = elegido.arranques[Math.floor(segundos / 37) % elegido.arranques.length]
+
+  const mes = String(elegido.dia.getMonth() + 1).padStart(2, "0")
+  const nroDia = String(elegido.dia.getDate()).padStart(2, "0")
 
   return {
-    fecha: `${dia.getFullYear()}-${mes}-${nroDia}`,
-    inicio: hhmm(desdeLas5),
-    fin: hhmm(desdeLas5 + 30),
+    fecha: `${elegido.dia.getFullYear()}-${mes}-${nroDia}`,
+    inicio: aHHMM(inicio),
+    fin: aHHMM(inicio + DURACION_MINUTOS),
   }
 }
-
-const { fecha: FECHA, inicio: HORA_INICIO, fin: HORA_FIN } = huellaDeEstaCorrida()
 
 /** Completa un SelectorDeHora: "#<id>-hora" y "#<id>-minutos". */
 async function elegirHora(page: Page, id: string, hhmm: string) {
@@ -70,9 +164,15 @@ async function elegirHora(page: Page, id: string, hhmm: string) {
   await page.locator(`#${id}-minutos`).selectOption(minutos)
 }
 
-test("un docente reserva una PC y después cancela la reserva", async ({ page }) => {
+test("un docente reserva una PC y después cancela la reserva", async ({
+  page,
+  request,
+}) => {
+  const huella = huellaDeEstaCorrida(await jornadaDeclarada(request))
   // E2E_FECHA_RESERVA sigue mandando si se fija por entorno.
-  const fecha = process.env.E2E_FECHA_RESERVA ?? FECHA
+  const fecha = process.env.E2E_FECHA_RESERVA ?? huella.fecha
+  const HORA_INICIO = huella.inicio
+  const HORA_FIN = huella.fin
   const etiqueta = etiquetaDeReserva(fecha, HORA_INICIO, HORA_FIN)
 
   await login(page, DOCENTE_EMAIL, DOCENTE_PASSWORD)
