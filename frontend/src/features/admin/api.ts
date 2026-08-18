@@ -197,7 +197,7 @@ function conRango(base: string, desde?: string, hasta?: string) {
   return query ? `${base}?${query}` : base
 }
 
-/** RF-06.1 — uso por Equipo del ciclo, filtrable por rango de fechas. */
+/** RF-06.1 — uso por equipo del ciclo, filtrable por rango de fechas. */
 export function reporteUsoEquipos(cicloId: string, desde?: string, hasta?: string) {
   return apiFetch<RespuestaLista<ResumenUsoEquipo>>(
     conRango(`/api/reporting/ciclos/${cicloId}/uso-equipos`, desde, hasta)
@@ -289,7 +289,7 @@ export function listarLicenciasDeEquipo(equipoId: string) {
 }
 
 /**
- * Alta de la MISMA licencia en varias equipos de una vez: el caso real es
+ * Alta de la MISMA licencia en varios equipos de una vez: el caso real es
  * "AutoCAD, 30 días, en estas ocho máquinas".
  *
  * Responde 201 aunque algún equipo ya la tuviera; cuáles se saltearon viene en

@@ -47,7 +47,7 @@ export function CancelarReserva({
   const cancelables = grupo.reservas.filter((r) => r.estado === "CONFIRMADA")
 
   const cancelar = useMutation({
-    // RF-04.6: la elección se aplica "a todas los equipos del grupo en esa
+    // RF-04.6: la elección se aplica "a todos los equipos del grupo en esa
     // fecha (o rango)", así que las dos ramas cancelan el grupo entero —
     // lo único que cambia es si además alcanza a las fechas siguientes.
     // Antes "solo esta fecha" llamaba a cancelarReserva y liberaba un
@@ -78,7 +78,7 @@ export function CancelarReserva({
       <p className="text-sm">
         {grupo.esBloqueo
           ? `Se libera${cancelables.length === 1 ? "" : "n"} ${cancelables.length} equipo${cancelables.length === 1 ? "" : "s"} de este bloqueo. Vuelven a estar disponibles para reservar.`
-          : `Se ${cancelables.length === 1 ? "cancela" : "cancelan"} los ${cancelables.length} equipo${cancelables.length === 1 ? "" : "s"} de esta reserva.`}
+          : `Se ${cancelables.length === 1 ? "cancela" : "cancelan"} ${cancelables.length} equipo${cancelables.length === 1 ? "" : "s"} de esta reserva.`}
       </p>
 
       {/* El error de la cancelación va acá y no arriba de la pantalla: es la

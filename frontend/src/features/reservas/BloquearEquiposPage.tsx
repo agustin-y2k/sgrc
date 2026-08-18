@@ -164,7 +164,7 @@ export function BloquearEquiposPage() {
       {resultado && (
         <Alert className="mb-4">
           <AlertDescription>
-            Bloqueo creado sobre {resultado.bloqueos.length} Equipo
+            Bloqueo creado sobre {resultado.bloqueos.length} equipo
             {resultado.bloqueos.length === 1 ? "" : "s"}.{" "}
             {resultado.reservasCanceladas === 0
               ? "No había ninguna reserva en esa franja."
@@ -309,8 +309,8 @@ export function BloquearEquiposPage() {
       <div className="mt-4 grid gap-3">
         {seleccionadas.length > 0 && (
           <p className="text-sm">
-            {seleccionadas.length} Equipo{seleccionadas.length === 1 ? "" : "s"}{" "}
-            seleccionada
+            {seleccionadas.length} equipo{seleccionadas.length === 1 ? "" : "s"}{" "}
+            seleccionado
             {seleccionadas.length === 1 ? "" : "s"}.
           </p>
         )}
@@ -328,7 +328,7 @@ export function BloquearEquiposPage() {
         {confirmando && (
           <div className="grid gap-2 rounded-md border p-3">
             <p className="text-sm">
-              Se van a bloquear {seleccionadas.length} Equipo
+              Se van a bloquear {seleccionadas.length} equipo
               {seleccionadas.length === 1 ? "" : "s"} el {fecha} de {horaInicio} a{" "}
               {horaFin}.
             </p>

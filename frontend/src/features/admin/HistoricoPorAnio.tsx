@@ -66,7 +66,10 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
   const filasHistoricoEquipos = [...(historicoEquipos.data?.data ?? [])].sort(
     (a, b) => b.minutosReservados - a.minutosReservados
   )
-  const totalMinutosHistoricoEquipos = sumar(filasHistoricoEquipos, (h) => h.minutosReservados)
+  const totalMinutosHistoricoEquipos = sumar(
+    filasHistoricoEquipos,
+    (h) => h.minutosReservados
+  )
 
   const filasHistoricoDocentes = [...(historicoDocentes.data?.data ?? [])].sort(
     (a, b) => b.minutosTotales - a.minutosTotales
@@ -108,8 +111,8 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
       ) : (
         <>
           <p className="text-muted-foreground text-sm">
-            Los nombres son los que tenían al cerrar el año: un equipo pudo haberse mudado de
-            carro o darse de baja desde entonces, y el histórico igual tiene que seguir
+            Los nombres son los que tenían al cerrar el año: un equipo pudo haberse mudado
+            de carro o darse de baja desde entonces, y el histórico igual tiene que seguir
             diciendo dónde estaba.
           </p>
 
@@ -123,13 +126,19 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
             titulo={`Uso por equipo en ${anioElegido}`}
             resumen={
               filasHistoricoEquipos.length > 0 &&
-              `${filasHistoricoEquipos.length} Equipos · ${sumar(filasHistoricoEquipos, (h) => h.cantidadReservas)} reservas · ${formatearDuracion(totalMinutosHistoricoEquipos)} en total`
+              `${filasHistoricoEquipos.length} equipos · ${sumar(filasHistoricoEquipos, (h) => h.cantidadReservas)} reservas · ${formatearDuracion(totalMinutosHistoricoEquipos)} en total`
             }
             alDescargar={
               filasHistoricoEquipos.length > 0
                 ? () =>
-                    descargarCSV(`historico-uso-por-pc_${anioElegido}`, [
-                      ["Equipo", "Carro", "Reservas", "Minutos reservados", "% del total"],
+                    descargarCSV(`historico-uso-por-equipo_${anioElegido}`, [
+                      [
+                        "Equipo",
+                        "Carro",
+                        "Reservas",
+                        "Minutos reservados",
+                        "% del total",
+                      ],
                       ...filasHistoricoEquipos.map((h) => [
                         h.etiquetaSnapshot,
                         h.carroNombreSnapshot,
@@ -161,9 +170,7 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
                 <TableBody>
                   {filasHistoricoEquipos.map((h) => (
                     <TableRow key={h.id}>
-                      <TableCell className="font-medium">
-                        {h.etiquetaSnapshot}
-                      </TableCell>
+                      <TableCell className="font-medium">{h.etiquetaSnapshot}</TableCell>
                       <TableCell>{h.carroNombreSnapshot}</TableCell>
                       <TableCell className="text-right">{h.cantidadReservas}</TableCell>
                       <TableCell className="text-right">
