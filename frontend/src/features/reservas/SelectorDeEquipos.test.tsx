@@ -94,7 +94,7 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
     expect(
       await screen.findByText(/No queda ninguno libre en esa franja/)
     ).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Pedírsela" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Pedírselo" })).toBeInTheDocument()
     expect(screen.queryByText("No hay ningún equipo libre en esa franja.")).toBeNull()
   })
 
@@ -110,9 +110,9 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
     const user = userEvent.setup()
     renderSelector({ data: [], ocupados: [ocupado()] })
 
-    await user.click(await screen.findByRole("button", { name: "Pedírsela" }))
+    await user.click(await screen.findByRole("button", { name: "Pedírselo" }))
     await user.type(
-      screen.getByLabelText("¿Para qué la necesitás? (opcional)"),
+      screen.getByLabelText("¿Para qué lo necesitás? (opcional)"),
       "Tengo una evaluación"
     )
     await user.click(screen.getByRole("button", { name: "Enviar pedido" }))
@@ -127,7 +127,7 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
     const user = userEvent.setup()
     renderSelector({ data: [], ocupados: [ocupado()] })
 
-    await user.click(await screen.findByRole("button", { name: "Pedírsela" }))
+    await user.click(await screen.findByRole("button", { name: "Pedírselo" }))
     await user.click(screen.getByRole("button", { name: "Enviar pedido" }))
 
     expect(reservasApi.pedirLiberacion).toHaveBeenCalledWith("res-de-otro", "")
@@ -142,7 +142,7 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
     const user = userEvent.setup()
     renderSelector({ data: [], ocupados: [ocupado()] })
 
-    await user.click(await screen.findByRole("button", { name: "Pedírsela" }))
+    await user.click(await screen.findByRole("button", { name: "Pedírselo" }))
     await user.click(screen.getByRole("button", { name: "Enviar pedido" }))
 
     expect(await screen.findByText(/La reserva sigue siendo suya/)).toBeInTheDocument()
@@ -156,15 +156,15 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
     const user = userEvent.setup()
     renderSelector({ data: [], ocupados: [ocupado()] })
 
-    await user.click(await screen.findByRole("button", { name: "Pedírsela" }))
+    await user.click(await screen.findByRole("button", { name: "Pedírselo" }))
     await user.type(
-      screen.getByLabelText("¿Para qué la necesitás? (opcional)"),
+      screen.getByLabelText("¿Para qué lo necesitás? (opcional)"),
       "Otra vez"
     )
     await user.click(screen.getByRole("button", { name: "Enviar pedido" }))
 
     expect(await screen.findByText("ya le pediste esos equipos hoy")).toBeInTheDocument()
-    expect(screen.getByLabelText("¿Para qué la necesitás? (opcional)")).toHaveValue(
+    expect(screen.getByLabelText("¿Para qué lo necesitás? (opcional)")).toHaveValue(
       "Otra vez"
     )
   })
@@ -173,10 +173,10 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
     const user = userEvent.setup()
     renderSelector({ data: [], ocupados: [ocupado()] })
 
-    await user.click(await screen.findByRole("button", { name: "Pedírsela" }))
+    await user.click(await screen.findByRole("button", { name: "Pedírselo" }))
     await user.click(screen.getByRole("button", { name: "Cancelar" }))
 
-    expect(await screen.findByRole("button", { name: "Pedírsela" })).toBeInTheDocument()
+    expect(await screen.findByRole("button", { name: "Pedírselo" })).toBeInTheDocument()
     expect(reservasApi.pedirLiberacion).not.toHaveBeenCalled()
   })
 
@@ -188,7 +188,7 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
     renderSelector({ data: [], ocupados: [ocupado({ puedePedirse: false })] })
 
     expect(await screen.findByText(/Grace Hopper/)).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Pedírsela" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Pedírselo" })).toBeNull()
   })
 
   /**
@@ -209,7 +209,7 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
     })
 
     expect(await screen.findByText("Jornada docente")).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Pedírsela" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Pedírselo" })).toBeNull()
   })
 
   it("sin motivo ni docente, dice que lo tomó administración", async () => {
@@ -241,12 +241,12 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
       ],
     })
 
-    const botones = await screen.findAllByRole("button", { name: "Pedírsela" })
+    const botones = await screen.findAllByRole("button", { name: "Pedírselo" })
     expect(botones).toHaveLength(2)
 
     await user.click(botones[1])
 
-    expect(screen.getAllByRole("button", { name: "Pedírsela" })).toHaveLength(1)
+    expect(screen.getAllByRole("button", { name: "Pedírselo" })).toHaveLength(1)
     await user.click(screen.getByRole("button", { name: "Enviar pedido" }))
     expect(reservasApi.pedirLiberacion).toHaveBeenCalledWith("res-de-otro-mas", "")
   })

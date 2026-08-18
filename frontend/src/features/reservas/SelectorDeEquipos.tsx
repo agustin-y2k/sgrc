@@ -323,8 +323,13 @@ function EquipoTomado({ equipo }: { equipo: EquipoOcupado }) {
       ) : equipo.puedePedirse ? (
         pidiendo ? (
           <div className="grid gap-2">
+            {/* "lo" y no "la": el referente es el equipo, que puede ser un
+                proyector o un cargador y no solo una computadora. Con el
+                femenino, la pantalla le decía "Pedírsela" a un proyector —
+                y a dos renglones de la línea que ya lo dice bien ("podés
+                pedírselo a quien lo tiene"). */}
             <Label htmlFor={`pedido-${equipo.equipoId}`} className="text-xs">
-              ¿Para qué la necesitás? (opcional)
+              ¿Para qué lo necesitás? (opcional)
             </Label>
             <Input
               id={`pedido-${equipo.equipoId}`}
@@ -364,7 +369,7 @@ function EquipoTomado({ equipo }: { equipo: EquipoOcupado }) {
             variant="outline"
             onClick={() => setPidiendo(true)}
           >
-            Pedírsela
+            Pedírselo
           </Button>
         )
       ) : null}

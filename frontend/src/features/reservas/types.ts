@@ -26,13 +26,7 @@ export type TipoReserva = "NORMAL" | "BLOQUEO"
 // escuelas de jornada extendida y albergue que dictan el fin de semana, y
 // antes ni siquiera podían expresar "todos los sábados".
 export type DiaSemana =
-  | "LUNES"
-  | "MARTES"
-  | "MIERCOLES"
-  | "JUEVES"
-  | "VIERNES"
-  | "SABADO"
-  | "DOMINGO"
+  "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES" | "SABADO" | "DOMINGO"
 
 export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "LUNES", etiqueta: "Lunes" },
@@ -150,7 +144,7 @@ export type ReservaDetallada = Reserva & {
   /**
    * Presente solo si la reserva es parte de una serie recurrente. No
    * confundir con `reservaGrupoId`, que tienen TODAS las reservas normales
-   * (es el grupo de Equipos de una misma fecha).
+   * (es el grupo de equipos de una misma fecha).
    */
   reglaRecurrenciaId?: string
 }
@@ -160,7 +154,7 @@ export type ReservaDetallada = Reserva & {
  *
  * El glosario define ReservaGrupo como "la reserva tal como la percibe el
  * docente": una materia, una fecha, un horario, con N equipos adentro. La API
- * devuelve las filas sueltas (una por Equipo), así que el agrupado se arma acá.
+ * devuelve las filas sueltas (una por equipo), así que el agrupado se arma acá.
  */
 export type GrupoDeReservas = {
   /** Ausente si la reserva no pertenece a ningún grupo. */
@@ -190,8 +184,8 @@ export type GrupoDeReservas = {
  * Una reserva normal trae su `reservaGrupoId`: es lo que el docente vivió
  * como "una reserva". Un bloqueo administrativo NO tiene grupo en la base
  * —no pertenece a nadie ni a ninguna materia— pero para el Admin que lo
- * creó sí fue una sola operación: eligió varias equipos, una fecha y un
- * horario, y apretó confirmar una vez. Mostrarlo como una tarjeta por Equipo
+ * creó sí fue una sola operación: eligió varios equipos, una fecha y un
+ * horario, y apretó confirmar una vez. Mostrarlo como una tarjeta por equipo
  * hacía que bloquear ocho equipos se viera como ocho bloqueos distintos.
  *
  * Se agrupa por quién lo creó, la fecha y el horario, que es exactamente lo
@@ -210,7 +204,7 @@ function claveDeAgrupacion(r: ReservaDetallada): string {
 /**
  * Agrupa las filas `reserva` en lo que cada usuario percibe como "una
  * reserva" (ver claveDeAgrupacion), conservando el orden en que vinieron
- * (el backend ordena por fecha, hora e identificador de Equipo).
+ * (el backend ordena por fecha, hora e identificador de equipo).
  */
 export function agruparReservas(reservas: ReservaDetallada[]): GrupoDeReservas[] {
   const grupos = new Map<string, GrupoDeReservas>()
