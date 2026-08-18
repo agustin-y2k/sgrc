@@ -2012,6 +2012,281 @@ func TestPostgresRepo_ClaseNocturna_DespuesDeQueTermina_Libre(t *testing.T) {
 	}
 }
 
+// ── Clases nocturnas, del lado de la LECTURA ──────────────────────────
+//
+// Los tres de arriba cubren el alta: que se pueda crear, que choque con la
+// madrugada siguiente y que a las 02:00 la máquina ya esté libre. Estos
+// cubren lo mismo para las consultas que arman la pantalla de reservar, que
+// es por donde pasa el docente antes de llegar al alta. Faltaban, y sin
+// ellos las dos mitades de esa pantalla contestaban distinto que la base.
+
+// El bug más visible: pedir una franja que cruza la medianoche no filtraba
+// nada, hacía reventar la consulta entera con "range lower bound must be
+// less than or equal to range upper bound". La pantalla se quedaba sin una
+// sola máquina que ofrecer.
+func TestListarEquiposDisponiblesEn_FranjaQueCruzaMedianoche_NoRevienta(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	crearMateriaDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+
+	// De 19:00 a 03:00 del día siguiente, con la máquina enteramente libre.
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, lunes, 19*time.Hour, 3*time.Hour, "")
+	if err != nil {
+		t.Fatalf("una franja que termina al día siguiente es válida: %v", err)
+	}
+	if !contieneEquipo(disponibles, equipoID) {
+		t.Error("la máquina está libre toda la noche: tiene que aparecer")
+	}
+}
+
+// Y la contracara: si en el medio de esa noche hay algo, no aparece.
+func TestListarEquiposDisponiblesEn_FranjaQueCruzaMedianoche_VeLoQueYaEsta(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	materiaID := crearMateriaDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	martes := lunes.AddDate(0, 0, 1)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	// Alguien ya tiene la máquina el martes de 01:00 a 02:00, en el medio de
+	// la franja lunes 19:00 → martes 03:00.
+	g := nuevoReservaGrupoDeTest(materiaID, martes, 1*time.Hour, 2*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
+		martes, 1*time.Hour, 2*time.Hour, ahora)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CrearReserva(ctx, res); err != nil {
+		t.Fatal(err)
+	}
+
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, lunes, 19*time.Hour, 3*time.Hour, "")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if contieneEquipo(disponibles, equipoID) {
+		t.Error("la reserva del martes a la 01:00 cae dentro de la franja: no puede ofrecerse")
+	}
+}
+
+// El bug silencioso, que es el peor de los dos: la clase del lunes a las
+// 22:00 ocupa la madrugada del martes, pero está fechada el LUNES. Filtrando
+// por `fecha = el día consultado` no aparece nunca, así que la pantalla
+// ofrecía una máquina que el alta iba a rechazar con un 409.
+func TestListarEquiposDisponiblesEn_LaNocturnaDeAyerOcupaEstaMadrugada(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	materiaID := crearMateriaDeTest(t, pool)
+	ocupado := crearEquipoDeCarroDeTest(t, pool)
+	libre := crearEquipoDeCarroDeTest(t, pool)
+	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	martes := lunes.AddDate(0, 0, 1)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	g := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, ocupado, materiaID, "Ada", nil,
+		lunes, 22*time.Hour, 1*time.Hour, ahora)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CrearReserva(ctx, res); err != nil {
+		t.Fatal(err)
+	}
+
+	// Martes de 00:30 a 02:00: pisa la última media hora de la clase del lunes.
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, martes, 30*time.Minute, 2*time.Hour, "")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if contieneEquipo(disponibles, ocupado) {
+		t.Error("la nocturna del lunes sigue ocupando la máquina el martes a las 00:30")
+	}
+	if !contieneEquipo(disponibles, libre) {
+		t.Error("la otra máquina está libre y tiene que seguir apareciendo")
+	}
+
+	// Mirar el día anterior no puede bloquear el día entero: a las 02:00 la
+	// clase del lunes ya terminó.
+	disponibles, err = repo.ListarEquiposDisponiblesEn(ctx, martes, 2*time.Hour, 3*time.Hour, "")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !contieneEquipo(disponibles, ocupado) {
+		t.Error("a las 02:00 la clase del lunes ya terminó: la máquina está libre")
+	}
+}
+
+// La otra mitad de la pantalla tiene que contar la misma historia: si el
+// equipo no está entre los libres, tiene que estar entre los ocupados, con
+// el nombre de quien lo tiene. Si no, el docente ve una máquina que
+// desapareció sin explicación y no sabe a quién pedírsela (RF-04.11).
+func TestListarEquiposOcupadosEn_VeLaNocturnaDeAyer(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	materiaID := crearMateriaDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	martes := lunes.AddDate(0, 0, 1)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	g := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
+		lunes, 22*time.Hour, 1*time.Hour, ahora)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CrearReserva(ctx, res); err != nil {
+		t.Fatal(err)
+	}
+
+	ocupados, err := repo.ListarEquiposOcupadosEn(ctx, martes, 30*time.Minute, 2*time.Hour)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(ocupados) != 1 {
+		t.Fatalf("esperaba la nocturna del lunes entre los ocupados, obtuve %d: %+v", len(ocupados), ocupados)
+	}
+	if ocupados[0].EquipoID != equipoID {
+		t.Errorf("esperaba el equipo %s, obtuve %s", equipoID, ocupados[0].EquipoID)
+	}
+	if ocupados[0].DocenteNombre == "" {
+		t.Error("sin el nombre de quien la tiene, no hay a quién pedírsela")
+	}
+
+	// Y una franja que cruza la medianoche tampoco puede reventar de este lado.
+	if _, err := repo.ListarEquiposOcupadosEn(ctx, lunes, 19*time.Hour, 3*time.Hour); err != nil {
+		t.Fatalf("una franja que termina al día siguiente es válida: %v", err)
+	}
+}
+
+// Cambiar de máquina en una serie (RF-08.14) mira todas las fechas que le
+// quedan. Si una de esas madrugadas está tomada por la nocturna del día
+// anterior, el cambio no se puede ofrecer: la serie es todo o nada.
+func TestListarEquiposLibresEnLaSerie_LaNocturnaDeAyerOcupaUnaOcurrencia(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	materiaID := crearMateriaDeTest(t, pool)
+	ocupado := crearEquipoDeCarroDeTest(t, pool)
+	libre := crearEquipoDeCarroDeTest(t, pool)
+	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	martes := lunes.AddDate(0, 0, 1)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	// La nocturna del lunes, sobre el equipo que después no va a poder ofrecerse.
+	gNoche := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, gNoche); err != nil {
+		t.Fatal(err)
+	}
+	resNoche, err := domain.NuevaReservaNormal(NuevoID(), gNoche.ID, ocupado, materiaID, "Ada", nil,
+		lunes, 22*time.Hour, 1*time.Hour, ahora)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CrearReserva(ctx, resNoche); err != nil {
+		t.Fatal(err)
+	}
+
+	// La serie desde la que se quiere cambiar: el martes de 00:30 a 02:00.
+	gSerie := nuevoReservaGrupoDeTest(materiaID, martes, 30*time.Minute, 2*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, gSerie); err != nil {
+		t.Fatal(err)
+	}
+
+	libres, err := repo.ListarEquiposLibresEnLaSerie(ctx, gSerie.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if contieneEquipo(libres, ocupado) {
+		t.Error("esa máquina la tiene la nocturna del lunes: ofrecerla es mandar al docente a un 409")
+	}
+	if !contieneEquipo(libres, libre) {
+		t.Error("la otra máquina está libre y tiene que poder elegirse")
+	}
+}
+
+// El pre-chequeo del alta tenía media ventana: miraba el día anterior —la
+// nocturna de ayer— pero no el siguiente. Pidiendo de 19:00 a 03:00, la
+// reserva que choca está fechada MAÑANA y quedaba afuera del filtro. La
+// constraint la frenaba igual, pero con un error de base en vez del mensaje
+// que nombra la máquina y a quién la tiene.
+func TestPostgresRepo_BuscarSolapamientos_FranjaNocturna_VeLaDelDiaSiguiente(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	materiaID := crearMateriaDeTest(t, pool)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	martes := lunes.AddDate(0, 0, 1)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	// Ya hay algo el martes de 01:00 a 02:00.
+	g := nuevoReservaGrupoDeTest(materiaID, martes, 1*time.Hour, 2*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
+		martes, 1*time.Hour, 2*time.Hour, ahora)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CrearReserva(ctx, res); err != nil {
+		t.Fatal(err)
+	}
+
+	// Se pide el lunes de 19:00 a 03:00: pisa esa reserva de lleno.
+	conflictos, err := repo.BuscarSolapamientos(ctx,
+		[]string{equipoID}, []time.Time{lunes}, 19*time.Hour, 3*time.Hour)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(conflictos) != 1 {
+		t.Fatalf("esperaba 1 conflicto con la reserva del martes, obtuve %d: %+v", len(conflictos), conflictos)
+	}
+
+	// Y la contracara, para que la ventana más ancha no invente conflictos:
+	// de 19:00 a 23:00 del lunes no hay nada que chocar.
+	conflictos, err = repo.BuscarSolapamientos(ctx,
+		[]string{equipoID}, []time.Time{lunes}, 19*time.Hour, 23*time.Hour)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(conflictos) != 0 {
+		t.Errorf("esa franja no cruza la medianoche y no toca nada, obtuve %+v", conflictos)
+	}
+}
+
+func contieneEquipo(equipos []application.EquipoDisponible, id string) bool {
+	for _, p := range equipos {
+		if p.EquipoID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // jornadaLibre hace de institución que todavía no declaró su jornada, que es
 // el estado en que no hay restricción horaria. Estos tests van contra
 // Postgres real para ejercitar el SQL de reservas; la jornada tiene sus
