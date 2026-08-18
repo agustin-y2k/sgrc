@@ -36,6 +36,15 @@ func (v *ValidadorUsuarioPostgres) ExisteYAprobado(ctx context.Context, usuarioI
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil // no existe → no es válido, pero no es un error
 		}
+		// Un id vacío o con cualquier cosa adentro es un pedido mal armado, no
+		// una falla del servidor: Postgres lo rechaza con 22P02 y sin esta
+		// traducción el error salía envuelto, mapearError no lo reconocía y
+		// asignar un docente respondía 500 "error interno" en vez de decir que
+		// el id no tiene formato válido. Mismo criterio que el resto del
+		// paquete (ver esIDInvalido en postgres_repo.go).
+		if esIDInvalido(err) {
+			return false, application.ErrIDInvalido
+		}
 		return false, fmt.Errorf("verificando usuario: %w", err)
 	}
 	return estado == "APROBADA", nil

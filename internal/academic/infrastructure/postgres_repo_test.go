@@ -411,6 +411,27 @@ func TestValidadorUsuarioPostgres_Pendiente_False(t *testing.T) {
 	}
 }
 
+// Un id inexistente y un id mal formado son dos cosas distintas y tienen que
+// contestar distinto: el primero es "ese docente no está" (false, sin error),
+// el segundo es un pedido mal armado. Sin la traducción, el segundo salía
+// envuelto, mapearError no lo reconocía y asignar un docente respondía 500
+// "error interno" en vez de decir qué tenía de malo el id.
+func TestValidadorUsuarioPostgres_IDMalFormado_ErrIDInvalido(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	validador := NewValidadorUsuarioPostgres(pool)
+
+	for _, id := range []string{"", "no-soy-un-uuid", "123"} {
+		valido, err := validador.ExisteYAprobado(context.Background(), id)
+
+		if !errors.Is(err, application.ErrIDInvalido) {
+			t.Errorf("con el id %q esperaba ErrIDInvalido, obtuve %v", id, err)
+		}
+		if valido {
+			t.Errorf("con el id %q no puede dar válido", id)
+		}
+	}
+}
+
 func TestValidadorUsuarioPostgres_NoExiste_FalseSinError(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	validador := NewValidadorUsuarioPostgres(pool)

@@ -317,6 +317,15 @@ func (s *Service) AsignarDocente(ctx context.Context, materiaID, usuarioID strin
 
 	valido, err := s.validadorUsuario.ExisteYAprobado(ctx, usuarioID)
 	if err != nil {
+		// El id mal formado se devuelve pelado: es un centinela que la capa
+		// HTTP traduce a un 400 usando su propio texto, y envuelto le llegaba
+		// al Admin como "validando usuario: el ID indicado no tiene un formato
+		// válido" — plomería nuestra en un mensaje que lee una persona. El
+		// resto sí se envuelve: va al 500 genérico y ahí el contexto es lo
+		// único que queda en el log.
+		if errors.Is(err, ErrIDInvalido) {
+			return nil, ErrIDInvalido
+		}
 		return nil, fmt.Errorf("validando usuario: %w", err)
 	}
 	if !valido {
