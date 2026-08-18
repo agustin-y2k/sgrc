@@ -174,14 +174,27 @@ export function AltaDeEquipo({ carroId }: { carroId: string }) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="grid gap-1.5">
-          <Label htmlFor={`alta-${carroId}-identificador`}>Identificador</Label>
+          {/* "Número de máquina" y no "Identificador": lo segundo no dice
+              qué escribir, y quien completa el formulario tiene la máquina
+              adelante con el número pintado. La aclaración va debajo y
+              siempre visible, no solo cuando el campo ya está mal: sirve
+              para no equivocarse, no para enterarse después. */}
+          <Label htmlFor={`alta-${carroId}-identificador`}>Número de máquina</Label>
           <Input
             id={`alta-${carroId}-identificador`}
             inputMode="numeric"
+            aria-describedby={`alta-${carroId}-identificador-ayuda`}
             value={campos.identificador}
             onChange={(e) => setCampos({ ...campos, identificador: e.target.value })}
-            placeholder="El número pintado en el equipo"
+            placeholder="Ej. 1"
           />
+          <p
+            id={`alta-${carroId}-identificador-ayuda`}
+            className="text-muted-foreground text-sm"
+          >
+            El número pintado en la máquina, que es el del zócalo que ocupa en el carro.
+            Va solo el número: 1, 2, 3…
+          </p>
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor={`alta-${carroId}-serie`}>Número de serie</Label>
@@ -203,7 +216,8 @@ export function AltaDeEquipo({ carroId }: { carroId: string }) {
 
       {campos.identificador !== "" && !identificadorValido && (
         <p className="text-destructive text-sm">
-          El identificador es un número entero: es el que está pintado en la máquina.
+          El número de máquina va sin letras: escribí solo el número pintado, por ejemplo
+          1. El código con letras es el número de serie, que va en el campo de al lado.
         </p>
       )}
 
@@ -274,11 +288,15 @@ export function EdicionDeEquipo({
       )}
 
       <p className="text-muted-foreground text-sm">
-        El identificador ({equipo.identificador}) y el número de serie ({equipo.numeroSerie}) no
-        se editan: identifican al equipo.
+        El número de máquina ({equipo.identificador}) y el número de serie (
+        {equipo.numeroSerie}) no se editan: identifican al equipo.
       </p>
 
-      <CamposComunes idPrefijo={`edicion-${equipo.id}`} valor={campos} onChange={setCampos} />
+      <CamposComunes
+        idPrefijo={`edicion-${equipo.id}`}
+        valor={campos}
+        onChange={setCampos}
+      />
 
       <div className="grid gap-1.5">
         {/* RF-03.10: el identificador tiene que seguir siendo único dentro
@@ -298,8 +316,8 @@ export function EdicionDeEquipo({
         </Select>
         {carroDestino !== equipo.carroId && (
           <p className="text-muted-foreground text-sm">
-            El equipo se va a mover de carro. Sus reservas y su historial de incidencias no se
-            tocan.
+            El equipo se va a mover de carro. Sus reservas y su historial de incidencias
+            no se tocan.
           </p>
         )}
       </div>

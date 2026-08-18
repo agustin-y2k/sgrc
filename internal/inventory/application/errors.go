@@ -25,6 +25,17 @@ var (
 	// misma máquina serían dos contadores que se contradicen.
 	ErrLicenciaDuplicada = errors.New("ese equipo ya tiene cargada una licencia de ese software")
 
+	// ErrNombreCarroDuplicado: UNIQUE en carro.nombre — el nombre es lo único
+	// que distingue a un carro en la pantalla de reservas, así que dos
+	// "Carro 1" harían imposible saber cuál se está eligiendo.
+	//
+	// Existe como centinela y no como error suelto porque sin él la capa HTTP
+	// no puede reconocerlo: el repositorio ya detectaba el choque y devolvía
+	// el mensaje correcto, pero `errors.Is` no engancha con un `fmt.Errorf`
+	// pelado, así que caía en el default y el Admin recibía un 500 "error
+	// interno" en vez de que le dijeran que ese nombre ya está usado.
+	ErrNombreCarroDuplicado = errors.New("ya existe un carro con ese nombre")
+
 	// ErrIdentificadorDuplicado: UNIQUE(carro_id, identificador) — "PC 27"
 	// ya existe en ese carro puntual (puede repetirse en otro carro).
 	ErrIdentificadorDuplicado = errors.New("ya existe un equipo con ese identificador en este carro")
