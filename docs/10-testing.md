@@ -95,6 +95,17 @@ Dos criterios que ya evitaron falsos verdes:
   barra de navegación completa de un Admin: no desborda en un monitor de
   desarrollo, sí en un portátil de 1024, no se ve en una captura, y vuelve sola
   cada vez que se agrega un ítem al menú.
+- **Un E2E no puede asumir un sistema sin configurar.** `e2e/reserva.spec.ts`
+  elegía su franja horaria entre las 05:00 y las 07:00 —una banda poco habitual,
+  a propósito, para no chocar con reservas reales—, lo que funciona mientras la
+  jornada institucional esté sin declarar, que es el estado de un entorno recién
+  sembrado. Apenas alguien carga el horario real de la escuela el backend
+  rechaza esa franja y el test del flujo crítico se cae: dejaba de probarse justo
+  en la instalación más parecida a la de producción. Ahora consulta
+  `GET /api/jornada` y arma la franja adentro de lo declarado, con la banda vieja
+  como respaldo para cuando no hay jornada. La regla general: si el test elige un
+  valor que el sistema puede llegar a rechazar por configuración, tiene que
+  leer esa configuración en vez de adivinarla.
 - **Lo que se toca, también.** `e2e/tactil.spec.ts` mide en un teléfono el alto
   de cada control a la vista —cuerpo, barra, menú desplegado y pie— y falla por
   debajo de 44px (24px si el enlace va embebido en una frase, que no puede
