@@ -1,4 +1,7 @@
-// Helpers de la vista semanal.
+import { aFechaLocal } from "@/lib/fechas"
+
+// Helpers de la vista semanal. Se trabaja con fechas y horas "planas"
+// (YYYY-MM-DD, HH:MM), igual que las columnas DATE y TIME del backend.
 
 // Los siete días.
 export const DIAS_SEMANA = [
@@ -54,9 +57,38 @@ export function aMinutos(hora: string): number {
 export function formatearRangoSemana(fecha: Date): string {
   const lunes = lunesDeLaSemana(fecha)
   const domingo = sumarDias(lunes, 6)
-  const fmt = (d: Date) =>
-    `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`
-  return `${fmt(lunes)} – ${fmt(domingo)}/${domingo.getFullYear()}`
+  return `${formatearDiaYMes(lunes)} – ${formatearDiaYMes(domingo)}/${domingo.getFullYear()}`
+}
+
+function formatearDiaYMes(d: Date): string {
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`
+}
+
+/**
+ * El rango que la grilla dibuja de verdad, a partir de las fechas visibles.
+ *
+ * No es lo mismo que la semana: se dibujan solo los días que la escuela
+ * declaró abiertos, así que una escuela de lunes a viernes muestra cinco
+ * columnas. El rótulo decía "17/08 – 23/08" igual, prometiendo dos días que no
+ * están y dejando la sensación de que faltaba algo.
+ *
+ * Recibe las fechas ya filtradas —"YYYY-MM-DD", en el orden en que se
+ * dibujan— para no volver a decidir acá cuáles son: esa decisión ya la tomó
+ * la pantalla con la jornada en la mano, y tenerla en dos lugares es cómo
+ * terminan discrepando.
+ */
+export function formatearRangoVisible(fechas: string[]): string {
+  if (fechas.length === 0) return ""
+
+  const primera = aFechaLocal(fechas[0])
+  const ultima = aFechaLocal(fechas[fechas.length - 1])
+  if (!primera || !ultima) return ""
+
+  // Un solo día abierto en la semana no es un rango.
+  if (fechas.length === 1) {
+    return `${formatearDiaYMes(primera)}/${primera.getFullYear()}`
+  }
+  return `${formatearDiaYMes(primera)} – ${formatearDiaYMes(ultima)}/${ultima.getFullYear()}`
 }
 
 /** "Lunes", "Sábado"… para una fecha "YYYY-MM-DD". */

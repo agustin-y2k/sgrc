@@ -13,7 +13,8 @@ func mapearError(err error) error {
 	switch {
 	case errors.Is(err, application.ErrReservaGrupoNoEncontrado),
 		errors.Is(err, application.ErrReservaNoEncontrada),
-		errors.Is(err, application.ErrPrestamoNoEncontrado):
+		errors.Is(err, application.ErrPrestamoNoEncontrado),
+		errors.Is(err, application.ErrEquipoNoEncontrado):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 
 	case errors.Is(err, application.ErrMateriaArchivada),

@@ -5,6 +5,7 @@ import {
   fechasDeLaSemana,
   lunesDeLaSemana,
   sumarDias,
+  formatearRangoVisible,
 } from "@/features/calendario/semana"
 
 describe("aFechaISO / desdeFechaISO", () => {
@@ -84,5 +85,38 @@ describe("aMinutos", () => {
     expect(aMinutos("00:00")).toBe(0)
     expect(aMinutos("08:30")).toBe(510)
     expect(aMinutos("23:59")).toBe(1439)
+  })
+})
+
+describe("formatearRangoVisible", () => {
+  // El rótulo tiene que describir lo que la grilla dibuja. Decía la semana
+  // entera —"09/03 – 15/03/2026"— aunque una escuela de lunes a viernes
+  // muestre cinco columnas: prometía dos días que no están.
+  it("rotula el primero y el último día visible, no la semana", () => {
+    const lunesAViernes = [
+      "2026-03-09",
+      "2026-03-10",
+      "2026-03-11",
+      "2026-03-12",
+      "2026-03-13",
+    ]
+    expect(formatearRangoVisible(lunesAViernes)).toBe("09/03 – 13/03/2026")
+  })
+
+  it("con los siete días declarados coincide con la semana completa", () => {
+    const todos = Array.from(
+      { length: 7 },
+      (_, i) => `2026-03-${String(9 + i).padStart(2, "0")}`
+    )
+    expect(formatearRangoVisible(todos)).toBe("09/03 – 15/03/2026")
+  })
+
+  // Un solo día abierto no es un rango: "14/03 – 14/03" se lee como un error.
+  it("un solo día no se escribe como rango", () => {
+    expect(formatearRangoVisible(["2026-03-14"])).toBe("14/03/2026")
+  })
+
+  it("sin días visibles no inventa un rótulo", () => {
+    expect(formatearRangoVisible([])).toBe("")
   })
 })

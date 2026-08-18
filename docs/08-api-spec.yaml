@@ -1430,6 +1430,7 @@ paths:
                 rol: { type: string, enum: [TITULAR, SUPLENTE] }
       responses:
         "201": { description: Docente asignado }
+        "400": { description: usuarioId vacío o sin formato de UUID }
         "404": { description: Usuario no encontrado }
         "409": { description: El usuario no está en estado APROBADA }
 
@@ -1816,6 +1817,12 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/Reserva' }
+        "404":
+          description: |
+            El equipo no está en el inventario. Antes esto respondía 200 con la
+            lista de bloques vacía, así que "no existe" y "está libre toda la
+            semana" se veían igual. Una máquina en mantenimiento SÍ tiene
+            calendario: lo que ya está reservado sigue ahí.
 
   /api/inventory/incidencias:
     post:
