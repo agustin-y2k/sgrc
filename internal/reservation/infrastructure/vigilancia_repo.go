@@ -82,15 +82,28 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 	for rows.Next() {
 		var v application.ReservaParaVigilar
 		var tipo string
+		// hora_inicio y hora_fin son columnas TIME y pgx las entrega como
+		// time.Time: escanearlas directo sobre los time.Duration de
+		// ReservaParaVigilar corta con "cannot scan time (OID 1083) in binary
+		// format into *time.Duration", y con eso muere el barrido entero —
+		// esta consulta es la primera de las dos. Se pasa por las mismas
+		// horaComoDuracion/duracionComoHora que usa todo el resto del paquete.
+		//
+		// El error solo aparece con al menos una reserva de hoy o mañana: sin
+		// filas, el Scan no se ejecuta y la consulta "anda". Por eso hay un
+		// test de integración que crea una reserva antes de mirar.
+		var horaInicio, horaFin time.Time
 		if err := rows.Scan(
 			&v.ReservaID, &v.GrupoID, &v.EquipoID, &v.Identificador,
-			&v.Fecha, &v.HoraInicio, &v.HoraFin, &tipo, &v.MateriaNombre, &v.Etiqueta,
+			&v.Fecha, &horaInicio, &horaFin, &tipo, &v.MateriaNombre, &v.Etiqueta,
 			&v.DocenteID, &v.DocenteNombre, &v.DocenteEmail,
 			&v.RecordatorioEnviado, &v.AvisoEquipoNoDisponibleEnviado, &v.AvisoSinRetirarEnviado,
 			&v.EquipoAfuera, &v.EquipoDebioVolverA, &v.UltimaEntregaDelGrupo,
 		); err != nil {
 			return nil, fmt.Errorf("escaneando reserva a vigilar: %w", err)
 		}
+		v.HoraInicio = horaComoDuracion(horaInicio)
+		v.HoraFin = horaComoDuracion(horaFin)
 		parsed, err := domain.ParseTipoReserva(tipo)
 		if err != nil {
 			return nil, fmt.Errorf("tipo inválido en la base para la reserva %s: %w", v.ReservaID, err)
@@ -128,9 +141,14 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 		var motivo, observaciones *string
 		var materiaNombre *string
 
+		// El orden y la cantidad los manda columnasPrestamoDetallado, que es
+		// compartida con prestamo_repo.go: cualquier columna que se le agregue
+		// allá hay que recibirla también acá, o pgx corta con "number of field
+		// descriptions must equal number of destinations" y el barrido entero
+		// deja de correr en silencio. Es lo que pasó con retirado_por.
 		if err := rows.Scan(
 			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
-			&motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
+			&p.RetiradoPor, &motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
 			&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
 			&v.Identificador, &v.Etiqueta, &v.CarroNombre, &materiaNombre,
