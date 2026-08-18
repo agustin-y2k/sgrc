@@ -3,7 +3,9 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -343,5 +345,46 @@ func TestHTTP_CambiarPassword_CuentaDeGoogle_409(t *testing.T) {
 	}
 	if resp.StatusCode != fiber.StatusConflict {
 		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
+	}
+}
+
+// Escribir mal la contraseña actual tiene que dar 400, no 401.
+//
+// El código importa más que el mensaje: el cliente trata cualquier 401 con
+// token válido como sesión rechazada y cierra la sesión (frontend/src/lib/
+// api-client.ts). Con 401 acá, quien se equivocaba tipeando terminaba en el
+// login —sin sesión y sin explicación— en vez de ver un cartel al lado del
+// campo. Este test existe para que ese 400 no se vuelva 401 sin que nadie
+// se entere.
+func TestHTTP_CambiarPassword_ActualIncorrecta_400_YNoCierraLaSesion(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{
+		ID: "u1", Email: "ada@escuela.edu.ar", PasswordHash: "hash:la-de-verdad",
+		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/cambiar-password", jsonBody(cambiarPasswordRequest{
+		PasswordActual: "la-que-no-es", PasswordNueva: "una-password-nueva",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode == fiber.StatusUnauthorized {
+		t.Fatal("401 hace que el cliente cierre la sesión: equivocarse tipeando no puede echar a nadie")
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+
+	cuerpo, _ := io.ReadAll(resp.Body)
+	// El mensaje también cambia: "credenciales inválidas" no dice cuál de
+	// los dos campos vino mal.
+	if !strings.Contains(string(cuerpo), "contraseña actual") {
+		t.Fatalf("el mensaje tiene que nombrar el campo, obtuve %q", string(cuerpo))
 	}
 }

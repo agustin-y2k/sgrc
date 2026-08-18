@@ -26,6 +26,13 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrCredencialesInvalidas):
 		return fiber.NewError(fiber.StatusUnauthorized, "credenciales inválidas")
 
+	// 400 y no 401: quien cambia su contraseña ya está autenticado, y lo que
+	// vino mal es un campo del cuerpo. Con 401 el cliente entiende "sesión
+	// rechazada" y cierra la sesión, que es lo último que hay que hacerle a
+	// alguien que solo se equivocó tipeando (ver el comentario del error).
+	case errors.Is(err, application.ErrPasswordActualIncorrecta):
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+
 	case errors.Is(err, application.ErrCuentaNoHabilitada):
 		// Un solo case para los tres motivos (pendiente, rechazada, en baja)
 		// más el genérico: los tres matchean contra este paraguas por su
