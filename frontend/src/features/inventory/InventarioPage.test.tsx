@@ -50,6 +50,9 @@ describe("InventarioPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({ data: carros })
+    // Por defecto la institución no presta nada suelto, que es el caso de la
+    // mayoría: los tests que sí lo necesitan lo declaran.
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
   })
 
   afterEach(() => {
@@ -274,5 +277,141 @@ describe("InventarioPage", () => {
     expect(inventoryApi.reportarIncidencia).toHaveBeenCalledWith(
       expect.objectContaining({ categoria: undefined })
     )
+  })
+
+  // ── RF-03.15: lo prestable que no está en ningún carro ──────────────
+  //
+  // Faltaba de esta pantalla: el proyector se podía reservar pero no se veía
+  // acá, así que un docente no tenía desde dónde mirar su calendario ni
+  // avisar que no anda.
+  describe("otros equipos", () => {
+    const proyector = equipo({
+      id: "eq-proyector",
+      carroId: undefined,
+      identificador: undefined,
+      numeroSerie: undefined,
+      etiqueta: "Proyector",
+      tipo: "Proyector",
+      reservable: true,
+    })
+
+    it("los lista con su calendario y con reportar una falla", async () => {
+      vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [proyector] })
+      renderInventario()
+
+      expect(await screen.findByText("Otros equipos")).toBeInTheDocument()
+      expect(screen.getByText("Proyector")).toBeInTheDocument()
+      expect(screen.getByRole("link", { name: "Ver calendario" })).toHaveAttribute(
+        "href",
+        "/inventario/equipos/eq-proyector/calendario"
+      )
+      expect(
+        screen.getByRole("button", { name: "Reportar problema" })
+      ).toBeInTheDocument()
+    })
+
+    // Un cargador no se reserva (RF-03.16), así que su calendario está
+    // siempre vacío. Avisar que no anda sí tiene sentido.
+    it("lo que no se reserva no ofrece calendario, pero sí reportar una falla", async () => {
+      vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+        data: [
+          equipo({
+            ...proyector,
+            id: "eq-cargador",
+            etiqueta: "Cargador",
+            tipo: "Cargador",
+            reservable: false,
+          }),
+        ],
+      })
+      renderInventario()
+
+      expect(await screen.findByText("Cargador")).toBeInTheDocument()
+      expect(
+        screen.queryByRole("link", { name: "Ver calendario" })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: "Reportar problema" })
+      ).toBeInTheDocument()
+    })
+
+    // Dos columnas de guiones no le dicen nada a nadie: un proyector no está
+    // freezado ni tiene software instalado.
+    it("no muestra las columnas de una computadora si no hay ninguna", async () => {
+      vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [proyector] })
+      renderInventario()
+
+      expect(await screen.findByText("Otros equipos")).toBeInTheDocument()
+      expect(
+        screen.queryByRole("columnheader", { name: "Freezada" })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole("columnheader", { name: "Software instalado" })
+      ).not.toBeInTheDocument()
+    })
+
+    // Cada columna se decide por su dato: una notebook suelta es tipo PC
+    // —así que "Freezada" dice algo— pero el alta de un equipo suelto todavía
+    // no acepta el software, y una columna vacía no le sirve a nadie.
+    it("una notebook suelta muestra Freezada, y el software solo si lo tiene", async () => {
+      vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+        data: [
+          equipo({
+            ...proyector,
+            id: "eq-notebook",
+            etiqueta: "Notebook de dirección",
+            tipo: "PC",
+            softwareInstalado: "Office",
+          }),
+        ],
+      })
+      renderInventario()
+
+      expect(await screen.findByText("Notebook de dirección")).toBeInTheDocument()
+      expect(screen.getByRole("columnheader", { name: "Freezada" })).toBeInTheDocument()
+      expect(
+        screen.getByRole("columnheader", { name: "Software instalado" })
+      ).toBeInTheDocument()
+    })
+
+    it("una notebook suelta sin software no arrastra la columna vacía", async () => {
+      vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+        data: [
+          equipo({
+            ...proyector,
+            id: "eq-nb2",
+            etiqueta: "Notebook sin cargar",
+            tipo: "PC",
+            softwareInstalado: undefined,
+          }),
+        ],
+      })
+      renderInventario()
+
+      expect(await screen.findByText("Notebook sin cargar")).toBeInTheDocument()
+      expect(screen.getByRole("columnheader", { name: "Freezada" })).toBeInTheDocument()
+      expect(
+        screen.queryByRole("columnheader", { name: "Software instalado" })
+      ).not.toBeInTheDocument()
+    })
+
+    // Contarle a una escuela que no presta nada suelto que no tiene nada
+    // suelto es ruido: la sección entera no aparece.
+    it("sin equipos sueltos, la sección no existe", async () => {
+      renderInventario()
+
+      expect(await screen.findByText("Carro 1")).toBeInTheDocument()
+      expect(screen.queryByText("Otros equipos")).not.toBeInTheDocument()
+    })
+
+    it("uno dado de baja no se lista", async () => {
+      vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+        data: [equipo({ ...proyector, dadoDeBaja: true })],
+      })
+      renderInventario()
+
+      expect(await screen.findByText("Carro 1")).toBeInTheDocument()
+      expect(screen.queryByText("Otros equipos")).not.toBeInTheDocument()
+    })
   })
 })
