@@ -224,8 +224,11 @@ func (r *PostgresRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipo
 //
 // De ahí el `- 1` en el rango de fechas: hay que mirar también el día de
 // antes, porque una reserva fechada ayer puede estar ocupando la máquina hoy
-// a las 00:30. El BETWEEN existe para que el índice siga sirviendo; la
-// condición fina la hace el EXISTS de abajo, fecha por fecha.
+// a las 00:30. Y el `+ 1` por el motivo simétrico: si la franja que se está
+// pidiendo cruza la medianoche, una reserva fechada el día DESPUÉS de la
+// última ocurrencia cae dentro de lo pedido. El BETWEEN existe para que el
+// índice siga sirviendo; la condición fina la hace el EXISTS de abajo,
+// fecha por fecha.
 //
 // Se une a equipo y carro para traer la etiqueta ya resuelta (RF-03.17). El
 // JOIN a carro va LEFT: un proyector no está en ninguno, y con INNER
@@ -246,7 +249,7 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 		LEFT JOIN carro c ON c.id = e.carro_id
 		WHERE res.equipo_id = ANY($1)
 		  AND res.fecha BETWEEN (SELECT min(f) - 1 FROM unnest($2::date[]) f)
-		                    AND (SELECT max(f)     FROM unnest($2::date[]) f)
+		                    AND (SELECT max(f) + 1 FROM unnest($2::date[]) f)
 		  AND res.estado = 'CONFIRMADA'
 		  AND EXISTS (
 		        SELECT 1 FROM unnest($2::date[]) AS f
@@ -811,14 +814,56 @@ func (r *PostgresRepo) YaPidioLiberacionHoy(ctx context.Context, reservaID, soli
 	return existe, nil
 }
 
+// sqlSolapaConLaFranja: una reserva de `res` que pisa la franja pedida en
+// $1 (fecha), $2 (hora de inicio) y $3 (hora de fin). Es el mismo criterio
+// que la constraint EXCLUDE de la migración, escrito una sola vez porque lo
+// necesitan las dos consultas que arman la pantalla de reservar: la de lo
+// que está libre y la de lo que ya tiene alguien. Que las dos mitades de una
+// misma pantalla contesten con criterios distintos es exactamente el bug que
+// esto evita.
+//
+// Las dos puntas pasan por fin_de_pared() porque las dos pueden terminar al
+// día siguiente:
+//
+//   - La reserva guardada, que es el caso que ya contemplaba la constraint.
+//   - La franja PEDIDA. Sin esto, consultar de 19:00 a 03:00 le pide a
+//     Postgres un rango que va para atrás y la consulta no falla filtrando:
+//     revienta entera con "range lower bound must be less than or equal to
+//     range upper bound". El docente no ve ninguna máquina —ni libre ni
+//     ocupada— porque la pregunta nunca se llegó a hacer.
+//
+// Y de ahí el filtro de fecha de tres días, que hay que leer de a una punta:
+//
+//   - `- 1` porque la reserva que ocupa la máquina hoy a las 00:30 puede
+//     estar fechada AYER, si es una nocturna que cruzó la medianoche.
+//     Mirando solo las de hoy, esa se escapa y la pantalla ofrece una
+//     máquina que el alta va a rechazar después con un 409.
+//   - `+ 1` porque la franja PEDIDA también puede cruzar: preguntando de
+//     19:00 a 03:00, una reserva fechada MAÑANA a la 01:00 cae justo en el
+//     medio de lo que se está pidiendo.
+//
+// El BETWEEN existe para que el índice (equipo_id, fecha) siga sirviendo; la
+// condición fina la hace el solapamiento de abajo, que descarta las que
+// entraron por la ventana pero no se tocan.
+const sqlSolapaConLaFranja = `
+	res.estado = 'CONFIRMADA'
+	  AND res.fecha BETWEEN $1::date - 1 AND $1::date + 1
+	  AND tsrange(res.fecha + res.hora_inicio,
+	              fin_de_pared(res.fecha, res.hora_inicio, res.hora_fin))
+	   && tsrange($1::date + $2::time,
+	              fin_de_pared($1::date, $2::time, $3::time))
+`
+
 // ListarEquiposOcupadosEn es la otra mitad de la franja (RF-04.11): del mismo
 // universo que la consulta de abajo —DISPONIBLE, reservable, no dado de baja—
 // los que YA tiene alguien, con quién los tiene.
 //
 // El JOIN con reserva es interno y no un LEFT: acá interesa exactamente lo
-// contrario que en la otra consulta. Y no puede devolver dos filas para el
-// mismo equipo, porque la constraint EXCLUDE ya garantiza que dos reservas
-// confirmadas no se pisen sobre la misma máquina.
+// contrario que en la otra consulta. Puede devolver más de una fila para el
+// mismo equipo, y está bien: son reservas distintas que caen dentro de la
+// franja consultada —una de 08:00 y otra de 11:00 dentro de una consulta de
+// 07:30 a 13:00— y la pantalla las muestra como renglones separados, con su
+// horario y su dueño, que es lo que necesita quien va a pedir una prestada.
 func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoOcupado, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT p.id,
@@ -831,10 +876,7 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 		       COALESCE(res.motivo_bloqueo, '')
 		FROM equipo p
 		JOIN reserva res ON res.equipo_id = p.id
-		 AND res.estado = 'CONFIRMADA'
-		 AND res.fecha = $1
-		 AND tsrange(res.fecha + res.hora_inicio, fin_de_pared(res.fecha, res.hora_inicio, res.hora_fin))
-		     && tsrange($1::date + $2::time, $1::date + $3::time)
+		 AND `+sqlSolapaConLaFranja+`
 		LEFT JOIN carro c ON c.id = p.carro_id
 		LEFT JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
 		LEFT JOIN materia m ON m.id = res.materia_id
@@ -842,7 +884,8 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 		WHERE p.estado = 'DISPONIBLE'
 		  AND p.dado_de_baja = false
 		  AND p.reservable = true
-		ORDER BY p.carro_id IS NULL, c.nombre, p.identificador, p.nombre
+		ORDER BY p.carro_id IS NULL, c.nombre, p.identificador, p.nombre,
+		         res.fecha, res.hora_inicio
 	`, fecha, duracionComoHora(horaInicio), duracionComoHora(horaFin))
 	if err != nil {
 		return nil, fmt.Errorf("listando equipos ocupados: %w", err)
@@ -1015,8 +1058,17 @@ func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID
 		WHERE p.estado = 'DISPONIBLE'
 		  AND p.dado_de_baja = false
 		  AND p.reservable = true
+		  -- El JOIN une por rango de fechas y no por igualdad, por las dos
+		  -- razones de sqlSolapaConLaFranja: la reserva que choca con la
+		  -- ocurrencia del martes a las 00:30 puede estar fechada el LUNES
+		  -- (una nocturna que termina al día siguiente), y si la ocurrencia
+		  -- misma cruza la medianoche puede chocar con una del MIÉRCOLES.
+		  -- Uniendo por igualdad no se encuentra ninguna de las dos, y el
+		  -- equipo se ofrece para el cambio para que la base lo rechace
+		  -- después.
 		  AND NOT EXISTS (
-			SELECT 1 FROM reserva res JOIN ocurrencias oc ON oc.fecha = res.fecha
+			SELECT 1 FROM reserva res
+			JOIN ocurrencias oc ON res.fecha BETWEEN oc.fecha - 1 AND oc.fecha + 1
 			WHERE res.equipo_id = p.id
 			  AND res.estado = 'CONFIRMADA'
 			  AND tsrange(res.fecha + res.hora_inicio, fin_de_pared(res.fecha, res.hora_inicio, res.hora_fin))
@@ -1068,10 +1120,7 @@ func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha tim
 		  AND NOT EXISTS (
 			SELECT 1 FROM reserva res
 			WHERE res.equipo_id = p.id
-			  AND res.estado = 'CONFIRMADA'
-			  AND res.fecha = $1
-			  AND tsrange(res.fecha + res.hora_inicio, fin_de_pared(res.fecha, res.hora_inicio, res.hora_fin))
-			      && tsrange($1::date + $2::time, $1::date + $3::time)
+			  AND `+sqlSolapaConLaFranja+`
 		  )
 		`+sqlOrdenDePreferencia+`
 	`, fecha, duracionComoHora(horaInicio), duracionComoHora(horaFin), materiaID)
