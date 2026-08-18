@@ -22,6 +22,7 @@ import { BloquearEquiposPage } from "@/features/reservas/BloquearEquiposPage"
 import { MisReservasPage } from "@/features/reservas/MisReservasPage"
 import { NuevaReservaPage } from "@/features/reservas/NuevaReservaPage"
 import { AdminRoute } from "@/routes/AdminRoute"
+import { NoEncontrada } from "@/routes/NoEncontrada"
 import { PublicOnlyRoute, ProtectedRoute } from "@/routes/ProtectedRoute"
 
 const router = createBrowserRouter([
@@ -51,7 +52,10 @@ const router = createBrowserRouter([
           // RF-07.2: cualquier usuario autenticado, no solo Admins. Editar
           // el horario propio está dentro de la página, condicionado al rol.
           { path: "/disponibilidad", element: <DisponibilidadPage /> },
-          { path: "/inventario/equipos/:equipoId/calendario", element: <CalendarioEquipoPage /> },
+          {
+            path: "/inventario/equipos/:equipoId/calendario",
+            element: <CalendarioEquipoPage />,
+          },
           {
             element: <AdminRoute />,
             children: [
@@ -69,6 +73,11 @@ const router = createBrowserRouter([
               },
             ],
           },
+          // El comodín va al final y DENTRO del layout: así una dirección
+          // que no existe conserva la barra de navegación, que es la salida
+          // más rápida. Suelto en la raíz mostraría la pantalla sin menú, y
+          // sin él la única forma de volver es el botón del navegador.
+          { path: "*", element: <NoEncontrada /> },
         ],
       },
     ],
