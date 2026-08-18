@@ -937,8 +937,14 @@ func TestCambiarPassword_ActualIncorrecta_Error(t *testing.T) {
 
 	_, err := svc.CambiarPassword(context.Background(), "u1", "incorrecta", "nuevapassword123")
 
-	if !errors.Is(err, ErrCredencialesInvalidas) {
-		t.Fatalf("esperaba ErrCredencialesInvalidas, obtuve %v", err)
+	// Propio y no ErrCredencialesInvalidas: ese mapea a 401, y un 401 con
+	// token válido hace que el cliente cierre la sesión. Equivocarse
+	// tipeando la contraseña actual no puede echar a nadie del sistema.
+	if !errors.Is(err, ErrPasswordActualIncorrecta) {
+		t.Fatalf("esperaba ErrPasswordActualIncorrecta, obtuve %v", err)
+	}
+	if errors.Is(err, ErrCredencialesInvalidas) {
+		t.Fatal("no puede seguir matcheando ErrCredencialesInvalidas: volvería a dar 401")
 	}
 }
 

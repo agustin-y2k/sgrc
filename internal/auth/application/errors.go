@@ -47,6 +47,23 @@ var (
 
 	ErrPasswordCorta = errors.New("la contraseña debe tener al menos 8 caracteres")
 
+	// ErrPasswordActualIncorrecta: la contraseña que se escribió en "actual"
+	// al cambiarla no es la de la cuenta.
+	//
+	// Es un error propio y no ErrCredencialesInvalidas, aunque la
+	// comprobación sea la misma, porque el HTTP que le corresponde es otro y
+	// eso tiene una consecuencia concreta. Ese error mapea a 401, y un 401
+	// con token válido significa "tu sesión ya no vale": el cliente lo trata
+	// como sesión rechazada y cierra la sesión (ver frontend/src/lib/
+	// api-client.ts). Resultado: quien se equivocaba tipeando su contraseña
+	// actual terminaba en el login, sin sesión y leyendo "credenciales
+	// inválidas", sin ninguna pista de qué había pasado.
+	//
+	// Acá la sesión está perfecta —el token se validó para llegar hasta
+	// este handler— y lo que está mal es un campo del cuerpo. Eso es un 400,
+	// y con un mensaje que nombra el campo.
+	ErrPasswordActualIncorrecta = errors.New("la contraseña actual no es correcta")
+
 	// ErrDatosObligatorios: nombre/apellido/email vacíos. Es un sentinel y
 	// no un fmt.Errorf suelto porque mapearError manda al 500 genérico todo
 	// lo que no reconoce: registrarse con el nombre vacío respondería "error

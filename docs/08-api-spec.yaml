@@ -923,6 +923,12 @@ paths:
         que cambiar: responde 409. Un Admin sí puede generarle una con
         POST /api/auth/usuarios/{id}/reset-password, que es la forma de devolverle el
         acceso a alguien que perdió su cuenta de Google; eso no rompe el vínculo.
+
+        Ojo con el código de `passwordActual` incorrecta: es **400 y no 401**. Quien
+        llega hasta acá ya está autenticado —el token se validó— y lo que vino mal es
+        un campo del cuerpo. Un 401 con token válido significa "tu sesión ya no vale",
+        y un cliente que lo trate así va a cerrarle la sesión a alguien que solo se
+        equivocó tipeando.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -936,7 +942,7 @@ paths:
                 passwordNueva: { type: string, minLength: 8 }
       responses:
         "200": { description: Contraseña actualizada }
-        "401": { description: passwordActual incorrecta }
+        "400": { description: passwordActual incorrecta, o passwordNueva más corta que 8 caracteres }
         "409": { description: La cuenta ingresa con Google y no tiene contraseña }
 
   /health:
