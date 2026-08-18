@@ -251,7 +251,18 @@ type PrestamoDemorado struct {
 	// Email vacío si quien la tiene no tiene cuenta en el sistema. En ese
 	// caso el reclamo le llega solo a los Admin, que es lo único que se
 	// puede hacer.
-	Email           string
+	Email string
+	// EntregadoEn y DebioVolverA vienen YA en la zona de la escuela, no en
+	// UTC: los publica el barrido, que es el único que tiene el reloj de la
+	// institución (ver reservation/application/vigilante.go). Quien arma el
+	// texto solo los formatea — si tuviera que convertirlos, cada mensaje
+	// nuevo sería otra oportunidad de olvidarse y mostrar tres horas de más.
+	//
+	// EntregadoEn es cuándo se la llevó, y existe porque el correo lo dice:
+	// "la tiene X desde las 10:15". Sin este campo ese hueco se llenaba con
+	// DebioVolverA, o sea que el correo afirmaba que se la había llevado
+	// justo a la hora en que tenía que devolverla.
+	EntregadoEn     time.Time
 	DebioVolverA    time.Time
 	MinutosDeDemora int
 }
@@ -269,6 +280,8 @@ type EquipoSinDevolverAlCierre struct {
 	Etiqueta    string
 	CarroNombre string
 	Quien       string
+	// DesdeCuando también viaja en la zona de la escuela (ver
+	// PrestamoDemorado).
 	DesdeCuando time.Time
 	// Del docente de la PRÓXIMA reserva de esa PC, si la hay. Se avisa solo
 	// al siguiente y no a todos los de la semana: es el único para quien el
