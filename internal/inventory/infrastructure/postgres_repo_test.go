@@ -87,6 +87,32 @@ func TestPostgresRepo_CrearCarroYBuscarPorID_OK(t *testing.T) {
 	}
 }
 
+// El nombre de un carro es único, y el choque tiene que llegar a la capa
+// HTTP como el centinela que esa capa sabe traducir a un 409.
+//
+// El test es de integración y no de unidad por la misma razón que el de los
+// equipos: lo que se está probando es la traducción del error de Postgres,
+// y un repositorio falso devuelve el error correcto por su cuenta. Con un
+// `fmt.Errorf` pelado —como estaba— el mensaje era el bueno pero
+// `errors.Is` no enganchaba, así que el Admin veía "error interno".
+func TestPostgresRepo_NombreDeCarroDuplicado_Error(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	crearCarroDeTest(t, repo, "Carro 1")
+
+	otro, err := domain.NuevoCarro(NuevoID(), "Carro 1", "")
+	if err != nil {
+		t.Fatalf("armando el carro: %v", err)
+	}
+	err = repo.CrearCarro(ctx, otro)
+
+	if !errors.Is(err, application.ErrNombreCarroDuplicado) {
+		t.Fatalf("esperaba ErrNombreCarroDuplicado, obtuve %v", err)
+	}
+}
+
 func TestPostgresRepo_CrearEquipo_OK(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

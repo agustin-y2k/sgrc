@@ -90,7 +90,7 @@ func (r *PostgresRepo) CrearCarro(ctx context.Context, c *domain.Carro) error {
 		c.ID, c.Nombre, c.Descripcion)
 	if err != nil {
 		if esViolacionUnica(err) {
-			return fmt.Errorf("ya existe un carro con ese nombre")
+			return application.ErrNombreCarroDuplicado
 		}
 		return fmt.Errorf("creando carro: %w", err)
 	}
@@ -126,7 +126,7 @@ func (r *PostgresRepo) GuardarCarro(ctx context.Context, c *domain.Carro) error 
 		c.ID, c.Nombre, c.Descripcion)
 	if err != nil {
 		if esViolacionUnica(err) {
-			return fmt.Errorf("ya existe un carro con ese nombre")
+			return application.ErrNombreCarroDuplicado
 		}
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
