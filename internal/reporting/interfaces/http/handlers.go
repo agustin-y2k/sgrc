@@ -167,11 +167,10 @@ func (h *Handler) ReporteIncidenciasPorCarro(c *fiber.Ctx) error {
 
 // ── RF-06.5: el estado del parque de equipos ────────────────────────────
 
-// GET /api/reporting/inventario/estado
-//
-// Sin rango de fechas a propósito: es una foto de AHORA. "Cuántas estaban
-// rotas en marzo" no se puede responder con el estado actual, y aceptar el
-// parámetro daría un número que parece esa respuesta sin serlo.
+// GET /api/reporting/inventario/estado Sin rango de fechas a propósito: es
+// una foto de AHORA. "Cuántas estaban rotas en marzo" no se puede responder
+// con el estado actual, y aceptar el parámetro daría un número que parece esa
+// respuesta sin serlo.
 func (h *Handler) ReporteEstadoDelInventario(c *fiber.Ctx) error {
 	filas, err := h.svc.EstadoDelInventario(c.UserContext())
 	if err != nil {
@@ -200,9 +199,8 @@ func (h *Handler) ReporteEquiposFueraDeCirculacion(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/reporting/incidencias/categorias — qué se rompe, agrupado por
-// tipo de falla. Este SÍ acepta rango de fechas: la pregunta es qué se rompió
-// en un período, y eso permite comparar un año contra otro.
+// GET /api/reporting/incidencias/categorias — qué se rompe, agrupado por tipo
+// de falla.
 func (h *Handler) ReporteIncidenciasPorCategoria(c *fiber.Ctx) error {
 	desde, hasta, err := rangoDeQuery(c)
 	if err != nil {

@@ -126,9 +126,7 @@ func TestRegisterEventHandlers_ReservaCancelada_NotificaAlDocenteAfectado(t *tes
 		if n.Tipo != domain.TipoReservaCancelada {
 			t.Errorf("tipo incorrecto: %q", n.Tipo)
 		}
-		// El prefijo se pone una sola vez, acá. Quien publica manda la
-		// razón pelada: si además armara la frase, el docente leía
-		// "Tu reserva fue cancelada: Tu reserva fue cancelada: …".
+		// El prefijo se pone una sola vez, acá.
 		esperado := "Tu reserva del 10/09/2026 (PC 7) fue cancelada: PC rota"
 		if n.Mensaje != esperado {
 			t.Errorf("mensaje incorrecto:\n  esperado %q\n  obtenido %q", esperado, n.Mensaje)
@@ -204,9 +202,6 @@ func TestRegisterEventHandlers_ReservaCancelada_VariasFechas(t *testing.T) {
 
 // Si reservation no pudo resolver los identificadores, el aviso sale igual
 // sin nombrar las PCs.
-// Sin etiquetas resueltas el aviso sale igual, sin el detalle: perder la
-// notificación por no poder adornarla sería mucho peor. Dice "equipos" y no
-// "PCs" porque lo cancelado puede ser un proyector.
 func TestRegisterEventHandlers_ReservaCancelada_SinIdentificadores(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
@@ -272,10 +267,10 @@ func TestRegisterEventHandlers_PayloadInesperado_NoPanikea(t *testing.T) {
 	// no alargar el request, pero acá se necesita determinismo.
 	RegisterEventHandlersSincronos(bus, svc)
 
-	// Publicar con un payload de tipo incorrecto (no el esperado por el
-	// handler) — no debería panickear, el eventbus ya recupera panics de
-	// handlers individuales, pero acá confirmamos que el propio handler
-	// se cuida solo con el type assertion seguro (ok, no panic directo).
+	// Publicar con un payload de tipo incorrecto (no el esperado por el handler)
+	// — no debería panickear, el eventbus ya recupera panics de handlers
+	// individuales, pero acá confirmamos que el propio handler se cuida solo con
+	// el type assertion seguro (ok, no panic directo).
 	bus.Publish(eventbus.Evento{Tipo: "docente.registro.pendiente", Payload: "esto no es un map"})
 	bus.Publish(eventbus.Evento{Tipo: "reserva.cancelada", Payload: 12345})
 
@@ -285,11 +280,11 @@ func TestRegisterEventHandlers_PayloadInesperado_NoPanikea(t *testing.T) {
 	}
 }
 
-// esperarNotificaciones sondea el repo fake hasta que aparezca la
-// cantidad esperada de notificaciones, o falla tras un timeout corto —
-// necesario porque eventbus.Publish corre los handlers síncronamente en
-// la goroutine del publisher, así que en la práctica esto ya está listo
-// apenas Publish retorna, pero sondear es más robusto que asumirlo.
+// esperarNotificaciones sondea el repo fake hasta que aparezca la cantidad
+// esperada de notificaciones, o falla tras un timeout corto — necesario
+// porque eventbus.Publish corre los handlers síncronamente en la goroutine
+// del publisher, así que en la práctica esto ya está listo apenas Publish
+// retorna, pero sondear es más robusto que asumirlo.
 func esperarNotificaciones(t *testing.T, repo *fakeRepo, esperadas int) {
 	t.Helper()
 	limite := time.Now().Add(time.Second)
@@ -306,9 +301,7 @@ func fecha(anio int, mes time.Month, dia int) time.Time {
 	return time.Date(anio, mes, dia, 0, 0, 0, 0, time.UTC)
 }
 
-// El aviso "X está pendiente de aprobación" pide una acción concreta. Una
-// vez que alguien la hizo, seguir viéndolo sin leer manda al Admin a una
-// lista donde esa persona ya no está.
+// El aviso "X está pendiente de aprobación" pide una acción concreta.
 func TestRegisterEventHandlers_CuentaResuelta_CierraElAvisoDePendiente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	listador := &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2"}}
@@ -539,11 +532,8 @@ func TestRegisterEventHandlers_Cierre_AvisaALosAdminsYAlProximo(t *testing.T) {
 	}
 }
 
-// TestEquiposDeLasCanceladas_OrdenNatural: con sort.Strings, "PC 12" iba antes que
-// "PC 3" porque compara carácter por carácter. El docente lee la lista de
-// sus máquinas, y verlas desordenadas hace dudar de si son las suyas.
-//
-// Con etiquetas numéricas el orden salía solo; con texto hay que ordenarlo.
+// TestEquiposDeLasCanceladas_OrdenNatural: con sort.Strings, "PC 12" iba
+// antes que "PC 3" porque compara carácter por carácter.
 func TestListaDeEquipos_OrdenNatural(t *testing.T) {
 	reservas := []eventbus.ReservaCancelada{
 		{Etiqueta: "PC 12"}, {Etiqueta: "PC 3"}, {Etiqueta: "PC 7"},

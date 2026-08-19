@@ -7,26 +7,13 @@ import { Button } from "@/components/ui/button"
 import * as perfilApi from "@/features/perfil/api"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * Cuánto mide la foto que se guarda, de lado.
- *
- * El recorte y el achicado los hace el navegador ANTES de subir: la cámara
- * de un teléfono saca fotos de varios megabytes, y mandarlas enteras por la
- * conexión de una escuela para que el servidor las tire es hacer esperar a
- * la persona por nada. 256 píxeles alcanzan de sobra para un redondel que
- * en pantalla mide 28.
- */
+/** Cuánto mide la foto que se guarda, de lado. */
 const LADO = 256
 
 /**
- * Achica y recorta la imagen a un cuadrado de LADO×LADO, en WEBP.
- *
- * El recorte es al centro y por el lado más corto, que es lo que espera
- * cualquiera que sube una foto de frente: una imagen apaisada pierde los
- * bordes, no la cara.
- *
- * Devuelve null si el archivo no se puede leer como imagen — ahí el mensaje
- * lo da esta pantalla, sin viajar al servidor para que lo rechace.
+ * Achica y recorta la imagen a un cuadrado de LADO×LADO, en WEBP. El recorte
+ * es al centro y por el lado más corto, que es lo que espera cualquiera que
+ * sube una foto de frente: una imagen apaisada pierde los bordes, no la cara.
  */
 async function aCuadradoChico(archivo: File): Promise<Blob | null> {
   const url = URL.createObjectURL(archivo)
@@ -56,14 +43,7 @@ async function aCuadradoChico(archivo: File): Promise<Blob | null> {
   }
 }
 
-/**
- * El redondel del perfil, con los botones para cambiar o sacar la foto.
- *
- * El botón dice "Cambiar la foto" y abre el explorador de archivos: el
- * `<input type="file">` real queda escondido porque su aspecto no se puede
- * cambiar y su texto por defecto ("Sin archivos seleccionados") no dice nada
- * de lo que va a pasar.
- */
+/** El redondel del perfil, con los botones para cambiar o sacar la foto. */
 export function FotoDePerfil({
   usuarioId,
   nombre,

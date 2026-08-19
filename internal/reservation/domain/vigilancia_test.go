@@ -26,8 +26,8 @@ func TestCorrespondeRecordar(t *testing.T) {
 		{"justo una hora antes", alas(7, 0), true},
 		{"media hora antes", alas(7, 30), true},
 		// Si el proceso estuvo caído, el recordatorio sale tarde en vez de
-		// perderse: a las 8:10 todavía sirve saber que la reserva se libera
-		// a las 8:40.
+		// perderse: a las 8:10 todavía sirve saber que la reserva se libera a las
+		// 8:40.
 		{"ya empezó pero no terminó", alas(8, 10), true},
 		{"justo cuando termina", alas(9, 0), false},
 		{"después de terminada", alas(10, 0), false},
@@ -79,9 +79,7 @@ func TestCorrespondeLiberar(t *testing.T) {
 }
 
 // TestCorrespondeLiberar_ClaseMasCortaQueLaGracia: con media hora de clase y
-// cuarenta minutos de gracia, no se libera nunca. Es el resultado correcto y
-// sale solo de la regla de "la que ya terminó no se libera" — no hace falta
-// recortar la gracia contra la duración.
+// cuarenta minutos de gracia, no se libera nunca.
 func TestCorrespondeLiberar_ClaseMasCortaQueLaGracia(t *testing.T) {
 	fin := 8*time.Hour + 30*time.Minute
 
@@ -103,11 +101,8 @@ func TestCorrespondeLiberar_GraciaConfigurable(t *testing.T) {
 	}
 }
 
-// TestCorrespondeAvisarEquipoNoDisponible_MaxDeteccionOInicioMenosUnaHora es la
-// regla que se definió para el docente siguiente. Lo que fija el test es la
-// mitad que vive en el dominio: la ventana. La otra mitad —que la máquina
-// siga demorada en ese momento— la pone el job, y es la que hace que el
-// aviso no salga nunca si la PC vuelve a tiempo.
+// TestCorrespondeAvisarEquipoNoDisponible_MaxDeteccionOInicioMenosUnaHora es
+// la regla que se definió para el docente siguiente.
 func TestCorrespondeAvisarEquipoNoDisponible_MaxDeteccionOInicioMenosUnaHora(t *testing.T) {
 	casos := []struct {
 		nombre   string
@@ -144,8 +139,8 @@ func TestEstadoReserva_NoRetirada(t *testing.T) {
 	if !ReservaConfirmada.PuedeTransicionarA(ReservaNoRetirada) {
 		t.Error("una confirmada tiene que poder liberarse")
 	}
-	// Liberar no es prohibir, pero tampoco se deshace: si el docente aparece
-	// a los cincuenta minutos y las máquinas siguen ahí, se le entregan como
+	// Liberar no es prohibir, pero tampoco se deshace: si el docente aparece a
+	// los cincuenta minutos y las máquinas siguen ahí, se le entregan como
 	// préstamo — la reserva no revive.
 	if ReservaNoRetirada.PuedeTransicionarA(ReservaConfirmada) {
 		t.Error("una liberada no vuelve a confirmarse")

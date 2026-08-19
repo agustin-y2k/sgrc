@@ -8,17 +8,11 @@ import (
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/.
-// Las agregaciones "en vivo" (Calcular...) consultan reserva/materia/curso
-// directamente por SQL — sin importar internal/reservation ni
-// internal/academic, mismo criterio que cualquier otro validador de solo
-// lectura del proyecto.
 type Repo interface {
 	GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.HistoricoUsoEquipo) error
 	GuardarHistoricoUsoDocente(ctx context.Context, h *domain.HistoricoUsoDocente) error
 	// BorrarHistoricoDocentesSinCuenta limpia las filas de un año cuyo
-	// usuario_id es NULL, para poder reescribirlas. El ON CONFLICT que hace
-	// idempotente al resto del snapshot no las alcanza: la constraint es
-	// UNIQUE (anio, usuario_id) y Postgres no considera iguales a dos NULL.
+	// usuario_id es NULL, para poder reescribirlas.
 	BorrarHistoricoDocentesSinCuenta(ctx context.Context, anio int) error
 	// Los históricos se listan por año (no por ciclo — ver el comentario
 	// en domain/historico.go sobre por qué esa tabla usa `anio`).
@@ -26,20 +20,17 @@ type Repo interface {
 	ListarHistoricoUsoDocentePorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoDocente, error)
 
 	// CalcularUsoEquiposDeCiclo acepta un rango de fechas opcional (RF-06.1:
-	// "filtrable por rango de fechas"). nil en cualquiera de los dos
-	// extremos significa "sin ese límite".
+	// "filtrable por rango de fechas").
 	CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoEquipo, error)
 	CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoDocente, error)
 
-	// RF-06.3: incidencias por equipo y por carro. No dependen del ciclo
-	// lectivo (Incidencia sobrevive al archivado, ver RF-02.4), así que se
-	// resuelven siempre con una query directa, sin snapshot.
+	// RF-06.3: incidencias por equipo y por carro.
 	CalcularIncidenciasPorEquipo(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasEquipo, error)
 	CalcularIncidenciasPorCarro(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasCarro, error)
 
-	// Los tres de RF-06.5 no dependen del ciclo lectivo: son una foto del
-	// parque HOY. Una máquina rota lo está ahora, sin importar en qué año se
-	// reportó la falla.
+	// Los tres de RF-06.5 no dependen del ciclo lectivo: son una foto del parque
+	// HOY. Una máquina rota lo está ahora, sin importar en qué año se reportó la
+	// falla.
 	EstadoDelInventario(ctx context.Context) ([]domain.EstadoDelInventario, error)
 	EquiposFueraDeCirculacion(ctx context.Context) ([]domain.EquipoFueraDeCirculacion, error)
 	CalcularIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error)
@@ -47,8 +38,7 @@ type Repo interface {
 
 // InfoEquipoParaSnapshot es el puerto hacia inventory — necesario para
 // "congelar" cómo se llamaba el equipo y dónde estaba al momento de archivar
-// (EtiquetaSnapshot/IdentificadorSnapshot/CarroNombreSnapshot). Nunca se
-// importa internal/inventory directamente.
+// (EtiquetaSnapshot/IdentificadorSnapshot/CarroNombreSnapshot).
 type InfoEquipoParaSnapshot interface {
 	// Devuelve la etiqueta siempre; identificador en 0 y carro vacío si el
 	// equipo no está en ningún carro.

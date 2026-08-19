@@ -16,9 +16,7 @@ import (
 // ── /health ────────────────────────────────────────────────────────────
 
 // El caso que importa: con la base caída, /health tiene que decirlo — un
-// healthcheck que no puede fallar no es un healthcheck. Se arma un pool contra un puerto donde no hay nadie
-// escuchando — pgxpool.New no conecta hasta el primer uso, así que el Ping
-// falla rápido con "connection refused" sin necesidad de un Postgres real.
+// healthcheck que no puede fallar no es un healthcheck.
 func TestHandlerHealth_SinBaseDeDatos_Responde503(t *testing.T) {
 	pool, err := pgxpool.New(context.Background(),
 		"postgres://nadie:nadie@127.0.0.1:1/nada?sslmode=disable&connect_timeout=1")
@@ -72,9 +70,9 @@ func TestEsInvocacionDeHealthcheck(t *testing.T) {
 }
 
 // El autochequeo tiene que distinguir el 503 del 200: si tomara cualquier
-// respuesta como buena, el HEALTHCHECK del contenedor volvería a dar por
-// sano a un proceso que no llega a la base — exactamente el problema que
-// este endpoint vino a resolver.
+// respuesta como buena, el HEALTHCHECK del contenedor volvería a dar por sano
+// a un proceso que no llega a la base — exactamente el problema que este
+// endpoint vino a resolver.
 func TestEjecutarHealthcheck_SegunLaRespuesta(t *testing.T) {
 	casos := map[string]struct {
 		estado   int

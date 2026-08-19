@@ -17,10 +17,6 @@ const columnasLicencia = `id, equipo_id, nombre, dias_duracion, dias_aviso, fech
 	`avisado_previo_para, avisado_vencimiento_para, creada_en`
 
 // columnasLicenciaConUbicacion agrega cómo se llama el equipo y dónde está.
-// Van prefijadas con l./p./c. porque la consulta hace JOIN.
-//
-// Los COALESCE están porque un equipo suelto con software licenciado no
-// tiene carro ni identificador, y sin ellos el escaneo a string/int revienta.
 const columnasLicenciaConUbicacion = `l.id, l.equipo_id, l.nombre, l.dias_duracion, l.dias_aviso, l.fecha_vencimiento, ` +
 	`l.ultima_renovacion, l.vencimiento_fijado_por, l.vencimiento_fijado_en, ` +
 	`l.avisado_previo_para, l.avisado_vencimiento_para, l.creada_en, ` +
@@ -130,12 +126,6 @@ func (r *PostgresRepo) GuardarLicencia(ctx context.Context, l *domain.LicenciaSo
 }
 
 // MarcarAvisosEnviados toca SOLO las dos marcas.
-//
-// No es un GuardarLicencia con otro nombre: entre que el job lee la
-// licencia y termina de hablar con el servidor de correo pueden pasar
-// decenas de segundos, y en ese rato un Admin puede haberla renovado desde
-// la pantalla. Con un UPDATE completo, el job escribiría de vuelta el
-// vencimiento viejo que tenía en memoria y desharía la renovación.
 func (r *PostgresRepo) MarcarAvisosEnviados(ctx context.Context, l *domain.LicenciaSoftware) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE licencia_software SET
@@ -191,17 +181,6 @@ func (r *PostgresRepo) ListarLicenciasPorEquipo(ctx context.Context, equipoID st
 }
 
 // ordenDeLaPantalla pone primero lo que hay que resolver.
-//
-// Las que no tienen fecha van arriba de todo: son las que están esperando
-// que alguien se siente delante de la máquina, y son las únicas que no se
-// pueden ordenar por días restantes porque no tienen ninguno. Después, de
-// la más vencida a la que más le falta. El desempate por carro y PC es para
-// que dos licencias que vencen el mismo día salgan siempre en el mismo
-// orden — sin él, Postgres puede devolverlas alternadas entre corridas y la
-// tabla parece moverse sola.
-// Los COALESCE del orden hacen falta porque con c.nombre y p.identificador
-// en NULL los equipos sueltos empatarían todos entre sí y la lista se
-// movería sola entre corridas. Ordenados por nombre quedan juntos y estables.
 const ordenDeLaPantalla = `ORDER BY l.fecha_vencimiento IS NOT NULL, l.fecha_vencimiento, ` +
 	`COALESCE(c.nombre, ''), COALESCE(p.identificador, 0), COALESCE(p.nombre, ''), l.nombre`
 
@@ -221,35 +200,7 @@ func (r *PostgresRepo) ListarLicencias(ctx context.Context) ([]*application.Lice
 	return escanearFilasConUbicacion(rows)
 }
 
-// ListarCandidatasAAviso es el filtro grueso del job. La regla fina la
-// aplica el dominio (ver el comentario del puerto).
-//
-// `l.fecha_vencimiento - l.dias_aviso <= $1` es aritmética de DATE:
-// en Postgres, date menos integer da date. Cubre de una las dos situaciones
-// —ya entró en la ventana de antelación, o ya venció— sin repetir la
-// condición.
-//
-// La comparación es date CONTRA date, sin ningún timestamp de por medio, y
-// eso no es casual: Postgres infiere el tipo de `$1` como `date` por el
-// operando izquierdo, así que pgx codifica el time.Time usando solo su
-// año/mes/día y la zona de la SESIÓN nunca entra en juego.
-//
-// Importa porque si entrara, el borde se correría un día —con la sesión en
-// -03:00 el 2026-08-07 pasaría a ser 2026-08-07 03:00 UTC y dejaría de ser
-// <= las 00:00 de ese mismo día— y la licencia que vence mañana se caería
-// del resultado sin ningún error: el aviso no saldría nunca. Ese es el peor
-// modo de falla posible acá, así que hay un test que lo fija con la sesión
-// en tres zonas distintas
-// (TestPostgresRepo_Licencia_CandidatasNoDependenDeLaZonaDeLaSesion).
-//
-// El filtro de marcas descarta las que ya avisaron todo lo que tenían que
-// avisar para este vencimiento. IS DISTINCT FROM y no <>: con NULL, el <>
-// devuelve NULL y la fila se pierde, que es exactamente al revés de lo que
-// hace falta (marca vacía = todavía no se avisó).
-//
-// Las PCs dadas de baja quedan afuera: nadie las va a usar, así que
-// renovarles la licencia no le sirve a nadie. Las FUERA_DE_SERVICIO sí
-// entran — son recuperables editándolas y la licencia les sigue corriendo.
+// ListarCandidatasAAviso es el filtro grueso del job.
 func (r *PostgresRepo) ListarCandidatasAAviso(ctx context.Context, hoy time.Time) ([]*application.LicenciaConUbicacion, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+columnasLicenciaConUbicacion+`

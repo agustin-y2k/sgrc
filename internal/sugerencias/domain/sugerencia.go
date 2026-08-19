@@ -1,11 +1,5 @@
 // Package domain son las reglas del buzón por donde se cuenta que algo del
 // sistema no anda, o que estaría bueno que hiciera otra cosa.
-//
-// No confundir con las incidencias de inventory: aquellas son sobre una
-// computadora que no arranca —marcan el equipo y lo sacan de circulación—;
-// esto es sobre el sistema. Son dos buzones distintos porque lo que se hace
-// con cada uno también lo es: una incidencia la resuelve el técnico, una
-// sugerencia la resuelve quien escribe el software.
 package domain
 
 import (
@@ -26,9 +20,7 @@ var (
 	ErrSugerenciaNoExist = errors.New("no se encontró esa sugerencia")
 )
 
-// MaxTexto: cuatro mil caracteres son unas dos carillas. Alcanza de sobra
-// para contar un problema con detalle y evita que un pegado accidental de
-// media pantalla termine en la base.
+// MaxTexto: cuatro mil caracteres son unas dos carillas.
 const MaxTexto = 4000
 
 // Tipo separa "no me deja hacer algo" de "estaría bueno que…", que es la
@@ -60,12 +52,6 @@ const (
 )
 
 // Sugerencia es un mensaje de alguien que usa el sistema.
-//
-// Pantalla y Version las completa la aplicación, no quien escribe: un "no
-// anda" sin saber desde dónde se escribió obliga a ir a buscar a la persona
-// para preguntarle, y con alguien que ya se sintió torpe usando el sistema,
-// esa conversación no vuelve a pasar. Con la pantalla anotada, quien lee
-// puede ir a mirar sin molestar a nadie.
 type Sugerencia struct {
 	ID        string
 	UsuarioID string
@@ -106,11 +92,6 @@ func Nueva(id, usuarioID string, tipo Tipo, texto, pantalla, version string, aho
 }
 
 // Responder deja la respuesta del Admin y da la sugerencia por resuelta.
-//
-// Las dos cosas van juntas a propósito: responder es lo que la cierra. Una
-// respuesta sin cerrar dejaría el mensaje en la lista de pendientes para
-// siempre, y cerrar sin responder es lo que hace que la próxima vez nadie
-// escriba.
 func (s *Sugerencia) Responder(respuesta string, adminID string, ahora time.Time) error {
 	if s.Estado == Resuelta {
 		return ErrYaResuelta

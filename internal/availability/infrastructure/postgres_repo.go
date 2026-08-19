@@ -1,7 +1,7 @@
-// Package infrastructure implementa application.Repo de availability
-// contra PostgreSQL real (pgx), además del adaptador ListadorAdmins hacia
-// auth (RF-07, ver docs/07-modelo-datos.md para las tablas horario_admin
-// y horario_admin_excepcion).
+// Package infrastructure implementa application.Repo de availability contra
+// PostgreSQL real (pgx), además del adaptador ListadorAdmins hacia auth
+// (RF-07, ver docs/07-modelo-datos.md para las tablas horario_admin y
+// horario_admin_excepcion).
 package infrastructure
 
 import (
@@ -36,12 +36,10 @@ func errorDeFilas(rows pgx.Rows) error {
 	return fmt.Errorf("iterando filas: %w", err)
 }
 
-// horaComoDuracion / duracionComoHora convierten entre time.Duration
-// (offset desde medianoche, el tipo que usa domain) y time.Time (lo que
-// pgx espera/devuelve para una columna TIME) — mismo criterio que
-// reservation/infrastructure. Se centraliza acá porque todos los métodos
-// de este archivo que tocan hora_inicio/hora_fin necesitan esta
-// conversión.
+// horaComoDuracion / duracionComoHora convierten entre time.Duration (offset
+// desde medianoche, el tipo que usa domain) y time.Time (lo que pgx
+// espera/devuelve para una columna TIME) — mismo criterio que
+// reservation/infrastructure.
 func horaComoDuracion(t time.Time) time.Duration {
 	return time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute + time.Duration(t.Second())*time.Second
 }
@@ -90,9 +88,7 @@ func (r *PostgresRepo) ListarBloquesDeUsuario(ctx context.Context, usuarioID str
 }
 
 // ListarBloquesDeUsuarios trae los bloques de varios Admin en una sola
-// consulta, en vez de una por Admin (ver el puerto). El ORDER BY repite el
-// de la versión individual para que el horario de cada uno salga en el
-// mismo orden por las dos vías.
+// consulta, en vez de una por Admin (ver el puerto).
 func (r *PostgresRepo) ListarBloquesDeUsuarios(ctx context.Context, usuarioIDs []string) (map[string][]*domain.BloqueHorario, error) {
 	resultado := make(map[string][]*domain.BloqueHorario, len(usuarioIDs))
 	if len(usuarioIDs) == 0 {
@@ -171,8 +167,8 @@ func (r *PostgresRepo) BuscarBloqueDeUsuario(ctx context.Context, id, usuarioID 
 	return escanearBloque(row)
 }
 
-// GuardarBloque actualiza acotando por (id, usuario_id) — si b.UsuarioID
-// no coincide con el dueño real de esa fila, RowsAffected queda en 0 y se
+// GuardarBloque actualiza acotando por (id, usuario_id) — si b.UsuarioID no
+// coincide con el dueño real de esa fila, RowsAffected queda en 0 y se
 // devuelve ErrBloqueNoEncontrado, igual que un ID inexistente.
 func (r *PostgresRepo) GuardarBloque(ctx context.Context, b *domain.BloqueHorario) error {
 	tag, err := r.pool.Exec(ctx,
@@ -221,9 +217,7 @@ func (r *PostgresRepo) BuscarExcepcionDeFecha(ctx context.Context, usuarioID str
 	return e, err
 }
 
-// BuscarExcepcionesDeFecha es la versión en lote. Los usuarios sin excepción
-// para esa fecha no aparecen en el mapa: no tenerla es el caso normal
-// (RF-07.4 es opcional), igual que en la versión individual.
+// BuscarExcepcionesDeFecha es la versión en lote.
 func (r *PostgresRepo) BuscarExcepcionesDeFecha(ctx context.Context, usuarioIDs []string, fecha time.Time) (map[string]*domain.Excepcion, error) {
 	resultado := make(map[string]*domain.Excepcion, len(usuarioIDs))
 	if len(usuarioIDs) == 0 {
@@ -286,10 +280,10 @@ func escanearExcepcion(row pgx.Row) (*domain.Excepcion, error) {
 }
 
 // GuardarExcepcion hace upsert por (usuario_id, fecha) — la UNIQUE de la
-// tabla — así volver a postear para la misma fecha REEMPLAZA la anterior
-// por completo (incluyendo el ID) en vez de violar la constraint (RF-07.4,
-// docs/08-api-spec.yaml: "reemplaza la excepción anterior si ya existía
-// una para esa fecha").
+// tabla — así volver a postear para la misma fecha REEMPLAZA la anterior por
+// completo (incluyendo el ID) en vez de violar la constraint (RF-07.4,
+// docs/08-api-spec.yaml: "reemplaza la excepción anterior si ya existía una
+// para esa fecha").
 func (r *PostgresRepo) GuardarExcepcion(ctx context.Context, e *domain.Excepcion) error {
 	var horaInicio, horaFin *time.Time
 	if e.HoraInicio != nil {
@@ -317,19 +311,12 @@ func (r *PostgresRepo) GuardarExcepcion(ctx context.Context, e *domain.Excepcion
 	return nil
 }
 
-// ── BloqueJornada (jornada_institucion) ────────────────────────────────
-//
-// Sin usuario_id: la jornada describe a la institución, no a una persona.
-// Eso simplifica todo lo que en horario_admin existe para acotar por dueño —
-// acá un ID inexistente es simplemente un ID inexistente.
+// ── BloqueJornada (jornada_institucion) ──────────────────────────────── Sin
+// usuario_id: la jornada describe a la institución, no a una persona.
 
 const columnasJornada = `id, dia_semana, hora_inicio, hora_fin`
 
-// ListarJornada trae la jornada completa. El ORDER BY es por hora dentro del
-// día, no por nombre de día: 'DOMINGO' y 'JUEVES' ordenan alfabéticamente en
-// un orden que no se parece a la semana, así que el día lo acomoda quien
-// muestra (el frontend tiene su ORDEN_DIA). Lo que sí importa acá es que los
-// tramos de un mismo día salgan cronológicos.
+// ListarJornada trae la jornada completa.
 func (r *PostgresRepo) ListarJornada(ctx context.Context) ([]*domain.BloqueJornada, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+columnasJornada+` FROM jornada_institucion ORDER BY dia_semana, hora_inicio`)

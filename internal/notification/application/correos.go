@@ -12,33 +12,18 @@ import (
 )
 
 // Copias por correo de los avisos del sistema (RF-05.8).
-//
-// Este archivo es el ÚNICO lugar del proyecto donde se escribe el texto de
-// un mail. Está separado de subscribers.go aunque los dos escuchen algunos
-// eventos en común, porque son dos canales con reglas distintas: el aviso
-// interno es la fuente de verdad —se guarda, se marca como leído, se puede
-// cerrar solo— y el correo es una copia que sale de la escuela y ya no
-// vuelve.
-//
-// Por eso son suscriptores aparte y no una rama dentro de los otros: el bus
-// admite varios handlers por evento, así que si un envío falla o tarda, el
-// aviso interno ya se escribió.
 
 // timeoutCorreo es más largo que timeoutNotificacion: aquello es un INSERT
 // contra un Postgres de la misma red, esto es un saludo SMTP, un STARTTLS,
 // una autenticación y una transferencia contra un servidor de Google.
 const timeoutCorreo = 45 * time.Second
 
-// Mensajero manda los correos. Es un tipo propio y no métodos del Service
-// porque no comparte nada con él: no toca el repositorio ni el reloj, y su
-// dependencia (el enviador) es opcional, mientras que las del Service no.
+// Mensajero manda los correos.
 type Mensajero struct {
 	enviador EnviadorDeEmail
 	admins   ListadorAdmins
-	// urlDelSistema es FRONTEND_ORIGIN, la dirección pública desde la que
-	// se entra. Va en casi todos los mails: decirle a alguien que su cuenta
-	// está aprobada sin decirle a dónde entrar lo manda a buscar el link a
-	// otro lado.
+	// urlDelSistema es FRONTEND_ORIGIN, la dirección pública desde la que se
+	// entra.
 	urlDelSistema string
 }
 
@@ -50,8 +35,8 @@ func NewMensajero(enviador EnviadorDeEmail, admins ListadorAdmins, urlDelSistema
 	}
 }
 
-// ══════════════════════════════════════════════════════════════════
-// Registro de los suscriptores
+// ══════════════════════════════════════════════════════════════════ Registro
+// de los suscriptores
 // ══════════════════════════════════════════════════════════════════
 
 // RegisterEmailHandlers suscribe los envíos de correo. Se llama desde
@@ -75,11 +60,8 @@ func RegisterEmailHandlersConEspera(bus eventbus.EventBus, m *Mensajero, pendien
 func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo EntregaAsincrona, pendientes *sync.WaitGroup) {
 	enviar := nuevaEntrega(modo, pendientes, timeoutCorreo)
 
-	// ── Aviso a los Admin: alguien se registró ──────────────────────
-	//
-	// Mismo evento que dispara el aviso interno (RF-05.6). El mail es lo que
-	// hace que un Admin se entere sin tener la pantalla abierta: una cuenta
-	// pendiente que nadie mira es un docente que no puede trabajar.
+	// ── Aviso a los Admin: alguien se registró ────────────────────── Mismo
+	// evento que dispara el aviso interno (RF-05.6).
 	bus.Subscribe("docente.registro.pendiente", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(map[string]string)
 		if !ok {
@@ -92,14 +74,8 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
-	// ── Aviso a los Admin: licencias por vencer (RF-05.9) ───────────
-	//
-	// El único correo del sistema que no lo dispara una persona sino el
-	// reloj. Por eso importa más que los otros que no se repita: nadie
-	// tiene el contexto de "yo hice algo, este mail es por eso", así que un
-	// duplicado diario se lee como que el sistema está roto. La
-	// idempotencia la garantizan las marcas de cada licencia, del lado de
-	// inventory.
+	// ── Aviso a los Admin: licencias por vencer (RF-05.9) ─────────── El único
+	// correo del sistema que no lo dispara una persona sino el reloj.
 	bus.Subscribe("licencia.por-vencer", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.AvisoDeLicencias)
 		if !ok {
@@ -147,9 +123,9 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
-	// El pedido de un docente a otro (RF-04.12) es de los que más necesitan
-	// el correo: la clase suele ser de esta semana, y un aviso que espera a
-	// que el dueño entre al sistema llega después de la clase.
+	// El pedido de un docente a otro (RF-04.12) es de los que más necesitan el
+	// correo: la clase suele ser de esta semana, y un aviso que espera a que el
+	// dueño entre al sistema llega después de la clase.
 	bus.Subscribe("reserva.pedido-de-liberacion", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PedidoDeLiberacion)
 		if !ok {
@@ -209,9 +185,9 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
-	// Un pedido para dictar una materia va a los Admin —que deciden— y a
-	// quien ya la dicta, con textos distintos: al segundo no se le pide
-	// nada, se lo pone al tanto.
+	// Un pedido para dictar una materia va a los Admin —que deciden— y a quien
+	// ya la dicta, con textos distintos: al segundo no se le pide nada, se lo
+	// pone al tanto.
 	bus.Subscribe("materia.pedido.nuevo", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PedidoDeMateriaNuevo)
 		if !ok {
@@ -253,9 +229,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	})
 
 	// El reclamo va a dos lados: a los Admin con la lista completa, y a cada
-	// persona que tenga cuenta con el suyo. Quien se llevó una máquina para
-	// un trámite y no tiene cuenta no recibe nada — no hay a dónde
-	// mandárselo, y por eso el aviso a los Admin es el que no puede fallar.
+	// persona que tenga cuenta con el suyo.
 	bus.Subscribe("prestamo.demorado", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PrestamosDemorados)
 		if !ok {
@@ -325,9 +299,9 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("password.recuperacion.solicitada", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.DatosDeRecuperacion)
 		if !ok {
-			// Único handler que NO loguea el payload: si el tipo no es el
-			// esperado igual puede contener el código en claro, y un %+v lo
-			// dejaría escrito en los logs del contenedor.
+			// Único handler que NO loguea el payload: si el tipo no es el esperado
+			// igual puede contener el código en claro, y un %+v lo dejaría escrito en
+			// los logs del contenedor.
 			log.Printf("correo: payload inesperado para password.recuperacion.solicitada (tipo %T)", e.Payload)
 			return
 		}
@@ -351,11 +325,9 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	})
 }
 
-// enviarATodosLosAdmins manda el mismo mensaje a cada Admin APROBADA.
-//
-// Un envío que falla no corta los demás: que la casilla de uno rebote no es
-// razón para que los otros tres se queden sin enterarse. Los errores se
-// juntan y se devuelven al final, con el detalle de a quién no se pudo.
+// enviarATodosLosAdmins manda el mismo mensaje a cada Admin APROBADA. Un
+// envío que falla no corta los demás: que la casilla de uno rebote no es
+// razón para que los otros tres se queden sin enterarse.
 func (m *Mensajero) enviarATodosLosAdmins(ctx context.Context, asunto, cuerpo string) error {
 	destinatarios, err := m.admins.EmailsDeAdminsAprobados(ctx)
 	if err != nil {
@@ -375,14 +347,9 @@ func (m *Mensajero) enviarATodosLosAdmins(ctx context.Context, asunto, cuerpo st
 	return nil
 }
 
-// ══════════════════════════════════════════════════════════════════
-// Los textos
-// ══════════════════════════════════════════════════════════════════
-//
-// Todos son texto plano, cortos y sin nada que haya que apretar. Están
-// juntos y separados del envío para poder leerlos de corrido: el tono de lo
-// que le llega a un docente es una decisión del sistema, no un detalle
-// desperdigado entre handlers.
+// ══════════════════════════════════════════════════════════════════ Los
+// textos ══════════════════════════════════════════════════════════════════
+// Todos son texto plano, cortos y sin nada que haya que apretar.
 
 // firma cierra todos los mensajes: dice de dónde salió el mail y que del
 // otro lado no hay nadie leyendo.
@@ -425,9 +392,8 @@ func (m *Mensajero) textoDeDocentePendiente(nombre, apellido, email string) (asu
 
 func (m *Mensajero) textoDeCuentaAprobada(nombre string) (asunto, cuerpo string) {
 	asunto = "Ya podés entrar al sistema de reservas"
-	// No se nombra "tu contraseña": la cuenta puede haberse creado con
-	// Google y no tener ninguna. "Los datos con los que te registraste" es
-	// cierto en los dos casos.
+	// No se nombra "tu contraseña": la cuenta puede haberse creado con Google y
+	// no tener ninguna.
 	cuerpo = saludo(nombre) +
 		"Un administrador aprobó tu cuenta. Ya podés ingresar con los datos con " +
 		"los que te registraste y empezar a reservar."
@@ -438,9 +404,9 @@ func (m *Mensajero) textoDeCuentaAprobada(nombre string) (asunto, cuerpo string)
 
 func (m *Mensajero) textoDeCodigoDeRecuperacion(nombre, codigo string, minutos int) (asunto, cuerpo string) {
 	asunto = "Tu código para restablecer la contraseña"
-	// El código va solo en su renglón y con espacios alrededor: es lo que
-	// se va a seleccionar y copiar desde el celular, y pegado a una frase
-	// se arrastra media oración con él.
+	// El código va solo en su renglón y con espacios alrededor: es lo que se va
+	// a seleccionar y copiar desde el celular, y pegado a una frase se arrastra
+	// media oración con él.
 	cuerpo = saludo(nombre) +
 		"Pediste restablecer la contraseña de tu cuenta. Este es tu código:\n\n" +
 		"    " + codigo + "\n\n" +
@@ -451,18 +417,17 @@ func (m *Mensajero) textoDeCodigoDeRecuperacion(nombre, codigo string, minutos i
 		"hayas pedido, avisale a un administrador."
 	// ÚNICO mail sin enlace al sistema, y es el único que contiene una
 	// credencial: "código + botón para entrar" es exactamente la forma de un
-	// phishing, y acostumbrar a los docentes a apretar ese link es
-	// entrenarlos para el día que llegue uno falso. Quien pidió el código ya
-	// está en la pantalla que lo pide.
+	// phishing, y acostumbrar a los docentes a apretar ese link es entrenarlos
+	// para el día que llegue uno falso.
 	cuerpo += firma
 	return asunto, cuerpo
 }
 
 func (m *Mensajero) textoDeCuentaSoloConGoogle(nombre string) (asunto, cuerpo string) {
 	asunto = "Tu cuenta ingresa con Google"
-	// Existe para que el resultado no sea el silencio: sin él, quien tiene
-	// una cuenta de Google pide el código, no le llega nada, y no puede
-	// saber si el sistema falló o si escribió mal la dirección.
+	// Existe para que el resultado no sea el silencio: sin él, quien tiene una
+	// cuenta de Google pide el código, no le llega nada, y no puede saber si el
+	// sistema falló o si escribió mal la dirección.
 	cuerpo = saludo(nombre) +
 		"Pediste restablecer la contraseña de tu cuenta, pero esa cuenta no tiene " +
 		"contraseña propia: entrás con el botón \"Continuar con Google\" de la " +

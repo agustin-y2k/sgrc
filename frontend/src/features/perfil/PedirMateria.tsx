@@ -10,18 +10,7 @@ import * as academicoApi from "@/features/academico/api"
 import * as perfilApi from "@/features/perfil/api"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * Pedir dictar una materia más.
- *
- * Dos caminos, como en el registro: elegir una de las que ya existen, o
- * escribirla cuando todavía no está cargada. El segundo no es un caso raro —
- * a mitad de año aparecen materias nuevas— y sin él la única salida era
- * encontrar a un Admin en el pasillo.
- *
- * Lo que el formulario deja claro es que esto NO se aprueba solo: lo resuelve
- * una persona. Decirlo acá evita que alguien mande el pedido y se quede
- * esperando que las máquinas aparezcan solas en su próxima clase.
- */
+/** Pedir dictar una materia más. */
 export function PedirMateria({ onListo }: { onListo?: () => void }) {
   const qc = useQueryClient()
   const [modo, setModo] = useState<"lista" | "nueva">("lista")
@@ -183,13 +172,7 @@ export function PedirMateria({ onListo }: { onListo?: () => void }) {
   )
 }
 
-/**
- * El selector de materia, agrupado por curso.
- *
- * Las materias se piden por curso (un endpoint por curso), así que esto
- * arma un `<optgroup>` por cada uno. Sin agrupar, una lista con "Matemática"
- * cinco veces —una por año— es imposible de usar.
- */
+/** El selector de materia, agrupado por curso. */
 function MateriasDelCiclo({
   cursos,
   valor,

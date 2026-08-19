@@ -1,8 +1,6 @@
 // Package domain contiene las entidades y reglas de negocio puras de
 // availability — sin dependencias de infraestructura (sin *sql.DB, sin
-// fiber.Ctx). Horario de disponibilidad de Admins, puramente informativo
-// (RF-07). Ver docs/03-diagrama-clases.md para las entidades y
-// docs/01-requisitos.md para el detalle funcional.
+// fiber.Ctx).
 package domain
 
 import (
@@ -17,12 +15,7 @@ import (
 // docs/06-arquitectura.md §3).
 type DiaSemana string
 
-// Los siete días. Antes el enum frenaba en viernes, y con eso un Admin de
-// una escuela que abre el sábado no podía publicar que ese día está — no
-// porque no estuviera, sino porque el sistema no admitía nombrar el día.
-//
-// Qué días opera la institución es un dato que se declara (ver
-// JornadaInstitucional), no una constante del código.
+// Los siete días.
 const (
 	Lunes     DiaSemana = "LUNES"
 	Martes    DiaSemana = "MARTES"
@@ -46,15 +39,6 @@ func ParseDiaSemana(s string) (DiaSemana, error) {
 
 // goWeekdayADiaSemana traduce el time.Weekday de Go a nuestro enum, para
 // poder comparar "ahora" contra los bloques cargados.
-//
-// Los siete días están mapeados. Antes el fin de semana quedaba afuera a
-// propósito y eso hacía que DisponibleAhora respondiera siempre "no hay
-// nadie" un sábado, sin importar qué hubiera cargado el Admin. Para una
-// escuela de lunes a viernes esa respuesta era correcta por accidente; para
-// una que abre el sábado era simplemente falsa, y no había forma de
-// corregirla desde la aplicación. Ahora la respuesta sale de los bloques que
-// el Admin haya cargado, que es de donde tenía que salir siempre: sin
-// bloques ese día, sigue diciendo que no hay nadie.
 var goWeekdayADiaSemana = map[time.Weekday]DiaSemana{
 	time.Monday:    Lunes,
 	time.Tuesday:   Martes,
@@ -65,19 +49,18 @@ var goWeekdayADiaSemana = map[time.Weekday]DiaSemana{
 	time.Sunday:    Domingo,
 }
 
-// DiaYHoraDe traduce un instante real a los dos componentes que necesita
-// el cálculo de disponibilidad (DisponibleAhora): el día de semana y el
-// offset desde medianoche.
+// DiaYHoraDe traduce un instante real a los dos componentes que necesita el
+// cálculo de disponibilidad (DisponibleAhora): el día de semana y el offset
+// desde medianoche.
 func DiaYHoraDe(ahora time.Time) (DiaSemana, time.Duration) {
 	dia := goWeekdayADiaSemana[ahora.Weekday()]
 	hora := time.Duration(ahora.Hour())*time.Hour + time.Duration(ahora.Minute())*time.Minute + time.Duration(ahora.Second())*time.Second
 	return dia, hora
 }
 
-// FechaSolo descarta la hora de un time.Time, quedándose solo con el día
-// — mismo criterio que reservation usa para Fecha (columna DATE, no
-// TIMESTAMP): la hora es irrelevante para identificar "la excepción de
-// hoy".
+// FechaSolo descarta la hora de un time.Time, quedándose solo con el día —
+// mismo criterio que reservation usa para Fecha (columna DATE, no TIMESTAMP):
+// la hora es irrelevante para identificar "la excepción de hoy".
 func FechaSolo(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
@@ -85,22 +68,15 @@ func FechaSolo(t time.Time) time.Time {
 // Lo comparten el horario de los Admin y la jornada de la institución, con
 // una diferencia que conviene tener presente: la jornada puede cruzar la
 // medianoche (20:00–01:00) y el horario de un Admin no, porque el cálculo de
-// "¿hay alguien ahora?" es de un solo día. Para los dos, fin igual a inicio
-// es inválido.
+// "¿hay alguien ahora?" es de un solo día.
 var ErrRangoHorarioInvalido = errors.New("la hora de fin no puede ser igual a la de inicio")
 
 // ErrBloqueSolapado: dos bloques del mismo día que se pisan.
-//
-// Se rechaza en vez de fusionarlos con el que ya estaba. Fusionar sería casi
-// siempre lo que la persona quiso —extender su horario— pero significa que
-// apretar "agregar" modifica un renglón que ya existía, y esto no tiene
-// deshacer. Rechazar es predecible: el mensaje dice cuál es el bloque que
-// estorba y quien lo cargó decide si lo edita o lo borra.
 var ErrBloqueSolapado = errors.New("ese horario se pisa con otro bloque del mismo día")
 
-// BloqueHorario es un tramo del patrón semanal recurrente de presencia de
-// un Admin en el laboratorio (RF-07.1) — puramente informativo, sin efecto
-// sobre permisos ni reservas.
+// BloqueHorario es un tramo del patrón semanal recurrente de presencia de un
+// Admin en el laboratorio (RF-07.1) — puramente informativo, sin efecto sobre
+// permisos ni reservas.
 type BloqueHorario struct {
 	ID         string
 	UsuarioID  string
@@ -128,11 +104,6 @@ func (b *BloqueHorario) Cubre(dia DiaSemana, horaActual time.Duration) bool {
 }
 
 // SeSolapaCon dice si dos bloques del mismo día pisan aunque sea un minuto.
-//
-// Rangos semiabiertos, igual que Cubre: dos bloques que se tocan en el borde
-// —uno termina 12:00 y el otro empieza 12:00— NO se solapan. Es el caso más
-// común de todos, el Admin que está a la mañana y a la tarde de corrido, y
-// rechazarlo sería absurdo.
 func (b *BloqueHorario) SeSolapaCon(otro *BloqueHorario) bool {
 	if b.DiaSemana != otro.DiaSemana {
 		return false
@@ -141,9 +112,6 @@ func (b *BloqueHorario) SeSolapaCon(otro *BloqueHorario) bool {
 }
 
 // PrimeroQueSeSolapa devuelve el bloque de la lista que pisa a este, o nil.
-//
-// Se ignora a sí mismo por ID, para que editar un bloque sin moverlo no
-// choque contra su propia versión guardada.
 func (b *BloqueHorario) PrimeroQueSeSolapa(otros []*BloqueHorario) *BloqueHorario {
 	for _, otro := range otros {
 		if otro.ID == b.ID {

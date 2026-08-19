@@ -56,7 +56,7 @@ describe("EnElLaboratorio", () => {
 
   /**
    * La pregunta que la tarjeta responde: con cuántas máquinas se cuenta si
-   * alguien golpea la puerta ahora. Lo entregado ya no está acá.
+   * alguien golpea la puerta ahora.
    */
   it("descuenta del inventario lo que está afuera", async () => {
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
@@ -70,8 +70,7 @@ describe("EnElLaboratorio", () => {
 
   /**
    * "Estar acá" y "poder entregarse" no son lo mismo: una máquina en
-   * mantenimiento está en el laboratorio y no se le da a nadie. Sumarla al
-   * número grande daría un total que después nadie sabe qué significa.
+   * mantenimiento está en el laboratorio y no se le da a nadie.
    */
   it("cuenta aparte las que están acá pero fuera de circulación", async () => {
     vi.mocked(adminApi.reporteEstadoDelInventario).mockResolvedValue({
@@ -101,8 +100,7 @@ describe("EnElLaboratorio", () => {
 
   /**
    * Un fallo de red no puede leerse como "no hay nada afuera": el Admin
-   * cerraría el laboratorio con máquinas todavía prestadas. Mismo criterio
-   * que los indicadores de la pantalla de inicio.
+   * cerraría el laboratorio con máquinas todavía prestadas.
    */
   it("no inventa un número cuando la consulta falla", async () => {
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockRejectedValue(new Error("sin red"))

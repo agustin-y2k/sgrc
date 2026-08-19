@@ -24,21 +24,13 @@ import type { Ciclo } from "@/features/admin/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { descargarCSV } from "@/lib/csv"
 
-/**
- * RF-06.4 — las estadísticas de los años ya cerrados.
- *
- * Vive aparte del resto del reporte porque se mueve en otro eje: por año
- * archivado y no por ciclo, y sin rango de fechas. Los números ya vienen
- * agregados y las reservas que los produjeron fueron borradas al archivar
- * (RF-02.4), así que no hay nada que filtrar ni recalcular.
- */
+/** RF-06.4 — las estadísticas de los años ya cerrados. */
 export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
   const [anio, setAnio] = useState("")
 
   /**
    * Los años con histórico son exactamente los de los ciclos archivados: el
-   * snapshot se calcula al archivar (RF-02.4) y se guarda bajo el año. Del
-   * más reciente al más viejo, que es el que se suele mirar.
+   * snapshot se calcula al archivar (RF-02.4) y se guarda bajo el año.
    */
   const aniosArchivados = ciclos
     .filter((c) => c.archivado)
@@ -60,9 +52,8 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
 
   const errorHistorico = historicoEquipos.error ?? historicoDocentes.error
 
-  // Mismo criterio que las tablas del ciclo activo: de mayor a menor y con
-  // el total a mano. Ojo con el nombre del campo de tiempo — acá es
-  // `minutosTotales`, no `minutosReservados` (ver types.ts).
+  // Mismo criterio que las tablas del ciclo activo: de mayor a menor y con el
+  // total a mano.
   const filasHistoricoEquipos = [...(historicoEquipos.data?.data ?? [])].sort(
     (a, b) => b.minutosReservados - a.minutosReservados
   )

@@ -15,12 +15,6 @@ import (
 // VerificadorCuentaVigente resuelve middleware.CuentaVigente contra la tabla
 // usuario: en cada request autenticado dice si esa cuenta sigue habilitada
 // para operar y con qué rol.
-//
-// Vive acá y no en application/ porque no tiene ninguna regla de negocio
-// propia — es la misma lectura por PK que hace BuscarPorID, reducida a las
-// dos columnas que el middleware necesita. Se inyecta desde cmd/main.go
-// porque internal/shared/middleware no puede importar internal/auth (ver
-// docs/06-arquitectura.md §3).
 type VerificadorCuentaVigente struct {
 	pool *pgxpool.Pool
 }
@@ -31,12 +25,6 @@ func NewVerificadorCuentaVigente(pool *pgxpool.Pool) *VerificadorCuentaVigente {
 
 // Vigente cumple la firma de middleware.CuentaVigente — se pasa como
 // v.Vigente directamente al armar la Autenticacion.
-//
-// Los tres casos de "no vigente" se responden igual (false, sin error) a
-// propósito: la cuenta no existe (RF-01.9 la eliminó), el ID del token no
-// es un UUID (token viejo de otra base, o manipulado), o el estado no es
-// APROBADA (PENDIENTE / RECHAZADA / BAJA). Ninguno es una falla del
-// sistema; los tres significan lo mismo para quien pregunta.
 func (v *VerificadorCuentaVigente) Vigente(ctx context.Context, usuarioID string) (middleware.EstadoDeCuenta, error) {
 	var rolStr, estadoStr string
 	var versionSesion int

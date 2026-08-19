@@ -9,18 +9,7 @@ import * as sugerenciasApi from "@/features/sugerencias/api"
 import type { TipoDeMensaje } from "@/features/sugerencias/types"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * El formulario para contar que algo no anda o proponer un cambio.
- *
- * Está pensado para alguien que ya se sintió torpe usando el sistema: no
- * pide categoría, ni prioridad, ni pasos para reproducir. Dos botones y un
- * cuadro de texto. Lo que hace falta para entender el reporte —desde qué
- * pantalla se escribió, con qué versión— lo agrega la aplicación sola.
- *
- * `pantallaPrevia` existe porque este formulario vive en su propia página:
- * la ruta que importa es la que la persona estaba mirando cuando decidió
- * escribir, no `/mis-mensajes`.
- */
+/** El formulario para contar que algo no anda o proponer un cambio. */
 export function EscribirSugerencia({
   pantallaPrevia,
   onEnviada,

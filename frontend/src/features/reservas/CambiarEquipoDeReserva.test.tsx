@@ -104,8 +104,8 @@ describe("CambiarEquipoDeReserva", () => {
 
   /**
    * El software instalado es el dato por el que se elige una máquina
-   * (RF-03.7): cambiar a una que no tenga el programa de la clase no
-   * resuelve nada.
+   * (RF-03.7): cambiar a una que no tenga el programa de la clase no resuelve
+   * nada.
    */
   it("muestra el software de cada opción", async () => {
     renderComponente()

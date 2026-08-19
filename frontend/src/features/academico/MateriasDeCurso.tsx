@@ -219,11 +219,6 @@ export function MateriasDeCurso({
 }
 
 /**
- * RF-02.2 — el nombre de un curso es año + división ("5°A"), así que se
- * elige de dos listas en vez de escribirse.
- *
- * El `°` no está en el teclado y se confunde con `º` (el ordinal
- * masculino): son dos caracteres distintos que se ven casi igual, y el que
- * no corresponde hacía fallar la validación sin que se notara por qué.
- * Eligiendo, ese problema no existe.
+ * RF-02.2 — el nombre de un curso es año + división ("5°A"), así que se elige
+ * de dos listas en vez de escribirse.
  */

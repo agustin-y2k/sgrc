@@ -8,8 +8,7 @@ import {
 
 /**
  * Un instante conocido, escrito en hora local para que el test diga lo mismo
- * corra donde corra. Con un ISO en UTC ("…T21:29:00Z") el resultado cambiaría
- * con la zona de la máquina y el test fallaría en el CI o en otra notebook.
+ * corra donde corra.
  */
 function instante(anio: number, mes: number, dia: number, hora: number, min: number) {
   return new Date(anio, mes - 1, dia, hora, min).toISOString()
@@ -17,8 +16,7 @@ function instante(anio: number, mes: number, dia: number, hora: number, min: num
 
 describe("formatearHora", () => {
   // El defecto que motiva estos tests: el `es-AR` de un navegador resuelve a
-  // 12 horas por defecto, así que las 21:29 se veían "09:29 p. m." en una
-  // aplicación que en todas las demás pantallas usa 24.
+  // 12 horas por defecto, así que las 21:29 se veían "09:29 p.
   it("usa 24 horas, no a. m. / p. m.", () => {
     expect(formatearHora(instante(2026, 8, 18, 21, 29))).toBe("21:29")
   })
@@ -47,10 +45,7 @@ describe("formatearHora", () => {
 
 describe("formatearFechaCortaYHora", () => {
   // Sin año, el locale escribe el mes sin el cero adelante ("18/8" y no
-  // "18/08"), a diferencia de la variante con año. Es lo que este formato
-  // viene mostrando desde siempre y se deja como está: lo que se estaba
-  // arreglando acá es la hora, y cambiar además el relleno del mes obligaría
-  // a armar la fecha a mano en vez de dejársela al locale.
+  // "18/08"), a diferencia de la variante con año.
   it("día, mes y hora en 24", () => {
     expect(formatearFechaCortaYHora(instante(2026, 8, 18, 21, 29))).toBe("18/8, 21:29")
   })

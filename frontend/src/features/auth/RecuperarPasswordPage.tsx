@@ -43,9 +43,8 @@ const restablecerSchema = z
     repetirPassword: z.string(),
   })
   // Repetir la contraseña solo tiene sentido acá: en el login te enterás de
-  // que la tipeaste mal en el intento siguiente, pero acá la estás
-  // eligiendo a ciegas y con un código que se consume. Equivocarse en un
-  // carácter significaría quedar afuera y tener que empezar de nuevo.
+  // que la tipeaste mal en el intento siguiente, pero acá la estás eligiendo
+  // a ciegas y con un código que se consume.
   .refine((v) => v.passwordNueva === v.repetirPassword, {
     message: "Las contraseñas no coinciden",
     path: ["repetirPassword"],
@@ -55,17 +54,8 @@ type PedirValues = z.infer<typeof pedirSchema>
 type RestablecerValues = z.infer<typeof restablecerSchema>
 
 /**
- * Recuperación de contraseña por autoservicio (RF-01.10), en dos pasos
- * dentro de la misma pantalla.
- *
- * Dos pasos y no dos rutas: el email del primero es lo que el segundo
- * necesita mandar de vuelta, y llevarlo en el estado del componente evita
- * tanto el parámetro en la URL (queda en el historial del navegador y en el
- * registro de cualquier proxy) como una sesión intermedia en el servidor.
- *
- * Solo aplica al ingreso local. Una cuenta creada con Google no tiene
- * contraseña que recuperar; el backend le manda a esa persona un mail
- * explicándoselo, en vez de dejarla esperando un código que no existe.
+ * Recuperación de contraseña por autoservicio (RF-01.10), en dos pasos dentro
+ * de la misma pantalla.
  */
 export function RecuperarPasswordPage() {
   const navigate = useNavigate()
@@ -86,10 +76,10 @@ export function RecuperarPasswordPage() {
     setError(null)
     try {
       await authApi.olvidePassword({ email: values.email })
-      // Se pasa al paso 2 SIEMPRE, exista o no la cuenta: el backend
-      // responde igual en los dos casos a propósito, y una pantalla que
-      // dijera "ese email no está registrado" tiraría abajo todo el
-      // cuidado que se puso del otro lado.
+      // Se pasa al paso 2 SIEMPRE, exista o no la cuenta: el backend responde
+      // igual en los dos casos a propósito, y una pantalla que dijera "ese
+      // email no está registrado" tiraría abajo todo el cuidado que se puso
+      // del otro lado.
       setEmailEnviado(values.email)
     } catch (err) {
       setError(getErrorMessage(err))

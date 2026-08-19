@@ -23,14 +23,7 @@ import { contar } from "@/lib/plural"
 /** Estado del formulario de archivado; `clonarA` vacío = archivar sin clonar. */
 type Archivado = { ciclo: CicloLectivo; clonarA: string }
 
-/**
- * RF-02: ciclos lectivos, cursos y materias.
- *
- * Es la puerta de entrada de todo el sistema: sin un ciclo no hay cursos,
- * sin cursos no hay materias, y sin materias nadie puede reservar. Por eso
- * el estado vacío explica el camino en vez de limitarse a decir "no hay
- * datos".
- */
+/** RF-02: ciclos lectivos, cursos y materias. */
 
 const CICLOS_KEY = ["ciclos"]
 

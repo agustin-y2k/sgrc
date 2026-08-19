@@ -23,14 +23,6 @@ import { getErrorMessage } from "@/lib/api-client"
 /**
  * RF-03.15 — lo prestable que no está en ningún carro: un proyector, los
  * cargadores, las notebooks de otro modelo.
- *
- * Va en una sección aparte y no mezclado entre los carros porque no
- * pertenece a ninguno: meterlo en un carro llamado "Sueltos" sería volver a
- * la mentira que el modelo viene sacándose de encima.
- *
- * Puertas adentro son la misma entidad que los equipos, y eso no es un detalle
- * de implementación: es lo que hace que el proyector se preste, se reclame y
- * —si es reservable— se reserve, con exactamente los mismos flujos.
  */
 
 const EQUIPOS_KEY = ["equipos-sueltos"]
@@ -138,10 +130,6 @@ function Alta({ tiposUsados, onListo }: { tiposUsados: string[]; onListo: () => 
 
 /**
  * Corregir lo que se cargó mal, o cambiar de idea sobre si algo se reserva.
- *
- * Los mismos tres campos que el alta y no más: el resto de lo que tiene un
- * equipo —CPU, memoria, número de serie— es de las computadoras de un carro y
- * acá no hay ninguna.
  */
 function Edicion({
   equipo,
@@ -170,10 +158,8 @@ function Edicion({
     },
   })
 
-  // Dejar de ser reservable no cancela nada: el backend solo saca al equipo de
-  // la lista de libres de ahí en adelante. Las reservas ya hechas siguen en
-  // pie, y está bien —alguien contaba con el proyector esa hora—, pero hay que
-  // decirlo o parece que se perdieron.
+  // Dejar de ser reservable no cancela nada: el backend solo saca al equipo
+  // de la lista de libres de ahí en adelante.
   const dejaDeSerReservable = equipo.reservable && !reservable
 
   return (

@@ -12,9 +12,8 @@ import (
 func licenciaDelAviso(nombre string, equipo int, carro string, diasRestantes int) eventbus.LicenciaPorVencer {
 	return eventbus.LicenciaPorVencer{
 		Nombre: nombre,
-		// La etiqueta es lo que se muestra; el identificador viaja igual
-		// porque otras pantallas lo usan. Ver licenciaSueltaDelAviso para el
-		// caso en que no hay identificador ninguno.
+		// La etiqueta es lo que se muestra; el identificador viaja igual porque
+		// otras pantallas lo usan.
 		Etiqueta:         fmt.Sprintf("PC %d", equipo),
 		Identificador:    equipo,
 		CarroNombre:      carro,
@@ -136,8 +135,7 @@ func TestMensajeDeLicencias_SinCarroNoDejaParentesisVacio(t *testing.T) {
 }
 
 // Un equipo suelto también puede tener software licenciado, y no tiene
-// número. Armar el aviso con el identificador mandaría al Admin a buscar una
-// "PC 0" que no existe.
+// número.
 func TestMensajeDeLicencias_EquipoSueltoSeNombraPorSuNombre(t *testing.T) {
 	aviso := eventbus.AvisoDeLicencias{
 		PorVencer: []eventbus.LicenciaPorVencer{{
@@ -235,8 +233,8 @@ func TestCorreo_Licencias_AsuntoSegunElContenido(t *testing.T) {
 }
 
 // TestCorreo_Licencias_AvisoVacioNoMandaNada: el job no publica si no hay
-// nada, pero el handler no puede confiar en eso — un aviso vacío mandaría
-// un mail que dice que hay licencias por vencer y no lista ninguna.
+// nada, pero el handler no puede confiar en eso — un aviso vacío mandaría un
+// mail que dice que hay licencias por vencer y no lista ninguna.
 func TestCorreo_Licencias_AvisoVacioNoMandaNada(t *testing.T) {
 	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
 

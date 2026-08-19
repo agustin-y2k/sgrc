@@ -13,26 +13,7 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/features/auth/AuthContext"
 import { AccesoDirecto } from "@/features/inicio/AccesoDirecto"
 
-/**
- * La pantalla de una dirección que no existe.
- *
- * Antes de esto, escribir mal una dirección o seguir un enlace viejo dejaba
- * al usuario frente al error crudo de React Router: "Unexpected Application
- * Error! 404 Not Found", en inglés, sin la barra de navegación, sin el pie y
- * sin ningún camino de vuelta. Para un docente que entra dos veces por
- * semana, eso no se distingue de "el sistema se rompió".
- *
- * Vive DENTRO de ProtectedRoute y de AppLayout, y eso es lo que la hace
- * útil: la barra sigue arriba, así que la salida más rápida —tocar el menú—
- * está donde siempre. Como efecto, alguien sin sesión que llega a una
- * dirección inventada va al login, igual que con cualquier otra pantalla del
- * sistema, y después de entrar cae acá.
- *
- * Ojo con lo que NO hace: el servidor sigue respondiendo 200. La SPA se
- * sirve con un fallback a index.html (ver frontend/nginx.conf), así que el
- * 404 es del router, no del protocolo. Para las personas da igual; para un
- * buscador o un monitor, no — pero nada de esto es público.
- */
+/** La pantalla de una dirección que no existe. */
 export function NoEncontrada() {
   const { pathname } = useLocation()
   const navigate = useNavigate()

@@ -28,6 +28,8 @@ tags:
     description: Reportes y estadísticas de uso
   - name: availability
     description: Horario de disponibilidad de Admins (informativo)
+  - name: sugerencias
+    description: Buzón para reportar problemas del sistema o proponer mejoras
 
 # ─────────────────────────────────────────
 # COMPONENTES REUTILIZABLES
@@ -64,6 +66,39 @@ components:
     # el texto ES el mensaje. Verificado contra el backend corriendo, no
     # inferido del código. Este esquema se conserva solo como referencia de
     # los mensajes posibles; ningún endpoint lo referencia.
+    PedidoDeMateria:
+      type: object
+      description: Pedido de un docente para poder dictar una materia.
+      properties:
+        id: { type: string, format: uuid }
+        usuarioId: { type: string, format: uuid }
+        materiaId: { type: string, format: uuid, description: Vacío si la materia todavía no existe }
+        cursoSolicitado: { type: string }
+        materiaSolicitada: { type: string }
+        esMateriaNueva: { type: boolean, description: Al aprobar hay que indicar en qué curso crearla }
+        motivo: { type: string }
+        estado: { type: string, enum: [PENDIENTE, APROBADO, RECHAZADO] }
+        respuesta: { type: string }
+        resueltoPor: { type: string, format: uuid }
+        resueltoEn: { type: string, format: date-time }
+        creadoEn: { type: string, format: date-time }
+
+    Sugerencia:
+      type: object
+      description: Un mensaje del buzón sobre el sistema.
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string, enum: [SUGERENCIA, PROBLEMA] }
+        texto: { type: string }
+        pantalla: { type: string, description: Desde dónde se escribió; lo completa la interfaz }
+        version: { type: string }
+        estado: { type: string, enum: [ABIERTA, RESUELTA] }
+        usuarioId: { type: string, format: uuid, description: Solo en el listado del Admin }
+        respuesta: { type: string }
+        respondidaPor: { type: string, format: uuid }
+        respondidaEn: { type: string, format: date-time }
+        creadaEn: { type: string, format: date-time }
+
     ErrorResponse:
       type: string
       description: |
@@ -3528,3 +3563,237 @@ paths:
                         cursoNombre: { type: string }
                         cicloId: { type: string, format: uuid }
                         cicloAnio: { type: integer }
+
+  # ─────────────────────────────────────────
+  # PERFIL: FOTO
+  # ─────────────────────────────────────────
+  /api/auth/mi-foto:
+    put:
+      tags: [auth]
+      summary: Subir o reemplazar la foto de perfil propia
+      description: >
+        Multipart con el campo `foto`. El tipo se deduce de los primeros bytes
+        del archivo, no de lo que declare el cliente: se aceptan PNG, JPEG y
+        WEBP. Máximo 200 KB — la interfaz recorta y achica a 256×256 antes de
+        subir.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                foto: { type: string, format: binary }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tipo: { type: string, example: image/webp }
+                  actualizadaEn: { type: string, format: date-time }
+        "400": { description: No es una imagen de un formato aceptado }
+        "413": { description: Pasa el tamaño máximo }
+    delete:
+      tags: [auth]
+      summary: Quitar la foto propia (vuelve a las iniciales)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Sin contenido }
+
+  /api/auth/usuarios/{id}/foto:
+    get:
+      tags: [auth]
+      summary: Ver la foto de una persona
+      description: >
+        La puede pedir cualquier usuario autenticado: las fotos aparecen al
+        lado del nombre en pantallas compartidas. Responde con la imagen y un
+        ETag; `Cache-Control: private` evita que un proxy compartido la guarde.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        "404": { description: Esa persona no tiene foto }
+
+  # ─────────────────────────────────────────
+  # PEDIDOS PARA DICTAR UNA MATERIA
+  # ─────────────────────────────────────────
+  /api/academic/pedidos-de-materia:
+    post:
+      tags: [academic]
+      summary: Pedir poder dictar una materia
+      description: >
+        Se elige una materia existente (`materiaId`) o se escribe una que
+        todavía no está cargada (`materiaSolicitada` y `cursoSolicitado`),
+        nunca las dos. El motivo es obligatorio: es lo que lee quien resuelve
+        antes de hablar con la persona.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                materiaId: { type: string, format: uuid }
+                cursoSolicitado: { type: string }
+                materiaSolicitada: { type: string }
+                motivo: { type: string, maxLength: 1000 }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PedidoDeMateria' }
+        "400": { description: Falta el motivo, o la materia se indicó de las dos formas }
+        "409": { description: Ya dicta esa materia, o ya tiene un pedido sin resolver }
+    get:
+      tags: [academic]
+      summary: Listar pedidos (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: pendientes, in: query, schema: { type: boolean }, description: Solo los que faltan resolver }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PedidoDeMateria' } }
+
+  /api/academic/pedidos-de-materia/mios:
+    get:
+      tags: [academic]
+      summary: Mis pedidos, con su estado y la respuesta
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PedidoDeMateria' } }
+
+  /api/academic/pedidos-de-materia/{id}/resolver:
+    post:
+      tags: [academic]
+      summary: Aprobar o rechazar un pedido (Admin)
+      description: >
+        Aprobar asigna al docente y, si la materia no existía, la crea en el
+        curso indicado (`cursoId`, obligatorio en ese caso). Sin `rol`, lo
+        decide el sistema: titular si nadie dicta la materia, suplente si ya
+        la dicta alguien. Rechazar exige respuesta.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [aprobar]
+              properties:
+                aprobar: { type: boolean }
+                respuesta: { type: string, maxLength: 1000 }
+                cursoId: { type: string, format: uuid }
+                rol: { type: string, enum: [TITULAR, SUPLENTE] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PedidoDeMateria' }
+        "400": { description: Falta el curso para crear la materia, o el rechazo no trae motivo }
+        "409": { description: El pedido ya estaba resuelto }
+
+  # ─────────────────────────────────────────
+  # BUZÓN DE SUGERENCIAS
+  # ─────────────────────────────────────────
+  /api/sugerencias/:
+    post:
+      tags: [sugerencias]
+      summary: Escribir al equipo de administración
+      description: >
+        `pantalla` y `version` las completa la interfaz, no la persona: sin
+        ellas, un reporte obliga a preguntarle qué estaba haciendo.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo, texto]
+              properties:
+                tipo: { type: string, enum: [SUGERENCIA, PROBLEMA] }
+                texto: { type: string, maxLength: 4000 }
+                pantalla: { type: string, maxLength: 200 }
+                version: { type: string }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sugerencia' }
+    get:
+      tags: [sugerencias]
+      summary: Ver todo el buzón (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: abiertas, in: query, schema: { type: boolean }, description: Solo lo que falta contestar }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/pageSize' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Sugerencia' } }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+  /api/sugerencias/mias:
+    get:
+      tags: [sugerencias]
+      summary: Lo que escribí, con las respuestas
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Sugerencia' } }
+
+  /api/sugerencias/{id}/responder:
+    post:
+      tags: [sugerencias]
+      summary: Contestar y cerrar un mensaje (Admin)
+      description: Le llega un aviso a quien escribió.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [respuesta]
+              properties:
+                respuesta: { type: string, maxLength: 4000 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sugerencia' }
+        "409": { description: Ya estaba contestado }

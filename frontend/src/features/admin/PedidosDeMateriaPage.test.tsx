@@ -47,9 +47,8 @@ describe("PedidosDeMateriaPage", () => {
   })
 
   /**
-   * El motivo es lo único con lo que cuenta quien decide antes de ir a
-   * hablar con la persona. Si no se ve, la pantalla no sirve para nada más
-   * que apretar un botón.
+   * El motivo es lo único con lo que cuenta quien decide antes de ir a hablar
+   * con la persona.
    */
   it("muestra con qué palabras lo pidió", async () => {
     vi.mocked(perfilApi.listarPedidos).mockResolvedValue({ data: [pedido()] })
@@ -76,9 +75,9 @@ describe("PedidosDeMateriaPage", () => {
   })
 
   /**
-   * Una materia que no existe hay que crearla en algún curso, y el sistema
-   * no lo adivina del texto que escribió el docente ("Robótica de 5°B" es
-   * una frase, no un curso).
+   * Una materia que no existe hay que crearla en algún curso, y el sistema no
+   * lo adivina del texto que escribió el docente ("Robótica de 5°B" es una
+   * frase, no un curso).
    */
   it("para aprobar una materia que no existe, pide el curso", async () => {
     vi.mocked(perfilApi.listarPedidos).mockResolvedValue({
@@ -104,8 +103,6 @@ describe("PedidosDeMateriaPage", () => {
   /**
    * El rol no da ni quita permisos, pero es el dato que después alguien lee
    * para saber quién es quién: hay suplentes que cubren un cargo por años.
-   * Sin elección explícita lo decide el servidor según quién dicte la
-   * materia hoy.
    */
   it("deja elegir el rol, y por defecto lo decide el sistema", async () => {
     vi.mocked(perfilApi.listarPedidos).mockResolvedValue({ data: [pedido()] })

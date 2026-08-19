@@ -11,16 +11,9 @@ import { Label } from "@/components/ui/label"
 import * as sugerenciasApi from "@/features/sugerencias/api"
 import { ETIQUETA_TIPO, type Sugerencia } from "@/features/sugerencias/types"
 import { getErrorMessage } from "@/lib/api-client"
-import { contar } from "@/lib/plural"
 import { formatearFechaLarga } from "@/lib/fechas"
 
-/**
- * Lo que la gente escribió sobre el sistema, para leerlo y contestarlo.
- *
- * Arranca mostrando solo lo que falta contestar: el archivo completo sirve
- * una vez cada tanto, y lo que se necesita al entrar es saber qué quedó
- * pendiente.
- */
+/** Lo que la gente escribió sobre el sistema, para leerlo y contestarlo. */
 export function SugerenciasPage() {
   const [soloAbiertas, setSoloAbiertas] = useState(true)
 
@@ -169,7 +162,3 @@ function MensajeRecibido({ mensaje }: { mensaje: Sugerencia }) {
   )
 }
 
-/** Para el panel del mostrador: cuántos mensajes falta contestar. */
-export function textoDePendientes(n: number) {
-  return contar(n, "mensaje")
-}

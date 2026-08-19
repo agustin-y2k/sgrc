@@ -38,9 +38,9 @@ func TestNueva_GuardaDesdeDondeSeEscribio(t *testing.T) {
 	}
 }
 
-// Responder y cerrar son la misma acción: una respuesta que no cierra deja
-// el mensaje en la lista de pendientes para siempre, y cerrar sin responder
-// es lo que hace que la próxima vez nadie escriba.
+// Responder y cerrar son la misma acción: una respuesta que no cierra deja el
+// mensaje en la lista de pendientes para siempre, y cerrar sin responder es
+// lo que hace que la próxima vez nadie escriba.
 func TestResponder_CierraYRegistra(t *testing.T) {
 	s := abierta(t)
 	if err := s.Responder(" ya lo arreglamos ", "admin1", ahoraDePrueba); err != nil {

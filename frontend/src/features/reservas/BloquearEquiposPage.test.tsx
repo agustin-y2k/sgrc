@@ -102,8 +102,7 @@ describe("BloquearEquiposPage", () => {
 
   /**
    * El backend rechaza el bloqueo ENTERO si viene un equipo que no está
-   * DISPONIBLE (ErrEquipoNoDisponible): no la saltea. Si la pantalla la
-   * dejara tildar, el Admin perdería toda la operación por un equipo.
+   * DISPONIBLE (ErrEquipoNoDisponible): no la saltea.
    */
   it("no deja elegir un equipo que no está disponible", async () => {
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
@@ -140,9 +139,9 @@ describe("BloquearEquiposPage", () => {
   })
 
   /**
-   * Es el punto de la pantalla: el endpoint no simula nada, así que la
-   * única forma de saber qué se va a cancelar es cruzar el inventario
-   * contra los equipos libres en esa franja.
+   * Es el punto de la pantalla: el endpoint no simula nada, así que la única
+   * forma de saber qué se va a cancelar es cruzar el inventario contra los
+   * equipos libres en esa franja.
    */
   it("marca los equipos que ya tienen reserva en la franja elegida", async () => {
     vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
@@ -222,9 +221,7 @@ describe("BloquearEquiposPage", () => {
 
   /**
    * El motivo se intercala tal cual en el aviso a cada docente, así que un
-   * bloqueo sin motivo le cancela la clase a alguien sin decirle por qué. Lo
-   * exigen los dos lados: acá para que el botón explique por qué no se puede
-   * apretar, y el backend para que valga igual sin pasar por esta pantalla.
+   * bloqueo sin motivo le cancela la clase a alguien sin decirle por qué.
    */
   it("exige un motivo", async () => {
     const user = userEvent.setup()
@@ -306,9 +303,7 @@ describe("BloquearEquiposPage", () => {
 
   /**
    * El motivo no es solo el texto del aviso de cancelación: queda guardado en
-   * el bloqueo. Es lo que permite explicar un rato ocupado que no pisó
-   * ninguna reserva, que es el caso más común porque se suele avisar con
-   * tiempo.
+   * el bloqueo.
    */
   it("manda el motivo tal como se escribió, sin categoría fija", async () => {
     const user = userEvent.setup()
@@ -324,8 +319,8 @@ describe("BloquearEquiposPage", () => {
   })
 
   // La pantalla no puede sugerir que el bloqueo es siempre lo mismo: el
-  // sistema no sabe de qué se trata, así que nombra varios casos como
-  // ejemplo y ninguno como categoría.
+  // sistema no sabe de qué se trata, así que nombra varios casos como ejemplo
+  // y ninguno como categoría.
   it("presenta el motivo como texto libre, sin una categoría fija", async () => {
     renderPagina()
     expect(await screen.findByText("Bloquear equipos")).toBeInTheDocument()

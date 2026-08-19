@@ -86,8 +86,7 @@ describe("CalendarioEquipoPage", () => {
     renderCalendario()
 
     // Lo que trae a alguien al calendario es "¿por qué no puedo reservar
-    // acá?". El motivo que escribió el Admin lo responde; cualquier rótulo
-    // fijo mentiría en cuanto el bloqueo fuera por otra cosa.
+    // acá?".
     expect(await screen.findByText("Jornada docente")).toBeInTheDocument()
   })
 

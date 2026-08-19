@@ -4,9 +4,7 @@ import { PieDeAutoria } from "@/components/PieDeAutoria"
 
 describe("PieDeAutoria", () => {
   // La licencia MIT solo pide una cosa a cambio de todo lo que permite: que
-  // el aviso de autoría viaje con el software. Si esto desaparece de la
-  // interfaz, el sistema sigue funcionando y nadie se entera — por eso se
-  // prueba.
+  // el aviso de autoría viaje con el software.
   it("muestra la autoría y la licencia", () => {
     render(<PieDeAutoria />)
 
@@ -17,9 +15,7 @@ describe("PieDeAutoria", () => {
     )
   })
 
-  // La versión la inyecta Vite desde package.json (ver vite.config.ts). Si
-  // esa sustitución se rompiera, acá saldría el literal `__VERSION__` en vez
-  // de un número, que es exactamente lo que no querés ver en producción.
+  // La versión la inyecta Vite desde package.json (ver vite.config.ts).
   it("muestra un número de versión, no el marcador sin sustituir", () => {
     render(<PieDeAutoria />)
 

@@ -7,15 +7,6 @@ export const NOTIFICACIONES_KEY = ["notificaciones"]
 /**
  * Cantidad de notificaciones sin leer, para el indicador de la barra de
  * navegación (RF-05.7: "visibles al ingresar al sistema").
- *
- * Se repregunta cada dos minutos porque las notificaciones no las genera
- * quien está mirando la pantalla: aparecen cuando un Admin cancela una
- * reserva o saca un equipo de servicio, en cualquier momento. Sin refresco
- * periódico, alguien con la pestaña abierta toda la mañana no se entera de
- * que le cancelaron la clase hasta que recarga.
- *
- * Dos minutos es un intervalo cómodo para decenas de usuarios contra un
- * único servidor; no hace falta nada más fino para un aviso interno.
  */
 export function useNoLeidas() {
   const { data } = useQuery({

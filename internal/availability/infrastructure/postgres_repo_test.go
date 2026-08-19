@@ -147,8 +147,8 @@ func TestPostgresRepo_GuardarBloque_DeOtroUsuario_ErrBloqueNoEncontrado(t *testi
 	repo.CrearBloque(context.Background(), b)
 
 	// Un intento de "editar" el bloque de otro usuario, forzando su propio
-	// UsuarioID en la entidad — la query WHERE id=$1 AND usuario_id=$2 no
-	// debe afectar ninguna fila.
+	// UsuarioID en la entidad — la query WHERE id=$1 AND usuario_id=$2 no debe
+	// afectar ninguna fila.
 	suplantado, _ := domain.NuevoBloqueHorario(b.ID, intruso, domain.Martes, 9*time.Hour, 11*time.Hour)
 	err := repo.GuardarBloque(context.Background(), suplantado)
 

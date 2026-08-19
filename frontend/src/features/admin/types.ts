@@ -1,10 +1,6 @@
 import type { EstadoEquipo } from "@/features/inventory/types"
 
 // Espeja los DTOs de internal/reporting.
-//
-// `Incidencia` NO está acá: es un concepto de inventario y la reportan los
-// docentes, así que vive en features/inventory/types.ts. Lo que queda son
-// los agregados de RF-06, que sí son solo para Admin.
 
 /**
  * RF-06.1. Trae identificador y carro además del UUID: un reporte que solo
@@ -22,12 +18,10 @@ export type ResumenUsoEquipo = {
 }
 
 /**
- * RF-06.2
- *
- * `usuarioId` es opcional por lo mismo que en `HistoricoUsoDocente`: si la
- * cuenta se eliminó definitivamente (RF-01.9), sus reservas conservan el
- * nombre congelado y sus horas siguen contando, pero ya no hay cuenta a la
- * que apuntar. No sirve como key de una lista.
+ * RF-06.2 `usuarioId` es opcional por lo mismo que en `HistoricoUsoDocente`:
+ * si la cuenta se eliminó definitivamente (RF-01.9), sus reservas conservan
+ * el nombre congelado y sus horas siguen contando, pero ya no hay cuenta a la
+ * que apuntar.
  */
 export type ResumenUsoDocente = {
   usuarioId?: string
@@ -36,16 +30,7 @@ export type ResumenUsoDocente = {
   minutosReservados: number
 }
 
-/**
- * RF-06.4 — el uso de un equipo en un año ya archivado.
- *
- * Todo lo que se muestra es un *snapshot*: al archivar el ciclo se borran
- * físicamente sus reservas (RF-02.4), así que estos números no se pueden
- * recalcular ni filtrar por fecha. El identificador y el carro son los que
- * el equipo tenía al cerrar el año — desde entonces pudo mudarse de carro
- * (RF-03.10) o darse de baja, y el reporte igual tiene que seguir
- * diciendo dónde estaba.
- */
+/** RF-06.4 — el uso de un equipo en un año ya archivado. */
 export type HistoricoUsoEquipo = {
   id: string
   anio: number
@@ -59,15 +44,7 @@ export type HistoricoUsoEquipo = {
   cantidadReservas: number
 }
 
-/**
- * RF-06.4 — el uso de un docente en un año ya archivado.
- *
- * `usuarioId` es opcional a propósito: la FK quedó en ON DELETE SET NULL,
- * así que si la cuenta se eliminó (RF-01.9) el snapshot sobrevive con el
- * nombre pero sin a quién apuntar. Ojo con el nombre del campo de tiempo:
- * acá es `minutosTotales`, no `minutosReservados` como en el reporte del
- * ciclo activo.
- */
+/** RF-06.4 — el uso de un docente en un año ya archivado. */
 export type HistoricoUsoDocente = {
   id: string
   anio: number
@@ -117,15 +94,9 @@ export function formatearDuracion(minutos: number): string {
 }
 
 /**
- * Qué parte del total representa un valor, de 0 a 100.
- *
- * Todo el reporte estaba en absolutos —"1240 minutos", "18 reservas"— y un
- * absoluto solo no se puede juzgar: nadie sabe si 1240 minutos es mucho sin
- * saber contra qué. El total de la propia tabla es el denominador que
- * tenemos sin pedirle nada nuevo al backend; no es la ocupación real del
- * laboratorio (eso necesita los equipos operativas y la franja lectiva, que hoy
- * no llegan a esta pantalla), así que se rotula como lo que es: la
- * participación de esa fila en el período consultado.
+ * Qué parte del total representa un valor, de 0 a 100. Todo el reporte estaba
+ * en absolutos —"1240 minutos", "18 reservas"— y un absoluto solo no se puede
+ * juzgar: nadie sabe si 1240 minutos es mucho sin saber contra qué.
  */
 export function proporcion(parte: number, total: number): number {
   return total === 0 ? 0 : (parte / total) * 100
@@ -140,22 +111,13 @@ export function formatearPorcentaje(valor: number): string {
  * Lo que devuelven las dos operaciones que sacan un equipo de circulación
  * (RF-03.8 y RF-03.9): cuántas reservas futuras se cancelaron en cascada y a
  * cuántos docentes se avisó.
- *
- * No es un detalle: dar de baja un proyector reservado para la semana que
- * viene cancela clases ajenas, y quien aprieta el botón tiene que enterarse
- * de que pasó.
  */
 export type ResultadoCascada = {
   reservasCanceladas: number
   docentesNotificados: number
 }
 
-/**
- * RF-06.5 — el estado del parque de equipos HOY, no en un período.
- *
- * `total` excluye los dados de baja: el porcentaje que importa es sobre lo
- * que la institución todavía tiene.
- */
+/** RF-06.5 — el estado del parque de equipos HOY, no en un período. */
 export type EstadoDelInventario = {
   /** Vacíos en la fila de los equipos que no están en ningún carro. */
   carroId?: string
@@ -168,8 +130,7 @@ export type EstadoDelInventario = {
 
 /**
  * Una máquina que hoy no se puede reservar, con lo último que se sabe de por
- * qué. Los tres últimos campos pueden faltar: se puede sacar algo de
- * circulación sin haber reportado ninguna falla, y ese hueco es un dato.
+ * qué.
  */
 export type EquipoFueraDeCirculacion = {
   equipoId: string

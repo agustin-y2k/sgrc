@@ -26,15 +26,6 @@ import { contar, plural } from "@/lib/plural"
 
 /**
  * Qué computadoras están fuera del laboratorio y el botón para recibirlas.
- *
- * Es EL lugar donde se marca que una máquina volvió, sin importar por qué
- * salió: da igual si fue contra una reserva o en un préstamo suelto para un
- * trámite. Por eso hay una sola lista y no dos — el Admin que la recibe no
- * necesita acordarse de cómo salió.
- *
- * Vive suelto y no dentro de una pantalla porque se usa en dos: en el panel
- * del laboratorio, que es donde el Admin está parado todo el día, y en la
- * pantalla de entregas.
  */
 export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
   const queryClient = useQueryClient()

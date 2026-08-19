@@ -16,39 +16,8 @@ import (
 const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en, cancelado_por, motivo_cancelacion, cancelada_en`
 
 // condicionNoTerminada arma "esta reserva todavía no terminó respecto del
-// instante dado", comparando la hora de pared de la reserva contra la hora
-// de pared de ese instante. Reemplaza al `fecha >= $2` que usaban
-// ListarReservasFuturasDeEquipo/DeMateria, por dos razones.
-//
-// La primera es un bug concreto: comparar contra la columna DATE pelada
-// ignora la hora, así que "las reservas futuras de esta PC" incluía las que
-// ya habían terminado ese mismo día. Un Admin que saca una PC de servicio a
-// las 14:00 (RF-03.8/03.9) cancelaba también la clase de 8 a 9 de esa
-// mañana, y el docente recibía un aviso de que se le canceló una clase que
-// ya había dado.
-//
-// La segunda es no depender de una inferencia implícita. `fecha + hora_fin`
-// es un TIMESTAMP SIN ZONA —la hora de pared de la escuela, que es lo que
-// significan las columnas DATE y TIME del modelo, ver
-// docs/07-modelo-datos.md— y el parámetro llega como un time.Time que la app
-// lee en APP_TIMEZONE. Que eso funcione depende hoy de que Postgres infiera
-// el tipo del parámetro a partir del operando de la izquierda y de que pgx
-// lo codifique tomando los campos de pared: se verificó contra Postgres real
-// (ver los tests de zona horaria en postgres_repo_test.go) y así es, sin
-// corrimiento. Pero es una propiedad de las reglas de resolución de tipos,
-// no algo que el código diga. Los dos casts explícitos —`::date` toma
-// año/mes/día, `::time` toma hora/minuto/segundo, del MISMO time.Time que se
-// pasa dos veces— lo dejan escrito y lo vuelven inmune a la zona de la
-// sesión. Mismo criterio que ListarEquiposDisponiblesEn, que ya usaba
-// `$1::date + $2::time`.
-// El primer parámetro es el alias de la tabla `reserva` en la consulta que
-// la usa ("res", "reserva", lo que sea). No es decoración: sin calificar, las
-// tres columnas quedan sueltas, y en cuanto la consulta hace JOIN con
-// reserva_grupo —que tiene fecha, hora_inicio y hora_fin con esos mismos
-// nombres— Postgres corta con `column reference "fecha" is ambiguous`
-// (42702). Pasó en ProximaReservaDeEquipo: el barrido dejaba de avisarle al
-// docente que tenía la máquina reservada después, en silencio y con una sola
-// línea en el log.
+// instante dado", comparando la hora de pared de la reserva contra la hora de
+// pared de ese instante.
 func condicionNoTerminada(alias, placeholderFecha, placeholderHora string) string {
 	if alias != "" {
 		alias += "."
@@ -65,10 +34,10 @@ func (r *PostgresRepo) CrearReserva(ctx context.Context, res *domain.Reserva) er
 		duracionComoHora(res.HoraInicio), duracionComoHora(res.HoraFin),
 		string(res.Estado), string(res.Tipo), nullSiVacio(res.MotivoBloqueo), res.CreadoPor, res.CreadaEn)
 	if err != nil {
-		// La constraint EXCLUDE (anti-solapamiento) es la garantía real
-		// contra condiciones de carrera — application.verificarSinSolapamiento
-		// ya intenta atraparlo antes, pero si dos pedidos llegan al mismo
-		// tiempo, esta es la última línea de defensa.
+		// La constraint EXCLUDE (anti-solapamiento) es la garantía real contra
+		// condiciones de carrera — application.verificarSinSolapamiento ya intenta
+		// atraparlo antes, pero si dos pedidos llegan al mismo tiempo, esta es la
+		// última línea de defensa.
 		if esViolacionExclusion(err) {
 			return application.ErrSolapamiento
 		}
@@ -130,21 +99,6 @@ func escanearReserva(row pgx.Row) (*domain.Reserva, error) {
 }
 
 // GuardarReserva persiste los campos mutables de una reserva ya creada.
-//
-// `equipo_id` está en la lista porque cambiar de máquina (RF-08.14) es una de
-// las cosas que le pasan a una reserva viva, no solo cancelarla o
-// finalizarla. Faltaba, y el modo en que fallaba es el que hay que tener
-// presente al tocar este UPDATE: el servicio modificaba la reserva en
-// memoria, esta función escribía todo menos el equipo, el UPDATE afectaba su
-// fila igual —así que no había error— y la respuesta salía con el equipo
-// nuevo. El cambio se veía aplicado en pantalla y no existía en la base.
-//
-// Enumerar columnas a mano tiene ese riesgo: lo que no está en la lista se
-// pierde en silencio. Si mañana `Reserva` gana otro campo mutable, va acá.
-//
-// Para los demás llamadores —las cancelaciones y la finalización— escribir el
-// equipo no cambia nada: traen la reserva leída de la base y no lo tocan, así
-// que reescriben el mismo valor.
 func (r *PostgresRepo) GuardarReserva(ctx context.Context, res *domain.Reserva) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE reserva SET equipo_id=$2, estado=$3, cancelado_por=$4, motivo_cancelacion=$5, cancelada_en=$6
@@ -184,16 +138,9 @@ func (r *PostgresRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoI
 }
 
 // ListarReservasFuturasDeEquipo: todas las reservas CONFIRMADA de una PC que
-// todavía no terminaron en el instante `desde`. Usado tanto para el chequeo
-// anticipado de solapamiento como para el bloqueo administrativo (RF-04.7) y
-// la cascada de cancelación de inventory/academic.
+// todavía no terminaron en el instante `desde`.
 func (r *PostgresRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipoID string, desde time.Time) ([]*domain.Reserva, error) {
 	// ORDER BY: quien llama puede necesitar LA PRÓXIMA, no una cualquiera.
-	// Sin él, el aviso de "esta PC tiene una reserva encima" que sale al
-	// entregarla suelta podía nombrar la reserva de la semana siguiente en
-	// vez de la de dentro de una hora, que es la única que le importa a
-	// quien está en el mostrador. Las cascadas de cancelación no dependen
-	// del orden, así que esto no les cambia nada.
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
 		WHERE equipo_id = $1 AND `+condicionNoTerminada("reserva", "$2", "$3")+` AND estado = 'CONFIRMADA'
@@ -220,31 +167,7 @@ func (r *PostgresRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipo
 
 // BuscarSolapamientos resuelve el pre-chequeo del lote entero en una
 // consulta: todos los equipos contra todas las fechas, con un único rango
-// horario. Ver el puerto en application/ports.go para por qué.
-//
-// El solapamiento se compara con `&&` sobre tsrange, exactamente igual que la
-// constraint EXCLUDE: rangos semiabiertos, así que dos bloques que se tocan
-// en el borde —uno termina 10:00 y el otro empieza 10:00— NO se pisan. Es el
-// caso más común de todos y tiene que poder reservarse.
-//
-// Antes esto comparaba las horas crudas (`hora_inicio < fin AND hora_fin >
-// inicio`), que era equivalente mientras ningún bloque cruzara la medianoche
-// y dejó de serlo cuando empezaron a existir las clases nocturnas. Fallaba de
-// las dos maneras: una reserva de 22:00 a 01:00 no encontraba nada porque
-// 01:00 es menor que casi todo, y una clase de la noche ANTERIOR que se mete
-// en esta madrugada quedaba fuera del filtro de fecha.
-//
-// De ahí el `- 1` en el rango de fechas: hay que mirar también el día de
-// antes, porque una reserva fechada ayer puede estar ocupando la máquina hoy
-// a las 00:30. Y el `+ 1` por el motivo simétrico: si la franja que se está
-// pidiendo cruza la medianoche, una reserva fechada el día DESPUÉS de la
-// última ocurrencia cae dentro de lo pedido. El BETWEEN existe para que el
-// índice siga sirviendo; la condición fina la hace el EXISTS de abajo,
-// fecha por fecha.
-//
-// Se une a equipo y carro para traer la etiqueta ya resuelta (RF-03.17). El
-// JOIN a carro va LEFT: un proyector no está en ninguno, y con INNER
-// desaparecería del resultado justo cuando es el que choca.
+// horario.
 func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []string, fechas []time.Time, horaInicio, horaFin time.Duration) ([]application.Solapamiento, error) {
 	if len(equipoIDs) == 0 || len(fechas) == 0 {
 		return nil, nil
@@ -292,10 +215,9 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 	return resultado, errorDeFilas(rows)
 }
 
-// ListarReservasFuturasDeMateria: todas las reservas CONFIRMADA vinculadas
-// a una materia (vía su ReservaGrupo) que todavía no terminaron en el
-// instante `desde`. Usado por la cascada de auth (RF-02.8: dar de baja al
-// último docente de una materia).
+// ListarReservasFuturasDeMateria: todas las reservas CONFIRMADA vinculadas a
+// una materia (vía su ReservaGrupo) que todavía no terminaron en el instante
+// `desde`.
 func (r *PostgresRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID string, desde time.Time) ([]*domain.Reserva, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
@@ -320,11 +242,8 @@ func (r *PostgresRepo) ListarReservasFuturasDeMateria(ctx context.Context, mater
 	return resultado, errorDeFilas(rows)
 }
 
-// ListarReservasConfirmadasVencidas: para el job RF-04.9 — todas las
-// Reserva CONFIRMADA cuya fecha+horaFin ya pasó respecto de "ahora".
-// La comparación se hace con aritmética date+time (mismo criterio que la
-// constraint EXCLUDE, ver docs/07-modelo-datos.md) para evitar el mismo
-// problema de IMMUTABLE que tuvimos en la migración original.
+// ListarReservasConfirmadasVencidas: para el job RF-04.9 — todas las Reserva
+// CONFIRMADA cuya fecha+horaFin ya pasó respecto de "ahora".
 func (r *PostgresRepo) ListarReservasConfirmadasVencidas(ctx context.Context, ahora time.Time, limite int) ([]*domain.Reserva, error) {
 	// De la más vieja a la más nueva: el job procesa por lotes, y así el
 	// primero se lleva el atraso más antiguo en vez de una franja al azar.
@@ -400,18 +319,6 @@ func (r *PostgresRepo) ListarGruposFuturosDeRegla(ctx context.Context, reglaID s
 // ReservaGrupo, Reserva y ReglaRecurrencia de un ciclo lectivo — la cascada
 // de archivado de RF-02.4. Se llama siempre DESPUÉS de calcular el snapshot
 // histórico, que es lo único que sobrevive del año.
-//
-// Tres borrados, en este orden:
-//
-//  1. reserva_grupo — las Reserva hijas se van solas por el ON DELETE
-//     CASCADE de reserva.reserva_grupo_id (docs/07-modelo-datos.md).
-//  2. regla_recurrencia de las materias del ciclo. RF-02.4 las nombra
-//     explícitamente: sin este paso quedan huérfanas para siempre,
-//     apuntando a materias archivadas.
-//  3. Los bloqueos administrativos del año del ciclo. No tienen
-//     materia (RF-04.7), así que la subconsulta de arriba no los alcanza y
-//     se acumularían ciclo tras ciclo. Se los ubica por año de la fecha,
-//     que es lo único que los ata a un ciclo lectivo.
 func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, cicloID string) (int, int, error) {
 	gruposDelCiclo := `
 		SELECT rg.id FROM reserva_grupo rg
@@ -467,19 +374,13 @@ func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, ciclo
 }
 
 // ListarReservas arma el WHERE dinámicamente a partir del filtro — mismo
-// criterio que auth.Listar: con varios filtros opcionales es más legible
-// que un COALESCE por columna.
-//
-// Devuelve los nombres de PC, carro, materia y curso ya resueltos: es un
-// listado para mostrar en pantalla, y sin ellos una reserva de varios equipos
-// se ve como N filas idénticas. Los JOIN son de solo lectura, igual que en
-// CalendarioDeEquipo. El de materia/curso es LEFT porque los bloqueos
-// administrativos no tienen materia.
+// criterio que auth.Listar: con varios filtros opcionales es más legible que
+// un COALESCE por columna.
 func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroReservas) ([]application.ReservaDetallada, int, error) {
-	// El FROM y el WHERE se arman una sola vez y los comparten las dos
-	// consultas posibles (la página y, si hace falta, el conteo suelto):
-	// dos copias del mismo filtro es cómo el total termina contando algo
-	// distinto de lo que devuelve la lista.
+	// El FROM y el WHERE se arman una sola vez y los comparten las dos consultas
+	// posibles (la página y, si hace falta, el conteo suelto): dos copias del
+	// mismo filtro es cómo el total termina contando algo distinto de lo que
+	// devuelve la lista.
 	desde := `
 		FROM reserva res
 		JOIN equipo p ON p.id = res.equipo_id
@@ -527,15 +428,10 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		       rg.regla_recurrencia_id,
 		       COUNT(*) OVER() AS total` + desde
 
-	// El ORDER BY es determinista hasta la última columna a propósito: con
-	// un orden ambiguo, dos filas empatadas pueden salir en distinto orden
-	// entre dos consultas y una misma reserva aparecer dos veces (o ninguna)
-	// al pasar de página.
-	//
-	// El identificador NO alcanza para desempatar: se repite entre carros
-	// distintos y es NULL en todo lo que no está en uno —los equipos sueltos
-	// empatarían todos entre sí—. res.equipo_id cierra el orden, que es lo
-	// único único de verdad acá.
+	// El ORDER BY es determinista hasta la última columna a propósito: con un
+	// orden ambiguo, dos filas empatadas pueden salir en distinto orden entre
+	// dos consultas y una misma reserva aparecer dos veces (o ninguna) al pasar
+	// de página.
 	query += " ORDER BY res.fecha, res.hora_inicio, p.identificador NULLS LAST, res.equipo_id"
 
 	argsPagina := append(append([]any{}, args...), f.Pagina.Limit(), f.Pagina.Offset())
@@ -559,9 +455,9 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		var motivoBloqueo *string
 		var detalle application.ReservaDetallada
 
-		// COUNT(*) OVER() cuenta las filas que matchean el WHERE, antes del
-		// LIMIT: da el total en la misma pasada, sin una segunda consulta que
-		// podría además ver un estado distinto de la tabla.
+		// COUNT(*) OVER() cuenta las filas que matchean el WHERE, antes del LIMIT:
+		// da el total en la misma pasada, sin una segunda consulta que podría
+		// además ver un estado distinto de la tabla.
 		if err := rows.Scan(
 			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
@@ -580,12 +476,8 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		res.HoraInicio = horaComoDuracion(horaInicio)
 		res.HoraFin = horaComoDuracion(horaFin)
 
-		// Por Parse y no por conversión directa, como ya hacían
-		// escanearReserva y CalendarioDeEquipo. La conversión acepta cualquier
-		// texto: un estado que la base no debería tener entraba igual al
-		// dominio y recién se notaba mucho más tarde, como una reserva que no
-		// se puede cancelar ni finalizar porque su estado no matchea ninguna
-		// transición. Que falle acá deja el error donde está el dato malo.
+		// Por Parse y no por conversión directa, como ya hacían escanearReserva y
+		// CalendarioDeEquipo.
 		estado, err := domain.ParseEstadoReserva(estadoStr)
 		if err != nil {
 			return nil, 0, fmt.Errorf("estado inválido en la base para reserva %s: %w", res.ID, err)
@@ -604,10 +496,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		return nil, 0, err
 	}
 
-	// Sin filas no hay ventana de la que leer COUNT(*) OVER(). Puede ser que
-	// no haya nada, o que la página pedida esté más allá del final —y ahí un
-	// total en 0 haría que la pantalla dijera "no tenés reservas" con la
-	// página 1 llena. Solo en ese caso vale la segunda consulta.
+	// Sin filas no hay ventana de la que leer COUNT(*) OVER().
 	if len(resultado) == 0 && f.Pagina.Offset() > 0 {
 		if err := r.db.QueryRow(ctx, "SELECT COUNT(*)"+desde, args...).Scan(&total); err != nil {
 			return nil, 0, fmt.Errorf("contando reservas: %w", err)
@@ -618,10 +507,10 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 }
 
 // CalendarioDeEquipo implementa RF-04.4. El LEFT JOIN hacia materia/curso es
-// de solo lectura (mismo criterio que los validadores de este paquete
-// hacia academic): tiene que ser LEFT porque los bloqueos administrativos
-// estatal no tienen materia asociada y también ocupan la PC, así que
-// también deben verse en el calendario.
+// de solo lectura (mismo criterio que los validadores de este paquete hacia
+// academic): tiene que ser LEFT porque los bloqueos administrativos estatal
+// no tienen materia asociada y también ocupan la PC, así que también deben
+// verse en el calendario.
 func (r *PostgresRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) ([]application.BloqueCalendario, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasReservaConPrefijo("res")+`,
@@ -682,14 +571,9 @@ func (r *PostgresRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, 
 	return resultado, errorDeFilas(rows)
 }
 
-// columnasReservaConPrefijo devuelve la lista de columnas calificada con
-// el alias de tabla — hace falta en las consultas con JOIN, donde "id" a
-// secas sería ambiguo.
-//
-// Parte por ", ", así que columnasReserva tiene que ser una lista de nombres
-// pelados: una expresión con coma adentro —un COALESCE, por ejemplo— se
-// partiría al medio y saldría SQL inválido. Por eso motivo_bloqueo se escanea
-// como puntero en vez de coalescerse en la consulta.
+// columnasReservaConPrefijo devuelve la lista de columnas calificada con el
+// alias de tabla — hace falta en las consultas con JOIN, donde "id" a secas
+// sería ambiguo.
 func columnasReservaConPrefijo(alias string) string {
 	columnas := strings.Split(columnasReserva, ", ")
 	for i, c := range columnas {
@@ -700,11 +584,6 @@ func columnasReservaConPrefijo(alias string) string {
 
 // ReservasDeLaSerieDesde: la misma máquina en las ocurrencias que le quedan a
 // la serie, de esta fecha en adelante (RF-08.14).
-//
-// Devuelve vacío cuando el grupo no tiene regla de recurrencia, porque la
-// comparación con NULL no matchea nada. Eso es lo correcto y no un descuido:
-// en una reserva suelta "esta y las siguientes" no significa nada distinto de
-// "solo esta", y quien llama ya tiene esa reserva en la mano.
 func (r *PostgresRepo) ReservasDeLaSerieDesde(ctx context.Context, reservaID string) ([]*domain.Reserva, error) {
 	rows, err := r.db.Query(ctx, `
 		WITH origen AS (
@@ -800,11 +679,6 @@ func (r *PostgresRepo) DatosParaPedirLiberacion(ctx context.Context, reservaID s
 // YaPidioLiberacionHoy mira las notificaciones ya emitidas en vez de una
 // tabla propia: el pedido no es una entidad, y la fila que igual se escribe
 // alcanza para saber que salió.
-//
-// `sobre_usuario_id` es de quién HABLA el aviso, y en este caso eso es quien
-// pide — el aviso le llega al dueño y trata sobre el otro docente. Es el
-// mismo uso que en "hay una cuenta esperando aprobación", y cae sobre el
-// índice que ya existe para esa columna.
 func (r *PostgresRepo) YaPidioLiberacionHoy(ctx context.Context, reservaID, solicitanteID string, dia time.Time) (bool, error) {
 	var existe bool
 	err := r.db.QueryRow(ctx, `
@@ -826,37 +700,8 @@ func (r *PostgresRepo) YaPidioLiberacionHoy(ctx context.Context, reservaID, soli
 	return existe, nil
 }
 
-// sqlSolapaConLaFranja: una reserva de `res` que pisa la franja pedida en
-// $1 (fecha), $2 (hora de inicio) y $3 (hora de fin). Es el mismo criterio
-// que la constraint EXCLUDE de la migración, escrito una sola vez porque lo
-// necesitan las dos consultas que arman la pantalla de reservar: la de lo
-// que está libre y la de lo que ya tiene alguien. Que las dos mitades de una
-// misma pantalla contesten con criterios distintos es exactamente el bug que
-// esto evita.
-//
-// Las dos puntas pasan por fin_de_pared() porque las dos pueden terminar al
-// día siguiente:
-//
-//   - La reserva guardada, que es el caso que ya contemplaba la constraint.
-//   - La franja PEDIDA. Sin esto, consultar de 19:00 a 03:00 le pide a
-//     Postgres un rango que va para atrás y la consulta no falla filtrando:
-//     revienta entera con "range lower bound must be less than or equal to
-//     range upper bound". El docente no ve ninguna máquina —ni libre ni
-//     ocupada— porque la pregunta nunca se llegó a hacer.
-//
-// Y de ahí el filtro de fecha de tres días, que hay que leer de a una punta:
-//
-//   - `- 1` porque la reserva que ocupa la máquina hoy a las 00:30 puede
-//     estar fechada AYER, si es una nocturna que cruzó la medianoche.
-//     Mirando solo las de hoy, esa se escapa y la pantalla ofrece una
-//     máquina que el alta va a rechazar después con un 409.
-//   - `+ 1` porque la franja PEDIDA también puede cruzar: preguntando de
-//     19:00 a 03:00, una reserva fechada MAÑANA a la 01:00 cae justo en el
-//     medio de lo que se está pidiendo.
-//
-// El BETWEEN existe para que el índice (equipo_id, fecha) siga sirviendo; la
-// condición fina la hace el solapamiento de abajo, que descarta las que
-// entraron por la ventana pero no se tocan.
+// sqlSolapaConLaFranja: una reserva de `res` que pisa la franja pedida en $1
+// (fecha), $2 (hora de inicio) y $3 (hora de fin).
 const sqlSolapaConLaFranja = `
 	res.estado = 'CONFIRMADA'
 	  AND res.fecha BETWEEN $1::date - 1 AND $1::date + 1
@@ -869,13 +714,6 @@ const sqlSolapaConLaFranja = `
 // ListarEquiposOcupadosEn es la otra mitad de la franja (RF-04.11): del mismo
 // universo que la consulta de abajo —DISPONIBLE, reservable, no dado de baja—
 // los que YA tiene alguien, con quién los tiene.
-//
-// El JOIN con reserva es interno y no un LEFT: acá interesa exactamente lo
-// contrario que en la otra consulta. Puede devolver más de una fila para el
-// mismo equipo, y está bien: son reservas distintas que caen dentro de la
-// franja consultada —una de 08:00 y otra de 11:00 dentro de una consulta de
-// 07:30 a 13:00— y la pantalla las muestra como renglones separados, con su
-// horario y su dueño, que es lo que necesita quien va a pedir una prestada.
 func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoOcupado, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT p.id,
@@ -922,23 +760,10 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 	return resultado, errorDeFilas(rows)
 }
 
-// ── El ordenamiento por preferencia de materia (RF-03.21) ──────────────
-//
-// Los cuatro fragmentos de acá abajo son las piezas de una misma consulta,
+// ── El ordenamiento por preferencia de materia (RF-03.21) ────────────── Los
+// cuatro fragmentos de acá abajo son las piezas de una misma consulta,
 // compartidas por las dos listas de equipos libres —la de una franja y la de
-// una serie— porque el docente tiene que ver el mismo orden en las dos. Lo
-// único que cambia entre ellas es de dónde sale la materia, y eso lo
-// resuelve cada una en su propio CTE `ctx_materia` (norm, anio, division).
-//
-// Todo se resuelve en SQL y no recorriendo la lista en Go a propósito: la
-// lista de libres ya es UNA consulta, y traer las marcas por separado para
-// cruzarlas después son tantas idas a la base como equipos tenga el
-// inventario (el mismo criterio de RF-04.10).
-//
-// `ctx_materia` vacío —un Admin reservando sin materia— es un caso normal y
-// no un borde: los dos CTE de acá abajo hacen JOIN contra él, así que sin
-// materia no hay ninguna marca que aplicar y la lista sale con el orden de
-// siempre.
+// una serie— porque el docente tiene que ver el mismo orden en las dos.
 const sqlTramosDePreferencia = `
 		-- La marca que apunta a MI materia. DISTINCT ON deja una sola por
 		-- equipo: gana la más específica (año+división > año > sin curso) y,
@@ -988,11 +813,6 @@ const sqlJoinsDePreferencia = `
 
 // sqlOrdenDePreferencia: primero el tramo, después la prioridad dentro del
 // tramo, y recién ahí el orden de siempre como desempate.
-//
-// La prioridad ajena va NEGADA a propósito. Dentro de los míos, prioridad 1
-// es el más recomendado y va arriba; dentro de los ajenos es al revés:
-// cuanto más fuerte el reclamo de la otra materia, más abajo tiene que
-// quedar. Negando, el mismo ASC sirve para los dos casos.
 const sqlOrdenDePreferencia = `
 		-- Los equipos sueltos van al final de su tramo: lo habitual es
 		-- reservar PCs de un carro, y el proyector no tiene por qué colarse
@@ -1020,15 +840,6 @@ func tramoDePreferencia(n int) application.TramoPreferencia {
 
 // ListarEquiposLibresEnLaSerie: los equipos libres en TODAS las ocurrencias
 // que le quedan a la serie de ese grupo (RF-08.14).
-//
-// El NOT EXISTS se evalúa contra el conjunto entero de fechas y no contra una:
-// un equipo que está libre en catorce martes y ocupado en el decimoquinto no
-// sirve, porque el cambio en serie es todo o nada. Resolverlo acá y no
-// preguntando fecha por fecha es lo que evita tantas idas a la base como
-// fechas tenga la serie.
-//
-// Un grupo sin recurrencia devuelve los libres de su propia franja: es el
-// mismo caso con una sola fecha.
 func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID string) ([]application.EquipoDisponible, error) {
 	rows, err := r.db.Query(ctx, `
 		WITH origen AS (
@@ -1097,11 +908,7 @@ func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID
 }
 
 // ListarEquiposDisponiblesEn implementa RF-04.2: las PCs que se pueden
-// reservar en una franja concreta. El NOT EXISTS usa el mismo criterio de
-// solapamiento que la constraint EXCLUDE de la migración (tsrange con
-// aritmética date+time), para que lo que se ofrece coincida exactamente
-// con lo que la base va a aceptar después. Consulta pc/carro de solo
-// lectura, mismo criterio que los validadores de este paquete.
+// reservar en una franja concreta.
 func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]application.EquipoDisponible, error) {
 	rows, err := r.db.Query(ctx, `
 		WITH ctx_materia AS (

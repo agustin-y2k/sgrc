@@ -11,8 +11,8 @@ import (
 
 var _ application.ListadorAdmins = (*ListadorAdminsPostgres)(nil)
 
-// ListadorAdminsPostgres implementa el puerto hacia auth — consulta
-// usuario directamente, sin importar internal/auth (mismo criterio que
+// ListadorAdminsPostgres implementa el puerto hacia auth — consulta usuario
+// directamente, sin importar internal/auth (mismo criterio que
 // ListadorAdminsPostgres de notification, aunque acá también trae
 // nombre/apellido para el DTO de disponibilidad, RF-07.2).
 type ListadorAdminsPostgres struct {

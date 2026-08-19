@@ -7,9 +7,9 @@ vi.mock("@/features/auth/api")
 
 /**
  * Lo que se prueba acá es la decisión de RF-05.8: el aviso solo aparece si
- * este despliegue manda correos, y cuando aparece nombra la dirección
- * exacta —que es lo único que de verdad saca al remitente de spam, porque
- * deja que la persona lo agregue a sus contactos una vez.
+ * este despliegue manda correos, y cuando aparece nombra la dirección exacta
+ * —que es lo único que de verdad saca al remitente de spam, porque deja que
+ * la persona lo agregue a sus contactos una vez.
  */
 describe("AvisoDeSpam", () => {
   afterEach(() => {

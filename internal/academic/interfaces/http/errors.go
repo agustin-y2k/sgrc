@@ -10,8 +10,7 @@ import (
 )
 
 // mapearError traduce cada error de negocio de application/ y domain/ a su
-// código HTTP según docs/08-api-spec.yaml. Ver el mismo patrón en
-// internal/auth/interfaces/http/errors.go.
+// código HTTP según docs/08-api-spec.yaml.
 func mapearError(err error) error {
 	switch {
 	case errors.Is(err, application.ErrCicloNoEncontrado),

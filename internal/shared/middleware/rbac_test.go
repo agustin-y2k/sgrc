@@ -8,8 +8,8 @@ import (
 )
 
 // appConRolFalso simula un pipeline donde ya corrió JWTAuth (inyectando
-// claims directo en el contexto), para testear RequireRol de forma
-// aislada sin necesitar generar JWTs reales acá.
+// claims directo en el contexto), para testear RequireRol de forma aislada
+// sin necesitar generar JWTs reales acá.
 func appConRolFalso(rol string, claimsPresentes bool) *fiber.App {
 	app := fiber.New()
 	app.Get("/solo-admin",
@@ -50,8 +50,8 @@ func TestRequireRol_RolNoPermitido_403(t *testing.T) {
 
 func TestRequireRol_SinClaims_401NoPanikea(t *testing.T) {
 	// Caso defensivo: si por algún bug de wiring RequireRol corre sin que
-	// JWTAuth haya corrido antes, no debe panickear con un nil pointer —
-	// debe responder 401 igual que "no autenticado".
+	// JWTAuth haya corrido antes, no debe panickear con un nil pointer — debe
+	// responder 401 igual que "no autenticado".
 	app := appConRolFalso("", false)
 
 	resp, err := app.Test(httptest.NewRequest("GET", "/solo-admin", nil))

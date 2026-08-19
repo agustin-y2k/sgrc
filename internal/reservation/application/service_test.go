@@ -65,9 +65,8 @@ func nuevoFakeRepo() *fakeRepo {
 // ── Lo que lee el barrido ───────────────────────────────────────────────
 
 // ReservasAVigilar reproduce la consulta real: las CONFIRMADA de hoy y
-// mañana, con el contacto del docente y el estado de custodia de cada PC.
-//
-// El cruce con los préstamos va por equipo_id y no por reserva_id, igual que en
+// mañana, con el contacto del docente y el estado de custodia de cada PC. El
+// cruce con los préstamos va por equipo_id y no por reserva_id, igual que en
 // SQL: si la máquina salió por una entrega espontánea, igual está afuera.
 func (r *fakeRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]ReservaParaVigilar, error) {
 	desde := diaDe(hoy)
@@ -128,8 +127,7 @@ func (r *fakeRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]Reser
 }
 
 // ultimaEntregaDelGrupo: de todas las reservas del grupo, cuándo se entregó
-// por última vez alguna. Es lo que distingue al docente que no vino del que
-// vino y se llevó una parte.
+// por última vez alguna.
 func (r *fakeRepo) ultimaEntregaDelGrupo(grupoID *string) *time.Time {
 	if grupoID == nil {
 		return nil
@@ -236,9 +234,8 @@ func diaDe(t time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
-// EnTransaccion imita el todo-o-nada de Postgres: saca una copia del
-// estado antes de correr fn y la restaura si fn falla. Sin esto el fake
-// daría verde en escenarios que en la base real dejarían filas a medias.
+// EnTransaccion imita el todo-o-nada de Postgres: saca una copia del estado
+// antes de correr fn y la restaura si fn falla.
 func (r *fakeRepo) EnTransaccion(ctx context.Context, fn func(Repo) error) error {
 	gruposAntes := make(map[string]*domain.ReservaGrupo, len(r.grupos))
 	for k, v := range r.grupos {
@@ -274,8 +271,7 @@ func (r *fakeRepo) EnTransaccion(ctx context.Context, fn func(Repo) error) error
 // ── Préstamos ───────────────────────────────────────────────────────────
 
 // CrearPrestamo reproduce el índice único parcial ux_prestamo_abierto: un
-// equipo no puede tener dos préstamos abiertos. Sin eso el fake daría verde
-// en el escenario que la base real rechaza.
+// equipo no puede tener dos préstamos abiertos.
 func (r *fakeRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) error {
 	for _, existente := range r.prestamos {
 		if existente.EquipoID == p.EquipoID && existente.EstaAbierto() {
@@ -473,21 +469,8 @@ func (r *fakeRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoID st
 	return resultado, nil
 }
 
-// ListarReservasFuturasDeEquipo devuelve ORDENADO por fecha y hora, como el repo
-// real: quien llama puede necesitar LA PRÓXIMA, no una cualquiera. Iterar el
-// map sin ordenar daba un resultado distinto en cada corrida y escondía esa
-// dependencia.
-//
-// El filtro temporal (que la reserva no haya terminado) NO se reproduce acá
-// —lo verifica el test de infrastructure contra Postgres—, así que los tests
-// de este paquete usan fechas futuras a propósito.
-// Filtra igual que el repo real: solo CONFIRMADA y solo lo que todavía no
-// terminó. Sin esas dos condiciones el fake es más permisivo que la base, y
-// un test que dependa de ellas pasa acá y falla en producción — que es
-// exactamente al revés de para qué sirve un fake.
-// Reproduce el pre-chequeo de la base: las confirmadas de esos equipos en
-// esas fechas cuyo rango horario se pisa con el pedido. Los bordes que se
-// tocan NO cuentan, igual que la constraint EXCLUDE.
+// ListarReservasFuturasDeEquipo devuelve ORDENADO por fecha y hora, como el
+// repo real: quien llama puede necesitar LA PRÓXIMA, no una cualquiera.
 func (r *fakeRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []string, fechas []time.Time, horaInicio, horaFin time.Duration) ([]Solapamiento, error) {
 	if r.errBuscarSolapamientos != nil {
 		return nil, r.errBuscarSolapamientos
@@ -560,11 +543,11 @@ func (r *fakeRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID
 	return resultado, nil
 }
 func (r *fakeRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, cicloID string) (int, int, error) {
-	// El fake no modela la relación ciclo→materia→grupo/reserva (viviría
-	// del lado de academic), así que solo se usa para confirmar que el
-	// método existe y es invocable desde los tests que ejercitan la
-	// cascada — el comportamiento real se prueba en infrastructure/
-	// contra Postgres de verdad, donde sí existen esas tablas.
+	// El fake no modela la relación ciclo→materia→grupo/reserva (viviría del
+	// lado de academic), así que solo se usa para confirmar que el método existe
+	// y es invocable desde los tests que ejercitan la cascada — el
+	// comportamiento real se prueba en infrastructure/ contra Postgres de
+	// verdad, donde sí existen esas tablas.
 	return 0, 0, nil
 }
 func (r *fakeRepo) ListarReservasConfirmadasVencidas(ctx context.Context, ahora time.Time, limite int) ([]*domain.Reserva, error) {
@@ -584,9 +567,7 @@ func (r *fakeRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID str
 }
 
 // ReservasDeLaSerieDesde reproduce la consulta real: la misma máquina, en las
-// ocurrencias que le quedan a la serie. Sin regla de recurrencia devuelve
-// vacío, que es lo que hace que "esta y las siguientes" sea igual a "solo
-// esta" en una reserva suelta.
+// ocurrencias que le quedan a la serie.
 func (r *fakeRepo) ReservasDeLaSerieDesde(ctx context.Context, reservaID string) ([]*domain.Reserva, error) {
 	origen, ok := r.reservas[reservaID]
 	if !ok || origen.ReservaGrupoID == nil {
@@ -692,9 +673,7 @@ func (f *fakeValidadorEquipo) EquipoDisponibleParaReservar(ctx context.Context, 
 	return f.disponible, nil
 }
 
-// EquiposNoReservables: la versión de lote, coherente con la de a una. El
-// fake tiene que respetar esa coherencia o los tests que usan una y otra
-// dirían cosas distintas sobre el mismo equipo.
+// EquiposNoReservables: la versión de lote, coherente con la de a una.
 func (f *fakeValidadorEquipo) EquiposNoReservables(ctx context.Context, equipoIDs []string) ([]string, error) {
 	f.vecesNoReservables++
 	if f.disponible {
@@ -710,11 +689,7 @@ func (f *fakeValidadorEquipo) EquipoEstaEnInventario(ctx context.Context, equipo
 }
 
 // EtiquetasDeEquipos: en los tests los equipos se llaman "pc1", "pc2"… así
-// que el número visible sale del sufijo. Alcanza para verificar que el aviso
-// nombre los equipos correctos.
-//
-// El prefijo del Sscanf tiene que seguir a los IDs que usan los tests, no al
-// nombre de la entidad: son cadenas literales, no identificadores.
+// que el número visible sale del sufijo.
 func (f *fakeValidadorEquipo) EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error) {
 	if f.errIdentificadores != nil {
 		return nil, f.errIdentificadores
@@ -783,14 +758,7 @@ func TestCrearReserva_OK(t *testing.T) {
 	}
 }
 
-// El fin de semana dejó de estar prohibido por el código. Antes esto
-// devolvía ErrDiaNoLectivo y dejaba afuera a las escuelas de jornada
-// extendida o albergue, que dictan sábados y domingos.
-//
-// Qué días abre cada institución se declara (ver JornadaInstitucional), y
-// mientras no haya jornada declarada no hay restricción: es lo único honesto
-// que puede hacer un sistema al que todavía no le dijeron en qué ámbito lo
-// instalaron. El 2026-03-14 es sábado y el 2026-03-15 domingo.
+// El fin de semana dejó de estar prohibido por el código.
 func TestCrearReserva_FinDeSemana_SePuede(t *testing.T) {
 	for nombre, dia := range map[string]time.Time{
 		"sábado":  fecha(2026, 3, 14),
@@ -812,10 +780,7 @@ func TestCrearReserva_FinDeSemana_SePuede(t *testing.T) {
 	}
 }
 
-// Con jornada declarada, lo que cae afuera se rechaza. Es el reemplazo de la
-// regla vieja "lunes a viernes": misma consecuencia visible —un 400 con un
-// mensaje claro— pero originada en un dato que la institución cargó y puede
-// cambiar, no en una constante del código.
+// Con jornada declarada, lo que cae afuera se rechaza.
 func TestCrearReserva_FueraDeLaJornada_Error(t *testing.T) {
 	svc := NewService(
 		nuevoFakeRepo(),
@@ -1092,8 +1057,7 @@ func TestCancelarReserva_PublicaEventoReservaCancelada(t *testing.T) {
 }
 
 // RF-05.1/05.2/05.3: bloquear tres PCs de una misma reserva le dejaba al
-// docente tres avisos idénticos. Es una sola noticia para él —"me sacaron la
-// clase"— así que sale un evento con las tres PCs adentro.
+// docente tres avisos idénticos.
 func TestBloquearEquipos_UnSoloEventoPorDocente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
@@ -1192,8 +1156,8 @@ func TestBloquearEquipos_UnEventoPorCadaDocente(t *testing.T) {
 }
 
 // Si no se pueden resolver los identificadores, el aviso sale igual sin el
-// detalle: quedarse sin notificar por no poder adornar el mensaje sería
-// mucho peor que un mensaje menos específico.
+// detalle: quedarse sin notificar por no poder adornar el mensaje sería mucho
+// peor que un mensaje menos específico.
 func TestPublicarCancelaciones_SinIdentificadores_ElAvisoSaleIgual(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := NewService(repo, &fakeValidadorMateria{asignado: true},
@@ -1227,11 +1191,7 @@ func TestPublicarCancelaciones_SinIdentificadores_ElAvisoSaleIgual(t *testing.T)
 	}
 }
 
-// RF-05.1 es "tu reserva fue cancelada POR UN ADMIN". Cancelar lo propio
-// es una acción deliberada del docente: avisarle de algo que acaba de
-// hacer no aporta nada, y como el motivo es opcional cuando la reserva es
-// propia (RF-04.8), el aviso salía además como "Tu reserva fue cancelada: "
-// con el dos puntos colgando.
+// RF-05.1 es "tu reserva fue cancelada POR UN ADMIN".
 func TestCancelarReserva_ElDocenteCancelaLaPropia_NoPublicaEvento(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
@@ -1256,9 +1216,8 @@ func TestCancelarReserva_ElDocenteCancelaLaPropia_NoPublicaEvento(t *testing.T) 
 	}
 }
 
-// El motivo viaja sin el "Tu reserva fue cancelada:" — esa frase la pone
-// el suscriptor de notification. Si el servicio también la pusiera, el
-// aviso saldría con el prefijo repetido.
+// El motivo viaja sin el "Tu reserva fue cancelada:" — esa frase la pone el
+// suscriptor de notification.
 func TestBloquearEquipos_ElMotivoNoTraeElPrefijoDelAviso(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
@@ -1284,9 +1243,9 @@ func TestBloquearEquipos_ElMotivoNoTraeElPrefijoDelAviso(t *testing.T) {
 		if strings.Contains(motivo, "Tu reserva fue cancelada") {
 			t.Errorf("el motivo no debe traer el prefijo del aviso: %q", motivo)
 		}
-		// El motivo del Admin va tal cual, sin envolverlo en ninguna
-		// categoría: si escribió "jornada docente", el docente cancelado tiene
-		// que leer exactamente eso.
+		// El motivo del Admin va tal cual, sin envolverlo en ninguna categoría: si
+		// escribió "jornada docente", el docente cancelado tiene que leer
+		// exactamente eso.
 		if motivo != "los equipos quedaron bloqueados: Aprender 2026" {
 			t.Errorf("motivo inesperado: %q", motivo)
 		}
@@ -1296,9 +1255,9 @@ func TestBloquearEquipos_ElMotivoNoTraeElPrefijoDelAviso(t *testing.T) {
 }
 
 func TestCancelarReserva_BloqueoAdministrativoCancelado_NoPublicaEvento(t *testing.T) {
-	// Un bloqueo administrativo no tiene CreadoPor de un docente afectado
-	// que notificar de la misma forma — no debería publicar nada (o al
-	// menos no debería panickear al no tener a quién avisar).
+	// Un bloqueo administrativo no tiene CreadoPor de un docente afectado que
+	// notificar de la misma forma — no debería publicar nada (o al menos no
+	// debería panickear al no tener a quién avisar).
 	repo := nuevoFakeRepo()
 	repo.reservas["r1"] = &domain.Reserva{ID: "r1", Estado: domain.ReservaConfirmada, Tipo: domain.TipoBloqueo, CreadoPor: nil}
 	svc := nuevoServicioDeTest(repo)
@@ -1321,9 +1280,9 @@ func TestCancelarReserva_BloqueoAdministrativoCancelado_NoPublicaEvento(t *testi
 func TestCrearReservaRecurrente_OK(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	// Marzo 2026: los lunes son 2, 9, 16, 23, 30 — el mock "ahora" es
-	// lunes 2/3 al mediodía, así que arrancamos la regla desde ahí, a la
-	// tarde: la primera ocurrencia es hoy pero todavía no empezó.
+	// Marzo 2026: los lunes son 2, 9, 16, 23, 30 — el mock "ahora" es lunes 2/3
+	// al mediodía, así que arrancamos la regla desde ahí, a la tarde: la primera
+	// ocurrencia es hoy pero todavía no empezó.
 	res, err := svc.CrearReservaRecurrente(context.Background(), "materia1", "docente1", false,
 		domain.Lunes, 14*time.Hour, 15*time.Hour,
 		fecha(2026, time.March, 2), fecha(2026, time.March, 30), []string{"pc1"})
@@ -1609,8 +1568,7 @@ type fakeRepoConVencidas struct {
 
 // Imita al repo real en las dos cosas de las que depende el job por lotes:
 // solo devuelve lo que sigue CONFIRMADA (lo ya finalizado sale del conjunto)
-// y respeta el límite. Sin esto, un test de lotes vería siempre la misma
-// lista y no probaría nada.
+// y respeta el límite.
 func (f *fakeRepoConVencidas) ListarReservasConfirmadasVencidas(ctx context.Context, ahora time.Time, limite int) ([]*domain.Reserva, error) {
 	var pendientes []*domain.Reserva
 	for _, r := range f.vencidas {
@@ -1627,16 +1585,13 @@ func (f *fakeRepoConVencidas) ListarReservasConfirmadasVencidas(ctx context.Cont
 
 // EnTransaccion se redefine acá a propósito: la versión promovida desde
 // *fakeRepo le pasaría a fn el fake interno, perdiendo este override de
-// ListarReservasConfirmadasVencidas. El repo real tiene el mismo cuidado —
-// la transacción devuelve un repo del mismo tipo concreto.
+// ListarReservasConfirmadasVencidas.
 func (f *fakeRepoConVencidas) EnTransaccion(ctx context.Context, fn func(Repo) error) error {
 	return fn(f)
 }
 
 // El job leía TODO lo vencido en una sola transacción, y "todo lo vencido"
-// crece con cada hora que el proceso haya estado caído. Ahora va por lotes:
-// lo que importa es que un atraso más grande que el lote se procese entero
-// igual, en varias transacciones.
+// crece con cada hora que el proceso haya estado caído.
 func TestFinalizarVencidas_AtrasoMayorQueUnLote_LoProcesaEntero(t *testing.T) {
 	base := nuevoFakeRepo()
 	cantidad := loteFinalizarVencidas*2 + 37
@@ -1673,9 +1628,7 @@ func TestFinalizarVencidas_AtrasoMayorQueUnLote_LoProcesaEntero(t *testing.T) {
 }
 
 // Una reserva que el repo devuelve como vencida pero que no puede
-// transicionar se saltea, y el lote entero no avanza. Sin el corte por falta
-// de progreso, el job pediría el mismo lote hasta agotar maxLotesPorCiclo en
-// cada corrida del ticker.
+// transicionar se saltea, y el lote entero no avanza.
 func TestFinalizarVencidas_LoteSinProgreso_NoSeQuedaEnBucle(t *testing.T) {
 	base := nuevoFakeRepo()
 
@@ -1711,8 +1664,8 @@ func TestFinalizarVencidas_LoteSinProgreso_NoSeQuedaEnBucle(t *testing.T) {
 }
 
 // fakeRepoTerca devuelve SIEMPRE el mismo lote completo, sin importar lo que
-// haya pasado antes — es el escenario que hace falta para probar el corte
-// por falta de progreso.
+// haya pasado antes — es el escenario que hace falta para probar el corte por
+// falta de progreso.
 type fakeRepoTerca struct {
 	*fakeRepo
 	siempre []*domain.Reserva
@@ -1986,8 +1939,7 @@ func TestEliminarReservasDeCiclo_ErrorDelRepo_SePropaga(t *testing.T) {
 // ── RF-04.1: quién puede reservar y sobre qué materia ──────────────────
 
 // "Pueden reservar para una materia: docentes asignados a ella (vía
-// DocenteMateria) Y CUALQUIER ADMIN". El chequeo miraba solo
-// docente_materia, así que un Admin no asignado quedaba afuera.
+// DocenteMateria) Y CUALQUIER ADMIN".
 func TestCrearReserva_UnAdminNoAsignadoPuedeReservar(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := NewService(repo,
@@ -2030,8 +1982,7 @@ func TestCrearReserva_UnDocenteNoAsignadoSigueSinPoder(t *testing.T) {
 }
 
 // "siempre que la materia no esté archivada — una materia de un ciclo ya
-// cerrado no admite reservas nuevas aunque el registro se conserve". Nada
-// validaba esto: alcanzaba con estar asignado.
+// cerrado no admite reservas nuevas aunque el registro se conserve".
 func TestCrearReserva_MateriaArchivada_NoAdmiteReservas(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := NewService(repo,
@@ -2095,17 +2046,6 @@ func TestCrearReservaRecurrente_MateriaArchivada_NoAdmiteReservas(t *testing.T) 
 // ── Alcance de la transacción ───────────────────────────────────────────
 
 // espiaDeTransaccion detecta escrituras que se escapan de la transacción.
-//
-// El fakeRepo normal no puede: su EnTransaccion le pasa a fn el MISMO
-// objeto, así que escribir por `s.repo` o por el `repo` del closure es
-// indistinguible. El PostgresRepo real no funciona así — devuelve un repo
-// nuevo atado a la pgx.Tx, y `s.repo` sigue apuntando al pool—, y por eso
-// el bug de actualizarEstadoGrupo (que guardaba el ReservaGrupo por
-// `s.repo`) daba verde acá y corrompía datos en producción: la Reserva
-// volvía atrás con el rollback y su grupo padre quedaba CANCELADA.
-//
-// Esto imita esa distinción: fn recibe una instancia marcada como "dentro
-// de la transacción" y todo lo que se guarde por afuera queda contado.
 type espiaDeTransaccion struct {
 	*fakeRepo
 	dentroDeTx     bool
@@ -2185,10 +2125,8 @@ func TestBloquearEquipos_SiFallaElBloqueoNoQuedaNingunGrupoTocado(t *testing.T) 
 		t.Errorf("la reserva debería seguir CONFIRMADA tras el rollback, quedó %s", estado)
 	}
 	// Ojo: este test NO detecta por sí solo una escritura fuera de la
-	// transacción — el fakeRepo restaura sus mapas enteros, sin importar
-	// quién los escribió. De eso se ocupa el test de arriba, con el espía.
-	// Este cubre la otra mitad: que la cascada y el bloqueo vayan
-	// efectivamente dentro del mismo alcance transaccional.
+	// transacción — el fakeRepo restaura sus mapas enteros, sin importar quién
+	// los escribió.
 	if estado := base.grupos[grupoID].Estado; estado != domain.GrupoConfirmada {
 		t.Errorf("el grupo debería seguir CONFIRMADA tras el rollback, quedó %s", estado)
 	}
@@ -2315,8 +2253,7 @@ func TestTieneReservasFuturasDeEquipo_DespuesDeLaCascada_False(t *testing.T) {
 // ── Tamaño del lote ─────────────────────────────────────────────────────
 
 // El pedido lo arma el cliente, así que el tamaño del lote es entrada como
-// cualquier otra. Sin tope, mandar diez mil identificadores hace que el
-// servidor intente diez mil filas en una transacción.
+// cualquier otra.
 func TestCrearReserva_DemasiadosEquipos_SeRechaza(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
@@ -2386,9 +2323,7 @@ func TestCrearReserva_ValidaLaDisponibilidadEnUnaSolaConsulta(t *testing.T) {
 	}
 }
 
-// El 409 tiene que decir QUÉ chocó. Con ocho equipos tildados, "uno o más
-// equipos ya tienen una reserva" obliga a adivinar cuál destildar — y el
-// dato lo trajo la misma consulta que detectó el conflicto.
+// El 409 tiene que decir QUÉ chocó.
 func TestCrearReserva_Solapamiento_ElMensajeNombraLoQueChoco(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 	dia := fecha(2026, 3, 9)
@@ -2514,8 +2449,7 @@ func TestCambiarEquipoDeReserva_EstaYLasSiguientes(t *testing.T) {
 }
 
 // El caso que justifica validar todo antes de tocar nada: si el equipo nuevo
-// choca en una sola de las fechas, no se cambia ninguna. Media serie repartida
-// entre dos máquinas es peor que un rechazo.
+// choca en una sola de las fechas, no se cambia ninguna.
 func TestCambiarEquipoDeReserva_EnSerie_UnChoqueNoCambiaNada(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
@@ -2548,8 +2482,8 @@ func TestCambiarEquipoDeReserva_EnSerie_UnChoqueNoCambiaNada(t *testing.T) {
 }
 
 // Una reserva suelta no tiene serie: "esta y las siguientes" no significa
-// nada distinto de "solo esta", y rechazar el pedido por eso sería inventar un
-// error para el caso más común.
+// nada distinto de "solo esta", y rechazar el pedido por eso sería inventar
+// un error para el caso más común.
 func TestCambiarEquipoDeReserva_SinSerie_ElAlcanceNoCambiaNada(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
@@ -2640,10 +2574,6 @@ func TestPedirLiberacionDeReserva_FranjaYaEmpezada(t *testing.T) {
 }
 
 // fakeValidadorJornada hace de la jornada declarada por la institución.
-//
-// Por defecto permite todo, que es el comportamiento real cuando nadie
-// declaró una jornada — el caso de la enorme mayoría de los tests, que no
-// tienen nada que decir sobre horarios de apertura.
 type fakeValidadorJornada struct {
 	permite bool
 }

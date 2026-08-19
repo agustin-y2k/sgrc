@@ -10,11 +10,7 @@ import { apiFetch } from "@/lib/api-client"
 
 // ── Consulta pública dentro del sistema (RF-07.2) ─────────────────────
 
-/**
- * Cualquier usuario autenticado, no solo Admins. `disponibleAhora` se
- * calcula en el servidor en el momento de la consulta, así que la respuesta
- * envejece: la pantalla la vuelve a pedir cada tanto.
- */
+/** Cualquier usuario autenticado, no solo Admins. */
 export function listarDisponibilidadDeAdmins() {
   return apiFetch<RespuestaLista<AdminDisponibilidad>>("/api/availability/admins")
 }
@@ -27,8 +23,8 @@ export function miHorario() {
 
 /**
  * RF-07.3 — el cambio rige desde ya y hacia adelante, sin ninguna acción de
- * "propagar": el horario es un patrón que se evalúa en cada consulta, no
- * una serie de semanas materializadas.
+ * "propagar": el horario es un patrón que se evalúa en cada consulta, no una
+ * serie de semanas materializadas.
  */
 export function agregarBloque(diaSemana: DiaSemana, horaInicio: string, horaFin: string) {
   return apiFetch<BloqueHorario>("/api/availability/mi-horario", {
@@ -61,10 +57,6 @@ export function eliminarBloque(id: string) {
 /**
  * Pisa la excepción que ya hubiera para esa fecha (UNIQUE por usuario y
  * fecha, resuelto con upsert): cargar dos veces el mismo día no acumula.
- *
- * El backend rechaza con 400 las combinaciones incoherentes —NO_DISPONIBLE
- * con horario, o HORARIO_MODIFICADO sin él—, misma regla que el CHECK de la
- * base.
  */
 export function cargarExcepcion(excepcion: {
   fecha: string
@@ -80,9 +72,8 @@ export function cargarExcepcion(excepcion: {
 }
 
 /**
- * RF-07.5 — atajo de un paso equivalente a cargar una excepción
- * NO_DISPONIBLE para hoy. La fecha la pone el servidor con su propia hora,
- * que es la que corresponde: la del navegador podría estar en otro día.
+ * RF-07.5 — atajo de un paso equivalente a cargar una excepción NO_DISPONIBLE
+ * para hoy.
  */
 export function marcarNoDisponibleAhora() {
   return apiFetch<Excepcion>("/api/availability/no-disponible-ahora", {
@@ -90,29 +81,14 @@ export function marcarNoDisponibleAhora() {
   })
 }
 
-// ── Jornada de la institución ─────────────────────────────────────────
-//
-// Vive en este archivo porque comparte el tipo BloqueHorario y las mismas
+// ── Jornada de la institución ───────────────────────────────────────── Vive
+// en este archivo porque comparte el tipo BloqueHorario y las mismas
 // conversiones de "HH:MM", pero cuelga de /api/jornada y no de
 // /api/availability: es un dato de la escuela, no la disponibilidad de una
 // persona.
 
-/**
- * La jornada declarada por la institución: qué días y en qué horas abre.
- *
- * La consulta cualquier autenticado, no solo Admins — el formulario de
- * reserva la usa para avisar antes de mandar, y el calendario para saber qué
- * días dibujar.
- *
- * Lista vacía significa que todavía no la declararon, y eso NO es una
- * escuela cerrada: sin jornada no hay restricción de día ni de horario.
- */
-/**
- * Clave de react-query de la jornada. Se declara acá, y no en la pantalla que
- * la edita, porque la consultan tres lugares —la pantalla del Admin, el
- * formulario de reserva y el calendario— y una clave escrita a mano en cada
- * uno se desincroniza el día que alguien la cambia en dos de los tres.
- */
+/** La jornada declarada por la institución: qué días y en qué horas abre. */
+/** Clave de react-query de la jornada. */
 export const JORNADA_KEY = ["jornada"]
 
 export function jornadaDeLaInstitucion() {

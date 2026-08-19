@@ -34,13 +34,7 @@ export function Seccion({
   )
 }
 
-/**
- * La participación de una fila en el total, como barra y como número.
- *
- * En columna y no en un gráfico aparte: es la misma comparación que la
- * tabla ya hace, y así se lee de un vistazo sin perder los valores exactos.
- * Un div con ancho en porcentaje alcanza — no justifica una librería.
- */
+/** La participación de una fila en el total, como barra y como número. */
 export function Proporcion({ parte, total }: { parte: number; total: number }) {
   const pct = proporcion(parte, total)
   return (

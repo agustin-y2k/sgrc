@@ -27,15 +27,14 @@ func ParseTipoExcepcion(s string) (TipoExcepcion, error) {
 
 // ErrExcepcionIncoherente: NO_DISPONIBLE no lleva horario, HORARIO_MODIFICADO
 // lo requiere completo — mismo chk_excepcion_horario_coherente de la base
-// (docs/07-modelo-datos.md), validado también acá para devolver 400 antes
-// de golpear la constraint.
+// (docs/07-modelo-datos.md), validado también acá para devolver 400 antes de
+// golpear la constraint.
 var ErrExcepcionIncoherente = errors.New("horaInicio/horaFin no coinciden con el tipo de excepción")
 
 // Excepcion cubre tanto una excepción planificada para una fecha puntual
 // (RF-07.4: horario distinto o ausencia total ese día) como el atajo
-// "marcarme no disponible ahora" (RF-07.5) — son la misma fila, con
-// Fecha=hoy en el segundo caso. UNIQUE(usuario_id, fecha) se garantiza vía
-// upsert en el repo, no acá.
+// "marcarme no disponible ahora" (RF-07.5) — son la misma fila, con Fecha=hoy
+// en el segundo caso.
 type Excepcion struct {
 	ID         string
 	UsuarioID  string
@@ -70,9 +69,8 @@ func NuevaExcepcion(id, usuarioID string, fecha time.Time, tipo TipoExcepcion, h
 }
 
 // DisponibleAhora resuelve si, asumiendo que ESTA excepción rige para hoy
-// (siempre pisa el patrón semanal — ver docs/07-modelo-datos.md §2), el
-// admin cuenta como disponible a la hora indicada. Rango [HoraInicio,
-// HoraFin) para HORARIO_MODIFICADO, igual criterio que BloqueHorario.Cubre.
+// (siempre pisa el patrón semanal — ver docs/07-modelo-datos.md §2), el admin
+// cuenta como disponible a la hora indicada.
 func (e *Excepcion) DisponibleAhora(horaActual time.Duration) bool {
 	if e.Tipo == NoDisponible {
 		return false

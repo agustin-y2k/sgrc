@@ -4,19 +4,6 @@ import { Link } from "react-router"
 /**
  * Un atajo de la pantalla de inicio: un ícono, qué se hace ahí y para qué
  * sirve, en una tarjeta que se toca entera.
- *
- * Reemplaza a la lista de botones grises que había antes, y los cambios no
- * son decorativos:
- *
- * - El rótulo es una acción en infinitivo ("Ver las computadoras"), no el
- *   nombre de una sección del sistema ("Inventario"). Alguien que no sabe
- *   cómo está dividido el sistema no puede elegir entre nombres de módulos,
- *   pero sí entre cosas que quiere hacer.
- * - Debajo va una línea que dice para qué sirve. Sin ella, el docente entra
- *   a averiguarlo, que es exactamente la navegación a ciegas que hay que
- *   evitar.
- * - El área de toque es toda la tarjeta y no un renglón de texto: en un
- *   teléfono, un enlace de una línea es un blanco chico.
  */
 export function AccesoDirecto({
   icono: Icono,

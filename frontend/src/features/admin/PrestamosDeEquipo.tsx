@@ -7,15 +7,7 @@ import type { Prestamo } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { formatearFechaCortaYHora } from "@/lib/fechas"
 
-/**
- * RF-08.8 — el historial de entregas de una máquina, dentro de su ficha.
- *
- * Es de solo lectura: entregar y recibir se hace en /admin/entregas, que es
- * donde está la gente esperando. Lo que aporta acá es lo que no se ve en
- * ningún otro lado — las observaciones de cada devolución ("volvió sin el
- * cargador"), que son justo lo que se consulta cuando un equipo aparece con un
- * problema y hay que reconstruir por dónde anduvo.
- */
+/** RF-08.8 — el historial de entregas de una máquina, dentro de su ficha. */
 
 function cuando(iso: string): string {
   return formatearFechaCortaYHora(iso)

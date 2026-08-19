@@ -29,16 +29,13 @@ type loginRequest struct {
 }
 
 // googleLoginRequest lleva el ID token que el navegador recibió de Google.
-// Se llama "credential" porque es el nombre del campo con el que Google
-// Identity Services se lo entrega al frontend — mantener el mismo nombre
-// evita una traducción a mitad de camino que no aporta nada.
 type googleLoginRequest struct {
 	Credential string `json:"credential"`
 }
 
-// googleRegistroRequest es el login con Google más lo único que el token
-// no puede traer: qué va a dictar la persona (RF-01.3) y, si quiere
-// corregirlo, su nombre tal como figura en la escuela.
+// googleRegistroRequest es el login con Google más lo único que el token no
+// puede traer: qué va a dictar la persona (RF-01.3) y, si quiere corregirlo,
+// su nombre tal como figura en la escuela.
 type googleRegistroRequest struct {
 	Credential string `json:"credential"`
 	// Opcionales: vacíos, se usan los del token (given_name/family_name).
@@ -70,13 +67,8 @@ type olvidePasswordRequest struct {
 	Email string `json:"email"`
 }
 
-// restablecerPasswordRequest es el segundo: el código que llegó al mail
-// más la contraseña elegida.
-//
-// El email viaja de nuevo y no en una sesión intermedia a propósito: sin
-// estado del lado del servidor, el paso 2 funciona aunque la persona haya
-// cerrado la pestaña, cambiado de dispositivo o pedido el código desde la
-// computadora de la escuela y lo lea en el celular.
+// restablecerPasswordRequest es el segundo: el código que llegó al mail más
+// la contraseña elegida.
 type restablecerPasswordRequest struct {
 	Email         string `json:"email"`
 	Codigo        string `json:"codigo"`
@@ -101,34 +93,19 @@ type loginResponse struct {
 	DebeCambiarPassword bool   `json:"debeCambiarPassword"`
 }
 
-// configPublicaResponse es lo que la pantalla de login necesita saber
-// antes de que haya alguien autenticado.
-//
-// El client ID de Google se sirve desde acá y no se compila dentro del
-// bundle (VITE_…) a propósito: el frontend se construye una sola vez
-// dentro de la imagen Docker, así que meterlo en el build obligaría a
-// reconstruir la imagen para cambiarlo. No es un secreto — viaja en cada
-// pedido a Google desde el navegador de todas formas.
+// configPublicaResponse es lo que la pantalla de login necesita saber antes
+// de que haya alguien autenticado.
 type configPublicaResponse struct {
 	// Vacío = este despliegue no tiene ingreso con Google configurado, y
 	// el frontend no muestra el botón.
 	GoogleClientID string `json:"googleClientId"`
 
 	// RemitenteDeCorreo es la dirección desde la que salen los avisos.
-	// Vacía si este despliegue no manda correos.
-	//
-	// La publica el servidor porque es lo único que convierte "revisá spam"
-	// en algo accionable: lo que resuelve el problema de verdad es que la
-	// persona marque ese remitente como conocido una vez. Escribirla a mano
-	// en el frontend la dejaría desactualizada en la primera instalación
-	// que use otra casilla.
 	RemitenteDeCorreo string `json:"remitenteDeCorreo,omitempty"`
 
-	// false = no hay SMTP configurado, así que el sistema no puede mandar
-	// el código de recuperación a ningún lado y la pantalla de login no
-	// muestra el enlace "olvidé mi contraseña". Mismo criterio que el botón
-	// de Google: no ofrecer lo que este despliegue no puede hacer. La
-	// salida en ese caso es que un Admin resetee la contraseña (RF-01.6).
+	// false = no hay SMTP configurado, así que el sistema no puede mandar el
+	// código de recuperación a ningún lado y la pantalla de login no muestra el
+	// enlace "olvidé mi contraseña".
 	RecuperacionPorEmail bool `json:"recuperacionPorEmail"`
 }
 
@@ -142,21 +119,12 @@ type usuarioResponse struct {
 	FechaRegistro       time.Time  `json:"fechaRegistro"`
 	FechaAprobacion     *time.Time `json:"fechaAprobacion,omitempty"`
 	DebeCambiarPassword bool       `json:"debeCambiarPassword"`
-	// Lo que declaró al registrarse (RF-01.3). Es lo que el Admin mira en la
-	// pantalla de aprobación para saber a qué materia y curso asignarlo, y
-	// con qué rol.
+	// Lo que declaró al registrarse (RF-01.3).
 	CursoSolicitado   string `json:"cursoSolicitado,omitempty"`
 	MateriaSolicitada string `json:"materiaSolicitada,omitempty"`
 	RolSolicitado     string `json:"rolSolicitado,omitempty"`
 
-	// Cómo puede entrar esta cuenta. Nunca se expone el google_sub en sí:
-	// alcanza con saber si el vínculo existe, y el identificador de la
-	// cuenta de Google de una persona no es asunto de nadie más.
-	//
-	// TienePassword es lo que le permite a la pantalla de perfil no
-	// ofrecerle "cambiar contraseña" a quien entra con Google y no tiene
-	// ninguna (el backend responde 409, pero es mejor no mostrar el
-	// formulario que explicar el error después).
+	// Cómo puede entrar esta cuenta.
 	TienePassword    bool `json:"tienePassword"`
 	VinculadaAGoogle bool `json:"vinculadaAGoogle"`
 }
@@ -184,11 +152,9 @@ type resetPasswordResponse struct {
 	PasswordTemporal string `json:"passwordTemporal"`
 }
 
-// El meta salía de un paginationMeta local que se llenaba con
-// {Total: len(data), Page: 1, PageSize: len(data)} — o sea, describía la
-// respuesta en vez de la colección, y decía "página 1 de 1" siempre. Ahora
-// es el tipo compartido y lo completa la ventana real (ver
-// internal/shared/paginacion).
+// El meta salía de un paginationMeta local que se llenaba con {Total:
+// len(data), Page: 1, PageSize: len(data)} — o sea, describía la respuesta en
+// vez de la colección, y decía "página 1 de 1" siempre.
 type listarUsuariosResponse struct {
 	Data []usuarioResponse `json:"data"`
 	Meta paginacion.Meta   `json:"meta"`

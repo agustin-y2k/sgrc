@@ -1,6 +1,5 @@
 // Package domain contiene las entidades y reglas de negocio puras de
-// inventory — carros, PCs e incidencias. Ver docs/03-diagrama-clases.md y
-// docs/01-requisitos.md RF-03 para el detalle funcional completo.
+// inventory — carros, PCs e incidencias.
 package domain
 
 import (

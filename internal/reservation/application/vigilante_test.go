@@ -9,9 +9,7 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
 )
 
-// busEspia guarda lo publicado. Lo que estos tests miran casi siempre es
-// CUÁNTOS eventos salieron: un aviso por clase y no por máquina, y uno solo
-// aunque el barrido corra veinte veces.
+// busEspia guarda lo publicado.
 type busEspia struct {
 	publicados []eventbus.Evento
 }
@@ -143,8 +141,7 @@ func TestBarrer_ElRecordatorioSaleUnaSolaVez(t *testing.T) {
 }
 
 // TestBarrer_RecordatorioTardioSaleIgual: si el proceso estuvo caído, el
-// recordatorio sale tarde en vez de perderse. A las 8:10 todavía sirve saber
-// que la reserva se libera a las 8:40.
+// recordatorio sale tarde en vez de perderse.
 func TestBarrer_RecordatorioTardioSaleIgual(t *testing.T) {
 	repo := repoConClase(t, "pc1")
 	bus := &busEspia{}
@@ -225,9 +222,9 @@ func TestBarrer_NoAvisaSiLaClaseEsMasCortaQueLaGracia(t *testing.T) {
 	}
 }
 
-// TestBarrer_SiVuelveDespuesDeLaGraciaLiberaSinAvisar: el proceso estuvo caído
-// y volvió a las 8:45. El aviso llegaría anunciando algo que ya pasó, así que
-// no sale: mejor callarse que mentir.
+// TestBarrer_SiVuelveDespuesDeLaGraciaLiberaSinAvisar: el proceso estuvo
+// caído y volvió a las 8:45. El aviso llegaría anunciando algo que ya pasó,
+// así que no sale: mejor callarse que mentir.
 func TestBarrer_SiVuelveDespuesDeLaGraciaLiberaSinAvisar(t *testing.T) {
 	repo := repoConClase(t, "pc1")
 	bus := &busEspia{}
@@ -282,10 +279,6 @@ func TestBarrer_LiberaALos40Minutos(t *testing.T) {
 // TestBarrer_NoLiberaLaQueSeLlevaron es la condición que separa "el docente
 // no vino" de "el docente vino": si la máquina está afuera, la reserva está
 // cumplida aunque nadie haya apretado nada más.
-//
-// Acá el préstamo es ESPONTÁNEO (sin reserva detrás): alguien se llevó la pc1
-// para un trámite. Por eso sigue corriendo el plazo largo — que esa máquina
-// esté afuera no dice nada sobre si el docente vino a dar su clase.
 func TestBarrer_NoLiberaLaQueSeLlevaron(t *testing.T) {
 	repo := repoConClase(t, "pc1", "pc2")
 	// Se llevó la primera.
@@ -328,10 +321,8 @@ func entregarContraLaReserva(t *testing.T, repo *fakeRepo, prestamoID, equipoID 
 	repo.prestamos[p.ID] = p
 }
 
-// TestBarrer_TrasEntregaParcialLiberaALos15DeLaEntrega: el docente vino 8:05 y
-// se llevó una de las dos. La otra no espera hasta las 8:40 — el sistema ya no
-// tiene nada que averiguar, así que la suelta a los quince minutos de esa
-// entrega.
+// TestBarrer_TrasEntregaParcialLiberaALos15DeLaEntrega: el docente vino 8:05
+// y se llevó una de las dos.
 func TestBarrer_TrasEntregaParcialLiberaALos15DeLaEntrega(t *testing.T) {
 	repo := repoConClase(t, "pc1", "pc2")
 	entregarContraLaReserva(t, repo, "pr1", "pc1", aLas(8, 5))
@@ -468,14 +459,14 @@ func TestBarrer_AvisoSueltoCuandoLaDemoraEsPosterior(t *testing.T) {
 	}
 }
 
-// TestBarrer_SiElEquipoVuelveATiempoNadieSeEntera es la razón por la que esto no
-// bombardea: el caso más común es que alguien se demore quince minutos y
+// TestBarrer_SiElEquipoVuelveATiempoNadieSeEntera es la razón por la que esto
+// no bombardea: el caso más común es que alguien se demore quince minutos y
 // devuelva.
 func TestBarrer_SiElEquipoVuelveATiempoNadieSeEntera(t *testing.T) {
 	repo := repoConClase(t, "pc1")
-	// La clase es a las 8; la máquina la tenía otro y debía volver a las
-	// 7:30, o sea que a las 7:00 —cuando sale el recordatorio— todavía no
-	// estaba demorada.
+	// La clase es a las 8; la máquina la tenía otro y debía volver a las 7:30, o
+	// sea que a las 7:00 —cuando sale el recordatorio— todavía no estaba
+	// demorada.
 	p := prestamoVencido(t, repo, "pr1", "pc1", aLas(7, 30))
 	bus := &busEspia{}
 
@@ -638,13 +629,9 @@ func TestBarrer_SinNadaQueHacerNoPublicaNada(t *testing.T) {
 	}
 }
 
-// TestBarrer_NoLiberaUnBloqueoAdministrativo
-//
-// Un bloqueo administrativo (RF-04.7) no es una reserva que alguien
-// venga a retirar: es un Admin sacando máquinas de circulación para una mesa
-// de examen. Liberarlo a los cuarenta minutos dejaría que otro docente
-// reserve una computadora que está siendo usada en un examen, con el examen
-// en curso.
+// TestBarrer_NoLiberaUnBloqueoAdministrativo Un bloqueo administrativo
+// (RF-04.7) no es una reserva que alguien venga a retirar: es un Admin
+// sacando máquinas de circulación para una mesa de examen.
 func TestBarrer_NoLiberaUnBloqueoAdministrativo(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.identificadorDeEquipo["pc1"] = 1

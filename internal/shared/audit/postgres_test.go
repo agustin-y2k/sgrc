@@ -20,11 +20,9 @@ func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
 
-	// Por el helper compartido y no leyendo un archivo por nombre: este
-	// harness apuntaba a `001_init.sql` y se rompió cuando el esquema pasó a
-	// estar en un solo archivo. Nombrar el archivo hace que un test quede
-	// construyendo un esquema viejo sin que nada lo avise — el modo de falla
-	// que testdb existe para evitar.
+	// Por el helper compartido y no leyendo un archivo por nombre: este harness
+	// apuntaba a `001_init.sql` y se rompió cuando el esquema pasó a estar en un
+	// solo archivo.
 	contenedor, err := postgres.Run(ctx,
 		"postgres:16-alpine",
 		postgres.WithDatabase("sgrc_test"),

@@ -15,18 +15,7 @@ import * as reservasApi from "@/features/reservas/api"
 import { getErrorMessage } from "@/lib/api-client"
 import { formatearFechaLarga } from "@/lib/fechas"
 
-/**
- * El perfil: la pantalla que se abre desde el redondel con las iniciales.
- *
- * Antes ese redondel llevaba directo a cambiar la contraseña, que es una de
- * las cosas que una persona quiere hacer sobre su cuenta, pero no la única
- * ni la primera. Acá están juntas las cuatro: quién soy, qué materias doy,
- * pedir otra, y la contraseña.
- *
- * El orden no es casual. Arriba lo que identifica (foto y nombre), después
- * lo que más se consulta —qué materias tengo, que es de lo que dependen las
- * reservas—, y al final lo que se hace una vez por año.
- */
+/** El perfil: la pantalla que se abre desde el redondel con las iniciales. */
 export function PerfilPage() {
   const { user } = useAuth()
 

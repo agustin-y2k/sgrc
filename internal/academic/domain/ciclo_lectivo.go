@@ -1,7 +1,5 @@
-// Package domain contiene las entidades y reglas de negocio puras de
-// academic — ciclos lectivos, cursos, materias y la asignación de
-// docentes a materias. Ver docs/03-diagrama-clases.md y docs/01-requisitos.md
-// RF-02 para el detalle funcional completo.
+// Package domain contiene las entidades y reglas de negocio puras de academic
+// — ciclos lectivos, cursos, materias y la asignación de docentes a materias.
 package domain
 
 import (
@@ -21,10 +19,7 @@ const (
 	anioMaximo = 2100
 )
 
-// CicloLectivo es el año académico (RF-02.1). Solo puede haber uno
-// `Activo` a la vez en todo el sistema — esa regla vive a nivel de
-// aplicación/base (índice único parcial), no acá, porque requiere
-// consultar los demás ciclos existentes.
+// CicloLectivo es el año académico (RF-02.1).
 type CicloLectivo struct {
 	ID        string
 	Anio      int

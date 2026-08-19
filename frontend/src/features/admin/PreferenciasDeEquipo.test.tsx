@@ -32,13 +32,7 @@ function renderPanel(preferencias: PreferenciaDeEquipo[] = []) {
   )
 }
 
-/**
- * RF-03.21 — las marcas de preferencia de un equipo.
- *
- * Lo que se prueba es la propiedad que define la funcionalidad: la marca
- * sólo ordena, así que ponerla y sacarla no arrastra ninguna consecuencia
- * que haya que confirmar ni avisar.
- */
+/** RF-03.21 — las marcas de preferencia de un equipo. */
 describe("PreferenciasDeEquipo", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -101,11 +95,7 @@ describe("PreferenciasDeEquipo", () => {
     })
   })
 
-  /**
-   * Sin año, una división no significa nada: no existen "todas las B". El
-   * backend lo rechaza, pero acá directamente no se puede llegar a ese
-   * estado.
-   */
+  /** Sin año, una división no significa nada: no existen "todas las B". */
   it("no deja elegir división sin año", async () => {
     renderPanel()
 

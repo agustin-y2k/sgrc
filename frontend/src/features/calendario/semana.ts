@@ -1,12 +1,6 @@
-// Helpers de la vista semanal. Se trabaja con fechas "planas" (YYYY-MM-DD)
-// y horas "planas" (HH:MM) igual que el backend: las columnas de la base
-// son DATE y TIME sin zona, y representan la hora de pared de la escuela
-// (ver zonaHorariaDeLaEscuela en cmd/main.go). Meter Date con husos en el
-// medio solo agrega oportunidades de correr todo un día o unas horas.
+// Helpers de la vista semanal.
 
-// Los siete días. El sistema no supone cuáles usa la institución: las
-// escuelas de jornada extendida o albergue dictan el fin de semana, y la
-// vista semanal tiene que poder mostrar lo que ahí se reserve.
+// Los siete días.
 export const DIAS_SEMANA = [
   "Lunes",
   "Martes",
@@ -30,13 +24,7 @@ export function desdeFechaISO(iso: string): Date {
   return new Date(anio, mes - 1, dia)
 }
 
-/**
- * Lunes de la semana que contiene a `fecha`. El domingo se considera parte
- * de la semana que termina, no de la que empieza: es la convención local, y
- * ahora importa de verdad — el domingo es una columna más del calendario, y
- * de este cálculo depende que caiga al final de su semana y no al principio
- * de la siguiente.
- */
+/** Lunes de la semana que contiene a `fecha`. */
 export function lunesDeLaSemana(fecha: Date): Date {
   const d = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate())
   const diaSemana = d.getDay() // 0 = domingo
@@ -71,17 +59,7 @@ export function formatearRangoSemana(fecha: Date): string {
   return `${fmt(lunes)} – ${fmt(domingo)}/${domingo.getFullYear()}`
 }
 
-/**
- * "Lunes", "Sábado"… para una fecha "YYYY-MM-DD".
- *
- * Existe porque la cabecera del calendario dejó de poder indexar DIAS_SEMANA
- * por posición: ahora se dibujan solo los días que la escuela declaró, así
- * que la tercera columna no es necesariamente el miércoles. La etiqueta sale
- * de la fecha misma, que es la única fuente que no se desalinea.
- *
- * El `(getDay() + 6) % 7` corre el origen del domingo (0 en JS) al lunes, que
- * es donde empieza DIAS_SEMANA.
- */
+/** "Lunes", "Sábado"… para una fecha "YYYY-MM-DD". */
 export function etiquetaDeDia(fechaISO: string): string {
   return DIAS_SEMANA[(desdeFechaISO(fechaISO).getDay() + 6) % 7]
 }

@@ -13,12 +13,6 @@ import (
 )
 
 // Revocación de sesiones al cambiar la contraseña (RF-01.11).
-//
-// El middleware ya consulta la base en cada request, pero el estado de la
-// cuenta no cambia al cambiar una contraseña. Sin la versión de sesión, un
-// token emitido antes del cambio seguiría sirviendo hasta expirar, y el
-// caso que motiva cambiarla —"creo que alguien entró a mi cuenta"— sería
-// justo el que no funciona.
 
 // tokenConVersion firma un token válido para user-1 con la versión de
 // sesión indicada, como lo haría el firmador real.
@@ -60,9 +54,9 @@ func statusConToken(t *testing.T, aut Autenticacion, token string) int {
 }
 
 func TestRequerida_TokenAnteriorAlCambioDePassword_401(t *testing.T) {
-	// El token es criptográficamente válido y la cuenta está habilitada:
-	// lo único que cambió es que alguien cambió la contraseña, y con eso la
-	// versión de sesión pasó de 0 a 1.
+	// El token es criptográficamente válido y la cuenta está habilitada: lo
+	// único que cambió es que alguien cambió la contraseña, y con eso la versión
+	// de sesión pasó de 0 a 1.
 	aut := Autenticacion{Secret: testSecret, Vigente: cuentaEnVersion(1)}
 
 	if got := statusConToken(t, aut, tokenConVersion(t, testSecret, 0)); got != fiber.StatusUnauthorized {
@@ -71,9 +65,8 @@ func TestRequerida_TokenAnteriorAlCambioDePassword_401(t *testing.T) {
 }
 
 func TestRequerida_TokenEmitidoDespuesDelCambio_PasaBien(t *testing.T) {
-	// La contracara del test anterior: el token que devuelve el propio
-	// cambio de contraseña ya viene con la versión nueva. Si esto fallara,
-	// cambiar la contraseña dejaría afuera también a quien la cambió.
+	// La contracara del test anterior: el token que devuelve el propio cambio de
+	// contraseña ya viene con la versión nueva.
 	aut := Autenticacion{Secret: testSecret, Vigente: cuentaEnVersion(1)}
 
 	if got := statusConToken(t, aut, tokenConVersion(t, testSecret, 1)); got != fiber.StatusOK {
@@ -104,9 +97,8 @@ func TestRequerida_ElMensajeExplicaPorQueSeCayoLaSesion(t *testing.T) {
 }
 
 func TestRequerida_TokenSinElClaimSirveMientrasLaCuentaEsteEnCero(t *testing.T) {
-	// Un token sin el claim queda en 0 al deserializar — igual que el DEFAULT
-	// de la columna. Es lo que hace que una cuenta que nunca cambió su
-	// contraseña no necesite un claim para seguir siendo válida.
+	// Un token sin el claim queda en 0 al deserializar — igual que el DEFAULT de
+	// la columna.
 	aut := Autenticacion{Secret: testSecret, Vigente: cuentaEnVersion(0)}
 
 	// tokenValido es el helper viejo: firma sin VersionSesion.
@@ -117,8 +109,8 @@ func TestRequerida_TokenSinElClaimSirveMientrasLaCuentaEsteEnCero(t *testing.T) 
 
 func TestRequeridaPermitiendoPasswordVencida_TambienRevoca(t *testing.T) {
 	// La excepción de RF-01.6 es sobre la contraseña temporal, no sobre la
-	// revocación: si /me y /cambiar-password no chequearan la versión,
-	// quedaría un par de rutas usables con una sesión que ya se cerró — y
+	// revocación: si /me y /cambiar-password no chequearan la versión, quedaría
+	// un par de rutas usables con una sesión que ya se cerró — y
 	// /cambiar-password es justamente la que permitiría quedarse adentro.
 	aut := Autenticacion{Secret: testSecret, Vigente: cuentaEnVersion(1)}
 	app := fiber.New()

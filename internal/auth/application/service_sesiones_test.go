@@ -8,11 +8,6 @@ import (
 )
 
 // Revocación de sesiones.
-//
-// Los tres caminos por los que una contraseña cambia tienen que cerrar las
-// sesiones abiertas de esa cuenta. Lo que se verifica acá es que
-// VersionSesion suba y quede persistida; que el middleware la haga valer
-// está en internal/shared/middleware.
 
 func TestCambiarPassword_CierraLasSesionesAbiertas(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -30,10 +25,9 @@ func TestCambiarPassword_CierraLasSesionesAbiertas(t *testing.T) {
 }
 
 func TestCambiarPassword_ElTokenQueDevuelveNoNaceInvalido(t *testing.T) {
-	// El orden importa: si se firmara antes de InvalidarSesiones, quien
-	// acaba de cambiar su contraseña recibiría un token con la versión vieja
-	// y quedaría afuera en el request siguiente — echado por su propio
-	// cambio exitoso.
+	// El orden importa: si se firmara antes de InvalidarSesiones, quien acaba de
+	// cambiar su contraseña recibiría un token con la versión vieja y quedaría
+	// afuera en el request siguiente — echado por su propio cambio exitoso.
 	repo := nuevoFakeRepo()
 	u := docenteAprobado(repo, "ana@escuela.edu.ar")
 
@@ -73,9 +67,8 @@ func TestCambiarPassword_ConLaActualEquivocadaNoTocaLasSesiones(t *testing.T) {
 }
 
 func TestResetearPassword_CierraLasSesionesAbiertas(t *testing.T) {
-	// Es lo que se espera del caso que motiva un reset asistido: alguien
-	// perdió el control de su cuenta y pide ayuda. Sin esto, la sesión de
-	// quien haya entrado con la contraseña vieja sobrevive al reset.
+	// Es lo que se espera del caso que motiva un reset asistido: alguien perdió
+	// el control de su cuenta y pide ayuda.
 	repo := nuevoFakeRepo()
 	u := docenteAprobado(repo, "ana@escuela.edu.ar")
 	svc := nuevoServicioDeTest(repo)
@@ -126,8 +119,7 @@ func TestRestablecerConCodigo_UnCodigoEquivocadoNoCierraSesiones(t *testing.T) {
 
 func TestAprobarYDarDeBaja_NoTocanLaVersionDeSesion(t *testing.T) {
 	// El estado de la cuenta ya lo verifica el middleware por separado: una
-	// cuenta en BAJA no pasa aunque su versión coincida. Subir la versión
-	// acá sería redundante y confundiría las dos cosas.
+	// cuenta en BAJA no pasa aunque su versión coincida.
 	repo := nuevoFakeRepo()
 	u := docenteAprobado(repo, "ana@escuela.edu.ar")
 	u.Estado = domain.EstadoPendiente

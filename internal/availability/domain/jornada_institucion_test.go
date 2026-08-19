@@ -15,10 +15,7 @@ func bloqueJornada(dia DiaSemana, desde, hasta int) *BloqueJornada {
 }
 
 // La distinción que sostiene todo el diseño: una jornada vacía significa
-// "todavía no la declararon", no "la escuela está cerrada". Si se
-// confundieran, instalar el sistema y no configurar nada dejaría a todos sin
-// poder reservar, y el mensaje de error hablaría de una jornada que nadie
-// cargó nunca.
+// "todavía no la declararon", no "la escuela está cerrada".
 func TestPermiteReserva_SinJornadaDeclarada_NoRestringe(t *testing.T) {
 	for nombre, dia := range map[string]DiaSemana{
 		"un martes":  Martes,
@@ -64,9 +61,7 @@ func TestPermiteReserva_DentroDelTramo(t *testing.T) {
 	}
 }
 
-// Turno mañana y turno noche, con el mediodía cerrado. La reserva tiene que
-// entrar ENTERA en un tramo: una que cruce el hueco pediría el laboratorio
-// durante horas en que la escuela está cerrada.
+// Turno mañana y turno noche, con el mediodía cerrado.
 func TestPermiteReserva_DosTurnos_NoSePuedeCruzarElHueco(t *testing.T) {
 	jornada := []*BloqueJornada{
 		bloqueJornada(Miercoles, 7, 12),
@@ -84,10 +79,7 @@ func TestPermiteReserva_DosTurnos_NoSePuedeCruzarElHueco(t *testing.T) {
 	}
 }
 
-// Dos tramos contiguos describen un día abierto de punta a punta. Sin
-// fusionarlos, una reserva que cruza la juntura no entraría entera en
-// ninguno de los dos y se rechazaría sin que la persona pueda entender por
-// qué: en la pantalla el día figura abierto de 7 a 18.
+// Dos tramos contiguos describen un día abierto de punta a punta.
 func TestPermiteReserva_TramosContiguos_SeFusionan(t *testing.T) {
 	jornada := []*BloqueJornada{
 		bloqueJornada(Jueves, 12, 18),
@@ -113,9 +105,7 @@ func TestPermiteReserva_NoMezclaDias(t *testing.T) {
 }
 
 // "Fin antes del inicio" dejó de ser un error: significa que el tramo cruza
-// la medianoche, que es como abre una escuela nocturna. Lo único inválido es
-// la igualdad, que sería un tramo de cero o de veinticuatro horas y en la
-// práctica es un tipeo.
+// la medianoche, que es como abre una escuela nocturna.
 func TestNuevoBloqueJornada_RangoInvalido(t *testing.T) {
 	if _, err := NuevoBloqueJornada("id1", Lunes, 8*time.Hour, 8*time.Hour); !errors.Is(err, ErrRangoHorarioInvalido) {
 		t.Errorf("fin igual al inicio: esperaba ErrRangoHorarioInvalido, obtuve %v", err)

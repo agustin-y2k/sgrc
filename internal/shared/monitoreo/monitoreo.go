@@ -1,22 +1,5 @@
 // Package monitoreo avisa a un servicio externo que un barrido de fondo
 // terminó bien.
-//
-// El problema que resuelve: los tres barridos del sistema corren en
-// goroutines del mismo proceso (ver cmd/main.go). Si una muere o se queda
-// colgada, el proceso sigue vivo, la web responde, el healthcheck da verde y
-// nadie se entera. Lo que deja de pasar —las reservas no se finalizan, los
-// avisos de retiro no salen— se descubre semanas después, cuando alguien
-// pregunta por qué su reserva sigue abierta.
-//
-// La forma de detectar eso NO es un aviso cuando algo falla: si la goroutine
-// está muerta, tampoco puede avisar. Es al revés — el barrido dice "estoy
-// vivo" cada vez que termina bien, y el servicio externo alerta cuando ese
-// aviso DEJA de llegar. Es lo que se llama un interruptor de hombre muerto:
-// el silencio es la señal.
-//
-// Por eso solo se avisa el éxito y no el fallo: la alerta salta igual —el
-// aviso no llegó— y así el paquete no depende de las convenciones de ningún
-// proveedor en particular (unos esperan /fail, otros un parámetro).
 package monitoreo
 
 import (
@@ -46,9 +29,7 @@ var variableDeEntorno = map[string]string{
 	JobAvisoLicencias:   "PING_URL_AVISO_LICENCIAS",
 }
 
-// timeoutDelAviso: el aviso es un lujo, el barrido es el trabajo. Si el
-// servicio externo no contesta, se abandona rápido y el job sigue con lo
-// suyo.
+// timeoutDelAviso: el aviso es un lujo, el barrido es el trabajo.
 const timeoutDelAviso = 10 * time.Second
 
 // Avisador manda la señal de vida. El valor cero no sirve: usar DesdeEntorno.
@@ -57,13 +38,7 @@ type Avisador struct {
 	cliente *http.Client
 }
 
-// DesdeEntorno arma el avisador leyendo una variable por job. Las que no
-// estén configuradas dejan ese job sin aviso, que es el estado por defecto:
-// el sistema tiene que poder levantarse sin depender de un servicio externo.
-//
-// Devuelve error si una URL está escrita pero es inválida. Callar eso sería
-// lo peor de los dos mundos: alguien configuró el monitoreo, cree que está
-// cubierto, y no lo está.
+// DesdeEntorno arma el avisador leyendo una variable por job.
 func DesdeEntorno(getenv func(string) string) (*Avisador, error) {
 	urls := make(map[string]string)
 	for job, variable := range variableDeEntorno {
@@ -85,15 +60,12 @@ func DesdeEntorno(getenv func(string) string) (*Avisador, error) {
 }
 
 // JobsConAviso devuelve los nombres de los barridos que tienen aviso
-// configurado, para poder decirlo en el log de arranque. Sin eso, la única
-// forma de saber si el monitoreo quedó activo es esperar a que falle algo y
-// ver si llegó la alerta — que es exactamente cuando no se quiere descubrir
-// que no estaba configurado.
+// configurado, para poder decirlo en el log de arranque.
 func (a *Avisador) JobsConAviso() []string {
 	nombres := make([]string, 0, len(a.urls))
-	// Se recorre la lista de constantes y no el mapa: el orden de un mapa en
-	// Go es aleatorio, y una línea de log que cambia de orden en cada
-	// arranque es molesta de comparar entre reinicios.
+	// Se recorre la lista de constantes y no el mapa: el orden de un mapa en Go
+	// es aleatorio, y una línea de log que cambia de orden en cada arranque es
+	// molesta de comparar entre reinicios.
 	for _, job := range []string{JobReservasVencidas, JobBarridoEntregas, JobAvisoLicencias} {
 		if _, hay := a.urls[job]; hay {
 			nombres = append(nombres, job)
@@ -102,15 +74,7 @@ func (a *Avisador) JobsConAviso() []string {
 	return nombres
 }
 
-// Vive avisa que el barrido terminó bien. No devuelve error a propósito: el
-// llamador no puede hacer nada útil con él y no queremos que un problema del
-// servicio de monitoreo se confunda con un problema del barrido. Los fallos
-// se loguean y ahí termina.
-//
-// Es sincrónica: tarda como mucho timeoutDelAviso, y corre en la goroutine
-// del job, que después vuelve a esperar cinco minutos. Lanzar otra goroutine
-// para ahorrar ese tiempo agregaría una carrera con el apagado a cambio de
-// nada.
+// Vive avisa que el barrido terminó bien.
 func (a *Avisador) Vive(ctx context.Context, job string) {
 	destino, hay := a.urls[job]
 	if !hay {
@@ -128,10 +92,8 @@ func (a *Avisador) Vive(ctx context.Context, job string) {
 
 	resp, err := a.cliente.Do(pedido)
 	if err != nil {
-		// Que el aviso no salga NO es una falla del sistema: el barrido ya
-		// hizo su trabajo. Se loguea para poder distinguir después "el job
-		// dejó de correr" de "el job corre pero no llega el aviso", que
-		// desde el servicio externo se ven igual.
+		// Que el aviso no salga NO es una falla del sistema: el barrido ya hizo su
+		// trabajo.
 		log.Printf("aviso de vida de %s: %v", job, err)
 		return
 	}

@@ -17,26 +17,15 @@ type AuthContextValue = {
   isLoading: boolean
   /**
    * Se llena solo cuando la sesión no se pudo verificar por una falla de
-   * red/servidor (no por un token inválido). El token sigue guardado y la
-   * operación se puede reintentar — ver <ProtectedRoute>.
+   * red/servidor (no por un token inválido).
    */
   errorDeSesion: string | null
   /**
    * Por qué se cerró la sesión, cuando la cerró el backend y no la persona.
-   * Lo muestra la pantalla de login: sin esto, quien cambió su contraseña
-   * en otro dispositivo vuelve al login sin ninguna explicación de por qué
-   * lo echaron.
    */
   motivoDeCierre: string | null
   login: (email: string, password: string) => Promise<{ debeCambiarPassword: boolean }>
-  /**
-   * Ingreso con el ID token que devolvió Google. Deja la sesión igual que
-   * `login`: el token que guardamos sigue siendo el nuestro, el de Google
-   * no vuelve a usarse después de este llamado.
-   *
-   * Propaga el ApiError 404 ("todavía no hay cuenta") sin tocarlo: quién
-   * llama decide si eso significa mandar a completar el registro.
-   */
+  /** Ingreso con el ID token que devolvió Google. */
   loginConGoogle: (credential: string) => Promise<{ debeCambiarPassword: boolean }>
   logout: () => void
   refetchUser: () => Promise<void>
@@ -58,21 +47,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearToken()
       setUser(null)
       // errorDeSesion se limpia a propósito: eso es "no pude verificar la
-      // sesión, reintentá", y acá el backend sí contestó. <ProtectedRoute>
-      // manda al login cuando no hay usuario ni error de red.
+      // sesión, reintentá", y acá el backend sí contestó.
       setErrorDeSesion(null)
       setMotivoDeCierre(mensaje)
     })
   }, [])
 
   // Al bootear, si hay un token guardado, valida que siga siendo válido
-  // contra el backend (no hay lista de revocación local — GET /me es la
-  // única forma de confirmarlo) e hidrata el usuario completo.
-  //
-  // Distinguir 401/403 de una falla de red es importante: un token vencido
-  // SÍ tiene que cerrar la sesión, pero un backend momentáneamente caído no
-  // — si borráramos el token ahí, un blip de red desloguearía al usuario y
-  // lo obligaría a escribir la contraseña de nuevo sin ninguna explicación.
+  // contra el backend (no hay lista de revocación local — GET /me es la única
+  // forma de confirmarlo) e hidrata el usuario completo.
   const loadUser = useCallback(async () => {
     if (!getToken()) {
       setUser(null)
@@ -109,15 +92,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadUser])
 
   // abrirSesion es lo que los dos caminos de ingreso (contraseña y Google)
-  // tienen en común: el backend devuelve el mismo LoginResponse en ambos,
-  // así que a partir de acá la sesión es idéntica.
+  // tienen en común: el backend devuelve el mismo LoginResponse en ambos, así
+  // que a partir de acá la sesión es idéntica.
   const abrirSesion = useCallback(
     async (res: LoginResponse) => {
       if (!res.token) {
         // El backend nunca devuelve 200 sin token — Login() en
         // internal/auth/application/service.go rechaza con 403 antes de
-        // firmar si la cuenta no está APROBADA. Si esto dispara, algo
-        // cambió del lado del backend sin avisar acá.
+        // firmar si la cuenta no está APROBADA. Si esto dispara, algo cambió
+        // del lado del backend sin avisar acá.
         throw new Error("login sin token en la respuesta")
       }
       setToken(res.token)

@@ -236,8 +236,7 @@ func TestHTTP_Recibir_PrestamoInexistente(t *testing.T) {
 }
 
 // TestHTTP_Prestamos_SoloAdmin: quien entrega y recibe es quien hoy escribe
-// el papel. Un docente que pudiera marcarse la entrega a sí mismo
-// convertiría el registro en una declaración en vez de en una constancia.
+// el papel.
 func TestHTTP_Prestamos_SoloAdmin(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 

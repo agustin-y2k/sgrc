@@ -131,9 +131,9 @@ describe("InventarioPage", () => {
   })
 
   // ── Reportar una incidencia (RF-03.5) ────────────────────────────────
-  //
   // "Docentes solo pueden reportarlas": esta es la pantalla donde un docente
-  // ya está mirando los equipos, así que el reporte va acá y no en una de Admin.
+  // ya está mirando los equipos, así que el reporte va acá y no en una de
+  // Admin.
 
   it("un docente reporta una falla desde el listado de Equipos", async () => {
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo({})] })
@@ -165,8 +165,7 @@ describe("InventarioPage", () => {
   })
 
   // Reportar no saca el equipo de circulación (eso es RF-03.8, y lo decide un
-  // Admin). Si la pantalla no lo dijera, el docente podría irse creyendo
-  // que el equipo ya no se puede reservar.
+  // Admin).
   it("avisa que reportar no saca el equipo de circulación", async () => {
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo({})] })
     const user = userEvent.setup()
@@ -220,11 +219,7 @@ describe("InventarioPage", () => {
     )
   })
 
-  /**
-   * Las categorías ya usadas se ofrecen como sugerencia. Es lo único que
-   * impide que "batería" y "Bateria" nazcan como dos categorías distintas,
-   * porque el campo es texto libre a propósito.
-   */
+  /** Las categorías ya usadas se ofrecen como sugerencia. */
   it("sugiere las categorías que ya se usaron", async () => {
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo({})] })
     vi.mocked(inventoryApi.listarCategoriasDeFalla).mockResolvedValue({
@@ -247,11 +242,7 @@ describe("InventarioPage", () => {
     })
   })
 
-  /**
-   * Sin diagnóstico también se puede reportar. Obligar a completarla llevaría
-   * a que alguien escriba "otro" o "no sé", que es peor que el vacío: parece
-   * un diagnóstico y no lo es.
-   */
+  /** Sin diagnóstico también se puede reportar. */
   it("deja reportar sin clasificar la falla", async () => {
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo({})] })
     vi.mocked(inventoryApi.reportarIncidencia).mockResolvedValue({
@@ -280,7 +271,6 @@ describe("InventarioPage", () => {
   })
 
   // ── RF-03.15: lo prestable que no está en ningún carro ──────────────
-  //
   // Faltaba de esta pantalla: el proyector se podía reservar pero no se veía
   // acá, así que un docente no tenía desde dónde mirar su calendario ni
   // avisar que no anda.
@@ -350,9 +340,9 @@ describe("InventarioPage", () => {
       ).not.toBeInTheDocument()
     })
 
-    // Cada columna se decide por su dato: una notebook suelta es tipo PC
-    // —así que "Freezada" dice algo— pero el alta de un equipo suelto todavía
-    // no acepta el software, y una columna vacía no le sirve a nadie.
+    // Cada columna se decide por su dato: una notebook suelta es tipo PC —así
+    // que "Freezada" dice algo— pero el alta de un equipo suelto todavía no
+    // acepta el software, y una columna vacía no le sirve a nadie.
     it("una notebook suelta muestra Freezada, y el software solo si lo tiene", async () => {
       vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
         data: [

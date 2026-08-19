@@ -1,12 +1,6 @@
 import { datosDeLaCredencial } from "@/lib/google-identity"
 
-/**
- * Un ID token con el payload que interesa. No se firma: lo que se prueba
- * acá es la LECTURA para prellenar el formulario, no la validación — esa
- * la hace el backend contra las claves públicas de Google (ver el
- * comentario en datosDeLaCredencial y
- * internal/auth/infrastructure/google_idtoken.go).
- */
+/** Un ID token con el payload que interesa. */
 function credencialCon(payload: Record<string, unknown>): string {
   const aBase64Url = (obj: unknown) =>
     btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(obj))))
@@ -35,9 +29,9 @@ describe("datosDeLaCredencial", () => {
     })
   })
 
-  // atob devuelve bytes, no caracteres: sin la conversión a UTF-8 los
-  // nombres con acentos llegan rotos al formulario, que es la mitad de los
-  // apellidos de una escuela argentina.
+  // atob devuelve bytes, no caracteres: sin la conversión a UTF-8 los nombres
+  // con acentos llegan rotos al formulario, que es la mitad de los apellidos
+  // de una escuela argentina.
   it("no rompe los acentos", () => {
     const datos = datosDeLaCredencial(
       credencialCon({

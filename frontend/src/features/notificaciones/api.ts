@@ -5,10 +5,7 @@ import type {
 } from "@/features/notificaciones/types"
 import { apiFetch } from "@/lib/api-client"
 
-/**
- * Las notificaciones del usuario autenticado. El backend siempre filtra
- * por el `sub` del token, así que no hay forma de pedir las de otro.
- */
+/** Las notificaciones del usuario autenticado. */
 export function listarNotificaciones(estado?: EstadoNotificacion, page?: number) {
   const params = new URLSearchParams()
   if (estado) params.set("estado", estado)

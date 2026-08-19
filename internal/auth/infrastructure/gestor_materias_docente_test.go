@@ -11,13 +11,8 @@ import (
 )
 
 // crearMateriaDeTest arma ciclo→curso→materia mínimos por SQL directo —
-// auth/infrastructure no importa academic, así que no puede usar su
-// domain para esto.
-// contadorAnioDeTest asegura un año único por llamada a crearMateriaDeTest
-// dentro de un mismo test — ciclo_lectivo.anio tiene una constraint
-// UNIQUE, y varios tests crean más de una materia (con su propio
-// ciclo/curso) en la misma corrida, así que un año fijo (2026) chocaba en
-// la segunda llamada.
+// auth/infrastructure no importa academic, así que no puede usar su domain
+// para esto.
 var contadorAnioDeTest int32
 
 func crearMateriaDeTest(t *testing.T, pool *pgxpool.Pool) string {
@@ -28,11 +23,11 @@ func crearMateriaDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	cursoID := NuevoID()
 	materiaID := NuevoID()
 
-	// activo=false a propósito: este fixture puede crearse varias veces
-	// por test (una por materia independiente), y solo puede haber UN
-	// ciclo activo a la vez en toda la tabla (idx_ciclo_lectivo_activo_unico,
-	// RF-02.1) — estos tests no necesitan que el ciclo esté activo para
-	// nada, así que evitamos esa constraint directamente.
+	// activo=false a propósito: este fixture puede crearse varias veces por test
+	// (una por materia independiente), y solo puede haber UN ciclo activo a la
+	// vez en toda la tabla (idx_ciclo_lectivo_activo_unico, RF-02.1) — estos
+	// tests no necesitan que el ciclo esté activo para nada, así que evitamos
+	// esa constraint directamente.
 	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
 		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
 	}
@@ -139,9 +134,8 @@ func TestGestorMateriasDocentePostgres_QuedaOtroDocenteActivo_False_EraElUnico(t
 }
 
 func TestGestorMateriasDocentePostgres_QuedaOtroDocenteActivo_False_OtroNoAprobado(t *testing.T) {
-	// Caso importante: si el "otro" docente existe pero no está en
-	// estado APROBADA (ej. también en BAJA, o PENDIENTE), no cuenta como
-	// "activo" — la materia queda igual de huérfana.
+	// Caso importante: si el "otro" docente existe pero no está en estado
+	// APROBADA (ej.
 	pool := levantarPostgresDeTest(t)
 	materiaID := crearMateriaDeTest(t, pool)
 	docente1 := crearUsuarioDeTestGestor(t, pool, "APROBADA")

@@ -7,24 +7,10 @@ import (
 	"time"
 )
 
-// puertoPorDefecto es el de SMTP con STARTTLS (submission, RFC 6409). Es el
-// que usa Gmail y el que corresponde al único modo que soporta este
-// paquete: conexión en claro que se cifra con STARTTLS antes de autenticar.
-// El 465 (TLS implícito desde el saludo) NO funcionaría acá.
+// puertoPorDefecto es el de SMTP con STARTTLS (submission, RFC 6409).
 const puertoPorDefecto = "587"
 
 // DesdeEntorno arma el Enviador que corresponda a la configuración.
-//
-// El correo es OPCIONAL, igual que el ingreso con Google: sin SMTP_HOST el
-// sistema arranca, los avisos siguen llegando a la campana de
-// notificaciones y lo único que se pierde son las copias por mail. La
-// recuperación por autoservicio (RF-01.10) sí queda fuera de servicio, y
-// por eso existe el reset asistido por un Admin (RF-01.6).
-//
-// Lo que NO se tolera es una configuración a medias: con SMTP_HOST puesto y
-// SMTP_FROM vacío el proceso arrancaría y cada envío fallaría dentro de una
-// goroutine cuyo error solo se loguea, que es el modo de falla que nadie
-// mira. Mejor no arrancar.
 func DesdeEntorno(getenv func(string) string, ahora func() time.Time) (Enviador, error) {
 	leer := func(clave string) string { return strings.TrimSpace(getenv(clave)) }
 
@@ -58,11 +44,9 @@ func DesdeEntorno(getenv func(string) string, ahora func() time.Time) (Enviador,
 		cfg.Desde = cfg.Usuario
 	}
 
-	// La contraseña de aplicación de Gmail se muestra en la consola de
-	// Google en cuatro grupos de cuatro ("abcd efgh ijkl mnop") y se copia
-	// con los espacios. Google los ignora, pero SMTP PLAIN no: la
-	// autenticación falla con "Username and Password not accepted", que
-	// manda a revisar el usuario y no los espacios que sobran.
+	// La contraseña de aplicación de Gmail se muestra en la consola de Google en
+	// cuatro grupos de cuatro ("abcd efgh ijkl mnop") y se copia con los
+	// espacios.
 	if esGmail(cfg.Host) {
 		cfg.Password = strings.ReplaceAll(cfg.Password, " ", "")
 	}

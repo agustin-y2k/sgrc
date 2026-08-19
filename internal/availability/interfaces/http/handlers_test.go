@@ -17,8 +17,8 @@ import (
 )
 
 // ── fakeRepo — misma semántica de titularidad-acotada-por-usuario_id que
-// application/service_test.go, reimplementada acá porque interfaces/http
-// no puede importar los tipos no exportados de otro paquete de test. ──
+// application/service_test.go, reimplementada acá porque interfaces/http no
+// puede importar los tipos no exportados de otro paquete de test.
 
 type fakeRepo struct {
 	jornada map[string]*domain.BloqueJornada
@@ -92,9 +92,8 @@ func (r *fakeRepo) BuscarExcepcionDeFecha(ctx context.Context, usuarioID string,
 }
 
 // Las versiones en lote se implementan reusando las individuales: lo que se
-// prueba en application/ es que el servicio arme bien el resultado, no el
-// SQL —eso vive en infrastructure/ y va contra Postgres real—. Cuentan las
-// llamadas para poder verificar que el listado dejó de hacer 2N viajes.
+// prueba en application/ es que el servicio arme bien el resultado, no el SQL
+// —eso vive en infrastructure/ y va contra Postgres real—.
 func (r *fakeRepo) ListarBloquesDeUsuarios(ctx context.Context, usuarioIDs []string) (map[string][]*domain.BloqueHorario, error) {
 	r.llamadasBloquesEnLote++
 	resultado := make(map[string][]*domain.BloqueHorario, len(usuarioIDs))
@@ -161,14 +160,14 @@ func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	return app
 }
 
-// registroDePrueba hace de tabla usuario para el middleware de
-// autenticación: Token() deja registrado el rol de cada ID, y
-// Autenticacion() se lo devuelve al middleware igual que lo haría la base.
+// registroDePrueba hace de tabla usuario para el middleware de autenticación:
+// Token() deja registrado el rol de cada ID, y Autenticacion() se lo devuelve
+// al middleware igual que lo haría la base.
 var registroDePrueba = authtest.Nuevo()
 
 // tokenPara genera un JWT válido para un usuario de prueba — reusa
-// exactamente el mismo formato que produce infrastructure.JWTFirmador,
-// para que estos tests ejerciten el middleware de autenticación real.
+// exactamente el mismo formato que produce infrastructure.JWTFirmador, para
+// que estos tests ejerciten el middleware de autenticación real.
 func tokenPara(id, rol string) string {
 	return registroDePrueba.Token(testSecret, id, rol)
 }
@@ -190,9 +189,9 @@ func TestHTTP_DisponibilidadDeAdmins_SinToken_401(t *testing.T) {
 }
 
 func TestHTTP_DisponibilidadDeAdmins_ComoDocente_200(t *testing.T) {
-	// RF-07.2: cualquier usuario autenticado (docentes incluidos) puede
-	// ver esta lista — a diferencia del resto de las rutas, que son solo
-	// para Admin sobre su propio horario.
+	// RF-07.2: cualquier usuario autenticado (docentes incluidos) puede ver esta
+	// lista — a diferencia del resto de las rutas, que son solo para Admin sobre
+	// su propio horario.
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	req := httptest.NewRequest("GET", "/api/availability/admins", nil)
@@ -553,10 +552,7 @@ func TestHTTP_DisponibilidadDeAdmins_ExcepcionDeHoyPisaElBloque(t *testing.T) {
 // ── Jornada de la institución ──────────────────────────────────────────
 
 // La ruta de edición existía sin que ninguna pantalla la usara, así que su
-// comportamiento no estaba fijado por ningún test. Estos dos cubren lo que
-// la pantalla necesita: que un Admin pueda mover un extremo, incluso hasta
-// cruzar la medianoche, y que un docente no pueda tocar la jornada de la
-// escuela aunque pueda leerla.
+// comportamiento no estaba fijado por ningún test.
 func TestHTTP_EditarBloqueDeJornada_CruzaLaMedianoche_200(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.jornada["j1"] = &domain.BloqueJornada{

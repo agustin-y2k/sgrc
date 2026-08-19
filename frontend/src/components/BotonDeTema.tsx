@@ -11,20 +11,13 @@ import {
   type Tema,
 } from "@/lib/tema"
 
-/**
- * El interruptor de claro/oscuro de la barra.
- *
- * Muestra el ícono de a dónde va, no el de dónde está: con un sol en modo
- * claro, la mitad de la gente lo lee como "estás en claro" y la otra mitad
- * como "cambiar a claro". Diciendo a dónde lleva, la etiqueta y el ícono
- * dicen lo mismo.
- */
+/** El interruptor de claro/oscuro de la barra. */
 export function BotonDeTema() {
   const [tema, setTema] = useState<Tema>(() => temaEfectivo())
 
-  // Mientras nadie haya elegido a mano, el tema sigue al sistema en vivo:
-  // si el usuario tiene el cambio automático al atardecer, la pestaña que
-  // dejó abierta acompaña sin recargar.
+  // Mientras nadie haya elegido a mano, el tema sigue al sistema en vivo: si
+  // el usuario tiene el cambio automático al atardecer, la pestaña que dejó
+  // abierta acompaña sin recargar.
   useEffect(() => {
     if (temaElegido() !== null) return
     if (typeof matchMedia !== "function") return
@@ -53,8 +46,7 @@ export function BotonDeTema() {
       variant="ghost"
       size="sm"
       // 44px en un teléfono (WCAG 2.5.5): es un botón de un solo ícono, y con
-      // el tamaño `sm` quedaba en 28px. En pantalla grande vuelve a su
-      // tamaño, donde se apunta con el mouse y la barra no puede engordar.
+      // el tamaño `sm` quedaba en 28px.
       className="size-11 sm:size-7"
       onClick={alternar}
       // El texto es la etiqueta accesible: el botón es solo un ícono, y sin

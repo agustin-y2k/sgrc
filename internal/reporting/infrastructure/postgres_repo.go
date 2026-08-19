@@ -48,19 +48,8 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 
 // ── Snapshot histórico (persistencia propia de reporting) ──────────────
 
-// Los dos Guardar* van con ON CONFLICT DO NOTHING sobre UNIQUE(anio, …)
-// para que el archivado de un ciclo (RF-02.4) se pueda reintentar. La
-// cascada cruza tres paquetes sin una transacción que los abarque, así que
-// un fallo en el borrado de reservas deja el snapshot ya escrito; sin esta
-// cláusula, el reintento moría en una violación de constraint.
-//
-// DO NOTHING y no DO UPDATE: si el snapshot del año ya existe, es el bueno
-// —se calculó cuando las reservas todavía estaban vivas—. Un DO UPDATE
-// pisaría esos números con los que devuelva un recálculo posterior al
-// borrado, o sea con ceros. El único caso en que faltan filas es un
-// snapshot interrumpido a la mitad, y ahí las reservas siguen intactas, así
-// que el recálculo da lo mismo que la primera vez y solo completa lo que
-// falta.
+// Los dos Guardar* van con ON CONFLICT DO NOTHING sobre UNIQUE(anio, …) para
+// que el archivado de un ciclo (RF-02.4) se pueda reintentar.
 func (r *PostgresRepo) GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.HistoricoUsoEquipo) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO historico_uso_equipo (id, anio, equipo_id, etiqueta_snapshot, identificador_snapshot, carro_nombre_snapshot, minutos_reservados, cantidad_reservas)
@@ -92,10 +81,8 @@ func (r *PostgresRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain
 }
 
 // BorrarHistoricoDocentesSinCuenta corre antes de escribir el snapshot del
-// año (ver application.CalcularSnapshotAnual): esas filas no las cubre el
-// ON CONFLICT, así que se rehacen enteras en cada intento en vez de
-// acumularse. Son las de los docentes cuya cuenta ya no existe, y su
-// contenido depende solo de las reservas, que en ese momento siguen vivas.
+// año (ver application.CalcularSnapshotAnual): esas filas no las cubre el ON
+// CONFLICT, así que se rehacen enteras en cada intento en vez de acumularse.
 func (r *PostgresRepo) BorrarHistoricoDocentesSinCuenta(ctx context.Context, anio int) error {
 	_, err := r.pool.Exec(ctx,
 		`DELETE FROM historico_uso_docente WHERE anio = $1 AND usuario_id IS NULL`, anio)
@@ -157,20 +144,6 @@ func (r *PostgresRepo) ListarHistoricoUsoDocentePorAnio(ctx context.Context, ani
 // sin importar internal/reservation ni internal/academic) ─────────────
 
 // expresionMinutosDe convierte la duración de una reserva a minutos enteros.
-// EXTRACT(EPOCH FROM ...) devuelve segundos; /60 y redondeando da minutos —
-// ROUND en vez de truncar para no arrastrar decimales de segundo por horarios
-// que no caen en minutos exactos (no debería pasar en la práctica, pero ROUND
-// es más seguro).
-//
-// La duración sale de fin_de_pared() menos el inicio, y NO de la resta
-// `hora_fin - hora_inicio`. Con una clase nocturna esa resta da NEGATIVO: una
-// de 22:00 a 01:00 aportaba −1260 minutos, así que una escuela nocturna no
-// habría visto un error sino un reporte de uso que baja cuanto más se usa el
-// laboratorio.
-//
-// Va calificada con el alias de tabla porque todas las consultas de uso
-// hacen JOIN (con pc/carro o con usuario, para traer los nombres) y ahí
-// las columnas sueltas serían ambiguas.
 func expresionMinutosDe(alias string) string {
 	return fmt.Sprintf(
 		`ROUND(EXTRACT(EPOCH FROM (fin_de_pared(%s.fecha, %s.hora_inicio, %s.hora_fin) - (%s.fecha + %s.hora_inicio))) / 60)::INTEGER`,
@@ -183,9 +156,8 @@ func condFechasPrefijo(alias, cond string) string {
 	return strings.ReplaceAll(cond, " fecha ", " "+alias+".fecha ")
 }
 
-// filtroFechas agrega las condiciones de rango (RF-06.1) a una query que
-// ya trae al menos un parámetro. Devuelve el fragmento SQL y los args
-// actualizados.
+// filtroFechas agrega las condiciones de rango (RF-06.1) a una query que ya
+// trae al menos un parámetro.
 func filtroFechas(columna string, desde, hasta *time.Time, args []any) (string, []any) {
 	sql := ""
 	if desde != nil {
@@ -270,14 +242,9 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 	condFechas, args := filtroFechas("fecha", desde, hasta, args)
 
 	// El JOIN a usuario va LEFT y no se filtra por creado_por IS NOT NULL: al
-	// eliminar definitivamente una cuenta (RF-01.9) esa columna queda en NULL,
-	// y con INNER las reservas de esa persona desaparecían del reporte y de
-	// los totales del año. El nombre sale entonces del snapshot que la fila
-	// guarda justamente para eso.
-	//
-	// Se agrupa también por nombre_docente_snapshot: sin eso, todas las
-	// cuentas eliminadas caerían en un único renglón sin nombre, porque en un
-	// GROUP BY los NULL se juntan entre sí.
+	// eliminar definitivamente una cuenta (RF-01.9) esa columna queda en NULL, y
+	// con INNER las reservas de esa persona desaparecían del reporte y de los
+	// totales del año.
 	rows, err := r.pool.Query(ctx, `
 		SELECT r.creado_por,
 		       COALESCE(MAX(u.nombre || ' ' || u.apellido), r.nombre_docente_snapshot, '') AS docente,
@@ -312,13 +279,10 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 	return resultado, errorDeFilas(rows)
 }
 
-// ── RF-06.3: incidencias por equipo y por carro ────────────────────────
-//
-// A diferencia del uso de equipos/docentes, estas consultas NO dependen del
-// ciclo lectivo ni necesitan snapshot: Incidencia nunca se elimina, así
-// que el dato histórico siempre está disponible en vivo (ver RF-02.4).
-// El LEFT JOIN es contra las tablas de inventory, de solo lectura — mismo
-// criterio que el resto de los adaptadores de este paquete.
+// ── RF-06.3: incidencias por equipo y por carro ──────────────────────── A
+// diferencia del uso de equipos/docentes, estas consultas NO dependen del
+// ciclo lectivo ni necesitan snapshot: Incidencia nunca se elimina, así que
+// el dato histórico siempre está disponible en vivo (ver RF-02.4).
 
 func (r *PostgresRepo) CalcularIncidenciasPorEquipo(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasEquipo, error) {
 	args := []any{}
@@ -398,13 +362,6 @@ func (r *PostgresRepo) CalcularIncidenciasPorCarro(ctx context.Context, desde, h
 // ── Estado del parque de equipos (RF-06.5) ──────────────────────────────
 
 // EstadoDelInventario cuenta equipos por estado, agrupados por carro.
-//
-// Los dados de baja quedan afuera de todo: ya no son parte del parque, y
-// contarlos como "fuera de servicio" inflaría el número que la escuela usa
-// para pedir presupuesto con máquinas que ya nadie espera recuperar.
-//
-// LEFT JOIN a carro para que los equipos sueltos aparezcan igual, en su
-// propia fila: un proyector roto también sale de circulación.
 func (r *PostgresRepo) EstadoDelInventario(ctx context.Context) ([]domain.EstadoDelInventario, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT COALESCE(c.id::text, ''), COALESCE(c.nombre, ''),
@@ -439,12 +396,6 @@ func (r *PostgresRepo) EstadoDelInventario(ctx context.Context) ([]domain.Estado
 
 // EquiposFueraDeCirculacion lista lo que hoy no se puede reservar, con la
 // última incidencia de cada máquina.
-//
-// DISTINCT ON resuelve "la más reciente de cada equipo" en una sola pasada;
-// con una subconsulta correlacionada serían tantas consultas como equipos
-// listados. El LEFT JOIN es lo que deja aparecer a los que NO tienen ninguna
-// incidencia cargada — que es un caso a mostrar, no a esconder: alguien sacó
-// la máquina de circulación sin escribir por qué.
 func (r *PostgresRepo) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.EquipoFueraDeCirculacion, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT e.id,
@@ -485,15 +436,6 @@ func (r *PostgresRepo) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.
 }
 
 // CalcularIncidenciasPorCategoria responde "qué se rompe acá".
-//
-// Agrupa por lower(categoria) y no por el texto tal cual: la categoría es
-// libre, así que "Batería" y "batería" son la misma falla escrita por
-// dos personas distintas. Se muestra MIN(categoria) como etiqueta, que es
-// estable entre corridas.
-//
-// Las no clasificadas caen todas en una fila con categoría vacía en vez de
-// quedar afuera: cuántas fallas nadie pudo diagnosticar es uno de los
-// números que el reporte tiene que dar.
 func (r *PostgresRepo) CalcularIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error) {
 	args := []any{}
 	condFechas, args := filtroFechas("i.fecha", desde, hasta, args)

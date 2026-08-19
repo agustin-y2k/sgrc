@@ -59,14 +59,7 @@ function renderSelector(
   return { onCambio }
 }
 
-/**
- * RF-04.11 y RF-04.12: la mitad ocupada de la franja.
- *
- * Lo que se prueba es la decisión de fondo — que "no hay nada libre" y "los
- * tiene alguien con quien puedo hablar" son situaciones distintas, y que la
- * pantalla no replica la regla de a quién se le puede pedir: eso lo decide
- * el servidor con `puedePedirse`.
- */
+/** RF-04.11 y RF-04.12: la mitad ocupada de la franja. */
 describe("SelectorDeEquipos, los que ya tienen dueño", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -182,7 +175,7 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
 
   /**
    * `puedePedirse` es false en un bloqueo, en una reserva propia y cuando la
-   * franja ya empezó. La pantalla no distingue entre los tres: obedece.
+   * franja ya empezó.
    */
   it("no ofrece pedir lo que el servidor marcó como no pedible", async () => {
     renderSelector({ data: [], ocupados: [ocupado({ puedePedirse: false })] })
@@ -263,10 +256,6 @@ describe("SelectorDeEquipos, los que ya tienen dueño", () => {
 /**
  * RF-03.21 — la lista se parte en bloques según qué materia prefiere cada
  * equipo.
- *
- * Lo que se prueba es la decisión de fondo: los tramos son una ayuda de
- * lectura y no una restricción, así que todos los equipos se pueden tildar
- * igual y los títulos sólo aparecen cuando hay algo que distinguir.
  */
 describe("SelectorDeEquipos, tramos de preferencia", () => {
   beforeEach(() => {
@@ -330,9 +319,9 @@ describe("SelectorDeEquipos, tramos de preferencia", () => {
   })
 
   /**
-   * Es el caso normal mientras el inventario no tenga ninguna marca: sin
-   * nada que distinguir, ponerle un título al único bloque sería vocabulario
-   * nuevo que no dice nada.
+   * Es el caso normal mientras el inventario no tenga ninguna marca: sin nada
+   * que distinguir, ponerle un título al único bloque sería vocabulario nuevo
+   * que no dice nada.
    */
   it("sin marcas no muestra ningún título de tramo", async () => {
     renderSelector({

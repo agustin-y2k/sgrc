@@ -159,10 +159,9 @@ func (h *Handler) CancelarReserva(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusForbidden, "solo podés cancelar tus propias reservas")
 	}
 
-	// RF-04.8: cancelar la reserva de otra persona exige motivo — es el
-	// texto que el docente va a recibir en la notificación (RF-05.1), así
-	// que vacío lo dejaría sin ninguna explicación. Cancelar la propia no
-	// lo pide.
+	// RF-04.8: cancelar la reserva de otra persona exige motivo — es el texto
+	// que el docente va a recibir en la notificación (RF-05.1), así que vacío lo
+	// dejaría sin ninguna explicación.
 	if !esPropia && strings.TrimSpace(req.Motivo) == "" {
 		return mapearError(application.ErrMotivoObligatorio)
 	}
@@ -256,12 +255,6 @@ func (h *Handler) BloquearEquipos(c *fiber.Ctx) error {
 
 // GET /api/reservation/grupos/{id} — la reserva propia; un Admin puede ver
 // cualquiera.
-//
-// El chequeo de titularidad faltaba: alcanzaba con estar autenticado para
-// leer el grupo de cualquier otra persona, con su nombre y su materia
-// adentro. Es el mismo criterio que ya aplicaban ListarReservas (que le
-// fuerza el filtro por creador al docente) y las dos cancelaciones — este
-// endpoint era el único que se lo salteaba.
 func (h *Handler) ObtenerReservaGrupo(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)
@@ -284,10 +277,6 @@ func (h *Handler) ObtenerReservaGrupo(c *fiber.Ctx) error {
 
 // GET /api/reservation/reservas — lista reservas con filtros opcionales
 // (materiaId, equipoId, desde, hasta, incluirCanceladas).
-//
-// Control de acceso: un docente solo puede ver las suyas, así que el
-// filtro por creador se le fuerza sin importar lo que mande. Un Admin ve
-// todas, y puede acotar con ?creadoPor=<id>.
 func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -381,8 +370,8 @@ func (h *Handler) CalendarioDeEquipo(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// GET /api/reservation/equipos-disponibles?fecha&horaInicio&horaFin — RF-04.2.
-// La lista de la que el docente tilda las PCs que necesita; no está
+// GET /api/reservation/equipos-disponibles?fecha&horaInicio&horaFin —
+// RF-04.2. La lista de la que el docente tilda las PCs que necesita; no está
 // restringida a un solo carro.
 func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 	fecha, err := parseFecha(c.Query("fecha"))
@@ -404,9 +393,8 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 	}
 
 	// Con serieDesdeGrupoId, los libres son los que están libres en TODAS las
-	// fechas que le quedan a esa serie (RF-08.14): ofrecer los de hoy y
-	// rechazar el cambio cuando choca en la tercera fecha es hacerle adivinar
-	// al docente. Los ocupados siguen siendo los de la franja consultada.
+	// fechas que le quedan a esa serie (RF-08.14): ofrecer los de hoy y rechazar
+	// el cambio cuando choca en la tercera fecha es hacerle adivinar al docente.
 	var equipos []application.EquipoDisponible
 	if grupoID := strings.TrimSpace(c.Query("serieDesdeGrupoId")); grupoID != "" {
 		equipos, err = h.svc.ListarEquiposLibresEnLaSerie(c.UserContext(), grupoID)
@@ -436,16 +424,8 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 	return c.JSON(equiposDisponiblesResponse{Data: data, Ocupados: tomados})
 }
 
-// PATCH /api/reservation/reservas/{id}/equipo — cambiar una reserva de máquina.
-//
-// Existe para que "elegí otra" no obligue a cancelar y volver a reservar,
-// que arma un grupo nuevo y parte la clase en dos tarjetas. Es de quien
-// tenga la reserva, o de un Admin.
-//
-// `soloEsta` es un puntero para poder distinguir "no lo mandaron" de
-// "mandaron false", y el que falta se toma como true: un cliente viejo que no
-// conoce el campo pide cambiar UNA reserva, no la serie entera hasta fin de
-// año. Ante la duda, el cambio más chico.
+// PATCH /api/reservation/reservas/{id}/equipo — cambiar una reserva de
+// máquina.
 func (h *Handler) CambiarEquipoDeReserva(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -469,14 +449,9 @@ func (h *Handler) CambiarEquipoDeReserva(c *fiber.Ctx) error {
 	return c.JSON(toReservaResponse(reserva))
 }
 
-// POST /api/reservation/reservas/{id}/pedido-de-liberacion — RF-04.12.
-//
-// Le manda al dueño de esa reserva un aviso y un correo diciendo que otro
-// docente necesita ese equipo. No cambia ninguna reserva: es un mensaje.
-//
-// Responde 202 y no 201 porque no se crea ningún recurso que el cliente
-// pueda después consultar o borrar — lo único que queda es la notificación
-// del otro lado.
+// POST /api/reservation/reservas/{id}/pedido-de-liberacion — RF-04.12. Le
+// manda al dueño de esa reserva un aviso y un correo diciendo que otro
+// docente necesita ese equipo.
 func (h *Handler) PedirLiberacionDeReserva(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -502,7 +477,5 @@ func (h *Handler) PedirLiberacionDeReserva(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusAccepted)
 }
 
-// maxMensajeDelPedido acota el texto libre del pedido. No sale de ninguna
-// regla del dominio: sale de que el destino es el cuerpo de un correo, y de
-// que un pedido de dos páginas no lo lee nadie.
+// maxMensajeDelPedido acota el texto libre del pedido.
 const maxMensajeDelPedido = 500

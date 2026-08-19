@@ -18,12 +18,7 @@ import { hoyISO, type ReservaDetallada } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { contar } from "@/lib/plural"
 
-/**
- * Entregar las computadoras de una reserva del día.
- *
- * Máquina por máquina: el docente puede llevarse tres de las cinco que
- * reservó, y las otras dos siguen disponibles para otro.
- */
+/** Entregar las computadoras de una reserva del día. */
 export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
   const queryClient = useQueryClient()
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
@@ -33,9 +28,8 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
   const hoy = hoyISO()
   const { data, isLoading } = useQuery({
     queryKey: ["reservas", "del-dia", hoy],
-    // pageSize al máximo: el listado pagina de a 50 por defecto, y un día
-    // con ocho clases de ocho máquinas son 64 reservas. Con el default, las
-    // últimas del día no aparecían para entregar y nada lo avisaba.
+    // pageSize al máximo: el listado pagina de a 50 por defecto, y un día con
+    // ocho clases de ocho máquinas son 64 reservas.
     queryFn: () =>
       reservasApi.listarReservas({ desde: hoy, hasta: hoy, pageSize: 200 }),
   })
@@ -56,9 +50,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
               .join("; ")}`,
       ]
       // Solo llega cuando se entregó contra una reserva ya liberada: en el
-      // rato que el equipo estuvo libre, otro pudo reservarlo. No impide la
-      // entrega —el que llegó tarde igual necesita la máquina— pero el Admin
-      // tiene que saber que se la está sacando a alguien.
+      // rato que el equipo estuvo libre, otro pudo reservarlo.
       for (const a of respuesta.avisos ?? []) {
         partes.push(
           `Ojo: ese equipo tiene reserva ${a.fecha} de ${a.horaInicio} a ${a.horaFin}${a.docente ? ` (${a.docente})` : ""}.`
@@ -71,18 +63,14 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
     },
   })
 
-  // Las de hoy que todavía están en el laboratorio. Se cruzan por equipoId
-  // contra lo que está afuera: el backend no marca la reserva, porque la
-  // custodia es de la máquina y no de la reserva.
+  // Las de hoy que todavía están en el laboratorio.
   const pendientes = useMemo(() => {
     const reservas: ReservaDetallada[] = data?.data ?? []
     return reservas.filter(
       (r) =>
         r.estado === "CONFIRMADA" &&
         // Un bloqueo administrativo no tiene docente: lo crea un Admin sobre
-        // equipos sueltos, y no hay nadie esperando para retirarlas. Si alguien
-        // tiene que llevárselas para una mesa de examen, es una entrega
-        // suelta con el nombre escrito a mano.
+        // equipos sueltos, y no hay nadie esperando para retirarlas.
         r.tipo !== "BLOQUEO" &&
         !yaAfuera.has(r.equipoId)
     )

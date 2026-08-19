@@ -10,16 +10,6 @@ vi.mock("@/features/auth/api")
 vi.mock("@/lib/token-store")
 
 // Revocación de sesión desde el backend.
-//
-// El backend puede rechazar el token en CUALQUIER request, no solo en el
-// GET /me del arranque: la cuenta se dio de baja (RF-02.8), o alguien
-// cambió su contraseña y eso cerró las sesiones abiertas.
-//
-// Antes ese 401 llegaba como un error cualquiera: terminaba en un cartel
-// rojo dentro de la pantalla de turno mientras la aplicación seguía
-// creyendo que había sesión, así que cada acción siguiente fallaba igual y
-// nada llevaba al login. Estos tests ejercitan el apiFetch REAL (no un
-// mock) porque el enganche vive ahí.
 
 const usuarioMock: Usuario = {
   id: "1",

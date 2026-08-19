@@ -30,9 +30,7 @@ const MI_HORARIO_KEY = [...DISPONIBILIDAD_KEY, "mi-horario"]
 /**
  * "disponibleAhora" lo calcula el backend contra la hora del servidor en el
  * momento de la consulta, así que la respuesta se vuelve vieja sola: a las
- * 09:59 dice "disponible" y a las 10:01 ya no. Se refresca sin que el
- * usuario tenga que recargar, porque lo normal es dejar la pantalla abierta
- * mientras se decide si bajar al laboratorio.
+ * 09:59 dice "disponible" y a las 10:01 ya no.
  */
 const REFRESCO_MS = 60_000
 
@@ -138,12 +136,7 @@ function CamposDeBloque({
   )
 }
 
-/**
- * RF-07.1/07.3 — el patrón semanal propio del Admin autenticado.
- *
- * Se edita en la misma pantalla donde se consulta la de todos: el Admin ve
- * su tarjeta en la lista de arriba y acá abajo lo que la produce.
- */
+/** RF-07.1/07.3 — el patrón semanal propio del Admin autenticado. */
 function MiHorario() {
   const queryClient = useQueryClient()
   const [nuevo, setNuevo] = useState<FormBloque>(BLOQUE_VACIO)
@@ -176,8 +169,8 @@ function MiHorario() {
   })
 
   // La lambda no sobra: react-query invoca mutationFn con (variables,
-  // contexto), así que pasar la función de la API pelada le agrega un
-  // segundo argumento con el QueryClient adentro.
+  // contexto), así que pasar la función de la API pelada le agrega un segundo
+  // argumento con el QueryClient adentro.
   const eliminar = useMutation({
     mutationFn: (id: string) => disponibilidadApi.eliminarBloque(id),
     onSuccess: invalidar,
@@ -187,8 +180,8 @@ function MiHorario() {
   const errorAccion = agregar.error ?? editar.error ?? eliminar.error
 
   // El rango lo valida el backend (hora_fin > hora_inicio, en domain y en un
-  // CHECK), pero avisar antes evita mandar un request que ya sabemos que va
-  // a fallar.
+  // CHECK), pero avisar antes evita mandar un request que ya sabemos que va a
+  // fallar.
   const rangoNuevoInvalido = nuevo.horaFin <= nuevo.horaInicio
   const rangoEdicionInvalido = edicion.horaFin <= edicion.horaInicio
 
@@ -469,14 +462,8 @@ function MisExcepciones() {
 }
 
 /**
- * RF-07 — quién de los Admins está en el laboratorio ahora y con qué
- * horario habitual.
- *
- * Es la única pantalla del sistema que mira availability: el módulo tenía
- * dominio, servicio, repositorio y siete rutas sin nada que las consumiera.
- *
- * Un docente ve solo la lista. Un Admin ve además su propio horario y sus
- * excepciones, que es lo que alimenta su tarjeta.
+ * RF-07 — quién de los Admins está en el laboratorio ahora y con qué horario
+ * habitual.
  */
 export function DisponibilidadPage() {
   const { user } = useAuth()

@@ -10,8 +10,8 @@ vi.mock("@/lib/google-identity")
 /**
  * El botón lo dibuja Google dentro de su propio iframe, así que acá no hay
  * nada visual que probar: lo que importa es cuándo se inicializa la
- * biblioteca de Google y cuándo NO, y que el token termine en manos de
- * quien lo pidió.
+ * biblioteca de Google y cuándo NO, y que el token termine en manos de quien
+ * lo pidió.
  */
 function googleFalso() {
   const initialize = vi.fn()
@@ -28,8 +28,8 @@ describe("BotonGoogle", () => {
   })
 
   // Sin GOOGLE_CLIENT_ID en el backend, el formulario de email y contraseña
-  // sigue siendo un camino completo: no se dibuja nada ni se carga el
-  // script de un tercero.
+  // sigue siendo un camino completo: no se dibuja nada ni se carga el script
+  // de un tercero.
   it("sin client ID configurado, no carga nada de Google", async () => {
     const { initialize } = googleFalso()
     vi.mocked(authApi.configPublica).mockResolvedValue({ googleClientId: "" })
@@ -59,17 +59,15 @@ describe("BotonGoogle", () => {
     })
     // renderButton vive en OTRO useEffect, disparado por el estado que deja
     // el primero: cuando initialize ya corrió, todavía falta un ciclo de
-    // render. Sin waitFor esta línea gana la carrera una de cada tres veces.
+    // render.
     await waitFor(() => expect(renderButton).toHaveBeenCalled())
     await waitFor(() =>
       expect(screen.getByTestId("boton-google")).not.toHaveClass("hidden")
     )
   })
 
-  // El iframe de Google no se puede tocar con CSS, así que lo único que
-  // hace que el botón no desentone son las opciones de renderButton. Se
-  // prueban acá porque son la diferencia entre un botón alineado con el
-  // resto del formulario y uno que parece pegado de otra pantalla.
+  // El iframe de Google no se puede tocar con CSS, así que lo único que hace
+  // que el botón no desentone son las opciones de renderButton.
   it("pide el botón con el tema claro cuando la app está en claro", async () => {
     document.documentElement.classList.remove("dark")
     const { renderButton } = googleFalso()
@@ -138,8 +136,8 @@ describe("BotonGoogle", () => {
   })
 
   // Si el script de Google no carga (sin conexión, bloqueado por una
-  // extensión), no se muestra ningún error: para quien iba a entrar con
-  // email y contraseña sería ruido sobre algo que no pensaba usar.
+  // extensión), no se muestra ningún error: para quien iba a entrar con email
+  // y contraseña sería ruido sobre algo que no pensaba usar.
   it("si el script de Google no carga, no rompe la pantalla", async () => {
     vi.mocked(authApi.configPublica).mockResolvedValue({ googleClientId: "123-abc" })
     vi.mocked(cargarGoogleIdentity).mockRejectedValue(new Error("sin conexión"))

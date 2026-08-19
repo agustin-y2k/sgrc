@@ -18,12 +18,7 @@ const buttonVariants = cva(
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         // El texto no es `--destructive` puro: sobre el tinte del propio
         // botón medía 3.62:1 en claro y 4.3:1 en oscuro, por debajo de los
-        // 4.5:1 que pide WCAG AA para texto normal. Mezclarlo con
-        // `--foreground` lo corrige en los dos temas a la vez, porque el
-        // foreground es casi negro en claro y casi blanco en oscuro: el rojo
-        // se oscurece sobre fondo claro y se aclara sobre fondo oscuro, que
-        // es justo lo que cada uno necesita. Sigue siendo rojo y sigue siendo
-        // suave — lo que cambia es que ahora se lee.
+        // 4.5:1 que pide WCAG AA para texto normal.
         destructive:
           "bg-destructive/10 text-[color-mix(in_oklch,var(--destructive),var(--foreground)_30%)] hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",

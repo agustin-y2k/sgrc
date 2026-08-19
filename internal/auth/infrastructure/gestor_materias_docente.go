@@ -13,12 +13,7 @@ var _ application.GestorMateriasDocente = (*GestorMateriasDocentePostgres)(nil)
 
 // GestorMateriasDocentePostgres implementa el puerto hacia academic
 // (docente_materia) — a propósito NO importa internal/academic, mismo
-// criterio que ValidadorUsuarioPostgres de academic hacia auth. A
-// diferencia del puerto hacia reservation (que es una acción con máquina
-// de estados, resuelta en cmd/wiring_adapters.go envolviendo
-// reservation.Service), estas tres operaciones son lecturas simples y un
-// DELETE sin ninguna regla de negocio propia — van directo por SQL acá,
-// igual que todos los demás validadores de solo lectura del proyecto.
+// criterio que ValidadorUsuarioPostgres de academic hacia auth.
 type GestorMateriasDocentePostgres struct {
 	pool *pgxpool.Pool
 }

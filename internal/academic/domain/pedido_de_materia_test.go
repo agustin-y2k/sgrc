@@ -11,8 +11,7 @@ var ahoraDePrueba = time.Date(2026, time.August, 18, 10, 0, 0, 0, time.UTC)
 func idDeMateria(s string) *string { return &s }
 
 // Las dos formas de pedir son excluyentes: o se elige una materia de la
-// lista, o se escribe una que todavía no existe. Con las dos —o con
-// ninguna— no hay forma de saber qué quiso decir quien pidió.
+// lista, o se escribe una que todavía no existe.
 func TestNuevoPedido_UnaSolaForma(t *testing.T) {
 	casos := map[string]struct {
 		materiaID *string

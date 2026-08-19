@@ -37,12 +37,6 @@ func esViolacionUnica(err error) bool {
 
 // nombreDeConstraint devuelve qué constraint se violó, o "" si no fue una
 // violación de Postgres.
-//
-// La tabla `equipo` tiene tres restricciones de unicidad —identificador
-// dentro del carro, número de serie, y nombre entre los equipos sueltos— y
-// hace falta distinguirlas: "ya existe un equipo con ese identificador" es
-// una respuesta absurda para alguien que está cargando un segundo cargador
-// con el mismo nombre.
 func nombreDeConstraint(err error) string {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
@@ -56,10 +50,7 @@ func esIDInvalido(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == codigoTextoInvalido
 }
 
-// codigoViolacionFK: SQLSTATE 23503 — "foreign_key_violation". Es lo que
-// Postgres devuelve cuando el request nombra un padre que no existe (un
-// carro, un ciclo, una PC, un usuario). Se traduce igual que 22P02: es un
-// error del cliente, no una falla del servidor.
+// codigoViolacionFK: SQLSTATE 23503 — "foreign_key_violation".
 const codigoViolacionFK = "23503"
 
 func esViolacionFK(err error) bool {
@@ -69,8 +60,7 @@ func esViolacionFK(err error) bool {
 
 // errorDeFilas centraliza el chequeo de rows.Err(): pool.Query() no siempre
 // devuelve el error de sintaxis inmediatamente — a veces aparece recién en
-// rows.Err(), después del loop. Omitirlo hace que una consulta rota se vea
-// como un resultado vacío.
+// rows.Err(), después del loop.
 func errorDeFilas(rows pgx.Rows) error {
 	err := rows.Err()
 	if err == nil {

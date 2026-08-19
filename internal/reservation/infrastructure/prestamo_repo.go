@@ -14,8 +14,8 @@ import (
 
 // codigoViolacionUnica: SQLSTATE 23505. Es el único UNIQUE de este paquete —
 // el préstamo abierto por equipo—; la constraint característica de
-// reservation es el EXCLUDE de anti-solapamiento, que usa otro código
-// (23P01, ver esViolacionExclusion).
+// reservation es el EXCLUDE de anti-solapamiento, que usa otro código (23P01,
+// ver esViolacionExclusion).
 const codigoViolacionUnica = "23505"
 
 func esViolacionUnica(err error) bool {
@@ -29,19 +29,18 @@ const columnasPrestamo = `id, equipo_id, reserva_id, entregado_a_usuario_id, ent
 	`avisado_demora_en, avisado_cierre_para`
 
 // columnasPrestamoDetallado agrega la ubicación de la PC y, si el préstamo
-// salió contra una reserva, el nombre de la materia. Prefijadas porque la
-// consulta hace JOIN.
+// salió contra una reserva, el nombre de la materia.
 const columnasPrestamoDetallado = `p.id, p.equipo_id, p.reserva_id, p.entregado_a_usuario_id, p.entregado_a_nombre, ` +
 	`COALESCE(p.retirado_por, ''), ` +
 	`p.motivo, p.devolucion_estimada, p.entregado_por, p.entregado_en, p.devuelto_en, p.recibido_por, p.observaciones, ` +
 	`p.avisado_demora_en, p.avisado_cierre_para, ` +
 	`COALESCE(eq.identificador, 0), COALESCE(eq.nombre, 'PC ' || eq.identificador), COALESCE(c.nombre, ''), m.nombre`
 
-// joinsDelPrestamo: la PC y su carro son INNER —un préstamo sin PC no
-// existe— pero la reserva y la materia van LEFT, y por dos motivos
-// distintos: un préstamo espontáneo nunca tuvo reserva, y uno que sí la
-// tuvo puede haberla perdido cuando se archivó el ciclo lectivo (RF-02.4
-// borra las reservas; el préstamo sobrevive con reserva_id en NULL).
+// joinsDelPrestamo: la PC y su carro son INNER —un préstamo sin PC no existe—
+// pero la reserva y la materia van LEFT, y por dos motivos distintos: un
+// préstamo espontáneo nunca tuvo reserva, y uno que sí la tuvo puede haberla
+// perdido cuando se archivó el ciclo lectivo (RF-02.4 borra las reservas; el
+// préstamo sobrevive con reserva_id en NULL).
 const joinsDelPrestamo = `
 	FROM prestamo p
 	JOIN equipo eq ON eq.id = p.equipo_id
@@ -64,9 +63,9 @@ func (r *PostgresRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) er
 		p.EntregadoPor, p.EntregadoEn, p.DevueltoEn, p.RecibidoPor,
 		nullSiVacio(p.Observaciones))
 	if err != nil {
-		// El único índice único de la tabla es ux_prestamo_abierto, así que
-		// no hay ambigüedad sobre cuál se violó: alguien intentó entregar
-		// una máquina que ya estaba afuera.
+		// El único índice único de la tabla es ux_prestamo_abierto, así que no hay
+		// ambigüedad sobre cuál se violó: alguien intentó entregar una máquina que
+		// ya estaba afuera.
 		if esViolacionUnica(err) {
 			return application.ErrEquipoYaPrestado
 		}
@@ -122,10 +121,7 @@ func escanearPrestamo(row pgx.Row) (*domain.Prestamo, error) {
 	return &p, nil
 }
 
-// GuardarPrestamo solo actualiza lo que cambia al recibir la máquina. Los
-// datos de la entrega —qué PC, a quién, contra qué reserva— no se editan:
-// si están mal, lo que corresponde es anotar la devolución y registrar la
-// entrega correcta, igual que se tacharía un renglón en el papel.
+// GuardarPrestamo solo actualiza lo que cambia al recibir la máquina.
 func (r *PostgresRepo) GuardarPrestamo(ctx context.Context, p *domain.Prestamo) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE prestamo SET devuelto_en=$2, recibido_por=$3, observaciones=$4 WHERE id=$1
@@ -146,12 +142,6 @@ func (r *PostgresRepo) GuardarPrestamo(ctx context.Context, p *domain.Prestamo) 
 }
 
 // ListarPrestamosAbiertos: qué hay afuera ahora mismo.
-//
-// El orden pone primero lo que debía haber vuelto hace más tiempo, y deja al
-// final lo que no tiene hora pactada — que no está atrasado, simplemente no
-// se le puede reclamar nada. No hace falta pasarle "ahora": ordenar por
-// hora de devolución creciente ya deja arriba lo más vencido y, entre lo que
-// todavía no venció, lo que vence primero.
 func (r *PostgresRepo) ListarPrestamosAbiertos(ctx context.Context) ([]*application.PrestamoDetallado, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasPrestamoDetallado+joinsDelPrestamo+`
@@ -211,9 +201,8 @@ func escanearPrestamosDetallados(rows pgx.Rows) ([]*application.PrestamoDetallad
 	return resultado, errorDeFilas(rows)
 }
 
-// nullSiVacio guarda NULL en vez de una cadena vacía en las columnas de
-// texto opcionales (motivo, observaciones). Son cosas distintas: "no se
-// anotó nada" no es lo mismo que "se anotó un texto vacío".
+// nullSiVacio guarda NULL en vez de una cadena vacía en las columnas de texto
+// opcionales (motivo, observaciones).
 func nullSiVacio(s string) *string {
 	if s == "" {
 		return nil

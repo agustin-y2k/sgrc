@@ -253,8 +253,8 @@ type fakeValidadorUsuario struct {
 	valido bool
 	err    error
 	// validoPorUsuario permite distinguir un docente de otro, que es lo que
-	// necesita la cascada de RF-02.8: "queda otro docente" solo cuenta a los
-	// que siguen APROBADA. Si está en nil se usa `valido` para todos.
+	// necesita la cascada de RF-02.8: "queda otro docente" solo cuenta a los que
+	// siguen APROBADA. Si está en nil se usa `valido` para todos.
 	validoPorUsuario map[string]bool
 }
 
@@ -483,9 +483,7 @@ func TestArchivarYClonar_CicloYaArchivado_Error(t *testing.T) {
 }
 
 // El caso que tenía consecuencias de verdad: el Admin pide clonar a un año
-// que ya existe. Antes fallaba DESPUÉS de borrar el año viejo, así que
-// devolvía un 409 con las reservas ya destruidas y sin forma de completar el
-// clonado desde la interfaz.
+// que ya existe.
 func TestArchivarYClonar_AnioDestinoOcupado_FallaSinTocarNada(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: true}
@@ -526,9 +524,7 @@ func TestArchivarYClonar_AnioInvalido_FallaSinTocarNada(t *testing.T) {
 	}
 }
 
-// Si el clonado falla por algo transitorio, el archivado ya se consumó. El
-// reintento tiene que poder terminarlo: sin esto, el Admin quedaba cargando
-// a mano los cursos y materias del año nuevo.
+// Si el clonado falla por algo transitorio, el archivado ya se consumó.
 func TestArchivarYClonar_ReintentoCompletaElClonadoPendiente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	// Como quedó tras un primer intento que archivó y borró, pero no clonó.
@@ -594,14 +590,9 @@ func TestArchivarYClonar_LlamaAlArchivadorConCicloIDYAnio(t *testing.T) {
 }
 
 func TestArchivarYClonar_ErrorEnCascada_NoArchivaElCiclo(t *testing.T) {
-	// Si la cascada hacia reporting/reservation falla, la persistencia
-	// real (repo.ArchivarCiclo) no debe llegar a invocarse — mejor no
-	// archivar que archivar sin el histórico guardado. (Nota: no alcanza
-	// con mirar ciclo.Archivado en el fake, porque BuscarCicloPorID
-	// devuelve el mismo puntero del mapa, así que ciclo.Archivar() ya lo
-	// muta en memoria ANTES de la cascada, sin importar si después
-	// falla — lo que hay que verificar es que la persistencia real nunca
-	// se ejecutó.)
+	// Si la cascada hacia reporting/reservation falla, la persistencia real
+	// (repo.ArchivarCiclo) no debe llegar a invocarse — mejor no archivar que
+	// archivar sin el histórico guardado.
 	repo := nuevoFakeRepo()
 	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: true}
 	archivador := &fakeArchivadorHistorico{err: errors.New("reporting/reservation caídos")}
@@ -837,10 +828,9 @@ func TestRemoverDocenteMateria_OK(t *testing.T) {
 }
 
 // ── Cascada al quitar al último docente (RF-02.8) ──────────────────────
-//
 // auth.DarDeBaja ya hacía todo esto; quitar la asignación llegaba al mismo
-// estado —materia sin nadie a cargo, con reservas futuras vivas— sin
-// ninguna de las consecuencias.
+// estado —materia sin nadie a cargo, con reservas futuras vivas— sin ninguna
+// de las consecuencias.
 
 func TestRemoverDocenteMateria_EraElUnico_CancelaLasReservas(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -883,9 +873,7 @@ func TestRemoverDocenteMateria_QuedaOtroDocente_NoCancelaNada(t *testing.T) {
 }
 
 // Un docente que quedó en BAJA sigue teniendo su fila docente_materia hasta
-// que la cascada de auth la borre. Si contara como "otro docente", quitar al
-// único activo dejaría la materia huérfana sin cancelar nada — que es
-// exactamente el agujero que esto cierra.
+// que la cascada de auth la borre.
 func TestRemoverDocenteMateria_ElOtroDocenteNoEstaActivo_CancelaIgual(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "docente1", MateriaID: "m1"}
@@ -906,9 +894,7 @@ func TestRemoverDocenteMateria_ElOtroDocenteNoEstaActivo_CancelaIgual(t *testing
 }
 
 // Mismo criterio que auth.DarDeBaja: si la cascada falla, el vínculo se
-// conserva. Con el vínculo ya borrado no habría forma de reintentar —la
-// asignación que había que quitar ya no existe— y quedarían reservas vivas
-// en una materia sin docente.
+// conserva.
 func TestRemoverDocenteMateria_SiFallaLaCascada_ConservaLaAsignacion(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "docente1", MateriaID: "m1"}
@@ -927,11 +913,10 @@ func TestRemoverDocenteMateria_SiFallaLaCascada_ConservaLaAsignacion(t *testing.
 
 // ── Orden de la cascada de archivado (RF-02.4) ─────────────────────────
 
-// El borrado físico de reservas es el único paso irreversible de la
-// cascada, así que tiene que ser el ÚLTIMO. Si se ejecutara antes de
-// archivar el ciclo (como estaba originalmente), un fallo al archivar
-// dejaría el año entero de reservas borrado y el ciclo sin archivar, sin
-// forma de recuperarlo.
+// El borrado físico de reservas es el único paso irreversible de la cascada,
+// así que tiene que ser el ÚLTIMO. Si se ejecutara antes de archivar el ciclo
+// (como estaba originalmente), un fallo al archivar dejaría el año entero de
+// reservas borrado y el ciclo sin archivar, sin forma de recuperarlo.
 func TestArchivarYClonar_ElBorradoIrreversibleVaUltimo(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.ciclos["ciclo1"] = &domain.CicloLectivo{ID: "ciclo1", Anio: 2026, Activo: true}
@@ -1017,10 +1002,7 @@ func TestListarMateriasReservables_UnAdminLasVeTodas(t *testing.T) {
 
 // El archivado cruza tres paquetes sin una transacción que los abarque, así
 // que puede quedar a mitad de camino: ciclo marcado, snapshot guardado y
-// reservas todavía sin borrar. La única forma de completarlo desde la API
-// es volver a pedir el archivado, y para eso "ya está archivado" no puede
-// ser un error incondicional. Estos dos tests fijan de qué depende: de si
-// queda o no limpieza pendiente.
+// reservas todavía sin borrar.
 
 func TestArchivarYClonar_YaArchivadoConReservasPendientes_CompletaLaLimpieza(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -1059,10 +1041,9 @@ func TestArchivarYClonar_YaArchivadoYSinNadaPendiente_SigueSiendoError(t *testin
 	}
 }
 
-// ── Pedidos para dictar una materia ─────────────────────────────────────
-//
-// El fake los guarda en un mapa; el orden de los listados no importa para
-// estos tests, que verifican reglas y no presentación.
+// ── Pedidos para dictar una materia ───────────────────────────────────── El
+// fake los guarda en un mapa; el orden de los listados no importa para estos
+// tests, que verifican reglas y no presentación.
 
 func (r *fakeRepo) CrearPedido(_ context.Context, p *domain.PedidoDeMateria) error {
 	if r.pedidos == nil {

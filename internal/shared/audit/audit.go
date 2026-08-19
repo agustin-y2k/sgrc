@@ -1,9 +1,6 @@
 // Package audit persiste el registro de auditoría (ver
 // docs/09-seguridad-rbac.md §5): quién hizo qué acción administrativa
-// sensible, sobre qué entidad, y cuándo. Es un límite transversal como
-// middleware o eventbus — no pertenece al dominio de ningún paquete
-// feature en particular, así que auth/academic/inventory/reservation
-// dependen de la interfaz Auditor, nunca entre sí.
+// sensible, sobre qué entidad, y cuándo.
 package audit
 
 import "context"
@@ -18,21 +15,18 @@ const (
 	RolPromovidoAAdmin        = "ROL_PROMOVIDO_A_ADMIN"
 	RolDegradadoADocente      = "ROL_DEGRADADO_A_DOCENTE"
 	PasswordReseteada         = "PASSWORD_RESETEADA"
-	// PasswordRecuperadaPorEmail es la única acción de este catálogo cuyo
-	// actor NO está autenticado: la persona probó ser dueña de la cuenta
-	// con el código que le llegó al mail, no con un token. Por eso se
-	// audita —quedan la cuenta y la IP desde la que se hizo—, que es lo que
-	// permite reconstruir qué pasó si alguien reporta que no fue él.
+	// PasswordRecuperadaPorEmail es la única acción de este catálogo cuyo actor
+	// NO está autenticado: la persona probó ser dueña de la cuenta con el código
+	// que le llegó al mail, no con un token.
 	PasswordRecuperadaPorEmail = "PASSWORD_RECUPERADA_POR_EMAIL"
 	DocenteRemovidoDeMateria   = "DOCENTE_REMOVIDO_DE_MATERIA"
 	DocenteRolCambiado         = "DOCENTE_ROL_CAMBIADO"
 	ReservaCanceladaPorAdmin   = "RESERVA_CANCELADA_POR_ADMIN"
 	BloqueoCreado              = "BLOQUEO_CREADO"
-	// Los VALORES de estas constantes no se renombran nunca, aunque el
-	// sistema renombre la entidad: lo guardado es el nombre que la operación
-	// tenía cuando ocurrió, y reescribir un registro de auditoría es
-	// precisamente lo que un registro de auditoría no debe permitir. El
-	// identificador de Go sí se puede cambiar — no viaja a ningún lado.
+	// Los VALORES de estas constantes no se renombran nunca, aunque el sistema
+	// renombre la entidad: lo guardado es el nombre que la operación tenía
+	// cuando ocurrió, y reescribir un registro de auditoría es precisamente lo
+	// que un registro de auditoría no debe permitir.
 	EquipoEstadoCambiado       = "EQUIPO_ESTADO_CAMBIADO"
 	EquipoDadoDeBaja           = "EQUIPO_DADO_DE_BAJA"
 	EquipoMovidoDeCarro        = "EQUIPO_MOVIDO_DE_CARRO"
@@ -40,18 +34,12 @@ const (
 	MateriaEliminada           = "MATERIA_ELIMINADA"
 	CicloArchivadoReservasElim = "CICLO_ARCHIVADO_RESERVAS_ELIMINADAS"
 	CicloClonado               = "CICLO_CLONADO"
-	// Un pedido para dictar una materia se resolvió. Queda auditado porque
-	// aprobarlo habilita a reservar equipos para esa materia, y la decisión
-	// se toma hablando con gente fuera del sistema: cuando alguien pregunte
-	// meses después quién autorizó qué, esta es la única respuesta.
+	// Un pedido para dictar una materia se resolvió.
 	PedidoDeMateriaAprobado  = "PEDIDO_DE_MATERIA_APROBADO"
 	PedidoDeMateriaRechazado = "PEDIDO_DE_MATERIA_RECHAZADO"
 )
 
 // Entrada es una fila de audit_log (ver migrations/001_esquema_inicial.sql).
-// UsuarioID es siempre el actor que ejecutó la acción — nunca la entidad
-// afectada (ej: en CUENTA_BAJA, UsuarioID es el Admin que dio de baja, y
-// EntidadID es la cuenta dada de baja).
 type Entrada struct {
 	UsuarioID string
 	Accion    string
@@ -61,10 +49,7 @@ type Entrada struct {
 	IPOrigen  string // vacío si no se conoce
 }
 
-// Auditor persiste una Entrada. Un fallo de auditoría es una falla de
-// infraestructura secundaria, no debe abortar la operación de negocio que
-// ya se ejecutó — quien llama decide loguear el error y continuar (ver
-// docs/09-seguridad-rbac.md §5).
+// Auditor persiste una Entrada.
 type Auditor interface {
 	Registrar(ctx context.Context, e Entrada) error
 }

@@ -26,21 +26,6 @@ import { contar, plural } from "@/lib/plural"
 /**
  * La cola del mostrador: qué clase está en curso, qué viene después, y qué
  * máquinas hay que entregarle a cada docente.
- *
- * El sistema NO sabe dónde se da la clase — puede ser en el laboratorio o
- * puede ser que el docente se lleve las máquinas a su aula, y eso cambia de
- * una institución a otra. Lo único que sabe es que alguien reservó equipos
- * de tal a tal hora y viene a buscarlos, así que los títulos hablan de la
- * entrega y no de un lugar.
- *
- * Es la mitad del mostrador que mira hacia adelante (la otra —qué hay
- * afuera y qué volvió— es LoQueEstaAfuera). Las dos juntas son la pantalla
- * de inicio del Admin: son las preguntas que se hace todo el día, y tenerlas
- * que buscar en otra sección es lo que hace que nadie las mire.
- *
- * "Entregada" o "sin retirar" no sale de la reserva: sale de cruzar sus equipos
- * contra lo que está prestado ahora. La custodia es de la máquina, no de la
- * reserva — la misma computadora puede estar afuera por un préstamo suelto.
  */
 
 /** HH:MM a minutos, para comparar contra la hora actual. */
@@ -215,8 +200,7 @@ export function PanelDelLaboratorio() {
   const { data: reservas, isLoading } = useQuery({
     queryKey: ["reservas", "del-dia", hoy],
     // pageSize al máximo: el listado pagina de a 50 por defecto y un día con
-    // ocho clases de ocho máquinas son 64 reservas. Con el default, las
-    // últimas del día no aparecían y nada lo avisaba.
+    // ocho clases de ocho máquinas son 64 reservas.
     queryFn: () => reservasApi.listarReservas({ desde: hoy, hasta: hoy, pageSize: 200 }),
     refetchInterval: REFRESCO_DEL_MOSTRADOR,
   })

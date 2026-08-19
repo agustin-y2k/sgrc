@@ -10,15 +10,7 @@ import { Label } from "@/components/ui/label"
 import * as adminApi from "@/features/admin/api"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * RF-01.4 — un Admin crea otro Admin, que queda APROBADA de inmediato.
- *
- * Sin esto la institución se quedaba con la única cuenta administrativa que
- * siembra el arranque (SEED_ADMIN_EMAIL): el autorregistro crea DOCENTE y no
- * hay ningún endpoint que cambie el rol de una cuenta existente, así que la
- * segunda persona que administre el sistema tendría que compartir la cuenta
- * de la primera.
- */
+/** RF-01.4 — un Admin crea otro Admin, que queda APROBADA de inmediato. */
 
 const MIN_PASSWORD = 8
 

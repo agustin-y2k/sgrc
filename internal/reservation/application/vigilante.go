@@ -11,27 +11,8 @@ import (
 )
 
 // El barrido de reservas y entregas (RF-08.10 a RF-08.13).
-//
-// Es lo que el sistema hace SOLO: recordar la reserva una hora antes,
-// liberarla si a los cuarenta minutos nadie vino a buscar la máquina,
-// reclamar la que no volvió, avisarle al docente siguiente, y hacer un corte
-// al final de la jornada.
-//
-// Tipo aparte del Service, como AvisadorDeLicencias en inventory: no
-// comparte casi nada con él —no valida entradas de nadie, no genera IDs— y
-// su disparador es un reloj, no un request.
-//
-// Corre cada pocos minutos y NO hace falta que dispare una vez por día: cada
-// aviso deja su marca en la fila, así que reiniciar el contenedor no duplica
-// nada. Lo mismo vale al revés: si el proceso estuvo caído, el aviso sale
-// tarde en vez de perderse.
 
 // ConfigDeVigilancia son los plazos que la escuela puede ajustar.
-//
-// Dos de ellos valen quince minutos por defecto y no son lo mismo:
-// DemoraDelAvisoDeNoRetiro cuenta desde el inicio de la clase y manda un
-// correo; GraciaTrasEntregaParcial cuenta desde la entrega y libera sin decir
-// nada.
 type ConfigDeVigilancia struct {
 	// DemoraDelAvisoDeNoRetiro: cuánto se espera desde el inicio de la clase
 	// antes de avisarle al docente que todavía no las retiró (RF-08.20).
@@ -89,12 +70,7 @@ func (r ResumenDelBarrido) HizoAlgo() bool {
 		r.Reclamos+r.AvisosDeCierre > 0
 }
 
-// Barrer corre las seis pasadas. El orden importa en dos puntos: los
-// recordatorios van ANTES que los avisos sueltos de PC faltante, porque si
-// la advertencia entra en el recordatorio, el aviso suelto ya no
-// corresponde; y el aviso de no retiro va ANTES de liberar, porque después de
-// liberar la reserva ya no está CONFIRMADA y no habría a qué avisarle. El
-// resto son independientes.
+// Barrer corre las seis pasadas.
 func (v *Vigilante) Barrer(ctx context.Context) (ResumenDelBarrido, error) {
 	ahora := v.ahora()
 	var resumen ResumenDelBarrido
@@ -153,8 +129,8 @@ func (v *Vigilante) recordar(ctx context.Context, reservas []ReservaParaVigilar,
 		for _, r := range grupo {
 			aviso.Equipos = append(aviso.Equipos, r.Etiqueta)
 			// La advertencia de la máquina que no volvió viaja DENTRO del
-			// recordatorio: si el docente igual va a recibir un correo por
-			// esta clase, mandarle dos es el bombardeo que se quiso evitar.
+			// recordatorio: si el docente igual va a recibir un correo por esta clase,
+			// mandarle dos es el bombardeo que se quiso evitar.
 			if v.pcDemorada(r, ahora) && !r.AvisoEquipoNoDisponibleEnviado {
 				aviso.EquiposSinDevolver = append(aviso.EquiposSinDevolver, r.Etiqueta)
 				v.marcarAvisoDeEquipo(ctx, r.ReservaID, ahora, avisadas)
@@ -176,14 +152,9 @@ func (v *Vigilante) recordar(ctx context.Context, reservas []ReservaParaVigilar,
 
 // ── 2. El aviso suelto de "tu PC no volvió" ─────────────────────────────
 
-// avisarEquiposQueNoVolvieron cubre la otra mitad de max(detección, inicio − 1 h):
-// la demora se detectó DESPUÉS de que el recordatorio ya había salido, o
-// falta menos de una hora para la clase.
-//
-// Lo que hace que esto no sea bombardeo es lo que NO hace: si la máquina
-// vuelve antes de que se cumpla esa cuenta, el aviso no sale nunca. En el
-// caso más común —alguien se demora quince minutos y devuelve— el docente de
-// tres horas después no se entera de nada.
+// avisarEquiposQueNoVolvieron cubre la otra mitad de max(detección, inicio −
+// 1 h): la demora se detectó DESPUÉS de que el recordatorio ya había salido,
+// o falta menos de una hora para la clase.
 func (v *Vigilante) avisarEquiposQueNoVolvieron(ctx context.Context, reservas []ReservaParaVigilar, ahora time.Time, avisadas map[string]bool) int {
 	enviados := 0
 
@@ -237,10 +208,6 @@ func (v *Vigilante) avisarEquiposQueNoVolvieron(ctx context.Context, reservas []
 // ── 3. El aviso de "todavía no las retiraste" ───────────────────────────
 
 // avisarNoRetiro es el único aviso de esta parte del barrido (RF-08.20).
-// Sale a los quince minutos del inicio, no a los cuarenta junto con la
-// liberación: a los cuarenta el docente ya no puede hacer nada con la
-// información, y a los quince le quedan veinticinco minutos para ir, cambiar
-// la máquina que no está o cancelar y dejársela a otro.
 func (v *Vigilante) avisarNoRetiro(ctx context.Context, reservas []ReservaParaVigilar, ahora time.Time) int {
 	enviados := 0
 
@@ -258,9 +225,9 @@ func (v *Vigilante) avisarNoRetiro(ctx context.Context, reservas []ReservaParaVi
 			v.cfg.DemoraDelAvisoDeNoRetiro, v.cfg.GraciaDeRetiro, ahora) {
 			continue
 		}
-		// Si en esta misma pasada la reserva ya se va a liberar —el proceso
-		// estuvo caído y volvió pasada la gracia— el aviso llegaría anunciando
-		// algo que acaba de pasar. Mejor callarse que mentir.
+		// Si en esta misma pasada la reserva ya se va a liberar —el proceso estuvo
+		// caído y volvió pasada la gracia— el aviso llegaría anunciando algo que
+		// acaba de pasar.
 		if v.correspondeLiberar(primera, ahora) {
 			continue
 		}
@@ -282,9 +249,9 @@ func (v *Vigilante) avisarNoRetiro(ctx context.Context, reservas []ReservaParaVi
 
 		v.bus.Publish(eventbus.Evento{Tipo: "reserva.sin-retirar", Payload: aviso})
 		if err := v.repo.MarcarAvisoSinRetirarEnviado(ctx, *primera.GrupoID, ahora); err != nil {
-			// Mismo criterio que el recordatorio: el aviso ya salió, y no
-			// marcarlo solo significa que puede repetirse en la próxima
-			// pasada, no que se haya perdido.
+			// Mismo criterio que el recordatorio: el aviso ya salió, y no marcarlo
+			// solo significa que puede repetirse en la próxima pasada, no que se haya
+			// perdido.
 			log.Printf("barrido: no se pudo marcar el aviso de no retiro del grupo %s (el aviso ya salió): %v",
 				*primera.GrupoID, err)
 		}
@@ -298,17 +265,6 @@ func (v *Vigilante) avisarNoRetiro(ctx context.Context, reservas []ReservaParaVi
 
 // liberarNoRetiradas es el corazón de la etapa: cumplido el plazo, una
 // máquina que nadie vino a buscar deja de bloquear el horario.
-//
-// **No publica ningún evento.** Es el único punto del barrido donde una
-// reserva cambia de estado en silencio, y es deliberado: el aviso al docente
-// ya salió antes (RF-08.20), cuando todavía servía para decidir algo.
-// Repetirlo acá sería un segundo correo por la misma clase para contar un
-// hecho consumado.
-//
-// La condición de que la PC NO esté afuera no es un detalle: si el docente
-// llegó y se la llevó, la reserva está cumplida aunque nadie haya apretado
-// nada más. Y si la máquina salió por una entrega espontánea a otra persona,
-// tampoco tiene sentido liberar una franja para una PC que no está.
 func (v *Vigilante) liberarNoRetiradas(ctx context.Context, reservas []ReservaParaVigilar, ahora time.Time) int {
 	liberadas := 0
 
@@ -346,14 +302,6 @@ func (v *Vigilante) liberarNoRetiradas(ctx context.Context, reservas []ReservaPa
 }
 
 // correspondeLiberar elige cuál de los dos plazos le corre a esta reserva.
-//
-// No son el mismo plazo con distinto número. Sin ninguna entrega, el sistema
-// no sabe si el docente está por llegar, y espera desde el inicio de la clase.
-// Con una entrega hecha, el docente ya vino y eligió qué se llevaba: el plazo
-// cuenta desde ese momento y **reemplaza** al otro. En la práctica cae antes;
-// si el Admin anotó la entrega sobre el final de la gracia cae un poco
-// después, que es lo correcto — recién estuvo en el mostrador y sus quince
-// minutos para volver por el resto empiezan ahí.
 func (v *Vigilante) correspondeLiberar(primera ReservaParaVigilar, ahora time.Time) bool {
 	if primera.UltimaEntregaDelGrupo != nil {
 		return domain.CorrespondeLiberarTrasEntregaParcial(primera.Fecha, primera.HoraInicio, primera.HoraFin,
@@ -368,9 +316,8 @@ func (v *Vigilante) liberar(ctx context.Context, reservaID string, ahora time.Ti
 	if err != nil {
 		return err
 	}
-	// Releer antes de escribir: entre la consulta del barrido y este momento
-	// el docente pudo haber cancelado, o el Admin haber entregado la
-	// máquina. Si ya no está confirmada, no hay nada que liberar.
+	// Releer antes de escribir: entre la consulta del barrido y este momento el
+	// docente pudo haber cancelado, o el Admin haber entregado la máquina.
 	if reserva.Estado != domain.ReservaConfirmada {
 		return nil
 	}
@@ -382,8 +329,7 @@ func (v *Vigilante) liberar(ctx context.Context, reservaID string, ahora time.Ti
 
 // marcarGrupoSiQuedoTodoSinRetirar sigue el mismo criterio que
 // finalizarGrupoSiCorresponde: el grupo solo cambia cuando ya no queda
-// ninguna reserva viva adentro. Si el docente vino y se llevó tres de cinco,
-// el grupo NO pasa a NO_RETIRADA — vino a dar la clase.
+// ninguna reserva viva adentro.
 func (v *Vigilante) marcarGrupoSiQuedoTodoSinRetirar(ctx context.Context, grupoID string) {
 	grupo, err := v.repo.BuscarReservaGrupoPorID(ctx, grupoID)
 	if err != nil {
@@ -433,12 +379,8 @@ func (v *Vigilante) reclamarDevoluciones(ctx context.Context, prestamos []Presta
 		if !p.Prestamo.ExcedioLaDemora(v.cfg.DemoraParaReclamar, ahora) {
 			continue
 		}
-		// Las dos horas se convierten ACÁ, a la zona que trae `ahora` (que
-		// es la de la escuela, ver cmd/main.go). En la base son
-		// timestamptz y pgx las entrega en UTC: mandarlas así hacía que el
-		// aviso dijera "tenía que devolverla a las 21:12" cuando en la
-		// escuela eran las 18:12. El que arma el texto no tiene de dónde
-		// sacar la zona, así que le llegan ya resueltas.
+		// Las dos horas se convierten ACÁ, a la zona que trae `ahora` (que es la de
+		// la escuela, ver cmd/main.go).
 		demorados = append(demorados, eventbus.PrestamoDemorado{
 			PrestamoID:      p.Prestamo.ID,
 			Etiqueta:        p.Etiqueta,
@@ -454,9 +396,9 @@ func (v *Vigilante) reclamarDevoluciones(ctx context.Context, prestamos []Presta
 		return 0
 	}
 
-	// Publicar primero y marcar después, igual que el aviso de licencias: si
-	// el proceso se cae en el medio, un reclamo repetido molesta; uno que no
-	// sale deja una máquina perdida sin que nadie se entere.
+	// Publicar primero y marcar después, igual que el aviso de licencias: si el
+	// proceso se cae en el medio, un reclamo repetido molesta; uno que no sale
+	// deja una máquina perdida sin que nadie se entere.
 	v.bus.Publish(eventbus.Evento{Tipo: "prestamo.demorado", Payload: eventbus.PrestamosDemorados{Prestamos: demorados}})
 	for _, d := range demorados {
 		if err := v.repo.MarcarDemoraAvisada(ctx, d.PrestamoID, ahora); err != nil {
@@ -469,14 +411,6 @@ func (v *Vigilante) reclamarDevoluciones(ctx context.Context, prestamos []Presta
 // ── 5. El corte de fin de jornada ───────────────────────────────────────
 
 // cortarLaJornada avisa qué máquinas quedaron afuera al terminar el día.
-//
-// A diferencia del reclamo, este SÍ se repite: si mañana la PC sigue afuera,
-// vuelve a aparecer. Por eso la marca es la fecha de la jornada y no un
-// instante — un día, un aviso.
-//
-// Incluye a las que salieron sin hora pactada, que son las únicas que nunca
-// se reclaman: "vengo en un rato" deja de ser una respuesta válida cuando la
-// escuela cierra.
 func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoParaVigilar, ahora time.Time) int {
 	if ahora.Hour() < v.cfg.HoraDeCierre {
 		return 0
@@ -514,9 +448,7 @@ func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoPar
 	return len(afuera)
 }
 
-// completarProximaReserva busca a quién le va a faltar esa máquina. Es
-// informativo: si falla, el corte sale igual sin ese dato — perder el aviso
-// entero por no haber podido resolver un nombre sería peor.
+// completarProximaReserva busca a quién le va a faltar esa máquina.
 func (v *Vigilante) completarProximaReserva(ctx context.Context, equipoID string, ahora time.Time, destino *eventbus.EquipoSinDevolverAlCierre) {
 	proxima, err := v.repo.ProximaReservaDeEquipo(ctx, equipoID, ahora)
 	if err != nil {
@@ -536,9 +468,6 @@ func (v *Vigilante) completarProximaReserva(ctx context.Context, equipoID string
 // ── Auxiliares ──────────────────────────────────────────────────────────
 
 // pcDemorada: la máquina de esa reserva está afuera y pasada de hora.
-//
-// "Afuera" solo no alcanza: una PC entregada a las 8 para una clase que
-// termina a las 9 está afuera a las 8:30 y no le falta a nadie.
 func (v *Vigilante) pcDemorada(r ReservaParaVigilar, ahora time.Time) bool {
 	return r.EquipoAfuera && r.EquipoDebioVolverA != nil && ahora.After(*r.EquipoDebioVolverA)
 }
@@ -551,12 +480,8 @@ func (v *Vigilante) marcarAvisoDeEquipo(ctx context.Context, reservaID string, a
 	}
 }
 
-// agruparPorGrupo junta las reservas de una misma clase, conservando el
-// orden en que vinieron. Un aviso por clase y no por máquina: es la misma
-// lección que dejaron las cancelaciones en cascada (RF-05).
-//
-// Las que no tienen grupo —los bloqueos administrativos— quedan cada
-// una en su propio lote, que es lo correcto: no son la clase de nadie.
+// agruparPorGrupo junta las reservas de una misma clase, conservando el orden
+// en que vinieron.
 func agruparPorGrupo(reservas []ReservaParaVigilar) [][]ReservaParaVigilar {
 	var orden []string
 	porGrupo := map[string][]ReservaParaVigilar{}
@@ -581,22 +506,13 @@ func agruparPorGrupo(reservas []ReservaParaVigilar) [][]ReservaParaVigilar {
 
 // esDeUnDocente distingue la clase de alguien de un bloqueo administrativo
 // estatal (RF-04.7).
-//
-// El barrido entero se saltea los bloqueos, y no por prolijidad: liberar uno
-// a los cuarenta minutos dejaría que otro docente reserve una computadora
-// que está en una mesa de examen, con el examen en curso. Un bloqueo no lo
-// retira nadie — lo crea un Admin para sacar máquinas de circulación— así
-// que tampoco hay a quién recordarle ni a quién avisarle.
 func esDeUnDocente(r ReservaParaVigilar) bool {
 	return r.Tipo == domain.TipoNormal
 }
 
 // nombreODefecto es una guarda contra nil, no una rama de negocio: las tres
 // pasadas que la usan ya descartaron los bloqueos, y una reserva normal
-// siempre tiene materia (lo exige un CHECK). Pero el campo llega como
-// puntero de un JOIN, y desreferenciarlo a ciegas convertiría cualquier
-// sorpresa en un panic dentro de la goroutine del barrido — que se lleva el
-// proceso entero. El texto es deliberadamente neutro: nunca debería verse.
+// siempre tiene materia (lo exige un CHECK).
 func nombreODefecto(nombre *string) string {
 	if nombre == nil || *nombre == "" {
 		return "una clase"

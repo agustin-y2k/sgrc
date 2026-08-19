@@ -3,11 +3,11 @@ package main
 import "testing"
 
 // buildDSN se testea porque el modo de falla es especialmente ingrato: una
-// contraseña "buena" (larga y aleatoria, como pide RNF-04) tiene muchas
-// más chances de traer un carácter reservado de URL que una escrita a mano,
-// así que la versión concatenada rompía justo cuando alguien hacía lo
-// correcto — y el síntoma es un error de conexión que no menciona la
-// contraseña por ningún lado.
+// contraseña "buena" (larga y aleatoria, como pide RNF-04) tiene muchas más
+// chances de traer un carácter reservado de URL que una escrita a mano, así
+// que la versión concatenada rompía justo cuando alguien hacía lo correcto —
+// y el síntoma es un error de conexión que no menciona la contraseña por
+// ningún lado.
 func TestBuildDSN_EscapaCaracteresReservadosDeLaContraseña(t *testing.T) {
 	t.Setenv("POSTGRES_HOST", "postgres")
 	t.Setenv("POSTGRES_PORT", "5432")
@@ -38,12 +38,8 @@ func TestBuildDSN_CasoSimple(t *testing.T) {
 }
 
 // ── FRONTEND_ORIGIN ────────────────────────────────────────────────────
-//
-// origenDelFrontend llama a log.Fatal en los casos inválidos, así que el
-// test solo puede cubrir los válidos sin matar el proceso de test. Es
-// suficiente para lo que importa acá: que un origen bien formado pase tal
-// cual (sin recortes ni agregados) hacia el middleware de CORS, que lo
-// compara byte a byte contra el header Origin del navegador.
+// origenDelFrontend llama a log.Fatal en los casos inválidos, así que el test
+// solo puede cubrir los válidos sin matar el proceso de test.
 func TestOrigenDelFrontend_ValoresValidos(t *testing.T) {
 	casos := []struct{ env, esperado string }{
 		{"https://sgrc.tuinstitucion.edu.ar", "https://sgrc.tuinstitucion.edu.ar"},

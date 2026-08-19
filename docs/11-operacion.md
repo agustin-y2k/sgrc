@@ -406,14 +406,9 @@ goose: successfully migrated database to version: 1     ← la primera vez
 goose: no migrations to run. current version: 1         ← las siguientes
 ```
 
-> **Antes esto lo hacía Postgres** con los scripts de
-> `docker-entrypoint-initdb.d`, que corren **una sola vez**: cuando el volumen
-> se crea. Sobre una base ya existente no corría nada y nadie avisaba, así que
-> una actualización dejaba el binario nuevo hablando con el esquema viejo. Eso
-> se ve como un sistema que arranca perfecto y devuelve 500 en la primera
-> pantalla que toca una columna que no está — un error que no menciona ni el
-> esquema ni la migración faltante. Si algo así reaparece, `make migrate-status`
-> es la primera pregunta a hacer.
+> **Si el sistema arranca bien pero devuelve 500 en la primera pantalla que
+> toca una columna que no está**, el esquema quedó atrasado: `make
+> migrate-status` es la primera pregunta a hacer.
 
 Es un archivo único y no una cadena de parches incrementales. La razón es
 para quién está escrito: alguien que adopta el proyecto necesita entender qué

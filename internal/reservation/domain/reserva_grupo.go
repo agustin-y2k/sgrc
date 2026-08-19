@@ -1,7 +1,5 @@
 // Package domain contiene las entidades y reglas de negocio puras de
-// reservation — ReservaGrupo, Reserva y ReglaRecurrencia. Ver
-// docs/03-diagrama-clases.md, docs/05-diagramas-estado.md y
-// docs/01-requisitos.md RF-04 para el detalle funcional completo.
+// reservation — ReservaGrupo, Reserva y ReglaRecurrencia.
 package domain
 
 import (
@@ -10,10 +8,7 @@ import (
 	"time"
 )
 
-// EstadoReservaGrupo (RF-04, docs/05-diagramas-estado.md). Un ReservaGrupo
-// es lo que el docente percibe como "mi reserva" — una materia, fecha y
-// horario, que por debajo puede involucrar varios equipos (una Reserva cada
-// una).
+// EstadoReservaGrupo (RF-04, docs/05-diagramas-estado.md).
 type EstadoReservaGrupo string
 
 const (
@@ -21,9 +16,7 @@ const (
 	GrupoParcialmenteCancelada EstadoReservaGrupo = "PARCIALMENTE_CANCELADA"
 	GrupoCancelada             EstadoReservaGrupo = "CANCELADA"
 	GrupoFinalizada            EstadoReservaGrupo = "FINALIZADA"
-	// GrupoNoRetirado: NINGUNA de sus PCs se retiró. Si el docente vino y se
-	// llevó tres de cinco, el grupo NO pasa por acá: vino a dar la clase, y
-	// lo que pasó con las otras dos máquinas se ve fila por fila.
+	// GrupoNoRetirado: NINGUNA de sus PCs se retiró.
 	GrupoNoRetirado EstadoReservaGrupo = "NO_RETIRADA"
 )
 
@@ -38,11 +31,9 @@ func ParseEstadoReservaGrupo(s string) (EstadoReservaGrupo, error) {
 	}
 }
 
-// PuedeTransicionarA: CONFIRMADA puede pasar a cualquiera de los otros
-// tres (cancelación parcial de alguna PC, cancelación total, o
-// finalización por el paso del tiempo). PARCIALMENTE_CANCELADA puede
-// terminar de cancelarse del todo, o finalizar (las PCs que sí se usaron
-// llegaron a su horario). CANCELADA y FINALIZADA son terminales.
+// PuedeTransicionarA: CONFIRMADA puede pasar a cualquiera de los otros tres
+// (cancelación parcial de alguna PC, cancelación total, o finalización por el
+// paso del tiempo).
 func (e EstadoReservaGrupo) PuedeTransicionarA(nuevo EstadoReservaGrupo) bool {
 	switch e {
 	case GrupoConfirmada:
@@ -62,14 +53,10 @@ var ErrTransicionGrupoInvalida = errors.New("transición de estado de reserva gr
 // ErrRangoHorarioInvalido: horaFin debe ser posterior a horaInicio — se
 // valida en dominio para las dos entidades (ReservaGrupo y Reserva) y
 // ReglaRecurrencia, así que se declara acá una sola vez y se reusa.
-// El mensaje ya no dice "posterior": una clase nocturna de 22:00 a 01:00
-// tiene una hora de fin ANTERIOR, y eso es válido — significa que termina al
-// día siguiente. Lo único que se rechaza es que sean iguales.
 var ErrRangoHorarioInvalido = errors.New("la hora de fin no puede ser igual a la de inicio")
 
-// ReservaGrupo es la reserva tal como la percibe el docente — materia,
-// fecha, horario. Por debajo, una o más Reserva (una por PC) son las que
-// realmente ocupan el recurso físico.
+// ReservaGrupo es la reserva tal como la percibe el docente — materia, fecha,
+// horario.
 type ReservaGrupo struct {
 	ID                    string
 	MateriaID             string

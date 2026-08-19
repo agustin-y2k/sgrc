@@ -1,6 +1,5 @@
 // Package application orquesta los casos de uso de RF-05 (notificaciones
-// internas). Ver subscribers.go para cómo se conecta con los eventos que
-// auth y reservation ya publican.
+// internas).
 package application
 
 import (
@@ -24,9 +23,7 @@ func NewService(repo Repo, listadorAdmins ListadorAdmins, nuevoID IDGenerator, a
 	return &Service{repo: repo, listadorAdmins: listadorAdmins, nuevoID: nuevoID, ahora: ahora}
 }
 
-// NotificarUsuario crea una notificación para un usuario puntual. El tipo
-// es lo que después le permite a la interfaz ofrecer la acción que
-// corresponde sin leer el mensaje (ver domain.Tipo).
+// NotificarUsuario crea una notificación para un usuario puntual.
 func (s *Service) NotificarUsuario(ctx context.Context, usuarioID, mensaje string, tipo domain.Tipo, ref domain.Referencias) (*domain.Notificacion, error) {
 	n, err := domain.NuevaNotificacion(s.nuevoID(), usuarioID, mensaje, tipo, ref, s.ahora())
 	if err != nil {
@@ -38,20 +35,8 @@ func (s *Service) NotificarUsuario(ctx context.Context, usuarioID, mensaje strin
 	return n, nil
 }
 
-// NotificarATodosLosAdmins implementa el patrón que usan RF-05.4/05.5/05.6
-// — un evento le llega a TODOS los Admin en estado APROBADA, no a uno
-// solo. Devuelve cuántas notificaciones se crearon.
-//
-// Un fallo no corta a los que faltan: se intenta con todos y los errores se
-// juntan para el final. Cortando en el primero, un problema puntual con un
-// Admin —su cuenta borrada entre el listado y la inserción, por ejemplo—
-// dejaba a los siguientes sin enterarse de una cuenta esperando aprobación
-// o de una máquina que no volvió. Es el mismo criterio que ya usaba el envío
-// de correos (ver enviarATodosLosAdmins en correos.go): que uno falle no es
-// razón para que los otros tres se queden sin el aviso.
-//
-// El error se devuelve igual, así que el suscriptor lo registra en el log y
-// queda constancia de a quién no se le pudo avisar.
+// NotificarATodosLosAdmins implementa el patrón que usan RF-05.4/05.5/05.6 —
+// un evento le llega a TODOS los Admin en estado APROBADA, no a uno solo.
 func (s *Service) NotificarATodosLosAdmins(ctx context.Context, mensaje string, tipo domain.Tipo, ref domain.Referencias) (int, error) {
 	adminIDs, err := s.listadorAdmins.IDsDeAdminsAprobados(ctx)
 	if err != nil {
@@ -76,15 +61,6 @@ func (s *Service) NotificarATodosLosAdmins(ctx context.Context, mensaje string, 
 
 // CerrarAvisosSobreUsuario marca como leídas las notificaciones de un tipo
 // que hablan de una persona puntual.
-//
-// Existe para que el aviso "X está pendiente de aprobación" desaparezca solo
-// cuando alguien aprueba o rechaza a X: el aviso pedía una acción y esa
-// acción ya se hizo. Alcanza a TODOS los Admin, no solo al que resolvió —
-// para los demás el pendiente tampoco existe más, y dejarles el aviso los
-// manda a una lista donde esa persona ya no está.
-//
-// Devuelve cuántas cerró. No es un error que sean cero: puede que el aviso
-// ya estuviera leído, o que nunca hubiera existido uno sobre esa cuenta.
 func (s *Service) CerrarAvisosSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo) (int, error) {
 	pendientes, err := s.repo.ListarNoLeidasSobreUsuario(ctx, sobreUsuarioID, tipo)
 	if err != nil {
@@ -105,8 +81,8 @@ func (s *Service) CerrarAvisosSobreUsuario(ctx context.Context, sobreUsuarioID s
 }
 
 // ObtenerNotificacion es un passthrough directo al repo — usado por
-// interfaces/http para verificar la titularidad de una notificación antes
-// de dejarla marcar como leída.
+// interfaces/http para verificar la titularidad de una notificación antes de
+// dejarla marcar como leída.
 func (s *Service) ObtenerNotificacion(ctx context.Context, id string) (*domain.Notificacion, error) {
 	return s.repo.BuscarPorID(ctx, id)
 }

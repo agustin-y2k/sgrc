@@ -111,10 +111,8 @@ func TestHash_TamanioDelHashEsConsistente(t *testing.T) {
 
 func TestHashPassword_PasswordVacia_NoPanikeaYGeneraHashValido(t *testing.T) {
 	// HashPassword no impone la política de longitud mínima — eso vive en
-	// internal/shared/adminseed (para el seed) e internal/auth/application
-	// (para registro/reset normal). Acá solo confirmamos que la función de
-	// bajo nivel no panickea con un input vacío, ya que en teoría podría
-	// llegar uno si algún caller de más arriba no valida correctamente.
+	// internal/shared/adminseed (para el seed) e internal/auth/application (para
+	// registro/reset normal).
 	hash, err := HashPassword("")
 	if err != nil {
 		t.Fatalf("no debería fallar con password vacía: %v", err)

@@ -6,9 +6,8 @@ import { SelectorDeHora } from "@/components/SelectorDeHora"
 
 /**
  * El control nativo `<input type="time">` decidía su formato según la
- * configuración regional del navegador: en una máquina en inglés pedía
- * AM/PM, y metía hora, minutos y AM/PM en un solo campo. Estos tests fijan
- * lo que lo reemplaza.
+ * configuración regional del navegador: en una máquina en inglés pedía AM/PM,
+ * y metía hora, minutos y AM/PM en un solo campo.
  */
 
 function Anfitrion({ inicial = "" }: { inicial?: string }) {
@@ -72,9 +71,7 @@ describe("SelectorDeHora", () => {
 
   /**
    * Los minutos van de 5 en 5, pero el backend acepta cualquiera (los
-   * horarios son libres: la escuela no tiene módulos fijos). Un valor
-   * cargado fuera de la grilla tiene que poder verse y editarse sin que el
-   * selector lo cambie solo.
+   * horarios son libres: la escuela no tiene módulos fijos).
    */
   it("conserva un minuto que no cae en la grilla de 5", () => {
     render(<Anfitrion inicial="07:13" />)

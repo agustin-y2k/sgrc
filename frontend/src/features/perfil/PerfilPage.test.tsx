@@ -72,10 +72,9 @@ describe("PerfilPage", () => {
   })
 
   /**
-   * Sin materias no se puede reservar nada, y esa es exactamente la
-   * situación en la que alguien entra al perfil sin entender por qué el
-   * sistema "no lo deja". Decirlo acá, con la salida al lado, evita esa
-   * consulta.
+   * Sin materias no se puede reservar nada, y esa es exactamente la situación
+   * en la que alguien entra al perfil sin entender por qué el sistema "no lo
+   * deja".
    */
   it("sin materias asignadas, explica que por eso no puede reservar", async () => {
     montar()

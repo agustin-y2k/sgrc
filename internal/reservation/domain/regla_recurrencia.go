@@ -13,19 +13,7 @@ import (
 type DiaSemana string
 
 // La semana tiene siete días y el sistema no supone cuáles usa la
-// institución. Antes el enum frenaba en viernes y una regla fija rechazaba
-// sábados y domingos, lo cual dejaba afuera a dos clases de escuela que
-// existen y son mayoría en algunos lugares: las de jornada extendida o
-// albergue, que dictan el fin de semana, y las nocturnas, cuyo horario no se
-// parece al de la mañana.
-//
-// Qué días abre cada institución dejó de ser una constante del código y pasó
-// a ser un dato que el Admin declara (ver JornadaInstitucional en
-// availability). Sin jornada declarada no hay restricción: el sistema no
-// inventa un calendario que nadie le dijo.
-//
-// Los feriados y el receso NO se modelan — se resuelven a mano (ver
-// docs/01-requisitos.md).
+// institución.
 const (
 	Lunes     DiaSemana = "LUNES"
 	Martes    DiaSemana = "MARTES"
@@ -88,9 +76,9 @@ func NuevaReglaRecurrencia(id, materiaID, creadoPor string, diaSemana DiaSemana,
 	}, nil
 }
 
-// GenerarFechas devuelve todas las fechas entre FechaInicio y FechaFin
-// (ambas inclusive) que caen en el día de semana de esta regla — una por
-// cada ReservaGrupo que application/ debe materializar (RF-04.2).
+// GenerarFechas devuelve todas las fechas entre FechaInicio y FechaFin (ambas
+// inclusive) que caen en el día de semana de esta regla — una por cada
+// ReservaGrupo que application/ debe materializar (RF-04.2).
 func (r *ReglaRecurrencia) GenerarFechas() []time.Time {
 	objetivo := diaSemanaAGoWeekday[r.DiaSemana]
 	var fechas []time.Time

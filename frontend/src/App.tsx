@@ -50,9 +50,9 @@ const router = createBrowserRouter([
           { index: true, element: <InicioPage /> },
           { path: "/cambiar-password", element: <CambiarPasswordPage /> },
           { path: "/notificaciones", element: <NotificacionesPage /> },
-          // El perfil y el buzón son de cualquiera que use el sistema,
-          // Admin incluido: un Admin nuevo también se topa con cosas que
-          // no entiende.
+          // El perfil y el buzón son de cualquiera que use el sistema, Admin
+          // incluido: un Admin nuevo también se topa con cosas que no
+          // entiende.
           { path: "/perfil", element: <PerfilPage /> },
           { path: "/mis-mensajes", element: <MisMensajesPage /> },
           { path: "/reservas", element: <MisReservasPage /> },
@@ -87,10 +87,9 @@ const router = createBrowserRouter([
               },
             ],
           },
-          // El comodín va al final y DENTRO del layout: así una dirección
-          // que no existe conserva la barra de navegación, que es la salida
-          // más rápida. Suelto en la raíz mostraría la pantalla sin menú, y
-          // sin él la única forma de volver es el botón del navegador.
+          // El comodín va al final y DENTRO del layout: así una dirección que
+          // no existe conserva la barra de navegación, que es la salida más
+          // rápida.
           { path: "*", element: <NoEncontrada /> },
         ],
       },

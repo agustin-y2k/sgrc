@@ -9,18 +9,7 @@ import * as reservasApi from "@/features/reservas/api"
 import type { GrupoDeReservas } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * RF-08.14 — cambiar una computadora de una reserva ya hecha.
- *
- * Sirve cuando el sistema avisa que una máquina no volvió al laboratorio y
- * puede no estar para tu clase. Hasta ahora la única salida era cancelar esa
- * Equipo y hacer otra reserva, que arma un grupo nuevo: la misma clase terminaba
- * mostrada como dos tarjetas separadas en esta misma pantalla.
- *
- * Solo se ofrecen los equipos libres en esa franja. La lista sale del mismo
- * endpoint que usa el formulario de reserva, así que lo que se ve acá es lo
- * mismo que se vería al reservar de cero.
- */
+/** RF-08.14 — cambiar una computadora de una reserva ya hecha. */
 export function CambiarEquipoDeReserva({
   grupo,
   onListo,
@@ -32,9 +21,7 @@ export function CambiarEquipoDeReserva({
   const cambiables = grupo.reservas.filter((r) => r.estado === "CONFIRMADA")
   const [reservaID, setReservaID] = useState(cambiables[0]?.id ?? "")
   const [equipoID, setEquipoID] = useState("")
-  // RF-08.14: el alcance solo se pregunta si hay serie. En una reserva
-  // suelta las dos opciones significan lo mismo, y ofrecer la pregunta
-  // igual haría dudar sobre algo que no tiene consecuencias.
+  // RF-08.14: el alcance solo se pregunta si hay serie.
   const [soloEsta, setSoloEsta] = useState(true)
 
   // Con la serie elegida, los equipos que se ofrecen son los libres en TODAS
@@ -42,10 +29,9 @@ export function CambiarEquipoDeReserva({
   // choca en la tercera es hacerle adivinar al docente.
   const serieDesdeGrupoId = !soloEsta && grupo.esRecurrente ? grupo.grupoId : undefined
 
-  // La materia de la reserva que se está cambiando: es lo que ordena la
-  // lista (RF-03.21), para que cambiar de máquina ofrezca lo mismo que
-  // ofrecería reservar de cero. Con la serie elegida el backend la saca del
-  // propio grupo y este parámetro no hace falta.
+  // La materia de la reserva que se está cambiando: es lo que ordena la lista
+  // (RF-03.21), para que cambiar de máquina ofrezca lo mismo que ofrecería
+  // reservar de cero.
   const materiaId = cambiables.find((r) => r.id === reservaID)?.materiaId
 
   const { data, isLoading } = useQuery({

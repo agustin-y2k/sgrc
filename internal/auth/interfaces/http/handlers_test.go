@@ -170,10 +170,10 @@ func idSecuencial() string {
 	return fmt.Sprintf("id-%d", contadorID)
 }
 
-// fakeGestorMaterias / fakeCanceladorReservas: los tests HTTP de este
-// archivo prueban ruteo y RBAC, no el detalle de la cascada de
-// DarDeBaja (eso ya está cubierto en application/service_test.go) — así
-// que estos fakes son no-op, sin materias asignadas por defecto.
+// fakeGestorMaterias / fakeCanceladorReservas: los tests HTTP de este archivo
+// prueban ruteo y RBAC, no el detalle de la cascada de DarDeBaja (eso ya está
+// cubierto en application/service_test.go) — así que estos fakes son no-op,
+// sin materias asignadas por defecto.
 type fakeGestorMaterias struct{}
 
 func (f *fakeGestorMaterias) MateriasDeDocente(ctx context.Context, usuarioID string) ([]string, error) {
@@ -225,14 +225,14 @@ func nuevaAppDeTestConGoogle(repo *fakeRepo, verificador application.Verificador
 
 var testSecret = []byte("un-secreto-de-test-bastante-largo")
 
-// registroDePrueba hace de tabla usuario para el middleware de
-// autenticación: Token() deja registrado el rol de cada ID, y
-// Autenticacion() se lo devuelve al middleware igual que lo haría la base.
+// registroDePrueba hace de tabla usuario para el middleware de autenticación:
+// Token() deja registrado el rol de cada ID, y Autenticacion() se lo devuelve
+// al middleware igual que lo haría la base.
 var registroDePrueba = authtest.Nuevo()
 
 // tokenPara genera un JWT válido para un usuario de prueba — reusa
-// exactamente el mismo formato que produce infrastructure.JWTFirmador,
-// para que estos tests ejerciten el middleware de autenticación real.
+// exactamente el mismo formato que produce infrastructure.JWTFirmador, para
+// que estos tests ejerciten el middleware de autenticación real.
 func tokenPara(id, rol string) string {
 	return registroDePrueba.Token(testSecret, id, rol)
 }
@@ -419,9 +419,9 @@ func TestHTTP_ListarUsuarios_ComoAdmin_OK(t *testing.T) {
 	}
 }
 
-// El meta de este endpoint era decorativo: se llenaba con
-// {Total: len(data), Page: 1, PageSize: len(data)}, así que decía "página 1
-// de 1" con cualquier cantidad de usuarios y no había LIMIT en ningún lado.
+// El meta de este endpoint era decorativo: se llenaba con {Total: len(data),
+// Page: 1, PageSize: len(data)}, así que decía "página 1 de 1" con cualquier
+// cantidad de usuarios y no había LIMIT en ningún lado.
 func TestHTTP_ListarUsuarios_PaginaYTotal(t *testing.T) {
 	repo := nuevoFakeRepo()
 	for _, id := range []string{"u1", "u2", "u3", "u4", "u5"} {
@@ -915,10 +915,9 @@ func TestHTTP_Login_ElMotivoLlegaEnElCuerpo(t *testing.T) {
 	}
 }
 
-// ── Foto de perfil ──────────────────────────────────────────────────────
-//
-// El fake la guarda en un mapa: lo que verifican los tests de este paquete
-// son las reglas de la cuenta, no dónde vive la imagen.
+// ── Foto de perfil ────────────────────────────────────────────────────── El
+// fake la guarda en un mapa: lo que verifican los tests de este paquete son
+// las reglas de la cuenta, no dónde vive la imagen.
 
 func (r *fakeRepo) GuardarFoto(_ context.Context, f *domain.FotoDePerfil) error {
 	if r.fotos == nil {

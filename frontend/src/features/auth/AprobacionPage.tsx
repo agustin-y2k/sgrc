@@ -19,9 +19,7 @@ import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 
 const PENDIENTES_QUERY_KEY = ["usuarios", "PENDIENTE"]
 
-// Admin: aprobación de cuentas PENDIENTE (RF-01.3). El resto del panel de
-// usuarios —dar de baja, resetear contraseña, crear otro Admin— vive en
-// UsuariosPage.
+// Admin: aprobación de cuentas PENDIENTE (RF-01.3).
 export function AprobacionPage() {
   const queryClient = useQueryClient()
   // Id de la cuenta cuyo rechazo está esperando confirmación.

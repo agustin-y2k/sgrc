@@ -137,9 +137,7 @@ func TestElRegistroExponeLasMetricasEsperadas(t *testing.T) {
 }
 
 // El caso más grave es el que Prometheus no ve solo: una goroutine que muere
-// al arrancar y nunca corre. Si la serie no existe, una alerta por "hace más
-// de N minutos que no termina bien" no dispara nunca, porque en Prometheus
-// la ausencia no es un valor. Por eso las series se crean al arrancar.
+// al arrancar y nunca corre.
 func TestLasSeriesDeUnBarridoExistenAntesDeLaPrimeraCorrida(t *testing.T) {
 	m := Nuevo()
 

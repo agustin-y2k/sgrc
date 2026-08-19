@@ -113,8 +113,7 @@ describe("LicenciasPage", () => {
 
   /**
    * Una licencia sin fecha es una tarea pendiente —hay que ir hasta la
-   * máquina— y no una licencia "sin vencimiento". La pantalla lo tiene que
-   * decir con esas palabras.
+   * máquina— y no una licencia "sin vencimiento".
    */
   it("marca las que todavía no tienen vencimiento cargado", async () => {
     vi.mocked(adminApi.listarLicencias).mockResolvedValue({
@@ -132,12 +131,7 @@ describe("LicenciasPage", () => {
     expect(screen.getByText(/Sin fecha de vencimiento/)).toBeInTheDocument()
   })
 
-  /**
-   * La guarda del diseño: "Renovar" corre un contador que ya existe. Si se
-   * pudiera apretar sobre una licencia sin verificar, sería la forma fácil
-   * de sacarse de encima el aviso poniéndole treinta días que nadie
-   * confirmó — el dato falso que todo esto evita.
-   */
+  /** La guarda del diseño: "Renovar" corre un contador que ya existe. */
   it("no deja renovar una licencia sin fecha cargada", async () => {
     vi.mocked(adminApi.listarLicencias).mockResolvedValue({
       data: [
@@ -185,8 +179,7 @@ describe("LicenciasPage", () => {
 
   /**
    * El caso del olvido, que es la mitad del requerimiento: se renovaron el
-   * martes y se cargan el jueves. Sin esto el contador queda dos días
-   * adelantado y el aviso llega tarde.
+   * martes y se cargan el jueves.
    */
   it("permite renovar con una fecha anterior a hoy", async () => {
     const user = userEvent.setup()
@@ -250,12 +243,7 @@ describe("LicenciasPage", () => {
     expect(screen.getByLabelText("¿Cuándo vence?")).toHaveValue("sin-fecha")
   })
 
-  /**
-   * RF-03.11 no distingue: una licencia se carga sobre cualquier equipo. El
-   * formulario armaba su lista recorriendo los carros, así que lo que no
-   * está en ninguno —una notebook suelta con un CAD licenciado— no aparecía
-   * nunca, aunque la API lo aceptaba igual.
-   */
+  /** RF-03.11 no distingue: una licencia se carga sobre cualquier equipo. */
   it("ofrece también los equipos que no están en ningún carro", async () => {
     const user = userEvent.setup()
     renderPagina()

@@ -87,14 +87,11 @@ func TestPostgresRepo_CrearCarroYBuscarPorID_OK(t *testing.T) {
 	}
 }
 
-// El nombre de un carro es único, y el choque tiene que llegar a la capa
-// HTTP como el centinela que esa capa sabe traducir a un 409.
-//
-// El test es de integración y no de unidad por la misma razón que el de los
-// equipos: lo que se está probando es la traducción del error de Postgres,
-// y un repositorio falso devuelve el error correcto por su cuenta. Con un
-// `fmt.Errorf` pelado —como estaba— el mensaje era el bueno pero
-// `errors.Is` no enganchaba, así que el Admin veía "error interno".
+// El nombre de un carro es único, y el choque tiene que llegar a la capa HTTP
+// como el centinela que esa capa sabe traducir a un 409. El test es de
+// integración y no de unidad por la misma razón que el de los equipos: lo que
+// se está probando es la traducción del error de Postgres, y un repositorio
+// falso devuelve el error correcto por su cuenta.
 func TestPostgresRepo_NombreDeCarroDuplicado_Error(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -345,8 +342,7 @@ func crearEquipoSueltoDeTest(t *testing.T, repo *PostgresRepo, tipo, nombre stri
 
 // Lo que solo una base de verdad puede confirmar: las tres columnas que un
 // equipo suelto no usa aceptan NULL y vuelven vacías, no como un cero ni como
-// un error de escaneo. Un proyector sin carro, sin identificador y sin número
-// de serie es una fila perfectamente válida.
+// un error de escaneo.
 func TestPostgresRepo_EquipoSuelto_GuardarYRecuperar(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -394,8 +390,7 @@ func TestPostgresRepo_EquipoDeCarro_SigueSiendoEquipo(t *testing.T) {
 }
 
 // El nombre es lo único que distingue a un equipo suelto en la lista de
-// entregas. Dos "Cargador 1" tienen que rebotar como un 409 con mensaje, no
-// como un 500 de la base — y sin importar la caja.
+// entregas.
 func TestPostgresRepo_EquipoSuelto_NombreDuplicado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -413,7 +408,7 @@ func TestPostgresRepo_EquipoSuelto_NombreDuplicado(t *testing.T) {
 
 // A diferencia de un número de serie, que es único de fábrica, "Cargador 1"
 // es un apodo: si el cargador se rompe y compran otro lo van a seguir
-// llamando igual. Sin esto el alta rebotaría con un 409 sin salida.
+// llamando igual.
 func TestPostgresRepo_EquipoSuelto_NombreSeReusaTrasLaBaja(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -434,8 +429,7 @@ func TestPostgresRepo_EquipoSuelto_NombreSeReusaTrasLaBaja(t *testing.T) {
 }
 
 // El listado de la sección "Otros equipos": trae lo que no cuelga de ningún
-// carro y nada más. Si se colara una PC de carro, el proyector aparecería
-// junto a las 64 computadoras y la sección perdería sentido.
+// carro y nada más.
 func TestPostgresRepo_ListarEquipos_ConFiltroNoTraeLasDeCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -465,8 +459,7 @@ func TestPostgresRepo_ListarEquipos_ConFiltroNoTraeLasDeCarro(t *testing.T) {
 }
 
 // Sin filtro, ListarEquipos es el inventario entero: lo de los carros y lo
-// suelto en una sola consulta. Es lo que evita que una pantalla que necesita
-// todo lo prestable haga una consulta por carro más otra por los sueltos.
+// suelto en una sola consulta.
 func TestPostgresRepo_ListarEquipos_SinFiltroTraeTodo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -492,18 +485,11 @@ func TestPostgresRepo_ListarEquipos_SinFiltroTraeTodo(t *testing.T) {
 }
 
 // ── Qué error sale de cada restricción de unicidad ──────────────────────
-//
 // Estos tres tests solo tienen sentido contra Postgres: lo que se está
 // verificando es que el nombre de constraint que reporta la base sea el que
-// el repositorio busca. Un fake no puede fallar en eso — devuelve el error
-// que uno le programó — y por eso el desajuste real sobrevivió sin que nada
-// se pusiera en rojo.
+// el repositorio busca.
 
-// El número de serie es único en toda la institución. Este es el caso que
-// estaba roto: el switch buscaba `pc_numero_serie_key` y la constraint se
-// llama `equipo_numero_serie_key` desde que la tabla se renombró, así que
-// quien cargaba un serie repetido recibía el error del IDENTIFICADOR — otro
-// campo, otro problema, y a buscarlo donde no estaba.
+// El número de serie es único en toda la institución.
 func TestPostgresRepo_CrearEquipo_SerieRepetido_DiceQueEsElSerie(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

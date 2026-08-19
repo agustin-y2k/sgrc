@@ -10,10 +10,7 @@ vi.mock("@/features/auth/AuthContext")
 
 /**
  * El botón real lo dibuja Google dentro de un iframe, imposible de apretar
- * desde jsdom. Se reemplaza por un botón común que entrega un token: lo
- * que se prueba acá es qué hace la pantalla de login CON ese token, que es
- * la lógica propia. El componente en sí tiene sus tests en
- * BotonGoogle.test.tsx.
+ * desde jsdom.
  */
 vi.mock("@/features/auth/BotonGoogle", () => ({
   BotonGoogle: ({ onCredential }: { onCredential: (c: string) => void }) => (
@@ -102,9 +99,8 @@ describe("LoginPage — ingreso con Google", () => {
     expect(await screen.findByText("Cambiar password")).toBeInTheDocument()
   })
 
-  // El 404 no es un error a mostrar: significa "el token está bien, la
-  // cuenta todavía no existe". Se sigue al registro llevando el mismo
-  // token, para no hacer apretar el botón de Google dos veces.
+  // El 404 no es un error a mostrar: significa "el token está bien, la cuenta
+  // todavía no existe".
   it("sin cuenta todavía, lleva al registro con la credencial", async () => {
     mockAuth(
       vi

@@ -94,9 +94,9 @@ func (h *Handler) AgregarBloque(c *fiber.Ctx) error {
 }
 
 // PATCH /api/availability/mi-horario/{id} (Admin) — la titularidad se
-// resuelve en application/Repo (acotada por usuario_id), no acá: si el
-// bloque no es del usuario autenticado, el resultado es indistinguible de
-// "no existe" (404).
+// resuelve en application/Repo (acotada por usuario_id), no acá: si el bloque
+// no es del usuario autenticado, el resultado es indistinguible de "no
+// existe" (404).
 func (h *Handler) EditarBloque(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)
@@ -201,9 +201,8 @@ func (h *Handler) CargarExcepcion(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toExcepcionResponse(excepcion))
 }
 
-// POST /api/availability/no-disponible-ahora (Admin) — RF-07.5, atajo de
-// un solo paso equivalente a POST /mi-excepcion con tipo=NO_DISPONIBLE
-// para hoy.
+// POST /api/availability/no-disponible-ahora (Admin) — RF-07.5, atajo de un
+// solo paso equivalente a POST /mi-excepcion con tipo=NO_DISPONIBLE para hoy.
 func (h *Handler) MarcarNoDisponibleAhora(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -217,18 +216,10 @@ func (h *Handler) MarcarNoDisponibleAhora(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toExcepcionResponse(excepcion))
 }
 
-// ── Jornada de la institución ──────────────────────────────────────────
-//
-// Sin claims: la jornada no tiene dueño. Quién puede tocarla lo decide la
-// ruta (rol ADMIN); acá no hay titularidad que resolver, así que un ID
-// inexistente es 404 y nada más.
+// ── Jornada de la institución ────────────────────────────────────────── Sin
+// claims: la jornada no tiene dueño.
 
-// GET /api/jornada — la jornada declarada por la institución. La leen
-// también los docentes: el formulario de reserva la usa para avisar antes
-// de mandar, y el calendario para saber qué días dibujar.
-//
-// Lista vacía = todavía no la declararon, que NO es lo mismo que una
-// escuela cerrada: sin jornada no hay restricción.
+// GET /api/jornada — la jornada declarada por la institución.
 func (h *Handler) Jornada(c *fiber.Ctx) error {
 	bloques, err := h.svc.Jornada(c.UserContext())
 	if err != nil {
@@ -311,9 +302,7 @@ func (h *Handler) EditarBloqueDeJornada(c *fiber.Ctx) error {
 	return c.JSON(toBloqueJornadaResponse(bloque))
 }
 
-// DELETE /api/jornada/{id} (Admin). Borrar el último tramo deja la jornada
-// sin declarar, y con eso el sistema vuelve a no restringir ningún día — es
-// coherente y es reversible, así que no se pide confirmación especial.
+// DELETE /api/jornada/{id} (Admin).
 func (h *Handler) EliminarBloqueDeJornada(c *fiber.Ctx) error {
 	if err := h.svc.EliminarBloqueDeJornada(c.UserContext(), c.Params("id")); err != nil {
 		return mapearError(err)

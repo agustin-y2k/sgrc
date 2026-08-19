@@ -7,8 +7,8 @@ import (
 
 // Estos son los tests más importantes del paquete (ver
 // docs/07-modelo-datos.md §2): la excepción de hoy, si existe, PISA por
-// completo el patrón semanal — no importa si algún bloque cubriría la
-// hora actual.
+// completo el patrón semanal — no importa si algún bloque cubriría la hora
+// actual.
 
 func TestDisponibleAhora_SinExcepcion_SinBloques_NoDisponible(t *testing.T) {
 	disponible := DisponibleAhora(nil, nil, Lunes, 10*time.Hour)
@@ -65,9 +65,9 @@ func TestDisponibleAhora_SinExcepcion_BloqueDeOtroDia_NoAplica(t *testing.T) {
 // ── La excepción de hoy pisa el patrón semanal ─────────────────────────
 
 func TestDisponibleAhora_ExcepcionNoDisponible_PisaBloqueQueLoCubriria(t *testing.T) {
-	// El admin tiene un bloque LUNES 08-12 que normalmente lo cubriría a
-	// las 10:00, pero cargó una excepción NO_DISPONIBLE para hoy (ej:
-	// "marcarme no disponible ahora", RF-07.5).
+	// El admin tiene un bloque LUNES 08-12 que normalmente lo cubriría a las
+	// 10:00, pero cargó una excepción NO_DISPONIBLE para hoy (ej: "marcarme no
+	// disponible ahora", RF-07.5).
 	bloque, _ := NuevoBloqueHorario("b1", "admin1", Lunes, 8*time.Hour, 12*time.Hour)
 	excepcion, _ := NuevaExcepcion("e1", "admin1", time.Now(), NoDisponible, nil, nil, nil)
 
@@ -79,9 +79,9 @@ func TestDisponibleAhora_ExcepcionNoDisponible_PisaBloqueQueLoCubriria(t *testin
 }
 
 func TestDisponibleAhora_ExcepcionHorarioModificado_PisaAusenciaDelPatron(t *testing.T) {
-	// El admin NO tiene ningún bloque semanal para este día — normalmente
-	// no estaría disponible — pero cargó una excepción HORARIO_MODIFICADO
-	// para hoy que sí lo cubre a esta hora.
+	// El admin NO tiene ningún bloque semanal para este día — normalmente no
+	// estaría disponible — pero cargó una excepción HORARIO_MODIFICADO para hoy
+	// que sí lo cubre a esta hora.
 	excepcion, _ := NuevaExcepcion("e1", "admin1", time.Now(), HorarioModificado, dur(9), dur(11), nil)
 
 	disponible := DisponibleAhora(nil, excepcion, Lunes, 10*time.Hour)
@@ -92,9 +92,9 @@ func TestDisponibleAhora_ExcepcionHorarioModificado_PisaAusenciaDelPatron(t *tes
 }
 
 func TestDisponibleAhora_ExcepcionHorarioModificado_PeroFueraDeSuRango_NoDisponible(t *testing.T) {
-	// Hay excepción para hoy, pero la hora actual cae fuera del rango
-	// modificado — sigue sin mirar el patrón semanal (la excepción pisa
-	// del todo, no se combina).
+	// Hay excepción para hoy, pero la hora actual cae fuera del rango modificado
+	// — sigue sin mirar el patrón semanal (la excepción pisa del todo, no se
+	// combina).
 	bloqueQueLoCubriria, _ := NuevoBloqueHorario("b1", "admin1", Lunes, 8*time.Hour, 20*time.Hour)
 	excepcion, _ := NuevaExcepcion("e1", "admin1", time.Now(), HorarioModificado, dur(9), dur(11), nil)
 
@@ -106,12 +106,9 @@ func TestDisponibleAhora_ExcepcionHorarioModificado_PeroFueraDeSuRango_NoDisponi
 }
 
 func TestDisponibleAhora_ExcepcionDeOtroDia_NoAplicaria(t *testing.T) {
-	// Caso de integración implícito: si el llamador solo pasa la
-	// excepción correspondiente al día de hoy (como hace application/),
-	// una excepción de otra fecha simplemente no debe llegar acá. Este
-	// test documenta que, si SÍ llega una excepción, siempre se aplica
-	// sin importar Fecha — la responsabilidad de filtrar por "hoy" es de
-	// quien arma el argumento, no de esta función.
+	// Caso de integración implícito: si el llamador solo pasa la excepción
+	// correspondiente al día de hoy (como hace application/), una excepción de
+	// otra fecha simplemente no debe llegar acá.
 	bloque, _ := NuevoBloqueHorario("b1", "admin1", Lunes, 8*time.Hour, 12*time.Hour)
 	excepcionDeAyer, _ := NuevaExcepcion("e1", "admin1", time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), NoDisponible, nil, nil, nil)
 

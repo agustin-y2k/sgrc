@@ -9,35 +9,29 @@ import (
 	"github.com/ramiro/sgrc/internal/auth/domain"
 )
 
-// NuevoID genera un UUID nuevo para una fila de usuario — se llama antes
-// del INSERT, no se deja que Postgres lo genere con DEFAULT, porque
-// application.Service necesita el ID ya asignado para el evento que
-// publica (docente.registro.pendiente) y para devolverlo en la respuesta
-// HTTP sin tener que volver a leer la fila recién creada.
+// NuevoID genera un UUID nuevo para una fila de usuario — se llama antes del
+// INSERT, no se deja que Postgres lo genere con DEFAULT, porque
+// application.Service necesita el ID ya asignado para el evento que publica
+// (docente.registro.pendiente) y para devolverlo en la respuesta HTTP sin
+// tener que volver a leer la fila recién creada.
 func NuevoID() string {
 	return uuid.NewString()
 }
 
-// alfabetoPasswordTemporal evita caracteres ambiguos al leerlos en voz
-// alta o transcribirlos a mano (0/O, 1/l/I) — la temporal se la va a
-// dictar un Admin a un usuario por teléfono o en persona (RF-01.6).
+// alfabetoPasswordTemporal evita caracteres ambiguos al leerlos en voz alta o
+// transcribirlos a mano (0/O, 1/l/I) — la temporal se la va a dictar un Admin
+// a un usuario por teléfono o en persona (RF-01.6).
 const alfabetoPasswordTemporal = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
-// GenerarPasswordTemporal produce una contraseña aleatoria de 12
-// caracteres para el reset asistido por Admin (RF-01.6). 12 caracteres de
-// un alfabeto de 54 símbolos son ~68 bits de entropía — de sobra para una
-// contraseña que el usuario va a cambiar en su próximo login de todas
-// formas.
+// GenerarPasswordTemporal produce una contraseña aleatoria de 12 caracteres
+// para el reset asistido por Admin (RF-01.6).
 func GenerarPasswordTemporal() (string, error) {
 	const longitud = 12
 	alfabetoLen := len(alfabetoPasswordTemporal)
 
-	// Descarte de muestras en vez de "% alfabetoLen": con 256 valores
-	// posibles de byte y 54 símbolos, un módulo directo favorecería
-	// levemente a los primeros 256%54=40 símbolos del alfabeto. El
-	// límite (maxValido) es el mayor múltiplo de alfabetoLen que entra
-	// en un byte — cualquier byte por encima se descarta y se vuelve a
-	// samplear, así cada símbolo queda exactamente equiprobable.
+	// Descarte de muestras en vez de "% alfabetoLen": con 256 valores posibles
+	// de byte y 54 símbolos, un módulo directo favorecería levemente a los
+	// primeros 256%54=40 símbolos del alfabeto.
 	maxValido := byte(256 - (256 % alfabetoLen))
 
 	resultado := make([]byte, longitud)
@@ -55,26 +49,14 @@ func GenerarPasswordTemporal() (string, error) {
 	return string(resultado), nil
 }
 
-// GenerarCodigoRecuperacion produce el código de un solo uso que se manda
-// por mail para recuperar una contraseña olvidada.
-//
-// Son dígitos y no el alfabeto de arriba porque el recorrido es distinto:
-// la temporal se la dicta un Admin y la persona la usa una vez; el código
-// lo lee del celular, cambia de aplicación y lo tipea. Con solo dígitos el
-// teclado numérico aparece solo, no hay mayúsculas que confundir, y no
-// existe la duda de si esa "l" era una ele o un uno.
-//
-// Seis dígitos son un millón de combinaciones, poco por sí solo — lo que lo
-// hace seguro es el resto: quince minutos de vigencia, cinco intentos, un
-// solo código vigente por persona y rate limit en el endpoint (ver
-// domain.CodigoRecuperacion y migrations/001_esquema_inicial.sql).
+// GenerarCodigoRecuperacion produce el código de un solo uso que se manda por
+// mail para recuperar una contraseña olvidada.
 func GenerarCodigoRecuperacion() (string, error) {
 	const digitos = "0123456789"
 	longitud := domain.LongitudCodigoRecuperacion
 
-	// 250 es el mayor múltiplo de 10 que entra en un byte: los valores 250
-	// a 255 se descartan para que los diez dígitos queden equiprobables.
-	// Mismo criterio que GenerarPasswordTemporal.
+	// 250 es el mayor múltiplo de 10 que entra en un byte: los valores 250 a 255
+	// se descartan para que los diez dígitos queden equiprobables.
 	const maxValido = byte(250)
 
 	resultado := make([]byte, longitud)

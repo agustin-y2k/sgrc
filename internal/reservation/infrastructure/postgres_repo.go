@@ -1,6 +1,6 @@
-// Package infrastructure implementa application.Repo de reservation
-// contra PostgreSQL real (pgx), además de los tres adaptadores hacia
-// academic, inventory y auth.
+// Package infrastructure implementa application.Repo de reservation contra
+// PostgreSQL real (pgx), además de los tres adaptadores hacia academic,
+// inventory y auth.
 package infrastructure
 
 import (
@@ -21,19 +21,12 @@ const (
 	codigoTextoInvalido = "22P02"
 
 	// codigoViolacionExclusion: SQLSTATE 23P01 — "exclusion_violation".
-	// Es lo que dispara la constraint EXCLUDE de anti-solapamiento
-	// (docs/07-modelo-datos.md) cuando dos Reserva de la misma PC se
-	// superponen. Es un código DISTINTO de la violación UNIQUE (23505)
-	// que usan los demás paquetes — no es el mismo tipo de constraint.
 	codigoViolacionExclusion = "23P01"
 )
 
 var _ application.Repo = (*PostgresRepo)(nil)
 
-// consultor es el subconjunto de pgx que usan las consultas de este
-// paquete. Lo satisfacen tanto *pgxpool.Pool como pgx.Tx, que es lo que
-// permite que los mismos métodos del repo corran sueltos o dentro de una
-// transacción sin duplicar código.
+// consultor es el subconjunto de pgx que usan las consultas de este paquete.
 type consultor interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -52,15 +45,11 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 }
 
 // EnTransaccion corre fn con un repo atado a una única transacción: o se
-// aplica todo, o no queda nada. Es lo que garantiza que un ReservaGrupo
-// nunca quede a medio crear si una de sus Reserva choca contra la
-// constraint EXCLUDE a mitad del lote (RF-04.5: "Si hay conflicto, informa
-// cuáles son y no crea ninguna").
+// aplica todo, o no queda nada.
 func (r *PostgresRepo) EnTransaccion(ctx context.Context, fn func(application.Repo) error) error {
 	if r.pool == nil {
-		// Ya venimos dentro de una transacción: se reusa la misma en vez
-		// de anidar, para que el alcance del commit siga siendo el de
-		// afuera.
+		// Ya venimos dentro de una transacción: se reusa la misma en vez de anidar,
+		// para que el alcance del commit siga siendo el de afuera.
 		return fn(r)
 	}
 
@@ -81,10 +70,7 @@ func esIDInvalido(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == codigoTextoInvalido
 }
 
-// codigoViolacionFK: SQLSTATE 23503 — "foreign_key_violation". Es lo que
-// Postgres devuelve cuando el request nombra un padre que no existe (un
-// carro, un ciclo, una PC, un usuario). Se traduce igual que 22P02: es un
-// error del cliente, no una falla del servidor.
+// codigoViolacionFK: SQLSTATE 23503 — "foreign_key_violation".
 const codigoViolacionFK = "23503"
 
 func esViolacionFK(err error) bool {
@@ -108,11 +94,9 @@ func errorDeFilas(rows pgx.Rows) error {
 	return fmt.Errorf("iterando filas: %w", err)
 }
 
-// horaComoDuracion / duracionComoHora convierten entre time.Duration
-// (offset desde medianoche, el tipo que usa domain) y time.Time (lo que
-// pgx espera/devuelve para una columna TIME). Se centraliza acá porque
-// TODOS los métodos de este archivo necesitan esta conversión — un solo
-// lugar para el criterio de "medianoche de referencia".
+// horaComoDuracion / duracionComoHora convierten entre time.Duration (offset
+// desde medianoche, el tipo que usa domain) y time.Time (lo que pgx
+// espera/devuelve para una columna TIME).
 func horaComoDuracion(t time.Time) time.Duration {
 	return time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute + time.Duration(t.Second())*time.Second
 }

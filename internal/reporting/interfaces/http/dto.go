@@ -43,8 +43,7 @@ type historicoUsoEquipoResponse struct {
 	Anio     int    `json:"anio"`
 	EquipoID string `json:"equipoId"`
 	// Cómo se llamaba el equipo el día que se archivó el ciclo: "PC 3" o
-	// "Proyector Epson". Los dos de abajo van en 0 y "" si no estaba en
-	// ningún carro.
+	// "Proyector Epson".
 	EtiquetaSnapshot      string `json:"etiquetaSnapshot"`
 	IdentificadorSnapshot int    `json:"identificadorSnapshot"`
 	CarroNombreSnapshot   string `json:"carroNombreSnapshot"`
@@ -144,8 +143,8 @@ type equipoFueraDeCirculacionResponse struct {
 	CarroNombre string `json:"carroNombre,omitempty"`
 	Estado      string `json:"estado"`
 	// Los tres siguientes salen de la última incidencia y pueden faltar: una
-	// máquina se puede sacar de circulación sin haber reportado ninguna
-	// falla, y ese hueco es un dato — nadie escribió qué tiene.
+	// máquina se puede sacar de circulación sin haber reportado ninguna falla, y
+	// ese hueco es un dato — nadie escribió qué tiene.
 	Categoria        string `json:"categoria,omitempty"`
 	UltimaFalla      string `json:"ultimaFalla,omitempty"`
 	EstadoIncidencia string `json:"estadoIncidencia,omitempty"`

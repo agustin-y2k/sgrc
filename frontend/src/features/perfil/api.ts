@@ -4,25 +4,13 @@ import { getToken } from "@/lib/token-store"
 
 // ── Foto de perfil ────────────────────────────────────────────────────
 
-/**
- * La URL de la foto de alguien.
- *
- * Lleva `v` con la fecha de actualización para que, al cambiarla, el
- * navegador no siga mostrando la vieja de su caché: el servidor manda
- * `private, max-age=300`, así que sin esto una foto recién subida tardaba
- * hasta cinco minutos en verse.
- */
+/** La URL de la foto de alguien. */
 export function urlDeFoto(usuarioId: string, version?: string) {
   const base = `${import.meta.env.VITE_API_URL ?? ""}/api/auth/usuarios/${usuarioId}/foto`
   return version ? `${base}?v=${encodeURIComponent(version)}` : base
 }
 
-/**
- * Sube la foto propia.
- *
- * No usa apiFetch porque esto va como multipart y aquel serializa a JSON;
- * el token se agrega igual, a mano.
- */
+/** Sube la foto propia. */
 export async function subirMiFoto(archivo: Blob) {
   const cuerpo = new FormData()
   cuerpo.append("foto", archivo, "perfil.webp")

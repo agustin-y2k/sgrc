@@ -100,9 +100,8 @@ func TestRegistrarFallo_ElCodigoQuemadoNoSeReutiliza(t *testing.T) {
 		c.RegistrarFallo(momento)
 	}
 
-	// Que el error sea "inválido" y no "sin intentos" es correcto: al
-	// quemarse quedó marcado como usado, y Utilizable evalúa eso primero.
-	// Para quien está del otro lado los dos dicen lo mismo — pedí otro.
+	// Que el error sea "inválido" y no "sin intentos" es correcto: al quemarse
+	// quedó marcado como usado, y Utilizable evalúa eso primero.
 	if err := c.Utilizable(momento); err == nil {
 		t.Fatal("un código quemado no puede volver a validar")
 	}

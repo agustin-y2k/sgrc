@@ -29,11 +29,7 @@ type fakeRepo struct {
 	errListar             error
 	adminsAprobadosCount  int
 
-	// Códigos de recuperación, indexados por usuario. Solo se guarda el
-	// último sin usar: es exactamente el invariante que sostiene
-	// CrearCodigoRecuperacion en Postgres (pedir uno nuevo invalida el
-	// anterior), y tenerlo acá evita que un test pase contra el fake
-	// apoyándose en algo que la implementación real no permite.
+	// Códigos de recuperación, indexados por usuario.
 	codigos          map[string]*domain.CodigoRecuperacion
 	errGuardarCodigo error
 }
@@ -306,9 +302,8 @@ func nuevoServicioConCascada(repo Repo, gestorMaterias GestorMateriasDocente, ca
 	)
 }
 
-// servicioConFirmador permite espiar con qué usuario —y por lo tanto con
-// qué VersionSesion— se firma el token. Es lo que hace falta para verificar
-// que InvalidarSesiones corre ANTES de firmar (ver service_sesiones_test.go).
+// servicioConFirmador permite espiar con qué usuario —y por lo tanto con qué
+// VersionSesion— se firma el token.
 func servicioConFirmador(repo Repo, firmar TokenSigner) *Service {
 	contadorID = 0
 	return NewService(
@@ -484,11 +479,7 @@ func TestLogin_UsuarioNoExiste_CredencialesInvalidas(t *testing.T) {
 	}
 }
 
-// El mensaje de error ya era el mismo en los dos casos; el TIEMPO no. Con
-// email inexistente se volvía sin hashear nada, así que medir la respuesta
-// alcanzaba para enumerar quién tiene cuenta. Lo que se verifica es que los
-// dos caminos pasen por verify la misma cantidad de veces — medir
-// milisegundos en un test sería una fuente de fallos intermitentes.
+// El mensaje de error ya era el mismo en los dos casos; el TIEMPO no.
 func TestLogin_EmailInexistente_GastaElMismoTiempoQueUnoReal(t *testing.T) {
 	contarVerificaciones := func() (VerifyFunc, *int) {
 		n := 0
@@ -807,16 +798,15 @@ func TestDarDeBaja_Docente_ErrorCancelandoReservas_SePropaga(t *testing.T) {
 	if err == nil {
 		t.Fatal("esperaba que el error de cancelación se propague")
 	}
-	// La baja del usuario ya se aplicó — eso es intencional (ver comentario
-	// en DarDeBaja): no debe quedar bloqueada esperando a que reservation
-	// responda bien.
+	// La baja del usuario ya se aplicó — eso es intencional (ver comentario en
+	// DarDeBaja): no debe quedar bloqueada esperando a que reservation responda
+	// bien.
 	if repo.usuarios["d1"].Estado != domain.EstadoBaja {
 		t.Error("la baja del usuario ya debería haberse aplicado antes del error de cascada")
 	}
-	// Los vínculos, en cambio, tienen que sobrevivir: son el único registro
-	// de qué materias quedaron con reservas por cancelar, y la operación no
-	// se puede reintentar (BAJA→BAJA es inválida, RF-02.9). Borrarlos acá
-	// dejaba el sistema en un estado imposible de arreglar salvo por SQL.
+	// Los vínculos, en cambio, tienen que sobrevivir: son el único registro de
+	// qué materias quedaron con reservas por cancelar, y la operación no se
+	// puede reintentar (BAJA→BAJA es inválida, RF-02.9).
 	if len(gestor.removidoDe) != 0 {
 		t.Error("con la cascada fallada, las asignaciones no deberían haberse borrado")
 	}
@@ -842,9 +832,8 @@ func TestDarDeBaja_Docente_UnaMateriaFalla_LasDemasSeCancelanIgual(t *testing.T)
 	if err == nil {
 		t.Fatal("esperaba error: quedó una materia sin cancelar")
 	}
-	// Cortar en la primera materia dejaba a las otras dos con reservas
-	// vivas y sin docente, por una falla que no tenía nada que ver con
-	// ellas.
+	// Cortar en la primera materia dejaba a las otras dos con reservas vivas y
+	// sin docente, por una falla que no tenía nada que ver con ellas.
 	if len(cancelador.llamadoParaMateria) != 3 {
 		t.Errorf("esperaba que se intenten las 3 materias, se intentó: %v", cancelador.llamadoParaMateria)
 	}
@@ -923,9 +912,9 @@ func TestCambiarPassword_OK(t *testing.T) {
 	if repo.usuarios["u1"].DebeCambiarPassword {
 		t.Error("debería limpiar DebeCambiarPassword al cambiarla")
 	}
-	// El token viejo lleva DebeCambiarPassword=true congelado en los claims;
-	// sin uno nuevo, quien acaba de cambiarla queda bloqueado por su propio
-	// cambio exitoso hasta que expire (RF-01.6).
+	// El token viejo lleva DebeCambiarPassword=true congelado en los claims; sin
+	// uno nuevo, quien acaba de cambiarla queda bloqueado por su propio cambio
+	// exitoso hasta que expire (RF-01.6).
 	if token == "" {
 		t.Error("debería devolver un token nuevo")
 	}
@@ -938,9 +927,8 @@ func TestCambiarPassword_ActualIncorrecta_Error(t *testing.T) {
 
 	_, err := svc.CambiarPassword(context.Background(), "u1", "incorrecta", "nuevapassword123")
 
-	// Propio y no ErrCredencialesInvalidas: ese mapea a 401, y un 401 con
-	// token válido hace que el cliente cierre la sesión. Equivocarse
-	// tipeando la contraseña actual no puede echar a nadie del sistema.
+	// Propio y no ErrCredencialesInvalidas: ese mapea a 401, y un 401 con token
+	// válido hace que el cliente cierre la sesión.
 	if !errors.Is(err, ErrPasswordActualIncorrecta) {
 		t.Fatalf("esperaba ErrPasswordActualIncorrecta, obtuve %v", err)
 	}
@@ -963,10 +951,7 @@ func TestCambiarPassword_NuevaCorta_Error(t *testing.T) {
 
 // ── EliminarDefinitivamente ─────────────────────────────────────────────
 
-// Los dos estados terminales se pueden eliminar. RECHAZADA importa tanto
-// como BAJA: es el único camino que tiene un Admin para deshacer un rechazo
-// equivocado y liberar el email, porque RECHAZADA no transiciona a ningún
-// otro estado.
+// Los dos estados terminales se pueden eliminar.
 func TestEliminarDefinitivamente_DesdeEstadoTerminal_OK(t *testing.T) {
 	casos := []domain.Estado{domain.EstadoBaja, domain.EstadoRechazada}
 	for _, estado := range casos {
@@ -1384,9 +1369,7 @@ func TestPromoverAAdmin_OK(t *testing.T) {
 	}
 }
 
-// Promover conserva todo lo demás de la cuenta. Un docente que pasa a
-// coordinar suele seguir dando clase: borrarle nada por una promoción le
-// cancelaría las clases que ya tiene tomadas.
+// Promover conserva todo lo demás de la cuenta.
 func TestPromoverAAdmin_NoTocaNadaMasDeLaCuenta(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
@@ -1451,9 +1434,7 @@ func TestPromoverAAdmin_UsuarioInexistente(t *testing.T) {
 }
 
 // Promover solo agrega Admins, nunca los saca, así que no puede dejar al
-// sistema sin ninguno (RF-01.8). Este test fija que no se le agregue por
-// error el guard del último Admin, que bloquearía promociones legítimas
-// cuando hay un solo Admin — justamente el caso en que más se necesita.
+// sistema sin ninguno (RF-01.8).
 func TestPromoverAAdmin_ConUnSoloAdminEnElSistema_Funciona(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["admin"] = &domain.Usuario{
@@ -1497,9 +1478,7 @@ func TestDegradarADocente_OK(t *testing.T) {
 }
 
 // Espejo de TestPromoverAAdmin_NoTocaNadaMasDeLaCuenta: quien deja de
-// coordinar sigue dando clase, así que conserva materias y forma de
-// ingreso. Es la diferencia con darle de baja la cuenta, que era la única
-// forma que había de sacar a un Admin.
+// coordinar sigue dando clase, así que conserva materias y forma de ingreso.
 func TestDegradarADocente_NoTocaNadaMasDeLaCuenta(t *testing.T) {
 	repo := repoConDosAdmins()
 	repo.usuarios["u1"] = &domain.Usuario{
@@ -1527,8 +1506,8 @@ func TestDegradarADocente_NoTocaNadaMasDeLaCuenta(t *testing.T) {
 }
 
 // RF-01.8. Este es el caso que hace falta que exista el guard: sin él,
-// degradar al único Admin deja al sistema sin nadie que pueda aprobar
-// cuentas ni volver a promover a nadie, y sin salida.
+// degradar al único Admin deja al sistema sin nadie que pueda aprobar cuentas
+// ni volver a promover a nadie, y sin salida.
 func TestDegradarADocente_UltimoAdmin_Rechazado(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["unico"] = &domain.Usuario{
@@ -1640,8 +1619,8 @@ func TestLogin_CadaEstadoExplicaSuMotivo(t *testing.T) {
 }
 
 // Los tres mensajes tienen que ser distintos entre sí y no el genérico: si
-// alguno se olvidara, el síntoma sería un texto inútil en pantalla que
-// ningún test notaría.
+// alguno se olvidara, el síntoma sería un texto inútil en pantalla que ningún
+// test notaría.
 func TestLogin_LosTresMotivosDicenCosasDistintas(t *testing.T) {
 	mensajes := map[string]bool{}
 	for _, err := range []error{
@@ -1657,9 +1636,8 @@ func TestLogin_LosTresMotivosDicenCosasDistintas(t *testing.T) {
 	}
 }
 
-// Decir el motivo es seguro porque para llegar hasta ahí hay que haber
-// puesto la contraseña correcta. Con la contraseña equivocada, una cuenta
-// pendiente tiene que seguir siendo indistinguible de cualquier otra.
+// Decir el motivo es seguro porque para llegar hasta ahí hay que haber puesto
+// la contraseña correcta.
 func TestLogin_ConPasswordIncorrecta_NoRevelaElEstadoDeLaCuenta(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
@@ -1678,10 +1656,9 @@ func TestLogin_ConPasswordIncorrecta_NoRevelaElEstadoDeLaCuenta(t *testing.T) {
 	}
 }
 
-// ── Foto de perfil ──────────────────────────────────────────────────────
-//
-// El fake la guarda en un mapa: lo que verifican los tests de este paquete
-// son las reglas de la cuenta, no dónde vive la imagen.
+// ── Foto de perfil ────────────────────────────────────────────────────── El
+// fake la guarda en un mapa: lo que verifican los tests de este paquete son
+// las reglas de la cuenta, no dónde vive la imagen.
 
 func (r *fakeRepo) GuardarFoto(_ context.Context, f *domain.FotoDePerfil) error {
 	if r.fotos == nil {

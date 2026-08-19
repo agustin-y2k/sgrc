@@ -1,9 +1,6 @@
 // Package archtest impone en la suite de tests el límite de dominio de
 // docs/06-arquitectura.md §1/§3: "ningún paquete importa domain/ de otro
-// directamente". Sin este test, la disciplina de límites entre paquetes
-// (que es la única razón de ser del "monolito modular" en vez de un
-// monolito plano) se erosiona con el tiempo sin que nadie lo note — un
-// import de más compila perfecto y nadie lo revisa a mano en cada PR.
+// directamente".
 package archtest
 
 import (
@@ -18,15 +15,14 @@ import (
 
 const modulePrefix = "github.com/ramiro/sgrc/internal/"
 
-// paqueteDeDominio matchea imports del tipo
-// ".../internal/<paquete>/domain" (o subpaquetes de domain, si alguna vez
-// hubiera).
+// paqueteDeDominio matchea imports del tipo ".../internal/<paquete>/domain"
+// (o subpaquetes de domain, si alguna vez hubiera).
 var paqueteDeDominio = regexp.MustCompile(`^` + regexp.QuoteMeta(modulePrefix) + `([^/]+)/domain(/|$)`)
 
-// TestNingunPaqueteImportaDomainAjeno recorre cada .go de internal/ y
-// falla si encuentra un import de internal/<X>/domain desde un archivo
-// que no pertenece al propio paquete <X> (ni a internal/shared/, que es
-// transversal por diseño — ver docs/06-arquitectura.md §2).
+// TestNingunPaqueteImportaDomainAjeno recorre cada .go de internal/ y falla
+// si encuentra un import de internal/<X>/domain desde un archivo que no
+// pertenece al propio paquete <X> (ni a internal/shared/, que es transversal
+// por diseño — ver docs/06-arquitectura.md §2).
 func TestNingunPaqueteImportaDomainAjeno(t *testing.T) {
 	root := internalDir(t)
 

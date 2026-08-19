@@ -7,12 +7,7 @@ import (
 	"time"
 )
 
-// Estado de una PC (RF-03.3). Ver docs/05-diagramas-estado.md — a
-// diferencia de Usuario, FUERA_DE_SERVICIO es terminal en este diagrama:
-// no hay transición de vuelta a DISPONIBLE ni a EN_MANTENIMIENTO. Si en la
-// práctica una PC "fuera de servicio" se repara, la forma modelada de
-// volver a operarla es que un Admin la edite directamente (no es una
-// transición de estado, es una corrección de datos).
+// Estado de una PC (RF-03.3).
 type EstadoEquipo string
 
 const (
@@ -33,9 +28,9 @@ func ParseEstadoEquipo(s string) (EstadoEquipo, error) {
 }
 
 // PuedeTransicionarA implementa el diagrama de estados de PC
-// (docs/05-diagramas-estado.md): DISPONIBLE y EN_MANTENIMIENTO se
-// alternan libremente entre sí y hacia FUERA_DE_SERVICIO; FUERA_DE_SERVICIO
-// es terminal.
+// (docs/05-diagramas-estado.md): DISPONIBLE y EN_MANTENIMIENTO se alternan
+// libremente entre sí y hacia FUERA_DE_SERVICIO; FUERA_DE_SERVICIO es
+// terminal.
 func (e EstadoEquipo) PuedeTransicionarA(nuevo EstadoEquipo) bool {
 	switch e {
 	case EstadoDisponible:
@@ -51,45 +46,27 @@ func (e EstadoEquipo) PuedeTransicionarA(nuevo EstadoEquipo) bool {
 
 var ErrTransicionEstadoEquipoInvalida = errors.New("transición de estado de equipo inválida")
 
-// MaxLargoNumeroSerie es el tope del VARCHAR(50) de la columna. Se valida
-// acá además de en la base para que el error salga como un 400 con
-// explicación y no como un 500 de Postgres.
+// MaxLargoNumeroSerie es el tope del VARCHAR(50) de la columna.
 const MaxLargoNumeroSerie = 50
 
 var (
-	// El identificador sí es un entero positivo: es la etiqueta "PC 1",
-	// "PC 2" que se le pone al equipo dentro de su carro, y la elige la
-	// escuela.
+	// El identificador sí es un entero positivo: es la etiqueta "PC 1", "PC 2"
+	// que se le pone al equipo dentro de su carro, y la elige la escuela.
 	ErrIdentificadorInvalido = errors.New("el identificador del equipo debe ser un entero positivo")
-	// El número de serie NO es un número, aunque se llame así: es el código
-	// de fábrica de la etiqueta y casi siempre trae letras ("5CD1234ABC").
-	// Por eso la columna es texto: con un tipo numérico, la primera máquina
-	// cargada con el código que dice su etiqueta no entra.
+	// El número de serie NO es un número, aunque se llame así: es el código de
+	// fábrica de la etiqueta y casi siempre trae letras ("5CD1234ABC").
 	ErrNumeroSerieInvalido = errors.New("el número de serie no puede estar vacío")
 	ErrNumeroSerieLargo    = fmt.Errorf("el número de serie no puede tener más de %d caracteres", MaxLargoNumeroSerie)
 	ErrEquipoYaDadoDeBaja  = errors.New("el equipo ya está dado de baja")
 )
 
 // NormalizarNumeroSerie devuelve la forma canónica: sin espacios al borde y
-// en mayúsculas. Es la misma decisión que NormalizarEmail en auth y por el
-// mismo motivo — sin una forma única, "5cd1234abc" y "5CD1234ABC" son dos
-// filas distintas para el UNIQUE, o sea la misma máquina cargada dos veces.
-//
-// Mayúsculas y no minúsculas porque es como vienen impresas las etiquetas:
-// la forma canónica coincide con lo que se lee en el equipo.
+// en mayúsculas.
 func NormalizarNumeroSerie(s string) string {
 	return strings.ToUpper(strings.TrimSpace(s))
 }
 
 // Equipo es el equipo individual dentro de un Carro.
-//
-// Identificador es único solo dentro de su Carro (no globalmente) — "Equipo 27"
-// puede existir en el Carro 1 y en el Carro 2 sin conflicto. NumeroSerie sí
-// es único en toda la institución (es el de fábrica), y es texto: el nombre
-// engaña, pero el código de la etiqueta lleva letras.
-//
-// Freezado es puramente informativo (Deep Freeze instalado) — no afecta
-// ningún flujo de reservas ni de negocio.
 type Equipo struct {
 	ID string
 	// CarroID vacío = no está en ningún carro. Esto es
@@ -104,9 +81,7 @@ type Equipo struct {
 	Tipo string
 	// Nombre es cómo se lo llama cuando no tiene número de carro.
 	Nombre string
-	// Reservable: si aparece en la lista de equipos libres al reservar. Un
-	// proyector sí; un cargador se presta en el momento y nadie planifica
-	// con él.
+	// Reservable: si aparece en la lista de equipos libres al reservar.
 	Reservable        bool
 	Freezado          bool
 	CPU               string
@@ -123,9 +98,9 @@ func NuevoEquipoDeCarro(id, carroID string, identificador int, numeroSerie strin
 	if identificador <= 0 {
 		return nil, ErrIdentificadorInvalido
 	}
-	// Normalizar antes de validar: si no, un número de serie de puros
-	// espacios pasaría el "no vacío" y llegaría a la base a chocar contra
-	// el CHECK `chk_equipo_identificable`, que responde 500 en vez de explicar qué falta.
+	// Normalizar antes de validar: si no, un número de serie de puros espacios
+	// pasaría el "no vacío" y llegaría a la base a chocar contra el CHECK
+	// `chk_equipo_identificable`, que responde 500 en vez de explicar qué falta.
 	serie := NormalizarNumeroSerie(numeroSerie)
 	if serie == "" {
 		return nil, ErrNumeroSerieInvalido
@@ -147,10 +122,7 @@ func NuevoEquipoDeCarro(id, carroID string, identificador int, numeroSerie strin
 }
 
 // CambiarEstado aplica una transición si es válida (ver
-// EstadoEquipo.PuedeTransicionarA). No dispara ninguna cascada de cancelación
-// de reservas acá — eso es responsabilidad de application/, que llega a
-// reservation por un puerto (ValidadorReservas); el dominio no conoce
-// infraestructura.
+// EstadoEquipo.PuedeTransicionarA).
 func (p *Equipo) CambiarEstado(nuevo EstadoEquipo) error {
 	if !p.Estado.PuedeTransicionarA(nuevo) {
 		return fmt.Errorf("%w: de %s a %s", ErrTransicionEstadoEquipoInvalida, p.Estado, nuevo)
@@ -170,21 +142,13 @@ func (p *Equipo) DarDeBaja(ahora time.Time) error {
 	return nil
 }
 
-// MoverACarro cambia el carro al que pertenece la PC (RF-03.10). La
-// unicidad del identificador en el carro destino se valida en
-// infrastructure (constraint UNIQUE(carro_id, identificador)), no acá —
-// el dominio no tiene visibilidad de qué otras PCs existen.
+// MoverACarro cambia el carro al que pertenece la PC (RF-03.10).
 func (p *Equipo) MoverACarro(nuevoCarroID string) {
 	p.CarroID = nuevoCarroID
 }
 
 // ── Equipos que no son PCs de un carro (RF-03.15) ───────────────────────
-//
-// Una institución también presta proyectores, cargadores y notebooks
-// sueltas. Viven en esta misma entidad y no en una aparte porque "qué hay
-// afuera del laboratorio" tiene que ser UNA sola lista: con dos tipos de
-// cosa, el préstamo necesitaría dos referencias, el mostrador dos consultas
-// y el barrido dos recorridos (RF-03.15).
+// Una institución también presta proyectores, cargadores y notebooks sueltas.
 
 const (
 	// TipoPC es el tipo por defecto: una computadora de un carro.
@@ -201,21 +165,14 @@ var (
 	ErrNombreEquipoLargo = fmt.Errorf("el nombre no puede tener más de %d caracteres", MaxLargoNombreEquipo)
 )
 
-// NormalizarTextoDeEquipo recorta los bordes y colapsa los espacios
-// internos, sin tocar la caja: "Proyector Epson" se muestra tal cual se
-// escribió. La unicidad sin distinguir mayúsculas la da el índice funcional
-// de la base, igual que con el nombre de una licencia.
+// NormalizarTextoDeEquipo recorta los bordes y colapsa los espacios internos,
+// sin tocar la caja: "Proyector Epson" se muestra tal cual se escribió.
 func NormalizarTextoDeEquipo(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
 // TipoDeEquipoValido y NombreDeEquipoValido normalizan y validan, y devuelven
 // el texto ya listo para guardar.
-//
-// Están separadas de NuevoEquipo porque el alta no es el único lugar que los
-// escribe: el PATCH de una PC también puede cambiarlos, y sin pasar por acá
-// un `"nombre": ""` llegaría hasta el CHECK `equipo_nombre_check` y volvería como un 500
-// en vez de como el 400 que es.
 func TipoDeEquipoValido(tipo string) (string, error) {
 	tipo = NormalizarTextoDeEquipo(tipo)
 	if tipo == "" {
@@ -238,15 +195,8 @@ func NombreDeEquipoValido(nombre string) (string, error) {
 	return nombre, nil
 }
 
-// NuevoEquipoSuelto crea algo prestable que NO está en un carro: un proyector, un
-// cargador, una notebook suelta.
-//
-// No tiene identificador ni número de serie —"PC 3" no significa nada para
-// un cargador, y un cargador puede no traer serie de fábrica— así que lo que
-// lo identifica es el nombre, y por eso es obligatorio.
-//
-// `reservable` separa el proyector de los cargadores: solo lo reservable
-// aparece en la lista de equipos libres cuando un docente va a reservar.
+// NuevoEquipoSuelto crea algo prestable que NO está en un carro: un
+// proyector, un cargador, una notebook suelta.
 func NuevoEquipoSuelto(id, tipo, nombre string, reservable bool, fechaAlta time.Time) (*Equipo, error) {
 	tipo, err := TipoDeEquipoValido(tipo)
 	if err != nil {
@@ -274,12 +224,8 @@ func (p *Equipo) EstaEnUnCarro() bool {
 	return p.CarroID != ""
 }
 
-// Etiqueta es cómo se llama a este equipo en cualquier pantalla o correo:
-// "PC 3" si está en un carro, su nombre si no.
-//
-// Vive en el dominio y no en cada pantalla porque si no, la misma máquina se
-// vería distinta según por dónde se la mire — y porque un proyector rotulado
-// "PC 0" es lo que sale de formatear un identificador que no existe.
+// Etiqueta es cómo se llama a este equipo en cualquier pantalla o correo: "PC
+// 3" si está en un carro, su nombre si no.
 func (p *Equipo) Etiqueta() string {
 	if p.Nombre != "" {
 		return p.Nombre

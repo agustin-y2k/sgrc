@@ -2,14 +2,7 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-/**
- * El desplegable nativo, con la misma piel que `<Input>`.
- *
- * `bg-control` no es decorativo: el navegador pinta la lista desplegada
- * copiando el `background-color` del campo, y con un color translúcido sale
- * blanca sobre blanco en tema oscuro. La explicación está en index.css,
- * junto a la regla de `option`.
- */
+/** El desplegable nativo, con la misma piel que `<Input>`. */
 function Select({ className, ...props }: React.ComponentProps<"select">) {
   return (
     <select

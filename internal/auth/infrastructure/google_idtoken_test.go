@@ -22,18 +22,16 @@ import (
 	"github.com/ramiro/sgrc/internal/auth/application"
 )
 
-// Estos tests firman tokens de verdad con una clave RSA generada al vuelo
-// y sirven el JWKS desde un httptest.Server, así que ejercitan el mismo
-// camino que un ID token real de Google: firma, kid, cache de claves y
-// todos los chequeos de claims. Lo único que no es real es de dónde salen
-// las claves.
+// Estos tests firman tokens de verdad con una clave RSA generada al vuelo y
+// sirven el JWKS desde un httptest.Server, así que ejercitan el mismo camino
+// que un ID token real de Google: firma, kid, cache de claves y todos los
+// chequeos de claims.
 
 const clientIDDePrueba = "123456789-abcdef.apps.googleusercontent.com"
 
 // Generar una clave RSA de 2048 bits cuesta cerca de un segundo, y estos
 // tests necesitan la misma clave una y otra vez: se genera una sola por
-// proceso. claveImpostora es la de "alguien que no es Google", y por eso
-// tiene que ser distinta de la otra.
+// proceso.
 var (
 	claveDePrueba  = sync.OnceValue(generarClave)
 	claveImpostora = sync.OnceValue(generarClave)
@@ -54,8 +52,7 @@ func relojDePrueba(t time.Time) func() time.Time {
 }
 
 // jwksDePrueba levanta un servidor que publica la clave pública en formato
-// JWKS, igual que https://www.googleapis.com/oauth2/v3/certs. Devuelve
-// también el contador de pedidos, para poder verificar el cache.
+// JWKS, igual que https://www.googleapis.com/oauth2/v3/certs.
 func jwksDePrueba(t *testing.T, kid string, clave *rsa.PublicKey, cacheControl string) (*httptest.Server, *atomic.Int64) {
 	t.Helper()
 
@@ -161,10 +158,8 @@ func TestVerificar_AceptaLosDosEmisoresDeGoogle(t *testing.T) {
 
 // ── Lo que tiene que rechazar ─────────────────────────────────────────
 
-// El chequeo más importante de todos: Google le firma ID tokens a
-// cualquiera que tenga una aplicación registrada. Sin verificar que el aud
-// sea NUESTRO client ID, alguien podría presentar un token legítimo
-// emitido para su propia app y entrar como el usuario que quisiera.
+// El chequeo más importante de todos: Google le firma ID tokens a cualquiera
+// que tenga una aplicación registrada.
 func TestVerificar_TokenParaOtraAplicacion_Rechaza(t *testing.T) {
 	privada, v, _ := entornoDePrueba(t, nil)
 
@@ -181,9 +176,8 @@ func TestVerificar_TokenParaOtraAplicacion_Rechaza(t *testing.T) {
 func TestVerificar_FirmadoConOtraClave_Rechaza(t *testing.T) {
 	_, v, _ := entornoDePrueba(t, nil)
 
-	// Una clave que no es la que publica el JWKS, pero con el mismo kid:
-	// el atacante controla el header, así que puede poner el kid que
-	// quiera. Lo que no puede es falsificar la firma.
+	// Una clave que no es la que publica el JWKS, pero con el mismo kid: el
+	// atacante controla el header, así que puede poner el kid que quiera.
 	_, err := v.Verificar(context.Background(), firmar(t, claveImpostora(), "kid-1", claimsValidos()))
 
 	if !errors.Is(err, application.ErrTokenGoogleInvalido) {
@@ -192,9 +186,7 @@ func TestVerificar_FirmadoConOtraClave_Rechaza(t *testing.T) {
 }
 
 // La familia de bugs clásica de JWT: aceptar el algoritmo que declara el
-// propio token. Con alg=none no hay firma que verificar, y con HS256
-// firmado con la clave PÚBLICA (que es pública, justamente) cualquiera
-// puede producir un token válido si el verificador no fija el algoritmo.
+// propio token.
 func TestVerificar_AlgoritmoNoPermitido_Rechaza(t *testing.T) {
 	privada, v, _ := entornoDePrueba(t, nil)
 
@@ -363,9 +355,8 @@ func TestVerificar_CacheaLasClaves(t *testing.T) {
 	}
 }
 
-// Con las claves vencidas hay que volver a pedirlas: si no, el día que
-// Google rote sus claves todos los logins fallarían hasta reiniciar el
-// proceso.
+// Con las claves vencidas hay que volver a pedirlas: si no, el día que Google
+// rote sus claves todos los logins fallarían hasta reiniciar el proceso.
 func TestVerificar_ClavesVencidas_LasVuelveAPedir(t *testing.T) {
 	privada := claveDePrueba()
 	srv, pedidos := jwksDePrueba(t, "kid-1", &privada.PublicKey, "public, max-age=600")
@@ -392,9 +383,9 @@ func TestVerificar_ClavesVencidas_LasVuelveAPedir(t *testing.T) {
 	}
 }
 
-// Un token basura con un kid inventado no puede provocar un pedido a
-// Google por intento: sería un amplificador de tráfico gratuito contra un
-// endpoint público.
+// Un token basura con un kid inventado no puede provocar un pedido a Google
+// por intento: sería un amplificador de tráfico gratuito contra un endpoint
+// público.
 func TestVerificar_KidDesconocido_RefrescaUnaSolaVez(t *testing.T) {
 	privada, v, pedidos := entornoDePrueba(t, nil)
 
@@ -409,9 +400,7 @@ func TestVerificar_KidDesconocido_RefrescaUnaSolaVez(t *testing.T) {
 
 // ── Fallas de infraestructura ─────────────────────────────────────────
 
-// No poder hablar con Google no dice nada sobre el token. Reportarlo como
-// token inválido convertiría un problema nuestro (500) en un 401 que
-// culpa al usuario y no deja rastro de la causa.
+// No poder hablar con Google no dice nada sobre el token.
 func TestVerificar_SinPoderTraerLasClaves_NoEsTokenInvalido(t *testing.T) {
 	privada := claveDePrueba()
 

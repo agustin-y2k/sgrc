@@ -71,15 +71,13 @@ func (v *ValidadorEquipoPostgres) EquipoDisponibleParaReservar(ctx context.Conte
 		return false, fmt.Errorf("verificando disponibilidad del equipo: %w", err)
 	}
 	// `reservable` no es redundante con la lista de disponibles, que ya lo
-	// filtra: un pedido armado a mano no pasa por esa lista, y sin este
-	// chequeo se podría reservar un cargador igual (RF-03.16).
+	// filtra: un pedido armado a mano no pasa por esa lista, y sin este chequeo
+	// se podría reservar un cargador igual (RF-03.16).
 	return estado == "DISPONIBLE" && !dadoDeBaja && reservable, nil
 }
 
 // EquiposNoReservables es la versión de lote de la de arriba, en una sola
-// consulta. La base devuelve los que SÍ se pueden reservar y acá se restan:
-// lo que falta en el resultado no se puede, y eso cubre de paso los IDs que
-// no existen sin una segunda consulta.
+// consulta.
 func (v *ValidadorEquipoPostgres) EquiposNoReservables(ctx context.Context, equipoIDs []string) ([]string, error) {
 	if len(equipoIDs) == 0 {
 		return nil, nil
@@ -113,8 +111,8 @@ func (v *ValidadorEquipoPostgres) EquiposNoReservables(ctx context.Context, equi
 	}
 
 	// Se recorre la lista PEDIDA y no el mapa para conservar el orden en que
-	// llegaron: el mensaje de error nombra máquinas, y que salgan en otro
-	// orden que en la pantalla obliga a buscarlas de a una.
+	// llegaron: el mensaje de error nombra máquinas, y que salgan en otro orden
+	// que en la pantalla obliga a buscarlas de a una.
 	var noReservables []string
 	for _, id := range equipoIDs {
 		if !reservables[id] {
@@ -144,17 +142,15 @@ func (v *ValidadorEquipoPostgres) EquipoEstaEnInventario(ctx context.Context, eq
 }
 
 // EtiquetasDeEquipos: cómo se nombra cada equipo, para los avisos de
-// cancelación. Una sola consulta con = ANY en vez de una por PC — un
-// bloqueo administrativo sobre un carro entero puede tocar todas las suyas.
+// cancelación.
 func (v *ValidadorEquipoPostgres) EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error) {
 	etiquetas := make(map[string]string, len(equipoIDs))
 	if len(equipoIDs) == 0 {
 		return etiquetas, nil
 	}
 
-	// COALESCE en este orden: el nombre manda cuando existe (un proyector),
-	// y si no, el número. Es la misma regla que domain.Equipo.Etiqueta, resuelta
-	// en SQL para no traer la fila entera solo por el rótulo.
+	// COALESCE en este orden: el nombre manda cuando existe (un proyector), y si
+	// no, el número.
 	rows, err := v.pool.Query(ctx,
 		`SELECT id, COALESCE(nombre, 'PC ' || identificador) FROM equipo WHERE id = ANY($1)`, equipoIDs)
 	if err != nil {
@@ -204,9 +200,9 @@ func (o *ObtenedorNombrePostgres) NombreCompletoDe(ctx context.Context, usuarioI
 }
 
 // MateriaAceptaReservas implementa la mitad "no archivada" de RF-04.1. Se
-// mira también el curso y el ciclo: archivar un ciclo marca los tres
-// niveles (ver ArchivarCiclo en academic/infrastructure), pero basta con
-// que cualquiera de ellos esté archivado para que la materia ya no admita
+// mira también el curso y el ciclo: archivar un ciclo marca los tres niveles
+// (ver ArchivarCiclo en academic/infrastructure), pero basta con que
+// cualquiera de ellos esté archivado para que la materia ya no admita
 // reservas nuevas.
 func (v *ValidadorMateriaPostgres) MateriaAceptaReservas(ctx context.Context, materiaID string) (bool, error) {
 	var acepta bool

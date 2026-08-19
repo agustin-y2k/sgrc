@@ -11,11 +11,9 @@ import (
 )
 
 // ── fakeVerificadorGoogle ──────────────────────────────────────────────
-//
 // Reemplaza a la verificación real de firmas contra las claves públicas de
-// Google (eso se prueba aparte, en infrastructure/google_idtoken_test.go,
-// con tokens firmados de verdad). Acá lo único que interesa es qué hace el
-// servicio con una identidad ya verificada.
+// Google (eso se prueba aparte, en infrastructure/google_idtoken_test.go, con
+// tokens firmados de verdad).
 
 type fakeVerificadorGoogle struct {
 	identidad *IdentidadGoogle
@@ -77,9 +75,7 @@ func usuarioDeGoogle(id, email, sub string, estado domain.Estado) *domain.Usuari
 
 // ── Disponibilidad y validez del token ────────────────────────────────
 
-// Sin GOOGLE_CLIENT_ID configurado el verificador es nil. El sistema tiene
-// que seguir funcionando: los endpoints de Google avisan que no están
-// disponibles en vez de romper.
+// Sin GOOGLE_CLIENT_ID configurado el verificador es nil.
 func TestLoginConGoogle_SinVerificador_NoDisponible(t *testing.T) {
 	svc := nuevoServicioConGoogle(nuevoFakeRepo(), nil)
 
@@ -220,8 +216,8 @@ func TestLoginConGoogle_SinCuenta_PideRegistro(t *testing.T) {
 }
 
 // El caso del docente que ya tenía cuenta con contraseña y ahora entra con
-// Google: se le agrega el vínculo y CONSERVA la contraseña — las dos
-// formas de ingreso conviven.
+// Google: se le agrega el vínculo y CONSERVA la contraseña — las dos formas
+// de ingreso conviven.
 func TestLoginConGoogle_VinculaCuentaExistentePorEmail_YConservaLaPassword(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
@@ -249,8 +245,7 @@ func TestLoginConGoogle_VinculaCuentaExistentePorEmail_YConservaLaPassword(t *te
 }
 
 // La vinculación por email es segura solo porque antes se exigió
-// email_verified. Este test fija esa dependencia: sin la verificación de
-// Google no se toca ninguna cuenta ajena.
+// email_verified.
 func TestLoginConGoogle_EmailNoVerificado_NoVinculaNada(t *testing.T) {
 	identidad := identidadDePrueba()
 	identidad.EmailVerificado = false
@@ -475,10 +470,7 @@ func TestRegistrarConGoogle_EmailDeCuentaEnBaja(t *testing.T) {
 
 // ── Convivencia con el login y el cambio de contraseña locales ─────────
 
-// Una cuenta de Google no tiene contraseña. El login local no puede
-// responder "esta cuenta entra con Google" sin convertirse en un oráculo
-// de qué direcciones tienen cuenta en la escuela: responde exactamente lo
-// mismo que a un email inexistente.
+// Una cuenta de Google no tiene contraseña.
 func TestLogin_CuentaDeGoogle_NoDistingueDeUnEmailInexistente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
@@ -494,9 +486,9 @@ func TestLogin_CuentaDeGoogle_NoDistingueDeUnEmailInexistente(t *testing.T) {
 	if !errors.Is(err, ErrCredencialesInvalidas) {
 		t.Fatalf("esperaba ErrCredencialesInvalidas, hubo: %v", err)
 	}
-	// El mismo trabajo que haría contra un email inexistente: si acá se
-	// volviera de inmediato, el tiempo de respuesta delataría que la cuenta
-	// existe y que entra con Google.
+	// El mismo trabajo que haría contra un email inexistente: si acá se volviera
+	// de inmediato, el tiempo de respuesta delataría que la cuenta existe y que
+	// entra con Google.
 	if verificaciones != 1 {
 		t.Errorf("esperaba una verificación de descarte para igualar el tiempo, hubo %d", verificaciones)
 	}
@@ -515,8 +507,8 @@ func TestCambiarPassword_CuentaDeGoogle_NoTieneQueCambiar(t *testing.T) {
 }
 
 // El reset asistido por Admin (RF-01.6) sí funciona sobre una cuenta de
-// Google: es la forma de devolverle el acceso a alguien que perdió su
-// cuenta de Google. Le agrega una contraseña sin quitarle el vínculo.
+// Google: es la forma de devolverle el acceso a alguien que perdió su cuenta
+// de Google.
 func TestResetearPassword_CuentaDeGoogle_LeDaUnaContrasenia(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)

@@ -9,12 +9,6 @@ import (
 )
 
 // Los textos del barrido de reservas y entregas (RF-08.10 a RF-08.13).
-//
-// Son los únicos avisos del sistema que nacen de un reloj, y eso cambia cómo
-// hay que escribirlos: quien los recibe no acaba de hacer nada, así que el
-// mensaje tiene que explicar solo por qué le está llegando. Un "tu reserva
-// fue liberada" sin decir que pasaron cuarenta minutos se lee como un error
-// del sistema.
 
 // horaDelDia formatea una hora de pared ("08:00"). Los horarios de las
 // reservas son TIME sin zona: la hora de la escuela, no un instante.
@@ -22,12 +16,7 @@ func horaDelDia(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", int(d.Hours()), int(d.Minutes())%60)
 }
 
-// listaDeEquipos enumera "PC 1, PC 2 y Proyector Epson". La conjunción final
-// no es un capricho: sin ella se lee como una tabla, y esto es una frase.
-//
-// Recibe etiquetas ya resueltas y no números: lo que se reserva puede no
-// tener número —un proyector no es "PC 3"— y "PC 0" es lo que sale de
-// formatear uno que no existe (RF-03.17).
+// listaDeEquipos enumera "PC 1, PC 2 y Proyector Epson".
 func listaDeEquipos(nombres []string) string {
 	switch len(nombres) {
 	case 0:
@@ -64,8 +53,8 @@ func (m *Mensajero) textoDeRecordatorio(a eventbus.RecordatorioDeReserva) (asunt
 			listaDeEquipos(a.Equipos), a.MateriaNombre)
 
 	// La advertencia va acá adentro y no en un correo aparte: si el docente
-	// igual va a recibir un mensaje por esta clase, mandarle dos es
-	// exactamente el bombardeo que se quiso evitar.
+	// igual va a recibir un mensaje por esta clase, mandarle dos es exactamente
+	// el bombardeo que se quiso evitar.
 	if len(a.EquiposSinDevolver) > 0 {
 		cuerpo += fmt.Sprintf("\n\nUna cosa: %s todavía no volvió al laboratorio. "+
 			"Puede que vuelva antes de tu clase, pero si llegás y no está, avisale a un "+
@@ -73,9 +62,9 @@ func (m *Mensajero) textoDeRecordatorio(a eventbus.RecordatorioDeReserva) (asunt
 			listaDeEquipos(a.EquiposSinDevolver))
 	}
 
-	// La regla de los cuarenta minutos se explica en cada recordatorio, no
-	// una sola vez al principio: es lo que hace que liberar una reserva no
-	// se sienta como que el sistema se la quitó de prepo.
+	// La regla de los cuarenta minutos se explica en cada recordatorio, no una
+	// sola vez al principio: es lo que hace que liberar una reserva no se sienta
+	// como que el sistema se la quitó de prepo.
 	cuerpo += fmt.Sprintf("\n\nSi vas a llegar tarde o no vas a poder ir, modificá o anulá la "+
 		"reserva: pasados %d minutos del horario de inicio, las máquinas que no hayas "+
 		"retirado quedan libres para que las use otro docente.", a.MinutosDeGracia)
@@ -84,8 +73,8 @@ func (m *Mensajero) textoDeRecordatorio(a eventbus.RecordatorioDeReserva) (asunt
 	return asunto, cuerpo
 }
 
-// ══════════════════════════════════════════════════════════════════
-// Una PC de tu reserva no volvió
+// ══════════════════════════════════════════════════════════════════ Una PC
+// de tu reserva no volvió
 // ══════════════════════════════════════════════════════════════════
 
 func mensajeDeEquipoNoDisponible(a eventbus.EquipoNoDisponibleParaReserva) string {
@@ -101,9 +90,8 @@ func (m *Mensajero) textoDeEquipoNoDisponible(a eventbus.EquipoNoDisponibleParaR
 			"laboratorio: la tiene otra persona y ya se pasó de la hora de devolución.",
 			listaDeEquipos(a.Equipos), horaDelDia(a.HoraInicio), a.MateriaNombre)
 
-	// No se promete nada que el sistema no sepa: puede volver en cinco
-	// minutos, y decir "no va a estar" sería hacerle cambiar la reserva al
-	// pedo.
+	// No se promete nada que el sistema no sepa: puede volver en cinco minutos,
+	// y decir "no va a estar" sería hacerle cambiar la reserva al pedo.
 	cuerpo += "\n\nPuede que vuelva antes de tu clase. Si preferís no arriesgarte, " +
 		"desde el sistema podés cambiar esa máquina por otra que esté libre."
 	cuerpo += m.enlace("Tus reservas están en:")
@@ -111,14 +99,10 @@ func (m *Mensajero) textoDeEquipoNoDisponible(a eventbus.EquipoNoDisponibleParaR
 	return asunto, cuerpo
 }
 
-// ══════════════════════════════════════════════════════════════════
-// Alguien te pide un equipo que tenés reservado
-// ══════════════════════════════════════════════════════════════════
-//
-// Es el único aviso de esta familia que NO anuncia un cambio. Todos los demás
-// —cancelada, liberada, tu máquina no volvió— le cuentan al docente algo que
-// ya le pasó a su reserva, así que si este no dice en la primera línea que la
-// reserva sigue siendo suya, se lee como una cancelación más.
+// ══════════════════════════════════════════════════════════════════ Alguien
+// te pide un equipo que tenés reservado
+// ══════════════════════════════════════════════════════════════════ Es el
+// único aviso de esta familia que NO anuncia un cambio.
 
 func mensajeDePedidoDeLiberacion(a eventbus.PedidoDeLiberacion) string {
 	return fmt.Sprintf("%s necesita %s, que tenés reservada el %s de %s a %s. "+
@@ -137,9 +121,9 @@ func (m *Mensajero) textoDePedidoDeLiberacion(a eventbus.PedidoDeLiberacion) (as
 			horaDelDia(a.HoraInicio), horaDelDia(a.HoraFin), paraLaMateria(a.MateriaNombre))
 
 	if a.Mensaje != "" {
-		// Va tal cual y entre comillas: es la parte del pedido que explica
-		// para qué la necesita, y reformularla sería ponerle palabras en la
-		// boca a quien pidió.
+		// Va tal cual y entre comillas: es la parte del pedido que explica para qué
+		// la necesita, y reformularla sería ponerle palabras en la boca a quien
+		// pidió.
 		cuerpo += fmt.Sprintf("\n\nTe dejó este mensaje:\n\n  «%s»", a.Mensaje)
 	}
 
@@ -154,8 +138,7 @@ func (m *Mensajero) textoDePedidoDeLiberacion(a eventbus.PedidoDeLiberacion) (as
 }
 
 // paraLaMateria arma el " para Matemáticas" del medio de la frase, o nada si
-// la reserva no tiene materia a la vista. Sin esto, una materia vacía dejaba
-// un "para ." colgando.
+// la reserva no tiene materia a la vista.
 func paraLaMateria(nombre string) string {
 	if strings.TrimSpace(nombre) == "" {
 		return ""
@@ -163,14 +146,11 @@ func paraLaMateria(nombre string) string {
 	return " para " + nombre
 }
 
-// ══════════════════════════════════════════════════════════════════
-// Todavía no retiraste las máquinas
-// ══════════════════════════════════════════════════════════════════
-//
-// Este aviso sale mientras todavía se puede hacer algo, no cuando la reserva
-// ya se liberó. Por eso el texto está escrito en futuro y termina ofreciendo
-// las tres salidas que le quedan al docente: ir, cambiar la máquina o
-// cancelar. Un aviso que solo constata no le sirve a nadie.
+// ══════════════════════════════════════════════════════════════════ Todavía
+// no retiraste las máquinas
+// ══════════════════════════════════════════════════════════════════ Este
+// aviso sale mientras todavía se puede hacer algo, no cuando la reserva ya se
+// liberó.
 
 func mensajeDeReservaSinRetirar(a eventbus.ReservaSinRetirar) string {
 	return fmt.Sprintf("Todavía no retiraste %s de tu reserva de las %s para %s: a los %d "+
@@ -227,10 +207,10 @@ func (m *Mensajero) textoDeDemoraParaAdmins(a eventbus.PrestamosDemorados) (asun
 		if p.CarroNombre != "" {
 			fmt.Fprintf(&sb, " (%s)", p.CarroNombre)
 		}
-		// "desde las" es EntregadoEn y "tenía que volver a las" es
-		// DebioVolverA. Iban las dos con DebioVolverA, así que el correo
-		// repetía la misma hora y afirmaba que la máquina había salido justo
-		// cuando tenía que estar de vuelta.
+		// "desde las" es EntregadoEn y "tenía que volver a las" es DebioVolverA.
+		// Iban las dos con DebioVolverA, así que el correo repetía la misma hora y
+		// afirmaba que la máquina había salido justo cuando tenía que estar de
+		// vuelta.
 		fmt.Fprintf(&sb, ": la tiene %s desde las %s, tenía que volver a las %s (%s de demora)\n",
 			p.Quien, p.EntregadoEn.Format("15:04"), p.DebioVolverA.Format("15:04"),
 			textoDeDemora(p.MinutosDeDemora))
@@ -242,9 +222,7 @@ func (m *Mensajero) textoDeDemoraParaAdmins(a eventbus.PrestamosDemorados) (asun
 	return asunto, cuerpo
 }
 
-// textoDeDemoraParaQuienLaTiene es un recordatorio, no un reclamo. Quien la
-// tiene puede estar dando clase, y el tono importa: esto lo lee un colega,
-// no un deudor.
+// textoDeDemoraParaQuienLaTiene es un recordatorio, no un reclamo.
 func (m *Mensajero) textoDeDemoraParaQuienLaTiene(p eventbus.PrestamoDemorado) (asunto, cuerpo string) {
 	asunto = fmt.Sprintf("Acordate de devolver la %s", p.Etiqueta)
 
@@ -270,8 +248,8 @@ func textoDeDemora(minutos int) string {
 	return fmt.Sprintf("%d h %d min", horas, resto)
 }
 
-// ══════════════════════════════════════════════════════════════════
-// El corte de fin de jornada
+// ══════════════════════════════════════════════════════════════════ El corte
+// de fin de jornada
 // ══════════════════════════════════════════════════════════════════
 
 func mensajeDeCierre(a eventbus.EquiposSinDevolverAlCierre) string {

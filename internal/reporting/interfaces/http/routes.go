@@ -7,8 +7,8 @@ import (
 )
 
 // RegisterRoutes monta las rutas de reporting bajo /api/reporting — todas
-// exclusivas de Admin (RF-06 es una funcionalidad de gestión, no algo que
-// un docente necesite consultar sobre otros).
+// exclusivas de Admin (RF-06 es una funcionalidad de gestión, no algo que un
+// docente necesite consultar sobre otros).
 func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	reporting := app.Group("/api/reporting")
 

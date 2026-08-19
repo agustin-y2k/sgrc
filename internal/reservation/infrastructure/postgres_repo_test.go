@@ -69,10 +69,9 @@ func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 // auth/academic/inventory a propósito (reservation no los importa).
 
 // contadorAnioDeTest asegura un año único por llamada a crearMateriaDeTest
-// dentro de un mismo test — ciclo_lectivo.anio tiene una constraint
-// UNIQUE, y varios tests crean más de una materia (con su propio
-// ciclo/curso) en la misma corrida, así que un año fijo (2026) chocaba en
-// la segunda llamada.
+// dentro de un mismo test — ciclo_lectivo.anio tiene una constraint UNIQUE, y
+// varios tests crean más de una materia (con su propio ciclo/curso) en la
+// misma corrida, así que un año fijo (2026) chocaba en la segunda llamada.
 var contadorAnioDeTest int32
 
 func crearMateriaDeTest(t *testing.T, pool *pgxpool.Pool) string {
@@ -83,11 +82,11 @@ func crearMateriaDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	cursoID := NuevoID()
 	materiaID := NuevoID()
 
-	// activo=false a propósito: este fixture puede crearse varias veces
-	// por test (una por materia independiente), y solo puede haber UN
-	// ciclo activo a la vez en toda la tabla (idx_ciclo_lectivo_activo_unico,
-	// RF-02.1) — estos tests no necesitan que el ciclo esté activo para
-	// nada, así que evitamos esa constraint directamente.
+	// activo=false a propósito: este fixture puede crearse varias veces por test
+	// (una por materia independiente), y solo puede haber UN ciclo activo a la
+	// vez en toda la tabla (idx_ciclo_lectivo_activo_unico, RF-02.1) — estos
+	// tests no necesitan que el ciclo esté activo para nada, así que evitamos
+	// esa constraint directamente.
 	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
 		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
 	}
@@ -187,12 +186,10 @@ func TestPostgresRepo_CrearYBuscarReserva_OK(t *testing.T) {
 	}
 }
 
-// ── Paginación de ListarReservas ───────────────────────────────────────
-//
-// Va contra Postgres real y no solo contra el fake porque lo que puede
-// salir mal es el SQL: que los $n del LIMIT/OFFSET no pisen los de los
-// filtros dinámicos, y que COUNT(*) OVER() cuente antes del recorte.
-// Es además el listado que devolvía 2,1 MB en una sola respuesta.
+// ── Paginación de ListarReservas ─────────────────────────────────────── Va
+// contra Postgres real y no solo contra el fake porque lo que puede salir mal
+// es el SQL: que los $n del LIMIT/OFFSET no pisen los de los filtros
+// dinámicos, y que COUNT(*) OVER() cuente antes del recorte.
 
 func TestPostgresRepo_ListarReservas_PaginaYTotal(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
@@ -380,15 +377,6 @@ func TestPostgresRepo_GuardarReserva_Cancelar(t *testing.T) {
 
 // TestPostgresRepo_GuardarReserva_CambiarDeEquipo cubre RF-08.14 en el único
 // lugar donde podía fallar.
-//
-// El UPDATE de GuardarReserva enumera las columnas a mano, y el equipo se
-// había quedado afuera. Nada lo delataba: el UPDATE tocaba una fila, así que
-// no había error, y el servicio devolvía la reserva ya modificada en memoria
-// —con el equipo nuevo— mientras la base seguía con el viejo. El docente veía
-// el cambio aplicado, volvía al día siguiente y tenía la máquina de antes.
-//
-// Los tests de servicio y de handler no podían verlo: usan repositorios
-// falsos que guardan el objeto entero. Solo se ve contra la base, releyendo.
 func TestPostgresRepo_GuardarReserva_CambiarDeEquipo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -420,10 +408,7 @@ func TestPostgresRepo_GuardarReserva_CambiarDeEquipo(t *testing.T) {
 
 // TestPostgresRepo_GuardarReserva_MoverAUnEquipoOcupado_LoRechazaLaBase: al
 // escribir el equipo, este UPDATE pasó a poder violar la constraint EXCLUDE
-// de anti-solapamiento, cosa que antes no podía. El servicio ya verifica
-// antes para dar un mensaje entendible, pero la garantía ante dos pedidos
-// simultáneos es de la base — y tiene que llegar como un error, no como una
-// doble reserva del mismo equipo en la misma franja.
+// de anti-solapamiento, cosa que antes no podía.
 func TestPostgresRepo_GuardarReserva_MoverAUnEquipoOcupado_LoRechazaLaBase(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -459,10 +444,8 @@ func TestPostgresRepo_GuardarReserva_MoverAUnEquipoOcupado_LoRechazaLaBase(t *te
 }
 
 // TestPostgresRepo_ReservaVencida_ApareceEnElListado confirma que la
-// comparación fecha+hora_fin funciona igual que la de la constraint
-// EXCLUDE: aritmética date+time, no comparación de texto. Comparar como
-// texto da resultados distintos y el listado dejaría de coincidir con lo
-// que la constraint considera solapado.
+// comparación fecha+hora_fin funciona igual que la de la constraint EXCLUDE:
+// aritmética date+time, no comparación de texto.
 func TestPostgresRepo_ReservaVencida_ApareceEnElListado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -548,9 +531,7 @@ func TestPostgresRepo_ListarReservasFuturasDeMateria(t *testing.T) {
 // ── ReglaRecurrencia ────────────────────────────────────────────────────
 
 // La regla no guarda sus PCs: la relación con las PCs vive en los
-// ReservaGrupo que se materializan a partir de ella. La tabla
-// regla_recurrencia_pc se eliminó del esquema en 002 porque solo se
-// escribía y nunca se leía.
+// ReservaGrupo que se materializan a partir de ella.
 func TestPostgresRepo_ReglaRecurrencia_Crear(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -707,10 +688,7 @@ func TestObtenedorNombrePostgres_OK(t *testing.T) {
 }
 
 // ── Regresión: los validadores también deben mapear IDs con formato
-// inválido, no solo los repos. Bug real encontrado en la prueba manual
-// (un materiaId/equipoId con placeholder sin reemplazar tiraba 500 en vez de
-// 400, porque estos tres adaptadores no tenían el chequeo esIDInvalido
-// que sí tienen todos los demás métodos del repo).
+// inválido, no solo los repos.
 
 func TestValidadorMateriaPostgres_IDInvalido_ErrorControlado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
@@ -918,10 +896,7 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo(t *testing.T) {
 }
 
 // RF-02.4 nombra tres cosas a borrar al archivar: ReservaGrupo, Reserva y
-// ReglaRecurrencia. La tercera no se borraba nunca — las reglas quedaban
-// huérfanas apuntando a materias archivadas. Los bloqueos administrativos
-// (RF-04.7) tampoco: no tienen materia, así que la subconsulta del ciclo no
-// los alcanzaba y se acumulaban año tras año.
+// ReglaRecurrencia.
 func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -1001,13 +976,9 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *tes
 
 // ── Atomicidad (RF-04.5) ────────────────────────────────────────────────
 
-// Regresión: antes de que las operaciones multi-fila corrieran dentro de
-// una transacción, un choque de la constraint EXCLUDE a mitad del lote
-// devolvía error PERO dejaba commiteados el ReservaGrupo y las Reserva ya
-// insertadas. RF-04.5 exige que si hay conflicto no se cree ninguna.
-//
-// Se usa la misma PC repetida en el pedido porque reproduce el conflicto de
-// forma determinística, sin depender de dos requests concurrentes.
+// Regresión: antes de que las operaciones multi-fila corrieran dentro de una
+// transacción, un choque de la constraint EXCLUDE a mitad del lote devolvía
+// error PERO dejaba commiteados el ReservaGrupo y las Reserva ya insertadas.
 func TestCrearReserva_ConflictoAMitadDelLote_NoDejaGrupoParcial(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -1128,9 +1099,9 @@ func (validadorEquipoOK) EquipoEstaEnInventario(context.Context, string) (bool, 
 	return true, nil
 }
 
-// Estos tests no miran los avisos, así que alcanza con no romper el
-// contrato: la etiqueta real la resuelve ValidadorEquipoPostgres, que tiene su
-// propio test contra la base.
+// Estos tests no miran los avisos, así que alcanza con no romper el contrato:
+// la etiqueta real la resuelve ValidadorEquipoPostgres, que tiene su propio
+// test contra la base.
 func (validadorEquipoOK) EtiquetasDeEquipos(context.Context, []string) (map[string]string, error) {
 	return map[string]string{}, nil
 }
@@ -1216,11 +1187,10 @@ func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testi
 	}
 }
 
-// ── RF-03.21: la lista se ordena para la materia que se está reservando ─
-//
-// Es el corazón de la funcionalidad y se prueba contra la base porque ahí
-// vive: el tramo, la resolución de la marca más específica y el orden salen
-// todos de la misma consulta.
+// ── RF-03.21: la lista se ordena para la materia que se está reservando ─ Es
+// el corazón de la funcionalidad y se prueba contra la base porque ahí vive:
+// el tramo, la resolución de la marca más específica y el orden salen todos
+// de la misma consulta.
 
 // materiaEnCursoDeTest crea una materia con el nombre y el curso pedidos,
 // para poder probar el alcance por año y división.
@@ -1498,19 +1468,7 @@ func TestMateriaAceptaReservas_FalsoSiEstaArchivadaEnCualquierNivel(t *testing.T
 	})
 }
 
-// ── Hora de pared vs. instante ─────────────────────────────────────────
-//
-// Las columnas `fecha` (DATE) y `hora_inicio`/`hora_fin` (TIME) son la hora
-// de pared de la escuela, no un instante absoluto (docs/07-modelo-datos.md).
-// El proceso, en cambio, lee "ahora" en APP_TIMEZONE. Estos tests fijan que
-// la comparación entre las dos cosas dé lo correcto, con un "ahora" en la
-// zona de la escuela y a minutos del borde — que es donde un error se ve.
-// Los tests que ya existían no podían detectar nada de esto: pasaban
-// time.Now().UTC() y comparaban contra ayer/mañana.
-//
-// Los dos primeros pasan también con la implementación vieja (se comprobó):
-// están para que siga siendo así. El tercero es el que fallaba, y es el bug
-// que motivó el cambio — ver condicionNoTerminada en reserva_repo.go.
+// ── Hora de pared vs.
 
 // zonaDeLaEscuela: UTC-3 fijo, sin depender de la tzdata del host.
 var zonaDeLaEscuela = time.FixedZone("ART", -3*60*60)
@@ -1616,9 +1574,9 @@ func TestPostgresRepo_ReservasFuturasDeEquipo_ExcluyenLasQueYaTerminaronHoy(t *t
 	}
 }
 
-// El aviso de cancelación nombra los equipos como los reconoce la gente
-// ("PC 7", "Proyector Epson"), no por su UUID: esa traducción es una
-// consulta y por eso se verifica contra la base, no con un fake.
+// El aviso de cancelación nombra los equipos como los reconoce la gente ("PC
+// 7", "Proyector Epson"), no por su UUID: esa traducción es una consulta y
+// por eso se verifica contra la base, no con un fake.
 func TestValidadorEquipoPostgres_EtiquetasDeEquipos(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	validador := NewValidadorEquipoPostgres(pool)
@@ -1641,8 +1599,6 @@ func TestValidadorEquipoPostgres_EtiquetasDeEquipos(t *testing.T) {
 		t.Fatalf("esperaba 2 etiquetas, obtuve %d: %v", len(etiquetas), etiquetas)
 	}
 	// Una PC de carro se nombra por su número; el proyector, por su nombre.
-	// Sin esto último el aviso diría "PC 0", que es lo que sale de formatear
-	// un identificador que no existe.
 	if !strings.HasPrefix(etiquetas[equipo], "PC ") {
 		t.Errorf("una PC de carro se nombra por su número: %q", etiquetas[equipo])
 	}
@@ -1675,10 +1631,9 @@ func crearEquipoSueltoDeTest(t *testing.T, pool *pgxpool.Pool, nombre string) st
 	return equipoID
 }
 
-// El peor modo de falla al sumar los equipos sueltos: ListarReservas hacía INNER JOIN a carro,
-// así que la reserva de un proyector no se veía distinta — desaparecía de la
-// consulta entera, total paginado incluido. El docente la creaba, recibía la
-// confirmación y después no la encontraba para cancelarla.
+// El peor modo de falla al sumar los equipos sueltos: ListarReservas hacía
+// INNER JOIN a carro, así que la reserva de un proyector no se veía distinta
+// — desaparecía de la consulta entera, total paginado incluido.
 func TestPostgresRepo_ListarReservas_TraeLasDeUnEquipoSinCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -1759,12 +1714,9 @@ func TestPostgresRepo_ListarReservas_ElEquipoDeCarroSigueTrayendoTodo(t *testing
 	}
 }
 
-// TestPostgresRepo_Bloqueo_ElMotivoVuelveDeLaBase
-//
-// El motivo del bloqueo vive en la fila del bloqueo y no solo en el texto de
-// las cancelaciones que disparó. Sin eso, un bloqueo que no pisó ninguna
-// reserva —lo habitual— queda como un rato ocupado sin explicación, y al
-// archivar el ciclo el motivo se perdía del todo con la reserva cancelada.
+// TestPostgresRepo_Bloqueo_ElMotivoVuelveDeLaBase El motivo del bloqueo vive
+// en la fila del bloqueo y no solo en el texto de las cancelaciones que
+// disparó.
 func TestPostgresRepo_Bloqueo_ElMotivoVuelveDeLaBase(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -1804,9 +1756,8 @@ func TestPostgresRepo_Bloqueo_ElMotivoVuelveDeLaBase(t *testing.T) {
 	}
 }
 
-// El CHECK `chk_reserva_tipo_coherente` no deja que exista un bloqueo sin motivo, ni siquiera
-// escribiendo directo en la base. La regla vale para el sistema entero y no
-// solo para el camino que pasa por el dominio.
+// El CHECK `chk_reserva_tipo_coherente` no deja que exista un bloqueo sin
+// motivo, ni siquiera escribiendo directo en la base.
 func TestPostgresRepo_Bloqueo_SinMotivoLoRechazaLaBase(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	ctx := context.Background()
@@ -1838,9 +1789,7 @@ func TestPostgresRepo_ReservaNormal_NoAceptaMotivoDeBloqueo(t *testing.T) {
 }
 
 // El pre-chequeo del lote: una sola consulta para todos los equipos y todas
-// las fechas, que además dice QUÉ chocó. Solo se puede probar contra la base
-// —la condición de solapamiento y la resolución de la etiqueta son SQL— y es
-// justo donde un `<=` de más convierte dos clases consecutivas en un choque.
+// las fechas, que además dice QUÉ chocó.
 func TestPostgresRepo_BuscarSolapamientos_LoteCompleto(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -1914,9 +1863,8 @@ func TestPostgresRepo_BuscarSolapamientos_BordeQueSeToca_NoCuenta(t *testing.T) 
 	}
 }
 
-// ── Clases que cruzan la medianoche ───────────────────────────────────
-//
-// Lo que hace falta para una escuela nocturna, y lo que ninguna cantidad de
+// ── Clases que cruzan la medianoche ─────────────────────────────────── Lo
+// que hace falta para una escuela nocturna, y lo que ninguna cantidad de
 // tests de dominio puede garantizar: que el SQL y la constraint EXCLUDE de la
 // base entiendan que una clase del lunes a las 22:00 sigue ocupando la
 // máquina el martes a la 01:00.
@@ -1937,9 +1885,9 @@ func TestPostgresRepo_ClaseNocturna_SePuedeCrear(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dominio: %v", err)
 	}
-	// Sin fin_de_pared(), tsrange recibiría un fin ANTERIOR al inicio y
-	// Postgres rechazaría el INSERT con "range lower bound must be less than
-	// or equal to range upper bound".
+	// Sin fin_de_pared(), tsrange recibiría un fin ANTERIOR al inicio y Postgres
+	// rechazaría el INSERT con "range lower bound must be less than or equal to
+	// range upper bound".
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("una clase de 22:00 a 01:00 tiene que poder crearse: %v", err)
 	}
@@ -1987,8 +1935,7 @@ func TestPostgresRepo_ClaseNocturna_ChocaConLaMadrugadaSiguiente(t *testing.T) {
 }
 
 // La contracara: a las 02:00 del martes la clase del lunes ya terminó, así
-// que la máquina está libre. Sin esto, "detectar el cruce" podría estar
-// bloqueando el día entero siguiente.
+// que la máquina está libre.
 func TestPostgresRepo_ClaseNocturna_DespuesDeQueTermina_Libre(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -2012,18 +1959,13 @@ func TestPostgresRepo_ClaseNocturna_DespuesDeQueTermina_Libre(t *testing.T) {
 	}
 }
 
-// ── Clases nocturnas, del lado de la LECTURA ──────────────────────────
-//
-// Los tres de arriba cubren el alta: que se pueda crear, que choque con la
-// madrugada siguiente y que a las 02:00 la máquina ya esté libre. Estos
-// cubren lo mismo para las consultas que arman la pantalla de reservar, que
-// es por donde pasa el docente antes de llegar al alta. Faltaban, y sin
-// ellos las dos mitades de esa pantalla contestaban distinto que la base.
+// ── Clases nocturnas, del lado de la LECTURA ────────────────────────── Los
+// tres de arriba cubren el alta: que se pueda crear, que choque con la
+// madrugada siguiente y que a las 02:00 la máquina ya esté libre.
 
 // El bug más visible: pedir una franja que cruza la medianoche no filtraba
-// nada, hacía reventar la consulta entera con "range lower bound must be
-// less than or equal to range upper bound". La pantalla se quedaba sin una
-// sola máquina que ofrecer.
+// nada, hacía reventar la consulta entera con "range lower bound must be less
+// than or equal to range upper bound".
 func TestListarEquiposDisponiblesEn_FranjaQueCruzaMedianoche_NoRevienta(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -2132,9 +2074,8 @@ func TestListarEquiposDisponiblesEn_LaNocturnaDeAyerOcupaEstaMadrugada(t *testin
 }
 
 // La otra mitad de la pantalla tiene que contar la misma historia: si el
-// equipo no está entre los libres, tiene que estar entre los ocupados, con
-// el nombre de quien lo tiene. Si no, el docente ve una máquina que
-// desapareció sin explicación y no sabe a quién pedírsela (RF-04.11).
+// equipo no está entre los libres, tiene que estar entre los ocupados, con el
+// nombre de quien lo tiene.
 func TestListarEquiposOcupadosEn_VeLaNocturnaDeAyer(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -2180,8 +2121,7 @@ func TestListarEquiposOcupadosEn_VeLaNocturnaDeAyer(t *testing.T) {
 }
 
 // Cambiar de máquina en una serie (RF-08.14) mira todas las fechas que le
-// quedan. Si una de esas madrugadas está tomada por la nocturna del día
-// anterior, el cambio no se puede ofrecer: la serie es todo o nada.
+// quedan.
 func TestListarEquiposLibresEnLaSerie_LaNocturnaDeAyerOcupaUnaOcurrencia(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -2227,10 +2167,7 @@ func TestListarEquiposLibresEnLaSerie_LaNocturnaDeAyerOcupaUnaOcurrencia(t *test
 }
 
 // El pre-chequeo del alta tenía media ventana: miraba el día anterior —la
-// nocturna de ayer— pero no el siguiente. Pidiendo de 19:00 a 03:00, la
-// reserva que choca está fechada MAÑANA y quedaba afuera del filtro. La
-// constraint la frenaba igual, pero con un error de base en vez del mensaje
-// que nombra la máquina y a quién la tiene.
+// nocturna de ayer— pero no el siguiente.
 func TestPostgresRepo_BuscarSolapamientos_FranjaNocturna_VeLaDelDiaSiguiente(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -2288,9 +2225,7 @@ func contieneEquipo(equipos []application.EquipoDisponible, id string) bool {
 }
 
 // jornadaLibre hace de institución que todavía no declaró su jornada, que es
-// el estado en que no hay restricción horaria. Estos tests van contra
-// Postgres real para ejercitar el SQL de reservas; la jornada tiene sus
-// propios tests en availability y acá solo estorbaría.
+// el estado en que no hay restricción horaria.
 type jornadaLibre struct{}
 
 func (jornadaLibre) PermiteReserva(_ context.Context, _ time.Time, _, _ time.Duration) (bool, error) {

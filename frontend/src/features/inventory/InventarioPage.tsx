@@ -36,11 +36,6 @@ function EstadoDeEquipo({ estado }: { estado: EstadoEquipo }) {
 /**
  * La tabla con la que un docente mira un conjunto de equipos: qué son, cómo
  * están, y las dos cosas que puede hacer con cada uno.
- *
- * Está separada de quién los busca porque la usan dos secciones —los equipos
- * de un carro y los que no están en ninguno— y son la misma tabla. Con dos
- * copias, la primera vez que se agregue una columna o se cambie un rótulo
- * las dos empiezan a mostrar cosas distintas de la misma máquina.
  */
 function TablaDeEquipos({ equipos }: { equipos: Equipo[] }) {
   // RF-03.5: cualquier usuario autenticado puede reportar una falla, y esta
@@ -49,12 +44,6 @@ function TablaDeEquipos({ equipos }: { equipos: Equipo[] }) {
 
   // "Freezada" y "Software instalado" son datos de una computadora: en una
   // tabla de proyectores y cargadores serían dos columnas de guiones.
-  //
-  // Cada una se decide por separado y mirando el dato, no el tipo. El alta de
-  // un equipo suelto hoy solo pide tipo, nombre y si se reserva, así que una
-  // notebook fuera de un carro es tipo PC pero no tiene software cargado:
-  // preguntando por el tipo, esa tabla mostraría una columna entera vacía.
-  // Si algún día el alta acepta el dato, la columna aparece sola.
   const hayFreezado = equipos.some((equipo) => equipo.tipo === "PC")
   const haySoftware = equipos.some((equipo) => equipo.softwareInstalado)
 
@@ -156,20 +145,6 @@ function EquiposDelCarro({ carroId }: { carroId: string }) {
 /**
  * RF-03.15 — lo prestable que no está en ningún carro: un proyector, los
  * cargadores, las notebooks de otro modelo.
- *
- * Faltaba de esta pantalla, y el agujero era concreto: el proyector se puede
- * reservar —aparece en la lista al armar una reserva— pero acá no existía,
- * así que un docente no tenía desde dónde mirar si está libre el jueves ni
- * avisar que no enciende. Toda falla de un equipo suelto tenía que pasar por
- * un Admin, que es exactamente lo que RF-03.5 quiere evitar.
- *
- * Va después de los carros y no antes: un docente entra a esta pantalla a
- * ver qué computadoras hay, y los carros son esa respuesta. El panel del
- * Admin los pone primero porque ahí son una tarea de mantenimiento más.
- *
- * La sección entera desaparece si la institución no presta nada suelto: un
- * cartel de "no hay" sería contarle a la mayoría de las escuelas algo que no
- * necesitan saber.
  */
 function OtrosEquipos() {
   const { data, isLoading, error } = useQuery({

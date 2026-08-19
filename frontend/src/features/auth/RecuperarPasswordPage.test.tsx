@@ -41,9 +41,7 @@ describe("RecuperarPasswordPage", () => {
   beforeEach(() => {
     vi.mocked(authApi.olvidePassword).mockResolvedValue({ mensaje: "ok" })
     vi.mocked(authApi.restablecerPassword).mockResolvedValue(undefined)
-    // AvisoDeSpam (RF-05.8) pregunta el remitente al montarse. El automock
-    // devuelve undefined, y encadenar sobre eso revienta dentro del efecto:
-    // sin este mock fallan todos los casos de la pantalla, no el del aviso.
+    // AvisoDeSpam (RF-05.8) pregunta el remitente al montarse.
     vi.mocked(authApi.configPublica).mockResolvedValue({ googleClientId: "" })
   })
 

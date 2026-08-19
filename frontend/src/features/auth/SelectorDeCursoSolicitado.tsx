@@ -10,20 +10,6 @@ import {
 /**
  * El curso que un docente declara al registrarse, con los mismos dos
  * desplegables que usa el Admin para crear un curso (SelectorDeCurso).
- *
- * Son desplegables y no un campo de texto: escrito a mano, cada docente
- * nombra el mismo curso distinto —"5A", "5º A" (con el ordinal masculino,
- * que NO es el `°` que valida el sistema), "quinto A"— y el Admin recibe un
- * texto que tiene que traducir al curso real. Con los desplegables, lo que
- * llega es exactamente el nombre canónico que ya existe del otro lado.
- *
- * La diferencia con el del Admin es que acá el curso es OPCIONAL, y esa
- * diferencia es la razón de que sea un componente aparte en vez de una
- * prop del otro. Un desplegable siempre tiene algo elegido, así que sin una
- * opción vacía todos los registros llegarían diciendo "1°A" —incluido el de
- * quien no sabía qué poner— y el Admin no podría distinguir un dato
- * declarado de un valor por defecto. Eso sería peor que el texto libre: un
- * dato equivocado se ve igual que uno correcto.
  */
 export function SelectorDeCursoSolicitado({
   idPrefijo,
@@ -39,7 +25,7 @@ export function SelectorDeCursoSolicitado({
 }) {
   // El valor que viaja en el formulario es el nombre compuesto, no el par
   // año/división: es lo que espera el backend y lo que ya guardan las filas
-  // existentes. Se separa solo para pintar los dos selects.
+  // existentes.
   const partes = separarNombreDeCurso(value)
   const anio = partes?.anio ?? ""
   const division = partes?.division ?? ""
@@ -61,10 +47,7 @@ export function SelectorDeCursoSolicitado({
               // Volver a "Sin especificar" limpia el campo entero: dejar la
               // división colgada guardaría una mitad que no significa nada.
               if (!nuevoAnio) return onChange("")
-              // Elegir el año alcanza para tener un curso válido. La "A"
-              // existe en todos los años, y el desplegable de al lado queda
-              // a la vista para corregirla — es el mismo default que usa el
-              // Admin al crear un curso.
+              // Elegir el año alcanza para tener un curso válido.
               onChange(componerNombreDeCurso(nuevoAnio, division || "A"))
             }}
           >

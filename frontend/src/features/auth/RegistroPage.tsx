@@ -39,13 +39,9 @@ const registroSchema = z.object({
   email: z.string().email("Ingresá un email válido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
   // RF-01.3 + RF-02.6: los dos opcionales, y los dos siguen siendo texto
-  // libre en el contrato — el curso puede no existir todavía en el sistema,
-  // y quien se registra no está autenticado, así que no hay lista que
-  // consultar. Lo que cambia es cómo se completan: el curso se arma con dos
-  // desplegables (ver SelectorDeCursoSolicitado) para que llegue con el
-  // nombre canónico "5°A" en vez de las cinco formas de escribirlo a mano,
-  // y la materia sigue siendo un campo abierto, igual que cuando el Admin
-  // crea una (MateriasDeCurso).
+  // libre en el contrato — el curso puede no existir todavía en el sistema, y
+  // quien se registra no está autenticado, así que no hay lista que
+  // consultar.
   cursoSolicitado: z.string().max(100).optional(),
   materiaSolicitada: z.string().max(100).optional(),
   // El rol sí tiene lista cerrada —es la misma de DocenteMateria— así que
@@ -60,11 +56,9 @@ export function RegistroPage() {
   const [enviado, setEnviado] = useState(false)
   const location = useLocation()
 
-  // La credencial puede llegar de dos lados: de la pantalla de login
-  // (alguien apretó "Iniciar sesión con Google" y todavía no tenía cuenta,
-  // ver LoginPage) o del botón de esta misma pantalla. En los dos casos el
-  // token ya está en la mano, así que no hay que volver a pedírselo a
-  // Google.
+  // La credencial puede llegar de dos lados: de la pantalla de login (alguien
+  // apretó "Iniciar sesión con Google" y todavía no tenía cuenta, ver
+  // LoginPage) o del botón de esta misma pantalla.
   const credencialDelLogin = (location.state as { credencialDeGoogle?: string } | null)
     ?.credencialDeGoogle
   const [credencialDeGoogle, setCredencialDeGoogle] = useState<string | null>(

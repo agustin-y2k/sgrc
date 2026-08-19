@@ -18,13 +18,12 @@ import (
 type Handler struct {
 	svc     *application.Service
 	auditor audit.Auditor
-	// googleClientID solo se usa para publicarlo en GET /api/auth/config,
-	// que es de donde el frontend lo lee para dibujar el botón de Google.
-	// Vacío = este despliegue no tiene el ingreso con Google configurado.
+	// googleClientID solo se usa para publicarlo en GET /api/auth/config, que es
+	// de donde el frontend lo lee para dibujar el botón de Google.
 	googleClientID string
-	// remitenteDeCorreo se publica en el mismo lugar y por la misma razón:
-	// las pantallas donde alguien espera un correo tienen que poder decir de
-	// qué dirección va a llegar.
+	// remitenteDeCorreo se publica en el mismo lugar y por la misma razón: las
+	// pantallas donde alguien espera un correo tienen que poder decir de qué
+	// dirección va a llegar.
 	remitenteDeCorreo string
 }
 
@@ -33,9 +32,9 @@ func NewHandler(svc *application.Service, auditor audit.Auditor, googleClientID,
 		remitenteDeCorreo: remitenteDeCorreo}
 }
 
-// auditar registra una entrada de auditoría sin abortar la respuesta HTTP
-// si falla — un fallo de accountability no debe deshacer una acción de
-// negocio que ya se ejecutó con éxito (ver docs/09-seguridad-rbac.md §5).
+// auditar registra una entrada de auditoría sin abortar la respuesta HTTP si
+// falla — un fallo de accountability no debe deshacer una acción de negocio
+// que ya se ejecutó con éxito (ver docs/09-seguridad-rbac.md §5).
 func (h *Handler) auditar(c *fiber.Ctx, actorID, accion, entidad string, entidadID *string, detalle map[string]any) {
 	if err := h.auditor.Registrar(c.UserContext(), audit.Entrada{
 		UsuarioID: actorID,
@@ -94,11 +93,6 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 }
 
 // GET /api/auth/config — pública, sin autenticar.
-//
-// Es lo que la pantalla de login consulta antes de dibujarse para saber si
-// este despliegue tiene ingreso con Google. No expone nada sensible: el
-// client ID es público por definición (viaja al navegador en cada pedido
-// que este le hace a Google).
 func (h *Handler) Config(c *fiber.Ctx) error {
 	return c.JSON(configPublicaResponse{
 		GoogleClientID:       h.googleClientID,
@@ -108,14 +102,6 @@ func (h *Handler) Config(c *fiber.Ctx) error {
 }
 
 // POST /api/auth/password/olvide — paso 1 de la recuperación.
-//
-// Responde 202 SIEMPRE que el pedido esté bien formado, exista o no la
-// cuenta. No es pereza: es lo único que evita que este formulario sirva
-// para averiguar qué direcciones están registradas en la escuela. El cuerpo
-// tampoco dice si se mandó algo — el mensaje es el mismo para todos.
-//
-// El 202 (y no 200) describe lo que realmente pasó: el pedido se aceptó, el
-// correo sale por fuera del request (ver application/service_recuperacion.go).
 func (h *Handler) OlvidePassword(c *fiber.Ctx) error {
 	var req olvidePasswordRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -144,23 +130,15 @@ func (h *Handler) RestablecerPassword(c *fiber.Ctx) error {
 		return mapearError(err)
 	}
 
-	// El actor es la propia cuenta: acá no hay ningún Admin ni ningún token,
-	// la persona probó ser el dueño con el código que le llegó al mail. Lo
-	// que hace útil el registro es la IP.
+	// El actor es la propia cuenta: acá no hay ningún Admin ni ningún token, la
+	// persona probó ser el dueño con el código que le llegó al mail.
 	h.auditar(c, usuarioID, audit.PasswordRecuperadaPorEmail, "usuario", &usuarioID, nil)
 
-	// Sin token: el cambio de contraseña no inicia sesión. Quien lo hizo
-	// vuelve al login y entra con la contraseña que acaba de elegir — y así
-	// se comprueba de paso que la recuerda.
+	// Sin token: el cambio de contraseña no inicia sesión.
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // POST /api/auth/google — ingreso con una cuenta de Google ya registrada.
-//
-// Devuelve 404 cuando el token es válido pero no hay ninguna cuenta con
-// ese email. Eso no es un error del cliente: es el camino normal la
-// primera vez, y es lo que le indica al frontend que tiene que llevar a la
-// persona a completar el registro (POST /api/auth/google/registro).
 func (h *Handler) LoginConGoogle(c *fiber.Ctx) error {
 	var req googleLoginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -179,10 +157,6 @@ func (h *Handler) LoginConGoogle(c *fiber.Ctx) error {
 }
 
 // POST /api/auth/google/registro — autorregistro con cuenta de Google.
-//
-// Igual que el registro con contraseña: la cuenta queda PENDIENTE hasta
-// que un Admin la apruebe (RF-01.3). Tener una cuenta de Google válida
-// prueba quién sos, no que la escuela te conozca.
 func (h *Handler) RegistrarConGoogle(c *fiber.Ctx) error {
 	var req googleRegistroRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -227,9 +201,9 @@ func (h *Handler) CambiarPassword(c *fiber.Ctx) error {
 	if err != nil {
 		return mapearError(err)
 	}
-	// El token viejo sigue diciendo debeCambiarPassword=true, así que el
-	// cliente tiene que reemplazarlo por este o quedaría bloqueado por su
-	// propio cambio exitoso (RF-01.6).
+	// El token viejo sigue diciendo debeCambiarPassword=true, así que el cliente
+	// tiene que reemplazarlo por este o quedaría bloqueado por su propio cambio
+	// exitoso (RF-01.6).
 	return c.JSON(cambiarPasswordResponse{Token: token})
 }
 
@@ -321,11 +295,10 @@ func (h *Handler) ResetearPassword(c *fiber.Ctx) error {
 	return c.JSON(resetPasswordResponse{PasswordTemporal: temporal})
 }
 
-// POST /api/auth/usuarios/{id}/promover-a-admin (Admin)
-//
-// Son dos rutas que dicen lo que hacen —esta y degradar-a-docente— y no un
-// PATCH /rol genérico: cada una tiene sus propias condiciones y su propia
-// entrada de auditoría, y ninguna es "escribir un campo".
+// POST /api/auth/usuarios/{id}/promover-a-admin (Admin) Son dos rutas que
+// dicen lo que hacen —esta y degradar-a-docente— y no un PATCH /rol genérico:
+// cada una tiene sus propias condiciones y su propia entrada de auditoría, y
+// ninguna es "escribir un campo".
 func (h *Handler) PromoverAAdmin(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)
@@ -342,11 +315,10 @@ func (h *Handler) PromoverAAdmin(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
-// POST /api/auth/usuarios/{id}/degradar-a-docente (Admin)
-//
-// El ID del solicitante va al servicio porque nadie puede degradarse a sí
-// mismo (ver Service.DegradarADocente): es la única regla de esta operación
-// que depende de quién la pide y no del estado de la cuenta afectada.
+// POST /api/auth/usuarios/{id}/degradar-a-docente (Admin) El ID del
+// solicitante va al servicio porque nadie puede degradarse a sí mismo (ver
+// Service.DegradarADocente): es la única regla de esta operación que depende
+// de quién la pide y no del estado de la cuenta afectada.
 func (h *Handler) DegradarADocente(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)

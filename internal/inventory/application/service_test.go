@@ -95,8 +95,6 @@ func (r *fakeRepo) ListarEquiposPorCarro(ctx context.Context, carroID string) ([
 }
 
 // ListarEquipos: el inventario, o solo lo que no está en ningún carro.
-// El filtro se aplica acá igual que en la base: un fake más permisivo que el
-// repositorio real hace pasar en la máquina lo que falla en producción.
 func (r *fakeRepo) ListarEquipos(ctx context.Context, soloSueltos bool) ([]*domain.Equipo, error) {
 	var resultado []*domain.Equipo
 	for _, equipo := range r.equipos {
@@ -321,9 +319,9 @@ type fakeValidadorReservas struct {
 	llamado        bool
 	veces          int
 	motivoRecibido string
-	// tieneFuturas modela lo que ve el reintento: reservas todavía vivas
-	// sobre una PC que ya se guardó en su nuevo estado, o sea una cascada
-	// que quedó a medias.
+	// tieneFuturas modela lo que ve el reintento: reservas todavía vivas sobre
+	// una PC que ya se guardó en su nuevo estado, o sea una cascada que quedó a
+	// medias.
 	tieneFuturas    bool
 	errTieneFuturas error
 	// prestado: el equipo está afuera del laboratorio. Da de baja no puede
@@ -477,9 +475,7 @@ func TestEditarEquipo_MoverDeCarro(t *testing.T) {
 }
 
 // Editar es la otra puerta por la que se escriben tipo y nombre, además del
-// alta. Sin validar acá, un nombre vacío llegaría hasta el CHECK de la base y
-// volvería como un 500 en vez del 400 que corresponde — y dejaría un equipo
-// suelto sin lo único que lo distingue en la lista de entregas.
+// alta.
 func TestEditarEquipo_EquipoSueltoNoPuedeQuedarSinNombre(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.equipos["eq1"] = &domain.Equipo{ID: "eq1", Tipo: "PROYECTOR", Nombre: "Proyector Epson"}
@@ -613,11 +609,7 @@ func TestCambiarEstadoEquipo_SinMotivo_UsaMensajePorDefecto(t *testing.T) {
 		t.Error("esperaba un mensaje generado por defecto, no vacío")
 	}
 	// Es la RAZÓN, no el aviso entero: el "Tu reserva fue cancelada:" lo
-	// antepone notification. Nombra el equipo porque el docente recibe un
-	// aviso por cada uno y sin eso no sabe cuál se le cayó (RF-05.3).
-	//
-	// Sin artículo a propósito: la etiqueta puede ser "PC 27" o "Proyector
-	// Epson", y no hay un artículo que sirva para las dos.
+	// antepone notification.
 	esperado := "PC 27 pasó a FUERA_DE_SERVICIO"
 	if validador.motivoRecibido != esperado {
 		t.Errorf("motivo incorrecto:\n  esperado %q\n  obtenido %q", esperado, validador.motivoRecibido)
@@ -663,9 +655,7 @@ func TestDarDeBajaEquipo_PrestadoNoSePuedeDarDeBaja(t *testing.T) {
 }
 
 // El reintento de una cascada pendiente NO se bloquea: ahí el equipo ya está
-// de baja y lo único que falta es terminar de cancelar sus reservas. Si lo
-// prestaron antes de darlo de baja, bloquear acá dejaría la cascada a medias
-// para siempre.
+// de baja y lo único que falta es terminar de cancelar sus reservas.
 func TestDarDeBajaEquipo_YaDeBajaConCascadaPendiente_NoLoFrenaElPrestamo(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.equipos["eq1"] = &domain.Equipo{ID: "eq1", Identificador: 27, DadoDeBaja: true}
@@ -785,13 +775,9 @@ func TestEditarIncidencia_NoExiste_Error(t *testing.T) {
 	}
 }
 
-// ── Cascada a medias: el reintento tiene que poder terminarla ───────────
-//
-// La cascada de RF-03.8/03.9 no es atómica con el guardado de la PC (cruza a
-// reservation, que abre su propia transacción). Si falla el segundo paso, la
-// PC queda guardada en su nuevo estado y sus reservas siguen CONFIRMADA.
-// Estos tests cubren que el reintento la completa: sin eso rebotaría con un
-// 409 y no habría forma de terminarla desde la API.
+// ── Cascada a medias: el reintento tiene que poder terminarla ─────────── La
+// cascada de RF-03.8/03.9 no es atómica con el guardado de la PC (cruza a
+// reservation, que abre su propia transacción).
 
 func TestCambiarEstadoEquipo_ReintentoConCascadaPendiente_LaCompleta(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -832,9 +818,7 @@ func TestCambiarEstadoEquipo_MismoEstadoSinNadaPendiente_SigueSiendoError(t *tes
 	}
 }
 
-// La excepción es solo para repetir la MISMA transición. Un estado terminal
-// sigue siendo terminal aunque queden reservas vivas: si no, esto se
-// convertiría en una puerta trasera para salir de FUERA_DE_SERVICIO.
+// La excepción es solo para repetir la MISMA transición.
 func TestCambiarEstadoEquipo_DesdeTerminalConReservasVivas_SigueSiendoError(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Estado: domain.EstadoFueraDeServicio}
@@ -906,8 +890,8 @@ func TestCambiarEstadoEquipo_ErrorAlVerificarPendiente_SePropaga(t *testing.T) {
 	}
 }
 
-// El error del segundo paso tiene que decir que el primero sí se aplicó y
-// que reintentar completa lo que falta — si no, quien lo lee no sabe en qué
+// El error del segundo paso tiene que decir que el primero sí se aplicó y que
+// reintentar completa lo que falta — si no, quien lo lee no sabe en qué
 // estado quedó el sistema.
 func TestCambiarEstadoEquipo_ErrorEnCascada_ElMensajeExplicaComoSeguir(t *testing.T) {
 	repo := nuevoFakeRepo()

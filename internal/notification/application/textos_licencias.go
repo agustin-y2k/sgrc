@@ -8,15 +8,9 @@ import (
 )
 
 // Los textos de los avisos de licencias — el de la campana y el del correo.
-//
-// Están juntos y aparte de los demás porque comparten la parte difícil:
-// decir cuándo vence algo en castellano corriente. "Vence en 1 días" es lo
-// que sale si uno formatea por número, y es exactamente lo que hace que un
-// aviso automático se lea como un aviso automático.
 
 // cuandoVence describe la fecha en relación a hoy, que es como la lee una
-// persona. La fecha exacta va igual entre paréntesis: "mañana" alcanza para
-// entender la urgencia, pero no para anotarla en ningún lado.
+// persona.
 func cuandoVence(l eventbus.LicenciaPorVencer) string {
 	fecha := formatearFecha(l.FechaVencimiento)
 	switch d := l.DiasRestantes; {
@@ -33,12 +27,7 @@ func cuandoVence(l eventbus.LicenciaPorVencer) string {
 	}
 }
 
-// dondeEsta ubica la licencia: el equipo y, si está en uno, el carro. Es lo
-// que convierte el aviso en algo que se puede ir a resolver.
-//
-// Por la etiqueta y no por el identificador: un equipo suelto puede tener
-// software licenciado y no tiene número — el aviso mandaría a buscar una
-// "PC 0" que no existe (RF-03.17).
+// dondeEsta ubica la licencia: el equipo y, si está en uno, el carro.
 func dondeEsta(l eventbus.LicenciaPorVencer) string {
 	if l.CarroNombre == "" {
 		return l.Etiqueta
@@ -47,11 +36,6 @@ func dondeEsta(l eventbus.LicenciaPorVencer) string {
 }
 
 // mensajeDeLicencias arma el aviso de la campana.
-//
-// Con una sola licencia dice cuál es y dónde está, porque eso ya alcanza
-// para resolverlo sin abrir nada. Con varias resume y deja el detalle para
-// la pantalla: un aviso con ocho renglones adentro de la campana no se lee,
-// y el tipo LICENCIA_POR_VENCER ya la enlaza con la lista completa.
 func mensajeDeLicencias(a eventbus.AvisoDeLicencias) string {
 	if a.Total() == 1 {
 		l := append(append([]eventbus.LicenciaPorVencer{}, a.PorVencer...), a.Vencidas...)[0]
@@ -82,9 +66,8 @@ func plural(n int, singular, plural string) string {
 	return plural
 }
 
-// ══════════════════════════════════════════════════════════════════
-// El correo
-// ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════ El
+// correo ══════════════════════════════════════════════════════════════════
 
 func (m *Mensajero) textoDeLicencias(a eventbus.AvisoDeLicencias) (asunto, cuerpo string) {
 	switch {
@@ -98,10 +81,9 @@ func (m *Mensajero) textoDeLicencias(a eventbus.AvisoDeLicencias) (asunto, cuerp
 
 	var sb strings.Builder
 	sb.WriteString("Estas licencias de software necesitan que alguien las renueve:\n")
-	// A diferencia de la campana, acá va el detalle completo: el correo se
-	// lee sin tener el sistema abierto, y muchas veces desde el celular
-	// camino a la escuela. Resumir obligaría a entrar para saber a qué
-	// máquina hay que ir.
+	// A diferencia de la campana, acá va el detalle completo: el correo se lee
+	// sin tener el sistema abierto, y muchas veces desde el celular camino a la
+	// escuela.
 	escribirGrupo(&sb, "Por vencer", a.PorVencer)
 	escribirGrupo(&sb, "Ya vencidas", a.Vencidas)
 

@@ -1,10 +1,9 @@
 // Package email manda correo por SMTP. Vive en shared/ y no dentro de un
-// paquete de dominio porque lo usan dos (auth y notification), mismo
-// criterio que shared/security con argon2.
-//
-// Todo el correo del sistema es texto plano: son mensajes de cuatro líneas,
-// y el HTML agregaría multipart/alternative, plantillas y una forma nueva
-// de verse mal en el cliente de cada docente sin decir nada más.
+// paquete de dominio porque lo usan dos (auth y notification), mismo criterio
+// que shared/security con argon2. Todo el correo del sistema es texto plano:
+// son mensajes de cuatro líneas, y el HTML agregaría multipart/alternative,
+// plantillas y una forma nueva de verse mal en el cliente de cada docente sin
+// decir nada más.
 package email
 
 import (
@@ -23,13 +22,9 @@ import (
 	"time"
 )
 
-// Enviador es lo que ve el resto del sistema. Los paquetes que lo usan
-// declaran su propia interfaz con esta misma firma (la interfaz la define
-// quien consume), así que ninguno importa este paquete fuera de cmd/main.go.
+// Enviador es lo que ve el resto del sistema.
 type Enviador interface {
-	// Enviar manda un mensaje de texto plano. El error dice que no se pudo
-	// entregar al servidor SMTP; que el destinatario lo reciba ya no
-	// depende de nosotros.
+	// Enviar manda un mensaje de texto plano.
 	Enviar(ctx context.Context, para, asunto, cuerpo string) error
 }
 
@@ -37,16 +32,13 @@ type Enviador interface {
 // incompleta: el servidor SMTP daría un error mucho menos claro.
 var ErrSinDestinatario = errors.New("email: falta el destinatario")
 
-// ══════════════════════════════════════════════════════════════════
-// Enviador deshabilitado
+// ══════════════════════════════════════════════════════════════════ Enviador
+// deshabilitado
 // ══════════════════════════════════════════════════════════════════
 
-// Deshabilitado es lo que se usa cuando el despliegue no configuró SMTP.
-// No es un error: el correo es opcional y los avisos internos (la campana
-// de notificaciones) llegan igual.
-//
-// Loguea en vez de devolver error para que el modo sea visible: si alguien
-// reporta "no me llega el mail", el log lo explica.
+// Deshabilitado es lo que se usa cuando el despliegue no configuró SMTP. No
+// es un error: el correo es opcional y los avisos internos (la campana de
+// notificaciones) llegan igual.
 type Deshabilitado struct{}
 
 var _ Enviador = Deshabilitado{}
@@ -56,13 +48,10 @@ func (Deshabilitado) Enviar(_ context.Context, para, asunto, _ string) error {
 	return nil
 }
 
-// ══════════════════════════════════════════════════════════════════
-// Enviador SMTP
-// ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════ Enviador
+// SMTP ══════════════════════════════════════════════════════════════════
 
-// timeoutSMTP acota la conversación entera, no cada paso. Sin él, un
-// servidor que acepta la conexión TCP y después no contesta deja la
-// goroutine colgada para siempre — y el apagado ordenado las espera.
+// timeoutSMTP acota la conversación entera, no cada paso.
 const timeoutSMTP = 20 * time.Second
 
 // Config es lo que hace falta para hablar con el servidor SMTP.
@@ -73,9 +62,7 @@ type Config struct {
 	Puerto   string
 	Usuario  string
 	Password string
-	// Desde es la dirección del From. Con Gmail tiene que ser la misma
-	// cuenta que autentica (o un alias verificado); si no coincide, Google
-	// reescribe el From y el mensaje sale con otra dirección.
+	// Desde es la dirección del From.
 	Desde string
 	// NombreDeQuienEnvia es lo que ve el destinatario en su lista de
 	// correos. Opcional.
@@ -130,9 +117,9 @@ func (e *EnviadorSMTP) Enviar(ctx context.Context, para, asunto, cuerpo string) 
 	// ya la cerró y este Close es un no-op.
 	defer func() { _ = cliente.Close() }()
 
-	// STARTTLS es obligatorio, no "si el servidor lo ofrece": por esta
-	// conexión van la contraseña de la cuenta y, en los mails de
-	// recuperación, un código que sirve para entrar al sistema.
+	// STARTTLS es obligatorio, no "si el servidor lo ofrece": por esta conexión
+	// van la contraseña de la cuenta y, en los mails de recuperación, un código
+	// que sirve para entrar al sistema.
 	if soportado, _ := cliente.Extension("STARTTLS"); !soportado {
 		return fmt.Errorf("el servidor %s no ofrece STARTTLS: no se manda nada en claro", e.cfg.Host)
 	}
@@ -169,13 +156,8 @@ func (e *EnviadorSMTP) Enviar(ctx context.Context, para, asunto, cuerpo string) 
 	return cliente.Quit()
 }
 
-// armarMensaje arma cabeceras y cuerpo según el RFC 5322.
-//
-// Los acentos obligan a las dos codificaciones. Las cabeceras solo admiten
-// ASCII, así que el asunto va en RFC 2047 (=?utf-8?q?...?=); sin eso
-// "Restablecé tu contraseña" llega roto en varios clientes. El cuerpo va en
-// quoted-printable, que queda legible incluso crudo y no depende de que el
-// servidor acepte 8BITMIME.
+// armarMensaje arma cabeceras y cuerpo según el RFC 5322. Los acentos obligan
+// a las dos codificaciones.
 func (e *EnviadorSMTP) armarMensaje(para, asunto, cuerpo string) []byte {
 	remitente := e.cfg.Desde
 	if nombre := strings.TrimSpace(e.cfg.NombreDeQuienEnvia); nombre != "" {
@@ -196,16 +178,13 @@ func (e *EnviadorSMTP) armarMensaje(para, asunto, cuerpo string) []byte {
 	escribirCabecera("Subject", mime.QEncoding.Encode("utf-8", asunto))
 	escribirCabecera("Date", e.ahora().Format(time.RFC1123Z))
 	// Gmail le pone uno al mensaje que no lo trae, así que con él configurado
-	// esta línea no cambia nada. Existe por los demás servidores: varios lo
-	// dejan salir sin Message-ID, y un correo sin él es de las cosas que un
-	// filtro de spam mira para decidir que lo armó un programa mal hecho.
+	// esta línea no cambia nada.
 	escribirCabecera("Message-ID", e.mensajeID())
 	escribirCabecera("MIME-Version", "1.0")
 	escribirCabecera("Content-Type", `text/plain; charset="utf-8"`)
 	escribirCabecera("Content-Transfer-Encoding", "quoted-printable")
-	// Ninguno de estos correos espera respuesta: la casilla de la escuela no
-	// la lee nadie. Evita además que un autorespondedor del otro lado
-	// conteste y genere un rebote.
+	// Ninguno de estos correos espera respuesta: la casilla de la escuela no la
+	// lee nadie.
 	escribirCabecera("Auto-Submitted", "auto-generated")
 	sb.WriteString("\r\n")
 
@@ -219,23 +198,12 @@ func (e *EnviadorSMTP) armarMensaje(para, asunto, cuerpo string) []byte {
 
 // mensajeID arma el identificador único de este correo, con el formato del
 // RFC 5322: <algo-irrepetible@dominio>.
-//
-// La parte de la izquierda combina el instante con doce bytes al azar. El
-// instante solo no alcanza: dos avisos del mismo barrido salen dentro del
-// mismo nanosegundo con más frecuencia de la que uno esperaría, y dos correos
-// distintos con el mismo Message-ID hacen que algunos clientes muestren uno
-// solo.
-//
-// El dominio sale del remitente, que es lo que corresponde: el Message-ID
-// pertenece a quien lo emite. Si la dirección viniera sin arroba —no debería,
-// la configuración lo valida— cae al host del servidor SMTP, que también es
-// un dominio real.
 func (e *EnviadorSMTP) mensajeID() string {
 	var azar [12]byte
 	if _, err := rand.Read(azar[:]); err != nil {
 		// crypto/rand no falla en la práctica, pero si fallara un correo sin
-		// Message-ID es peor que uno con la parte azarosa en cero: el
-		// instante ya lo hace único salvo empate exacto.
+		// Message-ID es peor que uno con la parte azarosa en cero: el instante ya
+		// lo hace único salvo empate exacto.
 		log.Printf("email: no se pudo generar la parte azarosa del Message-ID: %v", err)
 	}
 

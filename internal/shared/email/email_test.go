@@ -54,9 +54,9 @@ func TestArmarMensaje_LlevaMessageIDConElDominioDelRemitente(t *testing.T) {
 }
 
 func TestArmarMensaje_DosMensajesNoCompartenMessageID(t *testing.T) {
-	// El reloj está fijo a propósito: si el ID dependiera solo del instante,
-	// dos avisos de la misma barrida saldrían con el mismo, y hay clientes
-	// que en ese caso muestran uno solo.
+	// El reloj está fijo a propósito: si el ID dependiera solo del instante, dos
+	// avisos de la misma barrida saldrían con el mismo, y hay clientes que en
+	// ese caso muestran uno solo.
 	e := enviadorDePrueba()
 	uno := extraerCabecera(t, string(e.armarMensaje("ana@escuela.edu.ar", "Hola", "hola")), "Message-ID")
 	otro := extraerCabecera(t, string(e.armarMensaje("beto@escuela.edu.ar", "Hola", "hola")), "Message-ID")

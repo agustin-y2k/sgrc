@@ -86,9 +86,8 @@ describe("MisReservasPage", () => {
     vi.restoreAllMocks()
   })
 
-  // El otro extremo de lo que deja NuevaReservaPage al navegar acá: sin
-  // esto, la única señal de que la reserva se creó era haber cambiado de
-  // pantalla.
+  // El otro extremo de lo que deja NuevaReservaPage al navegar acá: sin esto,
+  // la única señal de que la reserva se creó era haber cambiado de pantalla.
   it("muestra la confirmación con la que se llega desde Nueva reserva", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
     renderPagina({ confirmacion: "Reserva confirmada para el lunes 9 de marzo." })
@@ -116,8 +115,8 @@ describe("MisReservasPage", () => {
   })
 
   // El glosario define ReservaGrupo como "la reserva tal como la percibe el
-  // docente": sin agrupar, una reserva de varias equipos se ve como N tarjetas
-  // idénticas.
+  // docente": sin agrupar, una reserva de varias equipos se ve como N
+  // tarjetas idénticas.
   describe("agrupación por reserva", () => {
     const tresEquipos = [
       reserva({ id: "r1", equipoId: "pc1", identificador: 3 }),
@@ -152,9 +151,8 @@ describe("MisReservasPage", () => {
       expect(screen.getAllByRole("button", { name: "Cancelar" })).toHaveLength(2)
     })
 
-    // RF-04.7 / RF-03.8: una cascada puede cancelar algunas equipos y dejar el
-    // resto en pie. El motivo de cada una explica por qué la reserva quedó
-    // incompleta.
+    // RF-04.7 / RF-03.8: una cascada puede cancelar algunas equipos y dejar
+    // el resto en pie.
     it("muestra el motivo de cada equipo cancelada dentro del grupo", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([
@@ -226,10 +224,8 @@ describe("MisReservasPage", () => {
       )
     })
 
-    // RF-04.6: la elección se aplica "a todos los equipos del grupo en esa fecha
-    // (o rango)". Antes "solo esta fecha" llamaba a cancelarReserva y
-    // liberaba UNA sola Equipo, que no es lo que dice el requisito ni lo que
-    // sugiere el texto de la opción.
+    // RF-04.6: la elección se aplica "a todos los equipos del grupo en esa
+    // fecha (o rango)".
     it("'solo esta fecha' cancela el grupo entero, no un equipo suelta", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([
@@ -261,9 +257,7 @@ describe("MisReservasPage", () => {
       expect(reservasApi.cancelarGrupo).toHaveBeenCalledWith("grupo1", "", false)
     })
 
-    // El alcance de la serie solo tiene sentido si la reserva es
-    // recurrente. No sirve usar reservaGrupoId como proxy: lo tienen TODAS
-    // las reservas, así que la opción aparecería siempre.
+    // El alcance de la serie solo tiene sentido si la reserva es recurrente.
     it("una reserva puntual no ofrece el alcance de la serie", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([reserva({ reglaRecurrenciaId: undefined })])
@@ -296,9 +290,7 @@ describe("MisReservasPage", () => {
     })
 
     // El caso de uno solo es el más común —una clase con una máquina— y era
-    // justamente el que salía mal: "Se cancela los 1 equipo de esta
-    // reserva". El verbo se pluralizaba bien y el artículo había quedado
-    // fijo, así que la prueba de dos equipos pasaba y nadie lo veía.
+    // justamente el que salía mal: "Se cancela los 1 equipo de esta reserva".
     it("con un solo equipo, el aviso está bien escrito", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([reserva({ id: "r1", identificador: 3 })])
@@ -358,11 +350,10 @@ describe("MisReservasPage", () => {
     })
   })
 
-  // ── Bloqueos administrativos (RF-04.7) ────────────────────────────────
-  //
-  // No tienen ReservaGrupo en la base —no son la reserva de nadie— pero para
-  // el Admin que los creó fueron UNA operación: eligió varias equipos, una
-  // fecha y un horario, y confirmó una vez.
+  // ── Bloqueos administrativos (RF-04.7) ──────────────────────────────── No
+  // tienen ReservaGrupo en la base —no son la reserva de nadie— pero para el
+  // Admin que los creó fueron UNA operación: eligió varias equipos, una fecha
+  // y un horario, y confirmó una vez.
   describe("bloqueos administrativos", () => {
     // Los ve el Admin que los creó: al docente el backend le fuerza el
     // filtro por creador, así que nunca le aparecen.
@@ -458,11 +449,7 @@ describe("MisReservasPage", () => {
     expect(await screen.findByText("token inválido o expirado")).toBeInTheDocument()
   })
 
-  /**
-   * El proyector se reserva pero no está en ningún carro. La pantalla
-   * armaba el rótulo con identificador y carro, así que una reserva suya se
-   * leía "PC 0 · " — y con el INNER JOIN del repo ni siquiera llegaba acá.
-   */
+  /** El proyector se reserva pero no está en ningún carro. */
   it("nombra por su nombre lo que no está en ningún carro", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
       paginada([

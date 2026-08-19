@@ -63,9 +63,8 @@ func (r *fakeRepo) ListarPorUsuario(ctx context.Context, usuarioID string, filtr
 	return resultado[desde:hasta], total, nil
 }
 
-// idsOrdenados da un orden estable donde el repo real ordena por fecha:
-// sobre el map pelado, LIMIT/OFFSET devolvería una página distinta en cada
-// corrida.
+// idsOrdenados da un orden estable donde el repo real ordena por fecha: sobre
+// el map pelado, LIMIT/OFFSET devolvería una página distinta en cada corrida.
 func (r *fakeRepo) idsOrdenados() []string {
 	ids := make([]string, 0, len(r.notificaciones))
 	for id := range r.notificaciones {
@@ -112,14 +111,14 @@ func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	return app
 }
 
-// registroDePrueba hace de tabla usuario para el middleware de
-// autenticación: Token() deja registrado el rol de cada ID, y
-// Autenticacion() se lo devuelve al middleware igual que lo haría la base.
+// registroDePrueba hace de tabla usuario para el middleware de autenticación:
+// Token() deja registrado el rol de cada ID, y Autenticacion() se lo devuelve
+// al middleware igual que lo haría la base.
 var registroDePrueba = authtest.Nuevo()
 
 // tokenPara genera un JWT válido para un usuario de prueba — reusa
-// exactamente el mismo formato que produce infrastructure.JWTFirmador,
-// para que estos tests ejerciten el middleware de autenticación real.
+// exactamente el mismo formato que produce infrastructure.JWTFirmador, para
+// que estos tests ejerciten el middleware de autenticación real.
 func tokenPara(id, rol string) string {
 	return registroDePrueba.Token(testSecret, id, rol)
 }
@@ -259,9 +258,9 @@ func TestHTTP_MarcarLeida_OtroUsuario_403(t *testing.T) {
 }
 
 func TestHTTP_MarcarLeida_ComoAdmin_NoTieneExcepcion_403(t *testing.T) {
-	// A diferencia de otras rutas del proyecto, acá un Admin NO tiene
-	// pase libre — no hay ninguna razón de negocio para que un Admin
-	// marque como leída la notificación de otra persona.
+	// A diferencia de otras rutas del proyecto, acá un Admin NO tiene pase libre
+	// — no hay ninguna razón de negocio para que un Admin marque como leída la
+	// notificación de otra persona.
 	repo := nuevoFakeRepo()
 	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "dueño", Estado: domain.NoLeida}
 	app := nuevaAppDeTest(repo)

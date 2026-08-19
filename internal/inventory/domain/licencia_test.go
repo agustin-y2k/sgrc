@@ -14,10 +14,7 @@ func fecha(anio int, mes time.Month, dia int) time.Time {
 }
 
 // enBuenosAires devuelve el mismo día pero a una hora de la tarde y con el
-// offset de la escuela. Se usa para probar que el cálculo no depende de la
-// hora ni de la zona con la que se llame: es lo que pasa en producción,
-// donde "hoy" sale de time.Now().In(APP_TIMEZONE) y el vencimiento vuelve
-// de Postgres como medianoche UTC.
+// offset de la escuela.
 func enBuenosAires(t *testing.T, anio int, mes time.Month, dia, hora int) time.Time {
 	t.Helper()
 	loc, err := time.LoadLocation("America/Argentina/Buenos_Aires")
@@ -187,10 +184,8 @@ func TestRenovar_CorreDesdeHoy(t *testing.T) {
 // ── El contador ─────────────────────────────────────────────────────────
 
 func TestDiasRestantes_NoDependeDeLaHoraNiDeLaZona(t *testing.T) {
-	// El escenario real: el vencimiento vuelve de Postgres como medianoche
-	// UTC y "hoy" sale de la hora de la escuela (-03:00), a cualquier hora
-	// del día. Sin normalizar, restar esas dos cosas da 30 días y pico, y
-	// truncar hacia abajo daba un día de menos según la hora en que corriera.
+	// El escenario real: el vencimiento vuelve de Postgres como medianoche UTC y
+	// "hoy" sale de la hora de la escuela (-03:00), a cualquier hora del día.
 	l := licenciaDePrueba(t, 30, 1)
 	l.FechaVencimiento = ptr(fecha(2026, time.September, 6))
 
@@ -251,9 +246,8 @@ func TestEstado(t *testing.T) {
 // ── Cambio de duración ──────────────────────────────────────────────────
 
 func TestCambiarDuracion_NoMueveElVencimientoVigente(t *testing.T) {
-	// De 30 a 60 días: la licencia que ya está instalada sigue venciendo
-	// cuando vencía. Recalcular en silencio movería un vencimiento REAL por
-	// un cambio de configuración.
+	// De 30 a 60 días: la licencia que ya está instalada sigue venciendo cuando
+	// vencía.
 	l := licenciaDePrueba(t, 30, 1)
 	ahora := fecha(2026, time.August, 7)
 	l.RenovadaEl(fecha(2026, time.August, 4), "admin-1", ahora)

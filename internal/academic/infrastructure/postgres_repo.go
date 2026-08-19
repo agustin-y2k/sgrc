@@ -19,10 +19,6 @@ import (
 const codigoViolacionUnica = "23505"
 
 // codigoTextoInvalido: SQLSTATE 22P02 — "invalid input syntax for type X".
-// Es lo que Postgres devuelve cuando un string no castea a UUID (u otro
-// tipo). Sin distinguir esto, un ID mal formado (o un placeholder de
-// prueba sin reemplazar) terminaba como 500 genérico en vez de un 400
-// claro — se encontró en la práctica probando el endpoint a mano.
 const codigoTextoInvalido = "22P02"
 
 var _ application.Repo = (*PostgresRepo)(nil)
@@ -56,10 +52,7 @@ func esIDInvalido(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == codigoTextoInvalido
 }
 
-// codigoViolacionFK: SQLSTATE 23503 — "foreign_key_violation". Es lo que
-// Postgres devuelve cuando el request nombra un padre que no existe (un
-// carro, un ciclo, una PC, un usuario). Se traduce igual que 22P02: es un
-// error del cliente, no una falla del servidor.
+// codigoViolacionFK: SQLSTATE 23503 — "foreign_key_violation".
 const codigoViolacionFK = "23503"
 
 func esViolacionFK(err error) bool {
@@ -75,12 +68,8 @@ func (r *PostgresRepo) CrearCiclo(ctx context.Context, c *domain.CicloLectivo) e
 		c.ID, c.Anio, c.Activo, c.Archivado)
 	if err != nil {
 		if esViolacionUnica(err) {
-			// La misma constraint UNIQUE cubre dos casos distintos: año
-			// duplicado, o (por el índice único parcial) ya hay un ciclo
-			// activo. No podemos distinguir cuál violó sin parsear el
-			// nombre de la constraint — application.CrearCiclo ya valida
-			// "ciclo activo" antes de llegar acá, así que en la práctica
-			// esta rama casi siempre es año duplicado.
+			// La misma constraint UNIQUE cubre dos casos distintos: año duplicado, o
+			// (por el índice único parcial) ya hay un ciclo activo.
 			return application.ErrCicloYaTieneAnio
 		}
 		return fmt.Errorf("creando ciclo lectivo: %w", err)
@@ -154,16 +143,8 @@ func (r *PostgresRepo) ListarCiclos(ctx context.Context, filtroArchivado *bool) 
 	return resultado, errorDeFilas(rows)
 }
 
-// ArchivarCiclo marca el ciclo y todos sus cursos/materias como
-// archivados, en una sola transacción.
-//
-// No borra ninguna reserva, y eso NO es un paso que falte: el borrado vive
-// en application.Service.ArchivarYClonar, después de este método y fuera de
-// esta transacción. Cruza a reservation por un puerto, con su propia
-// transacción, así que meterlo acá adentro rompería el límite de dominio
-// (docs/06-arquitectura.md §3). El orden —snapshot, archivar, borrar— es lo
-// que hace recuperable un fallo a mitad de camino: si algo se cae antes del
-// borrado, las reservas siguen intactas y alcanza con reintentar.
+// ArchivarCiclo marca el ciclo y todos sus cursos/materias como archivados,
+// en una sola transacción.
 func (r *PostgresRepo) ArchivarCiclo(ctx context.Context, cicloID string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -294,9 +275,7 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 }
 
 // ListarMateriasReservables: materias de ciclos y cursos no archivados,
-// filtradas opcionalmente por el docente asignado (RF-04.1). El JOIN con
-// docente_materia solo se agrega cuando hace falta, para que el caso Admin
-// no pague el costo de deduplicar.
+// filtradas opcionalmente por el docente asignado (RF-04.1).
 func (r *PostgresRepo) ListarMateriasReservables(ctx context.Context, soloDelDocente *string) ([]application.MateriaReservable, error) {
 	query := `
 		SELECT m.id, m.nombre, c.id, c.nombre, cl.id, cl.anio

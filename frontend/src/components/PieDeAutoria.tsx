@@ -1,10 +1,4 @@
-/**
- * Quién hizo esto y bajo qué licencia se puede usar.
- *
- * La licencia MIT permite casi todo a cambio de una sola cosa: que el aviso
- * de autoría viaje con el software. Este pie lo hace visible donde la gente
- * lo ve, no solo en un LICENSE que nadie abre.
- */
+/** Quién hizo esto y bajo qué licencia se puede usar. */
 
 const AUTOR = "Ramiro Agustin Pintos De Nucci"
 const ANIO = 2026

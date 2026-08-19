@@ -6,9 +6,7 @@ import (
 )
 
 // Los bloques que cruzan la medianoche son lo que hace posible una escuela
-// nocturna. Todo lo de este archivo existe porque antes el sistema exigía
-// hora_fin > hora_inicio y una clase de 22:00 a 01:00 había que partirla en
-// dos reservas sin relación entre sí.
+// nocturna.
 
 func hs(h int) time.Duration { return time.Duration(h) * time.Hour }
 
@@ -32,9 +30,7 @@ func TestDuracionDe(t *testing.T) {
 }
 
 // El caso que más se paga si se equivoca: una clase nocturna dada por
-// terminada apenas se crea. Con "fecha + hora_fin" a secas, una reserva del
-// lunes 22:00–01:00 terminaba el lunes a la 01:00, o sea veintiuna horas
-// ANTES de empezar.
+// terminada apenas se crea.
 func TestYaTermino_CruzandoLaMedianoche(t *testing.T) {
 	lunes := time.Date(2026, time.March, 2, 0, 0, 0, 0, time.UTC)
 	enElLunes := func(h, m int) time.Time {
@@ -105,9 +101,7 @@ func TestSolapaCon_CruzandoLaMedianoche(t *testing.T) {
 	}
 }
 
-// El tope de duración se mide sobre la duración real. Sin esto, una clase
-// nocturna de tres horas daba una resta negativa, pasaba el tope sin
-// problema y una de veintitrés horas también.
+// El tope de duración se mide sobre la duración real.
 func TestValidarVentanaTemporal_TopeDeDuracionConCruce(t *testing.T) {
 	ahora := time.Date(2026, time.March, 2, 12, 0, 0, 0, time.UTC)
 	manana := time.Date(2026, time.March, 3, 0, 0, 0, 0, time.UTC)

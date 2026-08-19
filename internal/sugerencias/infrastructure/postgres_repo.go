@@ -172,8 +172,7 @@ func escanearTodas(rows pgx.Rows) ([]*domain.Sugerencia, error) {
 }
 
 // nullSiVacio deja NULL en vez de cadena vacía: en la base, "no se sabe de
-// qué pantalla vino" y "vino de una pantalla que se llama ”" no son lo
-// mismo.
+// qué pantalla vino" y "vino de una pantalla que se llama ”" no son lo mismo.
 func nullSiVacio(s string) *string {
 	if s == "" {
 		return nil
@@ -184,10 +183,6 @@ func nullSiVacio(s string) *string {
 // ── Adaptador hacia auth ───────────────────────────────────────────────
 
 // UsuarioPostgres resuelve nombre y mail leyendo la tabla `usuario`.
-//
-// Consulta directa y no una llamada al servicio de auth: son dos columnas
-// de una fila, y meter una dependencia entre módulos por eso ataría el
-// arranque de uno al del otro (mismo criterio que ListadorAdmins).
 type UsuarioPostgres struct {
 	db *pgxpool.Pool
 }

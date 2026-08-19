@@ -24,9 +24,8 @@ func TestParseDiaSemana_Validos(t *testing.T) {
 }
 
 func TestParseDiaSemana_Invalido(t *testing.T) {
-	// Los siete días son válidos, así que lo que se rechaza es lo que no es
-	// un día: vacío, minúsculas y cualquier otra palabra. SABADO y DOMINGO
-	// estaban acá cuando la semana terminaba el viernes.
+	// Los siete días son válidos, así que lo que se rechaza es lo que no es un
+	// día: vacío, minúsculas y cualquier otra palabra.
 	casos := []string{"", "lunes", "FERIADO"}
 	for _, c := range casos {
 		_, err := ParseDiaSemana(c)
@@ -36,12 +35,7 @@ func TestParseDiaSemana_Invalido(t *testing.T) {
 	}
 }
 
-// Una regla recurrente puede caer en sábado o en domingo. Antes el enum
-// frenaba en viernes, así que una escuela albergue no podía siquiera
-// expresar "todos los sábados de 9 a 11".
-//
-// El 1 y el 2 de agosto de 2026 son sábado y domingo, y agosto de 2026
-// arranca justo un sábado, así que el mes tiene cinco de cada uno.
+// Una regla recurrente puede caer en sábado o en domingo.
 func TestGenerarFechas_FinDeSemana(t *testing.T) {
 	casos := map[string]struct {
 		dia      DiaSemana

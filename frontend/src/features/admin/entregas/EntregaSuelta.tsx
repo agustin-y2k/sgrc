@@ -21,15 +21,6 @@ import { contar } from "@/lib/plural"
 /**
  * Entregar algo sin reserva detrás: "necesito una compu para hacer un
  * trámite", "me llevo el proyector".
- *
- * Ofrece TODO el inventario que no esté afuera, no solo las computadoras de
- * los carros: lo que más se presta en el momento son justamente los equipos
- * sueltos —un proyector, un cargador—, así que van primero en la lista.
- *
- * Vive suelto porque se usa desde dos lados — el panel del laboratorio y la
- * pantalla de entregas—: es de las cosas que más se hacen en el mostrador y
- * tenerla a un clic desde donde el Admin ya está parado es la diferencia
- * entre usarlo y volver al papel.
  */
 export function EntregaSuelta({
   yaAfuera,
@@ -52,8 +43,7 @@ export function EntregaSuelta({
 
   // Todo el inventario en UNA consulta: el endpoint sin filtro ya devuelve
   // los de carro y los sueltos juntos, así que no hace falta pedir carro por
-  // carro y unir las respuestas. Los carros se siguen pidiendo, pero solo
-  // para poder decir de dónde sale cada equipo.
+  // carro y unir las respuestas.
   const { data: todos } = useQuery({
     queryKey: ["equipos"],
     queryFn: () => inventoryApi.listarEquipos(),
@@ -64,11 +54,7 @@ export function EntregaSuelta({
     [carros]
   )
 
-  // Se ofrece todo lo que esté en el inventario y no esté ya afuera. No se
-  // filtra por estado a propósito: llevarle al técnico un equipo en
-  // mantenimiento es justamente un préstamo, y prohibirlo obligaría a
-  // sacarla del sistema para poder anotarlo. Tampoco por `reservable`: un
-  // cargador no se reserva pero sí se presta — es el caso principal.
+  // Se ofrece todo lo que esté en el inventario y no esté ya afuera.
   const equipos = useMemo(
     () =>
       (todos?.data ?? [])

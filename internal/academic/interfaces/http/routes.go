@@ -9,10 +9,6 @@ import (
 )
 
 // RegisterRoutes monta todas las rutas de academic bajo /api/academic.
-//
-// Reglas de acceso (docs/09-seguridad-rbac.md §3): los GET de lectura son
-// para cualquier usuario autenticado; crear/editar/eliminar/asignar es
-// solo ADMIN.
 func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	academic := app.Group("/api/academic")
 
@@ -39,12 +35,8 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	academic.Patch("/materias/:id", autenticado, soloAdmin, h.EditarMateria)
 	academic.Delete("/materias/:id", autenticado, soloAdmin, h.EliminarMateria)
 
-	// Pedidos para dictar una materia (RF-02: la asignación docente-materia
-	// deja de depender de encontrar a un Admin en el pasillo).
-	//
-	// Pedir es para cualquier autenticado; resolver, solo Admin. El rate
-	// limit está en pedir porque es lo que manda un aviso a todos los Admin
-	// y a los docentes de esa materia.
+	// Pedidos para dictar una materia (RF-02: la asignación docente-materia deja
+	// de depender de encontrar a un Admin en el pasillo).
 	academic.Post("/pedidos-de-materia", autenticado, middleware.RateLimit(5, time.Minute), h.PedirMateria)
 	academic.Get("/pedidos-de-materia/mios", autenticado, h.MisPedidosDeMateria)
 	academic.Get("/pedidos-de-materia", autenticado, soloAdmin, h.ListarPedidosDeMateria)

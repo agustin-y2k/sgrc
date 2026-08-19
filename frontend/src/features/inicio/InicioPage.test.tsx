@@ -136,8 +136,7 @@ describe("InicioPage", () => {
 
   /**
    * Un docente no lee un "1" grande arriba de la palabra "hoy" y sabe qué
-   * hacer con eso: lee el día de su clase. La fecha se rotula "Hoy" o
-   * "Mañana" porque son los dos días sobre los que se decide algo.
+   * hacer con eso: lee el día de su clase.
    */
   it("rotula la clase por el día, no por un contador", async () => {
     mockUsuario(DOCENTE)
@@ -250,11 +249,7 @@ describe("InicioPage", () => {
     })
   })
 
-  /**
-   * "Inventario", "Disponibilidad": nombres de secciones del sistema. Un
-   * docente que no sabe cómo está dividido no puede elegir entre ellos, pero
-   * sí entre cosas que quiere hacer.
-   */
+  /** "Inventario", "Disponibilidad": nombres de secciones del sistema. */
   it("nombra los atajos por lo que se hace, no por la sección", async () => {
     mockUsuario(DOCENTE)
     renderInicio()
@@ -262,8 +257,7 @@ describe("InicioPage", () => {
     expect(await screen.findByText("Ver las computadoras")).toBeInTheDocument()
     expect(screen.getByText("Quién te puede ayudar")).toBeInTheDocument()
     // "Mi perfil" reemplazó al atajo de la contraseña: esa quedó adentro,
-    // junto con la foto y las materias. Un atajo por cada cosa que se puede
-    // hacer sobre la cuenta convertía esta lista en un menú de opciones.
+    // junto con la foto y las materias.
     expect(screen.getByText("Mi perfil")).toBeInTheDocument()
     expect(screen.getByText("Escribirnos")).toBeInTheDocument()
     expect(screen.queryByText("Accesos rápidos")).not.toBeInTheDocument()
@@ -286,8 +280,7 @@ describe("InicioPage", () => {
 
   /**
    * El fallo más caro de esta pantalla no es quedarse en blanco: es afirmar
-   * que no hay nada. Un Admin que lee "0 afuera" cierra el laboratorio con
-   * las computadoras todavía prestadas.
+   * que no hay nada.
    */
   describe("cuando una consulta falla", () => {
     it("no muestra cero: muestra que no pudo preguntar", async () => {
@@ -334,10 +327,8 @@ describe("InicioPage", () => {
   })
 
   /**
-   * El título viejo decía "Ahora en el laboratorio" sobre una lista de
-   * clases en curso — justo las máquinas que se están yendo. Y daba por
-   * sentado que la clase se da ahí, que el sistema no sabe: puede darse en
-   * el aula del docente. Lo que la tarjeta lista es la entrega.
+   * El título viejo decía "Ahora en el laboratorio" sobre una lista de clases
+   * en curso — justo las máquinas que se están yendo.
    */
   it("el panel del mostrador habla de la entrega, no de dónde se da la clase", async () => {
     mockUsuario(ADMIN)
@@ -378,9 +369,7 @@ describe("InicioPage", () => {
 
   /**
    * El orden es la funcionalidad: entregar y recibir se opera todo el día con
-   * gente esperando, y los contadores se miran una vez. Con el mostrador
-   * debajo de ellos, lo que reemplaza al papel quedaba a un scroll de
-   * distancia en la pantalla que el Admin tiene abierta siempre.
+   * gente esperando, y los contadores se miran una vez.
    */
   it("al Admin le pone el mostrador antes que los contadores", async () => {
     mockUsuario(ADMIN)

@@ -2,17 +2,6 @@
 
 // Package testdb da a los tests de integración de cada paquete una única
 // forma de construir el esquema: la misma que usa el binario al arrancar.
-//
-// Eso último es el punto. Antes esto leía los .sql del directorio y los
-// ejecutaba concatenados, que era parecido a lo que hacía producción pero no
-// idéntico — y un test que construye su base de una forma distinta a la real
-// deja de avisar justo cuando el esquema cambia. Hoy los dos caminos son la
-// misma llamada a goose sobre los mismos archivos embebidos.
-//
-// De paso desapareció la ruta relativa ("../../../migrations") que cada
-// harness tenía que acertar. Ya pasó una vez que un harness nombrara un
-// archivo que había dejado de existir; falló ruidosamente, que fue lo bueno,
-// pero ahora no hay ruta que equivocar.
 package testdb
 
 import (
@@ -27,12 +16,8 @@ import (
 	"github.com/ramiro/sgrc/migrations"
 )
 
-// loggerSilencioso descarta el "OK 001_esquema_inicial.sql" que goose
-// imprime por cada migración aplicada. Cada test de integración levanta su
-// propio contenedor y migra de cero, así que esas líneas se multiplican por
-// cientos y tapan lo único que importa mirar, que es qué test falló.
-//
-// Fatalf no se silencia: si goose decide que algo es fatal, tiene que verse.
+// loggerSilencioso descarta el "OK 001_esquema_inicial.sql" que goose imprime
+// por cada migración aplicada.
 type loggerSilencioso struct{}
 
 func (loggerSilencioso) Printf(string, ...any) {}

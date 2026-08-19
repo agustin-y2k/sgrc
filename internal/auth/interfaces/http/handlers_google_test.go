@@ -14,10 +14,8 @@ import (
 	"github.com/ramiro/sgrc/internal/auth/domain"
 )
 
-// Estos tests verifican el contrato HTTP del ingreso con Google: qué
-// código sale para cada situación. La verificación de la firma se prueba
-// en infrastructure/, y las reglas de negocio en application/ — acá el
-// verificador es un doble que devuelve lo que cada caso necesita.
+// Estos tests verifican el contrato HTTP del ingreso con Google: qué código
+// sale para cada situación.
 
 const clientIDDePrueba = "123-abc.apps.googleusercontent.com"
 
@@ -295,9 +293,8 @@ func TestHTTP_RegistrarConGoogle_NoConfigurado_503(t *testing.T) {
 
 // ── Convivencia con el resto de auth ──────────────────────────────────
 
-// GET /api/auth/me tiene que decir cómo entra la cuenta, para que la
-// pantalla de perfil no le ofrezca "cambiar contraseña" a quien no tiene
-// ninguna.
+// GET /api/auth/me tiene que decir cómo entra la cuenta, para que la pantalla
+// de perfil no le ofrezca "cambiar contraseña" a quien no tiene ninguna.
 func TestHTTP_Me_InformaComoIngresaLaCuenta(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
@@ -348,14 +345,9 @@ func TestHTTP_CambiarPassword_CuentaDeGoogle_409(t *testing.T) {
 	}
 }
 
-// Escribir mal la contraseña actual tiene que dar 400, no 401.
-//
-// El código importa más que el mensaje: el cliente trata cualquier 401 con
-// token válido como sesión rechazada y cierra la sesión (frontend/src/lib/
-// api-client.ts). Con 401 acá, quien se equivocaba tipeando terminaba en el
-// login —sin sesión y sin explicación— en vez de ver un cartel al lado del
-// campo. Este test existe para que ese 400 no se vuelva 401 sin que nadie
-// se entere.
+// Escribir mal la contraseña actual tiene que dar 400, no 401. El código
+// importa más que el mensaje: el cliente trata cualquier 401 con token válido
+// como sesión rechazada y cierra la sesión (frontend/src/lib/ api-client.ts).
 func TestHTTP_CambiarPassword_ActualIncorrecta_400_YNoCierraLaSesion(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{

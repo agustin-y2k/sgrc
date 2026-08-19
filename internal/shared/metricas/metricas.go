@@ -1,25 +1,5 @@
-// Package metricas expone el estado interno del proceso en el formato que
-// lee Prometheus.
-//
-// Qué preguntas viene a contestar, que hoy no tienen respuesta:
-//
-//   - ¿La aplicación está lenta, o es la impresión de una persona? (duración
-//     de los requests, por ruta)
-//   - ¿Qué se rompe y cada cuánto? (respuestas 5xx, por ruta)
-//   - ¿Los barridos de fondo están corriendo? (marca de último éxito)
-//   - ¿El pool de conexiones alcanza, o hay requests esperando una libre?
-//
-// Es DISTINTO del aviso de vida de internal/shared/monitoreo, y no lo
-// reemplaza: aquel avisa desde afuera cuando el sistema se calla, y sigue
-// funcionando aunque este proceso muera. Esto de acá vive adentro del
-// proceso, así que si el proceso se muere, se muere con él. Uno alerta, el
-// otro explica.
-//
-// El endpoint /metrics NO se publica hacia internet: nginx solo proxea /api
-// y /health, y cualquier otra ruta cae en la SPA (ver frontend/nginx.conf).
-// Prometheus lo consulta por la red interna de Docker. Eso importa porque
-// las métricas cuentan cosas del funcionamiento interno que no tienen por
-// qué ser públicas.
+// Package metricas expone el estado interno del proceso en el formato que lee
+// Prometheus.
 package metricas
 
 import (
@@ -34,10 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
-// Registro es el conjunto de métricas de este proceso. Se usa uno propio en
-// vez del registro global del paquete de Prometheus para que quede explícito
-// qué se expone: con el global, cualquier dependencia que se agregue en el
-// futuro puede sumar métricas sin que nadie lo decida.
+// Registro es el conjunto de métricas de este proceso.
 type Registro struct {
 	registro *prometheus.Registry
 
@@ -51,9 +28,6 @@ type Registro struct {
 
 // Nuevo arma el registro con las métricas del sistema más las estándar del
 // runtime de Go (memoria, goroutines, GC) y del proceso (CPU, descriptores).
-// Esas dos últimas vienen gratis y son las que contestan "¿se está comiendo
-// la memoria del servidor?", que en una máquina compartida con otros usos es
-// una pregunta real.
 func Nuevo() *Registro {
 	r := prometheus.NewRegistry()
 	r.MustRegister(collectors.NewGoCollector())
@@ -70,11 +44,9 @@ func Nuevo() *Registro {
 		duracion: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name: "sgrc_peticion_http_duracion_segundos",
 			Help: "Cuánto tarda cada petición HTTP, por método y ruta.",
-			// Los cortes están elegidos para este sistema, no por defecto:
-			// abajo de 100ms es "instantáneo" para quien lo usa, y arriba de
-			// 2s alguien ya está mirando la pantalla sin entender. Los
-			// buckets por defecto de la biblioteca llegan hasta 10s, que acá
-			// es todo el mismo caso: inaceptable.
+			// Los cortes están elegidos para este sistema, no por defecto: abajo de
+			// 100ms es "instantáneo" para quien lo usa, y arriba de 2s alguien ya está
+			// mirando la pantalla sin entender.
 			Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5},
 		}, []string{"metodo", "ruta"}),
 
@@ -99,14 +71,7 @@ func Nuevo() *Registro {
 	return m
 }
 
-// ObservarPool publica el estado del pool de conexiones. Se lee en el
-// momento de cada consulta de Prometheus y no en un ticker propio, que es
-// para lo que sirve un collector de función: un gauge que alguien tiene que
-// refrescar termina mostrando un valor viejo justo cuando importa.
-//
-// La métrica que más dice es la de esperas: si crece, hay peticiones
-// haciendo cola por una conexión libre, y eso se siente como lentitud sin
-// que ninguna consulta sea lenta.
+// ObservarPool publica el estado del pool de conexiones.
 func (m *Registro) ObservarPool(pool *pgxpool.Pool) {
 	descripciones := map[string]struct {
 		ayuda string
@@ -140,12 +105,6 @@ func (m *Registro) ObservarPool(pool *pgxpool.Pool) {
 }
 
 // MiddlewareHTTP mide cada petición.
-//
-// La etiqueta `ruta` es el PATRÓN de la ruta (`/api/reservation/:id`), no la
-// URL que llegó. Usar la URL cruda haría una serie temporal nueva por cada
-// identificador distinto —y por cada ruta inventada que pruebe un escaneo
-// automático—, que es la forma clásica de que Prometheus termine consumiendo
-// toda la memoria del servidor.
 func (m *Registro) MiddlewareHTTP() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		inicio := time.Now()
@@ -154,11 +113,9 @@ func (m *Registro) MiddlewareHTTP() fiber.Handler {
 		ruta := c.Route().Path
 		codigo := c.Response().StatusCode()
 
-		// Cuando un handler devuelve error, la respuesta TODAVÍA NO está
-		// escrita: la arma el manejador de errores de Fiber después de que
-		// este middleware termina. Leer el código en ese momento devuelve
-		// 200, así que sin esto los errores se contarían como éxitos —
-		// justo la métrica por la que uno mira el tablero.
+		// Cuando un handler devuelve error, la respuesta TODAVÍA NO está escrita:
+		// la arma el manejador de errores de Fiber después de que este middleware
+		// termina.
 		if err != nil {
 			codigo = fiber.StatusInternalServerError
 			var errFiber *fiber.Error
@@ -167,33 +124,14 @@ func (m *Registro) MiddlewareHTTP() fiber.Handler {
 			}
 		}
 
-		// Una petición que no matchea ninguna ruta registrada tampoco tiene
-		// patrón: Fiber reporta "/". Contarla con la URL cruda haría una
-		// serie por cada dirección inventada que pruebe un escaneo
-		// automático, así que se agrupan todas juntas.
-		//
-		// La condición mira además la URL pedida, y no alcanza con comparar
-		// el error contra fiber.ErrNotFound: para una ruta inexistente Fiber
-		// devuelve un error NUEVO con el código 404, no ese centinela, así
-		// que errors.Is no lo reconoce. Y un "/" solo es un patrón de verdad
-		// cuando lo que se pidió fue efectivamente "/", de modo que esto
-		// sigue etiquetando bien el día que se registre una ruta raíz.
+		// Una petición que no matchea ninguna ruta registrada tampoco tiene patrón:
+		// Fiber reporta "/".
 		if ruta == "" || (ruta == "/" && c.Path() != "/") {
 			ruta = "desconocida"
 		}
 
-		// utils.CopyString y no c.Method() pelado: Fiber devuelve una vista
-		// sobre el buffer de la petición, que fasthttp reusa apenas termina
-		// de atenderla. Prometheus guarda ese string como CLAVE de la serie,
-		// así que cuando el buffer se reescribe, la clave ya guardada cambia
-		// abajo del mapa: aparecían métodos inventados como "GETT" y dos
-		// entradas distintas para la misma serie, y desde ahí /metrics
-		// devolvía 500 ("was collected before with the same name and label
-		// values") en vez de métricas. O sea: toda la observabilidad caída,
-		// justo por la ruta que la mira.
-		//
-		// La otra etiqueta, `ruta`, no necesita copia: es el patrón con el
-		// que se registró la ruta al arrancar, no algo que venga del buffer.
+		// utils.CopyString y no c.Method() pelado: Fiber devuelve una vista sobre
+		// el buffer de la petición, que fasthttp reusa apenas termina de atenderla.
 		metodo := utils.CopyString(c.Method())
 		m.duracion.WithLabelValues(metodo, ruta).Observe(time.Since(inicio).Seconds())
 		m.peticiones.WithLabelValues(metodo, ruta, strconv.Itoa(codigo)).Inc()
@@ -202,25 +140,13 @@ func (m *Registro) MiddlewareHTTP() fiber.Handler {
 	}
 }
 
-// InicializarBarrido deja las series de un barrido creadas desde el
-// arranque, antes de que haya corrido ni una vez.
-//
-// No es cosmético: en Prometheus la AUSENCIA de una serie no es un valor, así
-// que una alerta escrita como «hace más de 15 minutos que no termina bien»
-// no dispara nunca si la métrica no existe. O sea que el caso más grave —la
-// goroutine que se murió al arrancar y nunca corrió— sería justamente el
-// único que pasa desapercibido. Con la serie creada, el reloj empieza a
-// correr desde el arranque y la alerta salta sola.
-//
-// La marca arranca en "ahora" y no en cero: al reiniciar el sistema se
-// asume que está bien, y si el primer barrido no termina dentro del umbral,
-// ahí sí salta. Con cero, cada reinicio dispararía una alerta.
+// InicializarBarrido deja las series de un barrido creadas desde el arranque,
+// antes de que haya corrido ni una vez.
 func (m *Registro) InicializarBarrido(nombre string) {
 	m.ultimoExitoDesde.WithLabelValues(nombre).Set(float64(time.Now().Unix()))
-	// Los contadores también: sin la serie en cero, un rate() sobre un
-	// barrido que todavía no falló devuelve vacío en vez de 0, y un panel
-	// vacío se lee igual que "no hay datos" cuando en realidad significa
-	// "no pasó nada malo".
+	// Los contadores también: sin la serie en cero, un rate() sobre un barrido
+	// que todavía no falló devuelve vacío en vez de 0, y un panel vacío se lee
+	// igual que "no hay datos" cuando en realidad significa "no pasó nada malo".
 	m.barridos.WithLabelValues(nombre, "exito").Add(0)
 	m.barridos.WithLabelValues(nombre, "error").Add(0)
 }
@@ -229,9 +155,6 @@ func (m *Registro) InicializarBarrido(nombre string) {
 // resultado, mide cuánto tardó y, si salió bien, deja la marca de tiempo que
 // permite alertar por ausencia («hace más de N minutos que este barrido no
 // termina bien»).
-//
-// Devuelve el error tal cual para que el llamador siga tratándolo como
-// siempre: medir no es manejar.
 func (m *Registro) MedirBarrido(nombre string, corrida func() error) error {
 	inicio := time.Now()
 	err := corrida()

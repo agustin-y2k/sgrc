@@ -66,7 +66,7 @@ var contadorAnioDeTest int32
 
 // crearCicloDeTest arma un ciclo→curso→materia mínimo por SQL directo —
 // reporting/infrastructure no importa academic, así que no puede usar su
-// domain para esto. Devuelve el cicloID y el materiaID.
+// domain para esto.
 func crearCicloDeTest(t *testing.T, pool *pgxpool.Pool) (cicloID, materiaID string) {
 	t.Helper()
 	ctx := context.Background()
@@ -122,8 +122,8 @@ func crearCarroYEquipoDeTest(t *testing.T, pool *pgxpool.Pool, identificador int
 }
 
 // insertarReservaDeTest inserta una fila de reserva directo por SQL (sin
-// pasar por reservation, que reporting no importa) — un reserva_grupo
-// mínimo más su reserva, con el horario dado.
+// pasar por reservation, que reporting no importa) — un reserva_grupo mínimo
+// más su reserva, con el horario dado.
 func insertarReservaDeTest(t *testing.T, pool *pgxpool.Pool, materiaID, equipoID, docenteID string, horaInicio, horaFin string, estado string) {
 	t.Helper()
 	insertarReservaEnFecha(t, pool, materiaID, equipoID, docenteID,
@@ -206,10 +206,8 @@ func TestPostgresRepo_CalcularUsoDocentesDeCiclo(t *testing.T) {
 	}
 }
 
-// "Cuál se usa más" es la pregunta que trae a alguien a este reporte, así
-// que la respuesta tiene que estar en la primera fila. Sin ORDER BY las
-// filas salían en el orden del hash de agregación: no aleatorio, pero
-// tampoco estable entre llamadas.
+// "Cuál se usa más" es la pregunta que trae a alguien a este reporte, así que
+// la respuesta tiene que estar en la primera fila.
 func TestPostgresRepo_CalcularUsoEquiposDeCiclo_OrdenaDeMayorAMenor(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -311,9 +309,8 @@ func TestPostgresRepo_GuardarYListarHistoricoUsoEquipo(t *testing.T) {
 	}
 }
 
-// Un equipo suelto también se archiva: un proyector no tiene número ni
-// carro, y sin la etiqueta congelada el reporte del año pasado diría
-// "PC 0 ()".
+// Un equipo suelto también se archiva: un proyector no tiene número ni carro,
+// y sin la etiqueta congelada el reporte del año pasado diría "PC 0 ()".
 func TestPostgresRepo_HistoricoUsoEquipo_DeUnEquipoSinCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -414,9 +411,7 @@ func TestInfoEquipoPostgres_EtiquetaYCarroDe(t *testing.T) {
 	}
 }
 
-// Archivar un ciclo llama a esto por cada equipo con uso. Con el INNER JOIN
-// a carro, un proyector devolvía "equipo no encontrado" y abortaba el archivado
-// del ciclo entero — no solo la fila del proyector.
+// Archivar un ciclo llama a esto por cada equipo con uso.
 func TestInfoEquipoPostgres_EtiquetaYCarroDe_EquipoSinCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	equipoID := NuevoID()
@@ -741,9 +736,8 @@ func TestCalcularIncidenciasPorCategoria_AgrupaSinDistinguirMayusculas(t *testin
 	if filas[0].Total != 2 || filas[0].Abiertas != 1 {
 		t.Errorf("conteo incorrecto: %+v", filas[0])
 	}
-	// Dos máquinas distintas alcanzadas: veinte baterías sobre veinte
-	// máquinas es un problema de lote; veinte sobre una es una máquina para
-	// dar de baja.
+	// Dos máquinas distintas alcanzadas: veinte baterías sobre veinte máquinas
+	// es un problema de lote; veinte sobre una es una máquina para dar de baja.
 	if filas[0].EquiposAlcanzados != 2 {
 		t.Errorf("esperaba 2 equipos alcanzados, obtuve %d", filas[0].EquiposAlcanzados)
 	}
@@ -816,9 +810,7 @@ func TestPostgresRepo_CalcularUsoDocentes_CuentaEliminada_SigueContando(t *testi
 	}
 }
 
-// RF-08.10: una reserva que nadie retiró no fue una clase dada. Contarla
-// como uso infla el número con el que se justifica comprar equipos — un
-// carro que nadie va a buscar figuraría como el más usado.
+// RF-08.10: una reserva que nadie retiró no fue una clase dada.
 func TestPostgresRepo_CalcularUso_NoRetiradaNoCuenta(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

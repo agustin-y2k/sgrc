@@ -88,8 +88,8 @@ func TestPostgresRepo_PreferenciaDuplicadaSinAcentos(t *testing.T) {
 }
 
 // Dos alcances distintos de la misma materia SÍ conviven: uno general y uno
-// acotado a un curso son marcas diferentes, y la de 3°B es la que gana
-// cuando se reserva 3°B.
+// acotado a un curso son marcas diferentes, y la de 3°B es la que gana cuando
+// se reserva 3°B.
 func TestPostgresRepo_PreferenciaDistintoAlcance_Conviven(t *testing.T) {
 	repo := NewPostgresRepo(levantarPostgresDeTest(t))
 	ctx := context.Background()
