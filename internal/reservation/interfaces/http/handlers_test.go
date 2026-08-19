@@ -383,8 +383,15 @@ func idSecuencial() string {
 var testSecret = []byte("un-secreto-de-test-bastante-largo")
 
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
+	return nuevaAppConValidadorDeEquipo(repo, &fakeValidadorEquipo{disponible: true})
+}
+
+// Igual que la de arriba pero con el validador de equipos a medida, para los
+// casos que dependen de qué dice inventory: una PC dada de baja, o una que no
+// está en el inventario.
+func nuevaAppConValidadorDeEquipo(repo *fakeRepo, validador *fakeValidadorEquipo) *fiber.App {
 	contadorID = 0
-	svc := application.NewService(repo, &fakeValidadorMateria{asignado: true}, &fakeValidadorEquipo{disponible: true},
+	svc := application.NewService(repo, &fakeValidadorMateria{asignado: true}, validador,
 		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{}, idSecuencial, func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus())
 	h := NewHandler(svc, fakeAuditor{})
@@ -936,6 +943,52 @@ func TestHTTP_CalendarioDeEquipo_DevuelveDocenteYMateria(t *testing.T) {
 	b := body.Bloques[0]
 	if b.Docente != "Ada Lovelace" || b.MateriaNombre != "Matemáticas" || b.HoraInicio != "08:00" {
 		t.Errorf("el bloque debe traer docente, materia y horario (RF-04.4): %+v", b)
+	}
+}
+
+// El calendario de un equipo que no está en el inventario tiene que decirlo.
+//
+// Antes devolvía 200 con la lista de bloques vacía, así que la pantalla
+// dibujaba la grilla completa de la semana y no había forma de distinguir
+// "este equipo no existe" de "este equipo está libre toda la semana".
+func TestHTTP_CalendarioDeEquipo_EquipoInexistente_404(t *testing.T) {
+	app := nuevaAppConValidadorDeEquipo(nuevoFakeRepo(), &fakeValidadorEquipo{
+		disponible:         true,
+		fueraDelInventario: map[string]bool{"pc-que-no-existe": true},
+	})
+
+	req := httptest.NewRequest("GET",
+		"/api/reservation/equipos/pc-que-no-existe/calendario?desde=2026-03-01&hasta=2026-03-31", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("esperaba 404, obtuve %d", resp.StatusCode)
+	}
+}
+
+// La contracara, porque el arreglo podía irse de mano: una PC en mantenimiento
+// SÍ tiene calendario. Lo que ya está reservado sigue ahí y es justo lo que hay
+// que mirar para reprogramarlo.
+func TestHTTP_CalendarioDeEquipo_EnMantenimiento_SigueTeniendoCalendario(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaDeTest(repo, "r1", "pc1", "docente1")
+	// disponible:false es "no se puede reservar" — pero sigue en el inventario.
+	app := nuevaAppConValidadorDeEquipo(repo, &fakeValidadorEquipo{disponible: false})
+
+	req := httptest.NewRequest("GET",
+		"/api/reservation/equipos/pc1/calendario?desde=2026-03-01&hasta=2026-03-31", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
 }
 

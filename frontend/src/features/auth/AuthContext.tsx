@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
@@ -39,6 +40,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [errorDeSesion, setErrorDeSesion] = useState<string | null>(null)
   const [motivoDeCierre, setMotivoDeCierre] = useState<string | null>(null)
 
+  // Si había una sesión abierta EN ESTA VISITA. Es un ref y no un estado
+  // porque lo lee el manejador de abajo, que se registra una sola vez y se
+  // quedaría con el valor del primer render.
+  const habiaSesionAbierta = useRef(false)
+  useEffect(() => {
+    if (user) habiaSesionAbierta.current = true
+  }, [user])
+
   // El backend puede rechazar el token en cualquier request, no solo en el
   // GET /me del arranque: la cuenta se dio de baja (RF-02.8), o alguien
   // cambió su contraseña y eso cerró las sesiones abiertas (RF-01.11).
@@ -49,7 +58,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // errorDeSesion se limpia a propósito: eso es "no pude verificar la
       // sesión, reintentá", y acá el backend sí contestó.
       setErrorDeSesion(null)
-      setMotivoDeCierre(mensaje)
+      // El motivo se muestra solo si la persona ESTABA usando el sistema y la
+      // sacaron: ahí sí necesita saber por qué desapareció lo que estaba
+      // haciendo. Volver después de un rato y encontrar el token vencido no
+      // es un problema que haya que explicarle a nadie —es lo que pasa
+      // siempre—, y un cartel rojo de "token inválido o sesión expirada" al
+      // abrir la aplicación en el teléfono se lee como un error del sistema.
+      // Ahí va directo a la pantalla de ingreso, sin decir nada.
+      if (habiaSesionAbierta.current) setMotivoDeCierre(mensaje)
     })
   }, [])
 
