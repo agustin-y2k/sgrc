@@ -80,7 +80,7 @@ describe("EnElLaboratorio", () => {
     renderTarjeta()
 
     expect(await screen.findByText("13 de 13 equipos")).toBeInTheDocument()
-    expect(screen.getByText(/3 fuera de circulación/)).toBeInTheDocument()
+    expect(screen.getByText(/3 sin poder usarse/)).toBeInTheDocument()
     expect(screen.getByText(/no se entregan/)).toBeInTheDocument()
   })
 

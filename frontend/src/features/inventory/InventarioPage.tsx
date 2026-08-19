@@ -210,8 +210,8 @@ export function InventarioPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <EncabezadoDePagina
-        titulo="Inventario"
-        descripcion="Carros y equipos de la institución. Abrí un equipo para ver su calendario, o reportá una falla."
+        titulo="Las computadoras"
+        descripcion="Cuáles hay en cada carro y qué programas tiene cada una. Tocá una para ver su calendario o para avisar que no anda. Más abajo están los otros equipos que se prestan."
       />
 
       {error && (

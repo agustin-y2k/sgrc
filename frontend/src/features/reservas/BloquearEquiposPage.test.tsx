@@ -282,7 +282,7 @@ describe("BloquearEquiposPage", () => {
 
     expect(
       await screen.findByText(
-        /Se cancelaron 3 reserva\(s\) y se notificó a 2 docente\(s\)/
+        /Se cancelaron 3 reservas y se notificó a 2 docentes/
       )
     ).toBeInTheDocument()
   })

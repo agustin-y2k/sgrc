@@ -16,6 +16,7 @@ import { PRESTAMOS_KEY } from "@/features/admin/entregas/compartido"
 import * as reservasApi from "@/features/reservas/api"
 import { hoyISO, type ReservaDetallada } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
+import { contar } from "@/lib/plural"
 
 /**
  * Entregar las computadoras de una reserva del día.
@@ -49,7 +50,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
       const noSalieron = respuesta.noEntregadas ?? []
       const partes = [
         noSalieron.length === 0
-          ? `Salieron ${respuesta.entregadas.length} equipo(s).`
+          ? `Salieron ${contar(respuesta.entregadas.length, "equipo")}.`
           : `Salieron ${respuesta.entregadas.length}. No salieron ${noSalieron.length}: ${noSalieron
               .map((n) => n.detalle)
               .join("; ")}`,
@@ -209,7 +210,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                 disabled={entregar.isPending}
                 onClick={() => entregar.mutate([...marcadas])}
               >
-                Entregar {marcadas.size} equipo(s)
+                Entregar {contar(marcadas.size, "equipo")}
               </Button>
             </div>
           </div>

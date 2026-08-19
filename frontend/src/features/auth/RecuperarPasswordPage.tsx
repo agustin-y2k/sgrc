@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { InputPassword } from "@/components/ui/input-password"
 import * as authApi from "@/features/auth/api"
 import { getErrorMessage } from "@/lib/api-client"
 
@@ -224,7 +225,7 @@ export function RecuperarPasswordPage() {
                     <FormItem>
                       <FormLabel>Contraseña nueva</FormLabel>
                       <FormControl>
-                        <Input type="password" autoComplete="new-password" {...field} />
+                        <InputPassword autoComplete="new-password" {...field} />
                       </FormControl>
                       <FormDescription>Mínimo 8 caracteres.</FormDescription>
                       <FormMessage />
@@ -238,7 +239,7 @@ export function RecuperarPasswordPage() {
                     <FormItem>
                       <FormLabel>Repetir contraseña</FormLabel>
                       <FormControl>
-                        <Input type="password" autoComplete="new-password" {...field} />
+                        <InputPassword autoComplete="new-password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -111,7 +111,7 @@ export function MisReservasPage() {
         descripcion={
           user?.rol === "ADMIN"
             ? "Todas las reservas del sistema y los bloqueos administrativos."
-            : "Tus reservas. Cada tarjeta es una clase, con todas sus equipos adentro."
+            : "Cada tarjeta es una clase, con todas las computadoras que reservaste para ella."
         }
         accion={
           <Button asChild>
@@ -185,7 +185,23 @@ export function MisReservasPage() {
                       <p className="text-muted-foreground text-sm">
                         {grupo.nombreDocenteSnapshot}
                         {grupo.esRecurrente &&
-                          `${grupo.nombreDocenteSnapshot ? " · " : ""}reserva recurrente`}
+                          `${grupo.nombreDocenteSnapshot ? " · " : ""}se repite todas las semanas`}
+                      </p>
+                    )}
+                    {/* Un cartel naranja que dice "No retirada" y nada más
+                        deja al docente sin saber qué le pasó ni qué puede
+                        hacer: si perdió las máquinas para siempre, si tiene
+                        que avisarle a alguien, si le van a reclamar algo.
+                        Justo el estado que más preocupa era el que menos
+                        explicaba. La regla real es que se liberaron, pero que
+                        si siguen en el laboratorio se las entregan igual
+                        (RF-08), y eso es lo único accionable que hay para
+                        decirle. */}
+                    {estado === "NO_RETIRADA" && (
+                      <p className="text-muted-foreground text-sm">
+                        Pasó el plazo para retirarlas y quedaron libres para otro docente.
+                        Si todavía están en el laboratorio te las pueden entregar igual:
+                        preguntá en el mostrador.
                       </p>
                     )}
                   </div>

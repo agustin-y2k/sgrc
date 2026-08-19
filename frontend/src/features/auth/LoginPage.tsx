@@ -23,6 +23,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { InputPassword } from "@/components/ui/input-password"
 import * as authApi from "@/features/auth/api"
 import { useAuth } from "@/features/auth/AuthContext"
 import { BotonGoogle } from "@/features/auth/BotonGoogle"
@@ -170,7 +171,7 @@ export function LoginPage() {
                   <FormItem>
                     <FormLabel>Contraseña</FormLabel>
                     <FormControl>
-                      <Input type="password" autoComplete="current-password" {...field} />
+                      <InputPassword autoComplete="current-password" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

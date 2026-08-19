@@ -29,6 +29,7 @@ import * as inventoryApi from "@/features/inventory/api"
 import type { Licencia } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { formatearFechaLarga } from "@/lib/fechas"
+import { contar, plural } from "@/lib/plural"
 
 const LICENCIAS_KEY = ["licencias"]
 
@@ -150,7 +151,7 @@ function FilaDeLicencia({
               Renovación de {licencia.diasDuracion} días · avisa{" "}
               {licencia.diasAviso === 0
                 ? "el día que vence"
-                : `${licencia.diasAviso} día(s) antes`}
+                : `${contar(licencia.diasAviso, "día")} antes`}
               {licencia.ultimaRenovacion &&
                 ` · se renovó el ${formatearFechaLarga(licencia.ultimaRenovacion)}`}
             </p>
@@ -313,8 +314,8 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
       const yaEstaban = respuesta.equiposQueYaLaTenian?.length ?? 0
       setResumen(
         yaEstaban === 0
-          ? `Se cargó en ${respuesta.creadas.length} equipo(s).`
-          : `Se cargó en ${respuesta.creadas.length} equipo(s). ${yaEstaban} ya la tenían y se dejaron como estaban.`
+          ? `Se cargó en ${contar(respuesta.creadas.length, "equipo")}.`
+          : `Se cargó en ${contar(respuesta.creadas.length, "equipo")}. ${yaEstaban} ya la tenían y se dejaron como estaban.`
       )
       setCampos({ ...LICENCIA_VACIA, vencimiento: VENCIMIENTO_VACIO })
       setSeleccionadas(new Set())
@@ -379,7 +380,7 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
 
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={crear.isPending || seleccionadas.size === 0}>
-              Cargar en {seleccionadas.size} equipo(s)
+              Cargar en {contar(seleccionadas.size, "equipo")}
             </Button>
             <Button
               type="button"
@@ -414,7 +415,7 @@ function RenovacionMasiva({ ids, onListo }: { ids: string[]; onListo: () => void
       const sinFecha = respuesta.sinFechaPrevia?.length ?? 0
       setResumen(
         sinFecha === 0
-          ? `Se renovaron ${respuesta.renovadas.length} licencia(s).`
+          ? `Se renovaron ${contar(respuesta.renovadas.length, "licencia")}.`
           : `Se renovaron ${respuesta.renovadas.length}. ${sinFecha} no se pudieron: primero hay que cargarles el vencimiento.`
       )
       await queryClient.invalidateQueries({ queryKey: LICENCIAS_KEY })
@@ -425,7 +426,7 @@ function RenovacionMasiva({ ids, onListo }: { ids: string[]; onListo: () => void
   return (
     <Card>
       <CardContent className="grid gap-3">
-        <p className="text-sm font-medium">{ids.length} licencia(s) seleccionada(s)</p>
+        <p className="text-sm font-medium">{contar(ids.length, "licencia")} {plural(ids.length, "seleccionada")}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label htmlFor="renovadas-el">Fecha en que se renovaron</Label>
@@ -529,7 +530,7 @@ export function LicenciasPage() {
             <Alert>
               <AlertDescription>
                 {[
-                  vencidas > 0 && `${vencidas} vencida(s)`,
+                  vencidas > 0 && `${contar(vencidas, "vencida")}`,
                   porVencer > 0 && `${porVencer} por vencer`,
                   sinFecha > 0 && `${sinFecha} sin fecha cargada`,
                 ]

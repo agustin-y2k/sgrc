@@ -100,8 +100,8 @@ describe("PanelDelLaboratorio", () => {
 
     // El corte lo hace la hora, no el orden: a las 8:30 la de 8 a 9 está en
     // curso y la de 10 a 11 todavía no empezó.
-    expect(await screen.findByText(/1 clase\(s\) en curso/)).toBeInTheDocument()
-    expect(screen.getByText(/1 clase\(s\) por empezar/)).toBeInTheDocument()
+    expect(await screen.findByText(/1 clase en curso/)).toBeInTheDocument()
+    expect(screen.getByText(/1 clase por empezar/)).toBeInTheDocument()
     expect(screen.getByText(/08:00–09:00 · Matemáticas/)).toBeInTheDocument()
     expect(screen.getByText(/10:00–11:00 · Física/)).toBeInTheDocument()
     // Solo la que está pasando lleva el distintivo.
@@ -226,6 +226,6 @@ describe("PanelDelLaboratorio", () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
     renderPanel()
 
-    expect(await screen.findByText(/Hoy ya pasaron 1 clase/)).toBeInTheDocument()
+    expect(await screen.findByText(/Hoy ya pasó 1 clase/)).toBeInTheDocument()
   })
 })

@@ -31,6 +31,7 @@ import {
 import { getErrorMessage } from "@/lib/api-client"
 import { formatearFechaLargaCapitalizada } from "@/lib/fechas"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
+import { contar } from "@/lib/plural"
 
 type Modo = "simple" | "recurrente"
 
@@ -70,7 +71,7 @@ export function NuevaReservaPage() {
      * tiene a mano.
      */
     mutationFn: async (): Promise<string> => {
-      const cuantosEquipos = `${equipoIds.length} ${equipoIds.length === 1 ? "equipo" : "equipos"}`
+      const cuantosEquipos = `${contar(equipoIds.length, "computadora")}`
 
       if (modo === "simple") {
         await reservasApi.crearReserva({
@@ -159,7 +160,7 @@ export function NuevaReservaPage() {
   }
   if (horaInicio === "") faltantes.push("elegir la hora de inicio")
   if (horaFin === "") faltantes.push("elegir la hora de fin")
-  if (equipoIds.length === 0) faltantes.push("tildar al menos un equipo")
+  if (equipoIds.length === 0) faltantes.push("tildar al menos una computadora")
 
   const listoParaEnviar =
     faltantes.length === 0 &&
@@ -171,7 +172,7 @@ export function NuevaReservaPage() {
     <div className="mx-auto max-w-3xl">
       <EncabezadoDePagina
         titulo="Nueva reserva"
-        descripcion="Elegí el día, la franja horaria y los equipos. Los horarios van en formato de 24 horas."
+        descripcion="Elegí el día, desde qué hora hasta qué hora, y qué computadoras necesitás. Los horarios van en formato de 24 horas."
       />
 
       {!cargandoMaterias && materiasDisponibles.length === 0 && (
@@ -196,7 +197,7 @@ export function NuevaReservaPage() {
         <CardHeader>
           <CardTitle>Datos de la reserva</CardTitle>
           <CardDescription>
-            Podés combinar equipos de distintos carros en la misma reserva.
+            Podés combinar computadoras de distintos carros en la misma reserva.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -222,7 +223,7 @@ export function NuevaReservaPage() {
                 size="sm"
                 onClick={() => setModo("recurrente")}
               >
-                Recurrente
+                Se repite todas las semanas
               </Button>
             </div>
 
@@ -337,7 +338,7 @@ export function NuevaReservaPage() {
             )}
 
             <div className="grid gap-2">
-              <Label>Equipos a reservar</Label>
+              <Label>Qué computadoras necesitás</Label>
               {modo === "recurrente" && (
                 <p className="text-muted-foreground text-xs">
                   Se muestran las libres en la fecha de inicio. Al confirmar, el sistema

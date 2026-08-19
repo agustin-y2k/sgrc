@@ -15,6 +15,7 @@ import * as reservasApi from "@/features/reservas/api"
 import { cruzaMedianoche, hoyISO, type ResultadoBloqueo } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
+import { contar } from "@/lib/plural"
 
 const ETIQUETA_ESTADO: Record<string, string> = {
   EN_MANTENIMIENTO: "En mantenimiento",
@@ -168,7 +169,7 @@ export function BloquearEquiposPage() {
             {resultado.bloqueos.length === 1 ? "" : "s"}.{" "}
             {resultado.reservasCanceladas === 0
               ? "No había ninguna reserva en esa franja."
-              : `Se cancelaron ${resultado.reservasCanceladas} reserva(s) y se notificó a ${resultado.docentesNotificados} docente(s).`}
+              : `Se cancelaron ${contar(resultado.reservasCanceladas, "reserva")} y se notificó a ${contar(resultado.docentesNotificados, "docente")}.`}
           </AlertDescription>
         </Alert>
       )}

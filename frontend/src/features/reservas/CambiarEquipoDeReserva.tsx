@@ -181,15 +181,26 @@ export function CambiarEquipoDeReserva({
         </Alert>
       )}
 
+      {/* h-11 en teléfono, igual que los botones que abren estos paneles
+          (ver TarjetaDeClase): 44px es el mínimo táctil de WCAG 2.5.5. El
+          criterio se había aplicado al primer paso del flujo y se perdía en
+          el segundo, que es donde se confirma de verdad — el `sm` del
+          sistema son 28px, la mitad de un dedo. */}
       <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
+          className="h-11 px-4 sm:h-9"
           disabled={cambiar.isPending || !reservaID || !equipoID}
           onClick={() => cambiar.mutate()}
         >
           Cambiar
         </Button>
-        <Button variant="outline" size="sm" onClick={onListo}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-11 px-4 sm:h-9"
+          onClick={onListo}
+        >
           Cancelar
         </Button>
       </div>
