@@ -18,6 +18,10 @@ import { DisponibilidadPage } from "@/features/disponibilidad/DisponibilidadPage
 import { InicioPage } from "@/features/inicio/InicioPage"
 import { InventarioPage } from "@/features/inventory/InventarioPage"
 import { NotificacionesPage } from "@/features/notificaciones/NotificacionesPage"
+import { PerfilPage } from "@/features/perfil/PerfilPage"
+import { MisMensajesPage } from "@/features/sugerencias/MisMensajesPage"
+import { PedidosDeMateriaPage } from "@/features/admin/PedidosDeMateriaPage"
+import { SugerenciasPage } from "@/features/admin/SugerenciasPage"
 import { BloquearEquiposPage } from "@/features/reservas/BloquearEquiposPage"
 import { MisReservasPage } from "@/features/reservas/MisReservasPage"
 import { NuevaReservaPage } from "@/features/reservas/NuevaReservaPage"
@@ -46,6 +50,11 @@ const router = createBrowserRouter([
           { index: true, element: <InicioPage /> },
           { path: "/cambiar-password", element: <CambiarPasswordPage /> },
           { path: "/notificaciones", element: <NotificacionesPage /> },
+          // El perfil y el buzón son de cualquiera que use el sistema,
+          // Admin incluido: un Admin nuevo también se topa con cosas que
+          // no entiende.
+          { path: "/perfil", element: <PerfilPage /> },
+          { path: "/mis-mensajes", element: <MisMensajesPage /> },
           { path: "/reservas", element: <MisReservasPage /> },
           { path: "/reservas/nueva", element: <NuevaReservaPage /> },
           { path: "/inventario", element: <InventarioPage /> },
@@ -67,6 +76,11 @@ const router = createBrowserRouter([
               { path: "/admin/entregas", element: <EntregasPage /> },
               { path: "/admin/reportes", element: <ReportesPage /> },
               { path: "/admin/jornada", element: <JornadaPage /> },
+              { path: "/admin/sugerencias", element: <SugerenciasPage /> },
+              {
+                path: "/admin/pedidos-de-materia",
+                element: <PedidosDeMateriaPage />,
+              },
               {
                 path: "/admin/bloquear-equipos",
                 element: <BloquearEquiposPage />,

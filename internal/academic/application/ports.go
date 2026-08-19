@@ -38,6 +38,21 @@ type Repo interface {
 	RemoverDocenteMateria(ctx context.Context, id string) error
 	ListarDocentesDeMateria(ctx context.Context, materiaID string) ([]*domain.DocenteMateria, error)
 
+	// Pedidos para dictar una materia
+	CrearPedido(ctx context.Context, p *domain.PedidoDeMateria) error
+	BuscarPedidoPorID(ctx context.Context, id string) (*domain.PedidoDeMateria, error)
+	GuardarPedido(ctx context.Context, p *domain.PedidoDeMateria) error
+	// ListarPedidos: `soloPendientes` es como se mira casi siempre — lo que
+	// falta resolver, no el archivo.
+	ListarPedidos(ctx context.Context, soloPendientes bool) ([]*domain.PedidoDeMateria, error)
+	ListarPedidosDeUsuario(ctx context.Context, usuarioID string) ([]*domain.PedidoDeMateria, error)
+	ContarPedidosPendientes(ctx context.Context) (int, error)
+	// TienePedidoAbierto evita que apretar dos veces el botón mande dos
+	// avisos a todos los Admin por lo mismo. La base también lo impide (hay
+	// un índice único parcial), pero fallar acá permite explicarlo en
+	// castellano en vez de devolver un error de restricción.
+	TienePedidoAbierto(ctx context.Context, usuarioID, materiaID string) (bool, error)
+
 	// ListarMateriasReservables devuelve las materias en las que el
 	// usuario puede reservar (RF-04.1): las de un ciclo sin archivar a las
 	// que está asignado. Si soloDelDocente es nil devuelve todas las
@@ -61,6 +76,25 @@ type Repo interface {
 // asignado a una materia (RF-02.6: únicamente usuarios APROBADA).
 type ValidadorUsuario interface {
 	ExisteYAprobado(ctx context.Context, usuarioID string) (bool, error)
+}
+
+// ContactoDeDocente es lo mínimo para avisarle a alguien: quién es y a dónde
+// escribirle.
+type ContactoDeDocente struct {
+	UsuarioID string
+	Nombre    string
+	Email     string
+}
+
+// DatosDeUsuario resuelve nombres y correos, que viven en auth.
+//
+// Hace falta para los avisos de un pedido de materia: quién lo pide (va en
+// el aviso a los Admin) y quiénes ya dictan esa materia (les llega el aviso
+// de que alguien más la pidió). Es un puerto y no un JOIN para que academic
+// siga sin saber cómo está guardada una cuenta.
+type DatosDeUsuario interface {
+	Contacto(ctx context.Context, usuarioID string) (ContactoDeDocente, error)
+	Contactos(ctx context.Context, usuarioIDs []string) ([]ContactoDeDocente, error)
 }
 
 // ValidadorReservas es el puerto hacia reservation — todavía no existe

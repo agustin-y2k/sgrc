@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/ramiro/sgrc/internal/academic/domain"
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
@@ -17,6 +18,7 @@ type fakeRepo struct {
 	cursos          map[string]*domain.Curso
 	materias        map[string]*domain.Materia
 	docentesMateria map[string]*domain.DocenteMateria
+	pedidos         map[string]*domain.PedidoDeMateria
 
 	errCrearCiclo     error
 	errCrearCurso     error
@@ -316,16 +318,47 @@ func idSecuencial() string {
 	return fmt.Sprintf("id-%d", contadorID)
 }
 
+// fakeDatosDeUsuario resuelve contactos de mentira: los tests de pedidos
+// verifican qué evento sale, no de dónde salió el nombre.
+type fakeDatosDeUsuario struct {
+	contactos map[string]ContactoDeDocente
+}
+
+func (f *fakeDatosDeUsuario) Contacto(_ context.Context, usuarioID string) (ContactoDeDocente, error) {
+	if c, ok := f.contactos[usuarioID]; ok {
+		return c, nil
+	}
+	return ContactoDeDocente{UsuarioID: usuarioID, Nombre: "Docente " + usuarioID,
+		Email: usuarioID + "@escuela.edu.ar"}, nil
+}
+
+func (f *fakeDatosDeUsuario) Contactos(ctx context.Context, ids []string) ([]ContactoDeDocente, error) {
+	var r []ContactoDeDocente
+	for _, id := range ids {
+		c, _ := f.Contacto(ctx, id)
+		r = append(r, c)
+	}
+	return r, nil
+}
+
+// relojDeTest: los pedidos llevan fecha, y una fija hace que los tests no
+// dependan de cuándo se corren.
+func relojDeTest() time.Time {
+	return time.Date(2026, time.March, 10, 9, 0, 0, 0, time.UTC)
+}
+
 func nuevoServicioDeTest(repo Repo, validadorUsuario ValidadorUsuario, validadorReservas ValidadorReservas) *Service {
 	contadorID = 0
 	return NewService(repo, validadorUsuario, validadorReservas, &fakeArchivadorHistorico{},
-		&fakeCanceladorReservas{}, idSecuencial, eventbus.NewInMemoryEventBus())
+		&fakeCanceladorReservas{}, &fakeDatosDeUsuario{}, idSecuencial, relojDeTest,
+		eventbus.NewInMemoryEventBus())
 }
 
 func nuevoServicioConArchivador(repo Repo, validadorUsuario ValidadorUsuario, validadorReservas ValidadorReservas, archivador ArchivadorHistorico) *Service {
 	contadorID = 0
 	return NewService(repo, validadorUsuario, validadorReservas, archivador,
-		&fakeCanceladorReservas{}, idSecuencial, eventbus.NewInMemoryEventBus())
+		&fakeCanceladorReservas{}, &fakeDatosDeUsuario{}, idSecuencial, relojDeTest,
+		eventbus.NewInMemoryEventBus())
 }
 
 // fakeCanceladorReservas registra qué materias se le pidió limpiar, que es
@@ -355,7 +388,8 @@ func servicioSimple(repo Repo) *Service {
 func servicioConCancelador(repo Repo, cancelador *fakeCanceladorReservas, validadorUsuario ValidadorUsuario) *Service {
 	contadorID = 0
 	return NewService(repo, validadorUsuario, &fakeValidadorReservas{}, &fakeArchivadorHistorico{},
-		cancelador, idSecuencial, eventbus.NewInMemoryEventBus())
+		cancelador, &fakeDatosDeUsuario{}, idSecuencial, relojDeTest,
+		eventbus.NewInMemoryEventBus())
 }
 
 // ── CrearCiclo ──────────────────────────────────────────────────────────
@@ -1023,4 +1057,74 @@ func TestArchivarYClonar_YaArchivadoYSinNadaPendiente_SigueSiendoError(t *testin
 	if archivador.vecesLlamado != 0 {
 		t.Errorf("no debería haber recalculado el snapshot: pisaría el bueno con los datos de un ciclo ya vaciado")
 	}
+}
+
+// ── Pedidos para dictar una materia ─────────────────────────────────────
+//
+// El fake los guarda en un mapa; el orden de los listados no importa para
+// estos tests, que verifican reglas y no presentación.
+
+func (r *fakeRepo) CrearPedido(_ context.Context, p *domain.PedidoDeMateria) error {
+	if r.pedidos == nil {
+		r.pedidos = map[string]*domain.PedidoDeMateria{}
+	}
+	r.pedidos[p.ID] = p
+	return nil
+}
+
+func (r *fakeRepo) BuscarPedidoPorID(_ context.Context, id string) (*domain.PedidoDeMateria, error) {
+	p, ok := r.pedidos[id]
+	if !ok {
+		return nil, domain.ErrPedidoNoExiste
+	}
+	return p, nil
+}
+
+func (r *fakeRepo) GuardarPedido(_ context.Context, p *domain.PedidoDeMateria) error {
+	if r.pedidos == nil {
+		r.pedidos = map[string]*domain.PedidoDeMateria{}
+	}
+	r.pedidos[p.ID] = p
+	return nil
+}
+
+func (r *fakeRepo) ListarPedidos(_ context.Context, soloPendientes bool) ([]*domain.PedidoDeMateria, error) {
+	var out []*domain.PedidoDeMateria
+	for _, p := range r.pedidos {
+		if soloPendientes && p.Estado != domain.PedidoPendiente {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) ListarPedidosDeUsuario(_ context.Context, usuarioID string) ([]*domain.PedidoDeMateria, error) {
+	var out []*domain.PedidoDeMateria
+	for _, p := range r.pedidos {
+		if p.UsuarioID == usuarioID {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) ContarPedidosPendientes(_ context.Context) (int, error) {
+	n := 0
+	for _, p := range r.pedidos {
+		if p.Estado == domain.PedidoPendiente {
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (r *fakeRepo) TienePedidoAbierto(_ context.Context, usuarioID, materiaID string) (bool, error) {
+	for _, p := range r.pedidos {
+		if p.UsuarioID == usuarioID && p.Estado == domain.PedidoPendiente &&
+			p.MateriaID != nil && *p.MateriaID == materiaID {
+			return true, nil
+		}
+	}
+	return false, nil
 }

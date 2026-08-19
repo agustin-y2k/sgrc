@@ -93,8 +93,22 @@ func mapearError(err error) error {
 
 	case errors.Is(err, application.ErrPasswordCorta),
 		errors.Is(err, application.ErrDatosObligatorios),
+		// Los de la foto: lo que llegó no sirve como imagen. Sin esto
+		// caían en el 500 genérico, y quien sube una foto que el sistema
+		// rechaza se queda sin saber por qué — que es el único momento en
+		// que el mensaje importa.
+		errors.Is(err, domain.ErrFotoVacia),
+		errors.Is(err, domain.ErrFotoTipo),
+		errors.Is(err, domain.ErrFotoCorrupta),
 		errors.Is(err, domain.ErrEmailInvalido):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+
+	// 413 tiene su propio código: el archivo es una imagen, pero no entra.
+	case errors.Is(err, domain.ErrFotoGrande):
+		return fiber.NewError(fiber.StatusRequestEntityTooLarge, err.Error())
+
+	case errors.Is(err, domain.ErrFotoNoExiste):
+		return fiber.NewError(fiber.StatusNotFound, err.Error())
 
 	case errors.Is(err, application.ErrUltimoAdmin):
 		return fiber.NewError(fiber.StatusConflict, err.Error())

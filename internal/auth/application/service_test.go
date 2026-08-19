@@ -16,6 +16,7 @@ import (
 // ── fakeRepo: repositorio en memoria para tests, sin Postgres ──────────
 
 type fakeRepo struct {
+	fotos    map[string]*domain.FotoDePerfil
 	usuarios map[string]*domain.Usuario // por ID
 
 	errBuscarPorEmail     error
@@ -1675,4 +1676,40 @@ func TestLogin_ConPasswordIncorrecta_NoRevelaElEstadoDeLaCuenta(t *testing.T) {
 	if errors.Is(err, ErrCuentaNoHabilitada) {
 		t.Error("con la contraseña mal no se puede filtrar en qué estado está la cuenta")
 	}
+}
+
+// ── Foto de perfil ──────────────────────────────────────────────────────
+//
+// El fake la guarda en un mapa: lo que verifican los tests de este paquete
+// son las reglas de la cuenta, no dónde vive la imagen.
+
+func (r *fakeRepo) GuardarFoto(_ context.Context, f *domain.FotoDePerfil) error {
+	if r.fotos == nil {
+		r.fotos = map[string]*domain.FotoDePerfil{}
+	}
+	r.fotos[f.UsuarioID] = f
+	return nil
+}
+
+func (r *fakeRepo) BuscarFoto(_ context.Context, usuarioID string) (*domain.FotoDePerfil, error) {
+	f, ok := r.fotos[usuarioID]
+	if !ok {
+		return nil, domain.ErrFotoNoExiste
+	}
+	return f, nil
+}
+
+func (r *fakeRepo) EliminarFoto(_ context.Context, usuarioID string) error {
+	delete(r.fotos, usuarioID)
+	return nil
+}
+
+func (r *fakeRepo) UsuariosConFoto(_ context.Context, ids []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, id := range ids {
+		if _, ok := r.fotos[id]; ok {
+			out[id] = true
+		}
+	}
+	return out, nil
 }

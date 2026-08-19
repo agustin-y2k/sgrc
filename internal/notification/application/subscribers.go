@@ -177,6 +177,83 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		})
 	})
 
+	// Alguien escribió en el buzón: sugerencia o algo que no anda. Va a
+	// todos los Admin.
+	bus.Subscribe("sugerencia.nueva", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.SugerenciaNueva)
+		if !ok {
+			log.Printf("notification: payload inesperado para sugerencia.nueva: %+v", e.Payload)
+			return
+		}
+		mensaje := mensajeDeSugerencia(payload)
+		entregar("sugerencia.nueva", func(ctx context.Context) error {
+			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoSugerencia, domain.Referencias{})
+			return err
+		})
+	})
+
+	// Un Admin contestó: le llega a quien escribió.
+	bus.Subscribe("sugerencia.respondida", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.SugerenciaRespondida)
+		if !ok {
+			log.Printf("notification: payload inesperado para sugerencia.respondida: %+v", e.Payload)
+			return
+		}
+		mensaje := mensajeDeRespuestaASugerencia(payload)
+		entregar("sugerencia.respondida", func(ctx context.Context) error {
+			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
+				domain.TipoSugerenciaRespondida, domain.Referencias{})
+			return err
+		})
+	})
+
+	// Un docente pidió dictar una materia. Dos destinatarios distintos con
+	// dos mensajes distintos: los Admin tienen que decidir, y quien ya la
+	// dicta tiene que enterarse —no decide nada, pero es su materia—.
+	bus.Subscribe("materia.pedido.nuevo", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PedidoDeMateriaNuevo)
+		if !ok {
+			log.Printf("notification: payload inesperado para materia.pedido.nuevo: %+v", e.Payload)
+			return
+		}
+		entregar("materia.pedido.nuevo", func(ctx context.Context) error {
+			if _, err := svc.NotificarATodosLosAdmins(ctx, mensajeDePedidoDeMateria(payload),
+				domain.TipoPedidoDeMateria, domain.Referencias{}); err != nil {
+				return err
+			}
+			// A cada docente que ya dicta la materia. Si falla uno, se sigue
+			// con los demás: que no se entere uno es malo, que no se entere
+			// ninguno porque el primero falló es peor.
+			var ultimo error
+			for _, d := range payload.DocentesActuales {
+				if d.UsuarioID == payload.UsuarioID {
+					continue // ya la dicta y la volvió a pedir: no se avisa solo
+				}
+				if _, err := svc.NotificarUsuario(ctx, d.UsuarioID,
+					mensajeDePedidoParaElTitular(payload), domain.TipoPedidoDeMateria,
+					domain.Referencias{}); err != nil {
+					ultimo = err
+				}
+			}
+			return ultimo
+		})
+	})
+
+	// El Admin resolvió el pedido: le llega a quien lo hizo, aprobado o no.
+	bus.Subscribe("materia.pedido.resuelto", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PedidoDeMateriaResuelto)
+		if !ok {
+			log.Printf("notification: payload inesperado para materia.pedido.resuelto: %+v", e.Payload)
+			return
+		}
+		mensaje := mensajeDePedidoResuelto(payload)
+		entregar("materia.pedido.resuelto", func(ctx context.Context) error {
+			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
+				domain.TipoPedidoDeMateriaResuelto, domain.Referencias{})
+			return err
+		})
+	})
+
 	// RF-05.9: hay licencias de software por vencer o ya vencidas. Lo
 	// dispara el barrido de inventory, no un request: es el único aviso del
 	// sistema que nace de un reloj y no de que alguien haya hecho algo.

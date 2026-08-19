@@ -180,6 +180,78 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
+	// El buzón: lo que se escribe va a los Admin, y la respuesta a quien
+	// escribió.
+	bus.Subscribe("sugerencia.nueva", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.SugerenciaNueva)
+		if !ok {
+			log.Printf("correo: payload inesperado para sugerencia.nueva: %+v", e.Payload)
+			return
+		}
+		asunto, cuerpo := m.textoDeSugerencia(payload)
+		enviar("por mail una sugerencia", func(ctx context.Context) error {
+			return m.enviarATodosLosAdmins(ctx, asunto, cuerpo)
+		})
+	})
+
+	bus.Subscribe("sugerencia.respondida", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.SugerenciaRespondida)
+		if !ok {
+			log.Printf("correo: payload inesperado para sugerencia.respondida: %+v", e.Payload)
+			return
+		}
+		if payload.Email == "" {
+			return
+		}
+		asunto, cuerpo := m.textoDeRespuestaASugerencia(payload)
+		enviar("por mail la respuesta a una sugerencia", func(ctx context.Context) error {
+			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+		})
+	})
+
+	// Un pedido para dictar una materia va a los Admin —que deciden— y a
+	// quien ya la dicta, con textos distintos: al segundo no se le pide
+	// nada, se lo pone al tanto.
+	bus.Subscribe("materia.pedido.nuevo", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PedidoDeMateriaNuevo)
+		if !ok {
+			log.Printf("correo: payload inesperado para materia.pedido.nuevo: %+v", e.Payload)
+			return
+		}
+		asuntoAdmin, cuerpoAdmin := m.textoDePedidoDeMateria(payload)
+		asuntoTitular, cuerpoTitular := m.textoDePedidoParaElTitular(payload)
+		enviar("por mail un pedido de materia", func(ctx context.Context) error {
+			if err := m.enviarATodosLosAdmins(ctx, asuntoAdmin, cuerpoAdmin); err != nil {
+				return err
+			}
+			var ultimo error
+			for _, d := range payload.DocentesActuales {
+				if d.Email == "" || d.UsuarioID == payload.UsuarioID {
+					continue
+				}
+				if err := m.enviador.Enviar(ctx, d.Email, asuntoTitular, cuerpoTitular); err != nil {
+					ultimo = err
+				}
+			}
+			return ultimo
+		})
+	})
+
+	bus.Subscribe("materia.pedido.resuelto", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PedidoDeMateriaResuelto)
+		if !ok {
+			log.Printf("correo: payload inesperado para materia.pedido.resuelto: %+v", e.Payload)
+			return
+		}
+		if payload.Email == "" {
+			return
+		}
+		asunto, cuerpo := m.textoDePedidoResuelto(payload)
+		enviar("por mail la resolución de un pedido de materia", func(ctx context.Context) error {
+			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+		})
+	})
+
 	// El reclamo va a dos lados: a los Admin con la lista completa, y a cada
 	// persona que tenga cuenta con el suyo. Quien se llevó una máquina para
 	// un trámite y no tiene cuenta no recibe nada — no hay a dónde

@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useNoLeidas } from "@/features/notificaciones/useNoLeidas"
+import { contar } from "@/lib/plural"
+import { Avatar } from "@/components/Avatar"
 
 /**
  * Los enlaces del menú, en el orden en que se usan.
@@ -29,7 +31,17 @@ type Enlace = { a: string; texto: string }
 
 const ENLACES: Enlace[] = [
   { a: "/reservas", texto: "Reservas" },
-  { a: "/inventario", texto: "Inventario" },
+  // "Computadoras" y no "Inventario": desde la pantalla de inicio se llega
+  // acá por un atajo que dice "Ver las computadoras", y el cartel del
+  // destino tiene que coincidir con el botón que se apretó. Para quien no
+  // conoce el sistema, un nombre distinto del otro lado no se lee como un
+  // sinónimo, se lee como "me equivoqué". Además "Inventario" es palabra de
+  // depósito, y quien entra acá viene a mirar máquinas.
+  //
+  // Para un Admin, que ve las dos, ahora se distinguen mejor que antes:
+  // "Computadoras" es mirar, "Gestión del inventario" es editar. Con
+  // "Inventario" a secas eran casi el mismo nombre.
+  { a: "/inventario", texto: "Computadoras" },
   // RF-07.2: lo ve cualquier usuario autenticado. Para un docente es "a
   // quién busco si necesito algo del laboratorio"; para un Admin es además
   // donde carga su propio horario.
@@ -58,6 +70,11 @@ const ENLACES_ADMIN: Enlace[] = [
   // software con vencimiento tiene y cuándo hay que renovarlo.
   { a: "/admin/licencias", texto: "Licencias" },
   { a: "/admin/reportes", texto: "Reportes" },
+  // Los dos buzones nuevos: pedidos de materia y lo que la gente escribe
+  // sobre el sistema. Van al final del grupo porque no son diarios — se
+  // miran cuando llega un aviso.
+  { a: "/admin/pedidos-de-materia", texto: "Pedidos de materia" },
+  { a: "/admin/sugerencias", texto: "Lo que nos escribieron" },
   // La jornada de la escuela: qué días y horas abre. Se configura una vez y
   // casi no se toca, así que va abajo — pero antes de "Bloquear equipos",
   // que es lo que más rompe si se entra sin querer.
@@ -264,19 +281,22 @@ export function AppLayout() {
           </nav>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
+            {/* El redondel lleva al perfil y ya no directo a cambiar la
+                contraseña: esa es UNA de las cosas que alguien hace sobre su
+                cuenta, y la cara es donde se busca el perfil en cualquier
+                aplicación. La contraseña sigue estando, adentro. */}
             {user && (
               <Link
-                to="/cambiar-password"
+                to="/perfil"
                 onClick={cerrarMenu}
                 className="hover:bg-muted hidden items-center gap-2 rounded-lg px-2 py-1 sm:flex"
                 title={`${user.nombre} ${user.apellido} — ${esAdmin ? "Administración" : "Docente"}`}
               >
-                <span
-                  aria-hidden="true"
-                  className="bg-accent text-accent-foreground grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold"
-                >
-                  {(user.nombre[0] ?? "") + (user.apellido[0] ?? "")}
-                </span>
+                <Avatar
+                  usuarioId={user.id}
+                  nombre={user.nombre}
+                  apellido={user.apellido}
+                />
                 {/* El nombre completo solo cuando sobra ancho de verdad. En un
                     portátil de 1024 o 1280, con el menú de Admin desplegado,
                     estas dos líneas de texto eran justo lo que no entraba. La
@@ -315,10 +335,20 @@ export function AppLayout() {
             >
               {menuAbierto ? "Cerrar" : "Menú"}
               {!menuAbierto && noLeidas > 0 && (
-                <span
-                  aria-hidden="true"
-                  className="bg-destructive ml-1.5 size-2 rounded-full"
-                />
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="bg-destructive ml-1.5 size-2 rounded-full"
+                  />
+                  {/* El punto rojo se ve, pero no dice qué es: en la barra
+                      ancha el mismo aviso está escrito ("Avisos 3") y en el
+                      teléfono quedaba un punto mudo. Va como texto solo para
+                      lectores de pantalla, que además es lo que se escucha al
+                      llegar al botón. */}
+                  <span className="sr-only">
+                    , {contar(noLeidas, "aviso")} sin leer
+                  </span>
+                </>
               )}
             </Button>
           </div>

@@ -996,6 +996,103 @@ CREATE INDEX idx_audit_usuario ON audit_log (usuario_id, creado_en DESC);
 > registro de auditoría no debe permitir. El catálogo de acciones está en
 > `09-seguridad-rbac.md` §5.
 
+### `foto_de_perfil`
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| usuario_id | UUID | PK, FK → usuario ON DELETE CASCADE |
+| contenido | BYTEA | NOT NULL |
+| tipo | VARCHAR(20) | NOT NULL, CHECK image/webp \| image/jpeg \| image/png |
+| actualizada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+
+> **En una tabla aparte y no como columna de `usuario`**: la imagen pesa
+> cientos de veces más que el resto de la fila y se lee en una sola pantalla.
+> Adentro, cada listado de usuarios y cada JOIN que resuelve el nombre de un
+> docente se la habría llevado puesta.
+>
+> **El tipo se deduce de los bytes del archivo, no de lo que declare quien
+> sube** (ver `internal/auth/domain/foto_de_perfil.go`). La lista es cerrada y
+> sin SVG: un SVG puede traer JavaScript adentro y se serviría desde el mismo
+> origen que la aplicación, o sea con acceso a la sesión de quien lo mire.
+>
+> El `ON DELETE CASCADE` es lo que hace que borrar una cuenta se lleve su
+> foto. Guardarlas en disco dejaría archivos huérfanos, fuera de la copia de
+> seguridad —que hoy es solo de Postgres— y sin forma de saber de quién eran.
+
+### `pedido_de_materia`
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| usuario_id | UUID | NOT NULL, FK → usuario ON DELETE CASCADE |
+| materia_id | UUID | NULL, FK → materia ON DELETE CASCADE |
+| curso_solicitado | VARCHAR(100) | NULL |
+| materia_solicitada | VARCHAR(100) | NULL |
+| motivo | TEXT | NOT NULL, no vacío |
+| estado | VARCHAR(20) | NOT NULL, CHECK PENDIENTE \| APROBADO \| RECHAZADO |
+| respuesta | TEXT | NULL |
+| resuelto_por | UUID | NULL, FK → usuario ON DELETE SET NULL |
+| resuelto_en | TIMESTAMPTZ | NULL |
+| creado_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+
+```sql
+CREATE UNIQUE INDEX idx_pedido_materia_abierto
+    ON pedido_de_materia (usuario_id, materia_id)
+    WHERE estado = 'PENDIENTE' AND materia_id IS NOT NULL;
+```
+
+Un docente pide poder dictar —y por lo tanto reservar computadoras para— una
+materia más. Al registrarse ya se podía decir qué materia se dicta
+(`usuario.materia_solicitada`); esto es lo mismo pero repetible, porque a
+mitad de año a alguien le asignan una materia nueva.
+
+> **Dos formas de pedir, excluyentes** (`chk_pedido_una_forma`): o se elige
+> una materia que existe (`materia_id`), o se escribe una que todavía no está
+> cargada (`materia_solicitada` + `curso_solicitado`, texto libre igual que en
+> el registro). Con las dos —o con ninguna— no hay forma de saber qué se pidió.
+>
+> **El índice único es parcial**: vale solo mientras el pedido esté sin
+> resolver. Apretar dos veces el botón mandaba dos avisos a todos los Admin
+> por lo mismo; volver a pedir el año que viene es legítimo.
+>
+> **La aprobación es una decisión humana y el sistema no la automatiza.**
+> Aceptar habilita a reservar los mismos equipos que usa quien ya dicta esa
+> materia (tocarle las reservas no puede: eso está prohibido en
+> `reservation`). Si el pedido corresponde se sabe hablando con la persona o
+> con los directivos. El sistema deja el pedido escrito con su motivo, le
+> avisa a quien ya la dicta para que no se entere tarde, y guarda en
+> `audit_log` quién resolvió qué.
+
+### `sugerencia`
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| usuario_id | UUID | NOT NULL, FK → usuario ON DELETE CASCADE |
+| tipo | VARCHAR(20) | NOT NULL, CHECK SUGERENCIA \| PROBLEMA |
+| texto | TEXT | NOT NULL, no vacío |
+| pantalla | VARCHAR(200) | NULL |
+| version | VARCHAR(20) | NULL |
+| estado | VARCHAR(20) | NOT NULL, CHECK ABIERTA \| RESUELTA |
+| respuesta | TEXT | NULL |
+| respondida_por | UUID | NULL, FK → usuario ON DELETE SET NULL |
+| respondida_en | TIMESTAMPTZ | NULL |
+| creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+
+El buzón por donde alguien cuenta que algo del sistema no anda, o propone un
+cambio.
+
+> **No confundir con `incidencia`**: aquella es una computadora que no
+> arranca —marca el equipo y lo saca de circulación—; esto es sobre el
+> software. Lo resuelve gente distinta.
+>
+> **`pantalla` y `version` las completa la aplicación, no la persona.** Un "no
+> anda" sin saber desde dónde se escribió obliga a ir a buscar a quien lo
+> escribió para preguntarle qué estaba haciendo, y con alguien que ya se
+> sintió torpe usando el sistema esa conversación no vuelve a pasar.
+>
+> **Responder cierra el mensaje**, y le llega un aviso a quien lo escribió.
+> Las dos cosas van juntas: una respuesta que no cierra deja el mensaje en la
+> lista de pendientes para siempre, y cerrar sin responder es lo que hace que
+> la próxima vez nadie escriba.
+
 ## 3. Archivado de ciclo lectivo: qué se borra y qué se preserva
 
 Archivar un ciclo lectivo **no es un soft-delete de las reservas** — es un

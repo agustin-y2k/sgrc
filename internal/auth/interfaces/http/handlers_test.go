@@ -31,6 +31,7 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 // ── fakeRepo — el mismo patrón que internal/auth/application/service_test.go ──
 
 type fakeRepo struct {
+	fotos    map[string]*domain.FotoDePerfil
 	usuarios map[string]*domain.Usuario
 	codigos  map[string]*domain.CodigoRecuperacion
 }
@@ -912,4 +913,40 @@ func TestHTTP_Login_ElMotivoLlegaEnElCuerpo(t *testing.T) {
 			t.Errorf("estado %s: el mensaje %q es el de otro estado", c.estado, texto)
 		}
 	}
+}
+
+// ── Foto de perfil ──────────────────────────────────────────────────────
+//
+// El fake la guarda en un mapa: lo que verifican los tests de este paquete
+// son las reglas de la cuenta, no dónde vive la imagen.
+
+func (r *fakeRepo) GuardarFoto(_ context.Context, f *domain.FotoDePerfil) error {
+	if r.fotos == nil {
+		r.fotos = map[string]*domain.FotoDePerfil{}
+	}
+	r.fotos[f.UsuarioID] = f
+	return nil
+}
+
+func (r *fakeRepo) BuscarFoto(_ context.Context, usuarioID string) (*domain.FotoDePerfil, error) {
+	f, ok := r.fotos[usuarioID]
+	if !ok {
+		return nil, domain.ErrFotoNoExiste
+	}
+	return f, nil
+}
+
+func (r *fakeRepo) EliminarFoto(_ context.Context, usuarioID string) error {
+	delete(r.fotos, usuarioID)
+	return nil
+}
+
+func (r *fakeRepo) UsuariosConFoto(_ context.Context, ids []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, id := range ids {
+		if _, ok := r.fotos[id]; ok {
+			out[id] = true
+		}
+	}
+	return out, nil
 }

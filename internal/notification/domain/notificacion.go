@@ -65,6 +65,18 @@ const (
 	// TipoEquipoSinDevolver: para los Admin — una máquina no volvió a horario.
 	// Lleva a la pantalla de entregas, no a la de reservas.
 	TipoEquipoSinDevolver Tipo = "EQUIPO_SIN_DEVOLVER"
+
+	// TipoPedidoDeMateria: alguien pidió dictar una materia. Les llega a los
+	// Admin, que son quienes deciden, y a los docentes que ya la dictan —
+	// para ellos no es una acción, es enterarse a tiempo.
+	TipoPedidoDeMateria Tipo = "PEDIDO_DE_MATERIA"
+	// TipoPedidoDeMateriaResuelto: el Admin contestó ese pedido. Le llega a
+	// quien lo hizo, aprobado o no.
+	TipoPedidoDeMateriaResuelto Tipo = "PEDIDO_DE_MATERIA_RESUELTO"
+	// TipoSugerencia: alguien escribió en el buzón. Para los Admin.
+	TipoSugerencia Tipo = "SUGERENCIA"
+	// TipoSugerenciaRespondida: le contestaron. Para quien escribió.
+	TipoSugerenciaRespondida Tipo = "SUGERENCIA_RESPONDIDA"
 )
 
 var ErrTipoInvalido = errors.New("tipo de notificación inválido")
@@ -73,7 +85,8 @@ func ParseTipo(s string) (Tipo, error) {
 	switch Tipo(s) {
 	case TipoGeneral, TipoDocentePendiente, TipoReservaCancelada, TipoLicenciaPorVencer,
 		TipoReservaPorComenzar, TipoReservaNoRetirada, TipoEquipoSinDevolver,
-		TipoPedidoDeLiberacion:
+		TipoPedidoDeLiberacion, TipoPedidoDeMateria, TipoPedidoDeMateriaResuelto,
+		TipoSugerencia, TipoSugerenciaRespondida:
 		return Tipo(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrTipoInvalido, s)

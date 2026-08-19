@@ -261,7 +261,11 @@ describe("InicioPage", () => {
 
     expect(await screen.findByText("Ver las computadoras")).toBeInTheDocument()
     expect(screen.getByText("Quién te puede ayudar")).toBeInTheDocument()
-    expect(screen.getByText("Cambiar mi contraseña")).toBeInTheDocument()
+    // "Mi perfil" reemplazó al atajo de la contraseña: esa quedó adentro,
+    // junto con la foto y las materias. Un atajo por cada cosa que se puede
+    // hacer sobre la cuenta convertía esta lista en un menú de opciones.
+    expect(screen.getByText("Mi perfil")).toBeInTheDocument()
+    expect(screen.getByText("Escribirnos")).toBeInTheDocument()
     expect(screen.queryByText("Accesos rápidos")).not.toBeInTheDocument()
   })
 

@@ -58,6 +58,9 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/middleware"
 	"github.com/ramiro/sgrc/internal/shared/monitoreo"
 	"github.com/ramiro/sgrc/internal/shared/security"
+	sugerenciasapp "github.com/ramiro/sgrc/internal/sugerencias/application"
+	sugerenciasinfra "github.com/ramiro/sgrc/internal/sugerencias/infrastructure"
+	sugerenciashttp "github.com/ramiro/sgrc/internal/sugerencias/interfaces/http"
 )
 
 // zonaHorariaDeLaEscuela resuelve la zona en la que el sistema interpreta
@@ -567,7 +570,11 @@ func main() {
 		// al docente son dos caminos al mismo estado (RF-02.8), y los dos
 		// tienen que cancelar las reservas de la materia que queda sin nadie.
 		&authCanceladorReservasAdapter{reservationSvc: reservationSvc},
+		// Nombre y correo de quien pide una materia, y de quienes ya la
+		// dictan: los necesitan los avisos de un pedido (service_pedidos.go).
+		academicinfra.NewDatosDeUsuarioPostgres(pool),
 		academicinfra.NuevoID,
+		ahora,
 		bus,
 	)
 	academicHandler := academichttp.NewHandler(academicSvc, auditor)
@@ -632,6 +639,18 @@ func main() {
 	notificationapp.RegisterEmailHandlersConEspera(bus, mensajero, &notificacionesPendientes)
 
 	notificationHandler := notificationhttp.NewHandler(notificationSvc)
+
+	// ── El buzón de sugerencias ─────────────────────────────────────
+	// Va después de notification a propósito: publica eventos que aquellos
+	// suscriptores ya tienen que estar escuchando cuando llegue el primero.
+	sugerenciasSvc := sugerenciasapp.NewService(
+		sugerenciasinfra.NewPostgresRepo(pool),
+		sugerenciasinfra.NewUsuarioPostgres(pool),
+		sugerenciasinfra.NuevoID,
+		ahora,
+		bus,
+	)
+	sugerenciasHandler := sugerenciashttp.NewHandler(sugerenciasSvc)
 
 	// ── Job de vencimiento de reservas (RF-04.9) ────────────────────
 	// Corre como goroutine desde el arranque, sin infraestructura extra
@@ -818,6 +837,7 @@ func main() {
 	notificationhttp.RegisterRoutes(app, notificationHandler, autenticacion)
 	reportinghttp.RegisterRoutes(app, reportingHandler, autenticacion)
 	availabilityhttp.RegisterRoutes(app, availabilityHandler, autenticacion)
+	sugerenciashttp.RegisterRoutes(app, sugerenciasHandler, autenticacion)
 
 	port := puertoHTTP()
 
