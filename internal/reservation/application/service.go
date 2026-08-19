@@ -90,6 +90,7 @@ func (s *Service) publicarCancelaciones(ctx context.Context, pendientes []cancel
 	}
 
 	etiquetas := s.etiquetasDeLosEquipos(ctx, grupos)
+	contactos := s.contactosDeLosAfectados(ctx, orden)
 
 	for _, k := range orden {
 		reservas := grupos[k]
@@ -105,11 +106,34 @@ func (s *Service) publicarCancelaciones(ctx context.Context, pendientes []cancel
 			Tipo: "reserva.cancelada",
 			Payload: eventbus.CancelacionesDeUsuario{
 				UsuarioID: k.usuarioID,
+				Nombre:    contactos[k.usuarioID].Nombre,
+				Email:     contactos[k.usuarioID].Email,
 				Motivo:    k.motivo,
 				Reservas:  detalle,
 			},
 		})
 	}
+}
+
+// contactosDeLosAfectados resuelve a quién escribirle, en una sola consulta.
+// Si falla, el aviso interno sale igual y sin correo: perder la notificación
+// por no haber podido leer un email sería mucho peor que no mandar el mail.
+func (s *Service) contactosDeLosAfectados(ctx context.Context, orden []destinatario) map[string]Contacto {
+	vistos := map[string]bool{}
+	ids := make([]string, 0, len(orden))
+	for _, k := range orden {
+		if !vistos[k.usuarioID] {
+			vistos[k.usuarioID] = true
+			ids = append(ids, k.usuarioID)
+		}
+	}
+
+	contactos, err := s.obtenedorNombre.ContactosDe(ctx, ids)
+	if err != nil {
+		log.Printf("cancelaciones: no se pudieron resolver los contactos (el aviso sale sin correo): %v", err)
+		return map[string]Contacto{}
+	}
+	return contactos
 }
 
 // etiquetasDeLosEquipos resuelve cómo se llama cada equipo ("PC 7",

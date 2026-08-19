@@ -34,7 +34,7 @@ func (h *Handler) Escribir(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	s, err := h.svc.Escribir(c.UserContext(), claims.UserID, req.Tipo, req.Texto, req.Pantalla, req.Version)
+	s, err := h.svc.Escribir(c.UserContext(), claims.UserID, req.Tipo, req.Asunto, req.Texto, req.Pantalla, req.Version)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -85,7 +85,9 @@ func (h *Handler) Listar(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data, "meta": pagina.Meta(total)})
 }
 
-// POST /api/sugerencias/{id}/responder (Admin) — contesta y cierra.
+// POST /api/sugerencias/{id}/mensajes — escribe en el hilo. Lo usan los dos
+// lados: un Admin en cualquier conversación, y quien preguntó solo en la
+// suya (lo verifica el servicio).
 func (h *Handler) Responder(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -97,7 +99,18 @@ func (h *Handler) Responder(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	s, err := h.svc.Responder(c.UserContext(), c.Params("id"), claims.UserID, req.Respuesta)
+	esAdmin := claims.Rol == "ADMIN"
+	s, err := h.svc.Responder(c.UserContext(), c.Params("id"), claims.UserID, esAdmin, req.Texto)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toSugerenciaResponse(s, esAdmin))
+}
+
+// POST /api/sugerencias/{id}/resolver (Admin) — da el tema por terminado.
+// Es un acto aparte de contestar: se contesta muchas veces y se cierra una.
+func (h *Handler) Resolver(c *fiber.Ctx) error {
+	s, err := h.svc.MarcarResuelta(c.UserContext(), c.Params("id"))
 	if err != nil {
 		return mapearError(err)
 	}

@@ -18,6 +18,11 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	sugerencias.Post("/", autenticado, middleware.RateLimit(5, time.Minute), h.Escribir)
 	sugerencias.Get("/mias", autenticado, h.ListarPropias)
 
+	// Escribir en un hilo NO es solo del Admin: quien preguntó también
+	// contesta, y el servicio verifica que sea el suyo. El límite es el mismo
+	// que para abrir uno nuevo.
+	sugerencias.Post("/:id/mensajes", autenticado, middleware.RateLimit(5, time.Minute), h.Responder)
+
 	sugerencias.Get("/", autenticado, soloAdmin, h.Listar)
-	sugerencias.Post("/:id/responder", autenticado, soloAdmin, h.Responder)
+	sugerencias.Post("/:id/resolver", autenticado, soloAdmin, h.Resolver)
 }

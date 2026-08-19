@@ -83,21 +83,52 @@ components:
         resueltoEn: { type: string, format: date-time }
         creadoEn: { type: string, format: date-time }
 
-    Sugerencia:
+    MensajeDelHilo:
       type: object
-      description: Un mensaje del buzón sobre el sistema.
+      description: Una intervención de la conversación.
       properties:
         id: { type: string, format: uuid }
-        tipo: { type: string, enum: [SUGERENCIA, PROBLEMA] }
+        deAdmin:
+          type: boolean
+          description: >
+            De qué lado viene. Se guarda al escribir y no se deduce del rol
+            actual del autor: si a un docente lo ascienden, lo que escribió
+            antes lo escribió como docente.
         texto: { type: string }
+        escritoEn: { type: string, format: date-time }
+
+    Sugerencia:
+      type: object
+      description: >
+        Una conversación con el equipo de administración (RF-09): un pedido de
+        ayuda, un "algo no anda" o una idea, con todos sus mensajes.
+      properties:
+        id: { type: string, format: uuid }
+        tipo:
+          type: string
+          enum: [AYUDA, PROBLEMA, SUGERENCIA]
+          description: >
+            AYUDA es el pedido de soporte, y se distingue en algo que no es
+            cosmético: sus correos no se pueden desactivar (RF-09.5).
+        asunto: { type: string, maxLength: 150 }
         pantalla: { type: string, description: Desde dónde se escribió; lo completa la interfaz }
         version: { type: string }
         estado: { type: string, enum: [ABIERTA, RESUELTA] }
         usuarioId: { type: string, format: uuid, description: Solo en el listado del Admin }
-        respuesta: { type: string }
-        respondidaPor: { type: string, format: uuid }
-        respondidaEn: { type: string, format: date-time }
+        esperaRespuesta:
+          type: boolean
+          description: >
+            Está abierta y el último que habló fue quien preguntó. Viene
+            calculado del servidor para que las dos pantallas no lo deduzcan
+            distinto.
+        mensajes:
+          type: array
+          items: { $ref: '#/components/schemas/MensajeDelHilo' }
         creadaEn: { type: string, format: date-time }
+        ultimaActividadEn:
+          type: string
+          format: date-time
+          description: Por esto se ordena la bandeja, no por creadaEn.
 
     ErrorResponse:
       type: string
@@ -565,6 +596,70 @@ components:
             cambio**: la reserva del destinatario sigue intacta y la decisión es
             suya (RF-04.12). La pantalla no puede ofrecerle el mismo botón que a
             un aviso de cancelación.
+
+    CategoriaEmail:
+      type: string
+      enum:
+        # De la cuenta: salen siempre, no admiten preferencia.
+        - RECUPERACION_DE_CUENTA
+        - CUENTA_APROBADA
+        # Personales: las tiene cualquiera por sus reservas y pedidos.
+        # SOPORTE_RESPONDIDO tampoco se puede desactivar (RF-09.5).
+        - SOPORTE_RESPONDIDO
+        - RESERVA_CANCELADA
+        - EQUIPO_NO_DISPONIBLE
+        - PEDIDO_DE_LIBERACION
+        - PEDIDO_DE_MATERIA_RESUELTO
+        - PEDIDO_SOBRE_MI_MATERIA
+        - SUGERENCIA_RESPONDIDA
+        - RECORDATORIO_DE_RESERVA
+        - RESERVA_SIN_RETIRAR
+        - DEVOLUCION_PENDIENTE
+        # De administración: los avisos que van a todos los Admin.
+        # SOPORTE tampoco se puede desactivar (RF-09.5).
+        - SOPORTE
+        - CUENTA_PENDIENTE
+        - DEVOLUCION_DEMORADA
+        - CIERRE_SIN_DEVOLVER
+        - LICENCIA_POR_VENCER
+        - PEDIDO_DE_MATERIA
+        - SUGERENCIA
+      description: |
+        De qué avisa un correo (RF-05.13). NO es lo mismo que
+        `Notificacion.tipo`: acá se agrupa por "de qué me avisa el mail", que
+        es lo que la persona tilda. Un solo correo puede resumir varios avisos
+        internos, y los dos de la cuenta no generan aviso interno ninguno.
+
+    PreferenciaEmail:
+      type: object
+      properties:
+        categoria: { $ref: '#/components/schemas/CategoriaEmail' }
+        grupo:
+          type: string
+          enum: [CUENTA, PERSONAL, ADMINISTRACION]
+          description: |
+            En qué bloque del panel va. CUENTA son los que salen siempre,
+            PERSONAL los que le llegan a cualquiera por lo suyo, y
+            ADMINISTRACION los que van a todos los Admin — estos últimos solo
+            aparecen si quien pregunta es Admin.
+        etiqueta:
+          type: string
+          description: Cómo se nombra la casilla en la pantalla.
+        descripcion:
+          type: string
+          description: |
+            Qué llega y cada cuánto — es lo que permite decidir si se quiere.
+            Viaja con la casilla en vez de vivir en el cliente para que no
+            pueda quedar una casilla que no apaga nada ni un correo que
+            ninguna casilla nombra.
+        activa: { type: boolean }
+        fija:
+          type: boolean
+          description: |
+            Sale siempre y no admite preferencia. Se muestra igual —tildada y
+            sin casilla que tocar— para que se vea que existe: una lista que
+            oculta lo que no se puede cambiar se lee como la lista completa de
+            correos, y no lo es. Mandarla en un PUT devuelve 400.
 
     # ── Availability ──
     BloqueHorarioAdmin:
@@ -2884,6 +2979,70 @@ paths:
                   meta: { $ref: '#/components/schemas/PaginationMeta' }
         "400": { description: page o pageSize inválidos }
 
+  /api/notifications/preferencias-email:
+    get:
+      tags: [notifications]
+      summary: Qué copias por correo recibe quien pregunta (RF-05.13)
+      description: |
+        Devuelve SIEMPRE todas las categorías que le corresponden a esa persona
+        —las de la cuenta y las personales, más las de administración si es
+        Admin— con su estado, su grupo, y la etiqueta y descripción con las que
+        se muestran: la lista la define el backend, que es quien sabe qué
+        correos existen de verdad.
+
+        Una categoría sobre la que la persona nunca se pronunció viene con su
+        valor por defecto. Las `fija: true` vienen siempre activas.
+
+        Lo que se elige es el canal: todos estos avisos siguen apareciendo en
+        la campana, se tilde lo que se tilde.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PreferenciaEmail' } }
+    put:
+      tags: [notifications]
+      summary: Elegir qué copias por correo recibir (RF-05.13)
+      description: |
+        Reemplaza la selección ENTERA: lo que no viene en `categorias` queda
+        apagado, y eso se guarda como una decisión explícita. No es un
+        alta/baja de a una para que dos pestañas abiertas no puedan dejar una
+        mezcla que ninguna de las dos mostró.
+
+        Una lista vacía es válida: es "no quiero ninguna copia opcional". Los
+        avisos internos siguen llegando igual, y los correos de la cuenta
+        también.
+
+        Solo se mandan categorías configurables y que le correspondan a quien
+        pide: una `fija` responde 400 y una de administración pedida por un
+        docente responde 403.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                categorias:
+                  type: array
+                  items: { $ref: '#/components/schemas/CategoriaEmail' }
+      responses:
+        "200":
+          description: Cómo quedó la selección
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PreferenciaEmail' } }
+        "400": { description: Alguna categoría no existe, o es de las que salen siempre }
+        "403": { description: Un docente pidió una categoría de administración }
+
   /api/notifications/{id}/leida:
     patch:
       tags: [notifications]
@@ -3722,15 +3881,19 @@ paths:
         "409": { description: El pedido ya estaba resuelto }
 
   # ─────────────────────────────────────────
-  # BUZÓN DE SUGERENCIAS
+  # SOPORTE (RF-09)
   # ─────────────────────────────────────────
   /api/sugerencias/:
     post:
       tags: [sugerencias]
-      summary: Escribir al equipo de administración
+      summary: Abrir una conversación con el equipo de administración
       description: >
         `pantalla` y `version` las completa la interfaz, no la persona: sin
         ellas, un reporte obliga a preguntarle qué estaba haciendo.
+
+
+        Un `tipo: AYUDA` manda un correo que los Admin NO pueden desactivar
+        (RF-09.5); los otros dos usan una categoría optativa.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -3738,9 +3901,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [tipo, texto]
+              required: [tipo, asunto, texto]
               properties:
-                tipo: { type: string, enum: [SUGERENCIA, PROBLEMA] }
+                tipo: { type: string, enum: [AYUDA, PROBLEMA, SUGERENCIA] }
+                asunto: { type: string, maxLength: 150 }
                 texto: { type: string, maxLength: 4000 }
                 pantalla: { type: string, maxLength: 200 }
                 version: { type: string }
@@ -3751,7 +3915,7 @@ paths:
               schema: { $ref: '#/components/schemas/Sugerencia' }
     get:
       tags: [sugerencias]
-      summary: Ver todo el buzón (Admin)
+      summary: Ver todas las conversaciones (Admin)
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: abiertas, in: query, schema: { type: boolean }, description: Solo lo que falta contestar }
@@ -3770,7 +3934,7 @@ paths:
   /api/sugerencias/mias:
     get:
       tags: [sugerencias]
-      summary: Lo que escribí, con las respuestas
+      summary: Mis conversaciones, con todos sus mensajes
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -3781,11 +3945,19 @@ paths:
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/Sugerencia' } }
 
-  /api/sugerencias/{id}/responder:
+  /api/sugerencias/{id}/mensajes:
     post:
       tags: [sugerencias]
-      summary: Contestar y cerrar un mensaje (Admin)
-      description: Le llega un aviso a quien escribió.
+      summary: Escribir en una conversación
+      description: >
+        Lo usan los dos lados: un Admin en cualquier conversación, y quien la
+        abrió solo en la suya. De qué lado viene el mensaje lo decide el
+        servidor por el rol del token, no el cliente.
+
+
+        Contestar NO cierra el hilo — eso es `/resolver` — y un mensaje de
+        quien preguntó REABRE uno resuelto: si volvió a escribir, no estaba
+        resuelto. El aviso va al otro lado en los dos casos.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -3795,12 +3967,31 @@ paths:
           application/json:
             schema:
               type: object
-              required: [respuesta]
+              required: [texto]
               properties:
-                respuesta: { type: string, maxLength: 4000 }
+                texto: { type: string, maxLength: 4000 }
       responses:
         "200":
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Sugerencia' }
-        "409": { description: Ya estaba contestado }
+        "403": { description: La conversación es de otra persona }
+        "404": { description: No existe esa conversación }
+
+  /api/sugerencias/{id}/resolver:
+    post:
+      tags: [sugerencias]
+      summary: Dar la conversación por resuelta (Admin)
+      description: >
+        No manda correo: el aviso útil fue la respuesta, y un segundo mail
+        diciendo "lo dimos por terminado" es ruido. Quien preguntó puede
+        reabrirla escribiendo de nuevo.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sugerencia' }
+        "409": { description: Ya estaba resuelta }

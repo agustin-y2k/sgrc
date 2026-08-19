@@ -15,12 +15,19 @@ import (
 type Service struct {
 	repo           Repo
 	listadorAdmins ListadorAdmins
+	preferencias   PreferenciasEmail
 	nuevoID        IDGenerator
 	ahora          func() time.Time
 }
 
-func NewService(repo Repo, listadorAdmins ListadorAdmins, nuevoID IDGenerator, ahora func() time.Time) *Service {
-	return &Service{repo: repo, listadorAdmins: listadorAdmins, nuevoID: nuevoID, ahora: ahora}
+func NewService(repo Repo, listadorAdmins ListadorAdmins, preferencias PreferenciasEmail, nuevoID IDGenerator, ahora func() time.Time) *Service {
+	return &Service{
+		repo:           repo,
+		listadorAdmins: listadorAdmins,
+		preferencias:   preferencias,
+		nuevoID:        nuevoID,
+		ahora:          ahora,
+	}
 }
 
 // NotificarUsuario crea una notificación para un usuario puntual.
@@ -114,4 +121,29 @@ func (s *Service) ListarPorUsuario(ctx context.Context, usuarioID string, filtro
 		pagina = paginacion.PorDefecto()
 	}
 	return s.repo.ListarPorUsuario(ctx, usuarioID, filtroEstado, pagina)
+}
+
+// ── Qué copias por correo quiere cada Admin (RF-05.13) ──────────────────
+
+// CategoriasDeEmail devuelve qué copias por correo recibe hoy un usuario: lo
+// que eligió, y para lo que no eligió, el valor por defecto de esa categoría.
+// Solo las que le corresponden por su rol.
+func (s *Service) CategoriasDeEmail(ctx context.Context, usuarioID string, esAdmin bool) ([]domain.CategoriaEmail, error) {
+	elegidas, err := s.preferencias.ElegidasDe(ctx, usuarioID)
+	if err != nil {
+		return nil, fmt.Errorf("leyendo las preferencias de correo: %w", err)
+	}
+	return domain.EfectivasPara(elegidas, esAdmin), nil
+}
+
+// GuardarCategoriasDeEmail deja al usuario suscrito exactamente a esas
+// categorías, y devuelve cómo quedó. A partir de acá los valores por defecto
+// no cuentan más para esta persona: guardar el panel es pronunciarse sobre
+// todas las casillas que vio, incluidas las que dejó destildadas.
+func (s *Service) GuardarCategoriasDeEmail(ctx context.Context, usuarioID string, categorias []domain.CategoriaEmail, esAdmin bool) ([]domain.CategoriaEmail, error) {
+	decisiones := domain.Decisiones(categorias, esAdmin)
+	if err := s.preferencias.Reemplazar(ctx, usuarioID, decisiones); err != nil {
+		return nil, fmt.Errorf("guardando las preferencias de correo: %w", err)
+	}
+	return domain.EfectivasPara(decisiones, esAdmin), nil
 }

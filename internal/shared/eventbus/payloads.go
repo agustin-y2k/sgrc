@@ -17,8 +17,12 @@ type ReservaCancelada struct {
 // una sola noticia para ella, no tres.
 type CancelacionesDeUsuario struct {
 	UsuarioID string
-	Motivo    string
-	Reservas  []ReservaCancelada
+	// Nombre y Email son para la copia por correo; van vacíos si la cuenta ya
+	// no está, y entonces el aviso sale igual pero solo a la campana.
+	Nombre   string
+	Email    string
+	Motivo   string
+	Reservas []ReservaCancelada
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -213,12 +217,26 @@ type SugerenciaNueva struct {
 	SugerenciaID string
 	// Quien es el nombre de quien escribió, ya resuelto.
 	Quien string
-	// Tipo es "SUGERENCIA" o "PROBLEMA": lo primero que quiere saber quien
-	// lee es si hay algo roto.
-	Tipo  string
-	Texto string
+	// Tipo es "AYUDA", "PROBLEMA" o "SUGERENCIA": lo primero que quiere saber
+	// quien lee es si hay alguien esperando o si hay algo roto. Además decide
+	// si el correo se puede desactivar — el de AYUDA no.
+	Tipo string
+	// Asunto es lo que va en el asunto del mail, tal como lo escribió la
+	// persona.
+	Asunto string
+	Texto  string
 	// Pantalla desde la que se escribió, si se pudo saber.
 	Pantalla string
+}
+
+// SugerenciaSeguimiento: quien abrió el hilo volvió a escribir. Va a los
+// Admin, igual que el mensaje inicial, porque la conversación sigue.
+type SugerenciaSeguimiento struct {
+	SugerenciaID string
+	Quien        string
+	Tipo         string
+	Asunto       string
+	Texto        string
 }
 
 // SugerenciaRespondida: un Admin contestó. Le llega a quien escribió.
@@ -227,6 +245,9 @@ type SugerenciaRespondida struct {
 	UsuarioID    string
 	Email        string
 	Nombre       string
+	// Tipo decide si este correo se puede desactivar (ver SugerenciaNueva).
+	Tipo   string
+	Asunto string
 	// TextoOriginal para que el aviso recuerde de qué mensaje se trata: entre
 	// que se escribió y que llegó la respuesta pueden pasar días.
 	TextoOriginal string

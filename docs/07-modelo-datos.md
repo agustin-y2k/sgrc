@@ -905,6 +905,54 @@ CREATE INDEX idx_notif_sobre_usuario  ON notificacion (sobre_usuario_id, tipo) W
 > no el destinatario: el aviso le llega al dueño y trata sobre el otro docente.
 > Es el mismo uso que en "hay una cuenta esperando aprobación".
 
+### `preferencia_email`
+Qué copias por correo quiere recibir cada persona (RF-05.13). Guarda el canal,
+nunca el aviso: lo que se apaga acá sigue apareciendo en la campana.
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| usuario_id | UUID | FK → usuario.id **ON DELETE CASCADE**, NOT NULL, PK (con categoria) |
+| categoria | VARCHAR(30) | NOT NULL, PK (con usuario_id), CHECK con las 15 configurables (9 personales + 6 de administración) |
+| activa | BOOLEAN | NOT NULL |
+
+> **La ausencia de fila no es "apagado": es "todavía no eligió".** Ahí manda el
+> valor por defecto de la categoría, que vive en el código
+> (`domain.CategoriaEmail.ActivaPorDefecto`) y no en la base — es una decisión
+> de producto que se lee mejor al lado de la lista de categorías que repartida
+> en un `DEFAULT` por columna.
+>
+> Por eso se guardan también las **apagadas**. Si la tabla tuviera únicamente
+> lo tildado, destildar un aviso que arranca encendido sería indistinguible de
+> no haber abierto nunca el panel, y volvería a encenderse en la lectura
+> siguiente. Guardar el panel escribe una fila por categoría de una vez.
+>
+> **Los dos correos de la cuenta no están en el `CHECK` y no pueden estar.** El
+> código de recuperación y el "ya podés entrar" salen siempre; se muestran en
+> el panel tildados y sin casilla, y que la base rechace la fila es la última
+> garantía de que nadie los apague por accidente.
+>
+> **Solo se escriben las categorías que esa persona podía elegir.** A un
+> docente no se le guarda una fila apagada por cada aviso de administración:
+> el día que lo asciendan tiene que recibir los defaults de esas categorías, y
+> una fila en `false` se lo impediría para siempre sin que nadie recuerde por
+> qué.
+>
+> Sin índice propio: la PK `(usuario_id, categoria)` sirve a las tres consultas
+> que existen —las de una persona, el `LEFT JOIN` por categoría con el que se
+> arma la lista de Admin destinatarios, y la búsqueda por email con la que cada
+> correo personal se pregunta si sale—.
+>
+> `CASCADE` por lo mismo que `notificacion`: la preferencia no significa nada
+> sin la cuenta que la eligió.
+
+> **Las categorías no son los `notificacion.tipo`.** Son dos listas parecidas y
+> conviene no confundirlas: el `tipo` clasifica un aviso interno para decidir
+> qué botón ofrece la pantalla, y la `categoria` agrupa por "de qué me avisa
+> este mail", que es lo que una persona puede querer tildar. Un solo correo
+> —el corte de jornada— resume varios avisos; varios `tipo` no tienen correo
+> ninguno; y dos correos de esta tabla (los de la cuenta) no tienen `tipo`
+> porque no generan aviso interno.
+
 ### `horario_admin`
 Patrón semanal recurrente de presencia en el laboratorio — puramente
 informativo (RF-07), no afecta permisos ni reservas.
@@ -1061,37 +1109,62 @@ mitad de año a alguien le asignan una materia nueva.
 > avisa a quien ya la dicta para que no se entere tarde, y guarda en
 > `audit_log` quién resolvió qué.
 
-### `sugerencia`
+### `sugerencia` (el hilo)
 | Campo | Tipo | Restricciones |
 |---|---|---|
 | id | UUID | PK |
 | usuario_id | UUID | NOT NULL, FK → usuario ON DELETE CASCADE |
-| tipo | VARCHAR(20) | NOT NULL, CHECK SUGERENCIA \| PROBLEMA |
-| texto | TEXT | NOT NULL, no vacío |
+| tipo | VARCHAR(20) | NOT NULL, CHECK AYUDA \| PROBLEMA \| SUGERENCIA |
+| asunto | VARCHAR(150) | NOT NULL, no vacío |
 | pantalla | VARCHAR(200) | NULL |
 | version | VARCHAR(20) | NULL |
 | estado | VARCHAR(20) | NOT NULL, CHECK ABIERTA \| RESUELTA |
-| respuesta | TEXT | NULL |
-| respondida_por | UUID | NULL, FK → usuario ON DELETE SET NULL |
-| respondida_en | TIMESTAMPTZ | NULL |
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+| ultima_actividad_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 
-El buzón por donde alguien cuenta que algo del sistema no anda, o propone un
-cambio.
+### `sugerencia_mensaje` (cada intervención)
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| sugerencia_id | UUID | NOT NULL, FK → sugerencia ON DELETE CASCADE |
+| autor_id | UUID | NULL, FK → usuario ON DELETE SET NULL |
+| de_admin | BOOLEAN | NOT NULL |
+| texto | TEXT | NOT NULL, no vacío |
+| escrito_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 
+La bandeja de soporte (RF-09): por acá se pide ayuda, se cuenta que algo del
+sistema no anda y se proponen cambios. Es **una conversación**, no un mensaje
+con una respuesta.
+
+> **No hay `texto` en el hilo.** El mensaje inicial es la primera fila de
+> `sugerencia_mensaje` y no tiene nada de distinto salvo ser el primero.
+> Guardarlo aparte obligaría a leer dos lugares para mostrar una conversación,
+> y a decidir en cuál de los dos vive una respuesta.
+>
+> **`de_admin` se guarda, no se deduce del rol del autor.** Si a un docente lo
+> ascienden a `ADMIN`, lo que escribió antes lo escribió como docente y el hilo
+> tiene que seguir leyéndose igual. `autor_id` en `SET NULL` porque borrar
+> media conversación deja la otra media sin sentido.
+>
+> **`ultima_actividad_en` es por lo que se ordena la bandeja**, y por eso
+> existe además de `creada_en`: un hilo de la semana pasada al que le acaban de
+> escribir es el que tiene a alguien esperando.
+>
+> **El `tipo` decide algo más que el orden**: los correos de un `AYUDA` no se
+> pueden desactivar (RF-09.5), los de los otros dos sí.
+>
 > **No confundir con `incidencia`**: aquella es una computadora que no
-> arranca —marca el equipo y lo saca de circulación—; esto es sobre el
-> software. Lo resuelve gente distinta.
+> arranca —marca el equipo y lo saca de circulación—; esto es una conversación
+> con una persona. Lo resuelve gente distinta.
 >
 > **`pantalla` y `version` las completa la aplicación, no la persona.** Un "no
 > anda" sin saber desde dónde se escribió obliga a ir a buscar a quien lo
 > escribió para preguntarle qué estaba haciendo, y con alguien que ya se
 > sintió torpe usando el sistema esa conversación no vuelve a pasar.
 >
-> **Responder cierra el mensaje**, y le llega un aviso a quien lo escribió.
-> Las dos cosas van juntas: una respuesta que no cierra deja el mensaje en la
-> lista de pendientes para siempre, y cerrar sin responder es lo que hace que
-> la próxima vez nadie escriba.
+> **Contestar no cierra el hilo**, a diferencia de como era antes: cerrar es un
+> acto aparte y un mensaje de quien preguntó lo reabre. Una respuesta que
+> cerraba dejaba sin manera de decir "ya probé y no anda".
 
 ## 3. Archivado de ciclo lectivo: qué se borra y qué se preserva
 

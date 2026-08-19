@@ -1,8 +1,7 @@
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link } from "react-router"
+import { Link, useSearchParams } from "react-router"
 
-import { AvisoDeSpam } from "@/components/AvisoDeSpam"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { Paginador } from "@/components/Paginador"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -10,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import * as notificacionesApi from "@/features/notificaciones/api"
+import { PreferenciasDeCorreo } from "@/features/notificaciones/PreferenciasDeCorreo"
+import { PanelDeSoporte } from "@/features/sugerencias/PanelDeSoporte"
 import type { Notificacion } from "@/features/notificaciones/types"
 import { NOTIFICACIONES_KEY } from "@/features/notificaciones/useNoLeidas"
 import { getErrorMessage } from "@/lib/api-client"
@@ -23,6 +24,11 @@ function formatearFecha(iso: string): string {
 /** RF-05: notificaciones internas. */
 export function NotificacionesPage() {
   const queryClient = useQueryClient()
+  // El botón "Pedir ayuda" de la barra de arriba entra por acá: abre la
+  // pantalla con el formulario desplegado, en vez de dejar a alguien que
+  // necesita algo buscando dónde escribir.
+  const [parametros] = useSearchParams()
+  const abrirSoporte = parametros.get("soporte") === "nuevo"
   const [mostrarLeidas, setMostrarLeidas] = useState(false)
   const [pagina, setPagina] = useState(1)
 
@@ -72,11 +78,15 @@ export function NotificacionesPage() {
         }
       />
 
-      {/* El único lugar donde este texto puede ser permanente sin volverse
-          ruido: quien está acá ya vino a leer avisos. */}
-      <div className="mb-4">
-        <AvisoDeSpam>Algunos de estos avisos también te llegan por correo.</AvisoDeSpam>
-      </div>
+      {/* Las conversaciones van ARRIBA de los avisos y de las preferencias:
+          es lo único de esta pantalla donde hay una persona esperando del
+          otro lado. */}
+      <PanelDeSoporte abiertoDeEntrada={abrirSoporte} />
+
+      {/* Reemplaza a la línea de "algunos también te llegan por correo": el
+          panel dice cuáles, y deja cambiarlo. Es para todos, no solo para el
+          Admin: un docente también recibe correos por sus reservas. */}
+      <PreferenciasDeCorreo />
 
       <label className="mb-4 flex items-center gap-2 text-sm">
         <input

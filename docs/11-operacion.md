@@ -126,6 +126,13 @@ no es la contraseña con la que se entra a Gmail:
 4. `make restart` y mirá el log: tiene que decir
    `correo saliente habilitado vía smtp.gmail.com`.
 
+Cada persona elige después, desde la pantalla de notificaciones, qué avisos
+quiere recibir por correo (RF-05.13). De fábrica salen los de la cuenta —el
+código de recuperación y el "ya podés entrar", que no se pueden apagar—, los
+que traen noticias de algo que hizo otro, y para los Admin, la cuenta que
+espera aprobación. El resto se prende a mano. Nada de lo que se apague se
+pierde: esos mismos avisos siguen apareciendo en la campana, para todos.
+
 El límite de Gmail es de unos 500 destinatarios por día, de sobra para avisos.
 Gmail exige contraseña de aplicación desde 2022; el envío por SMTP en sí sigue
 siendo gratuito.

@@ -301,3 +301,51 @@ func (m *Mensajero) textoDeCierreParaElProximo(p eventbus.EquipoSinDevolverAlCie
 	cuerpo += firma
 	return asunto, cuerpo
 }
+
+// ══════════════════════════════════════════════════════════════════
+// Cancelaciones (RF-05.1/05.2/05.3)
+// ══════════════════════════════════════════════════════════════════
+
+// textoDeCancelacion cuenta qué computadoras se cancelaron y por qué.
+//
+// Lo que el texto no puede dejar pasar: una cancelación es POR MÁQUINA. Un
+// bloqueo sobre dos PCs de una clase de seis no cancela la clase, y quien lee
+// "se canceló tu reserva" a las once de la noche da por perdida una hora que
+// todavía tiene. Por eso se nombran los equipos y se aclara qué sigue en pie.
+func (m *Mensajero) textoDeCancelacion(a eventbus.CancelacionesDeUsuario) (asunto, cuerpo string) {
+	equipos := equiposDeLasCanceladas(a.Reservas)
+	fecha, unaSolaFecha := fechaUnica(a.Reservas)
+
+	switch {
+	case len(a.Reservas) == 1:
+		r := a.Reservas[0]
+		asunto = fmt.Sprintf("Se canceló %s de tu reserva del %s",
+			etiquetaODefecto(r.Etiqueta), formatearFecha(r.Fecha))
+		cuerpo = saludo(a.Nombre) + fmt.Sprintf(
+			"Se canceló %s, que tenías reservada para el %s.",
+			etiquetaODefecto(r.Etiqueta), formatearFecha(r.Fecha))
+	case unaSolaFecha:
+		asunto = fmt.Sprintf("Se cancelaron %d computadoras de tu reserva del %s",
+			len(a.Reservas), formatearFecha(fecha))
+		cuerpo = saludo(a.Nombre) + fmt.Sprintf(
+			"Se cancelaron %d computadoras que tenías reservadas para el %s: %s.",
+			len(a.Reservas), formatearFecha(fecha), equipos)
+	default:
+		asunto = fmt.Sprintf("Se cancelaron %d computadoras que tenías reservadas", len(a.Reservas))
+		cuerpo = saludo(a.Nombre) + fmt.Sprintf(
+			"Se cancelaron %d computadoras que tenías reservadas: %s.", len(a.Reservas), equipos)
+	}
+
+	// El motivo va en su propio renglón: es lo único de este correo que
+	// escribió una persona, y lo primero que se busca al leerlo.
+	if motivo := strings.TrimSpace(a.Motivo); motivo != "" {
+		cuerpo += "\n\nMotivo: " + motivo
+	}
+
+	cuerpo += "\n\nSe cancelaron solo las computadoras que se nombran acá: si " +
+		"para esa clase tenías otras, siguen reservadas. Podés reservar otra " +
+		"máquina para la misma franja si queda alguna libre."
+	cuerpo += m.enlace("Mirá cómo quedó tu reserva en:")
+	cuerpo += firma
+	return asunto, cuerpo
+}

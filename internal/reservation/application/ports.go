@@ -314,6 +314,19 @@ type ValidadorEquipo interface {
 // lógica de auth.
 type ObtenedorNombreDocente interface {
 	NombreCompletoDe(ctx context.Context, usuarioID string) (string, error)
+
+	// ContactosDe resuelve nombre y email de varias personas en UNA consulta.
+	// Lo pide el aviso de cancelación: una cascada le toca reservas a varios
+	// docentes a la vez, y preguntar de a uno serían tantas consultas como
+	// afectados.
+	ContactosDe(ctx context.Context, usuarioIDs []string) (map[string]Contacto, error)
+}
+
+// Contacto es a quién y cómo escribirle. Los dos campos pueden venir vacíos si
+// la cuenta se eliminó.
+type Contacto struct {
+	Nombre string
+	Email  string
 }
 
 type IDGenerator func() string

@@ -97,3 +97,65 @@ func (h *Handler) MarcarTodasLeidas(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"marcadas": n})
 }
+
+// GET /api/notifications/preferencias-email — RF-05.13. Las categorías que le
+// corresponden a quien pregunta, con el estado de cada una.
+func (h *Handler) ListarPreferenciasEmail(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	activas, err := h.svc.CategoriasDeEmail(c.UserContext(), claims.UserID, esAdmin(claims))
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toPreferenciasEmailResponse(activas, esAdmin(claims)))
+}
+
+// PUT /api/notifications/preferencias-email — reemplaza la selección entera.
+// No es PATCH por casilla a propósito: el panel se guarda como se ve, y dos
+// pestañas abiertas no pueden dejar una mezcla que ninguna de las dos mostró.
+func (h *Handler) GuardarPreferenciasEmail(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	var req guardarPreferenciasEmailRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "el cuerpo del pedido no es un JSON válido")
+	}
+
+	categorias := make([]domain.CategoriaEmail, 0, len(req.Categorias))
+	for _, s := range req.Categorias {
+		categoria, err := domain.ParseCategoriaEmail(s)
+		if err != nil {
+			return mapearError(err)
+		}
+		// Las fijas salen siempre: la casilla se muestra tildada y sin poder
+		// tocarse, así que un pedido que las nombre viene de un cliente que no
+		// está mirando el panel.
+		if categoria.EsFija() {
+			return fiber.NewError(fiber.StatusBadRequest,
+				"ese correo sale siempre y no se puede desactivar")
+		}
+		// Un docente no puede encender un correo que no recibe: sería una fila
+		// que no hace nada y una casilla que no vio nunca.
+		if !categoria.PuedeElegir(esAdmin(claims)) {
+			return fiber.NewError(fiber.StatusForbidden,
+				"esa categoría es de los avisos que van a los administradores")
+		}
+		categorias = append(categorias, categoria)
+	}
+
+	activas, err := h.svc.GuardarCategoriasDeEmail(c.UserContext(), claims.UserID, categorias, esAdmin(claims))
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toPreferenciasEmailResponse(activas, esAdmin(claims)))
+}
+
+func esAdmin(claims *middleware.Claims) bool {
+	return claims.Rol == "ADMIN"
+}

@@ -15,7 +15,8 @@ func mapearError(err error) error {
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	case errors.Is(err, domain.ErrYaLeida):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
-	case errors.Is(err, domain.ErrEstadoInvalido), errors.Is(err, application.ErrIDInvalido):
+	case errors.Is(err, domain.ErrEstadoInvalido), errors.Is(err, application.ErrIDInvalido),
+		errors.Is(err, domain.ErrCategoriaEmailInvalida):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	default:
 		return fiber.NewError(fiber.StatusInternalServerError, "error interno")

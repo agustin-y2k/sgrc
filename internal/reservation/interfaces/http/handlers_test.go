@@ -372,6 +372,14 @@ func (f *fakeObtenedorNombre) NombreCompletoDe(ctx context.Context, usuarioID st
 	return "Ada Lovelace", nil
 }
 
+func (f *fakeObtenedorNombre) ContactosDe(ctx context.Context, usuarioIDs []string) (map[string]application.Contacto, error) {
+	contactos := make(map[string]application.Contacto, len(usuarioIDs))
+	for _, id := range usuarioIDs {
+		contactos[id] = application.Contacto{Nombre: "Ada Lovelace", Email: id + "@escuela.edu.ar"}
+	}
+	return contactos, nil
+}
+
 var contadorID int
 
 // idSecuencial devuelve un ID DISTINTO por llamada.

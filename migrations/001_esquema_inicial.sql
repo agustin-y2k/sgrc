@@ -841,6 +841,57 @@ CREATE TABLE notificacion (
 CREATE INDEX idx_notif_usuario_estado ON notificacion (usuario_id, estado);
 CREATE INDEX idx_notif_sobre_usuario  ON notificacion (sobre_usuario_id, tipo) WHERE sobre_usuario_id IS NOT NULL;
 
+-- ── Qué copias por correo quiere cada persona (RF-05.13) ───────────────
+--
+-- Solo están las categorías que esa persona decidió explícitamente. NO tener
+-- fila no es "apagado": es "todavía no eligió", y ahí manda el valor por
+-- defecto de esa categoría, que vive en el código
+-- (domain.CategoriaEmail.ActivaPorDefecto).
+--
+-- Apagar todo es seguro porque cada uno de estos correos tiene su aviso
+-- interno equivalente, que llega siempre y que NADIE puede desactivar:
+-- elegir cambia el canal, no la información. Los correos de la cuenta
+-- —el código de recuperación, la cuenta aprobada— no están acá: esos no son
+-- copia de nada y salen siempre.
+CREATE TABLE preferencia_email (
+    usuario_id  UUID NOT NULL REFERENCES usuario(id) ON DELETE CASCADE,
+    categoria   VARCHAR(30) NOT NULL,
+    activa      BOOLEAN NOT NULL,
+
+    PRIMARY KEY (usuario_id, categoria),
+
+    -- Las categorías NO coinciden con los tipos de notificacion: acá se agrupa
+    -- por "de qué me avisa el mail", que es lo que la persona tilda, y un solo
+    -- correo puede resumir varios avisos internos.
+    --
+    -- Las primeras nueve son personales —las tiene cualquiera por sus propias
+    -- reservas y pedidos— y las últimas seis son los avisos que van a TODOS
+    -- los Admin. Qué puede tocar cada rol lo decide la aplicación
+    -- (domain.CategoriaEmail.PuedeElegir), no este CHECK.
+    --
+    -- Los correos de la CUENTA no están y no pueden estar: el código de
+    -- recuperación y el "ya podés entrar" salen siempre. Se muestran en el
+    -- panel tildados y sin casilla, y que el CHECK los rechace es la última
+    -- garantía de que nadie los apague por accidente.
+    CONSTRAINT chk_preferencia_email_categoria CHECK (categoria IN (
+        'RESERVA_CANCELADA',
+        'EQUIPO_NO_DISPONIBLE',
+        'PEDIDO_DE_LIBERACION',
+        'PEDIDO_DE_MATERIA_RESUELTO',
+        'PEDIDO_SOBRE_MI_MATERIA',
+        'SUGERENCIA_RESPONDIDA',
+        'RECORDATORIO_DE_RESERVA',
+        'RESERVA_SIN_RETIRAR',
+        'DEVOLUCION_PENDIENTE',
+        'CUENTA_PENDIENTE',
+        'LICENCIA_POR_VENCER',
+        'SUGERENCIA',
+        'PEDIDO_DE_MATERIA',
+        'DEVOLUCION_DEMORADA',
+        'CIERRE_SIN_DEVOLVER'
+    ))
+);
+
 -- ═══════════════════════════════════════════════════════════════════════
 -- Jornada de la institución — normativo
 -- ═══════════════════════════════════════════════════════════════════════
@@ -1001,7 +1052,7 @@ CREATE TABLE audit_log (
 CREATE INDEX idx_audit_usuario ON audit_log (usuario_id, creado_en DESC);
 
 -- ═══════════════════════════════════════════════════════════════════════
--- Perfil, pedidos de materia y buzón de sugerencias
+-- Perfil, pedidos de materia y soporte
 -- ═══════════════════════════════════════════════════════════════════════
 
 CREATE TABLE foto_de_perfil (
@@ -1092,20 +1143,31 @@ CREATE INDEX idx_pedido_materia_pendientes
 
 CREATE INDEX idx_pedido_materia_usuario ON pedido_de_materia (usuario_id, creado_en DESC);
 
--- ── 3. El buzón de sugerencias y fallas ────────────────────────────────
+-- ── 3. Soporte: pedir ayuda, contar que algo no anda, sugerir ──────────
 --
--- Lo que hoy pasa por el pasillo: "che, la pantalla esa no me deja", "estaría
--- bueno que se pueda...". Eso se pierde, y quien no cruza a un Admin
--- seguido no lo dice nunca.
+-- Lo que hoy pasa por el pasillo: "che, no me deja reservar", "estaría bueno
+-- que se pueda...", "¿me das una mano con el carro?". Eso se pierde, y quien
+-- no cruza a un Admin seguido no lo dice nunca.
+--
+-- Es UNA sola bandeja con tres tipos, y no tres buzones: para quien contesta
+-- son todos "alguien escribió y espera respuesta", y separarlos en pantallas
+-- distintas garantiza que una de ellas se mire menos.
 --
 -- Ojo con lo que NO es: para avisar que una computadora no anda ya está el
 -- reporte de incidencias, que la marca en el inventario y la saca de
--- circulación. Esto es sobre el sistema, no sobre las máquinas.
+-- circulación. Esto es una conversación con una persona.
 CREATE TABLE sugerencia (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     usuario_id   UUID NOT NULL REFERENCES usuario(id) ON DELETE CASCADE,
-    tipo         VARCHAR(20) NOT NULL CHECK (tipo IN ('SUGERENCIA', 'PROBLEMA')),
-    texto        TEXT NOT NULL CHECK (length(trim(texto)) > 0),
+
+    -- AYUDA es el pedido de soporte, y se distingue de los otros dos porque
+    -- su correo NO se puede desactivar: del otro lado hay alguien esperando
+    -- para poder dar clase. Una sugerencia, en cambio, puede esperar.
+    tipo         VARCHAR(20) NOT NULL CHECK (tipo IN ('AYUDA', 'PROBLEMA', 'SUGERENCIA')),
+
+    -- El asunto es lo único que se ve en la lista: sin él, contestar obliga a
+    -- abrir los diez hilos para saber cuál es urgente.
+    asunto       VARCHAR(150) NOT NULL CHECK (length(trim(asunto)) > 0),
 
     -- Desde qué pantalla se escribió, y con qué versión del sistema. Lo
     -- completa la aplicación, no la persona: un "no anda" sin saber dónde
@@ -1117,17 +1179,41 @@ CREATE TABLE sugerencia (
 
     estado       VARCHAR(20) NOT NULL DEFAULT 'ABIERTA'
                  CHECK (estado IN ('ABIERTA', 'RESUELTA')),
-    -- La respuesta del Admin, que le llega como aviso a quien escribió.
-    -- Cierra el círculo: sin respuesta, dos reportes ignorados alcanzan para
-    -- que nadie vuelva a usar el buzón.
-    respuesta    TEXT,
-    respondida_por UUID REFERENCES usuario(id) ON DELETE SET NULL,
-    respondida_en  TIMESTAMPTZ,
-    creada_en    TIMESTAMPTZ NOT NULL DEFAULT now()
+
+    creada_en    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Cuándo se escribió el último mensaje del hilo. Es por lo que se ordena
+    -- la bandeja: lo que se movió recién es lo que tiene a alguien esperando,
+    -- y no necesariamente lo que se abrió último.
+    ultima_actividad_en TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_sugerencia_abiertas ON sugerencia (estado, creada_en DESC);
-CREATE INDEX idx_sugerencia_usuario ON sugerencia (usuario_id, creada_en DESC);
+-- Los dos índices ordenan por actividad y no por fecha de creación, por lo
+-- mismo que la columna: un hilo de la semana pasada al que le acaban de
+-- contestar va arriba.
+CREATE INDEX idx_sugerencia_abiertas ON sugerencia (estado, ultima_actividad_en DESC);
+CREATE INDEX idx_sugerencia_usuario ON sugerencia (usuario_id, ultima_actividad_en DESC);
+
+-- Cada intervención del hilo, en orden. La primera es la de quien lo abrió:
+-- no hay un "texto" en la tabla de arriba, porque el mensaje inicial no tiene
+-- nada de distinto salvo ser el primero.
+CREATE TABLE sugerencia_mensaje (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sugerencia_id UUID NOT NULL REFERENCES sugerencia(id) ON DELETE CASCADE,
+
+    -- autor_id en NULL si esa cuenta se eliminó: el mensaje se conserva
+    -- igual, porque borrar media conversación deja la otra media sin sentido.
+    autor_id      UUID REFERENCES usuario(id) ON DELETE SET NULL,
+
+    -- De qué lado viene, guardado y no deducido del rol del autor: si a un
+    -- docente lo ascienden a ADMIN, lo que escribió antes lo escribió como
+    -- docente y el hilo tiene que seguir leyéndose igual.
+    de_admin      BOOLEAN NOT NULL,
+
+    texto         TEXT NOT NULL CHECK (length(trim(texto)) > 0),
+    escrito_en    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_sugerencia_mensaje_hilo ON sugerencia_mensaje (sugerencia_id, escrito_en);
 
 
 -- +goose Down
@@ -1150,6 +1236,7 @@ CREATE INDEX idx_sugerencia_usuario ON sugerencia (usuario_id, creada_en DESC);
 
 DROP TABLE IF EXISTS audit_log CASCADE;
 DROP TABLE IF EXISTS historico_uso_docente CASCADE;
+DROP TABLE IF EXISTS sugerencia_mensaje CASCADE;
 DROP TABLE IF EXISTS sugerencia CASCADE;
 DROP TABLE IF EXISTS pedido_de_materia CASCADE;
 DROP TABLE IF EXISTS foto_de_perfil CASCADE;
@@ -1157,6 +1244,7 @@ DROP TABLE IF EXISTS historico_uso_equipo CASCADE;
 DROP TABLE IF EXISTS horario_admin_excepcion CASCADE;
 DROP TABLE IF EXISTS horario_admin CASCADE;
 DROP TABLE IF EXISTS jornada_institucion CASCADE;
+DROP TABLE IF EXISTS preferencia_email CASCADE;
 DROP TABLE IF EXISTS notificacion CASCADE;
 DROP TABLE IF EXISTS prestamo CASCADE;
 DROP TABLE IF EXISTS reserva CASCADE;

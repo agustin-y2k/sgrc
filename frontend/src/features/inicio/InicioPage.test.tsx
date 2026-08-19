@@ -259,7 +259,9 @@ describe("InicioPage", () => {
     // "Mi perfil" reemplazó al atajo de la contraseña: esa quedó adentro,
     // junto con la foto y las materias.
     expect(screen.getByText("Mi perfil")).toBeInTheDocument()
-    expect(screen.getByText("Escribirnos")).toBeInTheDocument()
+    // "Pedir ayuda" reemplazó a "Escribirnos": es lo que la persona necesita
+    // hacer, y el mismo lugar sirve para contar que algo no anda.
+    expect(screen.getByText("Pedir ayuda")).toBeInTheDocument()
     expect(screen.queryByText("Accesos rápidos")).not.toBeInTheDocument()
   })
 

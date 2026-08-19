@@ -1112,6 +1112,14 @@ func (nombreDocenteFijo) NombreCompletoDe(context.Context, string) (string, erro
 	return "Ada Lovelace", nil
 }
 
+func (nombreDocenteFijo) ContactosDe(_ context.Context, usuarioIDs []string) (map[string]application.Contacto, error) {
+	contactos := make(map[string]application.Contacto, len(usuarioIDs))
+	for _, id := range usuarioIDs {
+		contactos[id] = application.Contacto{Nombre: "Ada Lovelace", Email: id + "@escuela.edu.ar"}
+	}
+	return contactos, nil
+}
+
 // ── RF-04.2: PCs disponibles en una franja ─────────────────────────────
 
 func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testing.T) {

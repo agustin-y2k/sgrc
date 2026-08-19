@@ -173,6 +173,20 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		})
 	})
 
+	// Quien preguntó volvió a escribir en su hilo: vuelve a los Admin.
+	bus.Subscribe("sugerencia.seguimiento", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.SugerenciaSeguimiento)
+		if !ok {
+			log.Printf("notification: payload inesperado para sugerencia.seguimiento: %+v", e.Payload)
+			return
+		}
+		mensaje := mensajeDeSeguimiento(payload)
+		entregar("sugerencia.seguimiento", func(ctx context.Context) error {
+			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoSugerencia, domain.Referencias{})
+			return err
+		})
+	})
+
 	// Un Admin contestó: le llega a quien escribió.
 	bus.Subscribe("sugerencia.respondida", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaRespondida)

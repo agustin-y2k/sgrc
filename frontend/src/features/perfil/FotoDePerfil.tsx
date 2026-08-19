@@ -33,7 +33,17 @@ async function aCuadradoChico(archivo: File): Promise<Blob | null> {
     if (!ctx) return null
 
     const lado = Math.min(img.width, img.height)
-    ctx.drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, LADO, LADO)
+    ctx.drawImage(
+      img,
+      (img.width - lado) / 2,
+      (img.height - lado) / 2,
+      lado,
+      lado,
+      0,
+      0,
+      LADO,
+      LADO
+    )
 
     return await new Promise<Blob | null>((resolve) =>
       lienzo.toBlob((b) => resolve(b), "image/webp", 0.85)
@@ -43,7 +53,14 @@ async function aCuadradoChico(archivo: File): Promise<Blob | null> {
   }
 }
 
-/** El redondel del perfil, con los botones para cambiar o sacar la foto. */
+/**
+ * El redondel del perfil, con los botones para cambiar la foto o quitarla.
+ *
+ * No hay ninguna forma de sacar una foto con la cámara, y es a propósito: la
+ * única entrada es el explorador de archivos del sistema. Por eso el botón
+ * dice "quitar" y no "sacar" — en el rótulo viejo, "Sacar la foto" se leía
+ * como tomarla, que es lo contrario de lo que hace.
+ */
 export function FotoDePerfil({
   usuarioId,
   nombre,
@@ -118,7 +135,7 @@ export function FotoDePerfil({
             disabled={trabajando}
             onClick={() => borrar.mutate()}
           >
-            Sacar la foto
+            Quitar la foto
           </Button>
         </div>
         <p className="text-muted-foreground text-sm">

@@ -9,9 +9,14 @@ import (
 
 // Repo es todo lo que este paquete necesita de infrastructure/.
 type Repo interface {
+	// Crear escribe el hilo con su primer mensaje.
 	Crear(ctx context.Context, s *domain.Sugerencia) error
+	// BuscarPorID lo devuelve con la conversación completa.
 	BuscarPorID(ctx context.Context, id string) (*domain.Sugerencia, error)
-	Guardar(ctx context.Context, s *domain.Sugerencia) error
+	// AgregarMensaje suma una intervención y actualiza el hilo.
+	AgregarMensaje(ctx context.Context, s *domain.Sugerencia, m domain.Mensaje) error
+	// GuardarEstado es para resolver: los mensajes no se editan nunca.
+	GuardarEstado(ctx context.Context, s *domain.Sugerencia) error
 
 	// ListarTodas es la pantalla del Admin.
 	ListarTodas(ctx context.Context, soloAbiertas bool, p paginacion.Pagina) ([]*domain.Sugerencia, int, error)

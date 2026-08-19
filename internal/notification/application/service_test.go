@@ -102,8 +102,12 @@ func (r *fakeRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioI
 // ── fakeListadorAdmins ──────────────────────────────────────────────────
 
 type fakeListadorAdmins struct {
-	adminIDs     []string
-	adminEmails  []string
+	adminIDs    []string
+	adminEmails []string
+	// suscriptos, si está, dice quién pidió cada categoría; en nil, todos los
+	// de adminEmails reciben todo, que es lo que suponen los tests que no
+	// hablan de preferencias.
+	suscriptos   map[domain.CategoriaEmail][]string
 	err          error
 	errorEnEmail error
 }
@@ -115,11 +119,14 @@ func (f *fakeListadorAdmins) IDsDeAdminsAprobados(ctx context.Context) ([]string
 	return f.adminIDs, nil
 }
 
-func (f *fakeListadorAdmins) EmailsDeAdminsAprobados(ctx context.Context) ([]string, error) {
+func (f *fakeListadorAdmins) EmailsDeAdminsSuscriptos(ctx context.Context, categoria domain.CategoriaEmail) ([]string, error) {
 	if f.errorEnEmail != nil {
 		return nil, f.errorEnEmail
 	}
-	return f.adminEmails, nil
+	if f.suscriptos == nil {
+		return f.adminEmails, nil
+	}
+	return f.suscriptos[categoria], nil
 }
 
 var contadorID int
@@ -129,9 +136,58 @@ func idSecuencial() string {
 	return "id-" + string(rune('0'+contadorID))
 }
 
+// fakePreferencias guarda las decisiones explícitas en memoria, igual que la
+// tabla: lo que no está es lo que la persona nunca eligió.
+type fakePreferencias struct {
+	porUsuario map[string]map[domain.CategoriaEmail]bool
+	// porEmail es lo mismo indexado como lo consulta el envío. Vacío = nadie
+	// eligió nada, así que mandan los valores por defecto.
+	porEmail map[string]map[domain.CategoriaEmail]bool
+	// siempreSi es para los tests que van sobre el TEXTO de un correo y no
+	// sobre a quién le llega: dice que sí a todo y los deja al margen de los
+	// valores por defecto.
+	siempreSi bool
+	err       error
+}
+
+func (f *fakePreferencias) ElegidasDe(ctx context.Context, usuarioID string) (map[domain.CategoriaEmail]bool, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.porUsuario[usuarioID], nil
+}
+
+func (f *fakePreferencias) Reemplazar(ctx context.Context, usuarioID string, decisiones map[domain.CategoriaEmail]bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	if f.porUsuario == nil {
+		f.porUsuario = map[string]map[domain.CategoriaEmail]bool{}
+	}
+	f.porUsuario[usuarioID] = decisiones
+	return nil
+}
+
+func (f *fakePreferencias) RecibePorEmail(ctx context.Context, email string, categoria domain.CategoriaEmail) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	if f.siempreSi {
+		return true, nil
+	}
+	if activa, decidio := f.porEmail[email][categoria]; decidio {
+		return activa, nil
+	}
+	return categoria.ActivaPorDefecto(), nil
+}
+
 func nuevoServicioDeTest(repo Repo, listador ListadorAdmins) *Service {
+	return nuevoServicioConPreferencias(repo, listador, &fakePreferencias{})
+}
+
+func nuevoServicioConPreferencias(repo Repo, listador ListadorAdmins, prefs PreferenciasEmail) *Service {
 	contadorID = 0
-	return NewService(repo, listador, idSecuencial, func() time.Time {
+	return NewService(repo, listador, prefs, idSecuencial, func() time.Time {
 		return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	})
 }
@@ -412,5 +468,120 @@ func TestListarPorUsuario_SegundaPagina(t *testing.T) {
 	}
 	if len(resultado) != 1 || resultado[0].ID != "n3" {
 		t.Fatalf("esperaba solo n3 en la segunda página, obtuve %+v", resultado)
+	}
+}
+
+// ── Preferencias de correo (RF-05.13) ───────────────────────────────────
+
+// Contiene dice si la lista trae esa categoría.
+func contiene(cats []domain.CategoriaEmail, buscada domain.CategoriaEmail) bool {
+	for _, c := range cats {
+		if c == buscada {
+			return true
+		}
+	}
+	return false
+}
+
+// Un Admin que nunca abrió el panel: los dos de su cuenta, las cinco
+// personales que vienen encendidas, y de las de administración solo las
+// cuentas esperando aprobación.
+func TestCategoriasDeEmail_LoQueRecibeQuienNuncaEligio(t *testing.T) {
+	svc := nuevoServicioConPreferencias(nuevoFakeRepo(), &fakeListadorAdmins{}, &fakePreferencias{})
+
+	cats, err := svc.CategoriasDeEmail(context.Background(), "admin1", true)
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !contiene(cats, domain.CatCuentaPendiente) {
+		t.Errorf("las cuentas pendientes tendrían que venir encendidas: %v", cats)
+	}
+	for _, apagada := range []domain.CategoriaEmail{
+		domain.CatLicenciaPorVencer, domain.CatSugerencia, domain.CatPedidoDeMateria,
+		domain.CatDevolucionDemorada, domain.CatCierreSinDevolver,
+		domain.CatRecordatorioDeReserva, domain.CatReservaSinRetirar, domain.CatDevolucionPendiente,
+	} {
+		if contiene(cats, apagada) {
+			t.Errorf("%s tendría que arrancar apagada: %v", apagada, cats)
+		}
+	}
+}
+
+// Un docente no ve ni recibe las de administración, aunque la base tuviera
+// una fila suya diciendo que sí.
+func TestCategoriasDeEmail_ElDocenteNoRecibeLasDeAdministracion(t *testing.T) {
+	prefs := &fakePreferencias{porUsuario: map[string]map[domain.CategoriaEmail]bool{
+		"docente1": {domain.CatSugerencia: true},
+	}}
+	svc := nuevoServicioConPreferencias(nuevoFakeRepo(), &fakeListadorAdmins{}, prefs)
+
+	cats, err := svc.CategoriasDeEmail(context.Background(), "docente1", false)
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if contiene(cats, domain.CatSugerencia) {
+		t.Errorf("le devolvió una categoría de administración: %v", cats)
+	}
+}
+
+// Destildar lo que viene encendido se guarda: el default vale hasta que la
+// persona se pronuncia, no vuelve a aplicarse después.
+func TestGuardarCategoriasDeEmail_DestildarLoEncendido_QuedaApagado(t *testing.T) {
+	prefs := &fakePreferencias{}
+	svc := nuevoServicioConPreferencias(nuevoFakeRepo(), &fakeListadorAdmins{}, prefs)
+	ctx := context.Background()
+
+	if _, err := svc.GuardarCategoriasDeEmail(ctx, "admin1",
+		[]domain.CategoriaEmail{domain.CatSugerencia}, true); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	cats, err := svc.CategoriasDeEmail(ctx, "admin1", true)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if contiene(cats, domain.CatCuentaPendiente) {
+		t.Errorf("se destildó y volvió sola: %v", cats)
+	}
+	if !contiene(cats, domain.CatSugerencia) {
+		t.Errorf("lo que tildó no quedó: %v", cats)
+	}
+}
+
+// Las fijas salen siempre, tilde lo que tilde: los dos de la cuenta y la
+// respuesta a un pedido de ayuda.
+func TestGuardarCategoriasDeEmail_LasFijasNoSeApagan(t *testing.T) {
+	prefs := &fakePreferencias{}
+	svc := nuevoServicioConPreferencias(nuevoFakeRepo(), &fakeListadorAdmins{}, prefs)
+	ctx := context.Background()
+
+	cats, err := svc.GuardarCategoriasDeEmail(ctx, "docente1", nil, false)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(cats) != 3 {
+		t.Fatalf("esperaba las tres fijas que ve un docente, obtuve %v", cats)
+	}
+	for _, c := range cats {
+		if !c.EsFija() {
+			t.Errorf("%s no es fija y quedó encendida", c)
+		}
+	}
+	// Y no se guardó ninguna decisión sobre ellas.
+	for c := range prefs.porUsuario["docente1"] {
+		if c.EsFija() {
+			t.Errorf("guardó una decisión sobre un correo que sale siempre: %s", c)
+		}
+	}
+}
+
+func TestGuardarCategoriasDeEmail_ErrorDelRepo_SePropaga(t *testing.T) {
+	prefs := &fakePreferencias{err: errors.New("la base no está")}
+	svc := nuevoServicioConPreferencias(nuevoFakeRepo(), &fakeListadorAdmins{}, prefs)
+
+	if _, err := svc.GuardarCategoriasDeEmail(context.Background(), "admin1", nil, true); err == nil {
+		t.Error("esperaba error y no hubo")
 	}
 }

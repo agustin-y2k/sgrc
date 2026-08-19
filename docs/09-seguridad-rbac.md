@@ -113,6 +113,9 @@ de la base al verificar la cuenta (§1).
 | Entregar y recibir equipos, y ver qué está prestado (RF-08) | ✅ | ❌ |
 | Gestionar licencias de software (RF-03.11 a RF-03.14) | ✅ | ❌ |
 | Ver notificaciones propias | ✅ | ✅ |
+| Elegir qué avisos recibir por correo (RF-05.13) | ✅ todas | ✅ solo las suyas — las seis de administración no las ve ni las puede activar |
+| Pedir ayuda y escribir al equipo de administración (RF-09) | ✅ | ✅ |
+| Contestar conversaciones ajenas y darlas por resueltas (RF-09) | ✅ | ❌ — en la suya sí escribe, y escribir la reabre |
 | Configurar mi horario de disponibilidad | ✅ | ❌ |
 | Ver disponibilidad de Admins | ✅ | ✅ |
 
