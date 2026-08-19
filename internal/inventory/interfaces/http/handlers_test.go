@@ -95,8 +95,6 @@ func (r *fakeRepo) ListarEquiposPorCarro(ctx context.Context, carroID string) ([
 }
 
 // ListarEquipos: el inventario, o solo lo que no está en ningún carro.
-// El filtro se aplica acá igual que en la base: un fake más permisivo que el
-// repositorio real hace pasar en la máquina lo que falla en producción.
 func (r *fakeRepo) ListarEquipos(ctx context.Context, soloSueltos bool) ([]*domain.Equipo, error) {
 	var resultado []*domain.Equipo
 	for _, equipo := range r.equipos {
@@ -293,14 +291,14 @@ func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	return app
 }
 
-// registroDePrueba hace de tabla usuario para el middleware de
-// autenticación: Token() deja registrado el rol de cada ID, y
-// Autenticacion() se lo devuelve al middleware igual que lo haría la base.
+// registroDePrueba hace de tabla usuario para el middleware de autenticación:
+// Token() deja registrado el rol de cada ID, y Autenticacion() se lo devuelve
+// al middleware igual que lo haría la base.
 var registroDePrueba = authtest.Nuevo()
 
 // tokenPara genera un JWT válido para un usuario de prueba — reusa
-// exactamente el mismo formato que produce infrastructure.JWTFirmador,
-// para que estos tests ejerciten el middleware de autenticación real.
+// exactamente el mismo formato que produce infrastructure.JWTFirmador, para
+// que estos tests ejerciten el middleware de autenticación real.
 func tokenPara(id, rol string) string {
 	return registroDePrueba.Token(testSecret, id, rol)
 }
@@ -378,8 +376,7 @@ func TestHTTP_CrearEquipo_OK(t *testing.T) {
 }
 
 // El número de serie es texto: con un tipo numérico no se podría cargar el
-// código que dice la etiqueta. La respuesta trae la forma canónica, que
-// puede no ser lo que se tipeó.
+// código que dice la etiqueta.
 func TestHTTP_CrearEquipo_NumeroSerieAlfanumerico_SeNormaliza(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 

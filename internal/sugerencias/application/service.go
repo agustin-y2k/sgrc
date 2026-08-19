@@ -14,10 +14,6 @@ import (
 
 // ObtenedorDeUsuario resuelve el nombre y el mail de quien escribió, que
 // viven en auth.
-//
-// Es un puerto y no una consulta con JOIN por dos razones: mantiene a este
-// paquete sin saber cómo está guardada una cuenta, y hace explícito que lo
-// único que necesita del usuario son tres campos para el aviso.
 type ObtenedorDeUsuario interface {
 	NombreYEmail(ctx context.Context, usuarioID string) (nombre, email string, err error)
 }
@@ -35,9 +31,6 @@ func NewService(repo Repo, usuario ObtenedorDeUsuario, nuevoID IDGenerator, ahor
 }
 
 // Escribir guarda el mensaje y avisa a los Admin.
-//
-// La pantalla y la versión las manda el frontend, no la persona: ver el
-// comentario de domain.Sugerencia.
 func (s *Service) Escribir(ctx context.Context, usuarioID, tipo, texto, pantalla, version string) (*domain.Sugerencia, error) {
 	t, err := domain.ParseTipo(tipo)
 	if err != nil {
@@ -53,8 +46,7 @@ func (s *Service) Escribir(ctx context.Context, usuarioID, tipo, texto, pantalla
 	}
 
 	// El nombre se resuelve para el aviso, y si falla no se deshace nada: el
-	// mensaje ya está guardado, que es lo que no se puede perder. Sin nombre
-	// el aviso sale igual, con el texto, que es lo que importa leer.
+	// mensaje ya está guardado, que es lo que no se puede perder.
 	nombre, _, err := s.usuario.NombreYEmail(ctx, usuarioID)
 	if err != nil {
 		nombre = ""

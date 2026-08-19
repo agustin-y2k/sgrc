@@ -233,12 +233,6 @@ func (r *PostgresRepo) GuardarIncidencia(ctx context.Context, i *domain.Incidenc
 
 // CategoriasDeFallaUsadas devuelve las categorías ya cargadas, una sola vez
 // cada una y en orden alfabético.
-//
-// DISTINCT ON sobre lower(categoria) y no un DISTINCT a secas: si alguien
-// escribió "Batería" y otro "batería", sugerir las dos no ayudaría a
-// converger — que es justamente para lo que existe esta lista. Se devuelve
-// la primera en orden alfabético de las variantes, que es estable entre
-// llamadas.
 func (r *PostgresRepo) CategoriasDeFallaUsadas(ctx context.Context) ([]string, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT ON (lower(categoria)) categoria
@@ -284,17 +278,7 @@ func (r *PostgresRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID 
 }
 
 // errorDeUnicidadDeEquipo traduce cuál de las tres restricciones de unicidad
-// de `equipo` se violó. Sin esto, cargar un segundo "Cargador 1" respondía
-// "ya existe un equipo con ese identificador", que no le dice nada a quien
-// está dando de alta un cargador.
-//
-// Los nombres tienen que ser EXACTAMENTE los que genera Postgres. Este switch
-// buscó `pc_numero_serie_key` mucho después de que la tabla se renombrara a
-// `equipo`: el case no entraba nunca, y quien cargaba un número de serie
-// repetido recibía el error del identificador — otro campo, otro problema. No
-// se notó porque el único test que lo cubría usaba un repositorio falso que
-// devolvía el error correcto por su cuenta. Por eso el test de esto vive en
-// las pruebas de integración, contra Postgres.
+// de `equipo` se violó.
 func errorDeUnicidadDeEquipo(err error) error {
 	switch nombreDeConstraint(err) {
 	case "ux_equipo_suelto_nombre":
@@ -307,9 +291,9 @@ func errorDeUnicidadDeEquipo(err error) error {
 	}
 }
 
-// nullSiCero es lo mismo que nullIfEmpty pero para el identificador: desde
-// Un equipo suelto no tiene número, y guardar 0 lo haría chocar
-// contra el CHECK de la base (identificador > 0) además de mentir.
+// nullSiCero es lo mismo que nullIfEmpty pero para el identificador: desde Un
+// equipo suelto no tiene número, y guardar 0 lo haría chocar contra el CHECK
+// de la base (identificador > 0) además de mentir.
 func nullSiCero(n int) *int {
 	if n == 0 {
 		return nil
@@ -317,10 +301,9 @@ func nullSiCero(n int) *int {
 	return &n
 }
 
-// nullIfEmpty convierte un string vacío en nil para que se guarde como
-// NULL en columnas opcionales (cpu, ram, sistema_operativo,
-// software_instalado) en vez de una cadena vacía — son cosas distintas:
-// "no se cargó este dato" vs. "se cargó una cadena vacía a propósito".
+// nullIfEmpty convierte un string vacío en nil para que se guarde como NULL
+// en columnas opcionales (cpu, ram, sistema_operativo, software_instalado) en
+// vez de una cadena vacía — son cosas distintas: "no se cargó este dato" vs.
 func nullIfEmpty(s string) *string {
 	if s == "" {
 		return nil
@@ -330,14 +313,6 @@ func nullIfEmpty(s string) *string {
 
 // ListarEquipos: el inventario entero, o solo lo que no está en ningún carro
 // —el proyector, los cargadores, las notebooks de otro modelo—.
-//
-// Es una consulta aparte y no un filtro de ListarEquiposPorCarro porque no
-// responde la misma pregunta: aquella arma la ficha de un carro, y esta
-// atraviesa el inventario.
-//
-// El orden pone los sueltos primero (los de carro tienen carro_id, que no es
-// NULL) y después ordena por tipo y nombre. En los de carro `nombre` es NULL,
-// así que el desempate real entre ellos lo da el identificador.
 func (r *PostgresRepo) ListarEquipos(ctx context.Context, soloSueltos bool) ([]*domain.Equipo, error) {
 	filtro := ""
 	if soloSueltos {

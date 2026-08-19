@@ -37,8 +37,7 @@ func TestListaDeEquipos(t *testing.T) {
 }
 
 // TestCorreo_Recordatorio_ExplicaLaReglaDeLosCuarentaMinutos: sin esa línea,
-// liberar la reserva después se lee como que el sistema se la quitó de
-// prepo. Por eso se repite en cada recordatorio y no se explica una sola vez.
+// liberar la reserva después se lee como que el sistema se la quitó de prepo.
 func TestCorreo_Recordatorio_ExplicaLaReglaDeLosCuarentaMinutos(t *testing.T) {
 	bus, enviador := mensajeroDePrueba()
 
@@ -85,8 +84,7 @@ func TestCorreo_Recordatorio_SinEmailNoMandaNada(t *testing.T) {
 }
 
 // TestCorreo_ReservaSinRetirar_OfreceLasSalidasQueQuedan: el aviso sale
-// mientras todavía se puede hacer algo, así que tiene que decir qué. Un correo
-// que solo constata no le sirve a nadie.
+// mientras todavía se puede hacer algo, así que tiene que decir qué.
 func TestCorreo_ReservaSinRetirar_OfreceLasSalidasQueQuedan(t *testing.T) {
 	bus, enviador := mensajeroDePrueba()
 
@@ -114,9 +112,9 @@ func TestCorreo_ReservaSinRetirar_OfreceLasSalidasQueQuedan(t *testing.T) {
 	}
 }
 
-// El aviso NO puede estar escrito como si ya hubiera pasado: sale a los quince
-// minutos justamente para que el docente todavía pueda ir, cambiar una máquina
-// o cancelar.
+// El aviso NO puede estar escrito como si ya hubiera pasado: sale a los
+// quince minutos justamente para que el docente todavía pueda ir, cambiar una
+// máquina o cancelar.
 func TestMensajeDeReservaSinRetirar_HablaEnFuturo(t *testing.T) {
 	mensaje := mensajeDeReservaSinRetirar(eventbus.ReservaSinRetirar{
 		MateriaNombre: "Matemáticas", HoraInicio: 8 * time.Hour,
@@ -171,8 +169,7 @@ func TestCorreo_Demora_VaALosAdminsYAQuienLaTiene(t *testing.T) {
 }
 
 // TestCorreo_Demora_SinCuentaSoloAvisaALosAdmins: quien se llevó una máquina
-// para un trámite muchas veces no tiene cuenta. No hay a dónde mandarle
-// nada, y por eso el aviso a los Admin es el que no puede fallar.
+// para un trámite muchas veces no tiene cuenta.
 func TestCorreo_Demora_SinCuentaSoloAvisaALosAdmins(t *testing.T) {
 	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
 
@@ -256,10 +253,7 @@ func TestCorreo_BarridoConListasVaciasNoMandaNada(t *testing.T) {
 
 // TestCorreo_Demora_DiceCuandoSalioYCuandoTeniaQueVolver: el correo a los
 // Admin dice "la tiene X desde las 10:15, tenía que volver a las 11:30", y
-// esas dos horas son datos distintos. Los dos huecos se llenaban con
-// DebioVolverA, así que el correo repetía la misma hora y afirmaba que la
-// máquina había salido justo cuando tenía que estar de vuelta — o sea, que
-// nunca la tuvo nadie. Sin este test no había nada que mirara ese renglón.
+// esas dos horas son datos distintos.
 func TestCorreo_Demora_DiceCuandoSalioYCuandoTeniaQueVolver(t *testing.T) {
 	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
 
@@ -286,10 +280,7 @@ func TestCorreo_Demora_DiceCuandoSalioYCuandoTeniaQueVolver(t *testing.T) {
 }
 
 // TestBarrido_LasHorasDeUnPrestamoViajanEnLaZonaDeLaEscuela: quien arma el
-// texto solo formatea (ver eventbus.PrestamoDemorado). Es el barrido el que
-// convierte, porque es el único que tiene el reloj de la institución. Con la
-// hora cruda de la base —timestamptz, que pgx entrega en UTC— el aviso decía
-// "tenía que devolverla a las 21:12" cuando en la escuela eran las 18:12.
+// texto solo formatea (ver eventbus.PrestamoDemorado).
 func TestBarrido_LasHorasDeUnPrestamoViajanEnLaZonaDeLaEscuela(t *testing.T) {
 	escuela := time.FixedZone("prueba", -3*60*60)
 	debioVolver := time.Date(2026, time.August, 10, 21, 12, 0, 0, time.UTC).In(escuela)

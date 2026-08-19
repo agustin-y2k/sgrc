@@ -9,19 +9,8 @@ import (
 )
 
 // Marcas de preferencia de materia por equipo (RF-03.21).
-//
-// Ninguna operación de este archivo toca una reserva, ni consulta si las
-// hay. Es la propiedad que define la funcionalidad: la marca SÓLO ORDENA la
-// lista al reservar, así que ponerla, cambiarla o sacarla no puede entrar en
-// conflicto con nada que ya esté reservado. Es lo que permite que el Admin
-// marque el inventario en cualquier momento del año, no sólo antes de que
-// se cargue la grilla.
 
 // NuevaPreferenciaParams es una marca aplicada a varios equipos de una vez.
-//
-// El alta es masiva por el mismo motivo que la de licencias (RF-03.11): lo
-// normal es marcar las ocho PCs de un carro con el mismo criterio, y de a
-// una son ocho recorridas por el mismo formulario.
 type NuevaPreferenciaParams struct {
 	EquipoIDs     []string
 	MateriaNombre string
@@ -31,11 +20,6 @@ type NuevaPreferenciaParams struct {
 }
 
 // ResultadoAltaDePreferencias separa lo creado de lo que ya estaba.
-//
-// Que un equipo ya tenga la marca no es un error del lote: al marcar un
-// carro entero es esperable que alguna máquina ya estuviera marcada de
-// antes, y abortar todo por eso obligaría al Admin a averiguar cuál y
-// destildarla. Se informa y se sigue.
 type ResultadoAltaDePreferencias struct {
 	Creadas          []*domain.PreferenciaDeEquipo
 	EquiposQueYaTeni []string
@@ -52,9 +36,9 @@ func (s *Service) MarcarPreferencia(ctx context.Context, params NuevaPreferencia
 		p, err := domain.NuevaPreferencia(s.nuevoID(), equipoID, params.MateriaNombre,
 			params.Anio, params.Division, params.Prioridad)
 		if err != nil {
-			// La materia, el alcance y la prioridad son los mismos para todo
-			// el lote: si no validan, no validan para ninguno y seguir
-			// intentando con las demás máquinas no puede cambiar nada.
+			// La materia, el alcance y la prioridad son los mismos para todo el lote:
+			// si no validan, no validan para ninguno y seguir intentando con las demás
+			// máquinas no puede cambiar nada.
 			return nil, err
 		}
 
@@ -71,19 +55,15 @@ func (s *Service) MarcarPreferencia(ctx context.Context, params NuevaPreferencia
 }
 
 // EditarPreferencia cambia el alcance y la prioridad de una marca existente.
-//
-// La materia no se edita: cambiarla es otra marca. Dejarla editable haría
-// que "corregir el año" y "apuntar a otra materia" fueran la misma
-// operación, y sólo la primera es una corrección.
 func (s *Service) EditarPreferencia(ctx context.Context, id string, anio *int, division *string, prioridad int) (*domain.PreferenciaDeEquipo, error) {
 	actual, err := s.repo.BuscarPreferenciaPorID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Se reconstruye por el constructor en vez de asignar campos sueltos:
-	// así el alcance editado pasa por las mismas validaciones que el nuevo
-	// (una división sin año, por ejemplo).
+	// Se reconstruye por el constructor en vez de asignar campos sueltos: así el
+	// alcance editado pasa por las mismas validaciones que el nuevo (una
+	// división sin año, por ejemplo).
 	editada, err := domain.NuevaPreferencia(actual.ID, actual.EquipoID, actual.MateriaNombre,
 		anio, division, prioridad)
 	if err != nil {

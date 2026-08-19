@@ -33,9 +33,8 @@ func tokenValido(t *testing.T, secret []byte, exp time.Time) string {
 	return signed
 }
 
-// cuentaVigenteFalsa responde que la cuenta existe y está habilitada, con
-// el rol que se le indique. Es el equivalente en memoria de la consulta que
-// auth/infrastructure hace contra la tabla usuario.
+// cuentaVigenteFalsa responde que la cuenta existe y está habilitada, con el
+// rol que se le indique.
 func cuentaVigenteFalsa(rol string) CuentaVigente {
 	return func(context.Context, string) (EstadoDeCuenta, error) {
 		return EstadoDeCuenta{Vigente: true, Rol: rol}, nil
@@ -218,9 +217,8 @@ func tokenConPasswordVencida(t *testing.T, secret []byte) string {
 	return signed
 }
 
-// Verificarlo solo en el navegador (<ProtectedRoute>) no alcanzaría: el
-// token que devuelve el login con contraseña temporal serviría contra toda
-// la API.
+// Verificarlo solo en el navegador (<ProtectedRoute>) no alcanzaría: el token
+// que devuelve el login con contraseña temporal serviría contra toda la API.
 func TestJWTAuth_PasswordTemporalSinCambiar_403(t *testing.T) {
 	app := appConProteccion(testSecret)
 
@@ -294,13 +292,9 @@ func TestClaimsFromCtx_SinClaimsEnContexto_NoPanikea(t *testing.T) {
 }
 
 // ── Cuenta vigente: la firma no alcanza ─────────────────────────────────
-//
 // Estos cuatro tests cubren el agujero que tenía el middleware: validaba la
 // firma y la expiración del token, pero nunca preguntaba si la cuenta seguía
-// habilitada. Un docente dado de baja (RF-02.8), rechazado, o eliminado
-// (RF-01.9) seguía leyendo Y ESCRIBIENDO con el token que ya tenía en el
-// navegador, por hasta JWT_ACCESS_TTL — una hora con la configuración por
-// defecto.
+// habilitada.
 
 func TestRequerida_CuentaDadaDeBaja_401(t *testing.T) {
 	// El token es criptográficamente válido: se emitió cuando la cuenta
@@ -326,9 +320,8 @@ func TestRequerida_CuentaDadaDeBaja_401(t *testing.T) {
 }
 
 func TestRequerida_RolDeLaBaseGanaSobreElDelToken(t *testing.T) {
-	// El token dice ADMIN; la base dice DOCENTE. Manda la base — si no, el
-	// RBAC de cada ruta decidiría con un rol congelado en el momento del
-	// login.
+	// El token dice ADMIN; la base dice DOCENTE. Manda la base — si no, el RBAC
+	// de cada ruta decidiría con un rol congelado en el momento del login.
 	aut := Autenticacion{Secret: testSecret, Vigente: cuentaVigenteFalsa("DOCENTE")}
 	app := appConAutenticacion(aut)
 

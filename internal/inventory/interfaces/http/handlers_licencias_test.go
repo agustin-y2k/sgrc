@@ -113,9 +113,8 @@ func TestHTTP_CrearLicencias_SegundaTandaInformaLasQueYaEstaban(t *testing.T) {
 	req.EquipoIDs = []string{"equipo-1", "equipo-2"}
 	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/licencias", req, "ADMIN")
 
-	// 201 y no 409: el lote se procesó, y lo que pasó con cada PC está en
-	// el cuerpo. Un conflicto obligaría a la pantalla a deshacer lo que sí
-	// entró.
+	// 201 y no 409: el lote se procesó, y lo que pasó con cada PC está en el
+	// cuerpo.
 	if codigo != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d: %s", codigo, cuerpo)
 	}
@@ -317,9 +316,7 @@ func TestHTTP_ListarLicencias_TraeLaUbicacion(t *testing.T) {
 	}
 }
 
-// TestHTTP_Licencias_SoloAdmin: un docente no tiene nada que hacer acá. La
-// información que sí le sirve para elegir PC es software_instalado, que ve
-// en la pantalla de reserva.
+// TestHTTP_Licencias_SoloAdmin: un docente no tiene nada que hacer acá.
 func TestHTTP_Licencias_SoloAdmin(t *testing.T) {
 	app := nuevaAppDeTest(repoConEquipo(t))
 
@@ -437,9 +434,7 @@ func TestHTTP_CrearEquipo_SoloAdmin(t *testing.T) {
 	}
 }
 
-// Sin filtro, `/equipos` es el inventario entero. Es lo que necesita
-// cualquier pantalla que ofrezca todo lo prestable sin recorrer carro por
-// carro — la entrega sin reserva, por ejemplo.
+// Sin filtro, `/equipos` es el inventario entero.
 func TestHTTP_ListarEquipos_SinFiltroTraeTodo(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.equipos["equipo-1"] = &domain.Equipo{
@@ -466,9 +461,7 @@ func TestHTTP_ListarEquipos_SinFiltroTraeTodo(t *testing.T) {
 	}
 }
 
-// Un valor que no es exactamente "false" no filtra nada. De un parámetro mal
-// escrito es mejor ver de más que de menos: ver de menos se confunde con "no
-// hay ninguno", y eso en el mostrador termina en "no tenemos proyector".
+// Un valor que no es exactamente "false" no filtra nada.
 func TestHTTP_ListarEquipos_FiltroMalEscritoNoEsconde(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.equipos["equipo-1"] = &domain.Equipo{

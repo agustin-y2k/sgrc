@@ -10,15 +10,7 @@ import * as inventoryApi from "@/features/inventory/api"
 import type { GravedadIncidencia, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * RF-03.5 — reportar una falla. Lo puede hacer cualquier usuario
- * autenticado, no solo un Admin: el docente sentado frente a el equipo es el
- * que ve que no anda.
- *
- * Reportar NO cambia el estado del equipo: sigue siendo reservable hasta que
- * un Admin decida sacarla de servicio (RF-03.8). Se dice en la pantalla
- * para que nadie asuma que reportar ya la bloqueó.
- */
+/** RF-03.5 — reportar una falla. */
 
 const GRAVEDADES: { valor: GravedadIncidencia; etiqueta: string; ayuda: string }[] = [
   { valor: "LEVE", etiqueta: "Leve", ayuda: "Molesta pero se puede usar" },

@@ -33,8 +33,7 @@ func TestMarcarPreferencia_MarcaTodoElLote(t *testing.T) {
 }
 
 // Marcar un carro entero cuando alguna máquina ya estaba marcada no es un
-// error del lote: se informa y se sigue. Abortar obligaría al Admin a
-// averiguar cuál y destildarla.
+// error del lote: se informa y se sigue.
 func TestMarcarPreferencia_LasYaMarcadasNoCortanElLote(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := servicioSimple(repo)

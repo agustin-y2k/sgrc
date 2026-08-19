@@ -13,38 +13,12 @@ import (
 )
 
 // formatoFechaSQL: el día viaja como texto con un cast a ::date explícito.
-// Format ya trunca a año/mes/día tomando la zona del propio time.Time —que
-// es la de la escuela, ver APP_TIMEZONE— así que no hay ninguna conversión
-// de zona de por medio ni depende de la de la sesión de Postgres.
 const formatoFechaSQL = "2006-01-02"
 
 // Las dos consultas del barrido (RF-08.10 a RF-08.13) y sus cuatro marcas.
-//
-// El JOIN con `usuario` para sacar nombre y email es SQL directo, sin pasar
-// por internal/auth — mismo criterio que ObtenedorNombreDocentePostgres y
-// que el ListadorAdmins de notification: es una lectura de dos columnas, no
-// una regla de negocio.
 
 // ReservasAVigilar: las confirmadas de hoy y mañana, con el contacto del
 // docente y el estado de custodia de cada máquina.
-//
-// El LEFT JOIN con prestamo es lo que distingue "el docente no vino" de "el
-// docente vino y se la llevó": sin él, el barrido liberaría reservas cuya PC
-// está en manos de alguien. Se cruza por equipo_id y no por reserva_id a
-// propósito — si la máquina salió por una entrega espontánea en vez de
-// contra la reserva, igual está afuera y la franja no se puede liberar.
-//
-// La subconsulta de la última entrega mira lo contrario, y por eso es una
-// subconsulta y no otro JOIN: pregunta si ESTE DOCENTE vino a buscar algo de
-// ESTA reserva, así que se cruza por reserva_id y sube al grupo. Una máquina
-// prestada a otra persona para un trámite no dice nada sobre si el docente
-// fue a dar su clase, y es esa diferencia la que decide si el aviso de
-// RF-08.20 sale y con qué plazo se libera el resto.
-//
-// El rango de fechas es grueso (hoy y mañana) porque la ventana fina la
-// decide el dominio. Traer un día de más no cuesta nada; que la consulta
-// tenga su propia idea de "una hora antes" sí, porque sería la segunda copia
-// de una regla que ya existe.
 func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]application.ReservaParaVigilar, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT
@@ -85,13 +59,8 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 		// hora_inicio y hora_fin son columnas TIME y pgx las entrega como
 		// time.Time: escanearlas directo sobre los time.Duration de
 		// ReservaParaVigilar corta con "cannot scan time (OID 1083) in binary
-		// format into *time.Duration", y con eso muere el barrido entero —
-		// esta consulta es la primera de las dos. Se pasa por las mismas
-		// horaComoDuracion/duracionComoHora que usa todo el resto del paquete.
-		//
-		// El error solo aparece con al menos una reserva de hoy o mañana: sin
-		// filas, el Scan no se ejecuta y la consulta "anda". Por eso hay un
-		// test de integración que crea una reserva antes de mirar.
+		// format into *time.Duration", y con eso muere el barrido entero — esta
+		// consulta es la primera de las dos.
 		var horaInicio, horaFin time.Time
 		if err := rows.Scan(
 			&v.ReservaID, &v.GrupoID, &v.EquipoID, &v.Identificador,
@@ -114,10 +83,7 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 	return resultado, errorDeFilas(rows)
 }
 
-// PrestamosAVigilar: todos los abiertos. Son pocos por definición —lo que
-// hay afuera del laboratorio en este momento— así que no hace falta filtrar
-// por demora acá; eso lo decide el dominio, que además es quien sabe que un
-// préstamo sin hora pactada nunca está demorado.
+// PrestamosAVigilar: todos los abiertos.
 func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.PrestamoParaVigilar, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasPrestamoDetallado+`, COALESCE(u.email, '')
@@ -142,10 +108,10 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 		var materiaNombre *string
 
 		// El orden y la cantidad los manda columnasPrestamoDetallado, que es
-		// compartida con prestamo_repo.go: cualquier columna que se le agregue
-		// allá hay que recibirla también acá, o pgx corta con "number of field
-		// descriptions must equal number of destinations" y el barrido entero
-		// deja de correr en silencio. Es lo que pasó con retirado_por.
+		// compartida con prestamo_repo.go: cualquier columna que se le agregue allá
+		// hay que recibirla también acá, o pgx corta con "number of field
+		// descriptions must equal number of destinations" y el barrido entero deja
+		// de correr en silencio.
 		if err := rows.Scan(
 			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 			&p.RetiradoPor, &motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
@@ -169,12 +135,7 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 }
 
 // ── Las marcas ──────────────────────────────────────────────────────────
-//
-// Cada una toca UNA columna. Entre que el barrido lee y termina de hablar
-// con el servidor de correo pueden pasar decenas de segundos, y en ese rato
-// un Admin puede haber cancelado la reserva o recibido la máquina desde la
-// pantalla: un UPDATE completo pisaría eso con lo que el barrido tenía en
-// memoria. Es la misma lección que MarcarAvisosEnviados en licencias.
+// Cada una toca UNA columna.
 
 func (r *PostgresRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
 	return r.marcar(ctx, `UPDATE reserva_grupo SET recordatorio_enviado_en=$2 WHERE id=$1`,
@@ -221,20 +182,13 @@ func (r *PostgresRepo) marcar(ctx context.Context, sql, id string, ahora time.Ti
 	return nil
 }
 
-// ProximaReservaDeEquipo: la siguiente reserva confirmada de esa máquina, con el
-// contacto del docente ya resuelto.
-//
-// LIMIT 1 con el mismo orden que ListarReservasFuturasDeEquipo. Es una consulta
-// aparte y no un filtro sobre aquella porque lo que cambia no es el criterio
-// sino lo que hace falta traer: para avisar por correo hace falta la
-// dirección, y esa consulta devuelve reservas peladas.
+// ProximaReservaDeEquipo: la siguiente reserva confirmada de esa máquina, con
+// el contacto del docente ya resuelto.
 func (r *PostgresRepo) ProximaReservaDeEquipo(ctx context.Context, equipoID string, desde time.Time) (*application.ProximaReserva, error) {
 	var p application.ProximaReserva
 	// hora_inicio es una columna TIME y pgx la entrega como time.Time:
 	// escanearla directo sobre el time.Duration de ProximaReserva corta con
 	// "cannot scan time (OID 1083) in binary format into *time.Duration".
-	// Es el mismo cuidado que tiene ReservasAVigilar unas líneas más arriba,
-	// y la misma conversión que usa todo el paquete.
 	var horaInicio time.Time
 	err := r.db.QueryRow(ctx, `
 		SELECT COALESCE(g.creado_por::text, ''),

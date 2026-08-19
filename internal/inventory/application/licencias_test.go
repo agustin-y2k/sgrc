@@ -84,9 +84,9 @@ func TestCrearLicencias_LasQueYaLaTenianSeSalteanYSeInforman(t *testing.T) {
 	}
 }
 
-// TestCrearLicencias_ElLoteEsReintentable es la razón por la que un
-// duplicado no aborta: si algo se rompe en el medio, volver a mandar el
-// mismo request termina el trabajo sin duplicar nada.
+// TestCrearLicencias_ElLoteEsReintentable es la razón por la que un duplicado
+// no aborta: si algo se rompe en el medio, volver a mandar el mismo request
+// termina el trabajo sin duplicar nada.
 func TestCrearLicencias_ElLoteEsReintentable(t *testing.T) {
 	repo := repoConCarroYEquipos(3)
 	svc := servicioSimple(repo)
@@ -368,8 +368,8 @@ func TestEditarLicencia_CambiarDuracionNoMueveElVencimiento(t *testing.T) {
 }
 
 // TestEditarLicencia_DuracionYRecalculoEnElMismoRequest cubre el botón
-// "recalcular": cambiar la duración y pedir explícitamente que el
-// vencimiento se rehaga desde la última renovación conocida.
+// "recalcular": cambiar la duración y pedir explícitamente que el vencimiento
+// se rehaga desde la última renovación conocida.
 func TestEditarLicencia_DuracionYRecalculoEnElMismoRequest(t *testing.T) {
 	repo := repoConCarroYEquipos(1)
 	l := licenciaCargada(t, repo, "lic-1", "equipo-1", dia(2026, time.January, 20))

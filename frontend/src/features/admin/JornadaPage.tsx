@@ -22,30 +22,7 @@ import {
 import type { TramoAgrupado } from "@/features/admin/jornada"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * La jornada de la institución: qué días y en qué horas abre la escuela.
- *
- * Es la pantalla que reemplaza a una suposición del código. Hasta acá el
- * sistema daba por sentado "lunes a viernes", lo cual dejaba afuera a las
- * escuelas de jornada extendida o albergue —que dictan el fin de semana— y a
- * las nocturnas, cuyo horario no se parece al de la mañana.
- *
- * Sin bloques cargados no hay restricción, y eso es deliberado: el sistema
- * no inventa un calendario que nadie le dijo. Recién cuando alguien declara
- * el primer tramo empieza a haber días cerrados.
- *
- * Se carga por varios días a la vez aunque el backend guarde un bloque por
- * día. Cargarla de a un día era honesto con el modelo y pésimo de usar: la
- * escuela típica abre con el mismo horario toda la semana, y eso eran cinco
- * pasadas idénticas por el formulario que después se leían como cinco líneas
- * sueltas. El modelo sigue siendo por día —cada uno se puede mover solo— y
- * lo que cambia es cómo se agrupa para verlo y para tocarlo.
- *
- * Agrupar no puede costar precisión, así que el grupo se despliega y cada
- * día se edita o se quita por su cuenta: la escuela que abre de 8 a 12 de
- * lunes a viernes salvo el martes, que cierra a las 14, se declara sin
- * desarmar nada. El agrupado se rehace solo con lo que devuelve el servidor.
- */
+/** La jornada de la institución: qué días y en qué horas abre la escuela. */
 
 /** Los campos de un tramo, compartidos por el alta y la edición. */
 type FormTramo = { dias: DiaSemana[]; horaInicio: string; horaFin: string }
@@ -53,9 +30,9 @@ type FormTramo = { dias: DiaSemana[]; horaInicio: string; horaFin: string }
 const TRAMO_VACIO: FormTramo = { dias: [], horaInicio: "08:00", horaFin: "12:00" }
 
 /**
- * Sin días marcados no se arranca: el formulario no adivina "lunes a
- * viernes" porque es exactamente la suposición que esta pantalla vino a
- * sacar del código. Los atajos están al lado para que igual sea un clic.
+ * Sin días marcados no se arranca: el formulario no adivina "lunes a viernes"
+ * porque es exactamente la suposición que esta pantalla vino a sacar del
+ * código.
  */
 function SelectorDeDias({
   valor,
@@ -185,20 +162,7 @@ function motivoParaNoGuardar(v: FormTramo): string {
   return ""
 }
 
-/**
- * Un día suelto de un tramo, con su propio horario editable.
- *
- * Existe porque agrupar no puede costar precisión: una escuela abre de 8 a 12
- * de lunes a viernes salvo el martes, que cierra a las 14, y eso tiene que
- * poder decirse sin desarmar el grupo y volver a cargarlo día por día. Editar
- * acá toca UN bloque —el que ya existe para ese día— y el reagrupado se
- * acomoda solo: si el martes pasa a coincidir con otro horario ya cargado,
- * la próxima lectura lo muestra junto a ese.
- *
- * El horario en edición es estado local y no del padre porque muere con el
- * formulario: al guardar o cancelar, lo que vale vuelve a ser lo que dice el
- * servidor.
- */
+/** Un día suelto de un tramo, con su propio horario editable. */
 function FilaDeDia({
   bloque,
   deshabilitado,
@@ -293,15 +257,7 @@ function FilaDeDia({
   )
 }
 
-/**
- * Un paso del guardado, atado al día que lo motivó.
- *
- * Guardar un tramo de lunes a viernes son cinco llamadas al backend, que las
- * valida de a una: el martes puede pisar otro tramo y el resto entrar sin
- * problema. Se ejecutan en orden y se juntan los que fallaron, para poder
- * decir cuáles quedaron sin guardar en vez de un "algo salió mal" que obliga
- * a mirar la lista para adivinar qué pasó.
- */
+/** Un paso del guardado, atado al día que lo motivó. */
 type Paso = { dia: DiaSemana; ejecutar: () => Promise<unknown> }
 
 async function ejecutarEnOrden(pasos: Paso[]): Promise<string[]> {
@@ -316,13 +272,7 @@ async function ejecutarEnOrden(pasos: Paso[]): Promise<string[]> {
   return fallos
 }
 
-/**
- * Los pasos para dejar un tramo como dice el formulario.
- *
- * El orden importa. Los borrados van primero porque liberan lugar: correr el
- * cierre de las 12:30 a las 13:30 cuando hay otro tramo a las 13:00 solo
- * entra si ese otro ya se fue. Después las ediciones, y último las altas.
- */
+/** Los pasos para dejar un tramo como dice el formulario. */
 function pasosDeEdicion(grupo: TramoAgrupado, valor: FormTramo): Paso[] {
   const quitados = grupo.bloques.filter((b) => !valor.dias.includes(b.diaSemana))
   const conservados = grupo.bloques.filter((b) => valor.dias.includes(b.diaSemana))
@@ -336,9 +286,9 @@ function pasosDeEdicion(grupo: TramoAgrupado, valor: FormTramo): Paso[] {
       dia: b.diaSemana,
       ejecutar: () => disponibilidadApi.eliminarBloqueDeJornada(b.id),
     })),
-    // Sin cambio de horario no hay nada que editar en los días que siguen:
-    // un PATCH que manda lo mismo que ya está solo agrega un request que
-    // puede fallar por un solape consigo mismo mal resuelto.
+    // Sin cambio de horario no hay nada que editar en los días que siguen: un
+    // PATCH que manda lo mismo que ya está solo agrega un request que puede
+    // fallar por un solape consigo mismo mal resuelto.
     ...(horarioCambio
       ? conservados.map((b) => ({
           dia: b.diaSemana,
@@ -383,12 +333,6 @@ export function JornadaPage() {
       ),
     // Siempre se invalida, también con fallos parciales: los días que sí
     // entraron ya están guardados y la lista tiene que mostrarlos.
-    // Las horas quedan puestas y los días se limpian: lo que sigue después
-    // de cargar un turno suele ser cargar el otro, con las mismas horas casi
-    // nunca y con los mismos días muy seguido — pero volver a apretar
-    // "Agregar" con los días todavía marcados duplicaría el tramo que se
-    // acaba de crear. Si algo falló, quedan marcados solo los días que hay
-    // que rehacer.
     onSuccess: async (fallidos, v) => {
       setFallos(fallidos)
       setNuevo({ ...v, dias: v.dias.filter((d) => fallidos.some(nombra(d))) })
@@ -681,10 +625,7 @@ export function JornadaPage() {
   )
 }
 
-/**
- * Identifica al tramo en la pantalla. Es el horario y no un ID porque un
- * tramo agrupado no tiene uno: son varios bloques, uno por día.
- */
+/** Identifica al tramo en la pantalla. */
 function claveDe(t: TramoAgrupado): string {
   return `${t.horaInicio}-${t.horaFin}`
 }

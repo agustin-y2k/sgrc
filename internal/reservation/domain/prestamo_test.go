@@ -102,10 +102,8 @@ func TestNuevoPrestamo_NombreInvalido(t *testing.T) {
 	}
 }
 
-// TestNuevoPrestamo_DevolucionYaVencidaEsValida: el docente que llegó tarde
-// y se las llevó igual. La reserva terminó a las 10:00 y la entrega se anota
-// a las 10:15, así que la hora de devolución ya pasó al registrarla. Es un
-// dato correcto, no un error de carga.
+// TestNuevoPrestamo_DevolucionYaVencidaEsValida: el docente que llegó tarde y
+// se las llevó igual.
 func TestNuevoPrestamo_DevolucionYaVencidaEsValida(t *testing.T) {
 	vence := instante(10, 0)
 	d := entregaMinima()
@@ -182,9 +180,8 @@ func TestDemorado(t *testing.T) {
 		{"justo a la hora", &vence, false, instante(10, 0), false, 0},
 		{"quince minutos tarde", &vence, false, instante(10, 15), true, 15},
 		{"ya devuelta", &vence, true, instante(10, 15), false, 0},
-		// Un "vengo en un rato" no se puede reclamar: no hay contra qué
-		// comparar, y tratarlo como vencido convertiría cada préstamo suelto
-		// en un aviso.
+		// Un "vengo en un rato" no se puede reclamar: no hay contra qué comparar, y
+		// tratarlo como vencido convertiría cada préstamo suelto en un aviso.
 		{"sin hora pactada", nil, false, instante(23, 0), false, 0},
 	}
 

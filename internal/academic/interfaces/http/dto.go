@@ -81,10 +81,9 @@ func toMateriaResponse(m *domain.Materia) materiaResponse {
 	return materiaResponse{ID: m.ID, CursoID: m.CursoID, Nombre: m.Nombre, Activo: m.Activo, Archivado: m.Archivado}
 }
 
-// docenteMateriaResponse no incluye nombre/apellido del docente todavía —
-// eso requeriría consultar la tabla usuario (de auth) desde acá, lo cual
-// no está en el alcance de esta pasada. El frontend puede resolverlo con
-// una consulta aparte a GET /api/auth/usuarios mientras tanto.
+// docenteMateriaResponse no incluye nombre/apellido del docente todavía — eso
+// requeriría consultar la tabla usuario (de auth) desde acá, lo cual no está
+// en el alcance de esta pasada.
 type docenteMateriaResponse struct {
 	ID        string `json:"id"`
 	UsuarioID string `json:"usuarioId"`
@@ -123,9 +122,7 @@ type materiaReservableResponse struct {
 }
 
 // removerDocenteResponse: RF-02.8 — quitar al único docente de una materia
-// cancela sus reservas futuras en cascada. El conteo va en la respuesta
-// para que el Admin se entere de que acaba de cancelar clases; con un 200
-// vacío la cascada sería invisible.
+// cancela sus reservas futuras en cascada.
 type removerDocenteResponse struct {
 	ReservasCanceladas int `json:"reservasCanceladas"`
 }

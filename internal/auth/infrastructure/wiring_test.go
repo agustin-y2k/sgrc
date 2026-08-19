@@ -21,9 +21,9 @@ func TestGenerarPasswordTemporal_LongitudYAlfabeto(t *testing.T) {
 }
 
 func TestGenerarPasswordTemporal_DosLlamadasDistintas(t *testing.T) {
-	// Con 68 bits de entropía la probabilidad de colisión es
-	// astronómicamente baja — si esto falla alguna vez, hay un bug real
-	// en la fuente de aleatoriedad, no mala suerte.
+	// Con 68 bits de entropía la probabilidad de colisión es astronómicamente
+	// baja — si esto falla alguna vez, hay un bug real en la fuente de
+	// aleatoriedad, no mala suerte.
 	p1, _ := GenerarPasswordTemporal()
 	p2, _ := GenerarPasswordTemporal()
 	if p1 == p2 {

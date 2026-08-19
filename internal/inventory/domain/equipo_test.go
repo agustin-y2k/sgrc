@@ -34,9 +34,9 @@ func TestParseEstadoEquipo_Invalido(t *testing.T) {
 	}
 }
 
-// TestPuedeTransicionarA_TodasLasCombinaciones prueba las 9 combinaciones
-// (3 estados x 3 destinos) explícitamente, para que un cambio futuro no
-// pueda abrir una transición no revisada sin que algún test lo note.
+// TestPuedeTransicionarA_TodasLasCombinaciones prueba las 9 combinaciones (3
+// estados x 3 destinos) explícitamente, para que un cambio futuro no pueda
+// abrir una transición no revisada sin que algún test lo note.
 func TestPuedeTransicionarA_TodasLasCombinaciones(t *testing.T) {
 	estados := []EstadoEquipo{EstadoDisponible, EstadoEnMantenimiento, EstadoFueraDeServicio}
 
@@ -87,9 +87,7 @@ func TestNuevaEquipo_IdentificadorInvalido_Error(t *testing.T) {
 	}
 }
 
-// El número de serie es texto porque el de fábrica trae letras. Con un tipo
-// numérico este caso no entra, y es el primero que aparece al cargar el
-// inventario real.
+// El número de serie es texto porque el de fábrica trae letras.
 func TestNuevaEquipo_NumeroSerieConLetras_OK(t *testing.T) {
 	equipo, err := NuevoEquipoDeCarro("id1", "carro1", 1, "5CD1234ABC", false, time.Now())
 	if err != nil {

@@ -12,20 +12,6 @@ const EQUIPOS_A_LA_VISTA = 6
 
 /**
  * Una clase del docente en la pantalla de inicio, con lo que puede hacerle.
- *
- * Las dos acciones se resuelven acá y no mandan a otra pantalla, que es la
- * diferencia con el listado que había antes: las dos cosas que le pasan a
- * una reserva ya hecha —me cambiaron el aula y necesito otra máquina, o
- * directamente no la doy— son urgentes y las hace alguien que no sabe en qué
- * sección del sistema vive cada una.
- *
- * Los paneles son los mismos componentes que usa la pantalla de reservas, no
- * una segunda versión: `CambiarEquipoDeReserva` y `CancelarReserva`. Una
- * copia propia acá terminaría, con el tiempo, cancelando distinto de como
- * cancela la otra pantalla.
- *
- * Solo se abre uno por vez: los dos hablan de la misma reserva y abiertos
- * juntos se leen como un solo formulario largo con dos botones de confirmar.
  */
 export function TarjetaDeClase({
   grupo,

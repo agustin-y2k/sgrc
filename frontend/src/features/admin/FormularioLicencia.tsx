@@ -3,24 +3,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import type { Licencia, VencimientoDeclarado } from "@/features/inventory/types"
 
-/**
- * Cómo se declara el vencimiento de una licencia.
- *
- * Son cuatro opciones y no un campo de fecha porque el dato llega en formas
- * distintas según dónde esté parado quien carga, y obligarlo a convertir de
- * una a otra en la cabeza es la manera más segura de que entren fechas
- * equivocadas:
- *
- *   - "todavía no sé"  → la licencia queda a verificar, sin avisar nada
- *   - "la renové el…"  → esa fecha + los días de duración
- *   - "quedan N días"  → hoy + N, que es lo que muestra la propia máquina
- *   - "vence el…"      → la fecha, tal cual
- *
- * La primera es el default a propósito. La alternativa —arrancar en "se
- * renovó hoy"— es la que falla en la dirección peligrosa: si en realidad
- * vencía en tres días, el sistema regala treinta de silencio justo cuando
- * tendría que estar avisando.
- */
+/** Cómo se declara el vencimiento de una licencia. */
 export type FormaDeVencimiento = "sin-fecha" | "renovada-el" | "quedan-dias" | "vence-el"
 
 export type CamposVencimiento = {
@@ -48,10 +31,7 @@ export function vencimientoDesdeLicencia(l: Licencia): CamposVencimiento {
   }
 }
 
-/**
- * Traduce los campos al cuerpo del request. Manda UNA sola forma: el backend
- * rechaza dos con 400 porque darían fechas distintas.
- */
+/** Traduce los campos al cuerpo del request. */
 export function aVencimientoDeclarado(v: CamposVencimiento): VencimientoDeclarado {
   switch (v.forma) {
     case "renovada-el":

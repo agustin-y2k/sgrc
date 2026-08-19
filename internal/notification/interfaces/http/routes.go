@@ -7,9 +7,6 @@ import (
 )
 
 // RegisterRoutes monta las rutas de notification bajo /api/notifications.
-// Ambas son para cualquier usuario autenticado sobre sus PROPIAS
-// notificaciones — no hay ninguna ruta de Admin acá, la titularidad se
-// verifica dentro de MarcarLeida.
 func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	notifications := app.Group("/api/notifications")
 

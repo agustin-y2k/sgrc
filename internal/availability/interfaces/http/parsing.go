@@ -6,8 +6,8 @@ import (
 )
 
 // parseFecha interpreta "2026-03-09" como una fecha en UTC (medianoche) —
-// mismo criterio que reservation/interfaces/http (domain.Excepcion.Fecha
-// solo le importa el día, no la hora).
+// mismo criterio que reservation/interfaces/http (domain.Excepcion.Fecha solo
+// le importa el día, no la hora).
 func parseFecha(s string) (time.Time, error) {
 	t, err := time.Parse("2006-01-02", s)
 	if err != nil {

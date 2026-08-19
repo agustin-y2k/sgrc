@@ -13,10 +13,7 @@ import (
 // fechas de una licencia son días de calendario, no instantes.
 const formatoFecha = "2006-01-02"
 
-// parsearFechaOpcional convierte "2026-09-03" a time.Time. Devuelve un 400
-// con el campo nombrado en vez de dejar que el valor llegue como cero al
-// dominio — una fecha vacía silenciosa terminaría fijando el vencimiento en
-// el año 1.
+// parsearFechaOpcional convierte "2026-09-03" a time.Time.
 func parsearFechaOpcional(campo string, valor *string) (*time.Time, error) {
 	if valor == nil || *valor == "" {
 		return nil, nil
@@ -39,10 +36,7 @@ func formatearFechaOpcional(t *time.Time) *string {
 
 // ── Requests ────────────────────────────────────────────────────────────
 
-// vencimientoRequest son las tres formas de declarar el vencimiento. Está
-// embebido en el alta y en la edición para que las dos acepten exactamente
-// lo mismo: cargar la fecha por primera vez y corregirla son la misma
-// operación con distinto punto de partida.
+// vencimientoRequest son las tres formas de declarar el vencimiento.
 type vencimientoRequest struct {
 	// RenovadaEl: "la renové el martes". Se le suman los días de duración.
 	RenovadaEl *string `json:"renovadaEl,omitempty"`
@@ -68,9 +62,7 @@ func (v vencimientoRequest) aDominio() (application.VencimientoDeclarado, error)
 	}, nil
 }
 
-// diasAvisoPorDefecto: avisar el día anterior. Es lo que hace falta para una
-// licencia que se renueva sola en cinco minutos; una que dependa de que
-// alguien la consiga se configura con más.
+// diasAvisoPorDefecto: avisar el día anterior.
 const diasAvisoPorDefecto = 1
 
 type crearLicenciasRequest struct {
@@ -114,19 +106,12 @@ type licenciaResponse struct {
 	VencimientoFijadoPor *string    `json:"vencimientoFijadoPor,omitempty"`
 	VencimientoFijadoEn  *time.Time `json:"vencimientoFijadoEn,omitempty"`
 
-	// DiasRestantes y Estado son derivados: no están en la base, se
-	// calculan contra el día de hoy. Viajan resueltos desde el backend para
-	// que la pantalla, el correo y el job digan lo mismo — si el navegador
-	// los calculara, bastaría con tener el reloj corrido para que la tabla
-	// mostrara un día distinto del que dispara el aviso.
+	// DiasRestantes y Estado son derivados: no están en la base, se calculan
+	// contra el día de hoy.
 	DiasRestantes *int   `json:"diasRestantes,omitempty"`
 	Estado        string `json:"estado"`
 
-	// Ubicación. Solo viene en el listado general; en el de una PC ya se
-	// sabe de qué máquina se está hablando.
-	//
-	// Etiqueta es lo que se muestra: "PC 3" o "Notebook chica". Los dos de
-	// abajo van vacíos cuando el equipo no está en ningún carro.
+	// Ubicación.
 	Etiqueta         string `json:"etiqueta,omitempty"`
 	Identificador    int    `json:"identificador,omitempty"`
 	CarroID          string `json:"carroId,omitempty"`
@@ -160,17 +145,14 @@ func toLicenciaConUbicacionResponse(u *application.LicenciaConUbicacion, hoy tim
 	return r
 }
 
-// altaMasivaResponse dice qué pasó con cada equipo del lote. EquiposQueYaLaTenian
-// no es un error: marcar las diez PCs del carro cuando ocho ya estaban
-// cargadas tiene que funcionar, y la pantalla lo informa sin alarmar.
+// altaMasivaResponse dice qué pasó con cada equipo del lote.
 type altaMasivaResponse struct {
 	Creadas              []licenciaResponse `json:"creadas"`
 	EquiposQueYaLaTenian []string           `json:"equiposQueYaLaTenian,omitempty"`
 }
 
 // renovacionResponse — SinFechaPrevia son las que no se pudieron renovar
-// porque todavía no tienen vencimiento cargado. Hay que cargarlas diciendo
-// cómo se sabe la fecha, no "renovarlas".
+// porque todavía no tienen vencimiento cargado.
 type renovacionResponse struct {
 	Renovadas      []licenciaResponse `json:"renovadas"`
 	SinFechaPrevia []string           `json:"sinFechaPrevia,omitempty"`

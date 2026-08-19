@@ -10,8 +10,8 @@ import (
 )
 
 // busEspia guarda lo publicado para poder afirmar cuántos eventos salieron,
-// que es el punto de todo esto: ocho licencias del mismo carro tienen que
-// dar UN aviso.
+// que es el punto de todo esto: ocho licencias del mismo carro tienen que dar
+// UN aviso.
 type busEspia struct {
 	publicados []eventbus.Evento
 }
@@ -82,8 +82,8 @@ func TestBarrer_LicenciaQueVenceManana(t *testing.T) {
 }
 
 // TestBarrer_DosCorridasElMismoDiaAvisanUnaVez es la prueba de la
-// idempotencia completa: el job corre cada hora y el contenedor se
-// reinicia, pero el mail sale uno solo.
+// idempotencia completa: el job corre cada hora y el contenedor se reinicia,
+// pero el mail sale uno solo.
 func TestBarrer_DosCorridasElMismoDiaAvisanUnaVez(t *testing.T) {
 	repo := repoConCarroYEquipos(1)
 	vence := dia(2026, time.August, 8)
@@ -131,8 +131,8 @@ func TestBarrer_LicenciaVencidaVaAlGrupoDeVencidas(t *testing.T) {
 }
 
 // TestBarrer_OchoEquiposDelMismoCarroDanUnSoloAviso es la lección que el
-// proyecto ya aprendió con las cancelaciones de reservas: un evento por
-// fila afectada llena la campana de avisos idénticos.
+// proyecto ya aprendió con las cancelaciones de reservas: un evento por fila
+// afectada llena la campana de avisos idénticos.
 func TestBarrer_OchoEquiposDelMismoCarroDanUnSoloAviso(t *testing.T) {
 	repo := repoConCarroYEquipos(8)
 	vence := dia(2026, time.August, 8)
@@ -180,8 +180,7 @@ func TestBarrer_SinNadaQueAvisarNoPublica(t *testing.T) {
 }
 
 // TestBarrer_UnaLicenciaSinFechaNoAvisaNunca: el estado "a verificar" es
-// silencioso a propósito. Si avisara, la única forma de callar el aviso
-// sería inventarle una fecha.
+// silencioso a propósito.
 func TestBarrer_UnaLicenciaSinFechaNoAvisaNunca(t *testing.T) {
 	repo := repoConCarroYEquipos(1)
 	licenciaEnEquipo(t, repo, "lic-1", "equipo-1", "AutoCAD 2027", nil, 365)

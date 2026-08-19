@@ -65,8 +65,6 @@ func TestPostgresRepo_Licencia_CrearSinFechaYBuscar(t *testing.T) {
 
 func TestPostgresRepo_Licencia_GuardarYReleerLaFecha(t *testing.T) {
 	// Confirma contra Postgres real que una fecha guardada vuelve idéntica.
-	// Es lo que hace confiable al contador: si el DATE volviera corrido por
-	// zona horaria, "faltan 30 días" pasaría a ser 29 o 31.
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
@@ -210,9 +208,8 @@ func TestPostgresRepo_Licencia_ListarTraeLaUbicacionYOrdena(t *testing.T) {
 }
 
 // TestPostgresRepo_Licencia_CandidatasAAviso cubre el filtro grueso del job
-// contra Postgres real: la aritmética de DATE con dias_aviso y el
-// IS DISTINCT FROM de las marcas. Es la consulta que decide si un mail sale
-// o no sale, y la que no se puede verificar con un fake.
+// contra Postgres real: la aritmética de DATE con dias_aviso y el IS DISTINCT
+// FROM de las marcas.
 func TestPostgresRepo_Licencia_CandidatasAAviso(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -264,8 +261,8 @@ func TestPostgresRepo_Licencia_CandidatasAAviso(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_Licencia_MarcarAvisosSacaDeLasCandidatas es la mitad de
-// la idempotencia que vive en la base: una vez marcada, la fila no vuelve a
+// TestPostgresRepo_Licencia_MarcarAvisosSacaDeLasCandidatas es la mitad de la
+// idempotencia que vive en la base: una vez marcada, la fila no vuelve a
 // aparecer aunque el job corra cada hora.
 func TestPostgresRepo_Licencia_MarcarAvisosSacaDeLasCandidatas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
@@ -295,9 +292,8 @@ func TestPostgresRepo_Licencia_MarcarAvisosSacaDeLasCandidatas(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	// Sigue siendo candidata, y está bien: mañana le toca el aviso del día
-	// del vencimiento. Lo que no puede es volver a disparar el aviso previo
-	// hoy — y eso lo decide el dominio, que es donde vive la regla fina.
+	// Sigue siendo candidata, y está bien: mañana le toca el aviso del día del
+	// vencimiento.
 	candidatas, err = repo.ListarCandidatasAAviso(ctx, hoy)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -390,20 +386,6 @@ func TestPostgresRepo_Licencia_EquipoDadaDeBajaNoAvisa(t *testing.T) {
 
 // TestPostgresRepo_Licencia_CandidatasNoDependenDeLaZonaDeLaSesion fija el
 // borde exacto del aviso contra un cambio futuro de la consulta.
-//
-// Hoy es correcta y no por casualidad: Postgres infiere el tipo de `$1` como
-// `date` a partir del operando izquierdo, así que pgx manda solo año/mes/día
-// y la comparación es date contra date. Pero alcanza con que alguien toque
-// esa expresión —comparar contra `now()`, castear a timestamp, agregar una
-// hora— para que el parámetro pase a inferirse como timestamptz y Postgres
-// tenga que convertir el DATE usando la zona de la SESIÓN. Ahí el borde se
-// corre un día: con -03:00, el 2026-08-07 pasa a ser 2026-08-07 03:00 UTC y
-// deja de ser <= las 00:00 de ese mismo día. La licencia que vence mañana se
-// cae del resultado y el aviso NO SALE, sin ningún error.
-//
-// Es el peor modo de falla posible para una funcionalidad cuyo único trabajo
-// es avisar, y no se vería en desarrollo: la base corre en UTC. Por eso el
-// test fuerza la zona en la sesión en vez de confiar en la del servidor.
 func TestPostgresRepo_Licencia_CandidatasNoDependenDeLaZonaDeLaSesion(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -459,9 +441,7 @@ func TestPostgresRepo_Licencia_DeUnEquipoSinCarro(t *testing.T) {
 	equipo := crearEquipoSueltoDeTest(t, repo, "NOTEBOOK", "Notebook chica", false)
 	l := crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", 30, 1)
 
-	// Vence mañana: entra en la ventana de aviso. Sin usuario, igual que los
-	// demás tests de este archivo — la columna referencia a usuario y acá no
-	// hace falta ninguno.
+	// Vence mañana: entra en la ventana de aviso.
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 	hoy := diaDe(2026, time.August, 7)
 	l.FijarVencimiento(diaDe(2026, time.August, 8), "", ahora)

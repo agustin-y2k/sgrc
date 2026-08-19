@@ -60,11 +60,11 @@ func TestParseEstado_Invalido(t *testing.T) {
 	}
 }
 
-// ── Transiciones de estado — todas las combinaciones posibles ─────────
-// Se prueban las 16 combinaciones (4 estados x 4 destinos) explícitamente
-// en vez de solo los casos "felices", para que un cambio futuro en
-// PuedeTransicionarA no pueda abrir una transición no revisada sin que
-// algún test lo note.
+// ── Transiciones de estado — todas las combinaciones posibles ───────── Se
+// prueban las 16 combinaciones (4 estados x 4 destinos) explícitamente en vez
+// de solo los casos "felices", para que un cambio futuro en
+// PuedeTransicionarA no pueda abrir una transición no revisada sin que algún
+// test lo note.
 
 func TestPuedeTransicionarA_TodasLasCombinaciones(t *testing.T) {
 	estados := []Estado{EstadoPendiente, EstadoAprobada, EstadoRechazada, EstadoBaja}
@@ -131,8 +131,6 @@ func TestCambiarEstado_AprobadaABaja_OK(t *testing.T) {
 
 func TestCambiarEstado_DesdeBaja_SiempreRechazado(t *testing.T) {
 	// El caso más importante de todo este archivo: BAJA es terminal.
-	// Ninguna transición debería lograr sacarlo de ahí, ni siquiera de
-	// vuelta a APROBADA (RF-02.9).
 	destinos := []Estado{EstadoPendiente, EstadoAprobada, EstadoRechazada, EstadoBaja}
 
 	for _, destino := range destinos {

@@ -1,6 +1,5 @@
 // Package domain contiene la entidad Notificacion — puramente interna al
-// sistema (RF-05), sin dependencias de infraestructura. Ver
-// docs/03-diagrama-clases.md y docs/01-requisitos.md.
+// sistema (RF-05), sin dependencias de infraestructura.
 package domain
 
 import (
@@ -29,10 +28,7 @@ func ParseEstado(s string) (Estado, error) {
 
 var ErrMensajeVacio = errors.New("el mensaje de la notificación no puede estar vacío")
 
-// Tipo dice de qué se trata el aviso. Existe para que la interfaz pueda
-// ofrecer la acción que corresponde —"ir a aprobar", "ver mis reservas"—
-// sin tener que adivinar leyendo el mensaje: el texto está escrito para una
-// persona y cambiarlo no debería romper un botón.
+// Tipo dice de qué se trata el aviso.
 type Tipo string
 
 const (
@@ -44,31 +40,22 @@ const (
 	// TipoReservaCancelada: RF-05.1/05.2/05.3.
 	TipoReservaCancelada Tipo = "RESERVA_CANCELADA"
 	// TipoLicenciaPorVencer: hay licencias de software que hay que renovar
-	// (RF-05.9). La pantalla del Admin lo enlaza con la de licencias, que
-	// es donde está el detalle y el botón de renovar — el aviso resume,
-	// no enumera.
+	// (RF-05.9).
 	TipoLicenciaPorVencer Tipo = "LICENCIA_POR_VENCER"
 	// TipoReservaPorComenzar: el recordatorio de que en un rato hay clase, y
-	// también el aviso de que una de esas máquinas no volvió. Comparten tipo
-	// porque para el docente la acción es la misma —mirar su reserva— y el
-	// tipo existe para elegir el botón, no para clasificar noticias.
+	// también el aviso de que una de esas máquinas no volvió.
 	TipoReservaPorComenzar Tipo = "RESERVA_POR_COMENZAR"
 	// TipoReservaNoRetirada: pasaron los minutos de gracia y esas máquinas
 	// dejaron de estar reservadas (RF-08.10).
 	TipoReservaNoRetirada Tipo = "RESERVA_NO_RETIRADA"
-	// TipoPedidoDeLiberacion: otro docente necesita un equipo que esta
-	// persona tiene reservado (RF-04.12). Es el único de esta lista que NO
-	// anuncia un cambio: la reserva sigue intacta y la decisión es suya, así
-	// que la pantalla no puede ofrecerle el mismo botón que a una
-	// cancelación.
+	// TipoPedidoDeLiberacion: otro docente necesita un equipo que esta persona
+	// tiene reservado (RF-04.12).
 	TipoPedidoDeLiberacion Tipo = "PEDIDO_DE_LIBERACION"
 	// TipoEquipoSinDevolver: para los Admin — una máquina no volvió a horario.
 	// Lleva a la pantalla de entregas, no a la de reservas.
 	TipoEquipoSinDevolver Tipo = "EQUIPO_SIN_DEVOLVER"
 
-	// TipoPedidoDeMateria: alguien pidió dictar una materia. Les llega a los
-	// Admin, que son quienes deciden, y a los docentes que ya la dictan —
-	// para ellos no es una acción, es enterarse a tiempo.
+	// TipoPedidoDeMateria: alguien pidió dictar una materia.
 	TipoPedidoDeMateria Tipo = "PEDIDO_DE_MATERIA"
 	// TipoPedidoDeMateriaResuelto: el Admin contestó ese pedido. Le llega a
 	// quien lo hizo, aprobado o no.
@@ -95,17 +82,12 @@ func ParseTipo(s string) (Tipo, error) {
 
 // Notificacion es un aviso interno para un usuario puntual — puede estar
 // vinculada a una Reserva concreta (ReservaID) o ser un aviso genérico sin
-// esa referencia (ej. "docente pendiente de aprobación" no apunta a
-// ninguna reserva).
+// esa referencia (ej.
 type Notificacion struct {
 	ID        string
 	UsuarioID string
 	ReservaID *string
 	// SobreUsuarioID: de quién habla el aviso, cuando habla de alguien.
-	// No confundir con UsuarioID, que es a quién le llega — en "X se
-	// registró y está pendiente", UsuarioID es cada Admin y este campo es X.
-	// Es lo que permite cerrar el aviso solo cuando la acción que pedía ya
-	// se hizo.
 	SobreUsuarioID *string
 	Mensaje        string
 	Tipo           Tipo
@@ -144,9 +126,7 @@ var ErrYaLeida = errors.New("la notificación ya está marcada como leída")
 
 // MarcarLeida es idempotente a propósito de NO serlo silenciosamente:
 // devuelve ErrYaLeida si se llama dos veces, para que la capa de arriba
-// decida si eso es un error real o algo que puede ignorar (ej. dos
-// pestañas del navegador marcando la misma notificación casi al mismo
-// tiempo).
+// decida si eso es un error real o algo que puede ignorar (ej.
 func (n *Notificacion) MarcarLeida(ahora time.Time) error {
 	if n.Estado == Leida {
 		return ErrYaLeida

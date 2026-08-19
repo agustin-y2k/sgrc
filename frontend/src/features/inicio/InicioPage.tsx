@@ -36,25 +36,7 @@ import { getErrorMessage } from "@/lib/api-client"
 import type { GrupoDeReservas } from "@/features/reservas/types"
 import { contar } from "@/lib/plural"
 
-/**
- * La primera pantalla después de iniciar sesión.
- *
- * Es donde cae todo el mundo todos los días, así que responde las dos
- * preguntas con las que alguien entra —"¿qué tengo hoy?" y "¿hay algo
- * esperándome?"— y ofrece el atajo a lo que venía a hacer, en vez de un
- * párrafo que explique dónde queda cada sección.
- *
- * Los dos roles entran acá pero no vienen a lo mismo, y por eso el cuerpo se
- * bifurca: un Admin abre esto para operar el mostrador —qué entregar ahora,
- * qué falta que vuelva— y lo tiene abierto todo el día; un docente entra de
- * a ratos, a reservar o a mirar qué le toca. Lo del docente vive en
- * `InicioDocente`, escrito para quien no conoce cómo está dividido el
- * sistema.
- *
- * Este archivo es el dueño de las consultas: las dos vistas se alimentan de
- * las mismas reservas, y pedirlas por separado sería la misma pregunta hecha
- * dos veces.
- */
+/** La primera pantalla después de iniciar sesión. */
 
 /** Cuántas clases resume el panel del Admin antes de mandar al listado. */
 const MAX_PROXIMAS = 5
@@ -74,12 +56,7 @@ function Indicador({
   a,
   destacado,
 }: {
-  /**
-   * null cuando la consulta que lo alimenta falló. No es lo mismo que cero:
-   * "no hay nada afuera" y "no pude preguntar qué hay afuera" llevan a
-   * decisiones distintas en el mostrador, y mostrar 0 en el segundo caso es
-   * afirmar algo que el sistema no sabe.
-   */
+  /** null cuando la consulta que lo alimenta falló. */
   valor: number | null
   rotulo: string
   detalle: string
@@ -150,9 +127,8 @@ export function InicioPage() {
     queryFn: () => reservasApi.listarReservas({ desde: hoy }),
   })
 
-  // Lo que está afuera del laboratorio: alimenta el indicador y el
-  // formulario de entrega suelta, que necesita saber qué máquinas NO
-  // ofrecer. Solo para Admin — un docente no tiene por qué verlo.
+  // Lo que está afuera del laboratorio: alimenta el indicador y el formulario
+  // de entrega suelta, que necesita saber qué máquinas NO ofrecer.
   const { data: prestamos, error: errorPrestamos } = useQuery({
     queryKey: PRESTAMOS_KEY,
     queryFn: reservasApi.listarPrestamosAbiertos,
@@ -168,9 +144,7 @@ export function InicioPage() {
   })
 
   // Sin cortar: cada vista decide cuántas muestra, pero los contadores se
-  // calculan sobre todas. Cortando acá, un docente con más clases que el
-  // corte leía "5 próximas" para siempre, y las de hoy se contaban sobre una
-  // lista ya truncada.
+  // calculan sobre todas.
   const grupos = agruparReservas(
     (reservas?.data ?? []).filter((r) => r.estado === "CONFIRMADA")
   ).sort((a, b) =>
@@ -180,8 +154,7 @@ export function InicioPage() {
   )
 
   // Cada número sale en null si su consulta falló, para que el indicador
-  // muestre "—" en vez de un cero inventado. Sin esto, un fallo de red se
-  // leía como "no hay ninguna computadora afuera del laboratorio".
+  // muestre "—" en vez de un cero inventado.
   const deHoy = errorReservas ? null : grupos.filter((g) => g.fecha === hoy).length
   const cuentasPendientes = errorPendientes ? null : (pendientes?.meta.total ?? 0)
 

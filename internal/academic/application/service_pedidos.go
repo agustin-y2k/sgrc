@@ -11,20 +11,12 @@ import (
 )
 
 // Los pedidos para dictar una materia (ver domain.PedidoDeMateria).
-//
-// Van en su propio archivo y no en service.go porque son un caso de uso
-// distinto de los de ahí: aquellos los hace un Admin sobre la estructura del
-// año; estos los inicia un docente y terminan en una conversación fuera del
-// sistema.
 
 var (
 	ErrYaDictaLaMateria = errors.New("ya estás asignado a esa materia")
 	ErrPedidoDuplicado  = errors.New("ya tenés un pedido sin resolver para esa materia")
-	// ErrFaltaCursoParaMateriaNueva: al aprobar un pedido de una materia que
-	// no existe hay que decir en qué curso crearla. El sistema no lo adivina
-	// del texto que escribió el docente ("Robótica de 5°B" es una frase, no
-	// un curso), y equivocarse acá crea una materia colgada del curso
-	// equivocado, que después hay que borrar a mano.
+	// ErrFaltaCursoParaMateriaNueva: al aprobar un pedido de una materia que no
+	// existe hay que decir en qué curso crearla.
 	ErrFaltaCursoParaMateriaNueva = errors.New("hay que indicar en qué curso se crea la materia")
 )
 
@@ -32,10 +24,8 @@ var (
 // significa que todavía no existe y va escrita a mano.
 func (s *Service) PedirMateria(ctx context.Context, usuarioID string, materiaID *string, curso, materia, motivo string) (*domain.PedidoDeMateria, error) {
 	// El pedido se arma PRIMERO, antes de tocar la base: así una entrada mal
-	// formada —sin motivo, sin materia, con las dos formas a la vez— se
-	// rechaza por lo que es (400) y no por lo primero que encuentre una
-	// consulta. Si alguien manda un pedido sin motivo sobre una materia que
-	// ya pidió, el problema es el motivo que falta, no el duplicado.
+	// formada —sin motivo, sin materia, con las dos formas a la vez— se rechaza
+	// por lo que es (400) y no por lo primero que encuentre una consulta.
 	p, err := domain.NuevoPedidoDeMateria(s.nuevoID(), usuarioID, materiaID, curso, materia, motivo, s.ahora())
 	if err != nil {
 		return nil, err
@@ -112,20 +102,6 @@ func (s *Service) PedirMateria(ctx context.Context, usuarioID string, materiaID 
 }
 
 // ResolverPedido aprueba o rechaza.
-//
-// Al aprobar hace las dos cosas que el Admin haría a mano: crea la materia
-// si no existía —en el curso que él indique— y asigna al docente. Si algo de
-// eso falla, el pedido queda pendiente: dar por resuelto lo que no se pudo
-// aplicar dejaría a la persona con un "aprobado" y sin poder reservar.
-// rolPorDefecto: si la materia todavía no tiene a nadie, quien la pide es su
-// titular; si ya la da alguien, el que se suma entra como suplente.
-//
-// El rol no da ni quita permisos (RF-02.6: es informativo), así que esto no
-// cambia lo que cada uno puede hacer. Lo que cuida es el dato: en una escuela
-// hay suplentes que cubren un cargo durante años, y también materias sin
-// titular con un suplente a cargo. Marcar "titular" a cualquiera que se suma
-// deja un registro que después nadie puede leer para saber quién es quién.
-// El Admin lo cambia al resolver si sabe que es al revés.
 func (s *Service) rolPorDefecto(ctx context.Context, materiaID string) domain.RolDocente {
 	asignados, err := s.repo.ListarDocentesDeMateria(ctx, materiaID)
 	if err != nil || len(asignados) == 0 {

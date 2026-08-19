@@ -50,7 +50,6 @@ func nuevoFakeRepo() *fakeRepo {
 }
 
 // ── Préstamos ───────────────────────────────────────────────────────────
-//
 // Reproduce el índice único parcial ux_prestamo_abierto —un equipo no puede
 // tener dos préstamos abiertos— porque de eso depende un 409.
 
@@ -153,8 +152,8 @@ func (r *fakeRepo) prestamosEnOrden() []*domain.Prestamo {
 	return resultado
 }
 
-// Estos tests verifican el contrato HTTP (códigos, permisos, parseo), no
-// la atomicidad — el todo-o-nada real se prueba contra Postgres en
+// Estos tests verifican el contrato HTTP (códigos, permisos, parseo), no la
+// atomicidad — el todo-o-nada real se prueba contra Postgres en
 // infrastructure/, así que acá alcanza con ejecutar fn tal cual.
 func (r *fakeRepo) EnTransaccion(ctx context.Context, fn func(application.Repo) error) error {
 	return fn(r)
@@ -196,9 +195,7 @@ func (r *fakeRepo) ListarReservas(ctx context.Context, f application.FiltroReser
 }
 
 // enOrden recorre las reservas con un orden estable (el repo real ordena por
-// fecha, hora e identificador de PC). Sobre el map pelado el orden cambia
-// entre llamadas, y con LIMIT/OFFSET eso hace que un test de paginación pase
-// o falle al azar.
+// fecha, hora e identificador de PC).
 func (r *fakeRepo) enOrden() []*domain.Reserva {
 	ordenadas := make([]*domain.Reserva, 0, len(r.reservas))
 	for _, res := range r.reservas {
@@ -339,9 +336,7 @@ func (f *fakeValidadorEquipo) EquipoDisponibleParaReservar(ctx context.Context, 
 	return f.disponible, nil
 }
 
-// EquiposNoReservables: la versión de lote, coherente con la de a una. El
-// fake tiene que respetar esa coherencia o los tests que usan una y otra
-// dirían cosas distintas sobre el mismo equipo.
+// EquiposNoReservables: la versión de lote, coherente con la de a una.
 func (f *fakeValidadorEquipo) EquiposNoReservables(ctx context.Context, equipoIDs []string) ([]string, error) {
 	if f.disponible {
 		return nil, nil
@@ -355,9 +350,8 @@ func (f *fakeValidadorEquipo) EquipoEstaEnInventario(ctx context.Context, equipo
 	return !f.fueraDelInventario[equipoID], nil
 }
 
-// EtiquetasDeEquipos: en los tests las PCs se llaman "pc1", "pc2"… así que
-// el número visible sale del sufijo. Alcanza para verificar que el aviso
-// nombre los equipos correctos.
+// EtiquetasDeEquipos: en los tests las PCs se llaman "pc1", "pc2"… así que el
+// número visible sale del sufijo.
 func (f *fakeValidadorEquipo) EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error) {
 	if f.errIdentificadores != nil {
 		return nil, f.errIdentificadores
@@ -380,10 +374,7 @@ func (f *fakeObtenedorNombre) NombreCompletoDe(ctx context.Context, usuarioID st
 
 var contadorID int
 
-// idSecuencial devuelve un ID DISTINTO por llamada. Devolvía siempre
-// "id-generado", lo cual daba igual mientras cada test creara una sola
-// entidad — pero las entregas son en lote, y con el ID repetido las cinco
-// máquinas de una reserva terminaban siendo una sola fila en el fake.
+// idSecuencial devuelve un ID DISTINTO por llamada.
 func idSecuencial() string {
 	contadorID++
 	return fmt.Sprintf("id-%d", contadorID)
@@ -403,14 +394,14 @@ func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	return app
 }
 
-// registroDePrueba hace de tabla usuario para el middleware de
-// autenticación: Token() deja registrado el rol de cada ID, y
-// Autenticacion() se lo devuelve al middleware igual que lo haría la base.
+// registroDePrueba hace de tabla usuario para el middleware de autenticación:
+// Token() deja registrado el rol de cada ID, y Autenticacion() se lo devuelve
+// al middleware igual que lo haría la base.
 var registroDePrueba = authtest.Nuevo()
 
 // tokenPara genera un JWT válido para un usuario de prueba — reusa
-// exactamente el mismo formato que produce infrastructure.JWTFirmador,
-// para que estos tests ejerciten el middleware de autenticación real.
+// exactamente el mismo formato que produce infrastructure.JWTFirmador, para
+// que estos tests ejerciten el middleware de autenticación real.
 func tokenPara(id, rol string) string {
 	return registroDePrueba.Token(testSecret, id, rol)
 }
@@ -440,9 +431,7 @@ func TestHTTP_CrearReserva_OK(t *testing.T) {
 	}
 }
 
-// RF-03.21: la lista no tiene un orden único, se ordena PARA una materia. Si
-// el handler no le pasa materiaId al servicio, el ordenamiento entero no
-// ocurre y la pantalla se ve igual que antes sin ningún error visible.
+// RF-03.21: la lista no tiene un orden único, se ordena PARA una materia.
 func TestHTTP_ListarEquiposDisponibles_PasaLaMateriaParaOrdenar(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
@@ -702,8 +691,7 @@ func TestHTTP_ObtenerReservaGrupo_OK(t *testing.T) {
 
 // Faltaba el chequeo de titularidad: alcanzaba con estar autenticado para
 // leer el grupo de cualquier otra persona, con su nombre y su materia
-// adentro. Es el mismo criterio que ya aplicaban ListarReservas y las dos
-// cancelaciones.
+// adentro.
 func TestHTTP_ObtenerReservaGrupo_DeOtroDocente_403(t *testing.T) {
 	repo := nuevoFakeRepo()
 	grupoDeTest(repo, "g1", "otroDocente")
@@ -785,8 +773,8 @@ func TestHTTP_ListarReservas_UnDocenteSoloVeLasSuyas(t *testing.T) {
 	}
 }
 
-// El listado tiene que traer los nombres resueltos y no los UUID de equipo_id y
-// materia_id: con los UUID, "Mis reservas" no puede decir de qué PC ni de
+// El listado tiene que traer los nombres resueltos y no los UUID de equipo_id
+// y materia_id: con los UUID, "Mis reservas" no puede decir de qué PC ni de
 // qué materia es cada tarjeta, y una reserva de ocho equipos se ve como ocho
 // filas idénticas.
 func TestHTTP_ListarReservas_TraeNombresResueltos(t *testing.T) {
@@ -837,11 +825,9 @@ func TestHTTP_ListarReservas_UnAdminLasVeTodas(t *testing.T) {
 	}
 }
 
-// ── Paginación ─────────────────────────────────────────────────────────
-//
-// Es el único listado que crece con el uso: una fila por PC, por clase, por
-// semana. Sin cota devolvía las 3.863 filas de un año en una sola respuesta
-// de 2,1 MB.
+// ── Paginación ───────────────────────────────────────────────────────── Es
+// el único listado que crece con el uso: una fila por PC, por clase, por
+// semana.
 
 func TestHTTP_ListarReservas_PaginaYTotal(t *testing.T) {
 	repo := nuevoFakeRepo()

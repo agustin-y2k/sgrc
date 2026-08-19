@@ -60,8 +60,8 @@ func (h *Handler) ListarPropias(c *fiber.Ctx) error {
 }
 
 // PATCH /api/notifications/{id}/leida — solo el dueño puede marcarla como
-// leída (no hay excepción de Admin acá: no tiene sentido que un Admin
-// marque como leída la notificación de otra persona).
+// leída (no hay excepción de Admin acá: no tiene sentido que un Admin marque
+// como leída la notificación de otra persona).
 func (h *Handler) MarcarLeida(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)

@@ -18,8 +18,8 @@ type fakeRepo struct {
 	notificaciones map[string]*domain.Notificacion
 	errCrear       error
 	// errCrearPara falla solo para ese usuario, para poder probar el fallo
-	// PARCIAL: errCrear falla siempre y no distingue "se cayó la base" de
-	// "un destinatario dio problema", que es justo lo que hay que separar.
+	// PARCIAL: errCrear falla siempre y no distingue "se cayó la base" de "un
+	// destinatario dio problema", que es justo lo que hay que separar.
 	errCrearPara map[string]error
 }
 
@@ -76,9 +76,8 @@ func (r *fakeRepo) ListarPorUsuario(ctx context.Context, usuarioID string, filtr
 	return resultado[desde:hasta], total, nil
 }
 
-// idsOrdenados da un orden estable donde el repo real ordena por fecha:
-// sobre el map pelado, LIMIT/OFFSET devolvería una página distinta en cada
-// corrida.
+// idsOrdenados da un orden estable donde el repo real ordena por fecha: sobre
+// el map pelado, LIMIT/OFFSET devolvería una página distinta en cada corrida.
 func (r *fakeRepo) idsOrdenados() []string {
 	ids := make([]string, 0, len(r.notificaciones))
 	for id := range r.notificaciones {
@@ -196,8 +195,7 @@ func TestNotificarATodosLosAdmins_OK(t *testing.T) {
 
 // Un Admin que falla no puede dejar sin aviso a los que siguen: si se corta
 // en el primero, el tercero nunca se entera de que hay una cuenta esperando
-// aprobación o una máquina que no volvió. Mismo criterio que el envío de
-// correos, que ya lo hacía así.
+// aprobación o una máquina que no volvió.
 func TestNotificarATodosLosAdmins_UnoFalla_LosDemasIgualSeEnteran(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.errCrearPara = map[string]error{"admin2": errors.New("cuenta borrada recién")}

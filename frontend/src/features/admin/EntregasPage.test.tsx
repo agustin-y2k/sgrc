@@ -131,8 +131,8 @@ describe("EntregasPage", () => {
   })
 
   /**
-   * "Sin hora de devolución" no es un dato faltante: es un préstamo al que
-   * no se le puede reclamar nada, y la pantalla tiene que decirlo con esas
+   * "Sin hora de devolución" no es un dato faltante: es un préstamo al que no
+   * se le puede reclamar nada, y la pantalla tiene que decirlo con esas
    * palabras para que nadie lo lea como un error de carga.
    */
   it("distingue las que no tienen hora de devolución", async () => {
@@ -179,8 +179,8 @@ describe("EntregasPage", () => {
   })
 
   /**
-   * El caso que planteó la escuela: devolver tres de cuatro no necesita
-   * nada especial, la que falta simplemente sigue figurando afuera.
+   * El caso que planteó la escuela: devolver tres de cuatro no necesita nada
+   * especial, la que falta simplemente sigue figurando afuera.
    */
   it("avisa cuando alguna ya figuraba adentro", async () => {
     const user = userEvent.setup()
@@ -214,11 +214,7 @@ describe("EntregasPage", () => {
     })
   })
 
-  /**
-   * Retiro parcial: se lleva una de las dos. La otra queda disponible para
-   * otro docente, que es el motivo por el que entregar es máquina por
-   * máquina y no de a reserva completa.
-   */
+  /** Retiro parcial: se lleva una de las dos. */
   it("permite entregar solo algunas de la reserva", async () => {
     const user = userEvent.setup()
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
@@ -235,12 +231,7 @@ describe("EntregasPage", () => {
     })
   })
 
-  /**
-   * El docente manda a un alumno, que es lo habitual. Se anota quién vino,
-   * pero el responsable sigue siendo él: reservó él y a él se le reclama si
-   * los equipos no vuelven. La pantalla lo dice para que nadie crea que
-   * escribir ese nombre le pasa la responsabilidad al alumno.
-   */
+  /** El docente manda a un alumno, que es lo habitual. */
   it("anota quién retira sin cambiar de quién es la responsabilidad", async () => {
     const user = userEvent.setup()
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
@@ -274,8 +265,8 @@ describe("EntregasPage", () => {
   })
 
   /**
-   * Una máquina ya entregada no se puede volver a entregar, y la pantalla
-   * no la ofrece: se cruza por equipoId contra lo que está afuera.
+   * Una máquina ya entregada no se puede volver a entregar, y la pantalla no
+   * la ofrece: se cruza por equipoId contra lo que está afuera.
    */
   it("no ofrece para entregar un equipo que ya está afuera", async () => {
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
@@ -336,9 +327,8 @@ describe("EntregasPage", () => {
   })
 
   /**
-   * Un bloqueo administrativo no tiene docente: lo crea un Admin
-   * sobre equipos sueltas y no hay nadie esperando para retirarlas. Ofrecerlo
-   * para entregar terminaba en un 400 que además tumbaba el lote entero.
+   * Un bloqueo administrativo no tiene docente: lo crea un Admin sobre
+   * equipos sueltas y no hay nadie esperando para retirarlas.
    */
   it("no ofrece los bloqueos administrativos para entregar", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
@@ -382,9 +372,7 @@ describe("EntregasPage", () => {
 
   /**
    * Entregar contra una reserva ya liberada es legítimo —el docente llegó
-   * tarde y el equipo seguía ahí— pero en ese rato otro pudo reservarlo. Sin
-   * mostrar el aviso que manda el backend, el Admin se lo entrega al primero
-   * y el segundo se encuentra con que no está.
+   * tarde y el equipo seguía ahí— pero en ese rato otro pudo reservarlo.
    */
   it("avisa si el equipo que se entrega tiene una reserva de otro encima", async () => {
     const user = userEvent.setup()
@@ -412,8 +400,7 @@ describe("EntregasPage", () => {
 
   /**
    * Los dos nombres, y en este orden: primero quien responde, después quien
-   * pasó a buscarlo. Con uno solo, quien lee la lista no sabe a quién
-   * reclamarle.
+   * pasó a buscarlo.
    */
   it("la lista de afuera nombra a quien responde y a quien retiró", async () => {
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
@@ -442,9 +429,7 @@ describe("EntregasPage", () => {
 
   /**
    * Lo que más se presta de forma espontánea no son las computadoras de un
-   * carro: es el proyector, el cargador, la notebook suelta (RF-03.16). Si
-   * la entrega sin reserva solo ofreciera los carros, justamente el caso
-   * principal habría que seguir anotándolo en papel.
+   * carro: es el proyector, el cargador, la notebook suelta (RF-03.16).
    */
   it("ofrece también los equipos que no están en ningún carro", async () => {
     const user = userEvent.setup()
@@ -497,9 +482,7 @@ describe("EntregasPage", () => {
 
   /**
    * El listado sale de UNA consulta al inventario, no de una por carro más
-   * otra por los sueltos. Con ocho carros eran nueve idas al servidor para
-   * dibujar una lista de casillas, y bastaba con que una fallara para que
-   * faltaran equipos sin que nada lo dijera.
+   * otra por los sueltos.
    */
   it("arma la lista con una sola consulta al inventario", async () => {
     const user = userEvent.setup()

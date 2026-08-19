@@ -8,9 +8,7 @@ function tramo(diaSemana: DiaSemana, horaInicio: string, horaFin: string): Bloqu
 }
 
 describe("diaDeLaFecha", () => {
-  // El 8 de agosto de 2026 es sábado. Es el caso que rompía antes: con
-  // `new Date("2026-08-08")` la fecha se lee como medianoche UTC y al oeste
-  // de Greenwich cae el día anterior, así que un sábado se leía viernes.
+  // El 8 de agosto de 2026 es sábado.
   it("lee la fecha en hora local, no en UTC", () => {
     expect(diaDeLaFecha("2026-08-08")).toBe("SABADO")
     expect(diaDeLaFecha("2026-08-09")).toBe("DOMINGO")
@@ -40,8 +38,7 @@ describe("diasDeLaJornada", () => {
 
 describe("dentroDeLaJornada", () => {
   // La distinción que sostiene el diseño: sin jornada cargada el sistema no
-  // restringe nada. Si esto devolviera false, instalar el sistema y no
-  // configurar nada dejaría a todos sin poder reservar.
+  // restringe nada.
   it("sin jornada declarada permite cualquier día y hora", () => {
     expect(dentroDeLaJornada([], "2026-08-09", "03:00", "05:00")).toBe(true)
   })
@@ -69,9 +66,7 @@ describe("dentroDeLaJornada", () => {
     expect(dentroDeLaJornada(jornada, "2026-08-10", "11:00", "19:00")).toBe(false)
   })
 
-  // Dos tramos que se tocan describen un día abierto de punta a punta. Sin
-  // fusionarlos, una reserva que cruza la juntura se rechazaría aunque en la
-  // pantalla el día figure abierto de 7 a 18.
+  // Dos tramos que se tocan describen un día abierto de punta a punta.
   it("fusiona tramos contiguos", () => {
     const jornada = [tramo("LUNES", "12:00", "18:00"), tramo("LUNES", "07:00", "12:00")]
     expect(dentroDeLaJornada(jornada, "2026-08-10", "11:00", "13:00")).toBe(true)

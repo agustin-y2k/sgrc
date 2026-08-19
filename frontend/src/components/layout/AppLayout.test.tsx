@@ -65,8 +65,6 @@ describe("AppLayout", () => {
   })
 
   // RF-05.7: las notificaciones tienen que verse al ingresar al sistema.
-  // El contador es lo que hace que alguien entre — nadie abre una bandeja
-  // de avisos por las dudas.
   it("muestra la cantidad de avisos sin leer", async () => {
     vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(
       paginada([notificacion("n1"), notificacion("n2"), notificacion("n3")])
@@ -93,9 +91,9 @@ describe("AppLayout", () => {
     renderLayout("DOCENTE")
 
     expect(await screen.findByRole("link", { name: "Reservas" })).toBeInTheDocument()
-    // Ni los enlaces ni el grupo que los contiene: sin el botón no hay
-    // forma de llegar, y su ausencia es más fácil de comprobar que la de
-    // cada enlace por separado.
+    // Ni los enlaces ni el grupo que los contiene: sin el botón no hay forma
+    // de llegar, y su ausencia es más fácil de comprobar que la de cada
+    // enlace por separado.
     expect(
       screen.queryByRole("button", { name: /Administración/ })
     ).not.toBeInTheDocument()
@@ -103,17 +101,13 @@ describe("AppLayout", () => {
     expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "Aprobación" })).not.toBeInTheDocument()
     // RF-04.7 es solo de Admin y cancela reservas ajenas: que no se filtre.
-    // El nombre tiene que ser el que la barra usa de verdad (ver
-    // ENLACES_ADMIN): con uno viejo la aserción da verdadera siempre y el
-    // enlace se podría filtrar sin que nadie se entere.
     expect(
       screen.queryByRole("link", { name: "Bloquear equipos" })
     ).not.toBeInTheDocument()
   })
 
   // RF-07.2: la disponibilidad de los Admins la consulta cualquier usuario
-  // autenticado. El enlace vive al lado de los de administración, así que es
-  // fácil que alguien lo mueva adentro del bloque de rol sin querer.
+  // autenticado.
   it("un docente sí ve la disponibilidad de los Admins", async () => {
     renderLayout("DOCENTE")
 

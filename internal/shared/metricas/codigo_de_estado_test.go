@@ -12,11 +12,7 @@ import (
 // El caso que este archivo cuida es sutil y ya se coló una vez: cuando un
 // handler DEVUELVE un error en vez de escribir la respuesta, Fiber arma la
 // respuesta después, en su manejador de errores — o sea, después de que el
-// middleware de métricas terminó. Leer el código en ese momento devuelve
-// 200, así que las fallas se contaban como éxitos.
-//
-// Es el peor modo de falla posible para una métrica: el tablero muestra
-// "todo verde" justamente cuando hay que mirarlo.
+// middleware de métricas terminó.
 
 func TestUnHandlerQueDevuelveErrorNoSeCuentaComo200(t *testing.T) {
 	m := Nuevo()

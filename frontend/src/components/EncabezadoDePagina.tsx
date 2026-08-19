@@ -3,14 +3,6 @@ import type { ReactNode } from "react"
 /**
  * El encabezado de una pantalla: qué es, para qué sirve, y la acción
  * principal si la tiene.
- *
- * Existe como componente y no como un `<h1>` suelto en cada página porque
- * cada una lo resolvía distinto —algunas con descripción y otras no, con
- * separaciones diferentes, con el botón antes o después del título— y eso
- * hace que moverse entre pantallas se sienta como usar dos aplicaciones.
- *
- * En un teléfono el título y la acción se apilan: puestos en la misma línea,
- * el botón quedaba espachurrado contra el borde.
  */
 export function EncabezadoDePagina({
   titulo,

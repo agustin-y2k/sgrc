@@ -10,28 +10,9 @@ import (
 )
 
 // Recuperación de contraseña por autoservicio (RF-01.10).
-//
-// Las dos operaciones de este archivo comparten una regla que explica todo
-// lo demás: **no decir nunca si un email está registrado**. Son endpoints
-// públicos, así que cualquier diferencia observable entre "esa cuenta
-// existe" y "no existe" —el mensaje, el código HTTP o el tiempo de
-// respuesta— convierte el formulario en un padrón de los docentes de la
-// escuela. De ahí salen las dos decisiones que se leen raras: que pedir un
-// código devuelva lo mismo pase lo que pase, y que el código se genere y se
-// hashee ANTES de saber si la cuenta existe.
 
-// SolicitarRecuperacionDePassword genera un código de un solo uso y lo
-// manda al email de la persona.
-//
-// Devuelve nil incluso cuando no mandó nada: es la respuesta
-// indistinguible. Los casos silenciosos son cuenta inexistente y cuenta que
-// no está APROBADA (una pendiente o rechazada no tiene a dónde entrar, y
-// una en BAJA no vuelve). La cuenta que solo entra con Google sí recibe un
-// correo, explicándole por qué no hay código.
-//
-// Los errores reales (Postgres caído, la generación del código) sí se
-// devuelven: ahí la operación no se completó para nadie y no hay nada que
-// proteger.
+// SolicitarRecuperacionDePassword genera un código de un solo uso y lo manda
+// al email de la persona.
 func (s *Service) SolicitarRecuperacionDePassword(ctx context.Context, email string) error {
 	if !s.correoHabilitado {
 		return ErrRecuperacionNoDisponible
@@ -45,13 +26,10 @@ func (s *Service) SolicitarRecuperacionDePassword(ctx context.Context, email str
 		return err
 	}
 
-	// El código se genera y se hashea antes de tocar la base, aunque quizás
-	// no haya a quién mandárselo, por el tiempo de respuesta: el hash es
-	// argon2 y cuesta cientos de milisegundos, muchísimo más que el resto
-	// de la operación. Calculándolo después de encontrar la cuenta, un
-	// email registrado tardaría notoriamente más que uno inexistente y
-	// medir esa diferencia desde afuera es trivial. Es la misma idea que
-	// consumirTiempoDeVerificacion en el login, del lado de la escritura.
+	// El código se genera y se hashea antes de tocar la base, aunque quizás no
+	// haya a quién mandárselo, por el tiempo de respuesta: el hash es argon2 y
+	// cuesta cientos de milisegundos, muchísimo más que el resto de la
+	// operación.
 	codigo, err := s.generarCodigo()
 	if err != nil {
 		return fmt.Errorf("generando código de recuperación: %w", err)
@@ -94,8 +72,8 @@ func (s *Service) SolicitarRecuperacionDePassword(ctx context.Context, email str
 	}
 
 	// El correo no se manda desde acá: el bus publica de forma sincrónica en
-	// esta goroutine, así que abrir la conexión SMTP adentro dejaría el
-	// request esperando a Gmail. Lo manda internal/notification.
+	// esta goroutine, así que abrir la conexión SMTP adentro dejaría el request
+	// esperando a Gmail.
 	s.bus.Publish(eventbus.Evento{
 		Tipo: "password.recuperacion.solicitada",
 		Payload: eventbus.DatosDeRecuperacion{
@@ -111,22 +89,15 @@ func (s *Service) SolicitarRecuperacionDePassword(ctx context.Context, email str
 
 // RestablecerPasswordConCodigo cambia la contraseña de una cuenta con el
 // código que se mandó al email de su dueño.
-//
-// DebeCambiarPassword queda en false: la contraseña la eligió la persona,
-// no es una temporal que haya que reemplazar en el próximo ingreso.
-//
-// Devuelve el ID de la cuenta para que interfaces/http pueda auditar el
-// cambio. Es la única acción auditada cuyo actor no está autenticado: probó
-// ser el dueño con el código, no con un token.
 func (s *Service) RestablecerPasswordConCodigo(ctx context.Context, email, codigo, passwordNueva string) (string, error) {
 	if !s.correoHabilitado {
 		return "", ErrRecuperacionNoDisponible
 	}
 
 	email = domain.NormalizarEmail(email)
-	// La contraseña se valida ANTES de mirar el código: si no, quien elige
-	// una de cuatro caracteres se entera después de haber quemado el código
-	// y tiene que pedir otro para volver a fallar.
+	// La contraseña se valida ANTES de mirar el código: si no, quien elige una
+	// de cuatro caracteres se entera después de haber quemado el código y tiene
+	// que pedir otro para volver a fallar.
 	if len(passwordNueva) < minPasswordLen {
 		return "", ErrPasswordCorta
 	}
@@ -165,9 +136,9 @@ func (s *Service) RestablecerPasswordConCodigo(ctx context.Context, email, codig
 	}
 	if !coincide {
 		quemado := registro.RegistrarFallo(s.ahora())
-		// El error de guardar tiene prioridad sobre el del código: si el
-		// contador no se puede persistir, el tope de intentos no existe y
-		// el código queda abierto a fuerza bruta.
+		// El error de guardar tiene prioridad sobre el del código: si el contador
+		// no se puede persistir, el tope de intentos no existe y el código queda
+		// abierto a fuerza bruta.
 		if err := s.repo.GuardarCodigoRecuperacion(ctx, registro); err != nil {
 			return "", fmt.Errorf("registrando intento fallido: %w", err)
 		}
@@ -183,10 +154,7 @@ func (s *Service) RestablecerPasswordConCodigo(ctx context.Context, email, codig
 	}
 
 	// Las dos escrituras van juntas o no van: sueltas, cualquiera de los dos
-	// órdenes deja un estado malo. Consumir el código y fallar al guardar la
-	// contraseña deja a la persona sin código y sin contraseña nueva;
-	// guardar la contraseña y fallar al consumir el código lo deja
-	// utilizable otra vez, y entonces no es de un solo uso.
+	// órdenes deja un estado malo.
 	err = s.repo.EnTransaccion(ctx, func(repo Repo) error {
 		if err := registro.Usar(s.ahora()); err != nil {
 			return traducirErrorDeCodigo(err)
@@ -197,10 +165,8 @@ func (s *Service) RestablecerPasswordConCodigo(ctx context.Context, email, codig
 
 		u.PasswordHash = passwordHash
 		u.DebeCambiarPassword = false
-		// Las sesiones abiertas se cierran, y acá no hay token nuevo que
-		// preservar: este endpoint no inicia sesión a propósito. Quien
-		// recuperó su contraseña vuelve al login; quien tuviera una sesión
-		// robada abierta, se cae.
+		// Las sesiones abiertas se cierran, y acá no hay token nuevo que preservar:
+		// este endpoint no inicia sesión a propósito.
 		u.InvalidarSesiones()
 		return repo.Guardar(ctx, u)
 	})
@@ -211,8 +177,7 @@ func (s *Service) RestablecerPasswordConCodigo(ctx context.Context, email, codig
 }
 
 // traducirErrorDeCodigo pasa los errores del dominio a los sentinels que
-// interfaces/http sabe mapear. Vencido y sin intentos conservan su
-// identidad; todo lo demás colapsa al genérico.
+// interfaces/http sabe mapear.
 func traducirErrorDeCodigo(err error) error {
 	switch {
 	case errors.Is(err, domain.ErrCodigoExpirado):

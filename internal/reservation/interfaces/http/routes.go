@@ -6,14 +6,7 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/middleware"
 )
 
-// RegisterRoutes monta todas las rutas de reservation bajo
-// /api/reservation.
-//
-// La titularidad de una reserva (RF-04.4: un docente solo cancela las
-// suyas) se verifica DENTRO de los handlers de cancelación, no acá — el
-// middleware de rol solo distingue ADMIN de "cualquier autenticado", la
-// regla más fina de "es tuya o sos Admin" necesita comparar contra el
-// dato de la reserva en sí.
+// RegisterRoutes monta todas las rutas de reservation bajo /api/reservation.
 func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	reservation := app.Group("/api/reservation")
 
@@ -25,37 +18,25 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	reservation.Post("/reservas/recurrentes", autenticado, h.CrearReservaRecurrente)
 	reservation.Post("/reservas/:id/cancelar", autenticado, h.CancelarReserva)
 	// RF-08.14: cambiar una reserva de máquina sin partir la clase en dos
-	// grupos. La titularidad se verifica adentro del handler, como en
-	// cancelar.
+	// grupos.
 	reservation.Patch("/reservas/:id/equipo", autenticado, h.CambiarEquipoDeReserva)
 	reservation.Post("/grupos/:id/cancelar", autenticado, h.CancelarOcurrenciaRecurrente)
 	reservation.Get("/grupos/:id", autenticado, h.ObtenerReservaGrupo)
 	reservation.Post("/bloqueos", autenticado, soloAdmin, h.BloquearEquipos)
 
 	// RF-04.4: el calendario de una PC lo puede ver cualquier usuario
-	// autenticado. Vive bajo /api/reservation aunque conceptualmente sea
-	// "de la PC", porque el dato es de este paquete — inventory no puede
-	// leer reservas sin romper el límite de dominio.
+	// autenticado.
 	reservation.Get("/equipos/:equipoId/calendario", autenticado, h.CalendarioDeEquipo)
 
-	// RF-04.2 y RF-04.11: las dos mitades de la franja — los equipos libres,
-	// de los que el docente tilda los que necesita, y los que ya tiene
-	// alguien, con quién los tiene.
+	// RF-04.2 y RF-04.11: las dos mitades de la franja — los equipos libres, de
+	// los que el docente tilda los que necesita, y los que ya tiene alguien, con
+	// quién los tiene.
 	reservation.Get("/equipos-disponibles", autenticado, h.ListarEquiposDisponibles)
 
-	// RF-04.12: pedirle al que lo tiene que lo libere. No cambia ninguna
-	// reserva —es un mensaje— y por eso lo puede hacer cualquier autenticado
-	// sin más permiso que estar aprobado.
+	// RF-04.12: pedirle al que lo tiene que lo libere.
 	reservation.Post("/reservas/:id/pedido-de-liberacion", autenticado, h.PedirLiberacionDeReserva)
 
-	// RF-08: entregas y devoluciones. Todo solo Admin — quien entrega y
-	// recibe las máquinas es quien hoy escribe el papel. Que un docente
-	// pudiera marcarse la entrega a sí mismo convertiría el registro en una
-	// declaración en vez de en una constancia.
-	//
-	// /prestamos/por-reserva y /prestamos/recibir van antes que nada que
-	// pueda parecerles un parámetro; hoy no hay ninguna ruta /prestamos/:id,
-	// pero el orden deja el camino despejado si mañana la hay.
+	// RF-08: entregas y devoluciones.
 	reservation.Get("/prestamos", autenticado, soloAdmin, h.ListarPrestamosAbiertos)
 	reservation.Post("/prestamos/por-reserva", autenticado, soloAdmin, h.EntregarPorReserva)
 	reservation.Post("/prestamos/recibir", autenticado, soloAdmin, h.RecibirEquipos)

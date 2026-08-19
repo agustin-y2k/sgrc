@@ -251,14 +251,14 @@ func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	return app
 }
 
-// registroDePrueba hace de tabla usuario para el middleware de
-// autenticación: Token() deja registrado el rol de cada ID, y
-// Autenticacion() se lo devuelve al middleware igual que lo haría la base.
+// registroDePrueba hace de tabla usuario para el middleware de autenticación:
+// Token() deja registrado el rol de cada ID, y Autenticacion() se lo devuelve
+// al middleware igual que lo haría la base.
 var registroDePrueba = authtest.Nuevo()
 
 // tokenPara genera un JWT válido para un usuario de prueba — reusa
-// exactamente el mismo formato que produce infrastructure.JWTFirmador,
-// para que estos tests ejerciten el middleware de autenticación real.
+// exactamente el mismo formato que produce infrastructure.JWTFirmador, para
+// que estos tests ejerciten el middleware de autenticación real.
 func tokenPara(id, rol string) string {
 	return registroDePrueba.Token(testSecret, id, rol)
 }
@@ -389,13 +389,7 @@ func TestHTTP_EliminarCurso_NoExiste_404(t *testing.T) {
 }
 
 // TestHTTP_IDInvalido_ContratoDocumentado deja constancia del bug real
-// encontrado probando el servidor a mano: un ID sin formato UUID (ej. un
-// placeholder de ejemplo pegado sin reemplazar en la URL) generaba un 500
-// en vez de un 400. El fakeRepo de este archivo no reproduce el error de
-// Postgres (22P02) porque no hay Postgres detrás — la cobertura real de
-// esIDInvalido está en los tests de integración de
-// internal/academic/infrastructure. Este test queda como documentación
-// del contrato esperado, no como prueba del fix en sí.
+// encontrado probando el servidor a mano: un ID sin formato UUID (ej.
 func TestHTTP_IDInvalido_ContratoDocumentado(t *testing.T) {
 	t.Skip("cobertura real en internal/academic/infrastructure (integration) — ver esIDInvalido")
 }
@@ -509,9 +503,7 @@ func TestHTTP_CambiarRolDocente_ComoDocente_403(t *testing.T) {
 	}
 }
 
-// RF-02.8: la respuesta tiene que decir qué se llevó puesto la cascada. El
-// endpoint devolvía 200 vacío, así que el Admin quitaba al último docente de
-// una materia y no se enteraba de que había cancelado clases.
+// RF-02.8: la respuesta tiene que decir qué se llevó puesto la cascada.
 func TestHTTP_RemoverDocenteMateria_DevuelveLasReservasCanceladas(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "d1", MateriaID: "m1"}

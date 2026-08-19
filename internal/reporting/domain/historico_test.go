@@ -56,9 +56,8 @@ func TestNuevoHistoricoUsoDocente_OK(t *testing.T) {
 }
 
 func TestNuevoHistoricoUsoDocente_SinUsuarioID_QuedaNil(t *testing.T) {
-	// Caso legítimo: el docente ya fue eliminado definitivamente
-	// (SET NULL) — el histórico se conserva solo con el snapshot del
-	// nombre.
+	// Caso legítimo: el docente ya fue eliminado definitivamente (SET NULL) — el
+	// histórico se conserva solo con el snapshot del nombre.
 	h, err := NuevoHistoricoUsoDocente("id1", 2026, nil, "Ada Lovelace", 8, 720)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)

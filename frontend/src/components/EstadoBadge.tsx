@@ -1,18 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 
-/**
- * Los estados del dominio, con un color cada uno.
- *
- * Antes salían todos de las tres variantes de shadcn (`default`,
- * `secondary`, `destructive`), así que "en mantenimiento" y "fuera de
- * servicio" se veían igual —las dos en rojo— y "disponible" era el mismo
- * gris que "finalizada". En una grilla de treinta equipos eso obliga a leer
- * cada etiqueta en vez de barrer con la vista.
- *
- * El color nunca va solo: cada badge lleva su texto. Alrededor de un 8% de
- * los varones no distingue rojo de verde, y este sistema lo va a usar toda
- * la escuela.
- */
+/** Los estados del dominio, con un color cada uno. */
 
 type Tono = "exito" | "alerta" | "peligro" | "info" | "neutro"
 
@@ -75,14 +63,7 @@ export const TONO_INCIDENCIA: Record<string, Tono> = {
   RESUELTA: "exito",
 }
 
-/**
- * RF-03.11 — estado de una licencia de software.
- *
- * SIN_FECHA va en `info` y no en `neutro` a propósito: no es un estado
- * pasivo del que no haya nada que decir, es una tarea pendiente —hay que ir
- * hasta la máquina a mirar cuántos días le quedan— y en la lista aparece
- * arriba de todo.
- */
+/** RF-03.11 — estado de una licencia de software. */
 export const TONO_LICENCIA: Record<string, Tono> = {
   SIN_FECHA: "info",
   VENCIDA: "peligro",

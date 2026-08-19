@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button"
 
 /**
- * Espeja `paginacion.Meta` del backend (internal/shared/paginacion): el
- * total es de la colección completa, no de la página que se está viendo.
+ * Espeja `paginacion.Meta` del backend (internal/shared/paginacion): el total
+ * es de la colección completa, no de la página que se está viendo.
  */
 export type PaginacionMeta = {
   total: number
@@ -11,14 +11,8 @@ export type PaginacionMeta = {
 }
 
 /**
- * Controles de página para los tres listados que el backend pagina
- * —reservas, notificaciones y usuarios—. Sin esto la pantalla mostraría
- * las primeras 50 filas y las demás desaparecerían sin que nada lo diga,
- * que es peor que el listado sin cota que la paginación vino a arreglar.
- *
- * No se muestra si todo entra en una sola página: en una escuela ese va a
- * ser el caso normal y no tiene sentido ocupar espacio con dos botones que
- * nunca se van a poder tocar.
+ * Controles de página para los tres listados que el backend pagina —reservas,
+ * notificaciones y usuarios—.
  */
 export function Paginador({
   meta,

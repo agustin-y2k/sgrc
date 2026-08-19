@@ -8,13 +8,7 @@ import * as inventoryApi from "@/features/inventory/api"
 import type { EstadoIncidencia, Incidencia } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * RF-03.5/RF-03.6 — el historial de fallas de un equipo y su gestión.
- *
- * Sin esta pantalla, el ciclo de vida completo de una incidencia existía en
- * el backend y no se podía tocar desde ningún lado: los reportes de RF-06
- * mostraban estadísticas de incidencias que nadie podía cargar ni cerrar.
- */
+/** RF-03.5/RF-03.6 — el historial de fallas de un equipo y su gestión. */
 
 const ETIQUETA_ESTADO_INCIDENCIA: Record<EstadoIncidencia, string> = {
   ABIERTA: "Abierta",
@@ -60,8 +54,7 @@ export function IncidenciasDeEquipo({ equipoId }: { equipoId: string }) {
       await queryClient.invalidateQueries({ queryKey: incidenciasKey })
       // Los reportes de RF-06 agregan por estado: si no se invalidan, el
       // Admin cierra una incidencia acá y el reporte la sigue contando
-      // abierta hasta que recargue la página. La clave es la raíz que usa
-      // ReportesPage para todas sus consultas.
+      // abierta hasta que recargue la página.
       await queryClient.invalidateQueries({ queryKey: ["reporte"] })
     },
   })

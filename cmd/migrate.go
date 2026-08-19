@@ -8,10 +8,7 @@ import (
 	"os"
 	"time"
 
-	// El driver de database/sql que necesita goose. El resto de la
-	// aplicación habla con Postgres por pgxpool, que es otra API del mismo
-	// pgx: este import registra la variante compatible con `sql.Open` y no
-	// agrega una dependencia nueva.
+	// El driver de database/sql que necesita goose.
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
@@ -19,31 +16,14 @@ import (
 )
 
 // El esquema lo aplica el propio binario al arrancar, con goose.
-//
-// Antes lo hacía Postgres con los scripts de docker-entrypoint-initdb.d, que
-// corren UNA sola vez: cuando el volumen se crea vacío. Sobre una base que ya
-// existía no corría nada y no avisaba nada, así que una actualización dejaba
-// el binario nuevo hablando con el esquema viejo. Eso se ve como un sistema
-// que arranca perfecto y falla con 500 en la primera consulta que toca una
-// columna que no está — un error que no menciona ni el esquema ni la
-// migración que faltaba. Costó una base entera.
-//
-// Con goose, cada migración aplicada queda anotada en `goose_db_version`:
-// arrancar dos veces no reaplica nada, y una base vieja se pone al día sola.
 
-// timeoutMigraciones acota el arranque: si la base no responde o alguien
-// dejó una transacción abierta sobre las tablas, el contenedor tiene que
-// fallar con un mensaje claro en vez de quedarse colgado para siempre en un
-// estado donde el healthcheck tampoco dice nada útil.
+// timeoutMigraciones acota el arranque: si la base no responde o alguien dejó
+// una transacción abierta sobre las tablas, el contenedor tiene que fallar
+// con un mensaje claro en vez de quedarse colgado para siempre en un estado
+// donde el healthcheck tampoco dice nada útil.
 const timeoutMigraciones = 2 * time.Minute
 
-// aplicarMigraciones deja la base en la última versión del esquema. Es
-// idempotente: si ya está al día, no hace nada.
-//
-// No toma un lock: el sistema corre como un único proceso (ver ADR 001), así
-// que no hay dos instancias compitiendo por migrar. Si algún día se corre
-// más de una réplica, esto necesita el locking de sesión de goose antes que
-// cualquier otra cosa.
+// aplicarMigraciones deja la base en la última versión del esquema.
 func aplicarMigraciones(ctx context.Context, dsn string) error {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -81,15 +61,7 @@ func esInvocacionDeMigrate(args []string) bool {
 }
 
 // ejecutarMigrate atiende `sgrc-app migrate status` y `sgrc-app migrate up`,
-// para poder mirar y forzar el estado del esquema sin levantar la
-// aplicación. Mismo recurso que `sgrc-app healthcheck`: en una imagen
-// `FROM scratch` el único ejecutable disponible es este binario, así que los
-// comandos de operación tienen que vivir acá adentro.
-//
-// `down` NO está, a propósito: revertir el esquema inicial borra las tablas
-// y con ellas los datos. Existe en el archivo de migración porque tiene que
-// existir, pero no se llega por accidente desde un comando corto — el mismo
-// criterio con el que `docker compose down -v` no tiene atajo en el Makefile.
+// para poder mirar y forzar el estado del esquema sin levantar la aplicación.
 func ejecutarMigrate(args []string, dsn string) int {
 	accion := "status"
 	if len(args) > 2 {

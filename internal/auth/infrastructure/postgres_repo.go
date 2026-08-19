@@ -33,25 +33,19 @@ func textoDe(p *string) string {
 	return *p
 }
 
-// codigoViolacionUnica es el código de error de Postgres para una
-// violación de constraint UNIQUE (email duplicado, en nuestro caso).
-// Ver https://www.postgresql.org/docs/current/errcodes-appendix.html
+// codigoViolacionUnica es el código de error de Postgres para una violación
+// de constraint UNIQUE (email duplicado, en nuestro caso).
 const codigoViolacionUnica = "23505"
 
 // codigoTextoInvalido: SQLSTATE 22P02 — "invalid input syntax for type X".
-// Mismo chequeo que ya tienen academic/inventory/reservation — agregado
-// retroactivamente acá, ver la nota en application/errors.go.
 const codigoTextoInvalido = "22P02"
 
-// PostgresRepo implementa application.Repo. El compilador verifica esta
-// aserción en tiempo de build — si el contrato cambia y esta struct deja
-// de cumplirlo, el proyecto entero deja de compilar en vez de fallar
-// silenciosamente en runtime.
+// PostgresRepo implementa application.Repo.
 var _ application.Repo = (*PostgresRepo)(nil)
 
-// consultor es el subconjunto de pgx que usan las consultas de este
-// paquete — lo satisfacen tanto *pgxpool.Pool como pgx.Tx, que es lo que
-// permite reusar los mismos métodos dentro y fuera de una transacción.
+// consultor es el subconjunto de pgx que usan las consultas de este paquete —
+// lo satisfacen tanto *pgxpool.Pool como pgx.Tx, que es lo que permite reusar
+// los mismos métodos dentro y fuera de una transacción.
 type consultor interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -68,10 +62,7 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 	return &PostgresRepo{db: pool, pool: pool}
 }
 
-// EnTransaccion corre fn dentro de una única transacción. Lo necesita el
-// guard del último Admin (RF-01.8): contar y después escribir en dos
-// statements sueltos deja una ventana donde dos pedidos concurrentes ven
-// el mismo conteo y ambos pasan la validación.
+// EnTransaccion corre fn dentro de una única transacción.
 func (r *PostgresRepo) EnTransaccion(ctx context.Context, fn func(application.Repo) error) error {
 	if r.pool == nil {
 		return fn(r)
@@ -99,10 +90,7 @@ func esIDInvalido(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == codigoTextoInvalido
 }
 
-// codigoViolacionFK: SQLSTATE 23503 — "foreign_key_violation". Es lo que
-// Postgres devuelve cuando el request nombra un padre que no existe (un
-// carro, un ciclo, una PC, un usuario). Se traduce igual que 22P02: es un
-// error del cliente, no una falla del servidor.
+// codigoViolacionFK: SQLSTATE 23503 — "foreign_key_violation".
 const codigoViolacionFK = "23503"
 
 func esViolacionFK(err error) bool {
@@ -112,8 +100,7 @@ func esViolacionFK(err error) bool {
 
 // errorDeFilas centraliza el chequeo de rows.Err(): pool.Query() no siempre
 // devuelve el error de sintaxis inmediatamente — a veces aparece recién acá,
-// después del loop. Omitirlo hace que una consulta rota se vea como un
-// resultado vacío.
+// después del loop.
 func errorDeFilas(rows pgx.Rows) error {
 	err := rows.Err()
 	if err == nil {
@@ -128,12 +115,6 @@ func errorDeFilas(rows pgx.Rows) error {
 const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por, curso_solicitado, materia_solicitada, rol_solicitado, google_sub, version_sesion`
 
 // BuscarPorEmail compara contra lower(email) y no contra la columna pelada.
-//
-// application ya normaliza el email antes de llamar acá, así que un
-// `email = $1` alcanzaría. Se usa lower() igual por dos razones: la
-// comparación deja de depender de que nadie inserte una fila a mano con otra
-// capitalización, y es exactamente la expresión del índice
-// idx_usuario_email_lower, así que resuelve por índice en vez de escanear.
 func (r *PostgresRepo) BuscarPorEmail(ctx context.Context, email string) (*domain.Usuario, error) {
 	row := r.db.QueryRow(ctx, `SELECT `+columnasUsuario+` FROM usuario WHERE lower(email) = lower($1)`, email)
 	return escanearUsuario(row)
@@ -144,12 +125,7 @@ func (r *PostgresRepo) BuscarPorID(ctx context.Context, id string) (*domain.Usua
 	return escanearUsuario(row)
 }
 
-// BuscarPorGoogleSub resuelve el vínculo con una cuenta de Google. Filtra
-// por IS NOT NULL además de la igualdad: sin eso, un sub vacío (que no
-// debería llegar hasta acá, pero es una condición fácil de sostener desde
-// el SQL) empataría contra cualquier fila con google_sub NULL en algunos
-// planes, y es exactamente el tipo de coincidencia accidental que
-// terminaría dándole a alguien la cuenta de otro.
+// BuscarPorGoogleSub resuelve el vínculo con una cuenta de Google.
 func (r *PostgresRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*domain.Usuario, error) {
 	if sub == "" {
 		return nil, application.ErrUsuarioNoEncontrado
@@ -159,15 +135,8 @@ func (r *PostgresRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*dom
 	return escanearUsuario(row)
 }
 
-// filaUsuario son los destinos de un Scan sobre columnasUsuario, en ese
-// mismo orden.
-//
-// Existe porque las dos consultas que leen usuarios (una fila sola y el
-// listado paginado, que agrega COUNT(*) OVER()) tienen que escanear
-// exactamente las mismas columnas en el mismo orden. Con dos Scan escritos
-// a mano —idénticos salvo el último destino— agregar una columna obligaría
-// a tocar los dos y a mantener el orden alineado entre ambos; acá la lista
-// de destinos vive en un solo lugar, al lado de la de columnas.
+// filaUsuario son los destinos de un Scan sobre columnasUsuario, en ese mismo
+// orden.
 type filaUsuario struct {
 	u                 domain.Usuario
 	rolStr, estadoStr string
@@ -217,9 +186,9 @@ func escanearUsuarioConTotal(row pgx.Row, total *int) (*domain.Usuario, error) {
 	return f.usuario()
 }
 
-// escanearUsuario centraliza el mapeo fila→entidad, incluyendo la
-// traducción de "no encontrado" al error de negocio que application/
-// espera (nunca dejar que pgx.ErrNoRows se filtre hacia arriba tal cual).
+// escanearUsuario centraliza el mapeo fila→entidad, incluyendo la traducción
+// de "no encontrado" al error de negocio que application/ espera (nunca dejar
+// que pgx.ErrNoRows se filtre hacia arriba tal cual).
 func escanearUsuario(row pgx.Row) (*domain.Usuario, error) {
 	var f filaUsuario
 	if err := row.Scan(f.destinos()...); err != nil {
@@ -285,11 +254,7 @@ func (r *PostgresRepo) Guardar(ctx context.Context, u *domain.Usuario) error {
 	return nil
 }
 
-// Listar devuelve usuarios filtrados por estado/rol (nil = sin ese
-// filtro). El WHERE se arma dinámicamente porque Postgres no tiene una
-// forma limpia de decir "este parámetro, si es NULL, ignora la condición"
-// sin ese patrón — la alternativa (COALESCE contra el parámetro) funciona
-// pero es menos legible para dos filtros opcionales nada más.
+// Listar devuelve usuarios filtrados por estado/rol (nil = sin ese filtro).
 func (r *PostgresRepo) Listar(ctx context.Context, filtroEstado *domain.Estado, filtroRol *domain.Rol, pagina paginacion.Pagina) ([]*domain.Usuario, int, error) {
 	desde := ` FROM usuario WHERE 1=1`
 	args := []any{}
@@ -331,9 +296,9 @@ func (r *PostgresRepo) Listar(ctx context.Context, filtroEstado *domain.Estado, 
 		return nil, 0, err
 	}
 
-	// Una página más allá del final no deja ninguna fila de la que leer
-	// COUNT(*) OVER(), y el total en 0 haría que la pantalla dijera que no
-	// hay usuarios teniendo la primera página llena.
+	// Una página más allá del final no deja ninguna fila de la que leer COUNT(*)
+	// OVER(), y el total en 0 haría que la pantalla dijera que no hay usuarios
+	// teniendo la primera página llena.
 	if len(resultado) == 0 && pagina.Offset() > 0 {
 		if err := r.db.QueryRow(ctx, "SELECT COUNT(*)"+desde, args...).Scan(&total); err != nil {
 			return nil, 0, fmt.Errorf("contando usuarios: %w", err)
@@ -343,14 +308,7 @@ func (r *PostgresRepo) Listar(ctx context.Context, filtroEstado *domain.Estado, 
 	return resultado, total, nil
 }
 
-// ContarAdminsAprobados bloquea las filas que cuenta (FOR UPDATE). Es lo
-// que hace cumplir RF-01.8 ("el sistema nunca permite que quede cero
-// ADMIN") ante pedidos concurrentes: sin el lock, dos bajas simultáneas
-// leen ambas "quedan 2", las dos pasan la validación, y el sistema termina
-// sin ningún Admin activo. Con el lock, la segunda transacción espera a
-// que la primera commitee y recién ahí cuenta — viendo ya el 1 que la hace
-// fallar. Solo tiene efecto real dentro de una transacción (ver
-// EnTransaccion), que es desde donde la llama transicionar().
+// ContarAdminsAprobados bloquea las filas que cuenta (FOR UPDATE).
 func (r *PostgresRepo) ContarAdminsAprobados(ctx context.Context) (int, error) {
 	var n int
 	err := r.db.QueryRow(ctx, `

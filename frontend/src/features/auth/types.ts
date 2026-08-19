@@ -20,13 +20,7 @@ export type Usuario = {
   cursoSolicitado?: string
   materiaSolicitada?: string
   rolSolicitado?: RolSolicitado
-  /**
-   * Cómo puede entrar esta cuenta. Una creada con Google no tiene
-   * contraseña (`tienePassword: false`), y ofrecerle "cambiar contraseña"
-   * sería mandarla a un 409.
-   *
-   * Opcionales en el tipo: el backend los omite cuando no aplican.
-   */
+  /** Cómo puede entrar esta cuenta. */
   tienePassword?: boolean
   vinculadaAGoogle?: boolean
 }
@@ -37,16 +31,10 @@ export type ConfigPublica = {
   googleClientId: string
   /**
    * false = no hay SMTP configurado, así que el sistema no puede mandar el
-   * código y el login no muestra "olvidé mi contraseña". Opcional en el
-   * tipo por la misma razón que `tienePassword`: una respuesta cacheada de
-   * antes de esta versión no lo trae.
+   * código y el login no muestra "olvidé mi contraseña".
    */
   recuperacionPorEmail?: boolean
-  /**
-   * Desde qué dirección salen los avisos. Vacía si este despliegue no manda
-   * correos. La usan las pantallas donde alguien espera uno, para poder
-   * decirle a quién agregar a sus contactos (RF-05.8).
-   */
+  /** Desde qué dirección salen los avisos. */
   remitenteDeCorreo?: string
 }
 
@@ -56,11 +44,10 @@ export type OlvidePasswordRequest = {
 }
 
 /**
- * POST /api/auth/password/restablecer — paso 2.
- *
- * El email va de nuevo y no queda en una sesión intermedia: así el paso 2
- * funciona aunque la persona haya pedido el código en la computadora de la
- * escuela y lo lea en el celular.
+ * POST /api/auth/password/restablecer — paso 2. El email va de nuevo y no
+ * queda en una sesión intermedia: así el paso 2 funciona aunque la persona
+ * haya pedido el código en la computadora de la escuela y lo lea en el
+ * celular.
  */
 export type RestablecerPasswordRequest = {
   email: string
@@ -82,11 +69,7 @@ export type GoogleRegistroRequest = GoogleLoginRequest & {
   rolSolicitado?: RolSolicitado
 }
 
-/**
- * Con qué rol se ofrece quien se registra. Es una sugerencia para el Admin,
- * igual que el curso y la materia: el rol que rige es el que él carga en
- * DocenteMateria al asignarlo.
- */
+/** Con qué rol se ofrece quien se registra. */
 export type RolSolicitado = "TITULAR" | "SUPLENTE"
 
 export type LoginRequest = {
@@ -104,11 +87,7 @@ export type RegistroRequest = {
   apellido: string
   email: string
   password: string
-  /**
-   * Qué va a dictar. Opcionales: son una declaración de intención para que
-   * el Admin sepa a qué asignarlo al aprobarlo (y si tiene que crear el
-   * curso o la materia antes), no una referencia a nada que ya exista.
-   */
+  /** Qué va a dictar. */
   cursoSolicitado?: string
   materiaSolicitada?: string
   rolSolicitado?: RolSolicitado

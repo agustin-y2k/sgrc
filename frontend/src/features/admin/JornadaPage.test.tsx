@@ -112,8 +112,7 @@ describe("JornadaPage", () => {
   })
 
   // Es una restricción del formulario, no del sistema: un tramo sin día no
-  // existe. La jornada SIN declarar sigue queriendo decir "todo vale", y el
-  // cartel de arriba es el que lo dice.
+  // existe.
   it("sin ningún día marcado no deja agregar el tramo y dice por qué", async () => {
     renderPagina()
 

@@ -8,32 +8,16 @@ var (
 	ErrIncidenciaNoEncontrada = errors.New("incidencia no encontrada")
 	ErrLicenciaNoEncontrada   = errors.New("licencia no encontrada")
 
-	// ErrEquipoPrestado: no se da de baja algo que está afuera del
-	// laboratorio. La salida es marcar primero que volvió — incluso si en
-	// realidad se perdió, porque ahí la observación de la devolución es el
-	// lugar donde eso queda escrito.
-	//
-	// La alternativa era cerrar el préstamo solo, y se descartó: `devuelto_en`
-	// significa que el equipo volvió, y ponerlo porque se dio de baja sería
-	// escribir en el registro algo que no pasó. Bloquear no inventa nada y
-	// deja la decisión —y la explicación— en manos de quien está en el
-	// mostrador.
+	// ErrEquipoPrestado: no se da de baja algo que está afuera del laboratorio.
 	ErrEquipoPrestado = errors.New("ese equipo está prestado: marcá primero que volvió")
 
 	// ErrLicenciaDuplicada: UNIQUE(equipo_id, lower(nombre)) — esa PC ya tiene
-	// una licencia de ese software. Dos filas del mismo programa en la
-	// misma máquina serían dos contadores que se contradicen.
+	// una licencia de ese software.
 	ErrLicenciaDuplicada = errors.New("ese equipo ya tiene cargada una licencia de ese software")
 
 	// ErrNombreCarroDuplicado: UNIQUE en carro.nombre — el nombre es lo único
-	// que distingue a un carro en la pantalla de reservas, así que dos
-	// "Carro 1" harían imposible saber cuál se está eligiendo.
-	//
-	// Existe como centinela y no como error suelto porque sin él la capa HTTP
-	// no puede reconocerlo: el repositorio ya detectaba el choque y devolvía
-	// el mensaje correcto, pero `errors.Is` no engancha con un `fmt.Errorf`
-	// pelado, así que caía en el default y el Admin recibía un 500 "error
-	// interno" en vez de que le dijeran que ese nombre ya está usado.
+	// que distingue a un carro en la pantalla de reservas, así que dos "Carro 1"
+	// harían imposible saber cuál se está eligiendo.
 	ErrNombreCarroDuplicado = errors.New("ya existe un carro con ese nombre")
 
 	// ErrIdentificadorDuplicado: UNIQUE(carro_id, identificador) — "PC 27"
@@ -41,9 +25,7 @@ var (
 	ErrIdentificadorDuplicado = errors.New("ya existe un equipo con ese identificador en este carro")
 
 	// ErrNombreDeEquipoDuplicado: entre los equipos que no están en ningún
-	// carro, el nombre es lo único que los distingue. Dos filas llamadas
-	// "Cargador" serían indistinguibles justo donde hay que elegir cuál se
-	// está prestando.
+	// carro, el nombre es lo único que los distingue.
 	ErrNombreDeEquipoDuplicado = errors.New("ya existe un equipo con ese nombre")
 
 	// ErrNumeroSerieDuplicado: UNIQUE global — el número de serie de
@@ -56,8 +38,6 @@ var (
 
 	// ErrReferenciaInexistente: SQLSTATE 23503 (foreign_key_violation) — el
 	// request nombró un padre que no existe (un carro, un ciclo, una PC, un
-	// usuario). Es un error del cliente, no una falla del servidor: sin este
-	// sentinel caía al 500 genérico de mapearError, que era el modo de falla
-	// más común de toda la API para cualquier ID válido-pero-inexistente.
+	// usuario).
 	ErrReferenciaInexistente = errors.New("alguno de los datos referenciados no existe")
 )

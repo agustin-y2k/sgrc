@@ -61,23 +61,14 @@ export function eliminarUsuario(id: string) {
   return apiFetch<void>(`/api/auth/usuarios/${id}`, { method: "DELETE" })
 }
 
-/**
- * Le da rol ADMIN a un docente ya aprobado.
- *
- * El cambio tiene efecto en el request siguiente, sin volver a iniciar
- * sesión: el backend lee el rol de la base en cada pedido.
- */
+/** Le da rol ADMIN a un docente ya aprobado. */
 export function promoverAAdmin(id: string) {
   return apiFetch<void>(`/api/auth/usuarios/${id}/promover-a-admin`, { method: "POST" })
 }
 
 /**
  * La inversa: le quita el rol ADMIN a un Admin y lo deja como docente, sin
- * cerrarle la cuenta. Conserva materias y reservas.
- *
- * El backend rechaza dos casos con 409 y el mensaje ya explica cuál es, así
- * que alcanza con mostrarlo: degradar al último Admin activo (RF-01.8) y
- * degradarse a uno mismo.
+ * cerrarle la cuenta.
  */
 export function degradarADocente(id: string) {
   return apiFetch<void>(`/api/auth/usuarios/${id}/degradar-a-docente`, { method: "POST" })
@@ -120,9 +111,6 @@ export function crearEquipoDeCarro(
 /**
  * RF-03.15 — dar de alta algo prestable que no es una computadora de un
  * carro.
- *
- * `reservable` separa el proyector de los cargadores: solo lo reservable
- * aparece en la lista de equipos libres cuando un docente va a reservar.
  */
 export function crearEquipoSuelto(req: {
   tipo: string
@@ -153,8 +141,7 @@ export function editarEquipo(
 
 /**
  * RF-03.8 — pasar un equipo a EN_MANTENIMIENTO o FUERA_DE_SERVICIO cancela en
- * cascada sus reservas futuras. El motivo es opcional; si no se manda, el
- * backend arma uno por defecto para la notificación al docente.
+ * cascada sus reservas futuras.
  */
 export function cambiarEstadoEquipo(
   id: string,
@@ -214,10 +201,6 @@ export function reporteUsoDocentes(cicloId: string, desde?: string, hasta?: stri
 /**
  * RF-06.4 — el snapshot anual, que es lo único que queda de un ciclo
  * archivado: sus reservas se borran físicamente al archivarlo (RF-02.4).
- *
- * Va por año y no por ciclo porque el snapshot se guarda bajo el año, no
- * bajo el ID del ciclo — que puede no existir más. No admite filtro por
- * rango de fechas: los números ya vienen agregados.
  */
 export function historicoUsoEquipos(anio: number) {
   return apiFetch<RespuestaLista<HistoricoUsoEquipo>>(
@@ -272,11 +255,10 @@ export function listarCiclos() {
   >("/api/academic/ciclos")
 }
 
-// ── Licencias de software (RF-03.11 a RF-03.14) ───────────────────────
-//
-// Todo solo-Admin, incluidas las lecturas: el docente elige Equipo por
-// `softwareInstalado`, que ya ve en la pantalla de reserva; cuándo vence
-// una licencia es trabajo administrativo.
+// ── Licencias de software (RF-03.11 a RF-03.14) ─────────────────────── Todo
+// solo-Admin, incluidas las lecturas: el docente elige Equipo por
+// `softwareInstalado`, que ya ve en la pantalla de reserva; cuándo vence una
+// licencia es trabajo administrativo.
 
 export function listarLicencias() {
   return apiFetch<RespuestaLista<Licencia>>("/api/inventory/licencias")
@@ -291,10 +273,6 @@ export function listarLicenciasDeEquipo(equipoId: string) {
 /**
  * Alta de la MISMA licencia en varios equipos de una vez: el caso real es
  * "AutoCAD, 30 días, en estas ocho máquinas".
- *
- * Responde 201 aunque algún equipo ya la tuviera; cuáles se saltearon viene en
- * `equiposQueYaLaTenian`. Eso hace que reintentar el mismo request sea seguro:
- * completa lo que falta sin duplicar lo que ya entró.
  */
 export function crearLicencias(
   req: {
@@ -311,9 +289,8 @@ export function crearLicencias(
 }
 
 /**
- * `renovadaEl` ausente significa "hoy", que es el botón que se aprieta el
- * 99% de las veces. Con fecha es el caso del olvido: se renovó el martes y
- * se carga el jueves.
+ * `renovadaEl` ausente significa "hoy", que es el botón que se aprieta el 99%
+ * de las veces.
  */
 export function renovarLicencias(req: { licenciaIds: string[]; renovadaEl?: string }) {
   return apiFetch<RenovacionLicencias>("/api/inventory/licencias/renovar", {
@@ -323,12 +300,9 @@ export function renovarLicencias(req: { licenciaIds: string[]; renovadaEl?: stri
 }
 
 /**
- * El "editar el contador en cualquier momento": corregir la fecha, cambiar
- * la duración de 30 a 60 días, o cargar el vencimiento de una licencia que
- * se dio de alta sin él.
- *
- * Cambiar `diasDuracion` NO mueve el vencimiento vigente — eso se pide
- * aparte, mandando además `renovadaEl` con la última renovación conocida.
+ * El "editar el contador en cualquier momento": corregir la fecha, cambiar la
+ * duración de 30 a 60 días, o cargar el vencimiento de una licencia que se
+ * dio de alta sin él.
  */
 export function editarLicencia(
   id: string,
@@ -345,12 +319,8 @@ export function borrarLicencia(id: string) {
   return apiFetch<void>(`/api/inventory/licencias/${id}`, { method: "DELETE" })
 }
 
-// ── Preferencia de materia por equipo (RF-03.21) ───────────────────────
-//
-// La marca dice que una máquina es preferente para una materia. SÓLO
-// ORDENA la lista al reservar: no restringe a nadie, no oculta el equipo y
-// no afecta ninguna reserva. Por eso ninguna de estas operaciones avisa de
-// cascadas ni pide confirmación — no hay nada que se pueda llevar puesto.
+// ── Preferencia de materia por equipo (RF-03.21) ─────────────────────── La
+// marca dice que una máquina es preferente para una materia.
 
 export function listarPreferenciasDeEquipo(equipoId: string) {
   return apiFetch<RespuestaLista<PreferenciaDeEquipo>>(
@@ -370,9 +340,6 @@ export function materiasEnUso() {
 /**
  * La misma marca en varios equipos de una vez: el caso real es "estas ocho
  * PCs son las de Dibujo Técnico".
- *
- * Responde 201 aunque alguna ya estuviera marcada; cuáles se saltearon viene
- * en `equiposQueYaLaTenian`, igual que en el alta de licencias.
  */
 export function marcarPreferencia(req: {
   equipoIds: string[]

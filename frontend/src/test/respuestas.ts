@@ -1,12 +1,8 @@
 import type { PaginacionMeta } from "@/components/Paginador"
 
 /**
- * Envuelve una lista como la devuelve un endpoint paginado, con el `meta`
- * que agrega el backend (internal/shared/paginacion).
- *
- * Existe para que un mock de test no tenga que repetir el meta a mano en
- * cada archivo: lo que el test quiere decir es "el endpoint devuelve estas
- * filas", y el resto es contrato.
+ * Envuelve una lista como la devuelve un endpoint paginado, con el `meta` que
+ * agrega el backend (internal/shared/paginacion).
  */
 export function paginada<T>(
   data: T[],

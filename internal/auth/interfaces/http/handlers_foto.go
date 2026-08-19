@@ -10,12 +10,6 @@ import (
 )
 
 // La foto de perfil.
-//
-// Sube y borra cada quien la suya; verla puede cualquier usuario
-// autenticado, porque las fotos aparecen al lado del nombre en pantallas
-// compartidas (quién tiene una máquina, quién dicta una materia). Sin sesión
-// no se sirve ninguna: son fotos de personas de una escuela, no assets
-// públicos.
 
 // PUT /api/auth/mi-foto — multipart con el campo `foto`.
 func (h *Handler) SubirMiFoto(c *fiber.Ctx) error {
@@ -62,17 +56,15 @@ func (h *Handler) VerFoto(c *fiber.Ctx) error {
 	foto, err := h.svc.BuscarFoto(c.UserContext(), c.Params("id"))
 	if err != nil {
 		if errors.Is(err, domain.ErrFotoNoExiste) {
-			// 404 y no una imagen por defecto: quien dibuja el avatar es la
-			// interfaz, que ya sabe hacer las iniciales. Mandar un PNG gris
-			// desde acá le quitaría la posibilidad de elegir.
+			// 404 y no una imagen por defecto: quien dibuja el avatar es la interfaz,
+			// que ya sabe hacer las iniciales.
 			return fiber.NewError(fiber.StatusNotFound, err.Error())
 		}
 		return mapearError(err)
 	}
 
 	// El ETag hace que el navegador no vuelva a bajar la misma foto en cada
-	// pantalla que la muestre. Es la fecha de actualización: cambia solo
-	// cuando la persona cambia la imagen.
+	// pantalla que la muestre.
 	c.Set(fiber.HeaderETag, `"`+foto.ActualizadaEn.UTC().Format("20060102150405")+`"`)
 	// Privado: es la cara de una persona. Sin esto, un proxy compartido
 	// podría guardarla y servírsela a otro.

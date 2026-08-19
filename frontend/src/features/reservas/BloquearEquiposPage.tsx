@@ -32,17 +32,6 @@ function esBloqueable(equipo: Equipo): boolean {
 /**
  * RF-04.7 — un Admin toma equipos en una fecha y un rango horario conocidos
  * de antemano, por el motivo que sea.
- *
- * El motivo es texto libre y obligatorio: el laboratorio se toma por una
- * evaluación, una jornada docente, una capacitación o una obra en el aula, y
- * el sistema no puede prever la lista. Ese texto es el que lee el docente al
- * que le cancelaron la clase.
- *
- * Es la operación más destructiva que puede hacer un Admin sin darse cuenta:
- * cancela las reservas ajenas que se solapen, no se restauran solas, y el
- * docente se entera por una notificación. Por eso la pantalla insiste en
- * mostrar qué se va a llevar puesto ANTES de confirmar, que es lo que la API
- * por sí sola no ofrece.
  */
 export function BloquearEquiposPage() {
   const queryClient = useQueryClient()
@@ -63,8 +52,8 @@ export function BloquearEquiposPage() {
   const carros = carrosQuery.data?.data ?? []
 
   // Todo el inventario de una, no carro por carro como en /inventario: acá
-  // hace falta el total para poder decir cuántas de los equipos elegidas están
-  // ocupadas, y la selección cruza carros.
+  // hace falta el total para poder decir cuántas de los equipos elegidas
+  // están ocupadas, y la selección cruza carros.
   const equiposQueries = useQueries({
     queries: carros.map((c) => ({
       queryKey: ["equipos", c.id],
@@ -72,14 +61,7 @@ export function BloquearEquiposPage() {
     })),
   })
 
-  /**
-   * Los equipos libres en la franja. La diferencia contra el inventario es lo
-   * que permite avisar "esta tiene una reserva que se va a cancelar" sin
-   * que el backend tenga un endpoint de simulación.
-   *
-   * `equipos-disponibles` ya excluye las que no son reservables, así que se
-   * cruza solo contra las bloqueables.
-   */
+  /** Los equipos libres en la franja. */
   const libresQuery = useQuery({
     queryKey: ["equipos-disponibles", fecha, horaInicio, horaFin],
     queryFn: () => reservasApi.equiposDisponibles({ fecha, horaInicio, horaFin }),
@@ -121,9 +103,8 @@ export function BloquearEquiposPage() {
     (equipo) => seleccionadas.includes(equipo.id) && estaOcupada(equipo)
   )
 
-  // El motivo lo exige también el dominio, así que mandarlo vacío da un 400
-  // y no un bloqueo mudo. Se pide igual acá para que el botón diga por qué no
-  // se puede apretar, en vez de fallar después.
+  // El motivo lo exige también el dominio, así que mandarlo vacío da un 400 y
+  // no un bloqueo mudo.
   const puedeBloquear = franjaCompleta && motivo.trim() !== "" && seleccionadas.length > 0
 
   function alternar(equipoId: string, tildada: boolean) {

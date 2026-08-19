@@ -18,12 +18,7 @@ export type Sugerencia = {
 
 export type RespuestaLista<T> = { data: T[]; meta?: { total: number } }
 
-/**
- * Cómo se nombra cada tipo en pantalla.
- *
- * "Algo no anda" y no "Problema" o "Error": lo primero es lo que la persona
- * diría, lo segundo es una categoría de sistema.
- */
+/** Cómo se nombra cada tipo en pantalla. */
 export const ETIQUETA_TIPO: Record<TipoDeMensaje, string> = {
   PROBLEMA: "Algo no anda",
   SUGERENCIA: "Una idea",

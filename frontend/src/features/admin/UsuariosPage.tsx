@@ -29,9 +29,8 @@ function EstadoDeCuenta({ estado }: { estado: Estado }) {
 }
 
 // PROMOVER y DEGRADAR piden confirmación como las otras dos aunque no
-// destruyan nada: cambian quién puede tocar el inventario, el ciclo lectivo
-// y las cuentas de los demás. Son reversibles entre sí, pero no por quien
-// las sufre.
+// destruyan nada: cambian quién puede tocar el inventario, el ciclo lectivo y
+// las cuentas de los demás.
 type Confirmacion = {
   usuario: Usuario
   accion: "BAJA" | "ELIMINAR" | "PROMOVER" | "DEGRADAR"
@@ -51,9 +50,7 @@ const TEXTO_CONFIRMACION: Record<Confirmacion["accion"], (u: Usuario) => string>
 const esCambioDeRol = (accion: Confirmacion["accion"]) =>
   accion === "PROMOVER" || accion === "DEGRADAR"
 
-// RF-01/RF-02: panel de usuarios. Las acciones irreversibles (dar de baja,
-// eliminar) piden confirmación explícita y explican la consecuencia — la
-// baja es permanente (RF-02.9) y eliminar es un hard delete (RF-01.9).
+// RF-01/RF-02: panel de usuarios.
 export function UsuariosPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()

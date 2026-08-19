@@ -13,16 +13,6 @@ import { getErrorMessage } from "@/lib/api-client"
 /**
  * RF-03.5 desde la pantalla de inicio: avisar que una computadora no anda,
  * sin tener que encontrar antes el carro en el inventario.
- *
- * El formulario de reporte es el mismo componente que usa el inventario
- * (`ReportarIncidencia`); lo único que agrega esto es el paso que allá
- * estaba implícito —cuál es la máquina— porque allá se llega con el carro ya
- * abierto y acá se entra desde cero.
- *
- * La lista se pide entera y se agrupa en el navegador en vez de encadenar
- * "elegí el carro" y después "elegí la computadora": son dos preguntas para
- * alguien que ya sabe qué máquina tuvo adelante, y la segunda no se puede
- * contestar hasta responder la primera.
  */
 export function AvisarUnaFalla({ onCerrar }: { onCerrar: () => void }) {
   const [equipoId, setEquipoId] = useState("")
@@ -43,12 +33,7 @@ export function AvisarUnaFalla({ onCerrar }: { onCerrar: () => void }) {
     queryFn: inventoryApi.listarCarros,
   })
 
-  /**
-   * Los equipos por carro, en el orden en que están en el mueble.
-   *
-   * Un equipo dado de baja no se ofrece: ya no existe para nadie que la use,
-   * y reportarle una falla no le llega a ningún Admin como algo accionable.
-   */
+  /** Los equipos por carro, en el orden en que están en el mueble. */
   const grupos = useMemo(() => {
     const nombreDeCarro = new Map((carros?.data ?? []).map((c) => [c.id, c.nombre]))
     const porCarro = new Map<string, { titulo: string; equipos: Equipo[] }>()

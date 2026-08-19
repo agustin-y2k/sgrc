@@ -11,7 +11,6 @@ import (
 )
 
 // ── Requests ────────────────────────────────────────────────────────────
-//
 // HoraInicio/HoraFin viajan como "HH:MM" en el JSON — se parsean a
 // time.Duration en los handlers (ver parseHora en handlers.go).
 
@@ -116,23 +115,16 @@ func toReservaResponse(r *domain.Reserva) reservaResponse {
 }
 
 // reservaDetalladaResponse agrega a reservaResponse los nombres que hacen
-// falta para mostrar la reserva en pantalla. Sin ellos, "Mis reservas"
-// solo tenía UUIDs: una reserva de ocho equipos se veía como ocho tarjetas
-// idénticas, sin forma de saber cuál era cuál.
+// falta para mostrar la reserva en pantalla.
 type reservaDetalladaResponse struct {
 	reservaResponse
-	// Etiqueta es lo que se muestra: "PC 3" o "Proyector Epson". Los dos de
-	// abajo van en 0 y "" cuando el equipo no está en ningún carro, así que
-	// una pantalla que arme el rótulo con ellos escribe "PC 0 · " (RF-03.17).
+	// Etiqueta es lo que se muestra: "PC 3" o "Proyector Epson".
 	Etiqueta      string `json:"etiqueta"`
 	Identificador int    `json:"identificador"`
 	CarroNombre   string `json:"carroNombre"`
 	MateriaNombre string `json:"materiaNombre,omitempty"`
 	CursoNombre   string `json:"cursoNombre,omitempty"`
-	// Presente solo si la reserva es parte de una serie recurrente. De esto
-	// depende que tenga sentido ofrecer "cancelar esta y las siguientes"
-	// (RF-04.6). No sirve usar reservaGrupoId como proxy: lo tienen TODAS
-	// las reservas, así que la opción aparecería siempre.
+	// Presente solo si la reserva es parte de una serie recurrente.
 	ReglaRecurrenciaID *string `json:"reglaRecurrenciaId,omitempty"`
 }
 
@@ -184,9 +176,7 @@ type listarReservasResponse struct {
 }
 
 // bloqueCalendarioResponse es lo que RF-04.4 pide mostrar de cada bloque
-// ocupado: horario, docente y materia. En un bloqueo administrativo
-// materia/curso vienen vacíos, y en su lugar va el motivo — quien mira el
-// calendario y encuentra el rato ocupado necesita saber por qué.
+// ocupado: horario, docente y materia.
 type bloqueCalendarioResponse struct {
 	ReservaID     string `json:"reservaId"`
 	Fecha         string `json:"fecha"`
@@ -236,9 +226,7 @@ func deref(s *string) string {
 // decidir sin consultar inventory aparte).
 type equipoDisponibleResponse struct {
 	EquipoID string `json:"equipoId"`
-	// Identificador va en 0 para un equipo suelto. Lo que se muestra es
-	// Etiqueta: un proyector rotulado "PC 0" es lo que sale de formatear un
-	// identificador que no existe.
+	// Identificador va en 0 para un equipo suelto.
 	Identificador int    `json:"identificador,omitempty"`
 	Etiqueta      string `json:"etiqueta"`
 	// Tipo distingue una PC de un proyector. Texto libre.
@@ -259,15 +247,11 @@ type equipoDisponibleResponse struct {
 
 type equiposDisponiblesResponse struct {
 	Data []equipoDisponibleResponse `json:"data"`
-	// Ocupados: la otra mitad de la franja (RF-04.11). Van aparte de `data`
-	// y no mezclados: son los que NO se pueden tildar, y lo que se muestra
-	// de ellos es otra cosa —quién los tiene y hasta cuándo—.
+	// Ocupados: la otra mitad de la franja (RF-04.11).
 	Ocupados []equipoOcupadoResponse `json:"ocupados"`
 }
 
-// equipoOcupadoResponse: un equipo que ya tiene dueño en esa franja. Se
-// muestra para poder ir a hablarle o mandarle un pedido (RF-04.12), no para
-// tildarlo. De la otra persona va el nombre y nunca el email.
+// equipoOcupadoResponse: un equipo que ya tiene dueño en esa franja.
 type equipoOcupadoResponse struct {
 	EquipoID    string `json:"equipoId"`
 	Etiqueta    string `json:"etiqueta"`
@@ -283,9 +267,8 @@ type equipoOcupadoResponse struct {
 	// coincidir con la franja consultada.
 	HoraInicio string `json:"horaInicio"`
 	HoraFin    string `json:"horaFin"`
-	// PuedePedirse lo decide el servidor: false en un bloqueo, en una
-	// reserva propia y si esa franja ya empezó. La pantalla no replica la
-	// regla, porque dos copias de una regla terminan discrepando.
+	// PuedePedirse lo decide el servidor: false en un bloqueo, en una reserva
+	// propia y si esa franja ya empezó.
 	PuedePedirse bool `json:"puedePedirse"`
 }
 
@@ -312,13 +295,8 @@ func toEquipoDisponibleResponse(p application.EquipoDisponible) equipoDisponible
 // tocan, es la misma clase.
 type cambiarEquipoRequest struct {
 	EquipoID string `json:"equipoId"`
-	// SoloEsta: mismo nombre y mismo significado que al cancelar una
-	// ocurrencia (RF-04.6). Son las dos operaciones que un docente hace
-	// sobre una serie ya creada, y tienen que preguntar igual.
-	//
-	// El default de Go es false, así que el cuerpo sin este campo cambia la
-	// serie entera. Es a propósito que el handler lo trate al revés: ver
-	// CambiarEquipoDeReserva.
+	// SoloEsta: mismo nombre y mismo significado que al cancelar una ocurrencia
+	// (RF-04.6).
 	SoloEsta *bool `json:"soloEsta"`
 }
 

@@ -13,11 +13,10 @@ import (
 )
 
 // ── fakeRepo ────────────────────────────────────────────────────────────
-//
-// Replica en memoria el criterio real de titularidad acotada por
-// usuario_id (ver ports.go): BuscarBloqueDeUsuario, GuardarBloque y
-// EliminarBloqueDeUsuario tratan "existe pero es de otro usuario" igual
-// que "no existe".
+// Replica en memoria el criterio real de titularidad acotada por usuario_id
+// (ver ports.go): BuscarBloqueDeUsuario, GuardarBloque y
+// EliminarBloqueDeUsuario tratan "existe pero es de otro usuario" igual que
+// "no existe".
 
 type fakeRepo struct {
 	jornada map[string]*domain.BloqueJornada
@@ -91,9 +90,8 @@ func (r *fakeRepo) BuscarExcepcionDeFecha(ctx context.Context, usuarioID string,
 }
 
 // Las versiones en lote se implementan reusando las individuales: lo que se
-// prueba en application/ es que el servicio arme bien el resultado, no el
-// SQL —eso vive en infrastructure/ y va contra Postgres real—. Cuentan las
-// llamadas para poder verificar que el listado dejó de hacer 2N viajes.
+// prueba en application/ es que el servicio arme bien el resultado, no el SQL
+// —eso vive en infrastructure/ y va contra Postgres real—.
 func (r *fakeRepo) ListarBloquesDeUsuarios(ctx context.Context, usuarioIDs []string) (map[string][]*domain.BloqueHorario, error) {
 	r.llamadasBloquesEnLote++
 	resultado := make(map[string][]*domain.BloqueHorario, len(usuarioIDs))
@@ -508,9 +506,8 @@ func TestDisponibilidadDeTodosLosAdmins_CombinaBloquesYExcepciones(t *testing.T)
 	}
 }
 
-// El listado hacía dos consultas por Admin (horario + excepción de hoy) en
-// un for. Es la pantalla que mira cualquier docente que necesita ubicar a un
-// Admin, así que crecía con el tamaño de la institución sin ninguna razón.
+// El listado hacía dos consultas por Admin (horario + excepción de hoy) en un
+// for.
 func TestDisponibilidadDeTodosLosAdmins_ConsultaEnLote_NoUnaVezPorAdmin(t *testing.T) {
 	repo := nuevoFakeRepo()
 	ahora := time.Date(2026, time.March, 9, 10, 0, 0, 0, time.UTC)
@@ -581,10 +578,7 @@ func TestDisponibilidadDeTodosLosAdmins_ErrorDelListador_Propaga(t *testing.T) {
 // ── Jornada de la institución ──────────────────────────────────────────
 
 // Una nocturna que abre de 20:00 a 01:00 tiene que poder corregir la hora
-// después de haberla cargado. La validación del alta y la de la edición
-// tienen que decir lo mismo: la edición pedía hora_fin mayor que la de
-// inicio —regla del horario de los Admin, que no cruza la medianoche— y así
-// el tramo se podía crear pero no editar.
+// después de haberla cargado.
 func TestEditarBloqueDeJornada_CruzaLaMedianoche(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))

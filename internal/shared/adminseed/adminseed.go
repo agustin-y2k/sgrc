@@ -1,10 +1,6 @@
 // Package adminseed contiene la lógica de decisión de "sembrar el primer
-// Admin si hace falta" (RF-01.4), aislada a propósito sin ninguna
-// dependencia externa (ni pgx, ni argon2) — solo stdlib. Eso permite
-// testearla con un repo/hash falsos, sin necesitar Postgres real ni
-// resolver dependencias de red. La implementación real contra Postgres y
-// argon2id vive en cmd/ (ver cmd/seed_admin.go), que implementa la
-// interfaz Repo y provee la función de hash concreta.
+// Admin si hace falta" (RF-01.4), aislada a propósito sin ninguna dependencia
+// externa (ni pgx, ni argon2) — solo stdlib.
 package adminseed
 
 import (
@@ -17,9 +13,6 @@ import (
 var ErrEnvFaltante = errors.New("SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD no están configurados")
 
 // ErrPasswordCorta: la contraseña inicial no cumple el mínimo de seguridad.
-// Mismo mínimo que RF-01.6/08-api-spec.yaml (minLength: 8) para no crear
-// un admin con una contraseña más débil que la que se le exige a cualquier
-// otro usuario al cambiarla.
 var ErrPasswordCorta = errors.New("la contraseña del admin inicial debe tener al menos 8 caracteres")
 
 const minPasswordLen = 8
@@ -28,13 +21,6 @@ const minPasswordLen = 8
 // lo implementa contra Postgres real.
 type Repo interface {
 	// ExisteAdminActivo: si hay al menos un ADMIN que pueda entrar hoy.
-	//
-	// El estado es parte de la pregunta, no un detalle: contando los ADMIN
-	// sin filtrar, una base cuyo único Admin quedó en BAJA (o RECHAZADA) se
-	// vería como "ya tiene admin" y el seed no haría nada. El sistema
-	// quedaría sin ningún acceso administrativo y sin forma de recuperarlo
-	// desde la aplicación —nadie puede aprobar cuentas— salvo SQL a mano
-	// contra producción.
 	ExisteAdminActivo(ctx context.Context) (bool, error)
 
 	// CrearAdmin siembra el Admin inicial. Solo se llama cuando no hay
@@ -42,23 +28,11 @@ type Repo interface {
 	CrearAdmin(ctx context.Context, email, passwordHash string) error
 }
 
-// HashFunc hashea una contraseña en texto plano. Inyectada en vez de
-// llamada directamente para poder testear la lógica de decisión con un
-// hash falso, sin depender de argon2 real.
+// HashFunc hashea una contraseña en texto plano.
 type HashFunc func(password string) (string, error)
 
-// SembrarSiHaceFalta es la lógica completa de RF-01.4, sin tocar Postgres
-// ni argon2 directamente — todo eso llega inyectado.
-//
-// Reglas, en orden:
-//  1. Si ya existe un ADMIN que pueda entrar, no hace nada (idempotente).
-//  2. Si no hay email/password configurados, error claro (no falla en
-//     silencio ni crea un admin con datos vacíos).
-//  3. Si la contraseña es demasiado corta, error claro (no crea un admin
-//     débil solo porque "algo" se configuró).
-//  4. Hashea y crea. Si el hash falla, o si CrearAdmin falla (ej. el email
-//     ya existe con otro rol), se propaga el error tal cual — nunca se
-//     traga un error silenciosamente.
+// SembrarSiHaceFalta es la lógica completa de RF-01.4, sin tocar Postgres ni
+// argon2 directamente — todo eso llega inyectado.
 func SembrarSiHaceFalta(ctx context.Context, repo Repo, hash HashFunc, email, password string) error {
 	existe, err := repo.ExisteAdminActivo(ctx)
 	if err != nil {

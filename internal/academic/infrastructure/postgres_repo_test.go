@@ -99,8 +99,8 @@ func TestPostgresRepo_CrearCicloYBuscarActivo_OK(t *testing.T) {
 
 func TestPostgresRepo_DosCiclosActivos_ConstraintDeLaBase(t *testing.T) {
 	// Confirma que el índice único parcial (idx_ciclo_lectivo_activo_unico)
-	// protege esto a nivel de base, no solo en application.Service —
-	// última línea de defensa ante una condición de carrera.
+	// protege esto a nivel de base, no solo en application.Service — última
+	// línea de defensa ante una condición de carrera.
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
@@ -168,9 +168,9 @@ func TestPostgresRepo_ArchivarCiclo_MarcaCicloCursosYMaterias(t *testing.T) {
 }
 
 func TestPostgresRepo_ArchivarCiclo_DosVeces_ErrorNoEncontrado(t *testing.T) {
-	// El WHERE archivado=false en el UPDATE hace que la segunda llamada
-	// no afecte ninguna fila — se traduce a ErrCicloNoEncontrado, no a un
-	// "éxito" silencioso que re-archive algo ya archivado.
+	// El WHERE archivado=false en el UPDATE hace que la segunda llamada no
+	// afecte ninguna fila — se traduce a ErrCicloNoEncontrado, no a un "éxito"
+	// silencioso que re-archive algo ya archivado.
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
@@ -425,13 +425,9 @@ func TestValidadorUsuarioPostgres_NoExiste_FalseSinError(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_IDConFormatoInvalido_ErrorControlado reproduce el bug
-// real encontrado probando el servidor a mano: pegar un ID que no tiene
-// formato UUID (ej. un placeholder de ejemplo sin reemplazar en una URL,
-// como pasó con "CICLO_ID" literal) hacía que Postgres devolviera
-// "invalid input syntax for type uuid" (SQLSTATE 22P02), y ese error caía
-// sin distinguir al 500 genérico. Ahora debe mapearse a
-// application.ErrIDInvalido en cada punto de entrada.
+// TestPostgresRepo_IDConFormatoInvalido_ErrorControlado reproduce el bug real
+// encontrado probando el servidor a mano: pegar un ID que no tiene formato
+// UUID (ej.
 func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

@@ -50,10 +50,10 @@ export function CambiarPasswordPage() {
   async function onSubmit(values: CambiarPasswordValues) {
     setError(null)
     try {
-      // El token nuevo va primero: el viejo lleva debeCambiarPassword=true
-      // en los claims y el backend rechaza con 403 todo lo que no sea /me o
-      // este endpoint, así que el refetchUser de abajo fallaría con el
-      // anterior (RF-01.6).
+      // El token nuevo va primero: el viejo lleva debeCambiarPassword=true en
+      // los claims y el backend rechaza con 403 todo lo que no sea /me o este
+      // endpoint, así que el refetchUser de abajo fallaría con el anterior
+      // (RF-01.6).
       const { token } = await authApi.cambiarPassword(values)
       setToken(token)
       await refetchUser()

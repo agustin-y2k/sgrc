@@ -97,11 +97,10 @@ func TestRateLimit_BloqueaAlSuperarElMaximo(t *testing.T) {
 
 // ── RateLimitPorEmail ───────────────────────────────────────────────────
 
-// Limitar el login solo por IP falla en las dos direcciones: los docentes
-// que entran desde el wifi de la escuela comparten NAT y se consumen la
-// cuota entre ellos, y quien prueba contraseñas contra una cuenta puntual
-// esquiva el límite cambiando de red. La cuenta atacada es lo único
-// constante.
+// Limitar el login solo por IP falla en las dos direcciones: los docentes que
+// entran desde el wifi de la escuela comparten NAT y se consumen la cuota
+// entre ellos, y quien prueba contraseñas contra una cuenta puntual esquiva
+// el límite cambiando de red.
 func TestRateLimitPorEmail_LimitaPorCuentaNoPorIP(t *testing.T) {
 	app := fiber.New()
 	app.Post("/login", RateLimitPorEmail(2, time.Minute), func(c *fiber.Ctx) error {

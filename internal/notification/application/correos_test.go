@@ -177,8 +177,8 @@ func TestCorreo_CodigoDeRecuperacion_LlevaElCodigoYLaVigencia(t *testing.T) {
 		t.Errorf("falta qué hacer si no lo pidió:\n%s", cuerpo)
 	}
 	// El enlace al sistema NO va en este mail: es el único que contiene una
-	// credencial, y un link en un mail con un código es exactamente la
-	// forma de un phishing.
+	// credencial, y un link en un mail con un código es exactamente la forma de
+	// un phishing.
 	if strings.Contains(cuerpo, urlDePrueba) {
 		t.Errorf("el mail del código no lleva enlaces:\n%s", cuerpo)
 	}
@@ -270,9 +270,7 @@ func TestCorreo_LaBarraFinalDeLaURLNoSeDuplica(t *testing.T) {
 }
 
 func TestCorreo_ElAvisoInternoYElMailSonIndependientes(t *testing.T) {
-	// Los dos suscriptores escuchan docente.registro.pendiente. Que el
-	// correo falle no puede impedir que se escriba el aviso interno: es la
-	// única razón por la que están registrados por separado.
+	// Los dos suscriptores escuchan docente.registro.pendiente.
 	bus := eventbus.NewInMemoryEventBus()
 	repo := nuevoFakeRepo()
 	listador := &fakeListadorAdmins{adminIDs: []string{"admin-1"}, adminEmails: []string{"admin@escuela.edu.ar"}}

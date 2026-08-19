@@ -59,8 +59,7 @@ func TestPostgresRepo_Prestamo_EspontaneoIdaYVuelta(t *testing.T) {
 }
 
 // TestPostgresRepo_Prestamo_UnEquipoNoPuedeEstarEnDosManos verifica contra
-// Postgres real la garantía que el papel no puede dar. Dos Admin anotando a
-// la vez, o un doble clic, no pueden entregar dos veces la misma máquina.
+// Postgres real la garantía que el papel no puede dar.
 func TestPostgresRepo_Prestamo_UnaEquipoNoPuedeEstarEnDosManos(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -134,9 +133,8 @@ func TestPostgresRepo_Prestamo_BuscarAbiertoDeEquipo(t *testing.T) {
 		t.Errorf("devolvió otro préstamo: %s", abierto.ID)
 	}
 
-	// Y al devolverla vuelve a no haber ninguno abierto: el estado se
-	// deriva de la tabla, no de una columna que haya que acordarse de
-	// actualizar.
+	// Y al devolverla vuelve a no haber ninguno abierto: el estado se deriva de
+	// la tabla, no de una columna que haya que acordarse de actualizar.
 	if err := abierto.Devolver("", "", ahora.Add(time.Hour)); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -181,8 +179,7 @@ func TestPostgresRepo_Prestamo_GuardarRegistraLaDevolucion(t *testing.T) {
 }
 
 // TestPostgresRepo_Prestamo_AbiertosTraenUbicacionYMateria: el listado que
-// reemplaza al papel. Un renglón que dice "entregada a Ana Pérez" sin decir
-// qué computadora no sirve para nada.
+// reemplaza al papel.
 func TestPostgresRepo_Prestamo_AbiertosTraenUbicacionYMateria(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -274,9 +271,7 @@ func TestPostgresRepo_Prestamo_SoloListaLosAbiertos(t *testing.T) {
 }
 
 // TestPostgresRepo_Prestamo_SobreviveALaReserva: al archivar un ciclo se
-// borran físicamente sus reservas (RF-02.4). El registro de que alguien se
-// llevó una máquina vale por sí mismo, así que el préstamo tiene que quedar
-// con reserva_id en NULL en vez de irse con ella.
+// borran físicamente sus reservas (RF-02.4).
 func TestPostgresRepo_Prestamo_SobreviveALaReserva(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -318,8 +313,8 @@ func TestPostgresRepo_Prestamo_SobreviveALaReserva(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_Prestamo_DentroDeUnaTransaccion: entregar varios equipos de
-// una reserva es una sola operación, así que el repo tiene que funcionar
+// TestPostgresRepo_Prestamo_DentroDeUnaTransaccion: entregar varios equipos
+// de una reserva es una sola operación, así que el repo tiene que funcionar
 // atado a una transacción igual que el resto del paquete.
 func TestPostgresRepo_Prestamo_DentroDeUnaTransaccion(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
@@ -353,13 +348,9 @@ func TestPostgresRepo_Prestamo_DentroDeUnaTransaccion(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_ReservasFuturasDeEquipo_VienenOrdenadas fija el contrato del
-// que depende el aviso de "esta PC tiene una reserva encima" al entregarla
-// suelta: quien llama toma la PRIMERA como la más próxima.
-//
-// La consulta no tenía ORDER BY, así que Postgres podía devolverlas en
-// cualquier orden y el aviso nombraba la reserva de la semana siguiente en
-// vez de la de dentro de una hora.
+// TestPostgresRepo_ReservasFuturasDeEquipo_VienenOrdenadas fija el contrato
+// del que depende el aviso de "esta PC tiene una reserva encima" al
+// entregarla suelta: quien llama toma la PRIMERA como la más próxima.
 func TestPostgresRepo_ReservasFuturasDeEquipo_VienenOrdenadas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -399,12 +390,9 @@ func TestPostgresRepo_ReservasFuturasDeEquipo_VienenOrdenadas(t *testing.T) {
 	}
 }
 
-// TestPostgresRepo_Prestamo_QuienRetiraSobreviveALaVueltaDeLaBase
-//
-// Quien responde y quien vino a buscar el equipo son dos columnas distintas,
-// y las dos tienen que volver de la base como se guardaron. Es el dato que
-// permite reclamarle al docente aunque las máquinas hayan salido en manos de
-// un alumno.
+// TestPostgresRepo_Prestamo_QuienRetiraSobreviveALaVueltaDeLaBase Quien
+// responde y quien vino a buscar el equipo son dos columnas distintas, y las
+// dos tienen que volver de la base como se guardaron.
 func TestPostgresRepo_Prestamo_QuienRetiraSobreviveALaVueltaDeLaBase(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -459,19 +447,6 @@ func TestPostgresRepo_Prestamo_SinAnotarQuienRetira(t *testing.T) {
 
 // PrestamosAVigilar es la consulta que alimenta el barrido de fondo: el
 // reclamo por devolución demorada y el aviso de cierre de jornada.
-//
-// Tiene test propio, y contra Postgres real, por cómo se rompió: comparte
-// `columnasPrestamoDetallado` con las consultas del mostrador, alguien le
-// agregó `retirado_por` a esa constante, actualizó el Scan de un consumidor y
-// no el del otro. pgx cortó con "number of field descriptions must equal
-// number of destinations, got 20 and 19" y el barrido murió en cada pasada
-// —cada cinco minutos, durante meses— sin que nadie recibiera un aviso de una
-// computadora que no volvió.
-//
-// Ningún test con un repo falso podía verlo: el error lo produce Postgres al
-// contar las columnas. Por eso este mira los campos que vienen DE la consulta,
-// y no solo que no falle: si mañana se agrega otra columna a la constante y se
-// olvida acá, el Scan vuelve a desalinearse y esto lo dice.
 func TestPostgresRepo_PrestamosAVigilar_TraeTodasLasColumnas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -565,15 +540,6 @@ func TestPostgresRepo_PrestamosAVigilar_IgnoraLoDevuelto(t *testing.T) {
 // ReservasAVigilar es la PRIMERA de las dos consultas del barrido, así que
 // cuando falla no corre nada: ni los recordatorios, ni el aviso de no retiro,
 // ni la liberación, ni los reclamos de devolución.
-//
-// Falló durante meses de una forma que se esconde sola: hora_inicio y hora_fin
-// son columnas TIME, pgx las entrega como time.Time, y el Scan las recibía
-// sobre los time.Duration del struct. Con la tabla vacía —o sin reservas de
-// hoy ni de mañana— el Scan no se ejecuta y la consulta parece sana; alcanza
-// UNA reserva del día para que el barrido entero muera.
-//
-// De ahí que este test cree la reserva antes de mirar, y que compare las horas
-// además de contar filas: es el par de campos que estaba mal convertido.
 func TestPostgresRepo_ReservasAVigilar_ConvierteLasHoras(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -625,8 +591,7 @@ func TestPostgresRepo_ReservasAVigilar_ConvierteLasHoras(t *testing.T) {
 }
 
 // La otra mitad del modo de falla: sin reservas del día la consulta no
-// escanea nada y no puede decir si la conversión está bien. Este test fija
-// que ese caso siga siendo silencioso y vacío, no un error.
+// escanea nada y no puede decir si la conversión está bien.
 func TestPostgresRepo_ReservasAVigilar_SinReservasDelDia(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

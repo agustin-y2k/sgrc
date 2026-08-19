@@ -25,9 +25,7 @@ func ParseRolDocente(s string) (RolDocente, error) {
 	}
 }
 
-// DocenteMateria vincula un usuario (docente) a una materia. Una materia
-// puede tener más de un docente asignado (titular + suplente, o varios
-// simultáneos) — RF-02.6.
+// DocenteMateria vincula un usuario (docente) a una materia.
 type DocenteMateria struct {
 	ID        string
 	UsuarioID string

@@ -10,15 +10,7 @@ import * as adminApi from "@/features/admin/api"
 import type { Carro, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * Alta (RF-03.2) y edición (RF-03.4/RF-03.10) de un equipo.
- *
- * Es un solo componente para las dos cosas porque los campos son los mismos;
- * lo que cambia es qué se puede tocar. `identificador` y `numeroSerie` solo
- * aparecen al crear: el backend no los acepta en el PATCH (ver
- * editarEquipoRequest en internal/inventory/interfaces/http/dto.go), y ofrecer
- * un campo que se ignora en silencio es peor que no ofrecerlo.
- */
+/** Alta (RF-03.2) y edición (RF-03.4/RF-03.10) de un equipo. */
 
 type CamposEquipo = {
   identificador: string
@@ -129,8 +121,8 @@ export function AltaDeEquipo({ carroId }: { carroId: string }) {
       adminApi.crearEquipoDeCarro(carroId, {
         identificador: Number(campos.identificador),
         // El backend lo normaliza igual (a mayúsculas y sin espacios al
-        // borde, ver domain.NormalizarNumeroSerie); acá se manda tal cual
-        // se tipeó y la respuesta trae la forma canónica.
+        // borde, ver domain.NormalizarNumeroSerie); acá se manda tal cual se
+        // tipeó y la respuesta trae la forma canónica.
         numeroSerie: campos.numeroSerie.trim(),
         freezado: campos.freezado,
         cpu: opcional(campos.cpu),
@@ -145,14 +137,7 @@ export function AltaDeEquipo({ carroId }: { carroId: string }) {
   })
 
   // El identificador es único dentro del carro y el número de serie en toda
-  // la institución (RF-03.2). El backend rechaza el duplicado, así que acá
-  // solo se chequea la forma.
-  //
-  // Y son dos formas distintas, aunque los dos campos se llamen "número":
-  // el identificador es el número del zócalo del carro —"PC 1", "PC 2"— y
-  // sí es un entero. El número de serie es el código de fábrica de la
-  // etiqueta y casi siempre trae letras ("5CD1234ABC"): exigirle dígitos
-  // haría imposible cargar el dato real.
+  // la institución (RF-03.2).
   const identificadorValido = /^\d+$/.test(campos.identificador.trim())
   const serieValida = campos.numeroSerie.trim() !== ""
 

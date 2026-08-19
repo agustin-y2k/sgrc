@@ -111,8 +111,8 @@ describe("DisponibilidadPage", () => {
 
   /**
    * Es lo que evita que la pantalla parezca rota: sin el texto de la
-   * excepción, un Admin que hoy no viene se ve como "no disponible" en
-   * pleno horario habitual y no hay forma de saber por qué.
+   * excepción, un Admin que hoy no viene se ve como "no disponible" en pleno
+   * horario habitual y no hay forma de saber por qué.
    */
   it("explica la excepción de hoy cuando contradice el horario habitual", async () => {
     vi.mocked(disponibilidadApi.listarDisponibilidadDeAdmins).mockResolvedValue({
@@ -321,8 +321,8 @@ describe("DisponibilidadPage", () => {
 
   /**
    * El backend rechaza con 400 una NO_DISPONIBLE que traiga horario
-   * (chk_excepcion_horario_coherente): los campos de hora no se mandan
-   * aunque el formulario tenga valores por defecto cargados.
+   * (chk_excepcion_horario_coherente): los campos de hora no se mandan aunque
+   * el formulario tenga valores por defecto cargados.
    */
   it("carga una ausencia puntual sin horario", async () => {
     mockUsuario(ADMIN)

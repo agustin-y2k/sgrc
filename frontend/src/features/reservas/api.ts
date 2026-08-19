@@ -28,10 +28,6 @@ export function misMaterias() {
 /**
  * RF-04.2 y RF-04.11 — las dos mitades de la franja: los equipos libres para
  * tildar y los que ya tiene alguien, con quién los tiene.
- *
- * Con `serieDesdeGrupoId`, los libres son los que están libres en TODAS las
- * fechas que le quedan a esa serie (RF-08.14): es lo que evita ofrecer una
- * máquina que después va a chocar en la tercera fecha.
  */
 export function equiposDisponibles({
   fecha,
@@ -44,11 +40,7 @@ export function equiposDisponibles({
   horaInicio: string
   horaFin: string
   serieDesdeGrupoId?: string
-  /**
-   * RF-03.21: para qué materia se ordena la lista. Sin él la lista sale
-   * igual, con el orden de siempre — que es lo que corresponde cuando un
-   * Admin reserva sin materia.
-   */
+  /** RF-03.21: para qué materia se ordena la lista. */
   materiaId?: string
 }) {
   const params = new URLSearchParams({ fecha, horaInicio, horaFin })
@@ -61,9 +53,6 @@ export function equiposDisponibles({
 
 /**
  * RF-04.12 — pedirle al docente que tiene esa reserva que libere el equipo.
- *
- * No cambia ninguna reserva: manda un aviso y un correo. El acuerdo lo
- * cierran ellos.
  */
 export function pedirLiberacion(reservaId: string, mensaje: string) {
   return apiFetch<void>(`/api/reservation/reservas/${reservaId}/pedido-de-liberacion`, {
@@ -72,20 +61,17 @@ export function pedirLiberacion(reservaId: string, mensaje: string) {
   })
 }
 
-/**
- * Las reservas del usuario. El backend fuerza el filtro por creador cuando
- * quien pregunta es docente, así que "mis reservas" no necesita mandar nada.
- */
+/** Las reservas del usuario. */
 export function listarReservas(filtros?: {
   desde?: string
   hasta?: string
   incluirCanceladas?: boolean
   page?: number
   /**
-   * El backend pagina de a 50 si no se pide nada, con un techo de 200. Un
-   * día con ocho clases de ocho máquinas son 64 reservas, así que la
-   * pantalla de entregas tiene que pedir el máximo: con el default se
-   * quedaba sin ver las últimas, y sin ningún aviso de que faltaban.
+   * El backend pagina de a 50 si no se pide nada, con un techo de 200. Un día
+   * con ocho clases de ocho máquinas son 64 reservas, así que la pantalla de
+   * entregas tiene que pedir el máximo: con el default se quedaba sin ver las
+   * últimas, y sin ningún aviso de que faltaban.
    */
   pageSize?: number
 }) {
@@ -125,14 +111,8 @@ export function cancelarReserva(reservaId: string, motivo: string) {
 }
 
 /**
- * RF-04.7 — toma equipos para otra cosa y cancela en cascada
- * las reservas que se solapen.
- *
- * Es destructivo e irreversible: las reservas canceladas no se restauran
- * si después se borra el bloqueo. El backend lo hace todo en una sola
- * transacción, así que o se bloquean todos los equipos o ninguno.
- *
- * Rechaza con 409 si alguna Equipo no está DISPONIBLE o está dada de baja.
+ * RF-04.7 — toma equipos para otra cosa y cancela en cascada las reservas que
+ * se solapen.
  */
 export function bloquearEquipos(req: BloquearRequest) {
   return apiFetch<ResultadoBloqueo>("/api/reservation/bloqueos", {
@@ -149,10 +129,9 @@ export function cancelarGrupo(grupoId: string, motivo: string, soloEsta: boolean
   )
 }
 
-// ── Entregas y devoluciones (RF-08) ───────────────────────────────────
-//
-// Todo solo Admin: quien entrega y recibe las máquinas es quien hoy escribe
-// el papel que esto reemplaza.
+// ── Entregas y devoluciones (RF-08) ─────────────────────────────────── Todo
+// solo Admin: quien entrega y recibe las máquinas es quien hoy escribe el
+// papel que esto reemplaza.
 
 /** Qué hay afuera ahora mismo. Lo más atrasado viene primero. */
 export function listarPrestamosAbiertos() {
@@ -166,21 +145,10 @@ export function historialDePrestamosDeEquipo(equipoId: string) {
   )
 }
 
-/**
- * Entregar las máquinas de una reserva. Se mandan las reservas puntuales
- * (una por equipo), no el grupo: el docente puede llevarse tres de las cinco.
- *
- * La hora de devolución no se manda — sale del fin de la reserva.
- *
- * Responde 200 aunque alguna Equipo no haya salido; qué pasó con cada una está
- * en `noEntregadas`.
- */
+/** Entregar las máquinas de una reserva. */
 export function entregarPorReserva(req: {
   reservaIds: string[]
-  /**
-   * Quién vino a buscarlas, si no fue el docente de la reserva. Se anota AL
-   * LADO del docente y no en su lugar: él reservó y él responde (RF-08.19).
-   */
+  /** Quién vino a buscarlas, si no fue el docente de la reserva. */
   retiradoPor?: string
 }) {
   return apiFetch<ResultadoEntrega>("/api/reservation/prestamos/por-reserva", {
@@ -204,11 +172,7 @@ export function entregarSuelta(req: {
   })
 }
 
-/**
- * Las máquinas volvieron. `observaciones` vale para todo el lote, así que si
- * hay algo puntual que anotar sobre una —"volvió sin el cargador"— conviene
- * recibir esa sola.
- */
+/** Las máquinas volvieron. */
 export function recibirEquipos(req: { prestamoIds: string[]; observaciones?: string }) {
   return apiFetch<ResultadoDevolucion>("/api/reservation/prestamos/recibir", {
     method: "POST",
@@ -216,19 +180,7 @@ export function recibirEquipos(req: { prestamoIds: string[]; observaciones?: str
   })
 }
 
-/**
- * RF-08.14 — cambiar una reserva de máquina sin partir la clase en dos.
- *
- * Sirve cuando el sistema avisa que un equipo no volvió al laboratorio: la
- * alternativa era cancelar esa reserva y crear otra, que arma un grupo nuevo
- * y deja la misma clase mostrada como dos tarjetas separadas.
- *
- * Es de quien tenga la reserva, o de un Admin.
- *
- * `soloEsta` es la misma pregunta que al cancelar una ocurrencia (RF-04.6):
- * con false, el cambio alcanza a todas las fechas que le quedan a la serie.
- * Se manda siempre explícito para no depender del default del servidor.
- */
+/** RF-08.14 — cambiar una reserva de máquina sin partir la clase en dos. */
 export function cambiarEquipoDeReserva(
   reservaId: string,
   equipoId: string,

@@ -8,7 +8,6 @@ import (
 )
 
 // ── Requests ────────────────────────────────────────────────────────────
-//
 // HoraInicio/HoraFin viajan como "HH:MM" en el JSON — se parsean a
 // time.Duration en los handlers (ver parseHora en parsing.go).
 
@@ -105,9 +104,7 @@ func toAdminDisponibilidadResponse(a application.AdminDisponibilidad) adminDispo
 }
 
 // toBloqueJornadaResponse reusa bloqueResponse: los dos tienen los mismos
-// cuatro campos y el mismo formato de hora. Se separa la función, no la
-// estructura — un DTO propio idéntico solo agregaría un lugar más donde
-// cambiar el formato de "HH:MM" y olvidarse del otro.
+// cuatro campos y el mismo formato de hora.
 func toBloqueJornadaResponse(b *domain.BloqueJornada) bloqueResponse {
 	return bloqueResponse{
 		ID:         b.ID,

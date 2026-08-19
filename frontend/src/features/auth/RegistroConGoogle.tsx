@@ -29,17 +29,8 @@ import { getErrorMessage } from "@/lib/api-client"
 import { datosDeLaCredencial } from "@/lib/google-identity"
 
 /**
- * El segundo paso del registro con Google: lo único que el token de Google
- * no puede traer.
- *
- * Que exista este paso es el motivo por el que el ingreso con Google son
- * dos endpoints y no uno. Al aprobar una cuenta, el Admin necesita saber
- * qué curso y qué materia le corresponde (RF-01.3 / RF-02.6); sin eso
- * recibiría solicitudes sin ningún dato para saber a qué asignarlas.
- *
- * El email no se puede editar: viene firmado dentro del token y es lo
- * único que el backend va a mirar. Mostrarlo como un campo editable sería
- * ofrecer un cambio que no tiene ningún efecto.
+ * El segundo paso del registro con Google: lo único que el token de Google no
+ * puede traer.
  */
 const registroGoogleSchema = z.object({
   nombre: z.string().min(1, "Requerido").max(100),
@@ -83,8 +74,8 @@ export function RegistroConGoogle({
         nombre: values.nombre,
         apellido: values.apellido,
         // Vacío se manda como ausente, igual que en el registro con
-        // contraseña: "no lo declaró" y "lo dejó en blanco" no son dos
-        // cosas distintas.
+        // contraseña: "no lo declaró" y "lo dejó en blanco" no son dos cosas
+        // distintas.
         cursoSolicitado: values.cursoSolicitado?.trim() || undefined,
         materiaSolicitada: values.materiaSolicitada?.trim() || undefined,
         rolSolicitado: values.rolSolicitado || undefined,

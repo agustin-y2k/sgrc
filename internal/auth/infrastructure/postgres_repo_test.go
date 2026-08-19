@@ -1,10 +1,8 @@
 //go:build integration
 
-// Este archivo solo se compila/corre con la tag "integration"
-// (go test -tags=integration ./...), porque necesita Docker corriendo
-// para levantar un Postgres real con testcontainers-go. Donde no haya
-// Docker, estos tests se saltean solos por el build tag — no hace falta un
-// flag extra para "no romper el build".
+// Este archivo solo se compila/corre con la tag "integration" (go test
+// -tags=integration ./...), porque necesita Docker corriendo para levantar un
+// Postgres real con testcontainers-go.
 package infrastructure
 
 import (
@@ -27,10 +25,9 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/testdb"
 )
 
-// levantarPostgresDeTest arranca un contenedor Postgres efímero, le
-// aplica la migración real del proyecto (docs/07-modelo-datos.md /
-// migrations/001_esquema_inicial.sql) y devuelve un pool conectado. Se destruye solo
-// al terminar el test (t.Cleanup).
+// levantarPostgresDeTest arranca un contenedor Postgres efímero, le aplica la
+// migración real del proyecto (docs/07-modelo-datos.md /
+// migrations/001_esquema_inicial.sql) y devuelve un pool conectado.
 func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
@@ -247,9 +244,6 @@ func TestPostgresRepo_Eliminar_OK(t *testing.T) {
 // Regresión de RF-01.9: el hard delete moría con violación de FK —y el
 // handler lo devolvía como 500— si el docente había creado una reserva
 // recurrente o figuraba en el snapshot histórico de un ciclo archivado.
-// Eran los dos casos comunes, no los raros: cualquier docente con
-// antigüedad quedaba imposible de eliminar y su email bloqueado para
-// siempre, que es justo lo contrario de para qué existe RF-01.9.
 func TestPostgresRepo_Eliminar_ConReglaRecurrenteEHistorico_OK(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -322,9 +316,9 @@ func TestPostgresRepo_Eliminar_Inexistente_ErrUsuarioNoEncontrado(t *testing.T) 
 func TestPostgresRepo_EmailUnico_ConstraintDeLaBase(t *testing.T) {
 	// Este test confirma específicamente que la protección contra emails
 	// duplicados no depende solo de la capa de aplicación (que ya chequea
-	// BuscarPorEmail antes de crear) — la constraint UNIQUE de la base es
-	// la última línea de defensa ante una condición de carrera entre dos
-	// registros simultáneos con el mismo email.
+	// BuscarPorEmail antes de crear) — la constraint UNIQUE de la base es la
+	// última línea de defensa ante una condición de carrera entre dos registros
+	// simultáneos con el mismo email.
 	pool := levantarPostgresDeTest(t)
 	ctx := context.Background()
 
@@ -464,9 +458,8 @@ func TestPostgresRepo_Listar_ConAmbosFiltrosCombinados(t *testing.T) {
 	}
 }
 
-// Un ID sin formato UUID tiene que mapear a application.ErrIDInvalido
-// (400), nunca a un 500 crudo de Postgres: es un error del cliente. Mismo
-// chequeo que en academic, inventory y reservation.
+// Un ID sin formato UUID tiene que mapear a application.ErrIDInvalido (400),
+// nunca a un 500 crudo de Postgres: es un error del cliente.
 func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -492,10 +485,8 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 
 // Prueba determinística del mecanismo que cierra el TOCTOU: el conteo de
 // Admins toma un lock sobre las filas que cuenta, así que una segunda
-// transacción que quiera contar lo mismo QUEDA BLOQUEADA hasta que la
-// primera termine — en vez de leer el mismo número y dejar pasar las dos
-// bajas. Sin el FOR UPDATE este test falla: la segunda lectura devuelve
-// enseguida.
+// transacción que quiera contar lo mismo QUEDA BLOQUEADA hasta que la primera
+// termine — en vez de leer el mismo número y dejar pasar las dos bajas.
 func TestContarAdminsAprobados_BloqueaALecturasConcurrentes(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -609,11 +600,9 @@ func TestUltimoAdmin_DosBajasConcurrentes_NuncaQuedanCeroAdmins(t *testing.T) {
 	}
 }
 
-// Degradar es el otro camino que reduce la cantidad de Admins, y no
-// compite solo consigo mismo: una baja y una degradación simultáneas sobre
-// los dos últimos Admins tienen que verse entre sí. Si cada una contara por
-// su lado, ambas leerían "quedan 2", ambas pasarían, y el sistema quedaría
-// sin nadie que pueda aprobar cuentas ni volver a promover a nadie.
+// Degradar es el otro camino que reduce la cantidad de Admins, y no compite
+// solo consigo mismo: una baja y una degradación simultáneas sobre los dos
+// últimos Admins tienen que verse entre sí.
 func TestUltimoAdmin_BajaYDegradacionConcurrentes_NuncaQuedanCeroAdmins(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

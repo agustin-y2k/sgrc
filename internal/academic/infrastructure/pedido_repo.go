@@ -44,10 +44,8 @@ func (r *PostgresRepo) CrearPedido(ctx context.Context, p *domain.PedidoDeMateri
 		p.Motivo, string(p.Estado), p.CreadoEn)
 	if err != nil {
 		if esViolacionUnica(err) {
-			// El índice único parcial: ya hay un pedido sin resolver de esta
-			// persona por esta materia. La aplicación lo chequea antes para
-			// poder explicarlo mejor; esto es la red por si dos pedidos
-			// entran a la vez.
+			// El índice único parcial: ya hay un pedido sin resolver de esta persona
+			// por esta materia.
 			return application.ErrPedidoDuplicado
 		}
 		if esViolacionFK(err) {
@@ -89,9 +87,8 @@ func (r *PostgresRepo) GuardarPedido(ctx context.Context, p *domain.PedidoDeMate
 }
 
 func (r *PostgresRepo) ListarPedidos(ctx context.Context, soloPendientes bool) ([]*domain.PedidoDeMateria, error) {
-	// Los pendientes van del más viejo al más nuevo: el que más esperó es el
-	// que más urge. Los resueltos, al revés — ahí lo que se busca es lo
-	// último que pasó.
+	// Los pendientes van del más viejo al más nuevo: el que más esperó es el que
+	// más urge.
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+columnasPedido+` FROM pedido_de_materia
 		 WHERE ($1 = false OR estado = 'PENDIENTE')

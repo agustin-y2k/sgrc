@@ -9,29 +9,12 @@ import (
 
 // PedidoDeMateria es un docente pidiendo poder dictar —y por lo tanto
 // reservar computadoras para— una materia más.
-//
-// Al registrarse ya se podía decir qué materia se dicta (usuario.
-// materia_solicitada, texto libre para el caso de que todavía no exista).
-// Esto es lo mismo, pero repetible: a un docente le dan una materia nueva en
-// mayo, y hasta ahora la única salida era encontrar a un Admin y pedirle que
-// lo cargara a mano.
-//
-// **Aprobarlo es una decisión de una persona, y el sistema no la toma.** Que
-// alguien tenga una materia habilita a reservar equipos para ella, y quien
-// ya la da puede quedarse sin máquinas porque el otro llegó antes (tocarle
-// las reservas no puede: eso ya está prohibido en reservation). Si el pedido
-// es legítimo se sabe hablando con la persona o con los directivos, no
-// mirando una pantalla. Lo que hace el sistema es dejarlo escrito con su
-// motivo, avisarle a quien ya la dicta, y guardar quién resolvió qué.
 type PedidoDeMateria struct {
 	ID        string
 	UsuarioID string
 
-	// Las dos formas de pedir, excluyentes:
-	//
-	//   MateriaID          → existe y se eligió de la lista.
-	//   CursoSolicitado /
-	//   MateriaSolicitada  → no existe todavía y va escrita a mano.
+	// Las dos formas de pedir, excluyentes: MateriaID → existe y se eligió de la
+	// lista.
 	MateriaID         *string
 	CursoSolicitado   string
 	MateriaSolicitada string
@@ -86,9 +69,9 @@ func NuevoPedidoDeMateria(id, usuarioID string, materiaID *string, cursoSolicita
 		return nil, ErrPedidoSinMateria
 	}
 
-	// El motivo es obligatorio y no un campo más: es lo único con lo que
-	// cuenta quien decide antes de ir a preguntar, y tener que escribirlo
-	// hace pensar dos veces a quien pide de más.
+	// El motivo es obligatorio y no un campo más: es lo único con lo que cuenta
+	// quien decide antes de ir a preguntar, y tener que escribirlo hace pensar
+	// dos veces a quien pide de más.
 	if motivo == "" {
 		return nil, ErrMotivoVacio
 	}
@@ -119,9 +102,7 @@ func (p *PedidoDeMateria) Aprobar(adminID, respuesta string, ahora time.Time) er
 	return p.resolver(PedidoAprobado, adminID, respuesta, ahora)
 }
 
-// Rechazar exige explicación. Un "no" sin motivo manda a la persona a
-// preguntar por qué, y esa conversación empieza mal: quien pidió ya se
-// expuso escribiendo para qué la quería.
+// Rechazar exige explicación.
 func (p *PedidoDeMateria) Rechazar(adminID, respuesta string, ahora time.Time) error {
 	if strings.TrimSpace(respuesta) == "" {
 		return ErrRechazoSinMotivo

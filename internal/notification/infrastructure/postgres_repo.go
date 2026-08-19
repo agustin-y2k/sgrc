@@ -98,9 +98,7 @@ func escanearNotificacion(row pgx.Row) (*domain.Notificacion, error) {
 }
 
 // escanearNotificacionConTotal es escanearNotificacion más la columna que
-// agrega COUNT(*) OVER() al listado paginado. Se escribe aparte y no con un
-// parámetro opcional porque el orden de las columnas del Scan tiene que
-// coincidir exactamente con el del SELECT de cada consulta.
+// agrega COUNT(*) OVER() al listado paginado.
 func escanearNotificacionConTotal(row pgx.Row, total *int) (*domain.Notificacion, error) {
 	var n domain.Notificacion
 	var estadoStr string
@@ -144,11 +142,8 @@ func (r *PostgresRepo) Guardar(ctx context.Context, n *domain.Notificacion) erro
 	return nil
 }
 
-// ListarPorUsuario devuelve una página de las notificaciones de un usuario
-// y el total que matchean el filtro.
-//
-// Es uno de los tres listados que crecen con el uso: cada cancelación en
-// cascada le deja una fila a cada docente afectado, y nada las borra.
+// ListarPorUsuario devuelve una página de las notificaciones de un usuario y
+// el total que matchean el filtro.
 func (r *PostgresRepo) ListarPorUsuario(ctx context.Context, usuarioID string, filtroEstado *domain.Estado, pagina paginacion.Pagina) ([]*domain.Notificacion, int, error) {
 	desde := ` FROM notificacion WHERE usuario_id = $1`
 	args := []any{usuarioID}
@@ -189,8 +184,8 @@ func (r *PostgresRepo) ListarPorUsuario(ctx context.Context, usuarioID string, f
 		return nil, 0, err
 	}
 
-	// Una página más allá del final no trae ventana de la que leer el total,
-	// y sin él la campana mostraría "0 notificaciones" con la primera página
+	// Una página más allá del final no trae ventana de la que leer el total, y
+	// sin él la campana mostraría "0 notificaciones" con la primera página
 	// llena.
 	if len(resultado) == 0 && pagina.Offset() > 0 {
 		if err := r.pool.QueryRow(ctx, "SELECT COUNT(*)"+desde, args...).Scan(&total); err != nil {
@@ -229,8 +224,6 @@ func (r *PostgresRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsua
 }
 
 // MarcarTodasLeidasDe: un solo UPDATE para todas las NO_LEIDA del usuario.
-// El WHERE por estado hace que sea idempotente — volver a llamarlo no
-// pisa la leida_en de las que ya estaban leídas.
 func (r *PostgresRepo) MarcarTodasLeidasDe(ctx context.Context, usuarioID string, ahora time.Time) (int, error) {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE notificacion SET estado = 'LEIDA', leida_en = $2

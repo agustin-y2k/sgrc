@@ -140,9 +140,7 @@ describe("AcademicoPage", () => {
     }
 
     // RF-02.2: el nombre sigue el patrón ^[1-6]°[A-Z]$, pero no se escribe:
-    // se elige el año y la división. El `°` no está en el teclado y se
-    // confunde con `º` (ordinal masculino), que es otro carácter y hacía
-    // fallar la validación sin que se notara la diferencia en pantalla.
+    // se elige el año y la división.
     it("arma el nombre del curso con los selectores de año y división", async () => {
       vi.mocked(academicoApi.crearCurso).mockResolvedValue(curso({ id: "nuevo" }))
       const user = userEvent.setup()
@@ -323,9 +321,9 @@ describe("AcademicoPage", () => {
       expect(screen.getByLabelText("Rol de Ada Lovelace")).toHaveValue("TITULAR")
     })
 
-    // Cambiar el rol tiene su propio endpoint: quitar y volver a asignar
-    // pasa por la cascada de RF-02.10 y, si es el único docente, le cancela
-    // las reservas futuras a la materia.
+    // Cambiar el rol tiene su propio endpoint: quitar y volver a asignar pasa
+    // por la cascada de RF-02.10 y, si es el único docente, le cancela las
+    // reservas futuras a la materia.
     it("corrige el rol sin quitar la asignación", async () => {
       vi.mocked(academicoApi.listarDocentesDeMateria).mockResolvedValue({
         data: [docenteMateria()],

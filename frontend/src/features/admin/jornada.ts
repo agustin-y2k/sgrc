@@ -2,17 +2,8 @@ import { DIAS_SEMANA, etiquetaDia } from "@/features/disponibilidad/types"
 import type { BloqueHorario, DiaSemana } from "@/features/disponibilidad/types"
 
 /**
- * Presentación de la jornada institucional: cómo se agrupa para leerla y
- * cómo se nombran los días.
- *
- * Está separado de la pantalla porque es la parte que tiene reglas —qué es
- * "lunes a viernes", cuándo un conjunto de días se dice como un rango— y esa
- * es la parte que conviene poder probar sin renderizar nada.
- *
- * El backend guarda un bloque por día: "lunes a viernes de 7:30 a 12:30" son
- * cinco filas. Eso está bien como modelo —cada día puede moverse solo— pero
- * es una forma pésima de leerlo y de cargarlo. Acá se hace el camino de
- * vuelta: cinco bloques con el mismo horario se muestran como una sola línea.
+ * Presentación de la jornada institucional: cómo se agrupa para leerla y cómo
+ * se nombran los días.
  */
 
 const ORDEN_SEMANA: DiaSemana[] = DIAS_SEMANA.map((d) => d.valor)
@@ -40,18 +31,7 @@ export type TramoAgrupado = {
   bloques: BloqueHorario[]
 }
 
-/**
- * Junta los bloques que comparten horario, sin importar el día.
- *
- * No fusiona horarios distintos aunque se toquen: 07:00–12:00 y 12:00–18:00
- * del mismo día se muestran como dos líneas porque son dos cosas que alguien
- * cargó por separado y va a querer tocar por separado. (El backend sí los
- * fusiona para decidir si una reserva entra — ver `dentroDeLaJornada` —, pero
- * eso es la regla, no la pantalla.)
- *
- * El orden es el de lectura: primero por el día más temprano del grupo, y
- * dentro del mismo día por hora de apertura.
- */
+/** Junta los bloques que comparten horario, sin importar el día. */
 export function agruparTramos(bloques: BloqueHorario[]): TramoAgrupado[] {
   const porHorario = new Map<string, BloqueHorario[]>()
   for (const b of bloques) {
@@ -81,9 +61,6 @@ export function agruparTramos(bloques: BloqueHorario[]): TramoAgrupado[] {
 /**
  * Cómo se dice un conjunto de días: "Todos los días", "Lunes a viernes",
  * "Lunes, miércoles y viernes".
- *
- * El rango ("de X a Y") se usa solo desde tres días seguidos. Con dos, "lunes
- * a martes" es más largo y más raro que "lunes y martes".
  */
 export function etiquetaDeDias(dias: DiaSemana[]): string {
   const ordenados = ordenarDias(dias)
@@ -114,11 +91,6 @@ const FIN_DE_SEMANA: DiaSemana[] = ["SABADO", "DOMINGO"]
  * Los tres repartos de la semana que cubren casi todos los casos reales: la
  * escuela de siempre, la de jornada extendida o albergue que dicta los siete
  * días, y el fin de semana con su propio horario.
- *
- * Son atajos y no opciones excluyentes: después de aplicar uno se pueden
- * marcar o desmarcar días sueltos, porque las escuelas que no entran en
- * ninguno de los tres existen y son justamente el motivo por el que la
- * jornada se declara en vez de suponerse.
  */
 export const ATAJOS_DE_DIAS: { etiqueta: string; dias: DiaSemana[] }[] = [
   { etiqueta: "Lunes a viernes", dias: DIAS_HABILES },

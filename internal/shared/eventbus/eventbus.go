@@ -1,11 +1,5 @@
-// Package eventbus implementa un pub/sub in-process (ver docs/06-arquitectura.md §4).
-//
-// Reemplaza a un message broker externo (NATS, Kafka): en un monolito no hace
-// falta desacoplar procesos que corren en el mismo binario. Si en el futuro el
-// proyecto se separa en microservicios, solo se reemplaza InMemoryEventBus por
-// una implementación que hable con un broker real — el resto del código
-// (quién publica, quién se suscribe) no cambia porque depende de la interfaz
-// EventBus, no de esta implementación concreta.
+// Package eventbus implementa un pub/sub in-process (ver
+// docs/06-arquitectura.md §4).
 package eventbus
 
 import (
@@ -27,9 +21,7 @@ type EventBus interface {
 }
 
 // InMemoryEventBus es la única implementación mientras el sistema sea un
-// monolito. La entrega es síncrona y en memoria — sin persistencia de
-// mensajes ni garantías at-least-once, que no hacen falta con un solo
-// proceso (si el proceso muere, todo se reinicia junto).
+// monolito.
 type InMemoryEventBus struct {
 	mu       sync.RWMutex
 	handlers map[string][]func(Evento)
@@ -44,15 +36,6 @@ func NewInMemoryEventBus() *InMemoryEventBus {
 }
 
 // Publish notifica a todos los handlers suscritos a ese tipo de evento.
-// Corre en la goroutine del llamador; si algún handler necesita no bloquear
-// la respuesta HTTP (ej. notificaciones), debe lanzar su propia goroutine
-// internamente.
-//
-// Un panic dentro de un handler NUNCA debe tirar abajo el resto de los
-// handlers suscritos al mismo evento, ni al proceso completo — se recupera,
-// se loguea, y Publish sigue con el siguiente handler. Sin esto, un bug en
-// (por ejemplo) el handler de reportes podría impedir que el handler de
-// notificaciones se entere de una cancelación de reserva.
 func (b *InMemoryEventBus) Publish(evento Evento) {
 	b.mu.RLock()
 	handlers := b.handlers[evento.Tipo]

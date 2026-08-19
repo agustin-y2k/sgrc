@@ -24,11 +24,6 @@ import { getErrorMessage } from "@/lib/api-client"
 // La grilla arranca a las 7 y termina a las 22 mientras no haya nada fuera de
 // esa franja: cubre el horario escolar típico sin desperdiciar alto en horas
 // en las que nunca hay clase.
-//
-// Son un piso y un techo por DEFECTO, no límites: una escuela nocturna dicta
-// hasta pasada la medianoche y con una grilla fija esas clases se dibujarían
-// afuera del recuadro, o sea en ninguna parte. El rango real lo decide
-// rangoHorarioVisible() a partir de lo que efectivamente hay esa semana.
 const HORA_DESDE_POR_DEFECTO = 7
 const HORA_HASTA_POR_DEFECTO = 22
 const ALTO_POR_HORA_REM = 3
@@ -36,12 +31,6 @@ const ALTO_POR_HORA_REM = 3
 /**
  * Parte un bloque que cruza la medianoche en los dos pedazos que se dibujan:
  * lo que ocurre en su propio día y lo que se pasa al siguiente.
- *
- * El backend guarda la clase como una sola cosa —una reserva del lunes de
- * 22:00 a 01:00— y así tiene que seguir siendo: es una clase, se cancela
- * entera y se cuenta una vez. Pero un calendario tiene una columna por día,
- * así que para dibujarla hay que cortarla por la medianoche. El corte es
- * puramente visual y no viaja a ningún lado.
  */
 function pedazosPorDia(b: BloqueCalendario): { fecha: string; bloque: BloqueCalendario }[] {
   if (aMinutos(b.horaFin) > aMinutos(b.horaInicio)) {
@@ -54,13 +43,7 @@ function pedazosPorDia(b: BloqueCalendario): { fecha: string; bloque: BloqueCale
   ]
 }
 
-/**
- * De qué hora a qué hora dibujar, dado lo que hay que mostrar.
- *
- * Se estira hacia afuera —nunca hacia adentro— para que ningún bloque quede
- * cortado: con una clase de 22:00 a 01:00 en la semana, la grilla llega hasta
- * las 24 y el día siguiente arranca a las 0.
- */
+/** De qué hora a qué hora dibujar, dado lo que hay que mostrar. */
 function rangoHorarioVisible(bloques: BloqueCalendario[]): { desde: number; hasta: number } {
   let desde = HORA_DESDE_POR_DEFECTO
   let hasta = HORA_HASTA_POR_DEFECTO
@@ -78,10 +61,9 @@ function BloqueOcupado({ bloque, horaDesde }: { bloque: BloqueCalendario; horaDe
 
   const esBloqueo = bloque.tipo === "BLOQUEO"
   // En un bloqueo el motivo viene siempre —es obligatorio al crearlo y lo
-  // sostiene un CHECK en la base— pero el campo es opcional en el tipo
-  // porque no existe en las reservas normales, y TypeScript no puede
-  // estrecharlo por `esBloqueo`. El respaldo cubre lo que el tipo permite:
-  // sin él, un `undefined` se leería tal cual dentro del title.
+  // sostiene un CHECK en la base— pero el campo es opcional en el tipo porque
+  // no existe en las reservas normales, y TypeScript no puede estrecharlo por
+  // `esBloqueo`.
   const motivo = bloque.motivoBloqueo || "Bloqueado"
   const alto = ((fin - inicio) / 60) * ALTO_POR_HORA_REM
   const desplazamiento = ((inicio - minutosBase) / 60) * ALTO_POR_HORA_REM
@@ -134,9 +116,7 @@ export function CalendarioEquipoPage() {
   const desde = semana[0]
   const hasta = semana[semana.length - 1]
 
-  // La jornada declarada decide qué días se dibujan. Una escuela de lunes a
-  // viernes ve cinco columnas; una albergue, siete. Sin jornada declarada se
-  // muestran los siete, porque no hay restricción que refleje.
+  // La jornada declarada decide qué días se dibujan.
   const { data: jornada } = useQuery({
     queryKey: JORNADA_KEY,
     queryFn: disponibilidadApi.jornadaDeLaInstitucion,
@@ -148,8 +128,7 @@ export function CalendarioEquipoPage() {
       return dia !== null && declarados.has(dia)
     })
     // Una jornada que no cubra ningún día de esta semana dejaría la grilla
-    // sin columnas y la pantalla sin sentido. Es un caso de borde raro pero
-    // posible mientras alguien está cargando la jornada a medias.
+    // sin columnas y la pantalla sin sentido.
     return visibles.length > 0 ? visibles : semana
   }, [semana, jornada])
 
@@ -158,11 +137,8 @@ export function CalendarioEquipoPage() {
     queryFn: () => calendarioApi.calendarioDeEquipo(equipoId, desde, hasta),
   })
 
-  // Se agrupa por fecha una sola vez en vez de filtrar dentro de cada
-  // celda (que sería recorrer la lista completa una vez por columna).
-  //
-  // Un bloque que cruza la medianoche entra en DOS días, partido: la clase
-  // del lunes a las 22:00 ocupa el final del lunes y el principio del martes.
+  // Se agrupa por fecha una sola vez en vez de filtrar dentro de cada celda
+  // (que sería recorrer la lista completa una vez por columna).
   const bloquesPorDia = useMemo(() => {
     const mapa = new Map<string, BloqueCalendario[]>()
     for (const b of data?.bloques ?? []) {

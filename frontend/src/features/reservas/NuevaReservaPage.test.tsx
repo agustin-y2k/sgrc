@@ -52,8 +52,7 @@ const equipos: EquipoDisponible[] = [
 
 /**
  * El listado, reducido a lo que este archivo necesita comprobar: que se
- * llegó, y con qué mensaje de confirmación. La pantalla real lo saca del
- * mismo lugar (ver useConfirmacionDeLlegada en MisReservasPage).
+ * llegó, y con qué mensaje de confirmación.
  */
 function ListadoDePrueba() {
   const { state } = useLocation()
@@ -80,11 +79,7 @@ function renderPagina() {
   )
 }
 
-/**
- * Espera a que el listado de materias haya llegado. El <select> se renderiza
- * antes que la respuesta, así que sin esto selectOptions corre contra un
- * combo que todavía solo tiene el placeholder.
- */
+/** Espera a que el listado de materias haya llegado. */
 async function elegirMateria(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByRole("option", { name: /Matemáticas/ })
   await user.selectOptions(screen.getByLabelText("Materia"), "m1")
@@ -144,12 +139,7 @@ describe("NuevaReservaPage", () => {
     )
   })
 
-  /**
-   * El proyector es reservable pero no está en ningún carro. Con el
-   * rótulo armado a partir del identificador se ofrecía como "Equipo undefined",
-   * y con `carroNombre` vacío caía bajo un título en blanco: el docente veía
-   * una casilla sin saber qué estaba tildando.
-   */
+  /** El proyector es reservable pero no está en ningún carro. */
   it("ofrece lo que no está en ningún carro bajo su propio título", async () => {
     const user = userEvent.setup()
     vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
@@ -217,9 +207,9 @@ describe("NuevaReservaPage", () => {
     expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
   })
 
-  // Una hora de fin MENOR que la de inicio ya no es un error: significa que la
-  // clase termina al día siguiente, que es como dicta una escuela nocturna.
-  // El formulario lo dice en vez de bloquearlo.
+  // Una hora de fin MENOR que la de inicio ya no es un error: significa que
+  // la clase termina al día siguiente, que es como dicta una escuela
+  // nocturna.
   it("una franja que cruza la medianoche se puede confirmar, y lo avisa", async () => {
     const user = userEvent.setup()
     renderPagina()
@@ -295,9 +285,8 @@ describe("NuevaReservaPage", () => {
     ).toBeInTheDocument()
   })
 
-  // Un botón gris en un formulario de siete campos no dice cuál de los
-  // siete falta. La persona lo mira, mira el formulario, y no tiene forma
-  // de saber qué corregir.
+  // Un botón gris en un formulario de siete campos no dice cuál de los siete
+  // falta.
   it("dice qué falta para poder confirmar", async () => {
     renderPagina()
     await screen.findByLabelText("Materia")

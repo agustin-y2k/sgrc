@@ -96,16 +96,7 @@ func TestPostgresRepo_CrearYBuscarPorID_OK(t *testing.T) {
 	}
 }
 
-// Los instantes van en TIMESTAMPTZ y este test lo sostiene. Con una columna
-// sin zona, escribir un instante en la hora local y leerlo de vuelta lo corre
-// tantas horas como el desfasaje: Postgres guarda la hora de pared y el
-// driver la interpreta como UTC. El síntoma llega hasta la interfaz — el
-// listado de notificaciones (RF-05) mostraría cada aviso a una hora que no
-// es.
-//
-// El test escribe con offset -03:00 a propósito, que es lo que hace el
-// proceso real (APP_TIMEZONE), y compara instantes: si la columna volviera
-// a ser TIMESTAMP, la diferencia sería exactamente de tres horas.
+// Los instantes van en TIMESTAMPTZ y este test lo sostiene.
 func TestPostgresRepo_CreadaEn_ConservaElInstante(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -213,10 +204,9 @@ func TestPostgresRepo_ListarPorUsuario_FiltraPorEstado(t *testing.T) {
 	}
 }
 
-// La paginación se verifica contra Postgres real y no solo con el fake
-// porque lo que puede salir mal es el SQL: el orden de $n del LIMIT/OFFSET
-// respecto de los args del filtro, y que COUNT(*) OVER() cuente antes del
-// recorte.
+// La paginación se verifica contra Postgres real y no solo con el fake porque
+// lo que puede salir mal es el SQL: el orden de $n del LIMIT/OFFSET respecto
+// de los args del filtro, y que COUNT(*) OVER() cuente antes del recorte.
 func TestPostgresRepo_ListarPorUsuario_PaginaYTotal(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -314,9 +304,8 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 	}
 }
 
-// El aviso de una cuenta pendiente guarda de quién habla, para poder
-// cerrarlo cuando esa cuenta se resuelve. Va contra la base porque lo que se
-// prueba es la columna y su consulta.
+// El aviso de una cuenta pendiente guarda de quién habla, para poder cerrarlo
+// cuando esa cuenta se resuelve.
 func TestPostgresRepo_ListarNoLeidasSobreUsuario(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

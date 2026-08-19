@@ -62,9 +62,6 @@ func (h *Handler) ListarPedidosDeMateria(c *fiber.Ctx) error {
 }
 
 // POST /api/academic/pedidos-de-materia/{id}/resolver (Admin).
-//
-// La decisión ya se tomó afuera —hablando con la persona o con los
-// directivos—; esto la registra y la aplica.
 func (h *Handler) ResolverPedidoDeMateria(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -77,10 +74,9 @@ func (h *Handler) ResolverPedidoDeMateria(c *fiber.Ctx) error {
 	}
 
 	// Sin rol explícito lo decide el servicio según la materia (ver
-	// rolPorDefecto en service_pedidos.go): arrogarle la titularidad a
-	// alguien que se suma a una materia que ya da otro es un dato mal
-	// cargado, y el rol es justamente el campo que después alguien lee para
-	// saber quién es quién.
+	// rolPorDefecto en service_pedidos.go): arrogarle la titularidad a alguien
+	// que se suma a una materia que ya da otro es un dato mal cargado, y el rol
+	// es justamente el campo que después alguien lee para saber quién es quién.
 	var rol *domain.RolDocente
 	if strings.TrimSpace(req.Rol) != "" {
 		parseado, err := domain.ParseRolDocente(req.Rol)

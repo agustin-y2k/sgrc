@@ -12,47 +12,23 @@ import { useNoLeidas } from "@/features/notificaciones/useNoLeidas"
 import { contar } from "@/lib/plural"
 import { Avatar } from "@/components/Avatar"
 
-/**
- * Los enlaces del menú, en el orden en que se usan.
- *
- * Están en una lista y no escritos a mano en el JSX porque la barra se
- * dibuja dos veces —horizontal en pantallas grandes, desplegable en un
- * teléfono— y dos copias del mismo menú es cómo terminan diferenciándose.
- *
- * Van en dos listas y no en una con `soloAdmin` porque no son la misma
- * clase de cosa. Las primeras son los tres lugares a los que se entra todos
- * los días; las de administración son tareas de mantenimiento que se hacen
- * de a ratos —dar de alta un ciclo, revisar un reporte— y que se usan una
- * vez cada tanto. Puestas todas al mismo nivel eran diez ítems hermanos sin
- * jerarquía: para un Admin, la barra no tenía forma, y a 1024px ni siquiera
- * entraba (de ahí el `overflow-x-auto` que había que dejar de red).
- */
+/** Los enlaces del menú, en el orden en que se usan. */
 type Enlace = { a: string; texto: string }
 
 const ENLACES: Enlace[] = [
   { a: "/reservas", texto: "Reservas" },
   // "Computadoras" y no "Inventario": desde la pantalla de inicio se llega
-  // acá por un atajo que dice "Ver las computadoras", y el cartel del
-  // destino tiene que coincidir con el botón que se apretó. Para quien no
-  // conoce el sistema, un nombre distinto del otro lado no se lee como un
-  // sinónimo, se lee como "me equivoqué". Además "Inventario" es palabra de
-  // depósito, y quien entra acá viene a mirar máquinas.
-  //
-  // Para un Admin, que ve las dos, ahora se distinguen mejor que antes:
-  // "Computadoras" es mirar, "Gestión del inventario" es editar. Con
-  // "Inventario" a secas eran casi el mismo nombre.
+  // acá por un atajo que dice "Ver las computadoras", y el cartel del destino
+  // tiene que coincidir con el botón que se apretó.
   { a: "/inventario", texto: "Computadoras" },
-  // RF-07.2: lo ve cualquier usuario autenticado. Para un docente es "a
-  // quién busco si necesito algo del laboratorio"; para un Admin es además
-  // donde carga su propio horario.
+  // RF-07.2: lo ve cualquier usuario autenticado.
   { a: "/disponibilidad", texto: "Horario Admins" },
 ]
 
 /**
  * Aprobación queda afuera del grupo, en la barra: es la única tarea de
- * administración que es diaria y reactiva —llegó un registro nuevo y
- * alguien está esperando para poder trabajar—. Enterrarla a un clic la
- * volvería más lenta justo en el caso en que la demora se le nota a otro.
+ * administración que es diaria y reactiva —llegó un registro nuevo y alguien
+ * está esperando para poder trabajar—.
  */
 const ENLACE_APROBACION: Enlace = { a: "/admin/aprobacion", texto: "Aprobación" }
 
@@ -71,13 +47,10 @@ const ENLACES_ADMIN: Enlace[] = [
   { a: "/admin/licencias", texto: "Licencias" },
   { a: "/admin/reportes", texto: "Reportes" },
   // Los dos buzones nuevos: pedidos de materia y lo que la gente escribe
-  // sobre el sistema. Van al final del grupo porque no son diarios — se
-  // miran cuando llega un aviso.
+  // sobre el sistema.
   { a: "/admin/pedidos-de-materia", texto: "Pedidos de materia" },
   { a: "/admin/sugerencias", texto: "Lo que nos escribieron" },
-  // La jornada de la escuela: qué días y horas abre. Se configura una vez y
-  // casi no se toca, así que va abajo — pero antes de "Bloquear equipos",
-  // que es lo que más rompe si se entra sin querer.
+  // La jornada de la escuela: qué días y horas abre.
   { a: "/admin/jornada", texto: "Jornada de la escuela" },
   // RF-04.7. Último: es lo que menos se usa y lo que más rompe si se entra
   // sin querer.
@@ -98,37 +71,21 @@ function claseDeEnlace({ isActive }: { isActive: boolean }): string {
 /**
  * Lo mismo, para el menú desplegable del teléfono: ahí cada enlace se toca
  * con el pulgar y necesita los 44px de WCAG 2.5.5, que con el `py-1.5` de la
- * barra no llegaba (32px). En la barra de escritorio se apunta con el mouse
- * y agrandar los ítems la haría desbordar, que es el problema que persigue
- * `e2e/responsive.spec.ts` — por eso son dos clases y no una.
+ * barra no llegaba (32px).
  */
 function claseDeEnlaceMovil(estado: { isActive: boolean }): string {
   return `${claseDeEnlace(estado)} flex min-h-11 items-center`
 }
 
-/**
- * El grupo "Administración" de la barra de escritorio.
- *
- * Es un desplegable escrito a mano y no una primitiva de Radix por dos
- * razones: el archivo ya resuelve así el menú del teléfono —un botón con
- * `aria-expanded`/`aria-controls` y un `<nav>` condicional— y traer una
- * segunda mecánica para el mismo gesto es cómo terminan comportándose
- * distinto; y porque lo que hace falta acá es una lista de cinco enlaces,
- * no un menú con navegación por flechas.
- *
- * Lo que sí hay que darle es lo que un usuario espera de cualquier
- * desplegable: que Escape lo cierre, que un clic afuera lo cierre y que
- * navegar lo cierre. Sin eso queda una trampa en la que se hace clic en
- * cualquier lado y no pasa nada.
- */
+/** El grupo "Administración" de la barra de escritorio. */
 function MenuAdministracion() {
   const [abierto, setAbierto] = useState(false)
   const contenedor = useRef<HTMLDivElement>(null)
   const { pathname } = useLocation()
 
-  // Con el menú cerrado, estar parado en una de sus pantallas tiene que
-  // verse igual: si no, en /admin/reportes la barra no marca nada y no hay
-  // forma de saber dónde se está.
+  // Con el menú cerrado, estar parado en una de sus pantallas tiene que verse
+  // igual: si no, en /admin/reportes la barra no marca nada y no hay forma de
+  // saber dónde se está.
   const enElGrupo = ENLACES_ADMIN.some((e) => pathname.startsWith(e.a))
 
   useEffect(() => {

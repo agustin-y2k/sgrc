@@ -1,14 +1,7 @@
 //go:build integration
 
-// Tests de la persistencia de los códigos de recuperación
-// contra Postgres real.
-//
-// Van acá y no contra un fake porque lo que hay que verificar es
-// exactamente lo que un fake no puede: que el CTE de CrearCodigoRecuperacion
-// invalide los anteriores sin tocar el que está insertando, y que el
-// `usado_en IS NULL` del UPDATE impida que dos pedidos concurrentes consuman
-// el mismo código. Las dos son propiedades de cómo Postgres resuelve el
-// statement, no de nuestra lógica en Go.
+// Tests de la persistencia de los códigos de recuperación contra Postgres
+// real.
 package infrastructure
 
 import (
@@ -99,9 +92,9 @@ func TestCodigoRecuperacion_CrearInvalidaElAnterior(t *testing.T) {
 		t.Fatalf("creando el segundo: %v", err)
 	}
 
-	// Es la razón de ser del CTE: el tope de 5 intentos es POR código, así
-	// que si los códigos se acumularan, pedir veinte multiplicaría por
-	// veinte los intentos disponibles para adivinar.
+	// Es la razón de ser del CTE: el tope de 5 intentos es POR código, así que
+	// si los códigos se acumularan, pedir veinte multiplicaría por veinte los
+	// intentos disponibles para adivinar.
 	vigente, err := repo.BuscarCodigoVigenteDe(ctx, usuarioID)
 	if err != nil {
 		t.Fatalf("no debería fallar buscando: %v", err)
@@ -110,10 +103,9 @@ func TestCodigoRecuperacion_CrearInvalidaElAnterior(t *testing.T) {
 		t.Fatalf("el vigente tiene que ser el último pedido, es %q", vigente.ID)
 	}
 
-	// Y el nuevo NO puede haberse invalidado a sí mismo: el UPDATE del CTE
-	// corre bajo la misma instantánea que el INSERT, así que no ve la fila
-	// que se está creando. Si esto falla, pedir un código lo dejaría
-	// nacido muerto.
+	// Y el nuevo NO puede haberse invalidado a sí mismo: el UPDATE del CTE corre
+	// bajo la misma instantánea que el INSERT, así que no ve la fila que se está
+	// creando.
 	if vigente.UsadoEn != nil {
 		t.Fatal("el código nuevo se invalidó a sí mismo")
 	}
@@ -229,9 +221,7 @@ func TestCodigoRecuperacion_DosPedidosConcurrentesConsumenUnaSolaVez(t *testing.
 		t.Fatalf("creando: %v", err)
 	}
 
-	// Dos requests con el código correcto llegando a la vez. Sin el
-	// `usado_en IS NULL` en el WHERE, los dos harían UPDATE sobre la misma
-	// fila y los dos cambiarían una contraseña con un código de un solo uso.
+	// Dos requests con el código correcto llegando a la vez.
 	const intentos = 8
 	var wg sync.WaitGroup
 	resultados := make([]error, intentos)
@@ -289,8 +279,8 @@ func TestCodigoRecuperacion_SeVanConLaCuenta(t *testing.T) {
 	}
 }
 
-// ══════════════════════════════════════════════════════════════════
-// Versión de sesión
+// ══════════════════════════════════════════════════════════════════ Versión
+// de sesión
 // ══════════════════════════════════════════════════════════════════
 
 func TestVersionSesion_ArrancaEnCeroYSePersiste(t *testing.T) {
@@ -304,9 +294,8 @@ func TestVersionSesion_ArrancaEnCeroYSePersiste(t *testing.T) {
 	}
 
 	// El DEFAULT 0 de la columna es lo que hace que una cuenta creada antes de
-	// que existiera el contador no
-	// desloguee a nadie: coincide con el claim ausente en los tokens que ya
-	// estaban emitidos.
+	// que existiera el contador no desloguee a nadie: coincide con el claim
+	// ausente en los tokens que ya estaban emitidos.
 	leido, err := repo.BuscarPorID(ctx, u.ID)
 	if err != nil {
 		t.Fatalf("buscando: %v", err)
@@ -344,9 +333,9 @@ func TestVerificadorCuentaVigente_DevuelveLaVersionDeSesion(t *testing.T) {
 		t.Fatalf("guardando: %v", err)
 	}
 
-	// Es la consulta que corre en CADA request autenticado: si no trajera
-	// la versión, la revocación no existiría por más que la columna estuviera
-	// bien guardada.
+	// Es la consulta que corre en CADA request autenticado: si no trajera la
+	// versión, la revocación no existiría por más que la columna estuviera bien
+	// guardada.
 	cuenta, err := NewVerificadorCuentaVigente(pool).Vigente(ctx, u.ID)
 	if err != nil {
 		t.Fatalf("verificando: %v", err)

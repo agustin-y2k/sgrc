@@ -1,6 +1,4 @@
-// Package application orquesta los casos de uso de RF-06 (reportes de
-// uso). ArchivarSnapshotDeCiclo es el lado "reporting" de la cascada de
-// archivado de RF-02.4 — ver el comentario en esa función.
+// Package application orquesta los casos de uso de RF-06 (reportes de uso).
 package application
 
 import (
@@ -22,11 +20,8 @@ func NewService(repo Repo, infoEquipo InfoEquipoParaSnapshot, infoUsuario InfoUs
 	return &Service{repo: repo, infoEquipo: infoEquipo, infoUsuario: infoUsuario, nuevoID: nuevoID}
 }
 
-// ReporteUsoEquipos / ReporteUsoDocentes implementan RF-06.1/06.2 — agregan EN
-// VIVO desde reserva/materia/curso. Solo tienen sentido para un ciclo que
-// todavía no se archivó: una vez archivado, sus Reserva se borran
-// físicamente y esta consulta no encuentra nada — para esos casos está
-// HistoricoUsoEquipos/HistoricoUsoDocentes en su lugar (RF-06.3, por año).
+// ReporteUsoEquipos / ReporteUsoDocentes implementan RF-06.1/06.2 — agregan
+// EN VIVO desde reserva/materia/curso.
 func (s *Service) ReporteUsoEquipos(ctx context.Context, cicloID string, desde, hasta *time.Time) ([]domain.ResumenUsoEquipo, error) {
 	if err := validarRango(desde, hasta); err != nil {
 		return nil, err
@@ -74,17 +69,10 @@ func (s *Service) HistoricoUsoDocentes(ctx context.Context, anio int) ([]*domain
 }
 
 // ArchivarSnapshotDeCiclo implementa el lado "reporting" de la cascada de
-// archivado (RF-02.4/06.3): calcula el uso agregado de cada PC y cada
-// docente en este ciclo — TODAVÍA con sus reservas vivas — y lo persiste
-// como snapshot permanente bajo el año del ciclo (anio, no cicloID: ver
+// archivado (RF-02.4/06.3): calcula el uso agregado de cada PC y cada docente
+// en este ciclo — TODAVÍA con sus reservas vivas — y lo persiste como
+// snapshot permanente bajo el año del ciclo (anio, no cicloID: ver
 // domain/historico.go).
-//
-// Se llama UNA SOLA VEZ, orquestado desde cmd/main.go (el adaptador de
-// composición que academic usa para su puerto ArchivadorHistorico), y
-// SIEMPRE antes de que reservation borre físicamente las reservas de ese
-// ciclo — el orden importa: invertido, no quedaría nada que agregar. Ver
-// el mismo criterio en cmd/wiring_adapters.go que ya usan
-// inventory/auth hacia reservation.
 func (s *Service) ArchivarSnapshotDeCiclo(ctx context.Context, cicloID string, anio int) error {
 	// Sin rango de fechas a propósito: el snapshot cubre el ciclo entero.
 	usosEquipo, err := s.repo.CalcularUsoEquiposDeCiclo(ctx, cicloID, nil, nil)
@@ -110,9 +98,6 @@ func (s *Service) ArchivarSnapshotDeCiclo(ctx context.Context, cicloID string, a
 		return fmt.Errorf("calculando uso de docentes: %w", err)
 	}
 	// Las filas de cuentas ya eliminadas se rehacen enteras en cada intento.
-	// El ON CONFLICT de las otras se apoya en UNIQUE (anio, usuario_id), y
-	// para Postgres dos NULL son distintos: sin esta limpieza previa, un
-	// archivado reintentado duplicaría a cada docente sin cuenta.
 	if err := s.repo.BorrarHistoricoDocentesSinCuenta(ctx, anio); err != nil {
 		return fmt.Errorf("limpiando el histórico de docentes sin cuenta: %w", err)
 	}
@@ -142,8 +127,6 @@ func (s *Service) ArchivarSnapshotDeCiclo(ctx context.Context, cicloID string, a
 
 // EstadoDelInventario y EquiposFueraDeCirculacion no reciben rango de fechas
 // a propósito: describen la situación de AHORA, no lo que pasó en un período.
-// Filtrarlas por fecha daría un número que no significa nada — "cuántas
-// estaban rotas en marzo" no se puede responder con el estado actual.
 func (s *Service) EstadoDelInventario(ctx context.Context) ([]domain.EstadoDelInventario, error) {
 	return s.repo.EstadoDelInventario(ctx)
 }

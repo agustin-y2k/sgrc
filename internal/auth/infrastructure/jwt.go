@@ -21,9 +21,9 @@ func NewJWTFirmador(secret []byte, ttl time.Duration) *JWTFirmador {
 	return &JWTFirmador{secret: secret, ttl: ttl}
 }
 
-// Firmar cumple la firma de application.TokenSigner
-// (func(u *domain.Usuario) (string, error)) — se pasa como
-// f.Firmar directamente al construir el Service.
+// Firmar cumple la firma de application.TokenSigner (func(u *domain.Usuario)
+// (string, error)) — se pasa como f.Firmar directamente al construir el
+// Service.
 func (f *JWTFirmador) Firmar(u *domain.Usuario) (string, error) {
 	claims := &middleware.Claims{
 		UserID:              u.ID,
@@ -31,10 +31,7 @@ func (f *JWTFirmador) Firmar(u *domain.Usuario) (string, error) {
 		Nombre:              u.Nombre,
 		Apellido:            u.Apellido,
 		DebeCambiarPassword: u.DebeCambiarPassword,
-		// La versión de sesión se toma del usuario tal como está en este
-		// momento. Quien invalida las sesiones y además emite un token
-		// nuevo (CambiarPassword) tiene que llamar a InvalidarSesiones
-		// ANTES de firmar, o el token que entrega nace inválido.
+		// La versión de sesión se toma del usuario tal como está en este momento.
 		VersionSesion: u.VersionSesion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(f.ttl)),

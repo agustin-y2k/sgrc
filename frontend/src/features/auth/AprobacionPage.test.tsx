@@ -43,9 +43,9 @@ const pendientesMock: ListarUsuariosResponse = {
 
 describe("AprobacionPage", () => {
   beforeEach(() => {
-    // vi.mock() genera mocks automáticos cuyo historial de llamadas NO
-    // limpia restoreAllMocks — sin esto, un "no fue llamado" ve las
-    // llamadas del test anterior.
+    // vi.mock() genera mocks automáticos cuyo historial de llamadas NO limpia
+    // restoreAllMocks — sin esto, un "no fue llamado" ve las llamadas del
+    // test anterior.
     vi.clearAllMocks()
   })
 
@@ -84,9 +84,7 @@ describe("AprobacionPage", () => {
   })
 
   // Rechazar no se deshace (RECHAZADA es terminal y no transiciona a ningún
-  // lado), así que un solo click no debe alcanzar. La salida que sí existe
-  // —eliminar la cuenta para liberar el email, RF-01.9— se nombra en el
-  // mismo aviso.
+  // lado), así que un solo click no debe alcanzar.
   it("Rechazar NO dispara el PATCH hasta confirmar, y avisa que no se deshace", async () => {
     vi.mocked(authApi.listarUsuarios).mockResolvedValue(pendientesMock)
     vi.mocked(authApi.cambiarEstado).mockResolvedValue(undefined)
@@ -144,8 +142,7 @@ describe("AprobacionPage", () => {
 })
 
 // RF-01.3 + RF-02.6: lo que el docente declaró al registrarse es lo que el
-// Admin necesita para saber a qué materia y curso asignarlo. Antes tenía que
-// preguntárselo por fuera del sistema.
+// Admin necesita para saber a qué materia y curso asignarlo.
 describe("AprobacionPage — lo que el docente pidió dictar", () => {
   beforeEach(() => {
     vi.clearAllMocks()

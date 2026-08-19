@@ -3,40 +3,9 @@ import { useEffect, useRef, useState } from "react"
 import * as authApi from "@/features/auth/api"
 import { cargarGoogleIdentity, type GoogleIdentity } from "@/lib/google-identity"
 
-/**
- * El botón "Iniciar sesión con Google". Lo dibuja Google, no nosotros: la
- * biblioteca lo renderiza dentro de un iframe propio, y ese es el único
- * botón que su política de marca permite.
- *
- * Que el iframe sea de Google significa que NO se puede tocar con CSS: no
- * hay clase, variable de tema ni `!important` que entre ahí. Todo lo que se
- * puede ajustar son las opciones de `renderButton`, y son justo las que
- * hacen que el botón parezca parte de la pantalla en vez de un recorte
- * pegado encima:
- *
- *   - `width` a la medida del formulario. Es lo que más se notaba: el botón
- *     salía con el ancho de su propio texto, centrado, mientras el de
- *     "Iniciar sesión" ocupaba toda la fila. Dos botones uno sobre otro con
- *     anchos distintos se leen como si el de abajo fuera de otra página.
- *   - `theme` según el tema de la app. En oscuro, el botón `outline` es una
- *     tarjeta blanca en medio de un formulario oscuro.
- *   - `logo_alignment: "left"`, que centra el texto en el resto del botón
- *     igual que los nuestros.
- *
- * No decide nada sobre la sesión — cuando Google devuelve el token, lo
- * entrega por `onCredential` y quien lo usa decide qué hacer (entrar,
- * mandar a completar el registro, mostrar un error).
- *
- * Si el despliegue no tiene GOOGLE_CLIENT_ID, o si el script de Google no
- * carga, no se dibuja nada: el formulario de email y contraseña sigue
- * estando y es un camino completo por sí solo.
- */
+/** El botón "Iniciar sesión con Google". */
 
-/**
- * El tope que acepta `renderButton`. Pedirle más no agranda el botón: lo
- * ignora y vuelve al ancho del texto, que es exactamente el defecto que
- * estamos tratando de evitar.
- */
+/** El tope que acepta `renderButton`. */
 const ANCHO_MAXIMO = 400
 
 export function BotonGoogle({
@@ -63,9 +32,9 @@ export function BotonGoogle({
 
   // ── Cargar e inicializar, una sola vez ────────────────────────────
   useEffect(() => {
-    // cancelado evita tocar el DOM (o el estado) si el componente se
-    // desmontó mientras se cargaba el script — pasa al navegar rápido entre
-    // login y registro.
+    // cancelado evita tocar el DOM (o el estado) si el componente se desmontó
+    // mientras se cargaba el script — pasa al navegar rápido entre login y
+    // registro.
     let cancelado = false
 
     async function preparar() {
@@ -82,17 +51,13 @@ export function BotonGoogle({
             if (credential) callback.current(credential)
           },
           // One Tap apagado: el diálogo flotante de Google puede aparecer
-          // solo y tapar el formulario de login. El botón explícito hace lo
-          // mismo sin sorprender a nadie.
+          // solo y tapar el formulario de login.
           auto_select: false,
           cancel_on_tap_outside: true,
         })
         setGoogle(google)
       } catch {
         // Sin botón de Google, el formulario de siempre sigue funcionando.
-        // No se muestra ningún error: para quien iba a entrar con email y
-        // contraseña, un cartel rojo sobre algo que no pensaba usar es
-        // ruido.
       }
     }
 
@@ -102,12 +67,10 @@ export function BotonGoogle({
     }
   }, [])
 
-  // ── Dibujar, y volver a dibujar si cambia el ancho o el tema ──────
-  //
-  // Son dos efectos y no uno porque tienen frecuencias distintas: cargar el
+  // ── Dibujar, y volver a dibujar si cambia el ancho o el tema ────── Son
+  // dos efectos y no uno porque tienen frecuencias distintas: cargar el
   // script y registrar el callback pasa una vez, y redibujar pasa cada vez
-  // que alguien rota el teléfono o toca el interruptor de tema. Meterlos
-  // juntos volvería a pedirle la config al backend en cada resize.
+  // que alguien rota el teléfono o toca el interruptor de tema.
   useEffect(() => {
     if (!google || !contenedor.current) return
 
@@ -149,23 +112,16 @@ export function BotonGoogle({
   )
 }
 
-/**
- * El ancho que tiene disponible el botón, en píxeles.
- *
- * Se mide el PADRE y no el propio nodo porque el nuestro está `hidden`
- * hasta que Google contesta, y un elemento con `display:none` mide cero.
- * El padre es el formulario, que siempre está en pantalla y es justo la
- * caja contra la que queremos alinearnos.
- */
+/** El ancho que tiene disponible el botón, en píxeles. */
 function useAnchoDisponible(ref: React.RefObject<HTMLElement | null>) {
   const [ancho, setAncho] = useState(0)
 
   useEffect(() => {
     const medir = () => setAncho(ref.current?.parentElement?.clientWidth ?? 0)
     medir()
-    // Un listener de resize y no un ResizeObserver: lo único que cambia
-    // este ancho es el viewport (rotar el teléfono, achicar la ventana), y
-    // el formulario no se redimensiona por su cuenta.
+    // Un listener de resize y no un ResizeObserver: lo único que cambia este
+    // ancho es el viewport (rotar el teléfono, achicar la ventana), y el
+    // formulario no se redimensiona por su cuenta.
     window.addEventListener("resize", medir)
     return () => window.removeEventListener("resize", medir)
   }, [ref])
@@ -175,10 +131,7 @@ function useAnchoDisponible(ref: React.RefObject<HTMLElement | null>) {
 
 /**
  * Si la app está en tema oscuro, para pedirle a Google el botón que
- * corresponde. Observa la clase del `<html>` en vez de leer la preferencia
- * guardada porque esa clase es la única fuente de verdad — la ponen tanto
- * el interruptor de la barra como el script inline de index.html (ver
- * lib/tema.ts).
+ * corresponde.
  */
 function useTemaOscuro() {
   const leer = () => document.documentElement.classList.contains("dark")

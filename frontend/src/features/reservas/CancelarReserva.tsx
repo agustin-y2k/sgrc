@@ -10,18 +10,7 @@ import * as reservasApi from "@/features/reservas/api"
 import type { GrupoDeReservas } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * RF-04.6 / RF-04.8 — el panel de confirmación para cancelar una reserva.
- *
- * Vive en un componente y no adentro del listado porque se abre desde dos
- * lugares: la pantalla de reservas y la de inicio, donde el docente ve su
- * próxima clase. Dos copias del mismo panel es cómo termina pasando que en
- * una el motivo sea obligatorio y en la otra no, o que una cancele el grupo
- * entero y la otra un solo equipo.
- *
- * Cancelar es destructivo y sin deshacer, así que se confirma siempre: el
- * botón de la tarjeta abre esto, no dispara la cancelación.
- */
+/** RF-04.6 / RF-04.8 — el panel de confirmación para cancelar una reserva. */
 export function CancelarReserva({
   grupo,
   onListo,
@@ -36,8 +25,8 @@ export function CancelarReserva({
   const [motivo, setMotivo] = useState("")
 
   // El id de los campos tiene que ser único en la página: en inicio puede
-  // haber varias tarjetas abiertas a la vez, y dos radios con el mismo
-  // `name` se comportan como un solo grupo entre tarjetas distintas.
+  // haber varias tarjetas abiertas a la vez, y dos radios con el mismo `name`
+  // se comportan como un solo grupo entre tarjetas distintas.
   const clave = grupo.grupoId ?? grupo.reservas[0]?.id ?? grupo.fecha
 
   // RF-04.8: el motivo solo es obligatorio si la reserva es de otra
@@ -48,21 +37,15 @@ export function CancelarReserva({
 
   const cancelar = useMutation({
     // RF-04.6: la elección se aplica "a todos los equipos del grupo en esa
-    // fecha (o rango)", así que las dos ramas cancelan el grupo entero —
-    // lo único que cambia es si además alcanza a las fechas siguientes.
-    // Antes "solo esta fecha" llamaba a cancelarReserva y liberaba un
-    // solo equipo, que no es lo que dice el requisito ni lo que sugiere el
-    // texto de la opción.
+    // fecha (o rango)", así que las dos ramas cancelan el grupo entero — lo
+    // único que cambia es si además alcanza a las fechas siguientes.
     mutationFn: async (): Promise<void> => {
       if (grupo.grupoId) {
         await reservasApi.cancelarGrupo(grupo.grupoId, motivo, soloEsta)
         return
       }
       // Un bloqueo administrativo son N filas `reserva` sueltas, sin grupo
-      // que las una en la base. Se cancelan TODAS: la tarjeta representa la
-      // operación completa, y liberar solo un equipo dejaría el aula a medio
-      // bloquear sin que nada lo diga. En serie y no en paralelo para que un
-      // fallo a mitad de camino sea un error claro y no una carrera.
+      // que las una en la base.
       for (const r of cancelables) {
         await reservasApi.cancelarReserva(r.id, motivo)
       }

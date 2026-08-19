@@ -13,10 +13,6 @@ vi.mock("@/features/reservas/api")
 /**
  * El reloj se fija a las 8:30 de un martes: con la clase de 8 a 9 en curso y
  * la de 10 a 11 por empezar.
- *
- * Sin fijarlo, el test sería una lotería según la hora a la que se corriera
- * —a las 23:50 "dentro de media hora" cae al día siguiente— que es
- * exactamente el tipo de test que empieza a fallar sin que nadie toque nada.
  */
 const AHORA = new Date(2026, 7, 11, 8, 30, 0)
 const HOY = "2026-08-11"
@@ -110,7 +106,7 @@ describe("PanelDelLaboratorio", () => {
 
   /**
    * "Entregada" o "sin retirar" no sale de la reserva: sale de cruzar sus
-   * Equipos contra lo que está prestado ahora. La custodia es de la máquina.
+   * Equipos contra lo que está prestado ahora.
    */
   it("distingue las máquinas entregadas de las que siguen adentro", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(
@@ -189,9 +185,9 @@ describe("PanelDelLaboratorio", () => {
   })
 
   /**
-   * Un bloqueo administrativo no lo retira nadie: lo crea un Admin para
-   * sacar máquinas de circulación, así que ofrecerlo para entregar no
-   * significa nada.
+   * Un bloqueo administrativo no lo retira nadie: lo crea un Admin para sacar
+   * máquinas de circulación, así que ofrecerlo para entregar no significa
+   * nada.
    */
   it("no muestra los bloqueos administrativos", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(

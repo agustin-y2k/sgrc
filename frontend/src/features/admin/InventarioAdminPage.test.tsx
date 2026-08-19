@@ -188,7 +188,6 @@ describe("InventarioAdminPage", () => {
   })
 
   // ── Alta de equipos (RF-03.2) ────────────────────────────────────────────
-  //
   // Es la operación que faltaba y sin la cual un despliegue limpio no sirve
   // para nada: se podía crear el carro pero no meterle un solo equipo, y sin
   // equipos nadie puede reservar.
@@ -216,10 +215,8 @@ describe("InventarioAdminPage", () => {
     })
   })
 
-  // El número de máquina SÍ es entero: es el que está pintado en la máquina
-  // y nombra el zócalo que ocupa en el carro. Sin este chequeo,
-  // Number("siete") manda NaN y el backend responde un 400 que no dice cuál
-  // de los dos campos está mal.
+  // El número de máquina SÍ es entero: es el que está pintado en la máquina y
+  // nombra el zócalo que ocupa en el carro.
   it("no deja agregar un equipo con identificador no numérico", async () => {
     const user = userEvent.setup()
     renderPagina()
@@ -232,9 +229,8 @@ describe("InventarioAdminPage", () => {
     expect(screen.getByRole("button", { name: "Agregar al carro" })).toBeDisabled()
   })
 
-  // Y el número de serie NO: la regla vale en la otra dirección, y esta es
-  // la que rompía. Un identificador válido con una serie alfanumérica tiene
-  // que dejar habilitado el botón.
+  // Y el número de serie NO: la regla vale en la otra dirección, y esta es la
+  // que rompía.
   it("acepta un número de serie con letras", async () => {
     const user = userEvent.setup()
     renderPagina()
@@ -328,11 +324,10 @@ describe("InventarioAdminPage", () => {
     })
   })
 
-  // ── Incidencias (RF-03.5 / RF-03.6) ──────────────────────────────────
-  //
-  // El ciclo de vida completo existía en el backend y no se podía tocar
-  // desde ningún lado: los reportes de RF-06 mostraban estadísticas de
-  // incidencias que nadie podía cargar ni cerrar.
+  // ── Incidencias (RF-03.5 / RF-03.6) ────────────────────────────────── El
+  // ciclo de vida completo existía en el backend y no se podía tocar desde
+  // ningún lado: los reportes de RF-06 mostraban estadísticas de incidencias
+  // que nadie podía cargar ni cerrar.
 
   it("lista las incidencias de un equipo", async () => {
     const user = userEvent.setup()
@@ -416,11 +411,7 @@ describe("InventarioAdminPage", () => {
     ).toBeInTheDocument()
   })
 
-  /**
-   * Sacar una máquina de circulación cancela clases de otros docentes. El
-   * backend devuelve la cuenta desde siempre; esta pantalla la descartaba, así
-   * que el Admin no se enteraba de lo que se había llevado puesto.
-   */
+  /** Sacar una máquina de circulación cancela clases de otros docentes. */
   it("dice cuántas reservas canceló el cambio de estado", async () => {
     const user = userEvent.setup()
     vi.mocked(adminApi.cambiarEstadoEquipo).mockResolvedValue({

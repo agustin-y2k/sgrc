@@ -21,27 +21,6 @@ import (
 
 // VerificadorGoogle valida los ID token que emite Google cuando alguien
 // aprieta "Iniciar sesión con Google" en el navegador.
-//
-// Es la implementación de application.VerificadorGoogle. Se verifica acá,
-// contra las claves públicas de Google, y no se confía en nada de lo que
-// el navegador diga por su cuenta: el token es un JWT firmado por Google,
-// y esa firma es la única razón por la que le creemos el email.
-//
-// Qué se exige, y por qué cada cosa:
-//
-//   - Firma RS256 válida contra una clave pública vigente de Google. Es lo
-//     que hace que el token no se pueda inventar.
-//   - alg RS256 explícito (jwt.WithValidMethods). Sin esa lista, un token
-//     con alg "none" o con un HMAC firmado con la propia clave pública
-//     sería aceptado — es la familia de bugs clásica de JWT.
-//   - aud igual a NUESTRO client ID. Google le firma ID tokens a
-//     cualquiera: sin este chequeo, alguien con su propia aplicación de
-//     Google podría presentarnos un token legítimo emitido para ella y
-//     entrar como el usuario que quisiera.
-//   - iss de Google, y exp vigente.
-//
-// El email_verified y el dominio se chequean después de la firma (ver
-// Verificar y application.Service.identidadDeGoogle).
 type VerificadorGoogle struct {
 	clientID           string
 	dominiosPermitidos []string
@@ -49,9 +28,9 @@ type VerificadorGoogle struct {
 	urlCertificados    string
 	ahora              func() time.Time
 
-	// Las claves públicas de Google rotan cada pocas horas, así que se
-	// cachean con el vencimiento que declara la propia respuesta en vez de
-	// pedirlas en cada login.
+	// Las claves públicas de Google rotan cada pocas horas, así que se cachean
+	// con el vencimiento que declara la propia respuesta en vez de pedirlas en
+	// cada login.
 	mu       sync.Mutex
 	claves   map[string]*rsa.PublicKey
 	vencenEn time.Time
@@ -62,14 +41,11 @@ type VerificadorGoogle struct {
 const urlCertificadosGoogle = "https://www.googleapis.com/oauth2/v3/certs"
 
 // emisoresGoogle: Google usa las dos formas indistintamente, y las dos son
-// válidas. Se comparan contra una lista explícita en vez de un
-// strings.Contains("google") para que un emisor parecido no pase.
+// válidas.
 var emisoresGoogle = []string{"https://accounts.google.com", "accounts.google.com"}
 
 // errKidDesconocido: el token viene firmado con una clave que Google no
-// publica (ni siquiera después de refrescar el cache). Es un token que no
-// podemos validar, o sea inválido — a diferencia de una falla de red
-// buscando las claves, que no dice nada sobre el token.
+// publica (ni siquiera después de refrescar el cache).
 var errKidDesconocido = errors.New("el token está firmado con una clave que Google no publica")
 
 var _ application.VerificadorGoogle = (*VerificadorGoogle)(nil)
@@ -80,9 +56,9 @@ func NewVerificadorGoogle(clientID string, dominiosPermitidos []string, ahora fu
 	return &VerificadorGoogle{
 		clientID:           clientID,
 		dominiosPermitidos: dominiosPermitidos,
-		// Timeout explícito: sin él, http.Client espera para siempre y un
-		// problema de red del lado de Google dejaría requests de login
-		// colgados hasta agotar el pool de conexiones.
+		// Timeout explícito: sin él, http.Client espera para siempre y un problema
+		// de red del lado de Google dejaría requests de login colgados hasta agotar
+		// el pool de conexiones.
 		http:            &http.Client{Timeout: 10 * time.Second},
 		urlCertificados: urlCertificadosGoogle,
 		ahora:           ahora,
@@ -91,11 +67,7 @@ func NewVerificadorGoogle(clientID string, dominiosPermitidos []string, ahora fu
 }
 
 // DominiosPermitidos parsea la lista separada por comas de
-// GOOGLE_DOMINIOS_PERMITIDOS ("tuinstitucion.edu.ar, otra.edu.ar"). Vacía o
-// ausente = cualquier cuenta de Google puede pedir registrarse, que sigue
-// siendo seguro porque la cuenta queda PENDIENTE hasta que un Admin la
-// apruebe; lo que la lista evita es que el Admin tenga que revisar
-// solicitudes de cualquier persona de internet.
+// GOOGLE_DOMINIOS_PERMITIDOS ("tuinstitucion.edu.ar, otra.edu.ar").
 func DominiosPermitidos(crudo string) []string {
 	var dominios []string
 	for _, d := range strings.Split(crudo, ",") {
@@ -119,12 +91,6 @@ type claimsGoogle struct {
 }
 
 // boolFlexible acepta tanto `true` como `"true"`.
-//
-// En el ID token el claim es un booleano JSON, pero los endpoints viejos
-// de Google lo devuelven como string y hay bibliotecas que lo replican. Si
-// llegara como string, un bool pelado fallaría el Unmarshal entero — y el
-// modo de falla sería el peor posible: un email verificado leído como no
-// verificado, o un error de parseo genérico en el login de todos.
 type boolFlexible bool
 
 func (b *boolFlexible) UnmarshalJSON(datos []byte) error {
@@ -147,10 +113,10 @@ func (b *boolFlexible) UnmarshalJSON(datos []byte) error {
 
 // Verificar cumple application.VerificadorGoogle.
 func (v *VerificadorGoogle) Verificar(ctx context.Context, idToken string) (*application.IdentidadGoogle, error) {
-	// El error de la búsqueda de claves se guarda aparte porque golang-jwt
-	// lo envuelve dentro de su propio error de parseo, y desde afuera no se
-	// puede distinguir "no pudimos hablar con Google" (nuestro problema, un
-	// 500) de "la firma no valida" (problema del token, un 401).
+	// El error de la búsqueda de claves se guarda aparte porque golang-jwt lo
+	// envuelve dentro de su propio error de parseo, y desde afuera no se puede
+	// distinguir "no pudimos hablar con Google" (nuestro problema, un 500) de
+	// "la firma no valida" (problema del token, un 401).
 	var errClaves error
 
 	var claims claimsGoogle
@@ -174,9 +140,9 @@ func (v *VerificadorGoogle) Verificar(ctx context.Context, idToken string) (*app
 		return nil, fmt.Errorf("obteniendo las claves públicas de Google: %w", errClaves)
 	}
 	if err != nil {
-		// El detalle va en el error envuelto (queda en los logs del
-		// servidor) pero no en el mensaje que el handler le muestra al
-		// cliente: ErrTokenGoogleInvalido tiene su propio texto genérico.
+		// El detalle va en el error envuelto (queda en los logs del servidor) pero
+		// no en el mensaje que el handler le muestra al cliente:
+		// ErrTokenGoogleInvalido tiene su propio texto genérico.
 		return nil, fmt.Errorf("%w: %v", application.ErrTokenGoogleInvalido, err)
 	}
 
@@ -224,12 +190,6 @@ func (v *VerificadorGoogle) dominioHabilitado(email string) bool {
 
 // clavePorKid devuelve la clave pública con la que verificar la firma,
 // refrescando el cache si el kid no está o si las claves vencieron.
-//
-// El refresco se intenta una sola vez por llamada: si después de traer las
-// claves frescas el kid sigue sin aparecer, el token está firmado con algo
-// que Google no publica y no hay nada más que intentar. Sin ese límite, un
-// token basura con un kid inventado provocaría un pedido a Google por cada
-// intento — un amplificador de tráfico gratuito contra un endpoint público.
 func (v *VerificadorGoogle) clavePorKid(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -249,9 +209,7 @@ func (v *VerificadorGoogle) clavePorKid(ctx context.Context, kid string) (*rsa.P
 	return clave, nil
 }
 
-// refrescarClaves trae el JWKS de Google. Se llama con v.mu tomado: eso
-// serializa los refrescos, así que N logins simultáneos con el cache
-// vencido hacen un solo pedido y no N.
+// refrescarClaves trae el JWKS de Google.
 func (v *VerificadorGoogle) refrescarClaves(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.urlCertificados, nil)
 	if err != nil {
@@ -283,17 +241,16 @@ func (v *VerificadorGoogle) refrescarClaves(ctx context.Context) error {
 
 	claves := make(map[string]*rsa.PublicKey, len(set.Keys))
 	for _, k := range set.Keys {
-		// Solo claves RSA para RS256: el JWKS puede traer otras (Google hoy
-		// no, pero el formato lo permite) y aceptarlas sería aceptar
-		// algoritmos que no dijimos soportar.
+		// Solo claves RSA para RS256: el JWKS puede traer otras (Google hoy no,
+		// pero el formato lo permite) y aceptarlas sería aceptar algoritmos que no
+		// dijimos soportar.
 		if k.Kty != "RSA" || (k.Alg != "" && k.Alg != "RS256") {
 			continue
 		}
 		clave, err := claveRSADesdeJWK(k.N, k.E)
 		if err != nil {
-			// Una clave ilegible no invalida a las demás: si justo es la que
-			// firmó este token, el kid no va a estar y el token se rechaza
-			// por ese camino.
+			// Una clave ilegible no invalida a las demás: si justo es la que firmó
+			// este token, el kid no va a estar y el token se rechaza por ese camino.
 			continue
 		}
 		claves[k.Kid] = clave
@@ -337,11 +294,6 @@ func claveRSADesdeJWK(nBase64, eBase64 string) (*rsa.PublicKey, error) {
 
 // vigenciaDe saca el max-age del Cache-Control con el que Google sirve sus
 // certificados.
-//
-// Los límites no son decoración: un max-age de un día dejaría el cache
-// caliente después de que Google rotara sus claves (todos los logins
-// fallarían hasta reiniciar el proceso), y uno de un segundo convertiría
-// cada login en un pedido a Google.
 func vigenciaDe(cacheControl string) time.Duration {
 	const (
 		porDefecto = time.Hour

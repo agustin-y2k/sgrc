@@ -7,9 +7,6 @@ import (
 )
 
 // FotoDePerfil es la imagen que alguien elige para su cuenta.
-//
-// Opcional siempre: sin foto, la interfaz muestra las iniciales, que es lo
-// que hacía antes. Nadie tiene que subir una para poder trabajar.
 type FotoDePerfil struct {
 	UsuarioID     string
 	Contenido     []byte
@@ -18,13 +15,6 @@ type FotoDePerfil struct {
 }
 
 // MaxBytesFoto es el tope de lo que se acepta guardar.
-//
-// El navegador recorta y achica la imagen a 256×256 antes de mandarla, así
-// que lo normal son unas decenas de kilobytes; este límite es contra lo que
-// no pasó por ahí (alguien llamando a la API directo, o un navegador donde
-// el recorte falló). Doscientos kilobytes dejan lugar de sobra para una foto
-// de ese tamaño incluso mal comprimida, y ponen un techo a lo que una cuenta
-// puede ocupar en la base.
 const MaxBytesFoto = 200 * 1024
 
 var (
@@ -41,12 +31,6 @@ var (
 )
 
 // NuevaFotoDePerfil valida y arma la foto.
-//
-// El tipo NO se toma de lo que diga quien sube —eso es un dato que manda el
-// cliente y se puede escribir a mano—: se deduce de los primeros bytes del
-// archivo. Un SVG renombrado a .png puede traer JavaScript adentro, y se
-// serviría desde nuestro propio dominio, o sea con acceso a la sesión de
-// quien lo mire. Por eso la lista es cerrada y por firma.
 func NuevaFotoDePerfil(usuarioID string, contenido []byte, ahora time.Time) (*FotoDePerfil, error) {
 	if len(contenido) == 0 {
 		return nil, ErrFotoVacia

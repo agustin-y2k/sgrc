@@ -8,23 +8,12 @@ export type EstadoReserva =
   /**
    * RF-08.10 — pasaron los minutos de gracia y nadie vino a buscar esa
    * máquina, así que dejó de estar reservada.
-   *
-   * No es una cancelación: nadie la decidió. Y liberar no es prohibir — si
-   * la computadora sigue en el laboratorio, un Admin se la entrega igual.
    */
   | "NO_RETIRADA"
-/**
- * NORMAL: la reserva de un docente para su clase.
- * BLOQUEO: un Admin se tomó el equipo para otra cosa y canceló lo que
- * hubiera encima. El motivo va en texto libre: se bloquea por una
- * evaluación, una jornada docente, una capacitación o una obra en el aula, y
- * el sistema no puede prever la lista.
- */
+/** NORMAL: la reserva de un docente para su clase. */
 export type TipoReserva = "NORMAL" | "BLOQUEO"
 
-// Los siete días. El sistema no supone qué días abre la institución: hay
-// escuelas de jornada extendida y albergue que dictan el fin de semana, y
-// antes ni siquiera podían expresar "todos los sábados".
+// Los siete días.
 export type DiaSemana =
   "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES" | "SABADO" | "DOMINGO"
 
@@ -39,12 +28,8 @@ export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
 ]
 
 /**
- * Hoy en formato YYYY-MM-DD, para el `min` de los inputs de fecha: el
- * backend rechaza un bloque que ya terminó (domain.ErrReservaEnElPasado).
- *
- * Se arma con los componentes locales por la misma razón que esDiaLectivo:
- * `toISOString()` pasa por UTC y al oeste de Greenwich devuelve el día
- * siguiente a partir de las 21:00.
+ * Hoy en formato YYYY-MM-DD, para el `min` de los inputs de fecha: el backend
+ * rechaza un bloque que ya terminó (domain.ErrReservaEnElPasado).
  */
 export function hoyISO(): string {
   const hoy = new Date()
@@ -61,16 +46,7 @@ function minutosDelDia(hhmm: string): number | null {
   return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null
 }
 
-/**
- * Cuánto dura la franja, en minutos, cruce o no la medianoche.
- *
- * Espejo de domain.DuracionDe. Para 22:00–01:00 son 180 minutos, no −1260:
- * una resta cruda daba negativo, pasaba cualquier tope y hacía que una clase
- * nocturna nunca se marcara como demasiado larga.
- *
- * Devuelve null con la hora incompleta, para que quien llame decida si eso es
- * un error o simplemente "todavía no lo eligió".
- */
+/** Cuánto dura la franja, en minutos, cruce o no la medianoche. */
 export function duracionEnMinutos(horaInicio: string, horaFin: string): number | null {
   const inicio = minutosDelDia(horaInicio)
   const fin = minutosDelDia(horaFin)
@@ -88,8 +64,7 @@ export function cruzaMedianoche(horaInicio: string, horaFin: string): boolean {
 
 /**
  * Avisa en el formulario en vez de esperar el 400 de
- * domain.ErrDuracionExcesiva. No aplica a los bloqueos administrativos, que
- * están exceptuados del tope.
+ * domain.ErrDuracionExcesiva.
  */
 export function excedeDuracionMaxima(horaInicio: string, horaFin: string): boolean {
   const duracion = duracionEnMinutos(horaInicio, horaFin)
@@ -110,10 +85,7 @@ export type Reserva = {
   horaFin: string
   estado: EstadoReserva
   tipo: TipoReserva
-  /**
-   * Por qué se tomaron los equipos. Solo viene en los BLOQUEO, y ahí viene
-   * siempre: es obligatorio al crearlos porque cancelan clases ajenas.
-   */
+  /** Por qué se tomaron los equipos. */
   motivoBloqueo?: string
   creadoPor?: string
   canceladoPor?: string
@@ -123,14 +95,7 @@ export type Reserva = {
 
 /**
  * Una Reserva con los nombres que resuelve el JOIN de `GET
- * /api/reservation/reservas` (espeja reservaDetalladaResponse). Sin ellos
- * la pantalla solo tendría UUIDs y no podría decir de qué Equipo ni de qué
- * materia es cada reserva.
- *
- * Es un tipo aparte y no campos opcionales de `Reserva` porque los otros
- * endpoints que devuelven reservas —crear una, crear un bloqueo por
- * evaluación— responden `reservaResponse` pelado: declararlos ahí sería
- * prometer datos que no llegan.
+ * /api/reservation/reservas` (espeja reservaDetalladaResponse).
  */
 export type ReservaDetallada = Reserva & {
   /** Cómo se nombra el equipo: "PC 3" o "Proyector Epson". */
@@ -141,29 +106,15 @@ export type ReservaDetallada = Reserva & {
   /** Vacío en los bloqueos administrativos, que no tienen materia. */
   materiaNombre?: string
   cursoNombre?: string
-  /**
-   * Presente solo si la reserva es parte de una serie recurrente. No
-   * confundir con `reservaGrupoId`, que tienen TODAS las reservas normales
-   * (es el grupo de equipos de una misma fecha).
-   */
+  /** Presente solo si la reserva es parte de una serie recurrente. */
   reglaRecurrenciaId?: string
 }
 
-/**
- * Las Reserva de un mismo ReservaGrupo, juntas.
- *
- * El glosario define ReservaGrupo como "la reserva tal como la percibe el
- * docente": una materia, una fecha, un horario, con N equipos adentro. La API
- * devuelve las filas sueltas (una por equipo), así que el agrupado se arma acá.
- */
+/** Las Reserva de un mismo ReservaGrupo, juntas. */
 export type GrupoDeReservas = {
   /** Ausente si la reserva no pertenece a ningún grupo. */
   grupoId?: string
-  /**
-   * Un bloqueo administrativo (RF-04.7). No tiene ReservaGrupo en la base
-   * —no es la reserva de nadie— pero sí es UNA operación del Admin, así que
-   * se junta en una sola tarjeta.
-   */
+  /** Un bloqueo administrativo (RF-04.7). */
   esBloqueo: boolean
   /** Por qué se tomaron los equipos. Solo en los bloqueos. */
   motivoBloqueo?: string
@@ -178,21 +129,7 @@ export type GrupoDeReservas = {
   reservas: ReservaDetallada[]
 }
 
-/**
- * La clave por la que dos filas `reserva` caen en la misma tarjeta.
- *
- * Una reserva normal trae su `reservaGrupoId`: es lo que el docente vivió
- * como "una reserva". Un bloqueo administrativo NO tiene grupo en la base
- * —no pertenece a nadie ni a ninguna materia— pero para el Admin que lo
- * creó sí fue una sola operación: eligió varios equipos, una fecha y un
- * horario, y apretó confirmar una vez. Mostrarlo como una tarjeta por equipo
- * hacía que bloquear ocho equipos se viera como ocho bloqueos distintos.
- *
- * Se agrupa por quién lo creó, la fecha y el horario, que es exactamente lo
- * que define una operación de bloqueo. Dos bloqueos distintos con los mismos
- * tres datos se juntarían en una tarjeta, pero desde afuera son
- * indistinguibles: son las mismas Equipos, el mismo día y la misma franja.
- */
+/** La clave por la que dos filas `reserva` caen en la misma tarjeta. */
 function claveDeAgrupacion(r: ReservaDetallada): string {
   if (r.reservaGrupoId) return r.reservaGrupoId
   if (r.tipo === "BLOQUEO") {
@@ -203,8 +140,8 @@ function claveDeAgrupacion(r: ReservaDetallada): string {
 
 /**
  * Agrupa las filas `reserva` en lo que cada usuario percibe como "una
- * reserva" (ver claveDeAgrupacion), conservando el orden en que vinieron
- * (el backend ordena por fecha, hora e identificador de equipo).
+ * reserva" (ver claveDeAgrupacion), conservando el orden en que vinieron (el
+ * backend ordena por fecha, hora e identificador de equipo).
  */
 export function agruparReservas(reservas: ReservaDetallada[]): GrupoDeReservas[] {
   const grupos = new Map<string, GrupoDeReservas>()
@@ -259,10 +196,7 @@ export type EquipoDisponible = {
   softwareInstalado?: string
   /**
    * RF-03.21: en qué bloque cae el equipo para la materia que se está
-   * reservando. La lista ya viene ordenada por tramo; esto permite
-   * titularlos.
-   *
-   * No es un permiso: los tres tramos se reservan igual.
+   * reservando.
    */
   tramo: TramoPreferencia
   /** "Preferente para Matemática de 3°B". Ausente en un equipo neutral. */
@@ -271,13 +205,7 @@ export type EquipoDisponible = {
 
 export type TramoPreferencia = "PREFERENTE" | "NEUTRAL" | "DE_OTRA_MATERIA"
 
-/**
- * RF-04.11: un equipo que ya tiene dueño en esa franja. No se tilda; está
- * para poder ir a hablarle o mandarle un pedido.
- *
- * De la otra persona llega el nombre y nunca el email: el correo lo manda el
- * servidor.
- */
+/** RF-04.11: un equipo que ya tiene dueño en esa franja. */
 export type EquipoOcupado = {
   equipoId: string
   etiqueta: string
@@ -294,8 +222,7 @@ export type EquipoOcupado = {
   horaFin: string
   /**
    * Lo decide el servidor: false en un bloqueo, en una reserva propia y si
-   * esa franja ya empezó. La pantalla no replica la regla — dos copias de
-   * una regla terminan discrepando.
+   * esa franja ya empezó.
    */
   puedePedirse: boolean
 }
@@ -318,14 +245,7 @@ export type CrearReservaRecurrenteRequest = {
   equipoIds: string[]
 }
 
-/**
- * RF-04.7 — bloqueo administrativo de equipos.
- *
- * A diferencia de una reserva no lleva materia (el bloqueo no es de nadie)
- * y sí lleva `motivo`, que es lo que el backend intercala en el aviso a
- * cada docente afectado: "Tu reserva fue cancelada: bloqueo administrativo
- * estatal (…)".
- */
+/** RF-04.7 — bloqueo administrativo de equipos. */
 export type BloquearRequest = {
   equipoIds: string[]
   fecha: string
@@ -336,9 +256,8 @@ export type BloquearRequest = {
 }
 
 /**
- * Lo que hay que mostrarle al Admin después: cuántas reservas ajenas se
- * llevó puesta la cascada y a cuántos docentes se les avisó. Es la única
- * devolución que tiene de una operación destructiva.
+ * Lo que hay que mostrarle al Admin después: cuántas reservas ajenas se llevó
+ * puesta la cascada y a cuántos docentes se les avisó.
  */
 export type ResultadoBloqueo = {
   bloqueos: Reserva[]
@@ -347,14 +266,7 @@ export type ResultadoBloqueo = {
 }
 
 // ── Entregas y devoluciones (RF-08) ───────────────────────────────────
-//
 // Espeja internal/reservation/interfaces/http/dto_prestamos.go.
-//
-// Un `Prestamo` NO es una reserva, y la diferencia es la razón de ser de
-// todo esto: la reserva es el derecho a usar un equipo en una franja, el
-// préstamo es dónde está la máquina ahora. Existen por separado —hay
-// reservas que nadie vino a buscar y préstamos sin reserva detrás— y por eso
-// son dos cosas distintas también acá.
 
 export type Prestamo = {
   id: string
@@ -378,12 +290,7 @@ export type Prestamo = {
   recibidoPor?: string
   observaciones?: string
 
-  /**
-   * Derivados: los calcula el backend contra su propio reloj. Vienen
-   * resueltos por la misma razón que el contador de las licencias — si los
-   * calculara el navegador, un reloj corrido mostraría una demora distinta
-   * de la que el sistema va a reclamar.
-   */
+  /** Derivados: los calcula el backend contra su propio reloj. */
   abierto: boolean
   demorado: boolean
   minutosDeDemora?: number
@@ -397,11 +304,7 @@ export type Prestamo = {
   materiaNombre?: string
 }
 
-/**
- * Por qué un equipo del lote no salió. El código permite ofrecer la acción que
- * corresponde: "ver quién la tiene" no es lo mismo que "revisá el
- * inventario".
- */
+/** Por qué un equipo del lote no salió. */
 export type RazonNoEntregada =
   | "YA_ENTREGADA"
   | "FUERA_DEL_INVENTARIO"
@@ -415,11 +318,7 @@ export type EquipoNoEntregada = {
   detalle: string
 }
 
-/**
- * Aviso de que una máquina recién entregada tiene una reserva encima. No
- * impidió nada: es información para que el Admin decida. El sistema no sabe
- * cuánto va a durar un trámite.
- */
+/** Aviso de que una máquina recién entregada tiene una reserva encima. */
 export type ReservaProxima = {
   equipoId: string
   fecha: string

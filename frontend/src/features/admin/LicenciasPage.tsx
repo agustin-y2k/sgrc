@@ -36,16 +36,6 @@ const LICENCIAS_KEY = ["licencias"]
 /**
  * RF-03.11 a RF-03.14 — el contador de vencimiento de las licencias de
  * software.
- *
- * El problema que resuelve: un equipo del carro tiene AutoCAD con licencia que
- * vence cada 30 días, y cuando vence deja de abrir. Sin esto, el Admin se
- * entera el día que un docente no puede dar la clase.
- *
- * Los días que faltan NO son un número guardado que alguien decrementa: los
- * calcula el backend contra la fecha de vencimiento cada vez que se pide.
- * Por eso un servidor apagado tres días no descuadra nada, y por eso el
- * contador de esta pantalla es siempre el mismo que dispara los avisos por
- * mail.
  */
 
 const ETIQUETA_ESTADO: Record<string, string> = {
@@ -55,12 +45,7 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   VIGENTE: "Vigente",
 }
 
-/**
- * El contador, en castellano. Es la misma redacción que usan los correos
- * (ver internal/notification/application/textos_licencias.go): "vence en 1
- * días" es lo que sale de formatear por número, y es exactamente lo que hace
- * que un aviso se lea como generado por una máquina.
- */
+/** El contador, en castellano. */
 function textoDelContador(l: Licencia): string {
   if (l.diasRestantes == null) return "Sin fecha de vencimiento"
   const d = l.diasRestantes
@@ -273,16 +258,7 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
   })
 
   // El inventario completo en una sola consulta, y no los equipos de cada
-  // carro por separado. Dos razones, y la primera es un defecto:
-  //
-  //   1. Recorriendo carros, lo que no está en ninguno NO aparecía nunca —
-  //      una notebook suelta con software licenciado no se podía cargar
-  //      desde acá, aunque la API la acepta igual (RF-03.11 no distingue).
-  //   2. De paso deja de ser 1 + N peticiones.
-  //
-  // Los carros se siguen pidiendo, pero solo para traducir carroId a nombre:
-  // este listado trae la etiqueta ya resuelta y el id del carro, no su
-  // nombre, y "PC 2" a secas no distingue entre dos carros.
+  // carro por separado.
   const { data: todosLosEquipos } = useQuery({
     queryKey: ["equipos"],
     queryFn: () => inventoryApi.listarEquipos(),

@@ -24,8 +24,7 @@ function llamada(fetchMock: ReturnType<typeof vi.fn>) {
 
 /**
  * Estas dos funciones nacieron con RF-04.12 y lo que se prueba es lo que
- * ningún test de pantalla ve: qué sale por el cable. Un componente que mockea
- * el módulo `api` da por buena cualquier cosa que este arme.
+ * ningún test de pantalla ve: qué sale por el cable.
  */
 describe("api de reservas, lo que se manda", () => {
   beforeEach(() => {
@@ -38,11 +37,7 @@ describe("api de reservas, lo que se manda", () => {
   })
 
   describe("pedirLiberacion", () => {
-    /**
-     * `apiFetch` ya serializa el body. Pasarle una cadena JSON lo codifica
-     * dos veces y al backend le llega una cadena donde espera un objeto, que
-     * es un 400 que ningún test de pantalla puede ver.
-     */
+    /** `apiFetch` ya serializa el body. */
     it("manda el mensaje como objeto, no como cadena ya serializada", async () => {
       const fetchMock = fetchFalso(new Response(null, { status: 204 }))
 

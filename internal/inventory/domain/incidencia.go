@@ -48,13 +48,7 @@ func ParseEstadoIncidencia(s string) (EstadoIncidencia, error) {
 
 var ErrDescripcionVacia = errors.New("la descripción de la incidencia no puede estar vacía")
 
-// Incidencia es un reporte de falla sobre una PC puntual (RF-03.5). A
-// diferencia de Usuario/PC, docs/01-requisitos.md no define una máquina de
-// estados estricta para EstadoIncidencia — cualquier transición entre los
-// cuatro valores es válida (un Admin puede, por ejemplo, volver de
-// ENVIADA_A_SOPORTE a EN_REPARACION si vuelve antes de lo esperado). Por eso acá
-// no hay un PuedeTransicionarA como en Usuario/PC — solo se valida que el
-// valor en sí sea uno de los cuatro conocidos (ParseEstadoIncidencia).
+// Incidencia es un reporte de falla sobre una PC puntual (RF-03.5).
 type Incidencia struct {
 	ID                 string
 	EquipoID           string
@@ -65,16 +59,7 @@ type Incidencia struct {
 	EnviadoASoporte    bool
 	FechaEnvioASoporte *time.Time
 	Estado             EstadoIncidencia
-	// Categoria es QUÉ tipo de falla es, en texto libre ("batería",
-	// "pantalla"). Vacía mientras no se haya podido diagnosticar, que es un
-	// estado real y no un dato faltante: una máquina que no enciende tiene
-	// una falla perfectamente concreta y ninguna categoría todavía.
-	//
-	// Es texto libre y no una lista cerrada por lo mismo que el tipo de
-	// equipo: cada institución rompe y repara cosas distintas, y una lista
-	// fija haría que la primera falla no prevista pida tocar el sistema. Lo
-	// que evita que la estadística se fragmente es que el formulario sugiere
-	// las ya usadas y que los reportes agrupan sin distinguir mayúsculas.
+	// Categoria es QUÉ tipo de falla es, en texto libre ("batería", "pantalla").
 	Categoria string
 }
 
@@ -120,8 +105,7 @@ func NuevaIncidencia(id, equipoID, reportadoPor, descripcion, categoria string, 
 }
 
 // MarcarEnviadaASoporte registra que el equipo se mandó a reparar afuera
-// (RF-03.6). A dónde depende de la institución: un organismo educativo, un
-// proveedor, un taller.
+// (RF-03.6).
 func (i *Incidencia) MarcarEnviadaASoporte(fecha time.Time) {
 	i.EnviadoASoporte = true
 	i.FechaEnvioASoporte = &fecha

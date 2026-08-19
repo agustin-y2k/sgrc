@@ -14,12 +14,7 @@ import (
 // llevarse tres de las cinco que reservó.
 type entregarPorReservaRequest struct {
 	ReservaIDs []string `json:"reservaIds"`
-	// RetiradoPor: quién vino a buscarlas, si no fue el docente de la
-	// reserva. Pasa seguido —manda a un alumno o a un colega— y el papel que
-	// esto reemplaza lo anota.
-	//
-	// No cambia de quién es la responsabilidad: el préstamo queda igual a
-	// nombre del docente, que es quien reservó.
+	// RetiradoPor: quién vino a buscarlas, si no fue el docente de la reserva.
 	RetiradoPor string `json:"retiradoPor,omitempty"`
 }
 
@@ -41,10 +36,7 @@ type entregarSueltaRequest struct {
 
 type recibirRequest struct {
 	PrestamoIDs []string `json:"prestamoIds"`
-	// Observaciones vale para todo el lote y normalmente va vacía. Si hay
-	// algo puntual que anotar sobre una máquina, se recibe esa sola: atarle
-	// la observación a cinco filas diría de las otras cuatro algo que no
-	// pasó.
+	// Observaciones vale para todo el lote y normalmente va vacía.
 	Observaciones string `json:"observaciones,omitempty"`
 }
 
@@ -55,9 +47,8 @@ type prestamoResponse struct {
 	EquipoID  string  `json:"equipoId"`
 	ReservaID *string `json:"reservaId,omitempty"`
 
-	// entregadoANombre es quién RESPONDE por el equipo; retiradoPor, quién
-	// vino a buscarlo si no fue esa misma persona. Ausente es el caso
-	// normal y significa que lo retiró quien responde.
+	// entregadoANombre es quién RESPONDE por el equipo; retiradoPor, quién vino
+	// a buscarlo si no fue esa misma persona.
 	EntregadoAUsuarioID *string `json:"entregadoAUsuarioId,omitempty"`
 	EntregadoANombre    string  `json:"entregadoANombre"`
 	RetiradoPor         string  `json:"retiradoPor,omitempty"`
@@ -70,18 +61,12 @@ type prestamoResponse struct {
 	RecibidoPor        *string    `json:"recibidoPor,omitempty"`
 	Observaciones      string     `json:"observaciones,omitempty"`
 
-	// Derivados. Viajan resueltos por la misma razón que el contador de las
-	// licencias: si los calculara el navegador, un reloj corrido mostraría
-	// una demora distinta de la que el sistema va a reclamar.
+	// Derivados.
 	Abierto         bool `json:"abierto"`
 	Demorado        bool `json:"demorado"`
 	MinutosDeDemora int  `json:"minutosDeDemora,omitempty"`
 
-	// Ubicación. Solo en los listados, que es donde hace falta.
-	//
-	// Etiqueta es cómo se nombra al equipo: "PC 3" o "Proyector Epson". Se
-	// resuelve del lado del servidor para que la misma cosa no se vea
-	// distinta según la pantalla.
+	// Ubicación.
 	Identificador int     `json:"identificador,omitempty"`
 	Etiqueta      string  `json:"etiqueta,omitempty"`
 	CarroNombre   string  `json:"carroNombre,omitempty"`
@@ -116,9 +101,9 @@ func toPrestamoDetalladoResponse(d *application.PrestamoDetallado, ahora time.Ti
 	return r
 }
 
-// pcNoEntregadaResponse lleva un código además del texto para que la
-// pantalla pueda ofrecer la acción que corresponde: "ver quién la tiene" no
-// es lo mismo que "revisá el inventario".
+// pcNoEntregadaResponse lleva un código además del texto para que la pantalla
+// pueda ofrecer la acción que corresponde: "ver quién la tiene" no es lo
+// mismo que "revisá el inventario".
 type pcNoEntregadaResponse struct {
 	EquipoID string `json:"equipoId"`
 	Razon    string `json:"razon"`

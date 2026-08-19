@@ -7,11 +7,6 @@ export type RespuestaLista<T> = { data: T[] }
  * declara su propio domain.DiaSemana en cada paquete en vez de compartirlo
  * (docs/06-arquitectura.md §3): son dos conceptos que hoy coinciden pero no
  * tienen por qué moverse juntos.
- *
- * Los siete días, igual que el enum del backend y el CHECK de la columna. Un
- * Admin de una escuela que abre el sábado tiene que poder publicar que ese
- * día está: antes el sistema no admitía nombrar el día, así que la respuesta
- * "no hay nadie" era estructural y no había forma de corregirla.
  */
 export type DiaSemana =
   | "LUNES"
@@ -63,10 +58,6 @@ export type Excepcion = {
 /**
  * RF-07.2 — un Admin con su estado de "ahora" ya calculado por el backend
  * contra la hora del servidor, más el horario semanal de referencia.
- *
- * `disponibleAhora` no se recalcula en el cliente a propósito: la hora que
- * vale es la de la escuela (APP_TIMEZONE), no la del navegador de quien
- * mira.
  */
 export type AdminDisponibilidad = {
   usuarioId: string
@@ -87,14 +78,7 @@ const ORDEN_DIA: Record<DiaSemana, number> = {
   DOMINGO: 7,
 }
 
-/**
- * Ordena los bloques como transcurre la semana.
- *
- * El backend los trae con `ORDER BY dia_semana, hora_inicio`, que sobre un
- * VARCHAR ordena alfabéticamente: JUEVES, LUNES, MARTES, MIERCOLES,
- * VIERNES. Leído así, un horario semanal no se entiende. Se ordena acá y no
- * en el SQL porque es una decisión de presentación.
- */
+/** Ordena los bloques como transcurre la semana. */
 export function ordenarPorDia(bloques: BloqueHorario[]): BloqueHorario[] {
   return [...bloques].sort((a, b) => {
     const dia = ORDEN_DIA[a.diaSemana] - ORDEN_DIA[b.diaSemana]
@@ -103,7 +87,6 @@ export function ordenarPorDia(bloques: BloqueHorario[]): BloqueHorario[] {
 }
 
 // ── Jornada de la institución ─────────────────────────────────────────
-//
 // Espejo de domain.PermiteReserva del backend, para poder avisar en la
 // pantalla en vez de esperar el 400. La regla vive en el backend, que es
 // quien decide; esto solo se adelanta.
@@ -119,37 +102,21 @@ const DIA_DE_JS: DiaSemana[] = [
   "SABADO",
 ]
 
-/**
- * Día de la semana de una fecha "YYYY-MM-DD".
- *
- * Se construye con componentes locales a propósito: `new Date("2026-08-08")`
- * la interpreta como medianoche UTC, y al oeste de Greenwich eso cae el día
- * anterior — un sábado se leería como viernes.
- */
+/** Día de la semana de una fecha "YYYY-MM-DD". */
 export function diaDeLaFecha(fechaISO: string): DiaSemana | null {
   const [anio, mes, dia] = fechaISO.split("-").map(Number)
   if (!anio || !mes || !dia) return null
   return DIA_DE_JS[new Date(anio, mes - 1, dia).getDay()]
 }
 
-/**
- * Los días en que la institución declaró que abre, en orden de semana.
- *
- * Con la jornada sin declarar devuelve los siete: no hay restricción, así
- * que no hay ningún día que ocultar.
- */
+/** Los días en que la institución declaró que abre, en orden de semana. */
 export function diasDeLaJornada(jornada: BloqueHorario[]): DiaSemana[] {
   if (jornada.length === 0) return DIAS_SEMANA.map((d) => d.valor)
   const declarados = new Set(jornada.map((b) => b.diaSemana))
   return DIAS_SEMANA.map((d) => d.valor).filter((d) => declarados.has(d))
 }
 
-/**
- * Si un bloque cae dentro de la jornada. Mismas dos reglas que el backend:
- * jornada vacía no restringe, y la reserva tiene que entrar entera en un
- * tramo — con los tramos contiguos fusionados, para que 07:00–12:00 más
- * 12:00–18:00 se comporten como un día abierto de 7 a 18.
- */
+/** Si un bloque cae dentro de la jornada. */
 export function dentroDeLaJornada(
   jornada: BloqueHorario[],
   fechaISO: string,
@@ -163,7 +130,7 @@ export function dentroDeLaJornada(
 
   // Todo se mide desde la misma medianoche, así que el fin pasa de las 24
   // horas cuando el tramo cruza: una jornada nocturna de 20:00 a 01:00 es
-  // [1200, 1500) en minutos. Comparar las horas crudas la leía al revés.
+  // [1200, 1500) en minutos.
   const tramos = jornada
     .filter((b) => b.diaSemana === dia)
     .map((b) => {

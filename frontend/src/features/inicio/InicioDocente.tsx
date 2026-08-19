@@ -16,36 +16,10 @@ import { AvisarUnaFalla } from "@/features/inicio/AvisarUnaFalla"
 import { TarjetaDeClase } from "@/features/inicio/TarjetaDeClase"
 import type { GrupoDeReservas } from "@/features/reservas/types"
 
-/**
- * Cuántas clases se muestran enteras, con sus botones. El resto queda a un
- * clic en el listado completo: la pantalla tiene que caber en la cabeza de
- * alguien que entró a hacer una sola cosa, y una agenda entera acá abajo
- * empuja los atajos fuera de la vista.
- */
+/** Cuántas clases se muestran enteras, con sus botones. */
 const CLASES_A_LA_VISTA = 3
 
-/**
- * La pantalla de inicio de un docente.
- *
- * Está escrita para alguien que no conoce —ni tiene por qué conocer— cómo
- * está dividido el sistema. De ahí las tres decisiones que la ordenan:
- *
- * 1. **Una sola acción principal, grande y arriba.** Reservar es a lo que un
- *    docente entra; antes era un botón chico en el encabezado de una tarjeta,
- *    a media pantalla, con el mismo peso visual que el resto.
- * 2. **Lo que ya tiene reservado se resuelve acá.** Cambiar una computadora
- *    o cancelar una clase son las dos cosas que pasan sobre la marcha, y
- *    obligaban a saber que viven en otra pantalla. Los paneles son los mismos
- *    componentes que usa el listado de reservas, no una copia.
- * 3. **Todo lo demás, nombrado por lo que se hace y no por dónde está.**
- *    "Ver las computadoras" en vez de "Inventario", cada uno con una línea
- *    que dice para qué sirve. Quedan abajo, agrupados y en tarjetas iguales:
- *    accesibles sin competir con lo de arriba.
- *
- * Lo que NO hace es mostrar números sueltos. Un "3" grande sobre la palabra
- * "próximas" obliga a interpretar antes de poder hacer nada; las mismas tres
- * reservas dichas en una frase, o directamente listadas, no.
- */
+/** La pantalla de inicio de un docente. */
 export function InicioDocente({
   grupos,
   hoy,

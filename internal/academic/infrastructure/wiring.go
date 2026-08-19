@@ -2,10 +2,7 @@ package infrastructure
 
 import "github.com/google/uuid"
 
-// uuidNuevo se usa internamente en este paquete (ej. al clonar cursos y
-// materias, donde se generan varios IDs dentro de la misma transacción,
-// sin pasar por application.IDGenerator). NuevoID es la versión pública
-// para wiring desde cmd/main.go.
+// uuidNuevo se usa internamente en este paquete (ej.
 func uuidNuevo() string {
 	return uuid.NewString()
 }

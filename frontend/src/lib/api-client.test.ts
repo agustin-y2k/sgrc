@@ -35,8 +35,7 @@ describe("apiFetch", () => {
   })
 
   // El backend real responde texto plano en éxito para varios endpoints
-  // (c.SendStatus, ej. POST /api/auth/registro → 201 "Created") — verificado
-  // contra el backend corriendo, no asumido del código Go.
+  // (c.SendStatus, ej.
   it("no intenta parsear JSON cuando el content-type es text/plain", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(textResponse("Created", 201)))
 
@@ -45,9 +44,9 @@ describe("apiFetch", () => {
     expect(result).toBeUndefined()
   })
 
-  // El error handler default de Fiber v2 manda texto plano, no
-  // {"error": "..."} — este test cubre exactamente el bug que se encontró
-  // probando contra el backend real (ver comentario en api-client.ts).
+  // El error handler default de Fiber v2 manda texto plano, no {"error":
+  // "..."} — este test cubre exactamente el bug que se encontró probando
+  // contra el backend real (ver comentario en api-client.ts).
   it("usa el body de texto plano como mensaje de ApiError", async () => {
     vi.stubGlobal(
       "fetch",

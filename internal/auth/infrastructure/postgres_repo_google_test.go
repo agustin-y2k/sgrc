@@ -13,13 +13,8 @@ import (
 )
 
 // Lo que agregó migrations/001_esquema_inicial.sql solo se puede probar
-// contra Postgres de verdad: que password_hash pueda ser NULL, que
-// google_sub sea único, y que el CHECK impida una cuenta sin ninguna forma
-// de entrar. Un fake en memoria no tiene ninguna de esas reglas.
-//
-// Cada uno de estos tests levanta su propio contenedor (es lo que hacen
-// todos los de este paquete), así que están agrupados por tema en vez de
-// uno por aserción.
+// contra Postgres de verdad: que password_hash pueda ser NULL, que google_sub
+// sea único, y que el CHECK impida una cuenta sin ninguna forma de entrar.
 
 func usuarioDeGoogleDeTest(email, sub string) *domain.Usuario {
 	return &domain.Usuario{
@@ -159,9 +154,7 @@ func TestPostgresRepo_VariasCuentasSinGoogle_Conviven(t *testing.T) {
 }
 
 // El CHECK chk_usuario_credencial: una cuenta sin contraseña Y sin Google no
-// se puede entrar de ninguna forma, así que la base no la acepta. Es la
-// red de contención por si alguna vez un camino de código deja las dos
-// vacías.
+// se puede entrar de ninguna forma, así que la base no la acepta.
 func TestPostgresRepo_CuentaSinNingunaCredencial_LaRechazaLaBase(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

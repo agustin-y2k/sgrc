@@ -39,9 +39,9 @@ function Probe() {
 
 describe("AuthProvider", () => {
   beforeEach(() => {
-    // vi.mock() genera mocks automáticos cuyo historial de llamadas NO
-    // limpia restoreAllMocks — sin esto, un "no fue llamado" ve las
-    // llamadas del test anterior.
+    // vi.mock() genera mocks automáticos cuyo historial de llamadas NO limpia
+    // restoreAllMocks — sin esto, un "no fue llamado" ve las llamadas del
+    // test anterior.
     vi.clearAllMocks()
     vi.mocked(tokenStore.getToken).mockReturnValue(null)
   })

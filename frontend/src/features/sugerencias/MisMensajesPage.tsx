@@ -12,11 +12,6 @@ import { formatearFechaLarga } from "@/lib/fechas"
 /**
  * Donde alguien escribe al equipo de administración y lee lo que le
  * contestaron.
- *
- * Las dos cosas en la misma pantalla y no en dos: quien entra a escribir por
- * segunda vez tiene que poder ver qué pasó con la primera. Sin eso, el buzón
- * se siente como escribir al vacío, y dos mensajes sin respuesta alcanzan
- * para que nadie lo use más.
  */
 export function MisMensajesPage() {
   const location = useLocation()

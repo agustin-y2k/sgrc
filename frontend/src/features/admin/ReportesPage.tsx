@@ -27,9 +27,7 @@ import { getErrorMessage } from "@/lib/api-client"
 import { descargarCSV } from "@/lib/csv"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 
-// RF-06: reportes de uso e incidencias del ciclo lectivo elegido. El
-// histórico de los años ya cerrados vive en HistoricoPorAnio: se mueve por
-// otro eje y no comparte ni estado ni consultas con esto.
+// RF-06: reportes de uso e incidencias del ciclo lectivo elegido.
 export function ReportesPage() {
   const [cicloId, setCicloId] = useState("")
   const [desde, setDesde] = useState("")
@@ -73,8 +71,7 @@ export function ReportesPage() {
   })
 
   // Los dos del parque NO llevan rango de fechas: describen la situación de
-  // hoy. Filtrarlos por fecha daría un número que parece "cuántas estaban
-  // rotas en marzo" sin serlo.
+  // hoy.
   const estadoInventario = useQuery({
     queryKey: ["reporte", "estado-inventario"],
     queryFn: adminApi.reporteEstadoDelInventario,
@@ -100,17 +97,7 @@ export function ReportesPage() {
     fueraDeCirculacion.error ??
     porCategoria.error
 
-  /**
-   * Las cuatro tablas, ordenadas de mayor a menor y con sus totales.
-   *
-   * El orden es parte del reporte, no una preferencia: lo que se busca acá
-   * es "cuál se usa más" y "cuál se rompe más", y con las filas en el orden
-   * en que las devolvió la base hay que leerlas todas para contestarlo. De
-   * mayor a menor, la respuesta está en la primera fila.
-   *
-   * Los totales son el denominador que le faltaba a cada número: "18
-   * reservas" no dice nada solo, "18 de 214" sí.
-   */
+  /** Las cuatro tablas, ordenadas de mayor a menor y con sus totales. */
   const filasUsoEquipos = [...(usoEquipos.data?.data ?? [])].sort(
     (a, b) => b.minutosReservados - a.minutosReservados
   )
@@ -149,11 +136,7 @@ export function ReportesPage() {
   const filasCategoria = porCategoria.data?.data ?? []
   const totalPorCategoria = sumar(filasCategoria, (f) => f.total)
 
-  /**
-   * Con qué período se guarda el archivo. Un `reportes.csv` en la carpeta
-   * de Descargas, al lado de otros tres, no se distingue de los otros
-   * tres: el nombre tiene que decir de qué ciclo y de qué rango es.
-   */
+  /** Con qué período se guarda el archivo. */
   const anioDelCiclo = listaCiclos.find((c) => c.id === cicloElegido)?.anio ?? ""
   const rango = desde || hasta ? `_${desde || "inicio"}_a_${hasta || "hoy"}` : ""
   const sufijo = `${anioDelCiclo}${rango}`

@@ -171,9 +171,8 @@ describe("ReportesPage", () => {
   // ── RF-06.4: histórico por año ──────────────────────────────────────
 
   /**
-   * El snapshot se guarda bajo el año y se calcula al archivar (RF-02.4),
-   * así que los años consultables son exactamente los de los ciclos
-   * archivados. Consultar el año del ciclo activo devolvería siempre vacío.
+   * El snapshot se guarda bajo el año y se calcula al archivar (RF-02.4), así
+   * que los años consultables son exactamente los de los ciclos archivados.
    */
   it("solo ofrece los años de ciclos archivados", async () => {
     renderPagina()
@@ -246,9 +245,8 @@ describe("ReportesPage", () => {
     expect(adminApi.historicoUsoEquipos).toHaveBeenLastCalledWith(2024)
   })
 
-  // Un absoluto suelto no se puede juzgar: "150 minutos" no dice si ese equipo
-  // se usó mucho o poco. El total de la tabla es el denominador que hace
-  // legible cada fila.
+  // Un absoluto suelto no se puede juzgar: "150 minutos" no dice si ese
+  // equipo se usó mucho o poco.
   it("muestra el total de cada tabla como contexto de las filas", async () => {
     renderPagina()
 
@@ -321,9 +319,8 @@ describe("ReportesPage", () => {
     renderPagina()
 
     // `waitFor` sobre el total y no un `findAllByRole` suelto: ese resuelve
-    // apenas encuentra el primero, y las dos tablas del histórico viven en
-    // un componente aparte que dispara sus consultas un instante después.
-    // Sin esperar el total, el test contaba solo las dos del ciclo activo.
+    // apenas encuentra el primero, y las dos tablas del histórico viven en un
+    // componente aparte que dispara sus consultas un instante después.
     await waitFor(() => {
       // Uso por equipo, uso por docente y las dos del histórico. Las de
       // incidencias no aparecen: en este escenario vienen vacías.
@@ -361,11 +358,7 @@ describe("ReportesPage", () => {
 
   // ── RF-06.5: el estado del parque ───────────────────────────────────
 
-  /**
-   * El número que se lleva a pedir presupuesto. Sin esta línea, saber cuántas
-   * máquinas están fuera de circulación pedía abrir carro por carro y contar
-   * los badges a mano.
-   */
+  /** El número que se lleva a pedir presupuesto. */
   it("dice cuántos equipos hay y cuántos están fuera de circulación", async () => {
     vi.mocked(adminApi.reporteEstadoDelInventario).mockResolvedValue({
       data: [
@@ -386,10 +379,7 @@ describe("ReportesPage", () => {
     ).toBeInTheDocument()
   })
 
-  /**
-   * La lista que se manda al service. Lo que no puede faltar es la falla:
-   * "PC 7 rota" no sirve para pedir un repuesto, "PC 7 - batería" sí.
-   */
+  /** La lista que se manda al service. */
   it("lista los equipos fuera de circulación con su falla", async () => {
     vi.mocked(adminApi.reporteEquiposFueraDeCirculacion).mockResolvedValue({
       data: [
@@ -445,8 +435,7 @@ describe("ReportesPage", () => {
 
   /**
    * El backend devuelve el desglose por estado desde siempre y la tabla lo
-   * tiraba. Sin él, "12 incidencias" no dice si el problema está atendido o
-   * esperando a que alguien lo mire — que es lo único que cambia qué hacer.
+   * tiraba.
    */
   it("desglosa las incidencias por estado, no solo el total", async () => {
     vi.mocked(adminApi.reporteIncidenciasPorEquipo).mockResolvedValue({

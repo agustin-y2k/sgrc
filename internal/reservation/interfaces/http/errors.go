@@ -20,9 +20,9 @@ func mapearError(err error) error {
 		errors.Is(err, application.ErrDocenteNoAsignado),
 		errors.Is(err, application.ErrEquipoNoDisponible),
 		errors.Is(err, application.ErrSolapamiento),
-		// Los lotes de entrega informan estos dos por PC en el cuerpo, sin
-		// fallar; acá solo llegan si alguna vez se pide una entrega de una
-		// sola máquina como operación atómica.
+		// Los lotes de entrega informan estos dos por PC en el cuerpo, sin fallar;
+		// acá solo llegan si alguna vez se pide una entrega de una sola máquina
+		// como operación atómica.
 		errors.Is(err, application.ErrEquipoYaPrestado),
 		errors.Is(err, application.ErrEquipoDadoDeBaja),
 		errors.Is(err, application.ErrReservaNoModificable),

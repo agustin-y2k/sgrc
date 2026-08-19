@@ -309,8 +309,6 @@ func (r *fakeRepo) CalcularIncidenciasPorCategoria(ctx context.Context, desde, h
 
 // Una cuenta eliminada definitivamente (RF-01.9) deja creado_por en NULL, y
 // el repositorio devuelve esa fila con UsuarioID nil y el nombre congelado.
-// El snapshot la tiene que guardar igual: si no, las horas de esa persona
-// desaparecen del año y los totales dejan de cerrar.
 func TestArchivarSnapshotDeCiclo_DocenteSinCuenta_SeGuardaConElNombreCongelado(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usoDocentes = []domain.ResumenUsoDocente{
@@ -341,9 +339,7 @@ func TestArchivarSnapshotDeCiclo_DocenteSinCuenta_SeGuardaConElNombreCongelado(t
 }
 
 // El archivado se puede reintentar (la cascada cruza tres paquetes sin una
-// transacción común). Para las filas con usuario_id NULL el ON CONFLICT de
-// la base no sirve —Postgres no considera iguales a dos NULL— así que el
-// servicio las borra antes de reescribirlas.
+// transacción común).
 func TestArchivarSnapshotDeCiclo_Reintentado_NoDuplicaDocentesSinCuenta(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usoDocentes = []domain.ResumenUsoDocente{

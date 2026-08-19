@@ -55,8 +55,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
     queryClient.invalidateQueries({ queryKey: ["equipos", carroId] })
 
   // Las dos operaciones cancelan reservas de otros docentes, así que las dos
-  // tienen que decir cuántas. Se avisa DESPUÉS y con el número real: antes de
-  // apretar solo se puede advertir que va a pasar, no cuánto.
+  // tienen que decir cuántas.
   const [cascada, setCascada] = useState<ResultadoCascada | null>(null)
 
   const cambiarEstado = useMutation({

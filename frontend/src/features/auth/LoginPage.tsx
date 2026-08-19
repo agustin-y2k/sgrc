@@ -43,18 +43,12 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
 
   // Mensaje que deja la pantalla de recuperación al terminar ("ya podés
-  // entrar con tu contraseña nueva"). Va en el state de la navegación y no
-  // en la URL para que no quede en el historial ni se muestre de nuevo al
-  // recargar.
+  // entrar con tu contraseña nueva").
   const aviso = (location.state as { aviso?: string } | null)?.aviso
 
   // El enlace de "olvidé mi contraseña" solo aparece si el despliegue puede
   // mandar mails: sin SMTP el backend responde 503 y la pantalla llevaría a
-  // un callejón sin salida. Mismo criterio que el botón de Google.
-  //
-  // Mientras la consulta no vuelve no se dibuja: es un parpadeo de menos
-  // que mostrarlo y esconderlo. Si falla, tampoco — que no aparezca un
-  // enlace es mejor que ofrecer algo que no funciona.
+  // un callejón sin salida.
   const [recuperacionDisponible, setRecuperacionDisponible] = useState(false)
   useEffect(() => {
     let cancelado = false
@@ -95,10 +89,7 @@ export function LoginPage() {
   }
 
   // Google devolvió un token válido, pero eso todavía no dice si la persona
-  // tiene cuenta en el sistema. El 404 es la respuesta normal la primera
-  // vez: significa "el token está bien, la cuenta no existe", y de ahí se
-  // sigue al registro llevando el mismo token, para no hacer apretar el
-  // botón de Google dos veces.
+  // tiene cuenta en el sistema.
   async function onCredencialDeGoogle(credencial: string) {
     setError(null)
     try {

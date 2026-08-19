@@ -15,29 +15,12 @@ import { NOTIFICACIONES_KEY } from "@/features/notificaciones/useNoLeidas"
 import { getErrorMessage } from "@/lib/api-client"
 import { formatearFechaYHora } from "@/lib/fechas"
 
-/**
- * Fecha y hora en la zona del navegador. Importa el "cuándo" concreto:
- * "ayer 08:15" es más útil que "hace 19 horas" cuando lo que se canceló es
- * una clase con horario.
- *
- * `creadaEn` es un instante real (`TIMESTAMPTZ`), así que convertirlo a la
- * zona del navegador da la hora correcta. Con una columna sin zona, lo
- * guardado sería hora de pared servida con sufijo Z y esto mostraría el
- * desfasaje de la zona como si fuera parte del dato.
- */
+/** Fecha y hora en la zona del navegador. */
 function formatearFecha(iso: string): string {
   return formatearFechaYHora(iso)
 }
 
-/**
- * RF-05: notificaciones internas.
- *
- * Es el único lugar donde se ve el motivo con el que un Admin canceló una
- * reserva ajena (RF-04.8, motivo obligatorio), qué equipos puntuales se
- * cancelaron por un bloqueo administrativo (RF-05.2) o porque un equipo pasó a
- * fuera de servicio (RF-05.3). Sin esta pantalla el backend guardaba todo
- * eso y nadie podía leerlo.
- */
+/** RF-05: notificaciones internas. */
 export function NotificacionesPage() {
   const queryClient = useQueryClient()
   const [mostrarLeidas, setMostrarLeidas] = useState(false)

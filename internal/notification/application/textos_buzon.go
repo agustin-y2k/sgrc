@@ -8,19 +8,12 @@ import (
 )
 
 // Los textos del buzón de sugerencias y de los pedidos para dictar una
-// materia. Mismo criterio que el resto: el aviso dice qué pasó y, cuando hay
-// algo para hacer, qué.
+// materia.
 
-// ══════════════════════════════════════════════════════════════════
-// El buzón
+// ══════════════════════════════════════════════════════════════════ El buzón
 // ══════════════════════════════════════════════════════════════════
 
 // maxEnElAviso: cuánto del mensaje entra en el aviso de la campana.
-//
-// Un aviso es un renglón que se lee de reojo, no el mensaje entero; pero
-// cortar demasiado obliga a entrar para saber si es urgente, que es
-// justamente lo que un aviso tiene que evitar. Doscientos caracteres son
-// unas tres líneas: alcanza para entender de qué se trata.
 const maxEnElAviso = 200
 
 func recortar(texto string) string {
@@ -67,9 +60,9 @@ func (m *Mensajero) textoDeSugerencia(a eventbus.SugerenciaNueva) (asunto, cuerp
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%s escribió desde el sistema:\n\n", quienODefecto(a.Quien))
-	// El texto va COMPLETO en el correo, a diferencia del aviso: acá no hay
-	// un renglón que respetar, y quien lee necesita el detalle para poder
-	// hacer algo con esto.
+	// El texto va COMPLETO en el correo, a diferencia del aviso: acá no hay un
+	// renglón que respetar, y quien lee necesita el detalle para poder hacer
+	// algo con esto.
 	fmt.Fprintf(&sb, "  %s\n", strings.ReplaceAll(strings.TrimSpace(a.Texto), "\n", "\n  "))
 	if a.Pantalla != "" {
 		fmt.Fprintf(&sb, "\nLo escribió desde: %s\n", a.Pantalla)
@@ -92,13 +85,12 @@ func (m *Mensajero) textoDeRespuestaASugerencia(a eventbus.SugerenciaRespondida)
 	return asunto, cuerpo
 }
 
-// ══════════════════════════════════════════════════════════════════
-// Pedidos para dictar una materia
+// ══════════════════════════════════════════════════════════════════ Pedidos
+// para dictar una materia
 // ══════════════════════════════════════════════════════════════════
 
 // nombreDeLaMateria arma "Programación de 1°A" cuando se sabe el curso, y
-// solo el nombre cuando no. Es la forma en que se la nombra en el resto del
-// sistema.
+// solo el nombre cuando no.
 func nombreDeLaMateria(materia, curso string) string {
 	if strings.TrimSpace(curso) == "" {
 		return materia
@@ -110,17 +102,15 @@ func mensajeDePedidoDeMateria(a eventbus.PedidoDeMateriaNuevo) string {
 	base := fmt.Sprintf("%s pide dictar %s", quienODefecto(a.Nombre),
 		nombreDeLaMateria(a.MateriaNombre, a.CursoNombre))
 	if a.EsMateriaNueva {
-		// Que la materia no exista cambia lo que hay que hacer: no es
-		// aprobar un permiso, es crear algo. Se dice en el aviso para que no
-		// sorprenda al abrirlo.
+		// Que la materia no exista cambia lo que hay que hacer: no es aprobar un
+		// permiso, es crear algo.
 		base += " (esa materia todavía no existe en el sistema)"
 	}
 	return base + fmt.Sprintf(". Motivo: «%s»", recortar(a.Motivo))
 }
 
 // mensajeDePedidoParaElTitular es lo que le llega a quien YA dicta esa
-// materia. No le pide nada: no decide él. Lo que hace es que no se entere
-// tarde, cuando ya hay otro reservando para su materia.
+// materia.
 func mensajeDePedidoParaElTitular(a eventbus.PedidoDeMateriaNuevo) string {
 	return fmt.Sprintf(
 		"%s pidió dictar %s, que también das vos. Lo resuelve el equipo de administración; "+
@@ -151,9 +141,7 @@ func (m *Mensajero) textoDePedidoDeMateria(a eventbus.PedidoDeMateriaNuevo) (asu
 			"se crea con ese nombre.\n")
 	}
 	if len(a.DocentesActuales) > 0 {
-		// Con quién hablar antes de decidir. Es el dato que convierte esto
-		// en una conversación y no en un botón: aprobar habilita a reservar
-		// las mismas máquinas que usa esta gente.
+		// Con quién hablar antes de decidir.
 		nombres := make([]string, 0, len(a.DocentesActuales))
 		for _, d := range a.DocentesActuales {
 			nombres = append(nombres, d.Nombre)

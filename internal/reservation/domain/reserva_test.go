@@ -76,8 +76,7 @@ func TestNuevaReservaNormal_OK(t *testing.T) {
 }
 
 // Fin ANTES del inicio dejó de ser un error: significa que la clase termina
-// al día siguiente, que es como dicta una escuela nocturna. Lo único
-// inválido es la igualdad.
+// al día siguiente, que es como dicta una escuela nocturna.
 func TestNuevaReservaNormal_RangoInvalido_Error(t *testing.T) {
 	_, err := NuevaReservaNormal("id1", "grupo1", "pc1", "materia1", "Ada", nil, time.Now(), 8*time.Hour, 8*time.Hour, time.Now())
 	if !errors.Is(err, ErrRangoHorarioInvalido) {
@@ -236,8 +235,6 @@ func TestValidarVentanaTemporal(t *testing.T) {
 // ── El motivo del bloqueo ─────────────────────────────────────────
 
 // Un bloqueo cancela las clases de otros, así que el porqué no es opcional.
-// Sin motivo, quien mira el calendario y encuentra el rato ocupado no tiene
-// dónde averiguar por qué, y el docente cancelado recibe un aviso hueco.
 func TestNuevaReservaBloqueo_SinMotivo_Error(t *testing.T) {
 	_, err := NuevaReservaBloqueo("id1", "pc1", nil, time.Now(), 10*time.Hour, 12*time.Hour, "", time.Now())
 	if !errors.Is(err, ErrMotivoBloqueoVacio) {

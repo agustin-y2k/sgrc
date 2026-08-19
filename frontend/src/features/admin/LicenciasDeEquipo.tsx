@@ -11,16 +11,6 @@ import { useQuery } from "@tanstack/react-query"
 
 /**
  * RF-03.11 — las licencias de un equipo, dentro de la ficha de ese equipo.
- *
- * Es de solo lectura a propósito. Cargarlas, renovarlas y editarlas se hace
- * en /admin/licencias, donde las acciones son masivas: el mismo software
- * está en las ocho máquinas del carro y se renueva de una sola vez. Repetir
- * acá el alta y la renovación de a una invitaría a hacer ocho veces el
- * trabajo que la otra pantalla resuelve en uno, y a que las ocho fechas
- * queden desparejas sin motivo.
- *
- * Lo que sí aporta acá: mirando un equipo concreta —porque falló, porque un
- * docente preguntó por ella— se ve de una si su software está al día.
  */
 
 const ETIQUETA_ESTADO: Record<string, string> = {

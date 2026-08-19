@@ -20,19 +20,7 @@ import {
 import { getErrorMessage } from "@/lib/api-client"
 import { formatearFechaLarga } from "@/lib/fechas"
 
-/**
- * Los pedidos de docentes para dictar una materia más.
- *
- * Esta pantalla no decide nada: registra una decisión que se toma hablando
- * con la persona, o con los directivos. Aprobar habilita a reservar
- * computadoras para esa materia, y quien ya la da puede quedarse sin
- * máquinas porque el otro llegó antes — no puede tocarle las reservas, pero
- * sí ganarle de mano.
- *
- * Por eso la pantalla muestra el motivo escrito y quiénes dictan hoy esa
- * materia, y por eso rechazar pide explicación: del otro lado hay alguien
- * que se expuso contando para qué la quería.
- */
+/** Los pedidos de docentes para dictar una materia más. */
 export function PedidosDeMateriaPage() {
   const [soloPendientes, setSoloPendientes] = useState(true)
 

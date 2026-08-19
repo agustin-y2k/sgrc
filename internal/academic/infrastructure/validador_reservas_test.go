@@ -15,8 +15,8 @@ import (
 
 // crearMateriaConCursoDeTest arma ciclo→curso→materia mínimos para estos
 // tests — academic/infrastructure no importa reservation, así que una
-// reserva_grupo se inserta acá directo por SQL (mismos campos que
-// reservation usaría, sin depender de su domain).
+// reserva_grupo se inserta acá directo por SQL (mismos campos que reservation
+// usaría, sin depender de su domain).
 func crearMateriaConCursoDeTest(t *testing.T, pool *pgxpool.Pool) (cursoID, materiaID string) {
 	t.Helper()
 	ctx := context.Background()
@@ -138,9 +138,7 @@ func TestValidadorReservasPostgres_IDInvalido_ErrorControlado(t *testing.T) {
 }
 
 // El archivado borra tres cosas y esta comprobación es la que decide si el
-// reintento puede terminar lo que faltó. Con las reglas afuera, un fallo
-// justo entre borrar los grupos y borrar las reglas dejaba filas que el
-// reintento ya no veía.
+// reintento puede terminar lo que faltó.
 func TestValidadorReservasPostgres_TieneReservasDeCiclo_VeLasReglasHuerfanas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	v := NewValidadorReservasPostgres(pool)

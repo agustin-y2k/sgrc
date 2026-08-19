@@ -184,11 +184,10 @@ describe("UsuariosPage", () => {
     expect(await screen.findByText(/sin ningún Admin activo/)).toBeInTheDocument()
   })
 
-  // ── Crear otro Admin (RF-01.4) ───────────────────────────────────────
-  //
-  // Sin esta pantalla la institución se quedaba con la única cuenta que
-  // siembra el arranque: el autorregistro crea DOCENTE y no hay ningún
-  // endpoint que cambie el rol de una cuenta existente.
+  // ── Crear otro Admin (RF-01.4) ─────────────────────────────────────── Sin
+  // esta pantalla la institución se quedaba con la única cuenta que siembra
+  // el arranque: el autorregistro crea DOCENTE y no hay ningún endpoint que
+  // cambie el rol de una cuenta existente.
 
   it("crea otro Admin", async () => {
     conUsuarios(usuario({ estado: "APROBADA" }))
@@ -321,8 +320,7 @@ describe("UsuariosPage", () => {
   })
 
   // Quien se quitara los permisos perdería en el acto esta misma pantalla y
-  // dependería de otro Admin para volver atrás. El backend lo rechaza; acá
-  // ni siquiera se ofrece.
+  // dependería de otro Admin para volver atrás.
   it("no ofrece quitarse los permisos a uno mismo", async () => {
     conUsuarios(usuario({ id: "admin1", estado: "APROBADA", rol: "ADMIN" }))
     renderPagina()

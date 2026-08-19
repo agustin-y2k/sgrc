@@ -17,13 +17,7 @@ const ETIQUETA_ROL: Record<RolDocente, string> = {
   SUPLENTE: "Suplente",
 }
 
-/**
- * Docentes asignados a una materia (RF-02.6). Sin al menos uno, la materia
- * existe pero nadie puede reservar sobre ella salvo un Admin (RF-04.1).
- *
- * El endpoint de academic devuelve solo `usuarioId`, así que el nombre se
- * resuelve acá cruzando contra la lista de usuarios de auth.
- */
+/** Docentes asignados a una materia (RF-02.6). */
 export function DocentesDeMateria({
   materia,
   soloLectura,
@@ -60,8 +54,7 @@ export function DocentesDeMateria({
 
   // Cambiar el rol es su propio endpoint y no "quitar y volver a asignar":
   // ese camino pasa por la cascada de RF-02.10 y, si es el único docente de
-  // la materia, le cancela las reservas futuras. Corregir un rol mal cargado
-  // no puede costar las clases ya reservadas.
+  // la materia, le cancela las reservas futuras.
   const cambiarRol = useMutation({
     mutationFn: ({ dm, rol }: { dm: DocenteMateria; rol: RolDocente }) =>
       academicoApi.cambiarRolDocente(materia.id, dm.id, rol),
@@ -213,7 +206,4 @@ export function DocentesDeMateria({
   )
 }
 
-/**
- * Materias de un curso (RF-02.3). Es el nivel más profundo del árbol y el
- * que realmente importa: sin materias no hay nada que reservar.
- */
+/** Materias de un curso (RF-02.3). */

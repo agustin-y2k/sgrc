@@ -243,12 +243,8 @@ func (h *Handler) ListarIncidenciasPorEquipo(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/inventory/categorias-de-falla (cualquier autenticado)
-//
-// Las categorías de falla ya usadas, para sugerirlas al reportar una nueva.
-// Lo puede ver cualquiera por el mismo motivo que el inventario: un docente
-// también reporta fallas (RF-03.5), y es justo quien más ayuda necesita para
-// no inventar una categoría nueva por cada tipeo distinto.
+// GET /api/inventory/categorias-de-falla (cualquier autenticado) Las
+// categorías de falla ya usadas, para sugerirlas al reportar una nueva.
 func (h *Handler) ListarCategoriasDeFalla(c *fiber.Ctx) error {
 	categorias, err := h.svc.CategoriasDeFallaUsadas(c.UserContext())
 	if err != nil {
@@ -291,10 +287,6 @@ func (h *Handler) EditarIncidencia(c *fiber.Ctx) error {
 
 // POST /api/inventory/equipos (Admin) — un proyector, un cargador, una
 // notebook suelta.
-//
-// Es una colección aparte de /carros/{id}/equipos y no un campo opcional
-// suyo porque lo que se carga es distinto: acá no hay carro ni
-// identificador, y lo que identifica al equipo es el nombre.
 func (h *Handler) CrearEquipo(c *fiber.Ctx) error {
 	var req crearEquipoSueltoRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -309,20 +301,8 @@ func (h *Handler) CrearEquipo(c *fiber.Ctx) error {
 }
 
 // GET /api/inventory/equipos (cualquier autenticado) — todo el inventario.
-//
-// Acepta `?enCarro=false` para quedarse solo con lo que no está en ningún
-// carro: un proyector, un cargador, una notebook suelta. Sin el filtro
-// devuelve todo, que es lo que necesita cualquier pantalla que ofrezca el
-// inventario completo sin recorrer carro por carro.
-//
-// Lo puede ver cualquiera por el mismo motivo que los carros y las PCs
-// (RF-03.7): un docente necesita saber que existe un proyector antes de
-// pedirlo o de reservarlo.
 func (h *Handler) ListarEquipos(c *fiber.Ctx) error {
-	// Solo se reconoce el valor exacto "false". Cualquier otra cosa —vacío,
-	// "0", una errata— devuelve el inventario entero: de un filtro mal
-	// escrito es mejor ver de más que de menos, porque ver de menos se
-	// confunde con "no hay ninguno".
+	// Solo se reconoce el valor exacto "false".
 	var soloSueltos bool
 	if c.Query("enCarro") == "false" {
 		soloSueltos = true

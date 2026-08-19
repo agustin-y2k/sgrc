@@ -20,14 +20,7 @@ import { getErrorMessage } from "@/lib/api-client"
 
 const RESERVAS_KEY = ["reservas"]
 
-/**
- * El aviso de "listo, se creó" que deja NuevaReservaPage al navegar acá.
- *
- * Se copia a estado local y se borra del historial en el primer render: si
- * quedara en la entrada del historial, recargar la página o volver con el
- * botón "atrás" del navegador mostraría de nuevo la confirmación de algo
- * que se hizo hace media hora.
- */
+/** El aviso de "listo, se creó" que deja NuevaReservaPage al navegar acá. */
 function useConfirmacionDeLlegada(): string | null {
   const { pathname, state } = useLocation()
   const navigate = useNavigate()
@@ -44,12 +37,7 @@ function useConfirmacionDeLlegada(): string | null {
   return confirmacion
 }
 
-/**
- * Identifica una tarjeta del listado. Un bloqueo administrativo no tiene
- * grupo en la base, así que se lo identifica por la operación que lo creó
- * (ver claveDeAgrupacion en types.ts) — usar el id de su primera reserva
- * rompía apenas ese equipo se cancelaba y la tarjeta pasaba a empezar por otra.
- */
+/** Identifica una tarjeta del listado. */
 function claveDeTarjeta(grupo: GrupoDeReservas): string {
   if (grupo.grupoId) return grupo.grupoId
   if (grupo.esBloqueo) {
@@ -71,14 +59,7 @@ function EstadoDeReserva({ estado }: { estado: EstadoReserva }) {
   return <EstadoBadge tono={TONO_RESERVA[estado]}>{ETIQUETA_RESERVA[estado]}</EstadoBadge>
 }
 
-/**
- * Estado del grupo a partir del de sus reservas.
- *
- * El backend mantiene un estado propio en reserva_grupo
- * (PARCIALMENTE_CANCELADA incluido), pero el listado devuelve Reserva, no
- * grupos, así que acá se deriva de las filas: si queda alguna confirmada la
- * reserva sigue viva, y si no, se muestra el estado que comparten todas.
- */
+/** Estado del grupo a partir del de sus reservas. */
 function estadoDelGrupo(grupo: GrupoDeReservas): EstadoReserva {
   if (grupo.reservas.some((r) => r.estado === "CONFIRMADA")) return "CONFIRMADA"
   if (grupo.reservas.every((r) => r.estado === "CANCELADA")) return "CANCELADA"
@@ -154,9 +135,9 @@ export function MisReservasPage() {
       <div className="grid gap-3">
         {grupos.map((grupo) => {
           const clave = claveDeTarjeta(grupo)
-          // La clave no puede ser grupoId: un bloqueo administrativo no
-          // tiene grupo, y el panel de confirmación no se abriría nunca —
-          // apretar "Cancelar" no haría absolutamente nada.
+          // La clave no puede ser grupoId: un bloqueo administrativo no tiene
+          // grupo, y el panel de confirmación no se abriría nunca — apretar
+          // "Cancelar" no haría absolutamente nada.
           const enCurso = cancelando === clave
           const estado = estadoDelGrupo(grupo)
 

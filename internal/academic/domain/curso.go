@@ -12,10 +12,10 @@ var ErrNombreCursoInvalido = errors.New("el nombre del curso debe tener el forma
 
 var patronNombreCurso = regexp.MustCompile(`^[1-6]°[A-Z]$`)
 
-// ValidarNombreCurso es la única fuente de verdad de este formato — tanto
-// la creación (NuevoCurso) como la edición de un curso existente deben
-// pasar por acá, para no tener el regex duplicado en dos lugares que
-// puedan divergir con el tiempo.
+// ValidarNombreCurso es la única fuente de verdad de este formato — tanto la
+// creación (NuevoCurso) como la edición de un curso existente deben pasar por
+// acá, para no tener el regex duplicado en dos lugares que puedan divergir
+// con el tiempo.
 func ValidarNombreCurso(nombre string) error {
 	if !patronNombreCurso.MatchString(nombre) {
 		return fmt.Errorf("%w: %q", ErrNombreCursoInvalido, nombre)
@@ -23,9 +23,7 @@ func ValidarNombreCurso(nombre string) error {
 	return nil
 }
 
-// Curso pertenece a un CicloLectivo. Activo/Archivado siguen al ciclo que
-// lo contiene — un curso no se archiva individualmente, se archiva todo
-// el ciclo de una vez (RF-02.4).
+// Curso pertenece a un CicloLectivo.
 type Curso struct {
 	ID             string
 	CicloLectivoID string
@@ -42,8 +40,8 @@ func NuevoCurso(id, cicloLectivoID, nombre string) (*Curso, error) {
 }
 
 // RenombrarA valida el nuevo nombre antes de aplicarlo — RF-02.11 permite
-// editar el nombre mientras el ciclo está activo, pero siempre respetando
-// el mismo formato que en la creación.
+// editar el nombre mientras el ciclo está activo, pero siempre respetando el
+// mismo formato que en la creación.
 func (c *Curso) RenombrarA(nuevoNombre string) error {
 	if err := ValidarNombreCurso(nuevoNombre); err != nil {
 		return err

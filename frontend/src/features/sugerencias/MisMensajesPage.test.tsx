@@ -42,9 +42,9 @@ describe("MisMensajesPage", () => {
   })
 
   /**
-   * La pantalla desde la que se escribió la manda la interfaz, no la
-   * persona: sin ese dato, un "no me deja" obliga a ir a buscar a quien lo
-   * escribió para preguntarle qué estaba haciendo.
+   * La pantalla desde la que se escribió la manda la interfaz, no la persona:
+   * sin ese dato, un "no me deja" obliga a ir a buscar a quien lo escribió
+   * para preguntarle qué estaba haciendo.
    */
   it("manda la pantalla desde la que se llegó, junto con el texto", async () => {
     vi.mocked(sugerenciasApi.escribir).mockResolvedValue(mensaje())

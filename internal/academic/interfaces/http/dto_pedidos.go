@@ -10,7 +10,7 @@ import (
 
 // pedirMateriaRequest: o se elige una materia de la lista (MateriaID), o se
 // escribe cuál es cuando todavía no existe (MateriaSolicitada, y el curso
-// donde va). Nunca las dos — el dominio lo rechaza.
+// donde va).
 type pedirMateriaRequest struct {
 	MateriaID         string `json:"materiaId,omitempty"`
 	CursoSolicitado   string `json:"cursoSolicitado,omitempty"`

@@ -1,11 +1,6 @@
 /**
- * Carga de Google Identity Services (el botón "Iniciar sesión con Google")
- * y lectura del token que devuelve.
- *
- * El script se sirve desde accounts.google.com y no se puede empaquetar en
- * el bundle: Google no publica una versión distribuible y la URL es parte
- * del contrato (la biblioteca se comunica con esa misma página). Por eso
- * esto es lo único de todo el frontend que carga código de un tercero.
+ * Carga de Google Identity Services (el botón "Iniciar sesión con Google") y
+ * lectura del token que devuelve.
  */
 
 const URL_SCRIPT = "https://accounts.google.com/gsi/client"
@@ -18,8 +13,7 @@ export type GoogleIdentity = {
         client_id: string
         callback: (respuesta: { credential?: string }) => void
         // Sin esto, Google puede mostrar el diálogo de "One Tap" por su
-        // cuenta encima de la pantalla de login. Lo dejamos apagado: el
-        // botón explícito es más predecible y no tapa el formulario.
+        // cuenta encima de la pantalla de login.
         auto_select?: boolean
         cancel_on_tap_outside?: boolean
       }) => void
@@ -34,9 +28,7 @@ export type GoogleIdentity = {
           width?: number
           locale?: string
           // Con el logo a la izquierda y el texto centrado en el resto, el
-          // botón se lee como los demás de la pantalla. El default
-          // ("center") pega logo y texto en el medio y, en un botón ancho,
-          // deja dos huecos que lo hacen ver suelto.
+          // botón se lee como los demás de la pantalla.
           logo_alignment?: "left" | "center"
         }
       ) => void
@@ -52,8 +44,7 @@ declare global {
 
 /**
  * Carga el script una sola vez por pestaña, aunque se lo pidan varios
- * componentes a la vez: la promesa se guarda y se reutiliza. Sin esto, el
- * login y el registro insertarían dos veces el mismo `<script>`.
+ * componentes a la vez: la promesa se guarda y se reutiliza.
  */
 let cargando: Promise<GoogleIdentity> | null = null
 
@@ -96,13 +87,6 @@ export type DatosDeLaCredencial = {
  * Lee el contenido del ID token SIN verificarlo, solo para prellenar el
  * formulario de registro con lo que la persona ya tiene en su cuenta de
  * Google.
- *
- * Esto no es una validación y no puede serlo: cualquiera puede escribir un
- * JWT que diga lo que quiera. La verificación de verdad —firma, aud, exp—
- * la hace el backend contra las claves públicas de Google
- * (internal/auth/infrastructure/google_idtoken.go), y es la única que
- * decide qué email termina en la base. Acá el peor caso es un formulario
- * prellenado con datos raros que el backend después rechaza.
  */
 export function datosDeLaCredencial(credencial: string): DatosDeLaCredencial | null {
   const partes = credencial.split(".")

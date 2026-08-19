@@ -16,10 +16,7 @@ import type {
 import { getErrorMessage } from "@/lib/api-client"
 import { contar, plural } from "@/lib/plural"
 
-/**
- * Título del grupo de lo que no cuelga de ningún carro. Es lo que ve el
- * docente arriba del proyector cuando va a reservar.
- */
+/** Título del grupo de lo que no cuelga de ningún carro. */
 const SIN_CARRO = "Otros equipos"
 
 type Props = {
@@ -28,21 +25,14 @@ type Props = {
   horaFin: string
   seleccionadas: string[]
   onCambio: (equipoIds: string[]) => void
-  /**
-   * RF-03.21: para qué materia se ordena la lista. Vacío mientras el docente
-   * todavía no la eligió, y también cuando reserva un Admin: ahí la lista
-   * sale con el orden de siempre.
-   */
+  /** RF-03.21: para qué materia se ordena la lista. */
   materiaId?: string
 }
 
 /**
- * RF-04.2: "selecciona equipos de una lista (como tildar casillas) hasta juntar
- * la cantidad que necesita — la lista no está restringida a un solo carro".
- * Por eso se agrupa por carro pero la selección es única y cruzada.
- *
- * Solo consulta cuando la franja está completa: pedir disponibilidad sin
- * fecha u horario no tiene sentido y el backend responde 400.
+ * RF-04.2: "selecciona equipos de una lista (como tildar casillas) hasta
+ * juntar la cantidad que necesita — la lista no está restringida a un solo
+ * carro".
  */
 export function SelectorDeEquipos({
   fecha,
@@ -158,8 +148,7 @@ const TITULO_TRAMO: Record<TramoPreferencia, string> = {
 
 /**
  * La aclaración del último tramo no es decorativa: sin ella, "preferentes de
- * otra materia" se lee como una prohibición, y no lo es. La marca sólo
- * ordena la lista (RF-03.21).
+ * otra materia" se lee como una prohibición, y no lo es.
  */
 const AYUDA_TRAMO: Record<TramoPreferencia, string> = {
   PREFERENTE: "",
@@ -185,10 +174,6 @@ function agruparPorTramo(
 
 /**
  * Agrupadas por carro solo para que sea legible; la selección cruza carros.
- *
- * Lo que no está en ningún carro (015 — el proyector) va bajo su propio
- * título: con `carroNombre` vacío caía en un grupo sin leyenda, y ahí no
- * hay nada que le diga al docente qué está mirando.
  */
 function EquiposPorCarro({
   equipos,
@@ -259,14 +244,7 @@ function EquiposPorCarro({
   )
 }
 
-/**
- * RF-04.11 + RF-04.12: los equipos que ya tiene alguien en esa franja.
- *
- * No están para tildarlos: están porque "no hay nada libre" y "los tiene
- * alguien con quien puedo hablar" son situaciones distintas y solo la segunda
- * tiene salida. El dato ya era público —está en el calendario de cada
- * equipo— pero ahí no es donde se decide.
- */
+/** RF-04.11 + RF-04.12: los equipos que ya tiene alguien en esa franja. */
 function EquiposTomados({ ocupados }: { ocupados: EquipoOcupado[] }) {
   return (
     <div className="grid gap-2 border-t pt-4">

@@ -9,19 +9,7 @@ import { Select } from "@/components/ui/select"
 import * as adminApi from "@/features/admin/api"
 import { getErrorMessage } from "@/lib/api-client"
 
-/**
- * RF-03.21 — para qué materias es preferente este equipo.
- *
- * La marca **sólo ordena** la lista al reservar: la materia marcada ve esta
- * máquina primero y las demás la ven al final. Nadie queda excluido, así que
- * poner o sacar una marca no cancela nada ni pide confirmación — a
- * diferencia de casi todo lo demás en esta pantalla, acá no hay ninguna
- * consecuencia que avisar.
- *
- * El alta de a un equipo vive acá porque es la corrección puntual ("esta
- * máquina también"). Marcar un carro entero se hace desde la lista, con
- * selección múltiple.
- */
+/** RF-03.21 — para qué materias es preferente este equipo. */
 
 /** Los años que admite un curso, igual que el CHECK de `curso.nombre`. */
 const ANIOS = [1, 2, 3, 4, 5, 6]
@@ -167,8 +155,7 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
               onChange={(e) => {
                 setAnio(e.target.value)
                 // Sin año, una división no significa nada: no existen "todas
-                // las B". El backend lo rechaza; acá directamente no se puede
-                // llegar a ese estado.
+                // las B".
                 if (e.target.value === "") setDivision("")
               }}
             >

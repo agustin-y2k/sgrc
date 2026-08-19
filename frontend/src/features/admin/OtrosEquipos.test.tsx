@@ -67,8 +67,7 @@ describe("OtrosEquipos", () => {
 
   /**
    * La distinción que importa: un proyector se puede planificar, un cargador
-   * se pide en el momento. Sin marcarla, todo lo que se presta al paso
-   * aparecería entre las máquinas libres cada vez que alguien va a reservar.
+   * se pide en el momento.
    */
   it("distingue lo reservable de lo que solo se presta", async () => {
     vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
@@ -130,10 +129,8 @@ describe("OtrosEquipos", () => {
 
     await user.click(await screen.findByRole("button", { name: "Agregar equipo" }))
 
-    // El datalist evita terminar con "PROYECTOR" y "Proyector" como dos
-    // tipos distintos, igual que con los nombres de las licencias. Se
-    // consulta por selector: las opciones de un datalist no son accesibles
-    // por rol, están asociadas al input y no visibles en el árbol.
+    // El datalist evita terminar con "PROYECTOR" y "Proyector" como dos tipos
+    // distintos, igual que con los nombres de las licencias.
     const opciones = document.querySelectorAll("#tipos-de-equipo option")
     expect([...opciones].map((o) => o.getAttribute("value"))).toEqual([
       "CARGADOR",
@@ -178,8 +175,7 @@ describe("OtrosEquipos", () => {
 
   /**
    * Destildar "se puede reservar" no cancela las reservas que ya existen —el
-   * backend solo lo saca de la lista de libres—. Si la pantalla no lo dice,
-   * el Admin cree que las canceló.
+   * backend solo lo saca de la lista de libres—.
    */
   it("avisa que quitar lo reservable no toca las reservas ya hechas", async () => {
     const user = userEvent.setup()
@@ -206,8 +202,7 @@ describe("OtrosEquipos", () => {
 
   /**
    * El backend rechaza la baja de algo que está afuera: dejaría el préstamo
-   * abierto sin ninguna pantalla desde donde cerrarlo. La advertencia dice de
-   * antemano cuál es la salida, para no toparse con el error.
+   * abierto sin ninguna pantalla desde donde cerrarlo.
    */
   it("advierte qué pasa si el equipo está prestado", async () => {
     const user = userEvent.setup()
@@ -219,11 +214,7 @@ describe("OtrosEquipos", () => {
     expect(screen.getByText(/marcá primero que volvió/)).toBeInTheDocument()
   })
 
-  /**
-   * Dar de baja un proyector reservado cancela clases de otros. El backend ya
-   * devuelve la cuenta; no mostrarla dejaba al Admin sin saber qué se llevó
-   * puesto.
-   */
+  /** Dar de baja un proyector reservado cancela clases de otros. */
   it("dice cuántas reservas se cancelaron al dar de baja", async () => {
     const user = userEvent.setup()
     vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })

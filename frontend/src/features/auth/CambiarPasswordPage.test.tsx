@@ -31,9 +31,9 @@ async function completarYEnviar() {
 
 describe("CambiarPasswordPage", () => {
   beforeEach(() => {
-    // restoreAllMocks no resetea los contadores de un vi.mock de módulo:
-    // sin esto, las llamadas se acumulan entre tests y el que verifica
-    // "no llamó al backend" ve las de los anteriores.
+    // restoreAllMocks no resetea los contadores de un vi.mock de módulo: sin
+    // esto, las llamadas se acumulan entre tests y el que verifica "no llamó
+    // al backend" ve las de los anteriores.
     vi.clearAllMocks()
     vi.mocked(useAuth).mockReturnValue({
       user: null,
@@ -54,8 +54,7 @@ describe("CambiarPasswordPage", () => {
 
   // RF-01.6: el token con el que se llega acá lleva debeCambiarPassword=true
   // congelado en los claims, y el backend responde 403 a todo lo demás
-  // mientras siga así. Si no se guardara el token nuevo, quien acaba de
-  // cambiar la contraseña quedaría bloqueado por su propio cambio exitoso.
+  // mientras siga así.
   it("reemplaza el token con el que devuelve el backend", async () => {
     setToken("token-viejo-con-password-vencida")
     vi.mocked(authApi.cambiarPassword).mockResolvedValue({ token: "token-nuevo" })

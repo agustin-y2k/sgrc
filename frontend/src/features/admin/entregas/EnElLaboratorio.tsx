@@ -6,20 +6,7 @@ import { PRESTAMOS_KEY, REFRESCO_DEL_MOSTRADOR } from "@/features/admin/entregas
 import * as reservasApi from "@/features/reservas/api"
 import { contar, plural } from "@/lib/plural"
 
-/**
- * Cuántos equipos están físicamente acá en este momento.
- *
- * Es el reverso de LoQueEstaAfuera, y la pregunta que faltaba: esa tarjeta
- * dice qué salió, esta dice con qué se cuenta si alguien golpea la puerta
- * pidiendo una máquina. Se responde con lo que ya existe —el inventario y
- * los préstamos abiertos—, sin endpoint nuevo.
- *
- * "Acá" no es lo mismo que "se puede entregar": una máquina en
- * mantenimiento está en el laboratorio y no se le da a nadie. Por eso el
- * número grande cuenta presencia y el renglón de abajo descuenta lo que no
- * está en circulación, en vez de mezclar las dos cosas en un solo total que
- * después nadie sabe qué significa.
- */
+/** Cuántos equipos están físicamente acá en este momento. */
 export function EnElLaboratorio() {
   const { data: inventario, error: errorInventario } = useQuery({
     queryKey: ["reporte", "inventario", "estado"],
@@ -34,8 +21,8 @@ export function EnElLaboratorio() {
   })
 
   // Un fallo no puede convertirse en un cero: "0 afuera" y "no se pudo
-  // consultar" llevan a decisiones opuestas, y el mostrador se opera con
-  // esto a la vista. Mismo criterio que los indicadores de la pantalla.
+  // consultar" llevan a decisiones opuestas, y el mostrador se opera con esto
+  // a la vista.
   if (errorInventario || errorPrestamos) {
     return (
       <Card>

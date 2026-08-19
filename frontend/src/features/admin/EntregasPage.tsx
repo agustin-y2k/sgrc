@@ -17,16 +17,6 @@ import { getErrorMessage } from "@/lib/api-client"
 /**
  * RF-08 — el mostrador completo: qué computadoras están afuera, quién se las
  * llevó y cuáles volvieron.
- *
- * Es la vista extendida de lo que el Admin ya tiene en su pantalla de inicio.
- * Sigue existiendo aparte por dos razones: es a donde llevan los avisos de
- * "una máquina no volvió", y es donde se entrega una reserva del día con
- * calma, sin el resto del panel alrededor.
- *
- * Lo que se ve acá NO es "el estado del equipo": no hay ninguna columna que
- * diga "prestada". Se deriva de si existe un préstamo sin devolver, y por eso
- * no puede quedar desincronizado — que es exactamente lo que le pasa al papel
- * cuando alguien devuelve una máquina y nadie tacha el renglón.
  */
 export function EntregasPage() {
   const [entregandoSuelta, setEntregandoSuelta] = useState(false)
@@ -37,13 +27,7 @@ export function EntregasPage() {
     refetchInterval: REFRESCO_DEL_MOSTRADOR,
   })
 
-  // Qué máquinas están afuera, para no ofrecerlas de nuevo. Se calcula acá y
-  // se pasa a los dos formularios: es el mismo dato y una sola consulta.
-  //
-  // Si la consulta falla, este conjunto queda vacío y los formularios ofrecen
-  // equipos que en realidad están prestados. El backend igual los rechaza
-  // —el índice único de préstamo abierto no deja entregar dos veces— pero el
-  // Admin se entera recién al confirmar, así que conviene decírselo antes.
+  // Qué máquinas están afuera, para no ofrecerlas de nuevo.
   const yaAfuera = useMemo(() => new Set((data?.data ?? []).map((p) => p.equipoId)), [data])
 
   return (

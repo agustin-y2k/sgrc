@@ -4,11 +4,7 @@ import type { PaginacionMeta } from "@/components/Paginador"
 
 export type EstadoNotificacion = "NO_LEIDA" | "LEIDA"
 
-/**
- * De qué se trata el aviso. Existe para poder ofrecer la acción que
- * corresponde sin interpretar el texto del mensaje: el mensaje está escrito
- * para una persona y cambiar su redacción no debería romper un botón.
- */
+/** De qué se trata el aviso. */
 export type TipoNotificacion =
   | "GENERAL"
   | "DOCENTE_PENDIENTE"

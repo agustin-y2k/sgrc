@@ -120,8 +120,7 @@ describe("agruparTramos", () => {
   })
 
   // Una escuela real: doble turno casi toda la semana, un día corrido
-  // distinto, y el fin de semana cerrado. Es el caso que tiene que quedar
-  // legible de un vistazo, porque son nueve bloques en la base.
+  // distinto, y el fin de semana cerrado.
   it("doble turno con un día que difiere se lee en tres líneas", () => {
     const casiTodos: DiaSemana[] = ["LUNES", "MIERCOLES", "JUEVES", "VIERNES"]
     const jornada = [

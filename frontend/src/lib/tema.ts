@@ -1,17 +1,4 @@
-/**
- * Claro u oscuro.
- *
- * Por defecto manda la preferencia del sistema operativo: alguien que tiene
- * el teléfono en oscuro no debería tener que configurar nada acá tampoco. El
- * interruptor de la barra es para el caso en que esa preferencia no sirva —
- * el laboratorio con las persianas abiertas al mediodía, o al revés— y una
- * vez que se usa, la elección manda sobre el sistema y se recuerda.
- *
- * Ojo: la lógica de decidir el tema inicial está duplicada en el script
- * inline de `index.html`. Es a propósito y es el precio de no mostrar un
- * fogonazo blanco antes de que cargue el bundle. Si cambia CLAVE o el nombre
- * de la clase, hay que tocar los dos lados.
- */
+/** Claro u oscuro. */
 
 export type Tema = "claro" | "oscuro"
 
@@ -24,8 +11,7 @@ export function temaElegido(): Tema | null {
     return guardado === "claro" || guardado === "oscuro" ? guardado : null
   } catch {
     // localStorage puede tirar excepción con las cookies bloqueadas o en
-    // navegación privada de algunos navegadores. Sin preferencia guardada
-    // el sistema decide, que es un buen resultado igual.
+    // navegación privada de algunos navegadores.
     return null
   }
 }

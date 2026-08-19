@@ -21,14 +21,14 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrNombreCarroDuplicado),
 		errors.Is(err, application.ErrIdentificadorDuplicado),
 		errors.Is(err, application.ErrNumeroSerieDuplicado),
-		// El alta masiva saltea los duplicados y los informa en el cuerpo;
-		// esto solo salta al RENOMBRAR una licencia al nombre de otra que
-		// esa misma PC ya tiene.
+		// El alta masiva saltea los duplicados y los informa en el cuerpo; esto
+		// solo salta al RENOMBRAR una licencia al nombre de otra que esa misma PC
+		// ya tiene.
 		errors.Is(err, application.ErrLicenciaDuplicada),
 		errors.Is(err, application.ErrNombreDeEquipoDuplicado),
 		// Igual que las licencias: el alta masiva saltea los duplicados y los
-		// informa en el cuerpo; esto solo salta al EDITAR una marca hasta
-		// dejarla igual a otra del mismo equipo.
+		// informa en el cuerpo; esto solo salta al EDITAR una marca hasta dejarla
+		// igual a otra del mismo equipo.
 		errors.Is(err, domain.ErrPreferenciaDuplicada):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 

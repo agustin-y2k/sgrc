@@ -298,9 +298,8 @@ func TestRestablecer_SiNoSePuedeRegistrarElIntentoFallidoDevuelveErrorDeVerdad(t
 	_, err := svc.RestablecerPasswordConCodigo(context.Background(),
 		"ana@escuela.edu.ar", "999999", "una-contraseña-nueva")
 
-	// NO puede devolver "código inválido": ese es el error normal, y quien
-	// esté probando códigos seguiría probando sin que nada cuente sus
-	// intentos. Si el contador no se puede persistir, el tope no existe.
+	// NO puede devolver "código inválido": ese es el error normal, y quien esté
+	// probando códigos seguiría probando sin que nada cuente sus intentos.
 	if errors.Is(err, ErrCodigoRecuperacionInvalido) {
 		t.Fatal("con el contador de intentos roto no puede responder como un fallo normal: la fuerza bruta quedaría sin tope")
 	}
@@ -418,16 +417,14 @@ func TestSolicitarRecuperacion_PedirDeNuevoInvalidaElAnterior(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	// Tiene que quedar UNO solo vigente. Si se acumularan, el tope de cinco
-	// intentos por código se multiplicaría por la cantidad de códigos que
-	// alguien se tome el trabajo de pedir.
+	// Tiene que quedar UNO solo vigente.
 	if repo.codigos[u.ID].ID == primero.ID {
 		t.Fatal("pedir un código nuevo tiene que reemplazar al anterior")
 	}
 }
 
-// ══════════════════════════════════════════════════════════════════
-// El evento de cuenta aprobada
+// ══════════════════════════════════════════════════════════════════ El
+// evento de cuenta aprobada
 // ══════════════════════════════════════════════════════════════════
 
 func TestAprobar_PublicaCuentaAprobadaConNombreYEmail(t *testing.T) {
@@ -478,9 +475,9 @@ func TestRechazar_NoPublicaCuentaAprobada(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	// Este es el motivo por el que cuenta.aprobada existe como evento
-	// aparte: cuenta.pendiente.resuelta se publica igual al rechazar, así
-	// que colgarle el mail habría felicitado a quien acaban de rechazar.
+	// Este es el motivo por el que cuenta.aprobada existe como evento aparte:
+	// cuenta.pendiente.resuelta se publica igual al rechazar, así que colgarle
+	// el mail habría felicitado a quien acaban de rechazar.
 	if publicados != 0 {
 		t.Fatalf("rechazar no puede publicar cuenta.aprobada (se publicó %d veces)", publicados)
 	}

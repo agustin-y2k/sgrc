@@ -12,9 +12,7 @@ import (
 )
 
 // materia_norm no se escribe nunca desde acá: es una columna generada por la
-// base a partir de materia_nombre (ver migrations/003). Esa es la razón de
-// que el UNIQUE pueda ignorar acentos y mayúsculas sin que el código tenga
-// que acordarse de normalizar en cada INSERT.
+// base a partir de materia_nombre (ver migrations/003).
 const columnasPreferencia = `id, equipo_id, materia_nombre, anio, division, prioridad`
 
 func (r *PostgresRepo) CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {
@@ -107,15 +105,6 @@ func (r *PostgresRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID
 
 // NombresDeMateriaEnUso: los nombres distintos que existen, sin importar el
 // curso ni el ciclo.
-//
-// Incluye las materias archivadas a propósito. Una marca del inventario
-// sobrevive al cierre del ciclo (por eso apunta al nombre y no a un ID), así
-// que la lista para editarla tiene que seguir mostrando ese nombre aunque
-// ese año ya esté cerrado.
-//
-// DISTINCT ON sobre la forma normalizada para que "Matemática" y
-// "matematica" no aparezcan como dos opciones distintas; se muestra la
-// primera alfabéticamente de cada grupo.
 func (r *PostgresRepo) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT ON (nombre_norm) nombre

@@ -277,11 +277,8 @@ func (h *Handler) ListarDocentesDeMateria(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// PATCH /api/academic/materias/{materiaId}/docentes/{docenteMateriaId} (Admin)
-//
-// Es el único camino para corregir un rol. El otro —quitar y volver a
-// asignar— pasa por la cascada de RF-02.8 y puede cancelar las reservas
-// futuras de la materia.
+// PATCH /api/academic/materias/{materiaId}/docentes/{docenteMateriaId}
+// (Admin) Es el único camino para corregir un rol.
 func (h *Handler) CambiarRolDocente(c *fiber.Ctx) error {
 	materiaID := c.Params("materiaId")
 	id := c.Params("docenteMateriaId")
@@ -335,8 +332,7 @@ func (h *Handler) RemoverDocenteMateria(c *fiber.Ctx) error {
 }
 
 // GET /api/academic/mis-materias — RF-04.1: las materias en las que el
-// usuario autenticado puede reservar. Un Admin ve todas las no archivadas;
-// un docente, solo aquellas a las que está asignado.
+// usuario autenticado puede reservar.
 func (h *Handler) ListarMisMaterias(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {

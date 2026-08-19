@@ -72,13 +72,7 @@ func TestEntregarPorReserva_TomaLaHoraDeDevolucionDeLaReserva(t *testing.T) {
 }
 
 // TestEntregarPorReserva_SeLasLlevoOtraPersona: el docente manda a un alumno
-// o a un colega, que es lo habitual. El papel lo anota, así que el sistema
-// también — pero AL LADO del docente, no en su lugar.
-//
-// El responsable es quien reservó: es a quien se le reclama si los equipos
-// no vuelven, y muchas veces quien los retira ni siquiera tiene cuenta.
-// Reemplazarlo dejaba el registro diciendo que las tenía alguien a quien el
-// sistema no puede avisarle nada.
+// o a un colega, que es lo habitual.
 func TestEntregarPorReserva_SeLasLlevoOtraPersona(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(t, repo, "res1", "pc1")
@@ -106,8 +100,7 @@ func TestEntregarPorReserva_SeLasLlevoOtraPersona(t *testing.T) {
 }
 
 // Anotar quién retira es OPCIONAL: a una institución le sirve para
-// reconstruir quién pasó por el mostrador y a otra le sobra. Vacío significa
-// que las retiró el propio docente, no que falte un dato.
+// reconstruir quién pasó por el mostrador y a otra le sobra.
 func TestEntregarPorReserva_SinAnotarQuienRetira(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(t, repo, "res1", "pc1")
@@ -233,9 +226,7 @@ func TestEntregarPorReserva_SinReservas(t *testing.T) {
 }
 
 // Entregar contra una reserva LIBERADA es legítimo: el docente llegó tarde y
-// las máquinas seguían ahí. Lo que no puede pasar es que el Admin se entere
-// después de que en el rato que estuvo libre otro la reservó — para entonces
-// ya se la dio al primero y el segundo se encuentra con que no está.
+// las máquinas seguían ahí.
 func TestEntregarPorReserva_LiberadaAvisaSiOtroLaReservo(t *testing.T) {
 	repo := nuevoFakeRepo()
 	liberada := reservaDeTest(t, repo, "res1", "pc1")
@@ -268,8 +259,8 @@ func TestEntregarPorReserva_LiberadaAvisaSiOtroLaReservo(t *testing.T) {
 }
 
 // Con la reserva todavía confirmada no hay nada que avisar: la única
-// "próxima" que existe es ella misma, y nombrarla sería ruido en la
-// operación de todos los días.
+// "próxima" que existe es ella misma, y nombrarla sería ruido en la operación
+// de todos los días.
 func TestEntregarPorReserva_ConfirmadaNoAvisaDeSiMisma(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(t, repo, "res1", "pc1")
@@ -329,8 +320,6 @@ func TestEntregarSuelta_NombreVacio(t *testing.T) {
 }
 
 // TestEntregarSuelta_AvisaSiElEquipoTieneReservaEncima: no impide la entrega.
-// El sistema no sabe cuánto va a durar un trámite, así que decidir por el
-// Admin sería peor que darle el dato.
 func TestEntregarSuelta_AvisaSiElEquipoTieneReservaEncima(t *testing.T) {
 	repo := nuevoFakeRepo()
 	r := reservaDeTest(t, repo, "res1", "pc1")
@@ -376,12 +365,6 @@ func TestEntregarSuelta_SinReservasEncimaNoAvisaNada(t *testing.T) {
 // TestEntregaYDevolucion_ElCaminoEsElMismoConReservaYSinElla recorre el ciclo
 // completo por los dos caminos y verifica que terminen en el mismo lugar:
 // entregar, figurar afuera, marcar la devolución, dejar de figurar.
-//
-// Es la garantía que sostiene que el mostrador tenga UNA sola lista de
-// devolución. Si la entrega contra reserva escribiera en otro lado, o si
-// "qué hay afuera" filtrara por origen, la máquina de una clase quedaría
-// entregada para siempre sin que ninguna pantalla lo mostrara — y quien la
-// recibe no tiene por qué acordarse de cómo salió.
 func TestEntregaYDevolucion_ElCaminoEsElMismoConReservaYSinElla(t *testing.T) {
 	ctx := context.Background()
 	repo := nuevoFakeRepo()
@@ -547,8 +530,7 @@ func TestRecibirEquipos_ObservacionesYQuienRecibio(t *testing.T) {
 }
 
 // TestRecibirEquipos_DosVecesSeInforma: dos Admin en el mostrador o un doble
-// clic. Lo que el Admin quería —que la máquina figure adentro— ya pasó, así
-// que se informa en vez de fallar.
+// clic.
 func TestRecibirEquipos_DosVecesSeInforma(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
@@ -623,13 +605,9 @@ func TestEntregarDevolverYEntregarDeNuevo(t *testing.T) {
 
 // ── Regresiones encontradas al revisar ──────────────────────────────────
 
-// TestEntregarPorReserva_BloqueoSinDocenteNoRompeElLote
-//
-// Un bloqueo administrativo (RF-04.7) no tiene docente:
-// NuevaReservaBloqueo no recibe nombre, así que NombreDocenteSnapshot es
-// nil. Sin nombre, NuevoPrestamo devolvía ErrNombreDestinatarioVacio, y como
-// ese error corta el lote entero, entregar cinco máquinas fallaba con un 400
-// porque una de las reservas era un bloqueo — sin entregar ninguna.
+// TestEntregarPorReserva_BloqueoSinDocenteNoRompeElLote Un bloqueo
+// administrativo (RF-04.7) no tiene docente: NuevaReservaBloqueo no recibe
+// nombre, así que NombreDocenteSnapshot es nil.
 func TestEntregarPorReserva_BloqueoSinDocenteNoRompeElLote(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(t, repo, "res1", "pc1")
@@ -656,8 +634,8 @@ func TestEntregarPorReserva_BloqueoSinDocenteNoRompeElLote(t *testing.T) {
 	}
 }
 
-// TestEntregarPorReserva_BloqueoConNombreSiSeEntrega: con un nombre escrito
-// a mano sí se puede — alguien tiene que retirar las máquinas de una mesa de
+// TestEntregarPorReserva_BloqueoConNombreSiSeEntrega: con un nombre escrito a
+// mano sí se puede — alguien tiene que retirar las máquinas de una mesa de
 // examen.
 func TestEntregarPorReserva_BloqueoConNombreSiSeEntrega(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -688,12 +666,9 @@ func TestEntregarPorReserva_BloqueoConNombreSiSeEntrega(t *testing.T) {
 	}
 }
 
-// TestEntregarSuelta_AvisaDeLaReservaMasProxima
-//
-// reservaProximaDe tomaba futuras[0] dando por sentado que la consulta venía
-// ordenada, y no lo estaba. El aviso podía nombrar la reserva de la semana
-// que viene en vez de la de dentro de una hora, que es la única que le
-// importa a quien está entregando la máquina.
+// TestEntregarSuelta_AvisaDeLaReservaMasProxima reservaProximaDe tomaba
+// futuras[0] dando por sentado que la consulta venía ordenada, y no lo
+// estaba.
 func TestEntregarSuelta_AvisaDeLaReservaMasProxima(t *testing.T) {
 	repo := nuevoFakeRepo()
 	lejana := reservaDeTest(t, repo, "lejana", "pc1")

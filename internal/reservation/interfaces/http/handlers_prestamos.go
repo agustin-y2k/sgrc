@@ -7,16 +7,6 @@ import (
 )
 
 // Entregas y devoluciones de PCs (RF-08) — el mostrador.
-//
-// Todo es solo Admin: quien entrega y recibe las máquinas es quien hoy
-// escribe el papel. Que un docente pudiera marcarse la entrega a sí mismo
-// desde el teléfono convertiría el registro en una declaración en vez de en
-// una constancia, que es justo lo que hace confiable al papel.
-//
-// Ninguna de estas operaciones se anota en el audit_log, y no es un olvido:
-// el propio préstamo guarda quién entregó, quién recibió y cuándo. Duplicar
-// eso en el registro de auditoría sería llenarlo de movimientos de rutina
-// —decenas por día— sin agregar un dato que no esté ya.
 
 // GET /api/reservation/prestamos — qué hay afuera ahora mismo.
 func (h *Handler) ListarPrestamosAbiertos(c *fiber.Ctx) error {
@@ -50,10 +40,6 @@ func (h *Handler) HistorialDePrestamosDeEquipo(c *fiber.Ctx) error {
 
 // POST /api/reservation/prestamos/por-reserva — entregar las máquinas de una
 // reserva.
-//
-// Responde 200 aunque alguna PC no haya salido: el lote se procesó, y qué
-// pasó con cada una está en el cuerpo. Un 409 obligaría a la pantalla a
-// deshacer las que sí se entregaron, que ya están en manos del docente.
 func (h *Handler) EntregarPorReserva(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {

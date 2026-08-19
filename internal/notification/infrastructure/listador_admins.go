@@ -11,8 +11,8 @@ import (
 
 var _ application.ListadorAdmins = (*ListadorAdminsPostgres)(nil)
 
-// ListadorAdminsPostgres implementa el puerto hacia auth — consulta
-// usuario directamente, sin importar internal/auth (mismo criterio que
+// ListadorAdminsPostgres implementa el puerto hacia auth — consulta usuario
+// directamente, sin importar internal/auth (mismo criterio que
 // ValidadorUsuarioPostgres de academic).
 type ListadorAdminsPostgres struct {
 	pool *pgxpool.Pool
@@ -33,13 +33,9 @@ func (l *ListadorAdminsPostgres) EmailsDeAdminsAprobados(ctx context.Context) ([
 }
 
 // columnaDeAdminsAprobados evita duplicar la consulta y, sobre todo, evita
-// que las dos versiones del filtro se separen con el tiempo: si mañana
-// cambia qué cuenta como "Admin activo", tiene que cambiar para el aviso
-// interno y para el correo a la vez.
-//
-// La columna se interpola en el SQL, que en general es la forma de meter
-// una inyección. Acá no puede: el argumento nunca viene de un request, son
-// dos literales escritos arriba en este mismo archivo.
+// que las dos versiones del filtro se separen con el tiempo: si mañana cambia
+// qué cuenta como "Admin activo", tiene que cambiar para el aviso interno y
+// para el correo a la vez.
 func (l *ListadorAdminsPostgres) columnaDeAdminsAprobados(ctx context.Context, columna string) ([]string, error) {
 	rows, err := l.pool.Query(ctx,
 		`SELECT `+columna+` FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA'`)

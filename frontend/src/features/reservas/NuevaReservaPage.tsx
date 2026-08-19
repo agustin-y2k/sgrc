@@ -41,9 +41,7 @@ function enumerar(partes: string[]): string {
   return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`
 }
 
-// RF-04.2 (reserva puntual) y RF-04.5 (recurrente). Los dos modos comparten
-// materia, horario y selección de equipos; lo único que cambia es si se pide una
-// fecha o un día de la semana más un rango.
+// RF-04.2 (reserva puntual) y RF-04.5 (recurrente).
 export function NuevaReservaPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -65,10 +63,9 @@ export function NuevaReservaPage() {
 
   const crear = useMutation({
     /**
-     * Devuelve la frase que va a leer el usuario en el listado, no el
-     * cuerpo de la respuesta: los dos endpoints responden cosas distintas
-     * y ninguna de las dos se usa acá. Se arma con lo que el formulario ya
-     * tiene a mano.
+     * Devuelve la frase que va a leer el usuario en el listado, no el cuerpo
+     * de la respuesta: los dos endpoints responden cosas distintas y ninguna
+     * de las dos se usa acá.
      */
     mutationFn: async (): Promise<string> => {
       const cuantosEquipos = `${contar(equipoIds.length, "computadora")}`
@@ -97,9 +94,6 @@ export function NuevaReservaPage() {
       return `Reserva recurrente confirmada: todos los ${dia.toLowerCase()} de ${horaInicio} a ${horaFin}, con ${cuantosEquipos}, hasta el ${formatearFechaLargaCapitalizada(fechaFin)}.`
     },
     // El listado es la confirmación: la reserva recién creada aparece ahí.
-    // Pero llegar a una pantalla nueva no alcanza para saber que salió bien
-    // —sobre todo en el modo recurrente, donde se crearon varias de una— así
-    // que el mensaje viaja en el estado de navegación y se muestra al llegar.
     onSuccess: async (confirmacion) => {
       await queryClient.invalidateQueries({ queryKey: ["reservas"] })
       navigate("/reservas", { state: { confirmacion } })
@@ -107,9 +101,9 @@ export function NuevaReservaPage() {
   })
 
   // La franja de la que depende el selector de equipos: en modo recurrente se
-  // usa la primera fecha del rango como muestra, porque el backend valida
-  // la disponibilidad de TODAS las ocurrencias al crear (RF-04.5) — acá
-  // solo se necesita una lista razonable para tildar.
+  // usa la primera fecha del rango como muestra, porque el backend valida la
+  // disponibilidad de TODAS las ocurrencias al crear (RF-04.5) — acá solo se
+  // necesita una lista razonable para tildar.
   const fechaParaDisponibilidad = modo === "simple" ? fecha : fechaInicio
 
   const materiasDisponibles = materias?.data ?? []
@@ -117,14 +111,7 @@ export function NuevaReservaPage() {
   // navegador no puede limitar solo.
   const duracionExcesiva = excedeDuracionMaxima(horaInicio, horaFin)
 
-  // La jornada declarada por la institución. Se consulta para avisar acá en
-  // vez de dejar que el backend conteste 400 después de completar todo el
-  // formulario: el error es el mismo, pero llega cuando ya no se puede
-  // corregir sin volver a empezar.
-  //
-  // Sin jornada declarada, dentroDeLaJornada devuelve true y este aviso no
-  // aparece nunca — que es exactamente lo que tiene que pasar mientras nadie
-  // haya dicho qué días abre la escuela.
+  // La jornada declarada por la institución.
   const { data: jornada } = useQuery({
     queryKey: JORNADA_KEY,
     queryFn: disponibilidadApi.jornadaDeLaInstitucion,
@@ -136,20 +123,7 @@ export function NuevaReservaPage() {
     horaFin !== horaInicio &&
     !dentroDeLaJornada(bloquesDeJornada, fechaParaDisponibilidad, horaInicio, horaFin)
 
-  /**
-   * Lo que todavía falta para poder confirmar, dicho en palabras.
-   *
-   * Un booleano que apague el botón y nada más no alcanza: en un formulario
-   * de siete campos, un botón gris no dice cuál de los siete es el que
-   * falta, y la persona no tiene forma de saber qué corregir. Algunos
-   * errores se explican abajo del campo (la duración, la jornada de la escuela),
-   * pero los más comunes —no elegí materia, no tildé ningún equipo— no tienen
-   * dónde aparecer.
-   *
-   * Los que ya tienen su propio mensaje al lado del campo no se repiten
-   * acá: alcanza con que el botón siga apagado mientras ese texto en rojo
-   * esté a la vista.
-   */
+  /** Lo que todavía falta para poder confirmar, dicho en palabras. */
   const faltantes: string[] = []
   if (materiaId === "") faltantes.push("elegir la materia")
   if (modo === "simple") {

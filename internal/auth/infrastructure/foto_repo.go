@@ -23,9 +23,9 @@ func (r *PostgresRepo) GuardarFoto(ctx context.Context, f *domain.FotoDePerfil) 
 		return domain.ErrFotoTipo
 	}
 
-	// UPSERT: cambiar la foto es lo normal, y con INSERT pelado había que
-	// borrar antes — dos viajes y una ventana en la que la persona se queda
-	// sin foto si el segundo falla.
+	// UPSERT: cambiar la foto es lo normal, y con INSERT pelado había que borrar
+	// antes — dos viajes y una ventana en la que la persona se queda sin foto si
+	// el segundo falla.
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO foto_de_perfil (usuario_id, contenido, tipo, actualizada_en)
 		VALUES ($1, $2, $3, $4)

@@ -26,13 +26,7 @@ export const ETIQUETA_ESTADO_PEDIDO: Record<EstadoPedido, string> = {
   RECHAZADO: "No aprobado",
 }
 
-/**
- * Qué materia pidió, dicho en una frase.
- *
- * Un pedido tiene dos formas —una materia de la lista o una escrita a
- * mano— y la pantalla no debería tener que saber cuál es cada vez que la
- * muestra.
- */
+/** Qué materia pidió, dicho en una frase. */
 export function materiaDelPedido(p: PedidoDeMateria, nombreDeLaLista?: string) {
   if (!p.esMateriaNueva) return nombreDeLaLista ?? "la materia que elegiste"
   const curso = p.cursoSolicitado?.trim()

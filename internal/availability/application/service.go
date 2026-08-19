@@ -27,10 +27,9 @@ func (s *Service) MiHorario(ctx context.Context, usuarioID string) ([]*domain.Bl
 	return s.repo.ListarBloquesDeUsuario(ctx, usuarioID)
 }
 
-// AgregarBloque (RF-07.1/07.3) — aplica de inmediato para todas las
-// semanas futuras, sin ninguna acción extra de "propagar" (no hay nada
-// materializado que actualizar, es un patrón evaluado en el momento de
-// cada consulta).
+// AgregarBloque (RF-07.1/07.3) — aplica de inmediato para todas las semanas
+// futuras, sin ninguna acción extra de "propagar" (no hay nada materializado
+// que actualizar, es un patrón evaluado en el momento de cada consulta).
 func (s *Service) AgregarBloque(ctx context.Context, usuarioID string, dia domain.DiaSemana, horaInicio, horaFin time.Duration) (*domain.BloqueHorario, error) {
 	b, err := domain.NuevoBloqueHorario(s.nuevoID(), usuarioID, dia, horaInicio, horaFin)
 	if err != nil {
@@ -46,15 +45,6 @@ func (s *Service) AgregarBloque(ctx context.Context, usuarioID string, dia domai
 }
 
 // verificarSinSolape rechaza un bloque que pise a otro del mismo día.
-//
-// La base no puede garantizarlo sola —haría falta una constraint EXCLUDE con
-// btree_gist sobre un rango de TIME, que es bastante maquinaria para algo
-// puramente informativo—, así que la regla vive acá. Es una lectura por
-// usuario: son unos pocos bloques por persona.
-//
-// El error nombra el bloque que estorba. Decir "se pisa con otro" y no cuál
-// obliga a mirar la lista y compararlos a mano, que es justo lo que la
-// pantalla no ayuda a hacer cuando hay renglones parecidos.
 func (s *Service) verificarSinSolape(ctx context.Context, b *domain.BloqueHorario) error {
 	existentes, err := s.repo.ListarBloquesDeUsuario(ctx, b.UsuarioID)
 	if err != nil {
@@ -73,11 +63,8 @@ func formatearHora(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", int(d.Hours()), int(d.Minutes())%60)
 }
 
-// EditarBloque acepta campos opcionales (PATCH parcial) y revalida el
-// rango horario resultante contra domain, aunque solo se edite un
-// extremo. La titularidad se resuelve en BuscarBloqueDeUsuario, acotada
-// por usuarioID — intentar editar el bloque de otro Admin da
-// ErrBloqueNoEncontrado, igual que un ID inexistente.
+// EditarBloque acepta campos opcionales (PATCH parcial) y revalida el rango
+// horario resultante contra domain, aunque solo se edite un extremo.
 func (s *Service) EditarBloque(ctx context.Context, id, usuarioID string, dia *domain.DiaSemana, horaInicio, horaFin *time.Duration) (*domain.BloqueHorario, error) {
 	actual, err := s.repo.BuscarBloqueDeUsuario(ctx, id, usuarioID)
 	if err != nil {
@@ -101,9 +88,8 @@ func (s *Service) EditarBloque(ctx context.Context, id, usuarioID string, dia *d
 	if err != nil {
 		return nil, err
 	}
-	// Editar también puede crear un solape: mover el fin de las 12 a las 15
-	// pisa el bloque de la tarde. PrimeroQueSeSolapa se ignora a sí mismo por
-	// ID, así que guardar sin mover nada no choca con su propia versión.
+	// Editar también puede crear un solape: mover el fin de las 12 a las 15 pisa
+	// el bloque de la tarde.
 	if err := s.verificarSinSolape(ctx, actualizado); err != nil {
 		return nil, err
 	}
@@ -139,8 +125,8 @@ func (s *Service) MarcarNoDisponibleAhora(ctx context.Context, usuarioID string)
 	return s.CargarExcepcion(ctx, usuarioID, hoy, domain.NoDisponible, nil, nil, nil)
 }
 
-// AdminDisponibilidad es el resultado combinado por Admin para RF-07.2 —
-// vive en application/ porque combina datos de varias fuentes (auth vía
+// AdminDisponibilidad es el resultado combinado por Admin para RF-07.2 — vive
+// en application/ porque combina datos de varias fuentes (auth vía
 // ListadorAdmins + los propios repos de bloques/excepciones), no es una
 // entidad persistida por sí misma.
 type AdminDisponibilidad struct {
@@ -153,9 +139,7 @@ type AdminDisponibilidad struct {
 }
 
 // DisponibilidadDeTodosLosAdmins (GET /admins, RF-07.2) — para cualquier
-// usuario autenticado. disponibleAhora se calcula en el momento contra el
-// horario semanal y la excepción de hoy de cada Admin (la excepción,
-// cuando existe, siempre tiene prioridad — ver domain.DisponibleAhora).
+// usuario autenticado.
 func (s *Service) DisponibilidadDeTodosLosAdmins(ctx context.Context) ([]AdminDisponibilidad, error) {
 	admins, err := s.listadorAdmins.AdminsAprobados(ctx)
 	if err != nil {
@@ -166,9 +150,8 @@ func (s *Service) DisponibilidadDeTodosLosAdmins(ctx context.Context) ([]AdminDi
 	diaActual, horaActual := domain.DiaYHoraDe(ahora)
 	hoy := domain.FechaSolo(ahora)
 
-	// Dos consultas en total, no dos por Admin: resolverlo dentro del for
-	// serían 2N viajes a la base para armar una pantalla que mira cualquier
-	// docente.
+	// Dos consultas en total, no dos por Admin: resolverlo dentro del for serían
+	// 2N viajes a la base para armar una pantalla que mira cualquier docente.
 	ids := make([]string, len(admins))
 	for i, admin := range admins {
 		ids[i] = admin.ID
@@ -185,9 +168,8 @@ func (s *Service) DisponibilidadDeTodosLosAdmins(ctx context.Context) ([]AdminDi
 
 	resultado := make([]AdminDisponibilidad, 0, len(admins))
 	for _, admin := range admins {
-		// Faltar en el mapa es el caso normal: un Admin sin horario cargado
-		// y sin excepción para hoy. domain.DisponibleAhora ya trata el nil
-		// como "sin bloques" / "sin excepción".
+		// Faltar en el mapa es el caso normal: un Admin sin horario cargado y sin
+		// excepción para hoy.
 		bloques := bloquesPorAdmin[admin.ID]
 		excepcion := excepcionesPorAdmin[admin.ID]
 
@@ -206,17 +188,11 @@ func (s *Service) DisponibilidadDeTodosLosAdmins(ctx context.Context) ([]AdminDi
 // ═══════════════════════════════════════════════════════════════════════
 // Jornada de la institución
 // ═══════════════════════════════════════════════════════════════════════
-//
 // Vive en este paquete y no en uno propio porque es el mismo concepto que
 // availability ya modela —días de la semana y tramos horarios— y porque
-// comparte con él las conversiones de hora de pared. Lo que NO comparte es
-// el dueño: el horario de un Admin es de esa persona, la jornada es de la
-// escuela. Por eso ninguna de estas funciones recibe usuarioID; quién puede
-// tocarla se resuelve en la ruta, que exige rol ADMIN.
+// comparte con él las conversiones de hora de pared.
 
-// Jornada devuelve la jornada declarada, completa. Una lista vacía significa
-// que la institución todavía no la declaró, y eso NO es lo mismo que una
-// escuela cerrada: sin jornada declarada no hay restricción de horario.
+// Jornada devuelve la jornada declarada, completa.
 func (s *Service) Jornada(ctx context.Context) ([]*domain.BloqueJornada, error) {
 	return s.repo.ListarJornada(ctx)
 }
@@ -256,11 +232,9 @@ func (s *Service) EditarBloqueDeJornada(ctx context.Context, id string, dia *dom
 	if horaFin != nil {
 		nuevo.HoraFin = *horaFin
 	}
-	// Solo iguales es inválido, igual que en NuevoBloqueJornada: en la
-	// jornada, hora_fin menor que hora_inicio significa que el tramo termina
-	// al día siguiente. Acá decía `<=`, copiado del horario de los Admin —que
-	// no cruza la medianoche a propósito—, y eso dejaba crear el tramo de una
-	// nocturna (20:00–01:00) pero no editarlo nunca más.
+	// Solo iguales es inválido, igual que en NuevoBloqueJornada: en la jornada,
+	// hora_fin menor que hora_inicio significa que el tramo termina al día
+	// siguiente.
 	if nuevo.HoraFin == nuevo.HoraInicio {
 		return nil, domain.ErrRangoHorarioInvalido
 	}
@@ -279,10 +253,7 @@ func (s *Service) EliminarBloqueDeJornada(ctx context.Context, id string) error 
 }
 
 // verificarJornadaSinSolape rechaza un tramo que pise a otro del mismo día,
-// nombrando cuál. Mismo criterio y mismo motivo que verificarSinSolape.
-//
-// Se excluye el propio bloque de la comparación: al editar, el tramo se pisa
-// consigo mismo y sin esto no habría forma de mover un extremo.
+// nombrando cuál.
 func (s *Service) verificarJornadaSinSolape(ctx context.Context, b *domain.BloqueJornada) error {
 	existentes, err := s.repo.ListarJornada(ctx)
 	if err != nil {
@@ -301,12 +272,6 @@ func (s *Service) verificarJornadaSinSolape(ctx context.Context, b *domain.Bloqu
 }
 
 // PermiteReserva responde si un bloque cae dentro de la jornada declarada.
-// Lo consume reservation a través de un puerto (ver cmd/wiring_adapters.go):
-// availability no sabe que existen las reservas.
-//
-// `fecha` llega como el DATE de la reserva —medianoche, sin zona— y de ahí
-// sale el día de la semana. Las horas van aparte, como duraciones desde
-// medianoche, que es como las guarda la columna TIME.
 func (s *Service) PermiteReserva(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) (bool, error) {
 	jornada, err := s.repo.ListarJornada(ctx)
 	if err != nil {
