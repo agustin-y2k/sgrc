@@ -4,34 +4,46 @@ import { useLocation } from "react-router"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import * as sugerenciasApi from "@/features/sugerencias/api"
-import type { TipoDeMensaje } from "@/features/sugerencias/types"
+import {
+  AYUDA_DEL_TIPO,
+  ETIQUETA_TIPO,
+  type TipoDeMensaje,
+} from "@/features/sugerencias/types"
 import { getErrorMessage } from "@/lib/api-client"
 
-/** El formulario para contar que algo no anda o proponer un cambio. */
+/** El orden importa: primero el que tiene a alguien esperando. */
+const TIPOS: TipoDeMensaje[] = ["AYUDA", "PROBLEMA", "SUGERENCIA"]
+
+/** El formulario para pedir ayuda, contar que algo no anda o proponer algo. */
 export function EscribirSugerencia({
+  tipoInicial = "AYUDA",
   pantallaPrevia,
   onEnviada,
 }: {
+  tipoInicial?: TipoDeMensaje
   pantallaPrevia?: string
   onEnviada?: () => void
 }) {
   const qc = useQueryClient()
   const location = useLocation()
-  const [tipo, setTipo] = useState<TipoDeMensaje>("PROBLEMA")
+  const [tipo, setTipo] = useState<TipoDeMensaje>(tipoInicial)
+  const [asunto, setAsunto] = useState("")
   const [texto, setTexto] = useState("")
   const [error, setError] = useState("")
   const [enviada, setEnviada] = useState(false)
 
   const escribir = useMutation({
     mutationFn: () =>
-      sugerenciasApi.escribir(tipo, texto, pantallaPrevia ?? location.pathname),
+      sugerenciasApi.escribir(tipo, asunto, texto, pantallaPrevia ?? location.pathname),
     onSuccess: () => {
       setError("")
+      setAsunto("")
       setTexto("")
       setEnviada(true)
-      qc.invalidateQueries({ queryKey: ["sugerencias", "mias"] })
+      qc.invalidateQueries({ queryKey: ["sugerencias"] })
       onEnviada?.()
     },
     onError: (e) => setError(getErrorMessage(e)),
@@ -42,33 +54,41 @@ export function EscribirSugerencia({
       {enviada && (
         <Alert>
           <AlertDescription>
-            Llegó. Lo van a leer los Admin y te contestan por acá y por correo.
+            Llegó. Te van a contestar acá mismo, y también te avisamos por correo.
           </AlertDescription>
         </Alert>
       )}
 
       <div className="grid gap-1.5">
-        <Label>¿Qué querés contarnos?</Label>
+        <Label>¿Qué necesitás?</Label>
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant={tipo === "PROBLEMA" ? "default" : "outline"}
-            size="sm"
-            className="h-11 px-4 sm:h-9"
-            onClick={() => setTipo("PROBLEMA")}
-          >
-            Algo no anda
-          </Button>
-          <Button
-            type="button"
-            variant={tipo === "SUGERENCIA" ? "default" : "outline"}
-            size="sm"
-            className="h-11 px-4 sm:h-9"
-            onClick={() => setTipo("SUGERENCIA")}
-          >
-            Se me ocurre una idea
-          </Button>
+          {TIPOS.map((t) => (
+            <Button
+              key={t}
+              type="button"
+              variant={tipo === t ? "default" : "outline"}
+              size="sm"
+              className="h-11 px-4 sm:h-9"
+              onClick={() => setTipo(t)}
+            >
+              {ETIQUETA_TIPO[t]}
+            </Button>
+          ))}
         </div>
+        <p className="text-muted-foreground text-sm">{AYUDA_DEL_TIPO[tipo]}</p>
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label htmlFor="asunto-sugerencia">¿De qué se trata?</Label>
+        {/* El asunto es lo único que se ve en la lista de quien contesta: sin
+            él, elegir cuál abrir primero obliga a abrirlos todos. */}
+        <Input
+          id="asunto-sugerencia"
+          value={asunto}
+          maxLength={150}
+          onChange={(e) => setAsunto(e.target.value)}
+          placeholder="Ej.: No me aparecen computadoras para el jueves"
+        />
       </div>
 
       <div className="grid gap-1.5">
@@ -101,7 +121,7 @@ export function EscribirSugerencia({
           type="button"
           size="sm"
           className="h-11 px-4 sm:h-9"
-          disabled={texto.trim() === "" || escribir.isPending}
+          disabled={asunto.trim() === "" || texto.trim() === "" || escribir.isPending}
           onClick={() => escribir.mutate()}
         >
           {escribir.isPending ? "Mandando…" : "Mandar"}

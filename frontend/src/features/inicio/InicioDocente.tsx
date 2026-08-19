@@ -198,9 +198,9 @@ export function InicioDocente({
             />
             <AccesoDirecto
               icono={MessageSquare}
-              titulo="Escribirnos"
-              ayuda="Si algo no anda o se te ocurre una mejora, contanos."
-              a="/mis-mensajes"
+              titulo="Pedir ayuda"
+              ayuda="Si necesitás una mano, algo no anda o se te ocurre una mejora."
+              a="/notificaciones?soporte=nuevo"
             />
           </div>
         )}

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ramiro/sgrc/internal/notification/domain"
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
 )
 
@@ -20,17 +21,19 @@ const timeoutCorreo = 45 * time.Second
 
 // Mensajero manda los correos.
 type Mensajero struct {
-	enviador EnviadorDeEmail
-	admins   ListadorAdmins
+	enviador     EnviadorDeEmail
+	admins       ListadorAdmins
+	preferencias PreferenciasEmail
 	// urlDelSistema es FRONTEND_ORIGIN, la dirección pública desde la que se
 	// entra.
 	urlDelSistema string
 }
 
-func NewMensajero(enviador EnviadorDeEmail, admins ListadorAdmins, urlDelSistema string) *Mensajero {
+func NewMensajero(enviador EnviadorDeEmail, admins ListadorAdmins, preferencias PreferenciasEmail, urlDelSistema string) *Mensajero {
 	return &Mensajero{
 		enviador:      enviador,
 		admins:        admins,
+		preferencias:  preferencias,
 		urlDelSistema: strings.TrimRight(strings.TrimSpace(urlDelSistema), "/"),
 	}
 }
@@ -70,7 +73,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDeDocentePendiente(payload["nombre"], payload["apellido"], payload["email"])
 		enviar("por mail el registro pendiente", func(ctx context.Context) error {
-			return m.enviarATodosLosAdmins(ctx, asunto, cuerpo)
+			return m.enviarALosAdminsSuscriptos(ctx, domain.CatCuentaPendiente, asunto, cuerpo)
 		})
 	})
 
@@ -87,7 +90,23 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDeLicencias(payload)
 		enviar("por mail las licencias por vencer", func(ctx context.Context) error {
-			return m.enviarATodosLosAdmins(ctx, asunto, cuerpo)
+			return m.enviarALosAdminsSuscriptos(ctx, domain.CatLicenciaPorVencer, asunto, cuerpo)
+		})
+	})
+
+	// ── Le cancelaron computadoras de una reserva (RF-05.1/05.2/05.3) ──
+	bus.Subscribe("reserva.cancelada", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.CancelacionesDeUsuario)
+		if !ok {
+			log.Printf("correo: payload inesperado para reserva.cancelada: %+v", e.Payload)
+			return
+		}
+		if len(payload.Reservas) == 0 {
+			return
+		}
+		asunto, cuerpo := m.textoDeCancelacion(payload)
+		enviar("por mail la cancelación", func(ctx context.Context) error {
+			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatReservaCancelada, asunto, cuerpo)
 		})
 	})
 
@@ -104,7 +123,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDeRecordatorio(payload)
 		enviar("por mail el recordatorio de la reserva", func(ctx context.Context) error {
-			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatRecordatorioDeReserva, asunto, cuerpo)
 		})
 	})
 
@@ -119,7 +138,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDeEquipoNoDisponible(payload)
 		enviar("por mail la PC que no volvió", func(ctx context.Context) error {
-			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatEquipoNoDisponible, asunto, cuerpo)
 		})
 	})
 
@@ -137,7 +156,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDePedidoDeLiberacion(payload)
 		enviar("por mail el pedido de liberación", func(ctx context.Context) error {
-			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatPedidoDeLiberacion, asunto, cuerpo)
 		})
 	})
 
@@ -152,12 +171,14 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDeReservaSinRetirar(payload)
 		enviar("por mail el aviso de no retiro", func(ctx context.Context) error {
-			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatReservaSinRetirar, asunto, cuerpo)
 		})
 	})
 
-	// El buzón: lo que se escribe va a los Admin, y la respuesta a quien
-	// escribió.
+	// El buzón de soporte: lo que se escribe va a los Admin, y la respuesta a
+	// quien escribió. Un pedido de AYUDA usa las categorías fijas, que no se
+	// pueden desactivar; una sugerencia o un "algo no anda" usan las
+	// optativas, porque pueden esperar a que alguien entre a mirar.
 	bus.Subscribe("sugerencia.nueva", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaNueva)
 		if !ok {
@@ -166,7 +187,19 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDeSugerencia(payload)
 		enviar("por mail una sugerencia", func(ctx context.Context) error {
-			return m.enviarATodosLosAdmins(ctx, asunto, cuerpo)
+			return m.enviarALosAdminsSuscriptos(ctx, categoriaDelBuzon(payload.Tipo), asunto, cuerpo)
+		})
+	})
+
+	bus.Subscribe("sugerencia.seguimiento", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.SugerenciaSeguimiento)
+		if !ok {
+			log.Printf("correo: payload inesperado para sugerencia.seguimiento: %+v", e.Payload)
+			return
+		}
+		asunto, cuerpo := m.textoDeSeguimiento(payload)
+		enviar("por mail el seguimiento de una conversación", func(ctx context.Context) error {
+			return m.enviarALosAdminsSuscriptos(ctx, categoriaDelBuzon(payload.Tipo), asunto, cuerpo)
 		})
 	})
 
@@ -181,7 +214,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDeRespuestaASugerencia(payload)
 		enviar("por mail la respuesta a una sugerencia", func(ctx context.Context) error {
-			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+			return m.enviarSiLoQuiere(ctx, payload.Email, categoriaDeLaRespuesta(payload.Tipo), asunto, cuerpo)
 		})
 	})
 
@@ -197,7 +230,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		asuntoAdmin, cuerpoAdmin := m.textoDePedidoDeMateria(payload)
 		asuntoTitular, cuerpoTitular := m.textoDePedidoParaElTitular(payload)
 		enviar("por mail un pedido de materia", func(ctx context.Context) error {
-			if err := m.enviarATodosLosAdmins(ctx, asuntoAdmin, cuerpoAdmin); err != nil {
+			if err := m.enviarALosAdminsSuscriptos(ctx, domain.CatPedidoDeMateria, asuntoAdmin, cuerpoAdmin); err != nil {
 				return err
 			}
 			var ultimo error
@@ -205,7 +238,8 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 				if d.Email == "" || d.UsuarioID == payload.UsuarioID {
 					continue
 				}
-				if err := m.enviador.Enviar(ctx, d.Email, asuntoTitular, cuerpoTitular); err != nil {
+				if err := m.enviarSiLoQuiere(ctx, d.Email, domain.CatPedidoSobreMiMateria,
+					asuntoTitular, cuerpoTitular); err != nil {
 					ultimo = err
 				}
 			}
@@ -224,7 +258,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDePedidoResuelto(payload)
 		enviar("por mail la resolución de un pedido de materia", func(ctx context.Context) error {
-			return m.enviador.Enviar(ctx, payload.Email, asunto, cuerpo)
+			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatPedidoDeMateriaResuelto, asunto, cuerpo)
 		})
 	})
 
@@ -241,7 +275,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDeDemoraParaAdmins(payload)
 		enviar("por mail las devoluciones demoradas", func(ctx context.Context) error {
-			return m.enviarATodosLosAdmins(ctx, asunto, cuerpo)
+			return m.enviarALosAdminsSuscriptos(ctx, domain.CatDevolucionDemorada, asunto, cuerpo)
 		})
 
 		for _, p := range payload.Prestamos {
@@ -251,7 +285,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 			demorado := p
 			asunto, cuerpo := m.textoDeDemoraParaQuienLaTiene(demorado)
 			enviar("por mail el recordatorio de devolución", func(ctx context.Context) error {
-				return m.enviador.Enviar(ctx, demorado.Email, asunto, cuerpo)
+				return m.enviarSiLoQuiere(ctx, demorado.Email, domain.CatDevolucionPendiente, asunto, cuerpo)
 			})
 		}
 	})
@@ -267,7 +301,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		}
 		asunto, cuerpo := m.textoDeCierreParaAdmins(payload)
 		enviar("por mail el cierre de jornada", func(ctx context.Context) error {
-			return m.enviarATodosLosAdmins(ctx, asunto, cuerpo)
+			return m.enviarALosAdminsSuscriptos(ctx, domain.CatCierreSinDevolver, asunto, cuerpo)
 		})
 
 		for _, pc := range payload.Equipos {
@@ -277,7 +311,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 			aviso := pc
 			asunto, cuerpo := m.textoDeCierreParaElProximo(aviso)
 			enviar("por mail la PC que le va a faltar al docente siguiente", func(ctx context.Context) error {
-				return m.enviador.Enviar(ctx, aviso.ProximoEmail, asunto, cuerpo)
+				return m.enviarSiLoQuiere(ctx, aviso.ProximoEmail, domain.CatEquipoNoDisponible, asunto, cuerpo)
 			})
 		}
 	})
@@ -325,13 +359,57 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	})
 }
 
-// enviarATodosLosAdmins manda el mismo mensaje a cada Admin APROBADA. Un
-// envío que falla no corta los demás: que la casilla de uno rebote no es
-// razón para que los otros tres se queden sin enterarse.
-func (m *Mensajero) enviarATodosLosAdmins(ctx context.Context, asunto, cuerpo string) error {
-	destinatarios, err := m.admins.EmailsDeAdminsAprobados(ctx)
+// tipoAyuda es el valor que publica sugerencias en el evento. Va como
+// literal y no importando su domain: ningún paquete importa el domain de otro
+// (docs/06-arquitectura.md §1), y lo que cruza el bus son datos, no tipos.
+const tipoAyuda = "AYUDA"
+
+// categoriaDelBuzon elige con qué preferencia se filtra el correo a los Admin,
+// según de qué se trate el hilo.
+func categoriaDelBuzon(tipo string) domain.CategoriaEmail {
+	if tipo == tipoAyuda {
+		return domain.CatSoporte
+	}
+	return domain.CatSugerencia
+}
+
+// categoriaDeLaRespuesta es lo mismo para el correo que vuelve a quien
+// escribió.
+func categoriaDeLaRespuesta(tipo string) domain.CategoriaEmail {
+	if tipo == tipoAyuda {
+		return domain.CatSoporteRespondido
+	}
+	return domain.CatSugerenciaRespondida
+}
+
+// enviarSiLoQuiere manda un correo personal solo si esa persona no lo apagó
+// (RF-05.13). Los tres correos de la cuenta —el código de recuperación, la
+// cuenta aprobada, la cuenta con Google— NO pasan por acá y llaman derecho al
+// enviador: no son copia de ningún aviso interno, y el del código es el único
+// canal posible para alguien que justamente no puede entrar.
+func (m *Mensajero) enviarSiLoQuiere(ctx context.Context, para string, categoria domain.CategoriaEmail, asunto, cuerpo string) error {
+	if para == "" {
+		return nil
+	}
+	quiere, err := m.preferencias.RecibePorEmail(ctx, para, categoria)
 	if err != nil {
-		return fmt.Errorf("listando emails de admins: %w", err)
+		return fmt.Errorf("consultando si %s quiere recibir %s: %w", para, categoria, err)
+	}
+	if !quiere {
+		return nil
+	}
+	return m.enviador.Enviar(ctx, para, asunto, cuerpo)
+}
+
+// enviarALosAdminsSuscriptos manda el mismo mensaje a cada Admin APROBADA que
+// haya pedido esa categoría (RF-05.13); si no la pidió nadie, no sale ningún
+// mail y el aviso interno queda igual. Un envío que falla no corta los demás:
+// que la casilla de uno rebote no es razón para que los otros tres se queden
+// sin enterarse.
+func (m *Mensajero) enviarALosAdminsSuscriptos(ctx context.Context, categoria domain.CategoriaEmail, asunto, cuerpo string) error {
+	destinatarios, err := m.admins.EmailsDeAdminsSuscriptos(ctx, categoria)
+	if err != nil {
+		return fmt.Errorf("listando emails de admins suscriptos a %s: %w", categoria, err)
 	}
 
 	var fallidos []string

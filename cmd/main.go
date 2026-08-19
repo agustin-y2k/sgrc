@@ -518,10 +518,12 @@ func main() {
 	// que auth/reservation ya venían publicando sin que nadie los escuchara.
 	notificationRepo := notificationinfra.NewPostgresRepo(pool)
 	listadorAdmins := notificationinfra.NewListadorAdminsPostgres(pool)
+	preferenciasDeEmail := notificationinfra.NewPreferenciasEmailPostgres(pool)
 
 	notificationSvc := notificationapp.NewService(
 		notificationRepo,
 		listadorAdmins,
+		preferenciasDeEmail,
 		notificationinfra.NuevoID,
 		ahora,
 	)
@@ -536,12 +538,12 @@ func main() {
 	// aunque escuchen algunos de los mismos eventos: el aviso interno es la
 	// fuente de verdad y el mail una cortesía, así que si el envío falla o
 	// tarda, el aviso ya se escribió.
-	mensajero := notificationapp.NewMensajero(enviadorDeEmail, listadorAdmins, frontendOrigin)
+	mensajero := notificationapp.NewMensajero(enviadorDeEmail, listadorAdmins, preferenciasDeEmail, frontendOrigin)
 	notificationapp.RegisterEmailHandlersConEspera(bus, mensajero, &notificacionesPendientes)
 
 	notificationHandler := notificationhttp.NewHandler(notificationSvc)
 
-	// ── El buzón de sugerencias ───────────────────────────────────── Va
+	// ── Soporte: pedir ayuda, contar que algo no anda, sugerir ────── Va
 	// después de notification a propósito: publica eventos que aquellos
 	// suscriptores ya tienen que estar escuchando cuando llegue el primero.
 	sugerenciasSvc := sugerenciasapp.NewService(

@@ -378,3 +378,33 @@ flowchart LR
   2. Por cada uno, el sistema calcula "disponible ahora" comparando el día/hora actual contra: primero, si existe una excepción para hoy (la excepción manda); si no, contra el patrón semanal habitual.
   3. También se muestra el horario semanal completo de cada Admin, como referencia para saber cuándo volver.
 - **Nota:** esto es puramente informativo (RF-07.6) — no habilita ni restringe ninguna acción del sistema.
+
+### UC: Pedir ayuda al equipo de administración (RF-09)
+- **Actor:** Cualquier usuario autenticado
+- **Motivo:** lo que hoy pasa por el pasillo —"che, no me deja reservar", "¿me das una mano con el carro?"— se pierde, y quien no cruza a un Admin seguido no lo dice nunca.
+- **Flujo:**
+  1. Desde el botón **Pedir ayuda** de la barra superior, presente en todas las pantallas, la persona escribe un **asunto** y un **mensaje**, y elige de qué se trata: *necesito ayuda*, *algo no anda* o *una idea*.
+  2. El sistema deja constancia de **desde qué pantalla y con qué versión** se escribió, sin preguntárselo.
+  3. Le llega un aviso a todos los Admin —campana y correo— con el asunto y el texto completo.
+  4. El Admin lee y **contesta desde el sistema**, en la misma pantalla de notificaciones donde ve el resto de lo que espera una respuesta.
+  5. Quien preguntó recibe el aviso, ve la respuesta adentro y **puede volver a escribir** en el mismo hilo.
+  6. Cuando el tema terminó, el Admin la **da por resuelta**. Si quien preguntó vuelve a escribir, la conversación **se reabre**.
+- **Reglas que no son obvias:**
+  - **Contestar no cierra.** Antes sí, y era el problema: el Admin escribía "fijate en Reservas" y la conversación terminaba ahí, sin manera de decirle "ya probé y no está".
+  - **Los correos de un pedido de ayuda no se pueden desactivar** (RF-09.5), en los dos sentidos. Del otro lado hay alguien esperando para poder dar su clase. Los de "algo no anda" y "una idea" sí son optativos.
+  - **Es una sola bandeja, no tres.** Para quien contesta son todos "alguien escribió y espera respuesta", y separarlos en pantallas distintas garantiza que una de ellas se mire menos.
+  - **La lista se ordena por última actividad**, no por fecha de creación: un hilo de la semana pasada al que le acaban de escribir es el que tiene a alguien esperando.
+  - **No reemplaza al reporte de incidencias** (RF-03.5): aquello marca una computadora rota y la saca de circulación; esto es una conversación con una persona.
+
+### UC: Elegir qué avisos llegan por correo (RF-05.13)
+- **Actor:** Cualquier usuario autenticado
+- **Motivo:** los avisos por mail se acumulan hasta que dejan de leerse, y el que importaba se pierde entre los demás.
+- **Flujo:**
+  1. En la pantalla de notificaciones, la persona abre el apartado **Copias por correo**.
+  2. Ve **todas** las categorías que le corresponden, agrupadas en *tu cuenta*, *tus avisos* y —solo un Admin— *administración*, cada una con qué avisa y cada cuánto.
+  3. Tilda las que quiere y guarda. La selección se reemplaza entera.
+- **Reglas que no son obvias:**
+  - **Lo que se elige es el canal, no el aviso.** Todo lo que está en esa lista sigue apareciendo en la campana, para todo el mundo, siempre.
+  - **Las que salen siempre se muestran igual**, tildadas y sin casilla que tocar: el código de recuperación, el "ya podés entrar" y los dos de un pedido de ayuda. Una lista que oculta lo que no se puede cambiar se lee como la lista completa de correos, y no lo es.
+  - **No elegir y elegir que no son estados distintos**: guardar el panel deja una decisión explícita por cada casilla que se vio, así que destildar algo que venía encendido no se vuelve a encender solo.
+  - Un docente **no ve ni puede activar** las categorías de administración: no recibe esos avisos.

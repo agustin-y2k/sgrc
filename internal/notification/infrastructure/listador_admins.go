@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ramiro/sgrc/internal/notification/application"
+	"github.com/ramiro/sgrc/internal/notification/domain"
 )
 
 var _ application.ListadorAdmins = (*ListadorAdminsPostgres)(nil)
@@ -26,16 +27,36 @@ func (l *ListadorAdminsPostgres) IDsDeAdminsAprobados(ctx context.Context) ([]st
 	return l.columnaDeAdminsAprobados(ctx, "id")
 }
 
-// EmailsDeAdminsAprobados es la misma consulta con otra columna: a quién le
-// llega la copia por correo del aviso.
-func (l *ListadorAdminsPostgres) EmailsDeAdminsAprobados(ctx context.Context) ([]string, error) {
-	return l.columnaDeAdminsAprobados(ctx, "email")
+// EmailsDeAdminsSuscriptos son los Admin aprobados que reciben esa categoría
+// por correo (RF-05.13). El LEFT JOIN es lo que hace de filtro, y el COALESCE
+// resuelve a quien nunca abrió el panel: sin fila vale el valor por defecto de
+// la categoría, que lo dice el dominio y no esta consulta.
+func (l *ListadorAdminsPostgres) EmailsDeAdminsSuscriptos(ctx context.Context, categoria domain.CategoriaEmail) ([]string, error) {
+	rows, err := l.pool.Query(ctx, `
+		SELECT u.email
+		FROM usuario u
+		LEFT JOIN preferencia_email p ON p.usuario_id = u.id AND p.categoria = $1
+		WHERE u.rol = 'ADMIN' AND u.estado = 'APROBADA' AND COALESCE(p.activa, $2)
+	`, string(categoria), categoria.ActivaPorDefecto())
+	if err != nil {
+		return nil, fmt.Errorf("listando admins suscriptos a %s: %w", categoria, err)
+	}
+	defer rows.Close()
+
+	var emails []string
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, fmt.Errorf("escaneando email de admin suscripto: %w", err)
+		}
+		emails = append(emails, email)
+	}
+	return emails, errorDeFilas(rows)
 }
 
-// columnaDeAdminsAprobados evita duplicar la consulta y, sobre todo, evita
-// que las dos versiones del filtro se separen con el tiempo: si mañana cambia
-// qué cuenta como "Admin activo", tiene que cambiar para el aviso interno y
-// para el correo a la vez.
+// columnaDeAdminsAprobados deja el filtro de "Admin activo" en un solo lugar:
+// el de arriba lo repite con un JOIN encima, así que si mañana cambia qué
+// cuenta como Admin activo, hay que tocar los dos.
 func (l *ListadorAdminsPostgres) columnaDeAdminsAprobados(ctx context.Context, columna string) ([]string, error) {
 	rows, err := l.pool.Query(ctx,
 		`SELECT `+columna+` FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA'`)

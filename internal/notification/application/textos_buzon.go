@@ -7,7 +7,7 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
 )
 
-// Los textos del buzón de sugerencias y de los pedidos para dictar una
+// Los textos de la bandeja de soporte y de los pedidos para dictar una
 // materia.
 
 // ══════════════════════════════════════════════════════════════════ El buzón
@@ -31,35 +31,64 @@ func quienODefecto(nombre string) string {
 	return nombre
 }
 
-func mensajeDeSugerencia(a eventbus.SugerenciaNueva) string {
-	// "avisó que algo no anda" y no "reportó un problema": lo primero es lo
-	// que la persona hizo, lo segundo es cómo lo llamaría un sistema.
-	que := "dejó una sugerencia"
-	if a.Tipo == "PROBLEMA" {
-		que = "avisó que algo no anda"
+// queHizo describe la acción en los términos de la persona y no del sistema:
+// "avisó que algo no anda" y no "reportó un problema".
+func queHizo(tipo string) string {
+	switch tipo {
+	case "AYUDA":
+		return "pidió ayuda"
+	case "PROBLEMA":
+		return "avisó que algo no anda"
+	default:
+		return "dejó una sugerencia"
 	}
+}
 
-	base := fmt.Sprintf("%s %s: «%s»", quienODefecto(a.Quien), que, recortar(a.Texto))
+func mensajeDeSugerencia(a eventbus.SugerenciaNueva) string {
+	base := fmt.Sprintf("%s %s: «%s»", quienODefecto(a.Quien), queHizo(a.Tipo), recortar(a.Asunto))
 	if a.Pantalla != "" {
 		base += fmt.Sprintf(" (desde %s)", a.Pantalla)
 	}
 	return base
 }
 
+// mensajeDeSeguimiento: quien preguntó volvió a escribir en su hilo. Se
+// distingue del primero porque para quien lee no es lo mismo atender algo
+// nuevo que retomar una conversación que ya había contestado.
+func mensajeDeSeguimiento(a eventbus.SugerenciaSeguimiento) string {
+	return fmt.Sprintf("%s escribió de nuevo sobre «%s»: %s",
+		quienODefecto(a.Quien), recortar(a.Asunto), recortar(a.Texto))
+}
+
 func mensajeDeRespuestaASugerencia(a eventbus.SugerenciaRespondida) string {
-	return fmt.Sprintf("Te contestaron lo que escribiste («%s»): %s",
-		recortar(a.TextoOriginal), recortar(a.Respuesta))
+	return fmt.Sprintf("Te contestaron sobre «%s»: %s",
+		recortar(a.Asunto), recortar(a.Respuesta))
+}
+
+// asuntoDelHilo pone adelante de qué se trata y después lo que escribió la
+// persona. El prefijo importa en una bandeja llena: "Pedido de ayuda" ordena
+// solo, y el asunto suelto se pierde entre los mails de la escuela.
+func asuntoDelHilo(tipo, asunto string) string {
+	var prefijo string
+	switch tipo {
+	case "AYUDA":
+		prefijo = "Pedido de ayuda"
+	case "PROBLEMA":
+		prefijo = "Algo no anda"
+	default:
+		prefijo = "Sugerencia"
+	}
+	if asunto = strings.TrimSpace(asunto); asunto == "" {
+		return prefijo
+	}
+	return prefijo + ": " + asunto
 }
 
 func (m *Mensajero) textoDeSugerencia(a eventbus.SugerenciaNueva) (asunto, cuerpo string) {
-	if a.Tipo == "PROBLEMA" {
-		asunto = "Alguien avisó que algo del sistema no anda"
-	} else {
-		asunto = "Llegó una sugerencia"
-	}
+	asunto = asuntoDelHilo(a.Tipo, a.Asunto)
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "%s escribió desde el sistema:\n\n", quienODefecto(a.Quien))
+	fmt.Fprintf(&sb, "%s %s desde el sistema:\n\n", quienODefecto(a.Quien), queHizo(a.Tipo))
 	// El texto va COMPLETO en el correo, a diferencia del aviso: acá no hay un
 	// renglón que respetar, y quien lee necesita el detalle para poder hacer
 	// algo con esto.
@@ -74,13 +103,34 @@ func (m *Mensajero) textoDeSugerencia(a eventbus.SugerenciaNueva) (asunto, cuerp
 	return asunto, cuerpo
 }
 
+// textoDeSeguimiento es el correo a los Admin cuando quien preguntó vuelve a
+// escribir. No repite el mensaje inicial: lo que hace falta para retomar es
+// el asunto y lo último que dijo.
+func (m *Mensajero) textoDeSeguimiento(a eventbus.SugerenciaSeguimiento) (asunto, cuerpo string) {
+	asunto = asuntoDelHilo(a.Tipo, a.Asunto)
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s escribió de nuevo en una conversación abierta:\n\n", quienODefecto(a.Quien))
+	fmt.Fprintf(&sb, "  %s\n", strings.ReplaceAll(strings.TrimSpace(a.Texto), "\n", "\n  "))
+
+	cuerpo = sb.String()
+	cuerpo += m.enlace("Podés seguirla desde:")
+	cuerpo += firma
+	return asunto, cuerpo
+}
+
 func (m *Mensajero) textoDeRespuestaASugerencia(a eventbus.SugerenciaRespondida) (asunto, cuerpo string) {
-	asunto = "Te contestaron lo que escribiste"
+	asunto = "Te contestaron: " + strings.TrimSpace(a.Asunto)
 
 	cuerpo = saludo(a.Nombre) +
-		fmt.Sprintf("Sobre lo que escribiste:\n\n  %s\n\nTe contestaron:\n\n  %s\n",
-			strings.TrimSpace(a.TextoOriginal), strings.TrimSpace(a.Respuesta))
-	cuerpo += m.enlace("Podés ver todo lo que escribiste en:")
+		fmt.Sprintf("Sobre «%s», te contestaron:\n\n  %s\n",
+			strings.TrimSpace(a.Asunto),
+			strings.ReplaceAll(strings.TrimSpace(a.Respuesta), "\n", "\n  "))
+	// Que se puede seguir la conversación adentro es la mitad del punto de
+	// tener esto en el sistema: sin decirlo, la gente contesta el mail.
+	cuerpo += "\n\nSi te quedó algo por preguntar, podés seguir la conversación " +
+		"desde el sistema; no hace falta que respondas este correo."
+	cuerpo += m.enlace("Entrá a Notificaciones desde:")
 	cuerpo += firma
 	return asunto, cuerpo
 }

@@ -382,9 +382,9 @@ export function InicioPage() {
                 />
                 <AccesoDirecto
                   icono={MessageSquare}
-                  titulo="Lo que nos escribieron"
-                  ayuda="Problemas y sugerencias sobre el sistema, para leer y contestar."
-                  a="/admin/sugerencias"
+                  titulo="Pedidos de ayuda y mensajes"
+                  ayuda="Lo que escriben los docentes, para leerlo y contestarlo desde el sistema."
+                  a="/notificaciones"
                 />
               </CardContent>
             </Card>

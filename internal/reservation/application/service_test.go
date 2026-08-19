@@ -704,10 +704,26 @@ func (f *fakeValidadorEquipo) EtiquetasDeEquipos(ctx context.Context, equipoIDs 
 	return m, nil
 }
 
-type fakeObtenedorNombre struct{ nombre string }
+type fakeObtenedorNombre struct {
+	nombre string
+	// contactos, si está, es lo que devuelve ContactosDe; en nil, arma uno
+	// con el nombre de arriba para cada id que le pidan.
+	contactos map[string]Contacto
+}
 
 func (f *fakeObtenedorNombre) NombreCompletoDe(ctx context.Context, usuarioID string) (string, error) {
 	return f.nombre, nil
+}
+
+func (f *fakeObtenedorNombre) ContactosDe(ctx context.Context, usuarioIDs []string) (map[string]Contacto, error) {
+	if f.contactos != nil {
+		return f.contactos, nil
+	}
+	contactos := make(map[string]Contacto, len(usuarioIDs))
+	for _, id := range usuarioIDs {
+		contactos[id] = Contacto{Nombre: f.nombre, Email: id + "@escuela.edu.ar"}
+	}
+	return contactos, nil
 }
 
 var contadorID int

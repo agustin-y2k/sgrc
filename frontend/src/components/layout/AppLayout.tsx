@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router"
 
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, LifeBuoy } from "lucide-react"
 
 import { BotonDeTema } from "@/components/BotonDeTema"
 import { PieDeAutoria } from "@/components/PieDeAutoria"
@@ -46,10 +46,10 @@ const ENLACES_ADMIN: Enlace[] = [
   // software con vencimiento tiene y cuándo hay que renovarlo.
   { a: "/admin/licencias", texto: "Licencias" },
   { a: "/admin/reportes", texto: "Reportes" },
-  // Los dos buzones nuevos: pedidos de materia y lo que la gente escribe
-  // sobre el sistema.
+  // Los pedidos para dictar una materia. Lo que la gente escribe —ayuda,
+  // fallas, ideas— NO está acá: vive dentro de Notificaciones, junto con el
+  // resto de lo que espera una respuesta.
   { a: "/admin/pedidos-de-materia", texto: "Pedidos de materia" },
-  { a: "/admin/sugerencias", texto: "Lo que nos escribieron" },
   // La jornada de la escuela: qué días y horas abre.
   { a: "/admin/jornada", texto: "Jornada de la escuela" },
   // RF-04.7. Último: es lo que menos se usa y lo que más rompe si se entra
@@ -269,6 +269,23 @@ export function AppLayout() {
                 <span className="sr-only">Mi cuenta</span>
               </Link>
             )}
+            {/* Pedir ayuda vive en la barra y no adentro de un menú: quien
+                lo necesita está trabado en alguna pantalla, y hacerlo buscar
+                dónde escribir es exactamente el momento en que deja de
+                intentarlo y va a golpear la puerta del laboratorio. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden lg:inline-flex"
+              onClick={() => {
+                cerrarMenu()
+                navigate("/notificaciones?soporte=nuevo")
+              }}
+            >
+              <LifeBuoy aria-hidden="true" className="size-4" />
+              Pedir ayuda
+            </Button>
+
             <BotonDeTema />
 
             <Button
@@ -302,9 +319,7 @@ export function AppLayout() {
                       teléfono quedaba un punto mudo. Va como texto solo para
                       lectores de pantalla, que además es lo que se escucha al
                       llegar al botón. */}
-                  <span className="sr-only">
-                    , {contar(noLeidas, "aviso")} sin leer
-                  </span>
+                  <span className="sr-only">, {contar(noLeidas, "aviso")} sin leer</span>
                 </>
               )}
             </Button>
@@ -360,6 +375,16 @@ export function AppLayout() {
               </>
             )}
 
+            {/* En el teléfono no hay lugar en la barra, pero tampoco puede
+                quedar enterrado: va arriba de "Mi cuenta", que es lo último
+                de la lista. */}
+            <NavLink
+              to="/notificaciones?soporte=nuevo"
+              className={claseDeEnlaceMovil}
+              onClick={cerrarMenu}
+            >
+              Pedir ayuda
+            </NavLink>
             <NavLink
               to="/cambiar-password"
               className={claseDeEnlaceMovil}

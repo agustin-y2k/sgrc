@@ -185,6 +185,37 @@ func NewObtenedorNombrePostgres(pool *pgxpool.Pool) *ObtenedorNombrePostgres {
 	return &ObtenedorNombrePostgres{pool: pool}
 }
 
+// ContactosDe: a quién y cómo escribirle, para los avisos que salen después
+// de una cascada. Los ids que no existen simplemente no vienen en el mapa.
+func (o *ObtenedorNombrePostgres) ContactosDe(ctx context.Context, usuarioIDs []string) (map[string]application.Contacto, error) {
+	if len(usuarioIDs) == 0 {
+		return map[string]application.Contacto{}, nil
+	}
+
+	rows, err := o.pool.Query(ctx,
+		`SELECT id, nombre, apellido, email FROM usuario WHERE id = ANY($1)`, usuarioIDs)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("obteniendo contactos: %w", err)
+	}
+	defer rows.Close()
+
+	contactos := make(map[string]application.Contacto, len(usuarioIDs))
+	for rows.Next() {
+		var id, nombre, apellido, email string
+		if err := rows.Scan(&id, &nombre, &apellido, &email); err != nil {
+			return nil, fmt.Errorf("escaneando contacto: %w", err)
+		}
+		contactos[id] = application.Contacto{Nombre: nombre + " " + apellido, Email: email}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterando contactos: %w", err)
+	}
+	return contactos, nil
+}
+
 func (o *ObtenedorNombrePostgres) NombreCompletoDe(ctx context.Context, usuarioID string) (string, error) {
 	var nombre, apellido string
 	err := o.pool.QueryRow(ctx,
