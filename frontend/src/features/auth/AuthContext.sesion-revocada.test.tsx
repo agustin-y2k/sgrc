@@ -133,3 +133,44 @@ describe("sesión revocada por el backend", () => {
     expect(screen.getByTestId("user")).toHaveTextContent("ana@test.com")
   })
 })
+
+/**
+ * Volver a abrir la aplicación con el token vencido no es un problema que
+ * haya que explicarle a nadie: es lo que pasa siempre. Antes, ese 401 del
+ * GET /me del arranque disparaba el mismo aviso que una expulsión en medio
+ * del trabajo, y quien abría el sistema en el teléfono se encontraba con un
+ * cartel de "token inválido o expirado" que se lee como un error del
+ * sistema.
+ */
+describe("token vencido al abrir la aplicación", () => {
+  it("no muestra ningún motivo: va derecho a la pantalla de ingreso", async () => {
+    vi.mocked(tokenStore.getToken).mockReturnValue("un-token-vencido")
+    // El GET /me tiene que pasar por el cliente HTTP de verdad: es ahí donde
+    // un 401 con token dispara el manejador global de sesión rechazada, que
+    // es justamente lo que este test verifica. Con `me` devolviendo un error
+    // ya armado, ese camino no se recorre y el test no probaría nada.
+    responderCon(401, "token inválido o expirado")
+    vi.mocked(authApi.me).mockImplementation(() => apiFetch("/api/auth/me"))
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    )
+
+    await waitFor(() => expect(screen.getByTestId("loading")).toHaveTextContent("false"))
+    expect(screen.getByTestId("user")).toHaveTextContent("sin sesión")
+    expect(screen.getByTestId("motivo")).toHaveTextContent("sin motivo")
+  })
+
+  it("pero si la sesión estaba abierta y la revocan, sí dice por qué", async () => {
+    await montarConSesion()
+    responderCon(401, "tu sesión se cerró porque la contraseña de esta cuenta cambió; volvé a entrar")
+
+    await apiFetch("/api/reservation/reservas").catch(() => {})
+
+    await waitFor(() =>
+      expect(screen.getByTestId("motivo")).toHaveTextContent(/la contraseña de esta cuenta cambió/)
+    )
+  })
+})
