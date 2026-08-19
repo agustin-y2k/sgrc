@@ -253,3 +253,54 @@ func TestCorreo_BarridoConListasVaciasNoMandaNada(t *testing.T) {
 		t.Errorf("no debería mandar nada, mandó %d", len(enviador.enviados))
 	}
 }
+
+// TestCorreo_Demora_DiceCuandoSalioYCuandoTeniaQueVolver: el correo a los
+// Admin dice "la tiene X desde las 10:15, tenía que volver a las 11:30", y
+// esas dos horas son datos distintos. Los dos huecos se llenaban con
+// DebioVolverA, así que el correo repetía la misma hora y afirmaba que la
+// máquina había salido justo cuando tenía que estar de vuelta — o sea, que
+// nunca la tuvo nadie. Sin este test no había nada que mirara ese renglón.
+func TestCorreo_Demora_DiceCuandoSalioYCuandoTeniaQueVolver(t *testing.T) {
+	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
+
+	bus.Publish(eventbus.Evento{Tipo: "prestamo.demorado", Payload: eventbus.PrestamosDemorados{
+		Prestamos: []eventbus.PrestamoDemorado{{
+			Etiqueta:        "PC 7",
+			Quien:           "Marta",
+			EntregadoEn:     time.Date(2026, time.August, 10, 10, 15, 0, 0, time.UTC),
+			DebioVolverA:    time.Date(2026, time.August, 10, 11, 30, 0, 0, time.UTC),
+			MinutosDeDemora: 20,
+		}},
+	}})
+
+	if len(enviador.enviados) != 1 {
+		t.Fatalf("esperaba 1 mail, hubo %d", len(enviador.enviados))
+	}
+	cuerpo := enviador.enviados[0].cuerpo
+	if !strings.Contains(cuerpo, "desde las 10:15") {
+		t.Errorf("el correo no dice a qué hora salió la máquina:\n%s", cuerpo)
+	}
+	if !strings.Contains(cuerpo, "volver a las 11:30") {
+		t.Errorf("el correo no dice a qué hora tenía que volver:\n%s", cuerpo)
+	}
+}
+
+// TestBarrido_LasHorasDeUnPrestamoViajanEnLaZonaDeLaEscuela: quien arma el
+// texto solo formatea (ver eventbus.PrestamoDemorado). Es el barrido el que
+// convierte, porque es el único que tiene el reloj de la institución. Con la
+// hora cruda de la base —timestamptz, que pgx entrega en UTC— el aviso decía
+// "tenía que devolverla a las 21:12" cuando en la escuela eran las 18:12.
+func TestBarrido_LasHorasDeUnPrestamoViajanEnLaZonaDeLaEscuela(t *testing.T) {
+	escuela := time.FixedZone("prueba", -3*60*60)
+	debioVolver := time.Date(2026, time.August, 10, 21, 12, 0, 0, time.UTC).In(escuela)
+
+	msg := mensajeDePrestamosDemorados(eventbus.PrestamosDemorados{
+		Prestamos: []eventbus.PrestamoDemorado{{
+			Etiqueta: "PC 7", Quien: "Marta", DebioVolverA: debioVolver,
+		}},
+	})
+
+	if !strings.Contains(msg, "18:12") {
+		t.Errorf("esperaba la hora de la escuela (18:12), salió: %q", msg)
+	}
+}

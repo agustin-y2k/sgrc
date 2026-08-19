@@ -41,8 +41,20 @@ const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_doc
 // pasa dos veces— lo dejan escrito y lo vuelven inmune a la zona de la
 // sesión. Mismo criterio que ListarEquiposDisponiblesEn, que ya usaba
 // `$1::date + $2::time`.
-func condicionNoTerminada(placeholderFecha, placeholderHora string) string {
-	return "fin_de_pared(fecha, hora_inicio, hora_fin) > (" + placeholderFecha + "::date + " + placeholderHora + "::time)"
+// El primer parámetro es el alias de la tabla `reserva` en la consulta que
+// la usa ("res", "reserva", lo que sea). No es decoración: sin calificar, las
+// tres columnas quedan sueltas, y en cuanto la consulta hace JOIN con
+// reserva_grupo —que tiene fecha, hora_inicio y hora_fin con esos mismos
+// nombres— Postgres corta con `column reference "fecha" is ambiguous`
+// (42702). Pasó en ProximaReservaDeEquipo: el barrido dejaba de avisarle al
+// docente que tenía la máquina reservada después, en silencio y con una sola
+// línea en el log.
+func condicionNoTerminada(alias, placeholderFecha, placeholderHora string) string {
+	if alias != "" {
+		alias += "."
+	}
+	return "fin_de_pared(" + alias + "fecha, " + alias + "hora_inicio, " + alias + "hora_fin) > (" +
+		placeholderFecha + "::date + " + placeholderHora + "::time)"
 }
 
 func (r *PostgresRepo) CrearReserva(ctx context.Context, res *domain.Reserva) error {
@@ -184,7 +196,7 @@ func (r *PostgresRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipo
 	// del orden, así que esto no les cambia nada.
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
-		WHERE equipo_id = $1 AND `+condicionNoTerminada("$2", "$3")+` AND estado = 'CONFIRMADA'
+		WHERE equipo_id = $1 AND `+condicionNoTerminada("reserva", "$2", "$3")+` AND estado = 'CONFIRMADA'
 		ORDER BY fecha, hora_inicio
 	`, equipoID, desde, desde)
 	if err != nil {
@@ -287,7 +299,7 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 func (r *PostgresRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID string, desde time.Time) ([]*domain.Reserva, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
-		WHERE materia_id = $1 AND `+condicionNoTerminada("$2", "$3")+` AND estado = 'CONFIRMADA'
+		WHERE materia_id = $1 AND `+condicionNoTerminada("reserva", "$2", "$3")+` AND estado = 'CONFIRMADA'
 	`, materiaID, desde, desde)
 	if err != nil {
 		if esIDInvalido(err) {

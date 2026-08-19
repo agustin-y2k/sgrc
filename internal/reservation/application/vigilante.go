@@ -433,13 +433,20 @@ func (v *Vigilante) reclamarDevoluciones(ctx context.Context, prestamos []Presta
 		if !p.Prestamo.ExcedioLaDemora(v.cfg.DemoraParaReclamar, ahora) {
 			continue
 		}
+		// Las dos horas se convierten ACÁ, a la zona que trae `ahora` (que
+		// es la de la escuela, ver cmd/main.go). En la base son
+		// timestamptz y pgx las entrega en UTC: mandarlas así hacía que el
+		// aviso dijera "tenía que devolverla a las 21:12" cuando en la
+		// escuela eran las 18:12. El que arma el texto no tiene de dónde
+		// sacar la zona, así que le llegan ya resueltas.
 		demorados = append(demorados, eventbus.PrestamoDemorado{
 			PrestamoID:      p.Prestamo.ID,
 			Etiqueta:        p.Etiqueta,
 			CarroNombre:     p.CarroNombre,
 			Quien:           p.Prestamo.EntregadoANombre,
 			Email:           p.Email,
-			DebioVolverA:    *p.Prestamo.DevolucionEstimada,
+			EntregadoEn:     p.Prestamo.EntregadoEn.In(ahora.Location()),
+			DebioVolverA:    p.Prestamo.DevolucionEstimada.In(ahora.Location()),
 			MinutosDeDemora: p.Prestamo.MinutosDeDemora(ahora),
 		})
 	}
@@ -485,7 +492,8 @@ func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoPar
 			Etiqueta:    p.Etiqueta,
 			CarroNombre: p.CarroNombre,
 			Quien:       p.Prestamo.EntregadoANombre,
-			DesdeCuando: p.Prestamo.EntregadoEn,
+			// En la zona de la escuela, por lo mismo que en reclamarDevoluciones.
+			DesdeCuando: p.Prestamo.EntregadoEn.In(ahora.Location()),
 		}
 		v.completarProximaReserva(ctx, p.Prestamo.EquipoID, ahora, &pc)
 		afuera = append(afuera, pc)

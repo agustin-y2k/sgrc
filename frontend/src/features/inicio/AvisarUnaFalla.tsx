@@ -135,7 +135,12 @@ export function AvisarUnaFalla({ onCerrar }: { onCerrar: () => void }) {
 
       {!elegido && (
         <div>
-          <Button variant="outline" size="sm" onClick={onCerrar}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-11 px-4 sm:h-9"
+            onClick={onCerrar}
+          >
             Volver
           </Button>
         </div>

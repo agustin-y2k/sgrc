@@ -21,6 +21,7 @@ import {
 import * as reservasApi from "@/features/reservas/api"
 import { hoyISO, type ReservaDetallada } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
+import { contar, plural } from "@/lib/plural"
 
 /**
  * La cola del mostrador: qué clase está en curso, qué viene después, y qué
@@ -249,7 +250,7 @@ export function PanelDelLaboratorio() {
           <CardDescription>
             {enCurso.length === 0
               ? "No hay ninguna clase en curso."
-              : `${enCurso.length} clase(s) en curso. Entregá las máquinas desde acá.`}
+              : `${contar(enCurso.length, "clase")} en curso. Entregá las máquinas desde acá.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
@@ -259,7 +260,7 @@ export function PanelDelLaboratorio() {
           ))}
           {!isLoading && enCurso.length === 0 && terminadas.length > 0 && (
             <p className="text-muted-foreground text-sm">
-              Hoy ya pasaron {terminadas.length} clase(s).
+              Hoy ya {plural(terminadas.length, "pasó", "pasaron")} {contar(terminadas.length, "clase")}.
             </p>
           )}
         </CardContent>
@@ -271,7 +272,7 @@ export function PanelDelLaboratorio() {
           <CardDescription>
             {siguientes.length === 0
               ? "No queda ninguna clase por empezar hoy."
-              : `${siguientes.length} clase(s) por empezar. Se pueden entregar antes de hora.`}
+              : `${contar(siguientes.length, "clase")} por empezar. Se pueden entregar antes de hora.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">

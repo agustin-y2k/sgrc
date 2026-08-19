@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -26,6 +27,7 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 // ── fakeRepo (mismo patrón que application/service_test.go) ───────────
 
 type fakeRepo struct {
+	pedidos               map[string]*domain.PedidoDeMateria
 	ciclos                map[string]*domain.CicloLectivo
 	cursos                map[string]*domain.Curso
 	materias              map[string]*domain.Materia
@@ -240,7 +242,8 @@ func (f *fakeCanceladorReservas) CancelarReservasFuturasDeMateria(ctx context.Co
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	contadorID = 0
 	svc := application.NewService(repo, &fakeValidadorUsuario{valido: true}, &fakeValidadorReservas{},
-		&fakeArchivadorHistorico{}, &fakeCanceladorReservas{}, idSecuencial, eventbus.NewInMemoryEventBus())
+		&fakeArchivadorHistorico{}, &fakeCanceladorReservas{}, &fakeDatosDeUsuario{}, idSecuencial,
+		relojDeTest, eventbus.NewInMemoryEventBus())
 	h := NewHandler(svc, fakeAuditor{})
 
 	app := fiber.New()
@@ -513,8 +516,8 @@ func TestHTTP_RemoverDocenteMateria_DevuelveLasReservasCanceladas(t *testing.T) 
 	repo := nuevoFakeRepo()
 	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "d1", MateriaID: "m1"}
 	svc := application.NewService(repo, &fakeValidadorUsuario{valido: true}, &fakeValidadorReservas{},
-		&fakeArchivadorHistorico{}, &fakeCanceladorReservas{canceladas: 3}, idSecuencial,
-		eventbus.NewInMemoryEventBus())
+		&fakeArchivadorHistorico{}, &fakeCanceladorReservas{canceladas: 3}, &fakeDatosDeUsuario{},
+		idSecuencial, relojDeTest, eventbus.NewInMemoryEventBus())
 	app := fiber.New()
 	RegisterRoutes(app, NewHandler(svc, fakeAuditor{}), registroDePrueba.Autenticacion(testSecret))
 
@@ -548,4 +551,91 @@ func TestHTTP_RemoverDocenteMateria_ComoDocente_403(t *testing.T) {
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
 	}
+}
+
+// ── Puertos que sumó el pedido para dictar una materia ──────────────────
+
+type fakeDatosDeUsuario struct{}
+
+func (fakeDatosDeUsuario) Contacto(_ context.Context, usuarioID string) (application.ContactoDeDocente, error) {
+	return application.ContactoDeDocente{UsuarioID: usuarioID, Nombre: "Docente de prueba",
+		Email: usuarioID + "@escuela.edu.ar"}, nil
+}
+
+func (fakeDatosDeUsuario) Contactos(_ context.Context, ids []string) ([]application.ContactoDeDocente, error) {
+	var r []application.ContactoDeDocente
+	for _, id := range ids {
+		r = append(r, application.ContactoDeDocente{UsuarioID: id, Nombre: "Otro docente",
+			Email: id + "@escuela.edu.ar"})
+	}
+	return r, nil
+}
+
+func relojDeTest() time.Time {
+	return time.Date(2026, time.March, 10, 9, 0, 0, 0, time.UTC)
+}
+
+func (r *fakeRepo) CrearPedido(_ context.Context, p *domain.PedidoDeMateria) error {
+	if r.pedidos == nil {
+		r.pedidos = map[string]*domain.PedidoDeMateria{}
+	}
+	r.pedidos[p.ID] = p
+	return nil
+}
+
+func (r *fakeRepo) BuscarPedidoPorID(_ context.Context, id string) (*domain.PedidoDeMateria, error) {
+	p, ok := r.pedidos[id]
+	if !ok {
+		return nil, domain.ErrPedidoNoExiste
+	}
+	return p, nil
+}
+
+func (r *fakeRepo) GuardarPedido(_ context.Context, p *domain.PedidoDeMateria) error {
+	if r.pedidos == nil {
+		r.pedidos = map[string]*domain.PedidoDeMateria{}
+	}
+	r.pedidos[p.ID] = p
+	return nil
+}
+
+func (r *fakeRepo) ListarPedidos(_ context.Context, soloPendientes bool) ([]*domain.PedidoDeMateria, error) {
+	var out []*domain.PedidoDeMateria
+	for _, p := range r.pedidos {
+		if soloPendientes && p.Estado != domain.PedidoPendiente {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) ListarPedidosDeUsuario(_ context.Context, usuarioID string) ([]*domain.PedidoDeMateria, error) {
+	var out []*domain.PedidoDeMateria
+	for _, p := range r.pedidos {
+		if p.UsuarioID == usuarioID {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) ContarPedidosPendientes(_ context.Context) (int, error) {
+	n := 0
+	for _, p := range r.pedidos {
+		if p.Estado == domain.PedidoPendiente {
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (r *fakeRepo) TienePedidoAbierto(_ context.Context, usuarioID, materiaID string) (bool, error) {
+	for _, p := range r.pedidos {
+		if p.UsuarioID == usuarioID && p.Estado == domain.PedidoPendiente &&
+			p.MateriaID != nil && *p.MateriaID == materiaID {
+			return true, nil
+		}
+	}
+	return false, nil
 }

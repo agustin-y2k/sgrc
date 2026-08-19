@@ -14,6 +14,7 @@ import type {
   TramoPreferencia,
 } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
+import { contar, plural } from "@/lib/plural"
 
 /**
  * Título del grupo de lo que no cuelga de ningún carro. Es lo que ve el
@@ -65,7 +66,7 @@ export function SelectorDeEquipos({
   if (!franjaCompleta) {
     return (
       <p className="text-muted-foreground text-sm">
-        Elegí la fecha y el horario para ver qué equipos están libres.
+        Elegí la fecha y el horario para ver qué computadoras están libres.
       </p>
     )
   }
@@ -106,8 +107,8 @@ export function SelectorDeEquipos({
     <div className="grid gap-4">
       <p className="text-muted-foreground text-sm">
         {seleccionadas.length === 0
-          ? `${equipos.length} equipo(s) libres en esa franja.`
-          : `${seleccionadas.length} de ${equipos.length} seleccionado(s).`}
+          ? `${contar(equipos.length, "equipo")} ${plural(equipos.length, "libre")} en esa franja.`
+          : `${seleccionadas.length} de ${equipos.length} ${plural(seleccionadas.length, "seleccionado")}.`}
       </p>
 
       {equipos.length === 0 && (

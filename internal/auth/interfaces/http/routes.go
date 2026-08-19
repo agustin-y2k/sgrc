@@ -85,9 +85,16 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// devuelve 403 mientras debe_cambiar_password siga en true.
 	conPasswordVencida := aut.RequeridaPermitiendoPasswordVencida()
 	auth.Get("/me", conPasswordVencida, h.Me)
+
 	auth.Post("/cambiar-password", conPasswordVencida, h.CambiarPassword)
 
 	autenticado := aut.Requerida()
+	// Foto de perfil: la propia se sube y se borra; la de cualquiera se
+	// puede ver estando autenticado (aparecen al lado del nombre en
+	// pantallas compartidas). Sin sesión no se sirve ninguna.
+	auth.Put("/mi-foto", autenticado, h.SubirMiFoto)
+	auth.Delete("/mi-foto", autenticado, h.EliminarMiFoto)
+	auth.Get("/usuarios/:id/foto", autenticado, h.VerFoto)
 
 	// Solo ADMIN
 	soloAdmin := middleware.RequireRol("ADMIN")

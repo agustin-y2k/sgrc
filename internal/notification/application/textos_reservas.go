@@ -227,8 +227,12 @@ func (m *Mensajero) textoDeDemoraParaAdmins(a eventbus.PrestamosDemorados) (asun
 		if p.CarroNombre != "" {
 			fmt.Fprintf(&sb, " (%s)", p.CarroNombre)
 		}
+		// "desde las" es EntregadoEn y "tenía que volver a las" es
+		// DebioVolverA. Iban las dos con DebioVolverA, así que el correo
+		// repetía la misma hora y afirmaba que la máquina había salido justo
+		// cuando tenía que estar de vuelta.
 		fmt.Fprintf(&sb, ": la tiene %s desde las %s, tenía que volver a las %s (%s de demora)\n",
-			p.Quien, p.DebioVolverA.Format("15:04"), p.DebioVolverA.Format("15:04"),
+			p.Quien, p.EntregadoEn.Format("15:04"), p.DebioVolverA.Format("15:04"),
 			textoDeDemora(p.MinutosDeDemora))
 	}
 

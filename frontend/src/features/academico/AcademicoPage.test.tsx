@@ -422,7 +422,7 @@ describe("AcademicoPage", () => {
       await waitFor(() => {
         expect(academicoApi.archivarCiclo).toHaveBeenCalledWith("ciclo1", 2027)
       })
-      expect(await screen.findByText(/3 curso\(s\) y 9 materia\(s\)/)).toBeInTheDocument()
+      expect(await screen.findByText(/3 cursos y 9 materias/)).toBeInTheDocument()
     })
 
     it("archiva sin clonar si se vacía el año destino", async () => {

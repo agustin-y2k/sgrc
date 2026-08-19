@@ -45,6 +45,9 @@ SGRC resuelve los cuatro: **impide el solapamiento a nivel de base de datos** (n
 | **Reportar un equipo con problemas** | Desde el inventario o desde la pantalla de inicio, indicando la gravedad y qué falla. El aviso le llega al equipo de administración. |
 | **Cancelar** | Una fecha suelta o toda la serie de aquí en adelante. |
 | **Cambiar de máquina** | Si una de las que reservó no está, la cambia por otra libre en la misma franja sin partir la clase en dos reservas. Si la reserva se repite todas las semanas, elige si el cambio es solo por esa fecha o de ahí hasta el final de la serie. |
+| **Su perfil** | Su foto —opcional; si no pone ninguna se ven sus iniciales—, las materias que da, y la contraseña. Todo detrás del redondel con la cara, donde se lo busca en cualquier aplicación. |
+| **Pedir otra materia** | Le asignaron una materia a mitad de año y necesita reservar para ella. La elige de la lista, o la escribe si todavía no está cargada. Lo resuelve una persona, no el sistema. |
+| **Avisar que algo del sistema no anda** | Un buzón para contar un problema o proponer una mejora, con sus palabras. El sistema agrega solo desde qué pantalla se escribió. Le contestan, y la respuesta le llega. |
 
 ### Para el equipo de administración
 
@@ -58,6 +61,8 @@ SGRC resuelve los cuatro: **impide el solapamiento a nivel de base de datos** (n
 | **Licencias de software** | Qué programas con vencimiento hay en cada equipo y cuántos días le quedan a cada uno. El día antes de que venza —y el día que vence— llega un correo a todos los administradores. Si la licencia se renovó otro día, o hay que corregir la fecha, se edita en cualquier momento. |
 | **Ciclo lectivo** | Años, cursos, materias y qué docente dicta cada una. Al cerrar el año, el sistema guarda un resumen histórico permanente y clona la estructura al año siguiente. |
 | **Aprobación de cuentas** | Un docente se registra solo —con email y contraseña, o con su cuenta de Google— pero no entra hasta que alguien lo aprueba. Un docente aprobado también puede recibir permisos de Admin, y perderlos sin que se le cierre la cuenta. |
+| **Pedidos para dictar una materia** | Un docente pide sumarse a una materia y explica por qué. Al equipo de administración le llega el pedido con ese texto y con quiénes la dictan hoy, para saber con quién hablar; a esos docentes también les llega el aviso, para que no se enteren tarde. **Lo decide una persona**: aprobar habilita a reservar los mismos equipos que usa quien ya la da. Rechazar exige explicar por qué, y quién resolvió qué queda auditado. |
+| **Lo que escriben sobre el sistema** | Los problemas y las sugerencias que manda la gente, con la pantalla desde la que se escribieron. Se contestan desde ahí, y la respuesta le llega a quien escribió. |
 | **Bloquear equipos** | Toma las máquinas para otra cosa —una evaluación, una jornada docente, una obra en el aula— escribiendo por qué, y cancela automáticamente lo que se pisa notificando a cada docente afectado con ese mismo texto. |
 | **Reportes** | Uso por equipo y por docente, incidencias por equipo y por carro, con porcentajes y descarga a CSV. Y para el parque de máquinas: cuántas andan y cuántas no, la lista de las que están fuera de circulación con qué le pasa a cada una, y qué se rompe más seguido. |
 | **Auditoría** | Toda acción sensible queda registrada con quién, cuándo y desde qué dirección. |

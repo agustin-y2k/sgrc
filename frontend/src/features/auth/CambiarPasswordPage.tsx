@@ -21,7 +21,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
+import { InputPassword } from "@/components/ui/input-password"
 import * as authApi from "@/features/auth/api"
 import { useAuth } from "@/features/auth/AuthContext"
 import { getErrorMessage } from "@/lib/api-client"
@@ -87,7 +87,7 @@ export function CambiarPasswordPage() {
                   <FormItem>
                     <FormLabel>Contraseña actual</FormLabel>
                     <FormControl>
-                      <Input type="password" autoComplete="current-password" {...field} />
+                      <InputPassword autoComplete="current-password" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -100,7 +100,7 @@ export function CambiarPasswordPage() {
                   <FormItem>
                     <FormLabel>Contraseña nueva</FormLabel>
                     <FormControl>
-                      <Input type="password" autoComplete="new-password" {...field} />
+                      <InputPassword autoComplete="new-password" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

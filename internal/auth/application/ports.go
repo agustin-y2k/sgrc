@@ -19,6 +19,16 @@ type Repo interface {
 	// pedido se cuele en el medio.
 	EnTransaccion(ctx context.Context, fn func(Repo) error) error
 
+	// Foto de perfil (tabla aparte: pesa cientos de veces más que el resto
+	// de la fila y se lee en una sola pantalla, ver la migración 002).
+	GuardarFoto(ctx context.Context, f *domain.FotoDePerfil) error
+	BuscarFoto(ctx context.Context, usuarioID string) (*domain.FotoDePerfil, error)
+	EliminarFoto(ctx context.Context, usuarioID string) error
+	// UsuariosConFoto filtra, de una lista de ids, los que tienen foto. Es
+	// para que un listado de personas sepa a quién pedirle la imagen sin
+	// hacer una consulta por cabeza ni traerse los bytes de todas.
+	UsuariosConFoto(ctx context.Context, usuarioIDs []string) (map[string]bool, error)
+
 	BuscarPorEmail(ctx context.Context, email string) (*domain.Usuario, error)
 	BuscarPorID(ctx context.Context, id string) (*domain.Usuario, error)
 	// BuscarPorGoogleSub busca por el identificador estable de la cuenta de

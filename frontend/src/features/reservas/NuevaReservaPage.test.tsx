@@ -253,7 +253,7 @@ describe("NuevaReservaPage", () => {
     const user = userEvent.setup()
     renderPagina()
 
-    await user.click(await screen.findByRole("button", { name: "Recurrente" }))
+    await user.click(await screen.findByRole("button", { name: "Se repite todas las semanas" }))
     await elegirMateria(user)
     await user.selectOptions(screen.getByLabelText("Día de la semana"), "MARTES")
     await user.type(screen.getByLabelText("Desde"), FECHA)
@@ -303,7 +303,7 @@ describe("NuevaReservaPage", () => {
     await screen.findByLabelText("Materia")
 
     expect(screen.getByText(/elegir la materia/)).toBeInTheDocument()
-    expect(screen.getByText(/tildar al menos un equipo/)).toBeInTheDocument()
+    expect(screen.getByText(/tildar al menos una computadora/)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
   })
 
@@ -316,7 +316,7 @@ describe("NuevaReservaPage", () => {
     expect(screen.queryByText(/elegir la fecha/)).not.toBeInTheDocument()
     // Lo único que queda.
     expect(
-      screen.getByText(/Para confirmar falta tildar al menos un equipo/)
+      screen.getByText(/Para confirmar falta tildar al menos una computadora/)
     ).toBeInTheDocument()
 
     await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
@@ -337,7 +337,7 @@ describe("NuevaReservaPage", () => {
 
     expect(await screen.findByText("Listado")).toBeInTheDocument()
     expect(
-      screen.getByText(/Reserva confirmada .*de 08:00 a 09:00, con 1 equipo\./)
+      screen.getByText(/Reserva confirmada .*de 08:00 a 09:00, con 1 computadora\./)
     ).toBeInTheDocument()
   })
 
@@ -346,7 +346,7 @@ describe("NuevaReservaPage", () => {
     renderPagina()
     await elegirMateria(user)
 
-    await user.click(screen.getByRole("button", { name: "Recurrente" }))
+    await user.click(screen.getByRole("button", { name: "Se repite todas las semanas" }))
     await user.selectOptions(screen.getByLabelText("Día de la semana"), "MARTES")
     await user.type(screen.getByLabelText("Desde"), FECHA)
     await user.type(screen.getByLabelText("Hasta"), FECHA_FIN)

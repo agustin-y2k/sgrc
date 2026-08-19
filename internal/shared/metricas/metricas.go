@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/utils"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -181,7 +182,19 @@ func (m *Registro) MiddlewareHTTP() fiber.Handler {
 			ruta = "desconocida"
 		}
 
-		metodo := c.Method()
+		// utils.CopyString y no c.Method() pelado: Fiber devuelve una vista
+		// sobre el buffer de la petición, que fasthttp reusa apenas termina
+		// de atenderla. Prometheus guarda ese string como CLAVE de la serie,
+		// así que cuando el buffer se reescribe, la clave ya guardada cambia
+		// abajo del mapa: aparecían métodos inventados como "GETT" y dos
+		// entradas distintas para la misma serie, y desde ahí /metrics
+		// devolvía 500 ("was collected before with the same name and label
+		// values") en vez de métricas. O sea: toda la observabilidad caída,
+		// justo por la ruta que la mira.
+		//
+		// La otra etiqueta, `ruta`, no necesita copia: es el patrón con el
+		// que se registró la ruta al arrancar, no algo que venga del buffer.
+		metodo := utils.CopyString(c.Method())
 		m.duracion.WithLabelValues(metodo, ruta).Observe(time.Since(inicio).Seconds())
 		m.peticiones.WithLabelValues(metodo, ruta, strconv.Itoa(codigo)).Inc()
 

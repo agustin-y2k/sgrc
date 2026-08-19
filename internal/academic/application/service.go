@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ramiro/sgrc/internal/academic/domain"
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
@@ -20,8 +21,13 @@ type Service struct {
 	validadorReservas   ValidadorReservas
 	archivadorHistorico ArchivadorHistorico
 	canceladorReservas  CanceladorReservasDeMateria
-	nuevoID             IDGenerator
-	bus                 eventbus.EventBus
+	// datosDeUsuario y ahora los sumó el pedido para dictar una materia
+	// (service_pedidos.go): el pedido lleva fecha, y sus avisos necesitan
+	// nombre y correo de quien pide y de quienes ya dictan esa materia.
+	datosDeUsuario DatosDeUsuario
+	ahora          func() time.Time
+	nuevoID        IDGenerator
+	bus            eventbus.EventBus
 }
 
 func NewService(
@@ -30,7 +36,9 @@ func NewService(
 	validadorReservas ValidadorReservas,
 	archivadorHistorico ArchivadorHistorico,
 	canceladorReservas CanceladorReservasDeMateria,
+	datosDeUsuario DatosDeUsuario,
 	nuevoID IDGenerator,
+	ahora func() time.Time,
 	bus eventbus.EventBus,
 ) *Service {
 	return &Service{
@@ -39,7 +47,9 @@ func NewService(
 		validadorReservas:   validadorReservas,
 		archivadorHistorico: archivadorHistorico,
 		canceladorReservas:  canceladorReservas,
+		datosDeUsuario:      datosDeUsuario,
 		nuevoID:             nuevoID,
+		ahora:               ahora,
 		bus:                 bus,
 	}
 }

@@ -18,6 +18,7 @@ import { CursosDeCiclo } from "@/features/academico/CursosDeCiclo"
 import * as academicoApi from "@/features/academico/api"
 import type { CicloLectivo, ResultadoArchivado } from "@/features/academico/types"
 import { getErrorMessage } from "@/lib/api-client"
+import { contar } from "@/lib/plural"
 
 /** Estado del formulario de archivado; `clonarA` vacío = archivar sin clonar. */
 type Archivado = { ciclo: CicloLectivo; clonarA: string }
@@ -91,7 +92,7 @@ export function AcademicoPage() {
           <AlertDescription>
             Ciclo cerrado. Las estadísticas del año quedaron guardadas.
             {resultadoArchivado.nuevoCicloId
-              ? ` Se creó el ciclo siguiente con ${resultadoArchivado.cursosClonados} curso(s) y ${resultadoArchivado.materiasClonadas} materia(s) — falta asignarles docentes.`
+              ? ` Se creó el ciclo siguiente con ${contar(resultadoArchivado.cursosClonados, "curso")} y ${contar(resultadoArchivado.materiasClonadas, "materia")} — falta asignarles docentes.`
               : " No se creó un ciclo nuevo."}
           </AlertDescription>
         </Alert>

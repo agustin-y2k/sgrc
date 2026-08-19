@@ -40,6 +40,12 @@ const (
 	MateriaEliminada           = "MATERIA_ELIMINADA"
 	CicloArchivadoReservasElim = "CICLO_ARCHIVADO_RESERVAS_ELIMINADAS"
 	CicloClonado               = "CICLO_CLONADO"
+	// Un pedido para dictar una materia se resolvió. Queda auditado porque
+	// aprobarlo habilita a reservar equipos para esa materia, y la decisión
+	// se toma hablando con gente fuera del sistema: cuando alguien pregunte
+	// meses después quién autorizó qué, esta es la única respuesta.
+	PedidoDeMateriaAprobado  = "PEDIDO_DE_MATERIA_APROBADO"
+	PedidoDeMateriaRechazado = "PEDIDO_DE_MATERIA_RECHAZADO"
 )
 
 // Entrada es una fila de audit_log (ver migrations/001_esquema_inicial.sql).

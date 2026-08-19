@@ -230,6 +230,12 @@ func (r *PostgresRepo) marcar(ctx context.Context, sql, id string, ahora time.Ti
 // dirección, y esa consulta devuelve reservas peladas.
 func (r *PostgresRepo) ProximaReservaDeEquipo(ctx context.Context, equipoID string, desde time.Time) (*application.ProximaReserva, error) {
 	var p application.ProximaReserva
+	// hora_inicio es una columna TIME y pgx la entrega como time.Time:
+	// escanearla directo sobre el time.Duration de ProximaReserva corta con
+	// "cannot scan time (OID 1083) in binary format into *time.Duration".
+	// Es el mismo cuidado que tiene ReservasAVigilar unas líneas más arriba,
+	// y la misma conversión que usa todo el paquete.
+	var horaInicio time.Time
 	err := r.db.QueryRow(ctx, `
 		SELECT COALESCE(g.creado_por::text, ''),
 		       COALESCE(u.email, ''),
@@ -238,10 +244,10 @@ func (r *PostgresRepo) ProximaReservaDeEquipo(ctx context.Context, equipoID stri
 		FROM reserva res
 		LEFT JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
 		LEFT JOIN usuario u ON u.id = g.creado_por
-		WHERE res.equipo_id = $1 AND `+condicionNoTerminada("$2", "$3")+` AND res.estado = 'CONFIRMADA'
+		WHERE res.equipo_id = $1 AND `+condicionNoTerminada("res", "$2", "$3")+` AND res.estado = 'CONFIRMADA'
 		ORDER BY res.fecha, res.hora_inicio
 		LIMIT 1
-	`, equipoID, desde, desde).Scan(&p.UsuarioID, &p.Email, &p.Nombre, &p.Fecha, &p.HoraInicio)
+	`, equipoID, desde, desde).Scan(&p.UsuarioID, &p.Email, &p.Nombre, &p.Fecha, &horaInicio)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil // no hay próxima: no es un error
@@ -251,5 +257,6 @@ func (r *PostgresRepo) ProximaReservaDeEquipo(ctx context.Context, equipoID stri
 		}
 		return nil, fmt.Errorf("buscando la próxima reserva del equipo: %w", err)
 	}
+	p.HoraInicio = horaComoDuracion(horaInicio)
 	return &p, nil
 }

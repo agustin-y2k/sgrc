@@ -22,6 +22,7 @@ import {
 } from "@/features/admin/entregas/compartido"
 import * as reservasApi from "@/features/reservas/api"
 import { getErrorMessage } from "@/lib/api-client"
+import { contar, plural } from "@/lib/plural"
 
 /**
  * Qué computadoras están fuera del laboratorio y el botón para recibirlas.
@@ -59,7 +60,7 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
       const yaEstaban = respuesta.noRecibidos?.length ?? 0
       setResumen(
         yaEstaban === 0
-          ? `Volvieron ${respuesta.recibidos.length} equipo(s).`
+          ? `Volvieron ${contar(respuesta.recibidos.length, "equipo")}.`
           : `Volvieron ${respuesta.recibidos.length}. ${yaEstaban} ya figuraba(n) adentro.`
       )
       setMarcados(new Set())
@@ -85,7 +86,7 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
         <CardDescription>
           {prestamos.length === 0
             ? "No hay ningún equipo entregado."
-            : `${prestamos.length} equipo(s) entregado(s)${demorados > 0 ? `, ${demorados} sin devolver a horario` : ""}. Marcá acá cuando vuelvan.`}
+            : `${contar(prestamos.length, "equipo")} ${plural(prestamos.length, "entregado")}${demorados > 0 ? `, ${demorados} sin devolver a horario` : ""}. Marcá acá cuando vuelvan.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">

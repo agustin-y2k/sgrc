@@ -251,7 +251,18 @@ type PrestamoDemorado struct {
 	// Email vacío si quien la tiene no tiene cuenta en el sistema. En ese
 	// caso el reclamo le llega solo a los Admin, que es lo único que se
 	// puede hacer.
-	Email           string
+	Email string
+	// EntregadoEn y DebioVolverA vienen YA en la zona de la escuela, no en
+	// UTC: los publica el barrido, que es el único que tiene el reloj de la
+	// institución (ver reservation/application/vigilante.go). Quien arma el
+	// texto solo los formatea — si tuviera que convertirlos, cada mensaje
+	// nuevo sería otra oportunidad de olvidarse y mostrar tres horas de más.
+	//
+	// EntregadoEn es cuándo se la llevó, y existe porque el correo lo dice:
+	// "la tiene X desde las 10:15". Sin este campo ese hueco se llenaba con
+	// DebioVolverA, o sea que el correo afirmaba que se la había llevado
+	// justo a la hora en que tenía que devolverla.
+	EntregadoEn     time.Time
 	DebioVolverA    time.Time
 	MinutosDeDemora int
 }
@@ -269,6 +280,8 @@ type EquipoSinDevolverAlCierre struct {
 	Etiqueta    string
 	CarroNombre string
 	Quien       string
+	// DesdeCuando también viaja en la zona de la escuela (ver
+	// PrestamoDemorado).
 	DesdeCuando time.Time
 	// Del docente de la PRÓXIMA reserva de esa PC, si la hay. Se avisa solo
 	// al siguiente y no a todos los de la semana: es el único para quien el
@@ -284,4 +297,80 @@ type EquipoSinDevolverAlCierre struct {
 // EquiposSinDevolverAlCierre es el corte de fin de jornada.
 type EquiposSinDevolverAlCierre struct {
 	Equipos []EquipoSinDevolverAlCierre
+}
+
+// ══════════════════════════════════════════════════════════════════
+// El buzón de sugerencias y los pedidos para dictar una materia
+// ══════════════════════════════════════════════════════════════════
+
+// SugerenciaNueva: alguien escribió en el buzón. Les llega a los Admin.
+//
+// Lleva el texto entero y no un "andá a mirar el sistema": un aviso que
+// obliga a entrar para saber si es urgente se lee tarde, y lo que se está
+// reportando puede ser que el sistema no deja trabajar.
+type SugerenciaNueva struct {
+	SugerenciaID string
+	// Quien es el nombre de quien escribió, ya resuelto.
+	Quien string
+	// Tipo es "SUGERENCIA" o "PROBLEMA": lo primero que quiere saber quien
+	// lee es si hay algo roto.
+	Tipo  string
+	Texto string
+	// Pantalla desde la que se escribió, si se pudo saber.
+	Pantalla string
+}
+
+// SugerenciaRespondida: un Admin contestó. Le llega a quien escribió.
+type SugerenciaRespondida struct {
+	SugerenciaID string
+	UsuarioID    string
+	Email        string
+	Nombre       string
+	// TextoOriginal para que el aviso recuerde de qué mensaje se trata: entre
+	// que se escribió y que llegó la respuesta pueden pasar días.
+	TextoOriginal string
+	Respuesta     string
+}
+
+// PedidoDeMateriaNuevo: un docente pidió dictar una materia.
+//
+// Va a los Admin, que son quienes deciden, y también a los docentes que ya
+// dictan esa materia: enterarse de que alguien más va a poder reservar para
+// tu materia recién cuando te quedaste sin máquinas es la peor forma de
+// enterarse. Si la materia no existe todavía, DocentesActuales viene vacío.
+type PedidoDeMateriaNuevo struct {
+	PedidoID string
+	// Quien pide.
+	UsuarioID string
+	Nombre    string
+	// MateriaNombre es el nombre de la materia elegida, o el que escribió a
+	// mano si todavía no existe. CursoNombre puede venir vacío.
+	MateriaNombre string
+	CursoNombre   string
+	// EsMateriaNueva: la materia no existe y hay que crearla al aprobar.
+	EsMateriaNueva bool
+	Motivo         string
+	// DocentesActuales son los que ya dictan esa materia, para avisarles.
+	DocentesActuales []DocenteDeMateria
+}
+
+// DocenteDeMateria es quien ya dicta una materia, con lo necesario para
+// avisarle.
+type DocenteDeMateria struct {
+	UsuarioID string
+	Email     string
+	Nombre    string
+}
+
+// PedidoDeMateriaResuelto: el Admin aprobó o rechazó. Le llega a quien pidió.
+type PedidoDeMateriaResuelto struct {
+	PedidoID      string
+	UsuarioID     string
+	Email         string
+	Nombre        string
+	MateriaNombre string
+	Aprobado      bool
+	// Respuesta es lo que escribió el Admin. En un rechazo es lo único que
+	// explica el porqué, así que el texto del aviso la incluye siempre.
+	Respuesta string
 }

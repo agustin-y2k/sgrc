@@ -28,6 +28,50 @@ const (
 	saltLen      = 16
 )
 
+// maxHashesEnParalelo es cuántos argon2id pueden estar corriendo a la vez en
+// todo el proceso. Los demás esperan su turno.
+//
+// El número sale de una cuenta, no del gusto: cada hasheo reserva
+// argonMemory (64 MB) mientras dura, y el contenedor tiene un tope de
+// memoria (mem_limit en docker-compose.yml). Sin este límite, N logins
+// simultáneos piden 64·N MB de golpe y el kernel mata el proceso: cuatro
+// personas entrando al mismo tiempo alcanzaban para tumbar la API con los
+// 256 MB que había, y el contenedor no vuelve solo.
+//
+// Tres son 192 MB en el peor caso, que entra con holgura en el mem_limit de
+// 1g del compose (y bajo el GOMEMLIMIT de 800MiB que se le declara ahí) y
+// deja lugar al resto del proceso. Si algún día se sube o baja ese tope,
+// este número va con él.
+//
+// Que ahora sobre memoria no es motivo para subirlo: cada hasheo usa
+// argonThreads (4) de CPU, así que más en paralelo no da más logins por
+// segundo en un servidor chico — solo hace que compitan entre ellos. Tres
+// alcanzan de sobra para una escuela: es la cola la que absorbe el pico de
+// las 7:30, y se vacía en décimas de segundo.
+//
+// Encolar y no rechazar: un login que tarda un segundo de más es una
+// molestia; uno que devuelve error porque otros tres estaban entrando al
+// mismo tiempo es un sistema que se rompe justo cuando lo usan. El rate
+// limit de /login (RateLimit(5, time.Minute) en auth/interfaces/http) es el
+// que pone el techo real a cuánta cola se puede formar.
+const maxHashesEnParalelo = 3
+
+// turnoDeHasheo lleva los turnos. Un canal con buffer y no un sync.Mutex
+// porque lo que hace falta no es exclusión, sino dejar pasar hasta tres.
+var turnoDeHasheo = make(chan struct{}, maxHashesEnParalelo)
+
+// tomarTurno bloquea hasta que haya lugar y devuelve la función que lo
+// libera, para usarla como `defer tomarTurno()()`.
+//
+// No recibe context a propósito: cambiaría la firma de HashPassword y
+// VerifyPassword, que viajan como valores hasta internal/auth (ver
+// cmd/main.go), y la espera acá se mide en el tiempo de uno o dos hasheos
+// —décimas de segundo—, no en algo que valga la pena cancelar.
+func tomarTurno() func() {
+	turnoDeHasheo <- struct{}{}
+	return func() { <-turnoDeHasheo }
+}
+
 // HashPassword devuelve el hash en formato PHC estándar
 // ($argon2id$v=19$m=...,t=...,p=...$salt$hash).
 func HashPassword(password string) (string, error) {
@@ -36,6 +80,7 @@ func HashPassword(password string) (string, error) {
 		return "", fmt.Errorf("generando salt: %w", err)
 	}
 
+	defer tomarTurno()()
 	hash := argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
 
 	b64Salt := base64.RawStdEncoding.EncodeToString(salt)
@@ -85,6 +130,10 @@ func VerifyPassword(password, encoded string) (bool, error) {
 		return false, fmt.Errorf("hash vacío")
 	}
 
+	// El turno se toma acá y no al entrar: todo lo de arriba es parseo
+	// barato, y ocupar un lugar de la cola mientras se valida el formato de
+	// un hash haría esperar a un login legítimo por uno corrupto.
+	defer tomarTurno()()
 	obtenido := argon2.IDKey([]byte(password), salt, iterTime, memory, threads, uint32(len(esperado)))
 	return subtle.ConstantTimeCompare(obtenido, esperado) == 1, nil
 }

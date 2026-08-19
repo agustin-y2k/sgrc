@@ -16,6 +16,7 @@ import { PRESTAMOS_KEY } from "@/features/admin/entregas/compartido"
 import * as inventoryApi from "@/features/inventory/api"
 import * as reservasApi from "@/features/reservas/api"
 import { getErrorMessage } from "@/lib/api-client"
+import { contar } from "@/lib/plural"
 
 /**
  * Entregar algo sin reserva detrás: "necesito una compu para hacer un
@@ -93,7 +94,7 @@ export function EntregaSuelta({
     onSuccess: async (respuesta) => {
       const avisos = respuesta.avisos ?? []
       const noSalieron = respuesta.noEntregadas ?? []
-      const partes = [`Salieron ${respuesta.entregadas.length} equipo(s).`]
+      const partes = [`Salieron ${contar(respuesta.entregadas.length, "equipo")}.`]
       if (noSalieron.length > 0) {
         partes.push(`No salieron ${noSalieron.length}: ${noSalieron.map((n) => n.detalle).join("; ")}`)
       }
@@ -210,7 +211,7 @@ export function EntregaSuelta({
 
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={entregar.isPending || seleccionadas.size === 0}>
-              Entregar {seleccionadas.size} equipo(s)
+              Entregar {contar(seleccionadas.size, "equipo")}
             </Button>
             <Button type="button" variant="outline" onClick={onCerrar}>
               Cerrar

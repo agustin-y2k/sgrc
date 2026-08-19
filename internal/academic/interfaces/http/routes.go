@@ -1,6 +1,8 @@
 package http
 
 import (
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/ramiro/sgrc/internal/shared/middleware"
@@ -36,6 +38,17 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	academic.Get("/cursos/:cursoId/materias", autenticado, h.ListarMaterias)
 	academic.Patch("/materias/:id", autenticado, soloAdmin, h.EditarMateria)
 	academic.Delete("/materias/:id", autenticado, soloAdmin, h.EliminarMateria)
+
+	// Pedidos para dictar una materia (RF-02: la asignación docente-materia
+	// deja de depender de encontrar a un Admin en el pasillo).
+	//
+	// Pedir es para cualquier autenticado; resolver, solo Admin. El rate
+	// limit está en pedir porque es lo que manda un aviso a todos los Admin
+	// y a los docentes de esa materia.
+	academic.Post("/pedidos-de-materia", autenticado, middleware.RateLimit(5, time.Minute), h.PedirMateria)
+	academic.Get("/pedidos-de-materia/mios", autenticado, h.MisPedidosDeMateria)
+	academic.Get("/pedidos-de-materia", autenticado, soloAdmin, h.ListarPedidosDeMateria)
+	academic.Post("/pedidos-de-materia/:id/resolver", autenticado, soloAdmin, h.ResolverPedidoDeMateria)
 
 	// DocenteMateria
 	academic.Post("/materias/:materiaId/docentes", autenticado, soloAdmin, h.AsignarDocente)

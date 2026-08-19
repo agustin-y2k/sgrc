@@ -4,8 +4,8 @@ import {
   BellRing,
   CalendarDays,
   CalendarPlus,
-  KeyRound,
   Laptop,
+  MessageSquare,
   TriangleAlert,
   UserRound,
 } from "lucide-react"
@@ -211,11 +211,22 @@ export function InicioDocente({
               ayuda="Lo que el sistema te fue avisando sobre tus reservas."
               a="/notificaciones"
             />
+            {/* Reemplaza al atajo de "Cambiar mi contraseña": la
+                contraseña está adentro del perfil, junto con la foto y las
+                materias. Un atajo por cada cosa que se puede hacer sobre la
+                cuenta habría vuelto esta lista una lista de opciones, que es
+                lo contrario de lo que busca esta pantalla. */}
             <AccesoDirecto
-              icono={KeyRound}
-              titulo="Cambiar mi contraseña"
-              ayuda="Para cambiar la que usás para entrar."
-              a="/cambiar-password"
+              icono={UserRound}
+              titulo="Mi perfil"
+              ayuda="Tu foto, las materias que das y tu contraseña."
+              a="/perfil"
+            />
+            <AccesoDirecto
+              icono={MessageSquare}
+              titulo="Escribirnos"
+              ayuda="Si algo no anda o se te ocurre una mejora, contanos."
+              a="/mis-mensajes"
             />
           </div>
         )}

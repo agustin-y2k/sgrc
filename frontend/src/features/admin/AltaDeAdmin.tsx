@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { InputPassword } from "@/components/ui/input-password"
 import { Label } from "@/components/ui/label"
 import * as adminApi from "@/features/admin/api"
 import { getErrorMessage } from "@/lib/api-client"
@@ -122,9 +123,8 @@ export function AltaDeAdmin({ usuariosKey }: { usuariosKey: unknown[] }) {
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="admin-password">Contraseña inicial</Label>
-              <Input
+              <InputPassword
                 id="admin-password"
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />

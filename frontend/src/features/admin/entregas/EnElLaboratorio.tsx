@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import * as adminApi from "@/features/admin/api"
 import { PRESTAMOS_KEY, REFRESCO_DEL_MOSTRADOR } from "@/features/admin/entregas/compartido"
 import * as reservasApi from "@/features/reservas/api"
+import { contar, plural } from "@/lib/plural"
 
 /**
  * Cuántos equipos están físicamente acá en este momento.
@@ -71,17 +72,22 @@ export function EnElLaboratorio() {
       </CardHeader>
       <CardContent className="grid gap-1">
         <p className="text-2xl font-semibold tabular-nums">
-          {presentes} de {total} {total === 1 ? "equipo" : "equipos"}
+          {presentes} de {contar(total, "equipo")}
         </p>
+        {/* "en circulación" es vocabulario de depósito: dice si una máquina
+            está en condiciones de prestarse, pero hay que saberlo de antes.
+            En el mostrador se atiende con alguien esperando enfrente, así que
+            la línea tiene que leerse sin traducir nada. */}
         <p className="text-muted-foreground text-sm">
           {afuera} afuera ·{" "}
           {fueraDeCirculacion === 0
-            ? "todos en circulación"
-            : `${fueraDeCirculacion} fuera de circulación`}
+            ? "todas las demás se pueden usar"
+            : `${fueraDeCirculacion} sin poder usarse`}
         </p>
         {fueraDeCirculacion > 0 && (
           <p className="text-muted-foreground text-xs">
-            Los que están fuera de circulación siguen acá, pero no se entregan.
+            {plural(fueraDeCirculacion, "La que no se puede usar sigue", "Las que no se pueden usar siguen")}{" "}
+            en el laboratorio, pero no se {plural(fueraDeCirculacion, "entrega", "entregan")}.
           </p>
         )}
       </CardContent>

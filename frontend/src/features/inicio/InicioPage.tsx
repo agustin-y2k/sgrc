@@ -1,3 +1,14 @@
+import {
+  CalendarDays,
+  CalendarOff,
+  GraduationCap,
+  KeyRound,
+  Laptop,
+  MessageSquare,
+  PackageCheck,
+  UserRound,
+  Wrench,
+} from "lucide-react"
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
@@ -15,6 +26,7 @@ import {
   PRESTAMOS_KEY,
   REFRESCO_DEL_MOSTRADOR,
 } from "@/features/admin/entregas/compartido"
+import { AccesoDirecto } from "@/features/inicio/AccesoDirecto"
 import { InicioDocente } from "@/features/inicio/InicioDocente"
 import { useNoLeidas } from "@/features/notificaciones/useNoLeidas"
 import * as reservasApi from "@/features/reservas/api"
@@ -22,6 +34,7 @@ import { agruparReservas, hoyISO } from "@/features/reservas/types"
 import { etiquetaDeDia } from "@/lib/fechas"
 import { getErrorMessage } from "@/lib/api-client"
 import type { GrupoDeReservas } from "@/features/reservas/types"
+import { contar } from "@/lib/plural"
 
 /**
  * La primera pantalla después de iniciar sesión.
@@ -109,7 +122,7 @@ function ProximaReserva({ grupo, hoy }: { grupo: GrupoDeReservas; hoy: string })
           )}
         </p>
         <p className="text-muted-foreground text-sm">
-          {grupo.reservas.length} {grupo.reservas.length === 1 ? "equipo" : "equipos"}
+          {contar(grupo.reservas.length, "computadora")}
           {grupo.esRecurrente && " · se repite"}
         </p>
       </div>
@@ -327,32 +340,79 @@ export function InicioPage() {
               </CardContent>
             </Card>
 
+            {/* Mismos atajos que antes, con el componente que ya usa la
+                pantalla del docente (AccesoDirecto): cada uno dice qué se
+                hace ahí y para qué sirve.
+
+                Eran siete botones grises con el nombre de la sección y nada
+                más. Un Admin que usa el sistema todos los días los conoce de
+                memoria; uno nuevo —que en una escuela puede ser cualquiera
+                que sepa poco de computadoras— tenía que entrar a cada uno a
+                averiguar qué había adentro. Dos de ellos, además, se
+                confundían entre sí ("Ver carros y equipos" contra "Gestión
+                del inventario": mirar contra editar) y un tercero se leía al
+                revés de lo que hace: "Bloquear equipos" suena a ponerles
+                contraseña, cuando lo que hace es tomarlos para una
+                evaluación y cancelarle la clase a otro docente. */}
             <Card>
               <CardHeader>
-                <CardTitle>Accesos rápidos</CardTitle>
+                <CardTitle>Otras cosas que podés hacer</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-2">
-                <Button asChild variant="outline" className="justify-start">
-                  <Link to="/inventario">Ver carros y equipos</Link>
-                </Button>
-                <Button asChild variant="outline" className="justify-start">
-                  <Link to="/disponibilidad">Disponibilidad de Admins</Link>
-                </Button>
-                <Button asChild variant="outline" className="justify-start">
-                  <Link to="/admin/academico">Ciclos, cursos y materias</Link>
-                </Button>
-                <Button asChild variant="outline" className="justify-start">
-                  <Link to="/admin/entregas">Entregas y devoluciones</Link>
-                </Button>
-                <Button asChild variant="outline" className="justify-start">
-                  <Link to="/admin/inventario">Gestión del inventario</Link>
-                </Button>
-                <Button asChild variant="outline" className="justify-start">
-                  <Link to="/admin/licencias">Licencias de software</Link>
-                </Button>
-                <Button asChild variant="outline" className="justify-start">
-                  <Link to="/admin/bloquear-equipos">Bloquear equipos</Link>
-                </Button>
+              <CardContent className="grid gap-3">
+                <AccesoDirecto
+                  icono={Laptop}
+                  titulo="Ver las computadoras"
+                  ayuda="Qué hay en cada carro y en qué estado está cada una."
+                  a="/inventario"
+                />
+                <AccesoDirecto
+                  icono={PackageCheck}
+                  titulo="Entregar y recibir"
+                  ayuda="Qué hay que dar ahora, qué está afuera y qué volvió."
+                  a="/admin/entregas"
+                />
+                <AccesoDirecto
+                  icono={Wrench}
+                  titulo="Cargar y editar computadoras"
+                  ayuda="Dar de alta un carro o una máquina, cambiar su estado o darla de baja."
+                  a="/admin/inventario"
+                />
+                <AccesoDirecto
+                  icono={CalendarDays}
+                  titulo="Ciclos, cursos y materias"
+                  ayuda="El año lectivo y qué docente dicta cada materia."
+                  a="/admin/academico"
+                />
+                <AccesoDirecto
+                  icono={KeyRound}
+                  titulo="Licencias de software"
+                  ayuda="Qué programas vencen y cuándo, para renovarlos a tiempo."
+                  a="/admin/licencias"
+                />
+                <AccesoDirecto
+                  icono={CalendarOff}
+                  titulo="Tomar computadoras para otra cosa"
+                  ayuda="Para una evaluación o una jornada: cancela las clases que se pisen y le avisa a cada docente."
+                  a="/admin/bloquear-equipos"
+                />
+                <AccesoDirecto
+                  icono={UserRound}
+                  titulo="Horarios de los Admin"
+                  ayuda="En qué días y horarios atiende cada uno el laboratorio."
+                  a="/disponibilidad"
+                />
+                <AccesoDirecto
+                  icono={GraduationCap}
+                  titulo="Pedidos para dictar una materia"
+                  ayuda="Docentes que piden sumarse a una materia. Lo resolvés vos, hablando."
+                  a="/admin/pedidos-de-materia"
+                />
+                <AccesoDirecto
+                  icono={MessageSquare}
+                  titulo="Lo que nos escribieron"
+                  ayuda="Problemas y sugerencias sobre el sistema, para leer y contestar."
+                  a="/admin/sugerencias"
+                />
               </CardContent>
             </Card>
           </div>

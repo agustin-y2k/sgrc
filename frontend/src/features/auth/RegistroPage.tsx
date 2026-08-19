@@ -24,6 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { InputPassword } from "@/components/ui/input-password"
 import { Select } from "@/components/ui/select"
 import * as authApi from "@/features/auth/api"
 import { BotonGoogle } from "@/features/auth/BotonGoogle"
@@ -212,7 +213,7 @@ export function RegistroPage() {
                   <FormItem>
                     <FormLabel>Contraseña</FormLabel>
                     <FormControl>
-                      <Input type="password" autoComplete="new-password" {...field} />
+                      <InputPassword autoComplete="new-password" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

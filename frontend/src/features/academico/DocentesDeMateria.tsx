@@ -10,6 +10,7 @@ import * as academicoApi from "@/features/academico/api"
 import type { DocenteMateria, Materia, RolDocente } from "@/features/academico/types"
 import * as adminApi from "@/features/admin/api"
 import { getErrorMessage } from "@/lib/api-client"
+import { contar, plural } from "@/lib/plural"
 
 const ETIQUETA_ROL: Record<RolDocente, string> = {
   TITULAR: "Titular",
@@ -104,7 +105,7 @@ export function DocentesDeMateria({
       {ultimaCascada !== null && ultimaCascada > 0 && (
         <Alert>
           <AlertDescription>
-            Se cancelaron {ultimaCascada} reserva(s) futuras de esta materia, que quedó
+            Se cancelaron {contar(ultimaCascada, "reserva")} {plural(ultimaCascada, "futura")} de esta materia, que quedó
             sin docente asignado.
           </AlertDescription>
         </Alert>
