@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
 	"sort"
 	"strings"
@@ -182,6 +181,7 @@ func TestHTTP_ListarPropias_SoloLasDeUnoMismo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
@@ -211,6 +211,7 @@ func TestHTTP_ListarPropias_PaginaYTotal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
@@ -238,6 +239,7 @@ func TestHTTP_ListarPropias_PaginacionInvalida_400(t *testing.T) {
 		if resp.StatusCode != fiber.StatusBadRequest {
 			t.Errorf("%s: esperaba 400, obtuve %d", query, resp.StatusCode)
 		}
+		resp.Body.Close()
 	}
 }
 
@@ -245,6 +247,7 @@ func TestHTTP_ListarPropias_SinToken_401(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	resp, _ := app.Test(httptest.NewRequest("GET", "/api/notifications/", nil))
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Fatalf("esperaba 401, obtuve %d", resp.StatusCode)
 	}
@@ -257,6 +260,7 @@ func TestHTTP_ListarPropias_FiltroEstadoInvalido_400(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
@@ -276,6 +280,7 @@ func TestHTTP_MarcarLeida_Propietario_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
@@ -293,6 +298,7 @@ func TestHTTP_MarcarLeida_OtroUsuario_403(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("otro-usuario", "DOCENTE"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
 	}
@@ -313,6 +319,7 @@ func TestHTTP_MarcarLeida_ComoAdmin_NoTieneExcepcion_403(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403 incluso para un Admin, obtuve %d", resp.StatusCode)
 	}
@@ -325,6 +332,7 @@ func TestHTTP_MarcarLeida_NoExiste_404(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusNotFound {
 		t.Fatalf("esperaba 404, obtuve %d", resp.StatusCode)
 	}
@@ -339,6 +347,7 @@ func TestHTTP_MarcarLeida_YaLeida_409(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusConflict {
 		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
 	}
@@ -368,6 +377,7 @@ func leerPreferencias(t *testing.T, app *fiber.App, usuarioID, rol string) []pre
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
@@ -376,7 +386,11 @@ func leerPreferencias(t *testing.T, app *fiber.App, usuarioID, rol string) []pre
 	return body.Data
 }
 
-func guardarPreferencias(t *testing.T, app *fiber.App, usuarioID, rol, cuerpo string) *http.Response {
+// Devuelve el estado y el cuerpo ya leído, en vez de la respuesta: así el
+// cuerpo se cierra acá y no queda librado a que cada test se acuerde. Los
+// pedidos que terminan en 4xx no traen la lista, y el cuerpo vacío es
+// justamente lo que esos tests esperan.
+func guardarPreferencias(t *testing.T, app *fiber.App, usuarioID, rol, cuerpo string) (int, preferenciasEmailResponse) {
 	t.Helper()
 	req := httptest.NewRequest("PUT", "/api/notifications/preferencias-email", strings.NewReader(cuerpo))
 	req.Header.Set("Content-Type", "application/json")
@@ -386,7 +400,11 @@ func guardarPreferencias(t *testing.T, app *fiber.App, usuarioID, rol, cuerpo st
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
-	return resp
+	defer resp.Body.Close()
+
+	var body preferenciasEmailResponse
+	json.NewDecoder(resp.Body).Decode(&body)
+	return resp.StatusCode, body
 }
 
 func TestHTTP_ListarPreferenciasEmail_CadaUnaConSuValorPorDefecto(t *testing.T) {
@@ -461,14 +479,12 @@ func TestHTTP_GuardarPreferenciasEmail_GuardaYDevuelveComoQuedo(t *testing.T) {
 	prefs := &fakePreferencias{}
 	app := nuevaAppConPreferencias(nuevoFakeRepo(), prefs)
 
-	resp := guardarPreferencias(t, app, "admin1", "ADMIN",
+	estado, body := guardarPreferencias(t, app, "admin1", "ADMIN",
 		`{"categorias":["SUGERENCIA","CUENTA_PENDIENTE"]}`)
-	if resp.StatusCode != fiber.StatusOK {
-		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	if estado != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", estado)
 	}
 
-	var body preferenciasEmailResponse
-	json.NewDecoder(resp.Body).Decode(&body)
 	activas := map[string]bool{}
 	for _, p := range body.Data {
 		if p.Activa {
@@ -504,9 +520,9 @@ func TestHTTP_GuardarPreferenciasEmail_ListaVacia_200(t *testing.T) {
 	}}
 	app := nuevaAppConPreferencias(nuevoFakeRepo(), prefs)
 
-	resp := guardarPreferencias(t, app, "admin1", "ADMIN", `{"categorias":[]}`)
-	if resp.StatusCode != fiber.StatusOK {
-		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	estado, _ := guardarPreferencias(t, app, "admin1", "ADMIN", `{"categorias":[]}`)
+	if estado != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", estado)
 	}
 
 	for categoria, activa := range prefs.porUsuario["admin1"] {
@@ -527,10 +543,10 @@ func TestHTTP_GuardarPreferenciasEmail_CategoriaQueNoExiste_400(t *testing.T) {
 	app := nuevaAppConPreferencias(nuevoFakeRepo(), prefs)
 
 	// "GENERAL" es un Tipo de notificación, no una categoría de correo.
-	resp := guardarPreferencias(t, app, "admin1", "ADMIN", `{"categorias":["GENERAL"]}`)
+	estado, _ := guardarPreferencias(t, app, "admin1", "ADMIN", `{"categorias":["GENERAL"]}`)
 
-	if resp.StatusCode != fiber.StatusBadRequest {
-		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	if estado != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", estado)
 	}
 	if _, guardo := prefs.porUsuario["admin1"]; guardo {
 		t.Error("un pedido inválido no debería haber tocado nada")
@@ -547,11 +563,11 @@ func TestHTTP_GuardarPreferenciasEmail_NoDejaTocarLasFijas(t *testing.T) {
 			prefs := &fakePreferencias{}
 			app := nuevaAppConPreferencias(nuevoFakeRepo(), prefs)
 
-			resp := guardarPreferencias(t, app, "docente1", "DOCENTE",
+			estado, _ := guardarPreferencias(t, app, "docente1", "DOCENTE",
 				`{"categorias":["`+string(fija)+`"]}`)
 
-			if resp.StatusCode != fiber.StatusBadRequest {
-				t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+			if estado != fiber.StatusBadRequest {
+				t.Fatalf("esperaba 400, obtuve %d", estado)
 			}
 			if _, guardo := prefs.porUsuario["docente1"]; guardo {
 				t.Error("no tendría que haber guardado nada")
@@ -566,10 +582,10 @@ func TestHTTP_GuardarPreferenciasEmail_DocenteConCategoriaDeAdmin_403(t *testing
 	prefs := &fakePreferencias{}
 	app := nuevaAppConPreferencias(nuevoFakeRepo(), prefs)
 
-	resp := guardarPreferencias(t, app, "docente1", "DOCENTE", `{"categorias":["SUGERENCIA"]}`)
+	estado, _ := guardarPreferencias(t, app, "docente1", "DOCENTE", `{"categorias":["SUGERENCIA"]}`)
 
-	if resp.StatusCode != fiber.StatusForbidden {
-		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	if estado != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", estado)
 	}
 	if _, guardo := prefs.porUsuario["docente1"]; guardo {
 		t.Error("no tendría que haber guardado nada")
@@ -581,11 +597,11 @@ func TestHTTP_GuardarPreferenciasEmail_DocenteGuardaLasSuyas_200(t *testing.T) {
 	prefs := &fakePreferencias{}
 	app := nuevaAppConPreferencias(nuevoFakeRepo(), prefs)
 
-	resp := guardarPreferencias(t, app, "docente1", "DOCENTE",
+	estado, _ := guardarPreferencias(t, app, "docente1", "DOCENTE",
 		`{"categorias":["RECORDATORIO_DE_RESERVA"]}`)
 
-	if resp.StatusCode != fiber.StatusOK {
-		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	if estado != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", estado)
 	}
 	if !prefs.porUsuario["docente1"][domain.CatRecordatorioDeReserva] {
 		t.Errorf("no se guardó: %v", prefs.porUsuario["docente1"])
