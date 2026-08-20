@@ -1,0 +1,1058 @@
+<meta charset="utf-8">
+<title>Guía para administradores — SGRC</title>
+<style>
+  :root {
+    --tinta: #14181f;
+    --gris: #5b6470;
+    --linea: #d7dce3;
+    --azul: #0f766e;
+    --azul-suave: #ecfdf8;
+    --amarillo: #fff7e6;
+    --amarillo-borde: #e0a800;
+    --verde: #f0fdf4;
+    --verde-borde: #12805c;
+  }
+
+  @page { size: A4; margin: 17mm 15mm 20mm 15mm; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--tinta);
+    font-size: 11.5pt;
+    line-height: 1.62;
+    margin: 0;
+  }
+
+  h1, h2, h3 { line-height: 1.25; margin: 0; }
+
+  .portada {
+    height: 247mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    break-after: page;
+  }
+  .portada .marca {
+    display: inline-block;
+    background: var(--azul);
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: .12em;
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-size: 13pt;
+    margin: 0 auto 22mm auto;
+  }
+  .portada h1 { font-size: 34pt; letter-spacing: -.02em; }
+  .portada .bajada { font-size: 15pt; color: var(--gris); margin-top: 6mm; }
+  .portada .pie { margin-top: 24mm; color: var(--gris); font-size: 11pt; }
+  .portada .para-quien {
+    margin: 14mm auto 0 auto;
+    max-width: 125mm;
+    background: var(--azul-suave);
+    border-radius: 10px;
+    padding: 7mm 9mm;
+    text-align: left;
+    font-size: 11pt;
+  }
+
+  .indice { break-after: page; }
+  .indice ol { list-style: none; padding: 0; margin: 8mm 0 0 0; counter-reset: cap; }
+  .indice li {
+    counter-increment: cap;
+    padding: 3mm 0;
+    border-bottom: 1px solid var(--linea);
+    font-size: 12pt;
+  }
+  .indice li::before {
+    content: counter(cap);
+    display: inline-block;
+    width: 9mm;
+    color: var(--azul);
+    font-weight: 700;
+  }
+  .indice li span { color: var(--gris); font-size: 10.5pt; display: block; margin-left: 9mm; }
+
+  .cap { break-before: page; }
+  .cap > h2 {
+    font-size: 20pt;
+    letter-spacing: -.01em;
+    padding-bottom: 3mm;
+    border-bottom: 3px solid var(--azul);
+    margin-bottom: 6mm;
+  }
+  .cap > h2 .n {
+    display: inline-block;
+    background: var(--azul);
+    color: #fff;
+    border-radius: 7px;
+    padding: 0 3.2mm;
+    margin-right: 3mm;
+    font-size: 16pt;
+    vertical-align: 2px;
+  }
+  h3 { font-size: 13.5pt; margin: 8mm 0 2mm 0; }
+  p { margin: 0 0 3.5mm 0; }
+  .entrada { color: var(--gris); font-size: 11pt; margin-bottom: 5mm; }
+
+  ol.pasos { list-style: none; counter-reset: paso; padding: 0; margin: 0 0 5mm 0; }
+  ol.pasos > li {
+    counter-increment: paso;
+    position: relative;
+    padding: 0 0 3.5mm 12mm;
+    break-inside: avoid;
+  }
+  ol.pasos > li::before {
+    content: counter(paso);
+    position: absolute;
+    left: 0;
+    top: 0.4mm;
+    width: 8mm;
+    height: 8mm;
+    background: var(--azul);
+    color: #fff;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 11pt;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  ol.referencias { list-style: none; counter-reset: ref; padding: 0; margin: 0 0 5mm 0; }
+  ol.referencias > li {
+    counter-increment: ref;
+    position: relative;
+    padding: 0 0 2.5mm 11mm;
+    break-inside: avoid;
+  }
+  ol.referencias > li::before {
+    content: counter(ref);
+    position: absolute;
+    left: 0;
+    top: 0.4mm;
+    width: 7.5mm;
+    height: 7.5mm;
+    background: #dc2626;
+    color: #fff;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 10pt;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  ul.simple { margin: 0 0 4mm 0; padding-left: 6mm; }
+  ul.simple li { margin-bottom: 1.6mm; }
+
+  b, strong { font-weight: 650; }
+  .boton {
+    display: inline-block;
+    border: 1px solid var(--linea);
+    background: #f6f8fb;
+    border-radius: 5px;
+    padding: 0 2mm;
+    font-size: 10.5pt;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  figure { margin: 5mm 0 6mm 0; break-inside: avoid; text-align: center; }
+  figure img {
+    max-width: 100%;
+    max-height: 140mm;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(20, 24, 31, .18);
+  }
+  figcaption { color: var(--gris); font-size: 9.5pt; margin-top: 2.5mm; }
+
+  .nota, .ojo, .listo {
+    padding: 4mm 5mm;
+    border-radius: 8px;
+    margin: 4mm 0 5mm 0;
+    font-size: 10.8pt;
+    break-inside: avoid;
+  }
+  .nota { background: var(--azul-suave); border-left: 4px solid var(--azul); }
+  .ojo { background: var(--amarillo); border-left: 4px solid var(--amarillo-borde); }
+  .listo { background: var(--verde); border-left: 4px solid var(--verde-borde); }
+  .nota .titulo, .ojo .titulo, .listo .titulo {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 1.2mm;
+  }
+
+  table.rutina {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.8pt;
+    margin: 3mm 0 5mm 0;
+  }
+  table.rutina th, table.rutina td {
+    border: 1px solid var(--linea);
+    padding: 2.6mm 3mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  table.rutina th { background: #f4f7fa; font-weight: 700; width: 32mm; }
+
+  .pregunta { break-inside: avoid; margin-bottom: 5mm; }
+  .pregunta h3 { margin: 0 0 1.5mm 0; font-size: 12pt; }
+  dl.glosario { margin: 0; }
+  dl.glosario dt { font-weight: 700; margin-top: 3.5mm; }
+  dl.glosario dd { margin: 0.6mm 0 0 0; color: var(--gris); }
+</style>
+
+<div class="portada">
+  <span class="marca">SGRC</span>
+  <h1>Administrar el<br>laboratorio</h1>
+  <div class="bajada">Guía para administradores</div>
+  <div class="para-quien">
+    <b>No hace falta saber de computación para ser Admin acá.</b>
+    Lo que hay que saber es qué pasa en el laboratorio: quién se lleva qué, qué
+    volvió y qué falta. Esta guía muestra cada pantalla con fotos y explica, paso
+    por paso, qué botón toca en cada caso.
+  </div>
+  <div class="pie">
+    Sistema de Gestión y Reserva de Computadoras · versión 1.11<br>
+    Agosto de 2026
+  </div>
+</div>
+
+<div class="indice">
+  <h2 style="font-size:20pt;border-bottom:3px solid var(--azul);padding-bottom:3mm">Qué hay en esta guía</h2>
+  <ol>
+    <li>Qué hace un Admin <span>Tu rol, en una página.</span></li>
+    <li>Tu pantalla de inicio: el mostrador <span>Lo que hay que mirar apenas entrás.</span></li>
+    <li>Dónde está cada cosa <span>El menú Administración.</span></li>
+    <li>Aprobar las cuentas nuevas <span>Sin esto, un docente no puede entrar.</span></li>
+    <li>Ciclos, cursos y materias <span>La base de todo: sin materia no hay reserva.</span></li>
+    <li>Los usuarios <span>Contraseñas, roles y bajas.</span></li>
+    <li>El inventario <span>Carros, computadoras y su estado.</span></li>
+    <li>Entregar y recibir <span>El trabajo de todos los días.</span></li>
+    <li>Licencias de software <span>Qué vence y cuándo.</span></li>
+    <li>Bloquear equipos <span>Cuando el laboratorio los necesita para otra cosa.</span></li>
+    <li>La jornada de la escuela <span>En qué horarios se puede reservar.</span></li>
+    <li>Pedidos para dictar una materia</li>
+    <li>Pedidos de ayuda y mensajes <span>Contestarles a los docentes.</span></li>
+    <li>Reportes <span>Cuánto se usó y qué se rompe.</span></li>
+    <li>Tus horarios de atención</li>
+    <li>Tus avisos y tus correos</li>
+    <li>Una rutina que funciona <span>Qué mirar cada día, cada semana y cada año.</span></li>
+    <li>Si algo no sale como esperabas</li>
+    <li>Las palabras que vas a ver</li>
+  </ol>
+</div>
+
+<!-- 1 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">1</span>Qué hace un Admin</h2>
+
+  <p class="entrada">
+    Un Admin es la persona que mantiene el laboratorio funcionando. El sistema le
+    da las herramientas; las decisiones las sigue tomando ella.
+  </p>
+
+  <h3>Tus cuatro tareas, en orden de importancia</h3>
+  <ul class="simple">
+    <li><b>Entregar y recibir.</b> Cuando un docente viene a buscar las computadoras
+      que reservó, lo registrás; cuando las devuelve, también. Esto reemplaza al
+      cuaderno de papel y es lo único que hay que hacer todos los días.</li>
+    <li><b>Aprobar cuentas.</b> Un docente que se registra no puede entrar hasta que
+      vos lo apruebes.</li>
+    <li><b>Mantener el inventario y las materias al día.</b> Que las máquinas rotas
+      figuren como rotas, y que cada docente esté anotado en las materias que dicta.</li>
+    <li><b>Contestar los pedidos de ayuda.</b> Del otro lado hay alguien esperando.</li>
+  </ul>
+
+  <div class="nota">
+    <span class="titulo">Lo que un Admin puede hacer y un docente no</span>
+    Aprobar cuentas, cargar y editar computadoras, entregar y recibir, cargar
+    licencias, bloquear equipos para una evaluación, declarar el horario de la
+    escuela, ver los reportes de uso y contestar los pedidos de ayuda.
+  </div>
+
+  <div class="ojo">
+    <span class="titulo">Todo queda registrado con tu nombre</span>
+    Las acciones importantes —aprobar, dar de baja, cancelar la reserva de otro—
+    quedan guardadas con quién las hizo y cuándo. No es para controlarte: es para
+    que, cuando algo no cierre, se pueda reconstruir qué pasó.
+  </div>
+</section>
+
+<!-- 2 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">2</span>Tu pantalla de inicio: el mostrador</h2>
+
+  <p class="entrada">
+    Está armada para el momento en que hay alguien esperando del otro lado del
+    mostrador: lo urgente arriba y a la izquierda.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-01-mostrador.png" alt="Pantalla de inicio del administrador con seis zonas señaladas">
+    <figcaption>La pantalla de inicio del Admin, con las zonas señaladas.</figcaption>
+  </figure>
+
+  <ol class="referencias">
+    <li><b>Para entregar ahora.</b> Las clases que están empezando y todavía no
+      retiraron sus computadoras. Es lo primero que mirás cuando llega un docente.</li>
+    <li><b>Afuera del laboratorio.</b> Lo que está fuera y todavía no volvió, con
+      quién lo tiene. Cuando devuelven, se marca acá.</li>
+    <li><b>En el laboratorio ahora.</b> Cuántas máquinas hay disponibles en este
+      momento.</li>
+    <li><b>Entregar sin reserva.</b> Para cuando alguien pide algo en el momento, sin
+      haber reservado.</li>
+    <li><b>Administración.</b> El menú con todo lo demás.</li>
+    <li><b>Lo que viene.</b> Las próximas clases con equipos reservados.</li>
+  </ol>
+
+  <div class="nota">
+    <span class="titulo">Los cuatro números del medio</span>
+    Debajo de las tarjetas hay cuatro contadores: clases de hoy, equipos afuera,
+    cuentas por aprobar y avisos sin leer. Si alguno está en cero, no hay nada
+    pendiente de ese tipo. El de cuentas por aprobar es el que más conviene mirar:
+    detrás de cada una hay un docente que no puede trabajar.
+  </div>
+</section>
+
+<!-- 3 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">3</span>Dónde está cada cosa</h2>
+
+  <p class="entrada">
+    En la barra de arriba, el menú <b>Administración</b> abre todo lo que es tuyo.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-02-menu.png" alt="Menú Administración desplegado">
+    <figcaption>El menú Administración, desplegado.</figcaption>
+  </figure>
+
+  <ul class="simple">
+    <li><b>Usuarios</b> — todas las cuentas: contraseñas, roles, bajas.</li>
+    <li><b>Académico</b> — ciclos, cursos, materias y qué docente da cada una.</li>
+    <li><b>Entregas</b> — entregar y recibir computadoras.</li>
+    <li><b>Gestión del inventario</b> — carros y equipos: alta, edición, estado.</li>
+    <li><b>Licencias</b> — qué software vence y cuándo.</li>
+    <li><b>Reportes</b> — cuánto se usó cada máquina y cada docente.</li>
+    <li><b>Pedidos de materia</b> — docentes que piden sumarse a una materia.</li>
+    <li><b>Jornada de la escuela</b> — en qué días y horarios se puede reservar.</li>
+    <li><b>Bloquear equipos</b> — tomar máquinas para una evaluación o una jornada.</li>
+  </ul>
+
+  <p>
+    Afuera del menú, en la misma barra, están <b>Aprobación</b> (las cuentas nuevas)
+    y <b>Avisos</b>, que es también donde se contestan los pedidos de ayuda.
+  </p>
+</section>
+
+<!-- 4 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">4</span>Aprobar las cuentas nuevas</h2>
+
+  <p class="entrada">
+    Cuando un docente se registra, su cuenta queda esperando. Hasta que la apruebes,
+    no puede entrar.
+  </p>
+
+  <ol class="pasos">
+    <li>Tocá <b>Aprobación</b> en la barra de arriba.</li>
+    <li>Mirá quién es y con qué email se registró. Si no lo reconocés,
+      <b>preguntá antes de aprobar</b>.</li>
+    <li>Tocá <span class="boton">Aprobar</span>, o <span class="boton">Rechazar</span>
+      si no corresponde.</li>
+    <li>Anotalo en su materia: eso se hace en <b>Académico</b> (capítulo 5). Sin
+      materia asignada, el docente entra pero no puede reservar.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/admin-03-aprobacion.png" alt="Pantalla de cuentas pendientes">
+    <figcaption>Una cuenta esperando aprobación.</figcaption>
+  </figure>
+
+  <div class="nota">
+    <span class="titulo">Al registrarse te dejaron una pista</span>
+    En el formulario de registro, el docente pudo indicar qué curso y qué materia va
+    a dictar. Eso llega junto con el pedido y es lo que mirás para asignarlo
+    correctamente.
+  </div>
+
+  <div class="ojo">
+    <span class="titulo">No dejes cuentas esperando</span>
+    Una cuenta sin aprobar es un docente que no puede reservar. Por eso este aviso
+    llega por correo a todos los Admin y viene encendido de fábrica.
+  </div>
+</section>
+
+<!-- 5 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">5</span>Ciclos, cursos y materias</h2>
+
+  <p class="entrada">
+    Es la base de todo. Un <b>ciclo lectivo</b> (el año) contiene <b>cursos</b>
+    (1°A, 2°B), cada curso tiene sus <b>materias</b>, y los docentes reservan
+    <b>para una materia</b>. Si esto no está cargado, nadie puede reservar nada.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-04-academico.png" alt="Pantalla de ciclos, cursos y materias">
+    <figcaption>El ciclo activo, con sus cursos y materias.</figcaption>
+  </figure>
+
+  <h3>Empezar el año</h3>
+  <ol class="pasos">
+    <li>En <b>Académico</b>, escribí el año en <b>Nuevo ciclo lectivo</b> y tocá
+      <span class="boton">Crear ciclo</span>.</li>
+    <li>Abrí el ciclo con <span class="boton">Cursos</span> y agregá cada curso:
+      elegís el año (1° a 6°) y la división (A, B, C…). Queda como «1°A».</li>
+    <li>En cada curso, tocá <span class="boton">Materias</span> y agregá las materias
+      que se dictan ahí.</li>
+    <li>En cada materia, asigná los docentes que la dan, indicando si son
+      <b>titular</b> o <b>suplente</b>.</li>
+  </ol>
+
+  <div class="ojo">
+    <span class="titulo">Solo puede haber un ciclo activo</span>
+    Para abrir el año siguiente hay que <b>cerrar el actual</b> primero, con
+    <span class="boton">Cerrar el año</span>. Al cerrarlo, todo lo de ese año queda
+    guardado como histórico y aparece en Reportes.
+  </div>
+
+  <div class="nota">
+    <span class="titulo">Si un docente pide una materia</span>
+    No hace falta que lo cargues a mano: puede pedirla desde su perfil y vos la
+    resolvés en <b>Pedidos de materia</b> (capítulo 12).
+  </div>
+</section>
+
+<!-- 6 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">6</span>Los usuarios</h2>
+
+  <p class="entrada">
+    En <b>Administración → Usuarios</b> están todas las cuentas, con un filtro por
+    estado.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-05-usuarios.png" alt="Listado de usuarios del sistema">
+    <figcaption>Cada cuenta, con su estado y lo que se puede hacer con ella.</figcaption>
+  </figure>
+
+  <h3>Restablecer una contraseña</h3>
+  <p>
+    Si un docente no puede entrar y el correo de recuperación no le llega, tocá
+    <span class="boton">Resetear contraseña</span> en su fila. El sistema le genera
+    una nueva y él la cambia al entrar.
+  </p>
+
+  <h3>Convertir a alguien en Admin</h3>
+  <p>
+    <span class="boton">Promover a admin</span> le da a esa persona todo lo que
+    describe esta guía. Hacelo solo con quien va a atender el laboratorio: un Admin
+    puede cancelar reservas ajenas y dar de baja equipos.
+  </p>
+
+  <h3>Dar de baja una cuenta</h3>
+  <p>
+    Para alguien que ya no trabaja en la escuela. La cuenta deja de poder entrar,
+    pero <b>no desaparece</b>: lo que reservó y entregó sigue figurando en el
+    historial, que es justamente para lo que sirve.
+  </p>
+
+  <div class="ojo">
+    <span class="titulo">Tu propia cuenta</span>
+    A vos mismo no podés degradarte ni darte de baja. Es a propósito: evita que la
+    escuela se quede sin ningún Admin por un clic.
+  </div>
+</section>
+
+<!-- 7 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">7</span>El inventario</h2>
+
+  <p class="entrada">
+    En <b>Administración → Gestión del inventario</b> se cargan los carros y las
+    computadoras, y se cambia su estado.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-06-inventario.png" alt="Gestión del inventario con los equipos de un carro">
+    <figcaption>Cada equipo, con su número de serie, sus programas y sus acciones.</figcaption>
+  </figure>
+
+  <h3>Cargar un carro y sus computadoras</h3>
+  <ol class="pasos">
+    <li>En <b>Nuevo carro</b>, poné el nombre (por ejemplo, «Carro 1») y una
+      descripción, y tocá <span class="boton">Crear carro</span>.</li>
+    <li>Abrilo con <span class="boton">Gestionar equipos</span>.</li>
+    <li>Agregá cada computadora con su <b>número</b> dentro del carro, su
+      <b>número de serie</b> y los <b>programas</b> que tiene instalados.</li>
+  </ol>
+
+  <div class="nota">
+    <span class="titulo">Lo que no está en un carro</span>
+    El proyector, los cargadores o una notebook suelta se cargan en
+    <b>Otros equipos</b>. Se entregan y se reciben igual que las computadoras, en la
+    misma pantalla.
+  </div>
+
+  <h3>Los tres estados de una computadora</h3>
+  <ul class="simple">
+    <li><b>Disponible</b> — se puede reservar y entregar.</li>
+    <li><b>En mantenimiento</b> — está siendo reparada. Nadie la puede reservar.</li>
+    <li><b>Fuera de servicio</b> — no anda y no se sabe cuándo va a andar.</li>
+  </ul>
+
+  <p>
+    El estado se cambia con las flechas <span class="boton">→ En mantenimiento</span>
+    y <span class="boton">→ Fuera de servicio</span> de cada equipo.
+  </p>
+
+  <div class="ojo">
+    <span class="titulo">Un aviso de falla no cambia el estado solo</span>
+    Cuando un docente avisa que una máquina no anda, queda cargada la incidencia,
+    pero la computadora <b>sigue disponible</b> hasta que vos la muevas. Es a
+    propósito: quien decide si se puede seguir usando sos vos. Si la falla es real,
+    pasala a mantenimiento para que nadie la reserve.
+  </div>
+
+  <h3>Las otras acciones de cada equipo</h3>
+  <ul class="simple">
+    <li><b>Incidencias</b> — las fallas que reportaron sobre esa máquina.</li>
+    <li><b>Licencias</b> — el software con vencimiento que tiene instalado.</li>
+    <li><b>Entregas</b> — el historial de quién se la llevó y cuándo volvió.</li>
+    <li><b>Preferencias</b> — para marcar que esa máquina es la preferida de cierta
+      materia; al reservar para esa materia aparece primera en la lista.</li>
+    <li><b>Dar de baja</b> — para una máquina que ya no existe. No borra su historial.</li>
+  </ul>
+</section>
+
+<!-- 8 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">8</span>Entregar y recibir</h2>
+
+  <p class="entrada">
+    Es el trabajo de todos los días y reemplaza al registro en papel. Está en
+    <b>Administración → Entregas</b>, y lo urgente también aparece en tu pantalla de
+    inicio.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-07-entregas.png" alt="Pantalla de entregas y devoluciones">
+    <figcaption>Arriba, lo que está afuera; abajo, las reservas de hoy sin retirar.</figcaption>
+  </figure>
+
+  <h3>Entregar las computadoras de una reserva</h3>
+  <ol class="pasos">
+    <li>Buscá la clase en <b>Entregar las de una reserva</b> —o en «Para entregar
+      ahora», en tu inicio—.</li>
+    <li>Tildá qué computadoras se lleva. Si se lleva menos de las que reservó, tildá
+      solo esas.</li>
+    <li>Confirmá la entrega.</li>
+  </ol>
+
+  <div class="nota">
+    <span class="titulo">La hora de devolución sale sola</span>
+    Para una reserva, la hora en que tienen que volver es la del fin de la clase. No
+    hay que cargarla.
+  </div>
+
+  <h3>Entregar sin reserva</h3>
+  <p>
+    Para cuando alguien pide algo en el momento: una computadora para un trámite, el
+    proyector para una charla. La persona <b>no necesita tener cuenta</b> en el
+    sistema.
+  </p>
+
+  <ol class="pasos">
+    <li>Tocá <span class="boton">Entregar sin reserva</span>.</li>
+    <li>Escribí <b>a quién</b> se la entregás. Alcanza con el nombre y, si sirve, de
+      dónde es: «Secretaría», «Marta (preceptoría)».</li>
+    <li>Si querés, poné <b>para qué</b> y <b>cuándo la devuelve</b>. Si no sabés
+      cuándo vuelve, dejalo vacío: en ese caso no se le va a reclamar.</li>
+    <li>Tildá los equipos y confirmá.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/admin-08-entregar-sin-reserva.png" alt="Formulario de entrega sin reserva">
+    <figcaption>Con el nombre alcanza; lo demás es opcional.</figcaption>
+  </figure>
+
+  <h3>Recibir lo que vuelve</h3>
+  <ol class="pasos">
+    <li>En <b>Afuera del laboratorio</b>, buscá el equipo que te están devolviendo.</li>
+    <li>Tocá <span class="boton">Recibir</span>. Si vuelven varios juntos, tildalos y
+      recibilos de una vez.</li>
+  </ol>
+
+  <div class="ojo">
+    <span class="titulo">Si algo no vuelve a horario</span>
+    El sistema avisa solo: al docente le llega un recordatorio y a los Admin un aviso
+    de devolución demorada. Al cerrar la jornada, además, queda un resumen de lo que
+    quedó afuera. Esos avisos sirven si lo que está en pantalla refleja la realidad:
+    <b>marcá las devoluciones en el momento</b>, no al final del día.
+  </div>
+</section>
+
+<!-- 9 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">9</span>Licencias de software</h2>
+
+  <p class="entrada">
+    Sirve para no enterarte de que una licencia venció el día que un docente no puede
+    dar su clase.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-09-licencias.png" alt="Listado de licencias con su estado">
+    <figcaption>Cada máquina lleva su propio contador. Primero, las que están por vencer.</figcaption>
+  </figure>
+
+  <h3>Cargar una licencia</h3>
+  <ol class="pasos">
+    <li>Tocá <span class="boton">Cargar una licencia</span>.</li>
+    <li>Escribí el <b>software</b> (por ejemplo, «AutoCAD 2027»).</li>
+    <li>Poné <b>cuántos días dura</b> cada renovación y con <b>cuántos días de
+      anticipación</b> querés que avise.</li>
+    <li>Tildá <b>en qué equipos</b> está instalado. Podés marcarlos todos de una vez.</li>
+    <li>Decí <b>cuándo vence</b>. Hay tres formas: le quedan N días, se renovó el…, o
+      vence el… Si no lo sabés, elegí «todavía no sé».</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/admin-10-cargar-licencia.png" alt="Formulario de carga de licencia">
+    <figcaption>Se carga el mismo software en varios equipos de una sola vez.</figcaption>
+  </figure>
+
+  <div class="nota">
+    <span class="titulo">«Todavía no sé» es una respuesta válida</span>
+    Una licencia sin fecha aparece primera en la lista, marcada como a verificar, y no
+    dispara avisos. Es mejor que inventar una fecha: la fecha inventada avisa cuando
+    no corresponde y calla cuando importa.
+  </div>
+
+  <h3>Renovar</h3>
+  <p>
+    Cuando renovás una licencia de verdad, tocá <span class="boton">Renovar hoy</span>
+    en esa máquina: el contador arranca de nuevo. Si renovaste varias, se pueden
+    renovar juntas.
+  </p>
+
+  <div class="ojo">
+    <span class="titulo">Los avisos llegan a todos los Admin</span>
+    El día que corresponde según la anticipación que cargaste, y otra vez el día del
+    vencimiento, les llega un correo a todos los administradores.
+  </div>
+</section>
+
+<!-- 10 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">10</span>Bloquear equipos</h2>
+
+  <p class="entrada">
+    Para cuando el laboratorio necesita las máquinas para otra cosa: una evaluación,
+    una jornada, una capacitación, un mantenimiento.
+  </p>
+
+  <ol class="pasos">
+    <li>Entrá a <b>Administración → Bloquear equipos</b>.</li>
+    <li>Elegí la <b>fecha</b> y el <b>horario</b>.</li>
+    <li>Escribí <b>por qué</b> se bloquean. Esto es importante: es exactamente lo que
+      van a leer los docentes en el aviso de cancelación.</li>
+    <li>Tildá los equipos. El sistema te marca cuáles ya tienen reserva en ese
+      horario.</li>
+    <li>Confirmá.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/admin-11-bloquear.png" alt="Pantalla para bloquear equipos">
+    <figcaption>Antes de bloquear, se ve qué máquinas tienen reserva en esa franja.</figcaption>
+  </figure>
+
+  <div class="ojo">
+    <span class="titulo">Bloquear cancela clases de otros</span>
+    Las reservas que se pisan con el bloqueo se cancelan, y a cada docente le llega un
+    aviso con el motivo que escribiste. Escribilo pensando en que lo lee alguien que
+    se acaba de quedar sin computadoras para su clase.
+  </div>
+
+  <div class="nota">
+    <span class="titulo">Se cancelan máquinas, no la clase entera</span>
+    Si bloqueás dos de las seis computadoras de una clase, las otras cuatro le quedan
+    reservadas al docente, y el aviso se lo dice.
+  </div>
+
+  <p>
+    Para levantar un bloqueo antes de tiempo, buscalo en <b>Reservas</b> y usá
+    <span class="boton">Levantar bloqueo</span>: los equipos vuelven a estar
+    disponibles.
+  </p>
+</section>
+
+<!-- 11 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">11</span>La jornada de la escuela</h2>
+
+  <p class="entrada">
+    Son los días y las horas en que la escuela está abierta. Las reservas fuera de ese
+    horario se rechazan solas.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-12-jornada.png" alt="Pantalla de la jornada de la escuela">
+    <figcaption>Se carga por tramos: qué días, desde qué hora y hasta cuál.</figcaption>
+  </figure>
+
+  <ol class="pasos">
+    <li>Entrá a <b>Administración → Jornada de la escuela</b>.</li>
+    <li>Tildá los <b>días</b> del tramo. Hay atajos: «Lunes a viernes», «Todos los
+      días», «Fin de semana».</li>
+    <li>Poné a qué hora <b>abre</b> y a qué hora <b>cierra</b>.</li>
+    <li>Tocá <span class="boton">Agregar tramo</span>. Repetí para cada tramo distinto.</li>
+  </ol>
+
+  <div class="nota">
+    <span class="titulo">Dos casos que conviene conocer</span>
+    <b>Turno mañana y turno noche:</b> cargá dos tramos para el mismo día —por
+    ejemplo 07:00–12:00 y 18:00–23:00— y el mediodía queda cerrado.
+    <b>Escuela nocturna:</b> si la hora de cierre es menor que la de apertura
+    —20:00–01:00—, el tramo termina al día siguiente.
+  </div>
+
+  <div class="ojo">
+    <span class="titulo">Mientras no cargues nada, no hay límite</span>
+    Sin jornada declarada se puede reservar cualquier día y a cualquier hora. Cargala
+    apenas puedas: es lo que evita reservas a las tres de la mañana de un domingo.
+  </div>
+</section>
+
+<!-- 12 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">12</span>Pedidos para dictar una materia</h2>
+
+  <p class="entrada">
+    Un docente puede pedir, desde su perfil, que lo anoten en una materia. Acá se
+    resuelven.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-13-pedidos-de-materia.png" alt="Pantalla de pedidos para dictar una materia">
+    <figcaption>Cada pedido trae el motivo que escribió el docente.</figcaption>
+  </figure>
+
+  <ol class="pasos">
+    <li>Entrá a <b>Administración → Pedidos de materia</b>.</li>
+    <li>Leé el motivo. Si la materia ya la da otro docente, a esa persona también le
+      llegó el aviso.</li>
+    <li><b>Hablalo antes de aprobar</b>, si hace falta. El sistema no reemplaza esa
+      conversación.</li>
+    <li>Aprobalo o rechazalo. Al aprobar, esa persona queda habilitada a reservar para
+      esa materia.</li>
+  </ol>
+
+  <div class="nota">
+    <span class="titulo">Si la materia no existe todavía</span>
+    El docente puede pedir una materia que no está cargada, describiéndola. En ese
+    caso, primero creala en <b>Académico</b> y después resolvé el pedido.
+  </div>
+</section>
+
+<!-- 13 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">13</span>Pedidos de ayuda y mensajes</h2>
+
+  <p class="entrada">
+    Es el buzón por donde los docentes piden ayuda, avisan que algo no anda o
+    proponen mejoras. Vive dentro de <b>Avisos</b>.
+  </p>
+
+  <ol class="pasos">
+    <li>Entrá a <b>Avisos</b>.</li>
+    <li>En <b>Pedidos de ayuda</b>, tocá
+      <span class="boton">Ver conversaciones</span>. Viene tildado «Ver solo lo que
+      falta contestar».</li>
+    <li>Abrí una conversación con <span class="boton">Ver</span>. Vas a leer todo lo
+      que se dijo, en orden.</li>
+    <li>Escribí tu respuesta abajo y tocá <span class="boton">Responder</span>.</li>
+    <li>Cuando el tema esté terminado, tocá
+      <span class="boton">Dar por resuelta</span>.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/admin-15-soporte-conversacion.png" alt="Conversación de soporte abierta con la respuesta del Admin">
+    <figcaption>La conversación completa: lo que escribió el docente y lo que
+      contestaron.</figcaption>
+  </figure>
+
+  <div class="nota">
+    <span class="titulo">Contestar no cierra el tema</span>
+    Podés contestar las veces que haga falta; recién se cierra cuando alguien la da
+    por resuelta. Y si el docente vuelve a escribir sobre una conversación resuelta,
+    <b>se reabre</b> y vuelve a aparecer en tu lista. Nada se pierde de vista.
+  </div>
+
+  <div class="ojo">
+    <span class="titulo">Estos correos no se pueden apagar</span>
+    Los pedidos de ayuda le llegan por mail a todos los Admin siempre, y la respuesta
+    le llega al docente siempre. Es el único canal por el que alguien pide auxilio:
+    si se pudiera apagar, dejaría de serlo.
+  </div>
+
+  <p>
+    Cada conversación te dice desde qué pantalla la escribieron y con qué versión del
+    sistema. Cuando alguien reporta algo raro, ese dato suele ser la mitad de la
+    respuesta.
+  </p>
+</section>
+
+<!-- 14 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">14</span>Reportes</h2>
+
+  <p class="entrada">
+    Para responder preguntas que en papel no se podían responder: cuánto se usa cada
+    máquina, quién reserva, qué se rompe.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-16-reportes.png" alt="Pantalla de reportes">
+    <figcaption>Todos los reportes en una sola pantalla, filtrados por ciclo y por fechas.</figcaption>
+  </figure>
+
+  <ul class="simple">
+    <li><b>Uso por equipo</b> — cuántas reservas y cuántas horas tuvo cada máquina.
+      Sirve para repartir el desgaste y para justificar una compra.</li>
+    <li><b>Horas por docente</b> — quién está usando el laboratorio.</li>
+    <li><b>Incidencias por equipo y por carro</b> — dónde se concentran las fallas.</li>
+    <li><b>Estado del parque</b> — cuántas disponibles, en mantenimiento y fuera de
+      servicio.</li>
+    <li><b>Qué se rompe</b> — las fallas agrupadas por tipo.</li>
+    <li><b>Histórico por año</b> — se genera solo al cerrar un ciclo lectivo.</li>
+  </ul>
+
+  <div class="nota">
+    <span class="titulo">Todo se puede bajar</span>
+    Cada reporte tiene <span class="boton">Descargar CSV</span>: se abre con Excel o
+    con Google Sheets, para armar un informe o presentarlo en una reunión.
+  </div>
+</section>
+
+<!-- 15 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">15</span>Tus horarios de atención</h2>
+
+  <p class="entrada">
+    Los docentes tienen una pantalla que les dice en qué días y horarios está cada
+    Admin. La cargás vos, para vos.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-17-horarios-admin.png" alt="Pantalla de disponibilidad de los Admin">
+    <figcaption>Tu horario, cargado por vos; los docentes lo ven en «Horario Admins».</figcaption>
+  </figure>
+
+  <ol class="pasos">
+    <li>Entrá a <b>Horario Admins</b>, en la barra de arriba.</li>
+    <li>Cargá tus tramos: qué días y de qué hora a qué hora atendés.</li>
+    <li>Si un día puntual no vas a estar, cargá la excepción; y si te tenés que ir
+      ahora, marcalo como no disponible.</li>
+  </ol>
+
+  <div class="nota">
+    <span class="titulo">Es informativo</span>
+    No cambia nada de lo que el sistema permite hacer. Sirve para que un docente no
+    camine hasta el laboratorio cuando no hay nadie.
+  </div>
+</section>
+
+<!-- 16 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">16</span>Tus avisos y tus correos</h2>
+
+  <p class="entrada">
+    Un Admin recibe, además de sus propios avisos, los del laboratorio: cuentas
+    pendientes, licencias por vencer, devoluciones demoradas, pedidos de ayuda.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-18-avisos.png" alt="Pantalla de avisos de un administrador">
+    <figcaption>Los avisos de administración, más el buzón de pedidos de ayuda.</figcaption>
+  </figure>
+
+  <p>
+    Si te llegan demasiados correos, en <b>Copias por correo</b> →
+    <span class="boton">Elegir cuáles</span> podés apagar los que no querés recibir
+    por mail. <b>Todos</b> siguen apareciendo acá adentro: lo que elegís es el canal,
+    no si te enterás.
+  </p>
+
+  <div class="ojo">
+    <span class="titulo">Dos que conviene dejar encendidos</span>
+    El de <b>cuentas pendientes</b>, porque su demora la sufre un docente que no puede
+    entrar, y el de <b>licencias por vencer</b>, porque avisa con tiempo de algo que
+    después no se resuelve en el momento.
+  </div>
+</section>
+
+<!-- 17 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">17</span>Una rutina que funciona</h2>
+
+  <p class="entrada">
+    No hace falta mirar todo todos los días. Con esto alcanza.
+  </p>
+
+  <table class="rutina">
+    <tr>
+      <th>Al abrir el laboratorio</th>
+      <td>Mirá tu pantalla de inicio: qué hay <b>para entregar ahora</b> y qué quedó
+        <b>afuera</b> de ayer. Si hay algo afuera que tenía que haber vuelto,
+        reclamalo.</td>
+    </tr>
+    <tr>
+      <th>Durante el día</th>
+      <td>Entregá y recibí <b>en el momento</b>. Es lo único que, si se hace tarde,
+        deja de servir.</td>
+    </tr>
+    <tr>
+      <th>Al cerrar</th>
+      <td>Revisá que no quede nada en «Afuera del laboratorio» que en realidad ya
+        volvió.</td>
+    </tr>
+    <tr>
+      <th>Una vez por día</th>
+      <td>Mirá <b>Aprobación</b> (cuentas nuevas) y <b>Avisos</b> (pedidos de ayuda sin
+        contestar).</td>
+    </tr>
+    <tr>
+      <th>Una vez por semana</th>
+      <td>Pasá por <b>Licencias</b> y por las <b>incidencias</b> de los equipos: qué
+        hay para renovar y qué máquina hay que mandar a arreglar.</td>
+    </tr>
+    <tr>
+      <th>Al empezar el año</th>
+      <td>Cerrá el ciclo anterior, creá el nuevo, cargá cursos y materias, y asigná los
+        docentes. Revisá también la <b>jornada</b> si cambiaron los turnos.</td>
+    </tr>
+  </table>
+
+  <div class="listo">
+    <span class="titulo">La regla de oro</span>
+    El sistema es útil en la medida en que lo que está en pantalla coincide con lo que
+    pasa en el laboratorio. Todo lo demás —los avisos, los reportes, los reclamos
+    automáticos— sale de ahí.
+  </div>
+</section>
+
+<!-- 18 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">18</span>Si algo no sale como esperabas</h2>
+
+  <div class="pregunta">
+    <h3>Un docente dice que no puede reservar</h3>
+    <p>Casi siempre es que no está asignado a ninguna materia del ciclo activo.
+      Revisalo en <b>Académico</b>, en la materia que corresponda. Lo segundo más
+      común: su cuenta quedó sin aprobar.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Un docente no recibe los correos</h3>
+    <p>Que revise «correo no deseado». Después, que mire en <b>Avisos → Copias por
+      correo</b> si apagó esa familia de mensajes. Los avisos siempre están dentro del
+      sistema, aunque el correo no llegue.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Una computadora aparece disponible y en realidad está rota</h3>
+    <p>La incidencia que cargó el docente no cambia el estado sola. Entrá a
+      <b>Gestión del inventario</b> y pasala a <b>En mantenimiento</b>.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Alguien devolvió una computadora y sigue figurando afuera</h3>
+    <p>Falta marcarla como recibida en <b>Entregas</b>. Mientras figure afuera, el
+      sistema va a seguir reclamándola.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Necesito las máquinas para una evaluación y ya están reservadas</h3>
+    <p>Usá <b>Bloquear equipos</b> con un motivo claro. Las reservas que se pisan se
+      cancelan y a cada docente le llega el aviso. Si podés, avisales antes por otro
+      lado: el sistema informa, no reemplaza el trato.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Me equivoqué al bloquear</h3>
+    <p>Buscá el bloqueo en <b>Reservas</b> y tocá <b>Levantar bloqueo</b>. Ojo: las
+      reservas que se cancelaron no vuelven solas; hay que avisarle al docente que
+      puede reservar de nuevo.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>No puedo crear el ciclo del año que viene</h3>
+    <p>Solo puede haber un ciclo activo. Cerrá el actual con <b>Cerrar el año</b> y
+      después creá el nuevo.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Se rompió algo del sistema</h3>
+    <p>Escribilo por <b>Pedir ayuda</b>, contando qué pantalla estabas usando y qué
+      pasó. El pedido guarda la pantalla y la versión, que es lo que necesita quien lo
+      va a mirar.</p>
+  </div>
+</section>
+
+<!-- 19 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">19</span>Las palabras que vas a ver</h2>
+
+  <dl class="glosario">
+    <dt>Ciclo lectivo</dt>
+    <dd>El año escolar. Contiene los cursos, y solo puede haber uno activo. Al
+      cerrarlo, lo de ese año queda como histórico.</dd>
+
+    <dt>Curso y materia</dt>
+    <dd>1°A es un curso; Matemática de 1°A es una materia. Los docentes reservan para
+      una materia, no para un curso.</dd>
+
+    <dt>Carro y equipo</dt>
+    <dd>El carro es el mueble con las computadoras. Equipo es cualquier cosa que se
+      preste: una computadora, el proyector, un cargador.</dd>
+
+    <dt>Reserva</dt>
+    <dd>El derecho a usar unas computadoras en una franja horaria. No implica tenerlas
+      en la mano.</dd>
+
+    <dt>Entrega y devolución</dt>
+    <dd>Dónde está físicamente la máquina. Es lo que reemplaza al cuaderno: una
+      reserva puede existir sin que nadie haya retirado nada.</dd>
+
+    <dt>Bloqueo</dt>
+    <dd>Tomar equipos para otra cosa en una franja, cancelando las reservas que se
+      pisen. Siempre lleva un motivo, que es lo que leen los docentes.</dd>
+
+    <dt>Incidencia</dt>
+    <dd>El reporte de que una máquina no anda. Queda cargada en el equipo y no cambia
+      su estado por sí sola.</dd>
+
+    <dt>Licencia</dt>
+    <dd>El permiso de uso de un programa, con vencimiento. Cada máquina lleva su
+      propio contador.</dd>
+
+    <dt>Jornada</dt>
+    <dd>Los días y horarios en que la escuela abre. Lo que queda afuera no se puede
+      reservar.</dd>
+  </dl>
+
+  <div class="listo" style="margin-top:10mm">
+    <span class="titulo">Si algo de esta guía no coincide con lo que ves</span>
+    El sistema se sigue mejorando, así que puede que una pantalla haya cambiado.
+    Escribilo por <b>Pedir ayuda</b>: así se corrige tanto el sistema como esta guía.
+  </div>
+</section>

@@ -1,0 +1,933 @@
+<meta charset="utf-8">
+<title>Guía para docentes — SGRC</title>
+<style>
+  :root {
+    --tinta: #14181f;
+    --gris: #5b6470;
+    --linea: #d7dce3;
+    --azul: #1d4ed8;
+    --azul-suave: #eef2ff;
+    --amarillo: #fff7e6;
+    --amarillo-borde: #e0a800;
+    --verde: #ecfdf3;
+    --verde-borde: #12805c;
+  }
+
+  @page { size: A4; margin: 17mm 15mm 20mm 15mm; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--tinta);
+    font-size: 11.5pt;
+    line-height: 1.62;
+    margin: 0;
+  }
+
+  h1, h2, h3 { line-height: 1.25; margin: 0; }
+
+  /* ── Portada ──────────────────────────────────────────────── */
+  .portada {
+    height: 247mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    break-after: page;
+  }
+  .portada .marca {
+    display: inline-block;
+    background: var(--azul);
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: .12em;
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-size: 13pt;
+    margin: 0 auto 22mm auto;
+  }
+  .portada h1 { font-size: 34pt; letter-spacing: -.02em; }
+  .portada .bajada { font-size: 15pt; color: var(--gris); margin-top: 6mm; }
+  .portada .pie { margin-top: 24mm; color: var(--gris); font-size: 11pt; }
+  .portada .para-quien {
+    margin: 14mm auto 0 auto;
+    max-width: 125mm;
+    background: var(--azul-suave);
+    border-radius: 10px;
+    padding: 7mm 9mm;
+    text-align: left;
+    font-size: 11pt;
+  }
+
+  /* ── Índice ───────────────────────────────────────────────── */
+  .indice { break-after: page; }
+  .indice ol { list-style: none; padding: 0; margin: 8mm 0 0 0; counter-reset: cap; }
+  .indice li {
+    counter-increment: cap;
+    padding: 3.2mm 0;
+    border-bottom: 1px solid var(--linea);
+    font-size: 12pt;
+  }
+  .indice li::before {
+    content: counter(cap);
+    display: inline-block;
+    width: 9mm;
+    color: var(--azul);
+    font-weight: 700;
+  }
+  .indice li span { color: var(--gris); font-size: 10.5pt; display: block; margin-left: 9mm; }
+
+  /* ── Capítulos ────────────────────────────────────────────── */
+  .cap { break-before: page; }
+  .cap > h2 {
+    font-size: 20pt;
+    letter-spacing: -.01em;
+    padding-bottom: 3mm;
+    border-bottom: 3px solid var(--azul);
+    margin-bottom: 6mm;
+  }
+  .cap > h2 .n {
+    display: inline-block;
+    background: var(--azul);
+    color: #fff;
+    border-radius: 7px;
+    padding: 0 3.2mm;
+    margin-right: 3mm;
+    font-size: 16pt;
+    vertical-align: 2px;
+  }
+  h3 { font-size: 13.5pt; margin: 8mm 0 2mm 0; }
+  p { margin: 0 0 3.5mm 0; }
+  .entrada { color: var(--gris); font-size: 11pt; margin-bottom: 5mm; }
+
+  /* ── Pasos ────────────────────────────────────────────────── */
+  ol.pasos { list-style: none; counter-reset: paso; padding: 0; margin: 0 0 5mm 0; }
+  ol.pasos > li {
+    counter-increment: paso;
+    position: relative;
+    padding: 0 0 3.5mm 12mm;
+    break-inside: avoid;
+  }
+  ol.pasos > li::before {
+    content: counter(paso);
+    position: absolute;
+    left: 0;
+    top: 0.4mm;
+    width: 8mm;
+    height: 8mm;
+    background: var(--azul);
+    color: #fff;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 11pt;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Lista que explica una captura numerada en rojo. */
+  ol.referencias { list-style: none; counter-reset: ref; padding: 0; margin: 0 0 5mm 0; }
+  ol.referencias > li {
+    counter-increment: ref;
+    position: relative;
+    padding: 0 0 2.5mm 11mm;
+    break-inside: avoid;
+  }
+  ol.referencias > li::before {
+    content: counter(ref);
+    position: absolute;
+    left: 0;
+    top: 0.4mm;
+    width: 7.5mm;
+    height: 7.5mm;
+    background: #dc2626;
+    color: #fff;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 10pt;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  ul.simple { margin: 0 0 4mm 0; padding-left: 6mm; }
+  ul.simple li { margin-bottom: 1.6mm; }
+
+  b, strong { font-weight: 650; }
+  .boton {
+    display: inline-block;
+    border: 1px solid var(--linea);
+    background: #f6f8fb;
+    border-radius: 5px;
+    padding: 0 2mm;
+    font-size: 10.5pt;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* ── Capturas ─────────────────────────────────────────────── */
+  figure { margin: 5mm 0 6mm 0; break-inside: avoid; text-align: center; }
+  figure img {
+    max-width: 100%;
+    max-height: 140mm;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(20, 24, 31, .18);
+  }
+  figcaption {
+    color: var(--gris);
+    font-size: 9.5pt;
+    margin-top: 2.5mm;
+    text-align: center;
+  }
+
+  /* ── Recuadros ────────────────────────────────────────────── */
+  .nota, .ojo, .listo {
+    padding: 4mm 5mm;
+    border-radius: 8px;
+    margin: 4mm 0 5mm 0;
+    font-size: 10.8pt;
+    break-inside: avoid;
+  }
+  .nota { background: var(--azul-suave); border-left: 4px solid var(--azul); }
+  .ojo { background: var(--amarillo); border-left: 4px solid var(--amarillo-borde); }
+  .listo { background: var(--verde); border-left: 4px solid var(--verde-borde); }
+  .nota .titulo, .ojo .titulo, .listo .titulo {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 1.2mm;
+  }
+
+  /* ── Preguntas frecuentes y glosario ──────────────────────── */
+  .pregunta { break-inside: avoid; margin-bottom: 5mm; }
+  .pregunta h3 { margin: 0 0 1.5mm 0; font-size: 12pt; }
+  dl.glosario { margin: 0; }
+  dl.glosario dt { font-weight: 700; margin-top: 3.5mm; }
+  dl.glosario dd { margin: 0.6mm 0 0 0; color: var(--gris); }
+</style>
+
+<div class="portada">
+  <span class="marca">SGRC</span>
+  <h1>Cómo reservar las<br>computadoras</h1>
+  <div class="bajada">Guía para docentes</div>
+  <div class="para-quien">
+    <b>Esta guía es para vos aunque no te lleves bien con la computadora.</b>
+    Está escrita paso por paso y con fotos de cada pantalla. No hace falta saber
+    nada de antes: alcanza con leer y seguir lo que dice cada número.
+  </div>
+  <div class="pie">
+    Sistema de Gestión y Reserva de Computadoras · versión 1.11<br>
+    Agosto de 2026
+  </div>
+</div>
+
+<div class="indice">
+  <h2 style="font-size:20pt;border-bottom:3px solid var(--azul);padding-bottom:3mm">Qué hay en esta guía</h2>
+  <ol>
+    <li>Qué es este sistema y para qué sirve <span>Lo primero que conviene entender.</span></li>
+    <li>Crear tu cuenta <span>Se hace una sola vez, y después la aprueba un Admin.</span></li>
+    <li>Entrar al sistema <span>Con tu email y contraseña, o con Google.</span></li>
+    <li>Si te olvidaste la contraseña <span>Se resuelve solo, con un código que llega por correo.</span></li>
+    <li>La pantalla de inicio <span>El mapa de todo lo que podés hacer.</span></li>
+    <li>Reservar computadoras para una clase <span>Lo que vas a hacer más seguido.</span></li>
+    <li>Reservar todas las semanas <span>Una sola vez para todo el año.</span></li>
+    <li>Ver, cambiar y cancelar lo que reservaste</li>
+    <li>Avisar que una computadora no anda</li>
+    <li>Ver qué computadoras hay y cuándo están libres</li>
+    <li>Los avisos <span>Qué te avisa el sistema y dónde se lee.</span></li>
+    <li>Qué te llega por correo <span>Y cómo pedir que te llegue menos.</span></li>
+    <li>Pedir ayuda <span>Escribirle a los Admin desde el sistema.</span></li>
+    <li>Tu perfil <span>Tu foto, tus materias y tu contraseña.</span></li>
+    <li>Quién te puede ayudar en el laboratorio</li>
+    <li>Usarlo desde el teléfono</li>
+    <li>Si algo no sale como esperabas <span>Las dudas más comunes, respondidas.</span></li>
+    <li>Las palabras que vas a ver</li>
+  </ol>
+</div>
+
+<!-- 1 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">1</span>Qué es este sistema y para qué sirve</h2>
+
+  <p class="entrada">
+    Antes de tocar ningún botón, conviene tener clara una sola idea.
+  </p>
+
+  <p>
+    La escuela tiene computadoras portátiles guardadas en <b>carros</b>. Como son
+    menos que los cursos que las necesitan, hay que ponerse de acuerdo en quién
+    las usa y cuándo. Ese acuerdo, que antes se anotaba en un cuaderno, ahora se
+    hace en este sistema.
+  </p>
+
+  <p>
+    <b>Reservar</b> es apartar unas computadoras para el día y la hora de tu
+    clase. Reservar no es retirarlas: el día de la clase vas al laboratorio y el
+    Admin te las entrega. Al terminar, las devolvés y él lo registra.
+  </p>
+
+  <div class="nota">
+    <span class="titulo">Lo único que tenés que recordar</span>
+    Reservás con anticipación desde el sistema; retirás y devolvés en persona, el
+    día de la clase. Si no reservaste, es probable que cuando llegues las
+    computadoras ya estén con otro curso.
+  </div>
+
+  <h3>Qué más podés hacer acá</h3>
+  <ul class="simple">
+    <li>Ver <b>qué computadoras hay</b> y qué programas tiene cada una.</li>
+    <li>Avisar que <b>una no anda</b>, para que la arreglen.</li>
+    <li>Enterarte si <b>te cancelaron</b> una clase, y por qué.</li>
+    <li><b>Pedir ayuda</b> a los Admin sin levantarte del aula.</li>
+  </ul>
+</section>
+
+<!-- 2 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">2</span>Crear tu cuenta</h2>
+
+  <p class="entrada">
+    Se hace una sola vez. Después, siempre entrás con el mismo email y la misma
+    contraseña.
+  </p>
+
+  <ol class="pasos">
+    <li>Abrí la dirección del sistema en el navegador (Chrome, Edge o el que uses).
+      La dirección te la da la escuela; conviene guardarla en favoritos.</li>
+    <li>Abajo de todo, donde dice <span class="boton">¿No tenés cuenta? Registrate</span>, tocá <b>Registrate</b>.</li>
+    <li>Completá <b>nombre</b>, <b>apellido</b>, <b>email</b> y una <b>contraseña</b>.
+      Usá el email de la escuela, o el que usás siempre: es el que te va a servir
+      para entrar y el que recibe los avisos.</li>
+    <li>Abajo hay una parte que dice <b>«¿Qué vas a dictar?»</b>. No es obligatoria,
+      pero <b>llenala</b>: elegí el año, la división, escribí la materia y, si sabés,
+      si sos titular o suplente.</li>
+    <li>Tocá <span class="boton">Crear cuenta</span>.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-02-crear-cuenta.png" alt="Formulario de creación de cuenta">
+    <figcaption>La pantalla de crear cuenta. Lo de abajo es opcional, pero es lo que
+      mira el Admin para asignarte tu materia.</figcaption>
+  </figure>
+
+  <div class="ojo">
+    <span class="titulo">Todavía no vas a poder entrar</span>
+    Una cuenta nueva queda <b>esperando aprobación</b>: alguien del equipo de
+    administración tiene que darle el visto bueno. Cuando lo haga, te llega un
+    correo avisándote, y recién ahí podés entrar. Si pasaron un par de días y no
+    llegó nada, pasá por el laboratorio y preguntá.
+  </div>
+
+  <div class="nota">
+    <span class="titulo">Por qué conviene completar «¿Qué vas a dictar?»</span>
+    Para reservar hace falta estar anotado en alguna materia. Si contás cuál dictás
+    desde el principio, el Admin te deja listo al aprobarte y no tenés que pedirlo
+    después.
+  </div>
+</section>
+
+<!-- 3 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">3</span>Entrar al sistema</h2>
+
+  <ol class="pasos">
+    <li>Abrí la dirección del sistema.</li>
+    <li>Escribí tu <b>email</b> y tu <b>contraseña</b>.</li>
+    <li>Tocá <span class="boton">Iniciar sesión</span>.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-01-entrar.png" alt="Pantalla de inicio de sesión">
+    <figcaption>La pantalla de entrada. El botón gris de abajo sirve si tu cuenta de
+      la escuela es de Gmail.</figcaption>
+  </figure>
+
+  <h3>Entrar con Google</h3>
+  <p>
+    Si tu cuenta de la escuela es de Gmail, podés tocar
+    <span class="boton">Acceder con Google</span> y elegir tu cuenta: no tenés que
+    acordarte de ninguna contraseña. Es el mismo sistema y la misma cuenta, solo
+    cambia la manera de entrar.
+  </p>
+
+  <div class="ojo">
+    <span class="titulo">Si te dice que la sesión venció</span>
+    Por seguridad, después de un rato sin usarlo el sistema te pide entrar de
+    nuevo. No pasó nada malo y no perdiste ninguna reserva: escribí tu email y tu
+    contraseña otra vez.
+  </div>
+</section>
+
+<!-- 4 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">4</span>Si te olvidaste la contraseña</h2>
+
+  <p class="entrada">Se resuelve solo, sin molestar a nadie.</p>
+
+  <ol class="pasos">
+    <li>En la pantalla de entrada, tocá <b>Olvidé mi contraseña</b>.</li>
+    <li>Escribí tu email —el mismo con el que te registraste— y tocá
+      <span class="boton">Enviarme el código</span>.</li>
+    <li>Abrí tu correo. Vas a tener un mensaje con un <b>código</b>.</li>
+    <li>Volvé al sistema, escribí ese código y elegí una contraseña nueva.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-03-olvide-contrasena.png" alt="Pantalla de recuperar contraseña">
+    <figcaption>Solo hace falta tu email: el código llega ahí.</figcaption>
+  </figure>
+
+  <div class="nota">
+    <span class="titulo">Si entrás con Google</span>
+    Puede que el correo te diga que tu cuenta no tiene contraseña propia porque
+    entrás con Google. En ese caso no hay nada que recuperar: entrá con el botón
+    <span class="boton">Acceder con Google</span>.
+  </div>
+
+  <div class="ojo">
+    <span class="titulo">Si el correo no llega</span>
+    Fijate en «correo no deseado» o «spam». Si tampoco está ahí, pedile a un Admin
+    que te restablezca la contraseña: lo puede hacer desde el sistema en un minuto.
+  </div>
+</section>
+
+<!-- 5 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">5</span>La pantalla de inicio</h2>
+
+  <p class="entrada">
+    Es lo primero que ves al entrar. Está pensada para que todo lo que necesitás
+    esté a la vista, sin buscar en menús.
+  </p>
+
+  <figure>
+    <img src="imagenes/docente-04-pantalla-de-inicio.png" alt="Pantalla de inicio del docente, con siete zonas señaladas">
+    <figcaption>La pantalla de inicio, con cada zona señalada en rojo.</figcaption>
+  </figure>
+
+  <ol class="referencias">
+    <li><b>Reservas.</b> La lista de todo lo que reservaste. También se llega desde
+      «Ver todas mis reservas».</li>
+    <li><b>Avisos.</b> Lo que el sistema te fue avisando. El número rojo es la
+      cantidad sin leer.</li>
+    <li><b>Tu cuenta.</b> Tocando tus iniciales entrás a tu perfil: tu foto, tus
+      materias y tu contraseña.</li>
+    <li><b>Salir.</b> Cierra tu sesión. Conviene usarlo si la computadora es
+      compartida.</li>
+    <li><b>Reservar computadoras.</b> El botón azul de la derecha empieza una reserva
+      nueva. Es lo que más vas a usar.</li>
+    <li><b>Tus próximas clases.</b> Las que ya reservaste, con qué computadoras y a
+      qué hora. Desde acá mismo podés cambiar una máquina o cancelar.</li>
+    <li><b>Otras cosas que podés hacer.</b> Accesos a todo lo demás, cada uno con una
+      línea que explica para qué sirve.</li>
+  </ol>
+
+  <div class="nota">
+    <span class="titulo">Si te perdés</span>
+    Tocá el logo <b>SGRC</b> de arriba a la izquierda: siempre vuelve a esta
+    pantalla.
+  </div>
+</section>
+
+<!-- 6 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">6</span>Reservar computadoras para una clase</h2>
+
+  <p class="entrada">Es lo que vas a hacer más seguido. Son seis pasos.</p>
+
+  <ol class="pasos">
+    <li>En la pantalla de inicio, tocá el botón azul <span class="boton">Reservar</span>.</li>
+    <li>Dejá elegido <span class="boton">Una sola fecha</span> (viene así). El otro
+      botón es para las clases que se repiten todas las semanas: eso está en el
+      capítulo siguiente.</li>
+    <li>En <b>Materia</b>, elegí para qué materia y curso es la clase.</li>
+    <li>En <b>Fecha</b>, elegí el día.</li>
+    <li>Elegí la <b>hora de inicio</b> y la <b>hora de fin</b>. Van en formato de 24
+      horas: las dos de la tarde son las <b>14</b>, no las 2.</li>
+    <li>Abajo aparecen las computadoras que están libres ese día a esa hora.
+      <b>Tildá</b> las que necesitás y tocá
+      <span class="boton">Confirmar reserva</span>.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-05-nueva-reserva.png" alt="Formulario de nueva reserva completo">
+    <figcaption>El formulario completo, con tres computadoras tildadas y listo para
+      confirmar.</figcaption>
+  </figure>
+
+  <ol class="referencias">
+    <li>Una sola fecha o todas las semanas.</li>
+    <li>La materia y el curso.</li>
+    <li>El día.</li>
+    <li>Desde qué hora hasta qué hora.</li>
+    <li>Las computadoras libres. Tildás las que querés; arriba te dice cuántas
+      llevás elegidas.</li>
+    <li>El botón para confirmar. Hasta que no completes todo lo anterior está
+      apagado, y el texto de al lado te dice qué falta.</li>
+  </ol>
+
+  <div class="listo">
+    <span class="titulo">Cómo sabés que quedó</span>
+    Después de confirmar, la reserva aparece en <b>Reservas</b> y también en «Tus
+    próximas clases», en la pantalla de inicio.
+  </div>
+
+  <div class="ojo">
+    <span class="titulo">Si no aparece ninguna computadora</span>
+    Puede ser por dos motivos. Uno: ya están todas tomadas en ese horario —el
+    sistema te muestra quién las tiene, así que podés hablarlo con esa persona—.
+    Dos: el horario que elegiste cae fuera del horario en que la escuela está
+    abierta. Probá con otra hora o preguntá en el laboratorio.
+  </div>
+</section>
+
+<!-- 7 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">7</span>Reservar todas las semanas</h2>
+
+  <p class="entrada">
+    Si tenés la misma clase todas las semanas, no hace falta cargarla una por una.
+  </p>
+
+  <ol class="pasos">
+    <li>Empezá una reserva nueva y tocá
+      <span class="boton">Se repite todas las semanas</span>.</li>
+    <li>Elegí la <b>materia</b> y el <b>día de la semana</b> (por ejemplo, todos los
+      martes).</li>
+    <li>Elegí <b>desde qué fecha hasta qué fecha</b>: por ejemplo, desde hoy hasta
+      que termine el año.</li>
+    <li>Elegí el horario y tildá las computadoras.</li>
+    <li>Confirmá.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-06-reserva-semanal.png" alt="Formulario de reserva que se repite todas las semanas">
+    <figcaption>La reserva semanal pide, además, entre qué fechas se repite.</figcaption>
+  </figure>
+
+  <div class="nota">
+    <span class="titulo">Después podés tocar una sola clase</span>
+    Si una semana no vas a dar la clase, cancelás <b>solo esa fecha</b> y las demás
+    quedan en pie. Lo ves en el capítulo 8.
+  </div>
+</section>
+
+<!-- 8 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">8</span>Ver, cambiar y cancelar lo que reservaste</h2>
+
+  <p class="entrada">
+    Todo junto está en <b>Reservas</b>, arriba a la izquierda.
+  </p>
+
+  <figure>
+    <img src="imagenes/docente-07-mis-reservas.png" alt="Lista de reservas con sus botones">
+    <figcaption>Cada tarjeta es una clase.</figcaption>
+  </figure>
+
+  <ol class="referencias">
+    <li>Empezar una reserva nueva.</li>
+    <li>Ver también las que ya cancelaste (normalmente no se muestran).</li>
+    <li>El estado de la clase. <b>Confirmada</b> quiere decir que está todo bien.</li>
+    <li>Cambiar una de las computadoras por otra.</li>
+    <li>Cancelar esa clase.</li>
+  </ol>
+
+  <h3>Cambiar una computadora</h3>
+  <p>
+    Sirve cuando una máquina puntual no te sirve —por ejemplo, la que reservaste
+    no tiene el programa que necesitás—. La clase queda igual: no se cancela ni
+    hay que volver a reservar.
+  </p>
+
+  <ol class="pasos">
+    <li>Tocá <span class="boton">Cambiar computadora</span> en esa clase.</li>
+    <li>En <b>¿Cuál cambiás?</b> elegí la que querés soltar.</li>
+    <li>En <b>¿Por cuál?</b> elegí una de las que están libres en ese mismo horario.</li>
+    <li>Tocá <span class="boton">Cambiar</span>.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-09-cambiar-computadora.png" alt="Panel para cambiar una computadora de la reserva">
+    <figcaption>Solo aparecen las computadoras que están libres en ese horario.</figcaption>
+  </figure>
+
+  <h3>Cancelar una clase</h3>
+
+  <ol class="pasos">
+    <li>Tocá <span class="boton">Cancelar</span> en la clase que no vas a dar.</li>
+    <li>Si querés, escribí el <b>motivo</b>. Es opcional, pero ayuda al que después
+      mira el historial.</li>
+    <li>Si la clase se repite todas las semanas, elegí si cancelás
+      <b>solo esa fecha</b> o <b>esa y todas las siguientes</b>.</li>
+    <li>Tocá <span class="boton">Confirmar cancelación</span>.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-08-cancelar.png" alt="Panel de confirmación de cancelación">
+    <figcaption>Antes de cancelar, el sistema te dice cuántas computadoras se liberan.</figcaption>
+  </figure>
+
+  <div class="ojo">
+    <span class="titulo">Cancelar es para la clase entera</span>
+    Al cancelar se sueltan <b>todas</b> las computadoras de esa clase, no una sola.
+    Si lo que querés es quedarte con menos máquinas, tenés dos caminos: cambiar la
+    que no vas a usar por otra, o cancelar la clase y volver a reservarla con la
+    cantidad que necesitás.
+  </div>
+
+  <div class="nota">
+    <span class="titulo">Cancelá apenas lo sepas</span>
+    Una computadora que soltás vuelve a la lista de libres y otro docente la puede
+    usar. Cancelar a tiempo es lo que hace que el sistema le sirva a todos.
+  </div>
+</section>
+
+<!-- 9 ─────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">9</span>Avisar que una computadora no anda</h2>
+
+  <p class="entrada">
+    Si una máquina no enciende, se apaga sola, no tiene el programa o le falta
+    algo, contalo acá. Los Admin lo ven y queda registrado.
+  </p>
+
+  <ol class="pasos">
+    <li>En la pantalla de inicio, tocá <b>Avisar que una no anda</b>.</li>
+    <li>Elegí <b>cuál</b> es, de la lista.</li>
+    <li>Contá <b>qué le pasa</b>, con tus palabras. No hace falta que sepas de
+      computadoras: «aprieto el botón y no prende» es una descripción perfecta.</li>
+    <li>Elegí qué tan <b>grave</b> es y mandalo.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-11-avisar-falla.png" alt="Formulario para reportar que un equipo no funciona">
+    <figcaption>Cuanto más concreto, mejor: qué hiciste y qué pasó.</figcaption>
+  </figure>
+
+  <div class="nota">
+    <span class="titulo">Qué pasa después</span>
+    El aviso queda cargado en esa computadora. Si la falla es seria, un Admin la
+    saca de circulación para que nadie la reserve hasta arreglarla.
+  </div>
+</section>
+
+<!-- 10 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">10</span>Ver qué computadoras hay</h2>
+
+  <p class="entrada">
+    En <b>Computadoras</b>, arriba, está todo el equipamiento de la escuela.
+  </p>
+
+  <ol class="pasos">
+    <li>Tocá <b>Computadoras</b> en la barra de arriba.</li>
+    <li>Tocá <span class="boton">Ver equipos</span> en el carro que te interese.</li>
+    <li>Vas a ver cada máquina con los programas que tiene instalados y su estado.</li>
+    <li>Tocando una computadora se abre su <b>calendario</b>: qué días y horas está
+      reservada, y por quién.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-10-computadoras.png" alt="Listado de computadoras de un carro">
+    <figcaption>Cada máquina, con sus programas y su estado.</figcaption>
+  </figure>
+
+  <div class="nota">
+    <span class="titulo">Para qué te sirve el calendario</span>
+    Si necesitás una máquina puntual —la única que tiene cierto programa— podés
+    mirar cuándo está libre antes de armar tu reserva.
+  </div>
+</section>
+
+<!-- 11 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">11</span>Los avisos</h2>
+
+  <p class="entrada">
+    El sistema te avisa lo que te afecta: que te cancelaron una clase, que una
+    computadora que reservaste puede no estar, que alguien te contestó.
+  </p>
+
+  <ol class="pasos">
+    <li>Tocá <b>Avisos</b> en la barra de arriba. El número rojo es lo que tenés sin
+      leer.</li>
+    <li>Leé el aviso. Cada uno cuenta qué pasó y, si corresponde, el motivo.</li>
+    <li>Tocá <span class="boton">Marcar como leída</span> para sacarlo de la lista, o
+      <span class="boton">Marcar todas como leídas</span> si querés limpiar todo.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-12-avisos.png" alt="Pantalla de avisos">
+    <figcaption>Los avisos sin leer quedan primero. Tildando «Mostrar también las
+      leídas» aparecen los viejos.</figcaption>
+  </figure>
+
+  <div class="nota">
+    <span class="titulo">Los avisos no se pierden</span>
+    Aunque apagues los correos (capítulo 12), <b>todos</b> los avisos siguen
+    apareciendo acá. Lo que se elige es si además te llegan por mail, no si te
+    enterás.
+  </div>
+</section>
+
+<!-- 12 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">12</span>Qué te llega por correo</h2>
+
+  <p class="entrada">
+    Si te llegan demasiados correos, podés elegir cuáles querés recibir. Los demás
+    los seguís viendo dentro del sistema.
+  </p>
+
+  <ol class="pasos">
+    <li>Entrá a <b>Avisos</b>.</li>
+    <li>Buscá el recuadro <b>Copias por correo</b> y tocá
+      <span class="boton">Elegir cuáles</span>.</li>
+    <li>Destildá los que no querés recibir por mail y tildá los que sí.</li>
+    <li>Guardá.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-14-copias-por-correo.png" alt="Panel para elegir qué avisos llegan por correo">
+    <figcaption>Cada renglón explica de qué avisa ese correo.</figcaption>
+  </figure>
+
+  <div class="ojo">
+    <span class="titulo">Hay tres que no se pueden apagar</span>
+    El código para recuperar tu contraseña, el aviso de que aprobaron tu cuenta y
+    las respuestas a tus pedidos de ayuda llegan siempre. Los dos primeros porque
+    no están en ningún otro lado; el tercero porque del otro lado hay alguien
+    esperando que le contestes.
+  </div>
+</section>
+
+<!-- 13 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">13</span>Pedir ayuda</h2>
+
+  <p class="entrada">
+    Si algo no te sale, no anda o se te ocurre una mejora, escribilo desde acá. Le
+    llega al equipo de administración y te contestan por el mismo lugar.
+  </p>
+
+  <ol class="pasos">
+    <li>Tocá <span class="boton">Pedir ayuda</span>, arriba a la derecha. Está en
+      todas las pantallas.</li>
+    <li>Elegí de qué se trata: <b>Pedido de ayuda</b> (necesitás una mano ahora),
+      <b>Algo no anda</b> (algo del sistema falla) o <b>Una idea</b> (una sugerencia).</li>
+    <li>Escribí un título corto y después contá con tus palabras qué querías hacer y
+      qué pasó.</li>
+    <li>Tocá <span class="boton">Mandar</span>.</li>
+  </ol>
+
+  <div class="nota">
+    <span class="titulo">No hace falta que sepas por qué pasa</span>
+    Con contar qué querías hacer y qué viste alcanza. Del otro lado se ocupan de
+    averiguar el resto.
+  </div>
+
+  <h3>Seguir la conversación</h3>
+  <p>
+    Cuando te contestan, te llega un correo y además lo ves en <b>Avisos</b>. La
+    respuesta no cierra el tema: podés seguir escribiendo si no se resolvió, y la
+    conversación queda completa en un solo lugar.
+  </p>
+
+  <figure>
+    <img src="imagenes/docente-13-conversacion.png" alt="Conversación de un pedido de ayuda">
+    <figcaption>Tu mensaje y la respuesta, uno abajo del otro. Abajo escribís de nuevo
+      si hace falta.</figcaption>
+  </figure>
+</section>
+
+<!-- 14 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">14</span>Tu perfil</h2>
+
+  <p class="entrada">
+    Se llega tocando tus iniciales, arriba a la derecha. Ahí está tu foto, las
+    materias que dictás y tu contraseña.
+  </p>
+
+  <figure>
+    <img src="imagenes/docente-15-perfil.png" alt="Pantalla de perfil del docente">
+    <figcaption>Todo lo tuyo, en una sola pantalla.</figcaption>
+  </figure>
+
+  <h3>Tu foto</h3>
+  <p>
+    Es opcional. Si no ponés ninguna, se muestran tus iniciales. Sirve para que en
+    el laboratorio te reconozcan al entregarte las máquinas.
+  </p>
+
+  <h3>Las materias que das</h3>
+  <p>
+    Son las materias para las que podés reservar. Si te falta una, tocá
+    <b>Pedir otra materia</b>: elegís la materia de la lista —o contás cuál es, si
+    todavía no está cargada—, explicás por qué la pedís y mandás el pedido. Lo
+    resuelve una persona, no es automático, y si esa materia ya la da otro docente,
+    a esa persona también le avisan.
+  </p>
+
+  <h3>Cambiar tu contraseña</h3>
+  <ol class="pasos">
+    <li>En tu perfil, tocá <span class="boton">Cambiar mi contraseña</span>.</li>
+    <li>Escribí la contraseña que usás <b>hoy</b>.</li>
+    <li>Escribí la <b>nueva</b> y confirmá.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/docente-16-cambiar-contrasena.png" alt="Pantalla para cambiar la contraseña">
+    <figcaption>Hace falta la actual: es lo que impide que otro te la cambie si dejaste
+      la sesión abierta.</figcaption>
+  </figure>
+</section>
+
+<!-- 15 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">15</span>Quién te puede ayudar en el laboratorio</h2>
+
+  <p class="entrada">
+    En <b>Horario Admins</b> ves en qué días y horarios está cada Admin.
+  </p>
+
+  <figure>
+    <img src="imagenes/docente-17-horario-admins.png" alt="Pantalla con la disponibilidad de los Admin">
+    <figcaption>Es informativo: sirve para saber a quién buscar y cuándo.</figcaption>
+  </figure>
+
+  <p>
+    Esta pantalla no cambia nada de lo que podés hacer en el sistema. Está para que
+    no camines hasta el laboratorio en un horario en el que no hay nadie.
+  </p>
+</section>
+
+<!-- 16 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">16</span>Usarlo desde el teléfono</h2>
+
+  <p class="entrada">
+    El sistema anda igual en el celular. Es la misma dirección y la misma cuenta.
+  </p>
+
+  <figure>
+    <img src="imagenes/docente-18-telefono.png" alt="El sistema visto en un teléfono">
+    <figcaption>En el teléfono, el menú se abre con el botón <b>Menú</b>, arriba a la derecha.</figcaption>
+  </figure>
+
+  <ul class="simple">
+    <li>Todo lo que hacés en la computadora lo podés hacer en el teléfono.</li>
+    <li>Los enlaces de arriba se guardan detrás del botón <b>Menú</b>, arriba a la derecha. El puntito rojo avisa que tenés algo sin leer.</li>
+    <li>Conviene guardar la dirección en la pantalla de inicio del teléfono, así la
+      tenés como si fuera una aplicación.</li>
+  </ul>
+</section>
+
+<!-- 17 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">17</span>Si algo no sale como esperabas</h2>
+
+  <div class="pregunta">
+    <h3>No puedo entrar: dice que el email o la contraseña no son correctos</h3>
+    <p>Fijate que el email esté completo y sin espacios. Si estás seguro de la
+      contraseña, puede que tu cuenta todavía no esté aprobada, o que hayas entrado
+      siempre con el botón de Google. Si no, usá «Olvidé mi contraseña».</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Creé la cuenta pero no me deja entrar</h3>
+    <p>Falta que un Admin la apruebe. Te va a llegar un correo cuando lo haga.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Al reservar no me aparece ninguna materia</h3>
+    <p>Quiere decir que todavía no estás anotado en ninguna. Entrá a tu perfil y usá
+      <b>Pedir otra materia</b>, o pasá por el laboratorio.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Elegí día y hora y no aparece ninguna computadora libre</h3>
+    <p>O están todas tomadas en ese horario —el sistema te muestra quién las tiene—,
+      o la hora que pusiste queda fuera del horario en que abre la escuela. Probá
+      corriendo el horario.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Me cancelaron una clase que había reservado</h3>
+    <p>Vas a tener un aviso con el motivo, y también un correo. Suele pasar cuando el
+      laboratorio necesita las máquinas para una evaluación o una jornada. Si te deja
+      sin clase, escribí por <b>Pedir ayuda</b>.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Reservé y al final no fui a buscar las computadoras</h3>
+    <p>Pasado un rato, el sistema las libera solo para que otro las pueda usar, y
+      queda registrado que no se retiraron. No es una sanción, pero conviene cancelar
+      cuando sabés que no vas a ir.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Necesito más computadoras de las que reservé</h3>
+    <p>No se le agregan máquinas a una reserva hecha. Cancelala y hacé una nueva con
+      la cantidad que necesitás; si las querés asegurar, hacelo cuanto antes.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Me equivoqué en el horario</h3>
+    <p>Cancelá esa clase y reservá de nuevo con el horario correcto.</p>
+  </div>
+
+  <div class="pregunta">
+    <h3>Toqué algo y no sé qué hice</h3>
+    <p>Ninguna pantalla borra nada sin preguntar antes. Tocá el logo <b>SGRC</b> para
+      volver al principio y, si quedaste con la duda, escribí por
+      <b>Pedir ayuda</b>: preguntar no molesta a nadie.</p>
+  </div>
+</section>
+
+<!-- 18 ────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">18</span>Las palabras que vas a ver</h2>
+
+  <dl class="glosario">
+    <dt>Carro</dt>
+    <dd>El mueble con ruedas donde se guardan y se cargan las computadoras. Cada
+      carro tiene un nombre y adentro varias máquinas numeradas.</dd>
+
+    <dt>Equipo</dt>
+    <dd>Cualquier cosa que se preste: una computadora, un proyector, un cargador.
+      La mayoría son computadoras.</dd>
+
+    <dt>Reserva</dt>
+    <dd>Apartar computadoras para una materia, un día y un horario. No implica
+      tenerlas en la mano: eso es la entrega.</dd>
+
+    <dt>Entrega y devolución</dt>
+    <dd>El momento en que el Admin te da las máquinas en el laboratorio y el momento
+      en que las devolvés. Queda registrado en el sistema.</dd>
+
+    <dt>Bloqueo</dt>
+    <dd>Cuando el laboratorio toma computadoras para otra cosa —una evaluación, una
+      jornada— y eso cancela las reservas que se pisan. Siempre viene con un motivo.</dd>
+
+    <dt>Incidencia</dt>
+    <dd>El aviso de que una computadora no anda. Es lo que cargás desde «Avisar que
+      una no anda».</dd>
+
+    <dt>Licencia</dt>
+    <dd>El permiso para usar un programa, que vence y hay que renovar. Lo maneja el
+      equipo de administración; a vos te importa solo si un programa deja de andar.</dd>
+
+    <dt>Admin</dt>
+    <dd>La persona del equipo de administración del laboratorio: aprueba cuentas,
+      entrega las máquinas y contesta los pedidos de ayuda.</dd>
+  </dl>
+
+  <div class="listo" style="margin-top:10mm">
+    <span class="titulo">Una última cosa</span>
+    Si después de leer esto te queda una duda, escribila por
+    <b>Pedir ayuda</b>. Las preguntas que se repiten son las que hacen que la próxima
+    versión de esta guía sea mejor.
+  </div>
+</section>
