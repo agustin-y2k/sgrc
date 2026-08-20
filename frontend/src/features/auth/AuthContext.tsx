@@ -43,10 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Si había una sesión abierta EN ESTA VISITA. Es un ref y no un estado
   // porque lo lee el manejador de abajo, que se registra una sola vez y se
   // quedaría con el valor del primer render.
+  //
+  // Se marca donde la sesión se abre (loadUser) y no en un useEffect sobre
+  // `user`: un efecto pasivo corre DESPUÉS del commit, así que quedaba una
+  // ventana en la que la pantalla ya mostraba a la persona y esto seguía en
+  // false. Un 401 que cayera justo ahí cerraba la sesión sin explicar por qué.
   const habiaSesionAbierta = useRef(false)
-  useEffect(() => {
-    if (user) habiaSesionAbierta.current = true
-  }, [user])
 
   // El backend puede rechazar el token en cualquier request, no solo en el
   // GET /me del arranque: la cuenta se dio de baja (RF-02.8), o alguien
@@ -80,7 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
-      setUser(await authApi.me())
+      const usuario = await authApi.me()
+      habiaSesionAbierta.current = true
+      setUser(usuario)
       setErrorDeSesion(null)
     } catch (err) {
       const tokenRechazado =
