@@ -81,6 +81,12 @@ dejar como vienen:
 | `JWT_SECRET` | El secreto que firma las sesiones | `openssl rand -base64 48` |
 | `SEED_ADMIN_PASSWORD` | La contraseña del primer Admin | La elegís vos, mínimo 8 caracteres |
 | `TUNNEL_TOKEN` | El token del túnel | Lo da el panel de Cloudflare |
+| `GRAFANA_PASSWORD` | La contraseña de `admin` en Grafana, solo si vas a levantar los tableros | `openssl rand -base64 24` |
+
+> `GRAFANA_PASSWORD` se siembra **una sola vez, en el primer arranque de
+> Grafana**: después el usuario vive en el volumen `grafana-datos` y editar el
+> `.env` ya no la cambia. Si hay que cambiarla más tarde,
+> `docker compose exec grafana grafana cli admin reset-admin-password '…'`.
 
 El resto tiene valores razonables por defecto, salvo dos que dependen del
 dominio:
@@ -95,6 +101,29 @@ dominio:
 
 > El `.env` no se comparte ni se publica: tiene la contraseña de la base y el
 > secreto de las sesiones.
+
+#### Poner al día un `.env` que ya está en uso
+
+Un `.env` de servidor envejece de una manera particular: los valores están
+bien, pero le faltan los comentarios que explican cada variable y las que se
+agregaron en versiones posteriores. Para volver a juntarlo con el ejemplo, sin
+tocar ningún valor:
+
+```bash
+umask 077                                   # el archivo nuevo, solo para vos
+./scripts/env-con-comentarios.sh > .env.nuevo
+diff .env .env.nuevo                        # mirar antes de reemplazar
+cp .env .env.respaldo && mv .env.nuevo .env
+```
+
+Toma la estructura y los comentarios de `.env.example`, y para cada variable
+usa **el valor que ya tenías**. Lo que el ejemplo trae y tu instalación no
+tiene queda con el valor de ejemplo y se avisa por pantalla; lo que tenés vos y
+el ejemplo no conoce se conserva al final del archivo, en su propia sección.
+Nada se descarta en silencio.
+
+El script escribe a la salida estándar y nunca pisa el `.env` en uso: el
+reemplazo es una decisión tuya, después de leer el `diff`.
 
 ### 1.1.b Configurar el correo (opcional, pero conviene)
 
@@ -496,6 +525,36 @@ Mandar otro al liberar sería un segundo mensaje por la misma clase para contar
 un hecho consumado. Si se sube `RETIRO_AVISO_MINUTOS` por encima de
 `RETIRO_GRACIA_MINUTOS`, el aviso pierde su razón de ser —llegaría con la
 reserva ya liberada—, así que esa combinación se rechaza al arrancar.
+
+#### `CIERRE_JORNADA`: el corte de lo que quedó afuera
+
+Es una **hora de reloj** (0-23, en la zona de `APP_TIMEZONE`) y **no tiene
+ninguna relación con la jornada institucional** que se declara desde la
+pantalla de Admin: son dos cosas con nombres parecidos que no se hablan. Lo
+único que hace el barrido es preguntar, cada cinco minutos, si la hora actual
+llegó a ese número; si llegó y hay equipos afuera que todavía no se avisaron
+hoy, sale un aviso a todos los Admin con la lista y con a quién le va a faltar
+esa máquina en su próxima reserva.
+
+Cada préstamo queda marcado con la fecha del aviso, así que el corte sale **una
+vez por día y por equipo**, y se repite al día siguiente si la máquina sigue
+afuera.
+
+De ese diseño salen dos consecuencias que conviene conocer antes de elegir el
+número:
+
+- **Pasada esa hora, el corte es casi inmediato.** Un equipo entregado a las 19
+  en una instalación con `CIERRE_JORNADA=18` aparece en el aviso de la barrida
+  siguiente, cinco minutos después: no espera a ningún cierre.
+- **Entre la medianoche y esa hora no hay corte**, porque la comparación es
+  contra la hora del reloj. En una escuela nocturna que cierra a la 01:00,
+  dejar 18 no sirve —el aviso saldría antes de que la escuela abra, y todo lo
+  que se entregue durante la noche se avisaría a los cinco minutos—. Lo más
+  cercano es poner la hora real de cierre del laboratorio (23, por ejemplo),
+  aceptando que lo entregado después se avisa enseguida. **Un turno que cruza
+  la medianoche no se puede expresar con una sola hora**: es un límite conocido
+  del diseño actual, el mismo que la jornada institucional sí resuelve
+  permitiendo que la hora de cierre sea menor que la de apertura.
 
 **Ningún aviso depende de que el barrido corra a una hora exacta.** Cada uno
 deja su marca en la fila, así que reiniciar el contenedor o estar caído dos
