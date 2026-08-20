@@ -1272,6 +1272,21 @@ func TestRegistrar_NombreVacio_ErrorDeDatosObligatorios(t *testing.T) {
 	}
 }
 
+// El registro y la edición del perfil comparten la misma regla de largo
+// (domain.NormalizarNombreYApellido). Sin esto, un nombre de más de 100
+// caracteres pasaba el servicio y reventaba contra el VARCHAR(100) como 500.
+func TestRegistrar_NombreDemasiadoLargo_Rechazado(t *testing.T) {
+	svc := nuevoServicioDeTest(nuevoFakeRepo())
+
+	_, err := svc.Registrar(context.Background(),
+		strings.Repeat("a", domain.LargoMaxNombre+1), "Perez", "juan@escuela.edu.ar",
+		"unaClave123", SolicitudDeAsignacion{})
+
+	if !errors.Is(err, domain.ErrNombreDemasiadoLargo) {
+		t.Fatalf("esperaba ErrNombreDemasiadoLargo, obtuve %v", err)
+	}
+}
+
 // RF-01.3 + RF-02.6: lo que el docente declara al registrarse es lo que el
 // Admin va a leer al aprobarlo, así que tiene que llegar hasta la fila.
 func TestRegistrar_GuardaLaMateriaYElCursoSolicitados(t *testing.T) {

@@ -93,6 +93,21 @@ export type RegistroRequest = {
   rolSolicitado?: RolSolicitado
 }
 
+/** PATCH /api/auth/mi-perfil — cambiar el propio nombre y apellido. */
+export type ActualizarMisDatosRequest = {
+  nombre: string
+  apellido: string
+}
+
+/**
+ * El token viene en la respuesta porque el anterior lleva el nombre viejo en
+ * los claims: hay que reemplazarlo para que deje de mentir.
+ */
+export type ActualizarMisDatosResponse = {
+  usuario: Usuario
+  token: string
+}
+
 export type CambiarPasswordRequest = {
   passwordActual: string
   passwordNueva: string

@@ -3731,6 +3731,46 @@ paths:
                         cicloAnio: { type: integer }
 
   # ─────────────────────────────────────────
+  # PERFIL: MIS DATOS
+  # ─────────────────────────────────────────
+  /api/auth/mi-perfil:
+    patch:
+      tags: [auth]
+      summary: Cambiar el propio nombre y apellido (RF-01.12)
+      description: >
+        Autoservicio, sin aprobación de nadie. No recibe ningún id: la cuenta
+        sale del token, así que nadie cambia el nombre de otro por acá. Los dos
+        campos son obligatorios y se recortan los espacios; el largo máximo es
+        de 100 caracteres cada uno, el de la columna. El email no se edita.
+        Queda auditado como `NOMBRE_CAMBIADO`.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, apellido]
+              properties:
+                nombre: { type: string, maxLength: 100 }
+                apellido: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: >
+            El usuario ya actualizado y un token nuevo. El anterior lleva el
+            nombre viejo en los claims (RF-01.2) y el cliente tiene que
+            reemplazarlo, igual que en POST /api/auth/cambiar-password.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario: { $ref: "#/components/schemas/Usuario" }
+                  token: { type: string }
+        "400": { description: Nombre o apellido vacío, o de más de 100 caracteres }
+        "401": { description: Sin token }
+
+  # ─────────────────────────────────────────
   # PERFIL: FOTO
   # ─────────────────────────────────────────
   /api/auth/mi-foto:

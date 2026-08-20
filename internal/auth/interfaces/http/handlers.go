@@ -185,6 +185,34 @@ func (h *Handler) Me(c *fiber.Ctx) error {
 	return c.JSON(toUsuarioResponse(u))
 }
 
+// PATCH /api/auth/mi-perfil — cambiar el propio nombre y apellido.
+func (h *Handler) ActualizarMisDatos(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	var req actualizarMisDatosRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+
+	u, token, err := h.svc.ActualizarMisDatos(c.UserContext(), claims.UserID, req.Nombre, req.Apellido)
+	if err != nil {
+		return mapearError(err)
+	}
+
+	// Se audita aunque el actor sea el dueño de la cuenta: el nombre es con lo
+	// que el resto de la escuela lo identifica en las reservas y en las
+	// entregas, así que quién lo cambió y cuándo tiene que quedar registrado.
+	h.auditar(c, u.ID, audit.NombreCambiado, "usuario", &u.ID, map[string]any{
+		"nombre":   u.Nombre,
+		"apellido": u.Apellido,
+	})
+
+	return c.JSON(actualizarMisDatosResponse{Usuario: toUsuarioResponse(u), Token: token})
+}
+
 // POST /api/auth/cambiar-password
 func (h *Handler) CambiarPassword(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)

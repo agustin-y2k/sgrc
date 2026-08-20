@@ -83,7 +83,10 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrFotoVacia),
 		errors.Is(err, domain.ErrFotoTipo),
 		errors.Is(err, domain.ErrFotoCorrupta),
-		errors.Is(err, domain.ErrEmailInvalido):
+		errors.Is(err, domain.ErrEmailInvalido),
+		// Los del nombre propio, tanto en el registro como en Mi perfil.
+		errors.Is(err, domain.ErrNombreVacio),
+		errors.Is(err, domain.ErrNombreDemasiadoLargo):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 
 	// 413 tiene su propio código: el archivo es una imagen, pero no entra.

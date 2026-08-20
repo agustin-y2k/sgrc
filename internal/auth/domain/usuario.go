@@ -8,6 +8,7 @@ import (
 	"net/mail"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Rol de un usuario. Solo dos valores posibles en todo el sistema
@@ -100,6 +101,37 @@ func (e Estado) PuedeTransicionarA(nuevo Estado) bool {
 // mensaje para que el error sea depurable sin tener que ir a buscar el
 // diagrama de estados.
 var ErrTransicionInvalida = errors.New("transición de estado inválida")
+
+// LargoMaxNombre es lo que entra en las columnas nombre y apellido
+// (VARCHAR(100) en migrations/001_esquema_inicial.sql).
+const LargoMaxNombre = 100
+
+// ErrNombreVacio y ErrNombreDemasiadoLargo son las dos formas en que un
+// nombre no sirve.
+var (
+	ErrNombreVacio = errors.New("el nombre y el apellido son obligatorios")
+
+	ErrNombreDemasiadoLargo = fmt.Errorf(
+		"el nombre y el apellido no pueden tener más de %d caracteres", LargoMaxNombre)
+)
+
+// NormalizarNombreYApellido recorta los espacios y aplica la única regla que
+// tiene un nombre propio en este sistema: que exista y que entre en la
+// columna. Vive en el dominio porque son dos las puertas por las que se
+// escribe —el registro y la edición del propio perfil— y hasta ahora el largo
+// lo cortaba solamente el formulario del navegador.
+func NormalizarNombreYApellido(nombre, apellido string) (string, string, error) {
+	nombre, apellido = strings.TrimSpace(nombre), strings.TrimSpace(apellido)
+	if nombre == "" || apellido == "" {
+		return "", "", ErrNombreVacio
+	}
+	// Se cuentan runas y no bytes: VARCHAR(100) en Postgres son 100
+	// caracteres, y un apellido con eñes o acentos ocupa más bytes que letras.
+	if utf8.RuneCountInString(nombre) > LargoMaxNombre || utf8.RuneCountInString(apellido) > LargoMaxNombre {
+		return "", "", ErrNombreDemasiadoLargo
+	}
+	return nombre, apellido, nil
+}
 
 // ErrEmailInvalido se devuelve cuando un string no tiene forma de email.
 var ErrEmailInvalido = errors.New("el email no tiene un formato válido")

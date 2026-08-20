@@ -382,6 +382,93 @@ func TestHTTP_Me_ConToken_OK(t *testing.T) {
 	}
 }
 
+// ── PATCH /api/auth/mi-perfil ───────────────────────────────────────────
+
+func TestHTTP_ActualizarMisDatos_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron",
+		Email: "ada@x.com", Estado: domain.EstadoAprobada}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+		Nombre: "Ada", Apellido: "Lovelace",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+
+	var body actualizarMisDatosResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if body.Usuario.Apellido != "Lovelace" {
+		t.Errorf("esperaba el apellido nuevo en la respuesta, obtuve %q", body.Usuario.Apellido)
+	}
+	// Sin el token nuevo el cliente se quedaría con el nombre viejo en los
+	// claims hasta el próximo ingreso.
+	if body.Token == "" {
+		t.Error("la respuesta tiene que traer un token nuevo")
+	}
+}
+
+// El nombre propio se cambia solo, no el de otro: el endpoint no recibe
+// ningún id, sale del token.
+func TestHTTP_ActualizarMisDatos_SinToken_401(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+		Nombre: "Ada", Apellido: "Lovelace",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("esperaba 401, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_ActualizarMisDatos_NombreVacio_400(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron"}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+		Nombre: "  ", Apellido: "Lovelace",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_ActualizarMisDatos_DemasiadoLargo_400(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron"}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+		Nombre: strings.Repeat("a", domain.LargoMaxNombre+1), Apellido: "Lovelace",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	// 400 y no el 500 que daría el INSERT contra VARCHAR(100).
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+}
+
 // ── Rutas solo-Admin: RBAC real de punta a punta ───────────────────────
 
 func TestHTTP_ListarUsuarios_ComoDocente_403(t *testing.T) {

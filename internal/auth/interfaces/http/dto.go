@@ -47,6 +47,20 @@ type googleRegistroRequest struct {
 	RolSolicitado     string `json:"rolSolicitado,omitempty"` // TITULAR | SUPLENTE
 }
 
+// actualizarMisDatosRequest es la edición del propio nombre desde Mi perfil.
+type actualizarMisDatosRequest struct {
+	Nombre   string `json:"nombre"`
+	Apellido string `json:"apellido"`
+}
+
+// actualizarMisDatosResponse trae el usuario ya actualizado y, además, un
+// token nuevo: el anterior lleva el nombre viejo en los claims y el cliente
+// tiene que reemplazarlo para que deje de mentir.
+type actualizarMisDatosResponse struct {
+	Usuario usuarioResponse `json:"usuario"`
+	Token   string          `json:"token"`
+}
+
 type cambiarPasswordRequest struct {
 	PasswordActual string `json:"passwordActual"`
 	PasswordNueva  string `json:"passwordNueva"`

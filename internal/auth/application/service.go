@@ -138,15 +138,19 @@ func (s *Service) CrearAdmin(ctx context.Context, creadoPorID, nombre, apellido,
 // CrearAdmin — lo único que cambia entre los dos casos es el rol, el estado
 // inicial, y si hay que dejar registro de quién aprobó.
 func (s *Service) crearUsuario(ctx context.Context, nombre, apellido, email, password string, rol domain.Rol, estadoInicial domain.Estado, aprobadoPor *string, solicitud SolicitudDeAsignacion) (*domain.Usuario, error) {
-	nombre = strings.TrimSpace(nombre)
-	apellido = strings.TrimSpace(apellido)
 	// El email se normaliza ANTES de buscarlo y de guardarlo, así la comparación
 	// contra lo que ya existe y lo que termina en la fila usan la misma forma
 	// (ver domain.NormalizarEmail).
 	email = domain.NormalizarEmail(email)
 
-	if nombre == "" || apellido == "" || email == "" {
+	nombre, apellido, errNombre := domain.NormalizarNombreYApellido(nombre, apellido)
+	if errors.Is(errNombre, domain.ErrNombreVacio) || email == "" {
+		// ErrDatosObligatorios y no el error del dominio: acá los campos
+		// obligatorios son tres, y el mensaje tiene que nombrarlos a los tres.
 		return nil, ErrDatosObligatorios
+	}
+	if errNombre != nil {
+		return nil, errNombre
 	}
 	if err := domain.ValidarEmail(email); err != nil {
 		return nil, err
@@ -323,12 +327,17 @@ func (s *Service) RegistrarConGoogle(ctx context.Context, idToken, nombre, apell
 		return nil, err
 	}
 
-	nombre = primeroNoVacio(strings.TrimSpace(nombre), identidad.Nombre)
-	apellido = primeroNoVacio(strings.TrimSpace(apellido), identidad.Apellido)
 	email := domain.NormalizarEmail(identidad.Email)
 
-	if nombre == "" || apellido == "" || email == "" {
+	nombre, apellido, errNombre := domain.NormalizarNombreYApellido(
+		primeroNoVacio(strings.TrimSpace(nombre), identidad.Nombre),
+		primeroNoVacio(strings.TrimSpace(apellido), identidad.Apellido),
+	)
+	if errors.Is(errNombre, domain.ErrNombreVacio) || email == "" {
 		return nil, ErrDatosObligatorios
+	}
+	if errNombre != nil {
+		return nil, errNombre
 	}
 	if err := domain.ValidarEmail(email); err != nil {
 		return nil, err
