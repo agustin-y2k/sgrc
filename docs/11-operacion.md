@@ -258,6 +258,36 @@ La diferencia que importa:
   con usuarios, reservas e inventario. Es útil solo para empezar de cero en
   desarrollo. No hay forma de deshacerlo sin un backup (§6).
 
+### Si el túnel no es el del compose
+
+En una instalación donde el Cloudflare Tunnel ya existía antes que este
+proyecto —creado desde el panel, compartido con otros sitios del mismo
+servidor— el servicio `cloudflared` del compose **no sirve**: vive solo en
+`sgrc-net` y no podría resolver nada de afuera. Y `make run-prod` lo levanta
+igual, así que muere en cada arranque con «Provided Tunnel token is not valid».
+
+Para esos casos:
+
+```bash
+make levantar              # postgres, sgrc-app y frontend, nada más
+make levantar TABLEROS=1   # además Prometheus y Grafana
+```
+
+Levanta nombrando los servicios y, al terminar, **reconecta el túnel externo a
+la red** si encuentra un contenedor llamado `cloudflared`. Eso último importa
+después de cualquier `docker compose down`: la red se recrea y el túnel queda
+afuera, con el síntoma más difícil de diagnosticar que da este sistema —la pila
+entera sana y el sitio inalcanzable, sin una sola línea en los logs, porque el
+pedido nunca llega—. Si el túnel ya estaba conectado, lo dice y no hace nada;
+si no hay ninguno, tampoco falla.
+
+También se puede correr suelto, cuando el sitio dejó de responder sin motivo
+aparente:
+
+```bash
+make reconectar-tunel
+```
+
 El apagado es ordenado: al recibir la señal, la API deja de aceptar pedidos
 nuevos, termina los que estaban en curso (hasta 15 segundos), espera a que
 salgan las notificaciones pendientes y recién ahí cierra la conexión a la

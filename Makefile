@@ -1,4 +1,4 @@
-.PHONY: test lint build docker-build run dev rebuild dev-down run-prod stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report observabilidad observabilidad-stop
+.PHONY: test lint build docker-build run dev rebuild dev-down run-prod levantar reconectar-tunel stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report observabilidad observabilidad-stop
 
 test:
 	go test ./... -coverprofile=coverage.out
@@ -53,6 +53,47 @@ dev-down:
 # Levanta exactamente lo que corre en el servidor, sin puertos publicados.
 run-prod:
 	docker compose up --build
+
+# ── Despliegue con un túnel que NO es el del compose ──────────────────
+#
+# Cuando el Cloudflare Tunnel ya existía antes que este proyecto —creado
+# desde el panel, compartido con otros sitios del mismo servidor— el
+# `cloudflared` del compose no sirve: vive solo en sgrc-net y no podría
+# resolver lo que haya afuera. Pero `make run-prod` lo levanta igual, y sin
+# un TUNNEL_TOKEN válido muere con "Provided Tunnel token is not valid".
+#
+# Este target levanta el sistema NOMBRANDO los servicios, que es lo que hay
+# que hacer en esa instalación, y así deja de depender de que alguien se
+# acuerde de la lista.
+#
+#   make levantar                 el sistema
+#   make levantar TABLEROS=1      además Prometheus y Grafana
+#
+# Nombrar prometheus y grafana alcanza para levantarlos aunque estén en el
+# perfil `observabilidad`: Compose activa el perfil de un servicio que se
+# pide explícitamente.
+SERVICIOS := postgres sgrc-app frontend
+
+levantar:
+	docker compose up -d --build $(SERVICIOS) $(if $(TABLEROS),prometheus grafana)
+	@$(MAKE) --no-print-directory reconectar-tunel
+
+# Un `docker compose down` borra la red y la recrea al levantar, y el túnel
+# externo queda afuera: la pila entera sana y el sitio inalcanzable, sin nada
+# en los logs porque el pedido no llega nunca. Esto lo reconecta.
+#
+# Es idempotente y no falla si no hay ningún túnel externo: en una
+# instalación que usa el cloudflared del compose, no hace nada.
+reconectar-tunel:
+	@docker ps --format '{{.Names}}' | grep -qx cloudflared || { \
+		echo "sin túnel externo (contenedor 'cloudflared'): nada que reconectar"; exit 0; }; \
+	red=$$(docker inspect -f '{{range $$k, $$v := .NetworkSettings.Networks}}{{$$k}}{{end}}' \
+		$$(docker compose ps -q frontend)); \
+	if docker network connect $$red cloudflared 2>/dev/null; then \
+		echo "túnel reconectado a $$red"; \
+	else \
+		echo "el túnel ya estaba conectado a $$red"; \
+	fi
 
 # Apaga los contenedores sin borrarlos: los datos siguen ahí y run-prod
 # vuelve a levantar todo tal cual estaba.
