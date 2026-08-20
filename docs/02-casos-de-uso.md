@@ -163,15 +163,15 @@ flowchart LR
 - **Por qué se conserva la estructura académica pero no las reservas:** recrear "1°A" + "Matemáticas" + "el titular es Fulano" cada año es el trabajo tedioso que la clonación evita. Las reservas puntuales de un año que ya terminó no tienen valor operativo — solo estadístico, y ese valor queda cubierto por el snapshot histórico.
 - **El clonado se valida antes de empezar**: si el año destino ya existe o no es un año válido, la operación rebota sin archivar ni borrar nada. El archivado es irreversible y el clonado es el único paso que puede fallar por algo que el Admin tipeó, así que se comprueba primero. Si igual queda a medias, reintentar el archivado completa el clonado.
 
-### UC: Aprobar cuenta de docente
+### UC: Aprobar una cuenta pendiente
 - **Actor:** Admin
-- **Precondición:** Un docente se autorregistró y su cuenta está en estado `PENDIENTE`.
+- **Precondición:** Alguien se autorregistró y su cuenta está en estado `PENDIENTE`.
 - **Flujo:**
-  1. Docente se autorregistra, declarando —si quiere— qué curso y qué materia va a dictar → sistema notifica a todos los Admin (RF-05.6), sin necesidad de que revisen la lista manualmente.
+  1. La persona se autorregistra declarando su cargo (Docente o Administrador de Sistema) y si es titular o suplente, y —si da clase y ya lo sabe— qué curso y qué materia va a dictar → sistema notifica a todos los Admin (RF-05.6), sin necesidad de que revisen la lista manualmente.
   2. Admin ve la lista de cuentas pendientes, o llega directo desde el botón de la notificación.
-  3. La tarjeta de cada pendiente muestra lo que esa persona declaró, así el Admin sabe a qué materia y curso corresponde asignarla — y si todavía no existen, que los tiene que crear primero (RF-02.6).
-  4. Admin aprueba o rechaza.
-  5. Si aprueba, el docente puede iniciar sesión; para poder reservar, además hay que asignarlo a la materia desde Académico.
+  3. La tarjeta de cada pendiente muestra lo que esa persona declaró. Si es docente, a qué materia y curso corresponde asignarla —y si todavía no existen, que los tiene que crear primero (RF-02.6)—. Si se registró como Administrador de Sistema, la tarjeta lo dice y aclara que eso no le da permisos.
+  4. Admin aprueba o rechaza. **Aprobar significa lo mismo para todas las cuentas**, sin importar el cargo declarado.
+  5. Si aprueba, la persona puede iniciar sesión. Para poder reservar, además hay que asignarla a la materia desde Académico; para que administre el sistema, hay que promoverla desde Usuarios (RF-01.4). Un Administrador de Sistema que además dicte materias las pide desde su perfil una vez aprobado (RF-09/pedidos de materia).
 
 ### UC: Dar de baja a un docente
 - **Actor:** Admin

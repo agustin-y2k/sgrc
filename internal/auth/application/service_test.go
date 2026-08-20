@@ -279,6 +279,16 @@ func (f *fakeCanceladorReservas) CancelarReservasFuturasDeMateria(ctx context.Co
 	return f.canceladasPorMateria[materiaID], nil
 }
 
+// solicitudDeDocente es lo mínimo que el registro exige desde que hay que
+// declarar el cargo y el rol (RF-01.3). Los tests que no están probando esa
+// validación la usan para no repetir los dos campos en cada llamada.
+func solicitudDeDocente() SolicitudDeAsignacion {
+	return SolicitudDeAsignacion{
+		Cargo: domain.CargoSolicitadoDocente,
+		Rol:   domain.RolSolicitadoTitular,
+	}
+}
+
 func nuevoServicioDeTest(repo Repo) *Service {
 	return nuevoServicioConCascada(repo, nuevoFakeGestorMaterias(), nuevoFakeCanceladorReservas())
 }
@@ -350,7 +360,7 @@ func TestRegistrar_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", SolicitudDeAsignacion{})
+	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", solicitudDeDocente())
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -375,7 +385,7 @@ func TestRegistrar_PublicaEventoParaAdmins(t *testing.T) {
 		recibido <- e
 	})
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", SolicitudDeAsignacion{})
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", solicitudDeDocente())
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -394,7 +404,7 @@ func TestRegistrar_PublicaEventoParaAdmins(t *testing.T) {
 func TestRegistrar_PasswordCorta_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "1234567", SolicitudDeAsignacion{})
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "1234567", solicitudDeDocente())
 
 	if !errors.Is(err, ErrPasswordCorta) {
 		t.Fatalf("esperaba ErrPasswordCorta, obtuve %v", err)
@@ -406,7 +416,7 @@ func TestRegistrar_EmailYaExiste_Activo_Error(t *testing.T) {
 	repo.usuarios["existente"] = &domain.Usuario{ID: "existente", Email: "ada@escuela.edu.ar", Estado: domain.EstadoAprobada}
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", SolicitudDeAsignacion{})
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", solicitudDeDocente())
 
 	if !errors.Is(err, ErrEmailYaRegistrado) {
 		t.Fatalf("esperaba ErrEmailYaRegistrado, obtuve %v", err)
@@ -418,7 +428,7 @@ func TestRegistrar_EmailYaExiste_EnBaja_MensajeEspecifico(t *testing.T) {
 	repo.usuarios["viejo"] = &domain.Usuario{ID: "viejo", Email: "ada@escuela.edu.ar", Estado: domain.EstadoBaja}
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", SolicitudDeAsignacion{})
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", solicitudDeDocente())
 
 	if !errors.Is(err, ErrCuentaEnBaja) {
 		t.Fatalf("esperaba ErrCuentaEnBaja, obtuve %v", err)
@@ -430,7 +440,7 @@ func TestRegistrar_ErrorDelRepoAlCrear_SePropaga(t *testing.T) {
 	repo.errCrear = errors.New("la base está caída")
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", SolicitudDeAsignacion{})
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", solicitudDeDocente())
 
 	if err == nil {
 		t.Fatal("esperaba que el error del repo se propague")
@@ -445,7 +455,7 @@ func TestRegistrar_CamposObligatoriosVacios_Error(t *testing.T) {
 		{"Ada", "Lovelace", ""},
 	}
 	for _, c := range casos {
-		_, err := svc.Registrar(context.Background(), c.nombre, c.apellido, c.email, "password123", SolicitudDeAsignacion{})
+		_, err := svc.Registrar(context.Background(), c.nombre, c.apellido, c.email, "password123", solicitudDeDocente())
 		if err == nil {
 			t.Errorf("caso %+v: esperaba error por campo obligatorio vacío", c)
 		}
@@ -1200,7 +1210,7 @@ func TestLogin_OtraCapitalizacionDelMismoEmail_Entra(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	if _, err := svc.Registrar(context.Background(), "Juan", "Perez", "Juan.Perez@escuela.edu.ar", "unaClave123", SolicitudDeAsignacion{}); err != nil {
+	if _, err := svc.Registrar(context.Background(), "Juan", "Perez", "Juan.Perez@escuela.edu.ar", "unaClave123", solicitudDeDocente()); err != nil {
 		t.Fatalf("registro: %v", err)
 	}
 	// Aprobar para poder loguear (RF-01.3 deja la cuenta en PENDIENTE).
@@ -1224,11 +1234,11 @@ func TestLogin_OtraCapitalizacionDelMismoEmail_Entra(t *testing.T) {
 func TestRegistrar_MismoEmailOtraCapitalizacion_Rechazado(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	if _, err := svc.Registrar(context.Background(), "Juan", "Perez", "Juan.Perez@escuela.edu.ar", "unaClave123", SolicitudDeAsignacion{}); err != nil {
+	if _, err := svc.Registrar(context.Background(), "Juan", "Perez", "Juan.Perez@escuela.edu.ar", "unaClave123", solicitudDeDocente()); err != nil {
 		t.Fatalf("primer registro: %v", err)
 	}
 
-	_, err := svc.Registrar(context.Background(), "Juan", "Perez", "juan.perez@escuela.edu.ar", "unaClave123", SolicitudDeAsignacion{})
+	_, err := svc.Registrar(context.Background(), "Juan", "Perez", "juan.perez@escuela.edu.ar", "unaClave123", solicitudDeDocente())
 	if !errors.Is(err, ErrEmailYaRegistrado) {
 		t.Fatalf("esperaba ErrEmailYaRegistrado, obtuve %v", err)
 	}
@@ -1240,7 +1250,7 @@ func TestRegistrar_GuardaElEmailNormalizado(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	u, err := svc.Registrar(context.Background(), " Juan ", " Perez ", "  Juan.Perez@Escuela.Edu.Ar ", "unaClave123", SolicitudDeAsignacion{})
+	u, err := svc.Registrar(context.Background(), " Juan ", " Perez ", "  Juan.Perez@Escuela.Edu.Ar ", "unaClave123", solicitudDeDocente())
 	if err != nil {
 		t.Fatalf("registro: %v", err)
 	}
@@ -1255,7 +1265,7 @@ func TestRegistrar_GuardaElEmailNormalizado(t *testing.T) {
 func TestRegistrar_EmailSinFormato_Rechazado(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.Registrar(context.Background(), "Juan", "Perez", "no-es-un-email", "unaClave123", SolicitudDeAsignacion{})
+	_, err := svc.Registrar(context.Background(), "Juan", "Perez", "no-es-un-email", "unaClave123", solicitudDeDocente())
 	if !errors.Is(err, domain.ErrEmailInvalido) {
 		t.Fatalf("esperaba ErrEmailInvalido, obtuve %v", err)
 	}
@@ -1266,7 +1276,7 @@ func TestRegistrar_EmailSinFormato_Rechazado(t *testing.T) {
 func TestRegistrar_NombreVacio_ErrorDeDatosObligatorios(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.Registrar(context.Background(), "   ", "Perez", "juan@escuela.edu.ar", "unaClave123", SolicitudDeAsignacion{})
+	_, err := svc.Registrar(context.Background(), "   ", "Perez", "juan@escuela.edu.ar", "unaClave123", solicitudDeDocente())
 	if !errors.Is(err, ErrDatosObligatorios) {
 		t.Fatalf("esperaba ErrDatosObligatorios, obtuve %v", err)
 	}
@@ -1280,7 +1290,7 @@ func TestRegistrar_NombreDemasiadoLargo_Rechazado(t *testing.T) {
 
 	_, err := svc.Registrar(context.Background(),
 		strings.Repeat("a", domain.LargoMaxNombre+1), "Perez", "juan@escuela.edu.ar",
-		"unaClave123", SolicitudDeAsignacion{})
+		"unaClave123", solicitudDeDocente())
 
 	if !errors.Is(err, domain.ErrNombreDemasiadoLargo) {
 		t.Fatalf("esperaba ErrNombreDemasiadoLargo, obtuve %v", err)
@@ -1294,7 +1304,8 @@ func TestRegistrar_GuardaLaMateriaYElCursoSolicitados(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
-		SolicitudDeAsignacion{Curso: "  5°A  ", Materia: " Programación "})
+		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoDocente, Rol: domain.RolSolicitadoTitular,
+			Curso: "  5°A  ", Materia: " Programación "})
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1310,7 +1321,7 @@ func TestRegistrar_GuardaElRolSolicitado(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
-		SolicitudDeAsignacion{Curso: "5°A", Materia: "Programación", Rol: "SUPLENTE"})
+		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoDocente, Curso: "5°A", Materia: "Programación", Rol: "SUPLENTE"})
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1321,33 +1332,158 @@ func TestRegistrar_GuardaElRolSolicitado(t *testing.T) {
 }
 
 // A diferencia del curso y la materia —texto libre, porque nombran cosas que
-// quizás todavía no existen— el rol tiene una lista cerrada.
+// quizás todavía no existen— el rol tiene una lista cerrada. Desde que el
+// registro lo exige, un valor de fantasía cae en el mismo error que no
+// mandarlo: los dos significan que ese desplegable no está resuelto.
 func TestRegistrar_RolSolicitadoInvalido_Error(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
 	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
-		SolicitudDeAsignacion{Rol: "PROFESOR"})
+		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoDocente, Rol: "PROFESOR"})
 
-	if !errors.Is(err, domain.ErrRolSolicitadoInvalido) {
-		t.Fatalf("esperaba ErrRolSolicitadoInvalido, obtuve %v", err)
+	if !errors.Is(err, ErrRolSolicitadoObligatorio) {
+		t.Fatalf("esperaba ErrRolSolicitadoObligatorio, obtuve %v", err)
 	}
 }
 
-// Son opcionales: quien todavía no sabe qué va a dictar se registra igual y
-// lo arregla con el Admin.
-func TestRegistrar_SinSolicitud_NoFalla(t *testing.T) {
+// El curso y la materia siguen siendo opcionales: quien todavía no sabe qué
+// va a dictar se registra igual y lo arregla con el Admin. Lo que pasó a ser
+// obligatorio es el cargo y el rol, no esto.
+func TestRegistrar_SinCursoNiMateria_NoFalla(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
 	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
-		SolicitudDeAsignacion{})
+		solicitudDeDocente())
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	if u.CursoSolicitado != "" || u.MateriaSolicitada != "" {
 		t.Errorf("esperaba la solicitud vacía: %+v", u)
+	}
+}
+
+// ── El cargo declarado (RF-01.3) ────────────────────────────────────────
+
+func TestRegistrar_GuardaElCargoSolicitado(t *testing.T) {
+	casos := []string{domain.CargoSolicitadoDocente, domain.CargoSolicitadoAdminSistema}
+	for _, cargo := range casos {
+		t.Run(cargo, func(t *testing.T) {
+			svc := nuevoServicioDeTest(nuevoFakeRepo())
+
+			u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+				SolicitudDeAsignacion{Cargo: cargo, Rol: domain.RolSolicitadoTitular})
+
+			if err != nil {
+				t.Fatalf("no debería fallar: %v", err)
+			}
+			if u.CargoSolicitado != cargo {
+				t.Errorf("cargoSolicitado = %q, esperaba %q", u.CargoSolicitado, cargo)
+			}
+		})
+	}
+}
+
+// Lo declarado no da permisos: quien dice ser administrador de sistema nace
+// igual que cualquier otro, y es el Admin el que después decide si lo
+// promueve. Si aprobar diera ADMIN solo porque alguien lo escribió en el
+// formulario, "aprobar" pasaría a significar dos cosas distintas.
+func TestRegistrar_ComoAdminDeSistema_LaCuentaNaceDocentePendiente(t *testing.T) {
+	svc := nuevoServicioDeTest(nuevoFakeRepo())
+
+	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoAdminSistema, Rol: domain.RolSolicitadoTitular})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if u.Rol != domain.RolDocente {
+		t.Errorf("rol = %q, esperaba DOCENTE: el cargo declarado no otorga permisos", u.Rol)
+	}
+	if u.Estado != domain.EstadoPendiente {
+		t.Errorf("estado = %q, esperaba PENDIENTE", u.Estado)
+	}
+}
+
+// El formulario oculta "¿qué vas a dictar?" para este cargo, pero eso es una
+// decisión del navegador. Si el curso y la materia llegan igual —un cliente
+// propio, un formulario a medio esconder— no se guardan.
+func TestRegistrar_ComoAdminDeSistema_DescartaCursoYMateria(t *testing.T) {
+	svc := nuevoServicioDeTest(nuevoFakeRepo())
+
+	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoAdminSistema, Rol: domain.RolSolicitadoSuplente,
+			Curso: "5°A", Materia: "Programación"})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if u.CursoSolicitado != "" || u.MateriaSolicitada != "" {
+		t.Errorf("esperaba curso y materia descartados, obtuve %q / %q",
+			u.CursoSolicitado, u.MateriaSolicitada)
+	}
+	// El rol sí se conserva: lo declaran los dos cargos.
+	if u.RolSolicitado != domain.RolSolicitadoSuplente {
+		t.Errorf("rolSolicitado = %q, esperaba SUPLENTE", u.RolSolicitado)
+	}
+}
+
+func TestRegistrar_SinCargo_Error(t *testing.T) {
+	svc := nuevoServicioDeTest(nuevoFakeRepo())
+
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+		SolicitudDeAsignacion{Rol: domain.RolSolicitadoTitular})
+
+	if !errors.Is(err, ErrCargoObligatorio) {
+		t.Fatalf("esperaba ErrCargoObligatorio, obtuve %v", err)
+	}
+}
+
+func TestRegistrar_CargoDesconocido_Error(t *testing.T) {
+	svc := nuevoServicioDeTest(nuevoFakeRepo())
+
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+		SolicitudDeAsignacion{Cargo: "DIRECTOR", Rol: domain.RolSolicitadoTitular})
+
+	if !errors.Is(err, ErrCargoObligatorio) {
+		t.Fatalf("esperaba ErrCargoObligatorio, obtuve %v", err)
+	}
+}
+
+// Los dos cargos declaran si son titular o suplente: no es una pregunta de
+// "¿qué vas a dictar?", aplica también a quien administra el laboratorio.
+func TestRegistrar_SinRolSolicitado_Error(t *testing.T) {
+	for _, cargo := range []string{domain.CargoSolicitadoDocente, domain.CargoSolicitadoAdminSistema} {
+		t.Run(cargo, func(t *testing.T) {
+			svc := nuevoServicioDeTest(nuevoFakeRepo())
+
+			_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+				SolicitudDeAsignacion{Cargo: cargo})
+
+			if !errors.Is(err, ErrRolSolicitadoObligatorio) {
+				t.Fatalf("esperaba ErrRolSolicitadoObligatorio, obtuve %v", err)
+			}
+		})
+	}
+}
+
+// CrearAdmin comparte crearUsuario con el registro, pero no pasa por
+// exigirCargoYRol: a un Admin lo crea otro Admin y no hay nadie declarando
+// nada. Si la obligatoriedad hubiera quedado en crearUsuario, esto rompería.
+func TestCrearAdmin_NoExigeCargoNiRolSolicitado(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["admin1"] = &domain.Usuario{ID: "admin1", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada}
+	svc := nuevoServicioDeTest(repo)
+
+	u, err := svc.CrearAdmin(context.Background(), "admin1", "Grace", "Hopper", "grace@escuela.edu.ar", "password123")
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if u.CargoSolicitado != "" {
+		t.Errorf("un Admin creado por otro Admin no declara cargo, obtuve %q", u.CargoSolicitado)
 	}
 }
 

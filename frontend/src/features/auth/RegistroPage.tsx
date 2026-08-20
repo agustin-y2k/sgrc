@@ -25,28 +25,25 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { InputPassword } from "@/components/ui/input-password"
-import { Select } from "@/components/ui/select"
 import * as authApi from "@/features/auth/api"
 import { BotonGoogle } from "@/features/auth/BotonGoogle"
+import {
+  DeclaracionDeCargo,
+  camposDeclarados,
+  loQueDictaEseCargo,
+} from "@/features/auth/DeclaracionDeCargo"
 import { RegistroConGoogle } from "@/features/auth/RegistroConGoogle"
-import { SelectorDeCursoSolicitado } from "@/features/auth/SelectorDeCursoSolicitado"
 import { getErrorMessage } from "@/lib/api-client"
 
 // Espeja RegistroRequest de internal/auth/interfaces/http/dto.go / docs/08-api-spec.yaml.
+// Lo que se declara (cargo, rol, curso y materia) vive en camposDeclarados,
+// compartido con el registro por Google.
 const registroSchema = z.object({
   nombre: z.string().min(1, "Requerido").max(100),
   apellido: z.string().min(1, "Requerido").max(100),
   email: z.string().email("Ingresá un email válido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
-  // RF-01.3 + RF-02.6: los dos opcionales, y los dos siguen siendo texto
-  // libre en el contrato — el curso puede no existir todavía en el sistema, y
-  // quien se registra no está autenticado, así que no hay lista que
-  // consultar.
-  cursoSolicitado: z.string().max(100).optional(),
-  materiaSolicitada: z.string().max(100).optional(),
-  // El rol sí tiene lista cerrada —es la misma de DocenteMateria— así que
-  // es un desplegable y el backend lo valida. Vacío significa "no lo dijo".
-  rolSolicitado: z.enum(["TITULAR", "SUPLENTE"]).or(z.literal("")).optional(),
+  ...camposDeclarados,
 })
 
 type RegistroValues = z.infer<typeof registroSchema>
@@ -74,7 +71,8 @@ export function RegistroPage() {
       password: "",
       cursoSolicitado: "",
       materiaSolicitada: "",
-      rolSolicitado: "",
+      // El cargo y el rol arrancan sin elegir a propósito: son obligatorios y
+      // no hay ninguna opción que sea el caso "normal" del que partir.
     },
   })
 
@@ -83,11 +81,7 @@ export function RegistroPage() {
     try {
       await authApi.registrar({
         ...values,
-        // Vacío se manda como ausente: "no lo declaró" y "lo dejó en blanco"
-        // no son dos cosas distintas.
-        cursoSolicitado: values.cursoSolicitado?.trim() || undefined,
-        materiaSolicitada: values.materiaSolicitada?.trim() || undefined,
-        rolSolicitado: values.rolSolicitado || undefined,
+        ...loQueDictaEseCargo(values),
       })
       setEnviado(true)
     } catch (err) {
@@ -139,7 +133,8 @@ export function RegistroPage() {
           <CardTitle>Crear cuenta</CardTitle>
           {/* RF-01.3 */}
           <CardDescription>
-            Para docentes. Un Admin tiene que aprobar la cuenta antes del primer ingreso.
+            Para el personal de la escuela. Un Admin tiene que aprobar la cuenta antes
+            del primer ingreso.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -213,62 +208,7 @@ export function RegistroPage() {
                   </FormItem>
                 )}
               />
-              <div className="border-t pt-4">
-                <p className="mb-1 text-sm font-medium">¿Qué vas a dictar?</p>
-                <p className="text-muted-foreground mb-3 text-xs">
-                  Opcional, pero ayuda: es lo que el Admin va a mirar para asignarte a la
-                  materia correcta al aprobar tu cuenta. Si el curso o la materia todavía
-                  no existen, los crea.
-                </p>
-                <div className="grid gap-4">
-                  <FormField
-                    control={form.control}
-                    name="cursoSolicitado"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <SelectorDeCursoSolicitado
-                            idPrefijo="registro-curso"
-                            value={field.value ?? ""}
-                            onChange={field.onChange}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="materiaSolicitada"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Materia</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Ej.: Programación" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="rolSolicitado"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Rol</FormLabel>
-                        <FormControl>
-                          <Select {...field} value={field.value ?? ""}>
-                            <option value="">No lo sé todavía</option>
-                            <option value="TITULAR">Titular</option>
-                            <option value="SUPLENTE">Suplente</option>
-                          </Select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
+              <DeclaracionDeCargo idPrefijo="registro" />
 
               <Button type="submit" disabled={form.formState.isSubmitting}>
                 Crear cuenta

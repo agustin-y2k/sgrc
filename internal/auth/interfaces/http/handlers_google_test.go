@@ -242,6 +242,8 @@ func TestHTTP_RegistrarConGoogle_OK(t *testing.T) {
 
 	rec := postJSON(t, app, "/api/auth/google/registro", googleRegistroRequest{
 		Credential:        "un-token",
+		CargoSolicitado:   domain.CargoSolicitadoDocente,
+		RolSolicitado:     domain.RolSolicitadoTitular,
 		CursoSolicitado:   "5°A",
 		MateriaSolicitada: "Programación",
 	})
@@ -274,7 +276,8 @@ func TestHTTP_RegistrarConGoogle_YaExiste_409(t *testing.T) {
 	}
 	app := nuevaAppDeTestConGoogle(repo, verificadorQueDevuelve(identidadDePrueba()), clientIDDePrueba)
 
-	rec := postJSON(t, app, "/api/auth/google/registro", googleRegistroRequest{Credential: "un-token"})
+	rec := postJSON(t, app, "/api/auth/google/registro", googleRegistroRequest{Credential: "un-token",
+		CargoSolicitado: domain.CargoSolicitadoDocente, RolSolicitado: domain.RolSolicitadoTitular})
 
 	if rec.Code != fiber.StatusConflict {
 		t.Fatalf("esperaba 409, obtuve %d: %s", rec.Code, rec.Body)

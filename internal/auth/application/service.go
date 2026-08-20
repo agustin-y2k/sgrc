@@ -86,14 +86,46 @@ func NewService(
 // frontend para decidir si dibuja el enlace "olvidé mi contraseña".
 func (s *Service) RecuperacionPorEmailDisponible() bool { return s.correoHabilitado }
 
-// SolicitudDeAsignacion es lo que el docente declara al registrarse: qué
-// curso y qué materia va a dictar, y si se ofrece como titular o suplente.
+// SolicitudDeAsignacion es lo que se declara al registrarse: con qué cargo, si
+// se ofrece como titular o suplente, y —solo si da clase— qué curso y qué
+// materia.
 type SolicitudDeAsignacion struct {
 	Curso   string
 	Materia string
-	// Rol es "TITULAR", "SUPLENTE" o vacío. Se valida en crearUsuario: es el
-	// único de los tres con una lista cerrada.
+	// Rol es "TITULAR" o "SUPLENTE". Obligatorio en el registro (lo declaran
+	// los dos cargos); vacío solo en las cuentas que no se autorregistran.
 	Rol string
+	// Cargo es "DOCENTE" o "ADMIN_SISTEMA". Obligatorio en el registro. NO
+	// otorga permisos: ver domain.NormalizarCargoSolicitado.
+	Cargo string
+}
+
+// exigirCargoYRol es lo que separa al registro de las otras formas de crear
+// una cuenta. Vive acá y no en crearUsuario porque esa función también la usa
+// CrearAdmin (RF-01.4), donde no hay nadie declarando nada.
+func exigirCargoYRol(solicitud SolicitudDeAsignacion) error {
+	switch strings.TrimSpace(solicitud.Cargo) {
+	case domain.CargoSolicitadoDocente, domain.CargoSolicitadoAdminSistema:
+	default:
+		return ErrCargoObligatorio
+	}
+	switch strings.TrimSpace(solicitud.Rol) {
+	case domain.RolSolicitadoTitular, domain.RolSolicitadoSuplente:
+	default:
+		return ErrRolSolicitadoObligatorio
+	}
+	return nil
+}
+
+// soloLoQueDeclaraEseCargo descarta el curso y la materia de quien no se
+// registró para dar clase. El formulario ya no los muestra, pero eso es una
+// decisión del navegador: si igual llegan en el cuerpo, no se guardan.
+func soloLoQueDeclaraEseCargo(solicitud SolicitudDeAsignacion) SolicitudDeAsignacion {
+	if strings.TrimSpace(solicitud.Cargo) == domain.CargoSolicitadoAdminSistema {
+		solicitud.Curso = ""
+		solicitud.Materia = ""
+	}
+	return solicitud
 }
 
 // Registrar implementa RF-01.3: autorregistro de docente, queda PENDIENTE. La
@@ -101,8 +133,12 @@ type SolicitudDeAsignacion struct {
 // materia y curso asignarlo sin tener que preguntárselo por fuera del sistema
 // (y para que sepa si tiene que crearlos antes).
 func (s *Service) Registrar(ctx context.Context, nombre, apellido, email, password string, solicitud SolicitudDeAsignacion) (*domain.Usuario, error) {
+	if err := exigirCargoYRol(solicitud); err != nil {
+		return nil, err
+	}
+
 	u, err := s.crearUsuario(ctx, nombre, apellido, email, password, domain.RolDocente, domain.EstadoPendiente, nil,
-		solicitud)
+		soloLoQueDeclaraEseCargo(solicitud))
 	if err != nil {
 		return nil, err
 	}
@@ -162,6 +198,10 @@ func (s *Service) crearUsuario(ctx context.Context, nombre, apellido, email, pas
 	if err != nil {
 		return nil, err
 	}
+	cargoSolicitado, err := domain.NormalizarCargoSolicitado(strings.TrimSpace(solicitud.Cargo))
+	if err != nil {
+		return nil, err
+	}
 
 	existente, err := s.repo.BuscarPorEmail(ctx, email)
 	if err != nil && !errors.Is(err, ErrUsuarioNoEncontrado) {
@@ -193,6 +233,7 @@ func (s *Service) crearUsuario(ctx context.Context, nombre, apellido, email, pas
 		CursoSolicitado:   strings.TrimSpace(solicitud.Curso),
 		MateriaSolicitada: strings.TrimSpace(solicitud.Materia),
 		RolSolicitado:     rolSolicitado,
+		CargoSolicitado:   cargoSolicitado,
 	}
 	if estadoInicial == domain.EstadoAprobada {
 		u.FechaAprobacion = &ahora
@@ -322,10 +363,19 @@ func (s *Service) cuentaParaIdentidadGoogle(ctx context.Context, identidad *Iden
 // RegistrarConGoogle crea una cuenta de docente a partir de un ID token de
 // Google.
 func (s *Service) RegistrarConGoogle(ctx context.Context, idToken, nombre, apellido string, solicitud SolicitudDeAsignacion) (*domain.Usuario, error) {
+	// El orden importa: primero el token. Si este despliegue no tiene el
+	// ingreso con Google configurado, la respuesta tiene que ser "el sistema no
+	// hace esto" (503) y no "te faltó elegir un cargo" (400), que mandaría a
+	// corregir un formulario que igual no iba a funcionar.
 	identidad, err := s.identidadDeGoogle(ctx, idToken)
 	if err != nil {
 		return nil, err
 	}
+
+	if err := exigirCargoYRol(solicitud); err != nil {
+		return nil, err
+	}
+	solicitud = soloLoQueDeclaraEseCargo(solicitud)
 
 	email := domain.NormalizarEmail(identidad.Email)
 
@@ -343,6 +393,10 @@ func (s *Service) RegistrarConGoogle(ctx context.Context, idToken, nombre, apell
 		return nil, err
 	}
 	rolSolicitado, err := domain.NormalizarRolSolicitado(strings.TrimSpace(solicitud.Rol))
+	if err != nil {
+		return nil, err
+	}
+	cargoSolicitado, err := domain.NormalizarCargoSolicitado(strings.TrimSpace(solicitud.Cargo))
 	if err != nil {
 		return nil, err
 	}
@@ -385,6 +439,7 @@ func (s *Service) RegistrarConGoogle(ctx context.Context, idToken, nombre, apell
 		CursoSolicitado:   strings.TrimSpace(solicitud.Curso),
 		MateriaSolicitada: strings.TrimSpace(solicitud.Materia),
 		RolSolicitado:     rolSolicitado,
+		CargoSolicitado:   cargoSolicitado,
 	}
 
 	if err := s.repo.Crear(ctx, u); err != nil {

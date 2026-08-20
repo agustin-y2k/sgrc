@@ -112,7 +112,7 @@ func errorDeFilas(rows pgx.Rows) error {
 	return fmt.Errorf("iterando filas: %w", err)
 }
 
-const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por, curso_solicitado, materia_solicitada, rol_solicitado, google_sub, version_sesion`
+const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por, curso_solicitado, materia_solicitada, rol_solicitado, cargo_solicitado, google_sub, version_sesion`
 
 // BuscarPorEmail compara contra lower(email) y no contra la columna pelada.
 func (r *PostgresRepo) BuscarPorEmail(ctx context.Context, email string) (*domain.Usuario, error) {
@@ -142,14 +142,15 @@ type filaUsuario struct {
 	rolStr, estadoStr string
 	// Las columnas nullable se escanean a *string y recién después se
 	// traducen a "" — pgx no puede escribir un NULL en un string pelado.
-	passwordHash, curso, materia, rolSolicitado, googleSub *string
+	passwordHash, curso, materia, rolSolicitado, cargoSolicitado, googleSub *string
 }
 
 func (f *filaUsuario) destinos() []any {
 	return []any{
 		&f.u.ID, &f.u.Nombre, &f.u.Apellido, &f.u.Email, &f.passwordHash,
 		&f.u.DebeCambiarPassword, &f.rolStr, &f.estadoStr, &f.u.FechaRegistro,
-		&f.u.FechaAprobacion, &f.u.AprobadoPor, &f.curso, &f.materia, &f.rolSolicitado, &f.googleSub,
+		&f.u.FechaAprobacion, &f.u.AprobadoPor, &f.curso, &f.materia, &f.rolSolicitado,
+		&f.cargoSolicitado, &f.googleSub,
 		&f.u.VersionSesion,
 	}
 }
@@ -171,6 +172,7 @@ func (f *filaUsuario) usuario() (*domain.Usuario, error) {
 	f.u.CursoSolicitado = textoDe(f.curso)
 	f.u.MateriaSolicitada = textoDe(f.materia)
 	f.u.RolSolicitado = textoDe(f.rolSolicitado)
+	f.u.CargoSolicitado = textoDe(f.cargoSolicitado)
 	f.u.GoogleSub = textoDe(f.googleSub)
 
 	return &f.u, nil
@@ -205,12 +207,13 @@ func escanearUsuario(row pgx.Row) (*domain.Usuario, error) {
 
 func (r *PostgresRepo) Crear(ctx context.Context, u *domain.Usuario) error {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO usuario (id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, curso_solicitado, materia_solicitada, rol_solicitado, google_sub)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		INSERT INTO usuario (id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, curso_solicitado, materia_solicitada, rol_solicitado, cargo_solicitado, google_sub)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`, u.ID, u.Nombre, u.Apellido, u.Email, textoOpcional(u.PasswordHash), u.DebeCambiarPassword,
 		string(u.Rol), string(u.Estado), u.FechaRegistro,
 		textoOpcional(u.CursoSolicitado), textoOpcional(u.MateriaSolicitada),
-		textoOpcional(u.RolSolicitado), textoOpcional(u.GoogleSub))
+		textoOpcional(u.RolSolicitado), textoOpcional(u.CargoSolicitado),
+		textoOpcional(u.GoogleSub))
 
 	if err != nil {
 		if esViolacionUnica(err) {

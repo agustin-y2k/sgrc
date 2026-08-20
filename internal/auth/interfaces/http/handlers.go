@@ -67,7 +67,8 @@ func (h *Handler) Registrar(c *fiber.Ctx) error {
 	}
 
 	_, err := h.svc.Registrar(c.UserContext(), req.Nombre, req.Apellido, req.Email, req.Password,
-		application.SolicitudDeAsignacion{Curso: req.CursoSolicitado, Materia: req.MateriaSolicitada, Rol: req.RolSolicitado})
+		application.SolicitudDeAsignacion{Curso: req.CursoSolicitado, Materia: req.MateriaSolicitada,
+			Rol: req.RolSolicitado, Cargo: req.CargoSolicitado})
 	if err != nil {
 		return mapearError(err)
 	}
@@ -164,7 +165,8 @@ func (h *Handler) RegistrarConGoogle(c *fiber.Ctx) error {
 	}
 
 	_, err := h.svc.RegistrarConGoogle(c.UserContext(), req.Credential, req.Nombre, req.Apellido,
-		application.SolicitudDeAsignacion{Curso: req.CursoSolicitado, Materia: req.MateriaSolicitada, Rol: req.RolSolicitado})
+		application.SolicitudDeAsignacion{Curso: req.CursoSolicitado, Materia: req.MateriaSolicitada,
+			Rol: req.RolSolicitado, Cargo: req.CargoSolicitado})
 	if err != nil {
 		return mapearError(err)
 	}

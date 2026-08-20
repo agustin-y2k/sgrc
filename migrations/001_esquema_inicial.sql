@@ -140,6 +140,16 @@ CREATE TABLE usuario (
     -- pueden no existir todavía. Sigue siendo una declaración, no un vínculo:
     -- el rol que rige es el que el ADMIN carga al asignar (RF-02.6).
     rol_solicitado         VARCHAR(10) CHECK (rol_solicitado IN ('TITULAR','SUPLENTE')),
+    -- Qué cargo dijo tener: DOCENTE (da clase) o ADMIN_SISTEMA (auxiliar
+    -- informático, administrador de red y demás cargos docentes que
+    -- administran el laboratorio sin estar frente a alumnos). Es una
+    -- declaración más, como el curso y la materia: NO otorga permisos. La
+    -- cuenta nace DOCENTE/PENDIENTE igual, y si corresponde el ADMIN la
+    -- promueve después de aprobarla (RF-01.4), para que "aprobar" siga
+    -- significando lo mismo para todas las cuentas.
+    -- Nullable a propósito: las cuentas anteriores a esta columna quedan en
+    -- NULL, y un ADMIN creado por otro ADMIN tampoco declara ningún cargo.
+    cargo_solicitado       VARCHAR(20) CHECK (cargo_solicitado IN ('DOCENTE','ADMIN_SISTEMA')),
 
     -- Se incrementa para invalidar las sesiones abiertas de esta persona.
     -- Los tokens son stateless: sin este contador, cambiar una contraseña o

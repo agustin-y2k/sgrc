@@ -125,7 +125,7 @@ echo "→ docente (autorregistro + aprobación)"
 TOKEN_ADMIN=$TOKEN
 TOKEN=""  # el autorregistro es público, va sin token
 api POST /api/auth/registro \
-  "{\"nombre\":\"Ada\",\"apellido\":\"Lovelace\",\"email\":\"$DOCENTE_EMAIL\",\"password\":\"$DOCENTE_PASSWORD\"}" >/dev/null || true
+  "{\"nombre\":\"Ada\",\"apellido\":\"Lovelace\",\"email\":\"$DOCENTE_EMAIL\",\"password\":\"$DOCENTE_PASSWORD\",\"cargoSolicitado\":\"DOCENTE\",\"rolSolicitado\":\"TITULAR\"}" >/dev/null || true
 TOKEN=$TOKEN_ADMIN
 # Por email y no "el primer DOCENTE que aparezca": una vez que hay más de
 # uno cargado, el primero puede ser cualquiera.

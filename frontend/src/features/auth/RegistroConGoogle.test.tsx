@@ -42,6 +42,15 @@ function renderRegistro(credencial = credencialDeAda, onRegistrado = vi.fn()) {
   return onRegistrado
 }
 
+/** El cargo y el rol son obligatorios desde RF-01.3, para los dos cargos. */
+async function declarar(
+  user: ReturnType<typeof userEvent.setup>,
+  cargo: RegExp = /^Docente/
+) {
+  await user.click(screen.getByRole("radio", { name: cargo }))
+  await user.selectOptions(screen.getByLabelText("¿Sos titular o suplente?"), "TITULAR")
+}
+
 describe("RegistroConGoogle", () => {
   afterEach(() => {
     // clearAllMocks además de restoreAllMocks: restore repone los espías,
@@ -80,6 +89,7 @@ describe("RegistroConGoogle", () => {
     const onRegistrado = renderRegistro()
     const user = userEvent.setup()
 
+    await declarar(user)
     await user.selectOptions(screen.getByLabelText("Año"), "5")
     await user.selectOptions(screen.getByLabelText("División"), "A")
     await user.type(screen.getByLabelText("Materia"), "Programación")
@@ -90,6 +100,8 @@ describe("RegistroConGoogle", () => {
         credential: credencialDeAda,
         nombre: "Ada",
         apellido: "Lovelace",
+        cargoSolicitado: "DOCENTE",
+        rolSolicitado: "TITULAR",
         cursoSolicitado: "5°A",
         materiaSolicitada: "Programación",
       })
@@ -104,6 +116,7 @@ describe("RegistroConGoogle", () => {
     renderRegistro()
     const user = userEvent.setup()
 
+    await declarar(user)
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 
     await waitFor(() =>
@@ -111,6 +124,8 @@ describe("RegistroConGoogle", () => {
         credential: credencialDeAda,
         nombre: "Ada",
         apellido: "Lovelace",
+        cargoSolicitado: "DOCENTE",
+        rolSolicitado: "TITULAR",
         cursoSolicitado: undefined,
         materiaSolicitada: undefined,
       })
@@ -126,6 +141,7 @@ describe("RegistroConGoogle", () => {
 
     await user.clear(screen.getByLabelText("Nombre"))
     await user.type(screen.getByLabelText("Nombre"), "Augusta")
+    await declarar(user)
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 
     await waitFor(() =>
@@ -154,6 +170,7 @@ describe("RegistroConGoogle", () => {
     const onRegistrado = renderRegistro()
     const user = userEvent.setup()
 
+    await declarar(user)
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 
     expect(await screen.findByText("email ya registrado")).toBeInTheDocument()
@@ -167,7 +184,41 @@ describe("RegistroConGoogle", () => {
 
     expect(screen.getByLabelText("Nombre")).toHaveValue("")
     expect(
-      screen.getByText("Falta un dato para que un Admin pueda aprobar tu cuenta.")
+      screen.getByText("Faltan unos datos para que un Admin pueda aprobar tu cuenta.")
     ).toBeInTheDocument()
+  })
+
+  // El bloque de lo declarado es el mismo componente que en el registro con
+  // contraseña, así que acá alcanza con verificar que está montado y que se
+  // comporta igual con el otro cargo.
+  it("como administrador de sistema, no pregunta qué va a dictar", async () => {
+    vi.mocked(authApi.registrarConGoogle).mockResolvedValue(undefined)
+    renderRegistro()
+    const user = userEvent.setup()
+
+    await declarar(user, /^Administrador de Sistema/)
+
+    expect(screen.queryByText("¿Qué vas a dictar?")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
+
+    await waitFor(() =>
+      expect(authApi.registrarConGoogle).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cargoSolicitado: "ADMIN_SISTEMA",
+          cursoSolicitado: undefined,
+        })
+      )
+    )
+  })
+
+  it("sin elegir cargo ni rol, no manda nada", async () => {
+    renderRegistro()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
+
+    expect(await screen.findByText("Elegí con qué cargo te registrás")).toBeInTheDocument()
+    expect(authApi.registrarConGoogle).not.toHaveBeenCalled()
   })
 })

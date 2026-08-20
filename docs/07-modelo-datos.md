@@ -31,7 +31,7 @@ erDiagram
     REGLA_RECURRENCIA ||--o{ RESERVA_GRUPO : materializa
     RESERVA_GRUPO ||--o{ RESERVA : contiene
 
-    USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; bool debe_cambiar_password; string rol; string estado; timestamptz fecha_registro; timestamptz fecha_aprobacion; uuid aprobado_por; string curso_solicitado; string materia_solicitada; string rol_solicitado; int version_sesion }
+    USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; bool debe_cambiar_password; string rol; string estado; timestamptz fecha_registro; timestamptz fecha_aprobacion; uuid aprobado_por; string curso_solicitado; string materia_solicitada; string rol_solicitado; string cargo_solicitado; int version_sesion }
     CODIGO_RECUPERACION { uuid id; uuid usuario_id; string codigo_hash; timestamptz creado_en; timestamptz expira_en; timestamptz usado_en; int intentos }
     CARRO { uuid id; string nombre; string descripcion }
     EQUIPO { uuid id; uuid carro_id; int identificador; string nombre; string tipo; string numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool reservable; bool dado_de_baja; timestamptz fecha_baja; timestamptz fecha_alta }
@@ -109,6 +109,7 @@ El esquema distingue a propósito entre **instantes** y **hora de pared**:
 | curso_solicitado | VARCHAR(100) | NULL |
 | materia_solicitada | VARCHAR(100) | NULL |
 | rol_solicitado | VARCHAR(10) | NULL, CHECK IN (TITULAR, SUPLENTE) |
+| cargo_solicitado | VARCHAR(20) | NULL, CHECK IN (DOCENTE, ADMIN_SISTEMA) |
 | version_sesion | INTEGER | NOT NULL DEFAULT 0 |
 | | | CHECK `password_hash IS NOT NULL OR google_sub IS NOT NULL` |
 
@@ -150,11 +151,23 @@ CREATE INDEX        idx_usuario_estado       ON usuario (estado);
 > hecho el Admin quizás lo tenga que crear al aprobarla (RF-02.6). Es una
 > declaración de intención, no un vínculo.
 >
-> `rol_solicitado` acompaña a esos dos y es la excepción que confirma la
-> regla: **sí lleva CHECK**, porque "titular o suplente" es una lista cerrada
-> que existe siempre —la misma de `docente_materia.rol`— y no nombra nada que
-> pueda faltar. Sigue siendo una declaración: el rol que rige es el que el
-> Admin carga en `docente_materia` al asignar.
+> `rol_solicitado` y `cargo_solicitado` acompañan a esos dos y son la
+> excepción que confirma la regla: **sí llevan CHECK**, porque son listas
+> cerradas que existen siempre —"titular o suplente" es la misma de
+> `docente_materia.rol`— y no nombran nada que pueda faltar. Siguen siendo
+> declaraciones: el rol que rige es el que el Admin carga en `docente_materia`
+> al asignar.
+>
+> **`cargo_solicitado` no es `rol`.** `rol` es lo que la cuenta puede hacer;
+> `cargo_solicitado` es lo que la persona dijo ser al registrarse, y no otorga
+> ningún permiso: quien declara `ADMIN_SISTEMA` nace igual con
+> `rol = 'DOCENTE'` y `estado = 'PENDIENTE'`, y para que administre el sistema
+> un Admin tiene que promoverlo aparte (RF-01.3 / RF-01.4).
+>
+> Es **NULL-able** aunque el registro lo exija: las cuentas anteriores a la
+> columna quedaron sin cargo declarado, y un Admin creado por otro Admin
+> (RF-01.4) tampoco declara ninguno — nadie se autorregistró ahí. La
+> obligatoriedad es del caso de uso "registro", no del dato.
 
 > **`BAJA` es distinto de `RECHAZADA`.** `RECHAZADA` es una solicitud de
 > registro que nunca se aprobó; `BAJA` es una cuenta que **estuvo** `APROBADA`

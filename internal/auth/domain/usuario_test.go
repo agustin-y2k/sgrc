@@ -221,6 +221,33 @@ func TestEstaAprobado(t *testing.T) {
 
 // ── Email como identidad (mayúsculas, espacios, formato) ────────────────
 
+// ── NormalizarCargoSolicitado ──────────────────────────────────────────
+
+func TestNormalizarCargoSolicitado_Validos(t *testing.T) {
+	// El vacío entra: las cuentas anteriores a la columna no declararon
+	// ninguno, y un Admin creado por otro Admin tampoco.
+	validos := []string{"", CargoSolicitadoDocente, CargoSolicitadoAdminSistema}
+	for _, v := range validos {
+		obtenido, err := NormalizarCargoSolicitado(v)
+		if err != nil {
+			t.Errorf("NormalizarCargoSolicitado(%q) falló: %v", v, err)
+		}
+		if obtenido != v {
+			t.Errorf("NormalizarCargoSolicitado(%q) = %q", v, obtenido)
+		}
+	}
+}
+
+func TestNormalizarCargoSolicitado_Invalido(t *testing.T) {
+	// "ADMIN" es el que más tienta: es un domain.Rol válido, pero no un cargo
+	// declarable — el cargo no otorga permisos y no comparte lista con el rol.
+	for _, v := range []string{"ADMIN", "DIRECTOR", "docente", "ADMIN SISTEMA"} {
+		if _, err := NormalizarCargoSolicitado(v); !errors.Is(err, ErrCargoSolicitadoInvalido) {
+			t.Errorf("NormalizarCargoSolicitado(%q): esperaba ErrCargoSolicitadoInvalido, obtuve %v", v, err)
+		}
+	}
+}
+
 // ── NormalizarNombreYApellido ──────────────────────────────────────────
 
 func TestNormalizarNombreYApellido_RecortaYAcepta(t *testing.T) {

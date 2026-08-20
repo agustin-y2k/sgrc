@@ -13,11 +13,11 @@ sequenceDiagram
     participant NOTIF as notification (paquete)
     participant DB as sgrc_db
 
-    U->>FE: nombre, apellido, email, password<br/>+ qué curso y materia va a dictar (opcional)
+    U->>FE: nombre, apellido, email, password<br/>+ cargo y titular/suplente (obligatorios)<br/>+ qué curso y materia va a dictar (opcional, solo docentes)
     FE->>AUTH: POST /api/auth/registro
     AUTH->>DB: SELECT usuario WHERE lower(email) = lower($1)
     alt Email libre
-        AUTH->>DB: INSERT usuario (estado=PENDIENTE,<br/>curso_solicitado, materia_solicitada)
+        AUTH->>DB: INSERT usuario (rol=DOCENTE, estado=PENDIENTE,<br/>cargo_solicitado, rol_solicitado,<br/>curso_solicitado, materia_solicitada)
         AUTH->>EB: Publish("docente.registro.pendiente", { usuarioId, nombre, apellido })
         EB->>NOTIF: Publish es sincrónico; el handler se va a su propia goroutine
         NOTIF->>DB: SELECT usuario WHERE rol=ADMIN AND estado=APROBADA
