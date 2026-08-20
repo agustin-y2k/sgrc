@@ -102,29 +102,6 @@ dominio:
 > El `.env` no se comparte ni se publica: tiene la contraseña de la base y el
 > secreto de las sesiones.
 
-#### Poner al día un `.env` que ya está en uso
-
-Un `.env` de servidor envejece de una manera particular: los valores están
-bien, pero le faltan los comentarios que explican cada variable y las que se
-agregaron en versiones posteriores. Para volver a juntarlo con el ejemplo, sin
-tocar ningún valor:
-
-```bash
-umask 077                                   # el archivo nuevo, solo para vos
-./scripts/env-con-comentarios.sh > .env.nuevo
-diff .env .env.nuevo                        # mirar antes de reemplazar
-cp .env .env.respaldo && mv .env.nuevo .env
-```
-
-Toma la estructura y los comentarios de `.env.example`, y para cada variable
-usa **el valor que ya tenías**. Lo que el ejemplo trae y tu instalación no
-tiene queda con el valor de ejemplo y se avisa por pantalla; lo que tenés vos y
-el ejemplo no conoce se conserva al final del archivo, en su propia sección.
-Nada se descarta en silencio.
-
-El script escribe a la salida estándar y nunca pisa el `.env` en uso: el
-reemplazo es una decisión tuya, después de leer el `diff`.
-
 ### 1.1.b Configurar el correo (opcional, pero conviene)
 
 Sin esto el sistema funciona igual: los avisos siguen llegando a la campana de
