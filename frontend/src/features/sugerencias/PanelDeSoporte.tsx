@@ -64,11 +64,14 @@ export function PanelDeSoporte({
                   setAbierto(true)
                 }}
               >
-                {escribiendo ? "Cerrar" : "Pedir ayuda"}
+                {escribiendo ? "Cerrar el formulario" : "Pedir ayuda"}
               </Button>
             )}
+            {/* Los dos botones dicen QUÉ cierran. Cuando los dos decían
+                "Cerrar" quedaban uno al lado del otro, iguales, y no había
+                forma de saber cuál cerraba el formulario y cuál la lista. */}
             <Button variant="outline" size="sm" onClick={() => setAbierto(!abierto)}>
-              {abierto ? "Cerrar" : "Ver conversaciones"}
+              {abierto ? "Ocultar conversaciones" : "Ver conversaciones"}
             </Button>
           </div>
         </div>

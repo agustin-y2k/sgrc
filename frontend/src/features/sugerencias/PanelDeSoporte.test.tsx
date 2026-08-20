@@ -156,6 +156,24 @@ describe("PanelDeSoporte", () => {
     )
   })
 
+  // Con el formulario y la lista abiertos hay dos botones de cerrar, uno al
+  // lado del otro. Cuando los dos decían "Cerrar" eran indistinguibles: había
+  // que apretar uno para descubrir cuál era.
+  it("los dos botones de cerrar dicen qué cierran", async () => {
+    const user = userEvent.setup()
+    montar("DOCENTE")
+
+    await user.click(await screen.findByRole("button", { name: "Pedir ayuda" }))
+
+    const rotulos = screen.getAllByRole("button").map((b) => b.textContent?.trim())
+
+    expect(rotulos).toContain("Cerrar el formulario")
+    expect(rotulos).toContain("Ocultar conversaciones")
+    // Ningún rótulo repetido: dos botones con el mismo texto en la misma
+    // pantalla obligan a apretar uno para saber cuál era.
+    expect(new Set(rotulos).size).toBe(rotulos.length)
+  })
+
   // El Admin no pide ayuda: él es a quien se la piden.
   it("el Admin no ve el botón de pedir ayuda", async () => {
     montar("ADMIN")
