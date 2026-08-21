@@ -1,8 +1,10 @@
 # Modelo de Datos — SGRC
 
-El esquema completo, ejecutable, es `migrations/001_esquema_inicial.sql`. Este
-documento explica **por qué** es así: qué invariante protege cada constraint y
-qué pasaría sin ella.
+El esquema completo, ejecutable, es `migrations/001_esquema_inicial.sql`, más
+los archivos numerados que vengan después: la 001 es el punto de partida
+—congelado— y cada migración posterior lo modifica sobre bases que ya tienen
+datos (ver `docs/11-operacion.md` §5). Este documento explica **por qué** el
+esquema es así: qué invariante protege cada constraint y qué pasaría sin ella.
 
 ## 1. Diagrama ER
 
