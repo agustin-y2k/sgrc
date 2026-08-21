@@ -221,6 +221,77 @@ func TestEstaAprobado(t *testing.T) {
 
 // ── Email como identidad (mayúsculas, espacios, formato) ────────────────
 
+// ── NormalizarCargoSolicitado ──────────────────────────────────────────
+
+func TestNormalizarCargoSolicitado_Validos(t *testing.T) {
+	// El vacío entra: las cuentas anteriores a la columna no declararon
+	// ninguno, y un Admin creado por otro Admin tampoco.
+	validos := []string{"", CargoSolicitadoDocente, CargoSolicitadoAdminSistema}
+	for _, v := range validos {
+		obtenido, err := NormalizarCargoSolicitado(v)
+		if err != nil {
+			t.Errorf("NormalizarCargoSolicitado(%q) falló: %v", v, err)
+		}
+		if obtenido != v {
+			t.Errorf("NormalizarCargoSolicitado(%q) = %q", v, obtenido)
+		}
+	}
+}
+
+func TestNormalizarCargoSolicitado_Invalido(t *testing.T) {
+	// "ADMIN" es el que más tienta: es un domain.Rol válido, pero no un cargo
+	// declarable — el cargo no otorga permisos y no comparte lista con el rol.
+	for _, v := range []string{"ADMIN", "DIRECTOR", "docente", "ADMIN SISTEMA"} {
+		if _, err := NormalizarCargoSolicitado(v); !errors.Is(err, ErrCargoSolicitadoInvalido) {
+			t.Errorf("NormalizarCargoSolicitado(%q): esperaba ErrCargoSolicitadoInvalido, obtuve %v", v, err)
+		}
+	}
+}
+
+// ── NormalizarNombreYApellido ──────────────────────────────────────────
+
+func TestNormalizarNombreYApellido_RecortaYAcepta(t *testing.T) {
+	nombre, apellido, err := NormalizarNombreYApellido("  Ada ", " Lovelace  ")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if nombre != "Ada" || apellido != "Lovelace" {
+		t.Errorf("obtuve %q %q, esperaba \"Ada\" \"Lovelace\"", nombre, apellido)
+	}
+}
+
+func TestNormalizarNombreYApellido_Vacio_Error(t *testing.T) {
+	casos := []struct{ nombre, apellido string }{
+		{"", "Lovelace"},
+		{"Ada", ""},
+		{"   ", "Lovelace"},
+		{"Ada", "\t"},
+	}
+	for _, c := range casos {
+		if _, _, err := NormalizarNombreYApellido(c.nombre, c.apellido); !errors.Is(err, ErrNombreVacio) {
+			t.Errorf("NormalizarNombreYApellido(%q, %q): esperaba ErrNombreVacio, obtuve %v",
+				c.nombre, c.apellido, err)
+		}
+	}
+}
+
+// El límite se cuenta en caracteres, no en bytes: VARCHAR(100) en Postgres
+// son 100 caracteres, y un apellido con eñes ocupa más bytes que letras.
+func TestNormalizarNombreYApellido_ElLargoSeCuentaEnCaracteres(t *testing.T) {
+	justo := strings.Repeat("ñ", LargoMaxNombre)
+	if _, _, err := NormalizarNombreYApellido(justo, "Lovelace"); err != nil {
+		t.Errorf("%d eñes tienen que entrar, obtuve %v", LargoMaxNombre, err)
+	}
+
+	unoDeMas := strings.Repeat("a", LargoMaxNombre+1)
+	if _, _, err := NormalizarNombreYApellido(unoDeMas, "Lovelace"); !errors.Is(err, ErrNombreDemasiadoLargo) {
+		t.Errorf("esperaba ErrNombreDemasiadoLargo, obtuve %v", err)
+	}
+	if _, _, err := NormalizarNombreYApellido("Ada", unoDeMas); !errors.Is(err, ErrNombreDemasiadoLargo) {
+		t.Errorf("el apellido también tiene tope, obtuve %v", err)
+	}
+}
+
 func TestNormalizarEmail(t *testing.T) {
 	casos := []struct{ entrada, esperado string }{
 		{"juan.perez@escuela.edu.ar", "juan.perez@escuela.edu.ar"},

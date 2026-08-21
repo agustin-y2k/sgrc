@@ -3,8 +3,22 @@
 -- ═══════════════════════════════════════════════════════════════════════
 --
 -- Sistema de reserva de equipos informáticos para una institución
--- educativa. Este archivo es el esquema completo: se aplica solo, sobre una
--- base vacía, y deja el sistema listo para arrancar.
+-- educativa. Este archivo es el PUNTO DE PARTIDA del esquema: se aplica
+-- solo, sobre una base vacía, y deja el sistema listo para arrancar.
+--
+-- ── Está congelado ─────────────────────────────────────────────────────
+--
+-- No se edita más. Un cambio acá llegaría únicamente a las instalaciones que
+-- nacen después: goose anota en `goose_db_version` que esta migración ya
+-- corrió y no vuelve a leer el archivo nunca más, así que una base en uso se
+-- quedaría sin la columna nueva y el sistema recién lo diría al abrir la
+-- primera pantalla que la toca. Todo cambio posterior va en un archivo nuevo
+-- —002_lo_que_sea.sql, 003…—, que es lo único que se aplica sobre una base
+-- que ya tiene datos adentro. Cómo escribirlo: `docs/11-operacion.md` §5.
+--
+-- Que siga congelado lo comprueba `migraciones_test.go`, con una huella del
+-- SQL de este archivo. De los comentarios no: mejorar una explicación es
+-- siempre bienvenido.
 --
 -- Lo aplica el binario al arrancar, con goose, contra una base vacía o ya
 -- creada: goose lleva la cuenta de qué migraciones corrieron en la tabla
@@ -140,6 +154,16 @@ CREATE TABLE usuario (
     -- pueden no existir todavía. Sigue siendo una declaración, no un vínculo:
     -- el rol que rige es el que el ADMIN carga al asignar (RF-02.6).
     rol_solicitado         VARCHAR(10) CHECK (rol_solicitado IN ('TITULAR','SUPLENTE')),
+    -- Qué cargo dijo tener: DOCENTE (da clase) o ADMIN_SISTEMA (auxiliar
+    -- informático, administrador de red y demás cargos docentes que
+    -- administran el laboratorio sin estar frente a alumnos). Es una
+    -- declaración más, como el curso y la materia: NO otorga permisos. La
+    -- cuenta nace DOCENTE/PENDIENTE igual, y si corresponde el ADMIN la
+    -- promueve después de aprobarla (RF-01.4), para que "aprobar" siga
+    -- significando lo mismo para todas las cuentas.
+    -- Nullable a propósito: las cuentas anteriores a esta columna quedan en
+    -- NULL, y un ADMIN creado por otro ADMIN tampoco declara ningún cargo.
+    cargo_solicitado       VARCHAR(20) CHECK (cargo_solicitado IN ('DOCENTE','ADMIN_SISTEMA')),
 
     -- Se incrementa para invalidar las sesiones abiertas de esta persona.
     -- Los tokens son stateless: sin este contador, cambiar una contraseña o
@@ -1219,7 +1243,11 @@ CREATE INDEX idx_sugerencia_mensaje_hilo ON sugerencia_mensaje (sugerencia_id, e
 -- +goose Down
 
 -- Deshacer el esquema inicial es borrar la base entera: no hay estado
--- anterior al que volver, porque esta migración ES el punto de partida.
+-- anterior al que volver, porque esta migración ES el punto de partida. Por
+-- eso el punto de partida no se revierte: es una decisión, no un olvido. Lo
+-- que sigue está escrito para que el archivo sea correcto y para poder
+-- leerlo, pero la forma soportada de descartar una instalación entera es
+-- `docker compose down -v`, que al menos dice en el nombre lo que hace.
 --
 -- Está escrito de verdad, y no vacío, porque un `down` que no hace nada y
 -- termina bien es peor que uno que no existe: goose lo marca como

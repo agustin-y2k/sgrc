@@ -22,22 +22,24 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Select } from "@/components/ui/select"
 import * as authApi from "@/features/auth/api"
-import { SelectorDeCursoSolicitado } from "@/features/auth/SelectorDeCursoSolicitado"
+import {
+  DeclaracionDeCargo,
+  camposDeclarados,
+  loQueDictaEseCargo,
+} from "@/features/auth/DeclaracionDeCargo"
 import { getErrorMessage } from "@/lib/api-client"
 import { datosDeLaCredencial } from "@/lib/google-identity"
 
 /**
  * El segundo paso del registro con Google: lo único que el token de Google no
- * puede traer.
+ * puede traer. Lo declarado es el mismo bloque que el registro con
+ * contraseña (camposDeclarados), no una copia.
  */
 const registroGoogleSchema = z.object({
   nombre: z.string().min(1, "Requerido").max(100),
   apellido: z.string().min(1, "Requerido").max(100),
-  cursoSolicitado: z.string().max(100).optional(),
-  materiaSolicitada: z.string().max(100).optional(),
-  rolSolicitado: z.enum(["TITULAR", "SUPLENTE"]).or(z.literal("")).optional(),
+  ...camposDeclarados,
 })
 
 type RegistroGoogleValues = z.infer<typeof registroGoogleSchema>
@@ -62,7 +64,8 @@ export function RegistroConGoogle({
       apellido: datos?.apellido ?? "",
       cursoSolicitado: "",
       materiaSolicitada: "",
-      rolSolicitado: "",
+      // El cargo y el rol arrancan sin elegir: son obligatorios y ninguna de
+      // las dos opciones es el caso "normal" del que partir.
     },
   })
 
@@ -73,12 +76,9 @@ export function RegistroConGoogle({
         credential: credencial,
         nombre: values.nombre,
         apellido: values.apellido,
-        // Vacío se manda como ausente, igual que en el registro con
-        // contraseña: "no lo declaró" y "lo dejó en blanco" no son dos cosas
-        // distintas.
-        cursoSolicitado: values.cursoSolicitado?.trim() || undefined,
-        materiaSolicitada: values.materiaSolicitada?.trim() || undefined,
-        rolSolicitado: values.rolSolicitado || undefined,
+        cargoSolicitado: values.cargoSolicitado,
+        rolSolicitado: values.rolSolicitado,
+        ...loQueDictaEseCargo(values),
       })
       onRegistrado()
     } catch (err) {
@@ -93,11 +93,11 @@ export function RegistroConGoogle({
         <CardDescription>
           {datos?.email ? (
             <>
-              Vas a entrar con <span className="font-medium">{datos.email}</span>. Falta
-              un dato para que un Admin pueda aprobarte.
+              Vas a entrar con <span className="font-medium">{datos.email}</span>. Faltan
+              unos datos para que un Admin pueda aprobarte.
             </>
           ) : (
-            "Falta un dato para que un Admin pueda aprobar tu cuenta."
+            "Faltan unos datos para que un Admin pueda aprobar tu cuenta."
           )}
         </CardDescription>
       </CardHeader>
@@ -137,62 +137,7 @@ export function RegistroConGoogle({
                 )}
               />
             </div>
-            <div className="border-t pt-4">
-              <p className="mb-1 text-sm font-medium">¿Qué vas a dictar?</p>
-              <p className="text-muted-foreground mb-3 text-xs">
-                Opcional, pero ayuda: es lo que el Admin va a mirar para asignarte a la
-                materia correcta al aprobar tu cuenta. Si el curso o la materia todavía no
-                existen, los crea.
-              </p>
-              <div className="grid gap-4">
-                <FormField
-                  control={form.control}
-                  name="cursoSolicitado"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <SelectorDeCursoSolicitado
-                          idPrefijo="registro-google-curso"
-                          value={field.value ?? ""}
-                          onChange={field.onChange}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="materiaSolicitada"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Materia</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ej.: Programación" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="rolSolicitado"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Rol</FormLabel>
-                      <FormControl>
-                        <Select {...field} value={field.value ?? ""}>
-                          <option value="">No lo sé todavía</option>
-                          <option value="TITULAR">Titular</option>
-                          <option value="SUPLENTE">Suplente</option>
-                        </Select>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
+            <DeclaracionDeCargo idPrefijo="registro-google" />
 
             <Button type="submit" disabled={form.formState.isSubmitting}>
               Crear cuenta

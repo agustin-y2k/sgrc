@@ -102,29 +102,6 @@ dominio:
 > El `.env` no se comparte ni se publica: tiene la contraseña de la base y el
 > secreto de las sesiones.
 
-#### Poner al día un `.env` que ya está en uso
-
-Un `.env` de servidor envejece de una manera particular: los valores están
-bien, pero le faltan los comentarios que explican cada variable y las que se
-agregaron en versiones posteriores. Para volver a juntarlo con el ejemplo, sin
-tocar ningún valor:
-
-```bash
-umask 077                                   # el archivo nuevo, solo para vos
-./scripts/env-con-comentarios.sh > .env.nuevo
-diff .env .env.nuevo                        # mirar antes de reemplazar
-cp .env .env.respaldo && mv .env.nuevo .env
-```
-
-Toma la estructura y los comentarios de `.env.example`, y para cada variable
-usa **el valor que ya tenías**. Lo que el ejemplo trae y tu instalación no
-tiene queda con el valor de ejemplo y se avisa por pantalla; lo que tenés vos y
-el ejemplo no conoce se conserva al final del archivo, en su propia sección.
-Nada se descarta en silencio.
-
-El script escribe a la salida estándar y nunca pisa el `.env` en uso: el
-reemplazo es una decisión tuya, después de leer el `diff`.
-
 ### 1.1.b Configurar el correo (opcional, pero conviene)
 
 Sin esto el sistema funciona igual: los avisos siguen llegando a la campana de
@@ -312,9 +289,10 @@ make run-prod          # reconstruye las imágenes y reemplaza los contenedores
 ```
 
 Si la actualización trae **cambios en el esquema** (archivos nuevos en
-`migrations/`), no hay nada extra que hacer: el binario los aplica solo al
-arrancar. Conviene igual mirar el log —la línea empieza con `goose:`— y, si
-querés confirmarlo después, `make migrate-status`. El detalle está en §5.
+`migrations/`), el binario los aplica solo al arrancar, respetando los datos
+que ya están. Lo único que conviene agregar es un `make backup` antes y un
+`make migrate-status` después; el log lo cuenta en la línea que empieza con
+`goose:`. La lista de control completa, y qué hacer si falla, en §5.
 
 ---
 
@@ -458,11 +436,12 @@ docker compose logs sgrc-app | grep -i "correo\|email"
 
 ## 5. El esquema de la base
 
-`migrations/001_esquema_inicial.sql` es el esquema completo del sistema. **Lo
-aplica sgrc-app al arrancar**, con [goose](https://github.com/pressly/goose):
-mira qué migraciones registró la tabla `goose_db_version`, aplica las que
-falten y sigue. Arrancar mil veces no cambia nada; arrancar contra una base
-vacía la deja lista; arrancar contra una base vieja la pone al día.
+El esquema son los archivos de `migrations/`: la 001 lo crea entero y cada
+archivo posterior lo modifica. **Los aplica sgrc-app al arrancar**, con
+[goose](https://github.com/pressly/goose): mira qué migraciones registró la
+tabla `goose_db_version`, aplica las que falten en orden y sigue. Arrancar mil
+veces no cambia nada; arrancar contra una base vacía la deja lista; arrancar
+contra una base vieja la pone al día **sin tocar los datos que ya tiene**.
 
 En el log se ve así:
 
@@ -476,12 +455,30 @@ goose: no migrations to run. current version: 1         ← las siguientes
 > toca una columna que no está**, el esquema quedó atrasado: `make
 > migrate-status` es la primera pregunta a hacer.
 
-Es un archivo único y no una cadena de parches incrementales. La razón es
-para quién está escrito: alguien que adopta el proyecto necesita entender qué
-tablas hay y por qué son así, y eso se lee de corrido en un archivo — no
-reconstruyéndolo mentalmente a partir de veinte migraciones sucesivas, la
-mitad de las cuales renombran lo que hizo la otra mitad. La historia de cómo
-se llegó a este esquema está en el historial de git, que es donde corresponde.
+### El punto de partida está congelado
+
+La 001 es el **punto de partida**: el esquema entero de una instalación nueva,
+escrito para leerse de corrido. Que sea un archivo y no una cadena de veinte
+parches es deliberado — quien adopta el proyecto necesita entender qué tablas
+hay y por qué son así, no reconstruirlo mentalmente a partir de migraciones
+sucesivas, la mitad de las cuales renombran lo que hizo la otra mitad. La
+historia de cómo se llegó a ese esquema está en el historial de git, que es
+donde corresponde.
+
+Esa comodidad **se termina en el momento en que existe una instalación con
+datos adentro**, y por eso la 001 no se edita más. De ahí en adelante, cada
+cambio de esquema es un archivo nuevo que se aplica encima.
+
+> **La regla, en una línea:** una base ya migrada no vuelve a leer un archivo
+> que ya aplicó. Si el cambio no está en un archivo **nuevo**, en el servidor
+> no existe.
+
+Lo que hace peligrosa a esta regla es que romperla **no da ningún síntoma
+mientras se programa**: agregar una columna editando la 001 anda perfecto
+contra una base de desarrollo, que nace de cero cada vez. El problema aparece
+semanas después y en el servidor, como un 500 en la primera pantalla que toca
+la columna que ahí nunca se creó. Por eso hay un test que guarda una huella
+del SQL de la 001 y falla si alguien lo cambia: `go test ./migrations/`.
 
 ### Mirar y forzar el estado
 
@@ -503,7 +500,8 @@ existir, pero no se llega ahí por accidente — el mismo criterio con el que
 Un archivo nuevo en `migrations/`, numerado después del último
 (`002_lo_que_sea.sql`), con las dos anotaciones de goose: la de subida
 —`Up`— antes de los cambios y la de bajada —`Down`— antes de cómo se
-deshacen. Dos cosas que muerden:
+deshacen. No hay que tocar nada más: el directorio se embebe entero, así que
+el archivo nuevo entra solo. Tres cosas que muerden:
 
 - **Las anotaciones no se pueden nombrar en un comentario del mismo archivo.**
   goose lee todas las líneas que llevan su marca, así que explicarlas
@@ -513,6 +511,71 @@ deshacen. Dos cosas que muerden:
   `migrations/embed.go`), porque la imagen final no tiene sistema de archivos
   donde ponerlo. Por eso un archivo nuevo exige **reconstruir**: `make
   run-prod` sí, `make restart` no.
+- **Dos ramas pueden numerar 002 al mismo tiempo.** goose aplicaría una sola y
+  la otra quedaría muda para siempre en las bases que ya pasaron por ahí.
+  `go test ./migrations/` avisa: comprueba que las versiones sean correlativas
+  y no se repitan, y que cada archivo tenga sus dos anotaciones.
+
+#### Escribirla sabiendo que la tabla NO está vacía
+
+Es la diferencia entera entre desarrollo y el servidor. Lo que más aparece:
+
+- **Agregar una columna**: nullable, o con `DEFAULT`. Un `NOT NULL` sin
+  `DEFAULT` sobre una tabla que ya tiene filas **falla**. Si además tiene que
+  quedar obligatoria, son tres pasos que pueden ir en el mismo archivo:
+  agregarla nullable, rellenar las filas viejas con un `UPDATE`, y recién
+  entonces `SET NOT NULL`.
+- **Renombrar**: `ALTER TABLE ... RENAME COLUMN`, nunca borrar y volver a
+  crear. `DROP` + `ADD` compila, aplica, no se queja de nada y deja la columna
+  vacía.
+- **Cambiar el tipo**: `ALTER COLUMN ... TYPE ... USING ...`, con el `USING`
+  pensado para los datos raros que ya están guardados, no para los prolijos.
+- **Agregar un `UNIQUE` o un `CHECK`**: los datos viejos no tienen por qué
+  cumplirlo. Primero el `UPDATE` que los deja en regla, después la constraint,
+  los dos en el mismo archivo para que sea todo o nada.
+- **Borrar una columna o una tabla**: es lo único que ningún archivo posterior
+  puede deshacer. Que vaya sola en su migración y con el backup del día hecho.
+
+#### Todo o nada
+
+goose aplica **cada archivo dentro de una transacción**, y Postgres sabe hacer
+DDL transaccional: si la tercera instrucción falla, las dos anteriores se
+deshacen y la base queda exactamente en la versión anterior. No hay medio
+esquema que reparar a mano — lo que hay que reparar es el archivo.
+
+Y como el binario migra al arrancar, una migración que falla es **un
+contenedor que no levanta**. También es a propósito: prefiere no arrancar
+antes que atender con el esquema a medias.
+
+#### Desplegar un cambio de esquema
+
+```bash
+make backup            # 1. lo único que no se puede reconstruir (ver §6)
+make migrate-status    # 2. de qué versión venimos
+make run-prod          # 3. reconstruye (go:embed) y migra al arrancar
+make migrate-status    # 4. confirmar que la nueva quedó aplicada
+```
+
+Si el paso 3 deja el contenedor caído, `make logs` dice qué instrucción falló;
+la base sigue intacta en la versión vieja, así que volver a desplegar el
+código anterior levanta el sistema como estaba. El backup del paso 1 es para
+el otro caso, el peor: una migración que **sí** aplicó y resultó ser la
+equivocada. Restaurarlo, en §6.
+
+#### El test que cuida todo esto
+
+```bash
+go test ./migrations/                     # rápido, sin Docker: la convención
+go test -tags integration ./migrations/   # levanta Postgres: el camino real
+```
+
+El segundo arma una base en el punto de partida, le mete datos de una escuela
+en uso —docentes, cursos, equipos, reservas, entregas— y **recién entonces**
+aplica las migraciones que falten. Falla si alguna tabla pierde filas, si una
+desaparece, o si la reserva de prueba cambia de horario por el camino. Es el
+único test que ejercita lo que le pasa al servidor: todos los demás levantan
+un Postgres vacío, donde una migración destructiva no tiene nada que destruir
+y pasa en verde. Corre en CI, en el job de integración.
 
 ### Una base anterior a goose
 

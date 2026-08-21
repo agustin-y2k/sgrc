@@ -15,6 +15,10 @@ const (
 	RolPromovidoAAdmin        = "ROL_PROMOVIDO_A_ADMIN"
 	RolDegradadoADocente      = "ROL_DEGRADADO_A_DOCENTE"
 	PasswordReseteada         = "PASSWORD_RESETEADA"
+	// NombreCambiado es la única acción del catálogo que alguien hace sobre su
+	// propia cuenta sin ser Admin: cambiar el nombre cambia lo que el resto de
+	// la escuela ve en las reservas y en las entregas.
+	NombreCambiado = "NOMBRE_CAMBIADO"
 	// PasswordRecuperadaPorEmail es la única acción de este catálogo cuyo actor
 	// NO está autenticado: la persona probó ser dueña de la cuenta con el código
 	// que le llegó al mail, no con un token.

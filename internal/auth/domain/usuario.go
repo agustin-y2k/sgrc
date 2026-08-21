@@ -8,6 +8,7 @@ import (
 	"net/mail"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Rol de un usuario. Solo dos valores posibles en todo el sistema
@@ -77,6 +78,37 @@ func NormalizarRolSolicitado(s string) (string, error) {
 	}
 }
 
+// Los dos valores que admite CargoSolicitado.
+const (
+	// CargoSolicitadoDocente es quien da clase frente a alumnos.
+	CargoSolicitadoDocente = "DOCENTE"
+
+	// CargoSolicitadoAdminSistema cubre al auxiliar informático, al
+	// administrador de red y a los demás cargos docentes que administran el
+	// laboratorio sin estar frente a alumnos.
+	CargoSolicitadoAdminSistema = "ADMIN_SISTEMA"
+)
+
+// ErrCargoSolicitadoInvalido se devuelve cuando el registro declara un cargo
+// que no es ninguno de los dos.
+var ErrCargoSolicitadoInvalido = errors.New("cargo solicitado inválido")
+
+// NormalizarCargoSolicitado acepta el vacío —las cuentas anteriores a esta
+// columna no declararon ninguno, y un ADMIN creado por otro ADMIN tampoco— y
+// rechaza cualquier otra cosa. Que el registro EXIJA declararlo es una regla
+// del caso de uso, no del dato: vive en Registrar (ver application/service.go).
+//
+// Ojo con el nombre: el cargo declarado NO es domain.Rol y no otorga ningún
+// permiso. Es una declaración, igual que el curso y la materia.
+func NormalizarCargoSolicitado(s string) (string, error) {
+	switch s {
+	case "", CargoSolicitadoDocente, CargoSolicitadoAdminSistema:
+		return s, nil
+	default:
+		return "", fmt.Errorf("%w: %q", ErrCargoSolicitadoInvalido, s)
+	}
+}
+
 // PuedeTransicionarA implementa el diagrama de estados de Usuario
 // (docs/05-diagramas-estado.md): PENDIENTE puede ir a APROBADA o RECHAZADA;
 // APROBADA puede ir a BAJA; RECHAZADA y BAJA son terminales — ninguna
@@ -100,6 +132,37 @@ func (e Estado) PuedeTransicionarA(nuevo Estado) bool {
 // mensaje para que el error sea depurable sin tener que ir a buscar el
 // diagrama de estados.
 var ErrTransicionInvalida = errors.New("transición de estado inválida")
+
+// LargoMaxNombre es lo que entra en las columnas nombre y apellido
+// (VARCHAR(100) en migrations/001_esquema_inicial.sql).
+const LargoMaxNombre = 100
+
+// ErrNombreVacio y ErrNombreDemasiadoLargo son las dos formas en que un
+// nombre no sirve.
+var (
+	ErrNombreVacio = errors.New("el nombre y el apellido son obligatorios")
+
+	ErrNombreDemasiadoLargo = fmt.Errorf(
+		"el nombre y el apellido no pueden tener más de %d caracteres", LargoMaxNombre)
+)
+
+// NormalizarNombreYApellido recorta los espacios y aplica la única regla que
+// tiene un nombre propio en este sistema: que exista y que entre en la
+// columna. Vive en el dominio porque son dos las puertas por las que se
+// escribe —el registro y la edición del propio perfil— y hasta ahora el largo
+// lo cortaba solamente el formulario del navegador.
+func NormalizarNombreYApellido(nombre, apellido string) (string, string, error) {
+	nombre, apellido = strings.TrimSpace(nombre), strings.TrimSpace(apellido)
+	if nombre == "" || apellido == "" {
+		return "", "", ErrNombreVacio
+	}
+	// Se cuentan runas y no bytes: VARCHAR(100) en Postgres son 100
+	// caracteres, y un apellido con eñes o acentos ocupa más bytes que letras.
+	if utf8.RuneCountInString(nombre) > LargoMaxNombre || utf8.RuneCountInString(apellido) > LargoMaxNombre {
+		return "", "", ErrNombreDemasiadoLargo
+	}
+	return nombre, apellido, nil
+}
 
 // ErrEmailInvalido se devuelve cuando un string no tiene forma de email.
 var ErrEmailInvalido = errors.New("el email no tiene un formato válido")
@@ -148,6 +211,12 @@ type Usuario struct {
 
 	// RolSolicitado es si se ofrece como titular o como suplente.
 	RolSolicitado string
+
+	// CargoSolicitado es qué dijo ser al registrarse: DOCENTE o
+	// ADMIN_SISTEMA. Vacío en las cuentas anteriores a la columna y en los
+	// Admin creados por otro Admin. No otorga permisos — ver
+	// NormalizarCargoSolicitado.
+	CargoSolicitado string
 
 	// GoogleSub es el claim `sub` del ID token de Google: el identificador
 	// estable de esa cuenta.

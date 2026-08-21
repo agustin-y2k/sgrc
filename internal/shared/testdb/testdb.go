@@ -44,3 +44,28 @@ func AplicarEsquema(ctx context.Context, dsn string) error {
 	}
 	return nil
 }
+
+// AplicarHasta deja la base en una versión intermedia del esquema, en vez de
+// en la última. Sirve para un solo escenario, pero es el que ningún otro test
+// cubre: reconstruir una instalación vieja —el esquema hasta cierta
+// migración, con datos adentro— para después aplicarle encima las que
+// faltan, que es exactamente lo que le pasa al servidor de la institución en
+// cada actualización.
+func AplicarHasta(ctx context.Context, dsn string, version int64) error {
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return fmt.Errorf("abriendo la conexión de test: %w", err)
+	}
+	defer db.Close()
+
+	goose.SetBaseFS(migrations.FS)
+	goose.SetLogger(loggerSilencioso{})
+	if err := goose.SetDialect("postgres"); err != nil {
+		return fmt.Errorf("configurando goose: %w", err)
+	}
+
+	if err := goose.UpToContext(ctx, db, ".", version); err != nil {
+		return fmt.Errorf("aplicando el esquema hasta la versión %d: %w", version, err)
+	}
+	return nil
+}

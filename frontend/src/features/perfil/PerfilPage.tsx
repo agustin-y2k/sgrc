@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth } from "@/features/auth/AuthContext"
 import { FotoDePerfil } from "@/features/perfil/FotoDePerfil"
+import { MisDatos } from "@/features/perfil/MisDatos"
 import { PedirMateria } from "@/features/perfil/PedirMateria"
 import * as perfilApi from "@/features/perfil/api"
 import { ETIQUETA_ESTADO_PEDIDO, materiaDelPedido } from "@/features/perfil/types"
@@ -38,7 +39,7 @@ export function PerfilPage() {
     <div className="mx-auto grid max-w-3xl gap-4">
       <EncabezadoDePagina
         titulo="Mi perfil"
-        descripcion="Tu foto, las materias que das y la contraseña con la que entrás."
+        descripcion="Tu nombre, tu foto, las materias que das y la contraseña con la que entrás."
       />
 
       <Card>
@@ -48,15 +49,7 @@ export function PerfilPage() {
             nombre={user.nombre}
             apellido={user.apellido}
           />
-          <div>
-            <p className="text-lg font-medium">
-              {user.nombre} {user.apellido}
-            </p>
-            <p className="text-muted-foreground text-sm">{user.email}</p>
-            <p className="text-muted-foreground text-sm">
-              {user.rol === "ADMIN" ? "Administración" : "Docente"}
-            </p>
-          </div>
+          <MisDatos usuario={user} />
         </CardContent>
       </Card>
 

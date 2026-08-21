@@ -39,6 +39,14 @@ var (
 	// ErrDatosObligatorios: nombre/apellido/email vacíos.
 	ErrDatosObligatorios = errors.New("nombre, apellido y email son obligatorios")
 
+	// ErrCargoObligatorio y ErrRolSolicitadoObligatorio: los dos únicos campos
+	// que el registro exige además del nombre, el email y la contraseña. El
+	// curso y la materia siguen siendo opcionales — quien todavía no sabe qué
+	// va a dictar se registra igual y lo arregla con el Admin (RF-01.3).
+	ErrCargoObligatorio = errors.New("hay que elegir con qué cargo te registrás: docente o administrador de sistema")
+
+	ErrRolSolicitadoObligatorio = errors.New("hay que elegir si sos titular o suplente")
+
 	// ErrUltimoAdmin: RF-01.8 — el sistema nunca puede quedar sin ningún Admin.
 	ErrUltimoAdmin = errors.New("no se puede dejar al sistema sin ningún admin activo")
 

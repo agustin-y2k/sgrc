@@ -89,7 +89,7 @@ func TestLoginConGoogle_SinVerificador_NoDisponible(t *testing.T) {
 func TestRegistrarConGoogle_SinVerificador_NoDisponible(t *testing.T) {
 	svc := nuevoServicioConGoogle(nuevoFakeRepo(), nil)
 
-	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", SolicitudDeAsignacion{})
+	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", solicitudDeDocente())
 
 	if !errors.Is(err, ErrLoginGoogleNoDisponible) {
 		t.Fatalf("esperaba ErrLoginGoogleNoDisponible, hubo: %v", err)
@@ -338,7 +338,8 @@ func TestRegistrarConGoogle_CreaCuentaPendienteSinPassword(t *testing.T) {
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
 	u, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "",
-		SolicitudDeAsignacion{Curso: "5°A", Materia: "Programación"})
+		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoDocente, Rol: domain.RolSolicitadoTitular,
+			Curso: "5°A", Materia: "Programación"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -374,7 +375,7 @@ func TestRegistrarConGoogle_PublicaEventoParaAdmins(t *testing.T) {
 	recibido := make(chan eventbus.Evento, 1)
 	svc.bus.Subscribe("docente.registro.pendiente", func(e eventbus.Evento) { recibido <- e })
 
-	if _, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", SolicitudDeAsignacion{}); err != nil {
+	if _, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", solicitudDeDocente()); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -391,7 +392,7 @@ func TestRegistrarConGoogle_PublicaEventoParaAdmins(t *testing.T) {
 func TestRegistrarConGoogle_NombreDelRequestGanaSobreElDelToken(t *testing.T) {
 	svc := nuevoServicioConGoogle(nuevoFakeRepo(), &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
-	u, err := svc.RegistrarConGoogle(context.Background(), "un-token", "Augusta", "Byron", SolicitudDeAsignacion{})
+	u, err := svc.RegistrarConGoogle(context.Background(), "un-token", "Augusta", "Byron", solicitudDeDocente())
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -409,7 +410,7 @@ func TestRegistrarConGoogle_SinNombreEnNingunLado_Error(t *testing.T) {
 	identidad.Apellido = ""
 	svc := nuevoServicioConGoogle(nuevoFakeRepo(), &fakeVerificadorGoogle{identidad: identidad})
 
-	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", SolicitudDeAsignacion{})
+	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", solicitudDeDocente())
 
 	if !errors.Is(err, ErrDatosObligatorios) {
 		t.Fatalf("esperaba ErrDatosObligatorios, hubo: %v", err)
@@ -421,7 +422,7 @@ func TestRegistrarConGoogle_YaVinculada_NoCreaOtra(t *testing.T) {
 	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
-	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", SolicitudDeAsignacion{})
+	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", solicitudDeDocente())
 
 	if !errors.Is(err, ErrEmailYaRegistrado) {
 		t.Fatalf("esperaba ErrEmailYaRegistrado, hubo: %v", err)
@@ -440,7 +441,7 @@ func TestRegistrarConGoogle_EmailYaUsadoPorCuentaLocal_NoCreaOtra(t *testing.T) 
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
-	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", SolicitudDeAsignacion{})
+	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", solicitudDeDocente())
 
 	if !errors.Is(err, ErrEmailYaRegistrado) {
 		t.Fatalf("esperaba ErrEmailYaRegistrado, hubo: %v", err)
@@ -461,7 +462,7 @@ func TestRegistrarConGoogle_EmailDeCuentaEnBaja(t *testing.T) {
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
-	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", SolicitudDeAsignacion{})
+	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", solicitudDeDocente())
 
 	if !errors.Is(err, ErrCuentaEnBaja) {
 		t.Fatalf("esperaba ErrCuentaEnBaja, hubo: %v", err)

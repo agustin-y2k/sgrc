@@ -1,6 +1,24 @@
+import type {
+  ActualizarMisDatosRequest,
+  ActualizarMisDatosResponse,
+} from "@/features/auth/types"
 import type { PedidoDeMateria, RespuestaLista } from "@/features/perfil/types"
 import { apiFetch } from "@/lib/api-client"
 import { getToken } from "@/lib/token-store"
+
+// ── Mis datos ─────────────────────────────────────────────────────────
+
+/**
+ * Cambia el propio nombre y apellido. Devuelve un token nuevo: el actual
+ * lleva el nombre viejo en los claims (ver ActualizarMisDatos en
+ * internal/auth/application/service_perfil.go).
+ */
+export function actualizarMisDatos(req: ActualizarMisDatosRequest) {
+  return apiFetch<ActualizarMisDatosResponse>("/api/auth/mi-perfil", {
+    method: "PATCH",
+    body: req,
+  })
+}
 
 // ── Foto de perfil ────────────────────────────────────────────────────
 

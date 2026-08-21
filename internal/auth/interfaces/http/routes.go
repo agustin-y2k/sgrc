@@ -45,6 +45,9 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	auth.Post("/cambiar-password", conPasswordVencida, h.CambiarPassword)
 
 	autenticado := aut.Requerida()
+	// Los datos propios: el nombre con el que figurás en todo el sistema.
+	auth.Patch("/mi-perfil", autenticado, h.ActualizarMisDatos)
+
 	// Foto de perfil: la propia se sube y se borra; la de cualquiera se puede
 	// ver estando autenticado (aparecen al lado del nombre en pantallas
 	// compartidas).

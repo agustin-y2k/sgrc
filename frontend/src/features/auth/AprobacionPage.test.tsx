@@ -61,6 +61,50 @@ describe("AprobacionPage", () => {
     expect(authApi.listarUsuarios).toHaveBeenCalledWith({ estado: "PENDIENTE" })
   })
 
+  // El cargo declarado no otorga permisos: quien dijo ser administrador de
+  // sistema aparece igual en la lista de pendientes y se aprueba igual. La
+  // ficha tiene que decirlo, o "Aprobar" pasaría a significar dos cosas.
+  it("distingue a quien se registró como administrador de sistema", async () => {
+    vi.mocked(authApi.listarUsuarios).mockResolvedValue({
+      ...pendientesMock,
+      data: [
+        {
+          ...pendientesMock.data[0],
+          cargoSolicitado: "ADMIN_SISTEMA",
+          rolSolicitado: "SUPLENTE",
+        },
+      ],
+    })
+    renderAprobacionPage()
+
+    expect(await screen.findByText("Se registró como")).toBeInTheDocument()
+    expect(
+      screen.getByText("Administrador de Sistema · como suplente")
+    ).toBeInTheDocument()
+    expect(screen.getByText(/no le da ningún permiso/i)).toBeInTheDocument()
+    // No es un pedido de materia: esa ficha no corresponde acá.
+    expect(screen.queryByText("Pidió dictar")).not.toBeInTheDocument()
+  })
+
+  it("de un docente muestra lo que pidió dictar", async () => {
+    vi.mocked(authApi.listarUsuarios).mockResolvedValue({
+      ...pendientesMock,
+      data: [
+        {
+          ...pendientesMock.data[0],
+          cargoSolicitado: "DOCENTE",
+          materiaSolicitada: "Programación",
+          cursoSolicitado: "5°A",
+          rolSolicitado: "TITULAR",
+        },
+      ],
+    })
+    renderAprobacionPage()
+
+    expect(await screen.findByText("Pidió dictar")).toBeInTheDocument()
+    expect(screen.getByText("Programación · 5°A · como titular")).toBeInTheDocument()
+  })
+
   it("sin pendientes, muestra el mensaje vacío", async () => {
     vi.mocked(authApi.listarUsuarios).mockResolvedValue({
       data: [],

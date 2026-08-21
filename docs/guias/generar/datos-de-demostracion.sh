@@ -34,7 +34,7 @@ echo "→ materia Matemática $MAT_MAT"
 
 # Docente de la guía.
 api "" POST /api/auth/registro \
-  "{\"nombre\":\"Ana\",\"apellido\":\"Gómez\",\"email\":\"$DOC_EMAIL\",\"password\":\"$DOC_PASS\"}" >/dev/null || true
+  "{\"nombre\":\"Ana\",\"apellido\":\"Gómez\",\"email\":\"$DOC_EMAIL\",\"password\":\"$DOC_PASS\",\"cargoSolicitado\":\"DOCENTE\",\"rolSolicitado\":\"TITULAR\"}" >/dev/null || true
 DOC=$(api "$AT" GET "/api/auth/usuarios?rol=DOCENTE&pageSize=200" | jq -r ".data[] | select(.email==\"$DOC_EMAIL\") | .id")
 api "$AT" PATCH "/api/auth/usuarios/$DOC/estado" '{"estado":"APROBADA"}' >/dev/null || true
 api "$AT" POST "/api/academic/materias/$MAT_PROG/docentes" "{\"usuarioId\":\"$DOC\",\"rol\":\"TITULAR\"}" >/dev/null || true

@@ -20,6 +20,14 @@ export type Usuario = {
   cursoSolicitado?: string
   materiaSolicitada?: string
   rolSolicitado?: RolSolicitado
+  /**
+   * Con qué cargo dijo registrarse. NO es `rol`: es una declaración y no
+   * otorga permisos — quien dice ser administrador de sistema queda igual
+   * DOCENTE/PENDIENTE, y el Admin lo promueve aparte después de aprobarlo.
+   * Ausente en las cuentas anteriores a este campo y en los Admin creados por
+   * otro Admin.
+   */
+  cargoSolicitado?: CargoSolicitado
   /** Cómo puede entrar esta cuenta. */
   tienePassword?: boolean
   vinculadaAGoogle?: boolean
@@ -64,13 +72,23 @@ export type GoogleRegistroRequest = GoogleLoginRequest & {
   /** Vacíos, el backend usa los del token (given_name / family_name). */
   nombre?: string
   apellido?: string
+  /** Obligatorios los dos, para los dos cargos (RF-01.3). */
+  cargoSolicitado: CargoSolicitado
+  rolSolicitado: RolSolicitado
+  /** Solo tienen sentido para el cargo DOCENTE; el backend los descarta si no. */
   cursoSolicitado?: string
   materiaSolicitada?: string
-  rolSolicitado?: RolSolicitado
 }
 
-/** Con qué rol se ofrece quien se registra. */
+/** Con qué rol se ofrece quien se registra. Obligatorio para los dos cargos. */
 export type RolSolicitado = "TITULAR" | "SUPLENTE"
+
+/**
+ * Con qué cargo se registra. ADMIN_SISTEMA cubre al auxiliar informático, al
+ * administrador de red y a los demás cargos docentes que administran el
+ * laboratorio sin estar frente a alumnos.
+ */
+export type CargoSolicitado = "DOCENTE" | "ADMIN_SISTEMA"
 
 export type LoginRequest = {
   email: string
@@ -87,10 +105,27 @@ export type RegistroRequest = {
   apellido: string
   email: string
   password: string
-  /** Qué va a dictar. */
+  /** Obligatorios los dos, para los dos cargos (RF-01.3). */
+  cargoSolicitado: CargoSolicitado
+  rolSolicitado: RolSolicitado
+  /** Qué va a dictar. Solo para el cargo DOCENTE, y los dos opcionales. */
   cursoSolicitado?: string
   materiaSolicitada?: string
-  rolSolicitado?: RolSolicitado
+}
+
+/** PATCH /api/auth/mi-perfil — cambiar el propio nombre y apellido. */
+export type ActualizarMisDatosRequest = {
+  nombre: string
+  apellido: string
+}
+
+/**
+ * El token viene en la respuesta porque el anterior lleva el nombre viejo en
+ * los claims: hay que reemplazarlo para que deje de mentir.
+ */
+export type ActualizarMisDatosResponse = {
+  usuario: Usuario
+  token: string
 }
 
 export type CambiarPasswordRequest = {

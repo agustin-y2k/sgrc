@@ -249,6 +249,7 @@ func TestHTTP_Registrar_OK(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/auth/registro", jsonBody(registroRequest{
 		Nombre: "Ada", Apellido: "Lovelace", Email: "ada@x.com", Password: "password123",
+		CargoSolicitado: domain.CargoSolicitadoDocente, RolSolicitado: domain.RolSolicitadoTitular,
 	}))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -282,6 +283,7 @@ func TestHTTP_Registrar_EmailDuplicado_409(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/auth/registro", jsonBody(registroRequest{
 		Nombre: "Ada", Apellido: "Lovelace", Email: "ada@x.com", Password: "password123",
+		CargoSolicitado: domain.CargoSolicitadoDocente, RolSolicitado: domain.RolSolicitadoTitular,
 	}))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -379,6 +381,165 @@ func TestHTTP_Me_ConToken_OK(t *testing.T) {
 	}
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+}
+
+// El cargo y el rol son los dos únicos campos que el registro sumó como
+// obligatorios (RF-01.3): 400 y no 500, es un dato del formulario.
+func TestHTTP_Registrar_SinCargoNiRol_400(t *testing.T) {
+	casos := []struct {
+		caso string
+		req  registroRequest
+	}{
+		{"sin ninguno de los dos", registroRequest{
+			Nombre: "Ada", Apellido: "Lovelace", Email: "ada@x.com", Password: "password123",
+		}},
+		{"sin cargo", registroRequest{
+			Nombre: "Ada", Apellido: "Lovelace", Email: "ada@x.com", Password: "password123",
+			RolSolicitado: domain.RolSolicitadoTitular,
+		}},
+		{"sin rol", registroRequest{
+			Nombre: "Ada", Apellido: "Lovelace", Email: "ada@x.com", Password: "password123",
+			CargoSolicitado: domain.CargoSolicitadoDocente,
+		}},
+		{"cargo desconocido", registroRequest{
+			Nombre: "Ada", Apellido: "Lovelace", Email: "ada@x.com", Password: "password123",
+			CargoSolicitado: "DIRECTOR", RolSolicitado: domain.RolSolicitadoTitular,
+		}},
+	}
+	for _, c := range casos {
+		t.Run(c.caso, func(t *testing.T) {
+			app := nuevaAppDeTest(nuevoFakeRepo())
+
+			req := httptest.NewRequest("POST", "/api/auth/registro", jsonBody(c.req))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, _ := app.Test(req)
+			if resp.StatusCode != fiber.StatusBadRequest {
+				t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+			}
+		})
+	}
+}
+
+// Quien se registra como administrador de sistema queda igual que cualquier
+// otra cuenta: DOCENTE y PENDIENTE. Lo declarado no otorga permisos — el
+// Admin lo promueve después de aprobar, con el botón que ya existe.
+func TestHTTP_Registrar_ComoAdminDeSistema_QuedaDocentePendiente(t *testing.T) {
+	repo := nuevoFakeRepo()
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/registro", jsonBody(registroRequest{
+		Nombre: "Ada", Apellido: "Lovelace", Email: "ada@x.com", Password: "password123",
+		CargoSolicitado: domain.CargoSolicitadoAdminSistema,
+		RolSolicitado:   domain.RolSolicitadoSuplente,
+	}))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("esperaba 201, obtuve %d", resp.StatusCode)
+	}
+
+	var creado *domain.Usuario
+	for _, u := range repo.usuarios {
+		creado = u
+	}
+	if creado == nil {
+		t.Fatal("no se creó ninguna cuenta")
+	}
+	if creado.Rol != domain.RolDocente || creado.Estado != domain.EstadoPendiente {
+		t.Errorf("esperaba DOCENTE/PENDIENTE, obtuve %s/%s", creado.Rol, creado.Estado)
+	}
+	if creado.CargoSolicitado != domain.CargoSolicitadoAdminSistema {
+		t.Errorf("el cargo declarado tiene que quedar guardado, obtuve %q", creado.CargoSolicitado)
+	}
+}
+
+// ── PATCH /api/auth/mi-perfil ───────────────────────────────────────────
+
+func TestHTTP_ActualizarMisDatos_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron",
+		Email: "ada@x.com", Estado: domain.EstadoAprobada}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+		Nombre: "Ada", Apellido: "Lovelace",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+
+	var body actualizarMisDatosResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if body.Usuario.Apellido != "Lovelace" {
+		t.Errorf("esperaba el apellido nuevo en la respuesta, obtuve %q", body.Usuario.Apellido)
+	}
+	// Sin el token nuevo el cliente se quedaría con el nombre viejo en los
+	// claims hasta el próximo ingreso.
+	if body.Token == "" {
+		t.Error("la respuesta tiene que traer un token nuevo")
+	}
+}
+
+// El nombre propio se cambia solo, no el de otro: el endpoint no recibe
+// ningún id, sale del token.
+func TestHTTP_ActualizarMisDatos_SinToken_401(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+		Nombre: "Ada", Apellido: "Lovelace",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("esperaba 401, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_ActualizarMisDatos_NombreVacio_400(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron"}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+		Nombre: "  ", Apellido: "Lovelace",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_ActualizarMisDatos_DemasiadoLargo_400(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron"}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+		Nombre: strings.Repeat("a", domain.LargoMaxNombre+1), Apellido: "Lovelace",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	// 400 y no el 500 que daría el INSERT contra VARCHAR(100).
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
 }
 

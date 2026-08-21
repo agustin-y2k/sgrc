@@ -103,6 +103,63 @@ func TestPostgresRepo_CrearYBuscarPorEmail_OK(t *testing.T) {
 	}
 }
 
+// Lo declarado al registrarse tiene que sobrevivir el viaje a la base: es lo
+// único que el Admin tiene para decidir en la pantalla de aprobación. El
+// cargo lleva CHECK en el esquema, así que un valor que el dominio no conozca
+// tampoco entraría.
+func TestPostgresRepo_LoDeclaradoAlRegistrarse_VaYVuelve(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	u := usuarioDeTest("ada@escuela.edu.ar", domain.RolDocente, domain.EstadoPendiente)
+	u.CursoSolicitado = "5°A"
+	u.MateriaSolicitada = "Programación"
+	u.RolSolicitado = domain.RolSolicitadoSuplente
+	u.CargoSolicitado = domain.CargoSolicitadoAdminSistema
+
+	if err := repo.Crear(ctx, u); err != nil {
+		t.Fatalf("no debería fallar creando: %v", err)
+	}
+
+	encontrado, err := repo.BuscarPorID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar buscando: %v", err)
+	}
+	if encontrado.CargoSolicitado != domain.CargoSolicitadoAdminSistema {
+		t.Errorf("cargoSolicitado = %q, esperaba ADMIN_SISTEMA", encontrado.CargoSolicitado)
+	}
+	if encontrado.RolSolicitado != domain.RolSolicitadoSuplente {
+		t.Errorf("rolSolicitado = %q, esperaba SUPLENTE", encontrado.RolSolicitado)
+	}
+	if encontrado.CursoSolicitado != "5°A" || encontrado.MateriaSolicitada != "Programación" {
+		t.Errorf("curso/materia no coinciden: %+v", encontrado)
+	}
+}
+
+// Las cuentas anteriores a la columna quedaron en NULL, y un Admin creado por
+// otro Admin tampoco declara cargo: eso tiene que leerse como "" y no
+// reventar el Scan.
+func TestPostgresRepo_SinCargoDeclarado_SeLeeVacio(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	u := usuarioDeTest("grace@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
+
+	if err := repo.Crear(ctx, u); err != nil {
+		t.Fatalf("no debería fallar creando: %v", err)
+	}
+
+	encontrado, err := repo.BuscarPorID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar buscando: %v", err)
+	}
+	if encontrado.CargoSolicitado != "" {
+		t.Errorf("esperaba cargoSolicitado vacío, obtuve %q", encontrado.CargoSolicitado)
+	}
+}
+
 func TestPostgresRepo_BuscarPorEmail_NoExiste_ErrUsuarioNoEncontrado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)

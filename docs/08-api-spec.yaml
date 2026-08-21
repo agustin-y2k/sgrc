@@ -161,12 +161,33 @@ components:
     # ── Auth ──
     RegistroRequest:
       type: object
-      required: [nombre, apellido, email, password]
+      required: [nombre, apellido, email, password, cargoSolicitado, rolSolicitado]
       properties:
         nombre: { type: string, maxLength: 100 }
         apellido: { type: string, maxLength: 100 }
         email: { type: string, format: email }
         password: { type: string, minLength: 8 }
+        cargoSolicitado:
+          type: string
+          enum: [DOCENTE, ADMIN_SISTEMA]
+          description: |
+            Con qué cargo se registra. ADMIN_SISTEMA cubre al auxiliar
+            informático, al administrador de red y a los demás cargos docentes
+            que administran el laboratorio sin estar frente a alumnos.
+
+            NO es el `rol` de la cuenta y no otorga ningún permiso: quien
+            declara ADMIN_SISTEMA nace igual con rol DOCENTE y estado
+            PENDIENTE, y para que administre el sistema un Admin tiene que
+            promoverlo aparte, después de aprobarlo (RF-01.3 / RF-01.4).
+        rolSolicitado:
+          type: string
+          enum: [TITULAR, SUPLENTE]
+          description: |
+            Si se ofrece como titular o como suplente. Obligatorio, y para los
+            dos cargos: también hay auxiliares suplentes. Tiene lista cerrada
+            —la misma de DocenteMateria— y se valida: nombra algo que existe
+            siempre. Sigue siendo una declaración; el rol que rige es el que el
+            Admin carga al asignar (RF-02.6).
         cursoSolicitado:
           type: string
           maxLength: 100
@@ -176,19 +197,15 @@ components:
             —y lo que declara puede no existir todavía en el sistema—. Es lo
             que el Admin lee al aprobarla para saber a qué asignarla
             (RF-02.6), no una referencia.
+
+            Solo tiene sentido con cargoSolicitado=DOCENTE. Si el cargo es
+            ADMIN_SISTEMA el servidor lo descarta aunque venga en el cuerpo: el
+            formulario deja de mostrarlo, pero eso es una decisión del
+            navegador y no se confía en ella.
         materiaSolicitada:
           type: string
           maxLength: 100
           description: Igual que cursoSolicitado, para la materia.
-        rolSolicitado:
-          type: string
-          enum: [TITULAR, SUPLENTE]
-          description: |
-            Si se ofrece como titular o como suplente. También opcional, pero a
-            diferencia de los dos anteriores tiene lista cerrada —la misma de
-            DocenteMateria— y se valida: nombra algo que existe siempre. Sigue
-            siendo una declaración; el rol que rige es el que el Admin carga al
-            asignar (RF-02.6).
 
     LoginRequest:
       type: object
@@ -225,6 +242,15 @@ components:
           type: string
           enum: [TITULAR, SUPLENTE]
           description: Ídem, para el rol con el que se ofreció.
+        cargoSolicitado:
+          type: string
+          enum: [DOCENTE, ADMIN_SISTEMA]
+          description: |
+            Con qué cargo dijo registrarse. NO es `rol` y no otorga permisos:
+            lo lee la pantalla de aprobación para que el Admin sepa si además
+            tiene que promover la cuenta después de aprobarla. Ausente en las
+            cuentas anteriores a este campo y en los Admin creados por otro
+            Admin, que no se autorregistraron.
         tienePassword:
           type: boolean
           description: |
@@ -701,11 +727,15 @@ paths:
   /api/auth/registro:
     post:
       tags: [auth]
-      summary: Autorregistro de docente
+      summary: Autorregistro
       description: |
         Crea cuenta con rol DOCENTE y estado PENDIENTE hasta aprobación de un ADMIN.
         Notifica a todos los usuarios con rol ADMIN y estado APROBADA (RF-05.6) para
         que no dependan de revisar la lista manualmente.
+
+        `cargoSolicitado` y `rolSolicitado` son obligatorios (RF-01.3). El cargo
+        declarado no cambia nada de lo anterior: la cuenta nace DOCENTE/PENDIENTE
+        en los dos casos.
       requestBody:
         required: true
         content:
@@ -713,6 +743,7 @@ paths:
             schema: { $ref: '#/components/schemas/RegistroRequest' }
       responses:
         "201": { description: Cuenta creada, pendiente de aprobación. Todos los Admin son notificados. }
+        "400": { description: "Cuerpo malformado, contraseña corta, o falta declarar el cargo o el rol" }
         "409":
           description: |
             Email ya registrado. Si pertenece a una cuenta en estado BAJA, el mensaje
@@ -905,7 +936,7 @@ paths:
   /api/auth/google/registro:
     post:
       tags: [auth]
-      summary: Autorregistro de docente con cuenta de Google
+      summary: Autorregistro con cuenta de Google
       description: |
         Igual que /api/auth/registro pero sin contraseña: la cuenta queda con rol
         DOCENTE y estado PENDIENTE hasta que un ADMIN la apruebe, y notifica a todos
@@ -922,17 +953,18 @@ paths:
           application/json:
             schema:
               type: object
-              required: [credential]
+              required: [credential, cargoSolicitado, rolSolicitado]
               properties:
                 credential: { type: string }
                 nombre: { type: string, maxLength: 100 }
                 apellido: { type: string, maxLength: 100 }
+                cargoSolicitado: { type: string, enum: [DOCENTE, ADMIN_SISTEMA] }
+                rolSolicitado: { type: string, enum: [TITULAR, SUPLENTE] }
                 cursoSolicitado: { type: string, maxLength: 100 }
                 materiaSolicitada: { type: string, maxLength: 100 }
-                rolSolicitado: { type: string, enum: [TITULAR, SUPLENTE] }
       responses:
         "201": { description: Cuenta creada, pendiente de aprobación }
-        "400": { description: Cuerpo malformado, o falta el nombre tanto en el request como en el token }
+        "400": { description: "Cuerpo malformado, falta declarar el cargo o el rol, o falta el nombre tanto en el request como en el token" }
         "401": { description: El token de Google no es válido }
         "403": { description: Email sin confirmar por Google, o dominio no habilitado }
         "409":
@@ -3729,6 +3761,46 @@ paths:
                         cursoNombre: { type: string }
                         cicloId: { type: string, format: uuid }
                         cicloAnio: { type: integer }
+
+  # ─────────────────────────────────────────
+  # PERFIL: MIS DATOS
+  # ─────────────────────────────────────────
+  /api/auth/mi-perfil:
+    patch:
+      tags: [auth]
+      summary: Cambiar el propio nombre y apellido (RF-01.12)
+      description: >
+        Autoservicio, sin aprobación de nadie. No recibe ningún id: la cuenta
+        sale del token, así que nadie cambia el nombre de otro por acá. Los dos
+        campos son obligatorios y se recortan los espacios; el largo máximo es
+        de 100 caracteres cada uno, el de la columna. El email no se edita.
+        Queda auditado como `NOMBRE_CAMBIADO`.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, apellido]
+              properties:
+                nombre: { type: string, maxLength: 100 }
+                apellido: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: >
+            El usuario ya actualizado y un token nuevo. El anterior lleva el
+            nombre viejo en los claims (RF-01.2) y el cliente tiene que
+            reemplazarlo, igual que en POST /api/auth/cambiar-password.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario: { $ref: "#/components/schemas/Usuario" }
+                  token: { type: string }
+        "400": { description: Nombre o apellido vacío, o de más de 100 caracteres }
+        "401": { description: Sin token }
 
   # ─────────────────────────────────────────
   # PERFIL: FOTO

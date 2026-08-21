@@ -16,11 +16,15 @@ type registroRequest struct {
 	Apellido string `json:"apellido"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
-	// Qué va a dictar y con qué rol. Opcionales: quien todavía no lo sepa se
-	// registra igual y lo arregla con el Admin. Ver RF-01.3 / RF-02.6.
+	// Con qué cargo se registra y si se ofrece como titular o suplente: los
+	// dos obligatorios, para los dos cargos (RF-01.3).
+	CargoSolicitado string `json:"cargoSolicitado"` // DOCENTE | ADMIN_SISTEMA
+	RolSolicitado   string `json:"rolSolicitado"`   // TITULAR | SUPLENTE
+	// Qué va a dictar. Siguen siendo opcionales: quien todavía no lo sepa se
+	// registra igual y lo arregla con el Admin. Se ignoran si el cargo es
+	// ADMIN_SISTEMA. Ver RF-01.3 / RF-02.6.
 	CursoSolicitado   string `json:"cursoSolicitado,omitempty"`
 	MateriaSolicitada string `json:"materiaSolicitada,omitempty"`
-	RolSolicitado     string `json:"rolSolicitado,omitempty"` // TITULAR | SUPLENTE
 }
 
 type loginRequest struct {
@@ -42,9 +46,25 @@ type googleRegistroRequest struct {
 	Nombre   string `json:"nombre,omitempty"`
 	Apellido string `json:"apellido,omitempty"`
 
+	CargoSolicitado string `json:"cargoSolicitado"` // DOCENTE | ADMIN_SISTEMA
+	RolSolicitado   string `json:"rolSolicitado"`   // TITULAR | SUPLENTE
+
 	CursoSolicitado   string `json:"cursoSolicitado,omitempty"`
 	MateriaSolicitada string `json:"materiaSolicitada,omitempty"`
-	RolSolicitado     string `json:"rolSolicitado,omitempty"` // TITULAR | SUPLENTE
+}
+
+// actualizarMisDatosRequest es la edición del propio nombre desde Mi perfil.
+type actualizarMisDatosRequest struct {
+	Nombre   string `json:"nombre"`
+	Apellido string `json:"apellido"`
+}
+
+// actualizarMisDatosResponse trae el usuario ya actualizado y, además, un
+// token nuevo: el anterior lleva el nombre viejo en los claims y el cliente
+// tiene que reemplazarlo para que deje de mentir.
+type actualizarMisDatosResponse struct {
+	Usuario usuarioResponse `json:"usuario"`
+	Token   string          `json:"token"`
 }
 
 type cambiarPasswordRequest struct {
@@ -119,10 +139,15 @@ type usuarioResponse struct {
 	FechaRegistro       time.Time  `json:"fechaRegistro"`
 	FechaAprobacion     *time.Time `json:"fechaAprobacion,omitempty"`
 	DebeCambiarPassword bool       `json:"debeCambiarPassword"`
-	// Lo que declaró al registrarse (RF-01.3).
+	// Lo que declaró al registrarse (RF-01.3). Vacíos en las cuentas
+	// anteriores a cada campo y en los Admin creados por otro Admin.
 	CursoSolicitado   string `json:"cursoSolicitado,omitempty"`
 	MateriaSolicitada string `json:"materiaSolicitada,omitempty"`
 	RolSolicitado     string `json:"rolSolicitado,omitempty"`
+	// CargoSolicitado NO es el rol de la cuenta: es lo que la persona dijo ser
+	// al registrarse, y no otorga ningún permiso. Lo lee la pantalla de
+	// aprobación para que el Admin sepa si además tiene que promoverla.
+	CargoSolicitado string `json:"cargoSolicitado,omitempty"`
 
 	// Cómo puede entrar esta cuenta.
 	TienePassword    bool `json:"tienePassword"`
@@ -143,6 +168,7 @@ func toUsuarioResponse(u *domain.Usuario) usuarioResponse {
 		CursoSolicitado:     u.CursoSolicitado,
 		MateriaSolicitada:   u.MateriaSolicitada,
 		RolSolicitado:       u.RolSolicitado,
+		CargoSolicitado:     u.CargoSolicitado,
 		TienePassword:       u.PuedeIngresarConPassword(),
 		VinculadaAGoogle:    u.PuedeIngresarConGoogle(),
 	}

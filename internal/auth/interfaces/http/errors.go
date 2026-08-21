@@ -79,11 +79,17 @@ func mapearError(err error) error {
 
 	case errors.Is(err, application.ErrPasswordCorta),
 		errors.Is(err, application.ErrDatosObligatorios),
+		// Lo que el registro exige declarar (RF-01.3).
+		errors.Is(err, application.ErrCargoObligatorio),
+		errors.Is(err, application.ErrRolSolicitadoObligatorio),
 		// Los de la foto: lo que llegó no sirve como imagen.
 		errors.Is(err, domain.ErrFotoVacia),
 		errors.Is(err, domain.ErrFotoTipo),
 		errors.Is(err, domain.ErrFotoCorrupta),
-		errors.Is(err, domain.ErrEmailInvalido):
+		errors.Is(err, domain.ErrEmailInvalido),
+		// Los del nombre propio, tanto en el registro como en Mi perfil.
+		errors.Is(err, domain.ErrNombreVacio),
+		errors.Is(err, domain.ErrNombreDemasiadoLargo):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 
 	// 413 tiene su propio código: el archivo es una imagen, pero no entra.
@@ -115,7 +121,8 @@ func mapearError(err error) error {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrRolInvalido), errors.Is(err, domain.ErrEstadoInvalido),
-		errors.Is(err, domain.ErrRolSolicitadoInvalido):
+		errors.Is(err, domain.ErrRolSolicitadoInvalido),
+		errors.Is(err, domain.ErrCargoSolicitadoInvalido):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 
 	case errors.Is(err, application.ErrIDInvalido),

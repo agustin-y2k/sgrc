@@ -13,6 +13,7 @@ el `Makefile` y en §5.
 | **Unitario de aplicación** | Casos de uso completos contra repositorios en memoria (fakes), incluidas las cascadas entre paquetes | `go test ./...` |
 | **De handler** | Contrato HTTP: códigos de estado, permisos por rol, parseo de query y body | `go test ./...` |
 | **De integración** | Repositorios contra un **Postgres real** levantado en un contenedor efímero | `go test -tags integration ./...` |
+| **De migración** | Que la convención del esquema se cumpla, y que una actualización aplicada sobre una base **con datos** no se los lleve puestos | `go test ./migrations/` y con `-tags integration` |
 | **De arquitectura** | Que ningún paquete importe el `domain/` de otro | `go test ./...` |
 
 Los tests viven **junto al código** que prueban (`reserva.go` /
@@ -31,6 +32,26 @@ van en el ciclo corto. Lo que se prueba ahí es lo que **solo puede fallar
 contra la base**: la constraint `EXCLUDE` de anti-solapamiento, la aritmética
 `fecha + hora_fin` con zona horaria, los `$n` del `LIMIT/OFFSET` cuando hay
 filtros dinámicos, y que `COUNT(*) OVER()` cuente antes del recorte.
+
+### Los tests del esquema
+
+`migrations/` tiene dos tests propios, y los dos cuidan errores que ninguna
+herramienta avisa sola:
+
+- **Sin Docker** (`go test ./migrations/`): que las versiones sean
+  correlativas y no se repitan —dos ramas numerando 002 a la vez—, que cada
+  archivo traiga sus dos anotaciones de goose, y que el SQL de la 001 no haya
+  cambiado. La 001 está congelada: editarla anda perfecto en desarrollo, donde
+  la base nace de cero, y no llega nunca a una instalación que ya la aplicó.
+- **Con Postgres** (`-tags integration`): arma una base en el punto de
+  partida, le mete datos de una escuela en uso y **después** le aplica las
+  migraciones que falten. Es el único test que ejercita el camino del
+  servidor; los demás levantan la base vacía, donde una migración destructiva
+  no tiene nada que destruir. Falla si una tabla pierde filas, si desaparece,
+  o si los datos sembrados cambian de valor al migrar.
+
+El detalle de cómo escribir una migración que sobreviva a esto está en
+`11-operacion.md` §5.
 
 ### El test de límites de dominio
 
@@ -148,12 +169,14 @@ Vale tenerlo escrito, porque es donde hay que mirar a mano:
 - **El túnel de Cloudflare** no se prueba automáticamente: es lo único del
   camino de producción que no se puede ensayar en local. nginx y el build de
   producción sí, porque los E2E van contra `:8081`.
-- **El salto de una versión a la siguiente sobre datos reales.** Los tests de
-  integración aplican las migraciones con goose, igual que el binario, pero
-  siempre sobre una base vacía: lo que no se prueba es una instalación en
-  marcha —con datos que la migración nueva tiene que respetar— pasando de un
-  esquema al siguiente. Eso se sigue ensayando a mano, contra una copia
-  restaurada del backup, antes de tocar el servidor.
+- **El salto de una versión a la siguiente sobre datos *reales*.** Que la
+  migración respete los datos sí se prueba (`go test -tags integration
+  ./migrations/`), pero contra una muestra sembrada por el test: unas pocas
+  filas prolijas. Lo que esa muestra no tiene es lo que hace fallar de verdad
+  a una migración —el nombre con el carácter raro, el año con dos ciclos
+  abiertos, la tabla con cien mil filas que tarda—. Antes de un cambio de
+  esquema grande sigue conviniendo ensayarlo a mano contra una copia
+  restaurada del backup.
 
 ---
 
