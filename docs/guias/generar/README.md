@@ -57,9 +57,23 @@ node docs/guias/generar/hacer-pdf.mjs \
   1°A— y ninguna captura muestra correos ni nombres reales. Si vas a
   regenerarlas contra una base con datos de verdad, revisá antes qué queda a la
   vista, sobre todo en Usuarios y en Avisos.
+- **El Admin y el docente de prueba salen de TU `.env`, y terminan en los
+  PDF.** `SEED_ADMIN_EMAIL` es la cuenta que se ve en Usuarios, en Mi perfil y
+  en el pie de los avisos; `DOCENTE_EMAIL` es la que siembra el overlay de
+  desarrollo. Si en tu instalación local son tu correo personal, las capturas
+  lo publican. Antes de regenerar, poné valores neutros
+  —`admin@escuela.edu.ar`, `docente@escuela.edu.ar`—, recreá la base con
+  `docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v` y
+  volvé a levantar; después restaurá tu `.env`. Conviene apagar también
+  `SMTP_HOST` mientras dure: aprobar cuentas y cancelar reservas manda correos
+  de verdad.
+- **Las capturas son imágenes, así que buscar texto en el PDF no alcanza para
+  auditarlas.** Un `pdftotext` no ve lo que dice una pantalla fotografiada: si
+  hace falta confirmar que no quedó nada personal, hay que mirar las imágenes
+  o revisar la base con `make psql` antes de capturar.
 - **`preparar-imagenes.py` corta el vacío de abajo salteando el pie de la
   página web.** Sin eso, el hueco entre lo último que importa y el
-  «SGRC v1.11.0 — software libre…» viaja al PDF como media hoja en blanco.
+  «SGRC v1.12.0 — software libre…» viaja al PDF como media hoja en blanco.
 - **Las capturas numeradas se arman solas.** `capturar-marcas.mjs` guarda las
   coordenadas de cada elemento en `marcas.json` y `marcar.py` dibuja los globos
   rojos encima. Si movés un rótulo en la interfaz, el número lo sigue: no hay
