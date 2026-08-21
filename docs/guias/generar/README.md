@@ -38,6 +38,10 @@ node docs/guias/generar/capturar-formularios.mjs  # login, registro y recuperaci
 node docs/guias/generar/capturar-marcas.mjs       # las que llevan números en rojo
 node docs/guias/generar/capturar-readme.mjs       # las del README (otro encuadre)
 
+# Las del README no pasan por preparar-imagenes.py —van sin recorte ni
+# numeración— así que se copian a mano, con el mismo nombre:
+#   for f in docs/capturas/*.png; do cp "$SALIDA/$(basename $f)" "$f"; done
+
 # 3. Numerar en rojo lo que la guía explica, y preparar las imágenes
 #    (recorte del vacío, tope de alto, borde).
 python3 docs/guias/generar/marcar.py /tmp/capturas-sgrc
