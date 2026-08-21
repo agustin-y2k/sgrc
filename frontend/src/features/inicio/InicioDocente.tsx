@@ -193,7 +193,7 @@ export function InicioDocente({
             <AccesoDirecto
               icono={UserRound}
               titulo="Mi perfil"
-              ayuda="Tu foto, las materias que das y tu contraseña."
+              ayuda="Tu nombre, tu foto, las materias que das y tu contraseña."
               a="/perfil"
             />
             <AccesoDirecto

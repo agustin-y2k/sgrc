@@ -11,6 +11,8 @@
     --amarillo-borde: #e0a800;
     --verde: #ecfdf3;
     --verde-borde: #12805c;
+    --rojo: #fef2f2;
+    --rojo-borde: #dc2626;
   }
 
   @page { size: A4; margin: 17mm 15mm 20mm 15mm; }
@@ -182,7 +184,7 @@
   }
 
   /* ── Recuadros ────────────────────────────────────────────── */
-  .nota, .ojo, .listo {
+  .nota, .ojo, .listo, .peligro {
     padding: 4mm 5mm;
     border-radius: 8px;
     margin: 4mm 0 5mm 0;
@@ -192,7 +194,10 @@
   .nota { background: var(--azul-suave); border-left: 4px solid var(--azul); }
   .ojo { background: var(--amarillo); border-left: 4px solid var(--amarillo-borde); }
   .listo { background: var(--verde); border-left: 4px solid var(--verde-borde); }
-  .nota .titulo, .ojo .titulo, .listo .titulo {
+  /* Solo para lo que borra datos y no se puede deshacer. Si se usa para
+     cualquier advertencia, deja de querer decir algo. */
+  .peligro { background: var(--rojo); border-left: 4px solid var(--rojo-borde); }
+  .nota .titulo, .ojo .titulo, .listo .titulo, .peligro .titulo {
     display: block;
     font-weight: 700;
     margin-bottom: 1.2mm;
@@ -237,7 +242,7 @@
     <li>Los avisos <span>Qué te avisa el sistema y dónde se lee.</span></li>
     <li>Qué te llega por correo <span>Y cómo pedir que te llegue menos.</span></li>
     <li>Pedir ayuda <span>Escribirle a los Admin desde el sistema.</span></li>
-    <li>Tu perfil <span>Tu foto, tus materias y tu contraseña.</span></li>
+    <li>Tu perfil <span>Tu nombre, tu foto, tus materias y tu contraseña.</span></li>
     <li>Quién te puede ayudar en el laboratorio</li>
     <li>Usarlo desde el teléfono</li>
     <li>Si algo no sale como esperabas <span>Las dudas más comunes, respondidas.</span></li>
@@ -482,6 +487,13 @@
       apagado, y el texto de al lado te dice qué falta.</li>
   </ol>
 
+  <div class="nota">
+    <span class="titulo">Podés mezclar carros</span>
+    Si en un carro no quedan suficientes máquinas libres, tildá las que falten de
+    otro carro: entran todas en la misma reserva. En la lista, cada computadora dice
+    a qué carro pertenece.
+  </div>
+
   <div class="listo">
     <span class="titulo">Cómo sabés que quedó</span>
     Después de confirmar, la reserva aparece en <b>Reservas</b> y también en «Tus
@@ -640,8 +652,8 @@
     <li>Tocá <b>Computadoras</b> en la barra de arriba.</li>
     <li>Tocá <span class="boton">Ver equipos</span> en el carro que te interese.</li>
     <li>Vas a ver cada máquina con los programas que tiene instalados y su estado.</li>
-    <li>Tocando una computadora se abre su <b>calendario</b>: qué días y horas está
-      reservada, y por quién.</li>
+    <li>Cada máquina tiene su botón <span class="boton">Ver calendario</span>: ahí
+      ves qué días y horas está reservada, y por quién.</li>
   </ol>
 
   <figure>
@@ -654,6 +666,26 @@
     Si necesitás una máquina puntual —la única que tiene cierto programa— podés
     mirar cuándo está libre antes de armar tu reserva.
   </div>
+
+  <h3>Cómo se lee el calendario de una computadora</h3>
+
+  <figure>
+    <img src="imagenes/docente-19-calendario-equipo.png" alt="Calendario semanal de una computadora">
+    <figcaption>Una semana completa de una sola máquina, hora por hora.</figcaption>
+  </figure>
+
+  <ul class="simple">
+    <li><b>En azul</b> están las clases reservadas, con la materia.</li>
+    <li><b>En rojo</b>, los ratos en que un Admin bloqueó esa máquina para otra cosa
+      —una evaluación, una capacitación—, con el motivo.</li>
+    <li><b>Los huecos en blanco están libres</b>: ahí podés reservar.</li>
+  </ul>
+  <p>
+    Con <span class="boton">← Semana anterior</span> y
+    <span class="boton">Semana siguiente →</span> te movés de semana, y
+    <span class="boton">Hoy</span> te trae de vuelta. Para volver al listado,
+    <span class="boton">Volver al inventario</span>.
+  </p>
 </section>
 
 <!-- 11 ────────────────────────────────────────────────────────── -->
@@ -762,14 +794,31 @@
   <h2><span class="n">14</span>Tu perfil</h2>
 
   <p class="entrada">
-    Se llega tocando tus iniciales, arriba a la derecha. Ahí está tu foto, las
-    materias que dictás y tu contraseña.
+    Se llega tocando tus iniciales, arriba a la derecha. Ahí están tu nombre, tu
+    foto, las materias que dictás y tu contraseña.
   </p>
 
   <figure>
     <img src="imagenes/docente-15-perfil.png" alt="Pantalla de perfil del docente">
     <figcaption>Todo lo tuyo, en una sola pantalla.</figcaption>
   </figure>
+
+  <h3>Tu nombre</h3>
+  <p>
+    Si tu nombre o tu apellido quedaron mal escritos cuando creaste la cuenta, los
+    corregís vos: tocá <span class="boton">Cambiar mi nombre</span>, escribilos bien
+    y guardá. No hace falta pedírselo a nadie.
+  </p>
+  <p>
+    Es el nombre que aparece en tus reservas, así que conviene que esté bien: es lo
+    que ve quien te entrega las computadoras en el laboratorio.
+  </p>
+
+  <div class="nota">
+    <span class="titulo">El email no se cambia</span>
+    Tu dirección de correo es con la que entrás, y esa queda fija. Si de verdad
+    necesitás cambiarla, pedíselo a un Admin.
+  </div>
 
   <h3>Tu foto</h3>
   <p>

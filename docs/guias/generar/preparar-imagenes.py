@@ -43,6 +43,11 @@ MAPA = {
     "adm2-reportes": "admin-16-reportes",
     "adm-13-disponibilidad": "admin-17-horarios-admin",
     "adm-12-notificaciones": "admin-18-avisos",
+    # Las de los capítulos que se sumaron después (capturar-nuevas.mjs).
+    "nue-cerrar-anio": "admin-19-cerrar-anio",
+    "nue-calendario-equipo-admin": "admin-20-calendario-equipo",
+    "nue-perfil-admin": "admin-21-perfil",
+    "nue-calendario-equipo-docente": "docente-19-calendario-equipo",
 }
 
 def recortar_vacio(img, margen=40, pie=280):

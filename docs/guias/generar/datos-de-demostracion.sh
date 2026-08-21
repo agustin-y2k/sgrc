@@ -76,11 +76,31 @@ echo "→ entrega registrada"
 
 # Una conversación de soporte con respuesta, para la captura del buzón.
 SUG=$(api "$DT" POST /api/sugerencias/ \
-  '{"tipo":"AYUDA","asunto":"No sé cómo cancelar una sola computadora","texto":"Reservé seis máquinas para el martes y necesito devolver dos, pero no encuentro dónde se hace. ¿Me ayudan?","pantalla":"/reservas","version":"1.11.0"}' | jq -r .id)
+  '{"tipo":"AYUDA","asunto":"No sé cómo cancelar una sola computadora","texto":"Reservé seis máquinas para el martes y necesito devolver dos, pero no encuentro dónde se hace. ¿Me ayudan?","pantalla":"/reservas","version":"1.12.0"}' | jq -r .id)
 if [ -n "$SUG" ] && [ "$SUG" != null ]; then
   api "$AT" POST "/api/sugerencias/$SUG/mensajes" \
     '{"texto":"Hola Ana. Entrá a Reservas, abrí la reserva del martes y vas a ver cada computadora con su botón «Cancelar». Cancelá solo esas dos: las otras cuatro te quedan reservadas."}' >/dev/null || true
   echo "→ conversación de soporte $SUG"
+fi
+
+# Una cuenta PENDIENTE que declaró cargo de administración, para que la
+# pantalla de aprobación no salga vacía en las capturas y para que se vea la
+# ficha con "Se registró como Administrador de Sistema" (RF-01.4).
+#
+# Lleva rolSolicitado aunque no vaya a dar clase: titular/suplente es una
+# pregunta para los dos cargos, y el registro lo rechaza sin eso.
+api "" POST /api/auth/registro \
+  '{"nombre":"Marcos","apellido":"Ruiz","email":"marcos.ruiz@escuela.edu.ar","password":"guia.demo.2026","cargoSolicitado":"ADMIN_SISTEMA","rolSolicitado":"TITULAR"}' >/dev/null || true
+echo "→ cuenta pendiente con cargo declarado"
+
+# Una cuenta RECHAZADA, que es el único estado donde aparece «Eliminar
+# definitivamente»: sin esto, esa acción no se puede mostrar en la guía.
+api "" POST /api/auth/registro \
+  '{"nombre":"Cuenta","apellido":"Duplicada","email":"duplicada@escuela.edu.ar","password":"guia.demo.2026","cargoSolicitado":"DOCENTE","rolSolicitado":"TITULAR"}' >/dev/null || true
+DUP=$(api "$AT" GET "/api/auth/usuarios?rol=DOCENTE&pageSize=200" | jq -r '.data[] | select(.email=="duplicada@escuela.edu.ar") | .id')
+if [ -n "$DUP" ] && [ "$DUP" != null ]; then
+  api "$AT" PATCH "/api/auth/usuarios/$DUP/estado" '{"estado":"RECHAZADA"}' >/dev/null || true
+  echo "→ cuenta rechazada (para la captura de eliminar definitivamente)"
 fi
 
 echo
