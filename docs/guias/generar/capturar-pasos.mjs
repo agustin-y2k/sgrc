@@ -93,6 +93,10 @@ const nav = await chromium.launch()
 
   await paso("conversación soporte", async () => {
     await page.goto(`${BASE}/notificaciones`)
+    // La lista de conversaciones viene plegada: sin este clic, el «Ver» de
+    // cada hilo todavía no existe en la página.
+    await page.getByRole("button", { name: /ver conversaciones/i }).click()
+    await page.waitForTimeout(600)
     await page.getByRole("button", { name: /^ver$/i }).first().click()
     await foto(page, "paso-06-conversacion")
   })
@@ -106,7 +110,9 @@ const nav = await chromium.launch()
   await paso("avisar que no anda", async () => {
     await page.goto(`${BASE}/inventario`)
     await foto(page, "paso-08-computadoras-docente")
-    await page.getByRole("button", { name: /avisar|no anda|incidencia/i }).first().click()
+    await page.getByRole("button", { name: /ver equipos/i }).first().click()
+    await page.waitForTimeout(600)
+    await page.getByRole("button", { name: /reportar problema/i }).first().click()
     await foto(page, "paso-09-avisar-falla")
   })
 
@@ -140,6 +146,8 @@ const nav = await chromium.launch()
 
   await paso("panel soporte admin", async () => {
     await page.goto(`${BASE}/notificaciones`)
+    await page.getByRole("button", { name: /ver conversaciones/i }).click()
+    await page.waitForTimeout(600)
     await foto(page, "paso-22-soporte-admin")
     await page.getByRole("button", { name: /^ver$/i }).first().click()
     await foto(page, "paso-23-soporte-conversacion")

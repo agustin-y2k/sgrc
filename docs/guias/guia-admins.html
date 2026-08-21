@@ -11,6 +11,8 @@
     --amarillo-borde: #e0a800;
     --verde: #f0fdf4;
     --verde-borde: #12805c;
+    --rojo: #fef2f2;
+    --rojo-borde: #dc2626;
   }
 
   @page { size: A4; margin: 17mm 15mm 20mm 15mm; }
@@ -170,7 +172,7 @@
   }
   figcaption { color: var(--gris); font-size: 9.5pt; margin-top: 2.5mm; }
 
-  .nota, .ojo, .listo {
+  .nota, .ojo, .listo, .peligro {
     padding: 4mm 5mm;
     border-radius: 8px;
     margin: 4mm 0 5mm 0;
@@ -180,7 +182,10 @@
   .nota { background: var(--azul-suave); border-left: 4px solid var(--azul); }
   .ojo { background: var(--amarillo); border-left: 4px solid var(--amarillo-borde); }
   .listo { background: var(--verde); border-left: 4px solid var(--verde-borde); }
-  .nota .titulo, .ojo .titulo, .listo .titulo {
+  /* Solo para lo que borra datos y no se puede deshacer. Si se usa para
+     cualquier advertencia, deja de querer decir algo. */
+  .peligro { background: var(--rojo); border-left: 4px solid var(--rojo-borde); }
+  .nota .titulo, .ojo .titulo, .listo .titulo, .peligro .titulo {
     display: block;
     font-weight: 700;
     margin-bottom: 1.2mm;
@@ -231,8 +236,9 @@
     <li>Dónde está cada cosa <span>El menú Administración.</span></li>
     <li>Aprobar las cuentas nuevas <span>Sin esto, un docente no puede entrar.</span></li>
     <li>Ciclos, cursos y materias <span>La base de todo: sin materia no hay reserva.</span></li>
-    <li>Los usuarios <span>Contraseñas, roles y bajas.</span></li>
-    <li>El inventario <span>Carros, computadoras y su estado.</span></li>
+    <li>Cerrar el año y abrir el siguiente <span>Una vez al año, y no se puede deshacer.</span></li>
+    <li>Los usuarios <span>Contraseñas, roles, bajas y borrados.</span></li>
+    <li>El inventario <span>Carros, computadoras, su estado y su calendario.</span></li>
     <li>Entregar y recibir <span>El trabajo de todos los días.</span></li>
     <li>Licencias de software <span>Qué vence y cuándo.</span></li>
     <li>Bloquear equipos <span>Cuando el laboratorio los necesita para otra cosa.</span></li>
@@ -242,13 +248,14 @@
     <li>Reportes <span>Cuánto se usó y qué se rompe.</span></li>
     <li>Tus horarios de atención</li>
     <li>Tus avisos y tus correos</li>
+    <li>Tu perfil <span>Tu foto, tu nombre y tu contraseña.</span></li>
     <li>Una rutina que funciona <span>Qué mirar cada día, cada semana y cada año.</span></li>
     <li>Si algo no sale como esperabas</li>
     <li>Las palabras que vas a ver</li>
   </ol>
 </div>
 
-<!-- 1 ─────────────────────────────────────────────────────────── -->
+<!-- 1 ────────────────────────────────────────────────────────────── -->
 <section class="cap">
   <h2><span class="n">1</span>Qué hace un Admin</h2>
 
@@ -284,7 +291,7 @@
   </div>
 </section>
 
-<!-- 2 ─────────────────────────────────────────────────────────── -->
+<!-- 2 ────────────────────────────────────────────────────────────── -->
 <section class="cap">
   <h2><span class="n">2</span>Tu pantalla de inicio: el mostrador</h2>
 
@@ -320,7 +327,7 @@
   </div>
 </section>
 
-<!-- 3 ─────────────────────────────────────────────────────────── -->
+<!-- 3 ────────────────────────────────────────────────────────────── -->
 <section class="cap">
   <h2><span class="n">3</span>Dónde está cada cosa</h2>
 
@@ -351,7 +358,7 @@
   </p>
 </section>
 
-<!-- 4 ─────────────────────────────────────────────────────────── -->
+<!-- 4 ────────────────────────────────────────────────────────────── -->
 <section class="cap">
   <h2><span class="n">4</span>Aprobar las cuentas nuevas</h2>
 
@@ -390,7 +397,7 @@
     laboratorio sin dar clase—. Eso es solo lo que <i>declaró</i>: la cuenta se
     aprueba igual que cualquier otra y queda como docente. Si además tiene que
     administrar el sistema, se lo das vos después, desde <b>Usuarios</b> (capítulo
-    6), con <span class="boton">Promover a admin</span>. Aprobar nunca convierte a
+    7), con <span class="boton">Promover a admin</span>. Aprobar nunca convierte a
     nadie en Admin.
   </div>
 
@@ -401,7 +408,7 @@
   </div>
 </section>
 
-<!-- 5 ─────────────────────────────────────────────────────────── -->
+<!-- 5 ────────────────────────────────────────────────────────────── -->
 <section class="cap">
   <h2><span class="n">5</span>Ciclos, cursos y materias</h2>
 
@@ -430,25 +437,103 @@
 
   <div class="ojo">
     <span class="titulo">Solo puede haber un ciclo activo</span>
-    Para abrir el año siguiente hay que <b>cerrar el actual</b> primero, con
-    <span class="boton">Cerrar el año</span>. Al cerrarlo, todo lo de ese año queda
-    guardado como histórico y aparece en Reportes.
+    Para abrir el año siguiente hay que <b>cerrar el actual</b> primero. Es la
+    operación más delicada del sistema —borra las reservas del año— y tiene su
+    propio capítulo, el 6: leelo antes de tocar ese botón.
   </div>
 
   <div class="nota">
     <span class="titulo">Si un docente pide una materia</span>
     No hace falta que lo cargues a mano: puede pedirla desde su perfil y vos la
-    resolvés en <b>Pedidos de materia</b> (capítulo 12).
+    resolvés en <b>Pedidos de materia</b> (capítulo 13).
   </div>
 </section>
 
-<!-- 6 ─────────────────────────────────────────────────────────── -->
+<!-- 6 ────────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">6</span>Los usuarios</h2>
+  <h2><span class="n">6</span>Cerrar el año y abrir el siguiente</h2>
+
+  <p class="entrada">
+    Se hace <b>una vez al año</b>, cuando el ciclo lectivo terminó. Es la única
+    operación del sistema que <b>borra información para siempre</b>, así que este
+    capítulo cuenta exactamente qué se lleva puesto y qué no. Leelo entero antes de
+    hacerlo: no hay botón de deshacer.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-19-cerrar-anio.png" alt="El recuadro que aparece al tocar «Cerrar el año»">
+    <figcaption>El sistema te dice qué va a pasar antes de que confirmes.</figcaption>
+  </figure>
+
+  <div class="peligro">
+    <span class="titulo">Cerrar el año borra todas las reservas de ese año</span>
+    Todas: las que ya pasaron y las que estaban por venir. Por eso se hace
+    <b>cuando el año terminó</b> y no antes — si lo hacés en octubre, las clases
+    reservadas para noviembre desaparecen sin avisarle a nadie.
+  </div>
+
+  <h3>Qué se guarda y qué se pierde</h3>
+  <ul class="simple">
+    <li><b>Se guardan las estadísticas del año</b>, antes de borrar nada: cuánto usó
+      cada equipo y cuántas horas reservó cada docente. Quedan para siempre en
+      <b>Reportes</b>, en «Histórico por año».</li>
+    <li><b>Se conservan los cursos y las materias</b>, archivados, con sus docentes
+      asignados. No hay que volver a escribirlos para consultarlos.</li>
+    <li><b>No se tocan las incidencias</b> del inventario: lo que se rompió y cuándo
+      sigue estando.</li>
+    <li><b>Se pierde el detalle reserva por reserva</b>: qué día, a qué hora y qué
+      máquina usó cada uno. Del año viejo van a quedar los totales, no la agenda.</li>
+  </ul>
+
+  <div class="nota">
+    <span class="titulo">Si querés guardar el detalle, bajalo antes</span>
+    En <b>Reportes</b>, con el ciclo viejo elegido, tocá
+    <span class="boton">Descargar CSV</span> en cada bloque. Ese archivo se abre con
+    Excel y es lo único que va a conservar el detalle fino. Después de cerrar el año
+    ya no se puede sacar.
+  </div>
+
+  <h3>Cómo se hace</h3>
+  <ol class="pasos">
+    <li>Entrá a <b>Administración → Académico</b>.</li>
+    <li>En la tarjeta del ciclo activo, tocá <span class="boton">Cerrar el año</span>.
+      Todavía no pasó nada: se abre un recuadro que explica qué va a pasar.</li>
+    <li>Leé el recuadro. Si te arrepentís, <span class="boton">Volver</span> cierra
+      el recuadro y no cambia nada.</li>
+    <li>Mirá el campo <b>«Crear el ciclo siguiente copiando cursos y materias»</b>:
+      viene con el año que viene ya escrito. Si lo dejás así, el sistema crea el
+      ciclo nuevo con los mismos cursos y las mismas materias, y te ahorra cargar
+      todo de nuevo. Si lo <b>borrás</b>, no se crea ningún ciclo y lo hacés a mano
+      después.</li>
+    <li>Tocá el botón rojo con el año —<span class="boton">Cerrar 2026</span>— para
+      confirmar. Ahí sí, se cierra.</li>
+  </ol>
+
+  <div class="ojo">
+    <span class="titulo">A los docentes hay que volver a asignarlos</span>
+    La copia trae los cursos y las materias, pero <b>no</b> quién las da. En el
+    ciclo nuevo, cada materia arranca sin docentes: entrá a
+    <b>Académico → Cursos → Materias</b> y asignalos como en el capítulo 5. Hasta
+    que lo hagas, esos docentes no van a poder reservar.
+  </div>
+
+  <div class="listo">
+    <span class="titulo">Cómo saber que salió bien</span>
+    El ciclo viejo queda con la etiqueta <b>Archivado</b> y el nuevo con
+    <b>Activo</b>. En <b>Reportes</b>, abajo de todo, aparece el histórico del año
+    que cerraste.
+  </div>
+</section>
+
+<!-- 7 ────────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">7</span>Los usuarios</h2>
 
   <p class="entrada">
     En <b>Administración → Usuarios</b> están todas las cuentas, con un filtro por
-    estado.
+    estado. Arriba a la derecha, <span class="boton">Crear otro Admin</span> da de
+    alta una cuenta de administración directamente, sin que la persona tenga que
+    registrarse y esperar aprobación.
   </p>
 
   <figure>
@@ -476,23 +561,62 @@
     distintas y las tomás vos las dos.
   </p>
 
+  <h3>Quitarle los permisos a un Admin</h3>
+  <p>
+    Es lo contrario de promover, y aparece solo en las cuentas que ya son Admin:
+    <span class="boton">Quitar permisos de admin</span>. La persona sigue teniendo su
+    cuenta y sus materias, y vuelve a ver el sistema como cualquier docente.
+  </p>
+  <p>
+    Sirve cuando alguien deja de atender el laboratorio pero sigue dando clase. No
+    hace falta darlo de baja ni crearle otra cuenta: sus reservas y su historial
+    quedan intactos.
+  </p>
+
   <h3>Dar de baja una cuenta</h3>
   <p>
     Para alguien que ya no trabaja en la escuela. La cuenta deja de poder entrar,
     pero <b>no desaparece</b>: lo que reservó y entregó sigue figurando en el
     historial, que es justamente para lo que sirve.
   </p>
+  <div class="ojo">
+    <span class="titulo">La baja no se puede deshacer</span>
+    No hay forma de reactivar una cuenta dada de baja. Y si sus materias quedan sin
+    ningún otro docente, <b>sus reservas futuras se cancelan</b>. El sistema te lo
+    dice antes de confirmar.
+  </div>
+
+  <h3>Borrar una cuenta del todo</h3>
+  <p>
+    <span class="boton">Eliminar definitivamente</span> aparece únicamente en las
+    cuentas <b>rechazadas</b> o <b>dadas de baja</b>, y hace lo que dice: la borra y
+    <b>libera el email</b> para que esa persona pueda registrarse de nuevo.
+  </p>
+  <p>
+    Existe sobre todo para un caso: <b>rechazaste una cuenta por error</b>. Una
+    cuenta rechazada no se puede aprobar después, así que sin esto ese email queda
+    tomado para siempre y la persona no puede volver a registrarse. Eliminala y que
+    se registre otra vez.
+  </p>
+  <div class="peligro">
+    <span class="titulo">Esto sí borra a la persona</span>
+    Sus reservas e incidencias se conservan, pero <b>pierden el nombre</b>: quedan
+    sin dueño en el historial. Si lo que querés es que alguien deje de entrar,
+    <b>dar de baja alcanza</b> y conserva todo. Eliminar es para liberar el email.
+  </div>
 
   <div class="ojo">
     <span class="titulo">Tu propia cuenta</span>
-    A vos mismo no podés degradarte ni darte de baja. Es a propósito: evita que la
-    escuela se quede sin ningún Admin por un clic.
+    Sobre vos mismo el sistema no te ofrece ni quitarte los permisos ni darte de
+    baja: en tu fila solo vas a ver <span class="boton">Resetear contraseña</span>.
+    Es a propósito — evita que la escuela se quede sin ningún Admin por un clic, y
+    que te quedes afuera de esta pantalla sin poder volver.
   </div>
 </section>
 
-<!-- 7 ─────────────────────────────────────────────────────────── -->
+<!-- 8 ────────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">7</span>El inventario</h2>
+  <h2><span class="n">8</span>El inventario</h2>
 
   <p class="entrada">
     En <b>Administración → Gestión del inventario</b> se cargan los carros y las
@@ -549,11 +673,38 @@
       materia; al reservar para esa materia aparece primera en la lista.</li>
     <li><b>Dar de baja</b> — para una máquina que ya no existe. No borra su historial.</li>
   </ul>
+
+  <h3>El calendario de una computadora</h3>
+  <p>
+    Entrá a <b>Computadoras</b> en la barra de arriba, abrí el carro con
+    <span class="boton">Ver equipos</span> y tocá el
+    <span class="boton">Ver calendario</span> de la máquina que te interese: se abre
+    su semana completa, hora por hora. Es la forma más rápida de contestar «¿esta PC
+    está libre el jueves a las 10?» sin abrir ninguna reserva.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-20-calendario-equipo.png" alt="Calendario semanal de una computadora">
+    <figcaption>Una semana de una sola máquina: en azul las clases, en rojo los bloqueos.</figcaption>
+  </figure>
+
+  <ul class="simple">
+    <li><b>En azul</b>, las reservas de clase, con la materia y el docente.</li>
+    <li><b>En rojo</b>, los bloqueos que hiciste vos o cualquier Admin, con el
+      motivo que se escribió al bloquear (capítulo 11).</li>
+    <li><b>Los huecos en blanco están libres.</b></li>
+  </ul>
+  <p>
+    Con <span class="boton">← Semana anterior</span> y
+    <span class="boton">Semana siguiente →</span> te movés, y
+    <span class="boton">Hoy</span> te trae de vuelta. Los docentes ven exactamente
+    esta misma pantalla.
+  </p>
 </section>
 
-<!-- 8 ─────────────────────────────────────────────────────────── -->
+<!-- 9 ────────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">8</span>Entregar y recibir</h2>
+  <h2><span class="n">9</span>Entregar y recibir</h2>
 
   <p class="entrada">
     Es el trabajo de todos los días y reemplaza al registro en papel. Está en
@@ -618,9 +769,9 @@
   </div>
 </section>
 
-<!-- 9 ─────────────────────────────────────────────────────────── -->
+<!-- 10 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">9</span>Licencias de software</h2>
+  <h2><span class="n">10</span>Licencias de software</h2>
 
   <p class="entrada">
     Sirve para no enterarte de que una licencia venció el día que un docente no puede
@@ -669,9 +820,9 @@
   </div>
 </section>
 
-<!-- 10 ────────────────────────────────────────────────────────── -->
+<!-- 11 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">10</span>Bloquear equipos</h2>
+  <h2><span class="n">11</span>Bloquear equipos</h2>
 
   <p class="entrada">
     Para cuando el laboratorio necesita las máquinas para otra cosa: una evaluación,
@@ -685,7 +836,9 @@
       van a leer los docentes en el aviso de cancelación.</li>
     <li>Tildá los equipos. El sistema te marca cuáles ya tienen reserva en ese
       horario.</li>
-    <li>Confirmá.</li>
+    <li>Tocá <span class="boton">Revisar bloqueo</span>. Todavía no bloqueaste
+      nada: primero te muestra qué clases se van a cancelar y de qué docentes,
+      para que lo veas antes de confirmar.</li>
   </ol>
 
   <figure>
@@ -713,9 +866,9 @@
   </p>
 </section>
 
-<!-- 11 ────────────────────────────────────────────────────────── -->
+<!-- 12 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">11</span>La jornada de la escuela</h2>
+  <h2><span class="n">12</span>La jornada de la escuela</h2>
 
   <p class="entrada">
     Son los días y las horas en que la escuela está abierta. Las reservas fuera de ese
@@ -750,9 +903,9 @@
   </div>
 </section>
 
-<!-- 12 ────────────────────────────────────────────────────────── -->
+<!-- 13 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">12</span>Pedidos para dictar una materia</h2>
+  <h2><span class="n">13</span>Pedidos para dictar una materia</h2>
 
   <p class="entrada">
     Un docente puede pedir, desde su perfil, que lo anoten en una materia. Acá se
@@ -781,9 +934,9 @@
   </div>
 </section>
 
-<!-- 13 ────────────────────────────────────────────────────────── -->
+<!-- 14 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">13</span>Pedidos de ayuda y mensajes</h2>
+  <h2><span class="n">14</span>Pedidos de ayuda y mensajes</h2>
 
   <p class="entrada">
     Es el buzón por donde los docentes piden ayuda, avisan que algo no anda o
@@ -829,9 +982,9 @@
   </p>
 </section>
 
-<!-- 14 ────────────────────────────────────────────────────────── -->
+<!-- 15 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">14</span>Reportes</h2>
+  <h2><span class="n">15</span>Reportes</h2>
 
   <p class="entrada">
     Para responder preguntas que en papel no se podían responder: cuánto se usa cada
@@ -861,9 +1014,9 @@
   </div>
 </section>
 
-<!-- 15 ────────────────────────────────────────────────────────── -->
+<!-- 16 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">15</span>Tus horarios de atención</h2>
+  <h2><span class="n">16</span>Tus horarios de atención</h2>
 
   <p class="entrada">
     Los docentes tienen una pantalla que les dice en qué días y horarios está cada
@@ -878,9 +1031,26 @@
   <ol class="pasos">
     <li>Entrá a <b>Horario Admins</b>, en la barra de arriba.</li>
     <li>Cargá tus tramos: qué días y de qué hora a qué hora atendés.</li>
-    <li>Si un día puntual no vas a estar, cargá la excepción; y si te tenés que ir
-      ahora, marcalo como no disponible.</li>
+    <li>Si un día puntual no vas a estar, cargalo abajo, en <b>Excepciones</b>.</li>
   </ol>
+
+  <h3>Cuando un día se sale de la rutina</h3>
+  <p>
+    El horario de arriba vale para todas las semanas. Para los días sueltos hay dos
+    formas, según cuándo te enteres:
+  </p>
+  <ul class="simple">
+    <li><b>Hoy no estoy</b> — un solo botón,
+      <span class="boton">No estoy disponible ahora</span>, para cuando el día ya
+      empezó: llegaste tarde, te tenés que ir, no vas a poder venir. Vale solo para
+      hoy y no toca tu horario de siempre.</li>
+    <li><b>Un día puntual distinto</b> — para avisar con anticipación. Elegís la
+      fecha y si ese día <b>no venís</b> o <b>venís en otro horario</b>, y podés
+      escribir el motivo, que es lo que va a leer el docente.</li>
+  </ul>
+  <p>
+    Si cargás dos veces la misma fecha, la última reemplaza a la anterior.
+  </p>
 
   <div class="nota">
     <span class="titulo">Es informativo</span>
@@ -889,9 +1059,9 @@
   </div>
 </section>
 
-<!-- 16 ────────────────────────────────────────────────────────── -->
+<!-- 17 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">16</span>Tus avisos y tus correos</h2>
+  <h2><span class="n">17</span>Tus avisos y tus correos</h2>
 
   <p class="entrada">
     Un Admin recibe, además de sus propios avisos, los del laboratorio: cuentas
@@ -918,9 +1088,61 @@
   </div>
 </section>
 
-<!-- 17 ────────────────────────────────────────────────────────── -->
+<!-- 18 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">17</span>Una rutina que funciona</h2>
+  <h2><span class="n">18</span>Tu perfil</h2>
+
+  <p class="entrada">
+    Un Admin también tiene su cuenta, y se maneja igual que la de cualquier docente.
+    Se llega desde tu inicial o tu foto, arriba a la derecha, en
+    <b>Mi cuenta → Mi perfil</b>.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-21-perfil.png" alt="La pantalla Mi perfil de un Admin">
+    <figcaption>Tu foto, tu nombre, tus materias y tu contraseña, todo en un lugar.</figcaption>
+  </figure>
+
+  <h3>Tu foto</h3>
+  <p>
+    <span class="boton">Cambiar la foto</span> y <span class="boton">Quitar la
+    foto</span>. Es opcional: si no ponés ninguna, se muestran tus iniciales. Sirve
+    para que un docente que no te conoce sepa a quién está buscando en el
+    laboratorio.
+  </p>
+
+  <h3>Tu nombre</h3>
+  <p>
+    <span class="boton">Cambiar mi nombre</span> corrige tu nombre y tu apellido.
+    Útil si quedaron mal escritos al crear la cuenta: es el nombre que ven los
+    docentes en <b>Horario Admins</b> y al pie de los avisos que mandás.
+  </p>
+
+  <h3>Las materias que das</h3>
+  <p>
+    Si además de administrar el laboratorio das clase, tus materias aparecen acá y
+    podés reservar como cualquier docente. Y si te falta alguna, la pedís desde
+    <b>Pedir otra materia</b> — sí, el pedido lo resuelve un Admin, que
+    probablemente seas vos mismo u otro compañero.
+  </p>
+
+  <h3>Tu contraseña</h3>
+  <p>
+    <span class="boton">Cambiar mi contraseña</span>. Te pide la actual y la nueva
+    dos veces.
+  </p>
+
+  <div class="ojo">
+    <span class="titulo">Si te olvidaste la tuya</span>
+    Otro Admin puede resetearte la contraseña desde <b>Usuarios</b>. Si sos el único
+    Admin, la salida es el correo de recuperación de la pantalla de entrada — otra
+    razón para que la escuela tenga <b>más de un Admin</b>.
+  </div>
+</section>
+
+<!-- 19 ───────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">19</span>Una rutina que funciona</h2>
 
   <p class="entrada">
     No hace falta mirar todo todos los días. Con esto alcanza.
@@ -968,9 +1190,9 @@
   </div>
 </section>
 
-<!-- 18 ────────────────────────────────────────────────────────── -->
+<!-- 20 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">18</span>Si algo no sale como esperabas</h2>
+  <h2><span class="n">20</span>Si algo no sale como esperabas</h2>
 
   <div class="pregunta">
     <h3>Un docente dice que no puede reservar</h3>
@@ -1026,9 +1248,9 @@
   </div>
 </section>
 
-<!-- 19 ────────────────────────────────────────────────────────── -->
+<!-- 21 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">19</span>Las palabras que vas a ver</h2>
+  <h2><span class="n">21</span>Las palabras que vas a ver</h2>
 
   <dl class="glosario">
     <dt>Ciclo lectivo</dt>
