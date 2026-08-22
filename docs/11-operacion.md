@@ -600,7 +600,7 @@ El barrido corre dentro del mismo proceso, cada cinco minutos, sin cron ni
 nada que instalar. Cinco variables opcionales lo ajustan:
 `RETIRO_AVISO_MINUTOS` (15), `RETIRO_GRACIA_MINUTOS` (40),
 `RETIRO_PARCIAL_GRACIA_MINUTOS` (15), `DEVOLUCION_DEMORA_MINUTOS` (10) y
-`CIERRE_JORNADA` (18). Un valor mal escrito **impide levantar**, a propósito:
+`CIERRE_JORNADA` (23). Un valor mal escrito **impide levantar**, a propósito:
 descubrirlo tres horas después porque un aviso no salió es peor.
 
 Las tres primeras se leen juntas, porque son tres momentos de la misma clase y
@@ -621,33 +621,39 @@ reserva ya liberada—, así que esa combinación se rechaza al arrancar.
 
 #### `CIERRE_JORNADA`: el corte de lo que quedó afuera
 
-Es una **hora de reloj** (0-23, en la zona de `APP_TIMEZONE`) y **no tiene
-ninguna relación con la jornada institucional** que se declara desde la
-pantalla de Admin: son dos cosas con nombres parecidos que no se hablan. Lo
-único que hace el barrido es preguntar, cada cinco minutos, si la hora actual
-llegó a ese número; si llegó y hay equipos afuera que todavía no se avisaron
-hoy, sale un aviso a todos los Admin con la lista y con a quién le va a faltar
-esa máquina en su próxima reserva.
+**Solo se usa si la institución no declaró su jornada.** Cuando la declaró, el
+corte sale de ahí: **una hora después de que la escuela cierra ese día**, con
+la hora de cierre tomada de los tramos de ese día de la semana.
 
-Cada préstamo queda marcado con la fecha del aviso, así que el corte sale **una
-vez por día y por equipo**, y se repite al día siguiente si la máquina sigue
-afuera.
+Eso resuelve dos cosas que una hora fija no podía:
 
-De ese diseño salen dos consecuencias que conviene conocer antes de elegir el
-número:
+- Una escuela que cierra a las 22 recibe el aviso a las 23, y no a media tarde
+  con las máquinas legítimamente en clase.
+- Una **nocturna que cierra a la 01:00** lo recibe a las 02:00, ya entrado el
+  día siguiente. El tramo que cruza la medianoche se mide desde la medianoche
+  de su propio día, así que un lunes de 20:00 a 01:00 cierra "a las 25 horas"
+  del lunes y su corte cae el martes a las 02:00.
+- Los **días en que la escuela no abre no tienen corte**: una jornada de lunes
+  a viernes no avisa nada el sábado ni el domingo.
 
-- **Pasada esa hora, el corte es casi inmediato.** Un equipo entregado a las 19
-  en una instalación con `CIERRE_JORNADA=18` aparece en el aviso de la barrida
-  siguiente, cinco minutos después: no espera a ningún cierre.
-- **Entre la medianoche y esa hora no hay corte**, porque la comparación es
-  contra la hora del reloj. En una escuela nocturna que cierra a la 01:00,
-  dejar 18 no sirve —el aviso saldría antes de que la escuela abra, y todo lo
-  que se entregue durante la noche se avisaría a los cinco minutos—. Lo más
-  cercano es poner la hora real de cierre del laboratorio (23, por ejemplo),
-  aceptando que lo entregado después se avisa enseguida. **Un turno que cruza
-  la medianoche no se puede expresar con una sola hora**: es un límite conocido
-  del diseño actual, el mismo que la jornada institucional sí resuelve
-  permitiendo que la hora de cierre sea menor que la de apertura.
+Cuando no hay jornada declarada, el valor de `CIERRE_JORNADA` (una hora de
+reloj, 0-23, en la zona de `APP_TIMEZONE`) es la hora del corte, y valen los
+límites de siempre: pasada esa hora el corte es casi inmediato, y entre la
+medianoche y esa hora no hay corte.
+
+Tres cosas más que conviene saber:
+
+- **El aviso sale una sola vez por préstamo**, no una por día. Lo que sostiene
+  el seguimiento de una máquina que no volvió no es el correo sino la pantalla
+  de *Entregas*, con su contador en la barra de navegación: el número no baja
+  hasta que alguien la recibe. Si nunca vuelve, se le da de baja del
+  inventario.
+- **No se cuenta la máquina que sigue dentro de su ventana.** La que salió
+  para una clase que termina después del cierre no "quedó" afuera: está en uso.
+- Si el barrido estuvo **caído más de un día**, los cortes de esos días no
+  salen: un cierre de hace treinta horas ya no es "el cierre que acaba de
+  pasar". Queda una línea en el log diciéndolo, y lo que siga afuera se sigue
+  viendo en *Entregas*.
 
 **Ningún aviso depende de que el barrido corra a una hora exacta.** Cada uno
 deja su marca en la fila, así que reiniciar el contenedor o estar caído dos

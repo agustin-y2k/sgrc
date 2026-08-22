@@ -308,10 +308,12 @@ flowchart LR
 - **Flujo:**
   1. A los 10 minutos de la hora de devolución, a todos los Admin les llega la lista de lo que no volvió, y a quien la tiene —si tiene cuenta— un recordatorio aparte.
   2. Al docente de la próxima reserva de esa máquina se le avisa en `max(momento de la detección, inicio de su reserva − 1 hora)`.
-  3. Al cierre de la jornada, lo que siga afuera vuelve a listarse, diciendo a quién le va a faltar mañana.
+  3. Una hora después de que la escuela cierra, lo que siga afuera se lista una vez, diciendo a quién le va a faltar mañana.
 - **Reglas que no son obvias:**
   - **Si la máquina vuelve antes de que corresponda avisar, el aviso no sale nunca.** Es lo que evita que una demora de quince minutos le genere un correo a alguien que reservó para dentro de tres horas.
-  - **Un préstamo sin hora pactada nunca se reclama**: "vengo en un rato" es una respuesta válida. Esas máquinas aparecen recién en el corte de fin de jornada.
+  - **Un préstamo sin hora pactada nunca se reclama**: "vengo en un rato" es una respuesta válida. Esas máquinas aparecen recién en el corte de fin de jornada, y ese es su único aviso.
+  - **El corte sale una sola vez por préstamo, no una por día.** Lo que sostiene el seguimiento de una máquina que no volvió es la pantalla de *Entregas*, con su contador en la barra: el número no baja hasta que alguien la recibe. Un correo se puede no leer; un número que no se va, no.
+  - **La máquina que sigue dentro de su ventana no se cuenta.** La que salió para una clase que termina después del cierre no quedó afuera: está en uso.
   - **A quien tiene la máquina se le habla como a un colega**, no como a un deudor: el texto empieza aceptando que quizá ya la devolvió y todavía no la registraron.
   - Con una reserva contigua, el correo al docente siguiente llega tarde igual — ya está yendo al laboratorio. Lo que resuelve ese caso es el reclamo al Admin.
 

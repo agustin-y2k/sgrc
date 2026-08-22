@@ -612,7 +612,11 @@ Qué días y entre qué horas abre la escuela. Es la única tabla del sistema **
 | hora_inicio | TIME | NOT NULL |
 | hora_fin | TIME | NOT NULL, CHECK (hora_fin <> hora_inicio) |
 
-> **Tabla vacía y día sin filas significan cosas opuestas.** Vacía = la institución todavía no declaró su jornada, y entonces no hay restricción. Con filas cargadas, un día sin filas es un día en que la escuela no abre. Por eso la validación lee la tabla completa y no solo el día que le preguntan (ver `PermiteReserva` en `availability/domain`).
+> **Tabla vacía y día sin filas significan cosas opuestas.** Vacía = no hay horario declarado, y entonces no hay restricción. Con filas cargadas, un día sin filas es un día en que la escuela no abre. Por eso la validación lee la tabla completa y no solo el día que le preguntan (ver `PermiteReserva` en `availability/domain`).
+>
+> **Se reemplaza entera, en una transacción.** No hay alta ni baja de una fila suelta: la jornada es una sola decisión de siete días, y mientras se aplicaba por partes quedaba a la vista una jornada a medias que `PermiteReserva` ya estaba usando para aceptar o rechazar reservas. Los ids son nuevos en cada guardado, y eso no molesta a nadie: ninguna otra tabla los referencia.
+>
+> **De esta tabla también sale el corte de fin de jornada** del barrido de entregas: el fin más tardío del día, más una hora. Sin filas, se cae a `CIERRE_JORNADA` (ver `docs/11-operacion.md`).
 
 > **Varias filas por día a propósito**: turno mañana y turno noche, con el mediodía afuera. El solapamiento se rechaza en la aplicación —igual que en `horario_admin` y por la misma razón: tabla chica, escritura casi nula, y una constraint `EXCLUDE` sobre `TIME` exigiría un tipo de rango que Postgres no trae.
 
@@ -852,10 +856,11 @@ CREATE INDEX idx_prestamo_reserva  ON prestamo (reserva_id) WHERE reserva_id IS 
 > llevó una máquina vale por sí mismo aunque la reserva que lo originó ya no
 > exista. Mismo criterio que `notificacion.reserva_id`.
 
-> **Las marcas del barrido.** `avisado_demora_en` es un instante porque el
-> reclamo sale UNA vez; `avisado_cierre_para` es una FECHA porque el corte de
-> fin de jornada se repite cada día que la máquina siga afuera, así que lo que
-> hay que recordar es "de este día ya avisé".
+> **Las marcas del barrido.** Las dos existen para que un aviso salga una sola
+> vez por préstamo: `avisado_demora_en` para el reclamo de devolución y
+> `avisado_cierre_para` para el corte de fin de jornada. Lo único que importa
+> es si están puestas o no; el instante que guardan sirve para saber cuándo
+> salió, no para decidir si vuelve a salir.
 
 ### `notificacion`
 | Campo | Tipo | Restricciones |
