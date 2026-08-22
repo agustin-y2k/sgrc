@@ -20,12 +20,17 @@ import { InventarioPage } from "@/features/inventory/InventarioPage"
 import { NotificacionesPage } from "@/features/notificaciones/NotificacionesPage"
 import { PerfilPage } from "@/features/perfil/PerfilPage"
 import { PedidosDeMateriaPage } from "@/features/admin/PedidosDeMateriaPage"
+import { PrimeraJornadaPage } from "@/features/admin/PrimeraJornadaPage"
 import { BloquearEquiposPage } from "@/features/reservas/BloquearEquiposPage"
 import { MisReservasPage } from "@/features/reservas/MisReservasPage"
 import { NuevaReservaPage } from "@/features/reservas/NuevaReservaPage"
 import { AdminRoute } from "@/routes/AdminRoute"
 import { NoEncontrada } from "@/routes/NoEncontrada"
-import { PublicOnlyRoute, ProtectedRoute } from "@/routes/ProtectedRoute"
+import {
+  PublicOnlyRoute,
+  ProtectedRoute,
+  RUTA_PRIMERA_JORNADA,
+} from "@/routes/ProtectedRoute"
 
 const router = createBrowserRouter([
   {
@@ -42,6 +47,11 @@ const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
+      // Fuera del AppLayout a propósito: es un portón, no una página. Con la
+      // barra de navegación alrededor ofrecería salidas que ProtectedRoute
+      // deshace enseguida, y un menú que no lleva a ningún lado se lee como
+      // que el sistema está roto.
+      { path: RUTA_PRIMERA_JORNADA, element: <PrimeraJornadaPage /> },
       {
         element: <AppLayout />,
         children: [

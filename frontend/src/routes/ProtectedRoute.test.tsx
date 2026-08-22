@@ -1,11 +1,43 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router"
 
 import { useAuth } from "@/features/auth/AuthContext"
 import type { Usuario } from "@/features/auth/types"
-import { ProtectedRoute, PublicOnlyRoute } from "@/routes/ProtectedRoute"
+import * as disponibilidadApi from "@/features/disponibilidad/api"
+import {
+  ProtectedRoute,
+  PublicOnlyRoute,
+  RUTA_PRIMERA_JORNADA,
+} from "@/routes/ProtectedRoute"
 
 vi.mock("@/features/auth/AuthContext")
+
+vi.mock("@/features/disponibilidad/api", async (original) => ({
+  // JORNADA_KEY no es una llamada: es la clave de react-query.
+  ...(await original<typeof disponibilidadApi>()),
+  jornadaDeLaInstitucion: vi.fn(),
+}))
+
+const adminMock: Usuario = {
+  id: "2",
+  nombre: "Berta",
+  apellido: "Admin",
+  email: "berta@test.com",
+  rol: "ADMIN",
+  estado: "APROBADA",
+  fechaRegistro: "2026-01-01T00:00:00Z",
+  fechaAprobacion: null,
+  debeCambiarPassword: false,
+}
+
+/** Si la institución ya decidió su jornada, con o sin tramos cargados. */
+function jornadaDefinida(definida: boolean) {
+  vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({
+    data: [],
+    definida,
+  })
+}
 
 const usuarioMock: Usuario = {
   id: "1",
@@ -34,20 +66,34 @@ function mockAuth(overrides: Partial<ReturnType<typeof useAuth>>) {
 }
 
 function renderProtected(initialEntry: string) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <Routes>
-        <Route path="/login" element={<div>Login</div>} />
-        <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<div>Home protegido</div>} />
-          <Route path="/cambiar-password" element={<div>Cambiar password</div>} />
-        </Route>
-      </Routes>
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/login" element={<div>Login</div>} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/" element={<div>Home protegido</div>} />
+            <Route path="/cambiar-password" element={<div>Cambiar password</div>} />
+            <Route
+              path={RUTA_PRIMERA_JORNADA}
+              element={<div>Declarar la primera jornada</div>}
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
   )
 }
 
 describe("ProtectedRoute", () => {
+  beforeEach(() => {
+    // Las llamadas se cuentan por test: sin limpiar, el "no se le pregunta al
+    // docente" vería las consultas que hicieron los tests de Admin de arriba.
+    vi.clearAllMocks()
+    jornadaDefinida(true)
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -86,6 +132,60 @@ describe("ProtectedRoute", () => {
     renderProtected("/cambiar-password")
 
     expect(screen.getByText("Cambiar password")).toBeInTheDocument()
+  })
+
+  // ── El portón de la jornada ──────────────────────────────────────────
+
+  it("un Admin que entra sin jornada decidida va a declararla", async () => {
+    jornadaDefinida(false)
+    mockAuth({ user: adminMock })
+    renderProtected("/")
+
+    expect(await screen.findByText("Declarar la primera jornada")).toBeInTheDocument()
+  })
+
+  // Elegir dejarla libre también es decidir: la jornada llega vacía igual que
+  // en una instalación nueva, y la diferencia la hace la bandera.
+  it("con la jornada ya decidida no se vuelve a preguntar aunque esté vacía", async () => {
+    jornadaDefinida(true)
+    mockAuth({ user: adminMock })
+    renderProtected("/")
+
+    expect(await screen.findByText("Home protegido")).toBeInTheDocument()
+    expect(screen.queryByText("Declarar la primera jornada")).not.toBeInTheDocument()
+  })
+
+  // Un docente no puede declarar la jornada, así que bloquearlo dejaría a la
+  // escuela entera esperando a que entre un Admin.
+  it("a un docente no se le pregunta por la jornada", async () => {
+    jornadaDefinida(false)
+    mockAuth({ user: usuarioMock })
+    renderProtected("/")
+
+    expect(await screen.findByText("Home protegido")).toBeInTheDocument()
+    expect(disponibilidadApi.jornadaDeLaInstitucion).not.toHaveBeenCalled()
+  })
+
+  // Los dos portones en fila, y en este orden: la contraseña es de la persona
+  // y la jornada es de la escuela.
+  it("la contraseña temporal se cambia antes de declarar la jornada", async () => {
+    jornadaDefinida(false)
+    mockAuth({ user: { ...adminMock, debeCambiarPassword: true } })
+    renderProtected("/")
+
+    expect(await screen.findByText("Cambiar password")).toBeInTheDocument()
+  })
+
+  // Si la consulta falla no se bloquea: lo peor que pasa es no preguntar esta
+  // vez, mientras que bloquear ante la duda deja al Admin sin sistema.
+  it("si no se puede saber si hay jornada, no se bloquea", async () => {
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockRejectedValue(
+      new Error("sin red")
+    )
+    mockAuth({ user: adminMock })
+    renderProtected("/")
+
+    expect(await screen.findByText("Home protegido")).toBeInTheDocument()
   })
 })
 
