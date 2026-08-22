@@ -443,6 +443,7 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
     vi.mocked(disponibilidadApi.reemplazarJornada).mockResolvedValue({
       data: [],
       reservasCanceladas: 1,
+      clasesCanceladas: 1,
     })
     renderPagina()
     await achicarElTramo(user)
@@ -461,7 +462,7 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
     expect(tramos).toEqual([
       { diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00" },
     ])
-    expect(await screen.findByText(/Se cancelaron 1 reserva/)).toBeInTheDocument()
+    expect(await screen.findByText(/Se cancelaron 1 clase/)).toBeInTheDocument()
   })
 
   it("volver atrás no manda nada y deja la jornada como estaba", async () => {

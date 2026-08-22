@@ -145,7 +145,10 @@ export function JornadaPage() {
     tramos: TramoDeJornada[]
     impacto: ImpactoDeJornada
   } | null>(null)
-  const [canceladas, setCanceladas] = useState(0)
+  // Se guarda en clases y en equipos: el cartel habla en clases, igual que la
+  // confirmación, y decir "200 reservas" después de haber preguntado por "40
+  // clases" sería cambiar de vara entre la pregunta y la respuesta.
+  const [canceladas, setCanceladas] = useState({ clases: 0, equipos: 0 })
 
   const { data, isPending, error } = useQuery({
     queryKey: JORNADA_KEY,
@@ -174,7 +177,10 @@ export function JornadaPage() {
       setFalloAlGuardar(null)
       setPorConfirmar(null)
       setEditando(null)
-      setCanceladas(respuesta.reservasCanceladas ?? 0)
+      setCanceladas({
+        clases: respuesta.clasesCanceladas ?? 0,
+        equipos: respuesta.reservasCanceladas ?? 0,
+      })
       await invalidar()
     },
     // Un 409 con impacto no es un error que mostrar y olvidar: es la pregunta
@@ -200,7 +206,7 @@ export function JornadaPage() {
 
   /** Manda la jornada sin confirmar: si algo queda afuera, vuelve la pregunta. */
   function proponer(tramos: TramoDeJornada[]) {
-    setCanceladas(0)
+    setCanceladas({ clases: 0, equipos: 0 })
     guardar.mutate({ tramos, confirmado: false })
   }
 
@@ -250,12 +256,15 @@ export function JornadaPage() {
         </Alert>
       )}
 
-      {canceladas > 0 && (
+      {canceladas.clases > 0 && (
         <Alert className="mb-4">
           <AlertDescription>
-            La jornada se guardó. Se cancelaron {canceladas}{" "}
-            {canceladas === 1 ? "reserva" : "reservas"} que quedaban fuera del horario y
-            se avisó por correo a sus docentes.
+            La jornada se guardó. Se cancelaron {canceladas.clases}{" "}
+            {canceladas.clases === 1 ? "clase" : "clases"}
+            {canceladas.equipos !== canceladas.clases && (
+              <> ({canceladas.equipos} equipos)</>
+            )}{" "}
+            que quedaban fuera del horario, y se avisó por correo a sus docentes.
           </AlertDescription>
         </Alert>
       )}

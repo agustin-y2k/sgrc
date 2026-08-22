@@ -340,8 +340,12 @@ func (h *Handler) ReemplazarJornada(c *fiber.Ctx) error {
 	for i, b := range resultado.Bloques {
 		data[i] = toBloqueJornadaResponse(b)
 	}
+	// Las dos unidades, igual que en la confirmación: la pantalla habla en
+	// clases y decir "200 reservas" acá después de haber preguntado por "40
+	// clases" sería cambiar de vara entre la pregunta y la respuesta.
 	return c.JSON(fiber.Map{
 		"data":               data,
 		"reservasCanceladas": resultado.ReservasCanceladas,
+		"clasesCanceladas":   resultado.Impacto.ClasesAfectadas,
 	})
 }

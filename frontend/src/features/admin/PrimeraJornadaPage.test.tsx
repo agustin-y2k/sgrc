@@ -10,9 +10,17 @@ import {
   pedidoDescartado,
 } from "@/features/admin/pedidoDeJornada"
 import { PrimeraJornadaPage } from "@/features/admin/PrimeraJornadaPage"
+import type { ImpactoDeJornada } from "@/features/disponibilidad/types"
 import { ApiError } from "@/lib/api-client"
 
 vi.mock("@/features/auth/AuthContext")
+
+const navegar = vi.fn()
+
+vi.mock("react-router", async (original) => ({
+  ...(await original<typeof import("react-router")>()),
+  useNavigate: () => navegar,
+}))
 
 const logoutEspia = vi.fn()
 
@@ -21,6 +29,22 @@ vi.mock("@/features/disponibilidad/api", async (original) => ({
   ...(await original<typeof disponibilidadApi>()),
   reemplazarJornada: vi.fn(),
 }))
+
+/** El 409 que devuelve el backend en vez de aplicar el cambio. */
+function unImpactoCon(impacto: Partial<ImpactoDeJornada>) {
+  return new ApiError(409, "el cambio deja reservas fuera de la jornada", {
+    error: "el cambio deja reservas fuera de la jornada",
+    impacto: {
+      reservas: [],
+      prestamos: [],
+      totalAfectadas: 0,
+      clasesAfectadas: 0,
+      totalDeClases: 0,
+      totalDeReservas: 0,
+      ...impacto,
+    },
+  })
+}
 
 function renderPagina() {
   vi.mocked(useAuth).mockReturnValue({
@@ -195,6 +219,74 @@ describe("PrimeraJornadaPage", () => {
       expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(2)
     })
     expect(vi.mocked(disponibilidadApi.reemplazarJornada).mock.calls[1][1]).toBe(true)
+  })
+
+  // Al confirmar algo destructivo, el asistente cuenta qué pasó en vez de
+  // soltar al Admin adentro del sistema sin decirle nada. Es el único momento
+  // del flujo en que puede hacer algo con esa información.
+  it("después de cancelar clases muestra el resumen antes de dejar entrar", async () => {
+    const user = userEvent.setup()
+    vi.mocked(disponibilidadApi.reemplazarJornada).mockRejectedValueOnce(
+      unImpactoCon({
+        reservas: [
+          {
+            id: "r1",
+            fecha: "2026-03-14",
+            horaInicio: "09:00",
+            horaFin: "11:00",
+            equipo: "PC 3",
+            materia: "Matemáticas",
+            docente: "Ada Lovelace",
+          },
+        ],
+        prestamos: [{ id: "p1", equipo: "PC 3", quien: "Ada Lovelace" }],
+        totalAfectadas: 43,
+        clasesAfectadas: 12,
+      })
+    )
+    vi.mocked(disponibilidadApi.reemplazarJornada).mockResolvedValue({
+      data: [],
+      reservasCanceladas: 43,
+      clasesCanceladas: 12,
+    })
+    renderPagina()
+
+    await user.click(screen.getByRole("button", { name: "Lunes a viernes" }))
+    await user.click(screen.getByRole("button", { name: "Agregar tramo" }))
+    await user.click(screen.getByRole("button", { name: "Guardar la jornada" }))
+    await user.click(await screen.findByRole("button", { name: /Guardar y cancelar/ }))
+
+    expect(await screen.findByText("La jornada quedó declarada")).toBeInTheDocument()
+    // En clases, igual que la pregunta, con los equipos al lado.
+    expect(screen.getByText(/Se cancelaron/)).toHaveTextContent(
+      "Se cancelaron 12 clases (43 equipos)"
+    )
+    // Y la máquina que ya estaba afuera, que es lo accionable ahora.
+    expect(screen.getByText(/PC 3 · la tiene Ada Lovelace/)).toBeInTheDocument()
+    expect(screen.getByText(/Conviene avisarles a mano/)).toBeInTheDocument()
+    // El formulario ya no está: el paso terminó.
+    expect(
+      screen.queryByRole("button", { name: "Guardar la jornada" })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Entrar al sistema" }))
+    expect(navegar).toHaveBeenCalledWith("/", { replace: true })
+  })
+
+  // Sin nada que contar se sale de largo: un paso extra para decir "no pasó
+  // nada" es peor que no decirlo.
+  it("sin clases canceladas no interpone ningún resumen", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(screen.getByRole("button", { name: "Lunes a viernes" }))
+    await user.click(screen.getByRole("button", { name: "Agregar tramo" }))
+    await user.click(screen.getByRole("button", { name: "Guardar la jornada" }))
+
+    await waitFor(() => {
+      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalled()
+    })
+    expect(screen.queryByText("La jornada quedó declarada")).not.toBeInTheDocument()
   })
 
   it("muestra el error del backend", async () => {

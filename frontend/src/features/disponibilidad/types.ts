@@ -22,8 +22,10 @@ export type TramoDeJornada = {
  * sesión mientras siga vacío.
  */
 export type RespuestaJornada = RespuestaLista<BloqueHorario> & {
-  /** Cuántas reservas se cancelaron al guardar, si hubo alguna. */
+  /** Cuántas filas de reserva se cancelaron al guardar (una por equipo). */
   reservasCanceladas?: number
+  /** Las mismas, contadas en clases, que es como se preguntó. */
+  clasesCanceladas?: number
 }
 
 /** Una reserva que quedaría fuera de la jornada propuesta. */

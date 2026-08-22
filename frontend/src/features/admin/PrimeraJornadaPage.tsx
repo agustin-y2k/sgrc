@@ -9,7 +9,11 @@ import { useAuth } from "@/features/auth/AuthContext"
 import * as disponibilidadApi from "@/features/disponibilidad/api"
 import { JORNADA_KEY } from "@/features/disponibilidad/api"
 import { impactoDelError } from "@/features/disponibilidad/types"
-import type { ImpactoDeJornada, TramoDeJornada } from "@/features/disponibilidad/types"
+import type {
+  ImpactoDeJornada,
+  PrestamoAfectado,
+  TramoDeJornada,
+} from "@/features/disponibilidad/types"
 import { ImpactoDeLaJornada } from "@/features/admin/ImpactoDeLaJornada"
 import {
   CamposDeTramo,
@@ -47,6 +51,14 @@ export function PrimeraJornadaPage() {
     tramos: TramoDeJornada[]
     impacto: ImpactoDeJornada
   } | null>(null)
+  // Lo que se canceló al guardar, cuando hubo algo. Con esto puesto la
+  // pantalla deja de ser un formulario y pasa a ser el resumen de lo que
+  // acaba de pasar.
+  const [loCancelado, setLoCancelado] = useState<{
+    clases: number
+    equipos: number
+    prestamos: PrestamoAfectado[]
+  } | null>(null)
 
   const guardar = useMutation({
     mutationFn: ({
@@ -59,8 +71,20 @@ export function PrimeraJornadaPage() {
     // Sin navigate: en cuanto la jornada queda definida, el portón de
     // ProtectedRoute deja de mandar acá y la pantalla que el Admin quería
     // aparece sola. Redirigir a mano competiría con eso.
-    onSuccess: async () => {
+    onSuccess: async (respuesta) => {
       setFallo(null)
+      const clases = respuesta.clasesCanceladas ?? 0
+      // Sin nada que contar se sale de largo, como siempre: un paso extra
+      // para decir "no pasó nada" es peor que no decirlo. Con clases caídas,
+      // en cambio, este es el único momento del flujo en que el Admin puede
+      // hacer algo al respecto.
+      if (clases > 0) {
+        setLoCancelado({
+          clases,
+          equipos: respuesta.reservasCanceladas ?? 0,
+          prestamos: porConfirmar?.impacto.prestamos ?? [],
+        })
+      }
       setPorConfirmar(null)
       await queryClient.invalidateQueries({ queryKey: JORNADA_KEY })
     },
@@ -111,6 +135,61 @@ export function PrimeraJornadaPage() {
   for (const t of tramos) {
     const clave = `${t.horaInicio}-${t.horaFin}`
     porHorario.set(clave, [...(porHorario.get(clave) ?? []), t])
+  }
+
+  // Guardado con clases caídas: la pantalla pasa a contar qué pasó en vez de
+  // soltar al Admin adentro del sistema sin decirle nada. Llegar acá solo es
+  // posible en una instalación que venía funcionando sin jornada declarada, o
+  // sea justo donde el número es grande.
+  if (loCancelado !== null) {
+    return (
+      <div className="mx-auto flex min-h-svh max-w-2xl flex-col justify-center gap-6 p-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            La jornada quedó declarada
+          </h1>
+          <p className="text-destructive mt-2 text-sm">
+            Se cancelaron <strong>{loCancelado.clases}</strong>{" "}
+            {loCancelado.clases === 1 ? "clase" : "clases"}
+            {loCancelado.equipos !== loCancelado.clases && (
+              <> ({loCancelado.equipos} equipos)</>
+            )}{" "}
+            que quedaban fuera del horario, y ya se les avisó por correo a sus docentes.
+          </p>
+        </div>
+
+        {/* Se repite lo que ya vio al confirmar, y a propósito: ahí estaba
+            decidiendo, acá ya decidió. Este es el momento en que puede ir a
+            hablar con esa persona antes de que le llegue el correo. */}
+        {loCancelado.prestamos.length > 0 && (
+          <div className="rounded-md border p-3">
+            <p className="text-sm font-medium">
+              {loCancelado.prestamos.length}{" "}
+              {loCancelado.prestamos.length === 1
+                ? "de esas clases ya tenía su computadora entregada"
+                : "de esas clases ya tenían sus computadoras entregadas"}
+            </p>
+            <ul className="text-muted-foreground mt-1 text-sm">
+              {loCancelado.prestamos.map((p) => (
+                <li key={p.id}>
+                  {p.equipo} · la tiene {p.quien}
+                </li>
+              ))}
+            </ul>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Las computadoras siguen prestadas y se reciben como siempre. Conviene
+              avisarles a mano.
+            </p>
+          </div>
+        )}
+
+        <div>
+          <Button onClick={() => navigate("/", { replace: true })}>
+            Entrar al sistema
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
