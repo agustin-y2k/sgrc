@@ -525,17 +525,14 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
   })
 
   // Los préstamos se ven pero no se cancelan: la máquina está afuera.
-  it("lista los préstamos afectados aclarando que no se cancelan", async () => {
+  // La jornada no restringe los préstamos, así que lo que se avisa no es que
+  // el préstamo quede fuera de horario: es que su clase deja de existir
+  // mientras el docente tiene las máquinas en la mano.
+  it("avisa cuáles de las clases canceladas ya tienen la máquina entregada", async () => {
     const user = userEvent.setup()
     rechazaConImpacto({
-      prestamos: [
-        {
-          id: "p1",
-          equipo: "PC 7",
-          quien: "Marta",
-          devolucionEstimada: "2026-03-09T20:00:00Z",
-        },
-      ],
+      reservas: [reservaAfectada("r1", "Marta")],
+      prestamos: [{ id: "p1", equipo: "PC 7", quien: "Marta" }],
       totalDeReservas: 4,
     })
     renderPagina()
@@ -543,9 +540,9 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
     await achicarElTramo(user)
 
     expect(
-      await screen.findByText(/la devolución pactada fuera del horario nuevo/)
+      await screen.findByText(/ya tiene su computadora entregada/)
     ).toBeInTheDocument()
-    expect(screen.getByText(/No se cancelan/)).toBeInTheDocument()
+    expect(screen.getByText(/El préstamo no se cancela/)).toBeInTheDocument()
     expect(screen.getByText(/PC 7 · la tiene Marta/)).toBeInTheDocument()
   })
 

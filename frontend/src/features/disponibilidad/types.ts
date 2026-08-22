@@ -39,15 +39,17 @@ export type ReservaAfectada = {
 }
 
 /**
- * Una máquina que está afuera con la devolución pactada fuera del horario
- * nuevo. Se muestran para que se vean: no se cancelan nunca, porque el equipo
- * está físicamente afuera.
+ * Una máquina YA ENTREGADA contra una de las reservas que se van a cancelar.
+ *
+ * La jornada no restringe los préstamos —una máquina se entrega cualquier día
+ * y a cualquier hora mientras esté en el laboratorio—, así que lo que importa
+ * no es su horario sino que su clase deje de existir mientras el docente la
+ * tiene en la mano.
  */
 export type PrestamoAfectado = {
   id: string
   equipo: string
   quien: string
-  devolucionEstimada: string
 }
 
 /** Lo que un cambio de jornada dejaría afuera. */

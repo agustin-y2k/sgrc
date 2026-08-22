@@ -241,10 +241,17 @@ type ImpactoDeJornada struct {
 	// ocurrencias y no de a series: una recurrencia de quince lunes son
 	// quince, y decir "una serie" escondería el tamaño de lo que se cancela.
 	Reservas []ReservaFutura
-	// Prestamos son las máquinas que están afuera con la devolución pactada
-	// fuera del horario nuevo. Van solo para que se vean: no se cancelan
-	// nunca, porque el equipo está físicamente afuera y marcar el préstamo
-	// como cancelado sería perder el rastro de quién lo tiene.
+	// Prestamos son las máquinas YA ENTREGADAS contra alguna de esas reservas.
+	//
+	// Es el dato que cambia una decisión: cancelar una reserva cuyas máquinas
+	// todavía están en el laboratorio es un correo; cancelar una que el
+	// docente ya retiró es dejarlo parado con siete computadoras para una
+	// clase que dejó de existir. Se entregan antes de que empiece la hora, así
+	// que el caso es normal, no rebuscado.
+	//
+	// Van solo para que se vean: no se cancelan nunca. El equipo está
+	// físicamente afuera y marcar el préstamo como cancelado sería perder el
+	// rastro de quién lo tiene. La devolución sigue reclamándose como siempre.
 	Prestamos []PrestamoAbierto
 	// TotalDeReservas es cuántas reservas futuras hay en total, afectadas o
 	// no. Sirve para leer el número de arriba: veinte cancelaciones sobre
@@ -253,8 +260,10 @@ type ImpactoDeJornada struct {
 	TotalDeReservas int
 }
 
+// HayAlgo mira solo las reservas: los préstamos que se listan salen de ellas,
+// así que no puede haber un préstamo afectado sin una reserva afectada.
 func (i *ImpactoDeJornada) HayAlgo() bool {
-	return len(i.Reservas) > 0 || len(i.Prestamos) > 0
+	return len(i.Reservas) > 0
 }
 
 // ResultadoDeJornada es qué pasó al intentar cambiar la jornada.
@@ -362,18 +371,24 @@ func (s *Service) impactoDe(ctx context.Context, bloques []*domain.BloqueJornada
 		}
 	}
 
+	// Sin reservas que cancelar no hay préstamo que mirar: la jornada no
+	// restringe las entregas, así que un préstamo por sí solo nunca queda
+	// "fuera de horario".
+	if len(impacto.Reservas) == 0 {
+		return impacto, nil
+	}
+
+	afectadas := make(map[string]bool, len(impacto.Reservas))
+	for _, r := range impacto.Reservas {
+		afectadas[r.ID] = true
+	}
+
 	prestamos, err := s.reservas.PrestamosAbiertos(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("leyendo los préstamos abiertos: %w", err)
 	}
 	for _, p := range prestamos {
-		// Sin hora pactada no hay nada que comparar: ese préstamo no queda
-		// "fuera de la jornada" porque nunca tuvo un momento previsto.
-		if p.DevolucionEstimada == nil {
-			continue
-		}
-		dia, hora := domain.DiaYHoraDe(*p.DevolucionEstimada)
-		if !domain.MomentoDentroDeLaJornada(bloques, dia, hora) {
+		if p.ReservaID != nil && afectadas[*p.ReservaID] {
 			impacto.Prestamos = append(impacto.Prestamos, p)
 		}
 	}

@@ -145,10 +145,10 @@ func (a *availabilityReservasAdapter) PrestamosAbiertos(ctx context.Context) ([]
 	prestamos := make([]availabilityapp.PrestamoAbierto, len(abiertos))
 	for i, p := range abiertos {
 		prestamos[i] = availabilityapp.PrestamoAbierto{
-			ID:                 p.Prestamo.ID,
-			Equipo:             p.Etiqueta,
-			Quien:              p.Prestamo.EntregadoANombre,
-			DevolucionEstimada: p.Prestamo.DevolucionEstimada,
+			ID:        p.Prestamo.ID,
+			Equipo:    p.Etiqueta,
+			Quien:     p.Prestamo.EntregadoANombre,
+			ReservaID: p.Prestamo.ReservaID,
 		}
 	}
 	return prestamos, nil

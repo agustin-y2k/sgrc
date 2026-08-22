@@ -99,22 +99,18 @@ export function ImpactoDeLaJornada({
         </div>
       )}
 
-      {/* Los préstamos van aparte y sin acción: la máquina está físicamente
-          afuera y no hay nada que cancelar. Se muestran porque su devolución
-          va a quedar fuera del horario y alguien tiene que saberlo. */}
+      {/* Lo que cambia una decisión: cancelar una clase cuyas máquinas siguen
+          en el laboratorio es un correo; cancelar una que el docente ya retiró
+          es dejarlo parado con las computadoras en la mano. */}
       {impacto.prestamos.length > 0 && (
-        <div>
+        <div className="rounded-md border p-3">
           <p className="text-sm font-medium">
-            {impacto.prestamos.length}{" "}
+            Atención: {impacto.prestamos.length}{" "}
             {plural(
               impacto.prestamos.length,
-              "computadora que está afuera tiene",
-              "computadoras que están afuera tienen"
-            )}{" "}
-            la devolución pactada fuera del horario nuevo
-          </p>
-          <p className="text-muted-foreground text-sm">
-            No se cancelan: siguen prestadas y se reciben como siempre.
+              "de esas clases ya tiene su computadora entregada",
+              "de esas clases ya tienen sus computadoras entregadas"
+            )}
           </p>
           <ul className="text-muted-foreground mt-1 text-sm">
             {impacto.prestamos.map((p) => (
@@ -123,6 +119,10 @@ export function ImpactoDeLaJornada({
               </li>
             ))}
           </ul>
+          <p className="text-muted-foreground mt-1 text-sm">
+            El préstamo no se cancela: la máquina está afuera y se recibe como siempre.
+            Pero conviene avisarle a mano antes de que se entere por el correo.
+          </p>
         </div>
       )}
 

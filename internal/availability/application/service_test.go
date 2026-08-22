@@ -923,41 +923,70 @@ func TestReemplazarJornada_CerrarUnDiaSoloAfectaAEseDia(t *testing.T) {
 	}
 }
 
-// Los préstamos se listan pero no se cancelan nunca: la máquina está
-// físicamente afuera y marcar el préstamo como cancelado sería perder el
-// rastro de quién la tiene.
-func TestReemplazarJornada_LosPrestamosSeListanPeroNoSeCancelan(t *testing.T) {
-	devuelveALas20 := lunes(20)
-	reservas := &fakeReservas{prestamos: []PrestamoAbierto{
-		{ID: "p1", Equipo: "PC 7", Quien: "Marta", DevolucionEstimada: &devuelveALas20},
-		// Sin hora pactada no hay nada que comparar contra la jornada.
-		{ID: "p2", Equipo: "PC 8", Quien: "Secretaría"},
-	}}
+// Cancelar una reserva cuyas máquinas todavía están en el laboratorio es un
+// correo; cancelar una que el docente ya retiró es dejarlo parado con las
+// computadoras de una clase que dejó de existir. Esa diferencia tiene que
+// verse antes de confirmar.
+func TestReemplazarJornada_AvisaDeLasReservasQueYaTienenLasMaquinasAfuera(t *testing.T) {
+	deLaReserva := "r1"
+	reservas := &fakeReservas{
+		futuras: []ReservaFutura{
+			reservaDelLunes("r1", 13*time.Hour, 15*time.Hour),
+			reservaDelLunes("r2", 13*time.Hour, 15*time.Hour),
+		},
+		prestamos: []PrestamoAbierto{
+			// Ya retirada para la clase que se va a cancelar.
+			{ID: "p1", Equipo: "PC 7", Quien: "Ada", ReservaID: &deLaReserva},
+			// Espontáneo: la jornada no lo restringe, se entrega cualquier día
+			// y a cualquier hora. No tiene nada que ver con este cambio.
+			{ID: "p2", Equipo: "PC 8", Quien: "Secretaría"},
+		},
+	}
 	svc, _ := servicioConReservas(reservas)
 	ctx := context.Background()
 
 	resultado, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
-		{DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 18 * time.Hour},
+		{DiaSemana: domain.Lunes, HoraInicio: 16 * time.Hour, HoraFin: 18 * time.Hour},
 	}, false)
 
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
 	if len(resultado.Impacto.Prestamos) != 1 || resultado.Impacto.Prestamos[0].ID != "p1" {
-		t.Fatalf("solo el de hora pactada afuera: %+v", resultado.Impacto.Prestamos)
-	}
-	if resultado.Guardada {
-		t.Error("un préstamo afuera también pide confirmación")
+		t.Fatalf("solo el atado a una reserva que se cancela: %+v", resultado.Impacto.Prestamos)
 	}
 
-	// Y confirmado, se guarda sin tocar el préstamo.
+	// Y confirmado, el préstamo sigue abierto: la máquina está físicamente
+	// afuera y cancelarlo sería perder el rastro de quién la tiene.
 	if _, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
-		{DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 18 * time.Hour},
+		{DiaSemana: domain.Lunes, HoraInicio: 16 * time.Hour, HoraFin: 18 * time.Hour},
 	}, true); err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
-	if len(reservas.canceladas) != 0 {
-		t.Errorf("un préstamo no se cancela nunca: %v", reservas.canceladas)
+	if len(reservas.canceladas) != 2 {
+		t.Errorf("se cancelan las dos reservas: %v", reservas.canceladas)
+	}
+}
+
+// Un préstamo espontáneo no puede quedar "fuera de la jornada": la jornada no
+// restringe las entregas. Si no hay reservas que cancelar, no hay nada que
+// avisar.
+func TestReemplazarJornada_UnPrestamoEspontaneoNuncaEsImpacto(t *testing.T) {
+	reservas := &fakeReservas{prestamos: []PrestamoAbierto{
+		{ID: "p1", Equipo: "PC 7", Quien: "Secretaría"},
+	}}
+	svc, _ := servicioConReservas(reservas)
+	ctx := context.Background()
+
+	resultado, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
+		{DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour},
+	}, false)
+
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if !resultado.Guardada || resultado.Impacto.HayAlgo() {
+		t.Errorf("sin reservas afectadas no hay nada que confirmar: %+v", resultado)
 	}
 }
 

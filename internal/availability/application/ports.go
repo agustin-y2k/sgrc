@@ -81,13 +81,18 @@ type ReservaFutura struct {
 }
 
 // PrestamoAbierto es una máquina que está fuera del laboratorio ahora mismo.
-// DevolucionEstimada nil = salió sin hora pactada, y entonces no hay nada que
-// comparar contra la jornada.
+//
+// La jornada NO restringe los préstamos: una máquina se entrega cualquier día
+// y a cualquier hora mientras esté en el laboratorio. Lo que importa acá es
+// otra cosa —contra qué reserva salió— porque si esa reserva se cancela, hay
+// alguien con equipos en la mano para una clase que dejó de existir.
 type PrestamoAbierto struct {
-	ID                 string
-	Equipo             string
-	Quien              string
-	DevolucionEstimada *time.Time
+	ID     string
+	Equipo string
+	Quien  string
+	// ReservaID nil = préstamo espontáneo, sin reserva detrás. Un cambio de
+	// jornada no lo toca ni de lejos.
+	ReservaID *string
 }
 
 // ReservasDeLaInstitucion es el puerto hacia reservation.

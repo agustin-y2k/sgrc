@@ -488,7 +488,16 @@ func (v *Vigilante) momentoDelCorte(ctx context.Context, ahora time.Time) (time.
 		// siendo un corte válido el sábado a la noche, y una escuela que no
 		// abre el fin de semana estaría cortando igual — que es exactamente lo
 		// que se quiso evitar.
+		//
+		// Se loguea porque es una pérdida silenciosa: si el barrido estuvo
+		// caído más de un día, los cortes de esos días no salen nunca y la
+		// única señal sería notar que faltó un correo. Las máquinas siguen
+		// visibles en la pantalla de entregas, que es lo que hace que esto sea
+		// un aviso perdido y no una máquina perdida.
 		if ahora.Sub(momento) >= 24*time.Hour {
+			log.Printf("barrido: el corte del %s ya pasó hace más de un día y no se va a avisar "+
+				"(¿el barrido estuvo caído?); lo que siga afuera se ve en la pantalla de entregas",
+				momento.Format("2006-01-02 15:04"))
 			continue
 		}
 		return momento, true

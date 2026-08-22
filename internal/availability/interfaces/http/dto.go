@@ -3,8 +3,6 @@
 package http
 
 import (
-	"time"
-
 	"github.com/ramiro/sgrc/internal/availability/application"
 	"github.com/ramiro/sgrc/internal/availability/domain"
 )
@@ -53,13 +51,12 @@ type reservaAfectadaResponse struct {
 	Docente    string `json:"docente"`
 }
 
+// prestamoAfectadoResponse es una máquina YA ENTREGADA contra una de las
+// reservas que se van a cancelar.
 type prestamoAfectadoResponse struct {
 	ID     string `json:"id"`
 	Equipo string `json:"equipo"`
 	Quien  string `json:"quien"`
-	// DevolucionEstimada siempre viene: un préstamo sin hora pactada no tiene
-	// nada que comparar contra la jornada y no llega hasta acá.
-	DevolucionEstimada string `json:"devolucionEstimada"`
 }
 
 // MaxAfectadasEnLaRespuesta acota la lista que viaja al cliente.
@@ -106,10 +103,9 @@ func toImpactoResponse(i *application.ImpactoDeJornada) impactoResponse {
 	}
 	for n, p := range i.Prestamos {
 		r.Prestamos[n] = prestamoAfectadoResponse{
-			ID:                 p.ID,
-			Equipo:             p.Equipo,
-			Quien:              p.Quien,
-			DevolucionEstimada: p.DevolucionEstimada.Format(time.RFC3339),
+			ID:     p.ID,
+			Equipo: p.Equipo,
+			Quien:  p.Quien,
 		}
 	}
 	return r
