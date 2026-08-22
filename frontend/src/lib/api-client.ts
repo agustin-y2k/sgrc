@@ -6,11 +6,21 @@ import { getToken } from "@/lib/token-store"
 // text/plain), el body ES el mensaje directamente.
 export class ApiError extends Error {
   status: number
+  /**
+   * El cuerpo del rechazo, ya parseado, cuando vino como JSON.
+   *
+   * Casi todos los errores del backend son una frase y alcanza con `message`.
+   * Unos pocos traen además el detalle de por qué no se pudo —qué reservas
+   * quedarían fuera de la jornada nueva, por ejemplo— y la pantalla necesita
+   * mostrarlo, no solo decir que algo falló.
+   */
+  cuerpo?: unknown
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, cuerpo?: unknown) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.cuerpo = cuerpo
   }
 }
 
@@ -33,9 +43,36 @@ export function registrarManejadorDeSesionRechazada(
   }
 }
 
-async function parseErrorMessage(response: Response): Promise<string> {
+/**
+ * El mensaje y, si vino, el detalle estructurado.
+ *
+ * La mayoría de los rechazos son texto plano —Fiber devuelve así los
+ * fiber.NewError— y ese texto ES el mensaje. Unos pocos responden un objeto
+ * JSON con `error` adentro: sin este parseo, la pantalla le mostraría al
+ * usuario el JSON crudo como si fuera una frase.
+ */
+async function parseErrorBody(
+  response: Response
+): Promise<{ mensaje: string; cuerpo?: unknown }> {
   const text = await response.text()
-  return text.trim() || response.statusText || "error inesperado"
+  const porDefecto = text.trim() || response.statusText || "error inesperado"
+
+  if (!(response.headers.get("content-type") ?? "").includes("application/json")) {
+    return { mensaje: porDefecto }
+  }
+  try {
+    const cuerpo: unknown = JSON.parse(text)
+    if (typeof cuerpo === "object" && cuerpo !== null && "error" in cuerpo) {
+      const { error } = cuerpo as { error: unknown }
+      if (typeof error === "string" && error !== "") {
+        return { mensaje: error, cuerpo }
+      }
+    }
+    return { mensaje: porDefecto, cuerpo }
+  } catch {
+    // Un JSON mal formado no es motivo para perder el error original.
+    return { mensaje: porDefecto }
+  }
 }
 
 export async function apiFetch<T>(
@@ -56,7 +93,8 @@ export async function apiFetch<T>(
   })
 
   if (!response.ok) {
-    const error = new ApiError(response.status, await parseErrorMessage(response))
+    const { mensaje, cuerpo } = await parseErrorBody(response)
+    const error = new ApiError(response.status, mensaje, cuerpo)
     // Solo si HABÍA token: el 401 del login son credenciales equivocadas,
     // no una sesión rechazada, y cerrar sesión ahí no tendría sentido.
     if (response.status === 401 && token) {

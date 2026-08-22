@@ -542,6 +542,21 @@ func (r *fakeRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID
 	}
 	return resultado, nil
 }
+
+// ListarReservasFuturas: solo las de clase, como en la consulta real. Los
+// bloqueos administrativos nunca estuvieron sujetos a la jornada.
+func (r *fakeRepo) ListarReservasFuturas(ctx context.Context, desde time.Time) ([]ReservaDetallada, error) {
+	var resultado []ReservaDetallada
+	for _, res := range r.reservas {
+		if res.Estado != domain.ReservaConfirmada || res.Tipo != domain.TipoNormal {
+			continue
+		}
+		resultado = append(resultado, ReservaDetallada{Reserva: res, Identificador: r.identificadorDeEquipo[res.EquipoID],
+			Etiqueta: fmt.Sprintf("PC %d", r.identificadorDeEquipo[res.EquipoID])})
+	}
+	return resultado, nil
+}
+
 func (r *fakeRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, cicloID string) (int, int, error) {
 	// El fake no modela la relación ciclo→materia→grupo/reserva (viviría del
 	// lado de academic), así que solo se usa para confirmar que el método existe
@@ -2590,10 +2605,21 @@ func TestPedirLiberacionDeReserva_FranjaYaEmpezada(t *testing.T) {
 }
 
 // fakeValidadorJornada hace de la jornada declarada por la institución.
+//
+// `cierre` en nil = la institución no declaró jornada, que es el caso de casi
+// todos estos tests: ahí el corte del barrido cae a la hora configurada.
 type fakeValidadorJornada struct {
 	permite bool
+	cierre  func(fecha time.Time) CierreDeJornada
 }
 
 func (f *fakeValidadorJornada) PermiteReserva(_ context.Context, _ time.Time, _, _ time.Duration) (bool, error) {
 	return f.permite, nil
+}
+
+func (f *fakeValidadorJornada) CierreDeLaJornada(_ context.Context, fecha time.Time) (CierreDeJornada, error) {
+	if f.cierre == nil {
+		return CierreDeJornada{}, nil
+	}
+	return f.cierre(fecha), nil
 }

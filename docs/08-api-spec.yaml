@@ -3265,10 +3265,14 @@ paths:
         de reserva la usa para avisar antes de mandar, y el calendario para saber
         qué días dibujar.
 
-        **Una lista vacía significa que todavía no se declaró la jornada, NO que
-        la escuela esté cerrada.** Sin jornada declarada no hay restricción de día
-        ni de horario. Una vez declarada, un día sin tramos es un día en que la
-        escuela no abre.
+        **Una lista vacía significa que no hay horario declarado, NO que la
+        escuela esté cerrada.** Sin tramos no hay restricción de día ni de
+        horario. Con tramos, un día sin ninguno es un día en que la escuela no
+        abre.
+
+        Mientras la lista esté vacía, a un Admin se le pide declararla en cada
+        inicio de sesión. Esa insistencia la decide el cliente: acá no hay
+        ningún estado que la recuerde.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -3278,44 +3282,49 @@ paths:
                 type: object
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/BloqueHorarioAdmin' } }
-    post:
+    put:
       tags: [availability]
-      summary: Agregar un tramo a la jornada (Admin)
+      summary: Reemplazar la jornada entera (Admin)
       description: |
+        Manda la jornada COMPLETA: lo que viene es lo que queda, y lo que no
+        viene se borra. No hay endpoints por tramo.
+
+        Es un PUT del conjunto porque la jornada es **una sola decisión de siete
+        días**. Con altas y bajas sueltas quedaba a la vista una jornada a medias
+        que ya estaba decidiendo qué reservas aceptar, y no existía un momento en
+        el que preguntar "esto es lo que va a quedar, ¿confirmás?".
+
         Se pueden cargar varios tramos en el mismo día: una escuela con turno
         mañana y turno noche declara 07:00–12:00 y 18:00–23:00, y el mediodía
-        queda cerrado. Una reserva tiene que entrar entera en un tramo.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [diaSemana, horaInicio, horaFin]
-              properties:
-                diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO] }
-                horaInicio: { type: string, example: "07:00" }
-                horaFin: { type: string, example: "12:00" }
-      responses:
-        "201": { description: Tramo agregado }
-        "409":
-          description: |
-            Ese tramo se pisa con otro del mismo día. El mensaje nombra cuál.
-            Dos tramos que se tocan en el borde —uno termina 12:00 y el otro
-            empieza 12:00— no se consideran solapados: describen un día abierto
-            de punta a punta.
-          content:
-            text/plain:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        queda cerrado. Una reserva tiene que entrar **entera** en un tramo.
 
-  /api/jornada/{id}:
-    patch:
-      tags: [availability]
-      summary: Editar un tramo de la jornada (Admin)
+        Una lista vacía es válida: deja a la escuela sin restricción de horario.
+
+        ## Qué pasa con lo que ya está reservado
+
+        Antes de aplicar nada, el servidor calcula qué **reservas de clase que
+        todavía no empezaron** no entrarían en la jornada propuesta.
+
+        - Sin nada afectado, guarda y responde 200.
+        - Con algo afectado y sin `confirmado`, **no toca nada** y responde 409
+          con el detalle. Ese rechazo ES la previsualización: no hay un endpoint
+          aparte para simular, justamente para que no pueda decir una cosa
+          distinta de la que después se aplica.
+        - Con `confirmado: true`, recalcula el impacto desde cero, guarda y
+          cancela lo que quedó afuera, avisando por correo a cada docente.
+
+        Nunca se toca la clase que está **en curso**: no terminó, pero cancelarla
+        sería sacarle las máquinas a alguien que está frente al curso.
+
+        Los **préstamos no se cancelan nunca** y la jornada no los restringe: una
+        máquina se entrega cualquier día y a cualquier hora mientras esté en el
+        laboratorio. Lo que sí se informa es cuáles de las clases que se cancelan
+        ya tienen sus computadoras entregadas, porque el docente las tiene en la
+        mano.
+
+        Queda registrado en `audit_log` como `JORNADA_CAMBIADA`, con quién lo
+        hizo y cuánto se canceló.
       security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
         required: true
         content:
@@ -3323,36 +3332,114 @@ paths:
             schema:
               type: object
               properties:
-                diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO] }
-                horaInicio: { type: string, example: "07:00" }
-                horaFin: { type: string, example: "12:00" }
+                tramos:
+                  type: array
+                  description: La jornada completa. Ausente o vacía = sin restricción.
+                  maxItems: 50
+                  items:
+                    type: object
+                    required: [diaSemana, horaInicio, horaFin]
+                    properties:
+                      diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO] }
+                      horaInicio: { type: string, example: "07:00" }
+                      horaFin:
+                        type: string
+                        example: "12:00"
+                        description: |
+                          Menor que horaInicio significa que el tramo termina al
+                          día siguiente: una nocturna declara 20:00–01:00. Igual
+                          a horaInicio es inválido.
+                confirmado:
+                  type: boolean
+                  default: false
+                  description: |
+                    El Admin haciéndose cargo de que se cancelen las reservas que
+                    quedan afuera. Sin esto, un cambio con impacto se rechaza.
       responses:
-        "200": { description: Tramo actualizado }
+        "200":
+          description: La jornada quedó como se pidió.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/BloqueHorarioAdmin' } }
+                  clasesCanceladas:
+                    type: integer
+                    description: Cuántas clases se cancelaron. Es la unidad en la que se preguntó.
+                  reservasCanceladas:
+                    type: integer
+                    description: |
+                      Las mismas, contadas en equipos: el sistema guarda una fila
+                      por cada máquina, así que una clase de cinco computadoras
+                      son cinco reservas.
         "400":
           description: |
-            El tramo resultante empieza y termina a la misma hora. Que el fin
-            sea MENOR que el inicio no es un error: significa que cierra al día
-            siguiente (una nocturna declara 20:00–01:00), y la edición lo
-            acepta igual que el alta. La validación de las dos tiene que ser la
-            misma: pedir acá un fin posterior al inicio dejaría crear el tramo
-            de una nocturna y no corregirlo nunca más.
+            Un tramo empieza y termina a la misma hora, o hay más de 50 tramos.
+            El tope no es cosmético: la jornada se lee ENTERA en cada alta de
+            reserva, así que una inflada no molesta una vez sino todos los días.
           content:
             text/plain:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
-        "404": { description: No existe }
-        "409": { description: Se pisa con otro tramo del mismo día }
-    delete:
-      tags: [availability]
-      summary: Quitar un tramo de la jornada (Admin)
-      description: |
-        Quitar el último tramo deja la jornada sin declarar, y con eso el sistema
-        vuelve a no restringir ningún día. Es coherente y reversible.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-      responses:
-        "200": { description: Tramo eliminado }
-        "404": { description: No existe }
+        "409":
+          description: |
+            Dos cosas distintas responden 409 y se distinguen por el cuerpo.
+
+            **Con `impacto`**: el cambio deja reservas afuera y falta confirmar.
+            No se aplicó nada.
+
+            **Sin `impacto`** (texto plano): dos tramos del mismo día se pisan, y
+            el mensaje nombra cuál. Tocarse en el borde —uno termina 12:00 y el
+            otro empieza 12:00— no es pisarse: describen un día abierto de punta
+            a punta.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  impacto:
+                    type: object
+                    properties:
+                      reservas:
+                        type: array
+                        description: |
+                          RECORTADA a 50. Lo que se va a cancelar es
+                          `totalAfectadas`, no el largo de esta lista.
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string, format: uuid }
+                            fecha: { type: string, example: "2026-08-24" }
+                            horaInicio: { type: string, example: "13:00" }
+                            horaFin: { type: string, example: "16:00" }
+                            equipo: { type: string, example: "PC 3" }
+                            materia: { type: string, example: "Programación" }
+                            docente: { type: string, example: "Ada Lovelace" }
+                      prestamos:
+                        type: array
+                        description: |
+                          Las máquinas YA ENTREGADAS contra alguna de esas
+                          reservas. Van solo para que se vean: no se cancelan.
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string, format: uuid }
+                            equipo: { type: string, example: "PC 3" }
+                            quien: { type: string, example: "Ada Lovelace" }
+                      clasesAfectadas: { type: integer }
+                      totalAfectadas: { type: integer, description: Equipos, no clases. }
+                      totalDeClases: { type: integer, description: Cuántas hay en total, para leer el tamaño del cambio. }
+                      totalDeReservas: { type: integer }
+        "500":
+          description: |
+            Si el mensaje dice que **la jornada se guardó pero no se pudieron
+            cancelar** las reservas que quedaron afuera, el cambio SÍ se aplicó y
+            el horario nuevo ya rige. Volver a guardar la misma jornada reintenta
+            solo la cancelación: es idempotente.
+          content:
+            text/plain:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/availability/admins:
     get:

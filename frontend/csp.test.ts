@@ -92,3 +92,23 @@ describe("CSP", () => {
     expect(csp).toContain("connect-src 'self' https://accounts.google.com/gsi/")
   })
 })
+
+/**
+ * Las fotos de perfil se muestran desde un blob:.
+ *
+ * La ruta que las sirve exige autenticación y una etiqueta <img> no manda
+ * headers, así que hay que bajarlas por fetch con el token y mostrarlas
+ * desde un blob: (ver features/perfil/useFoto.ts).
+ *
+ * Este test existe por CÓMO falla: sin blob: en img-src el navegador bloquea
+ * la imagen EN SILENCIO. No dispara onerror, no aparece nada en la interfaz
+ * —el avatar cae a las iniciales, que se ven perfectamente intencionales— y
+ * la imagen queda en 0x0. Así estuvieron rotas las fotos sin que nadie lo
+ * notara.
+ */
+it("la CSP permite blob: en img-src, o las fotos de perfil no se ven", () => {
+  const csp = readFileSync(rutaCSP, "utf8")
+  const imgSrc = /img-src ([^;"]*)/.exec(csp)?.[1] ?? ""
+
+  expect(imgSrc).toContain("blob:")
+})

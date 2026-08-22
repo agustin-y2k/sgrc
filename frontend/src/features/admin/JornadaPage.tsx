@@ -10,157 +10,33 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import * as disponibilidadApi from "@/features/disponibilidad/api"
 import { JORNADA_KEY } from "@/features/disponibilidad/api"
-import { DIAS_SEMANA, etiquetaDia } from "@/features/disponibilidad/types"
-import type { BloqueHorario, DiaSemana } from "@/features/disponibilidad/types"
+import { etiquetaDia } from "@/features/disponibilidad/types"
+import { impactoDelError } from "@/features/disponibilidad/types"
+import type {
+  BloqueHorario,
+  ImpactoDeJornada,
+  TramoDeJornada,
+} from "@/features/disponibilidad/types"
+import { ImpactoDeLaJornada } from "@/features/admin/ImpactoDeLaJornada"
 import {
   agruparTramos,
-  ATAJOS_DE_DIAS,
+  aTramos,
   etiquetaDeDias,
-  mismosDias,
-  ordenarDias,
+  expandirDias,
+  sinLosBloques,
 } from "@/features/admin/jornada"
 import type { TramoAgrupado } from "@/features/admin/jornada"
+import {
+  CamposDeTramo,
+  motivoDeHoras,
+  motivoParaNoGuardar,
+  SIN_DIAS,
+  TRAMO_VACIO,
+} from "@/features/admin/CamposDeTramo"
+import type { FormTramo } from "@/features/admin/CamposDeTramo"
 import { getErrorMessage } from "@/lib/api-client"
 
 /** La jornada de la institución: qué días y en qué horas abre la escuela. */
-
-/** Los campos de un tramo, compartidos por el alta y la edición. */
-type FormTramo = { dias: DiaSemana[]; horaInicio: string; horaFin: string }
-
-const TRAMO_VACIO: FormTramo = { dias: [], horaInicio: "08:00", horaFin: "12:00" }
-
-/**
- * Sin días marcados no se arranca: el formulario no adivina "lunes a viernes"
- * porque es exactamente la suposición que esta pantalla vino a sacar del
- * código.
- */
-function SelectorDeDias({
-  valor,
-  onCambio,
-}: {
-  valor: DiaSemana[]
-  onCambio: (dias: DiaSemana[]) => void
-}) {
-  const alternar = (dia: DiaSemana) =>
-    onCambio(
-      valor.includes(dia) ? valor.filter((d) => d !== dia) : ordenarDias([...valor, dia])
-    )
-
-  return (
-    <div className="grid gap-2">
-      <span className="text-sm font-medium">Días</span>
-
-      {/* Botones con aria-pressed y no checkboxes: son siete y se marcan y
-          desmarcan seguido, así que el objetivo táctil tiene que ser toda la
-          etiqueta y no un cuadradito de 16px. */}
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Días">
-        {DIAS_SEMANA.map((d) => {
-          const marcado = valor.includes(d.valor)
-          return (
-            <Button
-              key={d.valor}
-              type="button"
-              size="sm"
-              variant={marcado ? "default" : "outline"}
-              aria-pressed={marcado}
-              onClick={() => alternar(d.valor)}
-            >
-              {d.etiqueta}
-            </Button>
-          )
-        })}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-muted-foreground text-xs">Atajos:</span>
-        {ATAJOS_DE_DIAS.map((atajo) => (
-          <Button
-            key={atajo.etiqueta}
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-auto px-2 py-1 text-xs"
-            aria-pressed={mismosDias(valor, atajo.dias)}
-            onClick={() => onCambio([...atajo.dias])}
-          >
-            {atajo.etiqueta}
-          </Button>
-        ))}
-        {valor.length > 0 && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground h-auto px-2 py-1 text-xs"
-            onClick={() => onCambio([])}
-          >
-            Limpiar
-          </Button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function CamposDeTramo({
-  valor,
-  onCambio,
-  idPrefijo,
-}: {
-  valor: FormTramo
-  onCambio: (v: FormTramo) => void
-  idPrefijo: string
-}) {
-  return (
-    <div className="grid gap-4">
-      <SelectorDeDias
-        valor={valor.dias}
-        onCambio={(dias) => onCambio({ ...valor, dias })}
-      />
-
-      <div className="flex flex-wrap items-end gap-4">
-        <SelectorDeHora
-          id={`${idPrefijo}-inicio`}
-          etiqueta="Abre"
-          valor={valor.horaInicio}
-          onCambio={(v) => onCambio({ ...valor, horaInicio: v })}
-        />
-        <SelectorDeHora
-          id={`${idPrefijo}-fin`}
-          etiqueta="Cierra"
-          valor={valor.horaFin}
-          onCambio={(v) => onCambio({ ...valor, horaFin: v })}
-        />
-        {cruzaLaMedianoche(valor) && (
-          <p className="text-muted-foreground pb-1.5 text-sm">Cierra al día siguiente.</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function cruzaLaMedianoche(v: FormTramo): boolean {
-  return v.horaInicio !== "" && v.horaFin !== "" && v.horaFin < v.horaInicio
-}
-
-/** Por qué no se puede guardar ese horario todavía, o "" si sí se puede. */
-function motivoDeHoras(horaInicio: string, horaFin: string): string {
-  if (horaInicio === "" || horaFin === "") return "Falta completar la hora."
-  if (horaFin === horaInicio) {
-    return "La hora de cierre no puede ser igual a la de apertura."
-  }
-  return ""
-}
-
-const SIN_DIAS = "Elegí al menos un día para este tramo."
-
-/** Lo mismo para un tramo entero, que además necesita días. */
-function motivoParaNoGuardar(v: FormTramo): string {
-  const horas = motivoDeHoras(v.horaInicio, v.horaFin)
-  if (horas !== "") return horas
-  if (v.dias.length === 0) return SIN_DIAS
-  return ""
-}
 
 /** Un día suelto de un tramo, con su propio horario editable. */
 function FilaDeDia({
@@ -257,63 +133,22 @@ function FilaDeDia({
   )
 }
 
-/** Un paso del guardado, atado al día que lo motivó. */
-type Paso = { dia: DiaSemana; ejecutar: () => Promise<unknown> }
-
-async function ejecutarEnOrden(pasos: Paso[]): Promise<string[]> {
-  const fallos: string[] = []
-  for (const paso of pasos) {
-    try {
-      await paso.ejecutar()
-    } catch (e) {
-      fallos.push(`${etiquetaDia(paso.dia)}: ${getErrorMessage(e)}`)
-    }
-  }
-  return fallos
-}
-
-/** Los pasos para dejar un tramo como dice el formulario. */
-function pasosDeEdicion(grupo: TramoAgrupado, valor: FormTramo): Paso[] {
-  const quitados = grupo.bloques.filter((b) => !valor.dias.includes(b.diaSemana))
-  const conservados = grupo.bloques.filter((b) => valor.dias.includes(b.diaSemana))
-  const agregados = valor.dias.filter((d) => !grupo.dias.includes(d))
-
-  const horarioCambio =
-    valor.horaInicio !== grupo.horaInicio || valor.horaFin !== grupo.horaFin
-
-  return [
-    ...quitados.map((b) => ({
-      dia: b.diaSemana,
-      ejecutar: () => disponibilidadApi.eliminarBloqueDeJornada(b.id),
-    })),
-    // Sin cambio de horario no hay nada que editar en los días que siguen: un
-    // PATCH que manda lo mismo que ya está solo agrega un request que puede
-    // fallar por un solape consigo mismo mal resuelto.
-    ...(horarioCambio
-      ? conservados.map((b) => ({
-          dia: b.diaSemana,
-          ejecutar: () =>
-            disponibilidadApi.editarBloqueDeJornada(b.id, {
-              horaInicio: valor.horaInicio,
-              horaFin: valor.horaFin,
-            }),
-        }))
-      : []),
-    ...agregados.map((d) => ({
-      dia: d,
-      ejecutar: () =>
-        disponibilidadApi.agregarBloqueDeJornada(d, valor.horaInicio, valor.horaFin),
-    })),
-  ]
-}
-
 export function JornadaPage() {
   const queryClient = useQueryClient()
   const [nuevo, setNuevo] = useState<FormTramo>(TRAMO_VACIO)
   const [editando, setEditando] = useState<string | null>(null)
   const [edicion, setEdicion] = useState<FormTramo>(TRAMO_VACIO)
   const [desplegados, setDesplegados] = useState<string[]>([])
-  const [fallos, setFallos] = useState<string[]>([])
+  const [falloAlGuardar, setFalloAlGuardar] = useState<string | null>(null)
+  // La jornada que espera confirmación, junto con lo que dejaría afuera.
+  const [porConfirmar, setPorConfirmar] = useState<{
+    tramos: TramoDeJornada[]
+    impacto: ImpactoDeJornada
+  } | null>(null)
+  // Se guarda en clases y en equipos: el cartel habla en clases, igual que la
+  // confirmación, y decir "200 reservas" después de haber preguntado por "40
+  // clases" sería cambiar de vara entre la pregunta y la respuesta.
+  const [canceladas, setCanceladas] = useState({ clases: 0, equipos: 0 })
 
   const { data, isPending, error } = useQuery({
     queryKey: JORNADA_KEY,
@@ -322,84 +157,67 @@ export function JornadaPage() {
 
   const invalidar = () => queryClient.invalidateQueries({ queryKey: JORNADA_KEY })
 
-  const agregar = useMutation({
-    mutationFn: (v: FormTramo) =>
-      ejecutarEnOrden(
-        v.dias.map((d) => ({
-          dia: d,
-          ejecutar: () =>
-            disponibilidadApi.agregarBloqueDeJornada(d, v.horaInicio, v.horaFin),
-        }))
-      ),
-    // Siempre se invalida, también con fallos parciales: los días que sí
-    // entraron ya están guardados y la lista tiene que mostrarlos.
-    onSuccess: async (fallidos, v) => {
-      setFallos(fallidos)
-      setNuevo({ ...v, dias: v.dias.filter((d) => fallidos.some(nombra(d))) })
-      await invalidar()
-    },
-  })
-
-  const guardarEdicion = useMutation({
-    mutationFn: ({ grupo, valor }: { grupo: TramoAgrupado; valor: FormTramo }) =>
-      ejecutarEnOrden(pasosDeEdicion(grupo, valor)),
-    onSuccess: async (fallidos) => {
-      setFallos(fallidos)
-      if (fallidos.length === 0) setEditando(null)
-      await invalidar()
-    },
-  })
-
-  const quitar = useMutation({
-    mutationFn: (bloques: BloqueHorario[]) =>
-      ejecutarEnOrden(
-        bloques.map((b) => ({
-          dia: b.diaSemana,
-          ejecutar: () => disponibilidadApi.eliminarBloqueDeJornada(b.id),
-        }))
-      ),
-    onSuccess: async (fallidos) => {
-      setFallos(fallidos)
-      await invalidar()
-    },
-  })
-
-  // Un día suelto que se desprende del grupo: es un PATCH sobre el bloque que
-  // ya existe para ese día, así que el resto del tramo no se entera.
-  const guardarDia = useMutation({
+  // Una sola mutación para las cuatro operaciones de la pantalla —agregar,
+  // editar, quitar, corregir un día suelto— porque desde el backend las
+  // cuatro son la misma: acá está la jornada completa, dejala así.
+  //
+  // Antes cada una se traducía a una serie de altas, PATCH y bajas que se
+  // mandaban en orden, y de ahí salía el guardado parcial: podía entrar el
+  // lunes y rechazarse el martes, dejando la jornada en un estado que nadie
+  // pidió. Ahora entra entera o no entra.
+  const guardar = useMutation({
     mutationFn: ({
-      bloque,
-      horaInicio,
-      horaFin,
+      tramos,
+      confirmado,
     }: {
-      bloque: BloqueHorario
-      horaInicio: string
-      horaFin: string
-    }) =>
-      ejecutarEnOrden([
-        {
-          dia: bloque.diaSemana,
-          ejecutar: () =>
-            disponibilidadApi.editarBloqueDeJornada(bloque.id, { horaInicio, horaFin }),
-        },
-      ]),
-    onSuccess: async (fallidos) => {
-      setFallos(fallidos)
+      tramos: TramoDeJornada[]
+      confirmado: boolean
+    }) => disponibilidadApi.reemplazarJornada(tramos, confirmado),
+    onSuccess: async (respuesta) => {
+      setFalloAlGuardar(null)
+      setPorConfirmar(null)
+      setEditando(null)
+      setCanceladas({
+        clases: respuesta.clasesCanceladas ?? 0,
+        equipos: respuesta.reservasCanceladas ?? 0,
+      })
+      await invalidar()
+    },
+    // Un 409 con impacto no es un error que mostrar y olvidar: es la pregunta
+    // que el backend devuelve en vez de aplicar el cambio. Se guarda la
+    // jornada propuesta para poder reintentarla con la confirmación puesta.
+    onError: async (e, variables) => {
+      const impacto = impactoDelError(e)
+      if (impacto !== null) {
+        setPorConfirmar({ tramos: variables.tramos, impacto })
+        setFalloAlGuardar(null)
+        return
+      }
+      setFalloAlGuardar(getErrorMessage(e))
+      // Un error puede haber dejado la jornada cambiada igual: es el caso de
+      // la cascada a medias, donde el horario nuevo ya rige y lo que falló fue
+      // cancelar lo que quedó afuera. Se relee para que la pantalla muestre lo
+      // que hay de verdad, en vez de la jornada vieja al lado de un error que
+      // habla de otra cosa.
+      setPorConfirmar(null)
       await invalidar()
     },
   })
 
-  const tramos = agruparTramos(data?.data ?? [])
+  /** Manda la jornada sin confirmar: si algo queda afuera, vuelve la pregunta. */
+  function proponer(tramos: TramoDeJornada[]) {
+    setCanceladas({ clases: 0, equipos: 0 })
+    guardar.mutate({ tramos, confirmado: false })
+  }
+
+  const bloques = data?.data ?? []
+  const tramos = agruparTramos(bloques)
   const motivoNuevo = motivoParaNoGuardar(nuevo)
   const motivoEdicion = motivoParaNoGuardar(edicion)
-  const trabajando =
-    agregar.isPending ||
-    guardarEdicion.isPending ||
-    quitar.isPending ||
-    guardarDia.isPending
+  const trabajando = guardar.isPending
 
   function empezarAEditar(grupo: TramoAgrupado) {
-    setFallos([])
+    setFalloAlGuardar(null)
     setEditando(claveDe(grupo))
     setEdicion({
       dias: grupo.dias,
@@ -429,20 +247,37 @@ export function JornadaPage() {
         </Alert>
       )}
 
-      {/* Los fallos se listan por día porque el guardado es parcial: puede
-          haber entrado el lunes y haberse rechazado el martes, y sin el
-          detalle no hay forma de saber cuál hay que rehacer. */}
-      {fallos.length > 0 && (
+      {/* Un solo mensaje y no una lista por día: el guardado ya no es
+          parcial, así que no existe el caso de "entró el lunes y falló el
+          martes" que obligaba a decir cuál rehacer. */}
+      {falloAlGuardar !== null && (
         <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{falloAlGuardar}</AlertDescription>
+        </Alert>
+      )}
+
+      {canceladas.clases > 0 && (
+        <Alert className="mb-4">
           <AlertDescription>
-            <p>Estos días quedaron sin guardar:</p>
-            <ul className="mt-1 list-disc pl-5">
-              {fallos.map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>
+            La jornada se guardó. Se cancelaron {canceladas.clases}{" "}
+            {canceladas.clases === 1 ? "clase" : "clases"}
+            {canceladas.equipos !== canceladas.clases && (
+              <> ({canceladas.equipos} equipos)</>
+            )}{" "}
+            que quedaban fuera del horario, y se avisó por correo a sus docentes.
           </AlertDescription>
         </Alert>
+      )}
+
+      {porConfirmar !== null && (
+        <ImpactoDeLaJornada
+          impacto={porConfirmar.impacto}
+          guardando={guardar.isPending}
+          onConfirmar={() =>
+            guardar.mutate({ tramos: porConfirmar.tramos, confirmado: true })
+          }
+          onCancelar={() => setPorConfirmar(null)}
+        />
       )}
 
       <Card className="mb-6">
@@ -453,8 +288,10 @@ export function JornadaPage() {
             <Button
               disabled={motivoNuevo !== "" || trabajando}
               onClick={() => {
-                setFallos([])
-                agregar.mutate(nuevo)
+                proponer([
+                  ...aTramos(bloques),
+                  ...expandirDias(nuevo.dias, nuevo.horaInicio, nuevo.horaFin),
+                ])
               }}
             >
               Agregar tramo
@@ -510,8 +347,14 @@ export function JornadaPage() {
                           size="sm"
                           disabled={motivoEdicion !== "" || trabajando}
                           onClick={() => {
-                            setFallos([])
-                            guardarEdicion.mutate({ grupo: t, valor: edicion })
+                            proponer([
+                              ...sinLosBloques(bloques, t.bloques),
+                              ...expandirDias(
+                                edicion.dias,
+                                edicion.horaInicio,
+                                edicion.horaFin
+                              ),
+                            ])
                           }}
                         >
                           Guardar
@@ -579,8 +422,7 @@ export function JornadaPage() {
                       size="sm"
                       disabled={trabajando}
                       onClick={() => {
-                        setFallos([])
-                        quitar.mutate(t.bloques)
+                        proponer(sinLosBloques(bloques, t.bloques))
                       }}
                       aria-label={`Quitar ${nombre}`}
                     >
@@ -597,12 +439,13 @@ export function JornadaPage() {
                         bloque={b}
                         deshabilitado={trabajando}
                         onGuardar={(horaInicio, horaFin) => {
-                          setFallos([])
-                          guardarDia.mutate({ bloque: b, horaInicio, horaFin })
+                          proponer([
+                            ...sinLosBloques(bloques, [b]),
+                            { diaSemana: b.diaSemana, horaInicio, horaFin },
+                          ])
                         }}
                         onQuitar={() => {
-                          setFallos([])
-                          quitar.mutate([b])
+                          proponer(sinLosBloques(bloques, [b]))
                         }}
                       />
                     ))}
@@ -628,9 +471,4 @@ export function JornadaPage() {
 /** Identifica al tramo en la pantalla. */
 function claveDe(t: TramoAgrupado): string {
   return `${t.horaInicio}-${t.horaFin}`
-}
-
-/** Si el mensaje de fallo habla de ese día, para dejarlo marcado y reintentar. */
-function nombra(dia: DiaSemana): (fallo: string) => boolean {
-  return (fallo) => fallo.startsWith(`${etiquetaDia(dia)}:`)
 }

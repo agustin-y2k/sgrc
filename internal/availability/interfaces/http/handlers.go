@@ -1,21 +1,40 @@
 package http
 
 import (
+	"errors"
+	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/ramiro/sgrc/internal/availability/application"
 	"github.com/ramiro/sgrc/internal/availability/domain"
+	"github.com/ramiro/sgrc/internal/shared/audit"
 	"github.com/ramiro/sgrc/internal/shared/middleware"
 )
 
 type Handler struct {
-	svc *application.Service
+	svc     *application.Service
+	auditor audit.Auditor
 }
 
-func NewHandler(svc *application.Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *application.Service, auditor audit.Auditor) *Handler {
+	return &Handler{svc: svc, auditor: auditor}
+}
+
+// auditar registra una entrada sin abortar la respuesta si falla, igual que
+// en auth y reservation: el cambio ya se aplicó, y perder el registro es malo
+// pero devolver un error por eso sería peor.
+func (h *Handler) auditar(c *fiber.Ctx, actorID, accion, entidad string, detalle map[string]any) {
+	if err := h.auditor.Registrar(c.UserContext(), audit.Entrada{
+		UsuarioID: actorID,
+		Accion:    accion,
+		Entidad:   entidad,
+		Detalle:   detalle,
+		IPOrigen:  middleware.IPCliente(c),
+	}); err != nil {
+		log.Printf("auditoría: no se pudo registrar %s sobre %s: %v", accion, entidad, err)
+	}
 }
 
 func claimsDelContexto(c *fiber.Ctx) (*middleware.Claims, error) {
@@ -216,16 +235,25 @@ func (h *Handler) MarcarNoDisponibleAhora(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toExcepcionResponse(excepcion))
 }
 
-// ── Jornada de la institución ────────────────────────────────────────── Sin
-// claims: la jornada no tiene dueño.
+// ── Jornada de la institución ───────────────────────────────────────────
+
+// accionJornadaCambiada es el nombre que queda escrito en audit_log. Va como
+// constante y no en línea para que no se escriba distinto en los dos lugares
+// que la registran —el camino normal y el de la cascada incompleta— y las
+// dos filas terminen pareciendo acciones diferentes.
+const accionJornadaCambiada = "JORNADA_CAMBIADA"
 
 // GET /api/jornada — la jornada declarada por la institución.
+//
+// La lista vacía significa una sola cosa: la escuela no declaró horario y no
+// hay restricción. Que al Admin se le siga pidiendo declararla mientras siga
+// vacía se decide del lado del cliente —una vez por sesión— así que acá no
+// hay nada que recordar.
 func (h *Handler) Jornada(c *fiber.Ctx) error {
 	bloques, err := h.svc.Jornada(c.UserContext())
 	if err != nil {
 		return mapearError(err)
 	}
-
 	data := make([]bloqueResponse, len(bloques))
 	for i, b := range bloques {
 		data[i] = toBloqueJornadaResponse(b)
@@ -233,79 +261,94 @@ func (h *Handler) Jornada(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// POST /api/jornada (Admin) — suma un tramo abierto a un día. Varios por
-// día es el caso previsto: turno mañana y turno noche.
-func (h *Handler) AgregarBloqueDeJornada(c *fiber.Ctx) error {
-	var req bloqueRequest
+// PUT /api/jornada (Admin) — reemplaza la jornada entera.
+//
+// Es un PUT del conjunto y no tres endpoints por tramo porque la jornada es
+// una sola decisión de siete días. Con los cambios llegando de a uno no había
+// ningún momento en que preguntar "esto es lo que va a quedar, ¿confirmás?",
+// y entre una llamada y la otra quedaba a la vista una jornada a medias que
+// ya decidía qué reservas se aceptaban.
+//
+// Una lista vacía es válida y no es lo mismo que no llamar: es la institución
+// eligiendo no restringir nada, y deja de preguntársele cuál es su jornada.
+func (h *Handler) ReemplazarJornada(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	var req jornadaRequest
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	dia, err := domain.ParseDiaSemana(req.DiaSemana)
-	if err != nil {
-		return mapearError(err)
-	}
-	horaInicio, err := parseHora(req.HoraInicio)
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
-	}
-	horaFin, err := parseHora(req.HoraFin)
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
-	}
-
-	bloque, err := h.svc.AgregarBloqueDeJornada(c.UserContext(), dia, horaInicio, horaFin)
-	if err != nil {
-		return mapearError(err)
-	}
-	return c.Status(fiber.StatusCreated).JSON(toBloqueJornadaResponse(bloque))
-}
-
-// PATCH /api/jornada/{id} (Admin) — parcial, como el horario de los Admin.
-func (h *Handler) EditarBloqueDeJornada(c *fiber.Ctx) error {
-	id := c.Params("id")
-
-	var req editarBloqueRequest
-	if err := c.BodyParser(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
-	}
-
-	var dia *domain.DiaSemana
-	if req.DiaSemana != nil {
-		d, err := domain.ParseDiaSemana(*req.DiaSemana)
+	tramos := make([]application.TramoDeJornada, 0, len(req.Tramos))
+	for _, t := range req.Tramos {
+		dia, err := domain.ParseDiaSemana(t.DiaSemana)
 		if err != nil {
 			return mapearError(err)
 		}
-		dia = &d
-	}
-	var horaInicio *time.Duration
-	if req.HoraInicio != nil {
-		hi, err := parseHora(*req.HoraInicio)
+		horaInicio, err := parseHora(t.HoraInicio)
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
-		horaInicio = &hi
-	}
-	var horaFin *time.Duration
-	if req.HoraFin != nil {
-		hf, err := parseHora(*req.HoraFin)
+		horaFin, err := parseHora(t.HoraFin)
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
-		horaFin = &hf
+		tramos = append(tramos, application.TramoDeJornada{
+			DiaSemana: dia, HoraInicio: horaInicio, HoraFin: horaFin,
+		})
 	}
 
-	bloque, err := h.svc.EditarBloqueDeJornada(c.UserContext(), id, dia, horaInicio, horaFin)
+	resultado, err := h.svc.ReemplazarJornada(c.UserContext(), tramos, req.Confirmado)
 	if err != nil {
+		// La cascada a medias deja la jornada nueva puesta: hay que auditarla
+		// igual, con lo que sí pasó, o el registro diría que el horario de la
+		// escuela cambió solo porque nadie lo anotó.
+		if errors.Is(err, application.ErrCascadaDeJornada) {
+			h.auditar(c, claims.UserID, accionJornadaCambiada, "jornada_institucion", map[string]any{
+				"tramos":            len(tramos),
+				"cascadaIncompleta": true,
+			})
+		}
 		return mapearError(err)
 	}
-	return c.JSON(toBloqueJornadaResponse(bloque))
-}
 
-// DELETE /api/jornada/{id} (Admin).
-func (h *Handler) EliminarBloqueDeJornada(c *fiber.Ctx) error {
-	if err := h.svc.EliminarBloqueDeJornada(c.UserContext(), c.Params("id")); err != nil {
-		return mapearError(err)
+	// 409 con el detalle adentro, y sin haber tocado nada: el pedido está bien
+	// formado, lo que no se puede es aplicarlo sin que alguien se haga cargo
+	// de las clases que se caen. El mismo endpoint hace de previsualización,
+	// así que no hay forma de que lo que se muestra difiera de lo que después
+	// se aplica.
+	if !resultado.Guardada {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"error":   "el cambio deja reservas fuera de la jornada",
+			"impacto": toImpactoResponse(resultado.Impacto),
+		})
 	}
-	return c.SendStatus(fiber.StatusOK)
+
+	// Es la acción administrativa de mayor alcance del sistema: puede cancelar
+	// las clases de toda la escuela de una vez. Queda registrado quién la
+	// disparó y cuánto se llevó puesto, por lo mismo que
+	// CICLO_ARCHIVADO_RESERVAS_ELIMINADAS (docs/09-seguridad-rbac.md §5).
+	// Las dos unidades también acá: el registro es permanente y tiene que
+	// poder leerse sin saber que el sistema guarda una fila por equipo.
+	h.auditar(c, claims.UserID, accionJornadaCambiada, "jornada_institucion", map[string]any{
+		"tramos":             len(tramos),
+		"clasesCanceladas":   resultado.Impacto.ClasesAfectadas,
+		"reservasCanceladas": resultado.ReservasCanceladas,
+	})
+
+	data := make([]bloqueResponse, len(resultado.Bloques))
+	for i, b := range resultado.Bloques {
+		data[i] = toBloqueJornadaResponse(b)
+	}
+	// Las dos unidades, igual que en la confirmación: la pantalla habla en
+	// clases y decir "200 reservas" acá después de haber preguntado por "40
+	// clases" sería cambiar de vara entre la pregunta y la respuesta.
+	return c.JSON(fiber.Map{
+		"data":               data,
+		"reservasCanceladas": resultado.ReservasCanceladas,
+		"clasesCanceladas":   resultado.Impacto.ClasesAfectadas,
+	})
 }

@@ -161,3 +161,65 @@ func TestSolapaCon(t *testing.T) {
 		}
 	}
 }
+
+// ── CierreDe ────────────────────────────────────────────────────────────
+
+func TestCierreDe_UnSoloTramo(t *testing.T) {
+	jornada := []*BloqueJornada{
+		{ID: "1", DiaSemana: Lunes, HoraInicio: 8 * time.Hour, HoraFin: 18 * time.Hour},
+	}
+
+	fin, abre := CierreDe(jornada, Lunes)
+
+	if !abre || fin != 18*time.Hour {
+		t.Errorf("esperaba cerrar a las 18h, obtuve %v (abre=%v)", fin, abre)
+	}
+}
+
+// Turno mañana y turno noche: la escuela cierra cuando termina la noche, no
+// cuando termina la mañana.
+func TestCierreDe_ConVariosTramosEsElUltimo(t *testing.T) {
+	jornada := []*BloqueJornada{
+		{ID: "1", DiaSemana: Lunes, HoraInicio: 18 * time.Hour, HoraFin: 23 * time.Hour},
+		{ID: "2", DiaSemana: Lunes, HoraInicio: 7 * time.Hour, HoraFin: 12 * time.Hour},
+	}
+
+	fin, abre := CierreDe(jornada, Lunes)
+
+	if !abre || fin != 23*time.Hour {
+		t.Errorf("esperaba cerrar a las 23h, obtuve %v (abre=%v)", fin, abre)
+	}
+}
+
+// La nocturna cierra pasada la medianoche, y el valor lo dice: 25h es la
+// 01:00 del día siguiente. Devolverlo así permite sumarle la gracia sin tener
+// que saber de qué día se habla.
+func TestCierreDe_CuandoCruzaLaMedianochePasaDe24(t *testing.T) {
+	jornada := []*BloqueJornada{
+		{ID: "1", DiaSemana: Lunes, HoraInicio: 20 * time.Hour, HoraFin: 1 * time.Hour},
+	}
+
+	fin, abre := CierreDe(jornada, Lunes)
+
+	if !abre || fin != 25*time.Hour {
+		t.Errorf("esperaba 25h (01:00 del martes), obtuve %v (abre=%v)", fin, abre)
+	}
+}
+
+func TestCierreDe_UnDiaSinTramosNoAbre(t *testing.T) {
+	jornada := []*BloqueJornada{
+		{ID: "1", DiaSemana: Lunes, HoraInicio: 8 * time.Hour, HoraFin: 18 * time.Hour},
+	}
+
+	if _, abre := CierreDe(jornada, Sabado); abre {
+		t.Error("el sábado no tiene tramos: no abre")
+	}
+}
+
+// Sin jornada declarada no hay de dónde deducir un cierre. Es distinto de
+// "no abre": quien pregunta tiene que poder caer a su valor por defecto.
+func TestCierreDe_SinJornadaDeclaradaNoAbre(t *testing.T) {
+	if _, abre := CierreDe(nil, Lunes); abre {
+		t.Error("sin jornada no hay cierre que deducir")
+	}
+}

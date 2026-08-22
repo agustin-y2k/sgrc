@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	availabilityapp "github.com/ramiro/sgrc/internal/availability/application"
@@ -71,4 +72,101 @@ type reservationValidadorJornadaAdapter struct {
 
 func (a *reservationValidadorJornadaAdapter) PermiteReserva(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) (bool, error) {
 	return a.availabilitySvc.PermiteReserva(ctx, fecha, horaInicio, horaFin)
+}
+
+func (a *reservationValidadorJornadaAdapter) CierreDeLaJornada(ctx context.Context, fecha time.Time) (reservationapp.CierreDeJornada, error) {
+	declarada, abre, fin, err := a.availabilitySvc.CierreDeLaJornada(ctx, fecha)
+	if err != nil {
+		return reservationapp.CierreDeJornada{}, err
+	}
+	return reservationapp.CierreDeJornada{Declarada: declarada, Abre: abre, Fin: fin}, nil
+}
+
+// availabilityReservasAdapter satisface
+// availability/application.ReservasDeLaInstitucion envolviendo
+// reservation/application.Service.
+//
+// Es la flecha inversa de reservationValidadorJornadaAdapter, y no es un
+// error: reservation le pregunta a availability si un horario entra en la
+// jornada, y availability le pregunta a reservation qué quedaría afuera si la
+// jornada cambiara. Son dos preguntas distintas y ninguna se contesta con la
+// otra. El ciclo existe solo en tiempo de ejecución; en compilación cada
+// módulo depende únicamente de un puerto propio, y las dos puntas se atan
+// acá.
+type availabilityReservasAdapter struct {
+	reservationSvc *reservationapp.Service
+}
+
+// errSinCablear protege el único momento frágil del arranque: entre que se
+// construye este adaptador y que se le asigna reservationSvc hay treinta
+// líneas de main.go, y quien las reordene rompería el cambio de jornada con un
+// panic a los seis meses. Con esto falla el request, no el proceso, y el
+// mensaje dice exactamente qué pasó.
+var errSinCablear = errors.New("el adaptador hacia reservation todavía no está cableado (ver el orden de construcción en main.go)")
+
+func (a *availabilityReservasAdapter) listo() error {
+	if a == nil || a.reservationSvc == nil {
+		return errSinCablear
+	}
+	return nil
+}
+
+func (a *availabilityReservasAdapter) ReservasFuturas(ctx context.Context, desde time.Time) ([]availabilityapp.ReservaFutura, error) {
+	if err := a.listo(); err != nil {
+		return nil, err
+	}
+	detalladas, err := a.reservationSvc.ReservasFuturas(ctx, desde)
+	if err != nil {
+		return nil, err
+	}
+	futuras := make([]availabilityapp.ReservaFutura, len(detalladas))
+	for i, d := range detalladas {
+		futuras[i] = availabilityapp.ReservaFutura{
+			ID:         d.Reserva.ID,
+			GrupoID:    textoDe(d.Reserva.ReservaGrupoID),
+			Fecha:      d.Reserva.Fecha,
+			HoraInicio: d.Reserva.HoraInicio,
+			HoraFin:    d.Reserva.HoraFin,
+			Equipo:     d.Etiqueta,
+			Materia:    d.MateriaNombre,
+			Docente:    textoDe(d.Reserva.NombreDocenteSnapshot),
+		}
+	}
+	return futuras, nil
+}
+
+func (a *availabilityReservasAdapter) PrestamosAbiertos(ctx context.Context) ([]availabilityapp.PrestamoAbierto, error) {
+	if err := a.listo(); err != nil {
+		return nil, err
+	}
+	abiertos, err := a.reservationSvc.ListarPrestamosAbiertos(ctx)
+	if err != nil {
+		return nil, err
+	}
+	prestamos := make([]availabilityapp.PrestamoAbierto, len(abiertos))
+	for i, p := range abiertos {
+		prestamos[i] = availabilityapp.PrestamoAbierto{
+			ID:        p.Prestamo.ID,
+			Equipo:    p.Etiqueta,
+			Quien:     p.Prestamo.EntregadoANombre,
+			ReservaID: p.Prestamo.ReservaID,
+		}
+	}
+	return prestamos, nil
+}
+
+func (a *availabilityReservasAdapter) CancelarReservas(ctx context.Context, reservaIDs []string, motivo string) (int, error) {
+	if err := a.listo(); err != nil {
+		return 0, err
+	}
+	return a.reservationSvc.CancelarReservasPorIDs(ctx, reservaIDs, motivo)
+}
+
+// textoDe desreferencia un texto opcional. El nombre del docente es nulo en
+// los bloqueos administrativos, que igual no llegan hasta acá.
+func textoDe(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

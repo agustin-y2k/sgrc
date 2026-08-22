@@ -336,53 +336,42 @@ func (r *PostgresRepo) ListarJornada(ctx context.Context) ([]*domain.BloqueJorna
 	return resultado, errorDeFilas(rows)
 }
 
-func (r *PostgresRepo) CrearBloqueJornada(ctx context.Context, b *domain.BloqueJornada) error {
-	_, err := r.pool.Exec(ctx,
-		`INSERT INTO jornada_institucion (`+columnasJornada+`) VALUES ($1, $2, $3, $4)`,
-		b.ID, string(b.DiaSemana), duracionComoHora(b.HoraInicio), duracionComoHora(b.HoraFin))
+// ReemplazarJornada borra la jornada vieja y escribe la nueva, en una sola
+// transacción.
+//
+// El borrar-y-escribir no es pereza frente a un diff: los tramos no tienen
+// identidad propia para el que los mira —nadie dice "el tramo tal"—, así que
+// calcular cuáles sobreviven sería trabajo para que las filas conserven un
+// UUID que nadie va a volver a nombrar.
+//
+// Lo que sí importa es que sea atómico. A mitad de camino la jornada está
+// incompleta, y PermiteReserva la lee para aceptar o rechazar reservas: un
+// docente que guarda justo en ese momento recibiría un rechazo por un horario
+// que la escuela sí abre.
+func (r *PostgresRepo) ReemplazarJornada(ctx context.Context, bloques []*domain.BloqueJornada) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		if esIDInvalido(err) {
-			return application.ErrIDInvalido
-		}
-		return fmt.Errorf("insertando bloque de jornada: %w", err)
+		return fmt.Errorf("iniciando la transacción de la jornada: %w", err)
 	}
-	return nil
-}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op si ya se hizo Commit
 
-func (r *PostgresRepo) BuscarBloqueJornada(ctx context.Context, id string) (*domain.BloqueJornada, error) {
-	row := r.pool.QueryRow(ctx,
-		`SELECT `+columnasJornada+` FROM jornada_institucion WHERE id = $1`, id)
-	return escanearBloqueJornada(row)
-}
+	if _, err := tx.Exec(ctx, `DELETE FROM jornada_institucion`); err != nil {
+		return fmt.Errorf("vaciando la jornada anterior: %w", err)
+	}
 
-func (r *PostgresRepo) GuardarBloqueJornada(ctx context.Context, b *domain.BloqueJornada) error {
-	tag, err := r.pool.Exec(ctx,
-		`UPDATE jornada_institucion SET dia_semana = $2, hora_inicio = $3, hora_fin = $4 WHERE id = $1`,
-		b.ID, string(b.DiaSemana), duracionComoHora(b.HoraInicio), duracionComoHora(b.HoraFin))
-	if err != nil {
-		if esIDInvalido(err) {
-			return application.ErrIDInvalido
+	for _, b := range bloques {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO jornada_institucion (`+columnasJornada+`) VALUES ($1, $2, $3, $4)`,
+			b.ID, string(b.DiaSemana), duracionComoHora(b.HoraInicio), duracionComoHora(b.HoraFin),
+		); err != nil {
+			if esIDInvalido(err) {
+				return application.ErrIDInvalido
+			}
+			return fmt.Errorf("insertando bloque de jornada: %w", err)
 		}
-		return fmt.Errorf("actualizando bloque de jornada: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return application.ErrBloqueNoEncontrado
-	}
-	return nil
-}
 
-func (r *PostgresRepo) EliminarBloqueJornada(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM jornada_institucion WHERE id = $1`, id)
-	if err != nil {
-		if esIDInvalido(err) {
-			return application.ErrIDInvalido
-		}
-		return fmt.Errorf("eliminando bloque de jornada: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return application.ErrBloqueNoEncontrado
-	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func escanearBloqueJornada(row pgx.Row) (*domain.BloqueJornada, error) {

@@ -234,9 +234,13 @@ nombre que tenía una operación **en su momento**. Si el sistema renombra algo,
 las filas viejas conservan el nombre viejo — reescribir un registro de
 auditoría es precisamente lo que un registro de auditoría no debe permitir.
 
-Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `ROL_DEGRADADO_A_DOCENTE`, `PASSWORD_RESETEADA`, `PASSWORD_RECUPERADA_POR_EMAIL`, `NOMBRE_CAMBIADO`, `DOCENTE_REMOVIDO_DE_MATERIA`, `DOCENTE_ROL_CAMBIADO`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_CREADO`, `EQUIPO_ESTADO_CAMBIADO`, `EQUIPO_DADO_DE_BAJA`, `EQUIPO_MOVIDO_DE_CARRO`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`.
+Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `ROL_DEGRADADO_A_DOCENTE`, `PASSWORD_RESETEADA`, `PASSWORD_RECUPERADA_POR_EMAIL`, `NOMBRE_CAMBIADO`, `DOCENTE_REMOVIDO_DE_MATERIA`, `DOCENTE_ROL_CAMBIADO`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_CREADO`, `EQUIPO_ESTADO_CAMBIADO`, `EQUIPO_DADO_DE_BAJA`, `EQUIPO_MOVIDO_DE_CARRO`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`, `JORNADA_CAMBIADA`.
 
 > `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS` tiene su propio nombre (en vez de un `CICLO_ARCHIVADO` genérico) porque implica un borrado físico de datos — vale la pena que quede explícito en el log qué admin lo disparó y cuántas filas se eliminaron (`detalle` puede guardar el conteo).
+
+> `JORNADA_CAMBIADA` está por el mismo motivo, y es la acción de mayor alcance del sistema: cambiar el horario de la escuela puede cancelar las clases de todos los docentes en una sola llamada. El `detalle` guarda cuántos tramos quedaron y cuánto se canceló, en clases y en equipos. Si la cancelación falla después de haber guardado la jornada, la entrada sale igual con `cascadaIncompleta`: el horario cambió, y eso es justamente lo que el registro no puede perderse.
+>
+> **Una previsualización no se audita.** El pedido sin confirmar no cambia nada, y un registro lleno de intentos esconde los cambios de verdad.
 
 > `NOMBRE_CAMBIADO` es la única acción del catálogo que alguien hace **sobre su propia cuenta y sin ser `ADMIN`** (RF-01.12). Se audita igual porque el nombre es con lo que el resto de la escuela identifica a esa persona en las reservas y en las entregas: sin esta fila, "la reserva la había pedido otro" no tendría cómo verificarse. `usuario_id` es la propia cuenta, y `detalle` guarda el nombre con el que quedó.
 

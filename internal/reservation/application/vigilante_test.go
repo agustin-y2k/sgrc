@@ -76,8 +76,24 @@ func repoConClaseDe(t *testing.T, horaInicio, horaFin time.Duration, equipos ...
 	return repo
 }
 
+// vigilanteALas arma el barrido para una institución que NO declaró jornada:
+// el corte cae a la hora de CIERRE_JORNADA, que es como funcionaba antes de
+// que la jornada existiera y sigue siendo el camino de quien elige no
+// restringir nada.
 func vigilanteALas(repo Repo, bus eventbus.EventBus, hora, minuto int) *Vigilante {
-	return NewVigilante(repo, bus, func() time.Time { return aLas(hora, minuto) },
+	return NewVigilante(repo, bus, &fakeValidadorJornada{}, func() time.Time { return aLas(hora, minuto) },
+		ConfigDeVigilanciaPorDefecto())
+}
+
+// vigilanteConJornada arma el barrido para una institución que sí la declaró.
+// `cierres` mapea día de la semana a la hora en que cierra ese día, medida
+// desde su medianoche: pasa de 24h cuando el tramo cruza.
+func vigilanteConJornada(repo Repo, bus eventbus.EventBus, momento time.Time, cierres map[time.Weekday]time.Duration) *Vigilante {
+	validador := &fakeValidadorJornada{cierre: func(fecha time.Time) CierreDeJornada {
+		fin, abre := cierres[fecha.Weekday()]
+		return CierreDeJornada{Declarada: true, Abre: abre, Fin: fin}
+	}}
+	return NewVigilante(repo, bus, validador, func() time.Time { return momento },
 		ConfigDeVigilanciaPorDefecto())
 }
 
@@ -573,11 +589,11 @@ func TestBarrer_CorteDeJornada(t *testing.T) {
 	repo.prestamos[p.ID] = p
 	bus := &busEspia{}
 
-	if r := barrer(t, vigilanteALas(repo, bus, 17, 0)); r.AvisosDeCierre != 0 {
+	if r := barrer(t, vigilanteALas(repo, bus, 22, 0)); r.AvisosDeCierre != 0 {
 		t.Fatalf("antes de la hora de cierre no hay corte: %+v", r)
 	}
 
-	resumen := barrer(t, vigilanteALas(repo, bus, 18, 0))
+	resumen := barrer(t, vigilanteALas(repo, bus, 23, 0))
 
 	if resumen.AvisosDeCierre != 1 {
 		t.Fatalf("esperaba el corte: %+v", resumen)
@@ -588,7 +604,32 @@ func TestBarrer_CorteDeJornada(t *testing.T) {
 	}
 }
 
-func TestBarrer_ElCorteSaleUnaVezPorDiaYSeRepiteAlSiguiente(t *testing.T) {
+// Una máquina que salió para una clase que termina DESPUÉS del cierre no
+// "quedó afuera": está en uso. Antes el corte las contaba a todas, así que el
+// docente de la próxima reserva recibía un "tu computadora puede no estar"
+// que era falso — y con el corte saliendo una sola vez, ese falso positivo se
+// come el único aviso del préstamo.
+func TestBarrer_ElCorteNoCuentaLaMaquinaQueTodaviaEstaEnHora(t *testing.T) {
+	repo := nuevoFakeRepo()
+	devuelveALas2330 := aLas(23, 30)
+	prestamoVencido(t, repo, "pr1", "pc1", devuelveALas2330)
+	bus := &busEspia{}
+
+	// El cierre es a las 23, pero la devolución está pactada para las 23:30.
+	if r := barrer(t, vigilanteALas(repo, bus, 23, 0)); r.AvisosDeCierre != 0 {
+		t.Fatalf("la máquina todavía está en hora, no quedó afuera: %+v", r)
+	}
+
+	// Pasada la hora de devolución sí corresponde, y ahí el aviso es cierto.
+	if r := barrer(t, vigilanteALas(repo, bus, 23, 45)); r.AvisosDeCierre != 1 {
+		t.Errorf("vencida la devolución el corte tiene que salir: %+v", r)
+	}
+}
+
+// La contracara: un préstamo espontáneo no tiene hora pactada y por eso
+// ExcedioLaDemora nunca lo reclama. Si el corte tampoco lo tomara, una
+// máquina prestada en el mostrador podría no generar un solo aviso nunca.
+func TestBarrer_ElCorteSiCuentaAlPrestamoSinHoraPactada(t *testing.T) {
 	repo := nuevoFakeRepo()
 	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
 	if err != nil {
@@ -597,21 +638,149 @@ func TestBarrer_ElCorteSaleUnaVezPorDiaYSeRepiteAlSiguiente(t *testing.T) {
 	repo.prestamos[p.ID] = p
 	bus := &busEspia{}
 
-	barrer(t, vigilanteALas(repo, bus, 18, 0))
+	if r := barrer(t, vigilanteALas(repo, bus, 23, 0)); r.AvisosDeCierre != 1 {
+		t.Errorf("sin hora pactada el corte es el único aviso posible: %+v", r)
+	}
+}
+
+// El aviso sale UNA vez por préstamo y no se repite nunca más, ni al día
+// siguiente. Lo que sostiene la insistencia dejó de ser el correo: la máquina
+// figura en "qué hay afuera" hasta que alguien la recibe, y eso no se puede
+// tapar marcando un aviso como leído.
+func TestBarrer_ElCorteSaleUnaSolaVezPorPrestamo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	repo.prestamos[p.ID] = p
+	bus := &busEspia{}
+
+	if r := barrer(t, vigilanteALas(repo, bus, 23, 0)); r.AvisosDeCierre != 1 {
+		t.Fatalf("esperaba el corte: %+v", r)
+	}
 	for _, minuto := range []int{15, 30, 45} {
-		if r := barrer(t, vigilanteALas(repo, bus, 18, minuto)); r.AvisosDeCierre != 0 {
-			t.Fatalf("a las 18:%d volvió a cortar el mismo día", minuto)
+		if r := barrer(t, vigilanteALas(repo, bus, 23, minuto)); r.AvisosDeCierre != 0 {
+			t.Fatalf("a las 23:%d volvió a cortar el mismo día", minuto)
 		}
 	}
 
-	// Al día siguiente la máquina sigue afuera: vuelve a aparecer. Por eso
-	// la marca es la fecha de la jornada y no un booleano.
-	manana := NewVigilante(repo, bus, func() time.Time {
-		return aLas(18, 0).AddDate(0, 0, 1)
+	// Al día siguiente la máquina sigue afuera y NO se vuelve a avisar.
+	manana := NewVigilante(repo, bus, &fakeValidadorJornada{}, func() time.Time {
+		return aLas(23, 0).AddDate(0, 0, 1)
 	}, ConfigDeVigilanciaPorDefecto())
 
-	if r := barrer(t, manana); r.AvisosDeCierre != 1 {
-		t.Errorf("al día siguiente tiene que volver a avisar: %+v", r)
+	if r := barrer(t, manana); r.AvisosDeCierre != 0 {
+		t.Errorf("el aviso es por única vez: %+v", r)
+	}
+}
+
+// ── El corte derivado de la jornada declarada ───────────────────────────
+
+// El corte sale una hora después de que la escuela cierra de verdad. Con la
+// hora fija, una que cierra a las 22 recibía el aviso a las 18, con las
+// máquinas legítimamente en clase.
+func TestBarrer_ElCorteSaleUnaHoraDespuesDelCierreDeclarado(t *testing.T) {
+	// El 10 de agosto de 2026 es un lunes (ver aLas).
+	cierreALas22 := map[time.Weekday]time.Duration{time.Monday: 22 * time.Hour}
+
+	casos := []struct {
+		hora     int
+		minuto   int
+		esperado int
+		porQue   string
+	}{
+		{18, 0, 0, "a las 18 la escuela todavía está abierta"},
+		{22, 30, 0, "recién cerró: la hora de gracia no pasó"},
+		{23, 0, 1, "una hora después del cierre, ahí sí"},
+	}
+
+	for _, c := range casos {
+		repo := nuevoFakeRepo()
+		p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
+		if err != nil {
+			t.Fatalf("error de dominio inesperado: %v", err)
+		}
+		repo.prestamos[p.ID] = p
+		bus := &busEspia{}
+
+		v := vigilanteConJornada(repo, bus, aLas(c.hora, c.minuto), cierreALas22)
+		if r := barrer(t, v); r.AvisosDeCierre != c.esperado {
+			t.Errorf("a las %02d:%02d esperaba %d avisos (%s): %+v",
+				c.hora, c.minuto, c.esperado, c.porQue, r)
+		}
+	}
+}
+
+// La nocturna: el lunes cierra a la 01:00 del martes, así que su corte cae a
+// las 02:00 del martes. Es el caso que el dedupe por fecha de calendario
+// rompía, y que "una sola vez por préstamo" resuelve sin bookkeeping.
+func TestBarrer_LaNocturnaCortaDeMadrugadaDelDiaSiguiente(t *testing.T) {
+	// Lunes de 20:00 a 01:00 = cierra a las 25h de su propio lunes.
+	nocturna := map[time.Weekday]time.Duration{time.Monday: 25 * time.Hour}
+
+	repo := nuevoFakeRepo()
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(21, 0))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	repo.prestamos[p.ID] = p
+	bus := &busEspia{}
+
+	// 01:30 del martes: la escuela cerró hace media hora, falta la gracia.
+	martes0130 := aLas(1, 30).AddDate(0, 0, 1)
+	if r := barrer(t, vigilanteConJornada(repo, bus, martes0130, nocturna)); r.AvisosDeCierre != 0 {
+		t.Fatalf("todavía no pasó la hora de gracia: %+v", r)
+	}
+
+	// 02:00 del martes: una hora después del cierre del lunes.
+	martes0200 := aLas(2, 0).AddDate(0, 0, 1)
+	if r := barrer(t, vigilanteConJornada(repo, bus, martes0200, nocturna)); r.AvisosDeCierre != 1 {
+		t.Errorf("el corte del lunes cae de madrugada del martes: %+v", r)
+	}
+}
+
+// Un día que la escuela no abre no tiene corte: nadie dejó una máquina afuera
+// de una escuela que no abrió. Es lo que hace que un aviso del viernes no se
+// repita el sábado ni el domingo.
+func TestBarrer_UnDiaCerradoNoTieneCorte(t *testing.T) {
+	// Solo abre los viernes; el sábado está cerrado.
+	soloViernes := map[time.Weekday]time.Duration{time.Friday: 18 * time.Hour}
+
+	repo := nuevoFakeRepo()
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	repo.prestamos[p.ID] = p
+	bus := &busEspia{}
+
+	// aLas() da un lunes; el sábado es cinco días después.
+	sabado := aLas(20, 0).AddDate(0, 0, 5)
+	if sabado.Weekday() != time.Saturday {
+		t.Fatalf("el fixture no cae sábado sino %v", sabado.Weekday())
+	}
+
+	if r := barrer(t, vigilanteConJornada(repo, bus, sabado, soloViernes)); r.AvisosDeCierre != 0 {
+		t.Errorf("un día cerrado no corta: %+v", r)
+	}
+}
+
+// Una máquina entregada DESPUÉS de que cerró no "quedó" afuera: recién salió.
+func TestBarrer_LaMaquinaEntregadaDespuesDelCierreNoQuedoAfuera(t *testing.T) {
+	cierreALas18 := map[time.Weekday]time.Duration{time.Monday: 18 * time.Hour}
+
+	repo := nuevoFakeRepo()
+	// Sale a las 19, con la escuela ya cerrada.
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(19, 0))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	repo.prestamos[p.ID] = p
+	bus := &busEspia{}
+
+	if r := barrer(t, vigilanteConJornada(repo, bus, aLas(19, 30), cierreALas18)); r.AvisosDeCierre != 0 {
+		t.Errorf("salió después del cierre, no quedó afuera: %+v", r)
 	}
 }
 
