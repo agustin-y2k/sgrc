@@ -130,15 +130,14 @@ export function CalendarioEquipoPage() {
     queryKey: JORNADA_KEY,
     queryFn: disponibilidadApi.jornadaDeLaInstitucion,
   })
-  const dias = useMemo(() => {
+  const diasCerrados = useMemo(() => {
     const declarados = new Set(diasDeLaJornada(jornada?.data ?? []))
-    const visibles = semana.filter((fecha) => {
-      const dia = diaDeLaFecha(fecha)
-      return dia !== null && declarados.has(dia)
-    })
-    // Una jornada que no cubra ningún día de esta semana dejaría la grilla
-    // sin columnas y la pantalla sin sentido.
-    return visibles.length > 0 ? visibles : semana
+    return new Set(
+      semana.filter((fecha) => {
+        const dia = diaDeLaFecha(fecha)
+        return dia !== null && !declarados.has(dia)
+      })
+    )
   }, [semana, jornada])
 
   const { data, isLoading, error } = useQuery({
@@ -159,6 +158,20 @@ export function CalendarioEquipoPage() {
     }
     return mapa
   }, [data])
+
+  // Un día que dejó de estar declarado se sigue dibujando si tiene algo
+  // reservado: esa reserva sobrevivió al cambio de jornada, sigue ocupando la
+  // máquina y sigue avisando, así que esconderla acá la volvería invisible en
+  // vez de resuelta. Los días cerrados y vacíos sí se ocultan, que es para lo
+  // que se declara una jornada.
+  const dias = useMemo(() => {
+    const visibles = semana.filter(
+      (fecha) => !diasCerrados.has(fecha) || bloquesPorDia.has(fecha)
+    )
+    // Una jornada que no cubra ningún día de esta semana dejaría la grilla
+    // sin columnas y la pantalla sin sentido.
+    return visibles.length > 0 ? visibles : semana
+  }, [semana, diasCerrados, bloquesPorDia])
 
   const rango = useMemo(
     () => rangoHorarioVisible([...bloquesPorDia.values()].flat()),
@@ -240,6 +253,14 @@ export function CalendarioEquipoPage() {
                     <div className="text-muted-foreground text-xs">
                       {desdeFechaISO(fecha).getDate()}
                     </div>
+                    {/* Sin este rótulo la columna miente: un día que la
+                        escuela declaró cerrado se vería igual que uno abierto,
+                        y lo que quedó adentro parecería normal. */}
+                    {diasCerrados.has(fecha) && (
+                      <div className="text-muted-foreground text-[0.65rem] leading-tight font-normal">
+                        fuera de la jornada
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

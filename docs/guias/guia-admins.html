@@ -763,8 +763,13 @@
   <div class="ojo">
     <span class="titulo">Si algo no vuelve a horario</span>
     El sistema avisa solo: al docente le llega un recordatorio y a los Admin un aviso
-    de devolución demorada. Al cerrar la jornada, además, queda un resumen de lo que
-    quedó afuera. Esos avisos sirven si lo que está en pantalla refleja la realidad:
+    de devolución demorada. Una hora después de que cierra la escuela, además, sale
+    un resumen de lo que quedó afuera — <b>una sola vez</b>, no todos los días.
+    <br><br>
+    Lo que sí no se va nunca es el <b>número al lado de «Entregas»</b> en el menú:
+    cuenta las computadoras que están fuera del laboratorio y no baja hasta que
+    alguien las recibe. Si una máquina no vuelve más, dala de baja del inventario y
+    dejá dicho ahí qué pasó. Todo esto sirve si la pantalla refleja la realidad:
     <b>marcá las devoluciones en el momento</b>, no al final del día.
   </div>
 </section>
@@ -898,8 +903,55 @@
 
   <div class="ojo">
     <span class="titulo">Mientras no cargues nada, no hay límite</span>
-    Sin jornada declarada se puede reservar cualquier día y a cualquier hora. Cargala
-    apenas puedas: es lo que evita reservas a las tres de la mañana de un domingo.
+    Sin horario declarado se puede reservar cualquier día y a cualquier hora. Por eso
+    el sistema te lo va a pedir cada vez que entres, hasta que lo cargues. Podés
+    postergarlo y trabajar igual —sirve para probar el sistema sin inventar un
+    horario que todavía no sabés— pero el pedido vuelve en la próxima entrada.
+  </div>
+
+  <figure>
+    <img src="imagenes/admin-12c-primera-jornada.png"
+         alt="Pantalla que pide declarar la jornada al entrar">
+    <figcaption>Lo primero que ves si la escuela todavía no tiene horario
+      cargado. Se puede declarar acá mismo o dejarlo para después.</figcaption>
+  </figure>
+
+  <h3>Si cambiás el horario y ya hay clases reservadas</h3>
+
+  <p>
+    El sistema no cancela nada por su cuenta. Antes de guardar te muestra
+    <b>cuántas clases quedan afuera y de cuántos docentes</b>, con la lista, y
+    recién ahí decidís.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-12b-jornada-impacto.png"
+         alt="Confirmación antes de cancelar clases por un cambio de horario">
+    <figcaption>Se cuenta en clases; los equipos van al lado porque una clase
+      puede tener varias computadoras.</figcaption>
+  </figure>
+
+  <ul class="lista">
+    <li><b>Ampliar el horario no afecta a nadie</b> y no te pregunta nada.</li>
+    <li><b>La clase entra entera o no entra.</b> Si achicás a 13:00–15:00, una clase
+      de 13:00 a 16:00 se cancela completa: no se le recorta la última hora.</li>
+    <li><b>La clase que está en curso no se toca.</b> Termina.</li>
+    <li>A cada docente le llega un correo explicando por qué.</li>
+  </ul>
+
+  <div class="ojo">
+    <span class="titulo">Si dice que se cancela casi todo, frená</span>
+    Un cambio real de horario rara vez se lleva puesta la escuela entera. Cuando el
+    cartel avisa que es casi todo lo reservado, revisá las horas del tramo antes de
+    confirmar: casi siempre es un número mal cargado.
+  </div>
+
+  <div class="nota">
+    <span class="titulo">Ojo con las computadoras ya entregadas</span>
+    Si alguna de las clases que se cancelan <b>ya tiene sus máquinas entregadas</b>,
+    el sistema te lo avisa con el nombre de quien las tiene. El préstamo no se
+    cancela —la computadora está afuera y se recibe como siempre— pero conviene
+    avisarle a esa persona a mano, antes de que se entere por el correo.
   </div>
 </section>
 

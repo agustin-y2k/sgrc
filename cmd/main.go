@@ -343,13 +343,25 @@ func main() {
 	availabilityRepo := availabilityinfra.NewPostgresRepo(pool)
 	availabilityListadorAdmins := availabilityinfra.NewListadorAdminsPostgres(pool)
 
+	// Las dos flechas entre availability y reservation se cruzan: reservation
+	// pregunta si un horario entra en la jornada, y availability pregunta qué
+	// reservas quedarían afuera si la jornada cambiara. Como los dos Service
+	// no pueden construirse a la vez, el adaptador se crea vacío acá y se
+	// completa unas líneas más abajo, apenas existe reservationSvc.
+	//
+	// Queda a la vista y no escondido detrás de un contenedor de dependencias
+	// a propósito: es el único lugar del programa donde hay que leer con
+	// cuidado el orden, y esconderlo no lo haría menos cierto.
+	availabilityReservas := &availabilityReservasAdapter{}
+
 	availabilitySvc := availabilityapp.NewService(
 		availabilityRepo,
 		availabilityListadorAdmins,
+		availabilityReservas,
 		availabilityinfra.NuevoID,
 		ahora,
 	)
-	availabilityHandler := availabilityhttp.NewHandler(availabilitySvc)
+	availabilityHandler := availabilityhttp.NewHandler(availabilitySvc, auditor)
 
 	// ── reservation ─────────────────────────────────────────────── Se arma
 	// temprano a propósito: tanto auth (cascada de DarDeBaja, RF-02.8) como
@@ -372,6 +384,11 @@ func main() {
 		ahora,
 		bus,
 	)
+	// La punta que faltaba del cruce de arriba. Antes de esta línea,
+	// availabilitySvc existe pero no puede preguntar por reservas; después,
+	// sí. Nada se atiende en el medio: el servidor todavía no levantó.
+	availabilityReservas.reservationSvc = reservationSvc
+
 	reservationHandler := reservationhttp.NewHandler(reservationSvc, auditor)
 
 	// ── auth ───────────────────────────────────────────────────── El secreto
@@ -505,7 +522,7 @@ func main() {
 	inventoryHandler := inventoryhttp.NewHandler(inventorySvc, auditor)
 
 	// El barrido de reservas y entregas (RF-08.10 a RF-08.13).
-	vigilante := reservationapp.NewVigilante(reservationRepo, bus, ahora, configDeVigilancia())
+	vigilante := reservationapp.NewVigilante(reservationRepo, bus, &reservationValidadorJornadaAdapter{availabilitySvc: availabilitySvc}, ahora, configDeVigilancia())
 
 	// El avisador de licencias es un tipo aparte del Service porque no lo
 	// dispara un request sino un reloj (ver el job más abajo).

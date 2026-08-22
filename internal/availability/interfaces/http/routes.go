@@ -30,9 +30,11 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// lee quien intenta entender la API. El GET es para cualquier autenticado,
 	// no solo Admin: el formulario de reserva lo usa para avisar antes de
 	// mandar, y el calendario para saber qué días dibujar.
+	//
+	// El PUT reemplaza la jornada entera —no hay endpoints por tramo— porque
+	// es una sola decisión de siete días: así se valida como conjunto y hay un
+	// único momento en el que confirmarla.
 	jornada := app.Group("/api/jornada")
 	jornada.Get("/", autenticado, h.Jornada)
-	jornada.Post("/", autenticado, soloAdmin, h.AgregarBloqueDeJornada)
-	jornada.Patch("/:id", autenticado, soloAdmin, h.EditarBloqueDeJornada)
-	jornada.Delete("/:id", autenticado, soloAdmin, h.EliminarBloqueDeJornada)
+	jornada.Put("/", autenticado, soloAdmin, h.ReemplazarJornada)
 }

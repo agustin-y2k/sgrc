@@ -1,6 +1,94 @@
 // Espeja los DTOs de internal/availability/interfaces/http/dto.go.
 
+import { ApiError } from "@/lib/api-client"
+
 export type RespuestaLista<T> = { data: T[] }
+
+/**
+ * Un tramo de la jornada tal como se manda: sin id, porque la jornada se
+ * reemplaza entera y los ids los pone el backend.
+ */
+export type TramoDeJornada = {
+  diaSemana: DiaSemana
+  horaInicio: string
+  horaFin: string
+}
+
+/**
+ * La jornada de la institución.
+ *
+ * `data` vacío significa una sola cosa: no hay horario declarado y no hay
+ * restricción. Al Admin se le sigue pidiendo declararlo en cada inicio de
+ * sesión mientras siga vacío.
+ */
+export type RespuestaJornada = RespuestaLista<BloqueHorario> & {
+  /** Cuántas filas de reserva se cancelaron al guardar (una por equipo). */
+  reservasCanceladas?: number
+  /** Las mismas, contadas en clases, que es como se preguntó. */
+  clasesCanceladas?: number
+}
+
+/** Una reserva que quedaría fuera de la jornada propuesta. */
+export type ReservaAfectada = {
+  id: string
+  fecha: string
+  horaInicio: string
+  horaFin: string
+  equipo: string
+  materia: string
+  docente: string
+}
+
+/**
+ * Una máquina YA ENTREGADA contra una de las reservas que se van a cancelar.
+ *
+ * La jornada no restringe los préstamos —una máquina se entrega cualquier día
+ * y a cualquier hora mientras esté en el laboratorio—, así que lo que importa
+ * no es su horario sino que su clase deje de existir mientras el docente la
+ * tiene en la mano.
+ */
+export type PrestamoAfectado = {
+  id: string
+  equipo: string
+  quien: string
+}
+
+/** Lo que un cambio de jornada dejaría afuera. */
+export type ImpactoDeJornada = {
+  /**
+   * Viene RECORTADA por el backend. Lo que se va a cancelar es
+   * `totalAfectadas`, no `reservas.length`: mostrar el largo de la lista haría
+   * que el Admin confirme creyendo que cancela muchas menos.
+   */
+  reservas: ReservaAfectada[]
+  prestamos: PrestamoAfectado[]
+  /** Cuántas filas de reserva se van a cancelar (una por equipo). */
+  totalAfectadas: number
+  /** Cuántas reservas futuras hay en total, afectadas o no. */
+  totalDeReservas: number
+  /**
+   * Los mismos hechos contados en clases, que es como los cuenta la persona:
+   * una clase con cinco máquinas es UNA clase que se cae, no cinco reservas.
+   */
+  clasesAfectadas: number
+  totalDeClases: number
+}
+
+/**
+ * El backend rechaza con 409 un cambio que deja algo afuera, y manda el
+ * detalle en el mismo cuerpo. Esta función lo saca del ApiError.
+ *
+ * Devuelve null si el error es cualquier otra cosa: un 409 por solape de
+ * tramos, por ejemplo, no trae impacto y se muestra como un error normal.
+ */
+export function impactoDelError(err: unknown): ImpactoDeJornada | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null
+  const cuerpo = err.cuerpo
+  if (typeof cuerpo !== "object" || cuerpo === null || !("impacto" in cuerpo)) {
+    return null
+  }
+  return (cuerpo as { impacto: ImpactoDeJornada }).impacto
+}
 
 /**
  * Se declara acá y no se importa de features/reservas, igual que el backend
@@ -9,13 +97,7 @@ export type RespuestaLista<T> = { data: T[] }
  * tienen por qué moverse juntos.
  */
 export type DiaSemana =
-  | "LUNES"
-  | "MARTES"
-  | "MIERCOLES"
-  | "JUEVES"
-  | "VIERNES"
-  | "SABADO"
-  | "DOMINGO"
+  "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES" | "SABADO" | "DOMINGO"
 
 export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "LUNES", etiqueta: "Lunes" },

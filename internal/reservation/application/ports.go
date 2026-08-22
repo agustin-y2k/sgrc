@@ -40,6 +40,12 @@ type Repo interface {
 	// vinculadas a esa materia a partir de cierta fecha/hora.
 	ListarReservasFuturasDeMateria(ctx context.Context, materiaID string, desde time.Time) ([]*domain.Reserva, error)
 
+	// ListarReservasFuturas: usado por availability para saber qué quedaría
+	// fuera de una jornada nueva. Trae TODAS las reservas de clase que
+	// todavía no terminaron, sin paginar y sin los bloqueos administrativos
+	// (que nunca estuvieron sujetos a la jornada).
+	ListarReservasFuturas(ctx context.Context, desde time.Time) ([]ReservaDetallada, error)
+
 	// EliminarReservasYGruposDeCiclo: usado por la cascada de archivado de
 	// academic (RF-02.4) — borra FÍSICAMENTE (no cancela) toda
 	// Reserva/ReservaGrupo vinculada a materias de ese ciclo lectivo, sin
@@ -453,10 +459,31 @@ func formatearHora(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", int(d.Hours()), int(d.Minutes())%60)
 }
 
+// CierreDeJornada es cuándo cierra la escuela un día puntual.
+//
+// Son TRES estados y no dos, y confundirlos es el error caro: "la escuela no
+// declaró jornada" no es lo mismo que "ese día no abre". Con la jornada sin
+// declarar el barrido no tiene de dónde deducir un cierre y cae al valor
+// configurado; con un día cerrado, en cambio, no hay corte y punto — nadie
+// dejó una máquina afuera de una escuela que no abrió.
+type CierreDeJornada struct {
+	// Declarada: la institución declaró al menos un tramo, de cualquier día.
+	Declarada bool
+	// Abre: ese día puntual tiene tramos.
+	Abre bool
+	// Fin, medido desde la medianoche de ESE día. Pasa de las 24 horas cuando
+	// el último tramo cruza: el lunes de una nocturna que va de 20:00 a 01:00
+	// cierra a las 25h. Solo tiene sentido con Abre en true.
+	Fin time.Duration
+}
+
 // ValidadorJornada es el puerto hacia availability, que sabe qué días y en
 // qué horas abre la institución (ver domain.PermiteReserva allá).
 type ValidadorJornada interface {
 	// PermiteReserva responde si ese día y ese rango horario caen dentro de la
 	// jornada declarada.
 	PermiteReserva(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) (bool, error)
+
+	// CierreDeLaJornada dice cuándo termina la jornada de ese día.
+	CierreDeLaJornada(ctx context.Context, fecha time.Time) (CierreDeJornada, error)
 }

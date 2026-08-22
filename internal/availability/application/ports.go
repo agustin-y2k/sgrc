@@ -45,10 +45,70 @@ type Repo interface {
 
 	// ListarJornada devuelve TODOS los bloques, de todos los días.
 	ListarJornada(ctx context.Context) ([]*domain.BloqueJornada, error)
-	CrearBloqueJornada(ctx context.Context, b *domain.BloqueJornada) error
-	BuscarBloqueJornada(ctx context.Context, id string) (*domain.BloqueJornada, error)
-	GuardarBloqueJornada(ctx context.Context, b *domain.BloqueJornada) error
-	EliminarBloqueJornada(ctx context.Context, id string) error
+
+	// ReemplazarJornada deja la jornada exactamente igual a `bloques`, en una
+	// transacción.
+	//
+	// Se reemplaza entera y no tramo por tramo porque la jornada es una sola
+	// decisión de siete días: mientras se aplicaba de a partes, quedaba a la
+	// vista una jornada a medias que PermiteReserva ya estaba usando para
+	// aceptar o rechazar reservas.
+	//
+	// Una lista vacía es válida: deja a la escuela sin restricción de horario.
+	ReemplazarJornada(ctx context.Context, bloques []*domain.BloqueJornada) error
+}
+
+// ── Lo que un cambio de jornada deja afuera ──────────────────────────────
+
+// ReservaFutura es una reserva ya cargada, con lo justo para decidir si entra
+// en una jornada y para poder nombrarla en la pantalla de confirmación.
+type ReservaFutura struct {
+	ID string
+	// GrupoID es la clase a la que pertenece. Una clase con cinco máquinas son
+	// CINCO ReservaFutura con el mismo GrupoID, porque el sistema guarda una
+	// fila por equipo: sin esto, cancelar una clase de cinco equipos durante
+	// quince semanas se le muestra al Admin como "75 reservas" cuando el
+	// docente que las pierde cuenta quince clases.
+	GrupoID    string
+	Fecha      time.Time
+	HoraInicio time.Duration
+	HoraFin    time.Duration
+	Equipo     string
+	Materia    string
+	Docente    string
+}
+
+// PrestamoAbierto es una máquina que está fuera del laboratorio ahora mismo.
+//
+// La jornada NO restringe los préstamos: una máquina se entrega cualquier día
+// y a cualquier hora mientras esté en el laboratorio. Lo que importa acá es
+// otra cosa —contra qué reserva salió— porque si esa reserva se cancela, hay
+// alguien con equipos en la mano para una clase que dejó de existir.
+type PrestamoAbierto struct {
+	ID     string
+	Equipo string
+	Quien  string
+	// ReservaID nil = préstamo espontáneo, sin reserva detrás. Un cambio de
+	// jornada no lo toca ni de lejos.
+	ReservaID *string
+}
+
+// ReservasDeLaInstitucion es el puerto hacia reservation.
+//
+// La regla de qué entra en la jornada NO viaja por acá: este puerto solo trae
+// las reservas y los préstamos, y cancela los que se le indiquen. Quién queda
+// afuera lo decide domain.PermiteReserva, que vive en este paquete y es la
+// misma función que usa el alta de una reserva. Si la regla se duplicara del
+// otro lado, el sistema podría cancelar algo que después aceptaría volver a
+// cargar.
+type ReservasDeLaInstitucion interface {
+	// ReservasFuturas son las CONFIRMADA de esa fecha en adelante.
+	ReservasFuturas(ctx context.Context, desde time.Time) ([]ReservaFutura, error)
+	// PrestamosAbiertos son las máquinas que hoy están afuera.
+	PrestamosAbiertos(ctx context.Context) ([]PrestamoAbierto, error)
+	// CancelarReservas cancela esas reservas puntuales con ese motivo, que
+	// llega tal cual al correo del docente.
+	CancelarReservas(ctx context.Context, reservaIDs []string, motivo string) (int, error)
 }
 
 // AdminInfo es lo mínimo que se necesita de cada Admin para RF-07.2 —

@@ -1007,6 +1007,58 @@ func (s *Service) CancelarReservasFuturasDeMateria(ctx context.Context, materiaI
 	return canceladas, nil
 }
 
+// ReservasFuturas lista lo que todavía no terminó, para que availability
+// pueda decidir qué quedaría fuera de una jornada nueva. No decide nada acá:
+// la regla de qué entra en la jornada vive del otro lado, que es donde
+// también la aplica el alta de una reserva.
+func (s *Service) ReservasFuturas(ctx context.Context, desde time.Time) ([]ReservaDetallada, error) {
+	return s.repo.ListarReservasFuturas(ctx, desde)
+}
+
+// CancelarReservasPorIDs cancela esas reservas puntuales con ese motivo.
+//
+// A diferencia de las otras cascadas, acá la lista de víctimas llega armada
+// desde afuera: quien decide cuáles caen es availability, con la jornada
+// nueva en la mano. Este lado se limita a cancelarlas con las mismas reglas
+// que el resto —sin "cancelado por", porque no es el click de una persona
+// sobre esa reserva— y a emitir los avisos.
+//
+// Las que ya no estén CONFIRMADA se saltean en silencio: entre que se calculó
+// el impacto y el Admin confirmó, alguna pudo cancelarse sola.
+func (s *Service) CancelarReservasPorIDs(ctx context.Context, reservaIDs []string, motivo string) (int, error) {
+	if len(reservaIDs) == 0 {
+		return 0, nil
+	}
+
+	ahora := s.ahora()
+	var canceladas int
+	var pendientes []cancelacionPendiente
+
+	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		reservas := make([]*domain.Reserva, 0, len(reservaIDs))
+		for _, id := range reservaIDs {
+			r, err := repo.BuscarReservaPorID(ctx, id)
+			if err != nil {
+				if errors.Is(err, ErrReservaNoEncontrada) {
+					continue
+				}
+				return fmt.Errorf("buscando la reserva %s: %w", id, err)
+			}
+			reservas = append(reservas, r)
+		}
+
+		var err error
+		canceladas, _, pendientes, err = s.cancelarEnCascada(ctx, repo, reservas, motivo, ahora)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	s.publicarCancelaciones(ctx, pendientes)
+	return canceladas, nil
+}
+
 // cancelarEnCascada centraliza lo que ya hacían por separado BloquearEquipos
 // y estos dos métodos: cancelar cada reserva CONFIRMADA de la lista (sin
 // "cancelado por" — son cascadas disparadas por el sistema, no por un click

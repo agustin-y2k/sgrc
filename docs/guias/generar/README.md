@@ -30,6 +30,7 @@ export GUIA_ADMIN_EMAIL='...'         # opcional, si tu Admin no es admin@escuel
 
 # 2. Capturas. Escriben todas en $SALIDA; se corren desde donde quieras.
 export SALIDA=/tmp/capturas-sgrc
+node docs/guias/generar/capturar-jornada.mjs      # PRIMERO: ver abajo por qué
 node docs/guias/generar/capturar-guia.mjs         # pantallas completas
 node docs/guias/generar/capturar-pasos.mjs        # diálogos y formularios en uso
 node docs/guias/generar/capturar-pasos-2.mjs      # los que necesitan otro camino
@@ -52,6 +53,22 @@ node docs/guias/generar/hacer-pdf.mjs \
   docs/guias/guia-docentes.html docs/guias/SGRC-guia-docentes.pdf \
   docs/guias/guia-admins.html   docs/guias/SGRC-guia-administradores.pdf
 ```
+
+## `capturar-jornada.mjs` va primero, y no es un detalle de orden
+
+Los dos motivos están escritos arriba del script, pero conviene tenerlos acá:
+
+1. **La primera captura necesita que la escuela NO tenga jornada declarada.**
+   Es lo que ve un Admin al entrar a un sistema recién instalado, y cualquier
+   script que corra antes y declare una la deja imposible de tomar.
+2. **Al terminar, deja la jornada declarada, y los demás la necesitan.** Sin
+   ningún tramo cargado el sistema le pide a cada Admin que la declare y no lo
+   deja navegar: todas las capturas de Admin que vengan después mostrarían el
+   asistente en vez de su pantalla.
+
+La confirmación del impacto se toma **sin aplicarla**: se propone un horario
+que deja clases afuera, se fotografía la pregunta y se sale con «Volver sin
+cambiar nada», así los datos de demostración quedan intactos.
 
 ## Decisiones que conviene no deshacer
 

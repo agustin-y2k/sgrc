@@ -5,10 +5,32 @@ import { MemoryRouter, Route, Routes } from "react-router"
 
 import { CalendarioEquipoPage } from "@/features/calendario/CalendarioEquipoPage"
 import * as calendarioApi from "@/features/calendario/api"
+import * as disponibilidadApi from "@/features/disponibilidad/api"
 import type { CalendarioEquipo } from "@/features/calendario/types"
+import type { BloqueHorario, DiaSemana } from "@/features/disponibilidad/types"
 import { ApiError } from "@/lib/api-client"
 
 vi.mock("@/features/calendario/api")
+
+vi.mock("@/features/disponibilidad/api", async (original) => ({
+  // JORNADA_KEY no es una llamada: es la clave de react-query y la pantalla
+  // la necesita de verdad.
+  ...(await original<typeof disponibilidadApi>()),
+  jornadaDeLaInstitucion: vi.fn(),
+}))
+
+/** Declara la jornada como abierta esos días, de 07:00 a 18:00. */
+function jornadaAbiertaLos(dias: DiaSemana[]) {
+  const data: BloqueHorario[] = dias.map((diaSemana) => ({
+    id: `j-${diaSemana}`,
+    diaSemana,
+    horaInicio: "07:00",
+    horaFin: "18:00",
+  }))
+  vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({
+    data,
+  })
+}
 
 // La semana del 9 al 15 de marzo de 2026 (lunes a domingo).
 const LUNES = new Date(2026, 2, 9, 10, 0, 0)
@@ -64,6 +86,11 @@ describe("CalendarioEquipoPage", () => {
     vi.clearAllMocks()
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(LUNES)
+    // Sin jornada declarada no hay restricción, que es como arranca una
+    // instalación nueva: los siete días se dibujan.
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({
+      data: [],
+    })
   })
 
   afterEach(() => {
@@ -159,5 +186,38 @@ describe("CalendarioEquipoPage", () => {
       screen.queryByText(/Los huecos en blanco están libres/)
     ).not.toBeInTheDocument()
     expect(screen.queryByText("Reserva de clase")).not.toBeInTheDocument()
+  })
+
+  // Si la escuela achica su jornada, lo que ya estaba reservado un día que
+  // dejó de estar declarado sigue existiendo y sigue ocupando la máquina.
+  // Antes la columna no se dibujaba y esa reserva quedaba invisible: la PC
+  // figuraba libre en la única pantalla que existe para verla.
+  it("dibuja un día que dejó de estar declarado si tiene algo reservado", async () => {
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
+    // El jueves 12 tiene un bloqueo cargado, pero la escuela ahora solo abre
+    // de lunes a miércoles.
+    jornadaAbiertaLos(["LUNES", "MARTES", "MIERCOLES"])
+    renderCalendario()
+
+    expect(await screen.findByText("Jueves")).toBeInTheDocument()
+    expect(screen.getByText("Jornada docente")).toBeInTheDocument()
+    expect(screen.getByText("fuera de la jornada")).toBeInTheDocument()
+  })
+
+  // La otra mitad: un día cerrado y sin nada adentro sí se oculta, que es
+  // para lo que una escuela declara su jornada.
+  it("oculta los días cerrados que no tienen nada reservado", async () => {
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
+    jornadaAbiertaLos(["LUNES", "MARTES", "MIERCOLES"])
+    renderCalendario()
+
+    await screen.findByText("Jueves")
+    // Viernes, sábado y domingo están cerrados y vacíos.
+    expect(screen.queryByText("Viernes")).not.toBeInTheDocument()
+    expect(screen.queryByText("Sábado")).not.toBeInTheDocument()
+    expect(screen.queryByText("Domingo")).not.toBeInTheDocument()
+    // Y el martes, que está declarado, no lleva el rótulo.
+    expect(screen.getByText("Martes")).toBeInTheDocument()
+    expect(screen.getAllByText("fuera de la jornada")).toHaveLength(1)
   })
 })

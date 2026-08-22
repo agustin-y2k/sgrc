@@ -37,6 +37,10 @@ MAPA = {
     "adm2-cargar-licencia": "admin-10-cargar-licencia",
     "adm2-bloquear": "admin-11-bloquear",
     "adm-09-jornada": "admin-12-jornada",
+    # La jornada: el asistente del primer arranque y la confirmación de lo que
+    # se cancela al achicarla (capturar-jornada.mjs).
+    "adm-18-jornada-impacto": "admin-12b-jornada-impacto",
+    "adm-16-primera-jornada": "admin-12c-primera-jornada",
     "adm2-pedidos": "admin-13-pedidos-de-materia",
     "paso-22-soporte-admin": "admin-14-soporte",
     "paso-23-soporte-conversacion": "admin-15-soporte-conversacion",
