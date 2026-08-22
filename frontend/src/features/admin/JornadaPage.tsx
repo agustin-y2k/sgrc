@@ -11,13 +11,20 @@ import { Card, CardContent } from "@/components/ui/card"
 import * as disponibilidadApi from "@/features/disponibilidad/api"
 import { JORNADA_KEY } from "@/features/disponibilidad/api"
 import { DIAS_SEMANA, etiquetaDia } from "@/features/disponibilidad/types"
-import type { BloqueHorario, DiaSemana } from "@/features/disponibilidad/types"
+import type {
+  BloqueHorario,
+  DiaSemana,
+  TramoDeJornada,
+} from "@/features/disponibilidad/types"
 import {
   agruparTramos,
   ATAJOS_DE_DIAS,
+  aTramos,
   etiquetaDeDias,
+  expandirDias,
   mismosDias,
   ordenarDias,
+  sinLosBloques,
 } from "@/features/admin/jornada"
 import type { TramoAgrupado } from "@/features/admin/jornada"
 import { getErrorMessage } from "@/lib/api-client"
@@ -257,63 +264,13 @@ function FilaDeDia({
   )
 }
 
-/** Un paso del guardado, atado al día que lo motivó. */
-type Paso = { dia: DiaSemana; ejecutar: () => Promise<unknown> }
-
-async function ejecutarEnOrden(pasos: Paso[]): Promise<string[]> {
-  const fallos: string[] = []
-  for (const paso of pasos) {
-    try {
-      await paso.ejecutar()
-    } catch (e) {
-      fallos.push(`${etiquetaDia(paso.dia)}: ${getErrorMessage(e)}`)
-    }
-  }
-  return fallos
-}
-
-/** Los pasos para dejar un tramo como dice el formulario. */
-function pasosDeEdicion(grupo: TramoAgrupado, valor: FormTramo): Paso[] {
-  const quitados = grupo.bloques.filter((b) => !valor.dias.includes(b.diaSemana))
-  const conservados = grupo.bloques.filter((b) => valor.dias.includes(b.diaSemana))
-  const agregados = valor.dias.filter((d) => !grupo.dias.includes(d))
-
-  const horarioCambio =
-    valor.horaInicio !== grupo.horaInicio || valor.horaFin !== grupo.horaFin
-
-  return [
-    ...quitados.map((b) => ({
-      dia: b.diaSemana,
-      ejecutar: () => disponibilidadApi.eliminarBloqueDeJornada(b.id),
-    })),
-    // Sin cambio de horario no hay nada que editar en los días que siguen: un
-    // PATCH que manda lo mismo que ya está solo agrega un request que puede
-    // fallar por un solape consigo mismo mal resuelto.
-    ...(horarioCambio
-      ? conservados.map((b) => ({
-          dia: b.diaSemana,
-          ejecutar: () =>
-            disponibilidadApi.editarBloqueDeJornada(b.id, {
-              horaInicio: valor.horaInicio,
-              horaFin: valor.horaFin,
-            }),
-        }))
-      : []),
-    ...agregados.map((d) => ({
-      dia: d,
-      ejecutar: () =>
-        disponibilidadApi.agregarBloqueDeJornada(d, valor.horaInicio, valor.horaFin),
-    })),
-  ]
-}
-
 export function JornadaPage() {
   const queryClient = useQueryClient()
   const [nuevo, setNuevo] = useState<FormTramo>(TRAMO_VACIO)
   const [editando, setEditando] = useState<string | null>(null)
   const [edicion, setEdicion] = useState<FormTramo>(TRAMO_VACIO)
   const [desplegados, setDesplegados] = useState<string[]>([])
-  const [fallos, setFallos] = useState<string[]>([])
+  const [falloAlGuardar, setFalloAlGuardar] = useState<string | null>(null)
 
   const { data, isPending, error } = useQuery({
     queryKey: JORNADA_KEY,
@@ -322,84 +279,32 @@ export function JornadaPage() {
 
   const invalidar = () => queryClient.invalidateQueries({ queryKey: JORNADA_KEY })
 
-  const agregar = useMutation({
-    mutationFn: (v: FormTramo) =>
-      ejecutarEnOrden(
-        v.dias.map((d) => ({
-          dia: d,
-          ejecutar: () =>
-            disponibilidadApi.agregarBloqueDeJornada(d, v.horaInicio, v.horaFin),
-        }))
-      ),
-    // Siempre se invalida, también con fallos parciales: los días que sí
-    // entraron ya están guardados y la lista tiene que mostrarlos.
-    onSuccess: async (fallidos, v) => {
-      setFallos(fallidos)
-      setNuevo({ ...v, dias: v.dias.filter((d) => fallidos.some(nombra(d))) })
+  // Una sola mutación para las cuatro operaciones de la pantalla —agregar,
+  // editar, quitar, corregir un día suelto— porque desde el backend las
+  // cuatro son la misma: acá está la jornada completa, dejala así.
+  //
+  // Antes cada una se traducía a una serie de altas, PATCH y bajas que se
+  // mandaban en orden, y de ahí salía el guardado parcial: podía entrar el
+  // lunes y rechazarse el martes, dejando la jornada en un estado que nadie
+  // pidió. Ahora entra entera o no entra.
+  const guardar = useMutation({
+    mutationFn: (tramos: TramoDeJornada[]) => disponibilidadApi.reemplazarJornada(tramos),
+    onSuccess: async () => {
+      setFalloAlGuardar(null)
+      setEditando(null)
       await invalidar()
     },
+    onError: (e) => setFalloAlGuardar(getErrorMessage(e)),
   })
 
-  const guardarEdicion = useMutation({
-    mutationFn: ({ grupo, valor }: { grupo: TramoAgrupado; valor: FormTramo }) =>
-      ejecutarEnOrden(pasosDeEdicion(grupo, valor)),
-    onSuccess: async (fallidos) => {
-      setFallos(fallidos)
-      if (fallidos.length === 0) setEditando(null)
-      await invalidar()
-    },
-  })
-
-  const quitar = useMutation({
-    mutationFn: (bloques: BloqueHorario[]) =>
-      ejecutarEnOrden(
-        bloques.map((b) => ({
-          dia: b.diaSemana,
-          ejecutar: () => disponibilidadApi.eliminarBloqueDeJornada(b.id),
-        }))
-      ),
-    onSuccess: async (fallidos) => {
-      setFallos(fallidos)
-      await invalidar()
-    },
-  })
-
-  // Un día suelto que se desprende del grupo: es un PATCH sobre el bloque que
-  // ya existe para ese día, así que el resto del tramo no se entera.
-  const guardarDia = useMutation({
-    mutationFn: ({
-      bloque,
-      horaInicio,
-      horaFin,
-    }: {
-      bloque: BloqueHorario
-      horaInicio: string
-      horaFin: string
-    }) =>
-      ejecutarEnOrden([
-        {
-          dia: bloque.diaSemana,
-          ejecutar: () =>
-            disponibilidadApi.editarBloqueDeJornada(bloque.id, { horaInicio, horaFin }),
-        },
-      ]),
-    onSuccess: async (fallidos) => {
-      setFallos(fallidos)
-      await invalidar()
-    },
-  })
-
-  const tramos = agruparTramos(data?.data ?? [])
+  const bloques = data?.data ?? []
+  const tramos = agruparTramos(bloques)
   const motivoNuevo = motivoParaNoGuardar(nuevo)
   const motivoEdicion = motivoParaNoGuardar(edicion)
-  const trabajando =
-    agregar.isPending ||
-    guardarEdicion.isPending ||
-    quitar.isPending ||
-    guardarDia.isPending
+  const trabajando = guardar.isPending
 
   function empezarAEditar(grupo: TramoAgrupado) {
-    setFallos([])
+    setFalloAlGuardar(null)
     setEditando(claveDe(grupo))
     setEdicion({
       dias: grupo.dias,
@@ -429,19 +334,12 @@ export function JornadaPage() {
         </Alert>
       )}
 
-      {/* Los fallos se listan por día porque el guardado es parcial: puede
-          haber entrado el lunes y haberse rechazado el martes, y sin el
-          detalle no hay forma de saber cuál hay que rehacer. */}
-      {fallos.length > 0 && (
+      {/* Un solo mensaje y no una lista por día: el guardado ya no es
+          parcial, así que no existe el caso de "entró el lunes y falló el
+          martes" que obligaba a decir cuál rehacer. */}
+      {falloAlGuardar !== null && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription>
-            <p>Estos días quedaron sin guardar:</p>
-            <ul className="mt-1 list-disc pl-5">
-              {fallos.map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>
-          </AlertDescription>
+          <AlertDescription>{falloAlGuardar}</AlertDescription>
         </Alert>
       )}
 
@@ -453,8 +351,10 @@ export function JornadaPage() {
             <Button
               disabled={motivoNuevo !== "" || trabajando}
               onClick={() => {
-                setFallos([])
-                agregar.mutate(nuevo)
+                guardar.mutate([
+                  ...aTramos(bloques),
+                  ...expandirDias(nuevo.dias, nuevo.horaInicio, nuevo.horaFin),
+                ])
               }}
             >
               Agregar tramo
@@ -510,8 +410,14 @@ export function JornadaPage() {
                           size="sm"
                           disabled={motivoEdicion !== "" || trabajando}
                           onClick={() => {
-                            setFallos([])
-                            guardarEdicion.mutate({ grupo: t, valor: edicion })
+                            guardar.mutate([
+                              ...sinLosBloques(bloques, t.bloques),
+                              ...expandirDias(
+                                edicion.dias,
+                                edicion.horaInicio,
+                                edicion.horaFin
+                              ),
+                            ])
                           }}
                         >
                           Guardar
@@ -579,8 +485,7 @@ export function JornadaPage() {
                       size="sm"
                       disabled={trabajando}
                       onClick={() => {
-                        setFallos([])
-                        quitar.mutate(t.bloques)
+                        guardar.mutate(sinLosBloques(bloques, t.bloques))
                       }}
                       aria-label={`Quitar ${nombre}`}
                     >
@@ -597,12 +502,13 @@ export function JornadaPage() {
                         bloque={b}
                         deshabilitado={trabajando}
                         onGuardar={(horaInicio, horaFin) => {
-                          setFallos([])
-                          guardarDia.mutate({ bloque: b, horaInicio, horaFin })
+                          guardar.mutate([
+                            ...sinLosBloques(bloques, [b]),
+                            { diaSemana: b.diaSemana, horaInicio, horaFin },
+                          ])
                         }}
                         onQuitar={() => {
-                          setFallos([])
-                          quitar.mutate([b])
+                          guardar.mutate(sinLosBloques(bloques, [b]))
                         }}
                       />
                     ))}
@@ -628,9 +534,4 @@ export function JornadaPage() {
 /** Identifica al tramo en la pantalla. */
 function claveDe(t: TramoAgrupado): string {
   return `${t.horaInicio}-${t.horaFin}`
-}
-
-/** Si el mensaje de fallo habla de ese día, para dejarlo marcado y reintentar. */
-function nombra(dia: DiaSemana): (fallo: string) => boolean {
-  return (fallo) => fallo.startsWith(`${etiquetaDia(dia)}:`)
 }

@@ -1,5 +1,9 @@
 import { DIAS_SEMANA, etiquetaDia } from "@/features/disponibilidad/types"
-import type { BloqueHorario, DiaSemana } from "@/features/disponibilidad/types"
+import type {
+  BloqueHorario,
+  DiaSemana,
+  TramoDeJornada,
+} from "@/features/disponibilidad/types"
 
 /**
  * Presentación de la jornada institucional: cómo se agrupa para leerla y cómo
@@ -56,6 +60,47 @@ export function agruparTramos(bloques: BloqueHorario[]): TramoAgrupado[] {
     const dia = indiceDeDia(a.dias[0]) - indiceDeDia(b.dias[0])
     return dia !== 0 ? dia : a.horaInicio.localeCompare(b.horaInicio)
   })
+}
+
+/**
+ * Cada cambio de la pantalla se expresa como la jornada COMPLETA que tiene
+ * que quedar, porque eso es lo que se guarda: un PUT del conjunto.
+ *
+ * Las tres funciones de acá abajo son las piezas con las que se arma esa
+ * lista. Son puras a propósito —entra la jornada actual, sale la que va a
+ * quedar— así que se pueden probar sin montar la pantalla, que es donde
+ * antes se escondían los errores de "quité un día y se borró otro".
+ */
+
+/** La jornada tal como está, en la forma en que se manda. */
+export function aTramos(bloques: BloqueHorario[]): TramoDeJornada[] {
+  return bloques.map((b) => ({
+    diaSemana: b.diaSemana,
+    horaInicio: b.horaInicio,
+    horaFin: b.horaFin,
+  }))
+}
+
+/** Un mismo horario repartido en un tramo por cada día marcado. */
+export function expandirDias(
+  dias: DiaSemana[],
+  horaInicio: string,
+  horaFin: string
+): TramoDeJornada[] {
+  return ordenarDias(dias).map((diaSemana) => ({ diaSemana, horaInicio, horaFin }))
+}
+
+/**
+ * La jornada sin esos bloques. Se comparan por id y no por horario: dos
+ * bloques de días distintos pueden tener exactamente las mismas horas, y
+ * quitar "el de las 8 a las 12" se llevaría puestos los siete días.
+ */
+export function sinLosBloques(
+  bloques: BloqueHorario[],
+  quitar: BloqueHorario[]
+): TramoDeJornada[] {
+  const ids = new Set(quitar.map((b) => b.id))
+  return aTramos(bloques.filter((b) => !ids.has(b.id)))
 }
 
 /**

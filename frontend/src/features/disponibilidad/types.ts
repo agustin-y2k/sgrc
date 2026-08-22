@@ -3,6 +3,27 @@
 export type RespuestaLista<T> = { data: T[] }
 
 /**
+ * Un tramo de la jornada tal como se manda: sin id, porque la jornada se
+ * reemplaza entera y los ids los pone el backend.
+ */
+export type TramoDeJornada = {
+  diaSemana: DiaSemana
+  horaInicio: string
+  horaFin: string
+}
+
+/**
+ * La jornada de la institución con su bandera al lado.
+ *
+ * `definida` es lo que separa "todavía no la declararon" de "eligieron
+ * dejarla libre": las dos llegan con `data` vacío y piden cosas distintas —a
+ * la primera hay que preguntarle cuál es su jornada, a la segunda no.
+ */
+export type RespuestaJornada = RespuestaLista<BloqueHorario> & {
+  definida: boolean
+}
+
+/**
  * Se declara acá y no se importa de features/reservas, igual que el backend
  * declara su propio domain.DiaSemana en cada paquete en vez de compartirlo
  * (docs/06-arquitectura.md §3): son dos conceptos que hoy coinciden pero no

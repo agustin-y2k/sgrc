@@ -3,8 +3,10 @@ import type {
   BloqueHorario,
   DiaSemana,
   Excepcion,
+  RespuestaJornada,
   RespuestaLista,
   TipoExcepcion,
+  TramoDeJornada,
 } from "@/features/disponibilidad/types"
 import { apiFetch } from "@/lib/api-client"
 
@@ -92,31 +94,22 @@ export function marcarNoDisponibleAhora() {
 export const JORNADA_KEY = ["jornada"]
 
 export function jornadaDeLaInstitucion() {
-  return apiFetch<RespuestaLista<BloqueHorario>>("/api/jornada")
+  return apiFetch<RespuestaJornada>("/api/jornada")
 }
 
-export function agregarBloqueDeJornada(
-  diaSemana: DiaSemana,
-  horaInicio: string,
-  horaFin: string
-) {
-  return apiFetch<BloqueHorario>("/api/jornada", {
-    method: "POST",
-    body: { diaSemana, horaInicio, horaFin },
+/**
+ * Reemplaza la jornada ENTERA: lo que se manda es lo que queda.
+ *
+ * No hay alta, edición ni baja de un tramo suelto. La jornada es una sola
+ * decisión de siete días, y mandarla de a partes dejaba a la vista un estado
+ * intermedio que ya decidía qué reservas se aceptaban.
+ *
+ * Una lista vacía es válida y no es lo mismo que no llamar: es la institución
+ * eligiendo no restringir nada, y deja de preguntársele cuál es su jornada.
+ */
+export function reemplazarJornada(tramos: TramoDeJornada[]) {
+  return apiFetch<RespuestaJornada>("/api/jornada", {
+    method: "PUT",
+    body: { tramos },
   })
-}
-
-/** PATCH parcial, igual que el horario propio. */
-export function editarBloqueDeJornada(
-  id: string,
-  cambios: { diaSemana?: DiaSemana; horaInicio?: string; horaFin?: string }
-) {
-  return apiFetch<BloqueHorario>(`/api/jornada/${id}`, {
-    method: "PATCH",
-    body: cambios,
-  })
-}
-
-export function eliminarBloqueDeJornada(id: string) {
-  return apiFetch<void>(`/api/jornada/${id}`, { method: "DELETE" })
 }

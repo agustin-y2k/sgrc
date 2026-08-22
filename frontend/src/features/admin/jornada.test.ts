@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
 
-import { agruparTramos, etiquetaDeDias, ordenarDias } from "./jornada"
+import {
+  agruparTramos,
+  aTramos,
+  etiquetaDeDias,
+  expandirDias,
+  ordenarDias,
+  sinLosBloques,
+} from "./jornada"
 import type { BloqueHorario, DiaSemana } from "@/features/disponibilidad/types"
 
 function bloque(
@@ -139,6 +146,52 @@ describe("agruparTramos", () => {
       "Lunes, miércoles, jueves y viernes de 08:00 a 12:00",
       "Lunes, miércoles, jueves y viernes de 13:00 a 18:00",
       "Martes de 08:00 a 14:00",
+    ])
+  })
+})
+
+describe("expandirDias", () => {
+  it("reparte un horario en un tramo por día, en orden de semana", () => {
+    expect(expandirDias(["MIERCOLES", "LUNES"], "08:00", "12:00")).toEqual([
+      { diaSemana: "LUNES", horaInicio: "08:00", horaFin: "12:00" },
+      { diaSemana: "MIERCOLES", horaInicio: "08:00", horaFin: "12:00" },
+    ])
+  })
+
+  it("sin días no hay tramos", () => {
+    expect(expandirDias([], "08:00", "12:00")).toEqual([])
+  })
+})
+
+describe("sinLosBloques", () => {
+  // La trampa: la escuela abre igual todos los días, así que los siete
+  // bloques comparten horario. Comparar por horario en vez de por id
+  // borraría la semana entera al querer sacar un solo día.
+  it("saca solo los bloques pedidos aunque compartan horario con otros", () => {
+    const semana = [
+      bloque("LUNES", "08:00", "12:00"),
+      bloque("MARTES", "08:00", "12:00"),
+      bloque("MIERCOLES", "08:00", "12:00"),
+    ]
+
+    expect(sinLosBloques(semana, [semana[1]])).toEqual([
+      { diaSemana: "LUNES", horaInicio: "08:00", horaFin: "12:00" },
+      { diaSemana: "MIERCOLES", horaInicio: "08:00", horaFin: "12:00" },
+    ])
+  })
+
+  it("sacar todo deja la jornada vacía, que es un pedido válido", () => {
+    const semana = [bloque("LUNES", "08:00", "12:00")]
+    expect(sinLosBloques(semana, semana)).toEqual([])
+  })
+})
+
+describe("aTramos", () => {
+  // Los ids no viajan de vuelta: el backend reemplaza la jornada entera y
+  // les pone unos nuevos.
+  it("deja los bloques listos para mandar, sin id", () => {
+    expect(aTramos([bloque("SABADO", "09:00", "13:00")])).toEqual([
+      { diaSemana: "SABADO", horaInicio: "09:00", horaFin: "13:00" },
     ])
   })
 })

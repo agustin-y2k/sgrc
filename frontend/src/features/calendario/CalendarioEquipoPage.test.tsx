@@ -27,7 +27,10 @@ function jornadaAbiertaLos(dias: DiaSemana[]) {
     horaInicio: "07:00",
     horaFin: "18:00",
   }))
-  vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({ data })
+  vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({
+    data,
+    definida: true,
+  })
 }
 
 // La semana del 9 al 15 de marzo de 2026 (lunes a domingo).
@@ -86,7 +89,10 @@ describe("CalendarioEquipoPage", () => {
     vi.setSystemTime(LUNES)
     // Sin jornada declarada no hay restricción, que es como arranca una
     // instalación nueva: los siete días se dibujan.
-    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({ data: [] })
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({
+      data: [],
+      definida: false,
+    })
   })
 
   afterEach(() => {
