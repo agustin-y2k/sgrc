@@ -71,7 +71,13 @@ type Repo interface {
 // ReservaFutura es una reserva ya cargada, con lo justo para decidir si entra
 // en una jornada y para poder nombrarla en la pantalla de confirmación.
 type ReservaFutura struct {
-	ID         string
+	ID string
+	// GrupoID es la clase a la que pertenece. Una clase con cinco máquinas son
+	// CINCO ReservaFutura con el mismo GrupoID, porque el sistema guarda una
+	// fila por equipo: sin esto, cancelar una clase de cinco equipos durante
+	// quince semanas se le muestra al Admin como "75 reservas" cuando el
+	// docente que las pierde cuenta quince clases.
+	GrupoID    string
 	Fecha      time.Time
 	HoraInicio time.Duration
 	HoraFin    time.Duration

@@ -1099,3 +1099,43 @@ func TestReemplazarJornada_EnUnaSerieCaenTodasLasOcurrencias(t *testing.T) {
 		t.Errorf("los quince lunes caen juntos: %d", resultado.ReservasCanceladas)
 	}
 }
+
+// Una clase con cinco máquinas son CINCO filas de reserva, y contarlas así al
+// Admin multiplica por cinco la escala que percibe: el docente que las pierde
+// cuenta clases, no equipos.
+func TestReemplazarJornada_CuentaClasesYEquiposPorSeparado(t *testing.T) {
+	var futuras []ReservaFutura
+	// Tres lunes de la misma clase, cinco máquinas cada uno = 15 filas.
+	for semana := 0; semana < 3; semana++ {
+		for equipo := 0; equipo < 5; equipo++ {
+			futuras = append(futuras, ReservaFutura{
+				ID:         fmt.Sprintf("r-%d-%d", semana, equipo),
+				GrupoID:    fmt.Sprintf("clase-%d", semana),
+				Fecha:      lunes(0).AddDate(0, 0, 7*semana),
+				HoraInicio: 13 * time.Hour,
+				HoraFin:    16 * time.Hour,
+				Equipo:     fmt.Sprintf("PC %d", equipo),
+			})
+		}
+	}
+	reservas := &fakeReservas{futuras: futuras}
+	svc, _ := servicioConReservas(reservas)
+	ctx := context.Background()
+
+	resultado, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
+		{DiaSemana: domain.Lunes, HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour},
+	}, false)
+
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resultado.Impacto.ClasesAfectadas != 3 {
+		t.Errorf("son tres clases: %d", resultado.Impacto.ClasesAfectadas)
+	}
+	if len(resultado.Impacto.Reservas) != 15 {
+		t.Errorf("y quince equipos: %d", len(resultado.Impacto.Reservas))
+	}
+	if resultado.Impacto.TotalDeClases != 3 {
+		t.Errorf("el total también va en clases: %d", resultado.Impacto.TotalDeClases)
+	}
+}

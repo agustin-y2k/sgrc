@@ -258,6 +258,14 @@ type ImpactoDeJornada struct {
 	// veinticinco reservas no es lo mismo que veinte sobre trescientas, y la
 	// primera huele a error de carga.
 	TotalDeReservas int
+
+	// ClasesAfectadas y TotalDeClases son lo mismo contado en grupos, que es
+	// como lo cuenta la persona: una clase con cinco máquinas es UNA clase que
+	// se cae, no cinco reservas. Los dos números se muestran —"15 clases (75
+	// equipos)"— porque el primero es la escala que el Admin reconoce y el
+	// segundo es lo que el sistema realmente cancela.
+	ClasesAfectadas int
+	TotalDeClases   int
 }
 
 // HayAlgo mira solo las reservas: los préstamos que se listan salen de ellas,
@@ -364,12 +372,26 @@ func (s *Service) impactoDe(ctx context.Context, bloques []*domain.BloqueJornada
 		return nil, fmt.Errorf("leyendo las reservas que podrían quedar fuera: %w", err)
 	}
 	impacto.TotalDeReservas = len(reservas)
+	todasLasClases := map[string]bool{}
+	clasesAfectadas := map[string]bool{}
 	for _, r := range reservas {
+		// Sin grupo, la reserva es su propia clase. No debería pasar —los
+		// bloqueos, que son los únicos sin grupo, ni siquiera llegan hasta
+		// acá— pero contar cero clases por una fila rara sería peor.
+		clave := r.GrupoID
+		if clave == "" {
+			clave = r.ID
+		}
+		todasLasClases[clave] = true
+
 		dia, _ := domain.DiaYHoraDe(r.Fecha)
 		if !domain.PermiteReserva(bloques, dia, r.HoraInicio, r.HoraFin) {
 			impacto.Reservas = append(impacto.Reservas, r)
+			clasesAfectadas[clave] = true
 		}
 	}
+	impacto.TotalDeClases = len(todasLasClases)
+	impacto.ClasesAfectadas = len(clasesAfectadas)
 
 	// Sin reservas que cancelar no hay préstamo que mirar: la jornada no
 	// restringe las entregas, así que un préstamo por sí solo nunca queda

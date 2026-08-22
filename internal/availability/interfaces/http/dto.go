@@ -73,6 +73,10 @@ type impactoResponse struct {
 	Reservas       []reservaAfectadaResponse  `json:"reservas"`
 	Prestamos      []prestamoAfectadoResponse `json:"prestamos"`
 	TotalAfectadas int                        `json:"totalAfectadas"`
+	// ClasesAfectadas y TotalDeClases son los mismos hechos contados en
+	// clases, que es como los cuenta quien decide.
+	ClasesAfectadas int `json:"clasesAfectadas"`
+	TotalDeClases   int `json:"totalDeClases"`
 	// TotalDeReservas: cuántas hay en total, afectadas o no, para poder leer
 	// el tamaño de lo que se cancela contra el tamaño de lo que hay.
 	TotalDeReservas int `json:"totalDeReservas"`
@@ -88,6 +92,8 @@ func toImpactoResponse(i *application.ImpactoDeJornada) impactoResponse {
 		Reservas:        make([]reservaAfectadaResponse, len(afectadas)),
 		Prestamos:       make([]prestamoAfectadoResponse, len(i.Prestamos)),
 		TotalAfectadas:  len(i.Reservas),
+		ClasesAfectadas: i.ClasesAfectadas,
+		TotalDeClases:   i.TotalDeClases,
 		TotalDeReservas: i.TotalDeReservas,
 	}
 	for n, res := range afectadas {

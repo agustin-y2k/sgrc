@@ -123,6 +123,7 @@ func (a *availabilityReservasAdapter) ReservasFuturas(ctx context.Context, desde
 	for i, d := range detalladas {
 		futuras[i] = availabilityapp.ReservaFutura{
 			ID:         d.Reserva.ID,
+			GrupoID:    textoDe(d.Reserva.ReservaGrupoID),
 			Fecha:      d.Reserva.Fecha,
 			HoraInicio: d.Reserva.HoraInicio,
 			HoraFin:    d.Reserva.HoraFin,

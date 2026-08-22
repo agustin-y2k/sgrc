@@ -30,8 +30,14 @@ export function ImpactoDeLaJornada({
   onConfirmar: () => void
   onCancelar: () => void
 }) {
-  const cuantas = impacto.totalAfectadas
-  const recortada = cuantas > impacto.reservas.length
+  // Se cuenta en CLASES, que es la unidad que reconoce quien decide: una
+  // clase con cinco máquinas es una clase que se cae, no cinco reservas. Los
+  // equipos se muestran al lado porque son lo que el sistema cancela de
+  // verdad, y en un carro entero la diferencia entre los dos números es la
+  // diferencia entre entender el cambio y no.
+  const clases = impacto.clasesAfectadas
+  const equipos = impacto.totalAfectadas
+  const recortada = equipos > impacto.reservas.length
   // Los docentes se cuentan sobre la lista, así que solo se pueden nombrar
   // cuando la lista está completa: con el recorte, "de 12 docentes" sería el
   // número de los primeros cincuenta y no el de los afectados.
@@ -41,17 +47,24 @@ export function ImpactoDeLaJornada({
   // Contra el total, no en absoluto: veinte cancelaciones sobre veinticinco
   // reservas no es lo mismo que veinte sobre trescientas.
   const casiTodo =
-    impacto.totalDeReservas > 0 &&
-    cuantas / impacto.totalDeReservas >= PROPORCION_SOSPECHOSA
+    impacto.totalDeClases > 0 && clases / impacto.totalDeClases >= PROPORCION_SOSPECHOSA
 
   return (
     <div className="border-destructive/50 mb-4 grid gap-3 rounded-md border p-4">
       <div>
         <p className="font-medium">Este cambio deja reservas fuera del horario</p>
-        {cuantas > 0 && (
+        {clases > 0 && (
           <p className="text-destructive mt-1 text-sm">
-            Se van a cancelar <strong>{cuantas}</strong>{" "}
-            {plural(cuantas, "reserva", "reservas")}
+            Se van a cancelar <strong>{clases}</strong>{" "}
+            {plural(clases, "clase", "clases")}
+            {/* Los equipos solo cuando el número difiere: con una máquina por
+                clase, "(3 equipos)" al lado de "3 clases" es ruido. */}
+            {equipos !== clases && (
+              <>
+                {" "}
+                ({equipos} {plural(equipos, "equipo", "equipos")})
+              </>
+            )}
             {docentes > 0 && (
               <>
                 {" "}
@@ -73,7 +86,7 @@ export function ImpactoDeLaJornada({
         </p>
       )}
 
-      {cuantas > 0 && (
+      {equipos > 0 && (
         <div className="max-h-60 overflow-y-auto rounded-md border">
           <ul className="divide-y text-sm">
             {impacto.reservas.map((r) => (
@@ -93,7 +106,7 @@ export function ImpactoDeLaJornada({
           {/* Sin esta línea la lista recortada parece la lista completa. */}
           {recortada && (
             <p className="text-muted-foreground px-3 py-1.5 text-sm">
-              y {cuantas - impacto.reservas.length} más
+              y {equipos - impacto.reservas.length} más
             </p>
           )}
         </div>
@@ -133,8 +146,8 @@ export function ImpactoDeLaJornada({
           disabled={guardando}
           onClick={onConfirmar}
         >
-          {cuantas > 0
-            ? `Guardar y cancelar ${cuantas} ${plural(cuantas, "reserva", "reservas")}`
+          {clases > 0
+            ? `Guardar y cancelar ${clases} ${plural(clases, "clase", "clases")}`
             : "Guardar igual"}
         </Button>
         <Button variant="outline" size="sm" disabled={guardando} onClick={onCancelar}>

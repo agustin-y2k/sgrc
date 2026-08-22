@@ -61,10 +61,16 @@ export type ImpactoDeJornada = {
    */
   reservas: ReservaAfectada[]
   prestamos: PrestamoAfectado[]
-  /** Cuántas se van a cancelar de verdad. */
+  /** Cuántas filas de reserva se van a cancelar (una por equipo). */
   totalAfectadas: number
   /** Cuántas reservas futuras hay en total, afectadas o no. */
   totalDeReservas: number
+  /**
+   * Los mismos hechos contados en clases, que es como los cuenta la persona:
+   * una clase con cinco máquinas es UNA clase que se cae, no cinco reservas.
+   */
+  clasesAfectadas: number
+  totalDeClases: number
 }
 
 /**

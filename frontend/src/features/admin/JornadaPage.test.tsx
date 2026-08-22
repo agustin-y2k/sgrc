@@ -377,6 +377,8 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
           reservas: [],
           prestamos: [],
           totalAfectadas: (impacto.reservas ?? []).length,
+          clasesAfectadas: (impacto.reservas ?? []).length,
+          totalDeClases: 0,
           totalDeReservas: 0,
           ...impacto,
         },
@@ -428,7 +430,7 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
     await achicarElTramo(user)
 
     expect(await screen.findByText(/Se van a cancelar/)).toHaveTextContent(
-      "Se van a cancelar 2 reservas de 2 docentes"
+      "Se van a cancelar 2 clases de 2 docentes"
     )
     // La primera llamada fue sin confirmar, y no hubo una segunda.
     expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(1)
@@ -449,7 +451,9 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
     renderPagina()
     await achicarElTramo(user)
 
-    await user.click(await screen.findByRole("button", { name: /Guardar y cancelar 1/ }))
+    await user.click(
+      await screen.findByRole("button", { name: /Guardar y cancelar 1 clase/ })
+    )
 
     await waitFor(() => {
       expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(2)
@@ -489,18 +493,22 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
     rechazaConImpacto({
       reservas: [reservaAfectada("r1", "Ada"), reservaAfectada("r2", "Grace")],
       totalAfectadas: 200,
+      clasesAfectadas: 40,
+      totalDeClases: 200,
       totalDeReservas: 1000,
     })
     renderPagina()
 
     await achicarElTramo(user)
 
+    // 40 clases de 200 equipos: los dos números, porque el primero es la
+    // escala que el Admin reconoce y el segundo lo que se cancela.
     expect(await screen.findByText(/Se van a cancelar/)).toHaveTextContent(
-      "Se van a cancelar 200 reservas"
+      "Se van a cancelar 40 clases (200 equipos)"
     )
     expect(screen.getByText("y 198 más")).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "Guardar y cancelar 200 reservas" })
+      screen.getByRole("button", { name: "Guardar y cancelar 40 clases" })
     ).toBeInTheDocument()
   })
 
@@ -513,6 +521,7 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
         reservaAfectada("r2", "Grace"),
         reservaAfectada("r3", "Alan"),
       ],
+      totalDeClases: 3,
       totalDeReservas: 3,
     })
     renderPagina()

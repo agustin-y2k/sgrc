@@ -144,6 +144,8 @@ describe("PrimeraJornadaPage", () => {
           ],
           prestamos: [],
           totalAfectadas: 1,
+          clasesAfectadas: 1,
+          totalDeClases: 40,
           totalDeReservas: 40,
         },
       })
@@ -154,7 +156,9 @@ describe("PrimeraJornadaPage", () => {
     await user.click(screen.getByRole("button", { name: "Agregar tramo" }))
     await user.click(screen.getByRole("button", { name: "Guardar la jornada" }))
 
-    await user.click(await screen.findByRole("button", { name: /Guardar y cancelar 1/ }))
+    await user.click(
+      await screen.findByRole("button", { name: /Guardar y cancelar 1 clase/ })
+    )
 
     await waitFor(() => {
       expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(2)
