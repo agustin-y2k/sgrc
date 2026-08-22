@@ -1076,3 +1076,7 @@ type fakeValidadorJornada struct {
 func (f *fakeValidadorJornada) PermiteReserva(_ context.Context, _ time.Time, _, _ time.Duration) (bool, error) {
 	return f.permite, nil
 }
+
+func (f *fakeValidadorJornada) CierreDeLaJornada(_ context.Context, _ time.Time) (application.CierreDeJornada, error) {
+	return application.CierreDeJornada{}, nil
+}

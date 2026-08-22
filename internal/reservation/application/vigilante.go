@@ -26,8 +26,9 @@ type ConfigDeVigilancia struct {
 	// DemoraParaReclamar: cuánto después de la hora de devolución se le
 	// reclama a quien tiene la máquina.
 	DemoraParaReclamar time.Duration
-	// HoraDeCierre (0-23): a partir de qué hora se hace el corte de lo que
-	// quedó afuera.
+	// HoraDeCierre (0-23) es el corte de lo que quedó afuera para una
+	// institución que NO declaró jornada. Cuando la declaró, el corte sale de
+	// ahí: es la hora a la que cierra ese día puntual, más una hora de gracia.
 	HoraDeCierre int
 }
 
@@ -39,19 +40,24 @@ func ConfigDeVigilanciaPorDefecto() ConfigDeVigilancia {
 		GraciaDeRetiro:           domain.GraciaDeRetiroPorDefecto,
 		GraciaTrasEntregaParcial: domain.GraciaTrasEntregaParcialPorDefecto,
 		DemoraParaReclamar:       domain.DemoraParaReclamarPorDefecto,
-		HoraDeCierre:             18,
+		HoraDeCierre:             23,
 	}
 }
 
 type Vigilante struct {
-	repo  Repo
-	bus   eventbus.EventBus
-	ahora func() time.Time
-	cfg   ConfigDeVigilancia
+	repo Repo
+	bus  eventbus.EventBus
+	// validadorJornada dice cuándo cierra la escuela cada día. El corte de
+	// "qué quedó afuera" sale de ahí y no de una hora fija: con una hora fija,
+	// una escuela que cierra a las 22 recibía el aviso a las 18, con las
+	// máquinas legítimamente en clase.
+	validadorJornada ValidadorJornada
+	ahora            func() time.Time
+	cfg              ConfigDeVigilancia
 }
 
-func NewVigilante(repo Repo, bus eventbus.EventBus, ahora func() time.Time, cfg ConfigDeVigilancia) *Vigilante {
-	return &Vigilante{repo: repo, bus: bus, ahora: ahora, cfg: cfg}
+func NewVigilante(repo Repo, bus eventbus.EventBus, validadorJornada ValidadorJornada, ahora func() time.Time, cfg ConfigDeVigilancia) *Vigilante {
+	return &Vigilante{repo: repo, bus: bus, validadorJornada: validadorJornada, ahora: ahora, cfg: cfg}
 }
 
 // ResumenDelBarrido es lo que hizo esta pasada. Se loguea: es la única forma
@@ -417,8 +423,18 @@ func (v *Vigilante) reclamarDevoluciones(ctx context.Context, prestamos []Presta
 // cortarLaJornada —el que arma el aviso y el que marca lo avisado—, y si las
 // condiciones divergieran se avisaría de una máquina sin marcarla: el mismo
 // aviso volvería a salir en el próximo barrido, cada cinco minutos.
-func entraEnElCorte(p *domain.Prestamo, hoy string, ahora time.Time) bool {
-	if p.AvisadoCierrePara != nil && p.AvisadoCierrePara.Format("2006-01-02") == hoy {
+func entraEnElCorte(p *domain.Prestamo, cierre time.Time, ahora time.Time) bool {
+	// Una sola vez por préstamo, y por eso alcanza con mirar si la marca
+	// existe. Antes el aviso se repetía cada día que la máquina siguiera
+	// afuera, así que había que comparar contra la fecha; ahora lo que sostiene
+	// la insistencia es que la máquina aparece en "qué hay afuera" hasta que
+	// alguien la recibe, y eso no se puede tapar con un correo leído.
+	if p.AvisadoCierrePara != nil {
+		return false
+	}
+	// La máquina tiene que haber estado afuera ANTES de que cerrara. Una que
+	// se entregó después del cierre no "quedó" afuera: recién salió.
+	if p.EntregadoEn.After(cierre) {
 		return false
 	}
 	// Una máquina cuya devolución todavía no venció no "quedó afuera": está
@@ -433,16 +449,82 @@ func entraEnElCorte(p *domain.Prestamo, hoy string, ahora time.Time) bool {
 	return true
 }
 
+// momentoDelCorte devuelve cuándo cerró la jornada que acaba de terminar, o
+// false si todavía no corresponde cortar.
+//
+// Se miran hoy y ayer, en ese orden. La jornada de ayer puede terminar hoy de
+// madrugada —una nocturna que declara el lunes de 20:00 a 01:00 cierra su
+// lunes a la 01:00 del martes— y su corte cae una hora después, ya entrado el
+// día siguiente. Hoy primero porque, si los dos cortes ya pasaron, el que
+// vale es el más reciente.
+//
+// Un día sin tramos no tiene corte: nadie dejó una máquina afuera de una
+// escuela que no abrió. Es lo que hace que un viernes a la noche no se
+// repita el sábado ni el domingo.
+//
+// Sin jornada declarada no hay de dónde deducir nada y se cae a la hora
+// configurada, que es el comportamiento que el sistema tenía antes de que la
+// jornada existiera.
+func (v *Vigilante) momentoDelCorte(ctx context.Context, ahora time.Time) (time.Time, bool) {
+	for _, deHaceDias := range []int{0, 1} {
+		fecha := ahora.AddDate(0, 0, -deHaceDias)
+		cierre, err := v.validadorJornada.CierreDeLaJornada(ctx, fecha)
+		if err != nil {
+			log.Printf("barrido: no se pudo leer el cierre de la jornada, se usa la hora configurada: %v", err)
+			return v.corteConfigurado(ahora)
+		}
+		if !cierre.Declarada {
+			return v.corteConfigurado(ahora)
+		}
+		if !cierre.Abre {
+			continue
+		}
+		momento := medianocheDe(fecha).Add(cierre.Fin)
+		if ahora.Before(momento.Add(GraciaDespuesDelCierre)) {
+			continue
+		}
+		// Un cierre de hace más de un día ya no es "el cierre que acaba de
+		// pasar": es historia. Sin este tope, el viernes a las 18 seguiría
+		// siendo un corte válido el sábado a la noche, y una escuela que no
+		// abre el fin de semana estaría cortando igual — que es exactamente lo
+		// que se quiso evitar.
+		if ahora.Sub(momento) >= 24*time.Hour {
+			continue
+		}
+		return momento, true
+	}
+	return time.Time{}, false
+}
+
+// GraciaDespuesDelCierre es cuánto se espera desde que cerró la escuela antes
+// de avisar qué quedó afuera. No es configurable: es el rato en que alguien
+// que se demoró guardando todavía puede aparecer, y una hora alcanza en
+// cualquier institución.
+const GraciaDespuesDelCierre = time.Hour
+
+// corteConfigurado es el camino de la institución que eligió no declarar
+// jornada: la hora de CIERRE_JORNADA, del día de hoy.
+func (v *Vigilante) corteConfigurado(ahora time.Time) (time.Time, bool) {
+	if ahora.Hour() < v.cfg.HoraDeCierre {
+		return time.Time{}, false
+	}
+	return medianocheDe(ahora).Add(time.Duration(v.cfg.HoraDeCierre) * time.Hour), true
+}
+
+func medianocheDe(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+}
+
 // cortarLaJornada avisa qué máquinas quedaron afuera al terminar el día.
 func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoParaVigilar, ahora time.Time) int {
-	if ahora.Hour() < v.cfg.HoraDeCierre {
+	cierre, hayCorte := v.momentoDelCorte(ctx, ahora)
+	if !hayCorte {
 		return 0
 	}
-	hoy := ahora.Format("2006-01-02")
 
 	var afuera []eventbus.EquipoSinDevolverAlCierre
 	for _, p := range prestamos {
-		if !entraEnElCorte(p.Prestamo, hoy, ahora) {
+		if !entraEnElCorte(p.Prestamo, cierre, ahora) {
 			continue
 		}
 		pc := eventbus.EquipoSinDevolverAlCierre{
@@ -461,7 +543,7 @@ func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoPar
 
 	v.bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{Equipos: afuera}})
 	for _, p := range prestamos {
-		if !entraEnElCorte(p.Prestamo, hoy, ahora) {
+		if !entraEnElCorte(p.Prestamo, cierre, ahora) {
 			continue
 		}
 		if err := v.repo.MarcarCierreAvisado(ctx, p.Prestamo.ID, ahora); err != nil {

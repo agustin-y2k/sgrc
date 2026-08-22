@@ -72,6 +72,28 @@ func PermiteReserva(jornada []*BloqueJornada, dia DiaSemana, horaInicio, horaFin
 	return false
 }
 
+// CierreDe dice a qué hora termina la jornada de ese día, medida desde la
+// medianoche del día que nombra al tramo.
+//
+// Pasa de las 24 horas cuando el último tramo cruza: una nocturna que declara
+// el lunes de 20:00 a 01:00 cierra su lunes a las 25h, o sea a la 01:00 del
+// martes. Devolverlo así —y no como "01:00"— es lo que permite sumarle la
+// hora de gracia sin tener que saber de qué día se está hablando.
+//
+// El segundo valor es false cuando ese día la escuela no abre. Con la jornada
+// sin declarar también es false: no hay de dónde deducir un cierre, y suponer
+// uno sería volver a inventar el calendario que este modelo vino a sacar.
+func CierreDe(jornada []*BloqueJornada, dia DiaSemana) (time.Duration, bool) {
+	tramos := tramosDelDia(jornada, dia)
+	if len(tramos) == 0 {
+		return 0, false
+	}
+	// Los tramos vienen ordenados y fusionados, así que el cierre es el fin
+	// del último: una escuela de turno mañana y turno noche cierra cuando
+	// termina la noche, no cuando termina la mañana.
+	return tramos[len(tramos)-1].hasta, true
+}
+
 // duracionDe es el gemelo de reservation/domain.DuracionDe.
 func duracionDe(horaInicio, horaFin time.Duration) time.Duration {
 	if horaFin < horaInicio {

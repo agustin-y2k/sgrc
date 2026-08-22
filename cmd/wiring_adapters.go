@@ -73,6 +73,14 @@ func (a *reservationValidadorJornadaAdapter) PermiteReserva(ctx context.Context,
 	return a.availabilitySvc.PermiteReserva(ctx, fecha, horaInicio, horaFin)
 }
 
+func (a *reservationValidadorJornadaAdapter) CierreDeLaJornada(ctx context.Context, fecha time.Time) (reservationapp.CierreDeJornada, error) {
+	declarada, abre, fin, err := a.availabilitySvc.CierreDeLaJornada(ctx, fecha)
+	if err != nil {
+		return reservationapp.CierreDeJornada{}, err
+	}
+	return reservationapp.CierreDeJornada{Declarada: declarada, Abre: abre, Fin: fin}, nil
+}
+
 // availabilityReservasAdapter satisface
 // availability/application.ReservasDeLaInstitucion envolviendo
 // reservation/application.Service.

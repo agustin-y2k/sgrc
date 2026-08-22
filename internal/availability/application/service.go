@@ -391,3 +391,24 @@ func (s *Service) PermiteReserva(ctx context.Context, fecha time.Time, horaInici
 	dia, _ := domain.DiaYHoraDe(fecha)
 	return domain.PermiteReserva(jornada, dia, horaInicio, horaFin), nil
 }
+
+// CierreDeLaJornada dice cuándo cierra la escuela ese día, para que el
+// barrido sepa a partir de cuándo una máquina que sigue afuera "quedó"
+// afuera.
+//
+// Devuelve los tres estados por separado —si hay jornada declarada, si ese
+// día abre, y a qué hora cierra— porque quien pregunta necesita distinguir
+// "no abre" de "no sabemos": en el primer caso no hay corte, en el segundo
+// hay que caer a lo que diga la configuración.
+func (s *Service) CierreDeLaJornada(ctx context.Context, fecha time.Time) (declarada bool, abre bool, fin time.Duration, err error) {
+	jornada, err := s.repo.ListarJornada(ctx)
+	if err != nil {
+		return false, false, 0, fmt.Errorf("leyendo la jornada de la institución: %w", err)
+	}
+	if len(jornada) == 0 {
+		return false, false, 0, nil
+	}
+	dia, _ := domain.DiaYHoraDe(fecha)
+	cierre, abre := domain.CierreDe(jornada, dia)
+	return true, abre, cierre, nil
+}

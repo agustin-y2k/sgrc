@@ -522,7 +522,7 @@ func main() {
 	inventoryHandler := inventoryhttp.NewHandler(inventorySvc, auditor)
 
 	// El barrido de reservas y entregas (RF-08.10 a RF-08.13).
-	vigilante := reservationapp.NewVigilante(reservationRepo, bus, ahora, configDeVigilancia())
+	vigilante := reservationapp.NewVigilante(reservationRepo, bus, &reservationValidadorJornadaAdapter{availabilitySvc: availabilitySvc}, ahora, configDeVigilancia())
 
 	// El avisador de licencias es un tipo aparte del Service porque no lo
 	// dispara un request sino un reloj (ver el job más abajo).

@@ -2605,10 +2605,21 @@ func TestPedirLiberacionDeReserva_FranjaYaEmpezada(t *testing.T) {
 }
 
 // fakeValidadorJornada hace de la jornada declarada por la institución.
+//
+// `cierre` en nil = la institución no declaró jornada, que es el caso de casi
+// todos estos tests: ahí el corte del barrido cae a la hora configurada.
 type fakeValidadorJornada struct {
 	permite bool
+	cierre  func(fecha time.Time) CierreDeJornada
 }
 
 func (f *fakeValidadorJornada) PermiteReserva(_ context.Context, _ time.Time, _, _ time.Duration) (bool, error) {
 	return f.permite, nil
+}
+
+func (f *fakeValidadorJornada) CierreDeLaJornada(_ context.Context, fecha time.Time) (CierreDeJornada, error) {
+	if f.cierre == nil {
+		return CierreDeJornada{}, nil
+	}
+	return f.cierre(fecha), nil
 }
