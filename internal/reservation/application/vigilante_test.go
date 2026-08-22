@@ -588,6 +588,45 @@ func TestBarrer_CorteDeJornada(t *testing.T) {
 	}
 }
 
+// Una máquina que salió para una clase que termina DESPUÉS del cierre no
+// "quedó afuera": está en uso. Antes el corte las contaba a todas, así que el
+// docente de la próxima reserva recibía un "tu computadora puede no estar"
+// que era falso — y con el corte saliendo una sola vez, ese falso positivo se
+// come el único aviso del préstamo.
+func TestBarrer_ElCorteNoCuentaLaMaquinaQueTodaviaEstaEnHora(t *testing.T) {
+	repo := nuevoFakeRepo()
+	devuelveALas19 := aLas(19, 0)
+	prestamoVencido(t, repo, "pr1", "pc1", devuelveALas19)
+	bus := &busEspia{}
+
+	// El cierre es a las 18, pero la clase va hasta las 19.
+	if r := barrer(t, vigilanteALas(repo, bus, 18, 0)); r.AvisosDeCierre != 0 {
+		t.Fatalf("la máquina todavía está en hora, no quedó afuera: %+v", r)
+	}
+
+	// Pasada la hora de devolución sí corresponde, y ahí el aviso es cierto.
+	if r := barrer(t, vigilanteALas(repo, bus, 19, 30)); r.AvisosDeCierre != 1 {
+		t.Errorf("vencida la devolución el corte tiene que salir: %+v", r)
+	}
+}
+
+// La contracara: un préstamo espontáneo no tiene hora pactada y por eso
+// ExcedioLaDemora nunca lo reclama. Si el corte tampoco lo tomara, una
+// máquina prestada en el mostrador podría no generar un solo aviso nunca.
+func TestBarrer_ElCorteSiCuentaAlPrestamoSinHoraPactada(t *testing.T) {
+	repo := nuevoFakeRepo()
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	repo.prestamos[p.ID] = p
+	bus := &busEspia{}
+
+	if r := barrer(t, vigilanteALas(repo, bus, 18, 0)); r.AvisosDeCierre != 1 {
+		t.Errorf("sin hora pactada el corte es el único aviso posible: %+v", r)
+	}
+}
+
 func TestBarrer_ElCorteSaleUnaVezPorDiaYSeRepiteAlSiguiente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))

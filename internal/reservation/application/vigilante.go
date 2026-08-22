@@ -410,6 +410,29 @@ func (v *Vigilante) reclamarDevoluciones(ctx context.Context, prestamos []Presta
 
 // ── 5. El corte de fin de jornada ───────────────────────────────────────
 
+// entraEnElCorte dice si ese préstamo tiene que aparecer en el corte de esta
+// jornada.
+//
+// Vive en una función porque se consulta en los DOS recorridos de
+// cortarLaJornada —el que arma el aviso y el que marca lo avisado—, y si las
+// condiciones divergieran se avisaría de una máquina sin marcarla: el mismo
+// aviso volvería a salir en el próximo barrido, cada cinco minutos.
+func entraEnElCorte(p *domain.Prestamo, hoy string, ahora time.Time) bool {
+	if p.AvisadoCierrePara != nil && p.AvisadoCierrePara.Format("2006-01-02") == hoy {
+		return false
+	}
+	// Una máquina cuya devolución todavía no venció no "quedó afuera": está
+	// en uso legítimo. Es el caso de la clase que termina más tarde que el
+	// cierre, y sin este filtro el docente de la próxima reserva recibe un
+	// "tu computadora puede no estar" que es falso. Sin hora pactada no hay
+	// nada que esperar, y ahí el corte sí corresponde: es el único aviso que
+	// un préstamo espontáneo va a generar (ExcedioLaDemora no lo reclama).
+	if p.DevolucionEstimada != nil && ahora.Before(*p.DevolucionEstimada) {
+		return false
+	}
+	return true
+}
+
 // cortarLaJornada avisa qué máquinas quedaron afuera al terminar el día.
 func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoParaVigilar, ahora time.Time) int {
 	if ahora.Hour() < v.cfg.HoraDeCierre {
@@ -419,7 +442,7 @@ func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoPar
 
 	var afuera []eventbus.EquipoSinDevolverAlCierre
 	for _, p := range prestamos {
-		if p.Prestamo.AvisadoCierrePara != nil && p.Prestamo.AvisadoCierrePara.Format("2006-01-02") == hoy {
+		if !entraEnElCorte(p.Prestamo, hoy, ahora) {
 			continue
 		}
 		pc := eventbus.EquipoSinDevolverAlCierre{
@@ -438,7 +461,7 @@ func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoPar
 
 	v.bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{Equipos: afuera}})
 	for _, p := range prestamos {
-		if p.Prestamo.AvisadoCierrePara != nil && p.Prestamo.AvisadoCierrePara.Format("2006-01-02") == hoy {
+		if !entraEnElCorte(p.Prestamo, hoy, ahora) {
 			continue
 		}
 		if err := v.repo.MarcarCierreAvisado(ctx, p.Prestamo.ID, ahora); err != nil {
