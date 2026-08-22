@@ -32,7 +32,6 @@ function bloque(
 function jornadaCargada(bloques: BloqueHorario[]) {
   vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({
     data: bloques,
-    definida: bloques.length > 0,
   })
 }
 
@@ -87,7 +86,6 @@ describe("JornadaPage", () => {
     jornadaCargada([])
     vi.mocked(disponibilidadApi.reemplazarJornada).mockResolvedValue({
       data: [],
-      definida: true,
     })
   })
 
@@ -403,7 +401,6 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
     jornadaCargada([bloque("LUNES", "08:00", "18:00")])
     vi.mocked(disponibilidadApi.reemplazarJornada).mockResolvedValue({
       data: [],
-      definida: true,
     })
   })
 
@@ -445,7 +442,6 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
     })
     vi.mocked(disponibilidadApi.reemplazarJornada).mockResolvedValue({
       data: [],
-      definida: true,
       reservasCanceladas: 1,
     })
     renderPagina()

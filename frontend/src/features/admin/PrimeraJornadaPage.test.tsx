@@ -1,10 +1,20 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { MemoryRouter } from "react-router"
 
 import * as disponibilidadApi from "@/features/disponibilidad/api"
+import { useAuth } from "@/features/auth/AuthContext"
+import {
+  olvidarPedidoDescartado,
+  pedidoDescartado,
+} from "@/features/admin/pedidoDeJornada"
 import { PrimeraJornadaPage } from "@/features/admin/PrimeraJornadaPage"
 import { ApiError } from "@/lib/api-client"
+
+vi.mock("@/features/auth/AuthContext")
+
+const logoutEspia = vi.fn()
 
 vi.mock("@/features/disponibilidad/api", async (original) => ({
   // JORNADA_KEY no es una llamada: es la clave de react-query.
@@ -13,10 +23,22 @@ vi.mock("@/features/disponibilidad/api", async (original) => ({
 }))
 
 function renderPagina() {
+  vi.mocked(useAuth).mockReturnValue({
+    user: null,
+    isLoading: false,
+    login: vi.fn(),
+    logout: logoutEspia,
+    loginConGoogle: vi.fn(),
+    errorDeSesion: null,
+    motivoDeCierre: null,
+    refetchUser: vi.fn(),
+  })
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
-      <PrimeraJornadaPage />
+      <MemoryRouter>
+        <PrimeraJornadaPage />
+      </MemoryRouter>
     </QueryClientProvider>
   )
 }
@@ -24,9 +46,9 @@ function renderPagina() {
 describe("PrimeraJornadaPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    olvidarPedidoDescartado()
     vi.mocked(disponibilidadApi.reemplazarJornada).mockResolvedValue({
       data: [],
-      definida: true,
     })
   })
 
@@ -82,18 +104,27 @@ describe("PrimeraJornadaPage", () => {
     })
   })
 
-  // La salida sin declarar nada: quien está evaluando el sistema no sabe
-  // todavía qué horario tiene la escuela, y obligarlo a inventar uno es
-  // producir el error que esta pantalla vino a evitar.
-  it("dejarla libre guarda una jornada vacía", async () => {
+  // Postergar no guarda nada: una jornada vacía YA es el estado actual, así
+  // que no hay qué escribir. Solo se calla el pedido por esta sesión.
+  it("dejarla libre no guarda nada y solo posterga el pedido", async () => {
     const user = userEvent.setup()
     renderPagina()
 
     await user.click(screen.getByRole("button", { name: "Dejarla libre por ahora" }))
 
-    await waitFor(() => {
-      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledWith([], false)
-    })
+    expect(disponibilidadApi.reemplazarJornada).not.toHaveBeenCalled()
+    expect(pedidoDescartado()).toBe(true)
+  })
+
+  // Es la única pantalla del sistema fuera del layout: sin este botón, quien
+  // entró con la cuenta equivocada no tendría ninguna forma de salir.
+  it("se puede cerrar sesión desde acá", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(screen.getByRole("button", { name: "Cerrar sesión" }))
+
+    expect(logoutEspia).toHaveBeenCalled()
   })
 
   // Guardar una jornada de cero tramos por accidente es lo mismo que dejarla

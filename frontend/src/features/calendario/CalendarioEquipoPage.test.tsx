@@ -29,7 +29,6 @@ function jornadaAbiertaLos(dias: DiaSemana[]) {
   }))
   vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({
     data,
-    definida: true,
   })
 }
 
@@ -91,7 +90,6 @@ describe("CalendarioEquipoPage", () => {
     // instalación nueva: los siete días se dibujan.
     vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({
       data: [],
-      definida: false,
     })
   })
 

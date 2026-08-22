@@ -26,8 +26,7 @@ import (
 // puede importar los tipos no exportados de otro paquete de test.
 
 type fakeRepo struct {
-	jornada         map[string]*domain.BloqueJornada
-	jornadaDefinida bool
+	jornada map[string]*domain.BloqueJornada
 
 	bloques     map[string]*domain.BloqueHorario
 	excepciones map[string]*domain.Excepcion
@@ -593,9 +592,6 @@ func TestHTTP_ReemplazarJornada_200(t *testing.T) {
 			t.Error("lo que no viene en el PUT se borra")
 		}
 	}
-	if !repo.jornadaDefinida {
-		t.Error("guardar la jornada es decidirla")
-	}
 }
 
 // Un cuerpo sin tramos es la institución eligiendo no restringir nada. No es
@@ -617,9 +613,6 @@ func TestHTTP_ReemplazarJornada_Vacia_200(t *testing.T) {
 	}
 	if len(repo.jornada) != 0 {
 		t.Errorf("la jornada tenía que quedar vacía, quedó %+v", repo.jornada)
-	}
-	if !repo.jornadaDefinida {
-		t.Error("dejarla libre también es decidir, y por eso no se vuelve a preguntar")
 	}
 }
 
@@ -914,38 +907,6 @@ func TestHTTP_ReemplazarJornada_CascadaAMedias_LoDiceYLoAudita(t *testing.T) {
 	}
 }
 
-// El GET lleva la bandera al lado de los tramos: sin ella, una lista vacía no
-// dice si la escuela todavía no declaró su jornada o si eligió dejarla libre.
-func TestHTTP_Jornada_InformaSiYaFueDefinida(t *testing.T) {
-	repo := nuevoFakeRepo()
-	app := nuevaAppDeTest(repo)
-
-	pedir := func() map[string]any {
-		t.Helper()
-		req := httptest.NewRequest("GET", "/api/jornada", nil)
-		req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("error inesperado: %v", err)
-		}
-		var cuerpo map[string]any
-		if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
-			t.Fatalf("respuesta ilegible: %v", err)
-		}
-		return cuerpo
-	}
-
-	if definida := pedir()["definida"]; definida != false {
-		t.Errorf("una instalación nueva todavía no decidió: %v", definida)
-	}
-
-	repo.jornadaDefinida = true
-
-	if definida := pedir()["definida"]; definida != true {
-		t.Errorf("ya decidió: %v", definida)
-	}
-}
-
 func (r *fakeRepo) ListarJornada(_ context.Context) ([]*domain.BloqueJornada, error) {
 	var todos []*domain.BloqueJornada
 	for _, b := range r.jornada {
@@ -965,12 +926,7 @@ func (r *fakeRepo) ReemplazarJornada(_ context.Context, bloques []*domain.Bloque
 	for _, b := range bloques {
 		r.jornada[b.ID] = b
 	}
-	r.jornadaDefinida = true
 	return nil
-}
-
-func (r *fakeRepo) JornadaDefinida(_ context.Context) (bool, error) {
-	return r.jornadaDefinida, nil
 }
 
 // fakeReservas es el doble del puerto hacia reservation. Vacío = no hay

@@ -4,6 +4,10 @@ import { MemoryRouter, Route, Routes } from "react-router"
 
 import { useAuth } from "@/features/auth/AuthContext"
 import type { Usuario } from "@/features/auth/types"
+import {
+  descartarPedido,
+  olvidarPedidoDescartado,
+} from "@/features/admin/pedidoDeJornada"
 import * as disponibilidadApi from "@/features/disponibilidad/api"
 import {
   ProtectedRoute,
@@ -31,11 +35,12 @@ const adminMock: Usuario = {
   debeCambiarPassword: false,
 }
 
-/** Si la institución ya decidió su jornada, con o sin tramos cargados. */
-function jornadaDefinida(definida: boolean) {
+/** La escuela declaró (o no) al menos un tramo. */
+function conJornada(declarada: boolean) {
   vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({
-    data: [],
-    definida,
+    data: declarada
+      ? [{ id: "j1", diaSemana: "LUNES", horaInicio: "08:00", horaFin: "18:00" }]
+      : [],
   })
 }
 
@@ -91,7 +96,9 @@ describe("ProtectedRoute", () => {
     // Las llamadas se cuentan por test: sin limpiar, el "no se le pregunta al
     // docente" vería las consultas que hicieron los tests de Admin de arriba.
     vi.clearAllMocks()
-    jornadaDefinida(true)
+    // Cada test arranca sin el pedido postergado: es una sesión nueva.
+    olvidarPedidoDescartado()
+    conJornada(true)
   })
 
   afterEach(() => {
@@ -136,18 +143,16 @@ describe("ProtectedRoute", () => {
 
   // ── El portón de la jornada ──────────────────────────────────────────
 
-  it("un Admin que entra sin jornada decidida va a declararla", async () => {
-    jornadaDefinida(false)
+  it("un Admin que entra sin jornada declarada va a declararla", async () => {
+    conJornada(false)
     mockAuth({ user: adminMock })
     renderProtected("/")
 
     expect(await screen.findByText("Declarar la primera jornada")).toBeInTheDocument()
   })
 
-  // Elegir dejarla libre también es decidir: la jornada llega vacía igual que
-  // en una instalación nueva, y la diferencia la hace la bandera.
-  it("con la jornada ya decidida no se vuelve a preguntar aunque esté vacía", async () => {
-    jornadaDefinida(true)
+  it("con la jornada declarada no se pregunta nada", async () => {
+    conJornada(true)
     mockAuth({ user: adminMock })
     renderProtected("/")
 
@@ -155,10 +160,33 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByText("Declarar la primera jornada")).not.toBeInTheDocument()
   })
 
+  // La molestia deliberada: sin horario declarado se puede trabajar, pero el
+  // pedido vuelve. Postergarlo vale para esta sesión y nada más.
+  it("postergado, deja pasar por el resto de la sesión", async () => {
+    conJornada(false)
+    mockAuth({ user: adminMock })
+    descartarPedido()
+
+    renderProtected("/")
+
+    expect(await screen.findByText("Home protegido")).toBeInTheDocument()
+  })
+
+  it("cerrar sesión vuelve a poner el pedido para el próximo inicio", async () => {
+    conJornada(false)
+    mockAuth({ user: adminMock })
+    descartarPedido()
+    olvidarPedidoDescartado()
+
+    renderProtected("/")
+
+    expect(await screen.findByText("Declarar la primera jornada")).toBeInTheDocument()
+  })
+
   // Un docente no puede declarar la jornada, así que bloquearlo dejaría a la
   // escuela entera esperando a que entre un Admin.
   it("a un docente no se le pregunta por la jornada", async () => {
-    jornadaDefinida(false)
+    conJornada(false)
     mockAuth({ user: usuarioMock })
     renderProtected("/")
 
@@ -169,7 +197,7 @@ describe("ProtectedRoute", () => {
   // Los dos portones en fila, y en este orden: la contraseña es de la persona
   // y la jornada es de la escuela.
   it("la contraseña temporal se cambia antes de declarar la jornada", async () => {
-    jornadaDefinida(false)
+    conJornada(false)
     mockAuth({ user: { ...adminMock, debeCambiarPassword: true } })
     renderProtected("/")
 

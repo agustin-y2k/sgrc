@@ -11,6 +11,7 @@ import {
 import * as authApi from "@/features/auth/api"
 import type { LoginResponse, Usuario } from "@/features/auth/types"
 import { ApiError, registrarManejadorDeSesionRechazada } from "@/lib/api-client"
+import { olvidarPedidoDescartado } from "@/features/admin/pedidoDeJornada"
 import { clearToken, getToken, setToken } from "@/lib/token-store"
 
 type AuthContextValue = {
@@ -150,6 +151,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     clearToken()
+    // El pedido de declarar la jornada vuelve en el próximo inicio: haberlo
+    // postergado vale para esta sesión, no para la cuenta.
+    olvidarPedidoDescartado()
     setUser(null)
     setErrorDeSesion(null)
     // Salir por decisión propia no necesita explicación en el login.

@@ -336,8 +336,8 @@ func (r *PostgresRepo) ListarJornada(ctx context.Context) ([]*domain.BloqueJorna
 	return resultado, errorDeFilas(rows)
 }
 
-// ReemplazarJornada borra la jornada vieja, escribe la nueva y marca que la
-// institución ya decidió, en una sola transacción.
+// ReemplazarJornada borra la jornada vieja y escribe la nueva, en una sola
+// transacción.
 //
 // El borrar-y-escribir no es pereza frente a un diff: los tramos no tienen
 // identidad propia para el que los mira —nadie dice "el tramo tal"—, así que
@@ -371,26 +371,7 @@ func (r *PostgresRepo) ReemplazarJornada(ctx context.Context, bloques []*domain.
 		}
 	}
 
-	// La marca viaja en la misma transacción que los tramos: si se guardara
-	// aparte y fallara, la escuela habría declarado su jornada y el sistema
-	// seguiría preguntándole cuál es.
-	if _, err := tx.Exec(ctx,
-		`UPDATE configuracion_institucion SET jornada_definida = TRUE`); err != nil {
-		return fmt.Errorf("marcando la jornada como definida: %w", err)
-	}
-
 	return tx.Commit(ctx)
-}
-
-// JornadaDefinida lee la bandera de la fila única de configuración.
-func (r *PostgresRepo) JornadaDefinida(ctx context.Context) (bool, error) {
-	var definida bool
-	err := r.pool.QueryRow(ctx,
-		`SELECT jornada_definida FROM configuracion_institucion`).Scan(&definida)
-	if err != nil {
-		return false, fmt.Errorf("leyendo si la jornada ya fue definida: %w", err)
-	}
-	return definida, nil
 }
 
 func escanearBloqueJornada(row pgx.Row) (*domain.BloqueJornada, error) {

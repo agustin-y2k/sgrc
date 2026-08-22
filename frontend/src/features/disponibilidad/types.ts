@@ -15,14 +15,13 @@ export type TramoDeJornada = {
 }
 
 /**
- * La jornada de la institución con su bandera al lado.
+ * La jornada de la institución.
  *
- * `definida` es lo que separa "todavía no la declararon" de "eligieron
- * dejarla libre": las dos llegan con `data` vacío y piden cosas distintas —a
- * la primera hay que preguntarle cuál es su jornada, a la segunda no.
+ * `data` vacío significa una sola cosa: no hay horario declarado y no hay
+ * restricción. Al Admin se le sigue pidiendo declararlo en cada inicio de
+ * sesión mientras siga vacío.
  */
 export type RespuestaJornada = RespuestaLista<BloqueHorario> & {
-  definida: boolean
   /** Cuántas reservas se cancelaron al guardar, si hubo alguna. */
   reservasCanceladas?: number
 }

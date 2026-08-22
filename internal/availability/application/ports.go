@@ -46,24 +46,16 @@ type Repo interface {
 	// ListarJornada devuelve TODOS los bloques, de todos los días.
 	ListarJornada(ctx context.Context) ([]*domain.BloqueJornada, error)
 
-	// ReemplazarJornada deja la jornada exactamente igual a `bloques` y marca
-	// que la institución ya la decidió, TODO en una transacción.
+	// ReemplazarJornada deja la jornada exactamente igual a `bloques`, en una
+	// transacción.
 	//
 	// Se reemplaza entera y no tramo por tramo porque la jornada es una sola
 	// decisión de siete días: mientras se aplicaba de a partes, quedaba a la
 	// vista una jornada a medias que PermiteReserva ya estaba usando para
 	// aceptar o rechazar reservas.
 	//
-	// Una lista vacía es válida y significativa: es la institución eligiendo
-	// no restringir nada. Por eso la marca va junto con los bloques y no
-	// depende de que haya alguno.
+	// Una lista vacía es válida: deja a la escuela sin restricción de horario.
 	ReemplazarJornada(ctx context.Context, bloques []*domain.BloqueJornada) error
-
-	// JornadaDefinida dice si la institución ya decidió su jornada, sea
-	// declarando tramos o eligiendo dejarla libre. Distingue las dos
-	// situaciones que antes se veían igual —la lista vacía—: a la que todavía
-	// no decidió hay que preguntarle, a la otra no.
-	JornadaDefinida(ctx context.Context) (bool, error)
 }
 
 // ── Lo que un cambio de jornada deja afuera ──────────────────────────────

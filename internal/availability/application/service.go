@@ -201,14 +201,6 @@ func (s *Service) Jornada(ctx context.Context) ([]*domain.BloqueJornada, error) 
 	return s.repo.ListarJornada(ctx)
 }
 
-// JornadaDefinida dice si la institución ya decidió su jornada. Una lista de
-// tramos vacía no alcanza para saberlo: puede ser que todavía no la declaren
-// o que hayan elegido no restringir nada, y a una hay que preguntarle y a la
-// otra no.
-func (s *Service) JornadaDefinida(ctx context.Context) (bool, error) {
-	return s.repo.JornadaDefinida(ctx)
-}
-
 // TramoDeJornada es un tramo pedido, todavía sin ID: los IDs los pone el
 // servicio porque la jornada se reemplaza entera y las filas viejas se van.
 type TramoDeJornada struct {
@@ -286,17 +278,16 @@ type ResultadoDeJornada struct {
 	ReservasCanceladas int
 }
 
-// ReemplazarJornada deja la jornada exactamente igual a los tramos pedidos y
-// marca que la institución ya decidió.
+// ReemplazarJornada deja la jornada exactamente igual a los tramos pedidos.
 //
 // Reemplazar entera —en vez de sumar, editar y borrar de a un tramo— es lo
 // que hace que la jornada se pueda validar como el conjunto que es: los
 // solapes se buscan sobre lo que va a quedar, no sobre un estado intermedio
 // que depende del orden en que se hayan mandado los cambios.
 //
-// Una lista vacía es válida: es la institución diciendo que no quiere
-// restringir días ni horarios. Queda igual que antes para reservar —sin
-// tramos no hay restricción— pero ya no se le vuelve a preguntar.
+// Una lista vacía es válida: es la institución sin restricción de días ni
+// horarios. Se le va a seguir pidiendo que declare una en cada inicio de
+// sesión de un Admin, que es la molestia deliberada de operar sin horario.
 func (s *Service) ReemplazarJornada(ctx context.Context, tramos []TramoDeJornada, confirmado bool) (*ResultadoDeJornada, error) {
 	if len(tramos) > MaxTramosDeJornada {
 		return nil, ErrDemasiadosTramos

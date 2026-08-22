@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/features/auth/AuthContext"
+import { pedidoDescartado } from "@/features/admin/pedidoDeJornada"
 import * as disponibilidadApi from "@/features/disponibilidad/api"
 import { JORNADA_KEY } from "@/features/disponibilidad/api"
 
@@ -57,19 +58,24 @@ export function ProtectedRoute() {
     return <Navigate to="/cambiar-password" replace />
   }
 
-  // El Admin declara la jornada de la institución antes de hacer nada más.
+  // El Admin declara la jornada de la escuela antes de hacer nada más, y se
+  // le vuelve a pedir en cada inicio de sesión mientras no haya declarado
+  // ningún tramo.
   //
-  // Se exige `definida === false` y no "la lista está vacía": son dos cosas
-  // distintas y confundirlas volvería a preguntarle para siempre a la escuela
-  // que ya eligió no restringir nada.
+  // Es una molestia a propósito. Quien está probando el sistema puede
+  // trabajar sin horario —no hay restricción y todo funciona— pero postergar
+  // la decisión no la hace desaparecer: es la única de la que dependen las
+  // reservas de toda la escuela, y descubrirla tarde obliga a cancelar
+  // clases ya cargadas.
   //
   // Mientras la consulta no respondió, `jornada` es undefined y no se
-  // bloquea. Es a propósito: si falla, lo peor que pasa es que no se pregunte
-  // esta vez, mientras que bloquear ante la duda dejaría al Admin sin sistema
-  // por un error de red.
+  // bloquea. Si falla, lo peor que pasa es que no se pregunte esta vez;
+  // bloquear ante la duda dejaría al Admin sin sistema por un corte de red.
+  const sinJornada = jornada !== undefined && jornada.data.length === 0
   if (
     esAdminEnCondiciones &&
-    jornada?.definida === false &&
+    sinJornada &&
+    !pedidoDescartado() &&
     location.pathname !== RUTA_PRIMERA_JORNADA
   ) {
     return <Navigate to={RUTA_PRIMERA_JORNADA} replace />

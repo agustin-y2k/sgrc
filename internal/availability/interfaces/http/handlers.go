@@ -245,26 +245,20 @@ const accionJornadaCambiada = "JORNADA_CAMBIADA"
 
 // GET /api/jornada — la jornada declarada por la institución.
 //
-// `definida` viaja al lado de los tramos y no en un endpoint aparte porque
-// quien pregunta por la jornada casi siempre necesita las dos cosas, y
-// separarlas obligaría a dos llamadas para pintar una sola pantalla. Sin él,
-// una lista vacía es ambigua: no se sabe si la escuela todavía no declaró su
-// jornada o si eligió no restringir nada.
+// La lista vacía significa una sola cosa: la escuela no declaró horario y no
+// hay restricción. Que al Admin se le siga pidiendo declararla mientras siga
+// vacía se decide del lado del cliente —una vez por sesión— así que acá no
+// hay nada que recordar.
 func (h *Handler) Jornada(c *fiber.Ctx) error {
 	bloques, err := h.svc.Jornada(c.UserContext())
 	if err != nil {
 		return mapearError(err)
 	}
-	definida, err := h.svc.JornadaDefinida(c.UserContext())
-	if err != nil {
-		return mapearError(err)
-	}
-
 	data := make([]bloqueResponse, len(bloques))
 	for i, b := range bloques {
 		data[i] = toBloqueJornadaResponse(b)
 	}
-	return c.JSON(fiber.Map{"data": data, "definida": definida})
+	return c.JSON(fiber.Map{"data": data})
 }
 
 // PUT /api/jornada (Admin) — reemplaza la jornada entera.
@@ -348,7 +342,6 @@ func (h *Handler) ReemplazarJornada(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{
 		"data":               data,
-		"definida":           true,
 		"reservasCanceladas": resultado.ReservasCanceladas,
 	})
 }

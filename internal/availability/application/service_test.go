@@ -19,8 +19,7 @@ import (
 // "no existe".
 
 type fakeRepo struct {
-	jornada         map[string]*domain.BloqueJornada
-	jornadaDefinida bool
+	jornada map[string]*domain.BloqueJornada
 
 	bloques     map[string]*domain.BloqueHorario
 	excepciones map[string]*domain.Excepcion // clave: usuarioID + "|" + fecha AAAA-MM-DD
@@ -686,31 +685,23 @@ func TestReemplazarJornada_LoQueNoVieneSeBorra(t *testing.T) {
 	}
 }
 
-// Una jornada vacía no es un cuerpo incompleto: es la institución eligiendo
-// no restringir nada. Se distingue de "todavía no decidieron" por la marca,
-// que es justamente lo que evita volver a preguntarle.
-func TestReemplazarJornada_VaciaMarcaQueYaDecidieron(t *testing.T) {
+// Una jornada vacía no es un cuerpo incompleto: es la institución sin
+// restricción de horario. Se guarda igual y se sigue pudiendo reservar
+// cualquier día y a cualquier hora.
+func TestReemplazarJornada_VaciaSeGuardaYNoRestringe(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := NewService(repo, &fakeListadorAdmins{}, &fakeReservas{}, idSecuencial(), ahoraFija(time.Now()))
 	ctx := context.Background()
 
-	if definida, _ := svc.JornadaDefinida(ctx); definida {
-		t.Fatal("una instalación nueva todavía no decidió nada")
-	}
-
 	if _, err := svc.ReemplazarJornada(ctx, nil, false); err != nil {
 		t.Fatalf("dejarla libre es válido: %v", err)
 	}
+	if len(repo.jornada) != 0 {
+		t.Errorf("la jornada tenía que quedar vacía: %+v", repo.jornada)
+	}
 
-	definida, err := svc.JornadaDefinida(ctx)
-	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
-	}
-	if !definida {
-		t.Error("elegir dejarla libre también es decidir")
-	}
-	// Y sin tramos se sigue pudiendo reservar cualquier día y hora.
-	permite, err := svc.PermiteReserva(ctx, time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC), 3*time.Hour, 5*time.Hour)
+	permite, err := svc.PermiteReserva(ctx,
+		time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC), 3*time.Hour, 5*time.Hour)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -738,12 +729,7 @@ func (r *fakeRepo) ReemplazarJornada(_ context.Context, bloques []*domain.Bloque
 	for _, b := range bloques {
 		r.jornada[b.ID] = b
 	}
-	r.jornadaDefinida = true
 	return nil
-}
-
-func (r *fakeRepo) JornadaDefinida(_ context.Context) (bool, error) {
-	return r.jornadaDefinida, nil
 }
 
 // ── El puerto hacia reservation ─────────────────────────────────────────

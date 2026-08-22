@@ -1,9 +1,11 @@
 import { useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useNavigate } from "react-router"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { useAuth } from "@/features/auth/AuthContext"
 import * as disponibilidadApi from "@/features/disponibilidad/api"
 import { JORNADA_KEY } from "@/features/disponibilidad/api"
 import { impactoDelError } from "@/features/disponibilidad/types"
@@ -16,6 +18,7 @@ import {
 } from "@/features/admin/CamposDeTramo"
 import type { FormTramo } from "@/features/admin/CamposDeTramo"
 import { etiquetaDeDias, expandirDias } from "@/features/admin/jornada"
+import { descartarPedido } from "@/features/admin/pedidoDeJornada"
 import { getErrorMessage } from "@/lib/api-client"
 
 /**
@@ -34,6 +37,8 @@ import { getErrorMessage } from "@/lib/api-client"
  */
 export function PrimeraJornadaPage() {
   const queryClient = useQueryClient()
+  const { logout } = useAuth()
+  const navigate = useNavigate()
   const [tramos, setTramos] = useState<TramoDeJornada[]>([])
   const [nuevo, setNuevo] = useState<FormTramo>(TRAMO_VACIO)
   const [fallo, setFallo] = useState<string | null>(null)
@@ -80,6 +85,14 @@ export function PrimeraJornadaPage() {
 
   function proponer(jornada: TramoDeJornada[]) {
     guardar.mutate({ jornada, confirmado: false })
+  }
+
+  // Postergar no guarda nada: no hay jornada que declarar y una jornada vacía
+  // ya es el estado actual. Solo se calla el pedido por esta sesión, y en el
+  // próximo inicio vuelve.
+  function postergar() {
+    descartarPedido()
+    navigate("/", { replace: true })
   }
 
   const motivoNuevo = motivoParaNoGuardar(nuevo)
@@ -195,16 +208,27 @@ export function PrimeraJornadaPage() {
             todas las letras: quien está probando el sistema no sabe todavía
             qué horario tiene la escuela, y obligarlo a inventar uno es
             producir el error que esta pantalla vino a evitar. */}
-        <Button variant="ghost" disabled={guardar.isPending} onClick={() => proponer([])}>
+        <Button variant="ghost" disabled={guardar.isPending} onClick={postergar}>
           Dejarla libre por ahora
         </Button>
       </div>
 
       <p className="text-muted-foreground text-sm">
-        Si la dejás libre se va a poder reservar cualquier día y a cualquier hora, y no se
-        vuelve a preguntar. La jornada se declara después desde{" "}
+        Si la dejás libre se va a poder reservar cualquier día y a cualquier hora. El
+        sistema te lo va a volver a preguntar cada vez que entres, hasta que la declares:
+        es la única decisión de la que dependen las reservas de toda la escuela, y
+        descubrirla tarde obliga a cancelar clases ya cargadas. También se declara desde{" "}
         <span className="font-medium">Jornada de la escuela</span>.
       </p>
+
+      {/* Esta pantalla vive fuera del layout, así que sin este botón no habría
+          ninguna forma de cerrar sesión: alguien que entró con la cuenta
+          equivocada quedaría sin salida. */}
+      <div className="border-border border-t pt-4">
+        <Button variant="ghost" size="sm" onClick={logout}>
+          Cerrar sesión
+        </Button>
+      </div>
 
       <p className="text-muted-foreground text-sm">
         Se pueden cargar varios tramos para el mismo día: una escuela con turno mañana y
