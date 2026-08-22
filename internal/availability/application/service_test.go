@@ -1032,3 +1032,70 @@ func TestReemplazarJornada_SiFallaLaCancelacionLaJornadaYaRige(t *testing.T) {
 		t.Error("la jornada se guardó antes de cancelar, y eso no se deshace")
 	}
 }
+
+// La reserva entra ENTERA o no entra: no existe el recorte.
+//
+// Jornada achicada a 13:00–15:00 y una clase de 13:00 a 16:00. Empieza dentro
+// del horario, pero se pasa una hora del cierre: cae completa, no se le
+// recortan los últimos sesenta minutos.
+//
+// Es a propósito y no una limitación: recortarla dejaría al docente con una
+// clase de dos horas que él planificó de tres, sin haberlo decidido y sin
+// enterarse hasta el día. Cancelarla le llega como aviso y puede volver a
+// reservar lo que sí entra.
+func TestReemplazarJornada_LaReservaQueSePasaDelCierreCaeEntera(t *testing.T) {
+	reservas := &fakeReservas{futuras: []ReservaFutura{
+		reservaDelLunes("laQueSePasa", 13*time.Hour, 16*time.Hour),
+		// La que entra justa se queda: el borde exacto no la saca.
+		reservaDelLunes("laQueEntraJusta", 13*time.Hour, 15*time.Hour),
+	}}
+	svc, _ := servicioConReservas(reservas)
+	ctx := context.Background()
+
+	resultado, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
+		{DiaSemana: domain.Lunes, HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour},
+	}, false)
+
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if len(resultado.Impacto.Reservas) != 1 ||
+		resultado.Impacto.Reservas[0].ID != "laQueSePasa" {
+		t.Fatalf("solo cae la que se pasa del cierre: %+v", resultado.Impacto.Reservas)
+	}
+	// Y cae con su horario original intacto: nadie la editó, se cancela.
+	if resultado.Impacto.Reservas[0].HoraFin != 16*time.Hour {
+		t.Errorf("la reserva no se recorta, se cancela: %v", resultado.Impacto.Reservas[0].HoraFin)
+	}
+}
+
+// En una serie todas las ocurrencias comparten día y horario, así que la
+// jornada las juzga a todas igual: o entran todas o no entra ninguna. No hay
+// serie que quede partida por un cambio de horario.
+func TestReemplazarJornada_EnUnaSerieCaenTodasLasOcurrencias(t *testing.T) {
+	var futuras []ReservaFutura
+	for semana := 0; semana < 15; semana++ {
+		futuras = append(futuras, ReservaFutura{
+			ID: fmt.Sprintf("lunes-%d", semana),
+			// Cada ocurrencia es un lunes distinto, mismo horario.
+			Fecha:      lunes(0).AddDate(0, 0, 7*semana),
+			HoraInicio: 13 * time.Hour,
+			HoraFin:    16 * time.Hour,
+			Equipo:     "PC 3",
+		})
+	}
+	reservas := &fakeReservas{futuras: futuras}
+	svc, _ := servicioConReservas(reservas)
+	ctx := context.Background()
+
+	resultado, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
+		{DiaSemana: domain.Lunes, HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour},
+	}, true)
+
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resultado.ReservasCanceladas != 15 {
+		t.Errorf("los quince lunes caen juntos: %d", resultado.ReservasCanceladas)
+	}
+}
