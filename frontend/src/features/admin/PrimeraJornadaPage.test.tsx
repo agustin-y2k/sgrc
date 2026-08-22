@@ -142,11 +142,11 @@ describe("PrimeraJornadaPage", () => {
 
   // Es la única pantalla del sistema fuera del layout: sin este botón, quien
   // entró con la cuenta equivocada no tendría ninguna forma de salir.
-  it("se puede cerrar sesión desde acá", async () => {
+  it("se puede salir desde acá", async () => {
     const user = userEvent.setup()
     renderPagina()
 
-    await user.click(screen.getByRole("button", { name: "Cerrar sesión" }))
+    await user.click(screen.getByRole("button", { name: "Salir" }))
 
     expect(logoutEspia).toHaveBeenCalled()
   })
@@ -274,8 +274,11 @@ describe("PrimeraJornadaPage", () => {
   })
 
   // Sin nada que contar se sale de largo: un paso extra para decir "no pasó
-  // nada" es peor que no decirlo.
-  it("sin clases canceladas no interpone ningún resumen", async () => {
+  // nada" es peor que no decirlo. Pero hay que SACARLO de acá a mano: esta
+  // ruta vive dentro de ProtectedRoute, así que cuando el portón deja de
+  // redirigir la pantalla se vuelve a dibujar a sí misma y el Admin queda
+  // mirando el formulario que acaba de guardar.
+  it("sin clases canceladas entra al sistema sin interponer nada", async () => {
     const user = userEvent.setup()
     renderPagina()
 
@@ -284,7 +287,7 @@ describe("PrimeraJornadaPage", () => {
     await user.click(screen.getByRole("button", { name: "Guardar la jornada" }))
 
     await waitFor(() => {
-      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalled()
+      expect(navegar).toHaveBeenCalledWith("/", { replace: true })
     })
     expect(screen.queryByText("La jornada quedó declarada")).not.toBeInTheDocument()
   })

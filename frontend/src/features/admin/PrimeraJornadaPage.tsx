@@ -68,9 +68,6 @@ export function PrimeraJornadaPage() {
       jornada: TramoDeJornada[]
       confirmado: boolean
     }) => disponibilidadApi.reemplazarJornada(jornada, confirmado),
-    // Sin navigate: en cuanto la jornada queda definida, el portón de
-    // ProtectedRoute deja de mandar acá y la pantalla que el Admin quería
-    // aparece sola. Redirigir a mano competiría con eso.
     onSuccess: async (respuesta) => {
       setFallo(null)
       const clases = respuesta.clasesCanceladas ?? 0
@@ -87,6 +84,15 @@ export function PrimeraJornadaPage() {
       }
       setPorConfirmar(null)
       await queryClient.invalidateQueries({ queryKey: JORNADA_KEY })
+      // Hay que sacarlo de acá a mano. Esta ruta vive DENTRO de
+      // ProtectedRoute, así que cuando el portón deja de redirigir no pasa
+      // nada: la pantalla se vuelve a dibujar a sí misma y el Admin queda
+      // mirando el formulario que acaba de guardar, sin señal de que
+      // funcionó. Con clases canceladas no se navega: ahí manda el resumen,
+      // que tiene su propio botón para entrar.
+      if (clases === 0) {
+        navigate("/", { replace: true })
+      }
     },
     // Acá el 409 no es un detalle de comodidad como en la pantalla de
     // jornada: es la diferencia entre poder seguir y quedar encerrado.
@@ -300,15 +306,6 @@ export function PrimeraJornadaPage() {
         <span className="font-medium">Jornada de la escuela</span>.
       </p>
 
-      {/* Esta pantalla vive fuera del layout, así que sin este botón no habría
-          ninguna forma de cerrar sesión: alguien que entró con la cuenta
-          equivocada quedaría sin salida. */}
-      <div className="border-border border-t pt-4">
-        <Button variant="ghost" size="sm" onClick={logout}>
-          Cerrar sesión
-        </Button>
-      </div>
-
       <p className="text-muted-foreground text-sm">
         Se pueden cargar varios tramos para el mismo día: una escuela con turno mañana y
         turno noche declara, por ejemplo, 07:00–12:00 y 18:00–23:00, y el mediodía queda
@@ -316,6 +313,17 @@ export function PrimeraJornadaPage() {
         apertura, el tramo termina al día siguiente. Los días que no cargues son días en
         que la escuela no abre.
       </p>
+
+      {/* Esta pantalla vive fuera del layout, así que sin este botón no habría
+          ninguna forma de salir: alguien que entró con la cuenta equivocada
+          quedaría encerrado. Dice "Salir" y no "Cerrar sesión" porque es la
+          palabra que usa la barra en todo el resto del sistema, y dos nombres
+          para la misma acción se leen como dos acciones distintas. */}
+      <div className="border-border border-t pt-4">
+        <Button variant="ghost" size="sm" onClick={logout}>
+          Salir
+        </Button>
+      </div>
     </div>
   )
 }

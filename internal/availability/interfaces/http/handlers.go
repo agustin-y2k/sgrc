@@ -331,8 +331,11 @@ func (h *Handler) ReemplazarJornada(c *fiber.Ctx) error {
 	// las clases de toda la escuela de una vez. Queda registrado quién la
 	// disparó y cuánto se llevó puesto, por lo mismo que
 	// CICLO_ARCHIVADO_RESERVAS_ELIMINADAS (docs/09-seguridad-rbac.md §5).
+	// Las dos unidades también acá: el registro es permanente y tiene que
+	// poder leerse sin saber que el sistema guarda una fila por equipo.
 	h.auditar(c, claims.UserID, accionJornadaCambiada, "jornada_institucion", map[string]any{
 		"tramos":             len(tramos),
+		"clasesCanceladas":   resultado.Impacto.ClasesAfectadas,
 		"reservasCanceladas": resultado.ReservasCanceladas,
 	})
 
