@@ -11,10 +11,36 @@ const requerir = createRequire(resolve(aca, "..", "..", "..", "frontend", "packa
 const { chromium } = requerir("@playwright/test")
 import { pathToFileURL } from "node:url"
 
-const GUIAS = [
-  { html: process.argv[2], pdf: process.argv[3], titulo: "SGRC · Guía para docentes" },
-  { html: process.argv[4], pdf: process.argv[5], titulo: "SGRC · Guía para administradores" },
+// El título del pie sale del NOMBRE del archivo, no de la posición del
+// argumento. Antes el primer par era siempre "docentes" y el segundo siempre
+// "administradores": regenerar una sola guía —lo normal cuando se corrige un
+// capítulo— le estampaba el título de la otra en todas las páginas.
+const TITULOS = [
+  [/docentes/, "SGRC · Guía para docentes"],
+  [/admin/, "SGRC · Guía para administradores"],
 ]
+
+function tituloDe(html) {
+  for (const [patron, titulo] of TITULOS) {
+    if (patron.test(html)) return titulo
+  }
+  throw new Error(
+    `no sé qué título poner en el pie de ${html}: el nombre no dice si es la ` +
+      `guía de docentes o la de administradores (ver TITULOS en este script)`
+  )
+}
+
+// De a pares html→pdf, los que vengan. Con uno solo alcanza.
+const args = process.argv.slice(2)
+if (args.length === 0 || args.length % 2 !== 0) {
+  throw new Error(
+    "uso: hacer-pdf.mjs <guia.html> <salida.pdf> [<guia.html> <salida.pdf> ...]"
+  )
+}
+const GUIAS = []
+for (let i = 0; i < args.length; i += 2) {
+  GUIAS.push({ html: args[i], pdf: args[i + 1], titulo: tituloDe(args[i]) })
+}
 const nav = await chromium.launch()
 for (const g of GUIAS) {
   const page = await (await nav.newContext()).newPage()
