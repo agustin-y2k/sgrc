@@ -197,75 +197,63 @@ func (s *Service) Jornada(ctx context.Context) ([]*domain.BloqueJornada, error) 
 	return s.repo.ListarJornada(ctx)
 }
 
-// AgregarBloqueDeJornada suma un tramo abierto a un día. Varios por día es
-// el caso previsto: turno mañana y turno noche, con el mediodía afuera.
-func (s *Service) AgregarBloqueDeJornada(ctx context.Context, dia domain.DiaSemana, horaInicio, horaFin time.Duration) (*domain.BloqueJornada, error) {
-	b, err := domain.NuevoBloqueJornada(s.nuevoID(), dia, horaInicio, horaFin)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.verificarJornadaSinSolape(ctx, b); err != nil {
-		return nil, err
-	}
-	if err := s.repo.CrearBloqueJornada(ctx, b); err != nil {
-		return nil, fmt.Errorf("creando bloque de jornada: %w", err)
-	}
-	return b, nil
+// JornadaDefinida dice si la institución ya decidió su jornada. Una lista de
+// tramos vacía no alcanza para saberlo: puede ser que todavía no la declaren
+// o que hayan elegido no restringir nada, y a una hay que preguntarle y a la
+// otra no.
+func (s *Service) JornadaDefinida(ctx context.Context) (bool, error) {
+	return s.repo.JornadaDefinida(ctx)
 }
 
-// EditarBloqueDeJornada acepta campos opcionales (PATCH parcial) y revalida
-// el rango resultante aunque se edite un solo extremo, igual que el horario
-// de los Admin.
-func (s *Service) EditarBloqueDeJornada(ctx context.Context, id string, dia *domain.DiaSemana, horaInicio, horaFin *time.Duration) (*domain.BloqueJornada, error) {
-	actual, err := s.repo.BuscarBloqueJornada(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	nuevo := *actual
-	if dia != nil {
-		nuevo.DiaSemana = *dia
-	}
-	if horaInicio != nil {
-		nuevo.HoraInicio = *horaInicio
-	}
-	if horaFin != nil {
-		nuevo.HoraFin = *horaFin
-	}
-	// Solo iguales es inválido, igual que en NuevoBloqueJornada: en la jornada,
-	// hora_fin menor que hora_inicio significa que el tramo termina al día
-	// siguiente.
-	if nuevo.HoraFin == nuevo.HoraInicio {
-		return nil, domain.ErrRangoHorarioInvalido
-	}
-	if err := s.verificarJornadaSinSolape(ctx, &nuevo); err != nil {
-		return nil, err
-	}
-
-	if err := s.repo.GuardarBloqueJornada(ctx, &nuevo); err != nil {
-		return nil, fmt.Errorf("guardando bloque de jornada: %w", err)
-	}
-	return &nuevo, nil
+// TramoDeJornada es un tramo pedido, todavía sin ID: los IDs los pone el
+// servicio porque la jornada se reemplaza entera y las filas viejas se van.
+type TramoDeJornada struct {
+	DiaSemana  domain.DiaSemana
+	HoraInicio time.Duration
+	HoraFin    time.Duration
 }
 
-func (s *Service) EliminarBloqueDeJornada(ctx context.Context, id string) error {
-	return s.repo.EliminarBloqueJornada(ctx, id)
-}
-
-// verificarJornadaSinSolape rechaza un tramo que pise a otro del mismo día,
-// nombrando cuál.
-func (s *Service) verificarJornadaSinSolape(ctx context.Context, b *domain.BloqueJornada) error {
-	existentes, err := s.repo.ListarJornada(ctx)
-	if err != nil {
-		return fmt.Errorf("verificando si el tramo se pisa con otro: %w", err)
-	}
-	for _, otro := range existentes {
-		if otro.ID == b.ID {
-			continue
+// ReemplazarJornada deja la jornada exactamente igual a los tramos pedidos y
+// marca que la institución ya decidió.
+//
+// Reemplazar entera —en vez de sumar, editar y borrar de a un tramo— es lo
+// que hace que la jornada se pueda validar como el conjunto que es: los
+// solapes se buscan sobre lo que va a quedar, no sobre un estado intermedio
+// que depende del orden en que se hayan mandado los cambios.
+//
+// Una lista vacía es válida: es la institución diciendo que no quiere
+// restringir días ni horarios. Queda igual que antes para reservar —sin
+// tramos no hay restricción— pero ya no se le vuelve a preguntar.
+func (s *Service) ReemplazarJornada(ctx context.Context, tramos []TramoDeJornada) ([]*domain.BloqueJornada, error) {
+	bloques := make([]*domain.BloqueJornada, 0, len(tramos))
+	for _, t := range tramos {
+		b, err := domain.NuevoBloqueJornada(s.nuevoID(), t.DiaSemana, t.HoraInicio, t.HoraFin)
+		if err != nil {
+			return nil, err
 		}
-		if b.SolapaCon(otro) {
-			return fmt.Errorf("%w: %s de %s a %s", domain.ErrBloqueJornadaSolapado,
-				otro.DiaSemana, formatearHora(otro.HoraInicio), formatearHora(otro.HoraFin))
+		bloques = append(bloques, b)
+	}
+
+	if err := verificarJornadaSinSolape(bloques); err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.ReemplazarJornada(ctx, bloques); err != nil {
+		return nil, fmt.Errorf("guardando la jornada: %w", err)
+	}
+	return bloques, nil
+}
+
+// verificarJornadaSinSolape rechaza dos tramos del mismo día que se pisen,
+// nombrando cuál. Compara todos contra todos sobre la jornada propuesta: no
+// hace falta ir a la base porque lo que se guarda es exactamente esta lista.
+func verificarJornadaSinSolape(bloques []*domain.BloqueJornada) error {
+	for i, b := range bloques {
+		for _, otro := range bloques[i+1:] {
+			if b.SolapaCon(otro) {
+				return fmt.Errorf("%w: %s de %s a %s", domain.ErrBloqueJornadaSolapado,
+					otro.DiaSemana, formatearHora(otro.HoraInicio), formatearHora(otro.HoraFin))
+			}
 		}
 	}
 	return nil

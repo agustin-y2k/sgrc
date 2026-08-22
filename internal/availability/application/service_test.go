@@ -19,7 +19,8 @@ import (
 // "no existe".
 
 type fakeRepo struct {
-	jornada map[string]*domain.BloqueJornada
+	jornada         map[string]*domain.BloqueJornada
+	jornadaDefinida bool
 
 	bloques     map[string]*domain.BloqueHorario
 	excepciones map[string]*domain.Excepcion // clave: usuarioID + "|" + fecha AAAA-MM-DD
@@ -577,46 +578,144 @@ func TestDisponibilidadDeTodosLosAdmins_ErrorDelListador_Propaga(t *testing.T) {
 
 // ── Jornada de la institución ──────────────────────────────────────────
 
-// Una nocturna que abre de 20:00 a 01:00 tiene que poder corregir la hora
-// después de haberla cargado.
-func TestEditarBloqueDeJornada_CruzaLaMedianoche(t *testing.T) {
+// Una nocturna que abre de 20:00 a 01:00 tiene que poder guardar ese tramo:
+// si la jornada no pudiera expresar el cruce, la escuela que dicta hasta la
+// una tendría que declarar 20:00–23:59 y sus propias clases quedarían fuera
+// de su propio horario.
+func TestReemplazarJornada_CruzaLaMedianoche(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
 	ctx := context.Background()
 
-	b, err := svc.AgregarBloqueDeJornada(ctx, domain.Lunes, 20*time.Hour, 1*time.Hour)
-	if err != nil {
-		t.Fatalf("el alta tiene que aceptar el cruce: %v", err)
-	}
-
-	nuevoFin := 2 * time.Hour
-	editado, err := svc.EditarBloqueDeJornada(ctx, b.ID, nil, nil, &nuevoFin)
+	bloques, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
+		{DiaSemana: domain.Lunes, HoraInicio: 20 * time.Hour, HoraFin: 1 * time.Hour},
+	})
 
 	if err != nil {
-		t.Fatalf("la edición también tiene que aceptarlo: %v", err)
+		t.Fatalf("la jornada tiene que aceptar el cruce: %v", err)
 	}
-	if editado.HoraFin != nuevoFin {
-		t.Errorf("esperaba fin a las 02:00, obtuve %v", editado.HoraFin)
+	if len(bloques) != 1 || bloques[0].HoraFin != 1*time.Hour {
+		t.Errorf("esperaba un tramo que termina a la 01:00, obtuve %+v", bloques)
 	}
 }
 
 // Iguales sigue siendo inválido: no describe ningún tramo, ni de cero horas
 // ni de veinticuatro.
-func TestEditarBloqueDeJornada_ExtremosIguales_SeRechaza(t *testing.T) {
+func TestReemplazarJornada_ExtremosIguales_SeRechaza(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
 	ctx := context.Background()
 
-	b, err := svc.AgregarBloqueDeJornada(ctx, domain.Lunes, 8*time.Hour, 12*time.Hour)
-	if err != nil {
-		t.Fatalf("el alta tiene que entrar: %v", err)
-	}
-
-	mismaHora := 8 * time.Hour
-	_, err = svc.EditarBloqueDeJornada(ctx, b.ID, nil, nil, &mismaHora)
+	_, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
+		{DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 8 * time.Hour},
+	})
 
 	if !errors.Is(err, domain.ErrRangoHorarioInvalido) {
 		t.Fatalf("esperaba ErrRangoHorarioInvalido, obtuve %v", err)
+	}
+}
+
+// El solape se busca sobre la jornada PROPUESTA y no contra lo que hay
+// guardado: lo que se manda es lo que queda, así que dos tramos que se pisan
+// dentro del mismo pedido tienen que caer aunque la base esté vacía.
+func TestReemplazarJornada_DosTramosDelMismoDiaQueSePisan_SeRechaza(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	_, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
+		{DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour},
+		{DiaSemana: domain.Lunes, HoraInicio: 11 * time.Hour, HoraFin: 15 * time.Hour},
+	})
+
+	if !errors.Is(err, domain.ErrBloqueJornadaSolapado) {
+		t.Fatalf("esperaba ErrBloqueJornadaSolapado, obtuve %v", err)
+	}
+	if len(repo.jornada) != 0 {
+		t.Errorf("un pedido rechazado no puede dejar nada escrito: %+v", repo.jornada)
+	}
+}
+
+// Tocarse no es pisarse: 07:00–12:00 y 12:00–18:00 son el turno mañana y el
+// turno tarde de la misma escuela.
+func TestReemplazarJornada_TramosContiguos_SeAceptan(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	bloques, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
+		{DiaSemana: domain.Lunes, HoraInicio: 7 * time.Hour, HoraFin: 12 * time.Hour},
+		{DiaSemana: domain.Lunes, HoraInicio: 12 * time.Hour, HoraFin: 18 * time.Hour},
+	})
+
+	if err != nil {
+		t.Fatalf("dos tramos contiguos son válidos: %v", err)
+	}
+	if len(bloques) != 2 {
+		t.Errorf("esperaba los dos tramos, obtuve %d", len(bloques))
+	}
+}
+
+// Reemplazar es reemplazar: lo que no viene en el pedido se va. Sin esto, un
+// día que la escuela dejó de abrir seguiría declarado.
+func TestReemplazarJornada_LoQueNoVieneSeBorra(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	if _, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
+		{DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour},
+		{DiaSemana: domain.Sabado, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour},
+	}); err != nil {
+		t.Fatalf("la primera carga tiene que entrar: %v", err)
+	}
+
+	// La escuela deja de abrir los sábados.
+	if _, err := svc.ReemplazarJornada(ctx, []TramoDeJornada{
+		{DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour},
+	}); err != nil {
+		t.Fatalf("la segunda carga tiene que entrar: %v", err)
+	}
+
+	quedaron, err := svc.Jornada(ctx)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if len(quedaron) != 1 || quedaron[0].DiaSemana != domain.Lunes {
+		t.Errorf("el sábado tenía que desaparecer, quedó %+v", quedaron)
+	}
+}
+
+// Una jornada vacía no es un cuerpo incompleto: es la institución eligiendo
+// no restringir nada. Se distingue de "todavía no decidieron" por la marca,
+// que es justamente lo que evita volver a preguntarle.
+func TestReemplazarJornada_VaciaMarcaQueYaDecidieron(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := NewService(repo, &fakeListadorAdmins{}, idSecuencial(), ahoraFija(time.Now()))
+	ctx := context.Background()
+
+	if definida, _ := svc.JornadaDefinida(ctx); definida {
+		t.Fatal("una instalación nueva todavía no decidió nada")
+	}
+
+	if _, err := svc.ReemplazarJornada(ctx, nil); err != nil {
+		t.Fatalf("dejarla libre es válido: %v", err)
+	}
+
+	definida, err := svc.JornadaDefinida(ctx)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if !definida {
+		t.Error("elegir dejarla libre también es decidir")
+	}
+	// Y sin tramos se sigue pudiendo reservar cualquier día y hora.
+	permite, err := svc.PermiteReserva(ctx, time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC), 3*time.Hour, 5*time.Hour)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if !permite {
+		t.Error("sin tramos declarados no hay restricción")
 	}
 }
 
@@ -634,31 +733,15 @@ func (r *fakeRepo) ListarJornada(_ context.Context) ([]*domain.BloqueJornada, er
 	return todos, nil
 }
 
-func (r *fakeRepo) CrearBloqueJornada(_ context.Context, b *domain.BloqueJornada) error {
-	r.jornada[b.ID] = b
+func (r *fakeRepo) ReemplazarJornada(_ context.Context, bloques []*domain.BloqueJornada) error {
+	r.jornada = make(map[string]*domain.BloqueJornada, len(bloques))
+	for _, b := range bloques {
+		r.jornada[b.ID] = b
+	}
+	r.jornadaDefinida = true
 	return nil
 }
 
-func (r *fakeRepo) BuscarBloqueJornada(_ context.Context, id string) (*domain.BloqueJornada, error) {
-	b, ok := r.jornada[id]
-	if !ok {
-		return nil, ErrBloqueNoEncontrado
-	}
-	return b, nil
-}
-
-func (r *fakeRepo) GuardarBloqueJornada(_ context.Context, b *domain.BloqueJornada) error {
-	if _, ok := r.jornada[b.ID]; !ok {
-		return ErrBloqueNoEncontrado
-	}
-	r.jornada[b.ID] = b
-	return nil
-}
-
-func (r *fakeRepo) EliminarBloqueJornada(_ context.Context, id string) error {
-	if _, ok := r.jornada[id]; !ok {
-		return ErrBloqueNoEncontrado
-	}
-	delete(r.jornada, id)
-	return nil
+func (r *fakeRepo) JornadaDefinida(_ context.Context) (bool, error) {
+	return r.jornadaDefinida, nil
 }

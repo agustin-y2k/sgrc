@@ -24,6 +24,17 @@ type editarBloqueRequest struct {
 	HoraFin    *string `json:"horaFin"`
 }
 
+// jornadaRequest es la jornada COMPLETA de la institución: lo que se manda es
+// lo que queda, y lo que no se manda se borra. Reusa bloqueRequest porque un
+// tramo de jornada tiene exactamente los mismos tres campos que uno del
+// horario de un Admin.
+//
+// La lista vacía —o ausente— es un valor legítimo y no un cuerpo incompleto:
+// es la institución declarando que no restringe ni días ni horarios.
+type jornadaRequest struct {
+	Tramos []bloqueRequest `json:"tramos"`
+}
+
 type excepcionRequest struct {
 	Fecha      string  `json:"fecha"`
 	Tipo       string  `json:"tipo"`

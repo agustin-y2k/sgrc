@@ -21,7 +21,8 @@ import (
 // puede importar los tipos no exportados de otro paquete de test.
 
 type fakeRepo struct {
-	jornada map[string]*domain.BloqueJornada
+	jornada         map[string]*domain.BloqueJornada
+	jornadaDefinida bool
 
 	bloques     map[string]*domain.BloqueHorario
 	excepciones map[string]*domain.Excepcion
@@ -551,18 +552,19 @@ func TestHTTP_DisponibilidadDeAdmins_ExcepcionDeHoyPisaElBloque(t *testing.T) {
 
 // ── Jornada de la institución ──────────────────────────────────────────
 
-// La ruta de edición existía sin que ninguna pantalla la usara, así que su
-// comportamiento no estaba fijado por ningún test.
-func TestHTTP_EditarBloqueDeJornada_CruzaLaMedianoche_200(t *testing.T) {
+// La jornada se manda entera, así que un PUT con dos tramos deja exactamente
+// esos dos: es el turno mañana y el turno noche de la misma escuela.
+func TestHTTP_ReemplazarJornada_200(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.jornada["j1"] = &domain.BloqueJornada{
-		ID: "j1", DiaSemana: domain.Lunes, HoraInicio: 20 * time.Hour, HoraFin: 1 * time.Hour,
+	repo.jornada["viejo"] = &domain.BloqueJornada{
+		ID: "viejo", DiaSemana: domain.Sabado, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour,
 	}
 	app := nuevaAppDeTest(repo)
 
-	nuevoFin := "02:00"
-	req := httptest.NewRequest("PATCH", "/api/jornada/j1",
-		conBody(editarBloqueRequest{HoraFin: &nuevoFin}))
+	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{Tramos: []bloqueRequest{
+		{DiaSemana: "LUNES", HoraInicio: "07:00", HoraFin: "12:00"},
+		{DiaSemana: "LUNES", HoraInicio: "20:00", HoraFin: "01:00"},
+	}}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -573,21 +575,55 @@ func TestHTTP_EditarBloqueDeJornada_CruzaLaMedianoche_200(t *testing.T) {
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
-	if repo.jornada["j1"].HoraFin != 2*time.Hour {
-		t.Errorf("no se actualizó el tramo: %+v", repo.jornada["j1"])
+	if len(repo.jornada) != 2 {
+		t.Fatalf("esperaba exactamente los dos tramos mandados, quedaron %d", len(repo.jornada))
+	}
+	// El sábado que ya no viene en el pedido tiene que haberse ido.
+	for _, b := range repo.jornada {
+		if b.DiaSemana == domain.Sabado {
+			t.Error("lo que no viene en el PUT se borra")
+		}
+	}
+	if !repo.jornadaDefinida {
+		t.Error("guardar la jornada es decidirla")
 	}
 }
 
-func TestHTTP_EditarBloqueDeJornada_Docente_403(t *testing.T) {
+// Un cuerpo sin tramos es la institución eligiendo no restringir nada. No es
+// un pedido incompleto y no se rechaza.
+func TestHTTP_ReemplazarJornada_Vacia_200(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.jornada["viejo"] = &domain.BloqueJornada{
+		ID: "viejo", DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour,
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{}))
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+	if len(repo.jornada) != 0 {
+		t.Errorf("la jornada tenía que quedar vacía, quedó %+v", repo.jornada)
+	}
+	if !repo.jornadaDefinida {
+		t.Error("dejarla libre también es decidir, y por eso no se vuelve a preguntar")
+	}
+}
+
+func TestHTTP_ReemplazarJornada_Docente_403(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.jornada["j1"] = &domain.BloqueJornada{
 		ID: "j1", DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour,
 	}
 	app := nuevaAppDeTest(repo)
 
-	nuevoFin := "23:00"
-	req := httptest.NewRequest("PATCH", "/api/jornada/j1",
-		conBody(editarBloqueRequest{HoraFin: &nuevoFin}))
+	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{Tramos: []bloqueRequest{
+		{DiaSemana: "LUNES", HoraInicio: "07:00", HoraFin: "23:00"},
+	}}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -597,6 +633,38 @@ func TestHTTP_EditarBloqueDeJornada_Docente_403(t *testing.T) {
 	}
 	if repo.jornada["j1"].HoraFin != 12*time.Hour {
 		t.Error("la jornada no debería haberse tocado")
+	}
+}
+
+// El GET lleva la bandera al lado de los tramos: sin ella, una lista vacía no
+// dice si la escuela todavía no declaró su jornada o si eligió dejarla libre.
+func TestHTTP_Jornada_InformaSiYaFueDefinida(t *testing.T) {
+	repo := nuevoFakeRepo()
+	app := nuevaAppDeTest(repo)
+
+	pedir := func() map[string]any {
+		t.Helper()
+		req := httptest.NewRequest("GET", "/api/jornada", nil)
+		req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("error inesperado: %v", err)
+		}
+		var cuerpo map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+			t.Fatalf("respuesta ilegible: %v", err)
+		}
+		return cuerpo
+	}
+
+	if definida := pedir()["definida"]; definida != false {
+		t.Errorf("una instalación nueva todavía no decidió: %v", definida)
+	}
+
+	repo.jornadaDefinida = true
+
+	if definida := pedir()["definida"]; definida != true {
+		t.Errorf("ya decidió: %v", definida)
 	}
 }
 
@@ -614,31 +682,15 @@ func (r *fakeRepo) ListarJornada(_ context.Context) ([]*domain.BloqueJornada, er
 	return todos, nil
 }
 
-func (r *fakeRepo) CrearBloqueJornada(_ context.Context, b *domain.BloqueJornada) error {
-	r.jornada[b.ID] = b
+func (r *fakeRepo) ReemplazarJornada(_ context.Context, bloques []*domain.BloqueJornada) error {
+	r.jornada = make(map[string]*domain.BloqueJornada, len(bloques))
+	for _, b := range bloques {
+		r.jornada[b.ID] = b
+	}
+	r.jornadaDefinida = true
 	return nil
 }
 
-func (r *fakeRepo) BuscarBloqueJornada(_ context.Context, id string) (*domain.BloqueJornada, error) {
-	b, ok := r.jornada[id]
-	if !ok {
-		return nil, application.ErrBloqueNoEncontrado
-	}
-	return b, nil
-}
-
-func (r *fakeRepo) GuardarBloqueJornada(_ context.Context, b *domain.BloqueJornada) error {
-	if _, ok := r.jornada[b.ID]; !ok {
-		return application.ErrBloqueNoEncontrado
-	}
-	r.jornada[b.ID] = b
-	return nil
-}
-
-func (r *fakeRepo) EliminarBloqueJornada(_ context.Context, id string) error {
-	if _, ok := r.jornada[id]; !ok {
-		return application.ErrBloqueNoEncontrado
-	}
-	delete(r.jornada, id)
-	return nil
+func (r *fakeRepo) JornadaDefinida(_ context.Context) (bool, error) {
+	return r.jornadaDefinida, nil
 }

@@ -220,8 +220,18 @@ func (h *Handler) MarcarNoDisponibleAhora(c *fiber.Ctx) error {
 // claims: la jornada no tiene dueño.
 
 // GET /api/jornada — la jornada declarada por la institución.
+//
+// `definida` viaja al lado de los tramos y no en un endpoint aparte porque
+// quien pregunta por la jornada casi siempre necesita las dos cosas, y
+// separarlas obligaría a dos llamadas para pintar una sola pantalla. Sin él,
+// una lista vacía es ambigua: no se sabe si la escuela todavía no declaró su
+// jornada o si eligió no restringir nada.
 func (h *Handler) Jornada(c *fiber.Ctx) error {
 	bloques, err := h.svc.Jornada(c.UserContext())
+	if err != nil {
+		return mapearError(err)
+	}
+	definida, err := h.svc.JornadaDefinida(c.UserContext())
 	if err != nil {
 		return mapearError(err)
 	}
@@ -230,82 +240,52 @@ func (h *Handler) Jornada(c *fiber.Ctx) error {
 	for i, b := range bloques {
 		data[i] = toBloqueJornadaResponse(b)
 	}
-	return c.JSON(fiber.Map{"data": data})
+	return c.JSON(fiber.Map{"data": data, "definida": definida})
 }
 
-// POST /api/jornada (Admin) — suma un tramo abierto a un día. Varios por
-// día es el caso previsto: turno mañana y turno noche.
-func (h *Handler) AgregarBloqueDeJornada(c *fiber.Ctx) error {
-	var req bloqueRequest
+// PUT /api/jornada (Admin) — reemplaza la jornada entera.
+//
+// Es un PUT del conjunto y no tres endpoints por tramo porque la jornada es
+// una sola decisión de siete días. Con los cambios llegando de a uno no había
+// ningún momento en que preguntar "esto es lo que va a quedar, ¿confirmás?",
+// y entre una llamada y la otra quedaba a la vista una jornada a medias que
+// ya decidía qué reservas se aceptaban.
+//
+// Una lista vacía es válida y no es lo mismo que no llamar: es la institución
+// eligiendo no restringir nada, y deja de preguntársele cuál es su jornada.
+func (h *Handler) ReemplazarJornada(c *fiber.Ctx) error {
+	var req jornadaRequest
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	dia, err := domain.ParseDiaSemana(req.DiaSemana)
-	if err != nil {
-		return mapearError(err)
-	}
-	horaInicio, err := parseHora(req.HoraInicio)
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
-	}
-	horaFin, err := parseHora(req.HoraFin)
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
-	}
-
-	bloque, err := h.svc.AgregarBloqueDeJornada(c.UserContext(), dia, horaInicio, horaFin)
-	if err != nil {
-		return mapearError(err)
-	}
-	return c.Status(fiber.StatusCreated).JSON(toBloqueJornadaResponse(bloque))
-}
-
-// PATCH /api/jornada/{id} (Admin) — parcial, como el horario de los Admin.
-func (h *Handler) EditarBloqueDeJornada(c *fiber.Ctx) error {
-	id := c.Params("id")
-
-	var req editarBloqueRequest
-	if err := c.BodyParser(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
-	}
-
-	var dia *domain.DiaSemana
-	if req.DiaSemana != nil {
-		d, err := domain.ParseDiaSemana(*req.DiaSemana)
+	tramos := make([]application.TramoDeJornada, 0, len(req.Tramos))
+	for _, t := range req.Tramos {
+		dia, err := domain.ParseDiaSemana(t.DiaSemana)
 		if err != nil {
 			return mapearError(err)
 		}
-		dia = &d
-	}
-	var horaInicio *time.Duration
-	if req.HoraInicio != nil {
-		hi, err := parseHora(*req.HoraInicio)
+		horaInicio, err := parseHora(t.HoraInicio)
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
-		horaInicio = &hi
-	}
-	var horaFin *time.Duration
-	if req.HoraFin != nil {
-		hf, err := parseHora(*req.HoraFin)
+		horaFin, err := parseHora(t.HoraFin)
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
-		horaFin = &hf
+		tramos = append(tramos, application.TramoDeJornada{
+			DiaSemana: dia, HoraInicio: horaInicio, HoraFin: horaFin,
+		})
 	}
 
-	bloque, err := h.svc.EditarBloqueDeJornada(c.UserContext(), id, dia, horaInicio, horaFin)
+	bloques, err := h.svc.ReemplazarJornada(c.UserContext(), tramos)
 	if err != nil {
 		return mapearError(err)
 	}
-	return c.JSON(toBloqueJornadaResponse(bloque))
-}
 
-// DELETE /api/jornada/{id} (Admin).
-func (h *Handler) EliminarBloqueDeJornada(c *fiber.Ctx) error {
-	if err := h.svc.EliminarBloqueDeJornada(c.UserContext(), c.Params("id")); err != nil {
-		return mapearError(err)
+	data := make([]bloqueResponse, len(bloques))
+	for i, b := range bloques {
+		data[i] = toBloqueJornadaResponse(b)
 	}
-	return c.SendStatus(fiber.StatusOK)
+	return c.JSON(fiber.Map{"data": data, "definida": true})
 }
