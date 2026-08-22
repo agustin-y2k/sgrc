@@ -545,9 +545,7 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
 
     await achicarElTramo(user)
 
-    expect(
-      await screen.findByText(/ya tiene su computadora entregada/)
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/ya está entregada/)).toBeInTheDocument()
     expect(screen.getByText(/El préstamo no se cancela/)).toBeInTheDocument()
     expect(screen.getByText(/PC 7 · la tiene Marta/)).toBeInTheDocument()
   })

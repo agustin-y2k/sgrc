@@ -169,11 +169,12 @@ export function PrimeraJornadaPage() {
             hablar con esa persona antes de que le llegue el correo. */}
         {loCancelado.prestamos.length > 0 && (
           <div className="rounded-md border p-3">
+            {/* Máquinas, no clases: una clase puede tener cinco entregadas. */}
             <p className="text-sm font-medium">
               {loCancelado.prestamos.length}{" "}
               {loCancelado.prestamos.length === 1
-                ? "de esas clases ya tenía su computadora entregada"
-                : "de esas clases ya tenían sus computadoras entregadas"}
+                ? "computadora de esas clases ya estaba entregada"
+                : "computadoras de esas clases ya estaban entregadas"}
             </p>
             <ul className="text-muted-foreground mt-1 text-sm">
               {loCancelado.prestamos.map((p) => (

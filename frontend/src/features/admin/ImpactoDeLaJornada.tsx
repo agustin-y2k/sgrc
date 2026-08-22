@@ -117,12 +117,15 @@ export function ImpactoDeLaJornada({
           es dejarlo parado con las computadoras en la mano. */}
       {impacto.prestamos.length > 0 && (
         <div className="rounded-md border p-3">
+          {/* Se cuentan MÁQUINAS, no clases: una sola clase puede tener
+              cinco computadoras entregadas, y decir "5 clases" sería inflar
+              el número justo donde el resto de la pantalla habla en clases. */}
           <p className="text-sm font-medium">
             Atención: {impacto.prestamos.length}{" "}
             {plural(
               impacto.prestamos.length,
-              "de esas clases ya tiene su computadora entregada",
-              "de esas clases ya tienen sus computadoras entregadas"
+              "computadora de esas clases ya está entregada",
+              "computadoras de esas clases ya están entregadas"
             )}
           </p>
           <ul className="text-muted-foreground mt-1 text-sm">
