@@ -30,8 +30,14 @@ export function ImpactoDeLaJornada({
   onConfirmar: () => void
   onCancelar: () => void
 }) {
-  const cuantas = impacto.reservas.length
-  const docentes = new Set(impacto.reservas.map((r) => r.docente).filter((d) => d !== ""))
+  const cuantas = impacto.totalAfectadas
+  const recortada = cuantas > impacto.reservas.length
+  // Los docentes se cuentan sobre la lista, así que solo se pueden nombrar
+  // cuando la lista está completa: con el recorte, "de 12 docentes" sería el
+  // número de los primeros cincuenta y no el de los afectados.
+  const docentes = recortada
+    ? 0
+    : new Set(impacto.reservas.map((r) => r.docente).filter((d) => d !== "")).size
   // Contra el total, no en absoluto: veinte cancelaciones sobre veinticinco
   // reservas no es lo mismo que veinte sobre trescientas.
   const casiTodo =
@@ -46,10 +52,10 @@ export function ImpactoDeLaJornada({
           <p className="text-destructive mt-1 text-sm">
             Se van a cancelar <strong>{cuantas}</strong>{" "}
             {plural(cuantas, "reserva", "reservas")}
-            {docentes.size > 0 && (
+            {docentes > 0 && (
               <>
                 {" "}
-                de {docentes.size} {plural(docentes.size, "docente", "docentes")}
+                de {docentes} {plural(docentes, "docente", "docentes")}
               </>
             )}
             , y se les va a avisar por correo.
@@ -84,6 +90,12 @@ export function ImpactoDeLaJornada({
               </li>
             ))}
           </ul>
+          {/* Sin esta línea la lista recortada parece la lista completa. */}
+          {recortada && (
+            <p className="text-muted-foreground px-3 py-1.5 text-sm">
+              y {cuantas - impacto.reservas.length} más
+            </p>
+          )}
         </div>
       )}
 

@@ -2346,9 +2346,10 @@ func TestPostgresRepo_ListarReservasFuturas(t *testing.T) {
 	}
 }
 
-// La reserva que cruza la medianoche no terminó hasta que termina de verdad,
-// y eso lo decide fin_de_pared. Sin esto, una clase de 22:00 a 01:00
-// desaparecería del conteo apenas pasa la medianoche.
+// La clase nocturna que cruza la medianoche se decide por cuándo EMPIEZA,
+// igual que cualquier otra. Vale la pena fijarlo: la consulta hermana que
+// alimenta las otras cascadas usa fin_de_pared, y quien venga a tocar esta
+// puede suponer que también lo necesita.
 func TestPostgresRepo_ListarReservasFuturas_LaQueCruzaLaMedianoche(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -2371,23 +2372,79 @@ func TestPostgresRepo_ListarReservasFuturas_LaQueCruzaLaMedianoche(t *testing.T)
 		t.Fatalf("no se pudo crear la reserva: %v", err)
 	}
 
-	// A las 23:00 de ese mismo día la clase está en curso: no terminó.
-	enPlenaClase := fecha.Add(23 * time.Hour)
-	futuras, err := repo.ListarReservasFuturas(ctx, enPlenaClase)
+	// A las 21:00 todavía no arrancó: entra en el cambio de jornada.
+	futuras, err := repo.ListarReservasFuturas(ctx, fecha.Add(21*time.Hour))
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	if len(futuras) != 1 {
-		t.Fatalf("la clase de la noche todavía no terminó: %+v", futuras)
+		t.Fatalf("antes de las 22 no empezó: %+v", futuras)
 	}
 
-	// A las 02:00 del día siguiente sí terminó.
-	yaTermino := fecha.AddDate(0, 0, 1).Add(2 * time.Hour)
-	futuras, err = repo.ListarReservasFuturas(ctx, yaTermino)
+	// A las 23:00 está en el aula, aunque falten dos horas para que termine.
+	futuras, err = repo.ListarReservasFuturas(ctx, fecha.Add(23*time.Hour))
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	if len(futuras) != 0 {
-		t.Errorf("a las 02:00 la clase de la noche anterior ya terminó: %+v", futuras)
+		t.Errorf("la clase de la noche ya arrancó: no se toca: %+v", futuras)
+	}
+}
+
+// La clase que está transcurriendo AHORA no entra en un cambio de jornada.
+// No terminó, pero cancelarla sería mandarle un correo a un docente que está
+// parado frente al curso para avisarle que le sacaron las máquinas que tiene
+// adelante. Lo que ya arrancó, termina.
+func TestPostgresRepo_ListarReservasFuturas_NoTocaLaClaseEnCurso(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	materiaID := crearMateriaDeTest(t, pool)
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	fecha := time.Date(2099, 3, 9, 0, 0, 0, 0, time.UTC)
+
+	crear := func(desde, hasta time.Duration) *domain.Reserva {
+		t.Helper()
+		g := nuevoReservaGrupoDeTest(materiaID, fecha, desde, hasta)
+		if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+			t.Fatalf("no se pudo crear el grupo: %v", err)
+		}
+		r, err := domain.NuevaReservaNormal(NuevoID(), g.ID, pc, materiaID, "Ada", nil,
+			fecha, desde, hasta, ahora)
+		if err != nil {
+			t.Fatalf("error de dominio inesperado: %v", err)
+		}
+		if err := repo.CrearReserva(ctx, r); err != nil {
+			t.Fatalf("no se pudo crear la reserva: %v", err)
+		}
+		return r
+	}
+
+	enCurso := crear(13*time.Hour, 15*time.Hour)
+	masTarde := crear(16*time.Hour, 18*time.Hour)
+
+	// Las 14:00 de ese día: la primera está en el aula, la segunda no empezó.
+	futuras, err := repo.ListarReservasFuturas(ctx, fecha.Add(14*time.Hour))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if len(futuras) != 1 || futuras[0].Reserva.ID != masTarde.ID {
+		t.Fatalf("solo la que todavía no empezó: %+v", futuras)
+	}
+	for _, f := range futuras {
+		if f.Reserva.ID == enCurso.ID {
+			t.Error("la clase en curso no se puede cancelar por un cambio de jornada")
+		}
+	}
+
+	// Y antes de que arranque, la de las 13 sí cuenta.
+	futuras, err = repo.ListarReservasFuturas(ctx, fecha.Add(12*time.Hour))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(futuras) != 2 {
+		t.Errorf("a las 12:00 ninguna empezó: %+v", futuras)
 	}
 }

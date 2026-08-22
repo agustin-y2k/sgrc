@@ -361,7 +361,7 @@ func main() {
 		availabilityinfra.NuevoID,
 		ahora,
 	)
-	availabilityHandler := availabilityhttp.NewHandler(availabilitySvc)
+	availabilityHandler := availabilityhttp.NewHandler(availabilitySvc, auditor)
 
 	// ── reservation ─────────────────────────────────────────────── Se arma
 	// temprano a propósito: tanto auth (cascada de DarDeBaja, RF-02.8) como

@@ -26,6 +26,21 @@ func condicionNoTerminada(alias, placeholderFecha, placeholderHora string) strin
 		placeholderFecha + "::date + " + placeholderHora + "::time)"
 }
 
+// condicionNoEmpezada arma "esta reserva todavía no arrancó" respecto del
+// instante dado.
+//
+// Es más estricta que condicionNoTerminada, y la diferencia importa: la clase
+// que está transcurriendo AHORA no terminó, pero cancelarla es sacarle las
+// máquinas a un docente que está parado frente al curso. Lo que ya empezó,
+// que termine.
+func condicionNoEmpezada(alias, placeholderFecha, placeholderHora string) string {
+	if alias != "" {
+		alias += "."
+	}
+	return "(" + alias + "fecha + " + alias + "hora_inicio) > (" +
+		placeholderFecha + "::date + " + placeholderHora + "::time)"
+}
+
 func (r *PostgresRepo) CrearReserva(ctx context.Context, res *domain.Reserva) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO reserva (id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en)
@@ -219,7 +234,12 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 // una materia (vía su ReservaGrupo) que todavía no terminaron en el instante
 // `desde`.
 // ListarReservasFuturas trae TODAS las reservas de clase que todavía no
-// terminaron, con el nombre del equipo y de la materia ya resueltos.
+// EMPEZARON, con el nombre del equipo y de la materia ya resueltos.
+//
+// No empezaron, y no "no terminaron": la clase que está transcurriendo en
+// este momento no puede entrar en un cambio de jornada. Cancelarla sería
+// mandarle un correo a un docente que está dando clase para avisarle que le
+// sacaron las máquinas que tiene adelante. Lo que ya arrancó, termina.
 //
 // Sin paginar, a diferencia de ListarReservas: es el insumo del conteo que se
 // le muestra al Admin antes de cambiar la jornada, y una página escondería
@@ -245,7 +265,7 @@ func (r *PostgresRepo) ListarReservasFuturas(ctx context.Context, desde time.Tim
 		LEFT JOIN reserva_grupo rg ON rg.id = res.reserva_grupo_id
 		LEFT JOIN materia m ON m.id = res.materia_id
 		LEFT JOIN curso cu ON cu.id = m.curso_id
-		WHERE `+condicionNoTerminada("res", "$1", "$2")+`
+		WHERE `+condicionNoEmpezada("res", "$1", "$2")+`
 		  AND res.estado = 'CONFIRMADA' AND res.tipo = 'NORMAL'
 		ORDER BY res.fecha, res.hora_inicio, p.identificador NULLS LAST, res.equipo_id
 	`, desde, desde)

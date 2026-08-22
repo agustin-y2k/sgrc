@@ -217,6 +217,18 @@ type TramoDeJornada struct {
 	HoraFin    time.Duration
 }
 
+// MaxTramosDeJornada es el techo de tramos que puede tener una jornada.
+//
+// Siete días por unos pocos turnos cada uno: una escuela con mañana, tarde y
+// noche los siete días usa veintiuno. Cincuenta deja lugar de sobra para
+// cualquier institución real y a la vez impide lo que no es una jornada sino
+// un accidente —o un cliente roto mandando el mismo tramo mil veces—.
+//
+// El tope no es cosmético. La jornada se lee ENTERA en cada alta de reserva
+// (PermiteReserva), así que una inflada no molesta una vez al guardarse: hace
+// más lenta cada reserva de la escuela, todos los días.
+const MaxTramosDeJornada = 50
+
 // MotivoCambioDeJornada llega TAL CUAL al correo del docente, después de "Tu
 // reserva fue cancelada: " que antepone notification. Por eso arranca en
 // minúscula y explica la causa en vez de nombrar una categoría: quien lo lee
@@ -269,6 +281,10 @@ type ResultadoDeJornada struct {
 // restringir días ni horarios. Queda igual que antes para reservar —sin
 // tramos no hay restricción— pero ya no se le vuelve a preguntar.
 func (s *Service) ReemplazarJornada(ctx context.Context, tramos []TramoDeJornada, confirmado bool) (*ResultadoDeJornada, error) {
+	if len(tramos) > MaxTramosDeJornada {
+		return nil, ErrDemasiadosTramos
+	}
+
 	bloques := make([]*domain.BloqueJornada, 0, len(tramos))
 	for _, t := range tramos {
 		b, err := domain.NuevoBloqueJornada(s.nuevoID(), t.DiaSemana, t.HoraInicio, t.HoraFin)

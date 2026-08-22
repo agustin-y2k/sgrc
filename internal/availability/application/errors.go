@@ -1,6 +1,9 @@
 package application
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	ErrBloqueNoEncontrado = errors.New("bloque de horario no encontrado")
@@ -20,3 +23,8 @@ var (
 // cancelar las reservas que quedaron afuera. Es un estado incompleto y hay
 // que decirlo: la jornada ya rige y esas clases siguen en pie.
 var ErrCascadaDeJornada = errors.New("la jornada se guardó, pero no se pudieron cancelar las reservas que quedaron afuera")
+
+// ErrDemasiadosTramos: la jornada pedida tiene más tramos de los que puede
+// tener el horario de una escuela.
+var ErrDemasiadosTramos = fmt.Errorf(
+	"la jornada no puede tener más de %d tramos: revisá si no se cargaron repetidos", MaxTramosDeJornada)

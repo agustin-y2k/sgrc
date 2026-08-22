@@ -1,21 +1,40 @@
 package http
 
 import (
+	"errors"
+	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/ramiro/sgrc/internal/availability/application"
 	"github.com/ramiro/sgrc/internal/availability/domain"
+	"github.com/ramiro/sgrc/internal/shared/audit"
 	"github.com/ramiro/sgrc/internal/shared/middleware"
 )
 
 type Handler struct {
-	svc *application.Service
+	svc     *application.Service
+	auditor audit.Auditor
 }
 
-func NewHandler(svc *application.Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *application.Service, auditor audit.Auditor) *Handler {
+	return &Handler{svc: svc, auditor: auditor}
+}
+
+// auditar registra una entrada sin abortar la respuesta si falla, igual que
+// en auth y reservation: el cambio ya se aplicó, y perder el registro es malo
+// pero devolver un error por eso sería peor.
+func (h *Handler) auditar(c *fiber.Ctx, actorID, accion, entidad string, detalle map[string]any) {
+	if err := h.auditor.Registrar(c.UserContext(), audit.Entrada{
+		UsuarioID: actorID,
+		Accion:    accion,
+		Entidad:   entidad,
+		Detalle:   detalle,
+		IPOrigen:  middleware.IPCliente(c),
+	}); err != nil {
+		log.Printf("auditoría: no se pudo registrar %s sobre %s: %v", accion, entidad, err)
+	}
 }
 
 func claimsDelContexto(c *fiber.Ctx) (*middleware.Claims, error) {
@@ -216,8 +235,13 @@ func (h *Handler) MarcarNoDisponibleAhora(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toExcepcionResponse(excepcion))
 }
 
-// ── Jornada de la institución ────────────────────────────────────────── Sin
-// claims: la jornada no tiene dueño.
+// ── Jornada de la institución ───────────────────────────────────────────
+
+// accionJornadaCambiada es el nombre que queda escrito en audit_log. Va como
+// constante y no en línea para que no se escriba distinto en los dos lugares
+// que la registran —el camino normal y el de la cascada incompleta— y las
+// dos filas terminen pareciendo acciones diferentes.
+const accionJornadaCambiada = "JORNADA_CAMBIADA"
 
 // GET /api/jornada — la jornada declarada por la institución.
 //
@@ -254,6 +278,11 @@ func (h *Handler) Jornada(c *fiber.Ctx) error {
 // Una lista vacía es válida y no es lo mismo que no llamar: es la institución
 // eligiendo no restringir nada, y deja de preguntársele cuál es su jornada.
 func (h *Handler) ReemplazarJornada(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
 	var req jornadaRequest
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
@@ -280,6 +309,15 @@ func (h *Handler) ReemplazarJornada(c *fiber.Ctx) error {
 
 	resultado, err := h.svc.ReemplazarJornada(c.UserContext(), tramos, req.Confirmado)
 	if err != nil {
+		// La cascada a medias deja la jornada nueva puesta: hay que auditarla
+		// igual, con lo que sí pasó, o el registro diría que el horario de la
+		// escuela cambió solo porque nadie lo anotó.
+		if errors.Is(err, application.ErrCascadaDeJornada) {
+			h.auditar(c, claims.UserID, accionJornadaCambiada, "jornada_institucion", map[string]any{
+				"tramos":            len(tramos),
+				"cascadaIncompleta": true,
+			})
+		}
 		return mapearError(err)
 	}
 
@@ -294,6 +332,15 @@ func (h *Handler) ReemplazarJornada(c *fiber.Ctx) error {
 			"impacto": toImpactoResponse(resultado.Impacto),
 		})
 	}
+
+	// Es la acción administrativa de mayor alcance del sistema: puede cancelar
+	// las clases de toda la escuela de una vez. Queda registrado quién la
+	// disparó y cuánto se llevó puesto, por lo mismo que
+	// CICLO_ARCHIVADO_RESERVAS_ELIMINADAS (docs/09-seguridad-rbac.md §5).
+	h.auditar(c, claims.UserID, accionJornadaCambiada, "jornada_institucion", map[string]any{
+		"tramos":             len(tramos),
+		"reservasCanceladas": resultado.ReservasCanceladas,
+	})
 
 	data := make([]bloqueResponse, len(resultado.Bloques))
 	for i, b := range resultado.Bloques {

@@ -373,7 +373,13 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
     vi.mocked(disponibilidadApi.reemplazarJornada).mockRejectedValueOnce(
       new ApiError(409, "el cambio deja reservas fuera de la jornada", {
         error: "el cambio deja reservas fuera de la jornada",
-        impacto: { reservas: [], prestamos: [], totalDeReservas: 0, ...impacto },
+        impacto: {
+          reservas: [],
+          prestamos: [],
+          totalAfectadas: (impacto.reservas ?? []).length,
+          totalDeReservas: 0,
+          ...impacto,
+        },
       })
     )
   }
@@ -473,6 +479,29 @@ describe("JornadaPage — el cambio que deja reservas afuera", () => {
 
     expect(screen.queryByText(/Se van a cancelar/)).not.toBeInTheDocument()
     expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(1)
+  })
+
+  // El backend recorta la lista, pero el número que decide es el total. Si la
+  // pantalla contara las filas que le llegaron, el Admin confirmaría creyendo
+  // que cancela cincuenta cuando cancela doscientas.
+  it("cuenta las afectadas de verdad, no las que entraron en la lista", async () => {
+    const user = userEvent.setup()
+    rechazaConImpacto({
+      reservas: [reservaAfectada("r1", "Ada"), reservaAfectada("r2", "Grace")],
+      totalAfectadas: 200,
+      totalDeReservas: 1000,
+    })
+    renderPagina()
+
+    await achicarElTramo(user)
+
+    expect(await screen.findByText(/Se van a cancelar/)).toHaveTextContent(
+      "Se van a cancelar 200 reservas"
+    )
+    expect(screen.getByText("y 198 más")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Guardar y cancelar 200 reservas" })
+    ).toBeInTheDocument()
   })
 
   // El detector del tipeo: un cambio real no suele llevarse casi todo.

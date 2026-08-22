@@ -180,7 +180,7 @@ export function JornadaPage() {
     // Un 409 con impacto no es un error que mostrar y olvidar: es la pregunta
     // que el backend devuelve en vez de aplicar el cambio. Se guarda la
     // jornada propuesta para poder reintentarla con la confirmación puesta.
-    onError: (e, variables) => {
+    onError: async (e, variables) => {
       const impacto = impactoDelError(e)
       if (impacto !== null) {
         setPorConfirmar({ tramos: variables.tramos, impacto })
@@ -188,6 +188,13 @@ export function JornadaPage() {
         return
       }
       setFalloAlGuardar(getErrorMessage(e))
+      // Un error puede haber dejado la jornada cambiada igual: es el caso de
+      // la cascada a medias, donde el horario nuevo ya rige y lo que falló fue
+      // cancelar lo que quedó afuera. Se relee para que la pantalla muestre lo
+      // que hay de verdad, en vez de la jornada vieja al lado de un error que
+      // habla de otra cosa.
+      setPorConfirmar(null)
+      await invalidar()
     },
   })
 

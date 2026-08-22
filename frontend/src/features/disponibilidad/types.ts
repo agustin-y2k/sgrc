@@ -52,8 +52,15 @@ export type PrestamoAfectado = {
 
 /** Lo que un cambio de jornada dejaría afuera. */
 export type ImpactoDeJornada = {
+  /**
+   * Viene RECORTADA por el backend. Lo que se va a cancelar es
+   * `totalAfectadas`, no `reservas.length`: mostrar el largo de la lista haría
+   * que el Admin confirme creyendo que cancela muchas menos.
+   */
   reservas: ReservaAfectada[]
   prestamos: PrestamoAfectado[]
+  /** Cuántas se van a cancelar de verdad. */
+  totalAfectadas: number
   /** Cuántas reservas futuras hay en total, afectadas o no. */
   totalDeReservas: number
 }
@@ -81,13 +88,7 @@ export function impactoDelError(err: unknown): ImpactoDeJornada | null {
  * tienen por qué moverse juntos.
  */
 export type DiaSemana =
-  | "LUNES"
-  | "MARTES"
-  | "MIERCOLES"
-  | "JUEVES"
-  | "VIERNES"
-  | "SABADO"
-  | "DOMINGO"
+  "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES" | "SABADO" | "DOMINGO"
 
 export const DIAS_SEMANA: { valor: DiaSemana; etiqueta: string }[] = [
   { valor: "LUNES", etiqueta: "Lunes" },

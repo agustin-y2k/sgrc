@@ -62,21 +62,38 @@ type prestamoAfectadoResponse struct {
 	DevolucionEstimada string `json:"devolucionEstimada"`
 }
 
+// MaxAfectadasEnLaRespuesta acota la lista que viaja al cliente.
+//
+// El conteo es el dato que decide; la lista solo sirve para reconocer qué se
+// está por perder, y para eso alcanza con las primeras. Sin tope, justamente
+// el caso que esto vino a detectar —el tipeo que se lleva todo— devolvería
+// miles de filas y las pintaría todas en pantalla.
+const MaxAfectadasEnLaRespuesta = 50
+
 type impactoResponse struct {
-	Reservas  []reservaAfectadaResponse  `json:"reservas"`
-	Prestamos []prestamoAfectadoResponse `json:"prestamos"`
-	// TotalDeReservas: cuántas hay en total, para poder leer el tamaño de lo
-	// que se cancela contra el tamaño de lo que hay.
+	// Reservas viene recortada a MaxAfectadasEnLaRespuesta. Las que se van a
+	// cancelar son TotalAfectadas, no len(Reservas).
+	Reservas       []reservaAfectadaResponse  `json:"reservas"`
+	Prestamos      []prestamoAfectadoResponse `json:"prestamos"`
+	TotalAfectadas int                        `json:"totalAfectadas"`
+	// TotalDeReservas: cuántas hay en total, afectadas o no, para poder leer
+	// el tamaño de lo que se cancela contra el tamaño de lo que hay.
 	TotalDeReservas int `json:"totalDeReservas"`
 }
 
 func toImpactoResponse(i *application.ImpactoDeJornada) impactoResponse {
+	afectadas := i.Reservas
+	if len(afectadas) > MaxAfectadasEnLaRespuesta {
+		afectadas = afectadas[:MaxAfectadasEnLaRespuesta]
+	}
+
 	r := impactoResponse{
-		Reservas:        make([]reservaAfectadaResponse, len(i.Reservas)),
+		Reservas:        make([]reservaAfectadaResponse, len(afectadas)),
 		Prestamos:       make([]prestamoAfectadoResponse, len(i.Prestamos)),
+		TotalAfectadas:  len(i.Reservas),
 		TotalDeReservas: i.TotalDeReservas,
 	}
-	for n, res := range i.Reservas {
+	for n, res := range afectadas {
 		r.Reservas[n] = reservaAfectadaResponse{
 			ID:         res.ID,
 			Fecha:      res.Fecha.Format("2006-01-02"),

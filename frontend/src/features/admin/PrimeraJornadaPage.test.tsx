@@ -143,6 +143,7 @@ describe("PrimeraJornadaPage", () => {
             },
           ],
           prestamos: [],
+          totalAfectadas: 1,
           totalDeReservas: 40,
         },
       })

@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +17,7 @@ import (
 
 	"github.com/ramiro/sgrc/internal/availability/application"
 	"github.com/ramiro/sgrc/internal/availability/domain"
+	"github.com/ramiro/sgrc/internal/shared/audit"
 	"github.com/ramiro/sgrc/internal/shared/authtest"
 )
 
@@ -149,16 +154,16 @@ func idSecuencial() func() string {
 var testSecret = []byte("un-secreto-de-test-bastante-largo")
 
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
-	return nuevaAppDeTestCon(repo, &fakeReservas{})
+	return nuevaAppDeTestCon(repo, &fakeReservas{}, &auditorEspia{})
 }
 
-func nuevaAppDeTestCon(repo *fakeRepo, reservas *fakeReservas) *fiber.App {
+func nuevaAppDeTestCon(repo *fakeRepo, reservas *fakeReservas, auditor *auditorEspia) *fiber.App {
 	svc := application.NewService(repo, &fakeListadorAdmins{}, reservas, idSecuencial(), func() time.Time {
 		// lunes 9-mar-2026, 10:00 — coherente con los bloques LUNES 08-12
 		// que usan los tests de DisponibilidadDeAdmins.
 		return time.Date(2026, time.March, 9, 10, 0, 0, 0, time.UTC)
 	})
-	h := NewHandler(svc)
+	h := NewHandler(svc, auditor)
 
 	app := fiber.New()
 	RegisterRoutes(app, h, registroDePrueba.Autenticacion(testSecret))
@@ -529,7 +534,7 @@ func TestHTTP_DisponibilidadDeAdmins_ExcepcionDeHoyPisaElBloque(t *testing.T) {
 		return time.Date(2026, time.March, 9, 10, 0, 0, 0, time.UTC)
 	})
 	app := fiber.New()
-	RegisterRoutes(app, NewHandler(svc), registroDePrueba.Autenticacion(testSecret))
+	RegisterRoutes(app, NewHandler(svc, &auditorEspia{}), registroDePrueba.Autenticacion(testSecret))
 
 	req := httptest.NewRequest("GET", "/api/availability/admins", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
@@ -650,7 +655,7 @@ func TestHTTP_ReemplazarJornada_ConImpacto_409YNoGuarda(t *testing.T) {
 		HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour,
 		Equipo: "PC 3", Materia: "Matemáticas", Docente: "Ada Lovelace",
 	}}}
-	app := nuevaAppDeTestCon(repo, reservas)
+	app := nuevaAppDeTestCon(repo, reservas, &auditorEspia{})
 
 	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{Tramos: []bloqueRequest{
 		{DiaSemana: "LUNES", HoraInicio: "16:00", HoraFin: "18:00"},
@@ -698,7 +703,7 @@ func TestHTTP_ReemplazarJornada_Confirmada_200YCancela(t *testing.T) {
 		ID: "r1", Fecha: time.Date(2026, time.March, 9, 0, 0, 0, 0, time.UTC),
 		HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour, Equipo: "PC 3",
 	}}}
-	app := nuevaAppDeTestCon(repo, reservas)
+	app := nuevaAppDeTestCon(repo, reservas, &auditorEspia{})
 
 	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{
 		Tramos:     []bloqueRequest{{DiaSemana: "LUNES", HoraInicio: "16:00", HoraFin: "18:00"}},
@@ -724,6 +729,188 @@ func TestHTTP_ReemplazarJornada_Confirmada_200YCancela(t *testing.T) {
 	}
 	if len(reservas.canceladas) != 1 {
 		t.Errorf("se tenía que cancelar r1: %v", reservas.canceladas)
+	}
+}
+
+// La acción administrativa de mayor alcance del sistema tiene que dejar
+// rastro de quién la disparó y de cuánto se llevó puesto. Es lo mismo que
+// pide docs/09-seguridad-rbac.md §5 para el archivado de un ciclo.
+func TestHTTP_ReemplazarJornada_QuedaAuditada(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservas := &fakeReservas{futuras: []application.ReservaFutura{{
+		ID: "r1", Fecha: time.Date(2026, time.March, 9, 0, 0, 0, 0, time.UTC),
+		HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour, Equipo: "PC 3",
+	}}}
+	auditor := &auditorEspia{}
+	app := nuevaAppDeTestCon(repo, reservas, auditor)
+
+	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{
+		Tramos:     []bloqueRequest{{DiaSemana: "LUNES", HoraInicio: "16:00", HoraFin: "18:00"}},
+		Confirmado: true,
+	}))
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	req.Header.Set("Content-Type", "application/json")
+
+	if _, err := app.Test(req); err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	entradas := auditor.de("JORNADA_CAMBIADA")
+	if len(entradas) != 1 {
+		t.Fatalf("esperaba una entrada de auditoría, hubo %d", len(entradas))
+	}
+	if entradas[0].UsuarioID != "admin1" {
+		t.Errorf("tiene que quedar QUIÉN lo hizo: %q", entradas[0].UsuarioID)
+	}
+	// El conteo es el dato que hace útil el registro: sin él la entrada dice
+	// que alguien cambió el horario, no que canceló las clases de la escuela.
+	if entradas[0].Detalle["reservasCanceladas"] != 1 {
+		t.Errorf("tiene que quedar CUÁNTO se canceló: %+v", entradas[0].Detalle)
+	}
+}
+
+// Un cambio que no se aplicó no se audita: el 409 es una pregunta, no un
+// hecho, y un registro lleno de intentos esconde los cambios de verdad.
+func TestHTTP_ReemplazarJornada_SinConfirmar_NoSeAudita(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservas := &fakeReservas{futuras: []application.ReservaFutura{{
+		ID: "r1", Fecha: time.Date(2026, time.March, 9, 0, 0, 0, 0, time.UTC),
+		HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour, Equipo: "PC 3",
+	}}}
+	auditor := &auditorEspia{}
+	app := nuevaAppDeTestCon(repo, reservas, auditor)
+
+	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{Tramos: []bloqueRequest{
+		{DiaSemana: "LUNES", HoraInicio: "16:00", HoraFin: "18:00"},
+	}}))
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	req.Header.Set("Content-Type", "application/json")
+
+	if _, err := app.Test(req); err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if len(auditor.de("JORNADA_CAMBIADA")) != 0 {
+		t.Error("una previsualización no cambió nada: no hay qué auditar")
+	}
+}
+
+// El tope existe sobre todo por lo que pasa DESPUÉS: la jornada se lee entera
+// en cada alta de reserva, así que una inflada no molesta una vez sino todos
+// los días.
+func TestHTTP_ReemplazarJornada_DemasiadosTramos_400(t *testing.T) {
+	repo := nuevoFakeRepo()
+	app := nuevaAppDeTest(repo)
+
+	// Tramos de un minuto, todos distintos: no se solapan, así que lo único
+	// que puede frenarlos es el tope.
+	muchos := make([]bloqueRequest, application.MaxTramosDeJornada+1)
+	for i := range muchos {
+		muchos[i] = bloqueRequest{
+			DiaSemana:  "LUNES",
+			HoraInicio: fmt.Sprintf("%02d:%02d", i/60, i%60),
+			HoraFin:    fmt.Sprintf("%02d:%02d", (i+1)/60, (i+1)%60),
+		}
+	}
+
+	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{Tramos: muchos}))
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+	if len(repo.jornada) != 0 {
+		t.Error("un pedido rechazado no puede dejar nada escrito")
+	}
+}
+
+// La lista del 409 se recorta, pero el número no: es el número el que decide,
+// y recortarlo haría que el Admin confirmara creyendo que cancela menos.
+func TestHTTP_ReemplazarJornada_LaListaSeRecortaPeroElConteoNo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	cuantas := MaxAfectadasEnLaRespuesta + 20
+	futuras := make([]application.ReservaFutura, cuantas)
+	for i := range futuras {
+		futuras[i] = application.ReservaFutura{
+			ID:    fmt.Sprintf("r%d", i),
+			Fecha: time.Date(2026, time.March, 9, 0, 0, 0, 0, time.UTC),
+			// 13:00–15:00, fuera del tramo 16:00–18:00 que se va a declarar.
+			HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour, Equipo: "PC 3",
+		}
+	}
+	app := nuevaAppDeTestCon(repo, &fakeReservas{futuras: futuras}, &auditorEspia{})
+
+	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{Tramos: []bloqueRequest{
+		{DiaSemana: "LUNES", HoraInicio: "16:00", HoraFin: "18:00"},
+	}}))
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	var cuerpo struct {
+		Impacto struct {
+			Reservas       []map[string]any `json:"reservas"`
+			TotalAfectadas int              `json:"totalAfectadas"`
+		} `json:"impacto"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if len(cuerpo.Impacto.Reservas) != MaxAfectadasEnLaRespuesta {
+		t.Errorf("la lista tenía que recortarse en %d, vinieron %d",
+			MaxAfectadasEnLaRespuesta, len(cuerpo.Impacto.Reservas))
+	}
+	if cuerpo.Impacto.TotalAfectadas != cuantas {
+		t.Errorf("el conteo tiene que ser el real (%d), vino %d", cuantas, cuerpo.Impacto.TotalAfectadas)
+	}
+}
+
+// La cascada a medias deja la jornada nueva puesta. El mensaje tiene que
+// decirlo: con un "error interno" genérico el Admin cree que no pasó nada y
+// el horario de la escuela cambió sin que lo sepa.
+func TestHTTP_ReemplazarJornada_CascadaAMedias_LoDiceYLoAudita(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservas := &fakeReservas{
+		futuras: []application.ReservaFutura{{
+			ID: "r1", Fecha: time.Date(2026, time.March, 9, 0, 0, 0, 0, time.UTC),
+			HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour, Equipo: "PC 3",
+		}},
+		errCancelar: errors.New("la base se cayó"),
+	}
+	auditor := &auditorEspia{}
+	app := nuevaAppDeTestCon(repo, reservas, auditor)
+
+	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{
+		Tramos:     []bloqueRequest{{DiaSemana: "LUNES", HoraInicio: "16:00", HoraFin: "18:00"}},
+		Confirmado: true,
+	}))
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Fatalf("esperaba 500, obtuve %d", resp.StatusCode)
+	}
+	cuerpo, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(cuerpo), "la jornada se guardó") {
+		t.Errorf("el mensaje tiene que decir que el cambio sí se aplicó: %q", cuerpo)
+	}
+	// Y queda auditado igual: el horario cambió, y eso es lo que el registro
+	// no puede perderse.
+	entradas := auditor.de("JORNADA_CAMBIADA")
+	if len(entradas) != 1 || entradas[0].Detalle["cascadaIncompleta"] != true {
+		t.Errorf("la cascada a medias también se audita: %+v", entradas)
 	}
 }
 
@@ -790,9 +977,10 @@ func (r *fakeRepo) JornadaDefinida(_ context.Context) (bool, error) {
 // nada que pueda quedar fuera de la jornada, que es el caso de casi todos
 // estos tests.
 type fakeReservas struct {
-	futuras    []application.ReservaFutura
-	prestamos  []application.PrestamoAbierto
-	canceladas []string
+	futuras     []application.ReservaFutura
+	prestamos   []application.PrestamoAbierto
+	canceladas  []string
+	errCancelar error
 }
 
 func (f *fakeReservas) ReservasFuturas(_ context.Context, _ time.Time) ([]application.ReservaFutura, error) {
@@ -804,6 +992,30 @@ func (f *fakeReservas) PrestamosAbiertos(_ context.Context) ([]application.Prest
 }
 
 func (f *fakeReservas) CancelarReservas(_ context.Context, ids []string, _ string) (int, error) {
+	if f.errCancelar != nil {
+		return 0, f.errCancelar
+	}
 	f.canceladas = append(f.canceladas, ids...)
 	return len(ids), nil
+}
+
+// auditorEspia guarda lo que se auditó, para poder afirmar que una acción
+// destructiva dejó rastro.
+type auditorEspia struct {
+	entradas []audit.Entrada
+}
+
+func (a *auditorEspia) Registrar(_ context.Context, e audit.Entrada) error {
+	a.entradas = append(a.entradas, e)
+	return nil
+}
+
+func (a *auditorEspia) de(accion string) []audit.Entrada {
+	var r []audit.Entrada
+	for _, e := range a.entradas {
+		if e.Accion == accion {
+			r = append(r, e)
+		}
+	}
+	return r
 }
