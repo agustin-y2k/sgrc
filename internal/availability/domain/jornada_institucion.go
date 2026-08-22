@@ -72,6 +72,30 @@ func PermiteReserva(jornada []*BloqueJornada, dia DiaSemana, horaInicio, horaFin
 	return false
 }
 
+// MomentoDentroDeLaJornada dice si un instante puntual cae en algún tramo
+// abierto de ese día.
+//
+// Es la pregunta que hace falta para un préstamo: su devolución pactada es un
+// momento, no un rango. Existe aparte de PermiteReserva —y no como una
+// reserva de duración cero— porque un tramo de cero horas es justamente lo
+// que NuevoBloqueJornada rechaza por inválido: apoyarse en que el cálculo de
+// duración se porte bien en ese borde sería apoyarse en un accidente.
+//
+// Jornada vacía = sin restricción, igual que en PermiteReserva.
+func MomentoDentroDeLaJornada(jornada []*BloqueJornada, dia DiaSemana, hora time.Duration) bool {
+	if len(jornada) == 0 {
+		return true
+	}
+	for _, t := range tramosDelDia(jornada, dia) {
+		// Cerrado en los dos extremos: devolver justo a la hora de cierre es
+		// devolver en horario.
+		if hora >= t.desde && hora <= t.hasta {
+			return true
+		}
+	}
+	return false
+}
+
 // CierreDe dice a qué hora termina la jornada de ese día, medida desde la
 // medianoche del día que nombra al tramo.
 //

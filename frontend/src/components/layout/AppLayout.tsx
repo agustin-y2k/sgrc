@@ -8,12 +8,24 @@ import { PieDeAutoria } from "@/components/PieDeAutoria"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/features/auth/AuthContext"
+import { useAfuera } from "@/features/admin/entregas/useAfuera"
 import { useNoLeidas } from "@/features/notificaciones/useNoLeidas"
 import { contar } from "@/lib/plural"
 import { Avatar } from "@/components/Avatar"
 
 /** Los enlaces del menú, en el orden en que se usan. */
 type Enlace = { a: string; texto: string }
+
+/**
+ * El enlace que lleva el contador de máquinas afuera.
+ *
+ * Va acá y no en Avisos porque no es un aviso: es un estado. El correo del
+ * cierre de jornada sale una sola vez, así que si la única huella de una
+ * computadora que no volvió fuera ese correo, alcanzaría con no leerlo para
+ * que nadie se enterara nunca más. Este número no se va hasta que alguien la
+ * recibe.
+ */
+const ENLACE_CON_AFUERA = "/admin/entregas"
 
 const ENLACES: Enlace[] = [
   { a: "/reservas", texto: "Reservas" },
@@ -57,6 +69,25 @@ const ENLACES_ADMIN: Enlace[] = [
   { a: "/admin/bloquear-equipos", texto: "Bloquear equipos" },
 ]
 
+/**
+ * El texto de un enlace de administración, con el contador cuando
+ * corresponde. Compartido entre la barra y el menú del teléfono: dos copias
+ * es cómo terminan mostrando números distintos.
+ */
+function TextoDeEnlaceAdmin({ enlace, afuera }: { enlace: Enlace; afuera: number }) {
+  if (enlace.a !== ENLACE_CON_AFUERA || afuera === 0) {
+    return <>{enlace.texto}</>
+  }
+  return (
+    <span className="flex w-full items-center justify-between gap-1.5">
+      {enlace.texto}
+      <Badge variant="secondary" aria-label={`${afuera} fuera del laboratorio`}>
+        {afuera}
+      </Badge>
+    </span>
+  )
+}
+
 function claseDeEnlace({ isActive }: { isActive: boolean }): string {
   // El activo se marca con fondo y no solo con color: en una barra de diez
   // ítems, un cambio de tono se pierde y nadie sabe dónde está parado.
@@ -78,7 +109,7 @@ function claseDeEnlaceMovil(estado: { isActive: boolean }): string {
 }
 
 /** El grupo "Administración" de la barra de escritorio. */
-function MenuAdministracion() {
+function MenuAdministracion({ afuera }: { afuera: number }) {
   const [abierto, setAbierto] = useState(false)
   const contenedor = useRef<HTMLDivElement>(null)
   const { pathname } = useLocation()
@@ -140,7 +171,7 @@ function MenuAdministracion() {
         >
           {ENLACES_ADMIN.map((e) => (
             <NavLink key={e.a} to={e.a} className={claseDeEnlace}>
-              {e.texto}
+              <TextoDeEnlaceAdmin enlace={e} afuera={afuera} />
             </NavLink>
           ))}
         </nav>
@@ -156,6 +187,7 @@ export function AppLayout() {
   const [menuAbierto, setMenuAbierto] = useState(false)
 
   const esAdmin = user?.rol === "ADMIN"
+  const afuera = useAfuera(esAdmin)
   const enlaces = esAdmin ? [...ENLACES, ENLACE_APROBACION] : ENLACES
 
   function handleLogout() {
@@ -234,7 +266,7 @@ export function AppLayout() {
               ))}
               {avisos(claseDeEnlace)}
             </div>
-            {esAdmin && <MenuAdministracion />}
+            {esAdmin && <MenuAdministracion afuera={afuera} />}
           </nav>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -369,7 +401,7 @@ export function AppLayout() {
                     className={claseDeEnlaceMovil}
                     onClick={cerrarMenu}
                   >
-                    {e.texto}
+                    <TextoDeEnlaceAdmin enlace={e} afuera={afuera} />
                   </NavLink>
                 ))}
               </>

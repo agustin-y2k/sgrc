@@ -9,8 +9,18 @@ import * as notificacionesApi from "@/features/notificaciones/api"
 import type { Notificacion } from "@/features/notificaciones/types"
 import { paginada } from "@/test/respuestas"
 
+import * as reservasApi from "@/features/reservas/api"
+
 vi.mock("@/features/auth/AuthContext")
 vi.mock("@/features/notificaciones/api")
+vi.mock("@/features/reservas/api")
+
+/** Cuántas computadoras figuran fuera del laboratorio. */
+function afuera(cuantas: number) {
+  vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
+    data: Array.from({ length: cuantas }, (_, i) => ({ id: `p${i}` })),
+  } as Awaited<ReturnType<typeof reservasApi.listarPrestamosAbiertos>>)
+}
 
 function notificacion(id: string): Notificacion {
   return {
@@ -58,6 +68,7 @@ describe("AppLayout", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(paginada([]))
+    afuera(0)
   })
 
   afterEach(() => {
@@ -151,5 +162,38 @@ describe("AppLayout", () => {
     await userEvent.keyboard("{Escape}")
 
     expect(screen.queryByRole("link", { name: "Reportes" })).not.toBeInTheDocument()
+  })
+
+  // El aviso del cierre de jornada sale una sola vez, así que la huella de una
+  // máquina que no volvió tiene que estar acá: este número no se va hasta que
+  // alguien la recibe.
+  it("muestra cuántas computadoras están afuera, junto a Entregas", async () => {
+    afuera(3)
+    renderLayout("ADMIN")
+
+    const grupo = await screen.findByRole("button", { name: /Administración/ })
+    await userEvent.click(grupo)
+
+    expect(screen.getByLabelText("3 fuera del laboratorio")).toBeInTheDocument()
+  })
+
+  it("sin nada afuera no dibuja el contador", async () => {
+    afuera(0)
+    renderLayout("ADMIN")
+
+    const grupo = await screen.findByRole("button", { name: /Administración/ })
+    await userEvent.click(grupo)
+
+    expect(screen.getByRole("link", { name: "Entregas" })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/fuera del laboratorio/)).not.toBeInTheDocument()
+  })
+
+  // Un docente no tiene la pantalla de entregas ni permiso para consultarla:
+  // pedirla igual sería un 403 en cada carga de página.
+  it("a un docente no se le consultan los préstamos", async () => {
+    renderLayout("DOCENTE")
+
+    await screen.findByRole("link", { name: /Reservas/ })
+    expect(reservasApi.listarPrestamosAbiertos).not.toHaveBeenCalled()
   })
 })

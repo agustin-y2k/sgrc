@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import * as disponibilidadApi from "@/features/disponibilidad/api"
 import { JORNADA_KEY } from "@/features/disponibilidad/api"
-import type { TramoDeJornada } from "@/features/disponibilidad/types"
+import { impactoDelError } from "@/features/disponibilidad/types"
+import type { ImpactoDeJornada, TramoDeJornada } from "@/features/disponibilidad/types"
+import { ImpactoDeLaJornada } from "@/features/admin/ImpactoDeLaJornada"
 import {
   CamposDeTramo,
   motivoParaNoGuardar,
@@ -35,19 +37,50 @@ export function PrimeraJornadaPage() {
   const [tramos, setTramos] = useState<TramoDeJornada[]>([])
   const [nuevo, setNuevo] = useState<FormTramo>(TRAMO_VACIO)
   const [fallo, setFallo] = useState<string | null>(null)
+  // La jornada que espera confirmación, con lo que dejaría afuera.
+  const [porConfirmar, setPorConfirmar] = useState<{
+    tramos: TramoDeJornada[]
+    impacto: ImpactoDeJornada
+  } | null>(null)
 
   const guardar = useMutation({
-    mutationFn: (jornada: TramoDeJornada[]) =>
-      disponibilidadApi.reemplazarJornada(jornada),
+    mutationFn: ({
+      jornada,
+      confirmado,
+    }: {
+      jornada: TramoDeJornada[]
+      confirmado: boolean
+    }) => disponibilidadApi.reemplazarJornada(jornada, confirmado),
     // Sin navigate: en cuanto la jornada queda definida, el portón de
     // ProtectedRoute deja de mandar acá y la pantalla que el Admin quería
     // aparece sola. Redirigir a mano competiría con eso.
     onSuccess: async () => {
       setFallo(null)
+      setPorConfirmar(null)
       await queryClient.invalidateQueries({ queryKey: JORNADA_KEY })
     },
-    onError: (e) => setFallo(getErrorMessage(e)),
+    // Acá el 409 no es un detalle de comodidad como en la pantalla de
+    // jornada: es la diferencia entre poder seguir y quedar encerrado.
+    //
+    // Una instalación que venía funcionando SIN jornada declarada llega a esta
+    // pantalla con meses de reservas cargadas, y cualquier horario que declare
+    // va a dejar alguna afuera. Sin poder confirmar, el Admin no sale de acá
+    // —el portón lo devuelve— y su única salida sería dejar la jornada libre,
+    // o sea rendirse.
+    onError: (e, variables) => {
+      const impacto = impactoDelError(e)
+      if (impacto !== null) {
+        setPorConfirmar({ tramos: variables.jornada, impacto })
+        setFallo(null)
+        return
+      }
+      setFallo(getErrorMessage(e))
+    },
   })
+
+  function proponer(jornada: TramoDeJornada[]) {
+    guardar.mutate({ jornada, confirmado: false })
+  }
 
   const motivoNuevo = motivoParaNoGuardar(nuevo)
 
@@ -85,6 +118,17 @@ export function PrimeraJornadaPage() {
         <Alert variant="destructive">
           <AlertDescription>{fallo}</AlertDescription>
         </Alert>
+      )}
+
+      {porConfirmar !== null && (
+        <ImpactoDeLaJornada
+          impacto={porConfirmar.impacto}
+          guardando={guardar.isPending}
+          onConfirmar={() =>
+            guardar.mutate({ jornada: porConfirmar.tramos, confirmado: true })
+          }
+          onCancelar={() => setPorConfirmar(null)}
+        />
       )}
 
       <Card>
@@ -143,7 +187,7 @@ export function PrimeraJornadaPage() {
       <div className="flex flex-wrap items-center gap-3">
         <Button
           disabled={tramos.length === 0 || guardar.isPending}
-          onClick={() => guardar.mutate(tramos)}
+          onClick={() => proponer(tramos)}
         >
           Guardar la jornada
         </Button>
@@ -151,11 +195,7 @@ export function PrimeraJornadaPage() {
             todas las letras: quien está probando el sistema no sabe todavía
             qué horario tiene la escuela, y obligarlo a inventar uno es
             producir el error que esta pantalla vino a evitar. */}
-        <Button
-          variant="ghost"
-          disabled={guardar.isPending}
-          onClick={() => guardar.mutate([])}
-        >
+        <Button variant="ghost" disabled={guardar.isPending} onClick={() => proponer([])}>
           Dejarla libre por ahora
         </Button>
       </div>

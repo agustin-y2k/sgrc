@@ -76,6 +76,7 @@ func TestUnaActualizacionNoSeLlevaLosDatosPuestos(t *testing.T) {
 	// 4. Nada de lo que había se perdió por el camino.
 	verificarQueNingunaTablaPerdioFilas(ctx, t, pool, antes)
 	verificarQueLaReservaSigueEntera(ctx, t, pool)
+	verificarQueLaJornadaYaEstabaDecidida(ctx, t, pool)
 	verificarQueLaVersionEsLaUltima(ctx, t, pool)
 }
 
@@ -191,6 +192,34 @@ func verificarQueNingunaTablaPerdioFilas(ctx context.Context, t *testing.T, pool
 // verificarQueLaReservaSigueEntera es el contrapeso del conteo: una migración
 // puede dejar la misma cantidad de filas y arruinarlas igual —perdiendo el
 // vínculo con el equipo, corriendo un horario al pasarlo a otro tipo—.
+// verificarQueLaJornadaYaEstabaDecidida cubre la única decisión de la 002 que
+// no es estructural.
+//
+// La bandera arranca en FALSE para una instalación nueva, y eso manda al
+// primer Admin a declarar la jornada. Pero esta base viene funcionando y ya
+// tiene su jornada cargada hace meses: si la actualización la dejara en
+// FALSE, el Admin abriría el sistema y se encontraría con un cuestionario
+// pidiéndole que responda algo que ya respondió.
+func verificarQueLaJornadaYaEstabaDecidida(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	var definida bool
+	if err := pool.QueryRow(ctx,
+		`SELECT jornada_definida FROM configuracion_institucion`).Scan(&definida); err != nil {
+		t.Fatalf("la 002 tiene que dejar la fila única de configuración creada: %v", err)
+	}
+	if !definida {
+		t.Error("la instalación ya tenía tramos cargados: su jornada ya estaba decidida")
+	}
+
+	// Y sigue siendo una sola fila: el CHECK sobre la clave primaria es lo
+	// que impide que aparezca una segunda escribiendo directo contra la base.
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO configuracion_institucion (unica, jornada_definida) VALUES (false, true)`); err == nil {
+		t.Error("la configuración de la institución tiene que ser una sola fila")
+	}
+}
+
 func verificarQueLaReservaSigueEntera(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 

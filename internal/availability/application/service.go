@@ -357,9 +357,7 @@ func (s *Service) impactoDe(ctx context.Context, bloques []*domain.BloqueJornada
 			continue
 		}
 		dia, hora := domain.DiaYHoraDe(*p.DevolucionEstimada)
-		// La devolución es un instante y no un rango, así que se pregunta por
-		// un tramo de duración cero: cae adentro o no cae.
-		if !domain.PermiteReserva(bloques, dia, hora, hora) {
+		if !domain.MomentoDentroDeLaJornada(bloques, dia, hora) {
 			impacto.Prestamos = append(impacto.Prestamos, p)
 		}
 	}

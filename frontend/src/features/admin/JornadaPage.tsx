@@ -256,7 +256,6 @@ export function JornadaPage() {
       {porConfirmar !== null && (
         <ImpactoDeLaJornada
           impacto={porConfirmar.impacto}
-          totalDeReservas={porConfirmar.impacto.totalDeReservas}
           guardando={guardar.isPending}
           onConfirmar={() =>
             guardar.mutate({ tramos: porConfirmar.tramos, confirmado: true })

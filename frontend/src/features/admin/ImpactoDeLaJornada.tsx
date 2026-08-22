@@ -21,22 +21,22 @@ function plural(n: number, singular: string, plural: string): string {
 
 export function ImpactoDeLaJornada({
   impacto,
-  totalDeReservas,
   guardando,
   onConfirmar,
   onCancelar,
 }: {
   impacto: ImpactoDeJornada
-  /** Cuántas reservas futuras hay en total, para saber si esto es casi todas. */
-  totalDeReservas: number
   guardando: boolean
   onConfirmar: () => void
   onCancelar: () => void
 }) {
   const cuantas = impacto.reservas.length
   const docentes = new Set(impacto.reservas.map((r) => r.docente).filter((d) => d !== ""))
+  // Contra el total, no en absoluto: veinte cancelaciones sobre veinticinco
+  // reservas no es lo mismo que veinte sobre trescientas.
   const casiTodo =
-    totalDeReservas > 0 && cuantas / totalDeReservas >= PROPORCION_SOSPECHOSA
+    impacto.totalDeReservas > 0 &&
+    cuantas / impacto.totalDeReservas >= PROPORCION_SOSPECHOSA
 
   return (
     <div className="border-destructive/50 mb-4 grid gap-3 rounded-md border p-4">

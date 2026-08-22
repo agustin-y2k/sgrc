@@ -2239,3 +2239,155 @@ type jornadaLibre struct{}
 func (jornadaLibre) PermiteReserva(_ context.Context, _ time.Time, _, _ time.Duration) (bool, error) {
 	return true, nil
 }
+
+// Sin jornada declarada no hay cierre que deducir: el barrido cae a la hora
+// configurada.
+func (jornadaLibre) CierreDeLaJornada(_ context.Context, _ time.Time) (application.CierreDeJornada, error) {
+	return application.CierreDeJornada{}, nil
+}
+
+// ── ListarReservasFuturas (el insumo del cambio de jornada) ─────────────
+
+// La consulta que alimenta el conteo que se le muestra al Admin antes de
+// achicar la jornada. Se prueba contra Postgres porque tiene cuatro JOINs y
+// el filtro de "todavía no terminó" apoyado en fin_de_pared: un LEFT que
+// debería ser INNER, o al revés, no lo ve ningún test con dobles.
+func TestPostgresRepo_ListarReservasFuturas(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	materiaID := crearMateriaDeTest(t, pool)
+	pcDeCarro := crearEquipoDeCarroDeTest(t, pool)
+	proyector := crearEquipoSueltoDeTest(t, pool, "Proyector Epson")
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	manana := time.Date(2099, 3, 9, 0, 0, 0, 0, time.UTC)
+	ayer := time.Date(2020, 3, 9, 0, 0, 0, 0, time.UTC)
+
+	crearReserva := func(equipoID string, fecha time.Time) *domain.Reserva {
+		t.Helper()
+		g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+		if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+			t.Fatalf("no se pudo crear el grupo: %v", err)
+		}
+		r, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace",
+			nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+		if err != nil {
+			t.Fatalf("error de dominio inesperado: %v", err)
+		}
+		if err := repo.CrearReserva(ctx, r); err != nil {
+			t.Fatalf("no se pudo crear la reserva: %v", err)
+		}
+		return r
+	}
+
+	futuraDeCarro := crearReserva(pcDeCarro, manana)
+	// El equipo suelto es el caso que rompe si el JOIN con carro fuera INNER:
+	// un proyector no está en ningún carro y su reserva se caería de la
+	// consulta, o sea del conteo que decide qué se cancela.
+	futuraSuelta := crearReserva(proyector, manana)
+	crearReserva(pcDeCarro, ayer) // ya terminó
+
+	// Un bloqueo administrativo: nunca estuvo sujeto a la jornada (RF-04.7).
+	bloqueo, err := domain.NuevaReservaBloqueo(NuevoID(), pcDeCarro, nil, manana,
+		14*time.Hour, 16*time.Hour, "Mantenimiento", ahora)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, bloqueo); err != nil {
+		t.Fatalf("no se pudo crear el bloqueo: %v", err)
+	}
+
+	// Una cancelada tampoco cuenta: ya no ocupa nada.
+	cancelada := crearReserva(proyector, manana.AddDate(0, 0, 1))
+	if err := cancelada.Cancelar(nil, "de prueba", ahora); err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.GuardarReserva(ctx, cancelada); err != nil {
+		t.Fatalf("no se pudo cancelar: %v", err)
+	}
+
+	futuras, err := repo.ListarReservasFuturas(ctx, ahora)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	ids := map[string]application.ReservaDetallada{}
+	for _, f := range futuras {
+		ids[f.Reserva.ID] = f
+	}
+	if len(futuras) != 2 {
+		t.Fatalf("esperaba las dos futuras de clase, obtuve %d: %+v", len(futuras), ids)
+	}
+	if _, ok := ids[futuraDeCarro.ID]; !ok {
+		t.Error("falta la reserva de la PC de carro")
+	}
+	if _, ok := ids[futuraSuelta.ID]; !ok {
+		t.Error("falta la reserva del equipo suelto: el JOIN con carro tiene que ser LEFT")
+	}
+	if _, ok := ids[bloqueo.ID]; ok {
+		t.Error("un bloqueo administrativo no está sujeto a la jornada")
+	}
+	if _, ok := ids[cancelada.ID]; ok {
+		t.Error("una reserva cancelada no ocupa nada")
+	}
+
+	// Los nombres tienen que venir resueltos: son lo que se le muestra al
+	// Admin para que entienda qué está por cancelar.
+	if d := ids[futuraSuelta.ID]; d.Etiqueta != "Proyector Epson" {
+		t.Errorf("un equipo suelto se nombra por su nombre, obtuve %q", d.Etiqueta)
+	}
+	if d := ids[futuraDeCarro.ID]; d.MateriaNombre == "" || d.CarroNombre == "" {
+		t.Errorf("faltan los nombres resueltos: %+v", d)
+	}
+	if d := ids[futuraDeCarro.ID]; d.Reserva.NombreDocenteSnapshot == nil ||
+		*d.Reserva.NombreDocenteSnapshot != "Ada Lovelace" {
+		t.Errorf("falta el docente, que es a quién le cae la cancelación: %+v", d.Reserva)
+	}
+}
+
+// La reserva que cruza la medianoche no terminó hasta que termina de verdad,
+// y eso lo decide fin_de_pared. Sin esto, una clase de 22:00 a 01:00
+// desaparecería del conteo apenas pasa la medianoche.
+func TestPostgresRepo_ListarReservasFuturas_LaQueCruzaLaMedianoche(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	materiaID := crearMateriaDeTest(t, pool)
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	fecha := time.Date(2099, 3, 9, 0, 0, 0, 0, time.UTC)
+	g := nuevoReservaGrupoDeTest(materiaID, fecha, 22*time.Hour, 1*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatalf("no se pudo crear el grupo: %v", err)
+	}
+	r, err := domain.NuevaReservaNormal(NuevoID(), g.ID, pc, materiaID, "Ada", nil,
+		fecha, 22*time.Hour, 1*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, r); err != nil {
+		t.Fatalf("no se pudo crear la reserva: %v", err)
+	}
+
+	// A las 23:00 de ese mismo día la clase está en curso: no terminó.
+	enPlenaClase := fecha.Add(23 * time.Hour)
+	futuras, err := repo.ListarReservasFuturas(ctx, enPlenaClase)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(futuras) != 1 {
+		t.Fatalf("la clase de la noche todavía no terminó: %+v", futuras)
+	}
+
+	// A las 02:00 del día siguiente sí terminó.
+	yaTermino := fecha.AddDate(0, 0, 1).Add(2 * time.Hour)
+	futuras, err = repo.ListarReservasFuturas(ctx, yaTermino)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(futuras) != 0 {
+		t.Errorf("a las 02:00 la clase de la noche anterior ya terminó: %+v", futuras)
+	}
+}

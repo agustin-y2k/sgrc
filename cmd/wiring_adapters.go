@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	availabilityapp "github.com/ramiro/sgrc/internal/availability/application"
@@ -96,7 +97,24 @@ type availabilityReservasAdapter struct {
 	reservationSvc *reservationapp.Service
 }
 
+// errSinCablear protege el único momento frágil del arranque: entre que se
+// construye este adaptador y que se le asigna reservationSvc hay treinta
+// líneas de main.go, y quien las reordene rompería el cambio de jornada con un
+// panic a los seis meses. Con esto falla el request, no el proceso, y el
+// mensaje dice exactamente qué pasó.
+var errSinCablear = errors.New("el adaptador hacia reservation todavía no está cableado (ver el orden de construcción en main.go)")
+
+func (a *availabilityReservasAdapter) listo() error {
+	if a == nil || a.reservationSvc == nil {
+		return errSinCablear
+	}
+	return nil
+}
+
 func (a *availabilityReservasAdapter) ReservasFuturas(ctx context.Context, desde time.Time) ([]availabilityapp.ReservaFutura, error) {
+	if err := a.listo(); err != nil {
+		return nil, err
+	}
 	detalladas, err := a.reservationSvc.ReservasFuturas(ctx, desde)
 	if err != nil {
 		return nil, err
@@ -117,6 +135,9 @@ func (a *availabilityReservasAdapter) ReservasFuturas(ctx context.Context, desde
 }
 
 func (a *availabilityReservasAdapter) PrestamosAbiertos(ctx context.Context) ([]availabilityapp.PrestamoAbierto, error) {
+	if err := a.listo(); err != nil {
+		return nil, err
+	}
 	abiertos, err := a.reservationSvc.ListarPrestamosAbiertos(ctx)
 	if err != nil {
 		return nil, err
@@ -134,6 +155,9 @@ func (a *availabilityReservasAdapter) PrestamosAbiertos(ctx context.Context) ([]
 }
 
 func (a *availabilityReservasAdapter) CancelarReservas(ctx context.Context, reservaIDs []string, motivo string) (int, error) {
+	if err := a.listo(); err != nil {
+		return 0, err
+	}
 	return a.reservationSvc.CancelarReservasPorIDs(ctx, reservaIDs, motivo)
 }
 

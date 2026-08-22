@@ -43,13 +43,16 @@ describe("PrimeraJornadaPage", () => {
     await waitFor(() => {
       expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(1)
     })
-    expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledWith([
-      { diaSemana: "LUNES", horaInicio: "08:00", horaFin: "12:00" },
-      { diaSemana: "MARTES", horaInicio: "08:00", horaFin: "12:00" },
-      { diaSemana: "MIERCOLES", horaInicio: "08:00", horaFin: "12:00" },
-      { diaSemana: "JUEVES", horaInicio: "08:00", horaFin: "12:00" },
-      { diaSemana: "VIERNES", horaInicio: "08:00", horaFin: "12:00" },
-    ])
+    expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledWith(
+      [
+        { diaSemana: "LUNES", horaInicio: "08:00", horaFin: "12:00" },
+        { diaSemana: "MARTES", horaInicio: "08:00", horaFin: "12:00" },
+        { diaSemana: "MIERCOLES", horaInicio: "08:00", horaFin: "12:00" },
+        { diaSemana: "JUEVES", horaInicio: "08:00", horaFin: "12:00" },
+        { diaSemana: "VIERNES", horaInicio: "08:00", horaFin: "12:00" },
+      ],
+      false
+    )
   })
 
   // Turno mañana y turno noche: dos tramos para los mismos días, con el
@@ -69,10 +72,13 @@ describe("PrimeraJornadaPage", () => {
     await user.click(screen.getByRole("button", { name: "Guardar la jornada" }))
 
     await waitFor(() => {
-      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledWith([
-        { diaSemana: "LUNES", horaInicio: "08:00", horaFin: "12:00" },
-        { diaSemana: "LUNES", horaInicio: "18:00", horaFin: "23:00" },
-      ])
+      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledWith(
+        [
+          { diaSemana: "LUNES", horaInicio: "08:00", horaFin: "12:00" },
+          { diaSemana: "LUNES", horaInicio: "18:00", horaFin: "23:00" },
+        ],
+        false
+      )
     })
   })
 
@@ -86,7 +92,7 @@ describe("PrimeraJornadaPage", () => {
     await user.click(screen.getByRole("button", { name: "Dejarla libre por ahora" }))
 
     await waitFor(() => {
-      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledWith([])
+      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledWith([], false)
     })
   })
 
@@ -113,6 +119,46 @@ describe("PrimeraJornadaPage", () => {
     await user.click(quitar)
 
     expect(screen.getByRole("button", { name: "Guardar la jornada" })).toBeDisabled()
+  })
+
+  // El encierro: una instalación que venía funcionando SIN jornada declarada
+  // llega acá con meses de reservas, así que cualquier horario que declare
+  // deja alguna afuera. Sin poder confirmar, el Admin no sale de esta pantalla
+  // —el portón lo devuelve— y su única salida sería rendirse y dejarla libre.
+  it("puede confirmar aunque el horario deje reservas afuera", async () => {
+    const user = userEvent.setup()
+    vi.mocked(disponibilidadApi.reemplazarJornada).mockRejectedValueOnce(
+      new ApiError(409, "el cambio deja reservas fuera de la jornada", {
+        error: "el cambio deja reservas fuera de la jornada",
+        impacto: {
+          reservas: [
+            {
+              id: "r1",
+              fecha: "2026-03-14",
+              horaInicio: "09:00",
+              horaFin: "11:00",
+              equipo: "PC 3",
+              materia: "Matemáticas",
+              docente: "Ada Lovelace",
+            },
+          ],
+          prestamos: [],
+          totalDeReservas: 40,
+        },
+      })
+    )
+    renderPagina()
+
+    await user.click(screen.getByRole("button", { name: "Lunes a viernes" }))
+    await user.click(screen.getByRole("button", { name: "Agregar tramo" }))
+    await user.click(screen.getByRole("button", { name: "Guardar la jornada" }))
+
+    await user.click(await screen.findByRole("button", { name: /Guardar y cancelar 1/ }))
+
+    await waitFor(() => {
+      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(2)
+    })
+    expect(vi.mocked(disponibilidadApi.reemplazarJornada).mock.calls[1][1]).toBe(true)
   })
 
   it("muestra el error del backend", async () => {
