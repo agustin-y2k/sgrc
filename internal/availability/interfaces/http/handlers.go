@@ -278,14 +278,30 @@ func (h *Handler) ReemplazarJornada(c *fiber.Ctx) error {
 		})
 	}
 
-	bloques, err := h.svc.ReemplazarJornada(c.UserContext(), tramos)
+	resultado, err := h.svc.ReemplazarJornada(c.UserContext(), tramos, req.Confirmado)
 	if err != nil {
 		return mapearError(err)
 	}
 
-	data := make([]bloqueResponse, len(bloques))
-	for i, b := range bloques {
+	// 409 con el detalle adentro, y sin haber tocado nada: el pedido está bien
+	// formado, lo que no se puede es aplicarlo sin que alguien se haga cargo
+	// de las clases que se caen. El mismo endpoint hace de previsualización,
+	// así que no hay forma de que lo que se muestra difiera de lo que después
+	// se aplica.
+	if !resultado.Guardada {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"error":   "el cambio deja reservas fuera de la jornada",
+			"impacto": toImpactoResponse(resultado.Impacto),
+		})
+	}
+
+	data := make([]bloqueResponse, len(resultado.Bloques))
+	for i, b := range resultado.Bloques {
 		data[i] = toBloqueJornadaResponse(b)
 	}
-	return c.JSON(fiber.Map{"data": data, "definida": true})
+	return c.JSON(fiber.Map{
+		"data":               data,
+		"definida":           true,
+		"reservasCanceladas": resultado.ReservasCanceladas,
+	})
 }

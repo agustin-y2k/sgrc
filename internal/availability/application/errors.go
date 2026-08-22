@@ -15,3 +15,8 @@ var (
 	// sin formato UUID válido se mapea a 400, no a 500.
 	ErrIDInvalido = errors.New("el ID indicado no tiene un formato válido")
 )
+
+// ErrCascadaDeJornada: la jornada nueva se guardó pero no se pudieron
+// cancelar las reservas que quedaron afuera. Es un estado incompleto y hay
+// que decirlo: la jornada ya rige y esas clases siguen en pie.
+var ErrCascadaDeJornada = errors.New("la jornada se guardó, pero no se pudieron cancelar las reservas que quedaron afuera")

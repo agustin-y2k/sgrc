@@ -107,9 +107,9 @@ export function jornadaDeLaInstitucion() {
  * Una lista vacía es válida y no es lo mismo que no llamar: es la institución
  * eligiendo no restringir nada, y deja de preguntársele cuál es su jornada.
  */
-export function reemplazarJornada(tramos: TramoDeJornada[]) {
+export function reemplazarJornada(tramos: TramoDeJornada[], confirmado = false) {
   return apiFetch<RespuestaJornada>("/api/jornada", {
     method: "PUT",
-    body: { tramos },
+    body: { tramos, confirmado },
   })
 }

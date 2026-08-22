@@ -11,7 +11,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import * as disponibilidadApi from "@/features/disponibilidad/api"
 import { JORNADA_KEY } from "@/features/disponibilidad/api"
 import { etiquetaDia } from "@/features/disponibilidad/types"
-import type { BloqueHorario, TramoDeJornada } from "@/features/disponibilidad/types"
+import { impactoDelError } from "@/features/disponibilidad/types"
+import type {
+  BloqueHorario,
+  ImpactoDeJornada,
+  TramoDeJornada,
+} from "@/features/disponibilidad/types"
+import { ImpactoDeLaJornada } from "@/features/admin/ImpactoDeLaJornada"
 import {
   agruparTramos,
   aTramos,
@@ -134,6 +140,12 @@ export function JornadaPage() {
   const [edicion, setEdicion] = useState<FormTramo>(TRAMO_VACIO)
   const [desplegados, setDesplegados] = useState<string[]>([])
   const [falloAlGuardar, setFalloAlGuardar] = useState<string | null>(null)
+  // La jornada que espera confirmación, junto con lo que dejaría afuera.
+  const [porConfirmar, setPorConfirmar] = useState<{
+    tramos: TramoDeJornada[]
+    impacto: ImpactoDeJornada
+  } | null>(null)
+  const [canceladas, setCanceladas] = useState(0)
 
   const { data, isPending, error } = useQuery({
     queryKey: JORNADA_KEY,
@@ -151,14 +163,39 @@ export function JornadaPage() {
   // lunes y rechazarse el martes, dejando la jornada en un estado que nadie
   // pidió. Ahora entra entera o no entra.
   const guardar = useMutation({
-    mutationFn: (tramos: TramoDeJornada[]) => disponibilidadApi.reemplazarJornada(tramos),
-    onSuccess: async () => {
+    mutationFn: ({
+      tramos,
+      confirmado,
+    }: {
+      tramos: TramoDeJornada[]
+      confirmado: boolean
+    }) => disponibilidadApi.reemplazarJornada(tramos, confirmado),
+    onSuccess: async (respuesta) => {
       setFalloAlGuardar(null)
+      setPorConfirmar(null)
       setEditando(null)
+      setCanceladas(respuesta.reservasCanceladas ?? 0)
       await invalidar()
     },
-    onError: (e) => setFalloAlGuardar(getErrorMessage(e)),
+    // Un 409 con impacto no es un error que mostrar y olvidar: es la pregunta
+    // que el backend devuelve en vez de aplicar el cambio. Se guarda la
+    // jornada propuesta para poder reintentarla con la confirmación puesta.
+    onError: (e, variables) => {
+      const impacto = impactoDelError(e)
+      if (impacto !== null) {
+        setPorConfirmar({ tramos: variables.tramos, impacto })
+        setFalloAlGuardar(null)
+        return
+      }
+      setFalloAlGuardar(getErrorMessage(e))
+    },
   })
+
+  /** Manda la jornada sin confirmar: si algo queda afuera, vuelve la pregunta. */
+  function proponer(tramos: TramoDeJornada[]) {
+    setCanceladas(0)
+    guardar.mutate({ tramos, confirmado: false })
+  }
 
   const bloques = data?.data ?? []
   const tramos = agruparTramos(bloques)
@@ -206,6 +243,28 @@ export function JornadaPage() {
         </Alert>
       )}
 
+      {canceladas > 0 && (
+        <Alert className="mb-4">
+          <AlertDescription>
+            La jornada se guardó. Se cancelaron {canceladas}{" "}
+            {canceladas === 1 ? "reserva" : "reservas"} que quedaban fuera del horario y
+            se avisó por correo a sus docentes.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {porConfirmar !== null && (
+        <ImpactoDeLaJornada
+          impacto={porConfirmar.impacto}
+          totalDeReservas={porConfirmar.impacto.totalDeReservas}
+          guardando={guardar.isPending}
+          onConfirmar={() =>
+            guardar.mutate({ tramos: porConfirmar.tramos, confirmado: true })
+          }
+          onCancelar={() => setPorConfirmar(null)}
+        />
+      )}
+
       <Card className="mb-6">
         <CardContent className="grid gap-4 pt-6">
           <p className="font-medium">Agregar un tramo</p>
@@ -214,7 +273,7 @@ export function JornadaPage() {
             <Button
               disabled={motivoNuevo !== "" || trabajando}
               onClick={() => {
-                guardar.mutate([
+                proponer([
                   ...aTramos(bloques),
                   ...expandirDias(nuevo.dias, nuevo.horaInicio, nuevo.horaFin),
                 ])
@@ -273,7 +332,7 @@ export function JornadaPage() {
                           size="sm"
                           disabled={motivoEdicion !== "" || trabajando}
                           onClick={() => {
-                            guardar.mutate([
+                            proponer([
                               ...sinLosBloques(bloques, t.bloques),
                               ...expandirDias(
                                 edicion.dias,
@@ -348,7 +407,7 @@ export function JornadaPage() {
                       size="sm"
                       disabled={trabajando}
                       onClick={() => {
-                        guardar.mutate(sinLosBloques(bloques, t.bloques))
+                        proponer(sinLosBloques(bloques, t.bloques))
                       }}
                       aria-label={`Quitar ${nombre}`}
                     >
@@ -365,13 +424,13 @@ export function JornadaPage() {
                         bloque={b}
                         deshabilitado={trabajando}
                         onGuardar={(horaInicio, horaFin) => {
-                          guardar.mutate([
+                          proponer([
                             ...sinLosBloques(bloques, [b]),
                             { diaSemana: b.diaSemana, horaInicio, horaFin },
                           ])
                         }}
                         onQuitar={() => {
-                          guardar.mutate(sinLosBloques(bloques, [b]))
+                          proponer(sinLosBloques(bloques, [b]))
                         }}
                       />
                     ))}

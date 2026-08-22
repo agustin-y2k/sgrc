@@ -3,6 +3,8 @@
 package http
 
 import (
+	"time"
+
 	"github.com/ramiro/sgrc/internal/availability/application"
 	"github.com/ramiro/sgrc/internal/availability/domain"
 )
@@ -33,6 +35,67 @@ type editarBloqueRequest struct {
 // es la institución declarando que no restringe ni días ni horarios.
 type jornadaRequest struct {
 	Tramos []bloqueRequest `json:"tramos"`
+	// Confirmado en true es el Admin haciéndose cargo de que se cancelen las
+	// reservas que quedan afuera. Sin él, un cambio con impacto se rechaza y
+	// devuelve el detalle en vez de aplicarse.
+	Confirmado bool `json:"confirmado"`
+}
+
+// ── Lo que un cambio de jornada deja afuera ──────────────────────────────
+
+type reservaAfectadaResponse struct {
+	ID         string `json:"id"`
+	Fecha      string `json:"fecha"`
+	HoraInicio string `json:"horaInicio"`
+	HoraFin    string `json:"horaFin"`
+	Equipo     string `json:"equipo"`
+	Materia    string `json:"materia"`
+	Docente    string `json:"docente"`
+}
+
+type prestamoAfectadoResponse struct {
+	ID     string `json:"id"`
+	Equipo string `json:"equipo"`
+	Quien  string `json:"quien"`
+	// DevolucionEstimada siempre viene: un préstamo sin hora pactada no tiene
+	// nada que comparar contra la jornada y no llega hasta acá.
+	DevolucionEstimada string `json:"devolucionEstimada"`
+}
+
+type impactoResponse struct {
+	Reservas  []reservaAfectadaResponse  `json:"reservas"`
+	Prestamos []prestamoAfectadoResponse `json:"prestamos"`
+	// TotalDeReservas: cuántas hay en total, para poder leer el tamaño de lo
+	// que se cancela contra el tamaño de lo que hay.
+	TotalDeReservas int `json:"totalDeReservas"`
+}
+
+func toImpactoResponse(i *application.ImpactoDeJornada) impactoResponse {
+	r := impactoResponse{
+		Reservas:        make([]reservaAfectadaResponse, len(i.Reservas)),
+		Prestamos:       make([]prestamoAfectadoResponse, len(i.Prestamos)),
+		TotalDeReservas: i.TotalDeReservas,
+	}
+	for n, res := range i.Reservas {
+		r.Reservas[n] = reservaAfectadaResponse{
+			ID:         res.ID,
+			Fecha:      res.Fecha.Format("2006-01-02"),
+			HoraInicio: formatHora(res.HoraInicio),
+			HoraFin:    formatHora(res.HoraFin),
+			Equipo:     res.Equipo,
+			Materia:    res.Materia,
+			Docente:    res.Docente,
+		}
+	}
+	for n, p := range i.Prestamos {
+		r.Prestamos[n] = prestamoAfectadoResponse{
+			ID:                 p.ID,
+			Equipo:             p.Equipo,
+			Quien:              p.Quien,
+			DevolucionEstimada: p.DevolucionEstimada.Format(time.RFC3339),
+		}
+	}
+	return r
 }
 
 type excepcionRequest struct {

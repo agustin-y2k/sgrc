@@ -13,12 +13,16 @@ import (
 type Service struct {
 	repo           Repo
 	listadorAdmins ListadorAdmins
+	reservas       ReservasDeLaInstitucion
 	nuevoID        IDGenerator
 	ahora          func() time.Time
 }
 
-func NewService(repo Repo, listadorAdmins ListadorAdmins, nuevoID IDGenerator, ahora func() time.Time) *Service {
-	return &Service{repo: repo, listadorAdmins: listadorAdmins, nuevoID: nuevoID, ahora: ahora}
+func NewService(repo Repo, listadorAdmins ListadorAdmins, reservas ReservasDeLaInstitucion, nuevoID IDGenerator, ahora func() time.Time) *Service {
+	return &Service{
+		repo: repo, listadorAdmins: listadorAdmins, reservas: reservas,
+		nuevoID: nuevoID, ahora: ahora,
+	}
 }
 
 // MiHorario devuelve el patrón semanal propio del Admin autenticado
@@ -213,6 +217,46 @@ type TramoDeJornada struct {
 	HoraFin    time.Duration
 }
 
+// MotivoCambioDeJornada llega TAL CUAL al correo del docente, después de "Tu
+// reserva fue cancelada: " que antepone notification. Por eso arranca en
+// minúscula y explica la causa en vez de nombrar una categoría: quien lo lee
+// no sabe qué es una jornada institucional, sabe que perdió su clase.
+const MotivoCambioDeJornada = "la escuela cambió su horario de apertura y ese día y hora quedaron fuera"
+
+// ImpactoDeJornada es lo que un cambio de jornada dejaría afuera.
+type ImpactoDeJornada struct {
+	// Reservas son las futuras que ya no entrarían. Se cuentan de a
+	// ocurrencias y no de a series: una recurrencia de quince lunes son
+	// quince, y decir "una serie" escondería el tamaño de lo que se cancela.
+	Reservas []ReservaFutura
+	// Prestamos son las máquinas que están afuera con la devolución pactada
+	// fuera del horario nuevo. Van solo para que se vean: no se cancelan
+	// nunca, porque el equipo está físicamente afuera y marcar el préstamo
+	// como cancelado sería perder el rastro de quién lo tiene.
+	Prestamos []PrestamoAbierto
+	// TotalDeReservas es cuántas reservas futuras hay en total, afectadas o
+	// no. Sirve para leer el número de arriba: veinte cancelaciones sobre
+	// veinticinco reservas no es lo mismo que veinte sobre trescientas, y la
+	// primera huele a error de carga.
+	TotalDeReservas int
+}
+
+func (i *ImpactoDeJornada) HayAlgo() bool {
+	return len(i.Reservas) > 0 || len(i.Prestamos) > 0
+}
+
+// ResultadoDeJornada es qué pasó al intentar cambiar la jornada.
+type ResultadoDeJornada struct {
+	// Bloques es la jornada que quedó; vacío si no se guardó nada.
+	Bloques []*domain.BloqueJornada
+	// Impacto es lo que quedaba (o quedó) afuera.
+	Impacto *ImpactoDeJornada
+	// Guardada en false significa que el cambio NO se aplicó porque hay
+	// impacto y falta confirmarlo.
+	Guardada           bool
+	ReservasCanceladas int
+}
+
 // ReemplazarJornada deja la jornada exactamente igual a los tramos pedidos y
 // marca que la institución ya decidió.
 //
@@ -224,7 +268,7 @@ type TramoDeJornada struct {
 // Una lista vacía es válida: es la institución diciendo que no quiere
 // restringir días ni horarios. Queda igual que antes para reservar —sin
 // tramos no hay restricción— pero ya no se le vuelve a preguntar.
-func (s *Service) ReemplazarJornada(ctx context.Context, tramos []TramoDeJornada) ([]*domain.BloqueJornada, error) {
+func (s *Service) ReemplazarJornada(ctx context.Context, tramos []TramoDeJornada, confirmado bool) (*ResultadoDeJornada, error) {
 	bloques := make([]*domain.BloqueJornada, 0, len(tramos))
 	for _, t := range tramos {
 		b, err := domain.NuevoBloqueJornada(s.nuevoID(), t.DiaSemana, t.HoraInicio, t.HoraFin)
@@ -238,10 +282,89 @@ func (s *Service) ReemplazarJornada(ctx context.Context, tramos []TramoDeJornada
 		return nil, err
 	}
 
+	impacto, err := s.impactoDe(ctx, bloques)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sin confirmar no se toca nada. El pedido sin confirmación ES la
+	// previsualización: no hay un endpoint aparte que calcule el impacto,
+	// justamente para que no pueda decir una cosa distinta de la que después
+	// se aplica.
+	if impacto.HayAlgo() && !confirmado {
+		return &ResultadoDeJornada{Impacto: impacto}, nil
+	}
+
 	if err := s.repo.ReemplazarJornada(ctx, bloques); err != nil {
 		return nil, fmt.Errorf("guardando la jornada: %w", err)
 	}
-	return bloques, nil
+
+	resultado := &ResultadoDeJornada{Bloques: bloques, Guardada: true, Impacto: impacto}
+
+	// Se cancela DESPUÉS de guardar, y son dos transacciones distintas porque
+	// viven en módulos distintos. El orden es el que deja el peor caso más
+	// benigno: si esto falla, la jornada nueva quedó puesta y sobreviven unas
+	// reservas fuera de horario —que es el estado que el sistema ya toleraba
+	// antes de todo esto—. Al revés se cancelarían clases por un cambio que
+	// después no se guarda.
+	if len(impacto.Reservas) > 0 {
+		ids := make([]string, len(impacto.Reservas))
+		for i, r := range impacto.Reservas {
+			ids[i] = r.ID
+		}
+		canceladas, err := s.reservas.CancelarReservas(ctx, ids, MotivoCambioDeJornada)
+		if err != nil {
+			return resultado, fmt.Errorf("%w: %w", ErrCascadaDeJornada, err)
+		}
+		resultado.ReservasCanceladas = canceladas
+	}
+
+	return resultado, nil
+}
+
+// impactoDe calcula qué queda afuera si la jornada pasa a ser `bloques`.
+//
+// Una jornada vacía no deja nada afuera: sin tramos declarados no hay
+// restricción, así que ampliar hasta el extremo de no restringir nada nunca
+// cancela una clase.
+func (s *Service) impactoDe(ctx context.Context, bloques []*domain.BloqueJornada) (*ImpactoDeJornada, error) {
+	impacto := &ImpactoDeJornada{}
+	if len(bloques) == 0 {
+		return impacto, nil
+	}
+
+	desde := s.ahora()
+	reservas, err := s.reservas.ReservasFuturas(ctx, desde)
+	if err != nil {
+		return nil, fmt.Errorf("leyendo las reservas que podrían quedar fuera: %w", err)
+	}
+	impacto.TotalDeReservas = len(reservas)
+	for _, r := range reservas {
+		dia, _ := domain.DiaYHoraDe(r.Fecha)
+		if !domain.PermiteReserva(bloques, dia, r.HoraInicio, r.HoraFin) {
+			impacto.Reservas = append(impacto.Reservas, r)
+		}
+	}
+
+	prestamos, err := s.reservas.PrestamosAbiertos(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("leyendo los préstamos abiertos: %w", err)
+	}
+	for _, p := range prestamos {
+		// Sin hora pactada no hay nada que comparar: ese préstamo no queda
+		// "fuera de la jornada" porque nunca tuvo un momento previsto.
+		if p.DevolucionEstimada == nil {
+			continue
+		}
+		dia, hora := domain.DiaYHoraDe(*p.DevolucionEstimada)
+		// La devolución es un instante y no un rango, así que se pregunta por
+		// un tramo de duración cero: cae adentro o no cae.
+		if !domain.PermiteReserva(bloques, dia, hora, hora) {
+			impacto.Prestamos = append(impacto.Prestamos, p)
+		}
+	}
+
+	return impacto, nil
 }
 
 // verificarJornadaSinSolape rechaza dos tramos del mismo día que se pisen,

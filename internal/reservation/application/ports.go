@@ -40,6 +40,12 @@ type Repo interface {
 	// vinculadas a esa materia a partir de cierta fecha/hora.
 	ListarReservasFuturasDeMateria(ctx context.Context, materiaID string, desde time.Time) ([]*domain.Reserva, error)
 
+	// ListarReservasFuturas: usado por availability para saber qué quedaría
+	// fuera de una jornada nueva. Trae TODAS las reservas de clase que
+	// todavía no terminaron, sin paginar y sin los bloqueos administrativos
+	// (que nunca estuvieron sujetos a la jornada).
+	ListarReservasFuturas(ctx context.Context, desde time.Time) ([]ReservaDetallada, error)
+
 	// EliminarReservasYGruposDeCiclo: usado por la cascada de archivado de
 	// academic (RF-02.4) — borra FÍSICAMENTE (no cancela) toda
 	// Reserva/ReservaGrupo vinculada a materias de ese ciclo lectivo, sin

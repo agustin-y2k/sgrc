@@ -1,5 +1,7 @@
 // Espeja los DTOs de internal/availability/interfaces/http/dto.go.
 
+import { ApiError } from "@/lib/api-client"
+
 export type RespuestaLista<T> = { data: T[] }
 
 /**
@@ -21,6 +23,55 @@ export type TramoDeJornada = {
  */
 export type RespuestaJornada = RespuestaLista<BloqueHorario> & {
   definida: boolean
+  /** Cuántas reservas se cancelaron al guardar, si hubo alguna. */
+  reservasCanceladas?: number
+}
+
+/** Una reserva que quedaría fuera de la jornada propuesta. */
+export type ReservaAfectada = {
+  id: string
+  fecha: string
+  horaInicio: string
+  horaFin: string
+  equipo: string
+  materia: string
+  docente: string
+}
+
+/**
+ * Una máquina que está afuera con la devolución pactada fuera del horario
+ * nuevo. Se muestran para que se vean: no se cancelan nunca, porque el equipo
+ * está físicamente afuera.
+ */
+export type PrestamoAfectado = {
+  id: string
+  equipo: string
+  quien: string
+  devolucionEstimada: string
+}
+
+/** Lo que un cambio de jornada dejaría afuera. */
+export type ImpactoDeJornada = {
+  reservas: ReservaAfectada[]
+  prestamos: PrestamoAfectado[]
+  /** Cuántas reservas futuras hay en total, afectadas o no. */
+  totalDeReservas: number
+}
+
+/**
+ * El backend rechaza con 409 un cambio que deja algo afuera, y manda el
+ * detalle en el mismo cuerpo. Esta función lo saca del ApiError.
+ *
+ * Devuelve null si el error es cualquier otra cosa: un 409 por solape de
+ * tramos, por ejemplo, no trae impacto y se muestra como un error normal.
+ */
+export function impactoDelError(err: unknown): ImpactoDeJornada | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null
+  const cuerpo = err.cuerpo
+  if (typeof cuerpo !== "object" || cuerpo === null || !("impacto" in cuerpo)) {
+    return null
+  }
+  return (cuerpo as { impacto: ImpactoDeJornada }).impacto
 }
 
 /**

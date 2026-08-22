@@ -7,6 +7,8 @@ import { JornadaPage } from "@/features/admin/JornadaPage"
 import type {
   BloqueHorario,
   DiaSemana,
+  ImpactoDeJornada,
+  ReservaAfectada,
   TramoDeJornada,
 } from "@/features/disponibilidad/types"
 import { ApiError } from "@/lib/api-client"
@@ -315,7 +317,7 @@ describe("JornadaPage", () => {
     await user.click(await screen.findByRole("button", { name: /^Quitar Lunes/ }))
 
     await waitFor(() => {
-      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledWith([])
+      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledWith([], false)
     })
   })
 
@@ -360,5 +362,178 @@ describe("JornadaPage", () => {
     expect(
       screen.getByText("La hora de cierre no puede ser igual a la de apertura.")
     ).toBeInTheDocument()
+  })
+})
+
+// ── La confirmación de lo que se cancela ────────────────────────────────
+
+describe("JornadaPage — el cambio que deja reservas afuera", () => {
+  /** El 409 que devuelve el backend en vez de aplicar el cambio. */
+  function rechazaConImpacto(impacto: Partial<ImpactoDeJornada>) {
+    vi.mocked(disponibilidadApi.reemplazarJornada).mockRejectedValueOnce(
+      new ApiError(409, "el cambio deja reservas fuera de la jornada", {
+        error: "el cambio deja reservas fuera de la jornada",
+        impacto: { reservas: [], prestamos: [], totalDeReservas: 0, ...impacto },
+      })
+    )
+  }
+
+  function reservaAfectada(id: string, docente: string): ReservaAfectada {
+    return {
+      id,
+      fecha: "2026-03-09",
+      horaInicio: "13:00",
+      horaFin: "15:00",
+      equipo: "PC 3",
+      materia: "Matemáticas",
+      docente,
+    }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    jornadaCargada([bloque("LUNES", "08:00", "18:00")])
+    vi.mocked(disponibilidadApi.reemplazarJornada).mockResolvedValue({
+      data: [],
+      definida: true,
+    })
+  })
+
+  async function achicarElTramo(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: /^Editar Lunes/ }))
+    await user.selectOptions(enLaEdicion().getByLabelText("Abre: hora"), "15")
+    await user.selectOptions(enLaEdicion().getByLabelText("Cierra: hora"), "16")
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+  }
+
+  // Guardar no cancela nada por sí solo: primero se muestra qué se cae y
+  // quién decide es el Admin.
+  it("no guarda: muestra qué se cancelaría y a cuántos docentes", async () => {
+    const user = userEvent.setup()
+    rechazaConImpacto({
+      reservas: [
+        reservaAfectada("r1", "Ada Lovelace"),
+        reservaAfectada("r2", "Grace H."),
+      ],
+      totalDeReservas: 10,
+    })
+    renderPagina()
+
+    await achicarElTramo(user)
+
+    expect(await screen.findByText(/Se van a cancelar/)).toHaveTextContent(
+      "Se van a cancelar 2 reservas de 2 docentes"
+    )
+    // La primera llamada fue sin confirmar, y no hubo una segunda.
+    expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(disponibilidadApi.reemplazarJornada).mock.calls[0][1]).toBe(false)
+  })
+
+  it("confirmar reenvía la misma jornada, ahora con la confirmación", async () => {
+    const user = userEvent.setup()
+    rechazaConImpacto({
+      reservas: [reservaAfectada("r1", "Ada Lovelace")],
+      totalDeReservas: 10,
+    })
+    vi.mocked(disponibilidadApi.reemplazarJornada).mockResolvedValue({
+      data: [],
+      definida: true,
+      reservasCanceladas: 1,
+    })
+    renderPagina()
+    await achicarElTramo(user)
+
+    await user.click(await screen.findByRole("button", { name: /Guardar y cancelar 1/ }))
+
+    await waitFor(() => {
+      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(2)
+    })
+    const [tramos, confirmado] = vi.mocked(disponibilidadApi.reemplazarJornada).mock
+      .calls[1]
+    expect(confirmado).toBe(true)
+    // Exactamente la jornada que se había propuesto, no otra.
+    expect(tramos).toEqual([
+      { diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00" },
+    ])
+    expect(await screen.findByText(/Se cancelaron 1 reserva/)).toBeInTheDocument()
+  })
+
+  it("volver atrás no manda nada y deja la jornada como estaba", async () => {
+    const user = userEvent.setup()
+    rechazaConImpacto({
+      reservas: [reservaAfectada("r1", "Ada Lovelace")],
+      totalDeReservas: 10,
+    })
+    renderPagina()
+    await achicarElTramo(user)
+
+    await user.click(
+      await screen.findByRole("button", { name: "Volver sin cambiar nada" })
+    )
+
+    expect(screen.queryByText(/Se van a cancelar/)).not.toBeInTheDocument()
+    expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(1)
+  })
+
+  // El detector del tipeo: un cambio real no suele llevarse casi todo.
+  it("avisa distinto cuando el cambio se lleva casi todas las reservas", async () => {
+    const user = userEvent.setup()
+    rechazaConImpacto({
+      reservas: [
+        reservaAfectada("r1", "Ada"),
+        reservaAfectada("r2", "Grace"),
+        reservaAfectada("r3", "Alan"),
+      ],
+      totalDeReservas: 3,
+    })
+    renderPagina()
+
+    await achicarElTramo(user)
+
+    expect(
+      await screen.findByText(/Eso es casi todo lo que hay reservado/)
+    ).toBeInTheDocument()
+  })
+
+  // Los préstamos se ven pero no se cancelan: la máquina está afuera.
+  it("lista los préstamos afectados aclarando que no se cancelan", async () => {
+    const user = userEvent.setup()
+    rechazaConImpacto({
+      prestamos: [
+        {
+          id: "p1",
+          equipo: "PC 7",
+          quien: "Marta",
+          devolucionEstimada: "2026-03-09T20:00:00Z",
+        },
+      ],
+      totalDeReservas: 4,
+    })
+    renderPagina()
+
+    await achicarElTramo(user)
+
+    expect(
+      await screen.findByText(/la devolución pactada fuera del horario nuevo/)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/No se cancelan/)).toBeInTheDocument()
+    expect(screen.getByText(/PC 7 · la tiene Marta/)).toBeInTheDocument()
+  })
+
+  // Un 409 por solape de tramos no trae impacto: es un error normal y se
+  // muestra como tal, sin pedir confirmar nada.
+  it("un 409 sin impacto se muestra como error, no como confirmación", async () => {
+    const user = userEvent.setup()
+    vi.mocked(disponibilidadApi.reemplazarJornada).mockRejectedValueOnce(
+      new ApiError(409, "ese bloque se superpone con otro del mismo día")
+    )
+    renderPagina()
+
+    await achicarElTramo(user)
+
+    expect(
+      await screen.findByText("ese bloque se superpone con otro del mismo día")
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Se van a cancelar/)).not.toBeInTheDocument()
   })
 })

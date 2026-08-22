@@ -542,6 +542,21 @@ func (r *fakeRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID
 	}
 	return resultado, nil
 }
+
+// ListarReservasFuturas: solo las de clase, como en la consulta real. Los
+// bloqueos administrativos nunca estuvieron sujetos a la jornada.
+func (r *fakeRepo) ListarReservasFuturas(ctx context.Context, desde time.Time) ([]ReservaDetallada, error) {
+	var resultado []ReservaDetallada
+	for _, res := range r.reservas {
+		if res.Estado != domain.ReservaConfirmada || res.Tipo != domain.TipoNormal {
+			continue
+		}
+		resultado = append(resultado, ReservaDetallada{Reserva: res, Identificador: r.identificadorDeEquipo[res.EquipoID],
+			Etiqueta: fmt.Sprintf("PC %d", r.identificadorDeEquipo[res.EquipoID])})
+	}
+	return resultado, nil
+}
+
 func (r *fakeRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, cicloID string) (int, int, error) {
 	// El fake no modela la relación ciclo→materia→grupo/reserva (viviría del
 	// lado de academic), así que solo se usa para confirmar que el método existe

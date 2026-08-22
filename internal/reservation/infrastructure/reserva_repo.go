@@ -218,6 +218,83 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 // ListarReservasFuturasDeMateria: todas las reservas CONFIRMADA vinculadas a
 // una materia (vía su ReservaGrupo) que todavía no terminaron en el instante
 // `desde`.
+// ListarReservasFuturas trae TODAS las reservas de clase que todavía no
+// terminaron, con el nombre del equipo y de la materia ya resueltos.
+//
+// Sin paginar, a diferencia de ListarReservas: es el insumo del conteo que se
+// le muestra al Admin antes de cambiar la jornada, y una página escondería
+// parte de lo que está por cancelar. Un conteo que miente ahí es peor que no
+// mostrarlo.
+//
+// Los bloqueos administrativos quedan fuera de la consulta: nunca estuvieron
+// sujetos a la jornada (RF-04.7), así que cambiarla no puede afectarlos.
+func (r *PostgresRepo) ListarReservasFuturas(ctx context.Context, desde time.Time) ([]application.ReservaDetallada, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT `+columnasReservaConPrefijo("res")+`,
+		       COALESCE(p.identificador, 0),
+		       COALESCE(p.nombre, 'PC ' || p.identificador),
+		       COALESCE(ca.nombre, ''),
+		       COALESCE(m.nombre, ''), COALESCE(cu.nombre, ''),
+		       rg.regla_recurrencia_id
+		FROM reserva res
+		JOIN equipo p ON p.id = res.equipo_id
+		-- LEFT por lo mismo que en ListarReservas: un proyector reservable no
+		-- está en ningún carro, y con INNER su reserva se caería de la
+		-- consulta — o sea, del conteo que se le muestra al Admin.
+		LEFT JOIN carro ca ON ca.id = p.carro_id
+		LEFT JOIN reserva_grupo rg ON rg.id = res.reserva_grupo_id
+		LEFT JOIN materia m ON m.id = res.materia_id
+		LEFT JOIN curso cu ON cu.id = m.curso_id
+		WHERE `+condicionNoTerminada("res", "$1", "$2")+`
+		  AND res.estado = 'CONFIRMADA' AND res.tipo = 'NORMAL'
+		ORDER BY res.fecha, res.hora_inicio, p.identificador NULLS LAST, res.equipo_id
+	`, desde, desde)
+	if err != nil {
+		return nil, fmt.Errorf("listando las reservas futuras: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []application.ReservaDetallada
+	for rows.Next() {
+		var res domain.Reserva
+		var horaInicio, horaFin time.Time
+		var estadoStr, tipoStr string
+		var motivoBloqueo *string
+		var detalle application.ReservaDetallada
+
+		if err := rows.Scan(
+			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
+			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
+			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
+			&detalle.Identificador, &detalle.Etiqueta, &detalle.CarroNombre,
+			&detalle.MateriaNombre, &detalle.CursoNombre,
+			&detalle.ReglaRecurrenciaID,
+		); err != nil {
+			return nil, fmt.Errorf("escaneando fila de reserva futura: %w", err)
+		}
+		if motivoBloqueo != nil {
+			res.MotivoBloqueo = *motivoBloqueo
+		}
+		res.HoraInicio = horaComoDuracion(horaInicio)
+		res.HoraFin = horaComoDuracion(horaFin)
+
+		estado, err := domain.ParseEstadoReserva(estadoStr)
+		if err != nil {
+			return nil, fmt.Errorf("estado inválido en la base para reserva %s: %w", res.ID, err)
+		}
+		tipo, err := domain.ParseTipoReserva(tipoStr)
+		if err != nil {
+			return nil, fmt.Errorf("tipo inválido en la base para reserva %s: %w", res.ID, err)
+		}
+		res.Estado = estado
+		res.Tipo = tipo
+
+		detalle.Reserva = &res
+		resultado = append(resultado, detalle)
+	}
+	return resultado, errorDeFilas(rows)
+}
+
 func (r *PostgresRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID string, desde time.Time) ([]*domain.Reserva, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva

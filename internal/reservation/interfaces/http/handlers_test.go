@@ -271,6 +271,10 @@ func (r *fakeRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipoID s
 func (r *fakeRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []string, fechas []time.Time, horaInicio, horaFin time.Duration) ([]application.Solapamiento, error) {
 	return r.solapamientos, nil
 }
+func (r *fakeRepo) ListarReservasFuturas(ctx context.Context, desde time.Time) ([]application.ReservaDetallada, error) {
+	return nil, nil
+}
+
 func (r *fakeRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID string, desde time.Time) ([]*domain.Reserva, error) {
 	return nil, nil
 }

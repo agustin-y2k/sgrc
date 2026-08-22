@@ -343,9 +343,21 @@ func main() {
 	availabilityRepo := availabilityinfra.NewPostgresRepo(pool)
 	availabilityListadorAdmins := availabilityinfra.NewListadorAdminsPostgres(pool)
 
+	// Las dos flechas entre availability y reservation se cruzan: reservation
+	// pregunta si un horario entra en la jornada, y availability pregunta qué
+	// reservas quedarían afuera si la jornada cambiara. Como los dos Service
+	// no pueden construirse a la vez, el adaptador se crea vacío acá y se
+	// completa unas líneas más abajo, apenas existe reservationSvc.
+	//
+	// Queda a la vista y no escondido detrás de un contenedor de dependencias
+	// a propósito: es el único lugar del programa donde hay que leer con
+	// cuidado el orden, y esconderlo no lo haría menos cierto.
+	availabilityReservas := &availabilityReservasAdapter{}
+
 	availabilitySvc := availabilityapp.NewService(
 		availabilityRepo,
 		availabilityListadorAdmins,
+		availabilityReservas,
 		availabilityinfra.NuevoID,
 		ahora,
 	)
@@ -372,6 +384,11 @@ func main() {
 		ahora,
 		bus,
 	)
+	// La punta que faltaba del cruce de arriba. Antes de esta línea,
+	// availabilitySvc existe pero no puede preguntar por reservas; después,
+	// sí. Nada se atiende en el medio: el servidor todavía no levantó.
+	availabilityReservas.reservationSvc = reservationSvc
+
 	reservationHandler := reservationhttp.NewHandler(reservationSvc, auditor)
 
 	// ── auth ───────────────────────────────────────────────────── El secreto

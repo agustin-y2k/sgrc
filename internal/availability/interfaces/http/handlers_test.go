@@ -149,7 +149,11 @@ func idSecuencial() func() string {
 var testSecret = []byte("un-secreto-de-test-bastante-largo")
 
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
-	svc := application.NewService(repo, &fakeListadorAdmins{}, idSecuencial(), func() time.Time {
+	return nuevaAppDeTestCon(repo, &fakeReservas{})
+}
+
+func nuevaAppDeTestCon(repo *fakeRepo, reservas *fakeReservas) *fiber.App {
+	svc := application.NewService(repo, &fakeListadorAdmins{}, reservas, idSecuencial(), func() time.Time {
 		// lunes 9-mar-2026, 10:00 — coherente con los bloques LUNES 08-12
 		// que usan los tests de DisponibilidadDeAdmins.
 		return time.Date(2026, time.March, 9, 10, 0, 0, 0, time.UTC)
@@ -521,7 +525,7 @@ func TestHTTP_DisponibilidadDeAdmins_ExcepcionDeHoyPisaElBloque(t *testing.T) {
 	repo.excepciones[claveExcepcion("admin1", time.Date(2026, time.March, 9, 0, 0, 0, 0, time.UTC))] =
 		&domain.Excepcion{ID: "e1", UsuarioID: "admin1", Fecha: time.Date(2026, time.March, 9, 0, 0, 0, 0, time.UTC), Tipo: domain.NoDisponible}
 
-	svc := application.NewService(repo, &fakeListadorAdmins{admins: []application.AdminInfo{{ID: "admin1", Nombre: "Ada", Apellido: "Lovelace"}}}, idSecuencial(), func() time.Time {
+	svc := application.NewService(repo, &fakeListadorAdmins{admins: []application.AdminInfo{{ID: "admin1", Nombre: "Ada", Apellido: "Lovelace"}}}, &fakeReservas{}, idSecuencial(), func() time.Time {
 		return time.Date(2026, time.March, 9, 10, 0, 0, 0, time.UTC)
 	})
 	app := fiber.New()
@@ -636,6 +640,93 @@ func TestHTTP_ReemplazarJornada_Docente_403(t *testing.T) {
 	}
 }
 
+// Un cambio que deja clases afuera se rechaza con el detalle adentro y sin
+// tocar nada. El mismo endpoint hace de previsualización: no hay forma de que
+// lo que se muestra difiera de lo que después se aplica.
+func TestHTTP_ReemplazarJornada_ConImpacto_409YNoGuarda(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservas := &fakeReservas{futuras: []application.ReservaFutura{{
+		ID: "r1", Fecha: time.Date(2026, time.March, 9, 0, 0, 0, 0, time.UTC),
+		HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour,
+		Equipo: "PC 3", Materia: "Matemáticas", Docente: "Ada Lovelace",
+	}}}
+	app := nuevaAppDeTestCon(repo, reservas)
+
+	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{Tramos: []bloqueRequest{
+		{DiaSemana: "LUNES", HoraInicio: "16:00", HoraFin: "18:00"},
+	}}))
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
+	}
+
+	var cuerpo struct {
+		Impacto struct {
+			Reservas []struct {
+				ID      string `json:"id"`
+				Docente string `json:"docente"`
+			} `json:"reservas"`
+		} `json:"impacto"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if len(cuerpo.Impacto.Reservas) != 1 || cuerpo.Impacto.Reservas[0].ID != "r1" {
+		t.Errorf("el detalle tiene que nombrar la reserva: %+v", cuerpo.Impacto.Reservas)
+	}
+	// Con el nombre del docente: un número suelto no deja ver a quién le cae.
+	if cuerpo.Impacto.Reservas[0].Docente != "Ada Lovelace" {
+		t.Errorf("falta el docente: %+v", cuerpo.Impacto.Reservas[0])
+	}
+	if len(repo.jornada) != 0 {
+		t.Errorf("un 409 no puede haber guardado nada: %+v", repo.jornada)
+	}
+	if len(reservas.canceladas) != 0 {
+		t.Errorf("un 409 no puede haber cancelado nada: %v", reservas.canceladas)
+	}
+}
+
+func TestHTTP_ReemplazarJornada_Confirmada_200YCancela(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservas := &fakeReservas{futuras: []application.ReservaFutura{{
+		ID: "r1", Fecha: time.Date(2026, time.March, 9, 0, 0, 0, 0, time.UTC),
+		HoraInicio: 13 * time.Hour, HoraFin: 15 * time.Hour, Equipo: "PC 3",
+	}}}
+	app := nuevaAppDeTestCon(repo, reservas)
+
+	req := httptest.NewRequest("PUT", "/api/jornada", conBody(jornadaRequest{
+		Tramos:     []bloqueRequest{{DiaSemana: "LUNES", HoraInicio: "16:00", HoraFin: "18:00"}},
+		Confirmado: true,
+	}))
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+
+	var cuerpo map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if cuerpo["reservasCanceladas"] != float64(1) {
+		t.Errorf("tenía que informar la cancelación: %v", cuerpo["reservasCanceladas"])
+	}
+	if len(reservas.canceladas) != 1 {
+		t.Errorf("se tenía que cancelar r1: %v", reservas.canceladas)
+	}
+}
+
 // El GET lleva la bandera al lado de los tramos: sin ella, una lista vacía no
 // dice si la escuela todavía no declaró su jornada o si eligió dejarla libre.
 func TestHTTP_Jornada_InformaSiYaFueDefinida(t *testing.T) {
@@ -693,4 +784,26 @@ func (r *fakeRepo) ReemplazarJornada(_ context.Context, bloques []*domain.Bloque
 
 func (r *fakeRepo) JornadaDefinida(_ context.Context) (bool, error) {
 	return r.jornadaDefinida, nil
+}
+
+// fakeReservas es el doble del puerto hacia reservation. Vacío = no hay
+// nada que pueda quedar fuera de la jornada, que es el caso de casi todos
+// estos tests.
+type fakeReservas struct {
+	futuras    []application.ReservaFutura
+	prestamos  []application.PrestamoAbierto
+	canceladas []string
+}
+
+func (f *fakeReservas) ReservasFuturas(_ context.Context, _ time.Time) ([]application.ReservaFutura, error) {
+	return f.futuras, nil
+}
+
+func (f *fakeReservas) PrestamosAbiertos(_ context.Context) ([]application.PrestamoAbierto, error) {
+	return f.prestamos, nil
+}
+
+func (f *fakeReservas) CancelarReservas(_ context.Context, ids []string, _ string) (int, error) {
+	f.canceladas = append(f.canceladas, ids...)
+	return len(ids), nil
 }

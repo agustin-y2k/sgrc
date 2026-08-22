@@ -66,6 +66,48 @@ type Repo interface {
 	JornadaDefinida(ctx context.Context) (bool, error)
 }
 
+// ── Lo que un cambio de jornada deja afuera ──────────────────────────────
+
+// ReservaFutura es una reserva ya cargada, con lo justo para decidir si entra
+// en una jornada y para poder nombrarla en la pantalla de confirmación.
+type ReservaFutura struct {
+	ID         string
+	Fecha      time.Time
+	HoraInicio time.Duration
+	HoraFin    time.Duration
+	Equipo     string
+	Materia    string
+	Docente    string
+}
+
+// PrestamoAbierto es una máquina que está fuera del laboratorio ahora mismo.
+// DevolucionEstimada nil = salió sin hora pactada, y entonces no hay nada que
+// comparar contra la jornada.
+type PrestamoAbierto struct {
+	ID                 string
+	Equipo             string
+	Quien              string
+	DevolucionEstimada *time.Time
+}
+
+// ReservasDeLaInstitucion es el puerto hacia reservation.
+//
+// La regla de qué entra en la jornada NO viaja por acá: este puerto solo trae
+// las reservas y los préstamos, y cancela los que se le indiquen. Quién queda
+// afuera lo decide domain.PermiteReserva, que vive en este paquete y es la
+// misma función que usa el alta de una reserva. Si la regla se duplicara del
+// otro lado, el sistema podría cancelar algo que después aceptaría volver a
+// cargar.
+type ReservasDeLaInstitucion interface {
+	// ReservasFuturas son las CONFIRMADA de esa fecha en adelante.
+	ReservasFuturas(ctx context.Context, desde time.Time) ([]ReservaFutura, error)
+	// PrestamosAbiertos son las máquinas que hoy están afuera.
+	PrestamosAbiertos(ctx context.Context) ([]PrestamoAbierto, error)
+	// CancelarReservas cancela esas reservas puntuales con ese motivo, que
+	// llega tal cual al correo del docente.
+	CancelarReservas(ctx context.Context, reservaIDs []string, motivo string) (int, error)
+}
+
 // AdminInfo es lo mínimo que se necesita de cada Admin para RF-07.2 —
 // nombre y apellido para el DTO, no el resto de la lógica de auth.
 type AdminInfo struct {
