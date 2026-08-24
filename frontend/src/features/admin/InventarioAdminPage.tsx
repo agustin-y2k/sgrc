@@ -22,6 +22,7 @@ import { PreferenciasDeEquipo } from "@/features/admin/PreferenciasDeEquipo"
 import { OtrosEquipos } from "@/features/admin/OtrosEquipos"
 import { PrestamosDeEquipo } from "@/features/admin/PrestamosDeEquipo"
 import * as inventoryApi from "@/features/inventory/api"
+import { CuentasDeEquipo } from "@/features/inventory/CuentasDeEquipo"
 import type { ResultadoCascada } from "@/features/admin/types"
 import { ETIQUETA_ESTADO_EQUIPO } from "@/features/inventory/types"
 import type { Carro, EstadoEquipo, Equipo } from "@/features/inventory/types"
@@ -45,6 +46,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
   const [viendoLicencias, setViendoLicencias] = useState<string | null>(null)
   const [viendoPreferencias, setViendoPreferencias] = useState<string | null>(null)
   const [viendoEntregas, setViendoEntregas] = useState<string | null>(null)
+  const [viendoCuentas, setViendoCuentas] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ["equipos", carroId],
@@ -107,6 +109,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
         const licenciasAbiertas = viendoLicencias === equipo.id
         const preferenciasAbiertas = viendoPreferencias === equipo.id
         const entregasAbiertas = viendoEntregas === equipo.id
+        const cuentasAbiertas = viendoCuentas === equipo.id
 
         return (
           <div key={equipo.id} className="grid gap-2 rounded-md border p-3">
@@ -162,6 +165,19 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                     onClick={() => setEditando(equipo.id)}
                   >
                     Editar
+                  </Button>
+                  {/* Con qué cuenta se entra a esta máquina (RF-03.22). El
+                      panel también está en Computadoras, que es donde lo
+                      consulta un docente; acá está porque es donde un Admin
+                      viene a CARGAR lo que se sabe de un equipo, y buscarlo
+                      en la otra pantalla obliga a irse a mitad del alta. */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-expanded={cuentasAbiertas}
+                    onClick={() => setViendoCuentas(cuentasAbiertas ? null : equipo.id)}
+                  >
+                    Cómo entrar
                   </Button>
                   <Button
                     variant="outline"
@@ -272,6 +288,8 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
             {entregasAbiertas && <PrestamosDeEquipo equipoId={equipo.id} />}
 
             {preferenciasAbiertas && <PreferenciasDeEquipo equipoId={equipo.id} />}
+
+            {cuentasAbiertas && <CuentasDeEquipo equipo={equipo} />}
 
             {bajandoEsta && (
               <div className="grid gap-2 rounded-md border p-3">

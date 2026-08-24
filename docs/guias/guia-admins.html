@@ -223,7 +223,7 @@
     por paso, qué botón toca en cada caso.
   </div>
   <div class="pie">
-    Sistema de Gestión y Reserva de Computadoras · versión 1.11<br>
+    Sistema de Gestión y Reserva de Computadoras · versión 1.15<br>
     Agosto de 2026
   </div>
 </div>
@@ -239,6 +239,7 @@
     <li>Cerrar el año y abrir el siguiente <span>Una vez al año, y no se puede deshacer.</span></li>
     <li>Los usuarios <span>Contraseñas, roles, bajas y borrados.</span></li>
     <li>El inventario <span>Carros, computadoras, su estado y su calendario.</span></li>
+    <li>Con qué cuenta se entra a cada equipo <span>Lo que hoy está en un papel.</span></li>
     <li>Entregar y recibir <span>El trabajo de todos los días.</span></li>
     <li>Licencias de software <span>Qué vence y cuándo.</span></li>
     <li>Bloquear equipos <span>Cuando el laboratorio los necesita para otra cosa.</span></li>
@@ -445,7 +446,7 @@
   <div class="nota">
     <span class="titulo">Si un docente pide una materia</span>
     No hace falta que lo cargues a mano: puede pedirla desde su perfil y vos la
-    resolvés en <b>Pedidos de materia</b> (capítulo 13).
+    resolvés en <b>Pedidos de materia</b> (capítulo 14).
   </div>
 </section>
 
@@ -637,12 +638,27 @@
       <b>número de serie</b> y los <b>programas</b> que tiene instalados.</li>
   </ol>
 
-  <div class="nota">
-    <span class="titulo">Lo que no está en un carro</span>
+  <h3>Lo que no está en un carro: «Otros equipos»</h3>
+  <p>
     El proyector, los cargadores o una notebook suelta se cargan en
-    <b>Otros equipos</b>. Se entregan y se reciben igual que las computadoras, en la
-    misma pantalla.
-  </div>
+    <b>Otros equipos</b>, en la misma pantalla, con
+    <span class="boton">Agregar equipo</span>. Se entregan y se reciben igual que
+    las computadoras. Se les pide:
+  </p>
+  <ul class="simple">
+    <li><b>¿Qué es?</b> — Proyector, Cargador, Notebook… lo escribís vos, y el
+      sistema te sugiere los que ya cargaste para que no convivan «Proyector» y
+      «PROYECTOR».</li>
+    <li><b>¿Cómo lo llaman?</b> — es lo único que lo distingue de otro igual. Si
+      hay más de uno, numeralos: Cargador 1, Cargador 2.</li>
+    <li><b>Número de serie</b> — <b>si tiene</b>. Un proyector trae, y es lo que
+      sirve para reclamarlo si se pierde; un cargador no trae ninguno. Dejarlo
+      vacío es normal: es mejor que inventar un valor.</li>
+    <li><b>Se puede reservar con anticipación</b> — marcalo para un proyector, que
+      alguien puede querer para una clase del jueves. Dejalo sin marcar para un
+      cargador: se presta en el momento, y aparecería como ruido cada vez que un
+      docente va a reservar.</li>
+  </ul>
 
   <h3>Los tres estados de una computadora</h3>
   <ul class="simple">
@@ -666,6 +682,8 @@
 
   <h3>Las otras acciones de cada equipo</h3>
   <ul class="simple">
+    <li><b>Cómo entrar</b> — con qué usuario se abre esa máquina y cuál es su
+      contraseña. Tiene su propio capítulo, el 9.</li>
     <li><b>Incidencias</b> — las fallas que reportaron sobre esa máquina.</li>
     <li><b>Licencias</b> — el software con vencimiento que tiene instalado.</li>
     <li><b>Entregas</b> — el historial de quién se la llevó y cuándo volvió.</li>
@@ -691,7 +709,7 @@
   <ul class="simple">
     <li><b>En azul</b>, las reservas de clase, con la materia y el docente.</li>
     <li><b>En rojo</b>, los bloqueos que hiciste vos o cualquier Admin, con el
-      motivo que se escribió al bloquear (capítulo 11).</li>
+      motivo que se escribió al bloquear (capítulo 12).</li>
     <li><b>Los huecos en blanco están libres.</b></li>
   </ul>
   <p>
@@ -704,7 +722,121 @@
 
 <!-- 9 ────────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">9</span>Entregar y recibir</h2>
+  <h2><span class="n">9</span>Con qué cuenta se entra a cada equipo</h2>
+
+  <p class="entrada">
+    Una notebook no se abre sola. Ese dato —con qué usuario se entra y cuál es la
+    contraseña— suele vivir en la cabeza de una persona y en un papel pegado
+    adentro del carro. Acá se anota una vez y lo consulta cualquiera que lo
+    necesite, desde el teléfono, parado frente a la máquina.
+  </p>
+
+  <ol class="pasos">
+    <li>Entrá a <b>Administración → Gestión del inventario</b> y abrí el carro con
+      <span class="boton">Gestionar equipos</span>.</li>
+    <li>En la fila de la máquina, tocá <span class="boton">Cómo entrar</span>.</li>
+    <li>Tocá <span class="boton">Agregar cuenta</span> y completá lo que sepas.</li>
+  </ol>
+
+  <figure>
+    <img src="imagenes/admin-22-cuentas-de-equipo.png" alt="Las cuentas anotadas de una computadora, desde la gestión del inventario">
+    <figcaption>Las cuentas de una máquina, con sus botones para editar y quitar.</figcaption>
+  </figure>
+
+  <div class="nota">
+    <span class="titulo">También está en «Computadoras»</span>
+    El mismo panel se abre desde <b>Computadoras</b>, en la barra de arriba: ahí es
+    donde lo consultan los docentes. La diferencia es que desde
+    <b>Gestión del inventario</b> lo tenés al lado del resto de lo que se carga de
+    un equipo, sin cambiar de pantalla en medio de un alta.
+  </div>
+
+  <h3>Qué se anota de cada cuenta</h3>
+
+  <figure>
+    <img src="imagenes/admin-23-cuenta-nueva.png" alt="Formulario para anotar una cuenta de un equipo">
+    <figcaption>Lo único obligatorio es con qué usuario se entra.</figcaption>
+  </figure>
+
+  <ul class="simple">
+    <li><b>¿Con qué usuario se entra?</b> — es lo único obligatorio: sin eso la
+      ficha no dice nada que sirva frente a la máquina. Escribilo tal cual hay que
+      tipearlo.</li>
+    <li><b>¿De qué tipo es?</b> — Local, Microsoft, Linux, Google… lo escribís vos,
+      y el sistema sugiere los que ya usaste. No es una lista cerrada porque no
+      todas las escuelas tienen las mismas.</li>
+    <li><b>¿Qué puede hacer en la máquina?</b> — usuario común o administrador.</li>
+    <li><b>Pide contraseña para entrar</b> — destildalo si la cuenta se abre sola.</li>
+    <li><b>Contraseña</b> — solo si la sabés (ver más abajo).</li>
+    <li><b>¿Quién puede ver la contraseña?</b> — solo los administradores, o
+      cualquier docente que la necesite.</li>
+    <li><b>Notas</b> — opcional: «es la que usa 5°B», «no cerrar la sesión».</li>
+  </ul>
+
+  <div class="ojo">
+    <span class="titulo">Quién ve la contraseña no depende de si la cuenta es de administrador</span>
+    Son dos preguntas distintas y el sistema no deduce una de la otra, porque se
+    equivocaría en los dos sentidos. La cuenta de administrador de la máquina del
+    taller la usa todo el mundo para instalar cosas: esa conviene marcarla
+    <b>pública</b>. Y una cuenta común puede tener adentro cosas de administración:
+    esa va <b>solo administradores</b>. Lo que la marca oculta es <b>la
+    contraseña</b>: la cuenta y su privilegio los ve todo el mundo igual, porque
+    esconderlos haría que el inventario mienta por omisión.
+  </div>
+
+  <h3>Tres situaciones con la contraseña, no dos</h3>
+  <ul class="simple">
+    <li><b>La máquina no pide contraseña.</b> Destildá «Pide contraseña para
+      entrar» y listo: en la ficha se lee «Entra sin contraseña».</li>
+    <li><b>Pide una y la sabés.</b> Tildala y escribila. Queda guardada
+      <b>cifrada</b>, y se muestra de a una cuando alguien la pide.</li>
+    <li><b>Pide una y nadie la sabe.</b> Tildala y dejá el campo vacío. La ficha
+      va a decir «Contraseña no anotada», que no es lo mismo que «entra sin
+      contraseña»: es un pendiente, y así queda registrado que hay que
+      averiguarla.</li>
+  </ul>
+
+  <div class="nota">
+    <span class="titulo">Las contraseñas no se muestran todas juntas</span>
+    Ni siquiera a vos: en la lista no aparece ninguna. Se piden de a una con
+    <span class="boton">Ver contraseña</span>, y cada vez que alguien lo hace
+    queda registrado quién fue y cuándo. Si viajaran en la lista, abrir la ficha
+    de una máquina sería mostrar todas sus contraseñas de una vez.
+  </div>
+
+  <h3>Cuándo aparece el botón «Cómo entrar»</h3>
+  <p>
+    Vos lo ves <b>siempre</b>, en todos los equipos: es la única forma de anotar la
+    primera cuenta. Un docente lo ve <b>solo en los equipos que ya tienen algo
+    anotado</b>. Por eso un cargador —que no tiene con qué entrar— no le muestra un
+    botón que no lleva a ningún lado.
+  </p>
+
+  <div class="ojo">
+    <span class="titulo">Si el sistema no te deja guardar la contraseña</span>
+    Si al guardar aparece un aviso diciendo que este sistema no puede guardar
+    contraseñas de equipos, es que a la instalación le falta una configuración
+    (<code>CUENTAS_SECRET</code>, en el archivo <code>.env</code> del servidor). La
+    cuenta se anota igual —usuario, tipo y privilegio—; lo único que no se guarda
+    es la contraseña. Pasale el dato a quien administra el servidor: está en la
+    guía de operación.
+  </div>
+
+  <h3>Cuando algo cambia</h3>
+  <ul class="simple">
+    <li><b>Editar</b> — para corregir el usuario, el tipo, el privilegio o quién
+      puede ver la contraseña. Si dejás el campo de la contraseña vacío, la que
+      estaba <b>se conserva</b>.</li>
+    <li>Para <b>borrar solo la contraseña</b> sin borrar la cuenta —cambió y todavía
+      no sabés la nueva— editala, borrá el contenido del campo y guardá: pasa a
+      «Contraseña no anotada».</li>
+    <li><b>Quitar</b> — para una cuenta que ya no existe en la máquina.</li>
+  </ul>
+</section>
+
+<!-- 10 ────────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">10</span>Entregar y recibir</h2>
 
   <p class="entrada">
     Es el trabajo de todos los días y reemplaza al registro en papel. Está en
@@ -774,9 +906,9 @@
   </div>
 </section>
 
-<!-- 10 ───────────────────────────────────────────────────────────── -->
+<!-- 11 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">10</span>Licencias de software</h2>
+  <h2><span class="n">11</span>Licencias de software</h2>
 
   <p class="entrada">
     Sirve para no enterarte de que una licencia venció el día que un docente no puede
@@ -825,9 +957,9 @@
   </div>
 </section>
 
-<!-- 11 ───────────────────────────────────────────────────────────── -->
+<!-- 12 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">11</span>Bloquear equipos</h2>
+  <h2><span class="n">12</span>Bloquear equipos</h2>
 
   <p class="entrada">
     Para cuando el laboratorio necesita las máquinas para otra cosa: una evaluación,
@@ -871,9 +1003,9 @@
   </p>
 </section>
 
-<!-- 12 ───────────────────────────────────────────────────────────── -->
+<!-- 13 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">12</span>La jornada de la escuela</h2>
+  <h2><span class="n">13</span>La jornada de la escuela</h2>
 
   <p class="entrada">
     Son los días y las horas en que la escuela está abierta. Las reservas fuera de ese
@@ -955,9 +1087,9 @@
   </div>
 </section>
 
-<!-- 13 ───────────────────────────────────────────────────────────── -->
+<!-- 14 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">13</span>Pedidos para dictar una materia</h2>
+  <h2><span class="n">14</span>Pedidos para dictar una materia</h2>
 
   <p class="entrada">
     Un docente puede pedir, desde su perfil, que lo anoten en una materia. Acá se
@@ -986,9 +1118,9 @@
   </div>
 </section>
 
-<!-- 14 ───────────────────────────────────────────────────────────── -->
+<!-- 15 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">14</span>Pedidos de ayuda y mensajes</h2>
+  <h2><span class="n">15</span>Pedidos de ayuda y mensajes</h2>
 
   <p class="entrada">
     Es el buzón por donde los docentes piden ayuda, avisan que algo no anda o
@@ -1034,9 +1166,9 @@
   </p>
 </section>
 
-<!-- 15 ───────────────────────────────────────────────────────────── -->
+<!-- 16 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">15</span>Reportes</h2>
+  <h2><span class="n">16</span>Reportes</h2>
 
   <p class="entrada">
     Para responder preguntas que en papel no se podían responder: cuánto se usa cada
@@ -1066,9 +1198,9 @@
   </div>
 </section>
 
-<!-- 16 ───────────────────────────────────────────────────────────── -->
+<!-- 17 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">16</span>Tus horarios de atención</h2>
+  <h2><span class="n">17</span>Tus horarios de atención</h2>
 
   <p class="entrada">
     Los docentes tienen una pantalla que les dice en qué días y horarios está cada
@@ -1111,9 +1243,9 @@
   </div>
 </section>
 
-<!-- 17 ───────────────────────────────────────────────────────────── -->
+<!-- 18 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">17</span>Tus avisos y tus correos</h2>
+  <h2><span class="n">18</span>Tus avisos y tus correos</h2>
 
   <p class="entrada">
     Un Admin recibe, además de sus propios avisos, los del laboratorio: cuentas
@@ -1140,9 +1272,9 @@
   </div>
 </section>
 
-<!-- 18 ───────────────────────────────────────────────────────────── -->
+<!-- 19 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">18</span>Tu perfil</h2>
+  <h2><span class="n">19</span>Tu perfil</h2>
 
   <p class="entrada">
     Un Admin también tiene su cuenta, y se maneja igual que la de cualquier docente.
@@ -1192,9 +1324,9 @@
   </div>
 </section>
 
-<!-- 19 ───────────────────────────────────────────────────────────── -->
+<!-- 20 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">19</span>Una rutina que funciona</h2>
+  <h2><span class="n">20</span>Una rutina que funciona</h2>
 
   <p class="entrada">
     No hace falta mirar todo todos los días. Con esto alcanza.
@@ -1242,9 +1374,9 @@
   </div>
 </section>
 
-<!-- 20 ───────────────────────────────────────────────────────────── -->
+<!-- 21 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">20</span>Si algo no sale como esperabas</h2>
+  <h2><span class="n">21</span>Si algo no sale como esperabas</h2>
 
   <div class="pregunta">
     <h3>Un docente dice que no puede reservar</h3>
@@ -1300,9 +1432,9 @@
   </div>
 </section>
 
-<!-- 21 ───────────────────────────────────────────────────────────── -->
+<!-- 22 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">21</span>Las palabras que vas a ver</h2>
+  <h2><span class="n">22</span>Las palabras que vas a ver</h2>
 
   <dl class="glosario">
     <dt>Ciclo lectivo</dt>
@@ -1336,6 +1468,10 @@
     <dt>Licencia</dt>
     <dd>El permiso de uso de un programa, con vencimiento. Cada máquina lleva su
       propio contador.</dd>
+
+    <dt>Cuenta de un equipo</dt>
+    <dd>Con qué usuario se entra a esa máquina. No es la cuenta del sistema: son
+      dos cosas distintas y una persona usa las dos.</dd>
 
     <dt>Jornada</dt>
     <dd>Los días y horarios en que la escuela abre. Lo que queda afuera no se puede

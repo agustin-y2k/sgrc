@@ -3,12 +3,21 @@ import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router"
 
+import { useAuth } from "@/features/auth/AuthContext"
 import { InventarioPage } from "@/features/inventory/InventarioPage"
 import * as inventoryApi from "@/features/inventory/api"
 import type { Carro, Equipo } from "@/features/inventory/types"
 import { ApiError } from "@/lib/api-client"
 
 vi.mock("@/features/inventory/api")
+vi.mock("@/features/auth/AuthContext")
+
+function sesionDe(rol: "ADMIN" | "DOCENTE") {
+  vi.mocked(useAuth).mockReturnValue({
+    user: { id: "u1", rol },
+    isLoading: false,
+  } as unknown as ReturnType<typeof useAuth>)
+}
 
 function renderInventario() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -53,6 +62,8 @@ describe("InventarioPage", () => {
     // Por defecto la institución no presta nada suelto, que es el caso de la
     // mayoría: los tests que sí lo necesitan lo declaran.
     vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
+    // El caso corriente de esta pantalla es un docente mirándola.
+    sesionDe("DOCENTE")
   })
 
   afterEach(() => {
@@ -402,6 +413,46 @@ describe("InventarioPage", () => {
 
       expect(await screen.findByText("Carro 1")).toBeInTheDocument()
       expect(screen.queryByText("Otros equipos")).not.toBeInTheDocument()
+    })
+  })
+
+  // RF-03.22: el tipo de equipo es texto libre, así que el sistema no puede
+  // saber que un cargador no tiene con qué entrar. Sí sabe si tiene alguna
+  // cuenta anotada, y con eso alcanza para no ofrecer un panel vacío.
+  describe("cuándo se ofrece «Cómo entrar»", () => {
+    it("a un docente, solo en los equipos que tienen alguna cuenta anotada", async () => {
+      vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+        data: [
+          equipo({ id: "pc1", identificador: 1, tieneCuentas: true }),
+          equipo({ id: "pc2", identificador: 2, tieneCuentas: false }),
+        ],
+      })
+      const user = userEvent.setup()
+      renderInventario()
+
+      await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
+
+      expect(await screen.findByText("PC 1")).toBeInTheDocument()
+      expect(screen.getAllByRole("button", { name: "Cómo entrar" })).toHaveLength(1)
+    })
+
+    // Sin esto no habría manera de anotar la primera cuenta: el botón solo
+    // aparecería donde ya hay una.
+    it("a un Admin, siempre", async () => {
+      sesionDe("ADMIN")
+      vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+        data: [
+          equipo({ id: "pc1", identificador: 1, tieneCuentas: false }),
+          equipo({ id: "pc2", identificador: 2, tieneCuentas: false }),
+        ],
+      })
+      const user = userEvent.setup()
+      renderInventario()
+
+      await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
+
+      expect(await screen.findByText("PC 1")).toBeInTheDocument()
+      expect(screen.getAllByRole("button", { name: "Cómo entrar" })).toHaveLength(2)
     })
   })
 })

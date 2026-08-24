@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/ramiro/sgrc/internal/shared/secretos"
 )
 
 type Service struct {
@@ -16,10 +17,15 @@ type Service struct {
 	validadorReservas ValidadorReservas
 	nuevoID           IDGenerator
 	ahora             func() time.Time
+	// cifrador guarda y recupera las contraseñas de las cuentas de cada equipo
+	// (RF-03.22). Puede ser nil: el despliegue que no configuró CUENTAS_SECRET
+	// registra cuentas igual, solo que sin contraseñas. Todos sus métodos
+	// toleran el nil y responden ErrSinClave.
+	cifrador *secretos.Cifrador
 }
 
-func NewService(repo Repo, validadorReservas ValidadorReservas, nuevoID IDGenerator, ahora func() time.Time) *Service {
-	return &Service{repo: repo, validadorReservas: validadorReservas, nuevoID: nuevoID, ahora: ahora}
+func NewService(repo Repo, validadorReservas ValidadorReservas, nuevoID IDGenerator, ahora func() time.Time, cifrador *secretos.Cifrador) *Service {
+	return &Service{repo: repo, validadorReservas: validadorReservas, nuevoID: nuevoID, ahora: ahora, cifrador: cifrador}
 }
 
 // ── Carro ───────────────────────────────────────────────────────────────
@@ -89,6 +95,10 @@ type EditarEquipoParams struct {
 	Tipo       *string
 	Nombre     *string
 	Reservable *bool
+	// NumeroSerie se edita porque los equipos que ya estaban cargados no lo
+	// tienen: sin esto habría que dar de baja la notebook y volver a crearla
+	// solo para anotarle la serie, perdiendo su historial.
+	NumeroSerie *string
 }
 
 func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params EditarEquipoParams) error {
@@ -133,6 +143,19 @@ func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params Edit
 	}
 	if params.Reservable != nil {
 		pc.Reservable = *params.Reservable
+	}
+	if params.NumeroSerie != nil {
+		serie, err := domain.NumeroSerieOpcionalValido(*params.NumeroSerie)
+		if err != nil {
+			return err
+		}
+		// Vaciarlo solo se permite fuera de un carro. Una computadora de
+		// laboratorio nace con serie obligatoria, y dejar que una edición se la
+		// saque abriría por la puerta de atrás un estado que el alta prohíbe.
+		if serie == "" && pc.EstaEnUnCarro() {
+			return domain.ErrNumeroSerieInvalido
+		}
+		pc.NumeroSerie = serie
 	}
 
 	return s.repo.GuardarEquipo(ctx, pc)
@@ -275,8 +298,8 @@ func (s *Service) ListarEquiposPorCarro(ctx context.Context, carroID string) ([]
 
 // CrearEquipo da de alta algo prestable que no es una computadora de un
 // carro: un proyector, un cargador, una notebook suelta.
-func (s *Service) CrearEquipo(ctx context.Context, tipo, nombre string, reservable bool) (*domain.Equipo, error) {
-	equipo, err := domain.NuevoEquipoSuelto(s.nuevoID(), tipo, nombre, reservable, s.ahora())
+func (s *Service) CrearEquipo(ctx context.Context, tipo, nombre, numeroSerie string, reservable bool) (*domain.Equipo, error) {
+	equipo, err := domain.NuevoEquipoSuelto(s.nuevoID(), tipo, nombre, numeroSerie, reservable, s.ahora())
 	if err != nil {
 		return nil, err
 	}

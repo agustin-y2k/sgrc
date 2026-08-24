@@ -92,6 +92,14 @@ type Equipo struct {
 	DadoDeBaja        bool
 	FechaBaja         *time.Time
 	FechaAlta         time.Time
+	// TieneCuentas: si este equipo tiene anotada al menos una cuenta de
+	// usuario (RF-03.22). Lo resuelven las consultas que listan equipos, y
+	// solo sirve para decidir si vale la pena ofrecer "Cómo entrar": un
+	// cargador no tiene con qué entrar y nadie debería ver ese botón.
+	//
+	// No es parte del estado del equipo —quien lo crea lo deja en false— y
+	// por eso no se persiste: se calcula al leer.
+	TieneCuentas bool
 }
 
 func NuevoEquipoDeCarro(id, carroID string, identificador int, numeroSerie string, freezado bool, fechaAlta time.Time) (*Equipo, error) {
@@ -184,6 +192,24 @@ func TipoDeEquipoValido(tipo string) (string, error) {
 	return tipo, nil
 }
 
+// NumeroSerieOpcionalValido normaliza y valida un número de serie que PUEDE
+// no venir. Es la diferencia con un equipo de carro, donde la serie es
+// obligatoria: lo que presta una escuela fuera del laboratorio no siempre la
+// tiene —un cargador no trae ninguna— y exigirla obligaría a inventar valores,
+// que es peor que no tenerla. El vacío devuelve vacío, y el repositorio lo
+// guarda como NULL: la columna es UNIQUE, y en Postgres eso permite tantos
+// NULL como haga falta pero un solo número repetido.
+func NumeroSerieOpcionalValido(numeroSerie string) (string, error) {
+	serie := NormalizarNumeroSerie(numeroSerie)
+	if serie == "" {
+		return "", nil
+	}
+	if len(serie) > MaxLargoNumeroSerie {
+		return "", ErrNumeroSerieLargo
+	}
+	return serie, nil
+}
+
 func NombreDeEquipoValido(nombre string) (string, error) {
 	nombre = NormalizarTextoDeEquipo(nombre)
 	if nombre == "" {
@@ -197,7 +223,13 @@ func NombreDeEquipoValido(nombre string) (string, error) {
 
 // NuevoEquipoSuelto crea algo prestable que NO está en un carro: un
 // proyector, un cargador, una notebook suelta.
-func NuevoEquipoSuelto(id, tipo, nombre string, reservable bool, fechaAlta time.Time) (*Equipo, error) {
+//
+// numeroSerie es opcional y vale para cualquier tipo, no solo para las
+// notebooks: un proyector tiene serie y es de lo que más se extravía, y un
+// cargador no tiene ninguna. Por eso es un campo que se llena o no, y no dos
+// categorías de equipo — la lista de lo que presta una escuela es texto libre
+// justamente para no tener que decidir de antemano qué entra en cada una.
+func NuevoEquipoSuelto(id, tipo, nombre, numeroSerie string, reservable bool, fechaAlta time.Time) (*Equipo, error) {
 	tipo, err := TipoDeEquipoValido(tipo)
 	if err != nil {
 		return nil, err
@@ -208,13 +240,19 @@ func NuevoEquipoSuelto(id, tipo, nombre string, reservable bool, fechaAlta time.
 		return nil, err
 	}
 
+	serie, err := NumeroSerieOpcionalValido(numeroSerie)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Equipo{
-		ID:         id,
-		Tipo:       tipo,
-		Nombre:     nombre,
-		Reservable: reservable,
-		Estado:     EstadoDisponible,
-		FechaAlta:  fechaAlta,
+		ID:          id,
+		Tipo:        tipo,
+		Nombre:      nombre,
+		NumeroSerie: serie,
+		Reservable:  reservable,
+		Estado:      EstadoDisponible,
+		FechaAlta:   fechaAlta,
 	}, nil
 }
 

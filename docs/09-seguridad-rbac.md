@@ -100,6 +100,10 @@ de la base al verificar la cuenta (§1).
 | Registrar incidencia | ✅ | ✅ solo reportar |
 | Ver el historial de incidencias de un equipo | ✅ | ✅ |
 | Cambiar estado de incidencia / marcar envío a soporte | ✅ | ❌ |
+| Ver las cuentas de un equipo y su privilegio (RF-03.22) | ✅ | ✅ |
+| Anotar, editar o borrar una cuenta de equipo | ✅ | ❌ |
+| Ver la contraseña de una cuenta marcada `PUBLICA` | ✅ | ✅ |
+| Ver la contraseña de una cuenta marcada `SOLO_ADMIN` | ✅ | ❌ |
 | Aprobar cuentas de docentes | ✅ | ❌ |
 | Resetear contraseña de un usuario | ✅ | ❌ |
 | Dar de baja a un docente (permanente) | ✅ | ❌ |
@@ -273,3 +277,28 @@ Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENT
 > `NOMBRE_CAMBIADO` es la única acción del catálogo que alguien hace **sobre su propia cuenta y sin ser `ADMIN`** (RF-01.12). Se audita igual porque el nombre es con lo que el resto de la escuela identifica a esa persona en las reservas y en las entregas: sin esta fila, "la reserva la había pedido otro" no tendría cómo verificarse. `usuario_id` es la propia cuenta, y `detalle` guarda el nombre con el que quedó.
 
 > `PASSWORD_RECUPERADA_POR_EMAIL` es la **única acción del catálogo cuyo actor no está autenticado**: en RF-01.10 la persona prueba ser dueña de la cuenta con el código que le llegó al mail, no con un token. En esa fila `usuario_id` es la propia cuenta (no un Admin que actuó sobre ella), y lo que la hace útil es `ip_origen` — es lo que permite reconstruir qué pasó si alguien reporta que él no cambió su contraseña. Los intentos fallidos no se auditan: viven en `codigo_recuperacion.intentos`, que es donde tienen efecto.
+
+## 6. Las contraseñas de las cuentas de cada equipo (RF-03.22)
+
+Este dato es distinto de todo lo demás que guarda el sistema: es una contraseña que hay que **poder leer**. Con qué usuario se entra a una notebook y cuál es su clave no sirve de nada si no se puede recuperar, así que no se hashea como la de un docente — al hash no se le puede preguntar cuál era la contraseña.
+
+Eso obliga a separar dos cosas que suelen confundirse:
+
+| | Qué protege | Dónde vive |
+|---|---|---|
+| **Visibilidad** (`PUBLICA` / `SOLO_ADMIN`) | Quién, dentro del sistema, puede ver esa contraseña | La aplicación, cuenta por cuenta |
+| **Cifrado** (AES-256-GCM, `CUENTAS_SECRET`) | La copia del archivo: el volcado de `make backup`, la base leída por fuera | `internal/shared/secretos` |
+
+**La visibilidad la marca un `ADMIN`, cuenta por cuenta, y es independiente del privilegio.** Hay cuentas de administrador que todo el mundo usa —la máquina del taller donde hay que instalar cosas— y cuentas comunes que solo administración debe abrir; deducir una de la otra se equivocaría en los dos sentidos.
+
+**Lo que la marca oculta es la contraseña, nunca la cuenta.** El usuario y su privilegio se listan siempre, para cualquier autenticado: saber que una notebook tiene una cuenta de administrador es útil aunque no puedas usarla, y esconderla haría que el inventario mienta por omisión. Por eso el listado no es `soloAdmin` y el 403 al revelar no es un 404: la cuenta ya se sabe que existe.
+
+**La regla vive en el servicio, no en el handler ni en la pantalla** (`puedeRevelar`, en `internal/inventory/application/cuentas.go`). Si viviera en la capa HTTP, una ruta nueva podría devolver la contraseña sin pasar por ella; y el frontend recibe `puedeVerLaPassword` ya resuelto, así que solo dibuja el botón.
+
+**La contraseña no viaja en el listado, ni para un `ADMIN`.** Se pide de a una, con `POST /api/inventory/cuentas/{id}/password`, y **cada llamada queda auditada** (`PASSWORD_DE_EQUIPO_REVELADA`) — también cuando la cuenta es pública. Si viajara en el listado, abrir la ficha de un equipo sería revelar todas sus contraseñas de una vez y la auditoría no distinguiría "miró la lista" de "necesitaba entrar a esta máquina". Es POST y no GET por lo mismo: un GET termina en el historial del navegador y en los logs de acceso, y esto no es una lectura inocua.
+
+Ninguna entrada de auditoría guarda la contraseña en su detalle: el registro de quién tocó qué no puede ser, él mismo, otra copia de las contraseñas.
+
+**`CUENTAS_SECRET` es opcional.** Sin ella el sistema arranca igual y las cuentas se registran; lo único que no se puede es guardar contraseñas, y se responde 503 con la explicación en vez de un 500. Es el mismo criterio que SMTP y el ingreso con Google. Si se cambia, lo guardado deja de poder leerse y hay que volver a cargarlo mirando las máquinas.
+
+**Lo que esto NO protege**: quien entra al servidor tiene la clave y la base, porque `CUENTAS_SECRET` vive en el mismo `.env` que `POSTGRES_PASSWORD`. El cifrado defiende la copia que sale del servidor, que es el escenario probable —un `.sql` en un pendrive o en una carpeta compartida—, no al servidor mismo.

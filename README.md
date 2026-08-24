@@ -42,6 +42,7 @@ SGRC resuelve los cuatro: **impide el solapamiento a nivel de base de datos** (n
 | **Reservas que se repiten** | "Todos los martes de 15 a 17, hasta fin de año." El sistema valida la serie completa antes de crear nada: si alguna fecha choca, dice cuáles y no crea ninguna. |
 | **Ver qué tiene por delante** | La pantalla de inicio responde "¿qué tengo hoy?" y "¿hay algo esperándome?" apenas se entra. Muestra sus próximas clases con el día en palabras, y sobre cada una puede cambiar de máquina o cancelar sin ir a ninguna otra pantalla. |
 | **Llegar a todo sin conocer el sistema** | Debajo, un atajo por cada cosa que puede hacer, nombrado por la tarea y no por la sección —"Ver las computadoras", no "Inventario"— con una línea que dice para qué sirve. Está pensado para quien no usa una computadora todos los días. |
+| **Saber con qué cuenta se entra a una máquina** | Una notebook no se abre sola. Cada equipo puede llevar anotadas sus cuentas: con qué usuario se entra, cuál es de administrador, si pide contraseña y —si le corresponde verla— cuál es. Se consulta desde el teléfono, parado frente a la máquina. |
 | **Reportar un equipo con problemas** | Desde el inventario o desde la pantalla de inicio, indicando la gravedad y qué falla. El aviso le llega al equipo de administración. |
 | **Cancelar** | Una fecha suelta o toda la serie de aquí en adelante. |
 | **Cambiar de máquina** | Si una de las que reservó no está, la cambia por otra libre en la misma franja sin partir la clase en dos reservas. Si la reserva se repite todas las semanas, elige si el cambio es solo por esa fecha o de ahí hasta el final de la serie. |
@@ -59,6 +60,7 @@ SGRC resuelve los cuatro: **impide el solapamiento a nivel de base de datos** (n
 | **La reserva que nadie retiró** | Una hora antes de la clase le llega un recordatorio al docente, y a los quince minutos de empezada —si todavía no fue a buscarlas— el aviso de que a los cuarenta quedan libres: llega cuando todavía puede ir, cambiar de máquina o cancelar. Pasado ese plazo se liberan para otro, aunque si el docente aparece más tarde y siguen ahí se le entregan igual. Si vino y se llevó solo una parte, lo que dejó se libera enseguida: ya lo decidió él. Y si un equipo no vuelve a horario, el sistema lo reclama y le avisa a quien lo tenía reservado después. |
 | **Inventario** | Carros, equipos, número de serie, procesador, memoria, software instalado y estado (disponible, en mantenimiento, fuera de servicio). |
 | **Otros equipos** | Lo que se presta y no está en ningún carro: un proyector, cargadores, notebooks sueltas. Se entregan y se reciben en la misma pantalla que las computadoras, y cada uno decide si además se puede reservar con anticipación —un proyector sí, un cargador se pide en el momento—. |
+| **Cuentas de cada equipo** | Con qué usuario se entra a cada máquina, si es local o de un directorio remoto, si tiene privilegios de administrador y cuál es la contraseña. Cada cuenta se marca por separado como visible para cualquier docente o solo para administración, y esa marca **no** se deduce del privilegio: hay cuentas de administrador que usa todo el mundo y cuentas comunes que no. Las contraseñas se guardan cifradas —el volcado de la copia de seguridad no es la lista de contraseñas de la institución—, no viajan en ningún listado, se piden de a una y cada consulta queda auditada. |
 | **Licencias de software** | Qué programas con vencimiento hay en cada equipo y cuántos días le quedan a cada uno. El día antes de que venza —y el día que vence— llega un correo a todos los administradores. Si la licencia se renovó otro día, o hay que corregir la fecha, se edita en cualquier momento. |
 | **Ciclo lectivo** | Años, cursos, materias y qué docente dicta cada una. Al cerrar el año, el sistema guarda un resumen histórico permanente y clona la estructura al año siguiente. |
 | **Aprobación de cuentas** | Un docente se registra solo —con email y contraseña, o con su cuenta de Google— pero no entra hasta que alguien lo aprueba. Un docente aprobado también puede recibir permisos de Admin, y perderlos sin que se le cierre la cuenta. |
@@ -238,7 +240,7 @@ sgrc/
 ├── internal/
 │   ├── auth/             ← usuarios, JWT, aprobación de cuentas, recuperación de contraseña
 │   ├── academic/         ← ciclos lectivos, cursos, materias, asignación de docentes
-│   ├── inventory/        ← carros, equipos, incidencias, licencias de software
+│   ├── inventory/        ← carros, equipos, cuentas de cada equipo, incidencias, licencias
 │   ├── reservation/      ← reservas, solapamiento, recurrencia, bloqueos, préstamos
 │   ├── notification/     ← avisos internos y sus copias por correo
 │   ├── reporting/        ← reportes y estadísticas históricas

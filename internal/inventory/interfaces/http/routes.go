@@ -45,6 +45,22 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	inventory.Delete("/licencias/:id", autenticado, soloAdmin, h.BorrarLicencia)
 	inventory.Get("/equipos/:equipoId/licencias", autenticado, soloAdmin, h.ListarLicenciasPorEquipo)
 
+	// Cuentas de usuario de cada equipo (RF-03.22).
+	//
+	// El listado NO es soloAdmin: la cuenta y su privilegio no son el secreto,
+	// y un docente parado frente a la notebook necesita saber con qué usuario
+	// entrar. Lo que se protege es la CONTRASEÑA, y esa decisión la toma el
+	// servicio cuenta por cuenta — no la ruta, que no puede mirar la
+	// visibilidad de cada fila.
+	inventory.Get("/equipos/:equipoId/cuentas", autenticado, h.ListarCuentasDeEquipo)
+	inventory.Get("/clases-de-cuenta", autenticado, soloAdmin, h.ListarClasesDeCuenta)
+	inventory.Post("/equipos/:equipoId/cuentas", autenticado, soloAdmin, h.CrearCuentaDeEquipo)
+	inventory.Patch("/cuentas/:id", autenticado, soloAdmin, h.EditarCuentaDeEquipo)
+	inventory.Delete("/cuentas/:id", autenticado, soloAdmin, h.BorrarCuentaDeEquipo)
+	// Revelar una contraseña tampoco es soloAdmin, por lo mismo: el servicio
+	// responde 403 si esa cuenta puntual es reservada.
+	inventory.Post("/cuentas/:id/password", autenticado, h.RevelarPasswordDeCuenta)
+
 	// Preferencia de materia por equipo (RF-03.21).
 	inventory.Get("/equipos/:equipoId/preferencias", autenticado, h.ListarPreferenciasDeEquipo)
 	inventory.Get("/materias-en-uso", autenticado, soloAdmin, h.ListarMateriasEnUso)

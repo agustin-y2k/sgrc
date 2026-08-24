@@ -68,6 +68,45 @@ api "$AT" POST /api/inventory/licencias "{\"equipoIds\":$EQ,\"nombre\":\"AutoCAD
 api "$AT" POST /api/inventory/licencias "{\"equipoIds\":$EQ2,\"nombre\":\"Office 365\",\"diasDuracion\":4,\"diasAviso\":7}" >/dev/null || true
 echo "→ licencias cargadas"
 
+# Dos equipos sueltos, que son los que hacen visible la sección "Otros
+# equipos": un proyector que se puede reservar con anticipación y un cargador
+# que se presta en el momento. El número de serie va en el proyector y no en
+# el cargador, que es la diferencia que la guía explica (RF-03.15).
+suelto() { # suelto JSON
+  api "$AT" POST /api/inventory/equipos "$1" | jq -e .id >/dev/null 2>&1 || true
+}
+suelto '{"tipo":"Proyector","nombre":"Proyector 1","numeroSerie":"PRY-2024-118","reservable":true}'
+suelto '{"tipo":"Cargador","nombre":"Cargador 1","reservable":false}'
+echo "→ equipos sueltos cargados"
+
+# Las cuentas de un equipo (RF-03.22), en los cuatro estados que la guía
+# explica: la que entra sin contraseña, la pública con contraseña anotada, la
+# reservada a administración y la que pide una contraseña que nadie anotó.
+# Sin las cuatro, la captura no muestra ninguna de las marcas.
+#
+# Guardar contraseñas necesita CUENTAS_SECRET en el .env; sin ella las dos
+# cuentas que la llevan salen con 503 y el aviso queda en pantalla.
+# La primera computadora DE UN CARRO, no la primera de la lista: el listado
+# devuelve antes los equipos sueltos, y las capturas de la guía abren el carro
+# y aprietan "Cómo entrar" en la primera PC.
+PC1=$(api "$AT" GET "/api/inventory/equipos?pageSize=200" | jq -r '[.data[] | select(.carroId != null)][0].id')
+cuenta() { # cuenta JSON
+  local r
+  r=$(api "$AT" POST "/api/inventory/equipos/$PC1/cuentas" "$1")
+  # Se avisa solo cuando la cuenta NO quedó: correr el script dos veces sobre
+  # la misma base es normal, y "ya tiene una cuenta con ese nombre" no es una
+  # falla. Lo que sí hay que ver es un 503 por CUENTAS_SECRET sin configurar.
+  case "$r" in
+    *'"id"'* | *"ya tiene una cuenta"*) : ;;
+    *) echo "   cuenta no cargada: $r" ;;
+  esac
+}
+cuenta '{"usuario":"alumno","clase":"Local","privilegio":"COMUN","visibilidad":"PUBLICA","tienePassword":false,"notas":"La que usan los chicos"}'
+cuenta '{"usuario":"taller","clase":"Local","privilegio":"ADMINISTRADOR","visibilidad":"PUBLICA","tienePassword":true,"password":"Taller.2026","notas":"Para instalar programas en el aula"}'
+cuenta '{"usuario":"soporte","clase":"Microsoft","privilegio":"ADMINISTRADOR","visibilidad":"SOLO_ADMIN","tienePassword":true,"password":"S0porte.2026"}'
+cuenta '{"usuario":"profesor","clase":"Linux","privilegio":"COMUN","visibilidad":"PUBLICA","tienePassword":true,"notas":"Viene del equipo anterior"}'
+echo "→ cuentas de la PC 1 cargadas"
+
 # Una entrega en curso, para que Entregas no esté vacía.
 EQ3=$(api "$AT" GET "/api/inventory/equipos?pageSize=200" | jq -c '[.data[7].id]')
 api "$AT" POST /api/reservation/prestamos \

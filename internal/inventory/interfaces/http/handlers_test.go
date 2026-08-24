@@ -17,6 +17,7 @@ import (
 	"github.com/ramiro/sgrc/internal/inventory/domain"
 	"github.com/ramiro/sgrc/internal/shared/audit"
 	"github.com/ramiro/sgrc/internal/shared/authtest"
+	"github.com/ramiro/sgrc/internal/shared/secretos"
 )
 
 // fakeAuditor descarta toda entrada de auditoría (ver el mismo tipo en
@@ -33,6 +34,7 @@ type fakeRepo struct {
 	incidencias  map[string]*domain.Incidencia
 	licencias    map[string]*domain.LicenciaSoftware
 	preferencias map[string]*domain.PreferenciaDeEquipo
+	cuentas      map[string]*domain.CuentaDeEquipo
 	// nombresDeMateria es lo que ofrece el selector del formulario de marcas.
 	nombresDeMateria []string
 }
@@ -44,7 +46,68 @@ func nuevoFakeRepo() *fakeRepo {
 		incidencias:  make(map[string]*domain.Incidencia),
 		licencias:    make(map[string]*domain.LicenciaSoftware),
 		preferencias: make(map[string]*domain.PreferenciaDeEquipo),
+		cuentas:      make(map[string]*domain.CuentaDeEquipo),
 	}
+}
+
+// ── fakeRepo: cuentas de equipo (RF-03.22) ──────────────────────────────
+
+func (r *fakeRepo) CrearCuentaDeEquipo(_ context.Context, c *domain.CuentaDeEquipo) error {
+	for _, existente := range r.cuentas {
+		if existente.EquipoID == c.EquipoID && strings.EqualFold(existente.Usuario, c.Usuario) {
+			return application.ErrCuentaDeEquipoDuplicada
+		}
+	}
+	r.cuentas[c.ID] = c
+	return nil
+}
+
+func (r *fakeRepo) BuscarCuentaDeEquipoPorID(_ context.Context, id string) (*domain.CuentaDeEquipo, error) {
+	c, ok := r.cuentas[id]
+	if !ok {
+		return nil, application.ErrCuentaDeEquipoNoEncontrada
+	}
+	return c, nil
+}
+
+func (r *fakeRepo) GuardarCuentaDeEquipo(_ context.Context, c *domain.CuentaDeEquipo) error {
+	if _, ok := r.cuentas[c.ID]; !ok {
+		return application.ErrCuentaDeEquipoNoEncontrada
+	}
+	r.cuentas[c.ID] = c
+	return nil
+}
+
+func (r *fakeRepo) BorrarCuentaDeEquipo(_ context.Context, id string) error {
+	if _, ok := r.cuentas[id]; !ok {
+		return application.ErrCuentaDeEquipoNoEncontrada
+	}
+	delete(r.cuentas, id)
+	return nil
+}
+
+func (r *fakeRepo) ListarCuentasDeEquipo(_ context.Context, equipoID string) ([]*domain.CuentaDeEquipo, error) {
+	var resultado []*domain.CuentaDeEquipo
+	for _, c := range r.cuentas {
+		if c.EquipoID == equipoID {
+			resultado = append(resultado, c)
+		}
+	}
+	sort.Slice(resultado, func(i, j int) bool { return resultado[i].Usuario < resultado[j].Usuario })
+	return resultado, nil
+}
+
+func (r *fakeRepo) ClasesDeCuentaUsadas(_ context.Context) ([]string, error) {
+	vistas := map[string]bool{}
+	var resultado []string
+	for _, c := range r.cuentas {
+		if !vistas[c.Clase] {
+			vistas[c.Clase] = true
+			resultado = append(resultado, c.Clase)
+		}
+	}
+	sort.Strings(resultado)
+	return resultado, nil
 }
 
 func (r *fakeRepo) CrearCarro(ctx context.Context, c *domain.Carro) error {
@@ -281,9 +344,13 @@ var testSecret = []byte("un-secreto-de-test-bastante-largo")
 
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	contadorID = 0
+	cifrador, err := secretos.Nuevo("clave-de-test-para-las-cuentas")
+	if err != nil {
+		panic(err)
+	}
 	svc := application.NewService(repo, &fakeValidadorReservas{}, idSecuencial, func() time.Time {
 		return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	})
+	}, cifrador)
 	h := NewHandler(svc, fakeAuditor{})
 
 	app := fiber.New()

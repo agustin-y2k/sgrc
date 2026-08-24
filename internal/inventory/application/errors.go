@@ -28,6 +28,28 @@ var (
 	// carro, el nombre es lo único que los distingue.
 	ErrNombreDeEquipoDuplicado = errors.New("ya existe un equipo con ese nombre")
 
+	// ── Cuentas de equipo (RF-03.22) ──────────────────────────────────
+	ErrCuentaDeEquipoNoEncontrada = errors.New("esa cuenta no existe")
+
+	// ErrCuentaDeEquipoDuplicada: UNIQUE(equipo_id, usuario_normalizado) — dos
+	// cuentas con el mismo nombre en la misma máquina no existen.
+	ErrCuentaDeEquipoDuplicada = errors.New("ese equipo ya tiene una cuenta con ese nombre")
+
+	// ErrSinClaveDeCifrado: el despliegue no configuró CUENTAS_SECRET, así que
+	// puede registrar cuentas pero no guardar sus contraseñas. No es una falla
+	// del sistema: es una función que ese despliegue no habilitó.
+	ErrSinClaveDeCifrado = errors.New("este despliegue no puede guardar contraseñas de equipos: falta configurar CUENTAS_SECRET en el .env")
+
+	// ErrNoAutorizado: se pidió revelar una contraseña marcada SOLO_ADMIN sin
+	// ser ADMIN. Vive acá y no en el handler porque es una regla de negocio: si
+	// estuviera en la capa HTTP, una ruta nueva podría saltearla sin notarlo.
+	ErrNoAutorizado = errors.New("esa contraseña solo la puede ver un administrador")
+
+	// ErrPasswordNoGuardada: se pidió ver una contraseña que no tenemos
+	// anotada. Es el tercer estado —la cuenta pide contraseña y no la sabemos—
+	// y decirlo es más útil que devolver un vacío que parece un error.
+	ErrPasswordNoGuardada = errors.New("esa cuenta no tiene una contraseña anotada en el sistema")
+
 	// ErrNumeroSerieDuplicado: UNIQUE global — el número de serie de
 	// fábrica no puede repetirse en ninguna PC del sistema.
 	ErrNumeroSerieDuplicado = errors.New("ya existe un equipo con ese número de serie")

@@ -5,11 +5,13 @@ import userEvent from "@testing-library/user-event"
 import { InventarioAdminPage } from "@/features/admin/InventarioAdminPage"
 import * as adminApi from "@/features/admin/api"
 import * as inventoryApi from "@/features/inventory/api"
+import { useAuth } from "@/features/auth/AuthContext"
 import type { Incidencia, Equipo } from "@/features/inventory/types"
 import { ApiError } from "@/lib/api-client"
 
 vi.mock("@/features/admin/api")
 vi.mock("@/features/inventory/api")
+vi.mock("@/features/auth/AuthContext")
 
 function equipo(over: Partial<Equipo> = {}): Equipo {
   // La etiqueta la resuelve el backend a partir del identificador; acá se
@@ -82,6 +84,12 @@ describe("InventarioAdminPage", () => {
     vi.mocked(inventoryApi.listarIncidenciasDeEquipo).mockResolvedValue({
       data: [incidencia()],
     })
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: "u1", rol: "ADMIN" },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAuth>)
+    vi.mocked(inventoryApi.listarCuentasDeEquipo).mockResolvedValue({ data: [] })
+    vi.mocked(inventoryApi.listarClasesDeCuenta).mockResolvedValue({ data: [] })
   })
 
   afterEach(() => {
@@ -440,5 +448,37 @@ describe("InventarioAdminPage", () => {
     await user.click(screen.getByRole("button", { name: "Confirmar cambio" }))
 
     expect(screen.queryByText(/Se cancelaron/)).not.toBeInTheDocument()
+  })
+
+  // RF-03.22: las cuentas se consultan desde Computadoras, pero se CARGAN
+  // desde acá, que es donde un Admin viene a completar lo que se sabe de un
+  // equipo. Sin este botón la función existía y no se encontraba.
+  it("abre las cuentas de un equipo desde la gestión del inventario", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarCuentasDeEquipo).mockResolvedValue({
+      data: [
+        {
+          id: "cu1",
+          equipoId: "pc1",
+          usuario: "alumno",
+          clase: "Local",
+          privilegio: "COMUN",
+          visibilidad: "PUBLICA",
+          tienePassword: false,
+          hayPasswordParaVer: false,
+          puedeVerLaPassword: true,
+        },
+      ],
+    })
+    renderPagina()
+    await abrirCarro(user)
+
+    await user.click(await screen.findByRole("button", { name: "Cómo entrar" }))
+
+    expect(await screen.findByText("Cómo entrar a PC 1")).toBeInTheDocument()
+    expect(await screen.findByText("alumno")).toBeInTheDocument()
+    // Y desde acá se pueden cargar, que es el motivo de que el botón exista.
+    expect(screen.getByRole("button", { name: "Agregar cuenta" })).toBeInTheDocument()
+    expect(inventoryApi.listarCuentasDeEquipo).toHaveBeenCalledWith("pc1")
   })
 })

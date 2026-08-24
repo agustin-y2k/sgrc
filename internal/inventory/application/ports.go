@@ -22,6 +22,17 @@ type Repo interface {
 	// que no está en ningún carro (RF-03.15) — el proyector, los cargadores.
 	ListarEquipos(ctx context.Context, soloSueltos bool) ([]*domain.Equipo, error)
 
+	// Cuentas de usuario de cada equipo (RF-03.22). Cargarlas es opcional: un
+	// equipo sin ninguna es un equipo del que no anotamos nada.
+	CrearCuentaDeEquipo(ctx context.Context, c *domain.CuentaDeEquipo) error
+	BuscarCuentaDeEquipoPorID(ctx context.Context, id string) (*domain.CuentaDeEquipo, error)
+	GuardarCuentaDeEquipo(ctx context.Context, c *domain.CuentaDeEquipo) error
+	BorrarCuentaDeEquipo(ctx context.Context, id string) error
+	ListarCuentasDeEquipo(ctx context.Context, equipoID string) ([]*domain.CuentaDeEquipo, error)
+	// ClasesDeCuentaUsadas alimenta las sugerencias del formulario: la clase es
+	// texto libre y esto evita que convivan "Microsoft" y "MICROSOFT".
+	ClasesDeCuentaUsadas(ctx context.Context) ([]string, error)
+
 	CrearIncidencia(ctx context.Context, i *domain.Incidencia) error
 	BuscarIncidenciaPorID(ctx context.Context, id string) (*domain.Incidencia, error)
 	GuardarIncidencia(ctx context.Context, i *domain.Incidencia) error

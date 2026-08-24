@@ -69,6 +69,29 @@ classDiagram
     %% hay afuera del laboratorio" sea una sola lista. `etiqueta()` resuelve
     %% cómo se lo nombra en pantallas y correos: "PC 3" o el nombre.
 
+    class CuentaDeEquipo {
+        +UUID id
+        +UUID equipoId
+        +string usuario
+        +string clase
+        +PrivilegioDeCuenta privilegio
+        +boolean tienePassword
+        +string passwordCifrada
+        +VisibilidadDeCuenta visibilidad
+        +string notas
+        +DateTime creadaEn
+        +DateTime actualizadaEn
+        +puedeVerLaPassword(esAdmin) boolean
+        +hayPasswordParaVer() boolean
+    }
+
+    %% Con qué cuenta se entra a la máquina (RF-03.22). `tienePassword` y
+    %% `passwordCifrada` son dos cosas distintas porque hay TRES estados: la
+    %% cuenta libre, la que pide una contraseña que tenemos anotada, y la que
+    %% pide una que no sabemos. `visibilidad` decide quién ve la CONTRASEÑA y
+    %% es independiente del privilegio: hay cuentas de administrador de uso
+    %% común y cuentas comunes reservadas.
+
     class LicenciaSoftware {
         +UUID id
         +UUID equipoId
@@ -252,6 +275,7 @@ classDiagram
     Carro "1" --> "N" Equipo
     Equipo "1" --> "N" Incidencia
     Equipo "1" --> "N" LicenciaSoftware
+    Equipo "1" --> "N" CuentaDeEquipo
     Equipo "1" --> "N" Prestamo
     Equipo "1" --> "N" Reserva
     Equipo "1" --> "N" HistoricoUsoEquipo
@@ -287,12 +311,15 @@ classDiagram
 | `EstadoIncidencia` | `ABIERTA`, `EN_REPARACION`, `ENVIADA_A_SOPORTE`, `RESUELTA` |
 | `EstadoNotif` | `NO_LEIDA`, `LEIDA` |
 | `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `LICENCIA_POR_VENCER`, `RESERVA_POR_COMENZAR`, `RESERVA_NO_RETIRADA`, `EQUIPO_SIN_DEVOLVER`, `PEDIDO_DE_LIBERACION` |
+| `PrivilegioDeCuenta` | `COMUN`, `ADMINISTRADOR` — qué puede hacer esa cuenta en la máquina |
+| `VisibilidadDeCuenta` | `PUBLICA`, `SOLO_ADMIN` — quién puede ver su **contraseña**; la cuenta y su privilegio se listan siempre |
 | `EstadoLicencia` | `SIN_FECHA`, `VENCIDA`, `POR_VENCER`, `VIGENTE` — **derivado**, nunca una columna: se calcula contra la fecha de hoy |
 | `DiaSemana` | `LUNES`…`DOMINGO` (los siete días; qué días opera la institución se declara, no se supone) |
 | `TipoExcepcionHorario` | `NO_DISPONIBLE`, `HORARIO_MODIFICADO` |
 
-Los tres campos que **no** son enums —`Equipo.tipo`, `Incidencia.categoria` y
-`Reserva.motivoBloqueo`— son los que escribe la institución. La regla es
+Los cuatro campos que **no** son enums —`Equipo.tipo`,
+`CuentaDeEquipo.clase`, `Incidencia.categoria` y `Reserva.motivoBloqueo`— son
+los que escribe la institución. La regla es
 simple: lo que el sistema interpreta es un enum, lo que describe una realidad
 local es texto libre.
 

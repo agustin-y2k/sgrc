@@ -36,6 +36,7 @@ node docs/guias/generar/capturar-pasos.mjs        # diálogos y formularios en u
 node docs/guias/generar/capturar-pasos-2.mjs      # los que necesitan otro camino
 node docs/guias/generar/capturar-admin.mjs        # pantallas de Admin desplegadas
 node docs/guias/generar/capturar-formularios.mjs  # login, registro y recuperación
+node docs/guias/generar/capturar-cuentas.mjs      # las cuentas de un equipo, con las dos sesiones
 node docs/guias/generar/capturar-marcas.mjs       # las que llevan números en rojo
 node docs/guias/generar/capturar-readme.mjs       # las del README (otro encuadre)
 
@@ -69,6 +70,21 @@ Los dos motivos están escritos arriba del script, pero conviene tenerlos acá:
 La confirmación del impacto se toma **sin aplicarla**: se propone un horario
 que deja clases afuera, se fotografía la pregunta y se sale con «Volver sin
 cambiar nada», así los datos de demostración quedan intactos.
+
+## Correr solo una parte, que es lo normal
+
+Cada script de captura es independiente y `preparar-imagenes.py` saltea con
+`✗ falta` los orígenes que no encuentra, así que **regenerar solo el que toca
+la pantalla que cambió deja las demás imágenes intactas**. Dos cosas a tener
+en cuenta cuando se hace así:
+
+- **`capturar-jornada.mjs` deja la jornada declarada, y los demás la
+  necesitan.** Si la base es nueva y se corre cualquier otro script primero,
+  el Admin queda atrapado en el asistente de la primera jornada y todas sus
+  capturas salen mostrando eso.
+- **El login falla de a ratos con `waitForURL: Timeout`** cuando se encadenan
+  varias corridas seguidas. No es la contraseña: volver a correr el mismo
+  script alcanza.
 
 ## Decisiones que conviene no deshacer
 

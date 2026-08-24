@@ -52,6 +52,11 @@ MAPA = {
     "nue-calendario-equipo-admin": "admin-20-calendario-equipo",
     "nue-perfil-admin": "admin-21-perfil",
     "nue-calendario-equipo-docente": "docente-19-calendario-equipo",
+    # Con qué cuenta se entra a cada equipo (capturar-cuentas.mjs).
+    "form-cuentas-admin": "admin-22-cuentas-de-equipo",
+    "form-cuenta-nueva": "admin-23-cuenta-nueva",
+    "cue-03-cuentas-docente": "docente-20-como-entrar",
+    "cue-04-cuentas-telefono": "docente-21-como-entrar-telefono",
 }
 
 def recortar_vacio(img, margen=40, pie=280):

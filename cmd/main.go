@@ -51,6 +51,7 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/metricas"
 	"github.com/ramiro/sgrc/internal/shared/middleware"
 	"github.com/ramiro/sgrc/internal/shared/monitoreo"
+	"github.com/ramiro/sgrc/internal/shared/secretos"
 	"github.com/ramiro/sgrc/internal/shared/security"
 	sugerenciasapp "github.com/ramiro/sgrc/internal/sugerencias/application"
 	sugerenciasinfra "github.com/ramiro/sgrc/internal/sugerencias/infrastructure"
@@ -530,11 +531,26 @@ func main() {
 	// reservation directamente (ver cmd/wiring_adapters.go).
 	inventoryValidadorReservas := &inventoryValidadorReservasAdapter{reservationSvc: reservationSvc}
 
+	// El cifrador de las contraseñas de las cuentas de cada equipo (RF-03.22).
+	// Sin CUENTAS_SECRET queda en nil y el sistema arranca igual: se pueden
+	// registrar cuentas, no guardar sus contraseñas. Es el mismo criterio que
+	// SMTP y que el ingreso con Google — una función de menos, no un arranque
+	// roto — y por eso no se valida como JWT_SECRET, que sí es obligatorio.
+	cifradorDeCuentas, err := secretos.Nuevo(os.Getenv("CUENTAS_SECRET"))
+	if err != nil {
+		log.Fatalf("no se pudo preparar el cifrado de las contraseñas de equipos: %v", err)
+	}
+	if !cifradorDeCuentas.Disponible() {
+		log.Println("CUENTAS_SECRET no configurado: se pueden registrar cuentas de equipos, " +
+			"pero no guardar sus contraseñas (ver .env.example)")
+	}
+
 	inventorySvc := inventoryapp.NewService(
 		inventoryRepo,
 		inventoryValidadorReservas,
 		inventoryinfra.NuevoID,
 		ahora,
+		cifradorDeCuentas,
 	)
 	inventoryHandler := inventoryhttp.NewHandler(inventorySvc, auditor)
 

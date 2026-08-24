@@ -115,6 +115,8 @@ export function crearEquipoDeCarro(
 export function crearEquipoSuelto(req: {
   tipo: string
   nombre: string
+  /** Opcional para cualquier tipo: un proyector tiene serie, un cargador no. */
+  numeroSerie?: string
   reservable: boolean
 }) {
   // A qué colección se hace POST decide dónde nace el equipo: acá nace
@@ -134,6 +136,8 @@ export function editarEquipo(
     tipo?: string
     nombre?: string
     reservable?: boolean
+    /** Cadena vacía borra la serie; el backend solo lo acepta fuera de un carro. */
+    numeroSerie?: string
   }
 ) {
   return apiFetch<void>(`/api/inventory/equipos/${id}`, { method: "PATCH", body: req })

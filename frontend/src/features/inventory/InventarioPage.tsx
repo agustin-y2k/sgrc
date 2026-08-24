@@ -21,7 +21,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useAuth } from "@/features/auth/AuthContext"
 import * as inventoryApi from "@/features/inventory/api"
+import { CuentasDeEquipo } from "@/features/inventory/CuentasDeEquipo"
 import { ReportarIncidencia } from "@/features/inventory/ReportarIncidencia"
 import { ETIQUETA_ESTADO_EQUIPO } from "@/features/inventory/types"
 import type { EstadoEquipo, Equipo } from "@/features/inventory/types"
@@ -41,6 +43,11 @@ function TablaDeEquipos({ equipos }: { equipos: Equipo[] }) {
   // RF-03.5: cualquier usuario autenticado puede reportar una falla, y esta
   // es la pantalla donde un docente ya está mirando los equipos.
   const [reportando, setReportando] = useState<Equipo | null>(null)
+  // Las cuentas de un equipo (RF-03.22) se abren de a una: son varias líneas
+  // por equipo y desplegarlas todas convertiría la tabla en un muro.
+  const [viendoCuentas, setViendoCuentas] = useState<Equipo | null>(null)
+  const { user } = useAuth()
+  const esAdmin = user?.rol === "ADMIN"
 
   // "Freezada" y "Software instalado" son datos de una computadora: en una
   // tabla de proyectores y cargadores serían dos columnas de guiones.
@@ -89,6 +96,29 @@ function TablaDeEquipos({ equipos }: { equipos: Equipo[] }) {
                       </Link>
                     </Button>
                   )}
+                  {/* Con qué usuario se entra a esta máquina (RF-03.22). Lo
+                      ve cualquier autenticado: la cuenta y su privilegio no
+                      son el secreto, y un docente parado frente a la notebook
+                      necesita saberlo. Qué contraseña se le revela lo decide
+                      el servidor, cuenta por cuenta.
+
+                      El botón aparece solo si hay algo anotado. El tipo es
+                      texto libre, así que el sistema no puede deducir que un
+                      cargador no tiene cuentas — pero sí sabe que no tiene
+                      ninguna, y eso alcanza. Para un Admin está siempre,
+                      porque si no, no habría cómo anotar la primera. */}
+                  {(esAdmin || equipo.tieneCuentas) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={viendoCuentas?.id === equipo.id}
+                      onClick={() =>
+                        setViendoCuentas(viendoCuentas?.id === equipo.id ? null : equipo)
+                      }
+                    >
+                      Cómo entrar
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -109,6 +139,15 @@ function TablaDeEquipos({ equipos }: { equipos: Equipo[] }) {
       {reportando && (
         <div className="mt-3">
           <ReportarIncidencia equipo={reportando} onListo={() => setReportando(null)} />
+        </div>
+      )}
+
+      {/* Fuera de la tabla por lo mismo que el formulario de arriba: una lista
+          de cuentas dentro de una celda queda ilegible en un teléfono, que es
+          justo desde donde alguien la consulta parado frente a la máquina. */}
+      {viendoCuentas && (
+        <div className="mt-3">
+          <CuentasDeEquipo equipo={viendoCuentas} />
         </div>
       )}
     </div>

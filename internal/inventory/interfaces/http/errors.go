@@ -15,8 +15,23 @@ func mapearError(err error) error {
 		errors.Is(err, application.ErrEquipoNoEncontrado),
 		errors.Is(err, application.ErrIncidenciaNoEncontrada),
 		errors.Is(err, application.ErrLicenciaNoEncontrada),
+		errors.Is(err, application.ErrCuentaDeEquipoNoEncontrada),
+		// 404 y no 204 vacío: se pidió ver una contraseña que no está anotada,
+		// y decirlo es más útil que devolver un vacío que parece un error.
+		errors.Is(err, application.ErrPasswordNoGuardada),
 		errors.Is(err, domain.ErrPreferenciaNoEncontr):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
+
+	// La cuenta existe y la contraseña también; lo que falta es el permiso
+	// para verla. 403 y no 404: esconder que existe no protegería nada —la
+	// cuenta ya se lista— y confundiría a quien pregunta por qué no la ve.
+	case errors.Is(err, application.ErrNoAutorizado):
+		return fiber.NewError(fiber.StatusForbidden, err.Error())
+
+	// 503 y no 500: el sistema anda, lo que falta es una configuración de este
+	// despliegue. El mensaje dice cuál.
+	case errors.Is(err, application.ErrSinClaveDeCifrado):
+		return fiber.NewError(fiber.StatusServiceUnavailable, err.Error())
 
 	case errors.Is(err, application.ErrNombreCarroDuplicado),
 		errors.Is(err, application.ErrIdentificadorDuplicado),
@@ -26,6 +41,7 @@ func mapearError(err error) error {
 		// ya tiene.
 		errors.Is(err, application.ErrLicenciaDuplicada),
 		errors.Is(err, application.ErrNombreDeEquipoDuplicado),
+		errors.Is(err, application.ErrCuentaDeEquipoDuplicada),
 		// Igual que las licencias: el alta masiva saltea los duplicados y los
 		// informa en el cuerpo; esto solo salta al EDITAR una marca hasta dejarla
 		// igual a otra del mismo equipo.
@@ -67,7 +83,18 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrDivisionPreferenciaInvalida),
 		errors.Is(err, domain.ErrDivisionSinAnio),
 		errors.Is(err, domain.ErrPrioridadInvalida),
-		errors.Is(err, domain.ErrSinEquiposParaPreferi):
+		errors.Is(err, domain.ErrSinEquiposParaPreferi),
+		// Las cuentas de cada equipo (RF-03.22). Sin estos casos, escribir mal
+		// una cuenta contestaba "error interno" en vez de decir qué falta.
+		errors.Is(err, domain.ErrUsuarioCuentaVacio),
+		errors.Is(err, domain.ErrUsuarioCuentaLargo),
+		errors.Is(err, domain.ErrClaseCuentaVacia),
+		errors.Is(err, domain.ErrClaseCuentaLarga),
+		errors.Is(err, domain.ErrPrivilegioInvalido),
+		errors.Is(err, domain.ErrVisibilidadInvalida),
+		errors.Is(err, domain.ErrNotasCuentaLargas),
+		errors.Is(err, domain.ErrPasswordCuentaLarga),
+		errors.Is(err, domain.ErrPasswordSinTenerlaEs):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 
 	default:

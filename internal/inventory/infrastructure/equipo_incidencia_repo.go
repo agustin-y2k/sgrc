@@ -13,7 +13,13 @@ import (
 
 // ── PC ──────────────────────────────────────────────────────────────────
 
-const columnasEquipo = `id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dado_de_baja, fecha_baja, fecha_alta, tipo, nombre, reservable`
+// La última columna no está en la tabla: es si el equipo tiene alguna cuenta
+// anotada (RF-03.22). Va acá y no en una consulta aparte porque quien lista
+// equipos lo necesita para TODAS las filas, y pedirlo de a uno sería una
+// consulta por equipo. EXISTS y no COUNT: alcanza con saber si hay alguna, y
+// se corta en la primera fila que encuentra.
+const columnasEquipo = `id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dado_de_baja, fecha_baja, fecha_alta, tipo, nombre, reservable,
+	EXISTS (SELECT 1 FROM equipo_cuenta ec WHERE ec.equipo_id = equipo.id) AS tiene_cuentas`
 
 func (r *PostgresRepo) CrearEquipo(ctx context.Context, pc *domain.Equipo) error {
 	_, err := r.pool.Exec(ctx, `
@@ -52,7 +58,7 @@ func escanearEquipo(row pgx.Row) (*domain.Equipo, error) {
 		&pc.ID, &carroID, &identificador, &numeroSerie, &pc.Freezado,
 		&cpu, &ram, &so, &software,
 		&estadoStr, &pc.DadoDeBaja, &pc.FechaBaja, &pc.FechaAlta,
-		&pc.Tipo, &nombre, &pc.Reservable,
+		&pc.Tipo, &nombre, &pc.Reservable, &pc.TieneCuentas,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

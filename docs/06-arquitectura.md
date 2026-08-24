@@ -19,6 +19,7 @@
 | `internal/shared/eventbus` | Pub/sub in-process (ver §4) |
 | `internal/shared/security` | Hash y verificación de contraseñas (`argon2id`), en un solo lugar |
 | `internal/shared/email` | Envío por SMTP (`net/smtp`, texto plano). Está en `shared/` porque lo usan dos: `notification` para los avisos y `auth` —indirectamente, vía evento— para el código de recuperación. Arma el mensaje a mano, y esa lista de cabeceras es deliberada: `From` igual a la cuenta que autentica (lo exige Gmail y es lo que alinea DMARC), `Auto-Submitted` para que ningún autorespondedor conteste, `Message-ID` propio —Gmail lo agrega si falta, pero cualquier otro SMTP deja salir el mensaje sin él y para varios filtros eso solo ya es señal de correo automático mal armado— y texto plano, sin HTML ni imágenes, que no tiene ratio que penalizar |
+| `internal/shared/secretos` | Cifra y descifra lo que el sistema tiene que poder **leer de vuelta** (AES-256-GCM). Hoy lo usa una sola cosa: las contraseñas de las cuentas de cada equipo (RF-03.22), que no se pueden hashear como la de un usuario porque a un hash no se le pregunta cuál era. Sin `CUENTAS_SECRET` queda en `nil` y responde "esta función no está disponible" en vez de romper |
 | `internal/shared/audit` | Escritura del `audit_log` (ver `09-seguridad-rbac.md` §5) |
 | `internal/shared/paginacion` | Ventana de resultados y `meta` de los listados paginados |
 | `internal/shared/adminseed` | Decisión de "sembrar el primer Admin si hace falta", sin dependencias externas |
@@ -36,7 +37,7 @@ sgrc/
 │   ├── notification/{...}
 │   ├── reporting/{...}
 │   ├── availability/{...}
-│   └── shared/{middleware, eventbus, security, email, audit, paginacion, adminseed, …}
+│   └── shared/{middleware, eventbus, security, secretos, email, audit, paginacion, adminseed, …}
 ├── migrations/
 ├── frontend/                 ← SPA React servida por nginx (ver README)
 ├── scripts/

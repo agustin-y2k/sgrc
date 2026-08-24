@@ -142,6 +142,7 @@ func (h *Handler) EditarEquipo(c *fiber.Ctx) error {
 		CarroID: req.CarroID, Freezado: req.Freezado, CPU: req.CPU,
 		RAM: req.RAM, SistemaOperativo: req.SistemaOperativo, SoftwareInstalado: req.SoftwareInstalado,
 		Tipo: req.Tipo, Nombre: req.Nombre, Reservable: req.Reservable,
+		NumeroSerie: req.NumeroSerie,
 	}
 	if err := h.svc.EditarEquipo(c.UserContext(), id, params); err != nil {
 		return mapearError(err)
@@ -293,7 +294,7 @@ func (h *Handler) CrearEquipo(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	equipo, err := h.svc.CrearEquipo(c.UserContext(), req.Tipo, req.Nombre, req.Reservable)
+	equipo, err := h.svc.CrearEquipo(c.UserContext(), req.Tipo, req.Nombre, req.NumeroSerie, req.Reservable)
 	if err != nil {
 		return mapearError(err)
 	}
