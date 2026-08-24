@@ -405,11 +405,28 @@ func main() {
 	}
 	jwtTTL, err := time.ParseDuration(os.Getenv("JWT_ACCESS_TTL"))
 	if err != nil {
-		jwtTTL = time.Hour // default razonable si el .env no lo especifica
+		// Una jornada escolar: quien entra a la mañana no vuelve a tipear la
+		// contraseña antes de irse.
+		jwtTTL = 24 * time.Hour
+	}
+	// Vigencia de las sesiones con "mantener la sesión iniciada" tildado
+	// (RF-01.13). Un mes: cubre las vacaciones de invierno sin que el docente
+	// que solo usa el sistema desde su teléfono tenga que volver a entrar.
+	jwtRecordarmeTTL, err := time.ParseDuration(os.Getenv("JWT_REMEMBER_TTL"))
+	if err != nil {
+		jwtRecordarmeTTL = 30 * 24 * time.Hour
+	}
+	// Una vigencia "larga" más corta que la normal no es una configuración, es
+	// un error de tipeo en el .env: la casilla prometería lo contrario de lo
+	// que hace. Se corrige acá en vez de arrancar mintiéndole a la gente.
+	if jwtRecordarmeTTL < jwtTTL {
+		log.Printf("JWT_REMEMBER_TTL (%s) es menor que JWT_ACCESS_TTL (%s): se usa el mayor para las dos",
+			jwtRecordarmeTTL, jwtTTL)
+		jwtRecordarmeTTL = jwtTTL
 	}
 
 	authRepo := authinfra.NewPostgresRepo(pool)
-	firmador := authinfra.NewJWTFirmador(jwtSecret, jwtTTL)
+	firmador := authinfra.NewJWTFirmador(jwtSecret, jwtTTL, jwtRecordarmeTTL)
 	gestorMaterias := authinfra.NewGestorMateriasDocentePostgres(pool)
 
 	// autenticacion es lo que cada RegisterRoutes usa para proteger sus rutas.

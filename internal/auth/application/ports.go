@@ -48,9 +48,11 @@ type Repo interface {
 // para que Service sea testeable con fakes, sin argon2 ni JWT reales — mismo
 // patrón que internal/shared/adminseed.
 type (
-	HashFunc            func(password string) (string, error)
-	VerifyFunc          func(password, hash string) (bool, error)
-	TokenSigner         func(u *domain.Usuario) (string, error)
+	HashFunc   func(password string) (string, error)
+	VerifyFunc func(password, hash string) (bool, error)
+	// TokenSigner firma la sesión. `recordarme` viene de la casilla del
+	// ingreso y elige entre la vigencia normal y la larga (RF-01.13).
+	TokenSigner         func(u *domain.Usuario, recordarme bool) (string, error)
 	IDGenerator         func() string
 	GenerarTemporalFunc func() (string, error)
 	// GenerarCodigoFunc produce el código de recuperación que se manda por

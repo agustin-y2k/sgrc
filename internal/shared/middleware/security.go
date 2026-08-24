@@ -35,6 +35,12 @@ func CORS(allowedOrigin string) fiber.Handler {
 		AllowMethods:     "GET,POST,PATCH,DELETE",
 		AllowHeaders:     "Origin,Content-Type,Authorization",
 		AllowCredentials: true,
+		// Sin esto el navegador recibe el header pero no deja leerlo desde otro
+		// origen, y el frontend no puede distinguir una sesión vencida de una
+		// cerrada desde afuera. En producción frontend y API comparten origen y
+		// no haría falta; en desarrollo, con VITE_API_URL apuntando a otro
+		// puerto, sí.
+		ExposeHeaders: HeaderMotivoSesion,
 	})
 }
 

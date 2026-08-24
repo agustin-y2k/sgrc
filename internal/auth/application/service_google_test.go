@@ -79,7 +79,7 @@ func usuarioDeGoogle(id, email, sub string, estado domain.Estado) *domain.Usuari
 func TestLoginConGoogle_SinVerificador_NoDisponible(t *testing.T) {
 	svc := nuevoServicioConGoogle(nuevoFakeRepo(), nil)
 
-	_, err := svc.LoginConGoogle(context.Background(), "un-token")
+	_, err := svc.LoginConGoogle(context.Background(), "un-token", false)
 
 	if !errors.Is(err, ErrLoginGoogleNoDisponible) {
 		t.Fatalf("esperaba ErrLoginGoogleNoDisponible, hubo: %v", err)
@@ -100,7 +100,7 @@ func TestLoginConGoogle_TokenVacio_NiSiquieraLlamaAGoogle(t *testing.T) {
 	verificador := &fakeVerificadorGoogle{identidad: identidadDePrueba()}
 	svc := nuevoServicioConGoogle(nuevoFakeRepo(), verificador)
 
-	_, err := svc.LoginConGoogle(context.Background(), "   ")
+	_, err := svc.LoginConGoogle(context.Background(), "   ", false)
 
 	if !errors.Is(err, ErrTokenGoogleInvalido) {
 		t.Fatalf("esperaba ErrTokenGoogleInvalido, hubo: %v", err)
@@ -116,7 +116,7 @@ func TestLoginConGoogle_TokenInvalido(t *testing.T) {
 	verificador := &fakeVerificadorGoogle{err: ErrTokenGoogleInvalido}
 	svc := nuevoServicioConGoogle(nuevoFakeRepo(), verificador)
 
-	_, err := svc.LoginConGoogle(context.Background(), "token-falsificado")
+	_, err := svc.LoginConGoogle(context.Background(), "token-falsificado", false)
 
 	if !errors.Is(err, ErrTokenGoogleInvalido) {
 		t.Fatalf("esperaba ErrTokenGoogleInvalido, hubo: %v", err)
@@ -130,7 +130,7 @@ func TestLoginConGoogle_FallaDeInfraestructura_NoSeDisfrazaDeTokenInvalido(t *te
 	fallaDeRed := errors.New("connection refused")
 	svc := nuevoServicioConGoogle(nuevoFakeRepo(), &fakeVerificadorGoogle{err: fallaDeRed})
 
-	_, err := svc.LoginConGoogle(context.Background(), "un-token")
+	_, err := svc.LoginConGoogle(context.Background(), "un-token", false)
 
 	if errors.Is(err, ErrTokenGoogleInvalido) {
 		t.Fatal("una falla de red no debe reportarse como token inválido")
@@ -150,7 +150,7 @@ func TestLoginConGoogle_EmailNoVerificado_Rechaza(t *testing.T) {
 	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidad})
 
-	_, err := svc.LoginConGoogle(context.Background(), "un-token")
+	_, err := svc.LoginConGoogle(context.Background(), "un-token", false)
 
 	if !errors.Is(err, ErrEmailNoVerificadoPorGoogle) {
 		t.Fatalf("esperaba ErrEmailNoVerificadoPorGoogle, hubo: %v", err)
@@ -160,7 +160,7 @@ func TestLoginConGoogle_EmailNoVerificado_Rechaza(t *testing.T) {
 func TestLoginConGoogle_DominioNoPermitido_LlegaIntacto(t *testing.T) {
 	svc := nuevoServicioConGoogle(nuevoFakeRepo(), &fakeVerificadorGoogle{err: ErrDominioNoPermitido})
 
-	_, err := svc.LoginConGoogle(context.Background(), "un-token")
+	_, err := svc.LoginConGoogle(context.Background(), "un-token", false)
 
 	if !errors.Is(err, ErrDominioNoPermitido) {
 		t.Fatalf("esperaba ErrDominioNoPermitido, hubo: %v", err)
@@ -174,7 +174,7 @@ func TestLoginConGoogle_CuentaVinculadaYAprobada_DevuelveToken(t *testing.T) {
 	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
-	res, err := svc.LoginConGoogle(context.Background(), "un-token")
+	res, err := svc.LoginConGoogle(context.Background(), "un-token", false)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -195,7 +195,7 @@ func TestLoginConGoogle_ElSubGanaSobreElEmail(t *testing.T) {
 
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
-	res, err := svc.LoginConGoogle(context.Background(), "un-token")
+	res, err := svc.LoginConGoogle(context.Background(), "un-token", false)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -208,7 +208,7 @@ func TestLoginConGoogle_ElSubGanaSobreElEmail(t *testing.T) {
 func TestLoginConGoogle_SinCuenta_PideRegistro(t *testing.T) {
 	svc := nuevoServicioConGoogle(nuevoFakeRepo(), &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
-	_, err := svc.LoginConGoogle(context.Background(), "un-token")
+	_, err := svc.LoginConGoogle(context.Background(), "un-token", false)
 
 	if !errors.Is(err, ErrCuentaGoogleNoRegistrada) {
 		t.Fatalf("esperaba ErrCuentaGoogleNoRegistrada, hubo: %v", err)
@@ -231,7 +231,7 @@ func TestLoginConGoogle_VinculaCuentaExistentePorEmail_YConservaLaPassword(t *te
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
-	if _, err := svc.LoginConGoogle(context.Background(), "un-token"); err != nil {
+	if _, err := svc.LoginConGoogle(context.Background(), "un-token", false); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -258,7 +258,7 @@ func TestLoginConGoogle_EmailNoVerificado_NoVinculaNada(t *testing.T) {
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidad})
 
-	if _, err := svc.LoginConGoogle(context.Background(), "un-token"); err == nil {
+	if _, err := svc.LoginConGoogle(context.Background(), "un-token", false); err == nil {
 		t.Fatal("esperaba que fallara")
 	}
 
@@ -279,7 +279,7 @@ func TestLoginConGoogle_CuentaPendiente_VinculaPeroNoDejaEntrar(t *testing.T) {
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
-	_, err := svc.LoginConGoogle(context.Background(), "un-token")
+	_, err := svc.LoginConGoogle(context.Background(), "un-token", false)
 
 	if !errors.Is(err, ErrCuentaNoHabilitada) {
 		t.Fatalf("esperaba ErrCuentaNoHabilitada, hubo: %v", err)
@@ -299,7 +299,7 @@ func TestLoginConGoogle_CuentaEnBaja_NoSeVincula(t *testing.T) {
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
-	_, err := svc.LoginConGoogle(context.Background(), "un-token")
+	_, err := svc.LoginConGoogle(context.Background(), "un-token", false)
 
 	// El error del INGRESO, no el del registro: acá la persona está
 	// intentando entrar, no crear una cuenta.
@@ -326,7 +326,7 @@ func TestLoginConGoogle_NormalizaElEmailAntesDeBuscar(t *testing.T) {
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidad})
 
-	if _, err := svc.LoginConGoogle(context.Background(), "un-token"); err != nil {
+	if _, err := svc.LoginConGoogle(context.Background(), "un-token", false); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 }
@@ -482,7 +482,7 @@ func TestLogin_CuentaDeGoogle_NoDistingueDeUnEmailInexistente(t *testing.T) {
 		return false, nil
 	})
 
-	_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "loquesea")
+	_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "loquesea", false)
 
 	if !errors.Is(err, ErrCredencialesInvalidas) {
 		t.Fatalf("esperaba ErrCredencialesInvalidas, hubo: %v", err)
@@ -500,7 +500,7 @@ func TestCambiarPassword_CuentaDeGoogle_NoTieneQueCambiar(t *testing.T) {
 	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.CambiarPassword(context.Background(), "u1", "loquesea", "password-nueva")
+	_, err := svc.CambiarPassword(context.Background(), "u1", "loquesea", "password-nueva", false)
 
 	if !errors.Is(err, ErrCuentaSinPassword) {
 		t.Fatalf("esperaba ErrCuentaSinPassword, hubo: %v", err)

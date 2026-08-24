@@ -257,7 +257,10 @@ type LoginResultado struct {
 // Login implementa RF-01.1. Nunca revela si el email existe o no en el
 // mensaje de error — "credenciales inválidas" cubre tanto "no existe" como
 // "existe pero la contraseña está mal".
-func (s *Service) Login(ctx context.Context, email, password string) (*LoginResultado, error) {
+//
+// `recordarme` es la casilla del ingreso (RF-01.13): decide la vigencia del
+// token y nada más. No cambia quién puede entrar ni con qué permisos.
+func (s *Service) Login(ctx context.Context, email, password string, recordarme bool) (*LoginResultado, error) {
 	// Misma normalización que en crearUsuario: sin esto, quien se registró como
 	// "Juan.Perez@…" y escribe "juan.perez@…" al entrar recibía "credenciales
 	// inválidas" aunque la contraseña fuera correcta.
@@ -293,7 +296,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*LoginResu
 		return nil, motivoPorElQueNoEntra(u.Estado)
 	}
 
-	token, err := s.firmar(u)
+	token, err := s.firmar(u, recordarme)
 	if err != nil {
 		return nil, fmt.Errorf("firmando token: %w", err)
 	}
@@ -303,7 +306,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*LoginResu
 
 // LoginConGoogle implementa el ingreso con una cuenta de Google ya existente
 // en el sistema.
-func (s *Service) LoginConGoogle(ctx context.Context, idToken string) (*LoginResultado, error) {
+func (s *Service) LoginConGoogle(ctx context.Context, idToken string, recordarme bool) (*LoginResultado, error) {
 	identidad, err := s.identidadDeGoogle(ctx, idToken)
 	if err != nil {
 		return nil, err
@@ -321,7 +324,7 @@ func (s *Service) LoginConGoogle(ctx context.Context, idToken string) (*LoginRes
 		return nil, motivoPorElQueNoEntra(u.Estado)
 	}
 
-	token, err := s.firmar(u)
+	token, err := s.firmar(u, recordarme)
 	if err != nil {
 		return nil, fmt.Errorf("firmando token: %w", err)
 	}
@@ -714,7 +717,10 @@ func (s *Service) ResetearPassword(ctx context.Context, usuarioID string) (strin
 
 // CambiarPassword implementa RF-01.7: cualquier usuario autenticado puede
 // cambiar su propia contraseña, indicando la actual.
-func (s *Service) CambiarPassword(ctx context.Context, usuarioID, passwordActual, passwordNueva string) (string, error) {
+// `recordarme` es el del token que trae quien llama: la sesión que sigue
+// después del cambio conserva la duración que tenía la anterior, en vez de
+// caerse a la corta por haber cambiado la contraseña.
+func (s *Service) CambiarPassword(ctx context.Context, usuarioID, passwordActual, passwordNueva string, recordarme bool) (string, error) {
 	u, err := s.repo.BuscarPorID(ctx, usuarioID)
 	if err != nil {
 		return "", err
@@ -750,7 +756,7 @@ func (s *Service) CambiarPassword(ctx context.Context, usuarioID, passwordActual
 		return "", err
 	}
 
-	token, err := s.firmar(u)
+	token, err := s.firmar(u, recordarme)
 	if err != nil {
 		return "", fmt.Errorf("firmando token nuevo: %w", err)
 	}

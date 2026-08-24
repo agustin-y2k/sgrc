@@ -15,7 +15,7 @@ func TestCambiarPassword_CierraLasSesionesAbiertas(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	versionAntes := u.VersionSesion
-	if _, err := svc.CambiarPassword(context.Background(), u.ID, "la-vieja", "una-contraseña-nueva"); err != nil {
+	if _, err := svc.CambiarPassword(context.Background(), u.ID, "la-vieja", "una-contraseña-nueva", false); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -34,12 +34,12 @@ func TestCambiarPassword_ElTokenQueDevuelveNoNaceInvalido(t *testing.T) {
 	// firmarConVersion deja registrada la versión que tenía el usuario en el
 	// momento exacto de firmar.
 	var versionEnElToken int
-	svc := servicioConFirmador(repo, func(u *domain.Usuario) (string, error) {
+	svc := servicioConFirmador(repo, func(u *domain.Usuario, _ bool) (string, error) {
 		versionEnElToken = u.VersionSesion
 		return "token-de-" + u.ID, nil
 	})
 
-	if _, err := svc.CambiarPassword(context.Background(), u.ID, "la-vieja", "una-contraseña-nueva"); err != nil {
+	if _, err := svc.CambiarPassword(context.Background(), u.ID, "la-vieja", "una-contraseña-nueva", false); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -55,7 +55,7 @@ func TestCambiarPassword_ConLaActualEquivocadaNoTocaLasSesiones(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	versionAntes := u.VersionSesion
-	if _, err := svc.CambiarPassword(context.Background(), u.ID, "la-que-no-es", "una-contraseña-nueva"); err == nil {
+	if _, err := svc.CambiarPassword(context.Background(), u.ID, "la-que-no-es", "una-contraseña-nueva", false); err == nil {
 		t.Fatal("esperaba que fallara")
 	}
 

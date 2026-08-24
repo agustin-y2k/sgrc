@@ -4,12 +4,56 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// HeaderMotivoSesion acompaña a cada 401 diciendo POR QUÉ no valió el token.
+// El cliente ya recibe un mensaje distinto en cada caso, pero un mensaje es
+// texto para una persona: decidir con él implicaría compararlo carácter por
+// carácter, y cualquier retoque de redacción rompería la lógica en silencio.
+//
+// Existe porque no todos los rechazos son igual de interesantes para quien los
+// sufre. Que la sesión venza es lo que pasa siempre y no hay nada que
+// explicar; que la hayan cerrado desde afuera sí necesita una explicación. Sin
+// distinguirlos, el frontend tiene que elegir entre avisar de más —un cartel
+// de error cada vez que alguien vuelve al día siguiente— o de menos.
+//
+// Va en un header y no en el cuerpo porque el cuerpo de estos 401 es el
+// mensaje pelado (Fiber v2 responde los fiber.NewError con
+// SendString(err.Error()), sin ErrorHandler propio en cmd/main.go), y
+// convertirlo en JSON cambiaría el contrato de TODOS los errores del sistema
+// para resolver un caso. Está en Access-Control-Expose-Headers (ver CORS en
+// internal/shared/middleware/security.go); sin eso el navegador lo recibe pero
+// no deja leerlo desde otro origen.
+const HeaderMotivoSesion = "X-Sesion-Motivo"
+
+// Los valores posibles de HeaderMotivoSesion.
+const (
+	// MotivoExpirada: el token venció por su propio `exp`. Es el final normal
+	// de toda sesión, no un problema.
+	MotivoExpirada = "expirada"
+	// MotivoInvalida: la firma no cierra, el algoritmo no es el nuestro, o el
+	// token está mal formado. No pasa por accidente.
+	MotivoInvalida = "invalida"
+	// MotivoRevocada: la cuenta ya no está habilitada para operar — dada de
+	// baja, rechazada, o borrada (RF-02.8).
+	MotivoRevocada = "revocada"
+	// MotivoPasswordCambiada: el token es anterior al último cambio de
+	// contraseña de esa cuenta (RF-01.11).
+	MotivoPasswordCambiada = "password-cambiada"
+)
+
+// sesionRechazada arma el 401 y deja el motivo en el header. Todos los
+// rechazos de sesión salen por acá para que ninguno se olvide de marcarlo.
+func sesionRechazada(c *fiber.Ctx, motivo, mensaje string) error {
+	c.Set(HeaderMotivoSesion, motivo)
+	return fiber.NewError(fiber.StatusUnauthorized, mensaje)
+}
 
 // Claims son los datos que viajan en el JWT (ver docs/09-seguridad-rbac.md
 // §2).
@@ -23,6 +67,12 @@ type Claims struct {
 	DebeCambiarPassword bool `json:"dcp,omitempty"`
 	// VersionSesion es la versión que tenía la cuenta al emitirse este token.
 	VersionSesion int `json:"vs,omitempty"`
+	// Recordarme marca que este token se emitió con "mantener la sesión
+	// iniciada" tildado: vale JWT_REMEMBER_TTL en vez de JWT_ACCESS_TTL. Viaja
+	// en el token porque las operaciones que vuelven a firmar (cambiar la
+	// contraseña, editar el perfil) no tienen otra forma de saber que la sesión
+	// era larga, y sin esto la degradarían a corta sin avisar.
+	Recordarme bool `json:"rec,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -101,11 +151,11 @@ func (a Autenticacion) validador() func(*fiber.Ctx) error {
 
 		header := c.Get("Authorization")
 		if !strings.HasPrefix(header, "Bearer ") {
-			return fiber.NewError(fiber.StatusUnauthorized, "falta el token")
+			return sesionRechazada(c, MotivoInvalida, "falta el token")
 		}
 		tokenStr := strings.TrimPrefix(header, "Bearer ")
 		if tokenStr == "" {
-			return fiber.NewError(fiber.StatusUnauthorized, "falta el token")
+			return sesionRechazada(c, MotivoInvalida, "falta el token")
 		}
 
 		claims := &Claims{}
@@ -118,7 +168,13 @@ func (a Autenticacion) validador() func(*fiber.Ctx) error {
 			return a.Secret, nil
 		})
 		if err != nil || !token.Valid {
-			return fiber.NewError(fiber.StatusUnauthorized, "token inválido o expirado")
+			// Vencido y falsificado son el mismo 401, pero no la misma
+			// situación: lo primero le pasa a todo el mundo todos los días y lo
+			// segundo no debería pasar nunca.
+			if errors.Is(err, jwt.ErrTokenExpired) {
+				return sesionRechazada(c, MotivoExpirada, "la sesión venció")
+			}
+			return sesionRechazada(c, MotivoInvalida, "token inválido o expirado")
 		}
 
 		// La firma solo prueba que el token lo emitimos nosotros, no que siga
@@ -131,13 +187,13 @@ func (a Autenticacion) validador() func(*fiber.Ctx) error {
 				"no se pudo verificar la sesión, probá de nuevo en unos segundos")
 		}
 		if !cuenta.Vigente {
-			return fiber.NewError(fiber.StatusUnauthorized, "la sesión ya no es válida")
+			return sesionRechazada(c, MotivoRevocada, "la sesión ya no es válida")
 		}
 
 		// Un token emitido antes del último cambio de contraseña no vale más,
 		// aunque la firma sea buena y la cuenta esté habilitada (RF-01.11).
 		if claims.VersionSesion != cuenta.VersionSesion {
-			return fiber.NewError(fiber.StatusUnauthorized,
+			return sesionRechazada(c, MotivoPasswordCambiada,
 				"tu sesión se cerró porque la contraseña de esta cuenta cambió; volvé a entrar")
 		}
 

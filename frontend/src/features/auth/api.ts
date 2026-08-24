@@ -28,10 +28,10 @@ export function registrar(req: RegistroRequest) {
 }
 
 /** Ingreso con una cuenta de Google ya registrada. */
-export function loginConGoogle(credential: string) {
+export function loginConGoogle(credential: string, recordarme = false) {
   return apiFetch<LoginResponse>("/api/auth/google", {
     method: "POST",
-    body: { credential } satisfies GoogleLoginRequest,
+    body: { credential, recordarme } satisfies GoogleLoginRequest,
   })
 }
 

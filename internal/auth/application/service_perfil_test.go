@@ -16,7 +16,7 @@ func TestActualizarMisDatos_OK(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron"}
 	svc := nuevoServicioDeTest(repo)
 
-	u, token, err := svc.ActualizarMisDatos(context.Background(), "u1", "Ada", "Lovelace")
+	u, token, err := svc.ActualizarMisDatos(context.Background(), "u1", "Ada", "Lovelace", false)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -39,7 +39,7 @@ func TestActualizarMisDatos_RecortaEspacios(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1"}
 	svc := nuevoServicioDeTest(repo)
 
-	u, _, err := svc.ActualizarMisDatos(context.Background(), "u1", "  Ada  ", "  Lovelace ")
+	u, _, err := svc.ActualizarMisDatos(context.Background(), "u1", "  Ada  ", "  Lovelace ", false)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -67,7 +67,7 @@ func TestActualizarMisDatos_Vacio_Error(t *testing.T) {
 			repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron"}
 			svc := nuevoServicioDeTest(repo)
 
-			_, _, err := svc.ActualizarMisDatos(context.Background(), "u1", c.nombre, c.apellido)
+			_, _, err := svc.ActualizarMisDatos(context.Background(), "u1", c.nombre, c.apellido, false)
 
 			if !errors.Is(err, domain.ErrNombreVacio) {
 				t.Fatalf("esperaba ErrNombreVacio, obtuve %v", err)
@@ -88,7 +88,7 @@ func TestActualizarMisDatos_DemasiadoLargo_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	_, _, err := svc.ActualizarMisDatos(context.Background(), "u1",
-		strings.Repeat("a", domain.LargoMaxNombre+1), "Lovelace")
+		strings.Repeat("a", domain.LargoMaxNombre+1), "Lovelace", false)
 
 	if !errors.Is(err, domain.ErrNombreDemasiadoLargo) {
 		t.Fatalf("esperaba ErrNombreDemasiadoLargo, obtuve %v", err)
@@ -102,7 +102,7 @@ func TestActualizarMisDatos_EnElLimite_OK(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	nombre := strings.Repeat("ñ", domain.LargoMaxNombre)
-	if _, _, err := svc.ActualizarMisDatos(context.Background(), "u1", nombre, "Lovelace"); err != nil {
+	if _, _, err := svc.ActualizarMisDatos(context.Background(), "u1", nombre, "Lovelace", false); err != nil {
 		t.Fatalf("%d caracteres tienen que entrar: %v", domain.LargoMaxNombre, err)
 	}
 }
@@ -110,7 +110,7 @@ func TestActualizarMisDatos_EnElLimite_OK(t *testing.T) {
 func TestActualizarMisDatos_UsuarioInexistente_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, _, err := svc.ActualizarMisDatos(context.Background(), "fantasma", "Ada", "Lovelace")
+	_, _, err := svc.ActualizarMisDatos(context.Background(), "fantasma", "Ada", "Lovelace", false)
 
 	if !errors.Is(err, ErrUsuarioNoEncontrado) {
 		t.Fatalf("esperaba ErrUsuarioNoEncontrado, obtuve %v", err)

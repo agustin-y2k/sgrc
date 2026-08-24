@@ -82,7 +82,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	res, err := h.svc.Login(c.UserContext(), req.Email, req.Password)
+	res, err := h.svc.Login(c.UserContext(), req.Email, req.Password, req.Recordarme)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -146,7 +146,7 @@ func (h *Handler) LoginConGoogle(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	res, err := h.svc.LoginConGoogle(c.UserContext(), req.Credential)
+	res, err := h.svc.LoginConGoogle(c.UserContext(), req.Credential, req.Recordarme)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -199,7 +199,9 @@ func (h *Handler) ActualizarMisDatos(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	u, token, err := h.svc.ActualizarMisDatos(c.UserContext(), claims.UserID, req.Nombre, req.Apellido)
+	// claims.Recordarme y no un campo del request: la duración de la sesión se
+	// eligió al entrar, y una pantalla de perfil no es lugar para cambiarla.
+	u, token, err := h.svc.ActualizarMisDatos(c.UserContext(), claims.UserID, req.Nombre, req.Apellido, claims.Recordarme)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -227,7 +229,7 @@ func (h *Handler) CambiarPassword(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	token, err := h.svc.CambiarPassword(c.UserContext(), claims.UserID, req.PasswordActual, req.PasswordNueva)
+	token, err := h.svc.CambiarPassword(c.UserContext(), claims.UserID, req.PasswordActual, req.PasswordNueva, claims.Recordarme)
 	if err != nil {
 		return mapearError(err)
 	}

@@ -28,8 +28,37 @@ type ApiFetchOptions = Omit<RequestInit, "body"> & {
   body?: unknown
 }
 
+/**
+ * Por qué el backend rechazó el token, tal como lo manda en el header
+ * `X-Sesion-Motivo` (ver internal/shared/middleware/jwt.go). No se decide por
+ * el texto del mensaje: ese texto es para leer, y atarle lógica haría que
+ * cualquier retoque de redacción rompiera el comportamiento sin que nadie se
+ * entere.
+ */
+export type MotivoDeRechazo =
+  | "expirada"
+  | "invalida"
+  | "revocada"
+  | "password-cambiada"
+  /** El backend no mandó el header (versión anterior, o un proxy lo comió). */
+  | "desconocido"
+
+const MOTIVOS_CONOCIDOS = new Set<MotivoDeRechazo>([
+  "expirada",
+  "invalida",
+  "revocada",
+  "password-cambiada",
+])
+
+function motivoDeRechazo(response: Response): MotivoDeRechazo {
+  const crudo = response.headers.get("X-Sesion-Motivo") ?? ""
+  return MOTIVOS_CONOCIDOS.has(crudo as MotivoDeRechazo)
+    ? (crudo as MotivoDeRechazo)
+    : "desconocido"
+}
+
 /** Qué hacer cuando el backend rechaza el token que mandamos. */
-type ManejadorDeSesionRechazada = (mensaje: string) => void
+type ManejadorDeSesionRechazada = (mensaje: string, motivo: MotivoDeRechazo) => void
 
 let alRechazarLaSesion: ManejadorDeSesionRechazada | null = null
 
@@ -98,7 +127,7 @@ export async function apiFetch<T>(
     // Solo si HABÍA token: el 401 del login son credenciales equivocadas,
     // no una sesión rechazada, y cerrar sesión ahí no tendría sentido.
     if (response.status === 401 && token) {
-      alRechazarLaSesion?.(error.message)
+      alRechazarLaSesion?.(error.message, motivoDeRechazo(response))
     }
     throw error
   }

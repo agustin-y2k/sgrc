@@ -99,7 +99,7 @@ make coverage-report   # genera coverage.html navegable
 
 Se prueba **por pantalla y por rol**, no por componente aislado: lo que
 importa es que un docente no vea acciones de Admin y que un formulario no
-deje mandar algo que el backend va a rechazar. Son 418 tests en 40 archivos.
+deje mandar algo que el backend va a rechazar. Son 622 tests en 57 archivos.
 
 Dos criterios que ya evitaron falsos verdes:
 

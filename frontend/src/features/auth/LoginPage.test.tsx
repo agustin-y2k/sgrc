@@ -79,8 +79,51 @@ describe("LoginPage", () => {
     await user.type(screen.getByLabelText("Contraseña"), "password123")
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }))
 
-    expect(login).toHaveBeenCalledWith("admin@test.com", "password123")
+    // El tercer argumento es la casilla "mantener la sesión iniciada": sin
+    // tocarla, false.
+    expect(login).toHaveBeenCalledWith("admin@test.com", "password123", false)
     await waitFor(() => expect(screen.getByText("Home")).toBeInTheDocument())
+  })
+
+  it("la casilla de mantener la sesión arranca destildada", async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: null,
+      isLoading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      loginConGoogle: vi.fn(),
+      errorDeSesion: null,
+      motivoDeCierre: null,
+      refetchUser: vi.fn(),
+    })
+    renderLoginPage()
+
+    // Que esté apagada por omisión es el punto: en una máquina compartida de
+    // la escuela, una sesión de un mes tiene que pedirse a propósito.
+    expect(screen.getByLabelText("Mantener la sesión iniciada")).not.toBeChecked()
+  })
+
+  it("con la casilla tildada, pide la sesión larga", async () => {
+    const login = vi.fn().mockResolvedValue({ debeCambiarPassword: false })
+    vi.mocked(useAuth).mockReturnValue({
+      user: null,
+      isLoading: false,
+      login,
+      logout: vi.fn(),
+      loginConGoogle: vi.fn(),
+      errorDeSesion: null,
+      motivoDeCierre: null,
+      refetchUser: vi.fn(),
+    })
+    const user = userEvent.setup()
+    renderLoginPage()
+
+    await user.type(screen.getByLabelText("Email"), "admin@test.com")
+    await user.type(screen.getByLabelText("Contraseña"), "password123")
+    await user.click(screen.getByLabelText("Mantener la sesión iniciada"))
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }))
+
+    expect(login).toHaveBeenCalledWith("admin@test.com", "password123", true)
   })
 
   it("con debeCambiarPassword=true, redirige a /cambiar-password", async () => {
