@@ -203,9 +203,18 @@ func hashFalso(password string) (string, error) { return "hash:" + password, nil
 func verifyFalso(password, hash string) (bool, error) {
 	return hash == "hash:"+password, nil
 }
-func firmarFalso(u *domain.Usuario) (string, error) { return "token-de-" + u.ID, nil }
-func temporalFalso() (string, error)                { return "temporal123", nil }
-func codigoFalso() (string, error)                  { return "123456", nil }
+
+// firmarFalso codifica el flag en el texto del token: así un test puede
+// afirmar que la casilla "recordarme" llegó hasta la firma sin tener que
+// parsear un JWT de verdad.
+func firmarFalso(u *domain.Usuario, recordarme bool) (string, error) {
+	if recordarme {
+		return "token-largo-de-" + u.ID, nil
+	}
+	return "token-de-" + u.ID, nil
+}
+func temporalFalso() (string, error) { return "temporal123", nil }
+func codigoFalso() (string, error)   { return "123456", nil }
 
 func relojFijo(t time.Time) func() time.Time {
 	return func() time.Time { return t }
@@ -469,7 +478,7 @@ func TestLogin_OK(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Email: "ada@x.com", PasswordHash: "hash:password123", Estado: domain.EstadoAprobada}
 	svc := nuevoServicioDeTest(repo)
 
-	res, err := svc.Login(context.Background(), "ada@x.com", "password123")
+	res, err := svc.Login(context.Background(), "ada@x.com", "password123", false)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -482,7 +491,7 @@ func TestLogin_OK(t *testing.T) {
 func TestLogin_UsuarioNoExiste_CredencialesInvalidas(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.Login(context.Background(), "nadie@x.com", "cualquiera")
+	_, err := svc.Login(context.Background(), "nadie@x.com", "cualquiera", false)
 
 	if !errors.Is(err, ErrCredencialesInvalidas) {
 		t.Fatalf("esperaba ErrCredencialesInvalidas, obtuve %v", err)
@@ -506,13 +515,13 @@ func TestLogin_EmailInexistente_GastaElMismoTiempoQueUnoReal(t *testing.T) {
 
 	verifyReal, vecesReal := contarVerificaciones()
 	svcReal := servicioConVerify(repoConUsuario, verifyReal)
-	if _, err := svcReal.Login(context.Background(), "ada@x.com", "incorrecta"); !errors.Is(err, ErrCredencialesInvalidas) {
+	if _, err := svcReal.Login(context.Background(), "ada@x.com", "incorrecta", false); !errors.Is(err, ErrCredencialesInvalidas) {
 		t.Fatalf("esperaba ErrCredencialesInvalidas, obtuve %v", err)
 	}
 
 	verifyFantasma, vecesFantasma := contarVerificaciones()
 	svcFantasma := servicioConVerify(nuevoFakeRepo(), verifyFantasma)
-	if _, err := svcFantasma.Login(context.Background(), "nadie@x.com", "incorrecta"); !errors.Is(err, ErrCredencialesInvalidas) {
+	if _, err := svcFantasma.Login(context.Background(), "nadie@x.com", "incorrecta", false); !errors.Is(err, ErrCredencialesInvalidas) {
 		t.Fatalf("esperaba ErrCredencialesInvalidas, obtuve %v", err)
 	}
 
@@ -547,7 +556,7 @@ func TestLogin_ElHashDeDescarteSeCalculaUnaSolaVez(t *testing.T) {
 	)
 
 	for i := 0; i < 5; i++ {
-		if _, err := svc.Login(context.Background(), "nadie@x.com", "cualquiera"); err == nil {
+		if _, err := svc.Login(context.Background(), "nadie@x.com", "cualquiera", false); err == nil {
 			t.Fatal("esperaba que fallara")
 		}
 	}
@@ -562,7 +571,7 @@ func TestLogin_PasswordIncorrecta_CredencialesInvalidas(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Email: "ada@x.com", PasswordHash: "hash:password123", Estado: domain.EstadoAprobada}
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.Login(context.Background(), "ada@x.com", "incorrecta")
+	_, err := svc.Login(context.Background(), "ada@x.com", "incorrecta", false)
 
 	if !errors.Is(err, ErrCredencialesInvalidas) {
 		t.Fatalf("esperaba ErrCredencialesInvalidas, obtuve %v", err)
@@ -576,7 +585,7 @@ func TestLogin_CuentaNoAprobada_Rechazado(t *testing.T) {
 		repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Email: "ada@x.com", PasswordHash: "hash:password123", Estado: estado}
 		svc := nuevoServicioDeTest(repo)
 
-		_, err := svc.Login(context.Background(), "ada@x.com", "password123")
+		_, err := svc.Login(context.Background(), "ada@x.com", "password123", false)
 
 		if !errors.Is(err, ErrCuentaNoHabilitada) {
 			t.Errorf("estado %s: esperaba ErrCuentaNoHabilitada, obtuve %v", estado, err)
@@ -592,7 +601,7 @@ func TestLogin_DebeCambiarPassword_SePropagaEnElResultado(t *testing.T) {
 	}
 	svc := nuevoServicioDeTest(repo)
 
-	res, err := svc.Login(context.Background(), "ada@x.com", "password123")
+	res, err := svc.Login(context.Background(), "ada@x.com", "password123", false)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -914,7 +923,7 @@ func TestCambiarPassword_OK(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", PasswordHash: "hash:actual", DebeCambiarPassword: true}
 	svc := nuevoServicioDeTest(repo)
 
-	token, err := svc.CambiarPassword(context.Background(), "u1", "actual", "nuevapassword123")
+	token, err := svc.CambiarPassword(context.Background(), "u1", "actual", "nuevapassword123", false)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -935,7 +944,7 @@ func TestCambiarPassword_ActualIncorrecta_Error(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", PasswordHash: "hash:actual"}
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.CambiarPassword(context.Background(), "u1", "incorrecta", "nuevapassword123")
+	_, err := svc.CambiarPassword(context.Background(), "u1", "incorrecta", "nuevapassword123", false)
 
 	// Propio y no ErrCredencialesInvalidas: ese mapea a 401, y un 401 con token
 	// válido hace que el cliente cierre la sesión.
@@ -952,7 +961,7 @@ func TestCambiarPassword_NuevaCorta_Error(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", PasswordHash: "hash:actual"}
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.CambiarPassword(context.Background(), "u1", "actual", "corta")
+	_, err := svc.CambiarPassword(context.Background(), "u1", "actual", "corta", false)
 
 	if !errors.Is(err, ErrPasswordCorta) {
 		t.Fatalf("esperaba ErrPasswordCorta, obtuve %v", err)
@@ -1223,7 +1232,7 @@ func TestLogin_OtraCapitalizacionDelMismoEmail_Entra(t *testing.T) {
 		"JUAN.PEREZ@ESCUELA.EDU.AR",
 		"  Juan.Perez@escuela.edu.ar  ",
 	} {
-		if _, err := svc.Login(context.Background(), comoLoEscribe, "unaClave123"); err != nil {
+		if _, err := svc.Login(context.Background(), comoLoEscribe, "unaClave123", false); err != nil {
 			t.Errorf("login con %q debería funcionar: %v", comoLoEscribe, err)
 		}
 	}
@@ -1756,7 +1765,7 @@ func TestLogin_CadaEstadoExplicaSuMotivo(t *testing.T) {
 		}
 		svc := nuevoServicioDeTest(repo)
 
-		_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "password123")
+		_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "password123", false)
 
 		if !errors.Is(err, c.esperado) {
 			t.Errorf("estado %s: esperaba %v, hubo %v", c.estado, c.esperado, err)
@@ -1797,7 +1806,7 @@ func TestLogin_ConPasswordIncorrecta_NoRevelaElEstadoDeLaCuenta(t *testing.T) {
 	}
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "la-equivocada")
+	_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "la-equivocada", false)
 
 	if !errors.Is(err, ErrCredencialesInvalidas) {
 		t.Fatalf("esperaba ErrCredencialesInvalidas, hubo: %v", err)

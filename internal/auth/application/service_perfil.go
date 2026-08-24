@@ -14,7 +14,7 @@ import (
 // nombre es del mismo orden que cambiar tu foto de perfil.
 //
 // Devuelve el usuario ya actualizado y un token nuevo (ver abajo por qué).
-func (s *Service) ActualizarMisDatos(ctx context.Context, usuarioID, nombre, apellido string) (*domain.Usuario, string, error) {
+func (s *Service) ActualizarMisDatos(ctx context.Context, usuarioID, nombre, apellido string, recordarme bool) (*domain.Usuario, string, error) {
 	nombre, apellido, err := domain.NormalizarNombreYApellido(nombre, apellido)
 	if err != nil {
 		return nil, "", err
@@ -36,7 +36,7 @@ func (s *Service) ActualizarMisDatos(ctx context.Context, usuarioID, nombre, ape
 	// viejo no rompe nada; aun así se firma uno nuevo, igual que hace
 	// CambiarPassword, para que el token no siga afirmando algo que ya es
 	// falso.
-	token, err := s.firmar(u)
+	token, err := s.firmar(u, recordarme)
 	if err != nil {
 		return nil, "", fmt.Errorf("firmando token nuevo: %w", err)
 	}

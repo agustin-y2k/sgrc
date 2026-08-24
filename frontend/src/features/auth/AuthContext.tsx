@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react"
@@ -26,9 +25,20 @@ type AuthContextValue = {
    * Por qué se cerró la sesión, cuando la cerró el backend y no la persona.
    */
   motivoDeCierre: string | null
-  login: (email: string, password: string) => Promise<{ debeCambiarPassword: boolean }>
-  /** Ingreso con el ID token que devolvió Google. */
-  loginConGoogle: (credential: string) => Promise<{ debeCambiarPassword: boolean }>
+  /**
+   * `recordarme` es la casilla "Mantener la sesión iniciada": el backend firma
+   * un token de vigencia larga en vez de la normal. Omitido = sesión normal.
+   */
+  login: (
+    email: string,
+    password: string,
+    recordarme?: boolean
+  ) => Promise<{ debeCambiarPassword: boolean }>
+  /** Ingreso con el ID token que devolvió Google, con la misma casilla. */
+  loginConGoogle: (
+    credential: string,
+    recordarme?: boolean
+  ) => Promise<{ debeCambiarPassword: boolean }>
   logout: () => void
   refetchUser: () => Promise<void>
 }
@@ -41,34 +51,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [errorDeSesion, setErrorDeSesion] = useState<string | null>(null)
   const [motivoDeCierre, setMotivoDeCierre] = useState<string | null>(null)
 
-  // Si había una sesión abierta EN ESTA VISITA. Es un ref y no un estado
-  // porque lo lee el manejador de abajo, que se registra una sola vez y se
-  // quedaría con el valor del primer render.
-  //
-  // Se marca donde la sesión se abre (loadUser) y no en un useEffect sobre
-  // `user`: un efecto pasivo corre DESPUÉS del commit, así que quedaba una
-  // ventana en la que la pantalla ya mostraba a la persona y esto seguía en
-  // false. Un 401 que cayera justo ahí cerraba la sesión sin explicar por qué.
-  const habiaSesionAbierta = useRef(false)
-
   // El backend puede rechazar el token en cualquier request, no solo en el
   // GET /me del arranque: la cuenta se dio de baja (RF-02.8), o alguien
   // cambió su contraseña y eso cerró las sesiones abiertas (RF-01.11).
   useEffect(() => {
-    return registrarManejadorDeSesionRechazada((mensaje) => {
+    return registrarManejadorDeSesionRechazada((mensaje, motivo) => {
       clearToken()
       setUser(null)
       // errorDeSesion se limpia a propósito: eso es "no pude verificar la
       // sesión, reintentá", y acá el backend sí contestó.
       setErrorDeSesion(null)
-      // El motivo se muestra solo si la persona ESTABA usando el sistema y la
-      // sacaron: ahí sí necesita saber por qué desapareció lo que estaba
-      // haciendo. Volver después de un rato y encontrar el token vencido no
-      // es un problema que haya que explicarle a nadie —es lo que pasa
-      // siempre—, y un cartel rojo de "token inválido o sesión expirada" al
-      // abrir la aplicación en el teléfono se lee como un error del sistema.
-      // Ahí va directo a la pantalla de ingreso, sin decir nada.
-      if (habiaSesionAbierta.current) setMotivoDeCierre(mensaje)
+      // Que una sesión venza NO se anuncia. Es el final normal de toda sesión
+      // —le pasa a todo el mundo, todos los días, y no hay nada que la persona
+      // pueda hacer distinto— así que un cartel ahí solo consigue que volver
+      // al sistema parezca un error del sistema. Va directo a la pantalla de
+      // ingreso, callado.
+      //
+      // Que la sesión la haya cerrado ALGUIEN sí se explica: una cuenta dada
+      // de baja (RF-02.8) o una contraseña cambiada (RF-01.11) dejan a la
+      // persona reintentando sin entender por qué no entra. El motivo lo dice
+      // el backend en un header, no el texto del mensaje ni una suposición
+      // nuestra sobre si estaba usando el sistema.
+      if (motivo === "revocada" || motivo === "password-cambiada") {
+        setMotivoDeCierre(mensaje)
+        return
+      }
+      // "invalida" y "desconocido" caen acá: un token falsificado no merece
+      // explicación, y un motivo que no reconocemos se trata como el caso
+      // normal en vez de mostrar un cartel que no sabemos si corresponde.
+      // Antes de este header la condición era "¿estaba usando el sistema?", y
+      // por eso una pestaña abierta toda la noche amanecía con "token inválido
+      // o expirado" en la pantalla.
     })
   }, [])
 
@@ -84,7 +97,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       const usuario = await authApi.me()
-      habiaSesionAbierta.current = true
       setUser(usuario)
       setErrorDeSesion(null)
     } catch (err) {
@@ -138,14 +150,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadUser]
   )
 
+  // recordarme llega desde la casilla de la pantalla de ingreso y solo afecta
+  // cuánto vive el token que firma el backend. Por omisión, false: en una
+  // computadora compartida de la escuela una sesión de un mes es exactamente
+  // lo que no queremos dejar abierto sin que nadie lo haya pedido.
   const login = useCallback(
-    async (email: string, password: string) =>
-      abrirSesion(await authApi.login({ email, password })),
+    async (email: string, password: string, recordarme = false) =>
+      abrirSesion(await authApi.login({ email, password, recordarme })),
     [abrirSesion]
   )
 
   const loginConGoogle = useCallback(
-    async (credential: string) => abrirSesion(await authApi.loginConGoogle(credential)),
+    async (credential: string, recordarme = false) =>
+      abrirSesion(await authApi.loginConGoogle(credential, recordarme)),
     [abrirSesion]
   )
 

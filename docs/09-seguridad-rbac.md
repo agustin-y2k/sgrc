@@ -3,16 +3,25 @@
 ## 1. Autenticación
 - Passwords con hash `argon2id` (resistente a ataques GPU).
 - JWT firmados **`HS256`** (secreto simétrico) — un solo proceso firma y verifica, así que un secreto simétrico cumple la función sin la gestión de un par de claves asimétricas (ver `06-arquitectura.md` §7).
-- Access token: 1h (`JWT_ACCESS_TTL`). **No hay refresh token**: cuando el access expira se vuelve a iniciar sesión. Para una jornada escolar, renovar la sesión una vez al día es aceptable, y evita el segundo token con su propio almacenamiento, su rotación y su revocación.
+- Access token: 24h (`JWT_ACCESS_TTL`). **No hay refresh token**: cuando el access expira se vuelve a iniciar sesión. Para una jornada escolar, renovar la sesión una vez al día es aceptable, y evita el segundo token con su propio almacenamiento, su rotación y su revocación.
+- **"Mantener la sesión iniciada": 30 días** (`JWT_REMEMBER_TTL`), pedido con una casilla en la pantalla de ingreso (RF-01.13). Es la misma sesión de siempre con otra vigencia: mismo token, mismos claims de identidad, mismo RBAC. Lo único que cambia es el `exp`.
+
+  **La casilla arranca apagada y se pide explícitamente.** La escuela tiene máquinas compartidas: dejar una sesión de un mes abierta por omisión en la PC del laboratorio es entregarle la cuenta al siguiente que se siente. Por eso la pantalla lo advierte al lado de la casilla, y un cliente que no mande el campo obtiene la sesión corta.
+
+  El plazo **no se desliza con el uso**: corre desde el ingreso, igual que el normal. Un token de 30 días vence a los 30 días de haber entrado, se haya usado todos los días o ninguno.
+
+  **La duración viaja en el token** (claim `rec`). Las dos operaciones que vuelven a firmar —cambiar la contraseña (RF-01.7) y editar el propio nombre (RF-01.12)— leen ese claim y conservan la vigencia que tenía la sesión en curso. Sin eso, editar el perfil degradaría en silencio una sesión de 30 días a una de 24h. La contrapartida es que esas dos operaciones **renuevan el plazo completo**: es aceptable porque las dos exigen estar autenticado y ninguna es algo que se haga a diario. La recuperación por autoservicio (RF-01.10) no tiene claims que leer —se hace sin sesión— y devuelve a la persona al ingreso, donde vuelve a elegir.
+
+  **Lo que esto NO agrega es revocación por dispositivo.** Un teléfono perdido con la casilla tildada mantiene el acceso hasta que venza el token; la única forma de cortarlo a distancia sigue siendo cambiar la contraseña de la cuenta, que invalida **todas** las sesiones abiertas por el contador `version_sesion`. Bajar `JWT_REMEMBER_TTL` acorta esa ventana; el resto de las defensas de esta sección (estado de cuenta por request, rol de la base, fallo cerrado) valen igual para una sesión larga que para una corta.
 - Login en un solo paso, con email y contraseña.
 - **Ingreso con cuenta de Google (opcional).** Habilitado solo si el despliegue configura `GOOGLE_CLIENT_ID`; sin eso, los endpoints responden 503 y el frontend no dibuja el botón. Ver §1.1.
 - **Una baja tiene efecto inmediato.** El token sigue siendo la prueba de identidad, pero no alcanza por sí solo: cada request autenticado consulta el estado de la cuenta antes de dejar pasar. Si el usuario ya no existe, no está `APROBADA`, o cambió de rol, el request se rechaza aunque el token siga sin expirar.
 
-  Un JWT estrictamente stateless sería más barato, pero le dejaría a una cuenta dada de baja hasta una hora de acceso **de escritura**, y RF-02.8/02.9 tratan la baja como efectiva de inmediato. La ventana no es teórica: un token emitido antes de la baja escribe en la base después, mientras no expire.
+  Un JWT estrictamente stateless sería más barato, pero le dejaría a una cuenta dada de baja hasta un día —o un mes, con la casilla tildada— de acceso **de escritura**, y RF-02.8/02.9 tratan la baja como efectiva de inmediato. La ventana no es teórica: un token emitido antes de la baja escribe en la base después, mientras no expire.
 
   El costo es una consulta por PK por request autenticado, irrelevante a esta escala. Ante un error de base **falla cerrado** (503, no "pasá igual"), y el rol que vale es el de la base, no el del token: no hay forma de conservar permisos viejos guardándose un token.
 
-- **Cambiar la contraseña cierra las sesiones abiertas** (RF-01.11). El punto anterior verifica el *estado* de la cuenta, que no cambia al cambiar una contraseña; sin algo más, la sesión de quien hubiera entrado con la contraseña vieja sobreviviría hasta que expire su token — hasta una hora. Eso vaciaría de sentido al caso que motiva cambiarla: alguien sospecha que entraron a su cuenta y quiere cortar ese acceso ya.
+- **Cambiar la contraseña cierra las sesiones abiertas** (RF-01.11). El punto anterior verifica el *estado* de la cuenta, que no cambia al cambiar una contraseña; sin algo más, la sesión de quien hubiera entrado con la contraseña vieja sobreviviría hasta que expire su token — hasta un día, o hasta un mes con la casilla tildada. Eso vaciaría de sentido al caso que motiva cambiarla: alguien sospecha que entraron a su cuenta y quiere cortar ese acceso ya.
 
   Cada cuenta lleva un contador (`usuario.version_sesion`) que viaja dentro del token como el claim `vs`. El middleware lo compara contra el de la fila en el mismo request en el que ya consulta el estado, así que **no cuesta ninguna consulta extra**. Cambiar la contraseña incrementa el contador y todo token anterior deja de valer en el request siguiente. Los tres caminos lo hacen: el cambio voluntario (RF-01.7), el reset asistido por un Admin (RF-01.6) y la recuperación por autoservicio (RF-01.10).
 
@@ -204,6 +213,25 @@ Se usa `CF-Connecting-IP` y no `X-Forwarded-For` porque Cloudflare la **sobrescr
 `debe_cambiar_password` viaja dentro del JWT para poder exigirlo sin consultar la base en cada request, pero eso lo deja congelado en el token. `POST /api/auth/cambiar-password` responde con un token nuevo y el cliente tiene que reemplazar el anterior; si no, quien acaba de cambiar la contraseña quedaría bloqueado por su propio cambio exitoso hasta que el token expirara.
 
 Las únicas dos rutas que aceptan un token con la contraseña temporal sin cambiar son `GET /api/auth/me` y `POST /api/auth/cambiar-password` — justamente las que hacen falta para salir de esa situación. Se marcan explícitamente con `JWTAuthPermitiendoPasswordVencida`; todo lo demás usa `JWTAuth`, que ya incluye la restricción, de modo que una ruta nueva queda protegida por omisión.
+
+### Cada 401 dice por qué, en el header `X-Sesion-Motivo`
+
+Los cuatro rechazos de sesión son el mismo 401, pero no significan lo mismo para quien los sufre:
+
+| Motivo | Cuándo | ¿Se le explica a la persona? |
+|---|---|---|
+| `expirada` | El token venció por su propio `exp` | **No.** Es el final normal de toda sesión. |
+| `invalida` | Firma que no cierra, algoritmo ajeno, token mal formado, o falta el header | No. No pasa por accidente. |
+| `revocada` | La cuenta ya no está habilitada (RF-02.8) | **Sí.** |
+| `password-cambiada` | El token es anterior al último cambio de contraseña (RF-01.11) | **Sí.** |
+
+El frontend borra el token en los cuatro casos; lo que cambia es si además muestra un cartel diciendo qué pasó.
+
+**Por qué un header y no un campo del cuerpo.** El cuerpo de estos 401 es el mensaje pelado: Fiber v2 responde los `fiber.NewError` con `SendString(err.Error())` y `cmd/main.go` no instala un `ErrorHandler` propio. Convertirlo en JSON cambiaría el contrato de **todos** los errores del sistema para resolver un caso. El header es aditivo: un cliente que no lo lee sigue funcionando igual. Está en `Access-Control-Expose-Headers` porque, sin eso, el navegador lo recibe pero no deja leerlo desde otro origen.
+
+**Por qué no alcanzaba con el texto del mensaje.** Cada caso ya devolvía una frase distinta, pero una frase es texto para leer: decidir con ella obliga a compararla carácter por carácter, y el día que alguien mejora la redacción el comportamiento cambia sin que nada lo señale.
+
+**Qué reemplazó.** Antes, el frontend decidía con "¿la persona estaba usando el sistema cuando la echaron?". La intención era la correcta —no anunciar un vencimiento— pero el criterio no: una pestaña que quedaba abierta toda la noche amanecía con un cartel de "token inválido o expirado", que se lee como una falla del sistema y no como lo que es. Y al revés, una expulsión real que cayera antes de que la pantalla terminara de cargar pasaba en silencio.
 
 ### Por qué la contraseña actual equivocada responde 400 y no 401
 

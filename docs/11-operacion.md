@@ -102,6 +102,26 @@ dominio:
 > El `.env` no se comparte ni se publica: tiene la contraseña de la base y el
 > secreto de las sesiones.
 
+**Cuánto duran las sesiones** — las dos son opcionales y tienen default:
+
+| Variable | Default | Qué controla |
+|---|---|---|
+| `JWT_ACCESS_TTL` | `24h` | La sesión normal: cuánto pasa hasta que hay que volver a tipear la contraseña. |
+| `JWT_REMEMBER_TTL` | `720h` (30 días) | La sesión de quien tildó "Mantener la sesión iniciada" al entrar (RF-01.13). |
+
+> **En un despliegue que ya venía funcionando, el `.env` gana sobre el
+> default.** Si el archivo todavía dice `JWT_ACCESS_TTL=1h`, la sesión sigue
+> durando una hora aunque el sistema haya cambiado su valor por omisión: hay
+> que editarlo a mano y reiniciar la API (`docker compose up -d sgrc-app`).
+> Los tokens ya emitidos conservan la vigencia con la que se firmaron — el
+> cambio se nota recién en el siguiente ingreso.
+
+> `JWT_REMEMBER_TTL` es la ventana en la que un dispositivo perdido sigue
+> entrando. No hay forma de cerrar una sesión concreta a distancia: lo que
+> corta **todas** las de una cuenta es cambiarle la contraseña (desde
+> `/admin/usuarios`, "Resetear contraseña"). Bajar el valor achica la ventana;
+> un valor menor que `JWT_ACCESS_TTL` se ignora y se avisa en el log.
+
 ### 1.1.b Configurar el correo (opcional, pero conviene)
 
 Sin esto el sistema funciona igual: los avisos siguen llegando a la campana de

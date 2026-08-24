@@ -66,6 +66,8 @@ export type RestablecerPasswordRequest = {
 export type GoogleLoginRequest = {
   /** El ID token que Google le entrega al navegador. */
   credential: string
+  /** La misma casilla que en el ingreso con contraseña: hay una sola. */
+  recordarme?: boolean
 }
 
 export type GoogleRegistroRequest = GoogleLoginRequest & {
@@ -93,6 +95,11 @@ export type CargoSolicitado = "DOCENTE" | "ADMIN_SISTEMA"
 export type LoginRequest = {
   email: string
   password: string
+  /**
+   * La casilla "Mantener la sesión iniciada". Ausente = sesión normal: la
+   * larga se pide explícitamente, nunca por omisión.
+   */
+  recordarme?: boolean
 }
 
 export type LoginResponse = {

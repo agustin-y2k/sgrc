@@ -45,7 +45,10 @@ function renderLoginPage(state?: { from: { pathname: string } }) {
 // La firma explícita evita que vi.fn() se infiera como "cualquier función":
 // sin esto, un test podría resolver con una forma que loginConGoogle nunca
 // devuelve y pasaría igual.
-type Ingreso = (credential: string) => Promise<{ debeCambiarPassword: boolean }>
+type Ingreso = (
+  credential: string,
+  recordarme?: boolean
+) => Promise<{ debeCambiarPassword: boolean }>
 
 function mockAuth(loginConGoogle: Ingreso) {
   vi.mocked(useAuth).mockReturnValue({
@@ -73,6 +76,22 @@ describe("LoginPage — ingreso con Google", () => {
     await user.click(screen.getByRole("button", { name: "Entrar con Google" }))
 
     expect(await screen.findByText("Home")).toBeInTheDocument()
+  })
+
+  // La casilla es una sola en la pantalla y vale para los dos caminos: el
+  // botón de Google vive dentro del mismo formulario.
+  it("respeta la casilla de mantener la sesión iniciada", async () => {
+    const loginConGoogle = vi
+      .fn<Ingreso>()
+      .mockResolvedValue({ debeCambiarPassword: false })
+    mockAuth(loginConGoogle)
+    const user = userEvent.setup()
+    renderLoginPage()
+
+    await user.click(screen.getByLabelText("Mantener la sesión iniciada"))
+    await user.click(screen.getByRole("button", { name: "Entrar con Google" }))
+
+    await waitFor(() => expect(loginConGoogle).toHaveBeenCalledWith("el-id-token", true))
   })
 
   // <ProtectedRoute> guarda la ruta que se quiso abrir sin sesión; entrar

@@ -49,12 +49,22 @@ async function montarConSesion() {
   )
 }
 
-/** Simula la respuesta del backend para el próximo apiFetch. */
-function responderCon(status: number, cuerpo: string) {
+/**
+ * Simula la respuesta del backend para el próximo apiFetch.
+ *
+ * `motivo` es el header `X-Sesion-Motivo` con el que el backend acompaña cada
+ * 401 (ver internal/shared/middleware/jwt.go). Omitirlo simula un backend que
+ * no lo manda, que es un caso real: un despliegue viejo, o un proxy que filtra
+ * headers.
+ */
+function responderCon(status: number, cuerpo: string, motivo?: string) {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(cuerpo, {
       status,
-      headers: { "content-type": "text/plain" },
+      headers: {
+        "content-type": "text/plain",
+        ...(motivo ? { "X-Sesion-Motivo": motivo } : {}),
+      },
     })
   )
 }
@@ -75,7 +85,8 @@ describe("sesión revocada por el backend", () => {
     await montarConSesion()
     responderCon(
       401,
-      "tu sesión se cerró porque la contraseña de esta cuenta cambió; volvé a entrar"
+      "tu sesión se cerró porque la contraseña de esta cuenta cambió; volvé a entrar",
+      "password-cambiada"
     )
 
     // Un request cualquiera del sistema, no /me ni el login.
@@ -135,21 +146,44 @@ describe("sesión revocada por el backend", () => {
 })
 
 /**
- * Volver a abrir la aplicación con el token vencido no es un problema que
- * haya que explicarle a nadie: es lo que pasa siempre. Antes, ese 401 del
- * GET /me del arranque disparaba el mismo aviso que una expulsión en medio
- * del trabajo, y quien abría el sistema en el teléfono se encontraba con un
- * cartel de "token inválido o expirado" que se lee como un error del
- * sistema.
+ * Qué se le cuenta a la persona cuando su sesión deja de valer, y qué no.
+ *
+ * La regla NO es "¿estaba usando el sistema?" sino "¿por qué la cerraron?".
+ * Con la regla vieja, una pestaña abierta toda la noche amanecía con un cartel
+ * de "token inválido o expirado" —el vencimiento le pasa a todo el mundo todos
+ * los días y no hay nada que explicar—, mientras que una expulsión real pasaba
+ * desapercibida si ocurría antes de que la pantalla terminara de cargar.
  */
-describe("token vencido al abrir la aplicación", () => {
-  it("no muestra ningún motivo: va derecho a la pantalla de ingreso", async () => {
+describe("qué se explica al cerrarse una sesión", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("una sesión ABIERTA que vence no muestra ningún cartel", async () => {
+    // El caso de la pestaña que quedó abierta: el vencimiento no es una
+    // novedad que valga la pena anunciar.
+    await montarConSesion()
+    responderCon(401, "la sesión venció", "expirada")
+
+    await apiFetch("/api/reservation/reservas").catch(() => {})
+
+    await waitFor(() =>
+      expect(screen.getByTestId("user")).toHaveTextContent("sin sesión")
+    )
+    expect(screen.getByTestId("motivo")).toHaveTextContent("sin motivo")
+  })
+
+  it("volver a abrir la aplicación con el token vencido tampoco", async () => {
     vi.mocked(tokenStore.getToken).mockReturnValue("un-token-vencido")
     // El GET /me tiene que pasar por el cliente HTTP de verdad: es ahí donde
     // un 401 con token dispara el manejador global de sesión rechazada, que
     // es justamente lo que este test verifica. Con `me` devolviendo un error
     // ya armado, ese camino no se recorre y el test no probaría nada.
-    responderCon(401, "token inválido o expirado")
+    responderCon(401, "la sesión venció", "expirada")
     vi.mocked(authApi.me).mockImplementation(() => apiFetch("/api/auth/me"))
 
     render(
@@ -163,14 +197,47 @@ describe("token vencido al abrir la aplicación", () => {
     expect(screen.getByTestId("motivo")).toHaveTextContent("sin motivo")
   })
 
-  it("pero si la sesión estaba abierta y la revocan, sí dice por qué", async () => {
+  it("una contraseña cambiada sí se explica", async () => {
     await montarConSesion()
-    responderCon(401, "tu sesión se cerró porque la contraseña de esta cuenta cambió; volvé a entrar")
+    responderCon(
+      401,
+      "tu sesión se cerró porque la contraseña de esta cuenta cambió; volvé a entrar",
+      "password-cambiada"
+    )
 
     await apiFetch("/api/reservation/reservas").catch(() => {})
 
     await waitFor(() =>
-      expect(screen.getByTestId("motivo")).toHaveTextContent(/la contraseña de esta cuenta cambió/)
+      expect(screen.getByTestId("motivo")).toHaveTextContent(
+        /la contraseña de esta cuenta cambió/
+      )
     )
+  })
+
+  it("una cuenta dada de baja sí se explica", async () => {
+    // Sin el cartel, quien fue dado de baja reintenta contra un login que le
+    // acepta la contraseña y lo vuelve a echar, sin decirle nunca por qué.
+    await montarConSesion()
+    responderCon(401, "la sesión ya no es válida", "revocada")
+
+    await apiFetch("/api/reservation/reservas").catch(() => {})
+
+    await waitFor(() =>
+      expect(screen.getByTestId("motivo")).toHaveTextContent("la sesión ya no es válida")
+    )
+  })
+
+  it("un backend que no manda el motivo se trata como el caso normal", async () => {
+    // Antes que mostrar un cartel que no sabemos si corresponde, no mostrar
+    // ninguno: la sesión se cierra igual, que es lo que importa.
+    await montarConSesion()
+    responderCon(401, "token inválido o expirado")
+
+    await apiFetch("/api/reservation/reservas").catch(() => {})
+
+    await waitFor(() =>
+      expect(screen.getByTestId("user")).toHaveTextContent("sin sesión")
+    )
+    expect(screen.getByTestId("motivo")).toHaveTextContent("sin motivo")
   })
 })

@@ -15,16 +15,26 @@ import (
 type JWTFirmador struct {
 	secret []byte
 	ttl    time.Duration
+	// ttlRecordarme es la vigencia de los tokens emitidos con "mantener la
+	// sesión iniciada" (RF-01.13). Es un segundo plazo y no un múltiplo del
+	// primero: son dos decisiones distintas —cuánto dura una jornada de trabajo
+	// y cuánto se le confía a un dispositivo propio— y el despliegue las
+	// configura por separado.
+	ttlRecordarme time.Duration
 }
 
-func NewJWTFirmador(secret []byte, ttl time.Duration) *JWTFirmador {
-	return &JWTFirmador{secret: secret, ttl: ttl}
+func NewJWTFirmador(secret []byte, ttl, ttlRecordarme time.Duration) *JWTFirmador {
+	return &JWTFirmador{secret: secret, ttl: ttl, ttlRecordarme: ttlRecordarme}
 }
 
-// Firmar cumple la firma de application.TokenSigner (func(u *domain.Usuario)
-// (string, error)) — se pasa como f.Firmar directamente al construir el
-// Service.
-func (f *JWTFirmador) Firmar(u *domain.Usuario) (string, error) {
+// Firmar cumple la firma de application.TokenSigner — se pasa como f.Firmar
+// directamente al construir el Service. `recordarme` elige entre las dos
+// vigencias configuradas.
+func (f *JWTFirmador) Firmar(u *domain.Usuario, recordarme bool) (string, error) {
+	vigencia := f.ttl
+	if recordarme {
+		vigencia = f.ttlRecordarme
+	}
 	claims := &middleware.Claims{
 		UserID:              u.ID,
 		Rol:                 string(u.Rol),
@@ -33,8 +43,9 @@ func (f *JWTFirmador) Firmar(u *domain.Usuario) (string, error) {
 		DebeCambiarPassword: u.DebeCambiarPassword,
 		// La versión de sesión se toma del usuario tal como está en este momento.
 		VersionSesion: u.VersionSesion,
+		Recordarme:    recordarme,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(f.ttl)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(vigencia)),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

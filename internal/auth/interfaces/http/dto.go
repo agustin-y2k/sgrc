@@ -30,11 +30,19 @@ type registroRequest struct {
 type loginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	// Recordarme es la casilla "mantener la sesión iniciada" (RF-01.13).
+	// Ausente = false: la sesión larga se pide explícitamente, nunca por
+	// omisión, porque en las máquinas compartidas de la escuela dejarla
+	// abierta un mes es el escenario que hay que evitar.
+	Recordarme bool `json:"recordarme,omitempty"`
 }
 
 // googleLoginRequest lleva el ID token que el navegador recibió de Google.
 type googleLoginRequest struct {
 	Credential string `json:"credential"`
+	// Misma casilla que en el ingreso con contraseña: es una sola en la
+	// pantalla y vale para los dos caminos.
+	Recordarme bool `json:"recordarme,omitempty"`
 }
 
 // googleRegistroRequest es el login con Google más lo único que el token no

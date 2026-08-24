@@ -40,6 +40,17 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        JWT propio del sistema, emitido por `/api/auth/login` o `/api/auth/google`.
+
+        **Todo 401 por sesión trae el header `X-Sesion-Motivo`** diciendo por
+        qué no valió el token: `expirada` (venció por su `exp`), `invalida`
+        (firma, algoritmo o formato), `revocada` (la cuenta ya no está
+        habilitada) o `password-cambiada` (el token es anterior al último
+        cambio de contraseña). Los cuatro son 401 y en los cuatro hay que
+        descartar el token; el motivo sirve para decidir qué se le dice a la
+        persona: un vencimiento no se anuncia, una sesión cerrada desde afuera
+        sí. Va en `Access-Control-Expose-Headers`. Ver `09-seguridad-rbac.md` §4.
 
   # Paginación (internal/shared/paginacion). Solo la usan los tres listados
   # que crecen con el uso: reservas, notificaciones y usuarios. Los demás
@@ -213,6 +224,14 @@ components:
       properties:
         email: { type: string, format: email }
         password: { type: string }
+        recordarme:
+          type: boolean
+          default: false
+          description: |
+            "Mantener la sesión iniciada" (RF-01.13). Con `true` el token se
+            firma con `JWT_REMEMBER_TTL` (30 días por defecto) en vez de
+            `JWT_ACCESS_TTL`; el resto de los claims es idéntico. Ausente o
+            `false` = sesión normal: la larga se pide explícitamente.
 
     LoginResponse:
       type: object
@@ -918,6 +937,10 @@ paths:
               required: [credential]
               properties:
                 credential: { type: string, description: ID token emitido por Google }
+                recordarme:
+                  type: boolean
+                  default: false
+                  description: Igual que en LoginRequest — es la misma casilla de la pantalla.
       responses:
         "200":
           content:

@@ -7,6 +7,7 @@ import { z } from "zod"
 import { PantallaDeAcceso } from "@/components/layout/PantallaDeAcceso"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -32,6 +33,9 @@ import { ApiError, getErrorMessage } from "@/lib/api-client"
 const loginSchema = z.object({
   email: z.string().email("Ingresá un email válido"),
   password: z.string().min(1, "Ingresá tu contraseña"),
+  // Sin validación: no hay forma de tildarla mal. Está en el schema solo para
+  // que el valor viaje junto con el resto del formulario.
+  recordarme: z.boolean(),
 })
 
 type LoginValues = z.infer<typeof loginSchema>
@@ -71,13 +75,17 @@ export function LoginPage() {
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { email: "", password: "", recordarme: false },
   })
 
   async function onSubmit(values: LoginValues) {
     setError(null)
     try {
-      const { debeCambiarPassword } = await login(values.email, values.password)
+      const { debeCambiarPassword } = await login(
+        values.email,
+        values.password,
+        values.recordarme
+      )
       // El cambio de contraseña forzado (RF-01.6) gana sobre el destino
       // original: hasta que no la cambie no puede operar nada más.
       navigate(debeCambiarPassword ? "/cambiar-password" : (destinoOriginal ?? "/"), {
@@ -93,7 +101,12 @@ export function LoginPage() {
   async function onCredencialDeGoogle(credencial: string) {
     setError(null)
     try {
-      const { debeCambiarPassword } = await loginConGoogle(credencial)
+      // getValues y no un estado aparte: la casilla es una sola para los dos
+      // caminos de ingreso, y el botón de Google vive dentro del mismo form.
+      const { debeCambiarPassword } = await loginConGoogle(
+        credencial,
+        form.getValues("recordarme")
+      )
       navigate(debeCambiarPassword ? "/cambiar-password" : (destinoOriginal ?? "/"), {
         replace: true,
       })
@@ -165,6 +178,36 @@ export function LoginPage() {
                       <InputPassword autoComplete="current-password" {...field} />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="recordarme"
+                render={({ field }) => (
+                  <FormItem className="flex items-start gap-2 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        className="mt-1"
+                        checked={field.value}
+                        onCheckedChange={(v) => field.onChange(v === true)}
+                      />
+                    </FormControl>
+                    <div className="grid gap-0.5">
+                      <FormLabel className="font-normal">
+                        Mantener la sesión iniciada
+                      </FormLabel>
+                      {/* La advertencia no es decorativa: el token queda
+                          guardado en ESE navegador hasta que venza, y la única
+                          forma de cortarlo a distancia es cambiar la
+                          contraseña de la cuenta. En una máquina del
+                          laboratorio eso es dejarle la sesión abierta al
+                          siguiente que se siente. */}
+                      <p className="text-muted-foreground text-xs">
+                        Solo en tu computadora o tu teléfono. No la marques en una máquina
+                        compartida de la escuela.
+                      </p>
+                    </div>
                   </FormItem>
                 )}
               />

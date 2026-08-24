@@ -159,9 +159,18 @@ func hashFalso(password string) (string, error) { return "hash:" + password, nil
 func verifyFalso(password, hash string) (bool, error) {
 	return hash == "hash:"+password, nil
 }
-func firmarFalso(u *domain.Usuario) (string, error) { return "token-de-" + u.ID, nil }
-func temporalFalso() (string, error)                { return "temporal123", nil }
-func codigoFalso() (string, error)                  { return "123456", nil }
+
+// firmarFalso codifica el flag en el texto del token: así un test puede
+// afirmar que la casilla "recordarme" llegó hasta la firma sin tener que
+// parsear un JWT de verdad.
+func firmarFalso(u *domain.Usuario, recordarme bool) (string, error) {
+	if recordarme {
+		return "token-largo-de-" + u.ID, nil
+	}
+	return "token-de-" + u.ID, nil
+}
+func temporalFalso() (string, error) { return "temporal123", nil }
+func codigoFalso() (string, error)   { return "123456", nil }
 
 var contadorID int
 
@@ -327,6 +336,52 @@ func TestHTTP_Login_OK(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&body)
 	if body.Token == "" {
 		t.Error("esperaba un token en la respuesta")
+	}
+}
+
+// La casilla del ingreso viaja en el mismo body que las credenciales
+// (RF-01.13). firmarFalso devuelve "token-largo-de-…" cuando la recibe.
+func TestHTTP_Login_ConRecordarme_PideLaSesionLarga(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Email: "ada@x.com", PasswordHash: "hash:password123", Estado: domain.EstadoAprobada}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/login",
+		jsonBody(loginRequest{Email: "ada@x.com", Password: "password123", Recordarme: true}))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	var body loginResponse
+	json.NewDecoder(resp.Body).Decode(&body)
+	if body.Token != "token-largo-de-u1" {
+		t.Fatalf("el campo recordarme del body no llegó a la firma: %q", body.Token)
+	}
+}
+
+// Sin el campo, la sesión es la corta: un cliente viejo que no lo manda no
+// puede terminar con una sesión de un mes por omisión.
+func TestHTTP_Login_SinRecordarme_SesionCorta(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Email: "ada@x.com", PasswordHash: "hash:password123", Estado: domain.EstadoAprobada}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/auth/login",
+		strings.NewReader(`{"email":"ada@x.com","password":"password123"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	var body loginResponse
+	json.NewDecoder(resp.Body).Decode(&body)
+	if body.Token != "token-de-u1" {
+		t.Fatalf("esperaba la sesión corta por omisión, obtuve %q", body.Token)
 	}
 }
 
