@@ -20,6 +20,7 @@ erDiagram
     CARRO ||--o{ EQUIPO : contiene
     EQUIPO ||--o{ INCIDENCIA : registra
     EQUIPO ||--o{ LICENCIA_SOFTWARE : tiene
+    EQUIPO ||--o{ EQUIPO_CUENTA : se_abre_con
     EQUIPO ||--o{ EQUIPO_PREFERENCIA : prefiere
     EQUIPO ||--o{ PRESTAMO : sale_en
     EQUIPO ||--o{ RESERVA : ocupa
@@ -39,6 +40,7 @@ erDiagram
     EQUIPO { uuid id; uuid carro_id; int identificador; string nombre; string tipo; string numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool reservable; bool dado_de_baja; timestamptz fecha_baja; timestamptz fecha_alta }
     INCIDENCIA { uuid id; uuid equipo_id; uuid reportado_por; string descripcion; string categoria; string gravedad; timestamptz fecha; bool enviado_a_soporte; timestamptz fecha_envio_a_soporte; string estado }
     LICENCIA_SOFTWARE { uuid id; uuid equipo_id; string nombre; int dias_duracion; int dias_aviso; date fecha_vencimiento; date ultima_renovacion; uuid vencimiento_fijado_por; timestamptz vencimiento_fijado_en; date avisado_previo_para; date avisado_vencimiento_para; timestamptz creada_en }
+    EQUIPO_CUENTA { uuid id; uuid equipo_id; string usuario; string usuario_normalizado; string clase; string privilegio; bool tiene_password; string password_cifrada; string visibilidad; string notas; timestamptz creada_en; timestamptz actualizada_en }
     EQUIPO_PREFERENCIA { uuid id; uuid equipo_id; string materia_nombre; string materia_norm; int anio; string division; int prioridad; timestamptz creada_en }
     CICLO_LECTIVO { uuid id; int anio; bool activo; bool archivado }
     CURSO { uuid id; uuid ciclo_lectivo_id; string nombre; bool activo; bool archivado }
@@ -415,6 +417,81 @@ CREATE UNIQUE INDEX ux_equipo_suelto_nombre
 > delete**. La fila permanece porque `incidencia`, `reserva` y `prestamo` la
 > referencian por FK, y esa historia no se pierde. Un hard delete exigiría
 > borrar en cascada todo ese historial.
+
+### `equipo_cuenta`
+Con qué cuenta de usuario se entra a cada equipo (RF-03.22). Una notebook no se
+abre sola, y sin esto ese dato vive en la memoria de una persona y en un papel.
+
+Cargar cuentas es **opcional**: un equipo sin ninguna es un equipo del que no
+anotamos nada, no un equipo mal cargado.
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| equipo_id | UUID | FK → equipo.id ON DELETE CASCADE, NOT NULL |
+| usuario | VARCHAR(100) | NOT NULL, CHECK no vacío ni con espacios al borde |
+| usuario_normalizado | VARCHAR(100) | GENERATED ALWAYS AS `lower(btrim(usuario))` STORED |
+| clase | VARCHAR(30) | NOT NULL, CHECK no vacía ni con espacios al borde |
+| privilegio | VARCHAR(20) | NOT NULL, CHECK IN ('COMUN','ADMINISTRADOR') |
+| tiene_password | BOOLEAN | NOT NULL |
+| password_cifrada | TEXT | NULL |
+| visibilidad | VARCHAR(20) | NOT NULL DEFAULT 'SOLO_ADMIN', CHECK IN ('PUBLICA','SOLO_ADMIN') |
+| notas | TEXT | NULL |
+| creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+| actualizada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+| | | UNIQUE (equipo_id, usuario_normalizado) |
+| | | CHECK `chk_equipo_cuenta_password_coherente` |
+
+```sql
+-- Una cuenta que no pide contraseña no puede traer una guardada: sería un
+-- dato que contradice al otro, y la pantalla tendría que elegir a cuál creerle.
+CONSTRAINT chk_equipo_cuenta_password_coherente
+    CHECK (tiene_password OR password_cifrada IS NULL)
+
+-- Dos cuentas con el mismo nombre en la misma máquina no existen. Se compara
+-- por la columna generada para que "Alumno" y "alumno" no entren las dos; se
+-- guarda `usuario` con su caja original porque es lo que hay que tipear.
+CONSTRAINT ux_equipo_cuenta_usuario UNIQUE (equipo_id, usuario_normalizado)
+```
+
+> **Tabla aparte y no columnas en `equipo`**, porque una misma máquina tiene
+> varias: la cuenta del alumno y la de administración conviven en la misma
+> notebook. No hace falta un índice por `equipo_id`: el UNIQUE ya crea uno
+> compuesto que empieza por esa columna, y listar las cuentas de un equipo es
+> exactamente esa búsqueda.
+
+> **`tiene_password` y `password_cifrada` son dos cosas distintas, porque hay
+> TRES estados y no dos**: la cuenta libre que no pide nada, la que pide una
+> contraseña que tenemos anotada, y la que pide una que no sabemos
+> (`tiene_password = true` con `password_cifrada` en NULL). Sin el tercero, "no
+> tiene contraseña" y "no sabemos la contraseña" se muestran igual — y esa
+> confusión termina con alguien parado frente a una máquina que no abre.
+
+> **La contraseña se guarda cifrada, no hasheada** (AES-256-GCM, clave en
+> `CUENTAS_SECRET`). A un hash no se le puede preguntar cuál era la contraseña,
+> y acá el punto entero es poder leerla. Lo que el cifrado protege es la
+> **copia del archivo** —el volcado de `make backup` no es la lista de
+> contraseñas de toda la institución—, no al servidor, donde la clave vive en
+> el mismo `.env`. Quién puede ver cada contraseña es control de acceso y vive
+> en la aplicación, no acá.
+
+> **`visibilidad` es de la CUENTA y no se deduce del privilegio.** Puede haber
+> una cuenta de administrador que todo el mundo usa —la máquina del taller
+> donde hay que instalar cosas— y una cuenta común que solo administración debe
+> abrir; deducir una de la otra se equivocaría en los dos sentidos. Lo que
+> oculta es la **contraseña**, nunca la cuenta ni su privilegio: esconderlas
+> haría que el inventario mienta por omisión.
+
+> **`clase` es texto libre**, por el mismo criterio que `equipo.tipo`: "local" y
+> "Microsoft" no agotan nada. Una escuela que corre RedHat tiene cuentas de
+> Linux y otra usa Google Workspace, y con un enum cada una de esas realidades
+> pediría una migración y un despliegue para poder anotarse. El formulario
+> sugiere las clases ya cargadas.
+
+> **No hay columna que diga si un equipo tiene cuentas.** Los listados la
+> calculan con un `EXISTS` dentro de la misma consulta —una, no una por
+> equipo— y la publican como `tieneCuentas`: es lo que decide si la pantalla
+> ofrece "Cómo entrar", para no mandar a nadie al panel vacío de un cargador.
 
 ### `incidencia`
 | Campo | Tipo | Restricciones |

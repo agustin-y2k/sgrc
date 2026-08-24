@@ -18,6 +18,8 @@ flowchart LR
         UC_Inventario[Gestionar carros y equipos - crear, editar, dar de baja]
         UC_OtrosEquipos[Registrar equipos sueltos - proyector, cargadores]
         UC_Licencias[Llevar el vencimiento de las licencias]
+        UC_CuentasEquipo[Anotar con qué cuenta se entra a un equipo]
+        UC_VerCuentas[Ver con qué cuenta se entra a un equipo]
         UC_Mostrador[Atender el mostrador]
         UC_Entregar[Entregar y recibir equipos]
         UC_Incidencia[Registrar incidencia]
@@ -38,9 +40,10 @@ flowchart LR
     ADM --> UC_Inventario & UC_CambioEstadoEquipo & UC_Reservar & UC_ReservarRec & UC_Cancelar & UC_Bloquear & UC_Reportes
     ADM --> UC_Horario & UC_VerDisp
     ADM --> UC_OtrosEquipos & UC_Licencias & UC_Mostrador & UC_Entregar
+    ADM --> UC_CuentasEquipo & UC_VerCuentas
 
     DOC --> UC_Incidencia & UC_Calendario & UC_Reservar & UC_ReservarRec & UC_Cancelar & UC_Notif & UC_VerDisp
-    DOC --> UC_Pedir
+    DOC --> UC_Pedir & UC_VerCuentas
     ADM --> UC_Pedir
 
     SYS --> UC_Vencer[Finalizar reservas vencidas]
@@ -333,6 +336,24 @@ flowchart LR
   - **Cambiar los días de duración no mueve el vencimiento vigente** (aplica a la próxima renovación); recalcularlo es una acción aparte.
   - Queda registrado **quién fijó el vencimiento y cuándo lo cargó**, que no es lo mismo que cuándo se renovó — es lo que responde "¿esto ya lo hizo alguien?" sin tener que preguntar.
 - **Visibilidad:** solo Admin, a diferencia del inventario. El docente elige equipo por `software_instalado`, que sigue siendo texto libre y visible para todos; el vencimiento es trabajo administrativo y no le sirve para decidir nada.
+
+### UC: Anotar y consultar con qué cuenta se entra a un equipo
+- **Actor:** Admin (anota y edita), cualquier usuario autenticado (consulta)
+- **Motivo:** una notebook no se abre sola, y hoy ese dato vive en la memoria de una persona y en un papel. En una escuela conviven cuentas locales, de Microsoft y de Linux, de usuario común y de administrador, algunas con contraseña y otras libres. Quien está parado frente a la máquina un sábado necesita saberlo sin llamar a nadie.
+- **Flujo:**
+  1. Desde la ficha de un equipo —en *Computadoras* o en *Gestión del inventario*— Admin abre *Cómo entrar* y anota una cuenta: con qué usuario se entra, de qué tipo es (texto libre: Local, Microsoft, Linux, Google), si tiene privilegios de administrador, si pide contraseña y cuál es.
+  2. Marca, para esa cuenta puntual, si la contraseña la puede ver cualquier docente o solo el equipo de administración.
+  3. Un docente abre la misma ficha y ve las cuentas, cuáles son de administrador y en qué estado está cada contraseña. Donde le corresponde verla, aprieta *Ver contraseña* y aparece; donde no, la pantalla le dice que solo la ven los administradores.
+  4. Un equipo puede tener varias cuentas —la del alumno y la de administración conviven en la misma notebook— y puede no tener ninguna.
+- **Reglas que no son obvias:**
+  - **Anotar cuentas es opcional.** Un equipo sin ninguna no está mal cargado: dar de alta un equipo nunca las pide, y pedir las de un equipo que no tiene devuelve una lista vacía, no un error.
+  - **Quién ve la contraseña es independiente del privilegio.** Hay cuentas de administrador que usa todo el mundo —la máquina del taller donde hay que instalar cosas— y cuentas comunes que solo administración debe abrir. Deducir una marca de la otra se equivocaría en los dos sentidos.
+  - **Lo que se oculta es la contraseña, nunca la cuenta ni su privilegio.** Saber que una notebook tiene una cuenta de administrador es útil aunque no se pueda usar; esconderla entera haría que el inventario mienta por omisión. Por eso el rechazo al revelar es un "no te corresponde" y no un "no existe".
+  - **Hay tres estados de contraseña y no dos:** la cuenta libre que no pide nada, la que pide una que tenemos anotada, y la que pide una que **no sabemos**. Sin el tercero, "no tiene contraseña" y "no la sabemos" se muestran igual, y esa confusión termina con alguien parado frente a una máquina que no abre.
+  - **La contraseña no viaja en el listado, ni para un Admin.** Se pide de a una y cada pedido queda auditado, también cuando la cuenta es de las públicas: si viajara en el listado, abrir la ficha de un equipo sería revelar todas sus contraseñas de una vez.
+  - **Se guarda cifrada** (ver `09-seguridad-rbac.md` §6), no hasheada: a un hash no se le puede preguntar cuál era, y acá el punto es poder leerla.
+  - **El botón solo aparece donde hay algo que ver.** Un cargador no tiene con qué entrar, y el tipo de equipo es texto libre, así que el sistema no lo deduce: se fija si el equipo tiene alguna cuenta anotada. Un Admin lo ve siempre, porque si no, no habría manera de anotar la primera.
+- **Visibilidad:** el listado, cualquier autenticado; anotar, editar y borrar, solo Admin.
 
 ### UC: Resetear contraseña de un usuario
 - **Actor:** Admin

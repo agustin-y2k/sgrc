@@ -100,6 +100,10 @@ de la base al verificar la cuenta (§1).
 | Registrar incidencia | ✅ | ✅ solo reportar |
 | Ver el historial de incidencias de un equipo | ✅ | ✅ |
 | Cambiar estado de incidencia / marcar envío a soporte | ✅ | ❌ |
+| Ver las cuentas de un equipo y su privilegio (RF-03.22) | ✅ | ✅ |
+| Anotar, editar o borrar una cuenta de equipo | ✅ | ❌ |
+| Ver la contraseña de una cuenta marcada `PUBLICA` | ✅ | ✅ |
+| Ver la contraseña de una cuenta marcada `SOLO_ADMIN` | ✅ | ❌ |
 | Aprobar cuentas de docentes | ✅ | ❌ |
 | Resetear contraseña de un usuario | ✅ | ❌ |
 | Dar de baja a un docente (permanente) | ✅ | ❌ |

@@ -190,6 +190,35 @@ Para probarlo de punta a punta sin tocar ninguna cuenta real: entrá a
 >   de un remitente. Cuando el log diga `destinatario rechazado`, corregí esa
 >   dirección en la cuenta en vez de esperar que se resuelva sola.
 
+### 1.1.c Poder guardar las contraseñas de los equipos (opcional)
+
+Cada equipo puede llevar anotadas sus cuentas de usuario: con qué usuario se
+entra, si tiene privilegios de administrador, si pide contraseña y cuál es
+(RF-03.22). **Las contraseñas se guardan cifradas**, y la clave del cifrado es
+`CUENTAS_SECRET`:
+
+```
+CUENTAS_SECRET=<lo que devuelva openssl rand -base64 48>
+```
+
+Sin la variable el sistema **arranca igual** y lo dice en el log. Se pueden
+anotar cuentas, ver quién es administrador y quién no, y marcar si la máquina
+pide contraseña; lo único que no se puede es **guardar la contraseña**, y ese
+pedido contesta 503 explicando qué falta. Es el mismo criterio que el correo:
+una función de menos, no un arranque roto.
+
+> **Qué protege este cifrado y qué no.** Protege la copia del archivo: el
+> volcado de `make backup` viaja a un pendrive o a una carpeta compartida, y
+> sin esto **ese archivo es la lista de contraseñas de todas las máquinas de la
+> institución**. No protege del que entra al servidor, porque la clave vive en
+> el mismo `.env` que la contraseña de la base. Y no decide quién ve qué: eso
+> se marca cuenta por cuenta en la pantalla.
+
+> **Si se cambia la clave, las contraseñas ya guardadas dejan de poder
+> leerse** y hay que volver a cargarlas mirando las máquinas. No se pierde nada
+> más: la cuenta, su privilegio y las notas siguen ahí. Guardá el valor junto
+> con el resto del `.env`.
+
 ### 1.2 Levantar todo
 
 ```bash
@@ -329,7 +358,7 @@ Qué buscar en el arranque de `sgrc-app`:
 ```
 zona horaria: America/Argentina/Buenos_Aires (ahora: ...)
 conectado a sgrc_db
-goose: successfully migrated database to version: 1   ← o "no migrations to run"
+goose: successfully migrated database to version: 2   ← o "no migrations to run"
 admin inicial: cuenta ... lista            ← solo si hizo falta sembrarlo
 correo saliente habilitado vía smtp.gmail.com
 aviso de vida configurado para: ...        ← si se configuró (ver abajo)
@@ -467,9 +496,13 @@ En el log se ve así:
 
 ```
 conectado a sgrc_db
-goose: successfully migrated database to version: 1     ← la primera vez
-goose: no migrations to run. current version: 1         ← las siguientes
+goose: successfully migrated database to version: 2     ← aplicó lo que faltaba
+goose: no migrations to run. current version: 2         ← ya estaba al día
 ```
+
+El número es el del último archivo de `migrations/`, así que sube con cada
+cambio de esquema. Lo que importa no es cuál sea, sino que **coincida con el
+del código que se está corriendo**.
 
 > **Si el sistema arranca bien pero devuelve 500 en la primera pantalla que
 > toca una columna que no está**, el esquema quedó atrasado: `make
@@ -518,7 +551,7 @@ existir, pero no se llega ahí por accidente — el mismo criterio con el que
 ### Agregar una migración
 
 Un archivo nuevo en `migrations/`, numerado después del último
-(`002_lo_que_sea.sql`), con las dos anotaciones de goose: la de subida
+(`003_lo_que_sea.sql`, si la última fue la 002), con las dos anotaciones de goose: la de subida
 —`Up`— antes de los cambios y la de bajada —`Down`— antes de cómo se
 deshacen. No hay que tocar nada más: el directorio se embebe entero, así que
 el archivo nuevo entra solo. Tres cosas que muerden:
