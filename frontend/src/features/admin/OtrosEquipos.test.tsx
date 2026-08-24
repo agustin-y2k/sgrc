@@ -5,10 +5,12 @@ import userEvent from "@testing-library/user-event"
 import * as adminApi from "@/features/admin/api"
 import { OtrosEquipos } from "@/features/admin/OtrosEquipos"
 import * as inventoryApi from "@/features/inventory/api"
+import { useAuth } from "@/features/auth/AuthContext"
 import type { Equipo } from "@/features/inventory/types"
 
 vi.mock("@/features/admin/api")
 vi.mock("@/features/inventory/api")
+vi.mock("@/features/auth/AuthContext")
 
 function equipo(over: Partial<Equipo> = {}): Equipo {
   return {
@@ -44,6 +46,12 @@ describe("OtrosEquipos", () => {
       reservasCanceladas: 0,
       docentesNotificados: 0,
     })
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: "u1", rol: "ADMIN" },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAuth>)
+    vi.mocked(inventoryApi.listarCuentasDeEquipo).mockResolvedValue({ data: [] })
+    vi.mocked(inventoryApi.listarClasesDeCuenta).mockResolvedValue({ data: [] })
   })
 
   it("muestra los equipos con y sin carro por igual", async () => {
@@ -347,5 +355,18 @@ describe("OtrosEquipos", () => {
     expect(
       await screen.findByText("No hay ningún equipo cargado todavía.")
     ).toBeInTheDocument()
+  })
+
+  // RF-03.22: un equipo suelto es el que alguien se lleva, así que saber con
+  // qué cuenta se abre importa acá tanto como en las PCs del carro.
+  it("abre las cuentas de un equipo suelto", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Cómo entrar" }))
+
+    expect(await screen.findByText("Cómo entrar a Proyector Epson")).toBeInTheDocument()
+    expect(inventoryApi.listarCuentasDeEquipo).toHaveBeenCalledWith("eq1")
   })
 })

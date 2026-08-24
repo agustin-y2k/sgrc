@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import * as adminApi from "@/features/admin/api"
 import { AvisoDeCascada } from "@/features/admin/AvisoDeCascada"
 import * as inventoryApi from "@/features/inventory/api"
+import { CuentasDeEquipo } from "@/features/inventory/CuentasDeEquipo"
 import type { ResultadoCascada } from "@/features/admin/types"
 import type { Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
@@ -283,6 +284,7 @@ export function OtrosEquipos() {
   const [agregando, setAgregando] = useState(false)
   const [editando, setEditando] = useState<string | null>(null)
   const [dandoDeBaja, setDandoDeBaja] = useState<Equipo | null>(null)
+  const [viendoCuentas, setViendoCuentas] = useState<string | null>(null)
 
   const [cascada, setCascada] = useState<ResultadoCascada | null>(null)
 
@@ -340,6 +342,7 @@ export function OtrosEquipos() {
         {equipos.map((e) => {
           const editandoEste = editando === e.id
           const bajandoEste = dandoDeBaja?.id === e.id
+          const cuentasAbiertas = viendoCuentas === e.id
 
           return (
             <div key={e.id} className="grid gap-2 rounded-md border p-3">
@@ -370,6 +373,17 @@ export function OtrosEquipos() {
                     <Button variant="outline" size="sm" onClick={() => setEditando(e.id)}>
                       Editar
                     </Button>
+                    {/* Con qué cuenta se entra a este equipo (RF-03.22). Una
+                        notebook suelta es justamente la que alguien se lleva y
+                        abre lejos del laboratorio. */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={cuentasAbiertas}
+                      onClick={() => setViendoCuentas(cuentasAbiertas ? null : e.id)}
+                    >
+                      Cómo entrar
+                    </Button>
                     <Button
                       variant="destructive"
                       size="sm"
@@ -388,6 +402,8 @@ export function OtrosEquipos() {
                   onListo={() => setEditando(null)}
                 />
               )}
+
+              {cuentasAbiertas && <CuentasDeEquipo equipo={e} />}
 
               {bajandoEste && (
                 <div className="grid gap-2 rounded-md border p-3">
