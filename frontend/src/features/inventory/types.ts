@@ -36,6 +36,13 @@ export type Equipo = {
   dadoDeBaja: boolean
   fechaBaja?: string
   fechaAlta: string
+  /**
+   * Si hay al menos una cuenta anotada (RF-03.22). Decide si vale la pena
+   * ofrecer "Cómo entrar": un cargador no tiene con qué entrar y su panel
+   * estaría siempre vacío. Un Admin ve el botón igual, porque es el único
+   * camino para anotar la primera.
+   */
+  tieneCuentas?: boolean
 }
 
 /** RF-03.5 — una falla reportada sobre un equipo. */

@@ -416,6 +416,7 @@ components:
         estado: { type: string, enum: [DISPONIBLE, EN_MANTENIMIENTO, FUERA_DE_SERVICIO] }
         dadoDeBaja: { type: boolean, description: "Soft delete: si es true, no aparece en listados activos ni puede reservarse" }
         fechaBaja: { type: string, format: date-time, nullable: true }
+        tieneCuentas: { type: boolean, description: "Si el equipo tiene anotada al menos una cuenta de usuario (RF-03.22). No se guarda: lo calcula la consulta. Sirve para no ofrecer 'Cómo entrar' donde no hay nada que ver — el tipo es texto libre, así que el sistema no puede deducir que un cargador no tiene con qué entrar, pero sí sabe que no tiene ninguna cuenta" }
 
     EquipoOcupado:
       type: object

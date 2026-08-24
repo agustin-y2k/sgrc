@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useAuth } from "@/features/auth/AuthContext"
 import * as inventoryApi from "@/features/inventory/api"
 import { CuentasDeEquipo } from "@/features/inventory/CuentasDeEquipo"
 import { ReportarIncidencia } from "@/features/inventory/ReportarIncidencia"
@@ -45,6 +46,8 @@ function TablaDeEquipos({ equipos }: { equipos: Equipo[] }) {
   // Las cuentas de un equipo (RF-03.22) se abren de a una: son varias líneas
   // por equipo y desplegarlas todas convertiría la tabla en un muro.
   const [viendoCuentas, setViendoCuentas] = useState<Equipo | null>(null)
+  const { user } = useAuth()
+  const esAdmin = user?.rol === "ADMIN"
 
   // "Freezada" y "Software instalado" son datos de una computadora: en una
   // tabla de proyectores y cargadores serían dos columnas de guiones.
@@ -97,17 +100,25 @@ function TablaDeEquipos({ equipos }: { equipos: Equipo[] }) {
                       ve cualquier autenticado: la cuenta y su privilegio no
                       son el secreto, y un docente parado frente a la notebook
                       necesita saberlo. Qué contraseña se le revela lo decide
-                      el servidor, cuenta por cuenta. */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-expanded={viendoCuentas?.id === equipo.id}
-                    onClick={() =>
-                      setViendoCuentas(viendoCuentas?.id === equipo.id ? null : equipo)
-                    }
-                  >
-                    Cómo entrar
-                  </Button>
+                      el servidor, cuenta por cuenta.
+
+                      El botón aparece solo si hay algo anotado. El tipo es
+                      texto libre, así que el sistema no puede deducir que un
+                      cargador no tiene cuentas — pero sí sabe que no tiene
+                      ninguna, y eso alcanza. Para un Admin está siempre,
+                      porque si no, no habría cómo anotar la primera. */}
+                  {(esAdmin || equipo.tieneCuentas) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={viendoCuentas?.id === equipo.id}
+                      onClick={() =>
+                        setViendoCuentas(viendoCuentas?.id === equipo.id ? null : equipo)
+                      }
+                    >
+                      Cómo entrar
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

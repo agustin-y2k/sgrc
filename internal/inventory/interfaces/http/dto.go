@@ -116,6 +116,11 @@ type equipoResponse struct {
 	DadoDeBaja        bool       `json:"dadoDeBaja"`
 	FechaBaja         *time.Time `json:"fechaBaja,omitempty"`
 	FechaAlta         time.Time  `json:"fechaAlta"`
+	// TieneCuentas dice si hay algo que ver detrás de "Cómo entrar"
+	// (RF-03.22). La pantalla lo usa para no ofrecerle a un docente un panel
+	// vacío en un cargador; un Admin ve el botón igual, porque es el único
+	// camino para anotar la primera cuenta.
+	TieneCuentas bool `json:"tieneCuentas"`
 }
 
 func toEquipoResponse(pc *domain.Equipo) equipoResponse {
@@ -125,6 +130,7 @@ func toEquipoResponse(pc *domain.Equipo) equipoResponse {
 		Freezado: pc.Freezado, CPU: pc.CPU, RAM: pc.RAM, SistemaOperativo: pc.SistemaOperativo,
 		SoftwareInstalado: pc.SoftwareInstalado, Estado: string(pc.Estado),
 		DadoDeBaja: pc.DadoDeBaja, FechaBaja: pc.FechaBaja, FechaAlta: pc.FechaAlta,
+		TieneCuentas: pc.TieneCuentas,
 	}
 }
 

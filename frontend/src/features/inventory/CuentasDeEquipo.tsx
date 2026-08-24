@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import type { QueryClient } from "@tanstack/react-query"
 
 import { EstadoBadge } from "@/components/EstadoBadge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -33,6 +34,19 @@ function claveDeCuentas(equipoId: string) {
   return ["equipo-cuentas", equipoId]
 }
 
+/**
+ * Anotar o quitar la última cuenta de un equipo cambia su `tieneCuentas`, que
+ * es lo que decide si a un docente le aparece el botón "Cómo entrar". El dato
+ * viaja en los listados de equipos, así que hay que releerlos: si no, el botón
+ * recién aparece —o desaparece— en la próxima recarga completa.
+ */
+async function refrescarListadosDeEquipos(queryClient: QueryClient) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["equipos"] }),
+    queryClient.invalidateQueries({ queryKey: ["equipos-sueltos"] }),
+  ])
+}
+
 /** Qué dice la fila sobre la contraseña, en los tres estados posibles. */
 function EstadoDeLaPassword({ cuenta }: { cuenta: CuentaDeEquipo }) {
   if (!cuenta.tienePassword) {
@@ -64,8 +78,10 @@ function Fila({ cuenta, esAdmin }: { cuenta: CuentaDeEquipo; esAdmin: boolean })
 
   const borrar = useMutation({
     mutationFn: () => inventoryApi.borrarCuentaDeEquipo(cuenta.id),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: claveDeCuentas(cuenta.equipoId) }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: claveDeCuentas(cuenta.equipoId) })
+      await refrescarListadosDeEquipos(queryClient)
+    },
   })
 
   if (editando) {
@@ -204,6 +220,7 @@ function Formulario({
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: claveDeCuentas(equipoId) })
       await queryClient.invalidateQueries({ queryKey: ["clases-de-cuenta"] })
+      await refrescarListadosDeEquipos(queryClient)
       onListo()
     },
   })

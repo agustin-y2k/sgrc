@@ -92,6 +92,14 @@ type Equipo struct {
 	DadoDeBaja        bool
 	FechaBaja         *time.Time
 	FechaAlta         time.Time
+	// TieneCuentas: si este equipo tiene anotada al menos una cuenta de
+	// usuario (RF-03.22). Lo resuelven las consultas que listan equipos, y
+	// solo sirve para decidir si vale la pena ofrecer "Cómo entrar": un
+	// cargador no tiene con qué entrar y nadie debería ver ese botón.
+	//
+	// No es parte del estado del equipo —quien lo crea lo deja en false— y
+	// por eso no se persiste: se calcula al leer.
+	TieneCuentas bool
 }
 
 func NuevoEquipoDeCarro(id, carroID string, identificador int, numeroSerie string, freezado bool, fechaAlta time.Time) (*Equipo, error) {

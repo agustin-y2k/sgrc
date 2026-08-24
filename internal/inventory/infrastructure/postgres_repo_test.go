@@ -549,3 +549,73 @@ func TestPostgresRepo_CrearEquipo_NombreSueltoRepetido_DiceQueEsElNombre(t *test
 		t.Errorf("err = %v, esperaba ErrNombreDeEquipoDuplicado", err)
 	}
 }
+
+// RF-03.22: las consultas que listan equipos traen si el equipo tiene alguna
+// cuenta anotada, para que la pantalla no le ofrezca "Cómo entrar" a un
+// cargador. Se prueba contra Postgres porque el dato no vive en la tabla: lo
+// calcula un EXISTS dentro de la consulta, y un cambio de columnas lo
+// rompería sin que ningún test unitario se entere.
+func TestPostgresRepo_TieneCuentas_SoloDondeHayAlgunaAnotada(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	notebook := crearEquipoSueltoDeTest(t, repo, "NOTEBOOK", "Notebook suelta 1", true)
+	cargador := crearEquipoSueltoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
+
+	cuenta, err := domain.NuevaCuentaDeEquipo(NuevoID(), notebook.ID, domain.DatosDeCuenta{
+		Usuario:     "alumno",
+		Clase:       "Local",
+		Privilegio:  domain.PrivilegioComun,
+		Visibilidad: domain.VisibilidadPublica,
+	}, "", time.Now().UTC().Truncate(time.Microsecond))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearCuentaDeEquipo(ctx, cuenta); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	conCuenta, err := repo.BuscarEquipoPorID(ctx, notebook.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !conCuenta.TieneCuentas {
+		t.Error("la notebook tiene una cuenta anotada y volvió con TieneCuentas en false")
+	}
+
+	sinCuenta, err := repo.BuscarEquipoPorID(ctx, cargador.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if sinCuenta.TieneCuentas {
+		t.Error("el cargador no tiene ninguna cuenta y volvió con TieneCuentas en true")
+	}
+
+	// Y lo mismo por la vía del listado, que es la que usa la pantalla.
+	equipos, err := repo.ListarEquipos(ctx, true)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	porID := map[string]bool{}
+	for _, e := range equipos {
+		porID[e.ID] = e.TieneCuentas
+	}
+	if !porID[notebook.ID] || porID[cargador.ID] {
+		t.Errorf("el listado no distinguió: notebook=%v cargador=%v",
+			porID[notebook.ID], porID[cargador.ID])
+	}
+
+	// Borrar la única cuenta lo devuelve a false: si quedara en true, el botón
+	// seguiría ofreciéndose para siempre.
+	if err := repo.BorrarCuentaDeEquipo(ctx, cuenta.ID); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	vuelto, err := repo.BuscarEquipoPorID(ctx, notebook.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if vuelto.TieneCuentas {
+		t.Error("se borró la única cuenta y el equipo sigue diciendo que tiene")
+	}
+}
