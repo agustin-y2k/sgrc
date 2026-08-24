@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/ramiro/sgrc/internal/shared/secretos"
 )
 
 // ── fakeRepo ────────────────────────────────────────────────────────────
@@ -20,6 +21,7 @@ type fakeRepo struct {
 	incidencias  map[string]*domain.Incidencia
 	licencias    map[string]*domain.LicenciaSoftware
 	preferencias map[string]*domain.PreferenciaDeEquipo
+	cuentas      map[string]*domain.CuentaDeEquipo
 	// nombresDeMateria es lo que el selector del inventario ofrece.
 	nombresDeMateria []string
 	// errAlCrearLicenciaEnEquipo fuerza un fallo que NO es un duplicado, para
@@ -34,6 +36,7 @@ func nuevoFakeRepo() *fakeRepo {
 		incidencias:                make(map[string]*domain.Incidencia),
 		licencias:                  make(map[string]*domain.LicenciaSoftware),
 		preferencias:               make(map[string]*domain.PreferenciaDeEquipo),
+		cuentas:                    make(map[string]*domain.CuentaDeEquipo),
 		errAlCrearLicenciaEnEquipo: make(map[string]error),
 	}
 }
@@ -356,7 +359,78 @@ func nuevoServicioDeTest(repo Repo, validador ValidadorReservas) *Service {
 	contadorID = 0
 	return NewService(repo, validador, idSecuencial, func() time.Time {
 		return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	})
+	}, cifradorDeTest())
+}
+
+// cifradorDeTest usa una clave fija: los tests no prueban el cifrado —eso lo
+// hace internal/shared/secretos— sino que el servicio cifre antes de guardar y
+// descifre al revelar.
+func cifradorDeTest() *secretos.Cifrador {
+	c, err := secretos.Nuevo("clave-de-test-para-las-cuentas")
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+// ── fakeRepo: cuentas de equipo ─────────────────────────────────────────
+
+func (r *fakeRepo) CrearCuentaDeEquipo(_ context.Context, c *domain.CuentaDeEquipo) error {
+	for _, existente := range r.cuentas {
+		if existente.EquipoID == c.EquipoID && strings.EqualFold(existente.Usuario, c.Usuario) {
+			return ErrCuentaDeEquipoDuplicada
+		}
+	}
+	r.cuentas[c.ID] = c
+	return nil
+}
+
+func (r *fakeRepo) BuscarCuentaDeEquipoPorID(_ context.Context, id string) (*domain.CuentaDeEquipo, error) {
+	c, ok := r.cuentas[id]
+	if !ok {
+		return nil, ErrCuentaDeEquipoNoEncontrada
+	}
+	return c, nil
+}
+
+func (r *fakeRepo) GuardarCuentaDeEquipo(_ context.Context, c *domain.CuentaDeEquipo) error {
+	if _, ok := r.cuentas[c.ID]; !ok {
+		return ErrCuentaDeEquipoNoEncontrada
+	}
+	r.cuentas[c.ID] = c
+	return nil
+}
+
+func (r *fakeRepo) BorrarCuentaDeEquipo(_ context.Context, id string) error {
+	if _, ok := r.cuentas[id]; !ok {
+		return ErrCuentaDeEquipoNoEncontrada
+	}
+	delete(r.cuentas, id)
+	return nil
+}
+
+func (r *fakeRepo) ListarCuentasDeEquipo(_ context.Context, equipoID string) ([]*domain.CuentaDeEquipo, error) {
+	var resultado []*domain.CuentaDeEquipo
+	for _, c := range r.cuentas {
+		if c.EquipoID == equipoID {
+			resultado = append(resultado, c)
+		}
+	}
+	sort.Slice(resultado, func(i, j int) bool { return resultado[i].Usuario < resultado[j].Usuario })
+	return resultado, nil
+}
+
+func (r *fakeRepo) ClasesDeCuentaUsadas(_ context.Context) ([]string, error) {
+	vistas := map[string]bool{}
+	var resultado []string
+	for _, c := range r.cuentas {
+		if !vistas[c.Clase] {
+			vistas[c.Clase] = true
+			resultado = append(resultado, c.Clase)
+		}
+	}
+	sort.Strings(resultado)
+	return resultado, nil
 }
 
 func servicioSimple(repo Repo) *Service {

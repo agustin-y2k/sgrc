@@ -31,9 +31,20 @@ const (
 	// renombre la entidad: lo guardado es el nombre que la operación tenía
 	// cuando ocurrió, y reescribir un registro de auditoría es precisamente lo
 	// que un registro de auditoría no debe permitir.
-	EquipoEstadoCambiado       = "EQUIPO_ESTADO_CAMBIADO"
-	EquipoDadoDeBaja           = "EQUIPO_DADO_DE_BAJA"
-	EquipoMovidoDeCarro        = "EQUIPO_MOVIDO_DE_CARRO"
+	EquipoEstadoCambiado = "EQUIPO_ESTADO_CAMBIADO"
+	EquipoDadoDeBaja     = "EQUIPO_DADO_DE_BAJA"
+	EquipoMovidoDeCarro  = "EQUIPO_MOVIDO_DE_CARRO"
+
+	// Cuentas de usuario de cada equipo (RF-03.22). PasswordDeEquipoRevelada
+	// se registra cada vez que alguien MIRA una contraseña, también cuando la
+	// cuenta es pública: sirve para reconstruir quién sabía qué el día que una
+	// máquina aparece con algo cambiado. Ninguna de las cuatro guarda la
+	// contraseña en el detalle — el registro de quién tocó qué no puede ser,
+	// él mismo, otra copia de las contraseñas.
+	CuentaDeEquipoCreada       = "CUENTA_DE_EQUIPO_CREADA"
+	CuentaDeEquipoEditada      = "CUENTA_DE_EQUIPO_EDITADA"
+	CuentaDeEquipoBorrada      = "CUENTA_DE_EQUIPO_BORRADA"
+	PasswordDeEquipoRevelada   = "PASSWORD_DE_EQUIPO_REVELADA"
 	CursoEliminado             = "CURSO_ELIMINADO"
 	MateriaEliminada           = "MATERIA_ELIMINADA"
 	CicloArchivadoReservasElim = "CICLO_ARCHIVADO_RESERVAS_ELIMINADAS"

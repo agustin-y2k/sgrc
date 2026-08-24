@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/ramiro/sgrc/internal/shared/secretos"
 )
 
 type Service struct {
@@ -16,10 +17,15 @@ type Service struct {
 	validadorReservas ValidadorReservas
 	nuevoID           IDGenerator
 	ahora             func() time.Time
+	// cifrador guarda y recupera las contraseñas de las cuentas de cada equipo
+	// (RF-03.22). Puede ser nil: el despliegue que no configuró CUENTAS_SECRET
+	// registra cuentas igual, solo que sin contraseñas. Todos sus métodos
+	// toleran el nil y responden ErrSinClave.
+	cifrador *secretos.Cifrador
 }
 
-func NewService(repo Repo, validadorReservas ValidadorReservas, nuevoID IDGenerator, ahora func() time.Time) *Service {
-	return &Service{repo: repo, validadorReservas: validadorReservas, nuevoID: nuevoID, ahora: ahora}
+func NewService(repo Repo, validadorReservas ValidadorReservas, nuevoID IDGenerator, ahora func() time.Time, cifrador *secretos.Cifrador) *Service {
+	return &Service{repo: repo, validadorReservas: validadorReservas, nuevoID: nuevoID, ahora: ahora, cifrador: cifrador}
 }
 
 // ── Carro ───────────────────────────────────────────────────────────────

@@ -167,3 +167,39 @@ export type AltaDePreferencias = {
   creadas: PreferenciaDeEquipo[]
   equiposQueYaLaTenian?: string[]
 }
+
+// ── Cuentas de usuario de cada equipo (RF-03.22) ────────────────────────
+
+export type PrivilegioDeCuenta = "COMUN" | "ADMINISTRADOR"
+export type VisibilidadDeCuenta = "PUBLICA" | "SOLO_ADMIN"
+
+export type CuentaDeEquipo = {
+  id: string
+  equipoId: string
+  usuario: string
+  /** Texto libre: Local, Microsoft, Linux, Google… lo que esa escuela tenga. */
+  clase: string
+  privilegio: PrivilegioDeCuenta
+  /** Quién puede ver la CONTRASEÑA. La cuenta en sí se lista siempre. */
+  visibilidad: VisibilidadDeCuenta
+  /** Si la cuenta pide contraseña para entrar. */
+  tienePassword: boolean
+  /**
+   * Si además la tenemos anotada. Junto con `tienePassword` da los tres
+   * estados: libre, anotada, y "pide una que no sabemos".
+   */
+  hayPasswordParaVer: boolean
+  /** Lo resuelve el servidor para quien pidió la lista. Acá solo se dibuja. */
+  puedeVerLaPassword: boolean
+  notas?: string
+}
+
+export type CuentaRequest = {
+  usuario: string
+  clase: string
+  privilegio: PrivilegioDeCuenta
+  visibilidad: VisibilidadDeCuenta
+  tienePassword: boolean
+  password?: string
+  notas?: string
+}

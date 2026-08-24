@@ -1,6 +1,8 @@
 import { apiFetch } from "@/lib/api-client"
 import type {
   Carro,
+  CuentaDeEquipo,
+  CuentaRequest,
   GravedadIncidencia,
   Incidencia,
   Equipo,
@@ -58,4 +60,46 @@ export function reportarIncidencia(req: {
  */
 export function listarCategoriasDeFalla() {
   return apiFetch<RespuestaLista<string>>("/api/inventory/categorias-de-falla")
+}
+
+// ── Cuentas de usuario de cada equipo (RF-03.22) ────────────────────────
+
+export function listarCuentasDeEquipo(equipoId: string) {
+  return apiFetch<{ data: CuentaDeEquipo[] }>(
+    `/api/inventory/equipos/${equipoId}/cuentas`
+  )
+}
+
+/** Las clases ya cargadas, para sugerirlas sin cerrar la lista. */
+export function listarClasesDeCuenta() {
+  return apiFetch<{ data: string[] }>("/api/inventory/clases-de-cuenta")
+}
+
+export function crearCuentaDeEquipo(equipoId: string, req: CuentaRequest) {
+  return apiFetch<CuentaDeEquipo>(`/api/inventory/equipos/${equipoId}/cuentas`, {
+    method: "POST",
+    body: req,
+  })
+}
+
+export function editarCuentaDeEquipo(cuentaId: string, req: Partial<CuentaRequest>) {
+  return apiFetch<CuentaDeEquipo>(`/api/inventory/cuentas/${cuentaId}`, {
+    method: "PATCH",
+    body: req,
+  })
+}
+
+export function borrarCuentaDeEquipo(cuentaId: string) {
+  return apiFetch<void>(`/api/inventory/cuentas/${cuentaId}`, { method: "DELETE" })
+}
+
+/**
+ * POST y no GET a propósito: un GET termina en el historial del navegador y en
+ * los logs con la URL completa, y además esto no es una lectura inocua — cada
+ * llamada queda registrada como que alguien miró esa contraseña.
+ */
+export function revelarPasswordDeCuenta(cuentaId: string) {
+  return apiFetch<{ password: string }>(`/api/inventory/cuentas/${cuentaId}/password`, {
+    method: "POST",
+  })
 }

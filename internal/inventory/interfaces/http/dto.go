@@ -159,3 +159,74 @@ func toIncidenciaResponse(i *domain.Incidencia) incidenciaResponse {
 		FechaEnvioASoporte: i.FechaEnvioASoporte, Estado: string(i.Estado),
 	}
 }
+
+// ── Cuentas de usuario de cada equipo (RF-03.22) ────────────────────────
+
+type cuentaRequest struct {
+	Usuario string `json:"usuario"`
+	// Clase es texto libre —Local, Microsoft, Linux, Google…—: la lista de
+	// dónde puede vivir una cuenta no es la misma en cada institución. El
+	// formulario sugiere las ya cargadas.
+	Clase string `json:"clase"`
+	// COMUN | ADMINISTRADOR. Se detalla siempre, aunque la contraseña no se
+	// muestre.
+	Privilegio string `json:"privilegio"`
+	// PUBLICA | SOLO_ADMIN. Decide a quién se le revela la CONTRASEÑA, y la
+	// marca un Admin cuenta por cuenta: es independiente del privilegio.
+	Visibilidad string `json:"visibilidad"`
+	// TienePassword es si la cuenta pide contraseña. Junto con Password da los
+	// tres estados: libre, con contraseña anotada, y con contraseña que no
+	// sabemos (TienePassword=true y Password vacía).
+	TienePassword bool   `json:"tienePassword"`
+	Password      string `json:"password,omitempty"`
+	Notas         string `json:"notas,omitempty"`
+}
+
+type editarCuentaRequest struct {
+	Usuario       *string `json:"usuario,omitempty"`
+	Clase         *string `json:"clase,omitempty"`
+	Privilegio    *string `json:"privilegio,omitempty"`
+	Visibilidad   *string `json:"visibilidad,omitempty"`
+	TienePassword *bool   `json:"tienePassword,omitempty"`
+	Notas         *string `json:"notas,omitempty"`
+	// Ausente deja la contraseña que estaba; cadena vacía borra la anotada, que
+	// es distinto: la cuenta puede seguir pidiendo contraseña y nosotros pasar
+	// a no saberla.
+	Password *string `json:"password,omitempty"`
+}
+
+// cuentaResponse nunca lleva la contraseña, ni siquiera para un Admin: se pide
+// aparte, de a una, y esa petición es la que queda auditada.
+type cuentaResponse struct {
+	ID         string `json:"id"`
+	EquipoID   string `json:"equipoId"`
+	Usuario    string `json:"usuario"`
+	Clase      string `json:"clase"`
+	Privilegio string `json:"privilegio"`
+	// Visibilidad la ven todos: saber que una contraseña es reservada explica
+	// por qué no aparece el botón, en vez de que la pantalla parezca rota.
+	Visibilidad   string `json:"visibilidad"`
+	TienePassword bool   `json:"tienePassword"`
+	// HayPasswordParaVer distingue el tercer estado: la cuenta pide contraseña
+	// pero no la tenemos anotada, así que no hay nada que revelar.
+	HayPasswordParaVer bool `json:"hayPasswordParaVer"`
+	// PuedeVerLaPassword lo resuelve el servidor para QUIEN pidió esta lista.
+	// El frontend solo dibuja el botón; no decide.
+	PuedeVerLaPassword bool   `json:"puedeVerLaPassword"`
+	Notas              string `json:"notas,omitempty"`
+}
+
+func toCuentaResponse(c application.CuentaVisible) cuentaResponse {
+	return cuentaResponse{
+		ID:                 c.ID,
+		EquipoID:           c.EquipoID,
+		Usuario:            c.Usuario,
+		Clase:              c.Clase,
+		Privilegio:         string(c.Privilegio),
+		Visibilidad:        string(c.Visibilidad),
+		TienePassword:      c.TienePassword,
+		HayPasswordParaVer: c.HayPasswordParaVer,
+		PuedeVerLaPassword: c.PuedeVerLaPassword,
+		Notas:              c.Notas,
+	}
+}

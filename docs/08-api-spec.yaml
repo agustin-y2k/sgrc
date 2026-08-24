@@ -218,6 +218,57 @@ components:
           maxLength: 100
           description: Igual que cursoSolicitado, para la materia.
 
+    CuentaDeEquipo:
+      type: object
+      description: |
+        Una cuenta con la que se inicia sesión en un equipo. Nunca lleva la
+        contraseña: eso se pide aparte.
+      properties:
+        id: { type: string, format: uuid }
+        equipoId: { type: string, format: uuid }
+        usuario: { type: string, description: "El nombre con el que se entra. Se conserva su caja: es lo que hay que tipear" }
+        clase: { type: string, example: "Linux", description: "Texto libre: Local, Microsoft, Linux, Google… lo que esa institución tenga" }
+        privilegio:
+          type: string
+          enum: [COMUN, ADMINISTRADOR]
+          description: Se muestra SIEMPRE, aunque la contraseña no.
+        visibilidad:
+          type: string
+          enum: [PUBLICA, SOLO_ADMIN]
+          description: |
+            Quién puede ver la CONTRASEÑA de esta cuenta. La marca un Admin
+            cuenta por cuenta y es independiente del privilegio.
+        tienePassword: { type: boolean, description: Si la cuenta pide contraseña para entrar. }
+        hayPasswordParaVer:
+          type: boolean
+          description: |
+            Si además la tenemos anotada. Junto con `tienePassword` distingue
+            el tercer estado — pide una contraseña que no sabemos.
+        puedeVerLaPassword:
+          type: boolean
+          description: |
+            Resuelto por el servidor para QUIEN pidió esta lista. El frontend
+            solo dibuja el botón; no calcula el permiso.
+        notas: { type: string }
+
+    CuentaRequest:
+      type: object
+      required: [usuario, clase, privilegio, visibilidad]
+      properties:
+        usuario: { type: string, maxLength: 100 }
+        clase: { type: string, maxLength: 30, example: "Linux" }
+        privilegio: { type: string, enum: [COMUN, ADMINISTRADOR] }
+        visibilidad: { type: string, enum: [PUBLICA, SOLO_ADMIN] }
+        tienePassword: { type: boolean }
+        password:
+          type: string
+          maxLength: 200
+          description: |
+            En claro; se guarda cifrada. Vacía con `tienePassword: true` anota
+            que la cuenta pide una contraseña que no sabemos. Mandarla con
+            `tienePassword: false` es una contradicción y se rechaza con 400.
+        notas: { type: string, maxLength: 500 }
+
     LoginRequest:
       type: object
       required: [email, password]
@@ -2488,6 +2539,179 @@ paths:
       responses:
         "204": { description: Licencia eliminada }
         "404": { description: La licencia no existe }
+
+  /api/inventory/equipos/{equipoId}/cuentas:
+    get:
+      tags: [inventory]
+      summary: Con qué cuentas se entra a un equipo (RF-03.22)
+      description: |
+        Cualquier autenticado. La cuenta y su privilegio NO son el secreto: un
+        docente parado frente a la notebook necesita saber con qué usuario
+        entrar, y esconder que existe una cuenta de administrador haría que el
+        inventario mienta por omisión.
+
+        Lo que cambia según quién pregunta es `puedeVerLaPassword` de cada
+        fila, que lo resuelve el servidor mirando la `visibilidad` de esa
+        cuenta y el rol de quien pide.
+
+        **La contraseña no viaja acá, ni para un ADMIN.** Se pide de a una con
+        POST /api/inventory/cuentas/{id}/password, y esa llamada queda
+        auditada. Si viajara en el listado, abrir la ficha de un equipo sería
+        revelar todas sus contraseñas de una vez.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: equipoId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CuentaDeEquipo' }
+    post:
+      tags: [inventory]
+      summary: Anotar una cuenta de un equipo (RF-03.22, Admin)
+      description: |
+        Cargar cuentas es opcional y un equipo puede tener varias: la del
+        alumno y la de administración conviven en la misma notebook.
+
+        `tienePassword` y `password` dan los tres estados: cuenta libre
+        (`tienePassword: false`), con contraseña anotada (`true` + `password`),
+        y con una que **no sabemos** (`true` sin `password`). El tercero es
+        real —la notebook que alguien configuró y nadie anotó— y sin él se
+        confunde con la primera.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: equipoId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CuentaRequest' }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CuentaDeEquipo' }
+        "400": { description: Datos inválidos, o una contraseña en una cuenta marcada como libre }
+        "403": { description: No es Admin }
+        "404": { description: Ese equipo no existe }
+        "409": { description: Ese equipo ya tiene una cuenta con ese nombre }
+        "503": { description: "Falta CUENTAS_SECRET: este despliegue no puede guardar contraseñas" }
+
+  /api/inventory/clases-de-cuenta:
+    get:
+      tags: [inventory]
+      summary: Las clases de cuenta ya usadas (Admin)
+      description: |
+        Alimenta las sugerencias del formulario. La clase es texto libre
+        —Local, Microsoft, Linux, Google— por el mismo criterio que el tipo de
+        equipo: una escuela que corre RedHat tiene cuentas de Linux, y con una
+        lista cerrada eso pediría una migración. Esto evita que convivan
+        "Microsoft" y "MICROSOFT" sin cerrar la lista.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: string } }
+
+  /api/inventory/cuentas/{id}:
+    patch:
+      tags: [inventory]
+      summary: Corregir una cuenta de equipo (RF-03.22, Admin)
+      description: |
+        Todos los campos son opcionales; lo que no se manda no se toca. Eso es
+        lo que permite cambiar solo la visibilidad sin volver a escribir la
+        contraseña, que es el caso normal.
+
+        `password` ausente deja la que estaba; `password: ""` borra la anotada
+        **sin** dejar de declarar que la cuenta pide una — es lo que pasa
+        cuando alguien la cambió en la máquina y todavía no sabemos la nueva.
+        Y pasar `tienePassword: false` suelta la guardada.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CuentaRequest' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CuentaDeEquipo' }
+        "403": { description: No es Admin }
+        "404": { description: Esa cuenta no existe }
+        "409": { description: Ese equipo ya tiene otra cuenta con ese nombre }
+    delete:
+      tags: [inventory]
+      summary: Quitar una cuenta de equipo (RF-03.22, Admin)
+      description: |
+        Se borra de verdad, a diferencia de un equipo. Una cuenta no tiene
+        historial que preservar —nada la referencia— y una que ya no existe en
+        la máquina pero sigue listada es peor que no tenerla: alguien la va a
+        intentar usar.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Quitada }
+        "403": { description: No es Admin }
+        "404": { description: Esa cuenta no existe }
+
+  /api/inventory/cuentas/{id}/password:
+    post:
+      tags: [inventory]
+      summary: Ver la contraseña de una cuenta (RF-03.22)
+      description: |
+        Cualquier autenticado; el servicio decide. Una cuenta `PUBLICA` la ve
+        cualquiera con sesión, una `SOLO_ADMIN` únicamente un ADMIN. El
+        privilegio de la cuenta NO entra en esa decisión: una cuenta de
+        administrador puede ser de uso común.
+
+        **Es POST y no GET a propósito**, por dos razones: un GET termina en el
+        historial del navegador y en los logs de acceso con la URL completa, y
+        además esto no es una lectura inocua — cada llamada queda registrada
+        (`PASSWORD_DE_EQUIPO_REVELADA`), también cuando la cuenta es pública.
+
+        El 403 es 403 y no 404 porque esconder que la cuenta existe no
+        protegería nada: ya aparece en el listado.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  password: { type: string }
+        "403": { description: Esa contraseña solo la puede ver un administrador }
+        "404": { description: Esa cuenta no existe, o no tiene una contraseña anotada }
+        "503": { description: "Falta CUENTAS_SECRET, o lo guardado no se pudo descifrar porque cambió" }
 
   /api/inventory/equipos/{equipoId}/licencias:
     get:
