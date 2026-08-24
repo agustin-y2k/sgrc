@@ -83,7 +83,18 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrDivisionPreferenciaInvalida),
 		errors.Is(err, domain.ErrDivisionSinAnio),
 		errors.Is(err, domain.ErrPrioridadInvalida),
-		errors.Is(err, domain.ErrSinEquiposParaPreferi):
+		errors.Is(err, domain.ErrSinEquiposParaPreferi),
+		// Las cuentas de cada equipo (RF-03.22). Sin estos casos, escribir mal
+		// una cuenta contestaba "error interno" en vez de decir qué falta.
+		errors.Is(err, domain.ErrUsuarioCuentaVacio),
+		errors.Is(err, domain.ErrUsuarioCuentaLargo),
+		errors.Is(err, domain.ErrClaseCuentaVacia),
+		errors.Is(err, domain.ErrClaseCuentaLarga),
+		errors.Is(err, domain.ErrPrivilegioInvalido),
+		errors.Is(err, domain.ErrVisibilidadInvalida),
+		errors.Is(err, domain.ErrNotasCuentaLargas),
+		errors.Is(err, domain.ErrPasswordCuentaLarga),
+		errors.Is(err, domain.ErrPasswordSinTenerlaEs):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 
 	default:

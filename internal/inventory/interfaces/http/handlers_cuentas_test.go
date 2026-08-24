@@ -301,3 +301,57 @@ func TestHTTP_Opcional_AltaDeEquipoNoPideCuentas(t *testing.T) {
 		t.Fatalf("esperaba 201, obtuve %d: %s", status, cuerpo)
 	}
 }
+
+// Una cuenta mal escrita se contesta con 400 y con el motivo, no con "error
+// interno". Las validaciones nacen en el dominio, así que si mapearError no
+// las conoce, la pantalla recibe un 500 y quien carga la cuenta no se entera
+// de qué le falta.
+func TestHTTP_CuentaInvalida_Da400ConElMotivo(t *testing.T) {
+	casos := []struct {
+		nombre string
+		req    cuentaRequest
+		dice   string
+	}{
+		{
+			"sin el nombre de la cuenta",
+			cuentaRequest{Clase: "Local", Privilegio: "COMUN", Visibilidad: "PUBLICA"},
+			"nombre de la cuenta",
+		},
+		{
+			"sin el tipo de cuenta",
+			cuentaRequest{Usuario: "Alumno", Privilegio: "COMUN", Visibilidad: "PUBLICA"},
+			"de qué tipo es la cuenta",
+		},
+		{
+			"un privilegio que no existe",
+			cuentaRequest{Usuario: "Alumno", Clase: "Local", Privilegio: "ROOT", Visibilidad: "PUBLICA"},
+			"COMUN o ADMINISTRADOR",
+		},
+		{
+			"una visibilidad que no existe",
+			cuentaRequest{Usuario: "Alumno", Clase: "Local", Privilegio: "COMUN", Visibilidad: "TODOS"},
+			"PUBLICA o SOLO_ADMIN",
+		},
+		{
+			"una contraseña en una cuenta marcada como libre",
+			cuentaRequest{Usuario: "Alumno", Clase: "Local", Privilegio: "COMUN", Visibilidad: "PUBLICA",
+				TienePassword: false, Password: "algo"},
+			"marcada como libre",
+		},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			app, _ := appConNotebook(t)
+
+			status, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos/eq1/cuentas", c.req, "ADMIN")
+
+			if status != fiber.StatusBadRequest {
+				t.Fatalf("esperaba 400, obtuve %d: %s", status, cuerpo)
+			}
+			if !strings.Contains(string(cuerpo), c.dice) {
+				t.Errorf("el mensaje tendría que explicar el problema (%q), y dice: %s", c.dice, cuerpo)
+			}
+		})
+	}
+}
