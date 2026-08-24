@@ -73,7 +73,12 @@ describe("OtrosEquipos", () => {
     vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
       data: [
         equipo(),
-        equipo({ id: "eq2", nombre: "Cargador 1", etiqueta: "Cargador 1", reservable: false }),
+        equipo({
+          id: "eq2",
+          nombre: "Cargador 1",
+          etiqueta: "Cargador 1",
+          reservable: false,
+        }),
       ],
     })
     renderSeccion()
@@ -95,6 +100,7 @@ describe("OtrosEquipos", () => {
     expect(adminApi.crearEquipoSuelto).toHaveBeenCalledWith({
       tipo: "PROYECTOR",
       nombre: "Proyector Epson",
+      numeroSerie: "",
       reservable: true,
     })
   })
@@ -116,6 +122,7 @@ describe("OtrosEquipos", () => {
     expect(adminApi.crearEquipoSuelto).toHaveBeenCalledWith({
       tipo: "CARGADOR",
       nombre: "Cargador 1",
+      numeroSerie: "",
       reservable: false,
     })
   })
@@ -157,6 +164,7 @@ describe("OtrosEquipos", () => {
     expect(adminApi.editarEquipo).toHaveBeenCalledWith("eq1", {
       tipo: "PROYECTOR",
       nombre: "Proyector del SUM",
+      numeroSerie: "",
       reservable: true,
     })
   })
@@ -174,6 +182,92 @@ describe("OtrosEquipos", () => {
   })
 
   /**
+   * El número de serie es opcional para CUALQUIER tipo, no solo para las
+   * notebooks: un proyector tiene serie —y es de lo que más se extravía— y un
+   * cargador no tiene ninguna. Por eso es un campo que se llena o no, y no dos
+   * categorías de equipo.
+   */
+  it("permite dar de alta con número de serie", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Agregar equipo" }))
+    await user.type(screen.getByLabelText("¿Qué es?"), "NOTEBOOK")
+    await user.type(screen.getByLabelText("¿Cómo lo llaman?"), "Notebook Dirección")
+    await user.type(screen.getByLabelText(/Número de serie/), "ABC-123X")
+    await user.click(screen.getByRole("button", { name: "Agregar" }))
+
+    expect(adminApi.crearEquipoSuelto).toHaveBeenCalledWith({
+      tipo: "NOTEBOOK",
+      nombre: "Notebook Dirección",
+      numeroSerie: "ABC-123X",
+      reservable: false,
+    })
+  })
+
+  it("dar de alta sin número de serie sigue funcionando", async () => {
+    // El cargador: no tiene serie y no hay ninguna que inventar.
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Agregar equipo" }))
+    await user.type(screen.getByLabelText("¿Qué es?"), "CARGADOR")
+    await user.type(screen.getByLabelText("¿Cómo lo llaman?"), "Cargador 2")
+    await user.click(screen.getByRole("button", { name: "Agregar" }))
+
+    // Sin serie se manda vacío, que el backend guarda como NULL. La columna es
+    // UNIQUE, y en Postgres eso permite tantos NULL como haga falta: veinte
+    // cargadores sin serie conviven sin chocar entre sí.
+    expect(adminApi.crearEquipoSuelto).toHaveBeenCalledWith({
+      tipo: "CARGADOR",
+      nombre: "Cargador 2",
+      numeroSerie: "",
+      reservable: false,
+    })
+  })
+
+  /**
+   * Los equipos que ya estaban cargados no tienen serie. Sin poder editarla
+   * habría que darlos de baja y recrearlos solo para anotarla, perdiendo su
+   * historial de préstamos e incidencias.
+   */
+  it("permite cargarle el número de serie a un equipo que ya existía", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Editar" }))
+    await user.type(screen.getByLabelText(/Número de serie/), "XYZ-9")
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+
+    expect(adminApi.editarEquipo).toHaveBeenCalledWith("eq1", {
+      tipo: "PROYECTOR",
+      nombre: "Proyector Epson",
+      numeroSerie: "XYZ-9",
+      reservable: true,
+    })
+  })
+
+  it("muestra el número de serie en la lista, y nada si no tiene", async () => {
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [
+        equipo({ numeroSerie: "ABC-123X" }),
+        equipo({ id: "eq2", tipo: "CARGADOR", nombre: "Cargador 1" }),
+      ],
+    })
+    renderSeccion()
+
+    // Es lo que sirve para reclamar un equipo perdido, así que tiene que
+    // verse sin entrar a editar.
+    expect(await screen.findByText("ABC-123X")).toBeInTheDocument()
+    // Y el que no tiene no muestra un hueco: una línea "Serie: —" en cada
+    // cargador es ruido en la lista que más se mira.
+    expect(screen.queryByText("—")).not.toBeInTheDocument()
+  })
+
+  /**
    * Destildar "se puede reservar" no cancela las reservas que ya existen —el
    * backend solo lo saca de la lista de libres—.
    */
@@ -185,7 +279,9 @@ describe("OtrosEquipos", () => {
     await user.click(await screen.findByRole("button", { name: "Editar" }))
     await user.click(screen.getByRole("checkbox", { name: /Se puede reservar/ }))
 
-    expect(screen.getByText(/Las reservas que ya tenga siguen en pie/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Las reservas que ya tenga siguen en pie/)
+    ).toBeInTheDocument()
   })
 
   it("da de baja pidiendo confirmación primero", async () => {

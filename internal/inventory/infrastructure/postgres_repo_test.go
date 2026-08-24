@@ -330,7 +330,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 
 func crearEquipoSueltoDeTest(t *testing.T, repo *PostgresRepo, tipo, nombre string, reservable bool) *domain.Equipo {
 	t.Helper()
-	eq, err := domain.NuevoEquipoSuelto(NuevoID(), tipo, nombre, reservable, time.Now().UTC().Truncate(time.Microsecond))
+	eq, err := domain.NuevoEquipoSuelto(NuevoID(), tipo, nombre, "", reservable, time.Now().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestPostgresRepo_EquipoSuelto_NombreDuplicado(t *testing.T) {
 
 	crearEquipoSueltoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
 
-	otro, _ := domain.NuevoEquipoSuelto(NuevoID(), "CARGADOR", "CARGADOR 1", false, time.Now().UTC())
+	otro, _ := domain.NuevoEquipoSuelto(NuevoID(), "CARGADOR", "CARGADOR 1", "", false, time.Now().UTC())
 	err := repo.CrearEquipo(ctx, otro)
 
 	if !errors.Is(err, application.ErrNombreDeEquipoDuplicado) {
@@ -422,7 +422,7 @@ func TestPostgresRepo_EquipoSuelto_NombreSeReusaTrasLaBaja(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	nuevo, _ := domain.NuevoEquipoSuelto(NuevoID(), "CARGADOR", "Cargador 1", false, time.Now().UTC())
+	nuevo, _ := domain.NuevoEquipoSuelto(NuevoID(), "CARGADOR", "Cargador 1", "", false, time.Now().UTC())
 	if err := repo.CrearEquipo(ctx, nuevo); err != nil {
 		t.Fatalf("el nombre de un equipo dado de baja debería poder reusarse: %v", err)
 	}
@@ -537,7 +537,7 @@ func TestPostgresRepo_CrearEquipo_NombreSueltoRepetido_DiceQueEsElNombre(t *test
 	repo := NewPostgresRepo(pool)
 	crearEquipoSueltoDeTest(t, repo, "CARGADOR", "Cargador 1", false)
 
-	otro, err := domain.NuevoEquipoSuelto(NuevoID(), "CARGADOR", "cargador 1", false,
+	otro, err := domain.NuevoEquipoSuelto(NuevoID(), "CARGADOR", "cargador 1", "", false,
 		time.Now().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)

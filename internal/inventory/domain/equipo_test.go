@@ -205,7 +205,7 @@ func TestMoverACarro_OK(t *testing.T) {
 // ── Equipos que no son PCs de un carro (RF-03.15) ───────────────────────
 
 func TestNuevoEquipo_ProyectorSinCarroNiNumero(t *testing.T) {
-	p, err := NuevoEquipoSuelto("eq-1", "PROYECTOR", "Proyector Epson", true, time.Now())
+	p, err := NuevoEquipoSuelto("eq-1", "PROYECTOR", "Proyector Epson", "", true, time.Now())
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -225,7 +225,7 @@ func TestNuevoEquipo_ProyectorSinCarroNiNumero(t *testing.T) {
 }
 
 func TestNuevoEquipo_CargadorNoReservable(t *testing.T) {
-	p, err := NuevoEquipoSuelto("eq-2", "CARGADOR", "Cargador 1", false, time.Now())
+	p, err := NuevoEquipoSuelto("eq-2", "CARGADOR", "Cargador 1", "", false, time.Now())
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -236,7 +236,7 @@ func TestNuevoEquipo_CargadorNoReservable(t *testing.T) {
 }
 
 func TestNuevoEquipo_NormalizaSinTocarLaCaja(t *testing.T) {
-	p, err := NuevoEquipoSuelto("eq-1", "  proyector  ", "  Proyector   Epson  ", true, time.Now())
+	p, err := NuevoEquipoSuelto("eq-1", "  proyector  ", "  Proyector   Epson  ", "", true, time.Now())
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -263,7 +263,7 @@ func TestNuevoEquipo_Invalidos(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.caso, func(t *testing.T) {
-			if _, err := NuevoEquipoSuelto("eq-1", c.tipo, c.nombre, true, time.Now()); !errors.Is(err, c.esperado) {
+			if _, err := NuevoEquipoSuelto("eq-1", c.tipo, c.nombre, "", true, time.Now()); !errors.Is(err, c.esperado) {
 				t.Errorf("esperaba %v, obtuve %v", c.esperado, err)
 			}
 		})
@@ -281,7 +281,7 @@ func TestEtiqueta(t *testing.T) {
 		t.Errorf("una PC de carro se llama por su número: %q", deCarro.Etiqueta())
 	}
 
-	suelto, err := NuevoEquipoSuelto("eq-1", "PROYECTOR", "Proyector Epson", true, time.Now())
+	suelto, err := NuevoEquipoSuelto("eq-1", "PROYECTOR", "Proyector Epson", "", true, time.Now())
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -300,5 +300,56 @@ func TestNuevaEquipo_NaceReservableYDeTipoEquipo(t *testing.T) {
 	}
 	if p.Tipo != TipoPC || !p.Reservable || !p.EstaEnUnCarro() {
 		t.Errorf("%+v", p)
+	}
+}
+
+// ── El número de serie opcional de un equipo suelto ──────────────────────
+//
+// Vale para cualquier tipo, no solo para las notebooks: un proyector tiene
+// serie y se extravía, un cargador no tiene ninguna. Por eso es un campo que
+// se llena o no, y no dos categorías de equipo.
+
+func TestNuevoEquipoSuelto_ConNumeroDeSerie_LoGuardaNormalizado(t *testing.T) {
+	p, err := NuevoEquipoSuelto("eq-1", "NOTEBOOK", "Notebook Dirección", "  abc-123x  ", true, time.Now())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	// Misma forma canónica que en una computadora de carro —mayúsculas y sin
+	// bordes—, para que la misma máquina no pueda entrar dos veces con
+	// distinta caja y esquivar el UNIQUE de la columna.
+	if p.NumeroSerie != "ABC-123X" {
+		t.Fatalf("esperaba ABC-123X, obtuve %q", p.NumeroSerie)
+	}
+}
+
+func TestNuevoEquipoSuelto_SinNumeroDeSerie_NoEsError(t *testing.T) {
+	// El caso del cargador: no tiene serie y no hay ninguna que inventar.
+	for _, entrada := range []string{"", "   "} {
+		p, err := NuevoEquipoSuelto("eq-1", "CARGADOR", "Cargador 1", entrada, false, time.Now())
+		if err != nil {
+			t.Fatalf("con %q no debería fallar: %v", entrada, err)
+		}
+		// Vacío y no espacios: el repositorio lo guarda como NULL, y la columna
+		// tiene un CHECK que rechaza la cadena vacía.
+		if p.NumeroSerie != "" {
+			t.Fatalf("con %q esperaba vacío, obtuve %q", entrada, p.NumeroSerie)
+		}
+	}
+}
+
+func TestNuevoEquipoSuelto_NumeroDeSerieDemasiadoLargo(t *testing.T) {
+	largo := strings.Repeat("A", MaxLargoNumeroSerie+1)
+
+	if _, err := NuevoEquipoSuelto("eq-1", "NOTEBOOK", "Notebook 1", largo, true, time.Now()); !errors.Is(err, ErrNumeroSerieLargo) {
+		t.Fatalf("esperaba ErrNumeroSerieLargo, obtuve %v", err)
+	}
+}
+
+// El equipo de carro sigue exigiéndolo: que sea opcional afuera no relaja la
+// regla adentro del laboratorio.
+func TestNuevoEquipoDeCarro_SigueExigiendoNumeroDeSerie(t *testing.T) {
+	if _, err := NuevoEquipoDeCarro("eq-1", "carro-1", 3, "", false, time.Now()); !errors.Is(err, ErrNumeroSerieInvalido) {
+		t.Fatalf("esperaba ErrNumeroSerieInvalido, obtuve %v", err)
 	}
 }

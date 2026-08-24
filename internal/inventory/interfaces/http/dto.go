@@ -38,6 +38,9 @@ type crearEquipoSueltoRequest struct {
 	// misma que la de otra.
 	Tipo   string `json:"tipo"`
 	Nombre string `json:"nombre"`
+	// NumeroSerie es opcional acá y obligatorio en una computadora de carro:
+	// un cargador no trae ninguna. Ausente o vacío se guarda como NULL.
+	NumeroSerie string `json:"numeroSerie,omitempty"`
 	// Reservable: si aparece en la lista de equipos libres al reservar. El
 	// proyector sí; un cargador se presta en el momento.
 	Reservable bool `json:"reservable"`
@@ -53,6 +56,8 @@ type editarEquipoRequest struct {
 	Tipo              *string `json:"tipo,omitempty"`
 	Nombre            *string `json:"nombre,omitempty"`
 	Reservable        *bool   `json:"reservable,omitempty"`
+	// Cadena vacía borra el número de serie; solo se acepta fuera de un carro.
+	NumeroSerie *string `json:"numeroSerie,omitempty"`
 }
 
 type cambiarEstadoEquipoRequest struct {

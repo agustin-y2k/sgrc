@@ -1814,8 +1814,13 @@ paths:
         suelto, en `/carros/{carroId}/equipos` nace adentro de ese carro.
 
         Son dos colecciones y no una con un campo opcional porque lo que se
-        carga es distinto: acá no hay carro, ni identificador, ni número de
-        serie, y lo que identifica al equipo es el nombre.
+        carga es distinto: acá no hay carro ni identificador, y lo que
+        identifica al equipo es el nombre.
+
+        El número de serie es **opcional** acá y obligatorio en una
+        computadora de carro. No se divide en "notebooks sí, otros no" porque
+        esa división es falsa: un proyector tiene serie —y es de lo que más se
+        extravía— y un cargador no trae ninguna.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -1827,6 +1832,16 @@ paths:
               properties:
                 tipo: { type: string, maxLength: 50, example: "PROYECTOR", description: "Texto libre: la lista de cosas que presta una escuela no es la de otra. El formulario sugiere los tipos ya cargados" }
                 nombre: { type: string, maxLength: 100, example: "Proyector Epson", description: "Único entre los equipos sueltos, sin distinguir mayúsculas" }
+                numeroSerie:
+                  type: string
+                  maxLength: 50
+                  example: "ABC-123X"
+                  description: |
+                    Opcional, para cualquier tipo de equipo. Se guarda en
+                    mayúsculas y sin espacios al borde, y es único entre TODOS
+                    los equipos. Ausente o vacío se guarda como NULL, y una
+                    columna `UNIQUE` admite tantos NULL como haga falta: veinte
+                    cargadores sin serie conviven sin chocar.
                 reservable: { type: boolean, default: false, description: "Marcar solo lo que alguien pueda querer planificar. Por defecto false: un cargador se presta en el momento y aparecería como ruido cada vez que un docente va a reservar" }
       responses:
         "201":
@@ -1869,9 +1884,19 @@ paths:
                 tipo: { type: string, maxLength: 50, description: "RF-03.15" }
                 nombre: { type: string, maxLength: 100, description: "RF-03.15. En un equipo suelto no puede quedar vacío: es lo único que lo distingue. En una computadora de carro sí, porque ahí no cumple ninguna función" }
                 reservable: { type: boolean, description: "RF-03.16" }
+                numeroSerie:
+                  type: string
+                  maxLength: 50
+                  description: |
+                    RF-03.15. Editable porque los equipos que ya estaban
+                    cargados no lo tienen: sin esto habría que darlos de baja y
+                    recrearlos —perdiendo su historial— solo para anotarlo.
+                    Cadena vacía lo borra, y eso **solo se acepta fuera de un
+                    carro**: adentro el alta lo exige, y una edición no puede
+                    abrir por la puerta de atrás un estado que el alta prohíbe.
       responses:
         "200": { description: PC actualizada }
-        "400": { description: Tipo o nombre vacíos o demasiado largos }
+        "400": { description: Tipo o nombre vacíos o demasiado largos, o número de serie vacío en una computadora de carro }
         "409": { description: Ya existe una PC con ese identificador en el carro destino, o el número de serie ya está registrado en otra PC }
     delete:
       tags: [inventory]

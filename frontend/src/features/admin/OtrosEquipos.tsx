@@ -31,14 +31,21 @@ function Alta({ tiposUsados, onListo }: { tiposUsados: string[]; onListo: () => 
   const queryClient = useQueryClient()
   const [tipo, setTipo] = useState("")
   const [nombre, setNombre] = useState("")
+  const [numeroSerie, setNumeroSerie] = useState("")
   const [reservable, setReservable] = useState(false)
 
   const crear = useMutation({
     mutationFn: () =>
-      adminApi.crearEquipoSuelto({ tipo: tipo.trim(), nombre: nombre.trim(), reservable }),
+      adminApi.crearEquipoSuelto({
+        tipo: tipo.trim(),
+        nombre: nombre.trim(),
+        numeroSerie: numeroSerie.trim(),
+        reservable,
+      }),
     onSuccess: async () => {
       setTipo("")
       setNombre("")
+      setNumeroSerie("")
       setReservable(false)
       await queryClient.invalidateQueries({ queryKey: EQUIPOS_KEY })
       onListo()
@@ -93,6 +100,26 @@ function Alta({ tiposUsados, onListo }: { tiposUsados: string[]; onListo: () => 
         </div>
       </div>
 
+      <div className="grid gap-1.5">
+        <Label htmlFor="equipo-numero-serie">
+          Número de serie <span className="text-muted-foreground">(si tiene)</span>
+        </Label>
+        <Input
+          id="equipo-numero-serie"
+          value={numeroSerie}
+          onChange={(e) => setNumeroSerie(e.target.value)}
+          placeholder="El de la etiqueta de fábrica"
+        />
+        {/* Opcional para todo, no solo para las notebooks: un proyector tiene
+            serie —y es de lo que más se extravía— y un cargador no tiene
+            ninguna. Exigirlo obligaría a inventar valores, que es peor que
+            dejarlo vacío. */}
+        <p className="text-muted-foreground text-xs">
+          Dejalo vacío si el equipo no tiene. Es el número de fábrica, el que sirve para
+          reclamarlo si se pierde.
+        </p>
+      </div>
+
       <label className="flex items-start gap-2 text-sm">
         <input
           type="checkbox"
@@ -143,6 +170,7 @@ function Edicion({
   const queryClient = useQueryClient()
   const [tipo, setTipo] = useState(equipo.tipo ?? "")
   const [nombre, setNombre] = useState(equipo.nombre ?? "")
+  const [numeroSerie, setNumeroSerie] = useState(equipo.numeroSerie ?? "")
   const [reservable, setReservable] = useState(equipo.reservable ?? false)
 
   const guardar = useMutation({
@@ -150,6 +178,7 @@ function Edicion({
       adminApi.editarEquipo(equipo.id, {
         tipo: tipo.trim(),
         nombre: nombre.trim(),
+        numeroSerie: numeroSerie.trim(),
         reservable,
       }),
     onSuccess: async () => {
@@ -197,6 +226,21 @@ function Edicion({
             required
           />
         </div>
+      </div>
+
+      {/* Editable y no solo cargable en el alta: los equipos que ya estaban
+          en el sistema no tienen serie, y sin esto habría que darlos de baja
+          y recrearlos —perdiendo su historial— solo para anotarla. */}
+      <div className="grid gap-1.5">
+        <Label htmlFor={`editar-serie-${equipo.id}`}>
+          Número de serie <span className="text-muted-foreground">(si tiene)</span>
+        </Label>
+        <Input
+          id={`editar-serie-${equipo.id}`}
+          value={numeroSerie}
+          onChange={(e) => setNumeroSerie(e.target.value)}
+          placeholder="El de la etiqueta de fábrica"
+        />
       </div>
 
       <label className="flex items-start gap-2 text-sm">
@@ -309,7 +353,17 @@ export function OtrosEquipos() {
                       <EstadoBadge tono="neutro">Solo préstamo</EstadoBadge>
                     )}
                   </p>
-                  <p className="text-muted-foreground text-sm">{e.tipo}</p>
+                  <p className="text-muted-foreground text-sm">
+                    {e.tipo}
+                    {/* Se muestra solo si lo tiene: una línea "Serie: —" en cada
+                        cargador es ruido en la lista que más se mira. */}
+                    {e.numeroSerie && (
+                      <>
+                        {" · "}
+                        <span className="font-mono">{e.numeroSerie}</span>
+                      </>
+                    )}
+                  </p>
                 </div>
                 {!editandoEste && !bajandoEste && (
                   <div className="flex shrink-0 flex-wrap gap-2">

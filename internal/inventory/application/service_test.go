@@ -521,6 +521,60 @@ func TestEditarEquipo_UnaEquipoDeCarroSiPuedeQuedarSinNombre(t *testing.T) {
 	}
 }
 
+// ── El número de serie que se carga después ─────────────────────────────
+//
+// Los equipos sueltos que ya estaban cargados no tienen serie: sin poder
+// editarla habría que darlos de baja y recrearlos solo para anotarla,
+// perdiendo su historial de préstamos e incidencias.
+
+func TestEditarEquipo_CargarNumeroDeSerieAUnSuelto(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["eq1"] = &domain.Equipo{ID: "eq1", Tipo: "NOTEBOOK", Nombre: "Notebook Dirección"}
+	svc := servicioSimple(repo)
+
+	serie := "  abc-123x "
+	if err := svc.EditarEquipo(context.Background(), "eq1", EditarEquipoParams{NumeroSerie: &serie}); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if repo.equipos["eq1"].NumeroSerie != "ABC-123X" {
+		t.Fatalf("esperaba ABC-123X, obtuve %q", repo.equipos["eq1"].NumeroSerie)
+	}
+}
+
+// El caso de haberla anotado mal: fuera de un carro se puede dejar sin serie.
+func TestEditarEquipo_UnSueltoSiPuedeQuedarSinNumeroDeSerie(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["eq1"] = &domain.Equipo{ID: "eq1", Tipo: "CARGADOR", Nombre: "Cargador 1", NumeroSerie: "XYZ-9"}
+	svc := servicioSimple(repo)
+
+	vacio := ""
+	if err := svc.EditarEquipo(context.Background(), "eq1", EditarEquipoParams{NumeroSerie: &vacio}); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if repo.equipos["eq1"].NumeroSerie != "" {
+		t.Errorf("no se limpió: %q", repo.equipos["eq1"].NumeroSerie)
+	}
+}
+
+// Adentro de un carro no: el alta la exige, y dejar que una edición se la
+// saque abriría por la puerta de atrás un estado que el alta prohíbe.
+func TestEditarEquipo_UnaDeCarroNoPuedeQuedarSinNumeroDeSerie(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", CarroID: "c1", Identificador: 3, NumeroSerie: "ABC-1"}
+	svc := servicioSimple(repo)
+
+	vacio := ""
+	err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{NumeroSerie: &vacio})
+
+	if !errors.Is(err, domain.ErrNumeroSerieInvalido) {
+		t.Fatalf("esperaba ErrNumeroSerieInvalido, obtuve %v", err)
+	}
+	if repo.equipos["pc1"].NumeroSerie != "ABC-1" {
+		t.Errorf("no debería haberse tocado: %q", repo.equipos["pc1"].NumeroSerie)
+	}
+}
+
 // ── CambiarEstadoEquipo + cascada ───────────────────────────────────────
 
 func TestCambiarEstadoEquipo_AMantenimiento_DisparaCascada(t *testing.T) {
