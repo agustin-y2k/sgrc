@@ -11,10 +11,18 @@ const ANCHO_MAXIMO = 400
 export function BotonGoogle({
   onCredential,
   texto = "signin_with",
+  children,
 }: {
   onCredential: (credential: string) => void
   /** "signup_with" dice "Registrarse con Google" en vez de "Iniciar sesión". */
   texto?: "signin_with" | "signup_with"
+  /**
+   * Lo que va entre el separador y el botón — hoy, la casilla de mantener la
+   * sesión iniciada del ingreso. Se recibe acá adentro y no se dibuja al lado
+   * en la pantalla para que se esconda JUNTO con el botón: sin Google
+   * configurado, una casilla suelta arriba de un hueco no dice nada.
+   */
+  children?: React.ReactNode
 }) {
   const raiz = useRef<HTMLDivElement>(null)
   const contenedor = useRef<HTMLDivElement>(null)
@@ -104,6 +112,7 @@ export function BotonGoogle({
         <span className="text-muted-foreground text-xs">o</span>
         <span className="bg-border h-px flex-1" />
       </div>
+      {children}
       {/* El iframe de Google se centra solo dentro de esta fila cuando no
           llega a ocupar todo el ancho (pantallas más anchas que el tope de
           400px que acepta renderButton). */}

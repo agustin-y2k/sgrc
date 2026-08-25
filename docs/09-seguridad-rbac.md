@@ -4,7 +4,7 @@
 - Passwords con hash `argon2id` (resistente a ataques GPU).
 - JWT firmados **`HS256`** (secreto simétrico) — un solo proceso firma y verifica, así que un secreto simétrico cumple la función sin la gestión de un par de claves asimétricas (ver `06-arquitectura.md` §7).
 - Access token: 24h (`JWT_ACCESS_TTL`). **No hay refresh token**: cuando el access expira se vuelve a iniciar sesión. Para una jornada escolar, renovar la sesión una vez al día es aceptable, y evita el segundo token con su propio almacenamiento, su rotación y su revocación.
-- **"Mantener la sesión iniciada": 30 días** (`JWT_REMEMBER_TTL`), pedido con una casilla en la pantalla de ingreso (RF-01.13). Es la misma sesión de siempre con otra vigencia: mismo token, mismos claims de identidad, mismo RBAC. Lo único que cambia es el `exp`.
+- **"Mantener la sesión iniciada": 30 días** (`JWT_REMEMBER_TTL`), pedido con las casillas de la pantalla de ingreso —una por camino, contraseña y Google (RF-01.13)—. Es la misma sesión de siempre con otra vigencia: mismo token, mismos claims de identidad, mismo RBAC. Lo único que cambia es el `exp`.
 
   **La casilla arranca apagada y se pide explícitamente.** La escuela tiene máquinas compartidas: dejar una sesión de un mes abierta por omisión en la PC del laboratorio es entregarle la cuenta al siguiente que se siente. Por eso la pantalla lo advierte al lado de la casilla, y un cliente que no mande el campo obtiene la sesión corta.
 

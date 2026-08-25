@@ -56,7 +56,10 @@ test.describe("duración de la sesión", () => {
     await page.getByLabel(/email/i).fill(ADMIN_EMAIL)
     await page.getByLabel(/contraseña/i).fill(ADMIN_PASSWORD)
     if (conLaCasilla) {
-      await page.getByLabel(/mantener la sesión iniciada/i).click()
+      // Exacto y no /…/i: en la pantalla hay DOS casillas de mantener la
+      // sesión —esta y la del botón de Google, que se llama "… con Google"—
+      // y un match parcial las agarra a las dos.
+      await page.getByLabel("Mantener la sesión iniciada", { exact: true }).click()
     }
     await page.getByRole("button", { name: /iniciar sesión/i }).click()
     await expect(page).not.toHaveURL(/\/login$/)
