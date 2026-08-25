@@ -247,6 +247,16 @@ export function AppLayout() {
               `min-w-0` + `overflow-x-auto` quedan igual de red, porque el
               nombre del usuario todavía puede crecer.
 
+              `min-[1100px]` y no `lg` (1024): entre 1024 y 1087px la barra de
+              un Admin entra, pero apretada —"Horario Admins" se partía en dos
+              renglones y el header pasaba de 57 a 73px—. A 1088px deja de
+              partirse; 1100 es ese número con un poco de aire. En esa franja
+              ahora se ve el menú del teléfono, que ahí anda bien. El valor
+              está en CINCO clases de este archivo (esta barra, "Pedir ayuda",
+              "Salir", el botón "Menú" y el menú desplegable) y las cinco
+              tienen que decir lo mismo: si una queda en `lg`, hay un ancho en
+              el que se ven los dos menús a la vez, o ninguno.
+
               OJO con dónde termina ese `overflow-x-auto`: tiene que envolver
               los enlaces y nada más. El desplegable de administración va
               afuera, porque `overflow-x: auto` con `overflow-y: visible`
@@ -256,7 +266,7 @@ export function AppLayout() {
               responde, el panel se monta, y no se ve nada. */}
           <nav
             aria-label="Principal"
-            className="hidden min-w-0 flex-1 items-center gap-0.5 lg:flex"
+            className="hidden min-w-0 flex-1 items-center gap-0.5 min-[1100px]:flex"
           >
             <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
               {enlaces.map((e) => (
@@ -278,7 +288,7 @@ export function AppLayout() {
               <Link
                 to="/perfil"
                 onClick={cerrarMenu}
-                className="hover:bg-muted hidden items-center gap-2 rounded-lg px-2 py-1 sm:flex"
+                className="hover:bg-muted hidden min-w-0 items-center gap-2 rounded-lg px-2 py-1 sm:flex"
                 title={`${user.nombre} ${user.apellido} — ${esAdmin ? "Administración" : "Docente"}`}
               >
                 <Avatar
@@ -286,18 +296,40 @@ export function AppLayout() {
                   nombre={user.nombre}
                   apellido={user.apellido}
                 />
-                {/* El nombre completo solo cuando sobra ancho de verdad. En un
-                    portátil de 1024 o 1280, con el menú de Admin desplegado,
-                    estas dos líneas de texto eran justo lo que no entraba. La
-                    inicial sigue estando, y el nombre en el `title`. */}
-                <span className="hidden text-left leading-tight 2xl:block">
-                  <span className="block text-sm font-medium">
-                    {user.nombre} {user.apellido}
+                {/* El nombre escrito es SOLO para el docente, y solo cuando
+                    sobra ancho de verdad. El Admin ve nada más el redondel:
+                    su barra suma Aprobación y el grupo Administración, y
+                    medida a 1536px no le queda lugar para este bloque —con
+                    los enlaces en una sola línea el nombre entra en 80px, y
+                    ni "Ada Lovelace" mide tan poco—. Cuando se lo mostrábamos
+                    igual, el que cedía era el `nav`: "Horario Admins" se
+                    partía en dos renglones y el header pasaba de 57 a 73px.
+                    No es una pérdida para el Admin: entre 1024 y 1535px ya
+                    venía viendo solo el redondel, y el nombre completo está
+                    en el `title` de acá y en /perfil.
+
+                    Ojo con el ancho: NO depende de la pantalla. El contenedor
+                    es `max-w-6xl`, así que de 1152px en adelante da igual
+                    tener 1536 o 1920 —subir el punto de corte no consigue ni
+                    un píxel más—. Lo único que lo mueve es cuántos enlaces
+                    hay al lado.
+
+                    Para el docente, `max-w-64` + `truncate`: sin tope el
+                    bloque crece sin límite, el `nav` de al lado (que es quien
+                    tiene `flex-1`) se queda sin ancho y los enlaces de TODOS
+                    terminan detrás de una barra de desplazamiento para
+                    mostrar entero el apellido de UNO. Su presupuesto medido
+                    es 322px; 256 deja margen. */}
+                {!esAdmin && (
+                  <span className="hidden max-w-64 min-w-0 text-left leading-tight 2xl:block">
+                    <span className="block truncate text-sm font-medium">
+                      {user.nombre} {user.apellido}
+                    </span>
+                    <span className="text-muted-foreground block truncate text-xs">
+                      Docente
+                    </span>
                   </span>
-                  <span className="text-muted-foreground block text-xs">
-                    {esAdmin ? "Administración" : "Docente"}
-                  </span>
-                </span>
+                )}
                 <span className="sr-only">Mi cuenta</span>
               </Link>
             )}
@@ -308,7 +340,7 @@ export function AppLayout() {
             <Button
               variant="outline"
               size="sm"
-              className="hidden lg:inline-flex"
+              className="hidden min-[1100px]:inline-flex"
               onClick={() => {
                 cerrarMenu()
                 navigate("/notificaciones?soporte=nuevo")
@@ -323,7 +355,7 @@ export function AppLayout() {
             <Button
               variant="outline"
               size="sm"
-              className="hidden lg:inline-flex"
+              className="hidden min-[1100px]:inline-flex"
               onClick={handleLogout}
             >
               Salir
@@ -334,7 +366,7 @@ export function AppLayout() {
             <Button
               variant="outline"
               size="sm"
-              className="h-11 px-4 lg:hidden"
+              className="h-11 px-4 min-[1100px]:hidden"
               aria-expanded={menuAbierto}
               aria-controls="menu-principal"
               onClick={() => setMenuAbierto((abierto) => !abierto)}
@@ -364,7 +396,7 @@ export function AppLayout() {
         {menuAbierto && (
           <nav
             id="menu-principal"
-            className="border-border grid gap-0.5 border-t px-4 py-2 lg:hidden"
+            className="border-border grid gap-0.5 border-t px-4 py-2 min-[1100px]:hidden"
           >
             {enlaces.map((e) => (
               <NavLink
