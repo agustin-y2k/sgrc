@@ -13,10 +13,22 @@ vi.mock("@/features/auth/AuthContext")
  * desde jsdom.
  */
 vi.mock("@/features/auth/BotonGoogle", () => ({
-  BotonGoogle: ({ onCredential }: { onCredential: (c: string) => void }) => (
-    <button type="button" onClick={() => onCredential("el-id-token")}>
-      Entrar con Google
-    </button>
+  // Los children son la casilla de mantener la sesión: el componente real la
+  // dibuja adentro para que se esconda junto con el botón, así que el doble
+  // tiene que hacer lo mismo o los tests de la casilla no verían nada.
+  BotonGoogle: ({
+    onCredential,
+    children,
+  }: {
+    onCredential: (c: string) => void
+    children?: React.ReactNode
+  }) => (
+    <>
+      {children}
+      <button type="button" onClick={() => onCredential("el-id-token")}>
+        Entrar con Google
+      </button>
+    </>
   ),
 }))
 
@@ -78,9 +90,9 @@ describe("LoginPage — ingreso con Google", () => {
     expect(await screen.findByText("Home")).toBeInTheDocument()
   })
 
-  // La casilla es una sola en la pantalla y vale para los dos caminos: el
-  // botón de Google vive dentro del mismo formulario.
-  it("respeta la casilla de mantener la sesión iniciada", async () => {
+  // Hay dos casillas, una por camino de ingreso. La que manda acá es la que
+  // está pegada al botón de Google.
+  it("respeta la casilla de mantener la sesión iniciada de Google", async () => {
     const loginConGoogle = vi
       .fn<Ingreso>()
       .mockResolvedValue({ debeCambiarPassword: false })
@@ -88,10 +100,35 @@ describe("LoginPage — ingreso con Google", () => {
     const user = userEvent.setup()
     renderLoginPage()
 
-    await user.click(screen.getByLabelText("Mantener la sesión iniciada"))
+    await user.click(screen.getByLabelText("Mantener la sesión iniciada con Google"))
     await user.click(screen.getByRole("button", { name: "Entrar con Google" }))
 
     await waitFor(() => expect(loginConGoogle).toHaveBeenCalledWith("el-id-token", true))
+  })
+
+  // Las dos casillas son excluyentes: marcar una desmarca la otra. Lo que se
+  // afirma acá es la consecuencia, que es la que se puede sentir — con la de
+  // contraseña marcada, entrar con Google da la sesión CORTA.
+  it("la casilla de contraseña no alarga la sesión de Google", async () => {
+    const loginConGoogle = vi
+      .fn<Ingreso>()
+      .mockResolvedValue({ debeCambiarPassword: false })
+    mockAuth(loginConGoogle)
+    const user = userEvent.setup()
+    renderLoginPage()
+
+    const deContraseña = screen.getByLabelText("Mantener la sesión iniciada")
+    const deGoogle = screen.getByLabelText("Mantener la sesión iniciada con Google")
+
+    await user.click(deGoogle)
+    expect(deGoogle).toBeChecked()
+
+    await user.click(deContraseña)
+    expect(deContraseña).toBeChecked()
+    expect(deGoogle).not.toBeChecked()
+
+    await user.click(screen.getByRole("button", { name: "Entrar con Google" }))
+    await waitFor(() => expect(loginConGoogle).toHaveBeenCalledWith("el-id-token", false))
   })
 
   // <ProtectedRoute> guarda la ruta que se quiso abrir sin sesión; entrar
