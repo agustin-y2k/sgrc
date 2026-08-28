@@ -25,9 +25,9 @@ const DOCENTE: Usuario = {
   debeCambiarPassword: false,
 }
 
-function montar() {
+function montar(usuario = DOCENTE) {
   vi.mocked(useAuth).mockReturnValue({
-    user: DOCENTE,
+    user: usuario,
     isLoading: false,
     errorDeSesion: null,
     motivoDeCierre: null,
@@ -48,12 +48,12 @@ function montar() {
 
 describe("PerfilPage", () => {
   beforeEach(() => {
-    vi.mocked(reservasApi.misMaterias).mockResolvedValue({ data: [] })
+    vi.mocked(reservasApi.misMateriasAsignadas).mockResolvedValue({ data: [] })
     vi.mocked(perfilApi.misPedidos).mockResolvedValue({ data: [] })
   })
 
   it("muestra quién sos y las materias que das", async () => {
-    vi.mocked(reservasApi.misMaterias).mockResolvedValue({
+    vi.mocked(reservasApi.misMateriasAsignadas).mockResolvedValue({
       data: [
         {
           materiaId: "m1",
@@ -111,5 +111,26 @@ describe("PerfilPage", () => {
   it("la contraseña se cambia desde acá", async () => {
     montar()
     expect(await screen.findByText("Cambiar mi contraseña")).toBeInTheDocument()
+  })
+
+  /**
+   * Un Admin no está asignado a ninguna materia y aun así puede reservar en
+   * todas. El vacío del docente —"no vas a poder reservar computadoras"— le
+   * decía lo contrario de lo que pasa.
+   *
+   * Antes ni siquiera llegaba a este vacío: la pantalla pedía las materias
+   * RESERVABLES, así que a un Admin le listaba las ocho del sistema bajo el
+   * título "Las materias que das".
+   */
+  it("a un Admin sin asignaciones no le dice que no puede reservar", async () => {
+    vi.mocked(reservasApi.misMateriasAsignadas).mockResolvedValue({ data: [] })
+    montar({ ...DOCENTE, rol: "ADMIN" })
+
+    expect(
+      await screen.findByText(/Como administrador podés reservar en cualquiera/)
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/no vas a poder reservar computadoras/)
+    ).not.toBeInTheDocument()
   })
 })

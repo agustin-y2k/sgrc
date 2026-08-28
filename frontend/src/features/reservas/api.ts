@@ -26,6 +26,18 @@ export function misMaterias() {
 }
 
 /**
+ * En qué materias está ASIGNADA la persona. Para un docente es lo mismo que
+ * misMaterias(); para un Admin no, porque puede reservar en todas y
+ * normalmente no dicta ninguna. Es la que va donde se dice "las materias que
+ * das", no donde se elige para qué materia reservar.
+ */
+export function misMateriasAsignadas() {
+  return apiFetch<RespuestaLista<MateriaReservable>>(
+    "/api/academic/mis-materias?asignadas=true"
+  )
+}
+
+/**
  * RF-04.2 y RF-04.11 — las dos mitades de la franja: los equipos libres para
  * tildar y los que ya tiene alguien, con quién los tiene.
  */
@@ -165,6 +177,12 @@ export function entregarSuelta(req: {
   motivo?: string
   /** ISO 8601. Opcional: "vengo en un rato" es una respuesta válida. */
   devolucionEstimada?: string
+  /**
+   * El equipo NO está disponible y sale igual, camino al técnico. Es el único
+   * modo de sacar del laboratorio algo en mantenimiento o fuera de servicio,
+   * y obliga a mandar `motivo`.
+   */
+  salidaAReparacion?: boolean
 }) {
   return apiFetch<ResultadoEntrega>("/api/reservation/prestamos", {
     method: "POST",

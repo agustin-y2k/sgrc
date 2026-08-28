@@ -14,6 +14,7 @@ import type { Carro, Equipo } from "@/features/inventory/types"
 import * as reservasApi from "@/features/reservas/api"
 import { cruzaMedianoche, hoyISO, type ResultadoBloqueo } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
+import { MINIMO_PARA_BUSCAR, sinTildes } from "@/lib/texto"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { contar } from "@/lib/plural"
 
@@ -40,6 +41,7 @@ export function BloquearEquiposPage() {
   const [horaFin, setHoraFin] = useState("")
   const [motivo, setMotivo] = useState("")
   const [seleccionadas, setSeleccionadas] = useState<string[]>([])
+  const [busqueda, setBusqueda] = useState("")
   const [confirmando, setConfirmando] = useState(false)
   const [resultado, setResultado] = useState<ResultadoBloqueo | null>(null)
 
@@ -113,6 +115,32 @@ export function BloquearEquiposPage() {
     setSeleccionadas((antes) =>
       tildada ? [...antes, equipoId] : antes.filter((id) => id !== equipoId)
     )
+  }
+
+  /**
+   * Marcar o desmarcar un carro entero: tomar un carro para una evaluación es
+   * el caso para el que existe esta pantalla, y hacerlo de a una son treinta
+   * clics.
+   *
+   * Solo lo bloqueable: las que no están DISPONIBLE no se pueden tildar de a
+   * una, y meterlas por acá haría que el backend rechace el bloqueo ENTERO.
+   */
+  function alternarCarro(equipos: Equipo[], marcar: boolean) {
+    setResultado(null)
+    setConfirmando(false)
+    const ids = equipos.filter(esBloqueable).map((equipo) => equipo.id)
+    setSeleccionadas((antes) =>
+      marcar
+        ? [...antes, ...ids.filter((id) => !antes.includes(id))]
+        : antes.filter((id) => !ids.includes(id))
+    )
+  }
+
+  // Busca en el nombre del equipo y en el del carro.
+  const filtro = sinTildes(busqueda.trim())
+  function coincide(equipo: Equipo, carro: Carro): boolean {
+    if (!filtro) return true
+    return sinTildes(`${equipo.etiqueta} ${carro.nombre}`).includes(filtro)
   }
 
   function confirmar() {
@@ -236,14 +264,44 @@ export function BloquearEquiposPage() {
         </p>
       )}
 
+      {/* Tres carros son más de ochenta casillas: sin buscador, encontrar "la
+          12 del Carro 2" es scrollear hasta darle. */}
+      {todasLasEquipos.length >= MINIMO_PARA_BUSCAR && (
+        <Input
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          aria-label="Buscar un equipo"
+          className="mb-3"
+          placeholder="Buscar — ej.: PC 12, Carro 2"
+        />
+      )}
+
       <div className="grid gap-4">
         {inventario.map(({ carro, equipos }) => {
-          const activas = equipos.filter((equipo) => !equipo.dadoDeBaja)
+          const activas = equipos.filter(
+            (equipo) => !equipo.dadoDeBaja && coincide(equipo, carro)
+          )
           if (activas.length === 0) return null
+          const bloqueables = activas.filter(esBloqueable)
+          const todasMarcadas =
+            bloqueables.length > 0 &&
+            bloqueables.every((equipo) => seleccionadas.includes(equipo.id))
 
           return (
             <fieldset key={carro.id} className="grid gap-2">
-              <legend className="mb-1 text-sm font-medium">{carro.nombre}</legend>
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <legend className="text-sm font-medium">{carro.nombre}</legend>
+                {bloqueables.length > 1 && (
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground text-xs underline"
+                    onClick={() => alternarCarro(activas, !todasMarcadas)}
+                  >
+                    {todasMarcadas ? "Desmarcar" : "Marcar"}{" "}
+                    {contar(bloqueables.length, "equipo")}
+                  </button>
+                )}
+              </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {activas.map((equipo) => {
                   const id = `equipo-${equipo.id}`
@@ -263,6 +321,9 @@ export function BloquearEquiposPage() {
                         disabled={!bloqueable}
                         checked={seleccionadas.includes(equipo.id)}
                         onCheckedChange={(v) => alternar(equipo.id, v === true)}
+                        // "PC 12" hay uno por carro, y quien usa un lector de
+                        // pantalla no tiene el título de arriba a la vista.
+                        aria-label={`${equipo.etiqueta} (${carro.nombre})`}
                       />
                       <div className="grid gap-0.5">
                         <Label htmlFor={id} className="cursor-pointer">
@@ -290,11 +351,23 @@ export function BloquearEquiposPage() {
 
       <div className="mt-4 grid gap-3">
         {seleccionadas.length > 0 && (
-          <p className="text-sm">
-            {seleccionadas.length} equipo{seleccionadas.length === 1 ? "" : "s"}{" "}
-            seleccionado
-            {seleccionadas.length === 1 ? "" : "s"}.
-          </p>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <p className="text-sm">
+              {contar(seleccionadas.length, "equipo")} seleccionado
+              {seleccionadas.length === 1 ? "" : "s"}.
+            </p>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground text-xs underline"
+              onClick={() => {
+                setResultado(null)
+                setConfirmando(false)
+                setSeleccionadas([])
+              }}
+            >
+              Limpiar la selección
+            </button>
+          </div>
         )}
 
         {!confirmando && (

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { PRESTAMOS_KEY } from "@/features/admin/entregas/compartido"
+import { nombreDeEquipo, PRESTAMOS_KEY } from "@/features/admin/entregas/compartido"
 import * as reservasApi from "@/features/reservas/api"
 import { hoyISO, type ReservaDetallada } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
@@ -30,8 +30,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
     queryKey: ["reservas", "del-dia", hoy],
     // pageSize al máximo: el listado pagina de a 50 por defecto, y un día con
     // ocho clases de ocho máquinas son 64 reservas.
-    queryFn: () =>
-      reservasApi.listarReservas({ desde: hoy, hasta: hoy, pageSize: 200 }),
+    queryFn: () => reservasApi.listarReservas({ desde: hoy, hasta: hoy, pageSize: 200 }),
   })
 
   const entregar = useMutation({
@@ -127,7 +126,10 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
           const primera = reservas[0]
           const todasMarcadas = reservas.every((r) => marcadas.has(r.id))
           return (
-            <div key={primera.reservaGrupoId ?? primera.id} className="grid gap-2 rounded-md border p-3">
+            <div
+              key={primera.reservaGrupoId ?? primera.id}
+              className="grid gap-2 rounded-md border p-3"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-medium">
@@ -135,7 +137,8 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                     {primera.cursoNombre && ` · ${primera.cursoNombre}`}
                   </p>
                   <p className="text-muted-foreground text-sm">
-                    {primera.horaInicio}–{primera.horaFin} · {primera.nombreDocenteSnapshot}
+                    {primera.horaInicio}–{primera.horaFin} ·{" "}
+                    {primera.nombreDocenteSnapshot}
                   </p>
                 </div>
                 <button
@@ -161,7 +164,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                         setMarcadas(nueva)
                       }}
                     />
-                    {r.etiqueta}
+                    {nombreDeEquipo(r)}
                     {/* El carro solo desambigua: "PC 2" existe en cada uno.
                         Un equipo suelto no tiene, y sin esta guarda el rótulo
                         quedaba en "Proyector 1 ()" — ver RF-03.17. */}
@@ -189,8 +192,8 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                   reservó y a él se le reclama. Esto es solo quién pasó por el
                   mostrador, y por eso se puede dejar vacío. */}
               <p className="text-muted-foreground text-xs">
-                Las máquinas quedan igual a cargo del docente de la reserva.
-                Dejalo vacío si no hace falta anotar quién vino a buscarlas.
+                Las máquinas quedan igual a cargo del docente de la reserva. Dejalo vacío
+                si no hace falta anotar quién vino a buscarlas.
               </p>
             </div>
             <div>

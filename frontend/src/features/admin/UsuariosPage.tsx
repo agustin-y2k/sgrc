@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select } from "@/components/ui/select"
 import { useAuth } from "@/features/auth/AuthContext"
+import { LoQueDeclaro } from "@/features/auth/LoQueDeclaro"
 import type { Estado, Usuario } from "@/features/auth/types"
 import { AltaDeAdmin } from "@/features/admin/AltaDeAdmin"
 import * as adminApi from "@/features/admin/api"
@@ -217,18 +218,40 @@ export function UsuariosPage() {
                   <p className="text-muted-foreground text-sm break-all">{u.email}</p>
                 </div>
 
+                {/* Lo que declaró al registrarse, con el mismo detalle que
+                    en Aprobación. Este atajo dejaba aprobar sin verlo: el
+                    botón decide sobre una persona de la que no se mostraba
+                    nada más que el nombre, y el curso y la materia que pidió
+                    son justamente lo que hay que mirar antes. */}
+                {u.estado === "PENDIENTE" && <LoQueDeclaro usuario={u} />}
+
                 {!confirmandoEste && (
                   <div className="flex flex-wrap gap-2">
                     {u.estado === "PENDIENTE" && (
-                      <Button
-                        size="sm"
-                        disabled={trabajando}
-                        onClick={() =>
-                          cambiarEstado.mutate({ id: u.id, estado: "APROBADA" })
-                        }
-                      >
-                        Aprobar
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          disabled={trabajando}
+                          onClick={() =>
+                            cambiarEstado.mutate({ id: u.id, estado: "APROBADA" })
+                          }
+                        >
+                          Aprobar
+                        </Button>
+                        {/* Rechazar estaba solo en Aprobación. Que un estado
+                            ofrezca la mitad de sus salidas obliga a irse a
+                            otra pantalla para terminar lo que se empezó acá. */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={trabajando}
+                          onClick={() =>
+                            cambiarEstado.mutate({ id: u.id, estado: "RECHAZADA" })
+                          }
+                        >
+                          Rechazar
+                        </Button>
+                      </>
                     )}
                     {u.estado === "APROBADA" && (
                       <>

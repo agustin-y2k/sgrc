@@ -182,11 +182,14 @@ func (s *Service) ResolverPedido(ctx context.Context, pedidoID, adminID string, 
 	return p, nil
 }
 
-func (s *Service) ListarPedidos(ctx context.Context, soloPendientes bool) ([]*domain.PedidoDeMateria, error) {
+// ListarPedidos y ListarMisPedidos devuelven PedidoDetallado y no el pedido
+// pelado porque las dos pantallas que los muestran necesitan NOMBRAR lo que se
+// pidió, y el pedido guarda solo `materia_id`.
+func (s *Service) ListarPedidos(ctx context.Context, soloPendientes bool) ([]*PedidoDetallado, error) {
 	return s.repo.ListarPedidos(ctx, soloPendientes)
 }
 
-func (s *Service) ListarMisPedidos(ctx context.Context, usuarioID string) ([]*domain.PedidoDeMateria, error) {
+func (s *Service) ListarMisPedidos(ctx context.Context, usuarioID string) ([]*PedidoDetallado, error) {
 	return s.repo.ListarPedidosDeUsuario(ctx, usuarioID)
 }
 

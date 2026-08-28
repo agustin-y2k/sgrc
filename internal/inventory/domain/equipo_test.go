@@ -45,6 +45,8 @@ func TestPuedeTransicionarA_TodasLasCombinaciones(t *testing.T) {
 		{EstadoDisponible, EstadoFueraDeServicio}:      true,
 		{EstadoEnMantenimiento, EstadoDisponible}:      true,
 		{EstadoEnMantenimiento, EstadoFueraDeServicio}: true,
+		{EstadoFueraDeServicio, EstadoDisponible}:      true,
+		{EstadoFueraDeServicio, EstadoEnMantenimiento}: true,
 	}
 
 	for _, desde := range estados {
@@ -58,12 +60,19 @@ func TestPuedeTransicionarA_TodasLasCombinaciones(t *testing.T) {
 	}
 }
 
-func TestFueraDeServicio_EsTerminal(t *testing.T) {
-	destinos := []EstadoEquipo{EstadoDisponible, EstadoEnMantenimiento, EstadoFueraDeServicio}
-	for _, destino := range destinos {
-		if EstadoFueraDeServicio.PuedeTransicionarA(destino) {
-			t.Errorf("FUERA_DE_SERVICIO -> %s no debería estar permitido", destino)
+// El caso real que lo destapó: un equipo pasó a FUERA_DE_SERVICIO porque no
+// tenía batería, apareció una batería, y no había forma de devolverlo a
+// circulación — el botón existía y el servidor lo rechazaba siempre. Lo
+// irreversible es dar de baja, no este estado.
+func TestFueraDeServicio_VuelveACirculacion(t *testing.T) {
+	for _, destino := range []EstadoEquipo{EstadoDisponible, EstadoEnMantenimiento} {
+		if !EstadoFueraDeServicio.PuedeTransicionarA(destino) {
+			t.Errorf("FUERA_DE_SERVICIO -> %s debería estar permitido: un equipo se arregla", destino)
 		}
+	}
+	// Lo único que sigue sin ser una transición es quedarse donde está.
+	if EstadoFueraDeServicio.PuedeTransicionarA(EstadoFueraDeServicio) {
+		t.Error("FUERA_DE_SERVICIO -> FUERA_DE_SERVICIO no es un cambio de estado")
 	}
 }
 
@@ -150,17 +159,35 @@ func TestCambiarEstadoEquipo_TransicionValida_OK(t *testing.T) {
 	}
 }
 
-func TestCambiarEstadoEquipo_DesdeFueraDeServicio_Rechazado(t *testing.T) {
+// Un equipo fuera de servicio que se arregla vuelve a circulación: apareció el
+// repuesto y la máquina anda. Antes esto devolvía
+// ErrTransicionEstadoEquipoInvalida y la única salida era darla de baja y
+// cargarla de nuevo, perdiendo su historial.
+func TestCambiarEstadoEquipo_DesdeFueraDeServicio_Vuelve(t *testing.T) {
 	equipo, _ := NuevoEquipoDeCarro("id1", "carro1", 1, "5CD1234ABC", false, time.Now())
 	equipo.Estado = EstadoFueraDeServicio
 
-	err := equipo.CambiarEstado(EstadoDisponible)
-
-	if !errors.Is(err, ErrTransicionEstadoEquipoInvalida) {
-		t.Fatalf("esperaba ErrTransicionEstadoEquipoInvalida, obtuve %v", err)
+	if err := equipo.CambiarEstado(EstadoDisponible); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
 	}
-	if equipo.Estado != EstadoFueraDeServicio {
-		t.Error("el estado no debería haber cambiado")
+	if equipo.Estado != EstadoDisponible {
+		t.Errorf("estado final = %s, esperaba DISPONIBLE", equipo.Estado)
+	}
+}
+
+// Repetir el estado que ya se tiene sigue siendo un error, en los tres: no es
+// un cambio, y dejarlo pasar convertiría un doble clic en una cascada de
+// cancelaciones repetida.
+func TestCambiarEstadoEquipo_AlMismoEstado_Rechazado(t *testing.T) {
+	for _, estado := range []EstadoEquipo{EstadoDisponible, EstadoEnMantenimiento, EstadoFueraDeServicio} {
+		equipo, _ := NuevoEquipoDeCarro("id1", "carro1", 1, "5CD1234ABC", false, time.Now())
+		equipo.Estado = estado
+
+		err := equipo.CambiarEstado(estado)
+
+		if !errors.Is(err, ErrTransicionEstadoEquipoInvalida) {
+			t.Errorf("%s -> %s: esperaba ErrTransicionEstadoEquipoInvalida, obtuve %v", estado, estado, err)
+		}
 	}
 }
 
@@ -351,5 +378,30 @@ func TestNuevoEquipoSuelto_NumeroDeSerieDemasiadoLargo(t *testing.T) {
 func TestNuevoEquipoDeCarro_SigueExigiendoNumeroDeSerie(t *testing.T) {
 	if _, err := NuevoEquipoDeCarro("eq-1", "carro-1", 3, "", false, time.Now()); !errors.Is(err, ErrNumeroSerieInvalido) {
 		t.Fatalf("esperaba ErrNumeroSerieInvalido, obtuve %v", err)
+	}
+}
+
+// TestEstadoEquipo_Legible fija los textos que ve un docente. El valor crudo
+// del enum llegaba tal cual al buzón y al correo: "el equipo pasó a
+// FUERA_DE_SERVICIO" en un aviso que además trae una mala noticia.
+func TestEstadoEquipo_Legible(t *testing.T) {
+	casos := map[EstadoEquipo]string{
+		EstadoDisponible:      "disponible",
+		EstadoEnMantenimiento: "en mantenimiento",
+		EstadoFueraDeServicio: "fuera de servicio",
+	}
+	for estado, esperado := range casos {
+		if obtenido := estado.Legible(); obtenido != esperado {
+			t.Errorf("%s: esperaba %q, obtuve %q", estado, esperado, obtenido)
+		}
+	}
+
+	// La frase donde se usa tiene que poder leerse con los tres. "pasó a en
+	// mantenimiento" es lo que obliga a que el verbo sea "quedó".
+	for estado := range casos {
+		frase := "el equipo quedó " + estado.Legible()
+		if strings.Contains(frase, "_") || strings.ToUpper(frase) == frase {
+			t.Errorf("la frase quedó con el enum adentro: %q", frase)
+		}
 	}
 }

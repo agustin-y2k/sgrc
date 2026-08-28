@@ -333,3 +333,74 @@ describe("SelectorDeEquipos, tramos de preferencia", () => {
     expect(screen.queryByText("Recomendados para esta materia")).not.toBeInTheDocument()
   })
 })
+
+/**
+ * Con tres carros cargados esta lista pasa las ochenta casillas. Sin buscador,
+ * encontrar "la 12 del Carro 2" es scrollear hasta darle, y quien arma la
+ * reserva suele tener la clase por empezar.
+ */
+describe("cuando la lista es larga", () => {
+  function muchos(): EquipoDisponible[] {
+    return Array.from({ length: 12 }, (_, i) =>
+      libre({
+        equipoId: `pc${i + 1}`,
+        identificador: i + 1,
+        etiqueta: `PC ${i + 1}`,
+        // Tamaños distintos a propósito: así el botón de cada carro tiene
+        // su propio nombre y el test no depende del orden en pantalla.
+        carroNombre: i < 5 ? "Carro 1" : "Carro EDUTEC",
+        carroId: i < 5 ? "c1" : "c2",
+      })
+    )
+  }
+
+  it("filtra por nombre de equipo y por carro, sin que importen las tildes", async () => {
+    const user = userEvent.setup()
+    renderSelector({ data: muchos() })
+
+    const buscador = await screen.findByLabelText("Buscar una computadora")
+    await user.type(buscador, "edutec")
+
+    expect(screen.queryByLabelText("PC 1 (Carro 1)")).not.toBeInTheDocument()
+    expect(screen.getByLabelText("PC 6 (Carro EDUTEC)")).toBeInTheDocument()
+  })
+
+  it("marca un carro entero de una", async () => {
+    const user = userEvent.setup()
+    const { onCambio } = renderSelector({ data: muchos() })
+
+    await user.click(await screen.findByRole("button", { name: "Marcar 5 equipos" }))
+
+    // Los cinco del Carro 1, ninguno del otro.
+    expect(onCambio).toHaveBeenCalledWith(["pc1", "pc2", "pc3", "pc4", "pc5"])
+  })
+
+  /**
+   * Marcar un carro con una búsqueda puesta tiene que operar sobre lo que se
+   * está VIENDO: es lo que espera quien acaba de escribir "EDUTEC".
+   */
+  it("al marcar el carro respeta lo que dejó ver la búsqueda", async () => {
+    const user = userEvent.setup()
+    const { onCambio } = renderSelector({ data: muchos() })
+
+    await user.type(await screen.findByLabelText("Buscar una computadora"), "edutec")
+    await user.click(screen.getByRole("button", { name: "Marcar 7 equipos" }))
+
+    expect(onCambio).toHaveBeenCalledWith([
+      "pc6",
+      "pc7",
+      "pc8",
+      "pc9",
+      "pc10",
+      "pc11",
+      "pc12",
+    ])
+  })
+
+  it("no muestra buscador cuando hay pocos equipos", async () => {
+    renderSelector({ data: [libre()] })
+
+    expect(await screen.findByLabelText("PC 1 (Carro 1)")).toBeInTheDocument()
+    expect(screen.queryByLabelText("Buscar una computadora")).not.toBeInTheDocument()
+  })
+})

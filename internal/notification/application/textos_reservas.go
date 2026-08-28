@@ -17,15 +17,70 @@ func horaDelDia(d time.Duration) string {
 }
 
 // listaDeEquipos enumera "PC 1, PC 2 y Proyector Epson".
+// listaDeEquipos enumera equipos para leer dentro de una frase: "PC 1, PC 2 y
+// PC 3 del Carro EDUTEC".
+//
+// Las etiquetas vienen con el carro adentro ("PC 1 del Carro EDUTEC") porque
+// el número del zócalo se repite entre carros y un aviso que dice solo "PC 1"
+// no le permite a nadie saber a dónde ir. Pero repetirlo en cada elemento hace
+// ilegible el caso normal, que es una clase entera del mismo carro: "PC 1 del
+// Carro 1, PC 5 del Carro 1, PC 11 del Carro 1, …" ocho veces.
+//
+// Por eso, si TODOS comparten el mismo carro, se dice una sola vez al final.
+// Si están mezclados, cada uno se queda con el suyo — ahí la repetición es
+// justamente la información.
 func listaDeEquipos(nombres []string) string {
 	switch len(nombres) {
 	case 0:
 		return ""
 	case 1:
 		return nombres[0]
-	default:
-		return strings.Join(nombres[:len(nombres)-1], ", ") + " y " + nombres[len(nombres)-1]
 	}
+
+	cuerpo, comun := factorizarCarro(nombres)
+	lista := strings.Join(cuerpo[:len(cuerpo)-1], ", ") + " y " + cuerpo[len(cuerpo)-1]
+	return lista + comun
+}
+
+// factorizarCarro saca el carro repetido al final. Devuelve las etiquetas ya
+// recortadas y el sufijo común (con su espacio adelante), o los nombres tal
+// cual y "" si no hay uno que valga la pena factorizar.
+//
+// Se calcula por sufijo común más largo y no partiendo por " del ": un carro
+// puede llamarse "Carro del Fondo", y ahí partir por la primera aparición
+// dejaría "PC 1 del Carro" + "del Fondo".
+func factorizarCarro(nombres []string) ([]string, string) {
+	comun := sufijoComun(nombres)
+	// Tiene que ser un carro entero —empieza en " del "— y tiene que quedar
+	// algo antes en cada etiqueta: si un equipo se llamara igual que el
+	// sufijo, recortarlo lo dejaría vacío.
+	if !strings.HasPrefix(comun, " del ") {
+		return nombres, ""
+	}
+	recortados := make([]string, len(nombres))
+	for i, n := range nombres {
+		recortados[i] = strings.TrimSuffix(n, comun)
+		if recortados[i] == "" {
+			return nombres, ""
+		}
+	}
+	return recortados, comun
+}
+
+// Recorta de a un byte y no de a una runa: alcanza, porque el sufijo solo se
+// acepta si empieza en " del " —ASCII— y eso garantiza que el corte cayó en un
+// borde de runa. Un carro con acento en el nombre no lo rompe.
+func sufijoComun(nombres []string) string {
+	comun := nombres[0]
+	for _, n := range nombres[1:] {
+		for !strings.HasSuffix(n, comun) {
+			comun = comun[1:]
+			if comun == "" {
+				return ""
+			}
+		}
+	}
+	return comun
 }
 
 // ══════════════════════════════════════════════════════════════════

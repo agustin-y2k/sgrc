@@ -663,14 +663,40 @@
   <h3>Los tres estados de una computadora</h3>
   <ul class="simple">
     <li><b>Disponible</b> — se puede reservar y entregar.</li>
-    <li><b>En mantenimiento</b> — está siendo reparada. Nadie la puede reservar.</li>
-    <li><b>Fuera de servicio</b> — no anda y no se sabe cuándo va a andar.</li>
+    <li><b>En mantenimiento</b> — está siendo reparada. Nadie la puede reservar
+      <b>ni retirar</b>: sigue en el laboratorio y no se le da a nadie.</li>
+    <li><b>Fuera de servicio</b> — no anda y no se sabe cuándo va a andar. Tampoco
+      se reserva ni se entrega.</li>
   </ul>
 
   <p>
     El estado se cambia con las flechas <span class="boton">→ En mantenimiento</span>
-    y <span class="boton">→ Fuera de servicio</span> de cada equipo.
+    y <span class="boton">→ Fuera de servicio</span> de cada equipo. Vale igual para
+    los <b>otros equipos</b>: un proyector también se rompe, y pasarlo a mantenimiento
+    no es lo mismo que darlo de baja — la baja lo saca del inventario y libera su
+    nombre.
   </p>
+
+  <div class="nota">
+    <span class="titulo">Se puede ir y volver</span>
+    Los tres estados van en cualquier dirección: si una computadora que estaba
+    <b>fuera de servicio</b> se arregla —le conseguiste la batería, la revisó el
+    técnico—, la pasás a <b>Disponible</b> y vuelve a circular. Lo único que no tiene
+    vuelta es <span class="boton">Dar de baja</span>, que la saca del inventario.
+    <br><br>
+    Lo que <b>no</b> vuelve solo son las reservas que se cancelaron mientras estuvo
+    fuera de circulación: si el docente todavía la necesita, tiene que reservar de
+    nuevo.
+  </div>
+
+  <div class="ojo">
+    <span class="titulo">¿Y si el técnico se la lleva?</span>
+    Una máquina en mantenimiento o fuera de servicio no aparece en
+    <b>Entregar sin reserva</b>, a propósito. Para que salga del laboratorio hay otro
+    botón en Entregas: <span class="boton">Sacar un equipo a reparación</span>. Ahí sí
+    aparece, y te pide que escribas a dónde va — eso es lo que después explica por qué
+    el equipo no está.
+  </div>
 
   <div class="ojo">
     <span class="titulo">Un aviso de falla no cambia el estado solo</span>
@@ -877,13 +903,46 @@
       dónde es: «Secretaría», «Marta (preceptoría)».</li>
     <li>Si querés, poné <b>para qué</b> y <b>cuándo la devuelve</b>. Si no sabés
       cuándo vuelve, dejalo vacío: en ese caso no se le va a reclamar.</li>
-    <li>Tildá los equipos y confirmá.</li>
+    <li>Tildá los equipos y confirmá. Están agrupados por carro, y si hay muchos
+      tenés un buscador arriba de la lista.</li>
   </ol>
 
   <figure>
     <img src="imagenes/admin-08-entregar-sin-reserva.png" alt="Formulario de entrega sin reserva">
     <figcaption>Con el nombre alcanza; lo demás es opcional.</figcaption>
   </figure>
+
+  <div class="nota">
+    <span class="titulo">Solo aparece lo que se puede entregar</span>
+    La lista muestra únicamente las máquinas <b>disponibles</b> que están en el
+    laboratorio. Lo que ya salió figura en «Afuera del laboratorio», y lo que está en
+    mantenimiento o fuera de servicio no se presta — ver abajo.
+  </div>
+
+  <h3>Sacar un equipo a reparación</h3>
+  <p>
+    Cuando una máquina rota se va del laboratorio —se la lleva el técnico, va al
+    service— eso también se anota, pero <b>no es un préstamo</b> y tiene su propio
+    botón, abajo de todo en la pantalla de Entregas:
+    <span class="boton">Sacar un equipo a reparación</span>.
+  </p>
+
+  <ol class="pasos">
+    <li>Antes que nada, pasá el equipo a <b>En mantenimiento</b> o
+      <b>Fuera de servicio</b> desde Gestión del inventario. Acá solo aparecen esos.</li>
+    <li>Escribí <b>quién se lo lleva</b> (el técnico, el service).</li>
+    <li>Escribí <b>a dónde va y por qué</b>. Este no es opcional: dentro de dos meses
+      es lo único que va a explicar por qué el equipo no está.</li>
+    <li>Tildá el equipo y confirmá.</li>
+  </ol>
+
+  <div class="nota">
+    <span class="titulo">Después vuelve como cualquier otro</span>
+    Mientras está afuera figura en «Afuera del laboratorio», igual que un préstamo
+    común, y cuando lo traen se recibe con el mismo botón
+    <span class="boton">Recibir</span>. Lo que <b>no</b> se puede sacar así es un
+    equipo dado de baja: ese ya no es parte del inventario.
+  </div>
 
   <h3>Recibir lo que vuelve</h3>
   <ol class="pasos">

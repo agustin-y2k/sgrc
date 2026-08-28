@@ -137,6 +137,13 @@ func (h *Handler) EditarEquipo(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
+	// Ver el comentario de editarEquipoRequest.Estado: antes esto pasaba con
+	// 200 sin hacer nada.
+	if req.Estado != nil {
+		return fiber.NewError(fiber.StatusBadRequest,
+			"el estado del equipo no se cambia por acá: usá PATCH /api/inventory/equipos/{id}/estado, "+
+				"que es el que cancela las reservas que quedan sin máquina")
+	}
 
 	params := application.EditarEquipoParams{
 		CarroID: req.CarroID, Freezado: req.Freezado, CPU: req.CPU,

@@ -32,6 +32,10 @@ type entregarSueltaRequest struct {
 	// DevolucionEstimada opcional, ISO 8601. Sin ella no se le reclama nada:
 	// "vengo en un rato" es la respuesta honesta.
 	DevolucionEstimada *time.Time `json:"devolucionEstimada,omitempty"`
+	// SalidaAReparacion: este equipo NO está disponible y sale igual, camino
+	// al técnico. Es el único modo de sacar del laboratorio algo que está en
+	// mantenimiento o fuera de servicio, y obliga a completar `motivo`.
+	SalidaAReparacion bool `json:"salidaAReparacion,omitempty"`
 }
 
 type recibirRequest struct {

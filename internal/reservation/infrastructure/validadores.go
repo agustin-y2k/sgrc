@@ -141,6 +141,27 @@ func (v *ValidadorEquipoPostgres) EquipoEstaEnInventario(ctx context.Context, eq
 	return !dadoDeBaja, nil
 }
 
+// CondicionParaEntregar: si el equipo sigue en el inventario y en qué estado
+// de circulación está. Las dos cosas en UNA consulta, porque se pregunta una
+// vez por equipo del lote.
+func (v *ValidadorEquipoPostgres) CondicionParaEntregar(ctx context.Context, equipoID string) (application.CondicionDeEquipo, error) {
+	var dadoDeBaja bool
+	var estado string
+	err := v.pool.QueryRow(ctx,
+		`SELECT dado_de_baja, estado FROM equipo WHERE id = $1`, equipoID,
+	).Scan(&dadoDeBaja, &estado)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.CondicionDeEquipo{}, nil
+		}
+		if esIDInvalido(err) {
+			return application.CondicionDeEquipo{}, application.ErrIDInvalido
+		}
+		return application.CondicionDeEquipo{}, fmt.Errorf("verificando si el equipo puede salir del laboratorio: %w", err)
+	}
+	return application.CondicionDeEquipo{EnInventario: !dadoDeBaja, Estado: estado}, nil
+}
+
 // EtiquetasDeEquipos: cómo se nombra cada equipo, para los avisos de
 // cancelación.
 func (v *ValidadorEquipoPostgres) EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error) {
@@ -150,9 +171,24 @@ func (v *ValidadorEquipoPostgres) EtiquetasDeEquipos(ctx context.Context, equipo
 	}
 
 	// COALESCE en este orden: el nombre manda cuando existe (un proyector), y si
-	// no, el número.
+	// no, el número MÁS el carro.
+	//
+	// El carro no es un adorno: el identificador es el número del zócalo, así
+	// que se repite en cada carro —"PC 4" existe tres veces en una escuela con
+	// tres carros— y un aviso que dice solo "PC 4" no le permite a nadie saber
+	// de qué máquina habla. Se dice "del Carro 1" y no "· Carro 1" porque estas
+	// etiquetas se leen DENTRO de una frase ("Tu reserva del 28/08 (PC 4 del
+	// Carro 1) fue cancelada") y dentro de una lista separada por comas; el
+	// punto medio es para la columna de una tabla, que es donde lo usa la
+	// pantalla de entregas.
+	//
+	// El LEFT JOIN es lo que deja pasar a los equipos sueltos, que no tienen
+	// carro: para ellos el primer COALESCE ya resolvió con el nombre.
 	rows, err := v.pool.Query(ctx,
-		`SELECT id, COALESCE(nombre, 'PC ' || identificador) FROM equipo WHERE id = ANY($1)`, equipoIDs)
+		`SELECT e.id, `+etiquetaConCarroSQL("e", "c")+`
+		   FROM equipo e
+		   LEFT JOIN carro c ON c.id = e.carro_id
+		  WHERE e.id = ANY($1)`, equipoIDs)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido

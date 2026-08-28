@@ -28,6 +28,7 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 
 type fakeRepo struct {
 	pedidos               map[string]*domain.PedidoDeMateria
+	nombresDeUsuario      map[string]string
 	ciclos                map[string]*domain.CicloLectivo
 	cursos                map[string]*domain.Curso
 	materias              map[string]*domain.Materia
@@ -38,10 +39,11 @@ type fakeRepo struct {
 
 func nuevoFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		ciclos:          make(map[string]*domain.CicloLectivo),
-		cursos:          make(map[string]*domain.Curso),
-		materias:        make(map[string]*domain.Materia),
-		docentesMateria: make(map[string]*domain.DocenteMateria),
+		ciclos:           make(map[string]*domain.CicloLectivo),
+		cursos:           make(map[string]*domain.Curso),
+		materias:         make(map[string]*domain.Materia),
+		docentesMateria:  make(map[string]*domain.DocenteMateria),
+		nombresDeUsuario: make(map[string]string),
 	}
 }
 
@@ -591,22 +593,42 @@ func (r *fakeRepo) GuardarPedido(_ context.Context, p *domain.PedidoDeMateria) e
 	return nil
 }
 
-func (r *fakeRepo) ListarPedidos(_ context.Context, soloPendientes bool) ([]*domain.PedidoDeMateria, error) {
-	var out []*domain.PedidoDeMateria
+// detallar hace lo mismo que el LEFT JOIN del repositorio real: le pega el
+// nombre de la materia y el del curso, y los deja vacíos cuando la materia
+// todavía no existe.
+func (r *fakeRepo) detallar(p *domain.PedidoDeMateria) *application.PedidoDetallado {
+	d := &application.PedidoDetallado{Pedido: p}
+	d.DocenteNombre = r.nombresDeUsuario[p.UsuarioID]
+	if p.MateriaID == nil {
+		return d
+	}
+	m, hay := r.materias[*p.MateriaID]
+	if !hay {
+		return d
+	}
+	d.MateriaNombre = m.Nombre
+	if c, hay := r.cursos[m.CursoID]; hay {
+		d.CursoNombre = c.Nombre
+	}
+	return d
+}
+
+func (r *fakeRepo) ListarPedidos(_ context.Context, soloPendientes bool) ([]*application.PedidoDetallado, error) {
+	var out []*application.PedidoDetallado
 	for _, p := range r.pedidos {
 		if soloPendientes && p.Estado != domain.PedidoPendiente {
 			continue
 		}
-		out = append(out, p)
+		out = append(out, r.detallar(p))
 	}
 	return out, nil
 }
 
-func (r *fakeRepo) ListarPedidosDeUsuario(_ context.Context, usuarioID string) ([]*domain.PedidoDeMateria, error) {
-	var out []*domain.PedidoDeMateria
+func (r *fakeRepo) ListarPedidosDeUsuario(_ context.Context, usuarioID string) ([]*application.PedidoDetallado, error) {
+	var out []*application.PedidoDetallado
 	for _, p := range r.pedidos {
 		if p.UsuarioID == usuarioID {
-			out = append(out, p)
+			out = append(out, r.detallar(p))
 		}
 	}
 	return out, nil
@@ -630,4 +652,148 @@ func (r *fakeRepo) TienePedidoAbierto(_ context.Context, usuarioID, materiaID st
 		}
 	}
 	return false, nil
+}
+
+// ── Pedidos para dictar una materia ─────────────────────────────────────
+
+// TestHTTP_ListarPedidos_NombraLaMateriaPedida deja fijado el arreglo de un
+// bug real: el pedido guarda `materia_id` y nada más, así que la respuesta no
+// tenía con qué decir QUÉ se pidió y las dos pantallas que la muestran caían a
+// un texto de relleno ("Una materia existente"). El Admin aprobaba a ciegas.
+//
+// Con una sola materia cargada el bug es invisible, que es por lo que
+// sobrevivió: aparece recién cuando hay varias y dos pedidos distintos se ven
+// idénticos.
+func TestHTTP_ListarPedidos_NombraLaMateriaPedida(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.cursos["cur1"] = &domain.Curso{ID: "cur1", Nombre: "5°A"}
+	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "cur1", Nombre: "Programación"}
+	materiaID := "m1"
+	repo.nombresDeUsuario["docente1"] = "Marisa Colombo"
+	repo.pedidos = map[string]*domain.PedidoDeMateria{
+		"ped1": {
+			ID: "ped1", UsuarioID: "docente1", MateriaID: &materiaID,
+			Motivo: "Tomo el segundo turno", Estado: domain.PedidoPendiente,
+			CreadoEn: relojDeTest(),
+		},
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET", "/api/academic/pedidos-de-materia", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+
+	var cuerpo struct {
+		Data []pedidoResponse `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+		t.Fatalf("no se pudo leer la respuesta: %v", err)
+	}
+	if len(cuerpo.Data) != 1 {
+		t.Fatalf("esperaba 1 pedido, obtuve %d", len(cuerpo.Data))
+	}
+	if cuerpo.Data[0].MateriaNombre != "Programación" {
+		t.Errorf("materiaNombre: esperaba \"Programación\", obtuve %q", cuerpo.Data[0].MateriaNombre)
+	}
+	if cuerpo.Data[0].CursoNombre != "5°A" {
+		t.Errorf("cursoNombre: esperaba \"5°A\", obtuve %q", cuerpo.Data[0].CursoNombre)
+	}
+	// Aprobar es asignar a ESA persona a la materia: sin el nombre, el Admin
+	// decide sobre un pedido que no sabe de quién es.
+	if cuerpo.Data[0].DocenteNombre != "Marisa Colombo" {
+		t.Errorf("docenteNombre: esperaba \"Marisa Colombo\", obtuve %q", cuerpo.Data[0].DocenteNombre)
+	}
+}
+
+// Una materia que todavía no existe no tiene nada que resolver por JOIN: lo
+// pedido es el texto que escribió la persona, y los dos campos nuevos van
+// vacíos para que la pantalla sepa cuál de las dos formas mostrar.
+func TestHTTP_ListarPedidos_MateriaNueva_SinNombreResuelto(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.pedidos = map[string]*domain.PedidoDeMateria{
+		"ped1": {
+			ID: "ped1", UsuarioID: "docente1",
+			CursoSolicitado: "6°A", MateriaSolicitada: "Laboratorio de Redes",
+			Motivo: "Es materia nueva del plan", Estado: domain.PedidoPendiente,
+			CreadoEn: relojDeTest(),
+		},
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET", "/api/academic/pedidos-de-materia", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	var cuerpo struct {
+		Data []pedidoResponse `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+		t.Fatalf("no se pudo leer la respuesta: %v", err)
+	}
+	if len(cuerpo.Data) != 1 {
+		t.Fatalf("esperaba 1 pedido, obtuve %d", len(cuerpo.Data))
+	}
+	if !cuerpo.Data[0].EsMateriaNueva {
+		t.Error("esperaba esMateriaNueva = true")
+	}
+	if cuerpo.Data[0].MateriaNombre != "" || cuerpo.Data[0].CursoNombre != "" {
+		t.Errorf("esperaba los dos nombres vacíos, obtuve %q / %q",
+			cuerpo.Data[0].MateriaNombre, cuerpo.Data[0].CursoNombre)
+	}
+}
+
+// TestHTTP_MisMaterias_Asignadas_UnAdminNoDictaNinguna fija el arreglo de un
+// bug de pantalla con raíz acá: el perfil mostraba "Las materias que das" con
+// esta respuesta, y a un Admin le listaba TODAS las del sistema.
+//
+// No estaba mal el endpoint —un Admin puede reservar en cualquier materia
+// (RF-04.1)— sino que son dos preguntas distintas y había una sola forma de
+// hacerlas. Con `asignadas=true` se responde por asignación, para cualquier rol.
+func TestHTTP_MisMaterias_Asignadas_UnAdminNoDictaNinguna(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.materiasReservables = []application.MateriaReservable{
+		{MateriaID: "m1", MateriaNombre: "Programación", CursoNombre: "5°A", CicloAnio: 2026},
+	}
+	app := nuevaAppDeTest(repo)
+
+	pedir := func(ruta string) int {
+		req := httptest.NewRequest("GET", ruta, nil)
+		req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("error inesperado: %v", err)
+		}
+		var cuerpo struct {
+			Data []materiaReservableResponse `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+			t.Fatalf("no se pudo leer la respuesta: %v", err)
+		}
+		return len(cuerpo.Data)
+	}
+
+	// Sin el parámetro sigue valiendo lo de siempre: el Admin reserva en todas,
+	// y el fake devuelve su lista completa porque no le llega filtro.
+	if n := pedir("/api/academic/mis-materias"); n != 1 {
+		t.Fatalf("esperaba la lista completa, obtuve %d", n)
+	}
+	if repo.filtroDocenteRecibido != nil {
+		t.Errorf("sin el parámetro no tiene que filtrar por persona, filtró por %q", *repo.filtroDocenteRecibido)
+	}
+
+	// Con el parámetro pregunta por asignación, y ahí el rol no cambia nada.
+	pedir("/api/academic/mis-materias?asignadas=true")
+	if repo.filtroDocenteRecibido == nil {
+		t.Fatal("con asignadas=true tiene que filtrar por la persona, no filtró")
+	}
+	if *repo.filtroDocenteRecibido != "admin1" {
+		t.Errorf("filtró por %q, esperaba admin1", *repo.filtroDocenteRecibido)
+	}
 }

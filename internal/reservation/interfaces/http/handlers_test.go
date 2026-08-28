@@ -334,6 +334,9 @@ type fakeValidadorEquipo struct {
 	// fueraDelInventario: PCs dadas de baja. Es lo único que distingue
 	// "no se puede reservar" de "no se puede ni entregar".
 	fueraDelInventario map[string]bool
+	// estados: el estado de circulación de cada equipo. Vacío es DISPONIBLE,
+	// que es el caso de casi todos los tests.
+	estados map[string]string
 }
 
 func (f *fakeValidadorEquipo) EquipoDisponibleParaReservar(ctx context.Context, equipoID string) (bool, error) {
@@ -348,10 +351,23 @@ func (f *fakeValidadorEquipo) EquiposNoReservables(ctx context.Context, equipoID
 	return equipoIDs, nil
 }
 
-// EquipoEstaEnInventario es más laxo: una PC en mantenimiento no se puede
-// reservar pero sí se le puede entregar al técnico.
+// EquipoEstaEnInventario es más laxo que reservar: una PC en mantenimiento no
+// se puede reservar y su calendario sí se mira.
 func (f *fakeValidadorEquipo) EquipoEstaEnInventario(ctx context.Context, equipoID string) (bool, error) {
 	return !f.fueraDelInventario[equipoID], nil
+}
+
+// CondicionParaEntregar: en el inventario si no lo sacaron, y DISPONIBLE
+// salvo que el test diga otra cosa.
+func (f *fakeValidadorEquipo) CondicionParaEntregar(ctx context.Context, equipoID string) (application.CondicionDeEquipo, error) {
+	estado := f.estados[equipoID]
+	if estado == "" {
+		estado = "DISPONIBLE"
+	}
+	return application.CondicionDeEquipo{
+		EnInventario: !f.fueraDelInventario[equipoID],
+		Estado:       estado,
+	}, nil
 }
 
 // EtiquetasDeEquipos: en los tests las PCs se llaman "pc1", "pc2"… así que el

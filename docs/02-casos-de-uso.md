@@ -284,7 +284,8 @@ flowchart LR
   - **Dónde está cada máquina se deriva**, no se guarda: no hay estado "prestado" en el equipo.
   - **Quien recibe la computadora no necesita tener cuenta**: el nombre se escribe a mano, porque quien viene a hacer un trámite muchas veces no es un docente.
   - **Sin hora de devolución no se reclama nada**: "vengo en un rato" es una respuesta válida.
-  - **Se puede entregar un equipo en mantenimiento** (llevarlo al técnico es un préstamo); no uno dado de baja.
+  - **Un equipo en mantenimiento o fuera de servicio no se entrega**: está en el laboratorio y no se le da a nadie. Ni siquiera contra una reserva — si dejó de estar disponible, esa reserva ya se canceló en cascada.
+  - **Llevarlo al técnico sí se registra, pero es otra operación**: la *salida a reparación* (RF-08.21), en un panel aparte que ofrece justo lo que la entrega común no ofrece, y que exige decir a dónde va el equipo. Lo dado de baja no sale por ningún camino.
 - **Visibilidad:** solo Admin, incluidas las lecturas. Que un docente pudiera marcarse la entrega a sí mismo convertiría el registro en una declaración en vez de en una constancia.
 
 ### UC: Liberar la reserva que nadie retiró

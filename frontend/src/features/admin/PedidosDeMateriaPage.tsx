@@ -18,7 +18,7 @@ import {
   type PedidoDeMateria,
 } from "@/features/perfil/types"
 import { getErrorMessage } from "@/lib/api-client"
-import { formatearFechaLarga } from "@/lib/fechas"
+import { formatearFechaLargaDeInstante } from "@/lib/fechas"
 
 /** Los pedidos de docentes para dictar una materia más. */
 export function PedidosDeMateriaPage() {
@@ -121,7 +121,7 @@ function Pedido({ pedido }: { pedido: PedidoDeMateria }) {
     <Card>
       <CardContent className="grid gap-2 pt-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="font-medium">{materiaDelPedido(pedido, "Una materia existente")}</span>
+          <span className="font-medium">{materiaDelPedido(pedido)}</span>
           <EstadoBadge
             tono={
               pedido.estado === "APROBADO"
@@ -135,10 +135,16 @@ function Pedido({ pedido }: { pedido: PedidoDeMateria }) {
           </EstadoBadge>
         </div>
 
+        {pedido.docenteNombre && (
+          <p className="text-sm">
+            Lo pide <span className="font-medium">{pedido.docenteNombre}</span>.
+          </p>
+        )}
+
         <p className="text-sm">Lo explica así: «{pedido.motivo}»</p>
 
         <p className="text-muted-foreground text-xs">
-          Pedido el {formatearFechaLarga(pedido.creadoEn.slice(0, 10))}
+          Pedido el {formatearFechaLargaDeInstante(pedido.creadoEn)}
         </p>
 
         {pedido.esMateriaNueva && (
@@ -149,8 +155,11 @@ function Pedido({ pedido }: { pedido: PedidoDeMateria }) {
 
         {(docentes?.data.length ?? 0) > 0 && (
           <p className="text-muted-foreground text-sm">
-            Hoy esa materia la dan {docentes!.data.length === 1 ? "1 docente" : `${docentes!.data.length} docentes`}, que ya
-            recibieron el aviso de este pedido.
+            Hoy esa materia la dan{" "}
+            {docentes!.data.length === 1
+              ? "1 docente"
+              : `${docentes!.data.length} docentes`}
+            , que ya recibieron el aviso de este pedido.
           </p>
         )}
 
@@ -202,7 +211,11 @@ function Pedido({ pedido }: { pedido: PedidoDeMateria }) {
               {panel === "aprobar" && (
                 <div className="grid gap-1.5">
                   <Label htmlFor={`rol-${pedido.id}`}>¿Con qué rol queda?</Label>
-                  <Select id={`rol-${pedido.id}`} value={rol} onChange={(e) => setRol(e.target.value)}>
+                  <Select
+                    id={`rol-${pedido.id}`}
+                    value={rol}
+                    onChange={(e) => setRol(e.target.value)}
+                  >
                     {/* Vacío = lo decide el sistema: titular si nadie la da,
                         suplente si ya la da alguien. El rol no cambia lo que
                         puede hacer, pero es el dato que después alguien lee
@@ -216,7 +229,9 @@ function Pedido({ pedido }: { pedido: PedidoDeMateria }) {
 
               <div className="grid gap-1.5">
                 <Label htmlFor={`respuesta-${pedido.id}`}>
-                  {panel === "rechazar" ? "¿Por qué no? (obligatorio)" : "Algo para decirle (opcional)"}
+                  {panel === "rechazar"
+                    ? "¿Por qué no? (obligatorio)"
+                    : "Algo para decirle (opcional)"}
                 </Label>
                 <Input
                   id={`respuesta-${pedido.id}`}

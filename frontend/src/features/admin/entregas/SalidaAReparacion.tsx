@@ -18,20 +18,22 @@ import {
   type EquipoParaEntregar,
 } from "@/features/admin/entregas/SelectorDeEquipos"
 import * as inventoryApi from "@/features/inventory/api"
+import { ETIQUETA_ESTADO_EQUIPO } from "@/features/inventory/types"
 import * as reservasApi from "@/features/reservas/api"
 import { getErrorMessage } from "@/lib/api-client"
 import { contar } from "@/lib/plural"
 
 /**
- * Entregar algo sin reserva detrás: "necesito una compu para hacer un
- * trámite", "me llevo el proyector".
+ * Sacar del laboratorio un equipo que NO está en condiciones de prestarse:
+ * se lo lleva el técnico, va al service, vuelve arreglado o no vuelve.
  *
- * Es la entrega que más se usa, así que ocupa todo el ancho que le den y no
- * media columna: quien la completa tiene a alguien esperando enfrente, y los
- * equipos se eligen de una grilla que se ve entera, no de una lista de tres
- * renglones con barra de desplazamiento.
+ * Vive en un panel aparte del mostrador a propósito. Es el único camino para
+ * que salga algo en mantenimiento o fuera de servicio —la entrega del día a
+ * día ni siquiera los ofrece (RF-08.17)—, y mezclarlos haría que la lista de
+ * todos los días tenga máquinas rotas adentro. Lo que sí comparten es el
+ * registro: una vez afuera, figura y se recibe como cualquier otra.
  */
-export function EntregaSuelta({
+export function SalidaAReparacion({
   yaAfuera,
   onCerrar,
 }: {
@@ -50,9 +52,6 @@ export function EntregaSuelta({
     queryFn: inventoryApi.listarCarros,
   })
 
-  // Todo el inventario en UNA consulta: el endpoint sin filtro ya devuelve
-  // los de carro y los sueltos juntos, así que no hace falta pedir carro por
-  // carro y unir las respuestas.
   const { data: todos } = useQuery({
     queryKey: ["equipos"],
     queryFn: () => inventoryApi.listarEquipos(),
@@ -63,54 +62,40 @@ export function EntregaSuelta({
     [carros]
   )
 
-  // Se ofrece lo que está en el inventario, en condiciones de prestarse y no
-  // está ya afuera. Un equipo en mantenimiento o fuera de servicio está acá y
-  // no se le da a nadie (RF-08.17): para sacarlo del laboratorio está la
-  // salida a reparación, que es otra pantalla a propósito.
+  // Justo lo contrario que la entrega del día a día: acá se ofrece solo lo
+  // que no está disponible. Lo dado de baja no aparece ni acá — ya no es
+  // parte del parque, y lo que sale del laboratorio es lo que después hay que
+  // esperar de vuelta.
   const equipos: EquipoParaEntregar[] = useMemo(
     () =>
       (todos?.data ?? [])
         .filter(
-          (eq) => !eq.dadoDeBaja && eq.estado === "DISPONIBLE" && !yaAfuera.has(eq.id)
+          (eq) => !eq.dadoDeBaja && eq.estado !== "DISPONIBLE" && !yaAfuera.has(eq.id)
         )
         .map((eq) => ({
           id: eq.id,
           etiqueta: eq.etiqueta,
           donde: eq.carroId ? (nombreDeCarro.get(eq.carroId) ?? "") : eq.tipo,
+          nota: ETIQUETA_ESTADO_EQUIPO[eq.estado],
         })),
     [todos, nombreDeCarro, yaAfuera]
   )
 
-  // Qué se está por entregar, escrito con los nombres que se leen en la
-  // etiqueta de la máquina: la grilla puede quedar desplazada y la selección
-  // fuera de la vista justo cuando se aprieta el botón.
-  const nombresElegidos = useMemo(
-    () => equipos.filter((eq) => seleccionadas.has(eq.id)).map((eq) => eq.etiqueta),
-    [equipos, seleccionadas]
-  )
-
-  const entregar = useMutation({
+  const enviar = useMutation({
     mutationFn: () =>
       reservasApi.entregarSuelta({
         equipoIds: [...seleccionadas],
         nombre: nombre.trim(),
-        motivo: motivo.trim() || undefined,
+        motivo: motivo.trim(),
         devolucionEstimada: devolucion ? new Date(devolucion).toISOString() : undefined,
+        salidaAReparacion: true,
       }),
     onSuccess: async (respuesta) => {
-      const avisos = respuesta.avisos ?? []
       const noSalieron = respuesta.noEntregadas ?? []
       const partes = [`Salieron ${contar(respuesta.entregadas.length, "equipo")}.`]
       if (noSalieron.length > 0) {
         partes.push(
           `No salieron ${noSalieron.length}: ${noSalieron.map((n) => n.detalle).join("; ")}`
-        )
-      }
-      // El aviso no impidió nada: el sistema no sabe cuánto dura un trámite,
-      // así que la decisión es del Admin.
-      for (const a of avisos) {
-        partes.push(
-          `Ojo: esa máquina tiene reserva ${a.fecha} de ${a.horaInicio} a ${a.horaFin}${a.docente ? ` (${a.docente})` : ""}.`
         )
       }
       setResumen(partes.join(" "))
@@ -125,11 +110,12 @@ export function EntregaSuelta({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Entregar sin reserva</CardTitle>
+        <CardTitle>Salida a reparación</CardTitle>
         <CardDescription>
-          Para cuando piden algo en el momento — una computadora para un trámite, el
-          proyector para una charla. No hace falta que la persona tenga cuenta en el
-          sistema.
+          Para lo que está en mantenimiento o fuera de servicio y se va del laboratorio:
+          al técnico, al service, a que lo miren. No se presta a nadie — queda registrado
+          que salió, quién se lo llevó y por qué, y se recibe como cualquier otro equipo
+          cuando vuelve.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -138,66 +124,66 @@ export function EntregaSuelta({
           onSubmit={(e) => {
             e.preventDefault()
             setResumen(null)
-            entregar.mutate()
+            enviar.mutate()
           }}
         >
-          {/* Los datos de la persona a la izquierda y los equipos a la
-              derecha, que es el orden en que se pregunta en el mostrador. En
-              un teléfono se apilan en ese mismo orden. */}
           <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
             <div className="grid content-start gap-4">
               <div className="grid gap-1.5">
-                <Label htmlFor="entrega-nombre">¿A quién?</Label>
+                <Label htmlFor="reparacion-nombre">¿Quién se lo lleva?</Label>
                 <Input
-                  id="entrega-nombre"
+                  id="reparacion-nombre"
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
-                  placeholder="Ej.: Marta (secretaría)"
+                  placeholder="Ej.: Service Rossi"
                   required
                 />
               </div>
 
+              {/* Obligatorio, al revés que en la entrega común: sin esto la
+                  salida a reparación es un préstamo mal cargado, y el registro
+                  de que la máquina se fue no dice a dónde. */}
               <div className="grid gap-1.5">
-                <Label htmlFor="entrega-motivo">¿Para qué? (opcional)</Label>
+                <Label htmlFor="reparacion-motivo">¿A dónde va y por qué?</Label>
                 <Input
-                  id="entrega-motivo"
+                  id="reparacion-motivo"
                   value={motivo}
                   onChange={(e) => setMotivo(e.target.value)}
-                  placeholder="Ej.: trámite"
+                  placeholder="Ej.: al service, no enciende"
+                  required
                 />
+                <p className="text-muted-foreground text-xs">
+                  Es la constancia: dentro de dos meses es lo único que va a explicar por
+                  qué el equipo no está.
+                </p>
               </div>
 
               <div className="grid gap-1.5">
-                <Label htmlFor="entrega-devolucion">
-                  ¿Cuándo la devuelve? (opcional)
-                </Label>
+                <Label htmlFor="reparacion-devolucion">¿Cuándo vuelve? (opcional)</Label>
                 <Input
-                  id="entrega-devolucion"
+                  id="reparacion-devolucion"
                   type="datetime-local"
                   value={devolucion}
                   onChange={(e) => setDevolucion(e.target.value)}
                 />
-                {/* Sin hora pactada no se le reclama nada: "vengo en un rato" es
-                    una respuesta válida, y una hora inventada solo generaría
-                    reclamos falsos. */}
                 <p className="text-muted-foreground text-xs">
-                  Si no la sabés, dejalo vacío: no se le va a reclamar la devolución.
+                  Una reparación casi nunca tiene fecha. Sin ella no se reclama nada.
                 </p>
               </div>
             </div>
 
             <SelectorDeEquipos
-              titulo="¿Qué equipos?"
+              titulo="¿Qué equipos salen?"
               equipos={equipos}
               seleccionados={seleccionadas}
               onSeleccionar={setSeleccionadas}
-              vacio="No hay equipos disponibles para entregar. Los que están en mantenimiento o fuera de servicio no se prestan, y los que ya salieron figuran en «Afuera del laboratorio»."
+              vacio="No hay ningún equipo en mantenimiento ni fuera de servicio esperando salir. Se marca el estado desde Inventario."
             />
           </div>
 
-          {entregar.error && (
+          {enviar.error && (
             <Alert variant="destructive">
-              <AlertDescription>{getErrorMessage(entregar.error)}</AlertDescription>
+              <AlertDescription>{getErrorMessage(enviar.error)}</AlertDescription>
             </Alert>
           )}
           {resumen && (
@@ -207,23 +193,14 @@ export function EntregaSuelta({
           )}
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-4">
-            <Button
-              type="submit"
-              size="lg"
-              disabled={entregar.isPending || seleccionadas.size === 0}
-            >
+            <Button type="submit" disabled={enviar.isPending || seleccionadas.size === 0}>
               {seleccionadas.size === 0
-                ? "Entregar"
-                : `Entregar ${contar(seleccionadas.size, "equipo")}`}
+                ? "Registrar la salida"
+                : `Registrar la salida de ${contar(seleccionadas.size, "equipo")}`}
             </Button>
             <Button type="button" variant="outline" onClick={onCerrar}>
               Cerrar
             </Button>
-            {nombresElegidos.length > 0 && (
-              <p className="text-muted-foreground min-w-0 flex-1 text-sm">
-                Salen: {nombresElegidos.join(", ")}
-              </p>
-            )}
           </div>
         </form>
       </CardContent>

@@ -455,4 +455,52 @@ describe("InventarioPage", () => {
       expect(screen.getAllByRole("button", { name: "Cómo entrar" })).toHaveLength(2)
     })
   })
+
+  /**
+   * En un teléfono la tabla queda cortada a la derecha: "Acciones" se ve como
+   * "A" y los botones como "Reportar pro…". Se llega deslizándola de costado,
+   * así que no se pierde nada — pero "Reportar problema" es EL motivo por el
+   * que un docente entra a esta pantalla, y quedaba fuera de la vista detrás
+   * de un gesto que hay que descubrir.
+   *
+   * Apiladas, las acciones están a la vista. Es lo que ya hace "Mis reservas".
+   */
+  describe("en una pantalla angosta", () => {
+    beforeEach(() => {
+      vi.stubGlobal(
+        "matchMedia",
+        (consulta: string) =>
+          ({
+            matches: true,
+            media: consulta,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+          }) as unknown as MediaQueryList
+      )
+    })
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it("apila los equipos en tarjetas, con sus acciones a la vista", async () => {
+      sesionDe("DOCENTE")
+      vi.mocked(inventoryApi.listarCarros).mockResolvedValue({ data: carros })
+      vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+        data: [equipo({ id: "pc1", identificador: 1 })],
+      })
+      vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
+      renderInventario()
+
+      await userEvent.click(await screen.findByRole("button", { name: "Ver equipos" }))
+
+      // La acción está en el documento sin tener que desplazar nada.
+      expect(
+        await screen.findByRole("button", { name: "Reportar problema" })
+      ).toBeInTheDocument()
+      // Y no quedó además la tabla: cada equipo tiene que estar UNA vez.
+      expect(screen.queryByRole("table")).not.toBeInTheDocument()
+      expect(screen.getAllByText("PC 1")).toHaveLength(1)
+    })
+  })
 })

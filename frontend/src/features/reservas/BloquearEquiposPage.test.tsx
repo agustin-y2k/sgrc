@@ -278,9 +278,7 @@ describe("BloquearEquiposPage", () => {
     await user.click(screen.getByRole("button", { name: "Confirmar bloqueo" }))
 
     expect(
-      await screen.findByText(
-        /Se cancelaron 3 reservas y se notificó a 2 docentes/
-      )
+      await screen.findByText(/Se cancelaron 3 reservas y se notificó a 2 docentes/)
     ).toBeInTheDocument()
   })
 
@@ -326,5 +324,59 @@ describe("BloquearEquiposPage", () => {
     expect(await screen.findByText("Bloquear equipos")).toBeInTheDocument()
     expect(screen.getByText(/una jornada/i)).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/jornada docente/i)).toBeInTheDocument()
+  })
+
+  /**
+   * Tomar un carro entero para una evaluación es el caso para el que existe
+   * esta pantalla, y con tres carros cargados son más de ochenta casillas.
+   * Antes había que tildarlas de a una.
+   */
+  describe("cuando el inventario es grande", () => {
+    beforeEach(() => {
+      vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+        data: [
+          ...Array.from({ length: 9 }, (_, i) =>
+            equipo({ id: `pc${i + 1}`, identificador: i + 1 })
+          ),
+          // Una rota: no se puede tildar de a una, así que tampoco puede
+          // entrar por "marcar el carro" — el backend rechaza el bloqueo
+          // ENTERO si viene una sola así.
+          equipo({ id: "pc10", identificador: 10, estado: "FUERA_DE_SERVICIO" }),
+        ],
+      })
+    })
+
+    it("marca el carro entero salteando las que no se pueden bloquear", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+
+      await user.click(await screen.findByRole("button", { name: "Marcar 9 equipos" }))
+
+      expect(await screen.findByText("9 equipos seleccionados.")).toBeInTheDocument()
+      expect(screen.getByLabelText("PC 10 (Carro A)")).not.toBeChecked()
+    })
+
+    it("filtra con el buscador sin que importen las tildes", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+
+      await user.type(await screen.findByLabelText("Buscar un equipo"), "carro a")
+      expect(screen.getByLabelText("PC 1 (Carro A)")).toBeInTheDocument()
+
+      await user.clear(screen.getByLabelText("Buscar un equipo"))
+      await user.type(screen.getByLabelText("Buscar un equipo"), "PC 3")
+      expect(screen.getByLabelText("PC 3 (Carro A)")).toBeInTheDocument()
+      expect(screen.queryByLabelText("PC 1 (Carro A)")).not.toBeInTheDocument()
+    })
+
+    it("limpia la selección de una", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+
+      await user.click(await screen.findByRole("button", { name: "Marcar 9 equipos" }))
+      await user.click(screen.getByRole("button", { name: "Limpiar la selección" }))
+
+      expect(screen.queryByText(/seleccionados\./)).not.toBeInTheDocument()
+    })
   })
 })

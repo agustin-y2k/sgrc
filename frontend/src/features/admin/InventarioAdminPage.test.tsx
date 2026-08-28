@@ -156,6 +156,51 @@ describe("InventarioAdminPage", () => {
     )
   })
 
+  /**
+   * Si el cambio falla, el mensaje va DENTRO del recuadro de confirmación.
+   * Estaba arriba del listado entero: con un carro de treinta máquinas, un
+   * error sobre la número 27 salía fuera de la pantalla y "Confirmar cambio"
+   * parecía no hacer nada.
+   */
+  it("si el cambio de estado falla, lo dice al lado del botón", async () => {
+    vi.mocked(adminApi.cambiarEstadoEquipo).mockRejectedValue(
+      new ApiError(409, "ese equipo está prestado")
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await abrirCarro(user)
+
+    await user.click(await screen.findByRole("button", { name: /En mantenimiento/i }))
+    await user.click(screen.getByRole("button", { name: "Confirmar cambio" }))
+
+    const mensaje = await screen.findByText("ese equipo está prestado")
+    // El recuadro sigue abierto y el mensaje está adentro: en el mismo panel
+    // que el botón que se apretó, no en otra parte de la página.
+    const panel = screen
+      .getByRole("button", { name: "Confirmar cambio" })
+      .closest(".rounded-md.border")
+    expect(panel).toContainElement(mensaje)
+  })
+
+  // Un equipo fuera de servicio vuelve a circulación cuando se arregla.
+  it("un equipo fuera de servicio puede volver a disponible", async () => {
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+      data: [equipo({ estado: "FUERA_DE_SERVICIO" })],
+    })
+    const user = userEvent.setup()
+    renderPagina()
+    await abrirCarro(user)
+
+    await user.click(await screen.findByRole("button", { name: /→ Disponible/ }))
+    await user.click(screen.getByRole("button", { name: "Confirmar cambio" }))
+
+    expect(adminApi.cambiarEstadoEquipo).toHaveBeenCalledWith(
+      "pc1",
+      "DISPONIBLE",
+      undefined
+    )
+  })
+
   it("no ofrece cambiar al estado en el que el equipo ya está", async () => {
     const user = userEvent.setup()
     renderPagina()
