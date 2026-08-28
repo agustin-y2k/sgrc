@@ -503,4 +503,40 @@ describe("InventarioPage", () => {
       expect(screen.getAllByText("PC 1")).toHaveLength(1)
     })
   })
+
+  /**
+   * Un carro tiene hasta 31 máquinas. Abrir "Cómo entrar" desde la primera
+   * dejaba el panel al final de la tabla, treinta filas más abajo y fuera de
+   * la pantalla: desde el mostrador parecía que el botón no había hecho nada.
+   *
+   * El test mira la POSICIÓN, no la existencia: que el panel esté en el
+   * documento ya lo cubren los de arriba, y eso pasaba también con el bug.
+   */
+  it("abre el panel pegado al equipo del que salió, no al final de la lista", async () => {
+    sesionDe("DOCENTE")
+    vi.mocked(inventoryApi.listarCarros).mockResolvedValue({ data: carros })
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+      data: [
+        equipo({ id: "pc1", identificador: 1, tieneCuentas: true }),
+        equipo({ id: "pc2", identificador: 2 }),
+        equipo({ id: "pc3", identificador: 3 }),
+      ],
+    })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
+    vi.mocked(inventoryApi.listarCuentasDeEquipo).mockResolvedValue({ data: [] })
+    const user = userEvent.setup()
+    renderInventario()
+
+    await user.click(await screen.findByRole("button", { name: "Ver equipos" }))
+    await user.click(screen.getByRole("button", { name: "Cómo entrar" }))
+
+    const panel = await screen.findByText(/Cómo entrar a PC 1/)
+    const filas = screen.getAllByRole("row")
+    const filaDePC1 = filas.findIndex((f) => f.textContent?.startsWith("PC 1"))
+    const filaDelPanel = filas.findIndex((f) => f.contains(panel))
+
+    expect(filaDelPanel).toBe(filaDePC1 + 1)
+    // Y no al final: quedan PC 2 y PC 3 debajo.
+    expect(filaDelPanel).toBeLessThan(filas.length - 1)
+  })
 })

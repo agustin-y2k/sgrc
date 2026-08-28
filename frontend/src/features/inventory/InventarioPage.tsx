@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
 
@@ -101,6 +101,29 @@ function TablaDeEquipos({ equipos }: { equipos: Equipo[] }) {
     )
   }
 
+  // Lo que se abre desde los botones de un equipo. Va PEGADO al equipo en las
+  // dos formas, no al final de la lista: en un carro de 31 máquinas, abrirlo
+  // desde la primera lo dejaba treinta filas más abajo, fuera de la pantalla,
+  // y desde el mostrador parecía que el botón no había hecho nada.
+  //
+  // Estuvo afuera hasta ahora porque un formulario adentro de una celda queda
+  // ilegible en un teléfono. Eso dejó de ser un problema cuando la lista pasó
+  // a ser tarjetas abajo de 640px: la tabla existe solo donde hay ancho.
+  function PanelDelEquipo({ equipo }: { equipo: Equipo }) {
+    if (reportando?.id !== equipo.id && viendoCuentas?.id !== equipo.id) return null
+    return (
+      <div className="grid gap-3">
+        {reportando?.id === equipo.id && (
+          <ReportarIncidencia equipo={equipo} onListo={() => setReportando(null)} />
+        )}
+        {viendoCuentas?.id === equipo.id && <CuentasDeEquipo equipo={equipo} />}
+      </div>
+    )
+  }
+
+  // Cuántas columnas tiene la tabla, para que el panel las cruce enteras.
+  const columnas = 3 + (hayFreezado ? 1 : 0) + (haySoftware ? 1 : 0)
+
   return (
     <div>
       {/* En un teléfono, cada equipo es una tarjeta.
@@ -138,6 +161,7 @@ function TablaDeEquipos({ equipos }: { equipos: Equipo[] }) {
               <div className="flex flex-wrap gap-2">
                 <Acciones equipo={equipo} />
               </div>
+              <PanelDelEquipo equipo={equipo} />
             </div>
           ))}
         </div>
@@ -160,44 +184,40 @@ function TablaDeEquipos({ equipos }: { equipos: Equipo[] }) {
             </TableHeader>
             <TableBody>
               {equipos.map((equipo) => (
-                <TableRow key={equipo.id}>
-                  <TableCell className="font-medium">{equipo.etiqueta}</TableCell>
-                  <TableCell>
-                    <EstadoDeEquipo estado={equipo.estado} />
-                  </TableCell>
-                  {hayFreezado && <TableCell>{equipo.freezado ? "Sí" : "No"}</TableCell>}
-                  {haySoftware && (
-                    <TableCell className="text-muted-foreground max-w-xs text-sm">
-                      {equipo.softwareInstalado || "—"}
+                <Fragment key={equipo.id}>
+                  <TableRow>
+                    <TableCell className="font-medium">{equipo.etiqueta}</TableCell>
+                    <TableCell>
+                      <EstadoDeEquipo estado={equipo.estado} />
                     </TableCell>
+                    {hayFreezado && (
+                      <TableCell>{equipo.freezado ? "Sí" : "No"}</TableCell>
+                    )}
+                    {haySoftware && (
+                      <TableCell className="text-muted-foreground max-w-xs text-sm">
+                        {equipo.softwareInstalado || "—"}
+                      </TableCell>
+                    )}
+                    <TableCell className="text-right">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Acciones equipo={equipo} />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {/* En su propia fila y cruzando todas las columnas: así el
+                      panel queda debajo del equipo del que salió, y no
+                      encajado en una celda. */}
+                  {(reportando?.id === equipo.id || viendoCuentas?.id === equipo.id) && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={columnas} className="py-3">
+                        <PanelDelEquipo equipo={equipo} />
+                      </TableCell>
+                    </TableRow>
                   )}
-                  <TableCell className="text-right">
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Acciones equipo={equipo} />
-                    </div>
-                  </TableCell>
-                </TableRow>
+                </Fragment>
               ))}
             </TableBody>
           </Table>
-        </div>
-      )}
-
-      {/* Fuera de la tabla a propósito: un formulario dentro de una celda
-          queda ilegible en pantallas angostas, que es justo desde donde un
-          docente reporta un equipo que no anda. */}
-      {reportando && (
-        <div className="mt-3">
-          <ReportarIncidencia equipo={reportando} onListo={() => setReportando(null)} />
-        </div>
-      )}
-
-      {/* Fuera de la tabla por lo mismo que el formulario de arriba: una lista
-          de cuentas dentro de una celda queda ilegible en un teléfono, que es
-          justo desde donde alguien la consulta parado frente a la máquina. */}
-      {viendoCuentas && (
-        <div className="mt-3">
-          <CuentasDeEquipo equipo={viendoCuentas} />
         </div>
       )}
     </div>
