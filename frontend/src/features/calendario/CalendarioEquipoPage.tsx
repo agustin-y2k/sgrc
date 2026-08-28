@@ -202,7 +202,14 @@ export function CalendarioEquipoPage() {
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">Calendario del equipo</h1>
+          {/* Con el nombre del equipo: se llega desde un botón por equipo, y
+              "Calendario del equipo" a secas hacía que tres pestañas abiertas
+              desde tres máquinas distintas se vieran iguales. El servidor lo
+              manda con el carro incluido, que es lo que distingue una "PC 7"
+              de las otras dos. */}
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {data?.etiqueta ? `Calendario de ${data.etiqueta}` : "Calendario del equipo"}
+          </h1>
           <p className="text-muted-foreground text-sm">
             {/* El rango que se dibuja, no la semana entera: con una escuela
                 de lunes a viernes el rótulo prometía dos días que no están. */}

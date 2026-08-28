@@ -191,7 +191,11 @@ type bloqueCalendarioResponse struct {
 }
 
 type calendarioEquipoResponse struct {
-	EquipoID string                     `json:"equipoId"`
+	EquipoID string `json:"equipoId"`
+	// Etiqueta es cómo se llama el equipo, con su carro: "PC 7 del Carro 2".
+	// Vacía si no se pudo resolver, y ahí la pantalla se queda con su título
+	// genérico.
+	Etiqueta string                     `json:"etiqueta,omitempty"`
 	Desde    string                     `json:"desde"`
 	Hasta    string                     `json:"hasta"`
 	Bloques  []bloqueCalendarioResponse `json:"bloques"`

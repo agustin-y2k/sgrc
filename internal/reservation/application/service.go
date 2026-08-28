@@ -435,9 +435,14 @@ func (s *Service) ListarReservas(ctx context.Context, f FiltroReservas) ([]Reser
 
 // CalendarioDeEquipo implementa RF-04.4: cualquier usuario autenticado puede
 // ver los bloques ocupados de una PC, con docente, materia y horario.
-func (s *Service) CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) ([]BloqueCalendario, error) {
+// Devuelve también CÓMO SE LLAMA el equipo, porque la pantalla que dibuja
+// esto se titulaba "Calendario del equipo" sin decir cuál: se llega desde un
+// botón por equipo, y abrir tres en pestañas distintas daba tres pantallas
+// idénticas. El nombre sale de EtiquetasDeEquipos, el mismo que usan los
+// avisos, así que dice "PC 7 del Carro 2" y no "PC 7".
+func (s *Service) CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) (etiqueta string, bloques []BloqueCalendario, err error) {
 	if hasta.Before(desde) {
-		return nil, domain.ErrRangoFechasInvalido
+		return "", nil, domain.ErrRangoFechasInvalido
 	}
 
 	// Se pregunta si el equipo existe antes de traer sus bloques. Sin esto, un
@@ -450,13 +455,26 @@ func (s *Service) CalendarioDeEquipo(ctx context.Context, equipoID string, desde
 	// calendario es algo que no está en el inventario.
 	enInventario, err := s.validadorEquipo.EquipoEstaEnInventario(ctx, equipoID)
 	if err != nil {
-		return nil, fmt.Errorf("verificando el equipo del calendario: %w", err)
+		return "", nil, fmt.Errorf("verificando el equipo del calendario: %w", err)
 	}
 	if !enInventario {
-		return nil, ErrEquipoNoEncontrado
+		return "", nil, ErrEquipoNoEncontrado
 	}
 
-	return s.repo.CalendarioDeEquipo(ctx, equipoID, desde, hasta)
+	bloques, err = s.repo.CalendarioDeEquipo(ctx, equipoID, desde, hasta)
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Si el nombre no se puede resolver, el calendario sale igual y la
+	// pantalla se queda con su título genérico: perder el calendario entero
+	// por no poder titularlo sería una mala transacción.
+	etiquetas, err := s.validadorEquipo.EtiquetasDeEquipos(ctx, []string{equipoID})
+	if err != nil {
+		log.Printf("reservation: no se pudo resolver el nombre del equipo %s para el calendario: %v", equipoID, err)
+		return "", bloques, nil
+	}
+	return etiquetas[equipoID], bloques, nil
 }
 
 // ListarEquiposDisponiblesEn implementa la selección de PCs de RF-04.2,
