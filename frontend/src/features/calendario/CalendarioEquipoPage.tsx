@@ -185,6 +185,21 @@ export function CalendarioEquipoPage() {
 
   return (
     <div>
+      {/* La salida va ARRIBA DE TODO y sola, no al final de la fila de
+          controles de semana.
+          
+          Ahí estaba, en la variante sin borde: el único botón de los cuatro
+          que lleva a otra pantalla era también el de menos peso visual, y
+          quedaba leyéndose como un control de fecha más. Las únicas flechas
+          de esa fila eran las de cambiar de semana, que no van a ningún lado.
+
+          `h-11 sm:h-9` es el mismo blanco táctil que usa la pantalla de "no
+          encontrada" para su botón de volver: 44px en el teléfono, que es lo
+          que pide WCAG 2.5.5 y verifica e2e/tactil.spec.ts. */}
+      <Button asChild variant="outline" className="mb-3 h-11 px-4 sm:h-9">
+        <Link to="/inventario">← Volver al inventario</Link>
+      </Button>
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Calendario del equipo</h1>
@@ -194,7 +209,7 @@ export function CalendarioEquipoPage() {
             {formatearRangoVisible(dias)}
           </p>
         </div>
-        {/* flex-wrap: los cuatro botones no entran en una línea en un
+        {/* flex-wrap: los tres botones no entran en una línea en un
             teléfono y sin esto empujaban el ancho de la página (RNF-07). */}
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -213,9 +228,6 @@ export function CalendarioEquipoPage() {
             onClick={() => setReferencia(sumarDias(referencia, 7))}
           >
             Semana siguiente →
-          </Button>
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/inventario">Volver al inventario</Link>
           </Button>
         </div>
       </div>
