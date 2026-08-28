@@ -243,7 +243,9 @@ describe("NuevaReservaPage", () => {
     const user = userEvent.setup()
     renderPagina()
 
-    await user.click(await screen.findByRole("button", { name: "Se repite todas las semanas" }))
+    await user.click(
+      await screen.findByRole("button", { name: "Se repite todas las semanas" })
+    )
     await elegirMateria(user)
     await user.selectOptions(screen.getByLabelText("Día de la semana"), "MARTES")
     await user.type(screen.getByLabelText("Desde"), FECHA)

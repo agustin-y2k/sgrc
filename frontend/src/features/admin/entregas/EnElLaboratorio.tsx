@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import * as adminApi from "@/features/admin/api"
-import { PRESTAMOS_KEY, REFRESCO_DEL_MOSTRADOR } from "@/features/admin/entregas/compartido"
+import {
+  PRESTAMOS_KEY,
+  REFRESCO_DEL_MOSTRADOR,
+} from "@/features/admin/entregas/compartido"
 import * as reservasApi from "@/features/reservas/api"
 import { contar, plural } from "@/lib/plural"
 
@@ -73,8 +76,13 @@ export function EnElLaboratorio() {
         </p>
         {fueraDeCirculacion > 0 && (
           <p className="text-muted-foreground text-xs">
-            {plural(fueraDeCirculacion, "La que no se puede usar sigue", "Las que no se pueden usar siguen")}{" "}
-            en el laboratorio, pero no se {plural(fueraDeCirculacion, "entrega", "entregan")}.
+            {plural(
+              fueraDeCirculacion,
+              "La que no se puede usar sigue",
+              "Las que no se pueden usar siguen"
+            )}{" "}
+            en el laboratorio, pero no se{" "}
+            {plural(fueraDeCirculacion, "entrega", "entregan")}.
           </p>
         )}
       </CardContent>

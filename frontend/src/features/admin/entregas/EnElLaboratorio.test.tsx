@@ -74,7 +74,9 @@ describe("EnElLaboratorio", () => {
    */
   it("cuenta aparte las que están acá pero fuera de circulación", async () => {
     vi.mocked(adminApi.reporteEstadoDelInventario).mockResolvedValue({
-      data: [carro({ disponibles: 10, enMantenimiento: 2, fueraDeServicio: 1, total: 13 })],
+      data: [
+        carro({ disponibles: 10, enMantenimiento: 2, fueraDeServicio: 1, total: 13 }),
+      ],
     })
     renderTarjeta()
 

@@ -218,7 +218,9 @@ describe("RegistroConGoogle", () => {
 
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 
-    expect(await screen.findByText("Elegí con qué cargo te registrás")).toBeInTheDocument()
+    expect(
+      await screen.findByText("Elegí con qué cargo te registrás")
+    ).toBeInTheDocument()
     expect(authApi.registrarConGoogle).not.toHaveBeenCalled()
   })
 })

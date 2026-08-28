@@ -69,7 +69,9 @@ describe("RegistroPage", () => {
     await user.type(screen.getByLabelText("Contraseña"), "password123")
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 
-    expect(await screen.findByText("Elegí con qué cargo te registrás")).toBeInTheDocument()
+    expect(
+      await screen.findByText("Elegí con qué cargo te registrás")
+    ).toBeInTheDocument()
     expect(screen.getByText("Elegí si sos titular o suplente")).toBeInTheDocument()
     expect(authApi.registrar).not.toHaveBeenCalled()
   })

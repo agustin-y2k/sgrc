@@ -203,7 +203,9 @@ export function RecuperarPasswordPage() {
                       {/* El caso más urgente de los tres: el código vence a
                           los 15 minutos, así que buscarlo en spam es contra
                           reloj. */}
-                      <AvisoDeSpam>Si no lo ves, fijate en la carpeta de spam.</AvisoDeSpam>
+                      <AvisoDeSpam>
+                        Si no lo ves, fijate en la carpeta de spam.
+                      </AvisoDeSpam>
                       <FormMessage />
                     </FormItem>
                   )}

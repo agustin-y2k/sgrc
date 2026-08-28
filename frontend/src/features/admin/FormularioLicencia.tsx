@@ -207,7 +207,9 @@ export function CamposComunesDeLicencia({
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor={`${idPrefijo}-aviso`}>Avisar con cuántos días de anticipación</Label>
+          <Label htmlFor={`${idPrefijo}-aviso`}>
+            Avisar con cuántos días de anticipación
+          </Label>
           <Input
             id={`${idPrefijo}-aviso`}
             type="number"
@@ -243,7 +245,8 @@ export function SelectorDeEquipos({
     onChange(nueva)
   }
 
-  const todasMarcadas = equipos.length > 0 && equipos.every((equipo) => seleccionadas.has(equipo.id))
+  const todasMarcadas =
+    equipos.length > 0 && equipos.every((equipo) => seleccionadas.has(equipo.id))
 
   return (
     <div className="grid gap-2">
@@ -254,7 +257,9 @@ export function SelectorDeEquipos({
         <button
           type="button"
           className="text-muted-foreground hover:text-foreground text-xs underline"
-          onClick={() => onChange(todasMarcadas ? new Set() : new Set(equipos.map((p) => p.id)))}
+          onClick={() =>
+            onChange(todasMarcadas ? new Set() : new Set(equipos.map((p) => p.id)))
+          }
         >
           {todasMarcadas ? "Desmarcar todas" : "Marcar todas"}
         </button>
