@@ -20,6 +20,56 @@ const columnasPedido = `id, usuario_id, materia_id, coalesce(curso_solicitado, '
 	coalesce(materia_solicitada, ''), motivo, estado, coalesce(respuesta, ''),
 	resuelto_por, resuelto_en, creado_en`
 
+// Las mismas columnas del pedido más el nombre de la materia y el del curso,
+// para los DOS listados. LEFT JOIN y no JOIN: un pedido de una materia que
+// todavía no existe tiene materia_id en NULL y tiene que seguir apareciendo —
+// es justamente el que más necesita el Admin.
+//
+// El `p.` de adelante no es decorativo: con las tablas unidas, `id`, `nombre`
+// y `estado` existen en más de una.
+const columnasPedidoDetallado = `p.id, p.usuario_id, p.materia_id,
+	coalesce(p.curso_solicitado, ''), coalesce(p.materia_solicitada, ''),
+	p.motivo, p.estado, coalesce(p.respuesta, ''), p.resuelto_por, p.resuelto_en,
+	p.creado_en, coalesce(m.nombre, ''), coalesce(c.nombre, ''),
+	btrim(coalesce(u.nombre, '') || ' ' || coalesce(u.apellido, ''))`
+
+// El usuario también por LEFT JOIN: la FK de pedido_de_materia es ON DELETE
+// CASCADE, así que en la práctica siempre está, pero un listado no es el lugar
+// donde enterarse de lo contrario.
+const desdePedidoDetallado = `FROM pedido_de_materia p
+	LEFT JOIN materia m ON m.id = p.materia_id
+	LEFT JOIN curso   c ON c.id = m.curso_id
+	LEFT JOIN usuario u ON u.id = p.usuario_id`
+
+func escanearPedidoDetallado(fila pgx.Row) (*application.PedidoDetallado, error) {
+	var p domain.PedidoDeMateria
+	var estado string
+	var d application.PedidoDetallado
+	if err := fila.Scan(
+		&p.ID, &p.UsuarioID, &p.MateriaID, &p.CursoSolicitado,
+		&p.MateriaSolicitada, &p.Motivo, &estado, &p.Respuesta,
+		&p.ResueltoPor, &p.ResueltoEn, &p.CreadoEn,
+		&d.MateriaNombre, &d.CursoNombre, &d.DocenteNombre,
+	); err != nil {
+		return nil, err
+	}
+	p.Estado = domain.EstadoPedido(estado)
+	d.Pedido = &p
+	return &d, nil
+}
+
+func escanearPedidosDetallados(rows pgx.Rows) ([]*application.PedidoDetallado, error) {
+	pedidos := []*application.PedidoDetallado{}
+	for rows.Next() {
+		d, err := escanearPedidoDetallado(rows)
+		if err != nil {
+			return nil, fmt.Errorf("escaneando un pedido: %w", err)
+		}
+		pedidos = append(pedidos, d)
+	}
+	return pedidos, rows.Err()
+}
+
 func escanearPedido(fila pgx.Row) (*domain.PedidoDeMateria, error) {
 	var p domain.PedidoDeMateria
 	var estado string
@@ -86,28 +136,30 @@ func (r *PostgresRepo) GuardarPedido(ctx context.Context, p *domain.PedidoDeMate
 	return nil
 }
 
-func (r *PostgresRepo) ListarPedidos(ctx context.Context, soloPendientes bool) ([]*domain.PedidoDeMateria, error) {
+func (r *PostgresRepo) ListarPedidos(ctx context.Context, soloPendientes bool) ([]*application.PedidoDetallado, error) {
 	// Los pendientes van del más viejo al más nuevo: el que más esperó es el que
 	// más urge.
 	rows, err := r.pool.Query(ctx, `
-		SELECT `+columnasPedido+` FROM pedido_de_materia
-		 WHERE ($1 = false OR estado = 'PENDIENTE')
-		 ORDER BY (estado = 'PENDIENTE') DESC,
-		          CASE WHEN estado = 'PENDIENTE' THEN creado_en END ASC,
-		          creado_en DESC
+		SELECT `+columnasPedidoDetallado+`
+		  `+desdePedidoDetallado+`
+		 WHERE ($1 = false OR p.estado = 'PENDIENTE')
+		 ORDER BY (p.estado = 'PENDIENTE') DESC,
+		          CASE WHEN p.estado = 'PENDIENTE' THEN p.creado_en END ASC,
+		          p.creado_en DESC
 	`, soloPendientes)
 	if err != nil {
 		return nil, fmt.Errorf("listando pedidos: %w", err)
 	}
 	defer rows.Close()
-	return escanearPedidos(rows)
+	return escanearPedidosDetallados(rows)
 }
 
-func (r *PostgresRepo) ListarPedidosDeUsuario(ctx context.Context, usuarioID string) ([]*domain.PedidoDeMateria, error) {
+func (r *PostgresRepo) ListarPedidosDeUsuario(ctx context.Context, usuarioID string) ([]*application.PedidoDetallado, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT `+columnasPedido+` FROM pedido_de_materia
-		 WHERE usuario_id = $1
-		 ORDER BY creado_en DESC
+		SELECT `+columnasPedidoDetallado+`
+		  `+desdePedidoDetallado+`
+		 WHERE p.usuario_id = $1
+		 ORDER BY p.creado_en DESC
 	`, usuarioID)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -116,7 +168,7 @@ func (r *PostgresRepo) ListarPedidosDeUsuario(ctx context.Context, usuarioID str
 		return nil, fmt.Errorf("listando pedidos del usuario: %w", err)
 	}
 	defer rows.Close()
-	return escanearPedidos(rows)
+	return escanearPedidosDetallados(rows)
 }
 
 func (r *PostgresRepo) ContarPedidosPendientes(ctx context.Context) (int, error) {
@@ -143,21 +195,6 @@ func (r *PostgresRepo) TienePedidoAbierto(ctx context.Context, usuarioID, materi
 		return false, fmt.Errorf("buscando pedidos abiertos: %w", err)
 	}
 	return existe, nil
-}
-
-func escanearPedidos(rows pgx.Rows) ([]*domain.PedidoDeMateria, error) {
-	var resultado []*domain.PedidoDeMateria
-	for rows.Next() {
-		p, err := escanearPedido(rows)
-		if err != nil {
-			return nil, fmt.Errorf("escaneando pedido: %w", err)
-		}
-		resultado = append(resultado, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterando pedidos: %w", err)
-	}
-	return resultado, nil
 }
 
 // vacioComoNull: en la base, "no escribió ningún curso" es NULL y no una

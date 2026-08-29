@@ -14,15 +14,15 @@ import * as perfilApi from "@/features/perfil/api"
 import { ETIQUETA_ESTADO_PEDIDO, materiaDelPedido } from "@/features/perfil/types"
 import * as reservasApi from "@/features/reservas/api"
 import { getErrorMessage } from "@/lib/api-client"
-import { formatearFechaLarga } from "@/lib/fechas"
+import { formatearFechaLargaDeInstante } from "@/lib/fechas"
 
 /** El perfil: la pantalla que se abre desde el redondel con las iniciales. */
 export function PerfilPage() {
   const { user } = useAuth()
 
   const { data: materias, error: errorMaterias } = useQuery({
-    queryKey: ["mis-materias"],
-    queryFn: reservasApi.misMaterias,
+    queryKey: ["mis-materias", "asignadas"],
+    queryFn: reservasApi.misMateriasAsignadas,
   })
 
   const { data: pedidos } = useQuery({
@@ -65,9 +65,13 @@ export function PerfilPage() {
           )}
 
           {misMaterias.length === 0 ? (
+            /* Dos vacíos y no uno: "no vas a poder reservar" es cierto para un
+               docente y falso para un Admin, que puede reservar en cualquier
+               materia aunque no dicte ninguna. */
             <p className="text-muted-foreground text-sm">
-              Todavía no tenés ninguna materia asignada, así que no vas a poder reservar
-              computadoras. Pedila acá abajo y el equipo de administración lo resuelve.
+              {user.rol === "ADMIN"
+                ? "No estás asignado a ninguna materia. Como administrador podés reservar en cualquiera igual; esto es solo para las que dictes vos."
+                : "Todavía no tenés ninguna materia asignada, así que no vas a poder reservar computadoras. Pedila acá abajo y el equipo de administración lo resuelve."}
             </p>
           ) : (
             <ul className="grid gap-2">
@@ -91,9 +95,7 @@ export function PerfilPage() {
               {misPedidos.map((p) => (
                 <div key={p.id} className="grid gap-1 rounded-lg border px-3 py-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium">
-                      {materiaDelPedido(p, "Una materia de la lista")}
-                    </span>
+                    <span className="font-medium">{materiaDelPedido(p)}</span>
                     <EstadoBadge
                       tono={
                         p.estado === "APROBADO"
@@ -107,12 +109,14 @@ export function PerfilPage() {
                     </EstadoBadge>
                   </div>
                   <p className="text-muted-foreground text-sm">
-                    Lo pediste el {formatearFechaLarga(p.creadoEn.slice(0, 10))}
+                    Lo pediste el {formatearFechaLargaDeInstante(p.creadoEn)}
                   </p>
                   {/* La respuesta se muestra siempre que exista, no solo en
                       los rechazos: en una aprobación suele explicar hasta
                       cuándo, o con quién se habló. */}
-                  {p.respuesta && <p className="text-sm">Te contestaron: {p.respuesta}</p>}
+                  {p.respuesta && (
+                    <p className="text-sm">Te contestaron: {p.respuesta}</p>
+                  )}
                 </div>
               ))}
             </div>

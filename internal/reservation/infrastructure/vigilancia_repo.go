@@ -24,7 +24,7 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 		SELECT
 			res.id, res.reserva_grupo_id, res.equipo_id, COALESCE(eq.identificador, 0),
 			res.fecha, res.hora_inicio, res.hora_fin, res.tipo, m.nombre,
-			COALESCE(eq.nombre, 'PC ' || eq.identificador),
+			`+etiquetaConCarroSQL("eq", "car")+`,
 			g.creado_por,
 			COALESCE(u.nombre || ' ' || u.apellido, res.nombre_docente_snapshot, ''),
 			COALESCE(u.email, ''),
@@ -39,6 +39,7 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 			  WHERE r2.reserva_grupo_id = res.reserva_grupo_id)
 		FROM reserva res
 		JOIN equipo eq ON eq.id = res.equipo_id
+		LEFT JOIN carro car ON car.id = eq.carro_id
 		LEFT JOIN reserva_grupo g ON g.id = res.reserva_grupo_id
 		LEFT JOIN materia m ON m.id = res.materia_id
 		LEFT JOIN usuario u ON u.id = g.creado_por

@@ -36,7 +36,14 @@ export function aFechaLocal(iso: string): Date | null {
   return new Date(anio, mes - 1, dia)
 }
 
-/** "martes 4 de agosto". Si la fecha no se entiende, devuelve el ISO. */
+/**
+ * "martes 4 de agosto", a partir de una FECHA ("2026-08-04"): lo que en la
+ * base es una columna DATE, como `reserva.fecha`.
+ *
+ * NO recibe un instante. Para eso está formatearFechaLargaDeInstante: cortarle
+ * los diez primeros caracteres a un TIMESTAMPTZ toma su fecha en UTC, y a las
+ * 23:40 de Argentina eso ya es el día siguiente.
+ */
 export function formatearFechaLarga(iso: string): string {
   const fecha = aFechaLocal(iso)
   return fecha ? LARGA.format(fecha) : iso
@@ -87,4 +94,13 @@ export function formatearFechaCortaYHora(iso: string): string {
 /** "18/08/2026, 21:29" — con año, para un historial que puede ser viejo. */
 export function formatearFechaYHora(iso: string): string {
   return conFormato(iso, FECHA_Y_HORA)
+}
+
+/**
+ * "martes 4 de agosto" a partir de un INSTANTE (`TIMESTAMPTZ`), en la zona del
+ * navegador. Es la que va cuando lo que se muestra es cuándo pasó algo y no
+ * una fecha de calendario.
+ */
+export function formatearFechaLargaDeInstante(iso: string): string {
+  return conFormato(iso, LARGA)
 }

@@ -133,8 +133,8 @@ export function RegistroPage() {
           <CardTitle>Crear cuenta</CardTitle>
           {/* RF-01.3 */}
           <CardDescription>
-            Para el personal de la escuela. Un Admin tiene que aprobar la cuenta antes
-            del primer ingreso.
+            Para el personal de la escuela. Un Admin tiene que aprobar la cuenta antes del
+            primer ingreso.
           </CardDescription>
         </CardHeader>
         <CardContent>

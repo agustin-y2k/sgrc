@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -406,5 +407,45 @@ func TestOpcional_LasNotasSePuedenOmitir(t *testing.T) {
 
 	if _, err := svc.CrearCuentaDeEquipo(context.Background(), "eq1", datos, "abc"); err != nil {
 		t.Fatalf("las notas son opcionales: %v", err)
+	}
+}
+
+// TestRevelarPassword_ClaveCambiada_ErrorQueSeEntiende fija el arreglo de un
+// bug real, encontrado probando el sistema con la base de una instalación en
+// otra máquina: la contraseña está guardada, pero se cifró con una
+// CUENTAS_SECRET distinta de la que corre ahora.
+//
+// Es una situación PREVISTA —el .env.example avisa que cambiar esa clave deja
+// ilegible lo guardado— y sin embargo salía como 500 "error interno", sin
+// mensaje y sin una línea en el log. Quien apretaba "Ver contraseña" no tenía
+// forma de saber que la salida es volver a cargarla mirando la máquina.
+func TestRevelarPassword_ClaveCambiada_ErrorQueSeEntiende(t *testing.T) {
+	svc, repo := servicioConEquipo(t)
+	cuenta, err := svc.CrearCuentaDeEquipo(context.Background(), "eq1",
+		datosDeCuenta("Alumno", domain.VisibilidadPublica), "SecretaDeLaMaquina")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	// Lo que hace un cambio de CUENTAS_SECRET, visto desde acá: lo guardado
+	// deja de corresponder con la clave del servicio.
+	otro, err := secretos.Nuevo("otra-clave-completamente-distinta")
+	if err != nil {
+		t.Fatalf("armando el otro cifrador: %v", err)
+	}
+	conOtraClave, err := otro.Cifrar("SecretaDeLaMaquina")
+	if err != nil {
+		t.Fatalf("cifrando con la otra clave: %v", err)
+	}
+	repo.cuentas[cuenta.ID].PasswordCifrada = conOtraClave
+
+	_, _, err = svc.RevelarPasswordDeCuenta(context.Background(), cuenta.ID, esAdmin)
+
+	if !errors.Is(err, ErrPasswordIlegible) {
+		t.Fatalf("esperaba ErrPasswordIlegible, obtuve %v", err)
+	}
+	// El mensaje tiene que decir qué hacer, no solo que algo falló.
+	if !strings.Contains(err.Error(), "volver a cargarla") {
+		t.Errorf("el error tiene que decir cuál es la salida, obtuve: %v", err)
 	}
 }

@@ -207,16 +207,21 @@ export function InicioPage() {
           {/* "Afuera" y "acá" son la misma pregunta dada vuelta, así que van
               enfrentadas: a la izquierda lo que salió, arriba a la derecha con
               qué se cuenta si alguien golpea la puerta ahora. */}
+          {/* Abierto ocupa el ancho entero y va arriba de todo: es lo que se
+              está haciendo en ese momento, y adentro de la media columna de
+              la derecha los equipos entraban de a tres por renglón en una
+              caja con barra de desplazamiento. */}
+          {entregandoSuelta && (
+            <EntregaSuelta
+              yaAfuera={yaAfuera}
+              onCerrar={() => setEntregandoSuelta(false)}
+            />
+          )}
           <div className="grid gap-4 lg:grid-cols-2">
             <LoQueEstaAfuera compacto />
             <div className="grid content-start gap-4">
               <EnElLaboratorio />
-              {entregandoSuelta ? (
-                <EntregaSuelta
-                  yaAfuera={yaAfuera}
-                  onCerrar={() => setEntregandoSuelta(false)}
-                />
-              ) : (
+              {!entregandoSuelta && (
                 <Card>
                   <CardHeader>
                     <CardTitle>Entregar sin reserva</CardTitle>

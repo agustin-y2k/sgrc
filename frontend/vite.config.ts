@@ -1,3 +1,14 @@
+// Zona fija para TODA la suite de tests, puesta ACÁ y no en el setup porque
+// este archivo es el único que corre antes de que existan los workers —y los
+// workers heredan el entorno— y porque tsconfig.app.json excluye los tipos de
+// Node a propósito: el código de la aplicación no usa `process`.
+//
+// Sin esto la suite se comporta distinto en la máquina de quien programa
+// (Argentina) que en CI, que corre en UTC, y el caso que más importa —un
+// instante de las 23:40 cuyo día en UTC ya es el siguiente— deja de fallar
+// justo donde tendría que hacerlo.
+process.env.TZ = "America/Argentina/Buenos_Aires"
+
 import path from "node:path"
 import { createRequire } from "node:module"
 import { defineConfig } from "vitest/config"

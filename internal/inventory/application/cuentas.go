@@ -239,7 +239,13 @@ func (s *Service) RevelarPasswordDeCuenta(ctx context.Context, cuentaID string, 
 		// Lo guardado no se pudo descifrar: casi siempre es CUENTAS_SECRET
 		// cambiada. Se dice tal cual, porque la salida es volver a cargar la
 		// contraseña y no hay nada que el sistema pueda hacer solo.
-		return nil, "", fmt.Errorf("%w: puede que CUENTAS_SECRET haya cambiado desde que se guardó", err)
+		//
+		// Va envuelto en ErrPasswordIlegible y no como error suelto: así el
+		// mapeo HTTP lo reconoce y contesta con esta explicación. Suelto caía
+		// al 500 "error interno", que no le dice nada a nadie ni deja rastro en
+		// el log. La causa original se conserva en la cadena para quien lea el
+		// error completo.
+		return nil, "", fmt.Errorf("%w (%v)", ErrPasswordIlegible, err)
 	}
 	return cuenta, password, nil
 }

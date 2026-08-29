@@ -122,6 +122,22 @@ if [ -n "$SUG" ] && [ "$SUG" != null ]; then
   echo "→ conversación de soporte $SUG"
 fi
 
+# Un PEDIDO DE MATERIA sin resolver, para que el capítulo que explica cómo
+# resolverlos no se ilustre con "No hay pedidos sin resolver".
+#
+# Lo hace Ada Lovelace —la docente que siembra el overlay de desarrollo— sobre
+# una materia que ya existe y que no da ella: es el caso que muestra los tres
+# datos sobre los que decide el Admin, el nombre de la materia con su curso,
+# quién la pide y el motivo.
+DOC2_EMAIL="${DOCENTE_EMAIL:-docente@escuela.edu.ar}"
+DOC2_PASS="${DOCENTE_PASSWORD:-docente_password_123}"
+DT2=$(api "" POST /api/auth/login "{\"email\":\"$DOC2_EMAIL\",\"password\":\"$DOC2_PASS\"}" | jq -r .token)
+if [ -n "$DT2" ] && [ "$DT2" != null ] && [ -n "$MAT_MAT" ]; then
+  api "$DT2" POST /api/academic/pedidos-de-materia \
+    "{\"materiaId\":\"$MAT_MAT\",\"motivo\":\"Me asignaron el segundo turno de Matemática desde este mes y necesito reservar las computadoras los jueves.\"}" >/dev/null || true
+  echo "→ pedido de materia sin resolver"
+fi
+
 # Una cuenta PENDIENTE que declaró cargo de administración, para que la
 # pantalla de aprobación no salga vacía en las capturas y para que se vea la
 # ficha con "Se registró como Administrador de Sistema" (RF-01.4).

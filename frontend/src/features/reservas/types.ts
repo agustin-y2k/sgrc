@@ -311,6 +311,11 @@ export type RazonNoEntregada =
   | "RESERVA_CANCELADA"
   /** La reserva no dice a nombre de quién: es un bloqueo administrativo. */
   | "SIN_DESTINATARIO"
+  /**
+   * El equipo está en mantenimiento o fuera de servicio: está acá y no se le
+   * da a nadie (RF-08.17). Sale solo como salida a reparación.
+   */
+  | "FUERA_DE_CIRCULACION"
 
 export type EquipoNoEntregada = {
   equipoId: string

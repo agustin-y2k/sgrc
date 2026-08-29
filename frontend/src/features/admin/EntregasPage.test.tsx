@@ -323,7 +323,9 @@ describe("EntregasPage", () => {
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
     await user.click(screen.getByRole("button", { name: /^Entregar 1 equipo/ }))
 
-    expect(await screen.findByText(/tiene reserva 2026-08-07 de 10:00 a 11:00/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/tiene reserva 2026-08-07 de 10:00 a 11:00/)
+    ).toBeInTheDocument()
   })
 
   /**
@@ -365,9 +367,7 @@ describe("EntregasPage", () => {
   it("explica el estado cuando no hay nada afuera", async () => {
     renderPagina()
 
-    expect(
-      await screen.findByText("No hay ningún equipo entregado.")
-    ).toBeInTheDocument()
+    expect(await screen.findByText("No hay ningún equipo entregado.")).toBeInTheDocument()
   })
 
   /**
@@ -413,7 +413,9 @@ describe("EntregasPage", () => {
     })
     renderPagina()
 
-    expect(await screen.findByText(/Ada Lovelace · retiró Juan \(alumno\)/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Ada Lovelace · retiró Juan \(alumno\)/)
+    ).toBeInTheDocument()
   })
 
   // Sin nadie anotado no se inventa un renglón: lo retiró quien responde.
@@ -450,7 +452,14 @@ describe("EntregasPage", () => {
   it("ofrece lo que no se puede reservar pero sí prestar", async () => {
     const user = userEvent.setup()
     vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
-      data: [equipoSuelto({ id: "eq2", nombre: "Cargador", etiqueta: "Cargador", reservable: false })],
+      data: [
+        equipoSuelto({
+          id: "eq2",
+          nombre: "Cargador",
+          etiqueta: "Cargador",
+          reservable: false,
+        }),
+      ],
     })
     renderPagina()
 
@@ -493,5 +502,130 @@ describe("EntregasPage", () => {
 
     expect(inventoryApi.listarEquipos).toHaveBeenCalledTimes(1)
     expect(inventoryApi.listarEquiposDeCarro).not.toHaveBeenCalled()
+  })
+
+  /**
+   * El tipo de un equipo suelto es texto libre: "PROYECTOR" y "Proyector"
+   * cargados en momentos distintos son el mismo lugar. Como el encabezado del
+   * grupo se dibuja en mayúsculas, agrupar por el texto crudo mostraba dos
+   * títulos idénticos con un equipo cada uno — se vio al correr la app.
+   */
+  it("no parte en dos un tipo escrito con distinta caja", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [
+        equipoSuelto({ tipo: "PROYECTOR" }),
+        equipoSuelto({
+          id: "eq2",
+          nombre: "Proyector viejo",
+          etiqueta: "Proyector viejo",
+          tipo: "Proyector",
+        }),
+      ],
+    })
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+
+    await screen.findByRole("checkbox", { name: /^Proyector Epson/ })
+    expect(screen.getAllByText(/^PROYECTOR$/i)).toHaveLength(1)
+    // Y como quedaron juntos, el atajo del grupo los abarca a los dos.
+    expect(screen.getByRole("button", { name: "Marcar 2 equipos" })).toBeInTheDocument()
+  })
+
+  // ── Lo que no está en circulación (RF-08.17) ─────────────────────────
+
+  /**
+   * Un equipo en mantenimiento o fuera de servicio está físicamente acá y no
+   * se le da a nadie. Antes se ofrecía como cualquier otro y salía: el
+   * mostrador dejaba prestar una máquina que un Admin acababa de marcar como
+   * rota.
+   */
+  it("no ofrece para entregar lo que no está disponible", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [
+        equipoSuelto({ estado: "EN_MANTENIMIENTO" }),
+        equipoSuelto({
+          id: "eq2",
+          nombre: "Notebook chica",
+          etiqueta: "Notebook chica",
+          estado: "FUERA_DE_SERVICIO",
+        }),
+      ],
+    })
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+
+    expect(
+      await screen.findByText(/No hay equipos disponibles para entregar/)
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("checkbox", { name: /^Proyector Epson/ })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("checkbox", { name: /^Notebook chica/ })
+    ).not.toBeInTheDocument()
+  })
+
+  /**
+   * La salida a reparación es la de al lado y ofrece justo lo contrario: solo
+   * lo que no está en condiciones de prestarse. Vive en su propio panel para
+   * no meter máquinas rotas en la lista que se usa todos los días.
+   */
+  it("la salida a reparación ofrece solo lo que no está disponible", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [
+        equipoSuelto(),
+        equipoSuelto({
+          id: "eq2",
+          nombre: "Notebook chica",
+          etiqueta: "Notebook chica",
+          estado: "EN_MANTENIMIENTO",
+        }),
+      ],
+    })
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Sacar un equipo a reparación" })
+    )
+
+    expect(
+      await screen.findByRole("checkbox", { name: /^Notebook chica/ })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("checkbox", { name: /^Proyector Epson/ })
+    ).not.toBeInTheDocument()
+  })
+
+  // El motivo es la constancia: dentro de dos meses es lo único que explica
+  // por qué el equipo no está.
+  it("registra la salida a reparación con a dónde va el equipo", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [equipoSuelto({ estado: "FUERA_DE_SERVICIO" })],
+    })
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Sacar un equipo a reparación" })
+    )
+    await user.type(screen.getByLabelText(/Quién se lo lleva/), "Service Rossi")
+    await user.type(screen.getByLabelText(/A dónde va/), "no enciende")
+    await user.click(await screen.findByRole("checkbox", { name: /^Proyector Epson/ }))
+    await user.click(
+      screen.getByRole("button", { name: /^Registrar la salida de 1 equipo/ })
+    )
+
+    expect(reservasApi.entregarSuelta).toHaveBeenCalledWith({
+      equipoIds: ["eq1"],
+      nombre: "Service Rossi",
+      motivo: "no enciende",
+      devolucionEstimada: undefined,
+      salidaAReparacion: true,
+    })
   })
 })

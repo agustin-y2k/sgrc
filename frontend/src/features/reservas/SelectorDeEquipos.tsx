@@ -15,6 +15,7 @@ import type {
 } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { contar, plural } from "@/lib/plural"
+import { MINIMO_PARA_BUSCAR, sinTildes } from "@/lib/texto"
 
 /** Título del grupo de lo que no cuelga de ningún carro. */
 const SIN_CARRO = "Otros equipos"
@@ -42,6 +43,7 @@ export function SelectorDeEquipos({
   onCambio,
   materiaId,
 }: Props) {
+  const [busqueda, setBusqueda] = useState("")
   const franjaCompleta = Boolean(fecha && horaInicio && horaFin && horaFin !== horaInicio)
 
   const { data, isLoading, error } = useQuery({
@@ -70,10 +72,21 @@ export function SelectorDeEquipos({
     )
   }
 
-  const equipos = data?.data ?? []
+  const todos = data?.data ?? []
   const ocupados = data?.ocupados ?? []
 
-  if (equipos.length === 0 && ocupados.length === 0) {
+  // El texto busca en el nombre, el carro y el software: en el mostrador se
+  // busca "PC 12", "EDUTEC" o "AutoCAD" según lo que se tenga en la cabeza.
+  const filtro = sinTildes(busqueda.trim())
+  const equipos = filtro
+    ? todos.filter((eq) =>
+        sinTildes(
+          `${eq.etiqueta} ${eq.carroNombre ?? ""} ${eq.softwareInstalado ?? ""}`
+        ).includes(filtro)
+      )
+    : todos
+
+  if (todos.length === 0 && ocupados.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
         No hay ningún equipo libre en esa franja.
@@ -89,19 +102,71 @@ export function SelectorDeEquipos({
     )
   }
 
+  /**
+   * Marcar o desmarcar un carro entero. Una clase de treinta se arma con las
+   * treinta de un carro, y tildarlas de a una son treinta clics.
+   *
+   * Opera sobre los que se están VIENDO: con una búsqueda puesta, marca lo que
+   * quedó a la vista y no lo que el filtro escondió, que es lo que espera
+   * quien acaba de escribir "EDUTEC".
+   */
+  function alternarCarro(delCarro: EquipoDisponible[], marcar: boolean) {
+    const ids = new Set(delCarro.map((eq) => eq.equipoId))
+    onCambio(
+      marcar
+        ? [
+            ...seleccionadas,
+            ...delCarro
+              .map((eq) => eq.equipoId)
+              .filter((id) => !seleccionadas.includes(id)),
+          ]
+        : seleccionadas.filter((id) => !ids.has(id))
+    )
+  }
+
   // La lista ya viene ordenada por tramo del servidor; acá sólo se corta en
   // bloques respetando ese orden.
   const tramos = agruparPorTramo(equipos)
 
   return (
     <div className="grid gap-4">
-      <p className="text-muted-foreground text-sm">
-        {seleccionadas.length === 0
-          ? `${contar(equipos.length, "equipo")} ${plural(equipos.length, "libre")} en esa franja.`
-          : `${seleccionadas.length} de ${equipos.length} ${plural(seleccionadas.length, "seleccionado")}.`}
-      </p>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className="text-muted-foreground text-sm">
+          {seleccionadas.length === 0
+            ? `${contar(todos.length, "equipo")} ${plural(todos.length, "libre")} en esa franja.`
+            : `${seleccionadas.length} de ${todos.length} ${plural(seleccionadas.length, "seleccionado")}.`}
+        </p>
+        {seleccionadas.length > 0 && (
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground text-xs underline"
+            onClick={() => onCambio([])}
+          >
+            Limpiar la selección ({seleccionadas.length})
+          </button>
+        )}
+      </div>
 
-      {equipos.length === 0 && (
+      {/* El buscador aparece recién cuando la lista es larga. Con tres
+          carros cargados son más de ochenta casillas, y encontrar "la 12 del
+          Carro 2" scrolleando es justo lo que no se puede hacer con alguien
+          esperando. */}
+      {todos.length >= MINIMO_PARA_BUSCAR && (
+        <Input
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          aria-label="Buscar una computadora"
+          placeholder="Buscar — ej.: PC 12, Carro 2, AutoCAD"
+        />
+      )}
+
+      {todos.length > 0 && equipos.length === 0 && (
+        <p className="text-muted-foreground text-sm">
+          Ninguna computadora coincide con «{busqueda.trim()}».
+        </p>
+      )}
+
+      {todos.length === 0 && (
         <p className="text-sm">
           No queda ninguno libre en esa franja, pero abajo está quién tiene cada uno.
         </p>
@@ -116,6 +181,7 @@ export function SelectorDeEquipos({
           equipos={equipos}
           seleccionadas={seleccionadas}
           alternar={alternar}
+          alternarCarro={alternarCarro}
         />
       ) : (
         tramos.map(([tramo, delTramo]) => (
@@ -130,6 +196,7 @@ export function SelectorDeEquipos({
               equipos={delTramo}
               seleccionadas={seleccionadas}
               alternar={alternar}
+              alternarCarro={alternarCarro}
             />
           </section>
         ))
@@ -179,10 +246,12 @@ function EquiposPorCarro({
   equipos,
   seleccionadas,
   alternar,
+  alternarCarro,
 }: {
   equipos: EquipoDisponible[]
   seleccionadas: string[]
   alternar: (equipoId: string, tildada: boolean) => void
+  alternarCarro: (delCarro: EquipoDisponible[], marcar: boolean) => void
 }) {
   const porCarro = new Map<string, EquipoDisponible[]>()
   for (const equipo of equipos) {
@@ -196,7 +265,26 @@ function EquiposPorCarro({
     <>
       {[...porCarro.entries()].map(([carro, delCarro]) => (
         <fieldset key={carro} className="grid gap-2">
-          <legend className="mb-1 text-sm font-medium">{carro}</legend>
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <legend className="text-sm font-medium">{carro}</legend>
+            {delCarro.length > 1 && (
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground text-xs underline"
+                onClick={() =>
+                  alternarCarro(
+                    delCarro,
+                    !delCarro.every((eq) => seleccionadas.includes(eq.equipoId))
+                  )
+                }
+              >
+                {delCarro.every((eq) => seleccionadas.includes(eq.equipoId))
+                  ? "Desmarcar"
+                  : "Marcar"}{" "}
+                {contar(delCarro.length, "equipo")}
+              </button>
+            )}
+          </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {delCarro.map((equipo) => {
               const id = `equipo-${equipo.equipoId}`
@@ -209,6 +297,9 @@ function EquiposPorCarro({
                     id={id}
                     checked={seleccionadas.includes(equipo.equipoId)}
                     onCheckedChange={(v) => alternar(equipo.equipoId, v === true)}
+                    // Quien navega con lector de pantalla no tiene el título
+                    // del carro a la vista, y "PC 12" hay uno por carro.
+                    aria-label={`${equipo.etiqueta} (${carro})`}
                   />
                   <div className="grid gap-0.5">
                     <Label htmlFor={id} className="cursor-pointer">

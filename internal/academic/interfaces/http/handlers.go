@@ -333,13 +333,26 @@ func (h *Handler) RemoverDocenteMateria(c *fiber.Ctx) error {
 
 // GET /api/academic/mis-materias — RF-04.1: las materias en las que el
 // usuario autenticado puede reservar.
+//
+// `?asignadas=true` cambia la pregunta: en qué materias está ASIGNADA esa
+// persona. Para un docente las dos respuestas coinciden; para un Admin no,
+// porque puede reservar en todas y normalmente no dicta ninguna.
+//
+// Existe porque el perfil las mostraba bajo el título "Las materias que das" y
+// a un Admin le listaba las ocho del sistema. Son dos preguntas distintas y
+// hacían falta las dos: el selector de una reserva nueva quiere la primera, el
+// perfil la segunda.
 func (h *Handler) ListarMisMaterias(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
 		return err
 	}
 
-	materias, err := h.svc.ListarMateriasReservables(c.UserContext(), claims.UserID, claims.Rol == "ADMIN")
+	// Con `asignadas=true` se responde igual para cualquier rol: filtrando por
+	// la persona. Es exactamente lo que ya hace el camino del docente.
+	comoAdmin := claims.Rol == "ADMIN" && c.Query("asignadas") != "true"
+
+	materias, err := h.svc.ListarMateriasReservables(c.UserContext(), claims.UserID, comoAdmin)
 	if err != nil {
 		return mapearError(err)
 	}

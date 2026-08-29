@@ -14,11 +14,12 @@ import (
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
-	ciclos          map[string]*domain.CicloLectivo
-	cursos          map[string]*domain.Curso
-	materias        map[string]*domain.Materia
-	docentesMateria map[string]*domain.DocenteMateria
-	pedidos         map[string]*domain.PedidoDeMateria
+	ciclos           map[string]*domain.CicloLectivo
+	cursos           map[string]*domain.Curso
+	materias         map[string]*domain.Materia
+	docentesMateria  map[string]*domain.DocenteMateria
+	pedidos          map[string]*domain.PedidoDeMateria
+	nombresDeUsuario map[string]string
 
 	errCrearCiclo     error
 	errCrearCurso     error
@@ -1069,22 +1070,42 @@ func (r *fakeRepo) GuardarPedido(_ context.Context, p *domain.PedidoDeMateria) e
 	return nil
 }
 
-func (r *fakeRepo) ListarPedidos(_ context.Context, soloPendientes bool) ([]*domain.PedidoDeMateria, error) {
-	var out []*domain.PedidoDeMateria
+// detallar hace lo mismo que el LEFT JOIN del repositorio real: le pega el
+// nombre de la materia y el del curso, y los deja vacíos cuando la materia
+// todavía no existe.
+func (r *fakeRepo) detallar(p *domain.PedidoDeMateria) *PedidoDetallado {
+	d := &PedidoDetallado{Pedido: p}
+	d.DocenteNombre = r.nombresDeUsuario[p.UsuarioID]
+	if p.MateriaID == nil {
+		return d
+	}
+	m, hay := r.materias[*p.MateriaID]
+	if !hay {
+		return d
+	}
+	d.MateriaNombre = m.Nombre
+	if c, hay := r.cursos[m.CursoID]; hay {
+		d.CursoNombre = c.Nombre
+	}
+	return d
+}
+
+func (r *fakeRepo) ListarPedidos(_ context.Context, soloPendientes bool) ([]*PedidoDetallado, error) {
+	var out []*PedidoDetallado
 	for _, p := range r.pedidos {
 		if soloPendientes && p.Estado != domain.PedidoPendiente {
 			continue
 		}
-		out = append(out, p)
+		out = append(out, r.detallar(p))
 	}
 	return out, nil
 }
 
-func (r *fakeRepo) ListarPedidosDeUsuario(_ context.Context, usuarioID string) ([]*domain.PedidoDeMateria, error) {
-	var out []*domain.PedidoDeMateria
+func (r *fakeRepo) ListarPedidosDeUsuario(_ context.Context, usuarioID string) ([]*PedidoDetallado, error) {
+	var out []*PedidoDetallado
 	for _, p := range r.pedidos {
 		if p.UsuarioID == usuarioID {
-			out = append(out, p)
+			out = append(out, r.detallar(p))
 		}
 	}
 	return out, nil

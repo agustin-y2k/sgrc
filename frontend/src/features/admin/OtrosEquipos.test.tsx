@@ -369,4 +369,92 @@ describe("OtrosEquipos", () => {
     expect(await screen.findByText("Cómo entrar a Proyector Epson")).toBeInTheDocument()
     expect(inventoryApi.listarCuentasDeEquipo).toHaveBeenCalledWith("eq1")
   })
+
+  // ── Estado (RF-03.3 / RF-03.8) ────────────────────────────────────────
+  // Un proyector también se rompe. Antes lo único que se podía hacer con él
+  // era darlo de baja, que además borra su historial de la vista y libera su
+  // nombre para el equipo que lo reemplace.
+
+  it("dice en qué estado está cada equipo", async () => {
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [
+        equipo(),
+        equipo({
+          id: "eq2",
+          nombre: "Notebook chica",
+          etiqueta: "Notebook chica",
+          estado: "EN_MANTENIMIENTO",
+        }),
+      ],
+    })
+    renderSeccion()
+
+    expect(await screen.findByText("Disponible")).toBeInTheDocument()
+    expect(screen.getByText("En mantenimiento")).toBeInTheDocument()
+  })
+
+  it("pasar a mantenimiento pide confirmación y avisa de la cascada", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: /En mantenimiento/ }))
+
+    expect(adminApi.cambiarEstadoEquipo).not.toHaveBeenCalled()
+    expect(screen.getByText(/cancela sus reservas futuras/)).toBeInTheDocument()
+  })
+
+  it("confirmado, manda el estado nuevo y el motivo", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: /Fuera de servicio/ }))
+    await user.type(screen.getByLabelText(/Motivo/), "se quemó la lámpara")
+    await user.click(screen.getByRole("button", { name: "Confirmar cambio" }))
+
+    expect(adminApi.cambiarEstadoEquipo).toHaveBeenCalledWith(
+      "eq1",
+      "FUERA_DE_SERVICIO",
+      "se quemó la lámpara"
+    )
+  })
+
+  /**
+   * Un equipo fuera de servicio vuelve a circulación cuando se arregla: el
+   * caso real fue una máquina sin batería que anduvo en cuanto apareció una.
+   * Lo irreversible es darla de baja, no este estado.
+   */
+  it("un equipo fuera de servicio puede volver a circulación", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [equipo({ estado: "FUERA_DE_SERVICIO" })],
+    })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: /→ Disponible/ }))
+    await user.click(screen.getByRole("button", { name: "Confirmar cambio" }))
+
+    expect(adminApi.cambiarEstadoEquipo).toHaveBeenCalledWith(
+      "eq1",
+      "DISPONIBLE",
+      undefined
+    )
+  })
+
+  /**
+   * Lo único que no es una transición es repetir el estado que ya se tiene:
+   * ese botón sí sobra.
+   */
+  it("no ofrece cambiar al estado en el que el equipo ya está", async () => {
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [equipo({ estado: "FUERA_DE_SERVICIO" })],
+    })
+    renderSeccion()
+
+    await screen.findByText("Proyector Epson")
+    expect(
+      screen.queryByRole("button", { name: /→ Fuera de servicio/ })
+    ).not.toBeInTheDocument()
+  })
 })

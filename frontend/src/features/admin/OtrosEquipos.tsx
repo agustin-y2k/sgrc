@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { EstadoBadge } from "@/components/EstadoBadge"
+import { EstadoBadge, TONO_PC } from "@/components/EstadoBadge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,7 +18,11 @@ import { AvisoDeCascada } from "@/features/admin/AvisoDeCascada"
 import * as inventoryApi from "@/features/inventory/api"
 import { CuentasDeEquipo } from "@/features/inventory/CuentasDeEquipo"
 import type { ResultadoCascada } from "@/features/admin/types"
-import type { Equipo } from "@/features/inventory/types"
+import {
+  ETIQUETA_ESTADO_EQUIPO,
+  TRANSICIONES_DE_ESTADO,
+} from "@/features/inventory/types"
+import type { Equipo, EstadoEquipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
 /**
@@ -27,6 +31,12 @@ import { getErrorMessage } from "@/lib/api-client"
  */
 
 const EQUIPOS_KEY = ["equipos-sueltos"]
+
+type CambioEstado = {
+  equipo: Equipo
+  nuevoEstado: EstadoEquipo
+  motivo: string
+}
 
 function Alta({ tiposUsados, onListo }: { tiposUsados: string[]; onListo: () => void }) {
   const queryClient = useQueryClient()
@@ -285,8 +295,22 @@ export function OtrosEquipos() {
   const [editando, setEditando] = useState<string | null>(null)
   const [dandoDeBaja, setDandoDeBaja] = useState<Equipo | null>(null)
   const [viendoCuentas, setViendoCuentas] = useState<string | null>(null)
+  const [cambiando, setCambiando] = useState<CambioEstado | null>(null)
 
   const [cascada, setCascada] = useState<ResultadoCascada | null>(null)
+
+  // RF-03.8 — lo mismo que para una computadora de carro: un proyector
+  // también se rompe, y antes lo único que se podía hacer con él era darlo de
+  // baja, que además borra su historial de la vista y libera su nombre.
+  const cambiarEstado = useMutation({
+    mutationFn: ({ equipo, nuevoEstado, motivo }: CambioEstado) =>
+      adminApi.cambiarEstadoEquipo(equipo.id, nuevoEstado, motivo.trim() || undefined),
+    onSuccess: async (resultado) => {
+      setCambiando(null)
+      setCascada(resultado)
+      await queryClient.invalidateQueries({ queryKey: EQUIPOS_KEY })
+    },
+  })
 
   const darDeBaja = useMutation({
     mutationFn: (equipo: Equipo) => adminApi.darDeBajaEquipo(equipo.id),
@@ -331,25 +355,36 @@ export function OtrosEquipos() {
           </p>
         )}
 
-        {darDeBaja.error && (
-          <Alert variant="destructive">
-            <AlertDescription>{getErrorMessage(darDeBaja.error)}</AlertDescription>
-          </Alert>
-        )}
-
+        {/* Los errores de cambiar el estado y de dar de baja se muestran
+            DENTRO del recuadro de confirmación, al lado del botón que se
+            apretó: acá arriba, con la lista larga, quedaban fuera de la
+            pantalla y el botón parecía no hacer nada. */}
         <AvisoDeCascada resultado={cascada} />
 
         {equipos.map((e) => {
           const editandoEste = editando === e.id
           const bajandoEste = dandoDeBaja?.id === e.id
           const cuentasAbiertas = viendoCuentas === e.id
+          const cambiandoEste = cambiando?.equipo.id === e.id
 
           return (
             <div key={e.id} className="grid gap-2 rounded-md border p-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              {/* Nombre arriba y botones abajo SIEMPRE, no lado a lado a
+                  partir de `sm`. Es el mismo problema que ya tenía el
+                  inventario de un carro: la fila de botones es `shrink-0` y
+                  crece con cada función nueva —hoy son cinco, con los dos
+                  cambios de estado—, así que al nombre y sus etiquetas les
+                  tocaba un pedazo cada vez más angosto y "Solo préstamo"
+                  bajaba a un renglón propio. */}
+              <div className="grid gap-2">
                 <div className="min-w-0">
-                  <p className="font-medium">
-                    {e.nombre}{" "}
+                  <p className="flex flex-wrap items-center gap-1.5 font-medium">
+                    {e.nombre}
+                    {/* El estado primero: dice si el equipo se puede usar hoy.
+                        Que además se reserve o no es la regla de siempre. */}
+                    <EstadoBadge tono={TONO_PC[e.estado]}>
+                      {ETIQUETA_ESTADO_EQUIPO[e.estado]}
+                    </EstadoBadge>
                     {e.reservable ? (
                       <EstadoBadge tono="info">Se puede reservar</EstadoBadge>
                     ) : (
@@ -368,8 +403,26 @@ export function OtrosEquipos() {
                     )}
                   </p>
                 </div>
-                {!editandoEste && !bajandoEste && (
-                  <div className="flex shrink-0 flex-wrap gap-2">
+                {!editandoEste && !bajandoEste && !cambiandoEste && (
+                  <div className="flex flex-wrap gap-2">
+                    {/* Solo las transiciones que el backend acepta: fuera de
+                        servicio es terminal, y para eso está Dar de baja. */}
+                    {TRANSICIONES_DE_ESTADO[e.estado].map((destino) => (
+                      <Button
+                        key={destino}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // Sin esto, el error de un intento anterior sobre
+                          // OTRO equipo aparece en este recuadro recién
+                          // abierto.
+                          cambiarEstado.reset()
+                          setCambiando({ equipo: e, nuevoEstado: destino, motivo: "" })
+                        }}
+                      >
+                        → {ETIQUETA_ESTADO_EQUIPO[destino]}
+                      </Button>
+                    ))}
                     <Button variant="outline" size="sm" onClick={() => setEditando(e.id)}>
                       Editar
                     </Button>
@@ -387,13 +440,73 @@ export function OtrosEquipos() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() => setDandoDeBaja(e)}
+                      onClick={() => {
+                        darDeBaja.reset()
+                        setDandoDeBaja(e)
+                      }}
                     >
                       Dar de baja
                     </Button>
                   </div>
                 )}
               </div>
+
+              {/* RF-03.8: sacar un equipo de disponible cancela sus reservas
+                  futuras, y volver a disponible NO las restaura. Por eso se
+                  avisa antes y no después. */}
+              {cambiandoEste && cambiando && (
+                <div className="grid gap-2 rounded-md border p-3">
+                  {cambiando.nuevoEstado !== "DISPONIBLE" ? (
+                    <p className="text-destructive text-sm">
+                      Pasar {e.nombre} a{" "}
+                      {ETIQUETA_ESTADO_EQUIPO[cambiando.nuevoEstado].toLowerCase()}{" "}
+                      cancela sus reservas futuras y avisa a cada docente. Deja de poder
+                      entregarse: para llevarlo al técnico, registrá una salida a
+                      reparación desde Entregas.
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">
+                      El equipo vuelve a poder reservarse y entregarse. Las reservas que
+                      se cancelaron mientras no lo estaba no se recuperan.
+                    </p>
+                  )}
+                  <div className="grid gap-1.5">
+                    <Label htmlFor={`motivo-suelto-${e.id}`}>Motivo (opcional)</Label>
+                    <Input
+                      id={`motivo-suelto-${e.id}`}
+                      value={cambiando.motivo}
+                      onChange={(ev) =>
+                        setCambiando({ ...cambiando, motivo: ev.target.value })
+                      }
+                      placeholder="Se incluye en el aviso al docente"
+                    />
+                  </div>
+                  {cambiarEstado.error && (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {getErrorMessage(cambiarEstado.error)}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={cambiarEstado.isPending}
+                      onClick={() => cambiarEstado.mutate(cambiando)}
+                    >
+                      Confirmar cambio
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCambiando(null)}
+                    >
+                      Volver
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {editandoEste && (
                 <Edicion
@@ -418,6 +531,13 @@ export function OtrosEquipos() {
                     El nombre queda libre para volver a usarlo en el equipo que lo
                     reemplace.
                   </p>
+                  {darDeBaja.error && (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {getErrorMessage(darDeBaja.error)}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"

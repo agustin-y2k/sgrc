@@ -353,13 +353,14 @@ func (h *Handler) CalendarioDeEquipo(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "hasta: "+err.Error())
 	}
 
-	bloques, err := h.svc.CalendarioDeEquipo(c.UserContext(), equipoID, desde, hasta)
+	etiqueta, bloques, err := h.svc.CalendarioDeEquipo(c.UserContext(), equipoID, desde, hasta)
 	if err != nil {
 		return mapearError(err)
 	}
 
 	resp := calendarioEquipoResponse{
 		EquipoID: equipoID,
+		Etiqueta: etiqueta,
 		Desde:    desde.Format("2006-01-02"),
 		Hasta:    hasta.Format("2006-01-02"),
 		Bloques:  make([]bloqueCalendarioResponse, len(bloques)),

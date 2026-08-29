@@ -28,6 +28,8 @@ stateDiagram-v2
 
 > Los tránsitos hacia `EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` son de duración **indefinida** y disparan cancelación en cascada de las reservas futuras de ese equipo puntual (RF-03.8). El regreso a `DISPONIBLE` no restaura nada automáticamente.
 
+> **`FUERA_DE_SERVICIO` no es terminal**, y este diagrama siempre lo dijo. El código lo trataba como si lo fuera —citando a este archivo para justificarlo— y por eso un equipo que se arreglaba no tenía forma de volver: la pantalla ofrecía el botón y el servidor respondía 409. Corregido el 2026-08-27. Lo terminal es `dado_de_baja`, que es otra columna.
+
 ## Estado de una Reserva (un equipo puntual)
 
 ```mermaid
@@ -121,7 +123,7 @@ son cosas distintas, ver RF-08 y `07-modelo-datos.md`.
 > cambiar la máquina o cancelar. Es la única transición del sistema que no genera
 > ninguna notificación, y la razón es esa.
 
-- Equipo en `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` o `dado_de_baja=true` rechaza nuevas reservas. **Entregarlo sí se permite** salvo que esté dado de baja: llevarle una máquina rota al técnico es justamente un préstamo (RF-08).
+- Equipo en `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` o `dado_de_baja=true` rechaza nuevas reservas, **y también rechaza entregas**: está físicamente en el laboratorio y no se le da a nadie (RF-08.17). Llevarle una máquina rota al técnico sigue registrándose, pero como *salida a reparación* (RF-08.21), que exige decir a dónde va y vive en un panel aparte del mostrador. Lo dado de baja no sale por ningún camino.
 - `Reserva` `CANCELADA` o `FINALIZADA` es inmutable; lo mismo aplica a `ReservaGrupo`. Ambas se eliminan físicamente al archivar el ciclo lectivo de su materia (no antes).
 - Cursos y materias con `archivado=true` no aparecen en vistas activas; a diferencia de las reservas, ellos **sí** se preservan (nunca se eliminan) para no recrearlos el año siguiente.
 - Un usuario con `estado=PENDIENTE`, `RECHAZADA` o `BAJA` no puede operar en el sistema aunque intente autenticarse. `BAJA` es terminal — no hay reactivación.

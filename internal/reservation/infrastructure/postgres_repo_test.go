@@ -1099,6 +1099,10 @@ func (validadorEquipoOK) EquipoEstaEnInventario(context.Context, string) (bool, 
 	return true, nil
 }
 
+func (validadorEquipoOK) CondicionParaEntregar(context.Context, string) (application.CondicionDeEquipo, error) {
+	return application.CondicionDeEquipo{EnInventario: true, Estado: "DISPONIBLE"}, nil
+}
+
 // Estos tests no miran los avisos, así que alcanza con no romper el contrato:
 // la etiqueta real la resuelve ValidadorEquipoPostgres, que tiene su propio
 // test contra la base.

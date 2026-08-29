@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/ramiro/sgrc/internal/academic/application"
 	"github.com/ramiro/sgrc/internal/academic/domain"
 	"github.com/ramiro/sgrc/internal/shared/audit"
 )
@@ -108,10 +109,10 @@ func (h *Handler) ResolverPedidoDeMateria(c *fiber.Ctx) error {
 	return c.JSON(toPedidoResponse(p))
 }
 
-func aRespuestas(pedidos []*domain.PedidoDeMateria) []pedidoResponse {
+func aRespuestas(pedidos []*application.PedidoDetallado) []pedidoResponse {
 	data := make([]pedidoResponse, len(pedidos))
 	for i, p := range pedidos {
-		data[i] = toPedidoResponse(p)
+		data[i] = toPedidoDetalladoResponse(p)
 	}
 	return data
 }

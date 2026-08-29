@@ -99,7 +99,11 @@ describe("ReportesPage", () => {
     renderPagina()
 
     expect(await screen.findByText("PC 7")).toBeInTheDocument()
-    expect(adminApi.reporteUsoEquipos).toHaveBeenCalledWith("c-activo", undefined, undefined)
+    expect(adminApi.reporteUsoEquipos).toHaveBeenCalledWith(
+      "c-activo",
+      undefined,
+      undefined
+    )
   })
 
   // El reporte devolvía solo UUIDs: sin identificador ni carro no se puede
@@ -155,7 +159,10 @@ describe("ReportesPage", () => {
     renderPagina()
     await screen.findByText("PC 7")
 
-    expect(adminApi.reporteIncidenciasPorEquipo).toHaveBeenCalledWith(undefined, undefined)
+    expect(adminApi.reporteIncidenciasPorEquipo).toHaveBeenCalledWith(
+      undefined,
+      undefined
+    )
     expect(adminApi.reporteIncidenciasPorCarro).toHaveBeenCalledWith(undefined, undefined)
   })
 
@@ -429,7 +436,9 @@ describe("ReportesPage", () => {
     })
     renderPagina()
 
-    expect(await screen.findByText(/15 incidencias en 2 tipos de falla/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/15 incidencias en 2 tipos de falla/)
+    ).toBeInTheDocument()
     expect(screen.getByText("batería")).toBeInTheDocument()
   })
 

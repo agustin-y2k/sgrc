@@ -402,7 +402,9 @@ function RenovacionMasiva({ ids, onListo }: { ids: string[]; onListo: () => void
   return (
     <Card>
       <CardContent className="grid gap-3">
-        <p className="text-sm font-medium">{contar(ids.length, "licencia")} {plural(ids.length, "seleccionada")}</p>
+        <p className="text-sm font-medium">
+          {contar(ids.length, "licencia")} {plural(ids.length, "seleccionada")}
+        </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label htmlFor="renovadas-el">Fecha en que se renovaron</Label>

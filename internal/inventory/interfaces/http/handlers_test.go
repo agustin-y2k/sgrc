@@ -532,13 +532,37 @@ func TestHTTP_CambiarEstadoEquipo_EstadoInvalido_400(t *testing.T) {
 	}
 }
 
-func TestHTTP_CambiarEstadoEquipo_DesdeFueraDeServicio_409(t *testing.T) {
+// Un equipo fuera de servicio que se arregla vuelve a circulación. Antes esto
+// respondía 409 y la pantalla ofrecía el botón igual: se apretaba "Confirmar
+// cambio" y no pasaba nada visible.
+func TestHTTP_CambiarEstadoEquipo_DesdeFueraDeServicio_Vuelve(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Estado: domain.EstadoFueraDeServicio}
 	app := nuevaAppDeTest(repo)
 
 	req := httptest.NewRequest("PATCH", "/api/inventory/equipos/pc1/estado",
 		jsonBody(cambiarEstadoEquipoRequest{Estado: "DISPONIBLE"}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+	if repo.equipos["pc1"].Estado != domain.EstadoDisponible {
+		t.Errorf("estado = %s, esperaba DISPONIBLE", repo.equipos["pc1"].Estado)
+	}
+}
+
+// Repetir el estado que ya se tiene sigue siendo 409: el pedido está bien
+// formado, pero no es un cambio.
+func TestHTTP_CambiarEstadoEquipo_AlMismoEstado_409(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Estado: domain.EstadoFueraDeServicio}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/inventory/equipos/pc1/estado",
+		jsonBody(cambiarEstadoEquipoRequest{Estado: "FUERA_DE_SERVICIO"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -619,5 +643,77 @@ func TestHTTP_EditarIncidencia_ComoDocente_403(t *testing.T) {
 	resp, _ := app.Test(req)
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	}
+}
+
+// TestHTTP_EditarEquipo_ConEstado_400 fija el arreglo de una trampa real: el
+// cuerpo de PATCH /equipos/{id} no tenía campo `estado`, así que mandarlo
+// devolvía 200 y se descartaba en silencio. Quien escribía un script contra la
+// API veía "salió bien" y la máquina seguía en el estado viejo.
+//
+// El estado tiene su propia ruta porque cambiarlo cancela las reservas que
+// quedan sin máquina (RF-03.8): no es un campo más del formulario.
+func TestHTTP_EditarEquipo_ConEstado_400(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("PATCH", "/api/inventory/equipos/eq1",
+		bytes.NewBufferString(`{"estado":"DISPONIBLE"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+	var cuerpo bytes.Buffer
+	if _, err := cuerpo.ReadFrom(resp.Body); err != nil {
+		t.Fatalf("no se pudo leer la respuesta: %v", err)
+	}
+	if !strings.Contains(cuerpo.String(), "/estado") {
+		t.Errorf("el mensaje tiene que decir a qué ruta ir, obtuve: %s", cuerpo.String())
+	}
+}
+
+// TestHTTP_RevelarPassword_ClaveCambiada_409 es la otra mitad del arreglo: el
+// servicio ya devolvía una explicación —"hay que volver a cargarla mirando el
+// equipo"— y el mapeo la tiraba, porque no tenía caso para este error y caía
+// al 500 genérico. En pantalla se leía "error interno" y en el log no quedaba
+// nada.
+func TestHTTP_RevelarPassword_ClaveCambiada_409(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["eq1"] = &domain.Equipo{ID: "eq1", Nombre: "Notebook 1"}
+	// Lo guardado no corresponde con la clave que corre: es lo que deja un
+	// cambio de CUENTAS_SECRET.
+	repo.cuentas["cu1"] = &domain.CuentaDeEquipo{
+		ID: "cu1", EquipoID: "eq1", Usuario: "alumno", Clase: "Local",
+		Privilegio: domain.PrivilegioComun, Visibilidad: domain.VisibilidadPublica,
+		TienePassword: true, PasswordCifrada: "esto-no-lo-descifra-ninguna-clave",
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/inventory/cuentas/cu1/password", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
+	}
+
+	var cuerpo bytes.Buffer
+	if _, err := cuerpo.ReadFrom(resp.Body); err != nil {
+		t.Fatalf("no se pudo leer la respuesta: %v", err)
+	}
+	if strings.Contains(cuerpo.String(), "error interno") {
+		t.Errorf("volvió el mensaje genérico: %s", cuerpo.String())
+	}
+	// Lo que importa no es el diagnóstico sino qué hacer con él.
+	if !strings.Contains(cuerpo.String(), "volver a cargarla") {
+		t.Errorf("la respuesta tiene que decir cuál es la salida, obtuve: %s", cuerpo.String())
 	}
 }

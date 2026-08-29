@@ -18,6 +18,31 @@ const (
 
 var ErrEstadoEquipoInvalido = errors.New("estado de equipo inválido")
 
+// Legible es el estado escrito como se lo nombra en la escuela, para los
+// textos que lee una persona: el aviso de que se le canceló una reserva sale
+// al buzón y al correo de un docente, y "FUERA_DE_SERVICIO" ahí es el valor de
+// un enum gritando en un mensaje que ya trae una mala noticia.
+//
+// En minúscula y sin sujeto porque se arma en frases más largas ("el equipo
+// quedó fuera de servicio"). Es el equivalente de ETIQUETA_ESTADO_EQUIPO en el
+// frontend, que resuelve lo mismo para las pantallas.
+//
+// El default devuelve el valor crudo: un estado que no esté en la lista no
+// puede existir —ParseEstadoEquipo es la única puerta de entrada— y si algún
+// día existiera, un texto feo es mejor que uno vacío.
+func (e EstadoEquipo) Legible() string {
+	switch e {
+	case EstadoDisponible:
+		return "disponible"
+	case EstadoEnMantenimiento:
+		return "en mantenimiento"
+	case EstadoFueraDeServicio:
+		return "fuera de servicio"
+	default:
+		return string(e)
+	}
+}
+
 func ParseEstadoEquipo(s string) (EstadoEquipo, error) {
 	switch EstadoEquipo(s) {
 	case EstadoDisponible, EstadoEnMantenimiento, EstadoFueraDeServicio:
@@ -27,10 +52,18 @@ func ParseEstadoEquipo(s string) (EstadoEquipo, error) {
 	}
 }
 
-// PuedeTransicionarA implementa el diagrama de estados de PC
-// (docs/05-diagramas-estado.md): DISPONIBLE y EN_MANTENIMIENTO se alternan
-// libremente entre sí y hacia FUERA_DE_SERVICIO; FUERA_DE_SERVICIO es
-// terminal.
+// PuedeTransicionarA implementa el diagrama de estados de equipo
+// (docs/05-diagramas-estado.md): los tres estados se alternan libremente entre
+// sí, y lo único de lo que no se vuelve es la baja del inventario, que es otra
+// cosa (el flag dado_de_baja, no un valor de este enum).
+//
+// FUERA_DE_SERVICIO NO es terminal, aunque este código dijera que sí y citara
+// al diagrama —que dice lo contrario— para justificarlo. La diferencia con
+// EN_MANTENIMIENTO no es "roto para siempre" contra "roto por un rato", sino
+// si la institución puede repararlo con lo que tiene; y eso cambia:
+// una máquina sin batería vuelve a andar en cuanto aparece una batería. Lo
+// irreversible es darla de baja, que la saca del inventario y libera su
+// nombre.
 func (e EstadoEquipo) PuedeTransicionarA(nuevo EstadoEquipo) bool {
 	switch e {
 	case EstadoDisponible:
@@ -38,7 +71,7 @@ func (e EstadoEquipo) PuedeTransicionarA(nuevo EstadoEquipo) bool {
 	case EstadoEnMantenimiento:
 		return nuevo == EstadoDisponible || nuevo == EstadoFueraDeServicio
 	case EstadoFueraDeServicio:
-		return false
+		return nuevo == EstadoDisponible || nuevo == EstadoEnMantenimiento
 	default:
 		return false
 	}

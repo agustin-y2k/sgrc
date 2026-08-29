@@ -53,12 +53,12 @@ compilada servida por nginx, no Vite— y toman las credenciales del docente
 sembrado y del `.env` del proyecto. Si no las encuentran **se saltean** en vez
 de fallar, para que `npm run e2e` nunca rompa solo por el entorno.
 
-| Variable | Para qué |
-| --- | --- |
-| `E2E_BASE_URL` | Dónde está el frontend (por defecto `http://localhost:8081`) |
-| `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` | El Admin sembrado por `cmd/main.go` |
-| `E2E_DOCENTE_EMAIL` / `E2E_DOCENTE_PASSWORD` | Un docente **aprobado y asignado a una materia de un ciclo activo** |
-| `E2E_FECHA_RESERVA` | Fecha `YYYY-MM-DD` a reservar, si el valor por defecto cae fuera del ciclo activo |
+| Variable                                     | Para qué                                                                          |
+| -------------------------------------------- | --------------------------------------------------------------------------------- |
+| `E2E_BASE_URL`                               | Dónde está el frontend (por defecto `http://localhost:8081`)                      |
+| `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD`     | El Admin sembrado por `cmd/main.go`                                               |
+| `E2E_DOCENTE_EMAIL` / `E2E_DOCENTE_PASSWORD` | Un docente **aprobado y asignado a una materia de un ciclo activo**               |
+| `E2E_FECHA_RESERVA`                          | Fecha `YYYY-MM-DD` a reservar, si el valor por defecto cae fuera del ciclo activo |
 
 Cada corrida reserva en una **franja distinta**: el test cancela su reserva pero
 no puede borrarla, así que con una franja fija la segunda corrida encontraría

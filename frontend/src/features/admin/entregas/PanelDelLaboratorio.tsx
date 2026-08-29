@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  nombreDeEquipo,
   PRESTAMOS_KEY,
   REFRESCO_DEL_MOSTRADOR,
 } from "@/features/admin/entregas/compartido"
@@ -70,9 +71,7 @@ function agruparPorClase(reservas: ReservaDetallada[]): ReservaDelDia[] {
     })
   }
 
-  return [...porGrupo.values()].sort((a, b) =>
-    a.horaInicio.localeCompare(b.horaInicio)
-  )
+  return [...porGrupo.values()].sort((a, b) => a.horaInicio.localeCompare(b.horaInicio))
 }
 
 function Clase({
@@ -126,19 +125,19 @@ function Clase({
       <div className="flex flex-wrap gap-1.5 text-xs">
         {entregadas.map((r) => (
           <EstadoBadge key={r.id} tono="exito">
-            {r.etiqueta} entregada
+            {nombreDeEquipo(r)} entregada
           </EstadoBadge>
         ))}
         {/* "Sin retirar" no es lo mismo que "liberada": la primera todavía
             está guardada para este docente, la segunda ya no. */}
         {sinRetirar.map((r) => (
           <EstadoBadge key={r.id} tono="neutro">
-            {r.etiqueta} sin retirar
+            {nombreDeEquipo(r)} sin retirar
           </EstadoBadge>
         ))}
         {liberadas.map((r) => (
           <EstadoBadge key={r.id} tono="alerta">
-            {r.etiqueta} liberada
+            {nombreDeEquipo(r)} liberada
           </EstadoBadge>
         ))}
       </div>
@@ -153,7 +152,9 @@ function Clase({
         <div className="grid gap-2">
           {abriendoNombre && (
             <div className="grid gap-1.5">
-              <Label htmlFor={`quien-${clase.clave}`}>¿Quién las retira? (opcional)</Label>
+              <Label htmlFor={`quien-${clase.clave}`}>
+                ¿Quién las retira? (opcional)
+              </Label>
               <Input
                 id={`quien-${clase.clave}`}
                 value={retiradoPor}
@@ -244,7 +245,8 @@ export function PanelDelLaboratorio() {
           ))}
           {!isLoading && enCurso.length === 0 && terminadas.length > 0 && (
             <p className="text-muted-foreground text-sm">
-              Hoy ya {plural(terminadas.length, "pasó", "pasaron")} {contar(terminadas.length, "clase")}.
+              Hoy ya {plural(terminadas.length, "pasó", "pasaron")}{" "}
+              {contar(terminadas.length, "clase")}.
             </p>
           )}
         </CardContent>

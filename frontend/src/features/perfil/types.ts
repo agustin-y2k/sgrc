@@ -7,6 +7,18 @@ export type PedidoDeMateria = {
   materiaId?: string
   cursoSolicitado?: string
   materiaSolicitada?: string
+  /**
+   * Cómo se llama la materia que ya existe, y en qué curso. Los resuelve el
+   * servidor: el pedido guarda solo `materiaId`, así que sin esto no había
+   * forma de nombrar lo que se pidió.
+   */
+  materiaNombre?: string
+  cursoNombre?: string
+  /**
+   * Quién lo pidió. Solo lo dibuja la bandeja del Admin: en el perfil de quien
+   * pidió sobra, y el pedido guarda un UUID que no le dice nada a nadie.
+   */
+  docenteNombre?: string
   /** La materia no existe todavía: al aprobar hay que elegir en qué curso crearla. */
   esMateriaNueva: boolean
   motivo: string
@@ -26,9 +38,20 @@ export const ETIQUETA_ESTADO_PEDIDO: Record<EstadoPedido, string> = {
   RECHAZADO: "No aprobado",
 }
 
-/** Qué materia pidió, dicho en una frase. */
-export function materiaDelPedido(p: PedidoDeMateria, nombreDeLaLista?: string) {
-  if (!p.esMateriaNueva) return nombreDeLaLista ?? "la materia que elegiste"
-  const curso = p.cursoSolicitado?.trim()
-  return curso ? `${p.materiaSolicitada} de ${curso}` : (p.materiaSolicitada ?? "")
+/**
+ * Qué materia pidió, dicho en una frase: "Programación de 5°A".
+ *
+ * Sale igual para las dos formas de pedir —una materia de la lista o una que
+ * todavía no existe— porque quien lee la frase necesita lo mismo en los dos
+ * casos. El respaldo genérico quedó solo para un pedido viejo cuya materia se
+ * eliminó después: ahí el JOIN no trae nombre y no hay nada que decir.
+ */
+export function materiaDelPedido(
+  p: PedidoDeMateria,
+  siNoSeSabe = "Una materia que ya no existe"
+) {
+  const nombre = p.esMateriaNueva ? p.materiaSolicitada : p.materiaNombre
+  const curso = (p.esMateriaNueva ? p.cursoSolicitado : p.cursoNombre)?.trim()
+  if (!nombre?.trim()) return siNoSeSabe
+  return curso ? `${nombre} de ${curso}` : nombre
 }

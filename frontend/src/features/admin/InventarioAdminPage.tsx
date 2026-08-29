@@ -24,7 +24,10 @@ import { PrestamosDeEquipo } from "@/features/admin/PrestamosDeEquipo"
 import * as inventoryApi from "@/features/inventory/api"
 import { CuentasDeEquipo } from "@/features/inventory/CuentasDeEquipo"
 import type { ResultadoCascada } from "@/features/admin/types"
-import { ETIQUETA_ESTADO_EQUIPO } from "@/features/inventory/types"
+import {
+  ETIQUETA_ESTADO_EQUIPO,
+  TRANSICIONES_DE_ESTADO,
+} from "@/features/inventory/types"
 import type { Carro, EstadoEquipo, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
@@ -82,16 +85,13 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
   if (isLoading) return <p className="text-muted-foreground text-sm">Cargando equipos…</p>
 
   const equipos = (data?.data ?? []).filter((equipo) => !equipo.dadoDeBaja)
-  const error = cambiarEstado.error ?? darDeBaja.error
 
   return (
     <div className="grid gap-3">
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-        </Alert>
-      )}
-
+      {/* Los errores de estas dos operaciones se muestran DENTRO del recuadro
+          de confirmación, al lado del botón que se apretó, y no acá arriba.
+          Con un carro de treinta máquinas, un error sobre la número 27 salía
+          fuera de la pantalla y "Confirmar cambio" parecía no hacer nada. */}
       <AvisoDeCascada resultado={cascada} />
 
       {equipos.length === 0 && (
@@ -139,26 +139,24 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
               </div>
               {!cambiandoEsta && !bajandoEsta && !editandoEsta && (
                 <div className="flex flex-wrap gap-2">
-                  {(
-                    [
-                      "DISPONIBLE",
-                      "EN_MANTENIMIENTO",
-                      "FUERA_DE_SERVICIO",
-                    ] as EstadoEquipo[]
-                  )
-                    .filter((e) => e !== equipo.estado)
-                    .map((e) => (
-                      <Button
-                        key={e}
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setCambiando({ equipo, nuevoEstado: e, motivo: "" })
-                        }
-                      >
-                        → {ETIQUETA_ESTADO_EQUIPO[e]}
-                      </Button>
-                    ))}
+                  {/* Solo las transiciones que el backend acepta: desde fuera
+                      de servicio no hay ninguna, y el botón "→ Disponible"
+                      que había ahí devolvía siempre un error. */}
+                  {TRANSICIONES_DE_ESTADO[equipo.estado].map((e) => (
+                    <Button
+                      key={e}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        // Sin esto, el error de un intento anterior sobre OTRA
+                        // máquina aparece en este recuadro recién abierto.
+                        cambiarEstado.reset()
+                        setCambiando({ equipo, nuevoEstado: e, motivo: "" })
+                      }}
+                    >
+                      → {ETIQUETA_ESTADO_EQUIPO[e]}
+                    </Button>
+                  ))}
                   <Button
                     variant="outline"
                     size="sm"
@@ -220,7 +218,10 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => setDandoDeBaja(equipo)}
+                    onClick={() => {
+                      darDeBaja.reset()
+                      setDandoDeBaja(equipo)
+                    }}
                   >
                     Dar de baja
                   </Button>
@@ -257,6 +258,13 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                     placeholder="Se incluye en el aviso al docente"
                   />
                 </div>
+                {cambiarEstado.error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      {getErrorMessage(cambiarEstado.error)}
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -297,6 +305,13 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                   Dar de baja el equipo {equipo.identificador} la saca del inventario y
                   cancela sus reservas futuras. Su historial de incidencias se conserva.
                 </p>
+                {darDeBaja.error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      {getErrorMessage(darDeBaja.error)}
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div className="flex gap-2">
                   <Button
                     size="sm"

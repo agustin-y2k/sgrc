@@ -221,7 +221,7 @@ func (s *Service) CambiarEstadoEquipo(ctx context.Context, equipoID string, nuev
 
 	resultado := &ResultadoCascada{}
 	if disparaCascada(nuevo) {
-		motivoTexto := motivoPorDefecto(pc, nuevo, motivo)
+		motivoTexto := motivoPorDefecto(nuevo, motivo)
 		canceladas, notificados, err := s.validadorReservas.CancelarReservasFuturasDeEquipo(ctx, equipoID, motivoTexto)
 		if err != nil {
 			return nil, errCascada(err)
@@ -271,7 +271,7 @@ func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*Result
 
 	// Minúscula y sin prefijo: esto se lee después de "Tu reserva fue cancelada:
 	// " (ver motivoPorDefecto).
-	motivo := fmt.Sprintf("%s fue dado de baja del inventario", pc.Etiqueta())
+	motivo := "el equipo fue dado de baja del inventario"
 	canceladas, notificados, err := s.validadorReservas.CancelarReservasFuturasDeEquipo(ctx, equipoID, motivo)
 	if err != nil {
 		return nil, errCascada(err)
@@ -283,11 +283,24 @@ func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*Result
 // motivoPorDefecto arma la RAZÓN de la cancelación, no el aviso completo: el
 // "Tu reserva fue cancelada:" lo antepone el suscriptor de notification (ver
 // internal/notification/application/subscribers.go).
-func motivoPorDefecto(pc *domain.Equipo, nuevo domain.EstadoEquipo, motivo *string) string {
+//
+// NO nombra el equipo, y esa es la regla que comparte con los otros dos
+// motivos del sistema ("la escuela cambió su horario de apertura…" en
+// availability, "Se quitó al único docente…" en academic). Quien arma el aviso
+// ya nombró la máquina —las tres formas del mensaje lo hacen, y el correo la
+// lista arriba del renglón "Motivo:"—, así que nombrarla de nuevo acá salía
+// como "Tu reserva del 28/08 (PC 7 del Carro 1) fue cancelada: PC 7 del Carro
+// 1 pasó a FUERA_DE_SERVICIO".
+//
+// Dice "el equipo" y no arranca directo en el verbo para que se lea igual de
+// bien solo, que es como aparece en el correo. Y "quedó" y no "pasó a" por el
+// estado del medio: "pasó a en mantenimiento" no se puede leer, "quedó en
+// mantenimiento" sí, y la misma frase sirve para los tres.
+func motivoPorDefecto(nuevo domain.EstadoEquipo, motivo *string) string {
 	if motivo != nil && *motivo != "" {
 		return *motivo
 	}
-	return fmt.Sprintf("%s pasó a %s", pc.Etiqueta(), nuevo)
+	return fmt.Sprintf("el equipo quedó %s", nuevo.Legible())
 }
 
 func (s *Service) ListarEquiposPorCarro(ctx context.Context, carroID string) ([]*domain.Equipo, error) {

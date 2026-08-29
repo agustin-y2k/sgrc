@@ -689,7 +689,10 @@ func TestCambiarEstadoEquipo_ADisponible_NoDisparaCascada(t *testing.T) {
 	}
 }
 
-func TestCambiarEstadoEquipo_TransicionInvalida_NoLlegaALaCascada(t *testing.T) {
+// Un equipo fuera de servicio que se arregla vuelve a circulación, y volver
+// nunca cancela nada: la cascada es de ida. El caso real fue una máquina que
+// pasó a fuera de servicio por no tener batería y volvió cuando apareció una.
+func TestCambiarEstadoEquipo_DesdeFueraDeServicio_VuelveSinCascada(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Estado: domain.EstadoFueraDeServicio}
 	validador := &fakeValidadorReservas{}
@@ -697,11 +700,14 @@ func TestCambiarEstadoEquipo_TransicionInvalida_NoLlegaALaCascada(t *testing.T) 
 
 	_, err := svc.CambiarEstadoEquipo(context.Background(), "pc1", domain.EstadoDisponible, nil)
 
-	if !errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida) {
-		t.Fatalf("esperaba ErrTransicionEstadoEquipoInvalida, obtuve %v", err)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if repo.equipos["pc1"].Estado != domain.EstadoDisponible {
+		t.Errorf("estado = %s, esperaba DISPONIBLE", repo.equipos["pc1"].Estado)
 	}
 	if validador.llamado {
-		t.Error("una transición inválida no debería disparar ninguna cascada")
+		t.Error("volver a circulación no debería disparar ninguna cascada")
 	}
 }
 
@@ -737,8 +743,9 @@ func TestCambiarEstadoEquipo_SinMotivo_UsaMensajePorDefecto(t *testing.T) {
 		t.Error("esperaba un mensaje generado por defecto, no vacío")
 	}
 	// Es la RAZÓN, no el aviso entero: el "Tu reserva fue cancelada:" lo
-	// antepone notification.
-	esperado := "PC 27 pasó a FUERA_DE_SERVICIO"
+	// antepone notification, que además ya nombró la máquina. Por eso el motivo
+	// NO la nombra — ver motivoPorDefecto.
+	esperado := "el equipo quedó fuera de servicio"
 	if validador.motivoRecibido != esperado {
 		t.Errorf("motivo incorrecto:\n  esperado %q\n  obtenido %q", esperado, validador.motivoRecibido)
 	}
@@ -946,8 +953,10 @@ func TestCambiarEstadoEquipo_MismoEstadoSinNadaPendiente_SigueSiendoError(t *tes
 	}
 }
 
-// La excepción es solo para repetir la MISMA transición.
-func TestCambiarEstadoEquipo_DesdeTerminalConReservasVivas_SigueSiendoError(t *testing.T) {
+// Cambiar el diagnóstico de un equipo que ya está fuera de circulación sí es
+// una transición, y dispara la cascada como cualquier otra salida de
+// DISPONIBLE: si le quedaban reservas vivas, se cancelan.
+func TestCambiarEstadoEquipo_DeFueraDeServicioAMantenimiento_CancelaLoQueQuede(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Estado: domain.EstadoFueraDeServicio}
 	validador := &fakeValidadorReservas{tieneFuturas: true}
@@ -955,11 +964,11 @@ func TestCambiarEstadoEquipo_DesdeTerminalConReservasVivas_SigueSiendoError(t *t
 
 	_, err := svc.CambiarEstadoEquipo(context.Background(), "pc1", domain.EstadoEnMantenimiento, nil)
 
-	if !errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida) {
-		t.Fatalf("esperaba ErrTransicionEstadoEquipoInvalida, obtuve %v", err)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
 	}
-	if validador.llamado {
-		t.Error("una transición inválida no debería disparar ninguna cascada")
+	if !validador.llamado {
+		t.Error("salir de circulación siempre cancela las reservas futuras que queden")
 	}
 }
 
@@ -995,9 +1004,9 @@ func TestDarDeBajaEquipo_ReintentoConCascadaPendiente_LaCompleta(t *testing.T) {
 	if resultado.ReservasCanceladas != 5 {
 		t.Errorf("esperaba 5 reservas canceladas, obtuve %d", resultado.ReservasCanceladas)
 	}
-	// El motivo tiene que seguir nombrando el equipo aunque sea un reintento
-	// — es lo que el docente lee en la notificación (RF-05.3).
-	if validador.motivoRecibido != "PC 27 fue dado de baja del inventario" {
+	// El reintento tiene que mandar el mismo motivo que el primer intento — es
+	// lo que el docente lee en la notificación (RF-05.3).
+	if validador.motivoRecibido != "el equipo fue dado de baja del inventario" {
 		t.Errorf("motivo inesperado en el reintento: %q", validador.motivoRecibido)
 	}
 }
@@ -1039,5 +1048,54 @@ func TestCambiarEstadoEquipo_ErrorEnCascada_ElMensajeExplicaComoSeguir(t *testin
 	// el reintento va a encontrar.
 	if repo.equipos["pc1"].Estado != domain.EstadoFueraDeServicio {
 		t.Errorf("la PC debería haber quedado guardada, está en %s", repo.equipos["pc1"].Estado)
+	}
+}
+
+// TestCambiarEstado_ElMotivoNoRepiteElNombreDelEquipo fija la segunda mitad de
+// un arreglo real. El aviso completo se arma en notification y YA nombra la
+// máquina; cuando el motivo la nombraba también, el docente leía "Tu reserva
+// del 28/08 (PC 7 del Carro 1) fue cancelada: PC 7 del Carro 1 pasó a
+// FUERA_DE_SERVICIO", y en el correo lo mismo dos renglones seguidos.
+//
+// Quién es la máquina lo resuelve reservation al armar el aviso
+// (EtiquetasDeEquipos, que sí trae el carro): acá alcanza con la razón.
+func TestCambiarEstado_ElMotivoNoRepiteElNombreDelEquipo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.carros["carro1"] = &domain.Carro{ID: "carro1", Nombre: "Carro EDUTEC"}
+	repo.equipos["eq1"] = &domain.Equipo{
+		ID: "eq1", CarroID: "carro1", Identificador: 7, Estado: domain.EstadoDisponible,
+	}
+	validador := &fakeValidadorReservas{}
+	svc := nuevoServicioDeTest(repo, validador)
+
+	if _, err := svc.CambiarEstadoEquipo(context.Background(), "eq1", domain.EstadoFueraDeServicio, nil); err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	if validador.motivoRecibido != "el equipo quedó fuera de servicio" {
+		t.Errorf("obtuve: %q", validador.motivoRecibido)
+	}
+	if strings.Contains(validador.motivoRecibido, "PC 7") {
+		t.Errorf("el motivo no tiene que nombrar la máquina, obtuve: %q", validador.motivoRecibido)
+	}
+}
+
+// Un motivo escrito por el Admin manda sobre el de por defecto: es lo único
+// del aviso que escribió una persona.
+func TestCambiarEstado_MotivoDelAdmin_MandaSobreElDeDefecto(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["eq1"] = &domain.Equipo{
+		ID: "eq1", Nombre: "Proyector Benq", Estado: domain.EstadoDisponible,
+	}
+	validador := &fakeValidadorReservas{}
+	svc := nuevoServicioDeTest(repo, validador)
+
+	suyo := "se lo llevó el service, vuelve la semana que viene"
+	if _, err := svc.CambiarEstadoEquipo(context.Background(), "eq1", domain.EstadoFueraDeServicio, &suyo); err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	if validador.motivoRecibido != suyo {
+		t.Errorf("obtuve: %q", validador.motivoRecibido)
 	}
 }

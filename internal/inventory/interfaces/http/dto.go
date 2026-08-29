@@ -58,6 +58,13 @@ type editarEquipoRequest struct {
 	Reservable        *bool   `json:"reservable,omitempty"`
 	// Cadena vacía borra el número de serie; solo se acepta fuera de un carro.
 	NumeroSerie *string `json:"numeroSerie,omitempty"`
+
+	// Estado NO se edita acá y este campo existe solo para poder decirlo. El
+	// estado dispara la cascada que cancela reservas (RF-03.8) y por eso vive
+	// en su propia ruta, `PATCH /equipos/{id}/estado`. Sin este campo, mandarlo
+	// en este cuerpo devolvía 200 y se descartaba en silencio: la respuesta
+	// decía que salió bien y la máquina seguía como estaba.
+	Estado *string `json:"estado,omitempty"`
 }
 
 type cambiarEstadoEquipoRequest struct {

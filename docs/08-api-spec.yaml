@@ -549,7 +549,7 @@ components:
             type: object
             properties:
               equipoId: { type: string, format: uuid }
-              razon: { type: string, enum: [YA_ENTREGADA, FUERA_DEL_INVENTARIO, RESERVA_CANCELADA, SIN_DESTINATARIO], description: "SIN_DESTINATARIO: la reserva es un bloqueo administrativo y no tiene docente. Se resuelve mandando retiradoPor, que en ese caso pasa a ser el responsable: no hay docente a quien anteponerle." }
+              razon: { type: string, enum: [YA_ENTREGADA, FUERA_DEL_INVENTARIO, RESERVA_CANCELADA, SIN_DESTINATARIO, FUERA_DE_CIRCULACION], description: "SIN_DESTINATARIO: la reserva es un bloqueo administrativo y no tiene docente. Se resuelve mandando retiradoPor, que en ese caso pasa a ser el responsable: no hay docente a quien anteponerle. FUERA_DE_CIRCULACION: el equipo está EN_MANTENIMIENTO o FUERA_DE_SERVICIO, está físicamente en el laboratorio y no se le da a nadie (RF-08.17). Sale únicamente con salidaAReparacion." }
               detalle: { type: string }
         avisos:
           type: array
@@ -2225,13 +2225,23 @@ paths:
                 usuarioId: { type: string, format: uuid }
                 motivo: { type: string, example: "trámite" }
                 devolucionEstimada: { type: string, format: date-time, description: "Opcional. Sin ella no se le reclama la devolución." }
+                salidaAReparacion:
+                  type: boolean
+                  default: false
+                  description: |
+                    RF-08.21 — el equipo NO está DISPONIBLE y sale igual, camino
+                    al técnico. Es el único modo de sacar del laboratorio algo
+                    en mantenimiento o fuera de servicio: sin esta marca el
+                    equipo se rechaza con razon FUERA_DE_CIRCULACION. Obliga a
+                    mandar `motivo` — es la constancia de a dónde fue. Lo dado
+                    de baja no sale ni así.
       responses:
         "201":
           description: Lote procesado
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ResultadoEntrega' }
-        "400": { description: Sin equipos o sin nombre }
+        "400": { description: "Sin equipos, sin nombre, o salidaAReparacion sin motivo" }
 
   /api/reservation/prestamos/por-reserva:
     post:

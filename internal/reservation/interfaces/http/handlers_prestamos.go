@@ -82,6 +82,7 @@ func (h *Handler) EntregarSuelta(c *fiber.Ctx) error {
 		Motivo:             req.Motivo,
 		DevolucionEstimada: req.DevolucionEstimada,
 		EntregadoPor:       claims.UserID,
+		SalidaAReparacion:  req.SalidaAReparacion,
 	})
 	if err != nil {
 		return mapearError(err)

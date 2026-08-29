@@ -43,8 +43,8 @@ type Repo interface {
 	GuardarPedido(ctx context.Context, p *domain.PedidoDeMateria) error
 	// ListarPedidos: `soloPendientes` es como se mira casi siempre — lo que
 	// falta resolver, no el archivo.
-	ListarPedidos(ctx context.Context, soloPendientes bool) ([]*domain.PedidoDeMateria, error)
-	ListarPedidosDeUsuario(ctx context.Context, usuarioID string) ([]*domain.PedidoDeMateria, error)
+	ListarPedidos(ctx context.Context, soloPendientes bool) ([]*PedidoDetallado, error)
+	ListarPedidosDeUsuario(ctx context.Context, usuarioID string) ([]*PedidoDetallado, error)
 	ContarPedidosPendientes(ctx context.Context) (int, error)
 	// TienePedidoAbierto evita que apretar dos veces el botón mande dos avisos a
 	// todos los Admin por lo mismo.
@@ -127,6 +127,28 @@ type MateriaReservable struct {
 	CursoNombre   string
 	CicloID       string
 	CicloAnio     int
+}
+
+// PedidoDetallado es un PedidoDeMateria con el nombre de lo que se pidió ya
+// resuelto por JOIN — mismo criterio que MateriaReservable acá arriba y que
+// PrestamoDetallado en reservation.
+//
+// Existe porque sin esto no había forma de decir QUÉ materia se pedía cuando
+// la materia ya existe: el pedido guarda `materia_id` y nada más, así que las
+// dos pantallas que lo muestran —la bandeja del Admin y el perfil de quien
+// pidió— caían a un texto de relleno ("Una materia existente"), y el Admin
+// terminaba aprobando sin saber qué. Con una sola materia cargada no se nota;
+// con varias, dos pedidos distintos se ven idénticos.
+type PedidoDetallado struct {
+	Pedido *domain.PedidoDeMateria
+	// Los dos vacíos cuando la materia todavía no existe: ahí lo que se pidió
+	// está en CursoSolicitado y MateriaSolicitada, escrito a mano.
+	MateriaNombre string
+	CursoNombre   string
+	// DocenteNombre es quién lo pidió, "Nombre Apellido". El pedido guarda el
+	// UUID, y aprobar es asignar a ESA persona a la materia: sin el nombre, la
+	// bandeja del Admin muestra un pedido que no se sabe de quién es.
+	DocenteNombre string
 }
 
 // IDGenerator genera un ID nuevo — inyectado, mismo patrón que auth.

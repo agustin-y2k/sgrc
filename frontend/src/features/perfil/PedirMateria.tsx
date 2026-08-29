@@ -68,16 +68,16 @@ export function PedirMateria({ onListo }: { onListo?: () => void }) {
       <div>
         <p className="font-medium">Pedir otra materia</p>
         <p className="text-muted-foreground text-sm">
-          Lo resuelve el equipo de administración, no es automático. Si la materia ya la da
-          otro docente, también le avisamos a esa persona.
+          Lo resuelve el equipo de administración, no es automático. Si la materia ya la
+          da otro docente, también le avisamos a esa persona.
         </p>
       </div>
 
       {listo && (
         <Alert>
           <AlertDescription>
-            Listo, tu pedido quedó registrado. Te vamos a avisar acá y por correo cuando lo
-            resuelvan.
+            Listo, tu pedido quedó registrado. Te vamos a avisar acá y por correo cuando
+            lo resuelvan.
           </AlertDescription>
         </Alert>
       )}

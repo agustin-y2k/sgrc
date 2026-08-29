@@ -130,7 +130,9 @@ export function IncidenciasDeEquipo({ equipoId }: { equipoId: string }) {
                 variant="outline"
                 size="sm"
                 disabled={editar.isPending}
-                onClick={() => editar.mutate({ incidencia: i, marcarEnviadaASoporte: true })}
+                onClick={() =>
+                  editar.mutate({ incidencia: i, marcarEnviadaASoporte: true })
+                }
               >
                 Marcar enviada a soporte
               </Button>

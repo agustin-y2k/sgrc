@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { MemoryRouter } from "react-router"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
@@ -41,7 +42,11 @@ function renderPagina() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
-      <UsuariosPage />
+      {/* La ficha de lo que declaró una cuenta pendiente enlaza a Académico y
+          a Usuarios, así que la página necesita un router. */}
+      <MemoryRouter>
+        <UsuariosPage />
+      </MemoryRouter>
     </QueryClientProvider>
   )
 }
@@ -397,5 +402,40 @@ describe("UsuariosPage", () => {
     await user.click(screen.getByRole("button", { name: "Confirmar" }))
 
     expect(await screen.findByText(/ya tiene rol ADMIN/)).toBeInTheDocument()
+  })
+
+  /**
+   * Este atajo dejaba aprobar a ciegas: mostraba el nombre, el rol y el estado,
+   * y el botón "Aprobar" al lado. Lo que la persona pidió dictar —el dato
+   * sobre el que se decide— estaba solo en la pantalla de Aprobación, que se
+   * había diseñado justamente para mostrarlo.
+   */
+  it("muestra qué pidió dictar antes de ofrecer aprobar", async () => {
+    conUsuarios(
+      usuario({
+        estado: "PENDIENTE",
+        materiaSolicitada: "Taller de Electrónica",
+        cursoSolicitado: "4°A",
+        rolSolicitado: "SUPLENTE",
+      })
+    )
+    renderPagina()
+
+    expect(await screen.findByText("Pidió dictar")).toBeInTheDocument()
+    expect(
+      screen.getByText(/Taller de Electrónica · 4°A · como suplente/)
+    ).toBeInTheDocument()
+  })
+
+  /**
+   * Un estado que ofrece la mitad de sus salidas obliga a irse a otra pantalla
+   * para terminar lo que se empezó acá.
+   */
+  it("ofrece rechazar además de aprobar", async () => {
+    conUsuarios(usuario({ estado: "PENDIENTE" }))
+    renderPagina()
+
+    expect(await screen.findByRole("button", { name: "Aprobar" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Rechazar" })).toBeInTheDocument()
   })
 })

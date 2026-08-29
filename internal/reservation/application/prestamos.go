@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ramiro/sgrc/internal/reservation/domain"
@@ -28,7 +29,28 @@ const (
 	NoEntregadaReservaCancelada RazonNoEntregada = "RESERVA_CANCELADA"
 	// NoEntregadaSinDestinatario: la reserva no dice a nombre de quién entregar.
 	NoEntregadaSinDestinatario RazonNoEntregada = "SIN_DESTINATARIO"
+	// NoEntregadaFueraDeCirculacion: el equipo está en mantenimiento o fuera
+	// de servicio. Está físicamente acá y no se le da a nadie (RF-08.17).
+	NoEntregadaFueraDeCirculacion RazonNoEntregada = "FUERA_DE_CIRCULACION"
 )
+
+// EstadoEquipoDisponible es el único estado de inventory con el que un equipo
+// sale del laboratorio en una entrega normal. Se compara como texto: el
+// puerto ya devuelve la cadena, y son dos contextos distintos.
+const EstadoEquipoDisponible = "DISPONIBLE"
+
+// porQueNoCircula traduce el estado de inventory a por qué esa máquina no se
+// le da a nadie. Lo lee quien está en el mostrador con alguien esperando
+// enfrente, así que dice el hecho y no el código.
+var porQueNoCircula = map[string]string{
+	"EN_MANTENIMIENTO":  "ese equipo está en mantenimiento",
+	"FUERA_DE_SERVICIO": "ese equipo está fuera de servicio",
+}
+
+// ErrSalidaAReparacionSinMotivo: sacar del laboratorio algo que no está en
+// condiciones de prestarse necesita decir a dónde va. Es la constancia, y es
+// lo único que distingue esa salida de un préstamo común mal cargado.
+var ErrSalidaAReparacionSinMotivo = errors.New("una salida a reparación tiene que decir a dónde va el equipo")
 
 // EquipoNoEntregado explica por qué una PC del lote no salió.
 type EquipoNoEntregado struct {
@@ -132,7 +154,10 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 			EntregadoPor:       params.EntregadoPor,
 		}
 
-		prestamo, noEntregada, err := s.registrarEntrega(ctx, datos, ahora)
+		// Una reserva nunca autoriza sacar un equipo roto: si la máquina dejó
+		// de estar disponible, sus reservas se cancelaron en cascada (RF-03.8)
+		// y esta entrega llega tarde.
+		prestamo, noEntregada, err := s.registrarEntrega(ctx, datos, ahora, false)
 		if err != nil {
 			return nil, err
 		}
@@ -171,11 +196,20 @@ type EntregaSueltaParams struct {
 	// honesta, y una hora inventada solo generaría reclamos falsos.
 	DevolucionEstimada *time.Time
 	EntregadoPor       string
+	// SalidaAReparacion autoriza sacar un equipo que NO está DISPONIBLE. Es
+	// el único camino: sin esta marca, una máquina en mantenimiento o fuera
+	// de servicio no sale, y con ella sale dejando constancia de a dónde fue.
+	// La pantalla que la manda es un panel aparte del mostrador — entregar un
+	// equipo roto no es una variante de la entrega del día a día.
+	SalidaAReparacion bool
 }
 
 func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams) (*ResultadoEntrega, error) {
 	if err := verificarCantidadDeEquipos(params.EquipoIDs); err != nil {
 		return nil, err
+	}
+	if params.SalidaAReparacion && strings.TrimSpace(params.Motivo) == "" {
+		return nil, ErrSalidaAReparacionSinMotivo
 	}
 
 	ahora := s.ahora()
@@ -192,7 +226,7 @@ func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams
 			EntregadoPor:       params.EntregadoPor,
 		}
 
-		prestamo, noEntregada, err := s.registrarEntrega(ctx, datos, ahora)
+		prestamo, noEntregada, err := s.registrarEntrega(ctx, datos, ahora, params.SalidaAReparacion)
 		if err != nil {
 			return nil, err
 		}
@@ -210,19 +244,38 @@ func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams
 	return resultado, nil
 }
 
-// registrarEntrega es el paso común: validar que la máquina esté en el
-// inventario y crearla, traduciendo los dos rechazos esperables a una razón
-// que la pantalla pueda mostrar.
-func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntrega, ahora time.Time) (*domain.Prestamo, *EquipoNoEntregado, error) {
-	enInventario, err := s.validadorEquipo.EquipoEstaEnInventario(ctx, datos.EquipoID)
+// registrarEntrega es el paso común: validar que la máquina pueda salir del
+// laboratorio y crear el préstamo, traduciendo los rechazos esperables a una
+// razón que la pantalla pueda mostrar.
+//
+// salidaAReparacion levanta la única condición que se puede levantar: la de
+// que el equipo esté DISPONIBLE. Lo dado de baja no sale ni así — ya no es
+// parte del parque, y lo que se saca del laboratorio es lo que después hay
+// que esperar de vuelta.
+func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntrega, ahora time.Time, salidaAReparacion bool) (*domain.Prestamo, *EquipoNoEntregado, error) {
+	condicion, err := s.validadorEquipo.CondicionParaEntregar(ctx, datos.EquipoID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("verificando el equipo %s: %w", datos.EquipoID, err)
 	}
-	if !enInventario {
+	if !condicion.EnInventario {
 		return nil, &EquipoNoEntregado{
 			EquipoID: datos.EquipoID,
 			Razon:    NoEntregadaFueraDelInventario,
 			Detalle:  ErrEquipoDadoDeBaja.Error(),
+		}, nil
+	}
+	// RF-08.17: lo que está en mantenimiento o fuera de servicio está
+	// físicamente acá y no se le da a nadie. Antes salía igual, y el mostrador
+	// dejaba prestar una máquina que un Admin acababa de marcar como rota.
+	if !salidaAReparacion && condicion.Estado != EstadoEquipoDisponible {
+		detalle, conocido := porQueNoCircula[condicion.Estado]
+		if !conocido {
+			detalle = "ese equipo no está disponible"
+		}
+		return nil, &EquipoNoEntregado{
+			EquipoID: datos.EquipoID,
+			Razon:    NoEntregadaFueraDeCirculacion,
+			Detalle:  detalle + ": para sacarlo del laboratorio, registrá una salida a reparación",
 		}, nil
 	}
 

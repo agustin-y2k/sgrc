@@ -117,8 +117,8 @@ describe("PanelDelLaboratorio", () => {
     })
     renderPanel()
 
-    expect(await screen.findByText("PC 1 entregada")).toBeInTheDocument()
-    expect(screen.getByText("PC 2 sin retirar")).toBeInTheDocument()
+    expect(await screen.findByText("PC 1 · Carro 1 entregada")).toBeInTheDocument()
+    expect(screen.getByText("PC 2 · Carro 1 sin retirar")).toBeInTheDocument()
   })
 
   it("marca aparte las que ya se liberaron por no retirarse", async () => {
@@ -129,8 +129,8 @@ describe("PanelDelLaboratorio", () => {
 
     // "Liberada" y "sin retirar" no son lo mismo: la primera ya dejó de
     // estar guardada para este docente.
-    expect(await screen.findByText("PC 1 liberada")).toBeInTheDocument()
-    expect(screen.queryByText("PC 1 sin retirar")).not.toBeInTheDocument()
+    expect(await screen.findByText("PC 1 · Carro 1 liberada")).toBeInTheDocument()
+    expect(screen.queryByText("PC 1 · Carro 1 sin retirar")).not.toBeInTheDocument()
   })
 
   it("entrega las máquinas de la clase en curso desde el panel", async () => {
@@ -171,7 +171,9 @@ describe("PanelDelLaboratorio", () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
     renderPanel()
 
-    await user.click(await screen.findByRole("button", { name: "Anotar quién las retira" }))
+    await user.click(
+      await screen.findByRole("button", { name: "Anotar quién las retira" })
+    )
     await user.type(screen.getByLabelText(/Quién las retira/), "Juan (alumno)")
     // El mostrador lo dice sin que haya que abrir nada: anotar al alumno no
     // le saca la responsabilidad al docente.
@@ -201,9 +203,7 @@ describe("PanelDelLaboratorio", () => {
     )
     renderPanel()
 
-    expect(
-      await screen.findByText("No hay ninguna clase en curso.")
-    ).toBeInTheDocument()
+    expect(await screen.findByText("No hay ninguna clase en curso.")).toBeInTheDocument()
   })
 
   it("pide el día completo sin que la paginación le coma reservas", async () => {
@@ -223,5 +223,25 @@ describe("PanelDelLaboratorio", () => {
     renderPanel()
 
     expect(await screen.findByText(/Hoy ya pasó 1 clase/)).toBeInTheDocument()
+  })
+
+  /**
+   * El identificador es el número del zócalo, así que "PC 1" existe una vez
+   * por carro. En esta pantalla alguien va FÍSICAMENTE a buscar la máquina:
+   * tres chips que dicen "PC 1" no le dicen a dónde ir. El dato ya venía en la
+   * respuesta (`carroNombre`), solo que no se dibujaba.
+   */
+  it("dice de qué carro es cada equipo de la clase", async () => {
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([
+        reserva({ id: "r1", equipoId: "pc-a", carroNombre: "Carro 1" }),
+        reserva({ id: "r2", equipoId: "pc-b", carroNombre: "Carro EDUTEC" }),
+      ])
+    )
+
+    renderPanel()
+
+    expect(await screen.findByText("PC 1 · Carro 1 sin retirar")).toBeInTheDocument()
+    expect(await screen.findByText("PC 1 · Carro EDUTEC sin retirar")).toBeInTheDocument()
   })
 })

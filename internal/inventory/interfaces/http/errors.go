@@ -33,6 +33,15 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrSinClaveDeCifrado):
 		return fiber.NewError(fiber.StatusServiceUnavailable, err.Error())
 
+	// 409 y no 500: el pedido está bien y el sistema también; lo que no encaja
+	// es lo guardado contra la clave que corre hoy. Sin este caso caía al 500
+	// "error interno" —sin mensaje y sin línea en el log—, y quien apretaba
+	// "Ver contraseña" no tenía forma de saber que la salida es volver a
+	// cargarla. Mismo criterio que los errores de más abajo: sin un caso acá,
+	// una situación prevista se ve como una falla del sistema.
+	case errors.Is(err, application.ErrPasswordIlegible):
+		return fiber.NewError(fiber.StatusConflict, application.ErrPasswordIlegible.Error())
+
 	case errors.Is(err, application.ErrNombreCarroDuplicado),
 		errors.Is(err, application.ErrIdentificadorDuplicado),
 		errors.Is(err, application.ErrNumeroSerieDuplicado),

@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -690,5 +691,154 @@ func TestEntregarSuelta_AvisaDeLaReservaMasProxima(t *testing.T) {
 	if !resultado.Avisos[0].Fecha.Equal(fecha(2026, time.March, 3)) {
 		t.Errorf("el aviso nombró la reserva del %v; tiene que ser la más próxima (3 de marzo)",
 			resultado.Avisos[0].Fecha)
+	}
+}
+
+// ── Lo que no está en circulación no sale (RF-08.17) ────────────────────
+
+// Antes salía: el mostrador validaba que el equipo estuviera en el inventario
+// y no miraba su estado, así que una máquina que un Admin acababa de marcar
+// como rota se podía prestar igual.
+func TestEntregarSuelta_LoQueNoEstaDisponibleNoSale(t *testing.T) {
+	for _, caso := range []struct{ estado, esperado string }{
+		{"EN_MANTENIMIENTO", "en mantenimiento"},
+		{"FUERA_DE_SERVICIO", "fuera de servicio"},
+	} {
+		t.Run(caso.estado, func(t *testing.T) {
+			repo := nuevoFakeRepo()
+			svc := servicioConValidador(repo, &fakeValidadorEquipo{
+				disponible: true,
+				estados:    map[string]string{"pc1": caso.estado},
+			})
+
+			resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
+				EquipoIDs: []string{"pc1"}, Nombre: "Marta (secretaría)", EntregadoPor: "admin1",
+			})
+
+			if err != nil {
+				t.Fatalf("no debería fallar el lote entero: %v", err)
+			}
+			if len(resultado.Entregadas) != 0 {
+				t.Fatalf("no debería haber salido nada: %+v", resultado.Entregadas)
+			}
+			if len(resultado.NoEntregadas) != 1 || resultado.NoEntregadas[0].Razon != NoEntregadaFueraDeCirculacion {
+				t.Fatalf("esperaba FUERA_DE_CIRCULACION, obtuve %+v", resultado.NoEntregadas)
+			}
+			// El detalle nombra el hecho, no el código: lo lee quien está en el
+			// mostrador con alguien esperando enfrente.
+			if !strings.Contains(resultado.NoEntregadas[0].Detalle, caso.esperado) {
+				t.Errorf("detalle = %q, esperaba que dijera %q", resultado.NoEntregadas[0].Detalle, caso.esperado)
+			}
+		})
+	}
+}
+
+// Una máquina del lote en mantenimiento no impide que salgan las demás:
+// mismo criterio que el resto de los rechazos por equipo.
+func TestEntregarSuelta_UnaFueraDeCirculacionNoAbortaElLote(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := servicioConValidador(repo, &fakeValidadorEquipo{
+		disponible: true,
+		estados:    map[string]string{"pc2": "EN_MANTENIMIENTO"},
+	})
+
+	resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
+		EquipoIDs: []string{"pc1", "pc2", "pc3"}, Nombre: "Marta", EntregadoPor: "admin1",
+	})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.Entregadas) != 2 {
+		t.Errorf("esperaba que salieran las otras 2, obtuve %d", len(resultado.Entregadas))
+	}
+	if len(resultado.NoEntregadas) != 1 || resultado.NoEntregadas[0].EquipoID != "pc2" {
+		t.Errorf("esperaba solo pc2 rechazada, obtuve %+v", resultado.NoEntregadas)
+	}
+}
+
+// La salida a reparación es el único camino para sacar del laboratorio algo
+// que no está en condiciones de prestarse: sale, y queda la constancia.
+func TestEntregarSuelta_SalidaAReparacionSacaLoQueNoCircula(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := servicioConValidador(repo, &fakeValidadorEquipo{
+		disponible: true,
+		estados:    map[string]string{"pc1": "FUERA_DE_SERVICIO"},
+	})
+
+	resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
+		EquipoIDs: []string{"pc1"}, Nombre: "Service Rossi", Motivo: "no enciende",
+		SalidaAReparacion: true, EntregadoPor: "admin1",
+	})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.Entregadas) != 1 {
+		t.Fatalf("esperaba que saliera: %+v", resultado.NoEntregadas)
+	}
+	if resultado.Entregadas[0].Motivo != "no enciende" {
+		t.Errorf("motivo = %q, es la constancia de a dónde fue", resultado.Entregadas[0].Motivo)
+	}
+}
+
+// Sin motivo no hay constancia, y sin constancia la salida a reparación es
+// un préstamo común mal cargado. Falla el lote entero: el motivo es uno solo
+// para todas las máquinas.
+func TestEntregarSuelta_SalidaAReparacionSinMotivo(t *testing.T) {
+	svc := nuevoServicioDeTest(nuevoFakeRepo())
+
+	_, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
+		EquipoIDs: []string{"pc1"}, Nombre: "Service Rossi", Motivo: "  ",
+		SalidaAReparacion: true, EntregadoPor: "admin1",
+	})
+
+	if !errors.Is(err, ErrSalidaAReparacionSinMotivo) {
+		t.Errorf("esperaba ErrSalidaAReparacionSinMotivo, obtuve %v", err)
+	}
+}
+
+// Ni siquiera la salida a reparación saca algo dado de baja: ya no es parte
+// del parque, y lo que sale del laboratorio es lo que hay que esperar de
+// vuelta.
+func TestEntregarSuelta_SalidaAReparacionNoSacaLoDadoDeBaja(t *testing.T) {
+	svc := servicioConValidador(nuevoFakeRepo(), &fakeValidadorEquipo{
+		disponible:         true,
+		fueraDelInventario: map[string]bool{"pc1": true},
+	})
+
+	resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
+		EquipoIDs: []string{"pc1"}, Nombre: "Service Rossi", Motivo: "no enciende",
+		SalidaAReparacion: true, EntregadoPor: "admin1",
+	})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.NoEntregadas) != 1 || resultado.NoEntregadas[0].Razon != NoEntregadaFueraDelInventario {
+		t.Errorf("esperaba FUERA_DEL_INVENTARIO, obtuve %+v", resultado.NoEntregadas)
+	}
+}
+
+// Una reserva tampoco autoriza sacar un equipo roto: si dejó de estar
+// disponible, sus reservas se cancelaron en cascada (RF-03.8) y esta entrega
+// llega tarde.
+func TestEntregarPorReserva_NoSaleLoQueEstaEnMantenimiento(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaDeTest(t, repo, "res1", "pc1")
+	svc := servicioConValidador(repo, &fakeValidadorEquipo{
+		disponible: true,
+		estados:    map[string]string{"pc1": "EN_MANTENIMIENTO"},
+	})
+
+	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
+		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+	})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.NoEntregadas) != 1 || resultado.NoEntregadas[0].Razon != NoEntregadaFueraDeCirculacion {
+		t.Errorf("esperaba FUERA_DE_CIRCULACION, obtuve %+v", resultado.NoEntregadas)
 	}
 }

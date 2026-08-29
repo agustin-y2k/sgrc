@@ -13,6 +13,10 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PRESTAMOS_KEY } from "@/features/admin/entregas/compartido"
+import {
+  SelectorDeEquipos,
+  type EquipoParaEntregar,
+} from "@/features/admin/entregas/SelectorDeEquipos"
 import * as inventoryApi from "@/features/inventory/api"
 import * as reservasApi from "@/features/reservas/api"
 import { getErrorMessage } from "@/lib/api-client"
@@ -21,6 +25,11 @@ import { contar } from "@/lib/plural"
 /**
  * Entregar algo sin reserva detrás: "necesito una compu para hacer un
  * trámite", "me llevo el proyector".
+ *
+ * Es la entrega que más se usa, así que ocupa todo el ancho que le den y no
+ * media columna: quien la completa tiene a alguien esperando enfrente, y los
+ * equipos se eligen de una grilla que se ve entera, no de una lista de tres
+ * renglones con barra de desplazamiento.
  */
 export function EntregaSuelta({
   yaAfuera,
@@ -54,19 +63,30 @@ export function EntregaSuelta({
     [carros]
   )
 
-  // Se ofrece todo lo que esté en el inventario y no esté ya afuera.
-  const equipos = useMemo(
+  // Se ofrece lo que está en el inventario, en condiciones de prestarse y no
+  // está ya afuera. Un equipo en mantenimiento o fuera de servicio está acá y
+  // no se le da a nadie (RF-08.17): para sacarlo del laboratorio está la
+  // salida a reparación, que es otra pantalla a propósito.
+  const equipos: EquipoParaEntregar[] = useMemo(
     () =>
       (todos?.data ?? [])
-        .filter((eq) => !eq.dadoDeBaja && !yaAfuera.has(eq.id))
+        .filter(
+          (eq) => !eq.dadoDeBaja && eq.estado === "DISPONIBLE" && !yaAfuera.has(eq.id)
+        )
         .map((eq) => ({
           id: eq.id,
           etiqueta: eq.etiqueta,
-          // De dónde sale: el carro si pertenece a uno, y si no su tipo
-          // ("PROYECTOR"), que es lo único que ubica a un equipo suelto.
           donde: eq.carroId ? (nombreDeCarro.get(eq.carroId) ?? "") : eq.tipo,
         })),
     [todos, nombreDeCarro, yaAfuera]
+  )
+
+  // Qué se está por entregar, escrito con los nombres que se leen en la
+  // etiqueta de la máquina: la grilla puede quedar desplazada y la selección
+  // fuera de la vista justo cuando se aprieta el botón.
+  const nombresElegidos = useMemo(
+    () => equipos.filter((eq) => seleccionadas.has(eq.id)).map((eq) => eq.etiqueta),
+    [equipos, seleccionadas]
   )
 
   const entregar = useMutation({
@@ -82,7 +102,9 @@ export function EntregaSuelta({
       const noSalieron = respuesta.noEntregadas ?? []
       const partes = [`Salieron ${contar(respuesta.entregadas.length, "equipo")}.`]
       if (noSalieron.length > 0) {
-        partes.push(`No salieron ${noSalieron.length}: ${noSalieron.map((n) => n.detalle).join("; ")}`)
+        partes.push(
+          `No salieron ${noSalieron.length}: ${noSalieron.map((n) => n.detalle).join("; ")}`
+        )
       }
       // El aviso no impidió nada: el sistema no sabe cuánto dura un trámite,
       // así que la decisión es del Admin.
@@ -112,76 +134,65 @@ export function EntregaSuelta({
       </CardHeader>
       <CardContent>
         <form
-          className="grid gap-4"
+          className="grid gap-6"
           onSubmit={(e) => {
             e.preventDefault()
             setResumen(null)
             entregar.mutate()
           }}
         >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="entrega-nombre">¿A quién?</Label>
-              <Input
-                id="entrega-nombre"
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Ej.: Marta (secretaría)"
-                required
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="entrega-motivo">¿Para qué? (opcional)</Label>
-              <Input
-                id="entrega-motivo"
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                placeholder="Ej.: trámite"
-              />
-            </div>
-          </div>
+          {/* Los datos de la persona a la izquierda y los equipos a la
+              derecha, que es el orden en que se pregunta en el mostrador. En
+              un teléfono se apilan en ese mismo orden. */}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+            <div className="grid content-start gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="entrega-nombre">¿A quién?</Label>
+                <Input
+                  id="entrega-nombre"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  placeholder="Ej.: Marta (secretaría)"
+                  required
+                />
+              </div>
 
-          <div className="grid gap-1.5 sm:max-w-xs">
-            <Label htmlFor="entrega-devolucion">¿Cuándo la devuelve? (opcional)</Label>
-            <Input
-              id="entrega-devolucion"
-              type="datetime-local"
-              value={devolucion}
-              onChange={(e) => setDevolucion(e.target.value)}
-            />
-            {/* Sin hora pactada no se le reclama nada: "vengo en un rato" es
-                una respuesta válida, y una hora inventada solo generaría
-                reclamos falsos. */}
-            <p className="text-muted-foreground text-xs">
-              Si no la sabés, dejalo vacío: no se le va a reclamar la devolución.
-            </p>
-          </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="entrega-motivo">¿Para qué? (opcional)</Label>
+                <Input
+                  id="entrega-motivo"
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                  placeholder="Ej.: trámite"
+                />
+              </div>
 
-          <div className="grid gap-2">
-            <Label>¿Qué equipos?</Label>
-            <div className="grid max-h-56 gap-1 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
-              {equipos.length === 0 && (
-                <p className="text-muted-foreground text-sm">
-                  No hay equipos disponibles para entregar.
+              <div className="grid gap-1.5">
+                <Label htmlFor="entrega-devolucion">
+                  ¿Cuándo la devuelve? (opcional)
+                </Label>
+                <Input
+                  id="entrega-devolucion"
+                  type="datetime-local"
+                  value={devolucion}
+                  onChange={(e) => setDevolucion(e.target.value)}
+                />
+                {/* Sin hora pactada no se le reclama nada: "vengo en un rato" es
+                    una respuesta válida, y una hora inventada solo generaría
+                    reclamos falsos. */}
+                <p className="text-muted-foreground text-xs">
+                  Si no la sabés, dejalo vacío: no se le va a reclamar la devolución.
                 </p>
-              )}
-              {equipos.map((equipo) => (
-                <label key={equipo.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={seleccionadas.has(equipo.id)}
-                    onChange={() => {
-                      const nueva = new Set(seleccionadas)
-                      if (nueva.has(equipo.id)) nueva.delete(equipo.id)
-                      else nueva.add(equipo.id)
-                      setSeleccionadas(nueva)
-                    }}
-                  />
-                  {equipo.etiqueta}
-                  <span className="text-muted-foreground">({equipo.donde})</span>
-                </label>
-              ))}
+              </div>
             </div>
+
+            <SelectorDeEquipos
+              titulo="¿Qué equipos?"
+              equipos={equipos}
+              seleccionados={seleccionadas}
+              onSeleccionar={setSeleccionadas}
+              vacio="No hay equipos disponibles para entregar. Los que están en mantenimiento o fuera de servicio no se prestan, y los que ya salieron figuran en «Afuera del laboratorio»."
+            />
           </div>
 
           {entregar.error && (
@@ -195,13 +206,24 @@ export function EntregaSuelta({
             </Alert>
           )}
 
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={entregar.isPending || seleccionadas.size === 0}>
-              Entregar {contar(seleccionadas.size, "equipo")}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-4">
+            <Button
+              type="submit"
+              size="lg"
+              disabled={entregar.isPending || seleccionadas.size === 0}
+            >
+              {seleccionadas.size === 0
+                ? "Entregar"
+                : `Entregar ${contar(seleccionadas.size, "equipo")}`}
             </Button>
             <Button type="button" variant="outline" onClick={onCerrar}>
               Cerrar
             </Button>
+            {nombresElegidos.length > 0 && (
+              <p className="text-muted-foreground min-w-0 flex-1 text-sm">
+                Salen: {nombresElegidos.join(", ")}
+              </p>
+            )}
           </div>
         </form>
       </CardContent>

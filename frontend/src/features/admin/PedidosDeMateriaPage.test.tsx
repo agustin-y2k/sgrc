@@ -41,9 +41,92 @@ describe("PedidosDeMateriaPage", () => {
       data: [{ id: "c1", anio: 2026, activo: true, archivado: false }],
     })
     vi.mocked(academicoApi.listarCursos).mockResolvedValue({
-      data: [{ id: "cur1", cicloLectivoId: "c1", nombre: "3°C", activo: true, archivado: false }],
+      data: [
+        {
+          id: "cur1",
+          cicloLectivoId: "c1",
+          nombre: "3°C",
+          activo: true,
+          archivado: false,
+        },
+      ],
     })
     vi.mocked(academicoApi.listarDocentesDeMateria).mockResolvedValue({ data: [] })
+  })
+
+  /**
+   * Sin esto el Admin aprueba a ciegas: el pedido guarda `materiaId` y nada
+   * más, así que la tarjeta decía «Una materia existente» y dos pedidos de
+   * materias distintas se veían idénticos. Con una sola materia cargada no se
+   * notaba; en una escuela con varias, sí.
+   */
+  it("nombra la materia y el curso de un pedido de una materia que ya existe", async () => {
+    vi.mocked(perfilApi.listarPedidos).mockResolvedValue({
+      data: [pedido({ materiaNombre: "Programación", cursoNombre: "5°A" })],
+    })
+    montar()
+
+    expect(await screen.findByText("Programación de 5°A")).toBeInTheDocument()
+    expect(screen.queryByText(/Una materia existente/)).not.toBeInTheDocument()
+  })
+
+  /**
+   * Aprobar es asignar a ESA persona a la materia, así que quién pide es el
+   * dato sobre el que se decide. El pedido guarda un UUID: sin el nombre
+   * resuelto por el servidor, la tarjeta no lo decía en ningún lado.
+   */
+  it("dice quién pide", async () => {
+    vi.mocked(perfilApi.listarPedidos).mockResolvedValue({
+      data: [
+        pedido({
+          materiaNombre: "Bases de Datos",
+          cursoNombre: "6°A",
+          docenteNombre: "Silvia Bermúdez",
+        }),
+      ],
+    })
+    montar()
+
+    expect(await screen.findByText("Silvia Bermúdez")).toBeInTheDocument()
+  })
+
+  /**
+   * `creadoEn` es un instante, no una fecha de calendario: cortarle los diez
+   * primeros caracteres tomaba su día en UTC, y un pedido hecho a las 23:40 de
+   * Argentina aparecía fechado al día siguiente.
+   */
+  it("fecha el pedido en la zona de quien mira, no en UTC", async () => {
+    vi.mocked(perfilApi.listarPedidos).mockResolvedValue({
+      data: [pedido({ creadoEn: "2026-08-28T02:40:00Z" })],
+    })
+    montar()
+
+    const esperado = new Intl.DateTimeFormat("es-AR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }).format(new Date("2026-08-28T02:40:00Z"))
+    expect(await screen.findByText(`Pedido el ${esperado}`)).toBeInTheDocument()
+  })
+
+  /**
+   * El otro camino: la materia todavía no existe y lo pedido es el texto que
+   * escribió la persona.
+   */
+  it("nombra lo que se escribió a mano cuando la materia no existe", async () => {
+    vi.mocked(perfilApi.listarPedidos).mockResolvedValue({
+      data: [
+        pedido({
+          materiaId: undefined,
+          esMateriaNueva: true,
+          materiaSolicitada: "Laboratorio de Redes",
+          cursoSolicitado: "6°A",
+        }),
+      ],
+    })
+    montar()
+
+    expect(await screen.findByText("Laboratorio de Redes de 6°A")).toBeInTheDocument()
   })
 
   /**
@@ -96,7 +179,10 @@ describe("PedidosDeMateriaPage", () => {
     await user.click(await screen.findByRole("button", { name: "Aprobar" }))
     expect(screen.getByRole("button", { name: /confirmar y habilitar/i })).toBeDisabled()
 
-    await user.selectOptions(await screen.findByLabelText(/en qué curso se crea/i), "cur1")
+    await user.selectOptions(
+      await screen.findByLabelText(/en qué curso se crea/i),
+      "cur1"
+    )
     expect(screen.getByRole("button", { name: /confirmar y habilitar/i })).toBeEnabled()
   })
 

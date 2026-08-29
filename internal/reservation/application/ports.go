@@ -293,6 +293,17 @@ type ValidadorMateria interface {
 	MateriaAceptaReservas(ctx context.Context, materiaID string) (bool, error)
 }
 
+// CondicionDeEquipo es el estado de un equipo visto desde acá: si sigue en el
+// inventario y en qué estado de circulación está.
+type CondicionDeEquipo struct {
+	EnInventario bool
+	// Estado es el de inventory ("DISPONIBLE", "EN_MANTENIMIENTO",
+	// "FUERA_DE_SERVICIO"), como texto. Se compara así y no importando el
+	// dominio de inventory: son dos contextos, y lo único que se pregunta acá
+	// es si el equipo puede salir.
+	Estado string
+}
+
 // ValidadorEquipo es el puerto hacia inventory — confirma que una PC existe y
 // está en condiciones de reservarse (estado DISPONIBLE, no dada de baja)
 // antes de dejarla incluir en una reserva.
@@ -309,9 +320,16 @@ type ValidadorEquipo interface {
 	// exige que la PC exista y no esté dada de baja, sin mirar su estado.
 	EquipoEstaEnInventario(ctx context.Context, equipoID string) (bool, error)
 
+	// CondicionParaEntregar es lo que hace falta saber antes de dejar salir un
+	// equipo del laboratorio. No alcanza con EquipoEstaEnInventario —eso deja
+	// salir una máquina rota— ni sirve EquipoDisponibleParaReservar, que además
+	// exige `reservable`: un cargador no se reserva y sí se presta.
+	CondicionParaEntregar(ctx context.Context, equipoID string) (CondicionDeEquipo, error)
+
 	// EtiquetasDeEquipos traduce los UUID al nombre con el que la gente reconoce
-	// cada cosa ("PC 7", "Proyector Epson"), para poder decir en un aviso cuáles
-	// se cancelaron.
+	// cada cosa ("PC 7 del Carro 2", "Proyector Epson"), para poder decir en un
+	// aviso cuáles se cancelaron. Lo del carro es parte del nombre y no un
+	// extra: el número solo se repite entre carros.
 	EtiquetasDeEquipos(ctx context.Context, equipoIDs []string) (map[string]string, error)
 }
 

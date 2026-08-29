@@ -23,6 +23,12 @@ export type BloqueCalendario = {
 
 export type CalendarioEquipo = {
   equipoId: string
+  /**
+   * Cómo se llama el equipo, con su carro: "PC 7 del Carro 2". Lo resuelve el
+   * servidor con el mismo criterio que los avisos. Vacía si no se pudo
+   * resolver, y ahí la pantalla se queda con su título genérico.
+   */
+  etiqueta?: string
   desde: string
   hasta: string
   bloques: BloqueCalendario[]

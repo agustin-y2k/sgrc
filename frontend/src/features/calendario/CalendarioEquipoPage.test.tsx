@@ -220,4 +220,30 @@ describe("CalendarioEquipoPage", () => {
     expect(screen.getByText("Martes")).toBeInTheDocument()
     expect(screen.getAllByText("fuera de la jornada")).toHaveLength(1)
   })
+
+  /**
+   * Se llega desde un botón por equipo, así que la pantalla tiene que decir de
+   * cuál es. Con "Calendario del equipo" a secas, tres pestañas abiertas desde
+   * tres máquinas distintas se veían idénticas.
+   */
+  it("titula con el nombre del equipo, con su carro", async () => {
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue({
+      ...calendarioMock,
+      etiqueta: "PC 7 del Carro 2",
+    })
+    renderCalendario()
+
+    expect(await screen.findByText("Calendario de PC 7 del Carro 2")).toBeInTheDocument()
+  })
+
+  /**
+   * Si el servidor no pudo resolver el nombre, el calendario sale igual: es
+   * mucho más útil que un error por no poder titularlo.
+   */
+  it("sin nombre resuelto se queda con el título genérico", async () => {
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
+    renderCalendario()
+
+    expect(await screen.findByText("Calendario del equipo")).toBeInTheDocument()
+  })
 })

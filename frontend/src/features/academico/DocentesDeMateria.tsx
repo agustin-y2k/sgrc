@@ -98,8 +98,9 @@ export function DocentesDeMateria({
       {ultimaCascada !== null && ultimaCascada > 0 && (
         <Alert>
           <AlertDescription>
-            Se cancelaron {contar(ultimaCascada, "reserva")} {plural(ultimaCascada, "futura")} de esta materia, que quedó
-            sin docente asignado.
+            Se cancelaron {contar(ultimaCascada, "reserva")}{" "}
+            {plural(ultimaCascada, "futura")} de esta materia, que quedó sin docente
+            asignado.
           </AlertDescription>
         </Alert>
       )}

@@ -40,6 +40,17 @@ var (
 	// del sistema: es una función que ese despliegue no habilitó.
 	ErrSinClaveDeCifrado = errors.New("este despliegue no puede guardar contraseñas de equipos: falta configurar CUENTAS_SECRET en el .env")
 
+	// ErrPasswordIlegible: la contraseña está guardada pero no se puede
+	// descifrar con la CUENTAS_SECRET que corre hoy. Pasa cuando esa clave se
+	// cambió después de guardarla, que es una situación PREVISTA —el
+	// .env.example la documenta— y por eso tiene un error propio en vez de
+	// caer al 500 genérico.
+	//
+	// La salida es volver a cargar la contraseña mirando la máquina: el sistema
+	// no puede recuperarla solo, y decirlo es todo lo que puede hacer por quien
+	// está enfrente de la pantalla.
+	ErrPasswordIlegible = errors.New("esa contraseña se guardó con otra clave de cifrado y ya no se puede leer: hay que volver a cargarla mirando el equipo")
+
 	// ErrNoAutorizado: se pidió revelar una contraseña marcada SOLO_ADMIN sin
 	// ser ADMIN. Vive acá y no en el handler porque es una regla de negocio: si
 	// estuviera en la capa HTTP, una ruta nueva podría saltearla sin notarlo.

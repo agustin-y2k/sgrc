@@ -153,6 +153,22 @@ export const ETIQUETA_ESTADO_EQUIPO: Record<EstadoEquipo, string> = {
 }
 
 /**
+ * RF-03.3 — a qué estados puede pasar un equipo desde el que tiene. Espeja
+ * `EstadoEquipo.PuedeTransicionarA` del backend: los tres se alternan
+ * libremente, y lo único de lo que no se vuelve es la baja del inventario,
+ * que es otra cosa.
+ *
+ * Lo único que no es una transición es repetir el estado que ya se tiene: por
+ * eso cada lista excluye el propio. Ofrecer un botón que el servidor rechaza
+ * es prometer algo que no se puede hacer.
+ */
+export const TRANSICIONES_DE_ESTADO: Record<EstadoEquipo, EstadoEquipo[]> = {
+  DISPONIBLE: ["EN_MANTENIMIENTO", "FUERA_DE_SERVICIO"],
+  EN_MANTENIMIENTO: ["DISPONIBLE", "FUERA_DE_SERVICIO"],
+  FUERA_DE_SERVICIO: ["DISPONIBLE", "EN_MANTENIMIENTO"],
+}
+
+/**
  * RF-03.21 — la marca que dice que un equipo es preferente para una materia.
  */
 export type PreferenciaDeEquipo = {
