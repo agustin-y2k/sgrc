@@ -11,12 +11,60 @@ El mismo pipeline actualiza las capturas del README (`../../capturas/`).
 ## Lo que hace falta
 
 - El sistema levantado en local: `make dev` (SPA en `localhost:8081`, API en
-  `localhost:8080`).
+  `localhost:8080`). **Si la base local tiene datos que no se pueden perder
+  —un volcado del servidor, por ejemplo— no uses esa pila: levantá la de
+  capturas, que va aparte (ver abajo).**
 - Node con las dependencias del frontend instaladas: los scripts usan el
   Playwright que ya está en `frontend/node_modules` y lo resuelven por ruta, así
   que se pueden correr desde cualquier directorio.
 - Python con Pillow, para recortar y numerar las capturas.
 - `jq` y `curl`, para el script de datos.
+
+## Levantarlo aparte, sin tocar la base de desarrollo
+
+El pipeline necesita **una base recién creada y datos neutros**: los correos
+del `.env` de desarrollo suelen ser personales, y las capturas de Usuarios y
+Mi perfil los publican. Recrear la base de desarrollo para eso no siempre es
+una opción —puede tener el volcado del servidor adentro—, así que todo esto
+corre en **otro proyecto de Compose**, con su propio volumen:
+
+```bash
+# 1. Un .env propio, copia del de desarrollo con lo que se VE en las capturas
+#    cambiado por valores neutros. No va al repo (.gitignore cubre .env.*).
+cp .env .env.capturas
+#    y editar en .env.capturas:
+#      SEED_ADMIN_EMAIL=admin@escuela.edu.ar
+#      DOCENTE_EMAIL=ada.lovelace@escuela.edu.ar   ← distinto del de la guía
+#      SMTP_HOST=  SMTP_USER=  SMTP_PASSWORD=  SMTP_FROM=
+#    GOOGLE_CLIENT_ID se DEJA como está: sin él, la captura del ingreso pierde
+#    el botón «Acceder con Google» que la guía explica. Es público —el
+#    navegador ya lo recibe en /api/auth/config—, no un secreto.
+
+# 2. La pila, en el proyecto sgrc-capturas
+docker compose --env-file .env.capturas -p sgrc-capturas \
+  -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.capturas.yml \
+  up -d --build postgres sgrc-app frontend seed-datos
+
+# 3. … los pasos de abajo, y al terminar:
+docker compose --env-file .env.capturas -p sgrc-capturas \
+  -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.capturas.yml \
+  down -v
+```
+
+El `-v` del final es seguro **porque el proyecto es otro**: borra
+`sgrc-capturas_pgdata` y no toca `sgrc-monolotico_pgdata`.
+
+Dos detalles que ya costaron una corrida:
+
+- **`DOCENTE_EMAIL` tiene que ser distinto del docente de la guía**
+  (`ana.gomez@escuela.edu.ar`). Son dos personas: Ada Lovelace la siembra el
+  overlay de desarrollo y es quien pide una materia; Ana Gómez la crea
+  `datos-de-demostracion.sh` y es quien reserva. Con el mismo correo, la
+  segunda reusa la cuenta de la primera y el paso del pedido de materia muere
+  con un `jq: parse error` que no dice qué pasó.
+- **La contraseña del Admin sale del mismo `.env.capturas`**
+  (`SEED_ADMIN_PASSWORD`), y es la que hay que exportar como
+  `GUIA_ADMIN_PASSWORD`.
 
 ## Los pasos
 

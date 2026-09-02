@@ -54,6 +54,14 @@ const page = await ctx.newPage()
 console.log("jornada")
 await login(page)
 
+// El envío al asistente no pasa en el login: lo decide ProtectedRoute recién
+// cuando responde la consulta de la jornada, un tick DESPUÉS de que la página
+// terminó de cargar. Sin esta espera el script leía la URL antes de tiempo,
+// daba por hecho que la escuela ya tenía jornada declarada y se salteaba las
+// dos capturas del asistente —y como además no la declaraba, se caía en el
+// paso siguiente, que edita el tramo que tendría que haber creado—.
+await page.waitForURL(/primera-jornada/, { timeout: 8000 }).catch(() => {})
+
 // 1. El asistente del primer arranque, tal como lo ve un Admin que entra a un
 //    sistema recién instalado.
 if (!page.url().includes("primera-jornada")) {

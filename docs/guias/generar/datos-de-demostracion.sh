@@ -68,15 +68,23 @@ api "$AT" POST /api/inventory/licencias "{\"equipoIds\":$EQ,\"nombre\":\"AutoCAD
 api "$AT" POST /api/inventory/licencias "{\"equipoIds\":$EQ2,\"nombre\":\"Office 365\",\"diasDuracion\":4,\"diasAviso\":7}" >/dev/null || true
 echo "→ licencias cargadas"
 
-# Dos equipos sueltos, que son los que hacen visible la sección "Otros
-# equipos": un proyector que se puede reservar con anticipación y un cargador
-# que se presta en el momento. El número de serie va en el proyector y no en
-# el cargador, que es la diferencia que la guía explica (RF-03.15).
+# Tres equipos sueltos, que son los que hacen visible la sección "Otros
+# equipos": un proyector que se puede reservar con anticipación, un cargador
+# que se presta en el momento y una notebook. El número de serie va en el
+# proyector y no en el cargador, que es la diferencia que la guía explica
+# (RF-03.15).
+#
+# La notebook es la única de las tres marcada como COMPUTADORA, y va con su
+# ficha técnica completa. Sin ella, la sección se ilustraba con dos equipos que
+# no son máquinas: no se veían ni la separación entre las computadoras y lo
+# demás, ni la ficha, ni los paneles de licencias y cuentas que solo tiene una
+# computadora — o sea, justo lo que el capítulo explica.
 suelto() { # suelto JSON
   api "$AT" POST /api/inventory/equipos "$1" | jq -e .id >/dev/null 2>&1 || true
 }
 suelto '{"tipo":"Proyector","nombre":"Proyector 1","numeroSerie":"PRY-2024-118","reservable":true}'
 suelto '{"tipo":"Cargador","nombre":"Cargador 1","reservable":false}'
+suelto '{"tipo":"Notebook","nombre":"Notebook de Dirección","numeroSerie":"5CD1234ABC","reservable":true,"esComputadora":true,"freezado":false,"cpu":"Intel i5","ram":"8 GB","sistemaOperativo":"Windows 11","softwareInstalado":"Office 2021, Zoom"}'
 echo "→ equipos sueltos cargados"
 
 # Las cuentas de un equipo (RF-03.22), en los cuatro estados que la guía
