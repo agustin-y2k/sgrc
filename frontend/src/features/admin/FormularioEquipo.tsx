@@ -12,14 +12,31 @@ import { getErrorMessage } from "@/lib/api-client"
 
 /** Alta (RF-03.2) y edición (RF-03.4/RF-03.10) de un equipo. */
 
-type CamposEquipo = {
-  identificador: string
-  numeroSerie: string
+/**
+ * Los datos de la máquina. Están aparte porque no son de "un equipo de carro"
+ * sino de "una computadora": una notebook suelta tiene los mismos, y la
+ * pantalla de Otros equipos reusa estos campos cuando el equipo está marcado
+ * como computadora (RF-03.15).
+ */
+export type FichaTecnica = {
   freezado: boolean
   cpu: string
   ram: string
   sistemaOperativo: string
   softwareInstalado: string
+}
+
+export const FICHA_VACIA: FichaTecnica = {
+  freezado: false,
+  cpu: "",
+  ram: "",
+  sistemaOperativo: "",
+  softwareInstalado: "",
+}
+
+type CamposEquipo = FichaTecnica & {
+  identificador: string
+  numeroSerie: string
 }
 
 const VACIO: CamposEquipo = {
@@ -50,14 +67,19 @@ function opcional(valor: string): string | undefined {
   return limpio === "" ? undefined : limpio
 }
 
-function CamposComunes({
+/**
+ * Genérico sobre `T extends FichaTecnica` para que sirva igual con los campos
+ * de un equipo de carro —que llevan además identificador y serie— y con los de
+ * una computadora suelta: el spread conserva lo que cada uno traiga de más.
+ */
+export function CamposDeLaMaquina<T extends FichaTecnica>({
   idPrefijo,
   valor,
   onChange,
 }: {
   idPrefijo: string
-  valor: CamposEquipo
-  onChange: (v: CamposEquipo) => void
+  valor: T
+  onChange: (v: T) => void
 }) {
   return (
     <>
@@ -197,7 +219,11 @@ export function AltaDeEquipo({ carroId }: { carroId: string }) {
         </div>
       </div>
 
-      <CamposComunes idPrefijo={`alta-${carroId}`} valor={campos} onChange={setCampos} />
+      <CamposDeLaMaquina
+        idPrefijo={`alta-${carroId}`}
+        valor={campos}
+        onChange={setCampos}
+      />
 
       {campos.identificador !== "" && !identificadorValido && (
         <p className="text-destructive text-sm">
@@ -277,7 +303,7 @@ export function EdicionDeEquipo({
         {equipo.numeroSerie}) no se editan: identifican al equipo.
       </p>
 
-      <CamposComunes
+      <CamposDeLaMaquina
         idPrefijo={`edicion-${equipo.id}`}
         valor={campos}
         onChange={setCampos}

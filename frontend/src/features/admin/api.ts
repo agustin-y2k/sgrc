@@ -118,6 +118,13 @@ export function crearEquipoSuelto(req: {
   /** Opcional para cualquier tipo: un proyector tiene serie, un cargador no. */
   numeroSerie?: string
   reservable: boolean
+  /** Habilita los cinco de abajo, que solo tienen sentido en una computadora. */
+  esComputadora?: boolean
+  freezado?: boolean
+  cpu?: string
+  ram?: string
+  sistemaOperativo?: string
+  softwareInstalado?: string
 }) {
   // A qué colección se hace POST decide dónde nace el equipo: acá nace
   // suelto, en /carros/{id}/equipos nace adentro de ese carro.
@@ -136,6 +143,7 @@ export function editarEquipo(
     tipo?: string
     nombre?: string
     reservable?: boolean
+    esComputadora?: boolean
     /** Cadena vacía borra la serie; el backend solo lo acepta fuera de un carro. */
     numeroSerie?: string
   }

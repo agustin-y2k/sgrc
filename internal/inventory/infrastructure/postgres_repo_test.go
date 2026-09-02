@@ -505,6 +505,95 @@ func TestPostgresRepo_DarDeBajaNoAflojaLaUnicidadEntreEquiposVivos(t *testing.T)
 	}
 }
 
+// La columna nueva de la 006 viaja en las dos direcciones y para las dos
+// clases de equipo: una notebook suelta guarda su ficha técnica igual que una
+// de laboratorio, y un cargador no es una computadora aunque comparta tabla
+// con ellas.
+func TestPostgresRepo_EsComputadora_VaYVuelve(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	notebook, err := domain.NuevoEquipoSuelto(NuevoID(), "Notebook", "Notebook de Dirección",
+		"SERIE-NB-1", true, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	notebook.EsComputadora = true
+	notebook.CPU = "i5"
+	notebook.RAM = "8 GB"
+	notebook.SistemaOperativo = "Windows 11"
+	notebook.SoftwareInstalado = "AutoCAD 2026"
+	notebook.Freezado = true
+	if err := repo.CrearEquipo(ctx, notebook); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	vuelta, err := repo.BuscarEquipoPorID(ctx, notebook.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !vuelta.EsComputadora || !vuelta.Freezado || vuelta.CPU != "i5" || vuelta.RAM != "8 GB" ||
+		vuelta.SistemaOperativo != "Windows 11" || vuelta.SoftwareInstalado != "AutoCAD 2026" {
+		t.Errorf("la ficha técnica de un equipo suelto no volvió entera: %+v", vuelta)
+	}
+
+	cargador := crearEquipoSueltoDeTest(t, repo, "Cargador", "Cargador 1", false)
+	vuelto, err := repo.BuscarEquipoPorID(ctx, cargador.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if vuelto.EsComputadora {
+		t.Error("un cargador no es una computadora")
+	}
+
+	// Y una de carro lo es sin que nadie lo pida.
+	carro := crearCarroDeTest(t, repo, "Carro 1")
+	deCarro := crearEquipoDeCarroDeTest(t, repo, carro.ID, 3, "SERIE-NB-2")
+	vueltaDeCarro, err := repo.BuscarEquipoPorID(ctx, deCarro.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !vueltaDeCarro.EsComputadora {
+		t.Error("una computadora de un carro tiene que quedar marcada como tal")
+	}
+}
+
+// Desmarcar "es una computadora" NO borra lo que ya se había anotado: lo
+// normal es que se esté corrigiendo un error de carga, y perder la ficha por
+// una casilla mal tildada es peor que guardar un dato que no se muestra.
+func TestPostgresRepo_DesmarcarComputadora_ConservaLaFicha(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	eq, err := domain.NuevoEquipoSuelto(NuevoID(), "Notebook", "La del taller", "", true, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	eq.EsComputadora = true
+	eq.CPU = "i3"
+	if err := repo.CrearEquipo(ctx, eq); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	eq.EsComputadora = false
+	if err := repo.GuardarEquipo(ctx, eq); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	vuelto, err := repo.BuscarEquipoPorID(ctx, eq.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if vuelto.EsComputadora {
+		t.Error("quedó marcado como computadora después de desmarcarlo")
+	}
+	if vuelto.CPU != "i3" {
+		t.Errorf("la ficha se perdió al desmarcar: cpu=%q", vuelto.CPU)
+	}
+}
+
 // El listado de la sección "Otros equipos": trae lo que no cuelga de ningún
 // carro y nada más.
 func TestPostgresRepo_ListarEquipos_ConFiltroNoTraeLasDeCarro(t *testing.T) {

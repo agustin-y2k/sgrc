@@ -16,6 +16,7 @@ const notebook: Equipo = {
   tipo: "NOTEBOOK",
   nombre: "Notebook 1",
   reservable: true,
+  esComputadora: false,
   freezado: false,
   estado: "DISPONIBLE",
   dadoDeBaja: false,

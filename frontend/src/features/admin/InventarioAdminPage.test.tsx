@@ -25,6 +25,7 @@ function equipo(over: Partial<Equipo> = {}): Equipo {
     etiqueta: `PC ${identificador}`,
     tipo: "PC",
     reservable: true,
+    esComputadora: true,
     freezado: false,
     estado: "DISPONIBLE",
     dadoDeBaja: false,

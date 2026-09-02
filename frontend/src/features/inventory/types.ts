@@ -27,6 +27,14 @@ export type Equipo = {
   nombre?: string
   /** Si aparece en la lista de equipos libres al reservar. */
   reservable: boolean
+  /**
+   * Si es una computadora (notebook, tablet, PC de escritorio). Decide si se
+   * le muestran los datos de la máquina y si se le pueden anotar cuentas de
+   * acceso: un cargador no tiene ninguna de las dos cosas. No reemplaza a
+   * `tipo`, que sigue diciendo qué es y sigue siendo texto libre. Las de un
+   * carro lo son siempre.
+   */
+  esComputadora: boolean
   freezado: boolean
   cpu?: string
   ram?: string

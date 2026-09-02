@@ -19,6 +19,7 @@ function equipo(over: Partial<Equipo> = {}): Equipo {
     tipo: "PROYECTOR",
     nombre: "Proyector Epson",
     reservable: true,
+    esComputadora: false,
     freezado: false,
     estado: "DISPONIBLE",
     dadoDeBaja: false,
@@ -29,7 +30,7 @@ function equipo(over: Partial<Equipo> = {}): Equipo {
 
 function renderSeccion() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <OtrosEquipos />
     </QueryClientProvider>
@@ -110,6 +111,7 @@ describe("OtrosEquipos", () => {
       nombre: "Proyector Epson",
       numeroSerie: "",
       reservable: true,
+      esComputadora: false,
     })
   })
 
@@ -132,6 +134,7 @@ describe("OtrosEquipos", () => {
       nombre: "Cargador 1",
       numeroSerie: "",
       reservable: false,
+      esComputadora: false,
     })
   })
 
@@ -174,6 +177,7 @@ describe("OtrosEquipos", () => {
       nombre: "Proyector del SUM",
       numeroSerie: "",
       reservable: true,
+      esComputadora: false,
     })
   })
 
@@ -211,6 +215,7 @@ describe("OtrosEquipos", () => {
       nombre: "Notebook Dirección",
       numeroSerie: "ABC-123X",
       reservable: false,
+      esComputadora: false,
     })
   })
 
@@ -233,6 +238,7 @@ describe("OtrosEquipos", () => {
       nombre: "Cargador 2",
       numeroSerie: "",
       reservable: false,
+      esComputadora: false,
     })
   })
 
@@ -255,6 +261,7 @@ describe("OtrosEquipos", () => {
       nombre: "Proyector Epson",
       numeroSerie: "XYZ-9",
       reservable: true,
+      esComputadora: false,
     })
   })
 
@@ -361,12 +368,23 @@ describe("OtrosEquipos", () => {
   // qué cuenta se abre importa acá tanto como en las PCs del carro.
   it("abre las cuentas de un equipo suelto", async () => {
     const user = userEvent.setup()
-    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [
+        equipo({
+          nombre: "Notebook de Dirección",
+          etiqueta: "Notebook de Dirección",
+          tipo: "Notebook",
+          esComputadora: true,
+        }),
+      ],
+    })
     renderSeccion()
 
     await user.click(await screen.findByRole("button", { name: "Cómo entrar" }))
 
-    expect(await screen.findByText("Cómo entrar a Proyector Epson")).toBeInTheDocument()
+    expect(
+      await screen.findByText("Cómo entrar a Notebook de Dirección")
+    ).toBeInTheDocument()
     expect(inventoryApi.listarCuentasDeEquipo).toHaveBeenCalledWith("eq1")
   })
 
@@ -456,5 +474,140 @@ describe("OtrosEquipos", () => {
     expect(
       screen.queryByRole("button", { name: /→ Fuera de servicio/ })
     ).not.toBeInTheDocument()
+  })
+
+  // ── Computadoras sueltas (RF-03.15) ───────────────────────────────────
+  // Una notebook que no vuelve al carro tiene ficha técnica, licencias y
+  // cuentas igual que una de laboratorio. Lo que decide si se le piden es una
+  // pregunta explícita, no el texto del tipo.
+
+  it("pide los datos de la máquina solo cuando el equipo es una computadora", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Agregar equipo" }))
+    expect(screen.queryByLabelText("CPU")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("radio", { name: /Una computadora/ }))
+    expect(screen.getByLabelText("CPU")).toBeInTheDocument()
+    expect(screen.getByLabelText("RAM")).toBeInTheDocument()
+    expect(screen.getByLabelText("Sistema operativo")).toBeInTheDocument()
+    expect(screen.getByLabelText("Software instalado")).toBeInTheDocument()
+
+    // Y se puede volver atrás sin arrastrar la ficha.
+    await user.click(screen.getByRole("radio", { name: /Otra cosa/ }))
+    expect(screen.queryByLabelText("CPU")).not.toBeInTheDocument()
+  })
+
+  it("da de alta una notebook suelta con su ficha técnica", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
+    renderSeccion()
+
+    await user.click(await screen.findByRole("button", { name: "Agregar equipo" }))
+    await user.click(screen.getByRole("radio", { name: /Una computadora/ }))
+    await user.type(screen.getByLabelText("¿Qué es?"), "Notebook")
+    await user.type(screen.getByLabelText("¿Cómo lo llaman?"), "Notebook de Dirección")
+    await user.type(screen.getByLabelText(/Número de serie/), "5CD1234ABC")
+    await user.type(screen.getByLabelText("CPU"), "i5")
+    await user.type(screen.getByLabelText("RAM"), "8 GB")
+    await user.type(screen.getByLabelText("Sistema operativo"), "Windows 11")
+    await user.type(screen.getByLabelText("Software instalado"), "AutoCAD 2026")
+    await user.click(screen.getByRole("button", { name: "Agregar" }))
+
+    expect(adminApi.crearEquipoSuelto).toHaveBeenCalledWith({
+      tipo: "Notebook",
+      nombre: "Notebook de Dirección",
+      numeroSerie: "5CD1234ABC",
+      reservable: false,
+      esComputadora: true,
+      freezado: false,
+      cpu: "i5",
+      ram: "8 GB",
+      sistemaOperativo: "Windows 11",
+      softwareInstalado: "AutoCAD 2026",
+    })
+  })
+
+  /**
+   * Los paneles de la fila: licencias donde se instala el software que vence,
+   * incidencias en cualquier cosa —un proyector con la lámpara quemada es una
+   * falla igual—, y las cuentas donde hay con qué entrar.
+   */
+  it("ofrece licencias y cuentas en una computadora, y no en un cargador", async () => {
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [
+        equipo({
+          id: "eq-nb",
+          nombre: "Notebook del taller",
+          etiqueta: "Notebook del taller",
+          tipo: "Notebook",
+          esComputadora: true,
+          reservable: false,
+        }),
+      ],
+    })
+    renderSeccion()
+
+    await screen.findByText("Notebook del taller")
+    expect(screen.getByRole("button", { name: "Licencias" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Cómo entrar" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Incidencias" })).toBeInTheDocument()
+  })
+
+  it("no ofrece licencias ni cuentas en algo que no es una computadora", async () => {
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [equipo({ nombre: "Cargador 1", etiqueta: "Cargador 1", tipo: "Cargador" })],
+    })
+    renderSeccion()
+
+    await screen.findByText("Cargador 1")
+    expect(screen.queryByRole("button", { name: "Licencias" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Cómo entrar" })).not.toBeInTheDocument()
+    // Las fallas se reportan sobre cualquier cosa.
+    expect(screen.getByRole("button", { name: "Incidencias" })).toBeInTheDocument()
+  })
+
+  /**
+   * El equipo cargado antes de que existiera esta distinción quedó como "no es
+   * computadora", y puede tener cuentas anotadas. Esconderle el botón sería
+   * hacer desaparecer datos que alguien puso, sin decir dónde fueron.
+   */
+  it("mantiene 'Cómo entrar' en un equipo viejo que ya tiene cuentas", async () => {
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [equipo({ tieneCuentas: true })],
+    })
+    renderSeccion()
+
+    await screen.findByText("Proyector Epson")
+    expect(screen.getByRole("button", { name: "Cómo entrar" })).toBeInTheDocument()
+  })
+
+  it("separa las computadoras del resto, y no pone títulos si hay de una sola clase", async () => {
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [
+        equipo({ id: "eq-c", nombre: "Cargador 1", etiqueta: "Cargador 1" }),
+        equipo({
+          id: "eq-n",
+          nombre: "Notebook 31",
+          etiqueta: "Notebook 31",
+          esComputadora: true,
+        }),
+      ],
+    })
+    const { unmount } = renderSeccion()
+
+    expect(await screen.findByText("Computadoras")).toBeInTheDocument()
+    expect(screen.getByText("Lo demás")).toBeInTheDocument()
+    unmount()
+
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({
+      data: [equipo({ nombre: "Cargador 1", etiqueta: "Cargador 1" })],
+    })
+    renderSeccion()
+
+    await screen.findByText("Cargador 1")
+    expect(screen.queryByText("Lo demás")).not.toBeInTheDocument()
   })
 })

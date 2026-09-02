@@ -92,6 +92,7 @@ function equipo(over: Partial<Equipo> = {}): Equipo {
     etiqueta: "PC 1",
     tipo: "notebook",
     reservable: true,
+    esComputadora: true,
     freezado: false,
     estado: "DISPONIBLE",
     dadoDeBaja: false,

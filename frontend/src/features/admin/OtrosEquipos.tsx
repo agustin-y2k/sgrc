@@ -15,6 +15,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import * as adminApi from "@/features/admin/api"
 import { AvisoDeCascada } from "@/features/admin/AvisoDeCascada"
+import { CamposDeLaMaquina, FICHA_VACIA } from "@/features/admin/FormularioEquipo"
+import type { FichaTecnica } from "@/features/admin/FormularioEquipo"
+import { IncidenciasDeEquipo } from "@/features/admin/IncidenciasDeEquipo"
+import { LicenciasDeEquipo } from "@/features/admin/LicenciasDeEquipo"
+import { PreferenciasDeEquipo } from "@/features/admin/PreferenciasDeEquipo"
 import * as inventoryApi from "@/features/inventory/api"
 import { CuentasDeEquipo } from "@/features/inventory/CuentasDeEquipo"
 import type { ResultadoCascada } from "@/features/admin/types"
@@ -38,12 +43,75 @@ type CambioEstado = {
   motivo: string
 }
 
+/**
+ * La pregunta que decide qué se le pide al equipo y qué se le puede anotar
+ * después (RF-03.15).
+ *
+ * Es una pregunta explícita y no una deducción del tipo: el tipo es texto
+ * libre —y tiene que seguir siéndolo— así que "Note book", "Notebook HP" y
+ * "Ultrabook" son la misma cosa para quien las escribe y tres cadenas
+ * distintas para cualquier regla que las quiera reconocer.
+ *
+ * Y dice "computadora" y no "notebook" porque lo que agrupa a una notebook,
+ * una tablet y una PC de escritorio que no vuelve al carro es tener ficha
+ * técnica y una cuenta con la que se entra, no el formato.
+ */
+function ClaseDeEquipo({
+  idPrefijo,
+  esComputadora,
+  onChange,
+}: {
+  idPrefijo: string
+  esComputadora: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <fieldset className="grid gap-1.5">
+      <legend className="text-sm font-medium">¿Qué clase de equipo es?</legend>
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="radio"
+          className="mt-1"
+          name={`${idPrefijo}-clase`}
+          checked={esComputadora}
+          onChange={() => onChange(true)}
+        />
+        <span>
+          Una computadora
+          <span className="text-muted-foreground block text-xs">
+            Notebook, tablet, PC de escritorio. Se le anotan los datos de la máquina, el
+            software con licencia y con qué cuenta se entra.
+          </span>
+        </span>
+      </label>
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="radio"
+          className="mt-1"
+          name={`${idPrefijo}-clase`}
+          checked={!esComputadora}
+          onChange={() => onChange(false)}
+        />
+        <span>
+          Otra cosa
+          <span className="text-muted-foreground block text-xs">
+            Proyector, cargador, parlante, lo que sea. Se entrega y se recibe igual, pero
+            no tiene datos de máquina que anotar.
+          </span>
+        </span>
+      </label>
+    </fieldset>
+  )
+}
+
 function Alta({ tiposUsados, onListo }: { tiposUsados: string[]; onListo: () => void }) {
   const queryClient = useQueryClient()
   const [tipo, setTipo] = useState("")
   const [nombre, setNombre] = useState("")
   const [numeroSerie, setNumeroSerie] = useState("")
   const [reservable, setReservable] = useState(false)
+  const [esComputadora, setEsComputadora] = useState(false)
+  const [ficha, setFicha] = useState<FichaTecnica>(FICHA_VACIA)
 
   const crear = useMutation({
     mutationFn: () =>
@@ -52,12 +120,18 @@ function Alta({ tiposUsados, onListo }: { tiposUsados: string[]; onListo: () => 
         nombre: nombre.trim(),
         numeroSerie: numeroSerie.trim(),
         reservable,
+        esComputadora,
+        // La ficha solo viaja si el equipo es una computadora: lo que se
+        // haya tipeado y después se haya cambiado de idea no se manda.
+        ...(esComputadora ? ficha : {}),
       }),
     onSuccess: async () => {
       setTipo("")
       setNombre("")
       setNumeroSerie("")
       setReservable(false)
+      setEsComputadora(false)
+      setFicha(FICHA_VACIA)
       await queryClient.invalidateQueries({ queryKey: EQUIPOS_KEY })
       onListo()
     },
@@ -71,6 +145,12 @@ function Alta({ tiposUsados, onListo }: { tiposUsados: string[]; onListo: () => 
         crear.mutate()
       }}
     >
+      <ClaseDeEquipo
+        idPrefijo="alta-suelto"
+        esComputadora={esComputadora}
+        onChange={setEsComputadora}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="grid gap-1.5">
           <Label htmlFor="equipo-tipo">¿Qué es?</Label>
@@ -131,6 +211,13 @@ function Alta({ tiposUsados, onListo }: { tiposUsados: string[]; onListo: () => 
         </p>
       </div>
 
+      {/* Los mismos campos que una computadora de carro, y son literalmente
+          los mismos: el componente se comparte con FormularioEquipo. Una
+          notebook suelta se administra igual que una de laboratorio. */}
+      {esComputadora && (
+        <CamposDeLaMaquina idPrefijo="alta-suelto" valor={ficha} onChange={setFicha} />
+      )}
+
       <label className="flex items-start gap-2 text-sm">
         <input
           type="checkbox"
@@ -183,6 +270,14 @@ function Edicion({
   const [nombre, setNombre] = useState(equipo.nombre ?? "")
   const [numeroSerie, setNumeroSerie] = useState(equipo.numeroSerie ?? "")
   const [reservable, setReservable] = useState(equipo.reservable ?? false)
+  const [esComputadora, setEsComputadora] = useState(equipo.esComputadora ?? false)
+  const [ficha, setFicha] = useState<FichaTecnica>({
+    freezado: equipo.freezado ?? false,
+    cpu: equipo.cpu ?? "",
+    ram: equipo.ram ?? "",
+    sistemaOperativo: equipo.sistemaOperativo ?? "",
+    softwareInstalado: equipo.softwareInstalado ?? "",
+  })
 
   const guardar = useMutation({
     mutationFn: () =>
@@ -191,6 +286,11 @@ function Edicion({
         nombre: nombre.trim(),
         numeroSerie: numeroSerie.trim(),
         reservable,
+        esComputadora,
+        // Si deja de ser una computadora no se manda la ficha, y la que
+        // tenía queda guardada sin mostrarse: lo habitual es que se esté
+        // corrigiendo un error de carga, y volver a marcarla la trae intacta.
+        ...(esComputadora ? ficha : {}),
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: EQUIPOS_KEY })
@@ -210,6 +310,12 @@ function Edicion({
         guardar.mutate()
       }}
     >
+      <ClaseDeEquipo
+        idPrefijo={`editar-${equipo.id}`}
+        esComputadora={esComputadora}
+        onChange={setEsComputadora}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="grid gap-1.5">
           <Label htmlFor={`editar-tipo-${equipo.id}`}>¿Qué es?</Label>
@@ -254,6 +360,22 @@ function Edicion({
         />
       </div>
 
+      {esComputadora && (
+        <CamposDeLaMaquina
+          idPrefijo={`editar-${equipo.id}`}
+          valor={ficha}
+          onChange={setFicha}
+        />
+      )}
+
+      {equipo.esComputadora && !esComputadora && (
+        <p className="text-muted-foreground text-sm">
+          Deja de mostrarse como computadora: se le esconden los datos de la máquina, las
+          licencias y las cuentas. No se borra nada — si lo volvés a marcar, aparece todo
+          como estaba.
+        </p>
+      )}
+
       <label className="flex items-start gap-2 text-sm">
         <input
           type="checkbox"
@@ -295,6 +417,9 @@ export function OtrosEquipos() {
   const [editando, setEditando] = useState<string | null>(null)
   const [dandoDeBaja, setDandoDeBaja] = useState<Equipo | null>(null)
   const [viendoCuentas, setViendoCuentas] = useState<string | null>(null)
+  const [viendoIncidencias, setViendoIncidencias] = useState<string | null>(null)
+  const [viendoLicencias, setViendoLicencias] = useState<string | null>(null)
+  const [viendoPreferencias, setViendoPreferencias] = useState<string | null>(null)
   const [cambiando, setCambiando] = useState<CambioEstado | null>(null)
 
   const [cascada, setCascada] = useState<ResultadoCascada | null>(null)
@@ -332,6 +457,22 @@ export function OtrosEquipos() {
     [equipos]
   )
 
+  // Las computadoras primero y separadas del resto: una notebook y un cargador
+  // se administran distinto —una tiene ficha, licencias y cuentas; el otro se
+  // entrega y se recibe y nada más— y mezclados en una sola tira la lista no
+  // dejaba ver cuál es cuál.
+  const secciones = useMemo(() => {
+    const computadoras = equipos.filter((e) => e.esComputadora)
+    const otros = equipos.filter((e) => !e.esComputadora)
+    // Los títulos solo aparecen cuando hay de las dos clases: con una sola,
+    // un encabezado suelto arriba de la lista entera no separa nada.
+    const conTitulos = computadoras.length > 0 && otros.length > 0
+    return [
+      { clave: "computadoras", titulo: "Computadoras", lista: computadoras, conTitulos },
+      { clave: "otros", titulo: "Lo demás", lista: otros, conTitulos },
+    ].filter((s) => s.lista.length > 0)
+  }, [equipos])
+
   return (
     <Card>
       <CardHeader>
@@ -361,207 +502,282 @@ export function OtrosEquipos() {
             pantalla y el botón parecía no hacer nada. */}
         <AvisoDeCascada resultado={cascada} />
 
-        {equipos.map((e) => {
-          const editandoEste = editando === e.id
-          const bajandoEste = dandoDeBaja?.id === e.id
-          const cuentasAbiertas = viendoCuentas === e.id
-          const cambiandoEste = cambiando?.equipo.id === e.id
+        {secciones.map((seccion) => (
+          <div key={seccion.clave} className="grid gap-3">
+            {seccion.conTitulos && (
+              <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                {seccion.titulo}
+              </h3>
+            )}
+            {seccion.lista.map((e) => {
+              const editandoEste = editando === e.id
+              const bajandoEste = dandoDeBaja?.id === e.id
+              const cuentasAbiertas = viendoCuentas === e.id
+              const incidenciasAbiertas = viendoIncidencias === e.id
+              const licenciasAbiertas = viendoLicencias === e.id
+              const preferenciasAbiertas = viendoPreferencias === e.id
+              const cambiandoEste = cambiando?.equipo.id === e.id
 
-          return (
-            <div key={e.id} className="grid gap-2 rounded-md border p-3">
-              {/* Nombre arriba y botones abajo SIEMPRE, no lado a lado a
+              return (
+                <div key={e.id} className="grid gap-2 rounded-md border p-3">
+                  {/* Nombre arriba y botones abajo SIEMPRE, no lado a lado a
                   partir de `sm`. Es el mismo problema que ya tenía el
                   inventario de un carro: la fila de botones es `shrink-0` y
                   crece con cada función nueva —hoy son cinco, con los dos
                   cambios de estado—, así que al nombre y sus etiquetas les
                   tocaba un pedazo cada vez más angosto y "Solo préstamo"
                   bajaba a un renglón propio. */}
-              <div className="grid gap-2">
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-1.5 font-medium">
-                    {e.nombre}
-                    {/* El estado primero: dice si el equipo se puede usar hoy.
+                  <div className="grid gap-2">
+                    <div className="min-w-0">
+                      <p className="flex flex-wrap items-center gap-1.5 font-medium">
+                        {e.nombre}
+                        {/* El estado primero: dice si el equipo se puede usar hoy.
                         Que además se reserve o no es la regla de siempre. */}
-                    <EstadoBadge tono={TONO_PC[e.estado]}>
-                      {ETIQUETA_ESTADO_EQUIPO[e.estado]}
-                    </EstadoBadge>
-                    {e.reservable ? (
-                      <EstadoBadge tono="info">Se puede reservar</EstadoBadge>
-                    ) : (
-                      <EstadoBadge tono="neutro">Solo préstamo</EstadoBadge>
-                    )}
-                  </p>
-                  <p className="text-muted-foreground text-sm">
-                    {e.tipo}
-                    {/* Se muestra solo si lo tiene: una línea "Serie: —" en cada
+                        <EstadoBadge tono={TONO_PC[e.estado]}>
+                          {ETIQUETA_ESTADO_EQUIPO[e.estado]}
+                        </EstadoBadge>
+                        {e.reservable ? (
+                          <EstadoBadge tono="info">Se puede reservar</EstadoBadge>
+                        ) : (
+                          <EstadoBadge tono="neutro">Solo préstamo</EstadoBadge>
+                        )}
+                      </p>
+                      <p className="text-muted-foreground text-sm">
+                        {e.tipo}
+                        {/* Se muestra solo si lo tiene: una línea "Serie: —" en cada
                         cargador es ruido en la lista que más se mira. */}
-                    {e.numeroSerie && (
-                      <>
-                        {" · "}
-                        <span className="font-mono">{e.numeroSerie}</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-                {!editandoEste && !bajandoEste && !cambiandoEste && (
-                  <div className="flex flex-wrap gap-2">
-                    {/* Solo las transiciones que el backend acepta: fuera de
+                        {e.numeroSerie && (
+                          <>
+                            {" · "}
+                            <span className="font-mono">{e.numeroSerie}</span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    {!editandoEste && !bajandoEste && !cambiandoEste && (
+                      <div className="flex flex-wrap gap-2">
+                        {/* Solo las transiciones que el backend acepta: fuera de
                         servicio es terminal, y para eso está Dar de baja. */}
-                    {TRANSICIONES_DE_ESTADO[e.estado].map((destino) => (
-                      <Button
-                        key={destino}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          // Sin esto, el error de un intento anterior sobre
-                          // OTRO equipo aparece en este recuadro recién
-                          // abierto.
-                          cambiarEstado.reset()
-                          setCambiando({ equipo: e, nuevoEstado: destino, motivo: "" })
-                        }}
-                      >
-                        → {ETIQUETA_ESTADO_EQUIPO[destino]}
-                      </Button>
-                    ))}
-                    <Button variant="outline" size="sm" onClick={() => setEditando(e.id)}>
-                      Editar
-                    </Button>
-                    {/* Con qué cuenta se entra a este equipo (RF-03.22). Una
+                        {TRANSICIONES_DE_ESTADO[e.estado].map((destino) => (
+                          <Button
+                            key={destino}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              // Sin esto, el error de un intento anterior sobre
+                              // OTRO equipo aparece en este recuadro recién
+                              // abierto.
+                              cambiarEstado.reset()
+                              setCambiando({
+                                equipo: e,
+                                nuevoEstado: destino,
+                                motivo: "",
+                              })
+                            }}
+                          >
+                            → {ETIQUETA_ESTADO_EQUIPO[destino]}
+                          </Button>
+                        ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditando(e.id)}
+                        >
+                          Editar
+                        </Button>
+                        {/* Las fallas se reportan sobre cualquier cosa: un
+                        proyector con la lámpara quemada es una incidencia
+                        igual que una notebook que no arranca. */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-expanded={incidenciasAbiertas}
+                          onClick={() =>
+                            setViendoIncidencias(incidenciasAbiertas ? null : e.id)
+                          }
+                        >
+                          Incidencias
+                        </Button>
+                        {/* Licencias solo en una computadora: es donde se instala
+                        el software que vence. */}
+                        {e.esComputadora && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            aria-expanded={licenciasAbiertas}
+                            onClick={() =>
+                              setViendoLicencias(licenciasAbiertas ? null : e.id)
+                            }
+                          >
+                            Licencias
+                          </Button>
+                        )}
+                        {/* Preferencias es sobre reservas, no sobre hardware: un
+                        proyector puede ser el preferido de una materia. Por eso
+                        va con lo reservable y no con lo que es computadora. */}
+                        {e.reservable && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            aria-expanded={preferenciasAbiertas}
+                            onClick={() =>
+                              setViendoPreferencias(preferenciasAbiertas ? null : e.id)
+                            }
+                          >
+                            Preferencias
+                          </Button>
+                        )}
+                        {/* Con qué cuenta se entra a este equipo (RF-03.22). Una
                         notebook suelta es justamente la que alguien se lleva y
-                        abre lejos del laboratorio. */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      aria-expanded={cuentasAbiertas}
-                      onClick={() => setViendoCuentas(cuentasAbiertas ? null : e.id)}
-                    >
-                      Cómo entrar
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => {
-                        darDeBaja.reset()
-                        setDandoDeBaja(e)
-                      }}
-                    >
-                      Dar de baja
-                    </Button>
-                  </div>
-                )}
-              </div>
+                        abre lejos del laboratorio.
 
-              {/* RF-03.8: sacar un equipo de disponible cancela sus reservas
+                        También aparece en algo que no está marcado como
+                        computadora pero YA tiene cuentas anotadas: si no, un
+                        equipo cargado antes de que existiera esta distinción
+                        escondería datos que alguien puso, sin decir dónde
+                        fueron. */}
+                        {(e.esComputadora || e.tieneCuentas) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            aria-expanded={cuentasAbiertas}
+                            onClick={() =>
+                              setViendoCuentas(cuentasAbiertas ? null : e.id)
+                            }
+                          >
+                            Cómo entrar
+                          </Button>
+                        )}
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            darDeBaja.reset()
+                            setDandoDeBaja(e)
+                          }}
+                        >
+                          Dar de baja
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* RF-03.8: sacar un equipo de disponible cancela sus reservas
                   futuras, y volver a disponible NO las restaura. Por eso se
                   avisa antes y no después. */}
-              {cambiandoEste && cambiando && (
-                <div className="grid gap-2 rounded-md border p-3">
-                  {cambiando.nuevoEstado !== "DISPONIBLE" ? (
-                    <p className="text-destructive text-sm">
-                      Pasar {e.nombre} a{" "}
-                      {ETIQUETA_ESTADO_EQUIPO[cambiando.nuevoEstado].toLowerCase()}{" "}
-                      cancela sus reservas futuras y avisa a cada docente. Deja de poder
-                      entregarse: para llevarlo al técnico, registrá una salida a
-                      reparación desde Entregas.
-                    </p>
-                  ) : (
-                    <p className="text-muted-foreground text-sm">
-                      El equipo vuelve a poder reservarse y entregarse. Las reservas que
-                      se cancelaron mientras no lo estaba no se recuperan.
-                    </p>
+                  {cambiandoEste && cambiando && (
+                    <div className="grid gap-2 rounded-md border p-3">
+                      {cambiando.nuevoEstado !== "DISPONIBLE" ? (
+                        <p className="text-destructive text-sm">
+                          Pasar {e.nombre} a{" "}
+                          {ETIQUETA_ESTADO_EQUIPO[cambiando.nuevoEstado].toLowerCase()}{" "}
+                          cancela sus reservas futuras y avisa a cada docente. Deja de
+                          poder entregarse: para llevarlo al técnico, registrá una salida
+                          a reparación desde Entregas.
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground text-sm">
+                          El equipo vuelve a poder reservarse y entregarse. Las reservas
+                          que se cancelaron mientras no lo estaba no se recuperan.
+                        </p>
+                      )}
+                      <div className="grid gap-1.5">
+                        <Label htmlFor={`motivo-suelto-${e.id}`}>Motivo (opcional)</Label>
+                        <Input
+                          id={`motivo-suelto-${e.id}`}
+                          value={cambiando.motivo}
+                          onChange={(ev) =>
+                            setCambiando({ ...cambiando, motivo: ev.target.value })
+                          }
+                          placeholder="Se incluye en el aviso al docente"
+                        />
+                      </div>
+                      {cambiarEstado.error && (
+                        <Alert variant="destructive">
+                          <AlertDescription>
+                            {getErrorMessage(cambiarEstado.error)}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={cambiarEstado.isPending}
+                          onClick={() => cambiarEstado.mutate(cambiando)}
+                        >
+                          Confirmar cambio
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCambiando(null)}
+                        >
+                          Volver
+                        </Button>
+                      </div>
+                    </div>
                   )}
-                  <div className="grid gap-1.5">
-                    <Label htmlFor={`motivo-suelto-${e.id}`}>Motivo (opcional)</Label>
-                    <Input
-                      id={`motivo-suelto-${e.id}`}
-                      value={cambiando.motivo}
-                      onChange={(ev) =>
-                        setCambiando({ ...cambiando, motivo: ev.target.value })
-                      }
-                      placeholder="Se incluye en el aviso al docente"
+
+                  {editandoEste && (
+                    <Edicion
+                      equipo={e}
+                      tiposUsados={tiposUsados}
+                      onListo={() => setEditando(null)}
                     />
-                  </div>
-                  {cambiarEstado.error && (
-                    <Alert variant="destructive">
-                      <AlertDescription>
-                        {getErrorMessage(cambiarEstado.error)}
-                      </AlertDescription>
-                    </Alert>
                   )}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={cambiarEstado.isPending}
-                      onClick={() => cambiarEstado.mutate(cambiando)}
-                    >
-                      Confirmar cambio
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCambiando(null)}
-                    >
-                      Volver
-                    </Button>
-                  </div>
-                </div>
-              )}
 
-              {editandoEste && (
-                <Edicion
-                  equipo={e}
-                  tiposUsados={tiposUsados}
-                  onListo={() => setEditando(null)}
-                />
-              )}
+                  {incidenciasAbiertas && <IncidenciasDeEquipo equipoId={e.id} />}
+                  {licenciasAbiertas && <LicenciasDeEquipo equipoId={e.id} />}
+                  {preferenciasAbiertas && <PreferenciasDeEquipo equipoId={e.id} />}
+                  {cuentasAbiertas && <CuentasDeEquipo equipo={e} />}
 
-              {cuentasAbiertas && <CuentasDeEquipo equipo={e} />}
-
-              {bajandoEste && (
-                <div className="grid gap-2 rounded-md border p-3">
-                  <p className="text-destructive text-sm">
-                    Dar de baja {e.nombre} lo saca del inventario y cancela sus reservas
-                    futuras. Si está prestado, el sistema no deja darlo de baja: marcá
-                    primero que volvió.
-                  </p>
-                  {/* El nombre y la serie se liberan al dar de baja: un
+                  {bajandoEste && (
+                    <div className="grid gap-2 rounded-md border p-3">
+                      <p className="text-destructive text-sm">
+                        Dar de baja {e.nombre} lo saca del inventario y cancela sus
+                        reservas futuras. Si está prestado, el sistema no deja darlo de
+                        baja: marcá primero que volvió.
+                      </p>
+                      {/* El nombre y la serie se liberan al dar de baja: un
                       cargador que se rompe y se reemplaza se va a seguir
                       llamando igual, y la misma máquina se puede volver a
                       cargar con la serie que trae de fábrica. */}
-                  <p className="text-muted-foreground text-sm">
-                    El nombre y el número de serie quedan libres para volver a usarlos en
-                    el equipo que lo reemplace.
-                  </p>
-                  {darDeBaja.error && (
-                    <Alert variant="destructive">
-                      <AlertDescription>
-                        {getErrorMessage(darDeBaja.error)}
-                      </AlertDescription>
-                    </Alert>
+                      <p className="text-muted-foreground text-sm">
+                        El nombre y el número de serie quedan libres para volver a usarlos
+                        en el equipo que lo reemplace.
+                      </p>
+                      {darDeBaja.error && (
+                        <Alert variant="destructive">
+                          <AlertDescription>
+                            {getErrorMessage(darDeBaja.error)}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={darDeBaja.isPending}
+                          onClick={() => darDeBaja.mutate(e)}
+                        >
+                          Confirmar baja
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDandoDeBaja(null)}
+                        >
+                          Volver
+                        </Button>
+                      </div>
+                    </div>
                   )}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={darDeBaja.isPending}
-                      onClick={() => darDeBaja.mutate(e)}
-                    >
-                      Confirmar baja
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setDandoDeBaja(null)}
-                    >
-                      Volver
-                    </Button>
-                  </div>
                 </div>
-              )}
-            </div>
-          )
-        })}
+              )
+            })}
+          </div>
+        ))}
 
         {/* Mientras se edita uno no se ofrece el alta: los dos formularios
             tienen los mismos campos, y verlos juntos no deja saber cuál se

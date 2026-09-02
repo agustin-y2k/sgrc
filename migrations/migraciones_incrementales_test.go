@@ -84,6 +84,8 @@ func TestUnaActualizacionNoSeLlevaLosDatosPuestos(t *testing.T) {
 	verificarQueElAvisoViejoSobrevivioConvertido(ctx, t, pool)
 	verificarQueLaVersionEsLaUltima(ctx, t, pool)
 
+	verificarQueLoDeUnCarroQuedoComoComputadora(ctx, t, pool)
+
 	// Va último porque escribe: da de baja el equipo sembrado y carga otro
 	// encima de sus identificadores.
 	verificarQueLaBajaLiberaSerieYZocalo(ctx, t, pool)
@@ -321,6 +323,24 @@ func verificarQueLaReservaSigueEntera(ctx context.Context, t *testing.T, pool *p
 	comprobar("estado", estado, "CONFIRMADA")
 	if esperada := "2026-05-04"; fecha.Format("2006-01-02") != esperada {
 		t.Errorf("la reserva cambió de fecha: %q en vez de %q", fecha.Format("2006-01-02"), esperada)
+	}
+}
+
+// verificarQueLoDeUnCarroQuedoComoComputadora: la 006 agrega es_computadora y
+// tiene que dejar en true lo que ya estaba adentro de un carro. Si el UPDATE de
+// la migración no corriera, las computadoras de laboratorio de una instalación
+// vieja se quedarían sin ficha técnica ni cuentas de un día para el otro, que
+// es una pérdida de función invisible: nada falla, solo dejan de mostrarse.
+func verificarQueLoDeUnCarroQuedoComoComputadora(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	var esComputadora bool
+	if err := pool.QueryRow(ctx,
+		`SELECT es_computadora FROM equipo WHERE id = $1`, idEquipo).Scan(&esComputadora); err != nil {
+		t.Fatalf("no se pudo leer es_computadora del equipo sembrado: %v", err)
+	}
+	if !esComputadora {
+		t.Error("la PC de un carro que ya existía tiene que quedar marcada como computadora")
 	}
 }
 

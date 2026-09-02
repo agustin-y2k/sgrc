@@ -354,7 +354,9 @@ func TestOpcional_UnEquipoSinCuentasEsValido(t *testing.T) {
 func TestOpcional_DarDeAltaUnEquipoNoPideCuentas(t *testing.T) {
 	svc := servicioSimple(nuevoFakeRepo())
 
-	equipo, err := svc.CrearEquipo(context.Background(), "NOTEBOOK", "Notebook Dirección", "", true)
+	equipo, err := svc.CrearEquipo(context.Background(), CrearEquipoSueltoParams{
+		Tipo: "NOTEBOOK", Nombre: "Notebook Dirección", Reservable: true, EsComputadora: true,
+	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
