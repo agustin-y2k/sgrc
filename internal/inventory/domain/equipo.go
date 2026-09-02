@@ -115,7 +115,15 @@ type Equipo struct {
 	// Nombre es cómo se lo llama cuando no tiene número de carro.
 	Nombre string
 	// Reservable: si aparece en la lista de equipos libres al reservar.
-	Reservable        bool
+	Reservable bool
+	// EsComputadora decide si los cinco campos de abajo —y las cuentas de
+	// acceso (RF-03.22)— tienen sentido para este equipo. Un cargador no
+	// tiene CPU ni forma de entrar; una notebook suelta tiene las dos cosas.
+	//
+	// No reemplaza a Tipo ni lo duplica: Tipo dice QUÉ ES y sigue siendo
+	// texto libre; esto dice QUÉ SE LE PREGUNTA. Las de un carro son
+	// computadoras siempre.
+	EsComputadora     bool
 	Freezado          bool
 	CPU               string
 	RAM               string
@@ -155,6 +163,7 @@ func NuevoEquipoDeCarro(id, carroID string, identificador int, numeroSerie strin
 		Identificador: identificador,
 		NumeroSerie:   serie,
 		Freezado:      freezado,
+		EsComputadora: true,
 		Tipo:          TipoPC,
 		Reservable:    true,
 		Estado:        EstadoDisponible,
@@ -262,6 +271,11 @@ func NombreDeEquipoValido(nombre string) (string, error) {
 // cargador no tiene ninguna. Por eso es un campo que se llena o no, y no dos
 // categorías de equipo — la lista de lo que presta una escuela es texto libre
 // justamente para no tener que decidir de antemano qué entra en cada una.
+//
+// Nace sin ser computadora (EsComputadora en false), que es lo que corresponde
+// a la mayoría de lo que se presta fuera del laboratorio. Quien lo crea lo
+// marca cuando corresponde, y ahí recién tienen sentido la ficha técnica y las
+// cuentas de acceso.
 func NuevoEquipoSuelto(id, tipo, nombre, numeroSerie string, reservable bool, fechaAlta time.Time) (*Equipo, error) {
 	tipo, err := TipoDeEquipoValido(tipo)
 	if err != nil {

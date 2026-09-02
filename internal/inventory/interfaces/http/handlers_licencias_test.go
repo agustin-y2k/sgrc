@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -380,6 +381,90 @@ func TestHTTP_CrearEquipo_CargadorNoReservable(t *testing.T) {
 	}
 	if resp.Reservable {
 		t.Error("un cargador se presta en el momento; nadie planifica con él")
+	}
+}
+
+// Una notebook suelta se carga con todo lo que tiene una de laboratorio: la
+// ficha técnica viaja en el alta, no hay que crearla y después editarla.
+func TestHTTP_CrearEquipo_NotebookConFichaTecnica(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoSueltoRequest{
+		Tipo: "Notebook", Nombre: "Notebook de Dirección", NumeroSerie: "5CD1234ABC", Reservable: true,
+		EsComputadora: true, Freezado: true, CPU: "i5", RAM: "8 GB",
+		SistemaOperativo: "Windows 11", SoftwareInstalado: "AutoCAD 2026",
+	}, "ADMIN")
+
+	if codigo != fiber.StatusCreated {
+		t.Fatalf("esperaba 201, obtuve %d: %s", codigo, cuerpo)
+	}
+	var resp equipoResponse
+	if err := json.Unmarshal(cuerpo, &resp); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if !resp.EsComputadora || !resp.Freezado {
+		t.Errorf("esComputadora=%v freezado=%v", resp.EsComputadora, resp.Freezado)
+	}
+	if resp.CPU != "i5" || resp.RAM != "8 GB" || resp.SistemaOperativo != "Windows 11" ||
+		resp.SoftwareInstalado != "AutoCAD 2026" {
+		t.Errorf("la ficha técnica no volvió entera: %+v", resp)
+	}
+	// Sigue siendo un equipo suelto: se nombra por su nombre y no cuelga de
+	// ningún carro.
+	if resp.CarroID != "" || resp.Etiqueta != "Notebook de Dirección" {
+		t.Errorf("carro=%q etiqueta=%q", resp.CarroID, resp.Etiqueta)
+	}
+}
+
+// Lo que se presta y no es una máquina no arrastra nada de eso.
+func TestHTTP_CrearEquipo_LoQueNoEsComputadoraNoLoEs(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoSueltoRequest{
+		Tipo: "Proyector", Nombre: "Proyector del SUM", Reservable: true,
+	}, "ADMIN")
+
+	if codigo != fiber.StatusCreated {
+		t.Fatalf("esperaba 201, obtuve %d: %s", codigo, cuerpo)
+	}
+	var resp equipoResponse
+	if err := json.Unmarshal(cuerpo, &resp); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+	if resp.EsComputadora {
+		t.Error("sin pedirlo, un equipo suelto no es una computadora")
+	}
+}
+
+// Corregir la carga: lo que se anotó como proyector resulta ser una notebook.
+func TestHTTP_EditarEquipo_MarcarloComoComputadora(t *testing.T) {
+	repo := nuevoFakeRepo()
+	app := nuevaAppDeTest(repo)
+
+	codigo, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos", crearEquipoSueltoRequest{
+		Tipo: "Notebook", Nombre: "Notebook del taller", Reservable: true,
+	}, "ADMIN")
+	if codigo != fiber.StatusCreated {
+		t.Fatalf("alta: esperaba 201, obtuve %d: %s", codigo, cuerpo)
+	}
+	var creado equipoResponse
+	if err := json.Unmarshal(cuerpo, &creado); err != nil {
+		t.Fatalf("respuesta ilegible: %v", err)
+	}
+
+	si := true
+	codigo, cuerpo = pedir(t, app, "PATCH", "/api/inventory/equipos/"+creado.ID,
+		editarEquipoRequest{EsComputadora: &si}, "ADMIN")
+	if codigo != fiber.StatusOK {
+		t.Fatalf("edición: esperaba 200, obtuve %d: %s", codigo, cuerpo)
+	}
+
+	equipo, err := repo.BuscarEquipoPorID(context.Background(), creado.ID)
+	if err != nil {
+		t.Fatalf("no se pudo releer: %v", err)
+	}
+	if !equipo.EsComputadora {
+		t.Error("la edición tenía que marcarlo como computadora")
 	}
 }
 

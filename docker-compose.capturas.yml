@@ -1,0 +1,30 @@
+# Overlay para GENERAR LAS CAPTURAS de las guías, sin tocar la base de
+# desarrollo.
+#
+# El pipeline necesita una base recién creada y datos neutros —el .env de
+# desarrollo tiene el correo personal en SEED_ADMIN_EMAIL y DOCENTE_EMAIL, y
+# las capturas de Usuarios y Mi perfil lo publicarían—, pero la base local
+# tiene el volcado real del servidor y no se puede borrar para esto.
+#
+# La salida es levantar TODO en otro proyecto de Compose:
+#
+#   docker compose -p sgrc-capturas -f docker-compose.yml \
+#     -f docker-compose.dev.yml -f docker-compose.capturas.yml up -d --build \
+#     postgres sgrc-app frontend
+#
+# Un proyecto distinto tiene su propio volumen, así que `pgdata` de
+# desarrollo ni se entera. Al terminar:
+#
+#   docker compose -p sgrc-capturas ... down -v
+#
+# borra SOLO el volumen de este proyecto. El `-v` acá es seguro justamente
+# porque el proyecto es otro.
+services:
+  sgrc-app:
+    env_file: .env.capturas
+  postgres:
+    env_file: .env.capturas
+  seed-datos:
+    env_file: .env.capturas
+  frontend:
+    env_file: .env.capturas

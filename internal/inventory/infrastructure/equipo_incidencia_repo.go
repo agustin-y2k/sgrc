@@ -18,16 +18,16 @@ import (
 // equipos lo necesita para TODAS las filas, y pedirlo de a uno sería una
 // consulta por equipo. EXISTS y no COUNT: alcanza con saber si hay alguna, y
 // se corta en la primera fila que encuentra.
-const columnasEquipo = `id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dado_de_baja, fecha_baja, fecha_alta, tipo, nombre, reservable,
+const columnasEquipo = `id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dado_de_baja, fecha_baja, fecha_alta, tipo, nombre, reservable, es_computadora,
 	EXISTS (SELECT 1 FROM equipo_cuenta ec WHERE ec.equipo_id = equipo.id) AS tiene_cuentas`
 
 func (r *PostgresRepo) CrearEquipo(ctx context.Context, pc *domain.Equipo) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO equipo (id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dado_de_baja, fecha_alta, tipo, nombre, reservable)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		INSERT INTO equipo (id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dado_de_baja, fecha_alta, tipo, nombre, reservable, es_computadora)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`, pc.ID, nullIfEmpty(pc.CarroID), nullSiCero(pc.Identificador), nullIfEmpty(pc.NumeroSerie), pc.Freezado,
 		nullIfEmpty(pc.CPU), nullIfEmpty(pc.RAM), nullIfEmpty(pc.SistemaOperativo), nullIfEmpty(pc.SoftwareInstalado),
-		string(pc.Estado), pc.DadoDeBaja, pc.FechaAlta, pc.Tipo, nullIfEmpty(pc.Nombre), pc.Reservable)
+		string(pc.Estado), pc.DadoDeBaja, pc.FechaAlta, pc.Tipo, nullIfEmpty(pc.Nombre), pc.Reservable, pc.EsComputadora)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return errorDeUnicidadDeEquipo(err)
@@ -58,7 +58,7 @@ func escanearEquipo(row pgx.Row) (*domain.Equipo, error) {
 		&pc.ID, &carroID, &identificador, &numeroSerie, &pc.Freezado,
 		&cpu, &ram, &so, &software,
 		&estadoStr, &pc.DadoDeBaja, &pc.FechaBaja, &pc.FechaAlta,
-		&pc.Tipo, &nombre, &pc.Reservable, &pc.TieneCuentas,
+		&pc.Tipo, &nombre, &pc.Reservable, &pc.EsComputadora, &pc.TieneCuentas,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -111,12 +111,12 @@ func (r *PostgresRepo) GuardarEquipo(ctx context.Context, pc *domain.Equipo) err
 			carro_id=$2, identificador=$3, numero_serie=$4, freezado=$5,
 			cpu=$6, ram=$7, sistema_operativo=$8, software_instalado=$9,
 			estado=$10, dado_de_baja=$11, fecha_baja=$12,
-			tipo=$13, nombre=$14, reservable=$15
+			tipo=$13, nombre=$14, reservable=$15, es_computadora=$16
 		WHERE id=$1
 	`, pc.ID, nullIfEmpty(pc.CarroID), nullSiCero(pc.Identificador), nullIfEmpty(pc.NumeroSerie), pc.Freezado,
 		nullIfEmpty(pc.CPU), nullIfEmpty(pc.RAM), nullIfEmpty(pc.SistemaOperativo), nullIfEmpty(pc.SoftwareInstalado),
 		string(pc.Estado), pc.DadoDeBaja, pc.FechaBaja,
-		pc.Tipo, nullIfEmpty(pc.Nombre), pc.Reservable)
+		pc.Tipo, nullIfEmpty(pc.Nombre), pc.Reservable, pc.EsComputadora)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return errorDeUnicidadDeEquipo(err)

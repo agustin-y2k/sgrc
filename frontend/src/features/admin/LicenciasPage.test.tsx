@@ -58,6 +58,7 @@ describe("LicenciasPage", () => {
           etiqueta: "PC 3",
           tipo: "PC",
           reservable: true,
+          esComputadora: true,
           freezado: false,
           estado: "DISPONIBLE",
           dadoDeBaja: false,
@@ -69,6 +70,7 @@ describe("LicenciasPage", () => {
           nombre: "Notebook de dirección",
           tipo: "NOTEBOOK",
           reservable: true,
+          esComputadora: false,
           freezado: false,
           estado: "DISPONIBLE",
           dadoDeBaja: false,
@@ -366,7 +368,9 @@ describe("LicenciasPage", () => {
     await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
 
     expect(screen.getByRole("heading", { name: "Licencias de software" })).toBeVisible()
-    expect(screen.getByText(/les llega un mail a todos los administradores/)).toBeVisible()
+    expect(
+      screen.getByText(/les llega un mail a todos los administradores/)
+    ).toBeVisible()
     // El botón se fue del encabezado: lo reemplazó el panel de abajo.
     expect(
       screen.queryByRole("button", { name: "Cargar una licencia" })

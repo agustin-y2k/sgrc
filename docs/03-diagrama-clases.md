@@ -50,6 +50,7 @@ classDiagram
         +string tipo
         +string numeroSerie
         +boolean reservable
+        +boolean esComputadora
         +boolean freezado
         +string cpu
         +string ram
@@ -64,10 +65,18 @@ classDiagram
     }
 
     %% Equipo no es solo una computadora: también un proyector o un cargador,
-    %% que no cuelgan de ningún carro (carroId, identificador y numeroSerie
-    %% quedan vacíos y los nombra `nombre`). Comparten entidad para que "qué
-    %% hay afuera del laboratorio" sea una sola lista. `etiqueta()` resuelve
-    %% cómo se lo nombra en pantallas y correos: "PC 3" o el nombre.
+    %% que no cuelgan de ningún carro (carroId e identificador quedan vacíos y
+    %% los nombra `nombre`; numeroSerie es opcional en ellos y obligatorio en
+    %% una computadora de carro). Comparten entidad para que "qué hay afuera
+    %% del laboratorio" sea una sola lista. `etiqueta()` resuelve cómo se lo
+    %% nombra en pantallas y correos: "PC 3" o el nombre.
+    %%
+    %% `esComputadora` es lo que decide qué se le pide y qué se le puede
+    %% anotar: los cuatro campos de la ficha (cpu, ram, sistemaOperativo,
+    %% softwareInstalado), `freezado` y las CuentaDeEquipo. Un cargador no
+    %% tiene nada de eso; una notebook suelta lo tiene todo. No reemplaza a
+    %% `tipo`, que dice QUÉ ES y sigue siendo texto libre: este dice QUÉ SE LE
+    %% PREGUNTA. Lo que está en un carro lo es siempre.
 
     class CuentaDeEquipo {
         +UUID id

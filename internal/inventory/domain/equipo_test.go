@@ -365,6 +365,27 @@ func TestNuevoEquipoSuelto_SinNumeroDeSerie_NoEsError(t *testing.T) {
 	}
 }
 
+// La pregunta que decide qué se le pide a cada equipo: una computadora de
+// carro lo es siempre, y lo que se presta fuera del laboratorio nace sin
+// serlo, para que el alta de un cargador no arrastre una ficha técnica.
+func TestEsComputadora_LasDeCarroSiempre_LasSueltasNo(t *testing.T) {
+	deCarro, err := NuevoEquipoDeCarro("eq-1", "carro-1", 7, "SERIE-7", false, time.Now())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !deCarro.EsComputadora {
+		t.Error("una computadora de un carro tiene que nacer marcada como computadora")
+	}
+
+	suelto, err := NuevoEquipoSuelto("eq-2", "CARGADOR", "Cargador 1", "", false, time.Now())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if suelto.EsComputadora {
+		t.Error("un equipo suelto nace sin ser computadora; lo marca quien lo carga")
+	}
+}
+
 func TestNuevoEquipoSuelto_NumeroDeSerieDemasiadoLargo(t *testing.T) {
 	largo := strings.Repeat("A", MaxLargoNumeroSerie+1)
 

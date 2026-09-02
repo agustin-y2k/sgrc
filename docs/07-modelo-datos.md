@@ -359,6 +359,7 @@ carro y también proyectores, cargadores o notebooks sueltas (RF-03.15).
 | software_instalado | TEXT | NULL |
 | estado | VARCHAR(25) | NOT NULL DEFAULT 'DISPONIBLE', CHECK IN ('DISPONIBLE','EN_MANTENIMIENTO','FUERA_DE_SERVICIO') |
 | reservable | BOOLEAN | NOT NULL DEFAULT true |
+| es_computadora | BOOLEAN | NOT NULL DEFAULT false |
 | dado_de_baja | BOOLEAN | NOT NULL DEFAULT false |
 | fecha_baja | TIMESTAMPTZ | NULL |
 | fecha_alta | TIMESTAMPTZ | NOT NULL DEFAULT now() |
@@ -406,6 +407,23 @@ CREATE UNIQUE INDEX ux_equipo_carro_identificador
 > (mayúsculas, sin espacios al borde) y la base lo exige con un CHECK: sin
 > forma canónica, la misma máquina cargada dos veces con distinta caja son dos
 > filas distintas para el `UNIQUE`.
+
+> `es_computadora` es la pregunta que decide **qué se le pide a este equipo**:
+> los cinco campos de la ficha técnica —`freezado`, `cpu`, `ram`,
+> `sistema_operativo`, `software_instalado`— y las cuentas de acceso
+> (`equipo_cuenta`, RF-03.22). Un cargador no tiene nada de eso; una notebook
+> suelta lo tiene todo y hasta la 006 no había dónde anotarlo.
+>
+> **No reemplaza a `tipo` ni lo duplica.** `tipo` dice *qué es* y sigue siendo
+> libre; esto dice *qué se le pregunta*. Y no se llama `es_notebook` porque lo
+> que agrupa a una notebook, una tablet y una PC de escritorio que no vuelve al
+> carro es tener ficha técnica y una cuenta con la que se entra, no el formato.
+>
+> Es una columna y no una deducción de `tipo` por la misma razón por la que
+> `tipo` es libre: sobre texto que escribe una persona, "Note book", "Notebook
+> HP" y "Ultrabook" son la misma cosa para quien las escribió y tres cadenas
+> distintas para cualquier `LIKE`. Lo de un carro nace en `true`; lo suelto, en
+> `false` hasta que alguien lo marque.
 
 > `tipo` es **texto libre y no un enum**: la lista de cosas que presta una
 > institución no es la de otra, y agregar una categoría nueva no puede exigir

@@ -44,6 +44,17 @@ type crearEquipoSueltoRequest struct {
 	// Reservable: si aparece en la lista de equipos libres al reservar. El
 	// proyector sí; un cargador se presta en el momento.
 	Reservable bool `json:"reservable"`
+	// EsComputadora habilita la ficha técnica de abajo y las cuentas de
+	// acceso. Ausente es false: lo que se presta fuera del laboratorio en su
+	// mayoría no es una computadora.
+	EsComputadora bool `json:"esComputadora,omitempty"`
+	// Los cinco de la ficha técnica, todos opcionales incluso en una
+	// computadora: se cargan con lo que se sepa.
+	Freezado          bool   `json:"freezado,omitempty"`
+	CPU               string `json:"cpu,omitempty"`
+	RAM               string `json:"ram,omitempty"`
+	SistemaOperativo  string `json:"sistemaOperativo,omitempty"`
+	SoftwareInstalado string `json:"softwareInstalado,omitempty"`
 }
 
 type editarEquipoRequest struct {
@@ -56,6 +67,7 @@ type editarEquipoRequest struct {
 	Tipo              *string `json:"tipo,omitempty"`
 	Nombre            *string `json:"nombre,omitempty"`
 	Reservable        *bool   `json:"reservable,omitempty"`
+	EsComputadora     *bool   `json:"esComputadora,omitempty"`
 	// Cadena vacía borra el número de serie; solo se acepta fuera de un carro.
 	NumeroSerie *string `json:"numeroSerie,omitempty"`
 
@@ -114,6 +126,7 @@ type equipoResponse struct {
 	Tipo              string     `json:"tipo"`
 	Nombre            string     `json:"nombre,omitempty"`
 	Reservable        bool       `json:"reservable"`
+	EsComputadora     bool       `json:"esComputadora"`
 	Freezado          bool       `json:"freezado"`
 	CPU               string     `json:"cpu,omitempty"`
 	RAM               string     `json:"ram,omitempty"`
@@ -134,7 +147,7 @@ func toEquipoResponse(pc *domain.Equipo) equipoResponse {
 	return equipoResponse{
 		ID: pc.ID, CarroID: pc.CarroID, Identificador: pc.Identificador, NumeroSerie: pc.NumeroSerie,
 		Etiqueta: pc.Etiqueta(), Tipo: pc.Tipo, Nombre: pc.Nombre, Reservable: pc.Reservable,
-		Freezado: pc.Freezado, CPU: pc.CPU, RAM: pc.RAM, SistemaOperativo: pc.SistemaOperativo,
+		EsComputadora: pc.EsComputadora, Freezado: pc.Freezado, CPU: pc.CPU, RAM: pc.RAM, SistemaOperativo: pc.SistemaOperativo,
 		SoftwareInstalado: pc.SoftwareInstalado, Estado: string(pc.Estado),
 		DadoDeBaja: pc.DadoDeBaja, FechaBaja: pc.FechaBaja, FechaAlta: pc.FechaAlta,
 		TieneCuentas: pc.TieneCuentas,

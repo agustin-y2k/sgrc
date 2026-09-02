@@ -100,6 +100,12 @@ type EditarEquipoParams struct {
 	Tipo       *string
 	Nombre     *string
 	Reservable *bool
+	// EsComputadora: corregir de qué se trata el equipo. Desmarcarlo NO borra
+	// la ficha técnica que ya tenía —deja de mostrarse y vuelve intacta si se
+	// vuelve a marcar—, porque lo normal es que se esté corrigiendo un error de
+	// carga y perder lo escrito por una casilla mal tildada es peor que
+	// guardar un dato que nadie mira.
+	EsComputadora *bool
 	// NumeroSerie se edita porque los equipos que ya estaban cargados no lo
 	// tienen: sin esto habría que dar de baja la notebook y volver a crearla
 	// solo para anotarle la serie, perdiendo su historial.
@@ -148,6 +154,9 @@ func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params Edit
 	}
 	if params.Reservable != nil {
 		pc.Reservable = *params.Reservable
+	}
+	if params.EsComputadora != nil {
+		pc.EsComputadora = *params.EsComputadora
 	}
 	if params.NumeroSerie != nil {
 		serie, err := domain.NumeroSerieOpcionalValido(*params.NumeroSerie)
@@ -316,11 +325,42 @@ func (s *Service) ListarEquiposPorCarro(ctx context.Context, carroID string) ([]
 
 // CrearEquipo da de alta algo prestable que no es una computadora de un
 // carro: un proyector, un cargador, una notebook suelta.
-func (s *Service) CrearEquipo(ctx context.Context, tipo, nombre, numeroSerie string, reservable bool) (*domain.Equipo, error) {
-	equipo, err := domain.NuevoEquipoSuelto(s.nuevoID(), tipo, nombre, numeroSerie, reservable, s.ahora())
+// CrearEquipoSueltoParams son los datos del alta de algo prestable que no está
+// en un carro (RF-03.15). Es un struct y no una lista de argumentos porque los
+// cinco últimos son la ficha técnica, y son cinco justamente para no tener que
+// elegir cuáles de los datos de una máquina merecen anotarse.
+//
+// La ficha se completa cuando EsComputadora: la pantalla no la ofrece para un
+// cargador. El servidor no la descarta si igual llega —guardar un dato que
+// nadie va a mirar es más barato que una regla escondida que borra lo que
+// alguien escribió—, simplemente no se muestra.
+type CrearEquipoSueltoParams struct {
+	Tipo        string
+	Nombre      string
+	NumeroSerie string
+	Reservable  bool
+
+	EsComputadora     bool
+	Freezado          bool
+	CPU               string
+	RAM               string
+	SistemaOperativo  string
+	SoftwareInstalado string
+}
+
+func (s *Service) CrearEquipo(ctx context.Context, params CrearEquipoSueltoParams) (*domain.Equipo, error) {
+	equipo, err := domain.NuevoEquipoSuelto(s.nuevoID(), params.Tipo, params.Nombre, params.NumeroSerie,
+		params.Reservable, s.ahora())
 	if err != nil {
 		return nil, err
 	}
+	equipo.EsComputadora = params.EsComputadora
+	equipo.Freezado = params.Freezado
+	equipo.CPU = params.CPU
+	equipo.RAM = params.RAM
+	equipo.SistemaOperativo = params.SistemaOperativo
+	equipo.SoftwareInstalado = params.SoftwareInstalado
+
 	if err := s.repo.CrearEquipo(ctx, equipo); err != nil {
 		return nil, err
 	}
