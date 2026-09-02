@@ -75,8 +75,12 @@ var ErrRangoHorarioInvalido = errors.New("la hora de fin no puede ser igual a la
 var ErrBloqueSolapado = errors.New("ese horario se pisa con otro bloque del mismo día")
 
 // BloqueHorario es un tramo del patrón semanal recurrente de presencia de un
-// Admin en el laboratorio (RF-07.1) — puramente informativo, sin efecto sobre
-// permisos ni reservas.
+// Admin en el laboratorio (RF-07.1).
+//
+// No restringe ninguna operación que haga una persona —reservar, entregar y
+// aprobar funcionan igual esté quien esté— pero desde la 1.18.0 **sí decide si
+// el barrido automático actúa** (RF-07.6, ver mostrador.go). Un horario mal
+// cargado ya no es solo una pantalla que miente.
 type BloqueHorario struct {
 	ID         string
 	UsuarioID  string

@@ -77,23 +77,6 @@ func TestRegisterEventHandlers_DocenteDesasignadoMateriaHuerfana_NotificaATodosL
 	}
 }
 
-func TestRegisterEventHandlers_DocenteBajaNotificarAdmin_NotificaATodosLosAdmins(t *testing.T) {
-	repo := nuevoFakeRepo()
-	listador := &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2"}}
-	svc := nuevoServicioDeTest(repo, listador)
-	bus := eventbus.NewInMemoryEventBus()
-	// Sincrónico a propósito: en producción la entrega es asincrónica para
-	// no alargar el request, pero acá se necesita determinismo.
-	RegisterEventHandlersSincronos(bus, svc)
-
-	bus.Publish(eventbus.Evento{
-		Tipo:    "docente.baja.notificar_admin",
-		Payload: map[string]any{"usuarioId": "d1", "materiaId": "m1"},
-	})
-
-	esperarNotificaciones(t, repo, 2)
-}
-
 func TestRegisterEventHandlers_ReservaCancelada_NotificaAlDocenteAfectado(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
@@ -419,7 +402,11 @@ func TestRegisterEventHandlers_LicenciaPorVencer_AvisoVacioNoNotifica(t *testing
 
 // ── El barrido de reservas y entregas (RF-08.10 a RF-08.13) ────────────
 
-func TestRegisterEventHandlers_Recordatorio_VaSoloAlDocente(t *testing.T) {
+// El recordatorio NO escribe en la campana (1.18.0): sale solo como correo, y
+// apagado por defecto. Era el aviso de mayor volumen del sistema —uno por
+// clase y por día— y el único que no traía ninguna noticia: le contaba al
+// docente algo que él mismo cargó.
+func TestRegisterEventHandlers_Recordatorio_NoEscribeEnLaCampana(t *testing.T) {
 	repo := nuevoFakeRepo()
 	listador := &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2"}}
 	svc := nuevoServicioDeTest(repo, listador)
@@ -431,84 +418,16 @@ func TestRegisterEventHandlers_Recordatorio_VaSoloAlDocente(t *testing.T) {
 		HoraInicio: 8 * time.Hour, Equipos: []string{"PC 1", "PC 2"}, MinutosDeGracia: 40,
 	}})
 
-	esperarNotificaciones(t, repo, 1)
-	for _, n := range repo.notificaciones {
-		if n.UsuarioID != "docente1" {
-			t.Errorf("el recordatorio es del docente, no de los Admin: %s", n.UsuarioID)
-		}
-		// El tipo elige el botón de la pantalla, no clasifica la noticia.
-		if n.Tipo != domain.TipoReservaPorComenzar {
-			t.Errorf("tipo = %q, esperaba %q", n.Tipo, domain.TipoReservaPorComenzar)
-		}
-	}
-}
-
-// Un bloqueo administrativo no tiene docente: no hay a quién
-// avisarle, y una notificación sin destinatario no existe.
-func TestRegisterEventHandlers_Recordatorio_SinDocenteNoNotifica(t *testing.T) {
-	repo := nuevoFakeRepo()
-	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1"}})
-	bus := eventbus.NewInMemoryEventBus()
-	RegisterEventHandlersSincronos(bus, svc)
-
-	bus.Publish(eventbus.Evento{Tipo: "reserva.recordatorio", Payload: eventbus.RecordatorioDeReserva{
-		Nombre: "", HoraInicio: 8 * time.Hour, Equipos: []string{"PC 1"},
-	}})
-
 	if len(repo.notificaciones) != 0 {
-		t.Errorf("no debería crear notificaciones: %d", len(repo.notificaciones))
+		t.Errorf("el recordatorio no va a la campana, se crearon %d avisos: %+v",
+			len(repo.notificaciones), repo.notificaciones)
 	}
 }
 
-func TestRegisterEventHandlers_ReservaSinRetirar_TipoPropio(t *testing.T) {
-	repo := nuevoFakeRepo()
-	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1"}})
-	bus := eventbus.NewInMemoryEventBus()
-	RegisterEventHandlersSincronos(bus, svc)
-
-	bus.Publish(eventbus.Evento{Tipo: "reserva.sin-retirar", Payload: eventbus.ReservaSinRetirar{
-		UsuarioID: "docente1", MateriaNombre: "Matemáticas", HoraInicio: 8 * time.Hour,
-		Equipos: []string{"PC 1"}, MinutosDeGracia: 40,
-	}})
-
-	esperarNotificaciones(t, repo, 1)
-	for _, n := range repo.notificaciones {
-		if n.Tipo != domain.TipoReservaNoRetirada {
-			t.Errorf("tipo = %q, esperaba %q", n.Tipo, domain.TipoReservaNoRetirada)
-		}
-		// El plazo es el dato accionable del aviso: dice cuánto tiempo queda.
-		if !strings.Contains(n.Mensaje, "40") {
-			t.Errorf("el aviso tiene que decir a los cuántos minutos quedan libres: %q", n.Mensaje)
-		}
-	}
-}
-
-// Las máquinas que no volvieron son problema de los Admin: son ellos
-// quienes pueden ir a buscarlas.
-func TestRegisterEventHandlers_PrestamoDemorado_VaALosAdmins(t *testing.T) {
-	repo := nuevoFakeRepo()
-	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2"}})
-	bus := eventbus.NewInMemoryEventBus()
-	RegisterEventHandlersSincronos(bus, svc)
-
-	bus.Publish(eventbus.Evento{Tipo: "prestamo.demorado", Payload: eventbus.PrestamosDemorados{
-		Prestamos: []eventbus.PrestamoDemorado{{
-			Etiqueta: "PC 7", Quien: "Marta",
-			DebioVolverA: time.Date(2026, time.August, 10, 9, 0, 0, 0, time.UTC), MinutosDeDemora: 15,
-		}},
-	}})
-
-	esperarNotificaciones(t, repo, 2)
-	for _, n := range repo.notificaciones {
-		if n.Tipo != domain.TipoEquipoSinDevolver {
-			t.Errorf("tipo = %q, esperaba %q", n.Tipo, domain.TipoEquipoSinDevolver)
-		}
-	}
-}
-
-// El corte avisa a los Admin Y al docente que la tiene reservada: es el
-// único para quien esto es accionable antes de mañana.
-func TestRegisterEventHandlers_Cierre_AvisaALosAdminsYAlProximo(t *testing.T) {
+// El corte avisa SOLO a los Admin. Al docente de la próxima reserva no: el
+// corte sale de noche, cuando ya no puede conseguir otra máquina, y su aviso
+// le llega una hora antes de la clase por reserva.equipo-no-disponible.
+func TestRegisterEventHandlers_Cierre_AvisaSoloALosAdmins(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1"}})
 	bus := eventbus.NewInMemoryEventBus()
@@ -522,13 +441,11 @@ func TestRegisterEventHandlers_Cierre_AvisaALosAdminsYAlProximo(t *testing.T) {
 		}},
 	}})
 
-	esperarNotificaciones(t, repo, 2)
-	destinatarios := map[string]bool{}
+	esperarNotificaciones(t, repo, 1)
 	for _, n := range repo.notificaciones {
-		destinatarios[n.UsuarioID] = true
-	}
-	if !destinatarios["admin1"] || !destinatarios["docente2"] {
-		t.Errorf("esperaba avisar al Admin y al docente siguiente: %v", destinatarios)
+		if n.UsuarioID != "admin1" {
+			t.Errorf("el corte es de los Admin, le llegó a %q", n.UsuarioID)
+		}
 	}
 }
 
@@ -552,5 +469,206 @@ func TestListaDeEquipos_ConUnEquipoSuelto(t *testing.T) {
 
 	if got := equiposDeLasCanceladas(reservas); got != "PC 3, Proyector Epson" {
 		t.Errorf("equiposDeLasCanceladas = %q", got)
+	}
+}
+
+// ── Un aviso a todos los Admin no puede ser trabajo para todos ──────────
+
+// El ida y vuelta del buzón dejaba un aviso por mensaje en la campana de CADA
+// Admin, y ninguno decía nada que el primero no dijera ya.
+func TestRegisterEventHandlers_ElSeguimientoNoRepiteElAviso(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2"}})
+	bus := eventbus.NewInMemoryEventBus()
+	RegisterEventHandlersSincronos(bus, svc)
+
+	bus.Publish(eventbus.Evento{Tipo: "sugerencia.nueva", Payload: eventbus.SugerenciaNueva{
+		SugerenciaID: "s1", UsuarioID: "docente1", Quien: "Ada", Tipo: "PROBLEMA",
+		Asunto: "la PC 3", Texto: "no prende",
+	}})
+	esperarNotificaciones(t, repo, 2)
+
+	// Tres mensajes más en el mismo hilo, sin que ningún Admin los haya leído.
+	for i := 0; i < 3; i++ {
+		bus.Publish(eventbus.Evento{Tipo: "sugerencia.seguimiento", Payload: eventbus.SugerenciaSeguimiento{
+			SugerenciaID: "s1", UsuarioID: "docente1", Quien: "Ada", Tipo: "PROBLEMA",
+			Asunto: "la PC 3", Texto: "sigue sin prender",
+		}})
+	}
+
+	if len(repo.notificaciones) != 2 {
+		t.Errorf("con uno sin leer por Admin alcanza, hay %d avisos", len(repo.notificaciones))
+	}
+}
+
+// Lo resuelve uno: deja de estar pendiente para los demás. Sin esto, el que
+// contesta tacha el suyo y los otros se quedan con un aviso sin leer para
+// siempre sobre algo que ya no existe.
+func TestRegisterEventHandlers_ResponderElBuzonCierraElAvisoDeTodos(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2"}})
+	bus := eventbus.NewInMemoryEventBus()
+	RegisterEventHandlersSincronos(bus, svc)
+
+	bus.Publish(eventbus.Evento{Tipo: "sugerencia.nueva", Payload: eventbus.SugerenciaNueva{
+		SugerenciaID: "s1", UsuarioID: "docente1", Quien: "Ada", Tipo: "PROBLEMA",
+		Asunto: "la PC 3", Texto: "no prende",
+	}})
+	esperarNotificaciones(t, repo, 2)
+
+	bus.Publish(eventbus.Evento{Tipo: "sugerencia.respondida", Payload: eventbus.SugerenciaRespondida{
+		SugerenciaID: "s1", UsuarioID: "docente1", Nombre: "Ada", Tipo: "PROBLEMA",
+		Asunto: "la PC 3", TextoOriginal: "no prende", Respuesta: "ya la vemos",
+	}})
+	esperarNotificaciones(t, repo, 3)
+
+	for _, n := range repo.notificaciones {
+		if n.Tipo == domain.TipoSugerencia && n.Estado != domain.Leida {
+			t.Errorf("el aviso de %s tendría que haberse cerrado solo", n.UsuarioID)
+		}
+	}
+}
+
+func TestRegisterEventHandlers_ResolverElPedidoDeMateriaCierraElAvisoDeTodos(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2"}})
+	bus := eventbus.NewInMemoryEventBus()
+	RegisterEventHandlersSincronos(bus, svc)
+
+	bus.Publish(eventbus.Evento{Tipo: "materia.pedido.nuevo", Payload: eventbus.PedidoDeMateriaNuevo{
+		PedidoID: "p1", UsuarioID: "docente1", Nombre: "Ada", MateriaNombre: "Física",
+	}})
+	esperarNotificaciones(t, repo, 2)
+
+	bus.Publish(eventbus.Evento{Tipo: "materia.pedido.resuelto", Payload: eventbus.PedidoDeMateriaResuelto{
+		PedidoID: "p1", UsuarioID: "docente1", Nombre: "Ada", MateriaNombre: "Física", Aprobado: true,
+	}})
+	esperarNotificaciones(t, repo, 3)
+
+	for _, n := range repo.notificaciones {
+		if n.Tipo == domain.TipoPedidoDeMateria && n.Estado != domain.Leida {
+			t.Errorf("el pedido de %s tendría que haberse cerrado solo", n.UsuarioID)
+		}
+	}
+}
+
+// A quien ya dicta la materia no se le avisa nada: no se le pide ninguna
+// acción y no puede hacer nada con la noticia.
+func TestRegisterEventHandlers_PedidoDeMateria_NoAvisaAlTitular(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1"}})
+	bus := eventbus.NewInMemoryEventBus()
+	RegisterEventHandlersSincronos(bus, svc)
+
+	bus.Publish(eventbus.Evento{Tipo: "materia.pedido.nuevo", Payload: eventbus.PedidoDeMateriaNuevo{
+		PedidoID: "p1", UsuarioID: "docente1", Nombre: "Ada", MateriaNombre: "Física",
+		DocentesActuales: []eventbus.DocenteDeMateria{
+			{UsuarioID: "docente-titular", Email: "titular@escuela.edu.ar"},
+		},
+	}})
+	esperarNotificaciones(t, repo, 1)
+
+	for _, n := range repo.notificaciones {
+		if n.UsuarioID == "docente-titular" {
+			t.Error("al titular no se le avisa: no se le pide nada")
+		}
+	}
+}
+
+// ── El cierre de los avisos que hablan de un conjunto ────────────────────
+//
+// Licencias y equipos afuera no hablan de una persona sino de varias cosas, y
+// el conjunto se rearma cada vez: las licencias no vencen todas el mismo día.
+// Por eso el cierre no es "se renovó una" sino "ya no queda ninguna".
+
+func TestRegisterEventHandlers_LicenciasRenovadas_CierraElAvisoCuandoNoQuedaNinguna(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2"}})
+	bus := eventbus.NewInMemoryEventBus()
+	RegisterEventHandlersSincronos(bus, svc)
+
+	bus.Publish(eventbus.Evento{Tipo: "licencia.por-vencer", Payload: eventbus.AvisoDeLicencias{
+		PorVencer: []eventbus.LicenciaPorVencer{
+			{Nombre: "AutoCAD", Etiqueta: "PC 3", DiasRestantes: 1},
+			{Nombre: "AutoCAD", Etiqueta: "PC 7", DiasRestantes: 1},
+		},
+	}})
+	esperarNotificaciones(t, repo, 2)
+
+	// Se renovó una de las dos: todavía queda trabajo, el aviso sigue en pie.
+	bus.Publish(eventbus.Evento{Tipo: "licencia.pendientes",
+		Payload: eventbus.PendientesDeLicencia{Pendientes: 1}})
+	for _, n := range repo.notificaciones {
+		if n.Tipo == domain.TipoLicenciaPorVencer && n.Estado != domain.NoLeida {
+			t.Fatal("todavía queda una licencia por renovar: el aviso no se puede cerrar")
+		}
+	}
+
+	// Se renovó la última: ya no hay a qué apuntar.
+	bus.Publish(eventbus.Evento{Tipo: "licencia.pendientes",
+		Payload: eventbus.PendientesDeLicencia{Pendientes: 0}})
+	for _, n := range repo.notificaciones {
+		if n.Tipo == domain.TipoLicenciaPorVencer && n.Estado != domain.Leida {
+			t.Errorf("no queda ninguna pendiente: el aviso de %s tendría que haberse cerrado", n.UsuarioID)
+		}
+	}
+}
+
+func TestRegisterEventHandlers_EquiposRecibidos_CierraElAvisoDeCierre(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1", "admin2"}})
+	bus := eventbus.NewInMemoryEventBus()
+	RegisterEventHandlersSincronos(bus, svc)
+
+	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{
+		Equipos: []eventbus.EquipoSinDevolverAlCierre{
+			{Etiqueta: "PC 3", Quien: "Marta"},
+			{Etiqueta: "PC 7", Quien: "Marta"},
+		},
+	}})
+	esperarNotificaciones(t, repo, 2)
+
+	// Recibieron una de las dos: la otra sigue afuera.
+	bus.Publish(eventbus.Evento{Tipo: "prestamo.cierre.pendientes",
+		Payload: eventbus.PendientesDelCierre{Pendientes: 1}})
+	for _, n := range repo.notificaciones {
+		if n.Tipo == domain.TipoEquipoSinDevolver && n.Estado != domain.NoLeida {
+			t.Fatal("todavía hay un equipo afuera: el aviso no se puede cerrar")
+		}
+	}
+
+	// Volvió la última.
+	bus.Publish(eventbus.Evento{Tipo: "prestamo.cierre.pendientes",
+		Payload: eventbus.PendientesDelCierre{Pendientes: 0}})
+	for _, n := range repo.notificaciones {
+		if n.Tipo == domain.TipoEquipoSinDevolver && n.Estado != domain.Leida {
+			t.Errorf("volvió todo: el aviso de %s tendría que haberse cerrado", n.UsuarioID)
+		}
+	}
+}
+
+// El cierre es POR TIPO, así que no puede llevarse puesto lo demás: un aviso
+// de cuenta pendiente sin leer tiene que seguir sin leer.
+func TestRegisterEventHandlers_ElCierrePorTipoNoTocaLosOtrosAvisos(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{adminIDs: []string{"admin1"}})
+	bus := eventbus.NewInMemoryEventBus()
+	RegisterEventHandlersSincronos(bus, svc)
+
+	bus.Publish(eventbus.Evento{Tipo: "licencia.por-vencer", Payload: eventbus.AvisoDeLicencias{
+		PorVencer: []eventbus.LicenciaPorVencer{{Nombre: "AutoCAD", Etiqueta: "PC 3", DiasRestantes: 1}},
+	}})
+	bus.Publish(eventbus.Evento{Tipo: "docente.registro.pendiente", Payload: map[string]string{
+		"usuarioId": "docente1", "nombre": "Ada", "apellido": "Lovelace", "email": "ada@escuela.edu.ar",
+	}})
+	esperarNotificaciones(t, repo, 2)
+
+	bus.Publish(eventbus.Evento{Tipo: "licencia.pendientes",
+		Payload: eventbus.PendientesDeLicencia{Pendientes: 0}})
+
+	for _, n := range repo.notificaciones {
+		if n.Tipo == domain.TipoDocentePendiente && n.Estado != domain.NoLeida {
+			t.Error("la cuenta sigue esperando aprobación: ese aviso no se toca")
+		}
 	}
 }

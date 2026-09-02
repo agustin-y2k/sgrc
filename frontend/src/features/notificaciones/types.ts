@@ -4,15 +4,25 @@ import type { PaginacionMeta } from "@/components/Paginador"
 
 export type EstadoNotificacion = "NO_LEIDA" | "LEIDA"
 
-/** De qué se trata el aviso. */
+/**
+ * De qué se trata el aviso.
+ *
+ * Tiene que estar COMPLETA respecto de domain.Tipo en el backend: de ella sale
+ * el Record de ACCION_POR_TIPO en NotificacionesPage, que obliga a decidir a
+ * dónde lleva cada aviso. Hasta la 1.18.0 le faltaban cinco tipos y esos
+ * avisos llegaban a la campana sin botón, sin que nada lo señalara.
+ */
 export type TipoNotificacion =
   | "GENERAL"
   | "DOCENTE_PENDIENTE"
   | "RESERVA_CANCELADA"
   | "LICENCIA_POR_VENCER"
-  | "RESERVA_POR_COMENZAR"
-  | "RESERVA_NO_RETIRADA"
   | "EQUIPO_SIN_DEVOLVER"
+  | "PEDIDO_DE_LIBERACION"
+  | "PEDIDO_DE_MATERIA"
+  | "PEDIDO_DE_MATERIA_RESUELTO"
+  | "SUGERENCIA"
+  | "SUGERENCIA_RESPONDIDA"
 
 export type Notificacion = {
   id: string
@@ -43,17 +53,12 @@ export type CategoriaEmail =
   | "CUENTA_APROBADA"
   // Personales: las tiene cualquiera por sus reservas y pedidos.
   | "RESERVA_CANCELADA"
-  | "EQUIPO_NO_DISPONIBLE"
   | "PEDIDO_DE_LIBERACION"
   | "PEDIDO_DE_MATERIA_RESUELTO"
-  | "PEDIDO_SOBRE_MI_MATERIA"
   | "SUGERENCIA_RESPONDIDA"
   | "RECORDATORIO_DE_RESERVA"
-  | "RESERVA_SIN_RETIRAR"
-  | "DEVOLUCION_PENDIENTE"
   // De administración: los avisos que van a todos los Admin.
   | "CUENTA_PENDIENTE"
-  | "DEVOLUCION_DEMORADA"
   | "CIERRE_SIN_DEVOLVER"
   | "LICENCIA_POR_VENCER"
   | "PEDIDO_DE_MATERIA"

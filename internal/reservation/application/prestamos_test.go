@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ramiro/sgrc/internal/reservation/domain"
+	"github.com/ramiro/sgrc/internal/shared/eventbus"
 )
 
 // El reloj de nuevoServicioDeTest está fijado el lunes 2 de marzo de 2026 a
@@ -840,5 +841,145 @@ func TestEntregarPorReserva_NoSaleLoQueEstaEnMantenimiento(t *testing.T) {
 	}
 	if len(resultado.NoEntregadas) != 1 || resultado.NoEntregadas[0].Razon != NoEntregadaFueraDeCirculacion {
 		t.Errorf("esperaba FUERA_DE_CIRCULACION, obtuve %+v", resultado.NoEntregadas)
+	}
+}
+
+// ── El cierre del aviso de "quedaron equipos afuera" ─────────────────────
+
+// servicioConBusEspia es nuevoServicioDeTest pero con un bus que se puede
+// mirar: el de siempre es el real, y lo que hay que verificar acá es qué se
+// publica.
+func servicioConBusEspia(repo Repo) (*Service, *busEspia) {
+	contadorID = 0
+	bus := &busEspia{}
+	svc := NewService(repo,
+		&fakeValidadorMateria{asignado: true},
+		&fakeValidadorEquipo{disponible: true},
+		&fakeValidadorJornada{permite: true},
+		&fakeObtenedorNombre{nombre: "Ada Lovelace"},
+		idSecuencial,
+		func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
+		bus,
+	)
+	return svc, bus
+}
+
+// Recibir un equipo publica cuántos del aviso de cierre siguen afuera, y con
+// cero ese aviso se cierra en la campana de todos los Admin (RF-08.13).
+//
+// El número importa tanto como el evento: mientras quede alguno afuera el
+// aviso sigue siendo cierto y no se puede cerrar.
+func TestRecibirEquipos_PublicaCuantosQuedanDelAvisoDeCierre(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc, bus := servicioConBusEspia(repo)
+	ctx := context.Background()
+
+	entrega, err := svc.EntregarSuelta(ctx, EntregaSueltaParams{
+		EquipoIDs: []string{"pc1", "pc2"}, Nombre: "Ada", EntregadoPor: "admin1",
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	primera, segunda := entrega.Entregadas[0], entrega.Entregadas[1]
+
+	// El corte de anoche avisó de las dos.
+	ahora := time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC)
+	for _, p := range []string{primera.ID, segunda.ID} {
+		if err := repo.MarcarCierreAvisado(ctx, p, ahora); err != nil {
+			t.Fatalf("no debería fallar: %v", err)
+		}
+	}
+
+	pendientes := func() []int {
+		var n []int
+		for _, e := range bus.de("prestamo.cierre.pendientes") {
+			n = append(n, e.Payload.(eventbus.PendientesDelCierre).Pendientes)
+		}
+		return n
+	}
+
+	// Vuelve la primera: queda una, el aviso no se puede cerrar.
+	if _, err := svc.RecibirEquipos(ctx, []string{primera.ID}, "admin2", ""); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if got := pendientes(); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("esperaba que avisara que queda 1 afuera, publicó %v", got)
+	}
+
+	// Vuelve la segunda: ya no queda nada del aviso.
+	if _, err := svc.RecibirEquipos(ctx, []string{segunda.ID}, "admin2", ""); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if got := pendientes(); len(got) != 2 || got[1] != 0 {
+		t.Fatalf("esperaba que avisara que no queda ninguna, publicó %v", got)
+	}
+}
+
+// Un equipo que salió DESPUÉS del corte no mantiene abierto el aviso de
+// anoche: nadie avisó de él. Sin esto, en un laboratorio con movimiento el
+// aviso no se cerraría nunca.
+func TestRecibirEquipos_ElQueSalioDespuesDelCorteNoCuenta(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc, bus := servicioConBusEspia(repo)
+	ctx := context.Background()
+	ahora := time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC)
+
+	deAnoche, err := svc.EntregarSuelta(ctx, EntregaSueltaParams{
+		EquipoIDs: []string{"pc1"}, Nombre: "Ada", EntregadoPor: "admin1",
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if err := repo.MarcarCierreAvisado(ctx, deAnoche.Entregadas[0].ID, ahora); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	// Esta salió hoy y nadie avisó de ella: queda afuera durante todo el test.
+	if _, err := svc.EntregarSuelta(ctx, EntregaSueltaParams{
+		EquipoIDs: []string{"pc2"}, Nombre: "Blas", EntregadoPor: "admin1",
+	}); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	// Vuelve la de anoche; la de hoy sigue afuera. El aviso igual se cierra.
+	if _, err := svc.RecibirEquipos(ctx, []string{deAnoche.Entregadas[0].ID}, "admin2", ""); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	eventos := bus.de("prestamo.cierre.pendientes")
+	if len(eventos) != 1 {
+		t.Fatalf("esperaba 1 evento, hubo %d", len(eventos))
+	}
+	if n := eventos[0].Payload.(eventbus.PendientesDelCierre).Pendientes; n != 0 {
+		t.Errorf("la de hoy no entró en ningún aviso: esperaba 0 pendientes, publicó %d", n)
+	}
+}
+
+// Recibir dos veces la misma no publica de más: no hubo devolución nueva.
+func TestRecibirEquipos_SinDevolucionesNoPublicaNada(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc, bus := servicioConBusEspia(repo)
+	ctx := context.Background()
+
+	entrega, err := svc.EntregarSuelta(ctx, EntregaSueltaParams{
+		EquipoIDs: []string{"pc1"}, Nombre: "Ada", EntregadoPor: "admin1",
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	id := entrega.Entregadas[0].ID
+
+	if _, err := svc.RecibirEquipos(ctx, []string{id}, "admin2", ""); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	// La segunda vez no recibe nada: ya estaba devuelta.
+	resultado, err := svc.RecibirEquipos(ctx, []string{id}, "admin2", "")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.Recibidos) != 0 {
+		t.Fatalf("no tendría que recibir nada la segunda vez: %+v", resultado.Recibidos)
+	}
+	if n := len(bus.de("prestamo.cierre.pendientes")); n != 1 {
+		t.Errorf("esperaba 1 evento (el de la devolución real), hubo %d", n)
 	}
 }

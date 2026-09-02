@@ -47,9 +47,9 @@ erDiagram
     MATERIA { uuid id; uuid curso_id; string nombre; string nombre_norm; bool activo; bool archivado }
     DOCENTE_MATERIA { uuid id; uuid usuario_id; uuid materia_id; string rol }
     REGLA_RECURRENCIA { uuid id; uuid materia_id; uuid creado_por; string dia_semana; time hora_inicio; time hora_fin; date fecha_inicio; date fecha_fin }
-    RESERVA_GRUPO { uuid id; uuid materia_id; uuid creado_por; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; uuid regla_recurrencia_id; timestamptz creada_en; timestamptz recordatorio_enviado_en; timestamptz aviso_sin_retirar_en }
+    RESERVA_GRUPO { uuid id; uuid materia_id; uuid creado_por; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; uuid regla_recurrencia_id; timestamptz creada_en; timestamptz recordatorio_enviado_en }
     RESERVA { uuid id; uuid reserva_grupo_id; uuid equipo_id; uuid materia_id; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; string tipo; string motivo_bloqueo; uuid creado_por; timestamptz creada_en; uuid cancelado_por; string motivo_cancelacion; timestamptz cancelada_en; timestamptz avisado_equipo_no_disponible_en }
-    PRESTAMO { uuid id; uuid equipo_id; uuid reserva_id; uuid entregado_a_usuario_id; string entregado_a_nombre; string retirado_por; string motivo; timestamptz devolucion_estimada; uuid entregado_por; timestamptz entregado_en; timestamptz devuelto_en; uuid recibido_por; string observaciones; timestamptz avisado_demora_en; date avisado_cierre_para }
+    PRESTAMO { uuid id; uuid equipo_id; uuid reserva_id; uuid entregado_a_usuario_id; string entregado_a_nombre; string retirado_por; string motivo; timestamptz devolucion_estimada; uuid entregado_por; timestamptz entregado_en; timestamptz devuelto_en; uuid recibido_por; string observaciones; date avisado_cierre_para }
     NOTIFICACION { uuid id; uuid usuario_id; uuid reserva_id; uuid sobre_usuario_id; string mensaje; string tipo; string estado; timestamptz creada_en; timestamptz leida_en }
     HORARIO_ADMIN { uuid id; uuid usuario_id; string dia_semana; time hora_inicio; time hora_fin }
     HORARIO_ADMIN_EXCEPCION { uuid id; uuid usuario_id; date fecha; string tipo; time hora_inicio; time hora_fin; string motivo }
@@ -676,7 +676,7 @@ La igualdad podría querer decir "veinticuatro horas" y se rechaza igual: nadie 
 
 > **Dónde vive la regla.** En la función `fin_de_pared(fecha, hora_inicio, hora_fin)`, que usan la constraint `EXCLUDE` de `reserva`, los barridos y todos los listados. Es `IMMUTABLE` porque sin eso Postgres no la acepta dentro del índice de la constraint. Su gemelo en Go es `domain.FinDePared`, y **las dos tienen que decir lo mismo**: si divergen, la aplicación acepta reservas que la base rechaza o —peor— deja pasar solapamientos que creía haber chequeado.
 
-> **Lo que NO cruza la medianoche es `horario_admin`**, el horario de presencia de cada Admin. Es informativo y el cálculo de "¿hay alguien ahora?" es de un solo día; un Admin del turno noche declara dos tramos. La jornada de la institución sí cruza, porque contra ella se validan las reservas.
+> **Lo que NO cruza la medianoche es `horario_admin`**, el horario de presencia de cada Admin: el cálculo de "¿hay alguien ahora?" es de un solo día, así que un Admin del turno noche declara dos tramos. La jornada de la institución sí cruza, porque contra ella se validan las reservas.
 
 ### `jornada_institucion`
 
@@ -735,7 +735,6 @@ que todos pertenezcan al mismo carro**.
 | regla_recurrencia_id | UUID | FK → regla_recurrencia.id **ON DELETE SET NULL**, NULL |
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 | recordatorio_enviado_en | TIMESTAMPTZ | NULL |
-| aviso_sin_retirar_en | TIMESTAMPTZ | NULL |
 
 ```sql
 CREATE INDEX idx_reserva_grupo_materia    ON reserva_grupo (materia_id);
@@ -745,12 +744,6 @@ CREATE INDEX idx_reserva_grupo_regla      ON reserva_grupo (regla_recurrencia_id
 -- El barrido de recordatorios: las que todavía no se avisaron (RF-08.11).
 CREATE INDEX idx_grupo_sin_recordar ON reserva_grupo (fecha, hora_inicio)
     WHERE recordatorio_enviado_en IS NULL AND estado = 'CONFIRMADA';
-
--- El aviso de "todavía no las retiraste" (RF-08.20). Mismo patrón que el
--- anterior y por la misma razón: el barrido corre cada cinco minutos y no
--- puede recorrer la tabla entera para descartar las que ya avisó.
-CREATE INDEX idx_grupo_sin_aviso_retiro ON reserva_grupo (fecha, hora_inicio)
-    WHERE aviso_sin_retirar_en IS NULL AND estado = 'CONFIRMADA';
 ```
 
 > `creado_por` en `SET NULL`: si el usuario se elimina definitivamente, la
@@ -761,13 +754,15 @@ CREATE INDEX idx_grupo_sin_aviso_retiro ON reserva_grupo (fecha, hora_inicio)
 > salió. Vive en el grupo y no en cada `reserva`: el recordatorio es uno por
 > clase, no uno por equipo.
 
-> `aviso_sin_retirar_en` es la marca del aviso de los 15 minutos (RF-08.20) y
-> sigue el mismo criterio, por las mismas dos razones. Son **dos columnas y no
-> un contador** porque son dos avisos distintos con condiciones distintas: el
-> recordatorio sale siempre, una hora antes; este solo si a los quince minutos
-> del inicio **no salió ninguna** máquina de esa reserva. Que la liberación
-> (RF-08.10) no tenga marca propia no es un olvido: no avisa nada, y su
-> idempotencia ya la da el estado `NO_RETIRADA`, que es terminal.
+> **`recordatorio_enviado_en` es la única marca que le queda al grupo.** Antes
+> eran dos: la acompañaba `aviso_sin_retirar_en`, del aviso de los 15 minutos,
+> que se retiró con él en la 1.18.0 (RF-08.20) y la migración 003 borró junto
+> con su índice parcial.
+>
+> Que la liberación (RF-08.10) no tenga marca propia no es un olvido: no avisa
+> nada, y su condición se recalcula sola contra la hora y las entregas
+> registradas. Una marca ahí sería un estado que mantener sin nada que
+> proteger.
 
 **Regla de recálculo de `estado`** (se ejecuta cada vez que cambia el estado de
 una `reserva` hija):
@@ -892,7 +887,6 @@ La custodia física de un equipo: quién lo tiene **ahora**. Ver RF-08.
 | devuelto_en | TIMESTAMPTZ | **NULL = la máquina sigue afuera**, CHECK ≥ `entregado_en` |
 | recibido_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | observaciones | TEXT | NULL |
-| avisado_demora_en | TIMESTAMPTZ | NULL |
 | avisado_cierre_para | DATE | NULL |
 
 ```sql
@@ -933,11 +927,16 @@ CREATE INDEX idx_prestamo_reserva  ON prestamo (reserva_id) WHERE reserva_id IS 
 > llevó una máquina vale por sí mismo aunque la reserva que lo originó ya no
 > exista. Mismo criterio que `notificacion.reserva_id`.
 
-> **Las marcas del barrido.** Las dos existen para que un aviso salga una sola
-> vez por préstamo: `avisado_demora_en` para el reclamo de devolución y
-> `avisado_cierre_para` para el corte de fin de jornada. Lo único que importa
-> es si están puestas o no; el instante que guardan sirve para saber cuándo
-> salió, no para decidir si vuelve a salir.
+> **La marca del barrido.** `avisado_cierre_para` existe para que el corte de
+> fin de jornada salga una sola vez por préstamo. Lo único que importa es si
+> está puesta o no; la fecha que guarda sirve para saber de qué jornada fue,
+> no para decidir si vuelve a salir.
+>
+> **Era una de dos.** `avisado_demora_en`, la del reclamo de devolución, se
+> retiró en la 1.18.0 junto con ese aviso (RF-08.12) — y con ella su índice
+> parcial, que seguía costando en cada escritura de una de las tablas más
+> movidas del sistema. Lo mismo con `reserva_grupo.aviso_sin_retirar_en` y
+> RF-08.20. Ver la migración `003_barrido_sin_admin.sql`.
 
 ### `notificacion`
 | Campo | Tipo | Restricciones |
@@ -947,7 +946,7 @@ CREATE INDEX idx_prestamo_reserva  ON prestamo (reserva_id) WHERE reserva_id IS 
 | reserva_id | UUID | FK → reserva.id **ON DELETE SET NULL**, NULL |
 | sobre_usuario_id | UUID | FK → usuario.id **ON DELETE CASCADE**, NULL |
 | mensaje | TEXT | NOT NULL |
-| tipo | VARCHAR(30) | NOT NULL DEFAULT 'GENERAL', CHECK IN ('GENERAL','DOCENTE_PENDIENTE','RESERVA_CANCELADA','LICENCIA_POR_VENCER','RESERVA_POR_COMENZAR','RESERVA_NO_RETIRADA','EQUIPO_SIN_DEVOLVER','PEDIDO_DE_LIBERACION') |
+| tipo | VARCHAR(30) | NOT NULL DEFAULT 'GENERAL', CHECK IN ('GENERAL','DOCENTE_PENDIENTE','RESERVA_CANCELADA','LICENCIA_POR_VENCER','EQUIPO_SIN_DEVOLVER','PEDIDO_DE_LIBERACION','PEDIDO_DE_MATERIA','PEDIDO_DE_MATERIA_RESUELTO','SUGERENCIA','SUGERENCIA_RESPONDIDA') |
 | estado | VARCHAR(10) | NOT NULL DEFAULT 'NO_LEIDA', CHECK IN ('NO_LEIDA','LEIDA') |
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 | leida_en | TIMESTAMPTZ | NULL |
@@ -978,13 +977,17 @@ CREATE INDEX idx_notif_sobre_usuario  ON notificacion (sobre_usuario_id, tipo) W
 > deduplicar—, no la institución. La pantalla elige el botón por este campo y
 > nunca leyendo el mensaje: cambiar una redacción no puede romper una acción.
 
-> **`RESERVA_NO_RETIRADA` cambió de momento, no de nombre.** Antes constataba una
-> liberación ya hecha; ahora es el aviso de los 15 minutos que advierte que va a
-> pasar (RF-08.20). El nombre sigue describiendo el hecho —esa reserva no se
-> retiró— y la pantalla lo lleva al mismo lugar, así que reusar el valor evita
-> una migración del `CHECK` y, sobre todo, evita dejar un valor huérfano que
-> ninguna fila nueva volvería a usar. Las notificaciones viejas conservan su
-> texto: el `mensaje` es lo que la persona lee, y no se reescribe.
+> **`RESERVA_NO_RETIRADA` y `RESERVA_POR_COMENZAR` ya no son tipos de aviso.**
+> Se retiraron con las notificaciones que los usaban: el aviso de los 15 minutos
+> (RF-08.20) y el de "una PC tuya puede no estar" (RF-08.22). Las migraciones
+> 003 y 004 los sacaron del `CHECK` y convirtieron a `GENERAL` las
+> notificaciones viejas que los tenían — que se conservan, porque son el
+> historial de alguien y su `mensaje` sigue diciendo algo cierto sobre lo que
+> pasó ese día.
+>
+> Ojo con el homónimo: **`NO_RETIRADA` sigue existiendo como estado de una
+> `reserva`** (RF-08.10), y no tiene nada que ver. Aquello era un tipo de
+> notificación; esto es lo que le pasa a la reserva que nadie retiró.
 
 > **El pedido de liberación (RF-04.12) no tiene tabla propia, y esta es.** Un
 > pedido es un mensaje: no cambia ninguna reserva, no espera respuesta dentro
@@ -1052,7 +1055,7 @@ nunca el aviso: lo que se apaga acá sigue apareciendo en la campana.
 
 ### `horario_admin`
 Patrón semanal recurrente de presencia en el laboratorio — puramente
-informativo (RF-07), no afecta permisos ni reservas.
+de guardia (RF-07): no afecta permisos ni reservas, pero de él depende que el barrido automático actúe (RF-07.6).
 
 | Campo | Tipo | Restricciones |
 |---|---|---|
@@ -1075,10 +1078,20 @@ CREATE INDEX idx_horario_admin_usuario ON horario_admin (usuario_id);
 
 > **Dos bloques del mismo Admin no pueden pisarse el mismo día** (RF-07.7), y
 > esa regla vive en el servicio y no en la base: garantizarla con una
-> constraint pediría `btree_gist` sobre un rango de `TIME`, que es mucha
-> maquinaria para algo puramente informativo. Dos bloques que se tocan en el
-> borde —uno termina 12:00, el otro empieza 12:00— no se pisan: es el caso más
-> común, el turno de la mañana y el de la tarde.
+> constraint pediría `btree_gist` sobre un rango de `TIME`, y el solapamiento
+> no rompe ningún cálculo — "¿hay alguien ahora?" pregunta si **algún** tramo
+> cubre el momento, y dos que se pisan dan el mismo resultado que uno solo. Se
+> rechaza para que el horario que se muestra sea legible. Dos bloques que se
+> tocan en el borde —uno termina 12:00, el otro empieza 12:00— no se pisan: es
+> el caso más común, el turno de la mañana y el de la tarde.
+
+> **Estas dos tablas dejaron de ser decorativas en la 1.18.0.** De ellas sale
+> ahora la condición del barrido automático (RF-07.6): sin ningún Admin cuyo
+> horario cubra el momento —y que no haya declarado ausencia para ese día— el
+> sistema no libera reservas ni avisa que falta una máquina, porque sin nadie
+> registrando entregas no puede distinguir "nadie vino" de "nadie lo anotó".
+> Un horario mal cargado ya no es solo una pantalla que miente: es un barrido
+> que actúa cuando no debería, o que se calla cuando debería actuar.
 
 ### `horario_admin_excepcion`
 Cubre tanto una excepción planificada (horario distinto un día puntual) como el

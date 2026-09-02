@@ -66,8 +66,64 @@ func (s *Service) NotificarATodosLosAdmins(ctx context.Context, mensaje string, 
 	return creadas, nil
 }
 
+// NotificarATodosLosAdminsSinRepetir es NotificarATodosLosAdmins con una
+// condición: a un Admin que ya tiene un aviso sin leer de ese tipo sobre esa
+// misma persona, no se le escribe otro.
+//
+// Existe por el buzón. Una conversación de ida y vuelta —seis mensajes de la
+// misma persona sobre el mismo tema— dejaba seis avisos sin leer en la
+// campana de CADA Admin, y ninguno decía nada que el primero no dijera ya:
+// "fulano escribió". El aviso no es un registro de mensajes, que para eso
+// está el hilo; es un "andá a mirar", y con uno alcanza hasta que alguien
+// vaya.
+//
+// La condición es POR ADMIN y no global: que uno haya leído el suyo no
+// significa que los otros tres se hayan enterado.
+func (s *Service) NotificarATodosLosAdminsSinRepetir(ctx context.Context, sobreUsuarioID, mensaje string, tipo domain.Tipo) (int, error) {
+	adminIDs, err := s.listadorAdmins.IDsDeAdminsAprobados(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("listando admins aprobados: %w", err)
+	}
+
+	// Una sola consulta para todos: devuelve los avisos sin leer de ese tipo
+	// sobre esa persona, de quien sea.
+	pendientes, err := s.repo.ListarNoLeidasSobreUsuario(ctx, sobreUsuarioID, tipo)
+	if err != nil {
+		return 0, fmt.Errorf("buscando avisos pendientes sobre el usuario: %w", err)
+	}
+	yaAvisado := make(map[string]bool, len(pendientes))
+	for _, n := range pendientes {
+		yaAvisado[n.UsuarioID] = true
+	}
+
+	ref := domain.Referencias{SobreUsuarioID: &sobreUsuarioID}
+	creadas := 0
+	var fallidos []string
+	for _, adminID := range adminIDs {
+		if yaAvisado[adminID] {
+			continue
+		}
+		if _, err := s.NotificarUsuario(ctx, adminID, mensaje, tipo, ref); err != nil {
+			fallidos = append(fallidos, fmt.Sprintf("%s (%v)", adminID, err))
+			continue
+		}
+		creadas++
+	}
+	if len(fallidos) > 0 {
+		return creadas, fmt.Errorf("no se pudo notificar a %d de %d admins: %s",
+			len(fallidos), len(adminIDs), strings.Join(fallidos, "; "))
+	}
+	return creadas, nil
+}
+
 // CerrarAvisosSobreUsuario marca como leídas las notificaciones de un tipo
 // que hablan de una persona puntual.
+//
+// Es lo que hace que un aviso dirigido a TODOS los Admin no se convierta en
+// trabajo para todos: cuando uno lo resuelve —aprueba la cuenta, contesta el
+// hilo, decide el pedido de materia—, el pendiente deja de estar pendiente
+// para los demás. Sin esto, el que resuelve tacha el suyo y los otros tres se
+// quedan con un aviso sin leer sobre algo que ya no existe, para siempre.
 func (s *Service) CerrarAvisosSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo) (int, error) {
 	pendientes, err := s.repo.ListarNoLeidasSobreUsuario(ctx, sobreUsuarioID, tipo)
 	if err != nil {
@@ -83,6 +139,27 @@ func (s *Service) CerrarAvisosSobreUsuario(ctx context.Context, sobreUsuarioID s
 			return cerradas, fmt.Errorf("cerrando aviso %s: %w", n.ID, err)
 		}
 		cerradas++
+	}
+	return cerradas, nil
+}
+
+// CerrarAvisosPendientesDe cierra todos los avisos sin leer de un tipo, para
+// todos los Admin, porque lo que los motivaba dejó de existir.
+//
+// La diferencia con CerrarAvisosSobreUsuario es de qué habla el aviso. Aquel
+// habla de una persona y se cierra cuando esa persona se resuelve. Estos
+// hablan de un CONJUNTO —"hay licencias por renovar", "quedaron equipos
+// afuera"— que además se arma de nuevo cada vez: las licencias no vencen
+// todas el mismo día, y un aviso junta las que caen esa mañana.
+//
+// Por eso no alcanza con "se renovó una". El aviso deja de tener sentido
+// cuando NO QUEDA NINGUNA pendiente, y quien sabe eso es el módulo dueño
+// —inventory para las licencias, reservation para los equipos— que lo manda
+// contado en el evento. Acá no se cuenta nada: se cierra o no se cierra.
+func (s *Service) CerrarAvisosPendientesDe(ctx context.Context, tipo domain.Tipo) (int, error) {
+	cerradas, err := s.repo.MarcarLeidasPorTipo(ctx, tipo, s.ahora())
+	if err != nil {
+		return 0, fmt.Errorf("cerrando los avisos de tipo %s: %w", tipo, err)
 	}
 	return cerradas, nil
 }

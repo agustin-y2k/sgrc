@@ -681,7 +681,7 @@ components:
         creadaEn: { type: string, format: date-time }
         tipo:
           type: string
-          enum: [GENERAL, DOCENTE_PENDIENTE, RESERVA_CANCELADA, LICENCIA_POR_VENCER, RESERVA_POR_COMENZAR, RESERVA_NO_RETIRADA, EQUIPO_SIN_DEVOLVER, PEDIDO_DE_LIBERACION]
+          enum: [GENERAL, DOCENTE_PENDIENTE, RESERVA_CANCELADA, LICENCIA_POR_VENCER, EQUIPO_SIN_DEVOLVER, PEDIDO_DE_LIBERACION, PEDIDO_DE_MATERIA, PEDIDO_DE_MATERIA_RESUELTO, SUGERENCIA, SUGERENCIA_RESPONDIDA]
           description: |
             De qué se trata el aviso, para que la interfaz pueda ofrecer la
             acción que corresponde sin interpretar el texto del mensaje. Un
@@ -704,19 +704,14 @@ components:
         # SOPORTE_RESPONDIDO tampoco se puede desactivar (RF-09.5).
         - SOPORTE_RESPONDIDO
         - RESERVA_CANCELADA
-        - EQUIPO_NO_DISPONIBLE
         - PEDIDO_DE_LIBERACION
         - PEDIDO_DE_MATERIA_RESUELTO
-        - PEDIDO_SOBRE_MI_MATERIA
         - SUGERENCIA_RESPONDIDA
         - RECORDATORIO_DE_RESERVA
-        - RESERVA_SIN_RETIRAR
-        - DEVOLUCION_PENDIENTE
         # De administración: los avisos que van a todos los Admin.
         # SOPORTE tampoco se puede desactivar (RF-09.5).
         - SOPORTE
         - CUENTA_PENDIENTE
-        - DEVOLUCION_DEMORADA
         - CIERRE_SIN_DEVOLVER
         - LICENCIA_POR_VENCER
         - PEDIDO_DE_MATERIA

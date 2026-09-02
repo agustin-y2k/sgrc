@@ -105,23 +105,8 @@ type RecordatorioDeReserva struct {
 	// Equipos son las etiquetas ("PC 3", "Proyector Epson"), no los UUID
 	// ni los números: lo reservable puede no tener número.
 	Equipos []string
-	// EquiposSinDevolver son los de esa misma reserva que en este momento están
-	// afuera y pasados de hora.
-	EquiposSinDevolver []string
 	// MinutosDeGracia es cuánto se espera antes de liberar la reserva.
 	MinutosDeGracia int
-}
-
-// EquipoNoDisponibleParaReserva es el aviso suelto al docente siguiente: una
-// máquina de su reserva no volvió.
-type EquipoNoDisponibleParaReserva struct {
-	UsuarioID     string
-	Email         string
-	Nombre        string
-	MateriaNombre string
-	Fecha         time.Time
-	HoraInicio    time.Duration
-	Equipos       []string
 }
 
 // PedidoDeLiberacion: un docente le pide a otro que le libere un equipo que
@@ -149,51 +134,15 @@ type PedidoDeLiberacion struct {
 	Mensaje string
 }
 
-// ReservaSinRetirar: la clase ya empezó y nadie vino a buscar las máquinas.
-type ReservaSinRetirar struct {
-	UsuarioID     string
-	Email         string
-	Nombre        string
-	MateriaNombre string
-	Fecha         time.Time
-	HoraInicio    time.Duration
-	Equipos       []string
-	// MinutosDeGracia es a los cuántos minutos quedan libres.
-	MinutosDeGracia int
-}
-
-// PrestamoDemorado es una máquina que tenía que haber vuelto y no volvió.
-type PrestamoDemorado struct {
-	PrestamoID string
-	// Etiqueta: "PC 7" o "Proyector Epson".
-	Etiqueta    string
-	CarroNombre string
-	Quien       string
-	// Email vacío si quien la tiene no tiene cuenta en el sistema.
-	Email string
-	// EntregadoEn y DebioVolverA vienen YA en la zona de la escuela, no en UTC:
-	// los publica el barrido, que es el único que tiene el reloj de la
-	// institución (ver reservation/application/vigilante.go).
-	EntregadoEn     time.Time
-	DebioVolverA    time.Time
-	MinutosDeDemora int
-}
-
-// PrestamosDemorados junta todo lo que está vencido en esta barrida: a los
-// Admin les llega un solo correo con la lista, y a cada persona que tenga
-// cuenta, uno suyo.
-type PrestamosDemorados struct {
-	Prestamos []PrestamoDemorado
-}
-
 // EquipoSinDevolverAlCierre es una máquina que quedó afuera al terminar la
 // jornada, con el docente al que le va a faltar mañana.
 type EquipoSinDevolverAlCierre struct {
 	Etiqueta    string
 	CarroNombre string
 	Quien       string
-	// DesdeCuando también viaja en la zona de la escuela (ver
-	// PrestamoDemorado).
+	// DesdeCuando viaja en la zona de la escuela, no en UTC: lo publica el
+	// barrido, que es el único que tiene el reloj de la institución (ver
+	// reservation/application/vigilante.go).
 	DesdeCuando time.Time
 	// Del docente de la PRÓXIMA reserva de esa PC, si la hay.
 	ProximoUsuarioID string
@@ -201,6 +150,19 @@ type EquipoSinDevolverAlCierre struct {
 	ProximoNombre    string
 	ProximaFecha     time.Time
 	ProximaHora      time.Duration
+}
+
+// PendientesDeLicencia dice cuántas licencias siguen por vencer o vencidas
+// después de que un Admin tocó alguna. Con cero, el aviso de la campana ya no
+// tiene a qué apuntar y se cierra para todos (RF-03.14).
+type PendientesDeLicencia struct {
+	Pendientes int
+}
+
+// PendientesDelCierre dice cuántos equipos del aviso de cierre siguen afuera
+// después de una devolución. Con cero, el aviso se cierra para todos.
+type PendientesDelCierre struct {
+	Pendientes int
 }
 
 // EquiposSinDevolverAlCierre es el corte de fin de jornada.
@@ -215,6 +177,11 @@ type EquiposSinDevolverAlCierre struct {
 // SugerenciaNueva: alguien escribió en el buzón.
 type SugerenciaNueva struct {
 	SugerenciaID string
+	// UsuarioID de quien escribió. Es lo que permite que el aviso a los Admin
+	// diga DE QUIÉN habla, y con eso: no repetirle el aviso al Admin que ya
+	// tiene uno sin leer de esa misma persona, y cerrarlos todos solos cuando
+	// alguno le contesta (ver notification/application/service.go).
+	UsuarioID string
 	// Quien es el nombre de quien escribió, ya resuelto.
 	Quien string
 	// Tipo es "AYUDA", "PROBLEMA" o "SUGERENCIA": lo primero que quiere saber
@@ -233,10 +200,13 @@ type SugerenciaNueva struct {
 // Admin, igual que el mensaje inicial, porque la conversación sigue.
 type SugerenciaSeguimiento struct {
 	SugerenciaID string
-	Quien        string
-	Tipo         string
-	Asunto       string
-	Texto        string
+	// UsuarioID: ver SugerenciaNueva. Acá es lo que evita que un ida y vuelta
+	// de seis mensajes deje seis avisos sin leer en la campana de cada Admin.
+	UsuarioID string
+	Quien     string
+	Tipo      string
+	Asunto    string
+	Texto     string
 }
 
 // SugerenciaRespondida: un Admin contestó. Le llega a quien escribió.

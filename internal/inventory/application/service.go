@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/ramiro/sgrc/internal/shared/eventbus"
 	"github.com/ramiro/sgrc/internal/shared/secretos"
 )
 
@@ -22,10 +23,14 @@ type Service struct {
 	// registra cuentas igual, solo que sin contraseñas. Todos sus métodos
 	// toleran el nil y responden ErrSinClave.
 	cifrador *secretos.Cifrador
+	// bus publica que una licencia dejó de estar pendiente, para que el aviso
+	// de la campana se cierre solo cuando ya no queda ninguna por renovar.
+	bus eventbus.EventBus
 }
 
-func NewService(repo Repo, validadorReservas ValidadorReservas, nuevoID IDGenerator, ahora func() time.Time, cifrador *secretos.Cifrador) *Service {
-	return &Service{repo: repo, validadorReservas: validadorReservas, nuevoID: nuevoID, ahora: ahora, cifrador: cifrador}
+func NewService(repo Repo, validadorReservas ValidadorReservas, nuevoID IDGenerator, ahora func() time.Time, cifrador *secretos.Cifrador, bus eventbus.EventBus) *Service {
+	return &Service{repo: repo, validadorReservas: validadorReservas, nuevoID: nuevoID,
+		ahora: ahora, cifrador: cifrador, bus: bus}
 }
 
 // ── Carro ───────────────────────────────────────────────────────────────

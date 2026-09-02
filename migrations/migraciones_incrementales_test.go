@@ -48,6 +48,11 @@ const (
 	idEquipo  = "77777777-7777-7777-7777-777777777777"
 	idGrupo   = "88888888-8888-8888-8888-888888888888"
 	idReserva = "99999999-9999-9999-9999-999999999999"
+
+	// Los avisos viejos cuyos tipos retiran la 003 y la 004: se conservan,
+	// convertidos a GENERAL.
+	idAvisoNoRetirada  = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	idAvisoPorComenzar = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 )
 
 func TestUnaActualizacionNoSeLlevaLosDatosPuestos(t *testing.T) {
@@ -76,6 +81,7 @@ func TestUnaActualizacionNoSeLlevaLosDatosPuestos(t *testing.T) {
 	// 4. Nada de lo que había se perdió por el camino.
 	verificarQueNingunaTablaPerdioFilas(ctx, t, pool, antes)
 	verificarQueLaReservaSigueEntera(ctx, t, pool)
+	verificarQueElAvisoViejoSobrevivioConvertido(ctx, t, pool)
 	verificarQueLaVersionEsLaUltima(ctx, t, pool)
 }
 
@@ -135,6 +141,30 @@ func sembrarInstalacionEnUso(ctx context.Context, t *testing.T, pool *pgxpool.Po
 		INSERT INTO preferencia_email (usuario_id, categoria, activa)
 		VALUES ($1, 'RECORDATORIO_DE_RESERVA', false)`, idDocente)
 
+	// Las dos filas que la 003 toca a propósito, para que su efecto quede
+	// probado y no sea algo que se descubre en el servidor. Son los dos casos
+	// opuestos: la notificación es un hecho que pasó y se conserva; la
+	// preferencia es una decisión sobre un correo que ya no existe y se borra.
+	ejecutar(ctx, t, pool, `
+		INSERT INTO notificacion (id, usuario_id, reserva_id, mensaje, tipo)
+		VALUES ($1, $2, $3, 'Todavía no retiraste tus computadoras', 'RESERVA_NO_RETIRADA')`,
+		idAvisoNoRetirada, idDocente, idReserva)
+
+	ejecutar(ctx, t, pool, `
+		INSERT INTO preferencia_email (usuario_id, categoria, activa)
+		VALUES ($1, 'DEVOLUCION_PENDIENTE', true)`, idDocente)
+
+	// Y lo que toca la 004, por lo mismo: el aviso de "una PC tuya puede no
+	// estar" y su categoría de correo.
+	ejecutar(ctx, t, pool, `
+		INSERT INTO notificacion (id, usuario_id, reserva_id, mensaje, tipo)
+		VALUES ($1, $2, $3, 'PC 7 no volvió al laboratorio', 'RESERVA_POR_COMENZAR')`,
+		idAvisoPorComenzar, idDocente, idReserva)
+
+	ejecutar(ctx, t, pool, `
+		INSERT INTO preferencia_email (usuario_id, categoria, activa)
+		VALUES ($1, 'EQUIPO_NO_DISPONIBLE', true)`, idDocente)
+
 	ejecutar(ctx, t, pool, `
 		INSERT INTO jornada_institucion (dia_semana, hora_inicio, hora_fin)
 		VALUES ('LUNES', TIME '07:30', TIME '17:00')`)
@@ -182,8 +212,69 @@ func verificarQueNingunaTablaPerdioFilas(ctx context.Context, t *testing.T, pool
 			t.Errorf("la tabla %q desapareció con la actualización, y tenía %d fila(s)", tabla, cantidadAntes)
 			continue
 		}
+		if permitido, esperadas := bajaDeliberada(tabla); permitido {
+			if cantidadDespues != cantidadAntes-esperadas {
+				t.Errorf("%q pasó de %d a %d fila(s); se esperaba que perdiera exactamente %d "+
+					"(ver bajaDeliberada)", tabla, cantidadAntes, cantidadDespues, esperadas)
+			}
+			continue
+		}
 		if cantidadDespues < cantidadAntes {
 			t.Errorf("%q pasó de %d a %d fila(s): la actualización borró datos", tabla, cantidadAntes, cantidadDespues)
+		}
+	}
+}
+
+// bajaDeliberada declara las ÚNICAS filas que una actualización tiene permitido
+// borrar, y cuántas.
+//
+// Existe para que una pérdida de datos intencional se escriba acá —donde se
+// lee, se discute y se justifica— en vez de aflojar el conteo para todas las
+// tablas. Cualquier otra baja sigue siendo un error.
+//
+// `preferencia_email`: la 003 y la 004 borran las filas de las cinco
+// categorías que se retiraron con sus avisos (RF-08.20, RF-08.12, RF-08.22 y
+// el pedido sobre una materia propia). Una preferencia no es un hecho que pasó
+// sino una decisión sobre un correo que ya no se manda; conservarla solo
+// dejaría al panel ofreciendo tildar algo inexistente.
+//
+// La siembra carga DOS de esas: DEVOLUCION_PENDIENTE (003) y
+// EQUIPO_NO_DISPONIBLE (004).
+func bajaDeliberada(tabla string) (bool, int) {
+	switch tabla {
+	case "preferencia_email":
+		return true, 2
+	default:
+		return false, 0
+	}
+}
+
+// verificarQueElAvisoViejoSobrevivioConvertido: la 003 retira el tipo
+// RESERVA_NO_RETIRADA, y las notificaciones que lo tenían NO se borran.
+//
+// Son el historial de alguien y siguen diciendo algo cierto sobre lo que pasó
+// ese día. Pasan a GENERAL, que es exactamente lo que son ahora: un aviso que
+// se lee y nada más, sin pantalla a la que llevar.
+func verificarQueElAvisoViejoSobrevivioConvertido(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	casos := []struct{ id, texto string }{
+		{idAvisoNoRetirada, "Todavía no retiraste tus computadoras"}, // 003
+		{idAvisoPorComenzar, "PC 7 no volvió al laboratorio"},        // 004
+	}
+
+	for _, caso := range casos {
+		var tipo, mensaje string
+		err := pool.QueryRow(ctx,
+			`SELECT tipo, mensaje FROM notificacion WHERE id = $1`, caso.id).Scan(&tipo, &mensaje)
+		if err != nil {
+			t.Fatalf("el aviso viejo %s se perdió con la actualización: %v", caso.id, err)
+		}
+		if tipo != "GENERAL" {
+			t.Errorf("%s: tipo = %q, esperaba GENERAL (el tipo viejo ya no lo permite el CHECK)", caso.id, tipo)
+		}
+		if mensaje != caso.texto {
+			t.Errorf("%s: el texto del aviso cambió: %q", caso.id, mensaje)
 		}
 	}
 }

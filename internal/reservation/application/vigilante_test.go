@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -43,13 +44,6 @@ func repoConClase(t *testing.T, equipos ...string) *fakeRepo {
 	return repoConClaseDe(t, 8*time.Hour, 9*time.Hour, equipos...)
 }
 
-// repoConClaseCorta arma una clase de media hora: más corta que los cuarenta
-// minutos de gracia, así que no se libera nunca y no hay nada que anunciarle.
-func repoConClaseCorta(t *testing.T) *fakeRepo {
-	t.Helper()
-	return repoConClaseDe(t, 8*time.Hour, 8*time.Hour+30*time.Minute, "pc1")
-}
-
 func repoConClaseDe(t *testing.T, horaInicio, horaFin time.Duration, equipos ...string) *fakeRepo {
 	t.Helper()
 	repo := nuevoFakeRepo()
@@ -81,8 +75,8 @@ func repoConClaseDe(t *testing.T, horaInicio, horaFin time.Duration, equipos ...
 // que la jornada existiera y sigue siendo el camino de quien elige no
 // restringir nada.
 func vigilanteALas(repo Repo, bus eventbus.EventBus, hora, minuto int) *Vigilante {
-	return NewVigilante(repo, bus, &fakeValidadorJornada{}, func() time.Time { return aLas(hora, minuto) },
-		ConfigDeVigilanciaPorDefecto())
+	return NewVigilante(repo, bus, &fakeValidadorJornada{}, &fakeValidadorMostrador{},
+		func() time.Time { return aLas(hora, minuto) }, ConfigDeVigilanciaPorDefecto())
 }
 
 // vigilanteConJornada arma el barrido para una institución que sí la declaró.
@@ -93,8 +87,8 @@ func vigilanteConJornada(repo Repo, bus eventbus.EventBus, momento time.Time, ci
 		fin, abre := cierres[fecha.Weekday()]
 		return CierreDeJornada{Declarada: true, Abre: abre, Fin: fin}
 	}}
-	return NewVigilante(repo, bus, validador, func() time.Time { return momento },
-		ConfigDeVigilanciaPorDefecto())
+	return NewVigilante(repo, bus, validador, &fakeValidadorMostrador{},
+		func() time.Time { return momento }, ConfigDeVigilanciaPorDefecto())
 }
 
 func barrer(t *testing.T, v *Vigilante) ResumenDelBarrido {
@@ -169,92 +163,32 @@ func TestBarrer_RecordatorioTardioSaleIgual(t *testing.T) {
 
 // ── El aviso de "todavía no las retiraste" (RF-08.20) ───────────────────
 
-func TestBarrer_AvisaALos15DeEmpezada(t *testing.T) {
-	repo := repoConClase(t, "pc1", "pc2")
-	bus := &busEspia{}
-
-	if r := barrer(t, vigilanteALas(repo, bus, 8, 10)); r.AvisosDeNoRetiro != 0 {
-		t.Fatalf("a los 10 minutos todavía no: %+v", r)
-	}
-	if r := barrer(t, vigilanteALas(repo, bus, 8, 15)); r.AvisosDeNoRetiro != 1 {
-		t.Fatalf("a los 15 sí: %+v", r)
-	}
-
-	eventos := bus.de("reserva.sin-retirar")
-	if len(eventos) != 1 {
-		t.Fatalf("esperaba 1 aviso, hubo %d", len(eventos))
-	}
-	aviso := eventos[0].Payload.(eventbus.ReservaSinRetirar)
-	// Un aviso por clase con las dos máquinas adentro, no uno por máquina.
-	if len(aviso.Equipos) != 2 {
-		t.Errorf("el aviso tiene que traer las dos PCs: %+v", aviso.Equipos)
-	}
-	if aviso.Email != "ada@escuela.edu.ar" || aviso.UsuarioID != docenteAda {
-		t.Errorf("falta el contacto del docente: %+v", aviso)
-	}
-	// El dato accionable: a los cuántos minutos las pierde, no a los cuántos
-	// se le avisó.
-	if aviso.MinutosDeGracia != 40 {
-		t.Errorf("minutosDeGracia = %d, esperaba 40", aviso.MinutosDeGracia)
-	}
-}
-
-func TestBarrer_ElAvisoDeNoRetiroSaleUnaSolaVez(t *testing.T) {
-	repo := repoConClase(t, "pc1")
-	bus := &busEspia{}
-	v := vigilanteALas(repo, bus, 8, 15)
-
-	barrer(t, v)
-	for i := 0; i < 10; i++ {
-		if r := barrer(t, v); r.AvisosDeNoRetiro != 0 {
-			t.Fatalf("corrida %d: volvió a avisar", i+2)
-		}
-	}
-	if len(bus.de("reserva.sin-retirar")) != 1 {
-		t.Errorf("salieron %d avisos, esperaba 1", len(bus.de("reserva.sin-retirar")))
-	}
-}
-
-// TestBarrer_SiRetiroAlgunaNoSeLeAvisaNada: vino al mostrador y eligió qué se
-// llevaba. Avisarle de su propia decisión es ruido.
-func TestBarrer_SiRetiroAlgunaNoSeLeAvisaNada(t *testing.T) {
-	repo := repoConClase(t, "pc1", "pc2")
-	entregarContraLaReserva(t, repo, "pr1", "pc1", aLas(8, 5))
-	bus := &busEspia{}
-
-	if r := barrer(t, vigilanteALas(repo, bus, 8, 15)); r.AvisosDeNoRetiro != 0 {
-		t.Fatalf("retiró una: no hay nada que avisarle: %+v", r)
-	}
-}
-
-// TestBarrer_NoAvisaSiLaClaseEsMasCortaQueLaGracia: esa reserva no se libera
-// nunca, así que anunciarle que va a quedar libre sería mentirle.
-func TestBarrer_NoAvisaSiLaClaseEsMasCortaQueLaGracia(t *testing.T) {
-	repo := repoConClaseCorta(t)
-	bus := &busEspia{}
-
-	if r := barrer(t, vigilanteALas(repo, bus, 8, 20)); r.AvisosDeNoRetiro != 0 {
-		t.Fatalf("una clase de media hora no se libera: no hay nada que anunciar: %+v", r)
-	}
-}
-
 // TestBarrer_SiVuelveDespuesDeLaGraciaLiberaSinAvisar: el proceso estuvo
 // caído y volvió a las 8:45. El aviso llegaría anunciando algo que ya pasó,
 // así que no sale: mejor callarse que mentir.
-func TestBarrer_SiVuelveDespuesDeLaGraciaLiberaSinAvisar(t *testing.T) {
+// TestBarrer_LiberarNoAvisaNada fija la decisión de RF-08.10: la liberación
+// es la única cosa que el barrido escribe, y no publica ningún evento.
+//
+// Antes de la 1.18.0 el aviso de los 15 minutos la precedía; ahora no la
+// precede nada. Es deliberado —liberar le devuelve la máquina al resto de la
+// escuela, no es un reproche— y por eso mismo depende del mostrador: el test
+// de al lado prueba que sin nadie atendiendo tampoco libera.
+func TestBarrer_LiberarNoAvisaNada(t *testing.T) {
 	repo := repoConClase(t, "pc1")
 	bus := &busEspia{}
 
 	resumen := barrer(t, vigilanteALas(repo, bus, 8, 45))
 
-	if resumen.AvisosDeNoRetiro != 0 {
-		t.Errorf("el aviso no puede salir junto con la liberación: %+v", resumen)
-	}
 	if resumen.Liberadas != 1 {
-		t.Errorf("pero liberar sí libera: %+v", resumen)
+		t.Errorf("tenía que liberar: %+v", resumen)
 	}
-	if len(bus.de("reserva.sin-retirar")) != 0 {
-		t.Error("no tiene que salir ningún aviso de no retiro")
+	// A las 8:45 el recordatorio de esta misma clase sale igual —es de la
+	// pasada 1 y no tiene nada que ver con liberar—, así que lo que se afirma
+	// es que NO hay ningún otro evento: la liberación no agrega ninguno.
+	for _, e := range bus.publicados {
+		if e.Tipo != "reserva.recordatorio" {
+			t.Errorf("liberar no publica nada, pero salió %q: %+v", e.Tipo, e.Payload)
+		}
 	}
 }
 
@@ -429,153 +363,7 @@ func prestamoVencido(t *testing.T, repo *fakeRepo, id, equipoID string, debioVol
 	return p
 }
 
-// TestBarrer_LaAdvertenciaViajaDentroDelRecordatorio: si el docente igual va
-// a recibir un correo por esta clase, mandarle dos es el bombardeo que se
-// quiso evitar.
-func TestBarrer_LaAdvertenciaViajaDentroDelRecordatorio(t *testing.T) {
-	repo := repoConClase(t, "pc1", "pc2")
-	prestamoVencido(t, repo, "pr1", "pc1", aLas(6, 30))
-	bus := &busEspia{}
-
-	resumen := barrer(t, vigilanteALas(repo, bus, 7, 0))
-
-	if resumen.Recordatorios != 1 {
-		t.Fatalf("esperaba el recordatorio: %+v", resumen)
-	}
-	if resumen.AvisosDeEquipoFaltante != 0 {
-		t.Errorf("la advertencia va adentro del recordatorio, no aparte: %+v", resumen)
-	}
-	aviso := bus.de("reserva.recordatorio")[0].Payload.(eventbus.RecordatorioDeReserva)
-	if len(aviso.EquiposSinDevolver) != 1 || aviso.EquiposSinDevolver[0] != "PC 1" {
-		t.Errorf("el recordatorio tiene que advertir de la PC 1: %+v", aviso.EquiposSinDevolver)
-	}
-	if len(bus.de("reserva.equipo-no-disponible")) != 0 {
-		t.Error("no tiene que salir un segundo correo")
-	}
-}
-
-// TestBarrer_AvisoSueltoCuandoLaDemoraEsPosterior es la otra mitad de
-// max(detección, inicio − 1 h): el recordatorio ya salió y recién después la
-// máquina se pasó de hora.
-func TestBarrer_AvisoSueltoCuandoLaDemoraEsPosterior(t *testing.T) {
-	repo := repoConClase(t, "pc1")
-	bus := &busEspia{}
-
-	barrer(t, vigilanteALas(repo, bus, 7, 0)) // el recordatorio sale sin advertencia
-	prestamoVencido(t, repo, "pr1", "pc1", aLas(7, 30))
-
-	resumen := barrer(t, vigilanteALas(repo, bus, 7, 40))
-
-	if resumen.AvisosDeEquipoFaltante != 1 {
-		t.Fatalf("esperaba el aviso suelto: %+v", resumen)
-	}
-	aviso := bus.de("reserva.equipo-no-disponible")[0].Payload.(eventbus.EquipoNoDisponibleParaReserva)
-	if len(aviso.Equipos) != 1 {
-		t.Errorf("el aviso tiene que nombrar el equipo: %+v", aviso)
-	}
-}
-
-// TestBarrer_SiElEquipoVuelveATiempoNadieSeEntera es la razón por la que esto
-// no bombardea: el caso más común es que alguien se demore quince minutos y
-// devuelva.
-func TestBarrer_SiElEquipoVuelveATiempoNadieSeEntera(t *testing.T) {
-	repo := repoConClase(t, "pc1")
-	// La clase es a las 8; la máquina la tenía otro y debía volver a las 7:30, o
-	// sea que a las 7:00 —cuando sale el recordatorio— todavía no estaba
-	// demorada.
-	p := prestamoVencido(t, repo, "pr1", "pc1", aLas(7, 30))
-	bus := &busEspia{}
-
-	barrer(t, vigilanteALas(repo, bus, 7, 0))
-	aviso := bus.de("reserva.recordatorio")[0].Payload.(eventbus.RecordatorioDeReserva)
-	if len(aviso.EquiposSinDevolver) != 0 {
-		t.Fatalf("a las 7:00 esa máquina no estaba demorada: %+v", aviso.EquiposSinDevolver)
-	}
-
-	// Vuelve a las 7:25, antes de pasarse.
-	if err := p.Devolver("", "", aLas(7, 25)); err != nil {
-		t.Fatalf("no debería fallar: %v", err)
-	}
-
-	resumen := barrer(t, vigilanteALas(repo, bus, 7, 45))
-
-	if resumen.AvisosDeEquipoFaltante != 0 {
-		t.Errorf("la máquina volvió: el docente no tiene que enterarse de nada")
-	}
-}
-
-func TestBarrer_ElAvisoDeEquipoFaltanteSaleUnaSolaVez(t *testing.T) {
-	repo := repoConClase(t, "pc1")
-	prestamoVencido(t, repo, "pr1", "pc1", aLas(6, 30))
-	bus := &busEspia{}
-	v := vigilanteALas(repo, bus, 7, 30)
-
-	barrer(t, v)
-	for i := 0; i < 5; i++ {
-		if r := barrer(t, v); r.AvisosDeEquipoFaltante != 0 || r.Recordatorios != 0 {
-			t.Fatalf("corrida %d: volvió a avisar (%+v)", i+2, r)
-		}
-	}
-}
-
 // ── El reclamo de devolución ────────────────────────────────────────────
-
-func TestBarrer_ReclamaALosDiezMinutos(t *testing.T) {
-	repo := nuevoFakeRepo()
-	repo.identificadorDeEquipo["pc1"] = 7
-	prestamoVencido(t, repo, "pr1", "pc1", aLas(9, 0))
-	bus := &busEspia{}
-
-	if r := barrer(t, vigilanteALas(repo, bus, 9, 5)); r.Reclamos != 0 {
-		t.Fatalf("a los 5 minutos todavía no se reclama: %+v", r)
-	}
-
-	resumen := barrer(t, vigilanteALas(repo, bus, 9, 10))
-
-	if resumen.Reclamos != 1 {
-		t.Fatalf("esperaba 1 reclamo, obtuve %d", resumen.Reclamos)
-	}
-	aviso := bus.de("prestamo.demorado")[0].Payload.(eventbus.PrestamosDemorados)
-	if len(aviso.Prestamos) != 1 {
-		t.Fatalf("esperaba 1 préstamo en el aviso: %+v", aviso)
-	}
-	d := aviso.Prestamos[0]
-	if d.Etiqueta != "PC 7" || d.MinutosDeDemora != 10 || d.Email != "otro@escuela.edu.ar" {
-		t.Errorf("datos del reclamo: %+v", d)
-	}
-}
-
-func TestBarrer_ElReclamoSaleUnaSolaVez(t *testing.T) {
-	repo := nuevoFakeRepo()
-	prestamoVencido(t, repo, "pr1", "pc1", aLas(9, 0))
-	bus := &busEspia{}
-
-	barrer(t, vigilanteALas(repo, bus, 9, 15))
-	for _, minuto := range []int{20, 30, 45} {
-		if r := barrer(t, vigilanteALas(repo, bus, 9, minuto)); r.Reclamos != 0 {
-			t.Fatalf("a las 9:%d volvió a reclamar", minuto)
-		}
-	}
-	if len(bus.de("prestamo.demorado")) != 1 {
-		t.Errorf("salieron %d reclamos, esperaba 1", len(bus.de("prestamo.demorado")))
-	}
-}
-
-// TestBarrer_SinHoraPactadaNoSeReclama: "vengo en un rato" es una respuesta
-// válida. Esas máquinas aparecen recién en el corte de fin de jornada.
-func TestBarrer_SinHoraPactadaNoSeReclama(t *testing.T) {
-	repo := nuevoFakeRepo()
-	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
-	if err != nil {
-		t.Fatalf("error de dominio inesperado: %v", err)
-	}
-	repo.prestamos[p.ID] = p
-	bus := &busEspia{}
-
-	if r := barrer(t, vigilanteALas(repo, bus, 15, 0)); r.Reclamos != 0 {
-		t.Errorf("sin hora pactada no se reclama: %+v", r)
-	}
-}
 
 // ── El corte de fin de jornada ──────────────────────────────────────────
 
@@ -627,7 +415,8 @@ func TestBarrer_ElCorteNoCuentaLaMaquinaQueTodaviaEstaEnHora(t *testing.T) {
 }
 
 // La contracara: un préstamo espontáneo no tiene hora pactada y por eso
-// ExcedioLaDemora nunca lo reclama. Si el corte tampoco lo tomara, una
+// Un préstamo sin hora pactada no genera ningún otro aviso. Si el corte
+// tampoco lo tomara, una
 // máquina prestada en el mostrador podría no generar un solo aviso nunca.
 func TestBarrer_ElCorteSiCuentaAlPrestamoSinHoraPactada(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -666,7 +455,7 @@ func TestBarrer_ElCorteSaleUnaSolaVezPorPrestamo(t *testing.T) {
 	}
 
 	// Al día siguiente la máquina sigue afuera y NO se vuelve a avisar.
-	manana := NewVigilante(repo, bus, &fakeValidadorJornada{}, func() time.Time {
+	manana := NewVigilante(repo, bus, &fakeValidadorJornada{}, &fakeValidadorMostrador{}, func() time.Time {
 		return aLas(23, 0).AddDate(0, 0, 1)
 	}, ConfigDeVigilanciaPorDefecto())
 
@@ -822,5 +611,188 @@ func TestBarrer_NoLiberaUnBloqueoAdministrativo(t *testing.T) {
 	}
 	if len(bus.publicados) != 0 {
 		t.Errorf("no hay a quién avisarle: publicó %d eventos", len(bus.publicados))
+	}
+}
+
+// ── Sin nadie en el mostrador, el sistema se queda quieto (RF-07.6) ──────
+//
+// El barrido no puede distinguir por su cuenta "nadie vino a buscar las
+// máquinas" de "vinieron, se las llevaron, y no había ningún Admin para
+// registrarlo". El día que el Admin falta y lo cubre alguien que prefiere
+// anotar en papel, todo lo que el barrido concluye es falso y el perjudicado
+// es el docente, que hizo todo bien.
+
+// vigilanteConMostrador arma el barrido diciendo explícitamente si había
+// alguien atendiendo.
+func vigilanteConMostrador(repo Repo, bus eventbus.EventBus, hora, minuto int, mostrador *fakeValidadorMostrador) *Vigilante {
+	return NewVigilante(repo, bus, &fakeValidadorJornada{}, mostrador,
+		func() time.Time { return aLas(hora, minuto) }, ConfigDeVigilanciaPorDefecto())
+}
+
+func TestBarrer_SinMostradorAtendido_NoLiberaNada(t *testing.T) {
+	repo := repoConClase(t, "pc1")
+	bus := &busEspia{}
+
+	// 8:45: pasaron los 40 minutos de gracia. Con alguien atendiendo, esto
+	// liberaría.
+	resumen := barrer(t, vigilanteConMostrador(repo, bus, 8, 45, mostradorSinAtender()))
+
+	if resumen.Liberadas != 0 {
+		t.Errorf("sin nadie operando el sistema no se le puede quitar la reserva a nadie: %+v", resumen)
+	}
+	if !resumen.MostradorSinAtender {
+		t.Errorf("el resumen tiene que dejar constancia de por qué no hizo nada: %+v", resumen)
+	}
+	if repo.reservas["res-pc1"].Estado != domain.ReservaConfirmada {
+		t.Errorf("la reserva tiene que seguir confirmada, quedó en %q", repo.reservas["res-pc1"].Estado)
+	}
+}
+
+// El contraste: con el mismo reloj y los mismos datos, pero con un Admin de
+// guardia, sí libera. Es lo que prueba que el gate no apagó la función.
+func TestBarrer_ConMostradorAtendido_LiberaComoSiempre(t *testing.T) {
+	repo := repoConClase(t, "pc1")
+	bus := &busEspia{}
+
+	resumen := barrer(t, vigilanteConMostrador(repo, bus, 8, 45, mostradorAtendido()))
+
+	if resumen.Liberadas != 1 {
+		t.Errorf("con alguien atendiendo el barrido opera igual que siempre: %+v", resumen)
+	}
+	if resumen.MostradorSinAtender {
+		t.Errorf("no se salteó nada: %+v", resumen)
+	}
+}
+
+// Una escuela que todavía no cargó los horarios no puede quedarse sin barrido:
+// no declarar nada no es declarar que no hay nadie.
+func TestBarrer_SinHorariosDeclarados_ElBarridoOperaIgual(t *testing.T) {
+	repo := repoConClase(t, "pc1")
+	bus := &busEspia{}
+
+	sinDeclarar := &fakeValidadorMostrador{declarado: false, atendido: false}
+	resumen := barrer(t, vigilanteConMostrador(repo, bus, 8, 45, sinDeclarar))
+
+	if resumen.Liberadas != 1 {
+		t.Errorf("sin horarios cargados el barrido opera como antes de RF-07.6: %+v", resumen)
+	}
+}
+
+// El corte de jornada pregunta por el DÍA y no por el instante: sale una hora
+// después de que cerró la escuela, cuando el Admin ya se fue. Preguntar por
+// ese momento daría "no hay nadie" siempre y el corte no saldría nunca.
+func TestBarrer_ElCorteMiraSiHuboAlguienEseDia_NoEsteInstante(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.identificadorDeEquipo["pc1"] = 3
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	repo.prestamos[p.ID] = p
+	bus := &busEspia{}
+
+	// A las 23:00 no hay nadie en el mostrador —es de noche— pero durante el
+	// día sí hubo: el corte tiene que salir.
+	huboEseDia := true
+	mostrador := &fakeValidadorMostrador{declarado: true, atendido: false, eseDia: &huboEseDia}
+
+	if r := barrer(t, vigilanteConMostrador(repo, bus, 23, 0, mostrador)); r.AvisosDeCierre != 1 {
+		t.Errorf("hubo alguien atendiendo ese día: el corte tiene que salir: %+v", r)
+	}
+}
+
+func TestBarrer_SinNadieEseDia_NoHayCorteNiSeMarcaElPrestamo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.identificadorDeEquipo["pc1"] = 3
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(9, 0))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	repo.prestamos[p.ID] = p
+	bus := &busEspia{}
+
+	resumen := barrer(t, vigilanteConMostrador(repo, bus, 23, 0, mostradorSinAtender()))
+
+	if resumen.AvisosDeCierre != 0 {
+		t.Errorf("nadie atendió ese día: no hay de qué avisar: %+v", resumen)
+	}
+	// Que no se marque es lo que permite que el corte salga el día que
+	// alguien sí atienda. Marcarlo perdería el aviso para siempre.
+	if p.AvisadoCierrePara != nil {
+		t.Error("no se puede marcar como avisado un corte que no salió")
+	}
+}
+
+// Si no se puede saber si había alguien, lo único que no se puede hacer es
+// liberarle la reserva a un docente por las dudas.
+func TestBarrer_SiNoSePuedeSaberSiHayMostrador_FallaYNoLibera(t *testing.T) {
+	repo := repoConClase(t, "pc1")
+	bus := &busEspia{}
+	roto := &fakeValidadorMostrador{err: errors.New("availability caído")}
+
+	v := vigilanteConMostrador(repo, bus, 8, 45, roto)
+	if _, err := v.Barrer(context.Background()); err == nil {
+		t.Fatal("el barrido tiene que fallar, no seguir de largo")
+	}
+	if repo.reservas["res-pc1"].Estado != domain.ReservaConfirmada {
+		t.Errorf("la reserva tiene que seguir confirmada, quedó en %q", repo.reservas["res-pc1"].Estado)
+	}
+}
+
+// TestBarrer_ElDiaDePapel_LaClaseCuentaComoDada es el escenario que motivó
+// RF-07.6, corrido de punta a punta: falta el Admin, lo cubre un directivo que
+// entrega las máquinas y anota en un cuaderno, y el barrido corre igual cada
+// cinco minutos durante todo el día.
+//
+// Lo que se afirma es el resultado para el docente, que es lo único que
+// importa: su reserva NO queda NO_RETIRADA. Se agota sola al terminar la
+// franja, como cualquier clase que se dio — porque se dio.
+//
+// El contraste está en el mismo test a propósito: con el mostrador atendido y
+// los MISMOS datos, la reserva sí queda NO_RETIRADA. Si algún día alguien
+// "simplifica" la condición del mostrador, este test dice exactamente qué se
+// rompe y a quién perjudica.
+func TestBarrer_ElDiaDePapel_LaClaseCuentaComoDada(t *testing.T) {
+	correrElDia := func(mostrador *fakeValidadorMostrador) *domain.Reserva {
+		t.Helper()
+		repo := repoConClase(t, "pc1")
+		bus := &busEspia{}
+		var reloj time.Time
+		svc := NewService(repo,
+			&fakeValidadorMateria{asignado: true},
+			&fakeValidadorEquipo{disponible: true},
+			&fakeValidadorJornada{permite: true},
+			&fakeObtenedorNombre{nombre: "Ada Lovelace"},
+			idSecuencial,
+			func() time.Time { return reloj },
+			eventbus.NewInMemoryEventBus(),
+		)
+
+		// De las 6 a las 23, cada cinco minutos, como en producción. El job de
+		// vencimiento (RF-04.9) corre aparte y NO mira el mostrador: es lo que
+		// cierra la reserva cuando se le termina la franja.
+		for h := 6; h <= 23; h++ {
+			for m := 0; m < 60; m += 5 {
+				reloj = aLas(h, m)
+				v := vigilanteConMostrador(repo, bus, h, m, mostrador)
+				if _, err := v.Barrer(context.Background()); err != nil {
+					t.Fatalf("barrido a las %02d:%02d: %v", h, m, err)
+				}
+				if _, err := svc.FinalizarVencidas(context.Background()); err != nil {
+					t.Fatalf("vencidas a las %02d:%02d: %v", h, m, err)
+				}
+			}
+		}
+		return repo.reservas["res-pc1"]
+	}
+
+	if estado := correrElDia(mostradorSinAtender()).Estado; estado != domain.ReservaFinalizada {
+		t.Errorf("sin nadie en el mostrador la clase tiene que contar como dada, quedó en %q.\n"+
+			"NO_RETIRADA acá sería el sistema castigando al docente por una ausencia que no es "+
+			"suya, y además le saca la clase al reporte de uso (RF-06.1)", estado)
+	}
+
+	if estado := correrElDia(mostradorAtendido()).Estado; estado != domain.ReservaNoRetirada {
+		t.Errorf("con el Admin en el mostrador y nadie retirando, la reserva sí se libera; quedó en %q", estado)
 	}
 }

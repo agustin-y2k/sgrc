@@ -159,13 +159,25 @@ func TestPreferenciasEmail_RecibePorEmail(t *testing.T) {
 	prefs := NewPreferenciasEmailPostgres(pool)
 	ctx := context.Background()
 
+	// Los cuatro cuadrantes que esta consulta tiene que resolver: elegir a
+	// favor y en contra del default, en las dos direcciones.
+	//
+	// Desde la 1.18.0 casi todo arranca APAGADO, así que la única categoría
+	// que sirve para probar "el default es encendido" es CUENTA_PENDIENTE.
+	// RecibePorEmail no mira el rol —resuelve por email y por el default de la
+	// categoría— así que alcanza con que exista la fila.
 	eligio := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	apago := crearUsuarioDeTest(t, pool, "ADMIN", "APROBADA")
 	sinElegir := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 
-	// Pide el recordatorio (que arranca apagado) y apaga el aviso de equipo no
-	// disponible (que arranca encendido): las dos cosas al revés del default.
+	// Pide el recordatorio, que arranca apagado.
 	if err := prefs.Reemplazar(ctx, eligio, domain.Decisiones(
 		[]domain.CategoriaEmail{domain.CatRecordatorioDeReserva}, false)); err != nil {
+		t.Fatalf("guardando: %v", err)
+	}
+	// Y este guardó el panel sin tildar nada: apaga cuentas pendientes, que es
+	// lo único que venía encendido.
+	if err := prefs.Reemplazar(ctx, apago, domain.Decisiones(nil, true)); err != nil {
 		t.Fatalf("guardando: %v", err)
 	}
 
@@ -175,12 +187,13 @@ func TestPreferenciasEmail_RecibePorEmail(t *testing.T) {
 		categoria domain.CategoriaEmail
 		esperado  bool
 	}{
-		{"eligió recibirlo", eligio + "@escuela.edu.ar", domain.CatRecordatorioDeReserva, true},
-		{"eligió no recibirlo", eligio + "@escuela.edu.ar", domain.CatEquipoNoDisponible, false},
+		{"eligió recibir algo que arranca apagado", eligio + "@escuela.edu.ar", domain.CatRecordatorioDeReserva, true},
+		{"eligió NO recibir algo que arranca encendido", apago + "@escuela.edu.ar", domain.CatCuentaPendiente, false},
 		{"no eligió, default apagado", sinElegir + "@escuela.edu.ar", domain.CatRecordatorioDeReserva, false},
-		{"no eligió, default encendido", sinElegir + "@escuela.edu.ar", domain.CatEquipoNoDisponible, true},
-		{"sin cuenta, vale el default", "de-afuera@otra-escuela.edu.ar", domain.CatEquipoNoDisponible, true},
-		{"sin cuenta y default apagado", "de-afuera@otra-escuela.edu.ar", domain.CatDevolucionPendiente, false},
+		{"no eligió, default encendido", sinElegir + "@escuela.edu.ar", domain.CatCuentaPendiente, true},
+		{"no eligió esa en particular", eligio + "@escuela.edu.ar", domain.CatReservaCancelada, false},
+		{"sin cuenta, vale el default encendido", "de-afuera@otra-escuela.edu.ar", domain.CatCuentaPendiente, true},
+		{"sin cuenta, vale el default apagado", "de-afuera@otra-escuela.edu.ar", domain.CatRecordatorioDeReserva, false},
 	}
 
 	for _, caso := range casos {

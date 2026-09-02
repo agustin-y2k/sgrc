@@ -24,8 +24,19 @@ El mismo pipeline actualiza las capturas del README (`../../capturas/`).
 export GUIA_ADMIN_PASSWORD='...'      # la de SEED_ADMIN_PASSWORD del .env
 export GUIA_ADMIN_EMAIL='...'         # opcional, si tu Admin no es admin@escuela.edu.ar
 
+# 0. SOBRE UNA BASE RECIÉN CREADA, esto va primero: crea el ciclo lectivo, el
+#    curso 1°A, la materia, un docente y un carro con 8 equipos. Sin esto, el
+#    paso 1 muere con "jq: error ... Cannot index object with number", que no
+#    dice en ningún lado que lo que falta es el ciclo.
+#
+#    Ojo con los nombres de las variables: este script NO lee las GUIA_* ni las
+#    SEED_ADMIN_* del .env, lee ADMIN_EMAIL y ADMIN_PASSWORD.
+ADMIN_EMAIL="$GUIA_ADMIN_EMAIL" ADMIN_PASSWORD="$GUIA_ADMIN_PASSWORD" \
+  ./scripts/sembrar-datos-de-prueba.sh
+
 # 1. Datos de demostración: docente, materias, reservas, licencias con
 #    vencimiento, una entrega en curso y una conversación de soporte.
+#    Da por sentado que el ciclo y el curso "1°A" ya existen (paso 0).
 ./docs/guias/generar/datos-de-demostracion.sh
 
 # 2. Capturas. Escriben todas en $SALIDA; se corren desde donde quieras.
@@ -37,6 +48,7 @@ node docs/guias/generar/capturar-pasos-2.mjs      # los que necesitan otro camin
 node docs/guias/generar/capturar-admin.mjs        # pantallas de Admin desplegadas
 node docs/guias/generar/capturar-formularios.mjs  # login, registro y recuperación
 node docs/guias/generar/capturar-cuentas.mjs      # las cuentas de un equipo, con las dos sesiones
+node docs/guias/generar/capturar-nuevas.mjs       # cerrar el año, los calendarios y el perfil del Admin
 node docs/guias/generar/capturar-marcas.mjs       # las que llevan números en rojo
 node docs/guias/generar/capturar-readme.mjs       # las del README (otro encuadre)
 
@@ -82,6 +94,11 @@ en cuenta cuando se hace así:
   necesitan.** Si la base es nueva y se corre cualquier otro script primero,
   el Admin queda atrapado en el asistente de la primera jornada y todas sus
   capturas salen mostrando eso.
+- **Un `✗ falta` de `preparar-imagenes.py` no siempre es intencional.** Ese
+  mensaje es el mismo cuando se salteó un script a propósito —lo normal, y para
+  eso está— que cuando se olvidó uno: en los dos casos la imagen vieja queda en
+  `imagenes/` y viaja al PDF sin que nada la señale. Si estás regenerando
+  TODO, un `✗ falta` es un script que no corriste.
 - **El login falla de a ratos con `waitForURL: Timeout`** cuando se encadenan
   varias corridas seguidas. No es la contraseña: volver a correr el mismo
   script alcanza.

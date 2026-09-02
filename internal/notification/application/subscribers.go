@@ -103,45 +103,34 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		})
 	})
 
-	// RF-02.8: se dio de baja al único docente de una materia, sus
-	// reservas futuras se cancelaron en cascada.
-	bus.Subscribe("docente.baja.materia-huerfana", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(map[string]any)
-		if !ok {
-			log.Printf("notification: payload inesperado para docente.baja.materia-huerfana: %+v", e.Payload)
-			return
-		}
-		mensaje := fmt.Sprintf("Se cancelaron %v reserva(s): el único docente de una materia fue dado de baja", payload["reservasCanceladas"])
-		entregar("docente.baja.materia-huerfana", func(ctx context.Context) error {
-			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoGeneral, domain.Referencias{})
-			return err
+	// RF-02.8, por sus dos caminos: una materia se quedó sin ningún docente y
+	// sus reservas futuras se cancelaron en cascada.
+	//
+	// Son dos eventos y no uno porque para el Admin que lo lee "se dio de baja
+	// al docente" y "se le quitó la materia" no son la misma noticia, aunque
+	// la consecuencia sea idéntica. Nunca salen los dos por un mismo hecho.
+	//
+	// Lo que NO existe más es el tercer aviso de esta familia (era RF-05.4):
+	// el de la materia que se queda con otro docente y no cancela nada. Ver
+	// auth/application/service.go, donde se dejó de publicar.
+	porMateriaHuerfana := func(evento, motivo string) {
+		bus.Subscribe(evento, func(e eventbus.Evento) {
+			payload, ok := e.Payload.(map[string]any)
+			if !ok {
+				log.Printf("notification: payload inesperado para %s: %+v", evento, e.Payload)
+				return
+			}
+			mensaje := fmt.Sprintf("Se cancelaron %v reserva(s): %s", payload["reservasCanceladas"], motivo)
+			entregar(evento, func(ctx context.Context) error {
+				_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoGeneral, domain.Referencias{})
+				return err
+			})
 		})
-	})
-
-	// RF-02.8 por el otro camino: no se dio de baja a nadie, se le quitó la
-	// asignación al último docente de una materia.
-	bus.Subscribe("docente.desasignado.materia-huerfana", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(map[string]any)
-		if !ok {
-			log.Printf("notification: payload inesperado para docente.desasignado.materia-huerfana: %+v", e.Payload)
-			return
-		}
-		mensaje := fmt.Sprintf("Se cancelaron %v reserva(s): se quitó al último docente asignado a una materia", payload["reservasCanceladas"])
-		entregar("docente.desasignado.materia-huerfana", func(ctx context.Context) error {
-			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoGeneral, domain.Referencias{})
-			return err
-		})
-	})
-
-	// RF-05.4: se dio de baja a un docente, pero la materia sigue
-	// teniendo otro docente asignado — aviso informativo, sin cascada.
-	bus.Subscribe("docente.baja.notificar_admin", func(e eventbus.Evento) {
-		mensaje := "Se dio de baja a un docente de una materia que sigue teniendo otro docente asignado"
-		entregar("docente.baja.notificar_admin", func(ctx context.Context) error {
-			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoGeneral, domain.Referencias{})
-			return err
-		})
-	})
+	}
+	porMateriaHuerfana("docente.baja.materia-huerfana",
+		"el único docente de una materia fue dado de baja")
+	porMateriaHuerfana("docente.desasignado.materia-huerfana",
+		"se quitó al último docente asignado a una materia")
 
 	// Una cuenta que estaba pendiente se aprobó o se rechazó: el aviso que pedía
 	// resolverla ya no tiene nada que pedir.
@@ -159,7 +148,8 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	})
 
 	// Alguien escribió en el buzón: sugerencia o algo que no anda. Va a
-	// todos los Admin.
+	// todos los Admin, salvo a los que ya tienen uno sin leer de esa misma
+	// persona (ver NotificarATodosLosAdminsSinRepetir).
 	bus.Subscribe("sugerencia.nueva", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaNueva)
 		if !ok {
@@ -168,12 +158,15 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		}
 		mensaje := mensajeDeSugerencia(payload)
 		entregar("sugerencia.nueva", func(ctx context.Context) error {
-			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoSugerencia, domain.Referencias{})
+			_, err := svc.NotificarATodosLosAdminsSinRepetir(ctx, payload.UsuarioID, mensaje,
+				domain.TipoSugerencia)
 			return err
 		})
 	})
 
-	// Quien preguntó volvió a escribir en su hilo: vuelve a los Admin.
+	// Quien preguntó volvió a escribir en su hilo. Es el caso que más se
+	// beneficia del "sin repetir": una conversación de seis mensajes dejaba
+	// seis avisos idénticos en la campana de cada Admin.
 	bus.Subscribe("sugerencia.seguimiento", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaSeguimiento)
 		if !ok {
@@ -182,12 +175,15 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		}
 		mensaje := mensajeDeSeguimiento(payload)
 		entregar("sugerencia.seguimiento", func(ctx context.Context) error {
-			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoSugerencia, domain.Referencias{})
+			_, err := svc.NotificarATodosLosAdminsSinRepetir(ctx, payload.UsuarioID, mensaje,
+				domain.TipoSugerencia)
 			return err
 		})
 	})
 
-	// Un Admin contestó: le llega a quien escribió.
+	// Un Admin contestó: le llega a quien escribió, y el pendiente se cierra
+	// para TODOS los Admin — el que contestó ya no tiene nada que hacer, y los
+	// demás tampoco.
 	bus.Subscribe("sugerencia.respondida", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaRespondida)
 		if !ok {
@@ -196,6 +192,9 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		}
 		mensaje := mensajeDeRespuestaASugerencia(payload)
 		entregar("sugerencia.respondida", func(ctx context.Context) error {
+			if _, err := svc.CerrarAvisosSobreUsuario(ctx, payload.UsuarioID, domain.TipoSugerencia); err != nil {
+				return err
+			}
 			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
 				domain.TipoSugerenciaRespondida, domain.Referencias{})
 			return err
@@ -209,24 +208,16 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 			log.Printf("notification: payload inesperado para materia.pedido.nuevo: %+v", e.Payload)
 			return
 		}
+		// Solo a los Admin, que son quienes deciden. A quien ya dicta la
+		// materia no se le avisa: no se le pide nada y no puede hacer nada.
+		//
+		// Guarda de quién habla, que es lo que permite cerrarlo solo cuando
+		// alguno lo resuelve (ver materia.pedido.resuelto).
+		usuarioID := payload.UsuarioID
 		entregar("materia.pedido.nuevo", func(ctx context.Context) error {
-			if _, err := svc.NotificarATodosLosAdmins(ctx, mensajeDePedidoDeMateria(payload),
-				domain.TipoPedidoDeMateria, domain.Referencias{}); err != nil {
-				return err
-			}
-			// A cada docente que ya dicta la materia.
-			var ultimo error
-			for _, d := range payload.DocentesActuales {
-				if d.UsuarioID == payload.UsuarioID {
-					continue // ya la dicta y la volvió a pedir: no se avisa solo
-				}
-				if _, err := svc.NotificarUsuario(ctx, d.UsuarioID,
-					mensajeDePedidoParaElTitular(payload), domain.TipoPedidoDeMateria,
-					domain.Referencias{}); err != nil {
-					ultimo = err
-				}
-			}
-			return ultimo
+			_, err := svc.NotificarATodosLosAdmins(ctx, mensajeDePedidoDeMateria(payload),
+				domain.TipoPedidoDeMateria, domain.Referencias{SobreUsuarioID: &usuarioID})
+			return err
 		})
 	})
 
@@ -239,6 +230,10 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		}
 		mensaje := mensajeDePedidoResuelto(payload)
 		entregar("materia.pedido.resuelto", func(ctx context.Context) error {
+			// Lo decidió uno: deja de estar pendiente para todos.
+			if _, err := svc.CerrarAvisosSobreUsuario(ctx, payload.UsuarioID, domain.TipoPedidoDeMateria); err != nil {
+				return err
+			}
 			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
 				domain.TipoPedidoDeMateriaResuelto, domain.Referencias{})
 			return err
@@ -263,42 +258,58 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		})
 	})
 
+	// ── Los dos avisos que se cierran cuando se resuelve lo que los motivó ──
+	//
+	// Estos no hablan de una persona, así que no se pueden cerrar con
+	// CerrarAvisosSobreUsuario: hablan de un conjunto —"hay licencias por
+	// renovar", "quedaron equipos afuera"— que además se rearma cada vez,
+	// porque las licencias no vencen todas el mismo día. Por eso el cierre no
+	// es "se renovó una" sino "ya no queda ninguna", y quien sabe eso es el
+	// módulo dueño, que lo manda contado.
+
+	bus.Subscribe("licencia.pendientes", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PendientesDeLicencia)
+		if !ok {
+			log.Printf("notification: payload inesperado para licencia.pendientes: %+v", e.Payload)
+			return
+		}
+		if payload.Pendientes > 0 {
+			return // todavía queda trabajo: el aviso sigue diciendo la verdad
+		}
+		entregar("licencia.pendientes", func(ctx context.Context) error {
+			_, err := svc.CerrarAvisosPendientesDe(ctx, domain.TipoLicenciaPorVencer)
+			return err
+		})
+	})
+
+	bus.Subscribe("prestamo.cierre.pendientes", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.PendientesDelCierre)
+		if !ok {
+			log.Printf("notification: payload inesperado para prestamo.cierre.pendientes: %+v", e.Payload)
+			return
+		}
+		if payload.Pendientes > 0 {
+			return // sigue habiendo equipos afuera de los que ya se avisó
+		}
+		entregar("prestamo.cierre.pendientes", func(ctx context.Context) error {
+			_, err := svc.CerrarAvisosPendientesDe(ctx, domain.TipoEquipoSinDevolver)
+			return err
+		})
+	})
+
 	// ── El barrido de reservas y entregas (RF-08.10 a RF-08.13) ───── Los cinco
 	// de abajo los dispara un reloj, no una persona.
 
-	bus.Subscribe("reserva.recordatorio", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.RecordatorioDeReserva)
-		if !ok {
-			log.Printf("notification: payload inesperado para reserva.recordatorio: %+v", e.Payload)
-			return
-		}
-		if payload.UsuarioID == "" {
-			return // un bloqueo administrativo no tiene a quién avisarle
-		}
-		mensaje := mensajeDeRecordatorio(payload)
-		entregar("reserva.recordatorio", func(ctx context.Context) error {
-			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
-				domain.TipoReservaPorComenzar, domain.Referencias{})
-			return err
-		})
-	})
-
-	bus.Subscribe("reserva.equipo-no-disponible", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.EquipoNoDisponibleParaReserva)
-		if !ok {
-			log.Printf("notification: payload inesperado para reserva.equipo-no-disponible: %+v", e.Payload)
-			return
-		}
-		if payload.UsuarioID == "" {
-			return
-		}
-		mensaje := mensajeDeEquipoNoDisponible(payload)
-		entregar("reserva.equipo-no-disponible", func(ctx context.Context) error {
-			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
-				domain.TipoReservaPorComenzar, domain.Referencias{})
-			return err
-		})
-	})
+	// El recordatorio de "en un rato tenés clase" NO escribe en la campana:
+	// sale solo como correo, y apagado por defecto (RF-05.13). Era el aviso de
+	// mayor volumen del sistema —uno por clase y por día, para siempre— y el
+	// único que no traía ninguna noticia.
+	//
+	// Y el aviso de "una PC tuya no volvió al laboratorio" ya no existe en
+	// ningún canal: quien resuelve eso es el Admin en el mostrador, cambiando
+	// la máquina que falta por otra libre, y se entera mirando la pantalla de
+	// entregas. Avisarle al docente una hora antes era pedirle que resolviera
+	// algo que no puede resolver.
 
 	// RF-04.12. La referencia a la reserva y a quien pide no es decorativa: es
 	// lo que sostiene la regla de un pedido por reserva, por solicitante y por
@@ -326,42 +337,8 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		})
 	})
 
-	bus.Subscribe("reserva.sin-retirar", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.ReservaSinRetirar)
-		if !ok {
-			log.Printf("notification: payload inesperado para reserva.sin-retirar: %+v", e.Payload)
-			return
-		}
-		if payload.UsuarioID == "" {
-			return
-		}
-		mensaje := mensajeDeReservaSinRetirar(payload)
-		entregar("reserva.sin-retirar", func(ctx context.Context) error {
-			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
-				domain.TipoReservaNoRetirada, domain.Referencias{})
-			return err
-		})
-	})
-
-	// Los dos de las máquinas que no volvieron van a los Admin: son ellos
-	// quienes pueden ir a buscarlas.
-	bus.Subscribe("prestamo.demorado", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.PrestamosDemorados)
-		if !ok {
-			log.Printf("notification: payload inesperado para prestamo.demorado: %+v", e.Payload)
-			return
-		}
-		if len(payload.Prestamos) == 0 {
-			return
-		}
-		mensaje := mensajeDePrestamosDemorados(payload)
-		entregar("prestamo.demorado", func(ctx context.Context) error {
-			_, err := svc.NotificarATodosLosAdmins(ctx, mensaje, domain.TipoEquipoSinDevolver,
-				domain.Referencias{})
-			return err
-		})
-	})
-
+	// El corte de fin de jornada va a los Admin: son ellos quienes pueden ir a
+	// buscar las máquinas.
 	bus.Subscribe("prestamo.sin-devolver.cierre", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.EquiposSinDevolverAlCierre)
 		if !ok {
@@ -378,21 +355,11 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 			return err
 		})
 
-		// Y al docente que la tiene reservada, si hay uno: es el único para
-		// quien esto es accionable antes de mañana.
-		for _, pc := range payload.Equipos {
-			if pc.ProximoUsuarioID == "" {
-				continue
-			}
-			usuarioID, aviso := pc.ProximoUsuarioID, pc
-			entregar("prestamo.sin-devolver.cierre (docente siguiente)", func(ctx context.Context) error {
-				mensaje := fmt.Sprintf("%s, que tenés reservado para el %s, quedó fuera del laboratorio al cierre",
-					aviso.Etiqueta, formatearFecha(aviso.ProximaFecha))
-				_, err := svc.NotificarUsuario(ctx, usuarioID, mensaje,
-					domain.TipoReservaPorComenzar, domain.Referencias{})
-				return err
-			})
-		}
+		// Al docente de la próxima reserva NO se le avisa acá. El corte sale de
+		// noche, cuando ya no puede hacer nada, y el aviso de "tu PC puede no
+		// estar" le llega igual una hora antes de su clase —que es cuando
+		// todavía puede conseguir otra— desde reserva.equipo-no-disponible.
+		// Mandar los dos es un aviso de madrugada que no cambia nada.
 	})
 
 	// RF-05.1/05.2/05.3: una reserva puntual se canceló (manual, bloqueo

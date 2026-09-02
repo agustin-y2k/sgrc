@@ -754,7 +754,15 @@ func TestDarDeBaja_Docente_PublicaEventoDeMateriaHuerfana(t *testing.T) {
 	}
 }
 
-func TestDarDeBaja_Docente_PublicaEventoDeNotificarAdmin_SiSigueOtroDocente(t *testing.T) {
+// Dar de baja a un docente de una materia que conserva OTRO docente no avisa
+// nada. Era RF-05.4 y se retiró en la 1.18.0: el aviso no nombraba ni al
+// docente ni a la materia, no llevaba a ninguna pantalla y no pedía ninguna
+// acción —no se canceló ninguna reserva—, y le llegaba a todos los Admin por
+// algo que uno de ellos acababa de hacer.
+//
+// La baja en sí tiene que seguir funcionando: lo que desaparece es el ruido,
+// no la operación.
+func TestDarDeBaja_Docente_NoAvisaNadaSiLaMateriaConservaOtroDocente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["d1"] = &domain.Usuario{ID: "d1", Rol: domain.RolDocente, Estado: domain.EstadoAprobada}
 
@@ -764,20 +772,26 @@ func TestDarDeBaja_Docente_PublicaEventoDeNotificarAdmin_SiSigueOtroDocente(t *t
 
 	svc := nuevoServicioConCascada(repo, gestor, nuevoFakeCanceladorReservas())
 
-	recibido := make(chan eventbus.Evento, 1)
-	svc.bus.Subscribe("docente.baja.notificar_admin", func(e eventbus.Evento) {
-		recibido <- e
-	})
+	publicados := make(chan eventbus.Evento, 4)
+	for _, tipo := range []string{
+		"docente.baja.notificar_admin",
+		"docente.baja.materia-huerfana",
+	} {
+		svc.bus.Subscribe(tipo, func(e eventbus.Evento) { publicados <- e })
+	}
 
 	if err := svc.DarDeBaja(context.Background(), "d1"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
+	if repo.usuarios["d1"].Estado != domain.EstadoBaja {
+		t.Errorf("la baja tiene que hacerse igual: estado = %q", repo.usuarios["d1"].Estado)
+	}
 
 	select {
-	case <-recibido:
-		// esperado
-	case <-time.After(time.Second):
-		t.Fatal("nunca se publicó el evento de notificación a Admin")
+	case e := <-publicados:
+		t.Errorf("no tendría que publicarse ningún aviso, salió %q", e.Tipo)
+	case <-time.After(200 * time.Millisecond):
+		// esperado: silencio
 	}
 }
 

@@ -366,6 +366,10 @@ func (r *fakeRepo) MarcarTodasLeidasDe(ctx context.Context, usuarioID string, ah
 	return n, nil
 }
 
+func (r *fakeRepo) MarcarLeidasPorTipo(ctx context.Context, tipo domain.Tipo, ahora time.Time) (int, error) {
+	return 0, nil
+}
+
 // ── Preferencias de correo (RF-05.13) ───────────────────────────────────
 
 func leerPreferencias(t *testing.T, app *fiber.App, usuarioID, rol string) []preferenciaEmailResponse {

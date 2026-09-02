@@ -200,6 +200,30 @@ func (r *PostgresRepo) ListarLicencias(ctx context.Context) ([]*application.Lice
 	return escanearFilasConUbicacion(rows)
 }
 
+// ContarPendientesDeRenovar cuenta las licencias que hoy están POR_VENCER o
+// VENCIDA, sin importar si ya se avisó de ellas.
+//
+// Es una pregunta distinta de la de ListarCandidatasAAviso, y la diferencia es
+// justo la marca de aviso: una licencia que ya avisó y nadie renovó deja de
+// ser candidata a un aviso NUEVO, pero sigue pendiente de resolver. Lo que se
+// pregunta acá es "¿queda algo por renovar?", que es lo que decide si el aviso
+// de la campana todavía tiene a qué apuntar.
+func (r *PostgresRepo) ContarPendientesDeRenovar(ctx context.Context, hoy time.Time) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM licencia_software l
+		JOIN equipo p ON p.id = l.equipo_id
+		WHERE l.fecha_vencimiento IS NOT NULL
+		  AND p.dado_de_baja = false
+		  AND l.fecha_vencimiento - l.dias_aviso <= $1
+	`, domain.Dia(hoy)).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("contando licencias pendientes de renovar: %w", err)
+	}
+	return n, nil
+}
+
 // ListarCandidatasAAviso es el filtro grueso del job.
 func (r *PostgresRepo) ListarCandidatasAAviso(ctx context.Context, hoy time.Time) ([]*application.LicenciaConUbicacion, error) {
 	rows, err := r.pool.Query(ctx, `

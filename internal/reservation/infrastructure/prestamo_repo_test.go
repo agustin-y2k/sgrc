@@ -445,8 +445,8 @@ func TestPostgresRepo_Prestamo_SinAnotarQuienRetira(t *testing.T) {
 	}
 }
 
-// PrestamosAVigilar es la consulta que alimenta el barrido de fondo: el
-// reclamo por devolución demorada y el aviso de cierre de jornada.
+// PrestamosAVigilar es la consulta que alimenta el barrido de fondo: el aviso
+// de cierre de jornada.
 func TestPostgresRepo_PrestamosAVigilar_TraeTodasLasColumnas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -605,4 +605,63 @@ func TestPostgresRepo_ReservasAVigilar_SinReservasDelDia(t *testing.T) {
 	if len(aVigilar) != 0 {
 		t.Fatalf("esperaba ninguna, obtuve %d", len(aVigilar))
 	}
+}
+
+// ContarAvisadosSinDevolver es la consulta que cierra el aviso de "quedaron
+// equipos afuera": mientras quede uno del que ya se avisó, el aviso sigue
+// siendo cierto y no se toca.
+//
+// Lo que este test protege es que mire `avisado_cierre_para` y no "todo lo que
+// está afuera". Son cosas distintas: una máquina que salió esta mañana está
+// afuera pero nadie avisó de ella, y si contara, el aviso de anoche no se
+// cerraría nunca en un laboratorio con movimiento.
+func TestPostgresRepo_ContarAvisadosSinDevolver(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	// Dos máquinas afuera, y de una sola se avisó al cierre.
+	avisada := crearPrestamoDeTest(t, repo, entregaDeTest(crearEquipoDeCarroDeTest(t, pool)), ahora)
+	crearPrestamoDeTest(t, repo, entregaDeTest(crearEquipoDeCarroDeTest(t, pool)), ahora)
+
+	if n := contarAvisados(t, repo, ctx); n != 0 {
+		t.Fatalf("todavía no se avisó de ninguna, esperaba 0, obtuve %d", n)
+	}
+
+	if err := repo.MarcarCierreAvisado(ctx, avisada.ID, ahora); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if n := contarAvisados(t, repo, ctx); n != 1 {
+		t.Fatalf("se avisó de una: esperaba 1, obtuve %d", n)
+	}
+
+	// La otra sigue afuera pero no cuenta: nadie avisó de ella. Es el caso que
+	// haría que el aviso nunca se cerrara si la consulta mirara `devuelto_en`
+	// a secas.
+	//
+	// Al recibir la avisada, no queda nada del aviso y se puede cerrar.
+	recibida, err := repo.BuscarPrestamoPorID(ctx, avisada.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if err := recibida.Devolver("", "", ahora.Add(time.Hour)); err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.GuardarPrestamo(ctx, recibida); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if n := contarAvisados(t, repo, ctx); n != 0 {
+		t.Errorf("volvió la única avisada: esperaba 0, obtuve %d", n)
+	}
+}
+
+func contarAvisados(t *testing.T, repo *PostgresRepo, ctx context.Context) int {
+	t.Helper()
+	n, err := repo.ContarAvisadosSinDevolver(ctx)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	return n
 }

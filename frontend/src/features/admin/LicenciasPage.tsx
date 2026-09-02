@@ -245,9 +245,24 @@ function FilaDeLicencia({
   )
 }
 
-function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
+/**
+ * El panel para cargar una licencia en varios equipos a la vez.
+ *
+ * Quien decide si está abierto es la PÁGINA, no este componente, y no es un
+ * detalle de estilo: el botón vive en la acción del encabezado, que es un slot
+ * `shrink-0` pensado para un control chico. Cuando este panel se renderizaba
+ * ahí adentro, se negaba a encoger y aplastaba el título y la descripción de
+ * la pantalla hasta dejarlos en una palabra por renglón. Ahora el encabezado
+ * recibe el botón y el panel se dibuja debajo, a lo ancho de la página.
+ */
+function AltaDeLicencias({
+  sugerencias,
+  onCerrar,
+}: {
+  sugerencias: string[]
+  onCerrar: () => void
+}) {
   const queryClient = useQueryClient()
-  const [abierto, setAbierto] = useState(false)
   const [campos, setCampos] = useState<CamposLicencia>(LICENCIA_VACIA)
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set())
   const [resumen, setResumen] = useState<string | null>(null)
@@ -299,16 +314,8 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
     },
   })
 
-  if (!abierto) {
-    return (
-      <Button variant="outline" onClick={() => setAbierto(true)}>
-        Cargar una licencia
-      </Button>
-    )
-  }
-
   return (
-    <Card>
+    <Card className="mb-6">
       <CardHeader>
         <CardTitle>Cargar una licencia</CardTitle>
         <CardDescription>
@@ -362,8 +369,8 @@ function AltaDeLicencias({ sugerencias }: { sugerencias: string[] }) {
               type="button"
               variant="outline"
               onClick={() => {
-                setAbierto(false)
                 setResumen(null)
+                onCerrar()
               }}
             >
               Cerrar
@@ -444,6 +451,7 @@ function RenovacionMasiva({ ids, onListo }: { ids: string[]; onListo: () => void
 
 export function LicenciasPage() {
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
+  const [altaAbierta, setAltaAbierta] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: LICENCIAS_KEY,
@@ -477,8 +485,18 @@ export function LicenciasPage() {
       <EncabezadoDePagina
         titulo="Licencias de software"
         descripcion="Qué software con vencimiento hay en cada equipo y cuántos días le quedan. El día antes de que venza —y el día que vence— les llega un mail a todos los administradores."
-        accion={<AltaDeLicencias sugerencias={sugerencias} />}
+        accion={
+          !altaAbierta && (
+            <Button variant="outline" onClick={() => setAltaAbierta(true)}>
+              Cargar una licencia
+            </Button>
+          )
+        }
       />
+
+      {altaAbierta && (
+        <AltaDeLicencias sugerencias={sugerencias} onCerrar={() => setAltaAbierta(false)} />
+      )}
 
       {error && (
         <Alert variant="destructive" className="mb-4">

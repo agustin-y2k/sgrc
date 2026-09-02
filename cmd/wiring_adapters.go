@@ -82,6 +82,30 @@ func (a *reservationValidadorJornadaAdapter) CierreDeLaJornada(ctx context.Conte
 	return reservationapp.CierreDeJornada{Declarada: declarada, Abre: abre, Fin: fin}, nil
 }
 
+// reservationValidadorMostradorAdapter satisface
+// reservation/application.ValidadorMostrador — el segundo puerto hacia
+// availability, por el que el barrido pregunta si había alguien operando el
+// sistema antes de concluir nada (RF-07.6).
+type reservationValidadorMostradorAdapter struct {
+	availabilitySvc *availabilityapp.Service
+}
+
+func (a *reservationValidadorMostradorAdapter) MostradorEn(ctx context.Context, momento time.Time) (reservationapp.MostradorAtendido, error) {
+	c, err := a.availabilitySvc.MostradorEn(ctx, momento)
+	if err != nil {
+		return reservationapp.MostradorAtendido{}, err
+	}
+	return reservationapp.MostradorAtendido{Atendido: c.Atendido, Declarado: c.Declarado}, nil
+}
+
+func (a *reservationValidadorMostradorAdapter) MostradorEseDia(ctx context.Context, fecha time.Time) (reservationapp.MostradorAtendido, error) {
+	c, err := a.availabilitySvc.MostradorEseDia(ctx, fecha)
+	if err != nil {
+		return reservationapp.MostradorAtendido{}, err
+	}
+	return reservationapp.MostradorAtendido{Atendido: c.Atendido, Declarado: c.Declarado}, nil
+}
+
 // availabilityReservasAdapter satisface
 // availability/application.ReservasDeLaInstitucion envolviendo
 // reservation/application.Service.

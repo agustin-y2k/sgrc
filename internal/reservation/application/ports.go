@@ -87,10 +87,10 @@ type Repo interface {
 
 	// Las cinco marcas de idempotencia.
 	MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error
-	MarcarAvisoSinRetirarEnviado(ctx context.Context, grupoID string, ahora time.Time) error
-	MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error
-	MarcarDemoraAvisada(ctx context.Context, prestamoID string, ahora time.Time) error
 	MarcarCierreAvisado(ctx context.Context, prestamoID string, jornada time.Time) error
+	// ContarAvisadosSinDevolver: de cuántos equipos ya salió el aviso de cierre
+	// y todavía no volvieron. Con cero, ese aviso se cierra en la campana.
+	ContarAvisadosSinDevolver(ctx context.Context) (int, error)
 
 	// ListarReservas devuelve las reservas que matcheen el filtro, con los
 	// nombres de PC, carro, materia y curso ya resueltos.
@@ -398,11 +398,7 @@ type ReservaParaVigilar struct {
 	DocenteNombre string
 	DocenteEmail  string
 
-	RecordatorioEnviado            bool
-	AvisoEquipoNoDisponibleEnviado bool
-	// AvisoSinRetirarEnviado: ya salió el aviso de "todavía no las retiraste"
-	// (RF-08.20).
-	AvisoSinRetirarEnviado bool
+	RecordatorioEnviado bool
 
 	// EquipoAfuera: hay un préstamo sin devolver sobre esa máquina.
 	EquipoAfuera bool
@@ -504,4 +500,38 @@ type ValidadorJornada interface {
 
 	// CierreDeLaJornada dice cuándo termina la jornada de ese día.
 	CierreDeLaJornada(ctx context.Context, fecha time.Time) (CierreDeJornada, error)
+}
+
+// MostradorAtendido es la respuesta a "¿había alguien operando el sistema?"
+// (RF-07.6). Tiene tres estados y no dos: ver CoberturaDelMostrador en
+// availability, de donde sale.
+type MostradorAtendido struct {
+	// Atendido: hay (o hubo) un Admin de guardia en ese momento.
+	Atendido bool
+	// Declarado: alguien cargó su horario alguna vez. En false, el barrido
+	// opera como si RF-07.6 no existiera.
+	Declarado bool
+}
+
+// Opera dice si el barrido puede sacar conclusiones de lo que ve en la base.
+func (m MostradorAtendido) Opera() bool {
+	return !m.Declarado || m.Atendido
+}
+
+// ValidadorMostrador es el segundo puerto hacia availability: dice si el
+// mostrador estaba atendido, que es la condición de la que dependen las
+// pasadas del barrido que concluyen algo a partir de lo que NO está
+// registrado (RF-07.6).
+//
+// Es un puerto aparte de ValidadorJornada porque son dos preguntas distintas
+// sobre dos cosas distintas: la jornada es el horario de la ESCUELA —cuándo
+// se puede reservar— y el mostrador es el horario de las PERSONAS que operan
+// el sistema. Una escuela abierta sin nadie en el laboratorio es un caso
+// normal, y es justamente el que hay que detectar.
+type ValidadorMostrador interface {
+	// MostradorEn: para las pasadas que evalúan un instante.
+	MostradorEn(ctx context.Context, momento time.Time) (MostradorAtendido, error)
+	// MostradorEseDia: para el corte de fin de jornada, que sale una hora
+	// después de que cerró y no puede preguntar por ese instante.
+	MostradorEseDia(ctx context.Context, fecha time.Time) (MostradorAtendido, error)
 }

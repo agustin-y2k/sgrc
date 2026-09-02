@@ -127,21 +127,6 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
-	bus.Subscribe("reserva.equipo-no-disponible", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.EquipoNoDisponibleParaReserva)
-		if !ok {
-			log.Printf("correo: payload inesperado para reserva.equipo-no-disponible: %+v", e.Payload)
-			return
-		}
-		if payload.Email == "" {
-			return
-		}
-		asunto, cuerpo := m.textoDeEquipoNoDisponible(payload)
-		enviar("por mail la PC que no volvió", func(ctx context.Context) error {
-			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatEquipoNoDisponible, asunto, cuerpo)
-		})
-	})
-
 	// El pedido de un docente a otro (RF-04.12) es de los que más necesitan el
 	// correo: la clase suele ser de esta semana, y un aviso que espera a que el
 	// dueño entre al sistema llega después de la clase.
@@ -157,21 +142,6 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		asunto, cuerpo := m.textoDePedidoDeLiberacion(payload)
 		enviar("por mail el pedido de liberación", func(ctx context.Context) error {
 			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatPedidoDeLiberacion, asunto, cuerpo)
-		})
-	})
-
-	bus.Subscribe("reserva.sin-retirar", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.ReservaSinRetirar)
-		if !ok {
-			log.Printf("correo: payload inesperado para reserva.sin-retirar: %+v", e.Payload)
-			return
-		}
-		if payload.Email == "" {
-			return
-		}
-		asunto, cuerpo := m.textoDeReservaSinRetirar(payload)
-		enviar("por mail el aviso de no retiro", func(ctx context.Context) error {
-			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatReservaSinRetirar, asunto, cuerpo)
 		})
 	})
 
@@ -218,32 +188,19 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
-	// Un pedido para dictar una materia va a los Admin —que deciden— y a quien
-	// ya la dicta, con textos distintos: al segundo no se le pide nada, se lo
-	// pone al tanto.
+	// Un pedido para dictar una materia va SOLO a los Admin, que son quienes
+	// deciden. A quien ya la dicta no se le manda nada: no se le pedía ninguna
+	// acción, y un correo que solo pone al tanto es el tipo de aviso que llena
+	// la casilla sin cambiar lo que nadie hace.
 	bus.Subscribe("materia.pedido.nuevo", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PedidoDeMateriaNuevo)
 		if !ok {
 			log.Printf("correo: payload inesperado para materia.pedido.nuevo: %+v", e.Payload)
 			return
 		}
-		asuntoAdmin, cuerpoAdmin := m.textoDePedidoDeMateria(payload)
-		asuntoTitular, cuerpoTitular := m.textoDePedidoParaElTitular(payload)
+		asunto, cuerpo := m.textoDePedidoDeMateria(payload)
 		enviar("por mail un pedido de materia", func(ctx context.Context) error {
-			if err := m.enviarALosAdminsSuscriptos(ctx, domain.CatPedidoDeMateria, asuntoAdmin, cuerpoAdmin); err != nil {
-				return err
-			}
-			var ultimo error
-			for _, d := range payload.DocentesActuales {
-				if d.Email == "" || d.UsuarioID == payload.UsuarioID {
-					continue
-				}
-				if err := m.enviarSiLoQuiere(ctx, d.Email, domain.CatPedidoSobreMiMateria,
-					asuntoTitular, cuerpoTitular); err != nil {
-					ultimo = err
-				}
-			}
-			return ultimo
+			return m.enviarALosAdminsSuscriptos(ctx, domain.CatPedidoDeMateria, asunto, cuerpo)
 		})
 	})
 
@@ -262,34 +219,6 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
-	// El reclamo va a dos lados: a los Admin con la lista completa, y a cada
-	// persona que tenga cuenta con el suyo.
-	bus.Subscribe("prestamo.demorado", func(e eventbus.Evento) {
-		payload, ok := e.Payload.(eventbus.PrestamosDemorados)
-		if !ok {
-			log.Printf("correo: payload inesperado para prestamo.demorado: %+v", e.Payload)
-			return
-		}
-		if len(payload.Prestamos) == 0 {
-			return
-		}
-		asunto, cuerpo := m.textoDeDemoraParaAdmins(payload)
-		enviar("por mail las devoluciones demoradas", func(ctx context.Context) error {
-			return m.enviarALosAdminsSuscriptos(ctx, domain.CatDevolucionDemorada, asunto, cuerpo)
-		})
-
-		for _, p := range payload.Prestamos {
-			if p.Email == "" {
-				continue
-			}
-			demorado := p
-			asunto, cuerpo := m.textoDeDemoraParaQuienLaTiene(demorado)
-			enviar("por mail el recordatorio de devolución", func(ctx context.Context) error {
-				return m.enviarSiLoQuiere(ctx, demorado.Email, domain.CatDevolucionPendiente, asunto, cuerpo)
-			})
-		}
-	})
-
 	bus.Subscribe("prestamo.sin-devolver.cierre", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.EquiposSinDevolverAlCierre)
 		if !ok {
@@ -304,16 +233,9 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 			return m.enviarALosAdminsSuscriptos(ctx, domain.CatCierreSinDevolver, asunto, cuerpo)
 		})
 
-		for _, pc := range payload.Equipos {
-			if pc.ProximoEmail == "" {
-				continue
-			}
-			aviso := pc
-			asunto, cuerpo := m.textoDeCierreParaElProximo(aviso)
-			enviar("por mail la PC que le va a faltar al docente siguiente", func(ctx context.Context) error {
-				return m.enviarSiLoQuiere(ctx, aviso.ProximoEmail, domain.CatEquipoNoDisponible, asunto, cuerpo)
-			})
-		}
+		// Al docente de la próxima reserva no se le manda nada acá: ver el
+		// mismo punto en subscribers.go. Su aviso sale una hora antes de la
+		// clase, que es cuando todavía puede hacer algo.
 	})
 
 	// ── Aviso a la persona: le aprobaron la cuenta ──────────────────

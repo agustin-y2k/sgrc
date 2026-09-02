@@ -57,6 +57,7 @@ export function UsuariosPage() {
   const queryClient = useQueryClient()
   const [filtroEstado, setFiltroEstado] = useState<Estado | "">("")
   const [pagina, setPagina] = useState(1)
+  const [altaAbierta, setAltaAbierta] = useState(false)
   const [confirmando, setConfirmando] = useState<Confirmacion | null>(null)
   const [passwordTemporal, setPasswordTemporal] = useState<{
     usuario: string
@@ -134,8 +135,18 @@ export function UsuariosPage() {
         titulo="Usuarios"
         descripcion="Todas las cuentas del sistema: estado, asignaciones y restablecimiento de contraseña."
         /* RF-01.4 */
-        accion={<AltaDeAdmin usuariosKey={USUARIOS_KEY} />}
+        accion={
+          !altaAbierta && (
+            <Button variant="outline" onClick={() => setAltaAbierta(true)}>
+              Crear otro Admin
+            </Button>
+          )
+        }
       />
+
+      {altaAbierta && (
+        <AltaDeAdmin usuariosKey={USUARIOS_KEY} onCerrar={() => setAltaAbierta(false)} />
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <label className="text-sm" htmlFor="filtroEstado">

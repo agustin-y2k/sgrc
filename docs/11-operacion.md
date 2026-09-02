@@ -650,27 +650,73 @@ perder, es más barato `docker compose down -v` y arrancar limpio.
 ### El barrido de entregas y devoluciones
 
 El barrido corre dentro del mismo proceso, cada cinco minutos, sin cron ni
-nada que instalar. Cinco variables opcionales lo ajustan:
-`RETIRO_AVISO_MINUTOS` (15), `RETIRO_GRACIA_MINUTOS` (40),
-`RETIRO_PARCIAL_GRACIA_MINUTOS` (15), `DEVOLUCION_DEMORA_MINUTOS` (10) y
+nada que instalar. Tres variables opcionales lo ajustan:
+`RETIRO_GRACIA_MINUTOS` (40), `RETIRO_PARCIAL_GRACIA_MINUTOS` (15) y
 `CIERRE_JORNADA` (23). Un valor mal escrito **impide levantar**, a propósito:
 descubrirlo tres horas después porque un aviso no salió es peor.
 
-Las tres primeras se leen juntas, porque son tres momentos de la misma clase y
-dos de ellas valen 15 por defecto sin ser lo mismo:
+> `RETIRO_AVISO_MINUTOS` y `DEVOLUCION_DEMORA_MINUTOS` **ya no se usan** desde
+> la 1.18.0: el aviso de no retiro (RF-08.20) y el reclamo de devolución
+> (RF-08.12) se retiraron. Si siguen en el `.env` el sistema levanta igual y
+> lo dice en el log, para que quien lo mantenga sepa que puede sacarlas.
+
+Las dos primeras se leen juntas, porque son dos momentos de la misma clase:
 
 | Variable | Desde cuándo cuenta | Qué hace |
 |---|---|---|
-| `RETIRO_AVISO_MINUTOS` (15) | el inicio de la clase | **Avisa** al docente que todavía no las retiró y que a los 40 quedan libres. Es el único aviso de esta etapa (RF-08.20) |
 | `RETIRO_GRACIA_MINUTOS` (40) | el inicio de la clase | **Libera**, en silencio, si no se retiró ninguna |
 | `RETIRO_PARCIAL_GRACIA_MINUTOS` (15) | la última **entrega** | **Libera**, en silencio, lo que el docente dejó cuando vino a buscar una parte |
 
-Las dos de liberación no avisan nada: el correo ya salió a los 15 minutos del
-inicio, cuando el docente todavía podía ir, cambiar la máquina o cancelar.
-Mandar otro al liberar sería un segundo mensaje por la misma clase para contar
-un hecho consumado. Si se sube `RETIRO_AVISO_MINUTOS` por encima de
-`RETIRO_GRACIA_MINUTOS`, el aviso pierde su razón de ser —llegaría con la
-reserva ya liberada—, así que esa combinación se rechaza al arrancar.
+Las dos liberan sin avisar nada, y desde la 1.18.0 tampoco las precede ningún
+aviso. Liberar le devuelve la máquina al resto de la escuela; no es un
+reproche, y el docente que no fue se entera al llegar.
+
+#### Sin nadie en el mostrador, el barrido no hace nada (RF-07.6)
+
+**Esta es la condición que más conviene entender antes de tocar cualquier
+plazo.** El barrido deduce cosas de lo que NO está registrado: si a los
+cuarenta minutos ninguna máquina figura entregada, concluye que nadie las fue
+a buscar. Eso solo vale mientras haya un `ADMIN` operando el sistema.
+
+El día que el `ADMIN` falta y lo cubre un directivo o un preceptor que anota
+en papel, el sistema no ve "nadie vino": ve su propio silencio. Por eso, antes
+de liberar nada, el barrido pregunta si algún `ADMIN` tenía horario cargado
+que cubriera ese momento (RF-07.1) y no declaró ausencia para ese día
+(RF-07.4). Si no lo hay:
+
+- no libera ninguna reserva,
+- no avisa que una computadora no volvió,
+- no saca el corte de fin de jornada **ni marca los préstamos**, para que el
+  corte pueda salir el día que alguien sí atienda,
+- y lo deja dicho en el log: `el mostrador no estaba atendido: no se liberó ni
+  se avisó nada`.
+
+El recordatorio de "en un rato tenés clase" **sí sale igual**: no deduce nada.
+
+**Si nadie cargó horarios, el barrido opera como siempre.** No declarar nada
+no es declarar que no hay nadie — es una escuela que todavía no configuró
+esto. Sin esa regla, actualizar a la 1.18.0 apagaría el barrido solo y en
+silencio.
+
+**El día que el barrido "no hace nada", mirá primero los horarios**, no los
+plazos: `Horario Admins` en la aplicación, o `SELECT * FROM horario_admin;`.
+
+#### El job de licencias
+
+`LICENCIAS_HORA_AVISO` (7) es la hora, en la zona de la escuela, **a partir de
+la cual** puede salir el aviso del día: un mail a las 00:05 se lee a la mañana
+igual, pero llega con cara de que algo se rompió de madrugada.
+
+`LICENCIAS_INTERVALO_MINUTOS` (60) es cada cuánto se revisa. **En producción no
+hay motivo para tocarlo**: lo que decide cuándo sale el aviso es la variable de
+arriba. Existe para poder ver el ciclo completo sin esperar —al probar el
+sistema, al preparar una capacitación—: con `1`, cargás una licencia vencida y
+el aviso aparece en la campana al minuto.
+
+> El aviso de una licencia sale **una sola vez por ciclo** aunque el job corra
+> cada minuto: la marca de "ya avisé" apunta a la fecha de vencimiento para la
+> que salió, así que bajar el intervalo no multiplica los correos. Renovar
+> cambia esa fecha y reabre el ciclo solo.
 
 #### `CIERRE_JORNADA`: el corte de lo que quedó afuera
 

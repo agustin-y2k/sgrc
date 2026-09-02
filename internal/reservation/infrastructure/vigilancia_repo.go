@@ -29,8 +29,6 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 			COALESCE(u.nombre || ' ' || u.apellido, res.nombre_docente_snapshot, ''),
 			COALESCE(u.email, ''),
 			g.recordatorio_enviado_en IS NOT NULL,
-			res.avisado_equipo_no_disponible_en IS NOT NULL,
-			g.aviso_sin_retirar_en IS NOT NULL,
 			p.id IS NOT NULL,
 			p.devolucion_estimada,
 			(SELECT max(pe.entregado_en)
@@ -67,7 +65,7 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 			&v.ReservaID, &v.GrupoID, &v.EquipoID, &v.Identificador,
 			&v.Fecha, &horaInicio, &horaFin, &tipo, &v.MateriaNombre, &v.Etiqueta,
 			&v.DocenteID, &v.DocenteNombre, &v.DocenteEmail,
-			&v.RecordatorioEnviado, &v.AvisoEquipoNoDisponibleEnviado, &v.AvisoSinRetirarEnviado,
+			&v.RecordatorioEnviado,
 			&v.EquipoAfuera, &v.EquipoDebioVolverA, &v.UltimaEntregaDelGrupo,
 		); err != nil {
 			return nil, fmt.Errorf("escaneando reserva a vigilar: %w", err)
@@ -117,7 +115,7 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 			&p.RetiradoPor, &motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
-			&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
+			&p.AvisadoCierrePara,
 			&v.Identificador, &v.Etiqueta, &v.CarroNombre, &materiaNombre,
 			&v.Email,
 		); err != nil {
@@ -143,19 +141,24 @@ func (r *PostgresRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID st
 		grupoID, ahora, "recordatorio")
 }
 
-func (r *PostgresRepo) MarcarAvisoSinRetirarEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
-	return r.marcar(ctx, `UPDATE reserva_grupo SET aviso_sin_retirar_en=$2 WHERE id=$1`,
-		grupoID, ahora, "aviso de no retiro")
-}
-
-func (r *PostgresRepo) MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
-	return r.marcar(ctx, `UPDATE reserva SET avisado_equipo_no_disponible_en=$2 WHERE id=$1`,
-		reservaID, ahora, "aviso de PC no disponible")
-}
-
-func (r *PostgresRepo) MarcarDemoraAvisada(ctx context.Context, prestamoID string, ahora time.Time) error {
-	return r.marcar(ctx, `UPDATE prestamo SET avisado_demora_en=$2 WHERE id=$1`,
-		prestamoID, ahora, "reclamo de devolución")
+// ContarAvisadosSinDevolver cuenta los equipos por los que ya salió un aviso
+// de cierre y que todavía no volvieron.
+//
+// Es la condición que cierra ese aviso en la campana: mientras quede uno
+// afuera el aviso sigue siendo cierto, y cuando el último vuelve deja de
+// tener a qué apuntar. Se mira `avisado_cierre_para` y no "todo lo que está
+// afuera" a propósito: una máquina que salió esta mañana está afuera pero
+// nadie avisó de ella, y no tiene por qué mantener abierto el aviso de anoche.
+func (r *PostgresRepo) ContarAvisadosSinDevolver(ctx context.Context) (int, error) {
+	var n int
+	err := r.db.QueryRow(ctx, `
+		SELECT count(*) FROM prestamo
+		WHERE avisado_cierre_para IS NOT NULL AND devuelto_en IS NULL
+	`).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("contando los equipos avisados que siguen afuera: %w", err)
+	}
+	return n, nil
 }
 
 // MarcarCierreAvisado guarda la JORNADA avisada, no un instante: el corte de

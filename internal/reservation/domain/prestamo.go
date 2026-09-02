@@ -55,8 +55,7 @@ type Prestamo struct {
 	RecibidoPor   *string
 	Observaciones string
 
-	// Marcas del barrido (RF-08.12/08.13).
-	AvisadoDemoraEn   *time.Time
+	// AvisadoCierrePara: marca del corte de fin de jornada (RF-08.13).
 	AvisadoCierrePara *time.Time
 }
 
@@ -148,13 +147,4 @@ func (p *Prestamo) MinutosDeDemora(ahora time.Time) int {
 		return 0
 	}
 	return int(ahora.Sub(*p.DevolucionEstimada).Minutes())
-}
-
-// ExcedioLaDemora dice si ya pasó la hora de devolución MÁS el margen que la
-// escuela tolera antes de reclamar.
-func (p *Prestamo) ExcedioLaDemora(margen time.Duration, ahora time.Time) bool {
-	if !p.EstaAbierto() || p.DevolucionEstimada == nil {
-		return false
-	}
-	return !ahora.Before(p.DevolucionEstimada.Add(margen))
 }

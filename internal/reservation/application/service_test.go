@@ -36,11 +36,9 @@ type fakeRepo struct {
 	identificadorDeEquipo map[string]int
 	contactoDeUsuario     map[string][2]string // usuarioID → {nombre, email}
 	// Las marcas del barrido, que en la base son columnas.
-	recordatorioEnviado     map[string]time.Time
-	pcsOcupadas             []EquipoOcupado
-	pedidosDeLiberacion     map[string]bool
-	avisoSinRetirarEnviado  map[string]time.Time
-	avisoEquipoNoDisponible map[string]time.Time
+	recordatorioEnviado map[string]time.Time
+	pcsOcupadas         []EquipoOcupado
+	pedidosDeLiberacion map[string]bool
 
 	errBuscarSolapamientos error
 }
@@ -53,12 +51,10 @@ func nuevoFakeRepo() *fakeRepo {
 		prestamos:      make(map[string]*domain.Prestamo),
 		pcsDadasDeBaja: make(map[string]bool),
 
-		identificadorDeEquipo:   make(map[string]int),
-		contactoDeUsuario:       make(map[string][2]string),
-		recordatorioEnviado:     make(map[string]time.Time),
-		pedidosDeLiberacion:     make(map[string]bool),
-		avisoSinRetirarEnviado:  make(map[string]time.Time),
-		avisoEquipoNoDisponible: make(map[string]time.Time),
+		identificadorDeEquipo: make(map[string]int),
+		contactoDeUsuario:     make(map[string][2]string),
+		recordatorioEnviado:   make(map[string]time.Time),
+		pedidosDeLiberacion:   make(map[string]bool),
 	}
 }
 
@@ -107,9 +103,7 @@ func (r *fakeRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]Reser
 				}
 			}
 			_, v.RecordatorioEnviado = r.recordatorioEnviado[*res.ReservaGrupoID]
-			_, v.AvisoSinRetirarEnviado = r.avisoSinRetirarEnviado[*res.ReservaGrupoID]
 		}
-		_, v.AvisoEquipoNoDisponibleEnviado = r.avisoEquipoNoDisponible[res.ID]
 
 		for _, p := range r.prestamos {
 			if p.EquipoID == res.EquipoID && p.EstaAbierto() {
@@ -204,29 +198,22 @@ func (r *fakeRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID string
 	return nil
 }
 
-func (r *fakeRepo) MarcarAvisoSinRetirarEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
-	r.avisoSinRetirarEnviado[grupoID] = ahora
-	return nil
-}
-
-func (r *fakeRepo) MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
-	r.avisoEquipoNoDisponible[reservaID] = ahora
-	return nil
-}
-
-func (r *fakeRepo) MarcarDemoraAvisada(ctx context.Context, prestamoID string, ahora time.Time) error {
-	if p, ok := r.prestamos[prestamoID]; ok {
-		p.AvisadoDemoraEn = &ahora
-	}
-	return nil
-}
-
 func (r *fakeRepo) MarcarCierreAvisado(ctx context.Context, prestamoID string, jornada time.Time) error {
 	if p, ok := r.prestamos[prestamoID]; ok {
 		d := diaDe(jornada)
 		p.AvisadoCierrePara = &d
 	}
 	return nil
+}
+
+func (r *fakeRepo) ContarAvisadosSinDevolver(ctx context.Context) (int, error) {
+	n := 0
+	for _, p := range r.prestamosEnOrden() {
+		if p.AvisadoCierrePara != nil && p.DevueltoEn == nil {
+			n++
+		}
+	}
+	return n, nil
 }
 
 func diaDe(t time.Time) time.Time {
@@ -565,8 +552,26 @@ func (r *fakeRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, cicloID s
 	// verdad, donde sí existen esas tablas.
 	return 0, 0, nil
 }
+
+// ListarReservasConfirmadasVencidas reproduce la consulta real: las
+// CONFIRMADA cuya franja ya terminó. Devolvía nil, y con eso ningún test podía
+// ver qué le pasa a una reserva que nadie tocó cuando se le acaba el horario
+// —que es justo lo que hay que saber el día que no hubo nadie en el mostrador
+// (RF-07.6)—.
 func (r *fakeRepo) ListarReservasConfirmadasVencidas(ctx context.Context, ahora time.Time, limite int) ([]*domain.Reserva, error) {
-	return nil, nil
+	var vencidas []*domain.Reserva
+	for _, res := range r.enOrden() {
+		if res.Estado != domain.ReservaConfirmada {
+			continue
+		}
+		if domain.YaTermino(res.Fecha, res.HoraInicio, res.HoraFin, ahora) {
+			vencidas = append(vencidas, res)
+		}
+		if len(vencidas) >= limite {
+			break
+		}
+	}
+	return vencidas, nil
 }
 func (r *fakeRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]EquipoDisponible, error) {
 	r.materiaRecibidaAlListar = materiaID
@@ -2638,4 +2643,52 @@ func (f *fakeValidadorJornada) CierreDeLaJornada(_ context.Context, fecha time.T
 		return CierreDeJornada{}, nil
 	}
 	return f.cierre(fecha), nil
+}
+
+// fakeValidadorMostrador dice si había alguien operando el sistema (RF-07.6).
+//
+// El cero value es "en esta escuela nadie declaró horarios": Declarado en
+// false, que es lo que hace que Opera() dé true. Así, los tests que no dicen
+// nada del mostrador siguen viendo el barrido de siempre, y solo los que
+// importan tienen que hablar del tema.
+type fakeValidadorMostrador struct {
+	// declarado + atendido: los dos juntos son "hay horarios cargados y
+	// ninguno cubre este momento", el caso que apaga las tres pasadas.
+	declarado bool
+	atendido  bool
+	// err para probar que un fallo no se traduce en liberar por las dudas.
+	err error
+	// eseDia permite que el corte de jornada responda distinto del instante,
+	// que es justamente para lo que existe MostradorEseDia.
+	eseDia *bool
+}
+
+func (f *fakeValidadorMostrador) MostradorEn(_ context.Context, _ time.Time) (MostradorAtendido, error) {
+	if f.err != nil {
+		return MostradorAtendido{}, f.err
+	}
+	return MostradorAtendido{Atendido: f.atendido, Declarado: f.declarado}, nil
+}
+
+func (f *fakeValidadorMostrador) MostradorEseDia(_ context.Context, _ time.Time) (MostradorAtendido, error) {
+	if f.err != nil {
+		return MostradorAtendido{}, f.err
+	}
+	atendido := f.atendido
+	if f.eseDia != nil {
+		atendido = *f.eseDia
+	}
+	return MostradorAtendido{Atendido: atendido, Declarado: f.declarado}, nil
+}
+
+// mostradorAtendido es el validador de los tests que necesitan que el barrido
+// opere con horarios efectivamente declarados.
+func mostradorAtendido() *fakeValidadorMostrador {
+	return &fakeValidadorMostrador{declarado: true, atendido: true}
+}
+
+// mostradorSinAtender es el día que el Admin faltó y lo cubrió alguien que no
+// usa el sistema.
+func mostradorSinAtender() *fakeValidadorMostrador {
+	return &fakeValidadorMostrador{declarado: true, atendido: false}
 }

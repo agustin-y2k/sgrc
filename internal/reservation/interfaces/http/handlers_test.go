@@ -126,17 +126,18 @@ func (r *fakeRepo) ProximaReservaDeEquipo(ctx context.Context, equipoID string, 
 func (r *fakeRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
 	return nil
 }
-func (r *fakeRepo) MarcarAvisoSinRetirarEnviado(ctx context.Context, grupoID string, ahora time.Time) error {
-	return nil
-}
-func (r *fakeRepo) MarcarAvisoEquipoNoDisponible(ctx context.Context, reservaID string, ahora time.Time) error {
-	return nil
-}
-func (r *fakeRepo) MarcarDemoraAvisada(ctx context.Context, prestamoID string, ahora time.Time) error {
-	return nil
-}
 func (r *fakeRepo) MarcarCierreAvisado(ctx context.Context, prestamoID string, jornada time.Time) error {
 	return nil
+}
+
+func (r *fakeRepo) ContarAvisadosSinDevolver(ctx context.Context) (int, error) {
+	n := 0
+	for _, p := range r.prestamos {
+		if p.AvisadoCierrePara != nil && p.DevueltoEn == nil {
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (r *fakeRepo) prestamosEnOrden() []*domain.Prestamo {

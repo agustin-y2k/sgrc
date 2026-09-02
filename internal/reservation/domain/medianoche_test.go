@@ -114,14 +114,25 @@ func TestValidarVentanaTemporal_TopeDeDuracionConCruce(t *testing.T) {
 	}
 }
 
-// PuedeLlegarALiberarse restaba las horas crudas, así que para una nocturna
-// daba 01:00 > 22:40 = falso: el sistema concluía que la clase era más corta
-// que el plazo de gracia y que nunca se libera.
-func TestPuedeLlegarALiberarse_ConCruce(t *testing.T) {
-	if !PuedeLlegarALiberarse(hs(22), hs(1), 40*time.Minute) {
-		t.Error("una nocturna de tres horas es más larga que 40 minutos de gracia")
+// La nocturna que cruza la medianoche tiene que poder liberarse igual.
+//
+// Antes esto lo cubría PuedeLlegarALiberarse, que se retiró con el aviso de no
+// retiro (era su único llamador). La protección no se perdió: CorrespondeLiberar
+// mide sobre la duración real, y una clase más corta que la gracia queda afuera
+// por YaTermino —a los 40 minutos ya terminó— sin necesidad de una regla aparte.
+func TestCorrespondeLiberar_ConCruceDeMedianoche(t *testing.T) {
+	// Nocturna del lunes 22:00 a 01:00, y son las 22:45 del lunes: pasaron los
+	// 40 de gracia y la clase sigue en curso.
+	lunes := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	alas2245 := time.Date(2026, 8, 10, 22, 45, 0, 0, time.UTC)
+	if !CorrespondeLiberar(lunes, hs(22), hs(1), 40*time.Minute, alas2245) {
+		t.Error("una nocturna de tres horas ya pasó su gracia a las 22:45")
 	}
-	if PuedeLlegarALiberarse(hs(23), 0, 90*time.Minute) {
-		t.Error("una clase de una hora es más corta que 90 minutos: no se libera nunca")
+
+	// Una clase de una hora con 90 minutos de gracia no se libera nunca: para
+	// cuando el plazo se cumple, la clase ya terminó.
+	alas0030 := time.Date(2026, 8, 11, 0, 30, 0, 0, time.UTC)
+	if CorrespondeLiberar(lunes, hs(23), 0, 90*time.Minute, alas0030) {
+		t.Error("una clase más corta que la gracia no se libera: ya terminó")
 	}
 }

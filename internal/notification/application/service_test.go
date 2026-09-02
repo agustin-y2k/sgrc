@@ -432,6 +432,20 @@ func (r *fakeRepo) MarcarTodasLeidasDe(ctx context.Context, usuarioID string, ah
 	return n, nil
 }
 
+func (r *fakeRepo) MarcarLeidasPorTipo(ctx context.Context, tipo domain.Tipo, ahora time.Time) (int, error) {
+	n := 0
+	for _, notif := range r.notificaciones {
+		if notif.Tipo != tipo || notif.Estado != domain.NoLeida {
+			continue
+		}
+		if err := notif.MarcarLeida(ahora); err != nil {
+			continue
+		}
+		n++
+	}
+	return n, nil
+}
+
 // La página sin inicializar es un caso real: cualquier llamador que arme el
 // filtro a mano y no toque Pagina daría LIMIT 0, o sea una lista vacía sin
 // ningún error que lo explique.
@@ -499,8 +513,7 @@ func TestCategoriasDeEmail_LoQueRecibeQuienNuncaEligio(t *testing.T) {
 	}
 	for _, apagada := range []domain.CategoriaEmail{
 		domain.CatLicenciaPorVencer, domain.CatSugerencia, domain.CatPedidoDeMateria,
-		domain.CatDevolucionDemorada, domain.CatCierreSinDevolver,
-		domain.CatRecordatorioDeReserva, domain.CatReservaSinRetirar, domain.CatDevolucionPendiente,
+		domain.CatCierreSinDevolver, domain.CatRecordatorioDeReserva,
 	} {
 		if contiene(cats, apagada) {
 			t.Errorf("%s tendría que arrancar apagada: %v", apagada, cats)

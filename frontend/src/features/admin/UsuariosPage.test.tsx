@@ -438,4 +438,28 @@ describe("UsuariosPage", () => {
     expect(await screen.findByRole("button", { name: "Aprobar" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Rechazar" })).toBeInTheDocument()
   })
+
+  // Mismo bug que tenía Licencias, y por la misma causa: el panel de alta se
+  // renderizaba dentro del slot de acción del encabezado, que es `shrink-0`,
+  // y aplastaba el título y la descripción de la pantalla.
+  //
+  // jsdom no mide layout, así que lo que se fija es la causa: el panel no
+  // puede ser descendiente del encabezado.
+  it("el panel de alta se dibuja fuera del encabezado, no en su slot de acción", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Crear otro Admin" }))
+
+    const titulo = screen.getByRole("heading", { name: "Usuarios" })
+    const encabezado = titulo.closest("div")?.parentElement
+    const panel = screen.getByText("Nuevo Admin", { selector: "div" })
+
+    expect(encabezado).not.toBeNull()
+    // Que SÍ contenga el título prueba que encontramos el encabezado: sin
+    // esto el assert de abajo pasaría por vacío, con el bug puesto.
+    expect(encabezado!.contains(titulo)).toBe(true)
+    expect(encabezado!.contains(panel)).toBe(false)
+    expect(screen.getByRole("heading", { name: "Usuarios" })).toBeVisible()
+  })
 })
