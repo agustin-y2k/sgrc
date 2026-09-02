@@ -351,7 +351,7 @@ carro y también proyectores, cargadores o notebooks sueltas (RF-03.15).
 | identificador | INTEGER | NULL en los equipos sueltos |
 | nombre | VARCHAR(100) | NULL en los equipos de carro, CHECK no vacío ni con espacios al borde |
 | tipo | VARCHAR(50) | NOT NULL DEFAULT 'PC', CHECK no vacío ni con espacios al borde |
-| numero_serie | VARCHAR(50) | UNIQUE, NULL, CHECK no vacío y en forma canónica |
+| numero_serie | VARCHAR(50) | NULL, único entre los equipos vivos, CHECK no vacío y en forma canónica |
 | freezado | BOOLEAN | NOT NULL DEFAULT false |
 | cpu | VARCHAR(100) | NULL |
 | ram | VARCHAR(20) | NULL |
@@ -362,7 +362,7 @@ carro y también proyectores, cargadores o notebooks sueltas (RF-03.15).
 | dado_de_baja | BOOLEAN | NOT NULL DEFAULT false |
 | fecha_baja | TIMESTAMPTZ | NULL |
 | fecha_alta | TIMESTAMPTZ | NOT NULL DEFAULT now() |
-| | | UNIQUE (carro_id, identificador) |
+| | | Único (carro_id, identificador) entre los equipos vivos |
 | | | CHECK `chk_equipo_identificable` |
 
 ```sql
@@ -376,11 +376,16 @@ CONSTRAINT chk_equipo_identificable CHECK (
 CREATE INDEX idx_equipo_carro_estado ON equipo (carro_id, estado);
 CREATE INDEX idx_equipo_sueltos      ON equipo (tipo, nombre) WHERE carro_id IS NULL;
 
--- Entre los equipos sueltos el nombre es lo único que los distingue.
--- Excluye los dados de baja: el nombre es un apodo y se reutiliza al
--- reemplazar el equipo, a diferencia de un número de serie.
+-- Las tres unicidades del equipo son índices PARCIALES: valen entre los
+-- equipos que siguen en el inventario y no cuentan a los dados de baja.
+-- Un equipo que sale del inventario devuelve su nombre, su serie y su
+-- zócalo, y la misma máquina se puede volver a cargar (migración 005).
 CREATE UNIQUE INDEX ux_equipo_suelto_nombre
     ON equipo (lower(nombre)) WHERE carro_id IS NULL AND dado_de_baja = false;
+CREATE UNIQUE INDEX ux_equipo_numero_serie
+    ON equipo (numero_serie) WHERE dado_de_baja = false;
+CREATE UNIQUE INDEX ux_equipo_carro_identificador
+    ON equipo (carro_id, identificador) WHERE dado_de_baja = false;
 ```
 
 > **Una sola tabla para todo lo prestable, y no es un detalle de
@@ -395,7 +400,7 @@ CREATE UNIQUE INDEX ux_equipo_suelto_nombre
 
 > `identificador` es el número del zócalo, único **dentro de su carro** — dos
 > carros pueden tener cada uno una "PC 27". `numero_serie` es distinto: es el
-> de fábrica, **único en toda la tabla**. Y a pesar del nombre **es texto**,
+> de fábrica, **único en toda la institución**. Y a pesar del nombre **es texto**,
 > porque los códigos de fábrica llevan letras (`5CD1234ABC`); un tipo numérico
 > haría imposible cargar el número que dice la etiqueta. Se guarda normalizado
 > (mayúsculas, sin espacios al borde) y la base lo exige con un CHECK: sin
@@ -417,6 +422,15 @@ CREATE UNIQUE INDEX ux_equipo_suelto_nombre
 > delete**. La fila permanece porque `incidencia`, `reserva` y `prestamo` la
 > referencian por FK, y esa historia no se pierde. Un hard delete exigiría
 > borrar en cascada todo ese historial.
+>
+> Lo que la fila **no** retiene son los identificadores: nombre, número de
+> serie y zócalo quedan libres al darla de baja, porque las tres unicidades
+> son índices parciales con `WHERE dado_de_baja = false`. Sin eso el soft
+> delete se filtraría a la cara del usuario —"ya existe un equipo con ese
+> número de serie", y el equipo que lo tiene no aparece en ninguna pantalla—,
+> y no habría forma de volver a cargar una máquina que se dio de baja, por
+> ejemplo la notebook de un carro que pasa a ser un equipo suelto porque tiene
+> otro hardware.
 
 ### `equipo_cuenta`
 Con qué cuenta de usuario se entra a cada equipo (RF-03.22). Una notebook no se

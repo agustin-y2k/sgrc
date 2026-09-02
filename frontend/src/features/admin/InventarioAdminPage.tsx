@@ -305,6 +305,14 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                   Dar de baja el equipo {equipo.identificador} la saca del inventario y
                   cancela sus reservas futuras. Su historial de incidencias se conserva.
                 </p>
+                {/* Los identificadores se liberan al dar de baja (migración
+                    005): sin decirlo acá, quien da de baja una notebook para
+                    volver a cargarla —con otro tipo, o fuera del carro— no
+                    tiene forma de saber que puede. */}
+                <p className="text-muted-foreground text-sm">
+                  Su número de serie y su lugar en el carro quedan libres para volver a
+                  usarlos en el equipo que la reemplace.
+                </p>
                 {darDeBaja.error && (
                   <Alert variant="destructive">
                     <AlertDescription>
