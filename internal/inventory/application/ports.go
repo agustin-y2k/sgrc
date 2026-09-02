@@ -49,6 +49,10 @@ type Repo interface {
 	// ListarLicencias devuelve todas las del sistema con su ubicación.
 	ListarLicencias(ctx context.Context) ([]*LicenciaConUbicacion, error)
 
+	// ContarPendientesDeRenovar dice cuántas licencias están hoy por vencer o
+	// vencidas, ya se haya avisado de ellas o no. Es lo que decide si el aviso
+	// de la campana sigue teniendo a qué apuntar.
+	ContarPendientesDeRenovar(ctx context.Context, hoy time.Time) (int, error)
 	// ListarCandidatasAAviso trae las que PODRÍAN necesitar aviso hoy: con fecha
 	// cargada, de una PC que no esté dada de baja, ya dentro de su ventana de
 	// antelación, y con alguna marca de aviso sin poner.

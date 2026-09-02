@@ -224,6 +224,21 @@ func (r *PostgresRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsua
 }
 
 // MarcarTodasLeidasDe: un solo UPDATE para todas las NO_LEIDA del usuario.
+// MarcarLeidasPorTipo cierra de una todas las NO_LEIDA de ese tipo, sin
+// importar de quién sean: un UPDATE y no un recorrido, porque con cuatro Admin
+// y varios días sin mirar la campana son varias decenas de filas y no hay nada
+// que decidir fila por fila.
+func (r *PostgresRepo) MarcarLeidasPorTipo(ctx context.Context, tipo domain.Tipo, ahora time.Time) (int, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE notificacion SET estado = 'LEIDA', leida_en = $2
+		WHERE tipo = $1 AND estado = 'NO_LEIDA'
+	`, string(tipo), ahora)
+	if err != nil {
+		return 0, fmt.Errorf("cerrando las notificaciones de tipo %s: %w", tipo, err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (r *PostgresRepo) MarcarTodasLeidasDe(ctx context.Context, usuarioID string, ahora time.Time) (int, error) {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE notificacion SET estado = 'LEIDA', leida_en = $2

@@ -17,6 +17,7 @@ import (
 	"github.com/ramiro/sgrc/internal/inventory/domain"
 	"github.com/ramiro/sgrc/internal/shared/audit"
 	"github.com/ramiro/sgrc/internal/shared/authtest"
+	"github.com/ramiro/sgrc/internal/shared/eventbus"
 	"github.com/ramiro/sgrc/internal/shared/secretos"
 )
 
@@ -303,6 +304,10 @@ func (r *fakeRepo) ListarLicencias(ctx context.Context) ([]*application.Licencia
 func (r *fakeRepo) ListarCandidatasAAviso(ctx context.Context, hoy time.Time) ([]*application.LicenciaConUbicacion, error) {
 	return nil, nil
 }
+
+func (r *fakeRepo) ContarPendientesDeRenovar(ctx context.Context, hoy time.Time) (int, error) {
+	return 0, nil
+}
 func (r *fakeRepo) MarcarAvisosEnviados(ctx context.Context, l *domain.LicenciaSoftware) error {
 	return nil
 }
@@ -350,7 +355,7 @@ func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	}
 	svc := application.NewService(repo, &fakeValidadorReservas{}, idSecuencial, func() time.Time {
 		return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	}, cifrador)
+	}, cifrador, eventbus.NewInMemoryEventBus())
 	h := NewHandler(svc, fakeAuditor{})
 
 	app := fiber.New()

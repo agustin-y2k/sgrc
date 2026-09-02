@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/ramiro/sgrc/internal/shared/eventbus"
 	"github.com/ramiro/sgrc/internal/shared/secretos"
 )
 
@@ -275,6 +276,24 @@ func (r *fakeRepo) ListarLicencias(ctx context.Context) ([]*LicenciaConUbicacion
 	return resultado, nil
 }
 
+// ContarPendientesDeRenovar cuenta las que hoy están por vencer o vencidas,
+// ya se haya avisado de ellas o no — es lo que decide si el aviso de la
+// campana se cierra. El fake reproduce la misma condición que el SQL: fecha
+// cargada, equipo activo, y dentro de la ventana de aviso.
+func (r *fakeRepo) ContarPendientesDeRenovar(ctx context.Context, hoy time.Time) (int, error) {
+	n := 0
+	for _, l := range r.licencias {
+		if r.conUbicacion(l).EquipoDadoDeBaja || l.FechaVencimiento == nil {
+			continue
+		}
+		switch l.Estado(hoy) {
+		case domain.LicenciaPorVencer, domain.LicenciaVencida:
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (r *fakeRepo) ListarCandidatasAAviso(ctx context.Context, hoy time.Time) ([]*LicenciaConUbicacion, error) {
 	// El fake no reproduce el filtro grueso del SQL —eso se verifica contra
 	// Postgres real en infrastructure— pero sí lo único que cambiaría el
@@ -359,7 +378,7 @@ func nuevoServicioDeTest(repo Repo, validador ValidadorReservas) *Service {
 	contadorID = 0
 	return NewService(repo, validador, idSecuencial, func() time.Time {
 		return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	}, cifradorDeTest())
+	}, cifradorDeTest(), eventbus.NewInMemoryEventBus())
 }
 
 // cifradorDeTest usa una clave fija: los tests no prueban el cifrado —eso lo

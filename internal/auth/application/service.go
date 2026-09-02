@@ -580,7 +580,6 @@ func (s *Service) DarDeBaja(ctx context.Context, usuarioID string) error {
 	}
 
 	var materiasHuerfanas []string
-	var materiasConOtroDocente []string
 
 	if u.EsDocente() {
 		materias, err := s.gestorMaterias.MateriasDeDocente(ctx, usuarioID)
@@ -592,9 +591,10 @@ func (s *Service) DarDeBaja(ctx context.Context, usuarioID string) error {
 			if err != nil {
 				return fmt.Errorf("verificando otros docentes de la materia %s: %w", materiaID, err)
 			}
-			if quedaOtro {
-				materiasConOtroDocente = append(materiasConOtroDocente, materiaID)
-			} else {
+			// Solo interesan las que quedan SIN docente: son las que van a
+			// cancelar reservas en cascada y las únicas que avisan algo. Las que
+			// conservan otro docente no generan ninguna notificación (ver abajo).
+			if !quedaOtro {
 				materiasHuerfanas = append(materiasHuerfanas, materiaID)
 			}
 		}
@@ -638,14 +638,13 @@ func (s *Service) DarDeBaja(ctx context.Context, usuarioID string) error {
 		return fmt.Errorf("removiendo asignaciones del docente: %w", err)
 	}
 
-	for _, materiaID := range materiasConOtroDocente {
-		// RF-05.4: aviso informativo — sigue habiendo otro docente, no se
-		// canceló nada.
-		s.bus.Publish(eventbus.Evento{
-			Tipo:    "docente.baja.notificar_admin",
-			Payload: map[string]any{"usuarioId": usuarioID, "materiaId": materiaID},
-		})
-	}
+	// Las materias que conservan otro docente no avisan nada. Era RF-05.4, y se
+	// retiró en la 1.18.0: el aviso decía "se dio de baja a un docente de una
+	// materia que sigue teniendo otro docente asignado" sin nombrar a quién ni
+	// qué materia, no llevaba a ninguna pantalla y no pedía ninguna acción
+	// —justamente porque no se canceló nada—, y le llegaba a TODOS los Admin
+	// por algo que uno de ellos acababa de hacer y ya había visto confirmado en
+	// su propia pantalla.
 
 	return nil
 }

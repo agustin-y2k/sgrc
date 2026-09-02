@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/ramiro/sgrc/internal/shared/eventbus"
 	"github.com/ramiro/sgrc/internal/shared/secretos"
 )
 
@@ -292,7 +293,7 @@ func servicioSinCifrador(t *testing.T) *Service {
 	contadorID = 0
 	return NewService(repo, &fakeValidadorReservas{}, idSecuencial, func() time.Time {
 		return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	}, sinClave)
+	}, sinClave, eventbus.NewInMemoryEventBus())
 }
 
 // El despliegue sin CUENTAS_SECRET registra cuentas igual: es una función de

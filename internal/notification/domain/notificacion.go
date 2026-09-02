@@ -42,12 +42,6 @@ const (
 	// TipoLicenciaPorVencer: hay licencias de software que hay que renovar
 	// (RF-05.9).
 	TipoLicenciaPorVencer Tipo = "LICENCIA_POR_VENCER"
-	// TipoReservaPorComenzar: el recordatorio de que en un rato hay clase, y
-	// también el aviso de que una de esas máquinas no volvió.
-	TipoReservaPorComenzar Tipo = "RESERVA_POR_COMENZAR"
-	// TipoReservaNoRetirada: pasaron los minutos de gracia y esas máquinas
-	// dejaron de estar reservadas (RF-08.10).
-	TipoReservaNoRetirada Tipo = "RESERVA_NO_RETIRADA"
 	// TipoPedidoDeLiberacion: otro docente necesita un equipo que esta persona
 	// tiene reservado (RF-04.12).
 	TipoPedidoDeLiberacion Tipo = "PEDIDO_DE_LIBERACION"
@@ -71,9 +65,8 @@ var ErrTipoInvalido = errors.New("tipo de notificación inválido")
 func ParseTipo(s string) (Tipo, error) {
 	switch Tipo(s) {
 	case TipoGeneral, TipoDocentePendiente, TipoReservaCancelada, TipoLicenciaPorVencer,
-		TipoReservaPorComenzar, TipoReservaNoRetirada, TipoEquipoSinDevolver,
-		TipoPedidoDeLiberacion, TipoPedidoDeMateria, TipoPedidoDeMateriaResuelto,
-		TipoSugerencia, TipoSugerenciaRespondida:
+		TipoEquipoSinDevolver, TipoPedidoDeLiberacion, TipoPedidoDeMateria,
+		TipoPedidoDeMateriaResuelto, TipoSugerencia, TipoSugerenciaRespondida:
 		return Tipo(s), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrTipoInvalido, s)

@@ -329,4 +329,47 @@ describe("LicenciasPage", () => {
     // fecha: si no, quien no sepa el vencimiento va a inventar uno.
     expect(await screen.findByText(/cargala\s+igual sin fecha/)).toBeInTheDocument()
   })
+
+  // ── Dónde se dibuja el panel de alta ──────────────────────────────────
+  //
+  // Este test existe por un bug visual que ningún test podía ver: el panel se
+  // renderizaba DENTRO del slot de acción del encabezado, que es `shrink-0`
+  // para que un botón no se parta en dos renglones. Una tarjeta entera ahí
+  // adentro se niega a encoger y aplasta el título y la descripción de la
+  // pantalla hasta dejarlos en una palabra por renglón.
+  //
+  // jsdom no tiene layout, así que no se puede medir el desborde. Lo que sí se
+  // puede fijar es la causa: el panel NO puede ser descendiente del encabezado.
+  it("el panel de alta se dibuja fuera del encabezado, no en su slot de acción", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
+
+    const titulo = screen.getByRole("heading", { name: "Licencias de software" })
+    const encabezado = titulo.closest("div")?.parentElement
+    const panel = screen.getByText("Cargar una licencia", { selector: "div" })
+
+    expect(encabezado).not.toBeNull()
+    // Que SÍ contenga el título prueba que encontramos el encabezado y no un
+    // envoltorio cualquiera: sin esto, el `contains(panel)` de abajo daría
+    // false por vacío y el test pasaría con el bug puesto.
+    expect(encabezado!.contains(titulo)).toBe(true)
+    expect(encabezado!.contains(panel)).toBe(false)
+  })
+
+  // Y el título sigue estando, que es lo que el bug hacía ilegible.
+  it("con el panel abierto, el encabezado sigue completo", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
+
+    expect(screen.getByRole("heading", { name: "Licencias de software" })).toBeVisible()
+    expect(screen.getByText(/les llega un mail a todos los administradores/)).toBeVisible()
+    // El botón se fue del encabezado: lo reemplazó el panel de abajo.
+    expect(
+      screen.queryByRole("button", { name: "Cargar una licencia" })
+    ).not.toBeInTheDocument()
+  })
 })

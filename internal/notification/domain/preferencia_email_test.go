@@ -35,7 +35,15 @@ func TestCategoriasPara_ElDocenteVeLasSuyasYLasDeLaCuenta(t *testing.T) {
 			t.Errorf("%s no debería estar en el panel de un docente", c)
 		}
 	}
-	if len(delDocente) != len(CategoriasDeEmail())-7 {
+	// Contadas y no un número fijo: retirar o agregar una categoría de
+	// administración no tiene por qué romper este test, que afirma otra cosa.
+	deAdministracion := 0
+	for _, c := range CategoriasDeEmail() {
+		if c.Grupo() == GrupoAdministracion {
+			deAdministracion++
+		}
+	}
+	if len(delDocente) != len(CategoriasDeEmail())-deAdministracion {
 		t.Errorf("esperaba las de cuenta y las personales, obtuve %v", delDocente)
 	}
 
@@ -52,19 +60,18 @@ func TestCategoriasPara_ElDocenteVeLasSuyasYLasDeLaCuenta(t *testing.T) {
 
 // El default no es un detalle de la pantalla: decide qué le llega a quien
 // nunca abrió el panel, que es el estado de casi todos.
-func TestActivaPorDefecto_SoloLoQueAvisaDeAlgoQueHizoOtro(t *testing.T) {
+//
+// Desde la 1.18.0 la respuesta es "casi nada": los cuatro correos fijos y una
+// sola categoría más. Todo lo demás se enciende si esa persona lo pide.
+func TestActivaPorDefecto_SoloLasFijasYCuentasPendientes(t *testing.T) {
 	encendidas := map[CategoriaEmail]bool{
-		CatRecuperacionDeCuenta:    true,
-		CatCuentaAprobada:          true,
-		CatSoporte:                 true,
-		CatSoporteRespondido:       true,
-		CatReservaCancelada:        true,
-		CatEquipoNoDisponible:      true,
-		CatPedidoDeLiberacion:      true,
-		CatPedidoDeMateriaResuelto: true,
-		CatPedidoSobreMiMateria:    true,
-		CatSugerenciaRespondida:    true,
-		CatCuentaPendiente:         true,
+		CatRecuperacionDeCuenta: true,
+		CatCuentaAprobada:       true,
+		CatSoporte:              true,
+		CatSoporteRespondido:    true,
+		// La única excepción, y no por quien la recibe sino por quien la
+		// sufre: un docente que no puede entrar hasta que un Admin lo mire.
+		CatCuentaPendiente: true,
 	}
 
 	for _, c := range CategoriasDeEmail() {
@@ -74,43 +81,42 @@ func TestActivaPorDefecto_SoloLoQueAvisaDeAlgoQueHizoOtro(t *testing.T) {
 	}
 }
 
-// Lo del reloj arranca apagado: le cuenta a alguien algo que ya sabe.
-func TestActivaPorDefecto_LosAvisosDelRelojArrancanApagados(t *testing.T) {
-	for _, c := range []CategoriaEmail{CatRecordatorioDeReserva, CatReservaSinRetirar, CatDevolucionPendiente} {
+// Ninguna categoría que se pueda apagar viene encendida, salvo la de las
+// cuentas pendientes. Es la misma regla dicha al revés, y está aparte porque
+// es la que hay que releer cuando alguien agregue una categoría nueva: el
+// default de lo nuevo es APAGADO, salvo que haya un tercero esperando.
+func TestActivaPorDefecto_NingunaConfigurableVieneEncendida(t *testing.T) {
+	for _, c := range CategoriasDeEmail() {
+		if c.EsFija() || c == CatCuentaPendiente {
+			continue
+		}
 		if c.ActivaPorDefecto() {
-			t.Errorf("%s debería arrancar apagada", c)
+			t.Errorf("%s no debería arrancar encendida: nadie la pidió", c)
 		}
 	}
 }
 
 func TestEfectivasPara_LoElegidoGanaSobreElDefault(t *testing.T) {
-	// Sin haber elegido nada, un docente recibe los dos de su cuenta, la
-	// respuesta de soporte (que tampoco se apaga) y las seis personales que
-	// vienen encendidas.
+	// Sin haber elegido nada, un docente recibe SOLO las tres fijas que le
+	// corresponden: los dos correos de su cuenta y la respuesta de soporte.
 	activas := EfectivasPara(nil, false)
-	if len(activas) != 9 {
-		t.Fatalf("esperaba 2 de cuenta + soporte + 6 personales, obtuve %v", activas)
+	if len(activas) != 3 {
+		t.Fatalf("esperaba solo las tres fijas del docente, obtuve %v", activas)
 	}
 	for _, c := range activas {
-		if c.Grupo() == GrupoAdministracion {
-			t.Errorf("%s no es del docente", c)
+		if !c.EsFija() {
+			t.Errorf("%s no es fija y no debería salir sin que nadie la pida", c)
 		}
 	}
 
-	// Destildar una que viene encendida tiene que poder apagarla de verdad.
+	// Y encender una tiene que poder encenderla de verdad.
 	elegidas := map[CategoriaEmail]bool{
-		CatReservaCancelada:        false,
-		CatEquipoNoDisponible:      false,
-		CatPedidoDeLiberacion:      false,
-		CatPedidoDeMateriaResuelto: false,
-		CatPedidoSobreMiMateria:    false,
-		CatSugerenciaRespondida:    false,
-		CatRecordatorioDeReserva:   true,
+		CatReservaCancelada:      true,
+		CatRecordatorioDeReserva: true,
 	}
-	// Quedan las tres fijas que ve un docente y el recordatorio.
 	activas = EfectivasPara(elegidas, false)
-	if len(activas) != 4 || activas[3] != CatRecordatorioDeReserva {
-		t.Fatalf("esperaba las fijas y el recordatorio, obtuve %v", activas)
+	if len(activas) != 5 {
+		t.Fatalf("esperaba las tres fijas más las dos elegidas, obtuve %v", activas)
 	}
 }
 
@@ -153,7 +159,7 @@ func TestDecisiones_SonExplicitasYSoloSobreLoQueLeToca(t *testing.T) {
 	if !decisiones[CatRecordatorioDeReserva] {
 		t.Error("la que tildó tendría que quedar encendida")
 	}
-	if decisiones[CatEquipoNoDisponible] != false {
+	if decisiones[CatReservaCancelada] != false {
 		t.Error("la que no tildó tendría que quedar apagada, no ausente")
 	}
 

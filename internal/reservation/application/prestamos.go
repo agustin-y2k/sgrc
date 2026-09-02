@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/ramiro/sgrc/internal/reservation/domain"
+	"github.com/ramiro/sgrc/internal/shared/eventbus"
 )
 
 // Entregas y devoluciones de PCs (RF-08).
@@ -376,7 +378,30 @@ func (s *Service) RecibirEquipos(ctx context.Context, prestamoIDs []string, reci
 		resultado.Recibidos = append(resultado.Recibidos, prestamo)
 	}
 
+	if len(resultado.Recibidos) > 0 {
+		s.avisarSiVolvioTodoLoDelCierre(ctx)
+	}
 	return resultado, nil
+}
+
+// avisarSiVolvioTodoLoDelCierre publica cuántos equipos del aviso de cierre
+// siguen afuera después de esta devolución. Con cero, el aviso de la campana
+// se cierra para todos los Admin (ver notification).
+//
+// Un fallo al contar no puede voltear la devolución, que ya está registrada:
+// se loguea y sigue. El peor caso es un aviso que queda abierto hasta la
+// próxima devolución, no una máquina que figura afuera estando adentro.
+func (s *Service) avisarSiVolvioTodoLoDelCierre(ctx context.Context) {
+	afuera, err := s.repo.ContarAvisadosSinDevolver(ctx)
+	if err != nil {
+		log.Printf("entregas: no se pudo contar qué queda afuera del aviso de cierre "+
+			"(el aviso puede quedar abierto de más): %v", err)
+		return
+	}
+	s.bus.Publish(eventbus.Evento{
+		Tipo:    "prestamo.cierre.pendientes",
+		Payload: eventbus.PendientesDelCierre{Pendientes: afuera},
+	})
 }
 
 // ── Lecturas ────────────────────────────────────────────────────────────

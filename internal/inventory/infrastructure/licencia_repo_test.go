@@ -475,3 +475,92 @@ func TestPostgresRepo_Licencia_DeUnEquipoSinCarro(t *testing.T) {
 		t.Errorf("el aviso mandaría a buscar %q", candidatas[0].Etiqueta)
 	}
 }
+
+// ContarPendientesDeRenovar es la consulta que decide si el aviso de la
+// campana se cierra (RF-03.14). Va contra Postgres y no contra el fake porque
+// su valor está justo en lo que el fake no reproduce: el filtro se hace en
+// SQL, con aritmética de fechas y un JOIN contra equipo.
+//
+// La diferencia con ListarCandidatasAAviso es lo que este test protege: esa
+// mira las marcas de aviso, esta NO. Una licencia de la que ya se avisó y que
+// nadie renovó dejó de ser candidata a un aviso nuevo, pero sigue pendiente —
+// y si esta consulta la contara como resuelta, el aviso se cerraría con
+// trabajo sin hacer.
+func TestPostgresRepo_ContarPendientesDeRenovar(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	hoy := diaDe(2026, time.August, 10)
+
+	carro := crearCarroDeTest(t, repo, "Carro 1")
+	conVencimiento := func(identificador int, serie string, dias, aviso int, vence time.Time) *domain.LicenciaSoftware {
+		t.Helper()
+		equipo := crearEquipoDeCarroDeTest(t, repo, carro.ID, identificador, serie)
+		l := crearLicenciaDeTest(t, repo, equipo.ID, "AutoCAD 2027", dias, aviso)
+		l.FijarVencimiento(vence, "", ahora)
+		if err := repo.GuardarLicencia(ctx, l); err != nil {
+			t.Fatalf("no debería fallar: %v", err)
+		}
+		return l
+	}
+
+	// Vencida hace días, por vencer dentro de su ventana, y vigente lejos.
+	vencida := conVencimiento(1, "S-1", 30, 5, diaDe(2026, time.August, 3))
+	conVencimiento(2, "S-2", 30, 5, diaDe(2026, time.August, 12)) // faltan 2, avisa a los 5
+	conVencimiento(3, "S-3", 30, 5, diaDe(2026, time.December, 1))
+
+	// Una SIN fecha: cargada pero no verificada. No es pendiente de nada.
+	equipoSinFecha := crearEquipoDeCarroDeTest(t, repo, carro.ID, 4, "S-4")
+	crearLicenciaDeTest(t, repo, equipoSinFecha.ID, "Office 365", 30, 5)
+
+	// Y una vencida sobre un equipo DADO DE BAJA: no se renueva lo que ya no
+	// está en el parque, así que no puede mantener el aviso abierto.
+	deBaja := crearEquipoDeCarroDeTest(t, repo, carro.ID, 5, "S-5")
+	lDeBaja := crearLicenciaDeTest(t, repo, deBaja.ID, "AutoCAD 2027", 30, 5)
+	lDeBaja.FijarVencimiento(diaDe(2026, time.August, 1), "", ahora)
+	if err := repo.GuardarLicencia(ctx, lDeBaja); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if err := deBaja.DarDeBaja(ahora); err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.GuardarEquipo(ctx, deBaja); err != nil {
+		t.Fatalf("no se pudo dar de baja el equipo: %v", err)
+	}
+
+	n, err := repo.ContarPendientesDeRenovar(ctx, hoy)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("esperaba 2 pendientes (la vencida y la que está por vencer), obtuve %d", n)
+	}
+
+	// Haber avisado NO resuelve nada: la licencia sigue pendiente hasta que
+	// alguien la renueve. Es la diferencia con ListarCandidatasAAviso.
+	vencida.MarcarAvisoDeVencimientoEnviado()
+	if err := repo.MarcarAvisosEnviados(ctx, vencida); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	n, err = repo.ContarPendientesDeRenovar(ctx, hoy)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("avisar no renueva nada: esperaba que siguieran las 2 pendientes, obtuve %d", n)
+	}
+
+	// Renovarla sí: el vencimiento se va lejos y sale de la cuenta.
+	vencida.RenovadaEl(hoy, "", ahora)
+	if err := repo.GuardarLicencia(ctx, vencida); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	n, err = repo.ContarPendientesDeRenovar(ctx, hoy)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("renovada la vencida esperaba 1 pendiente, obtuve %d", n)
+	}
+}

@@ -118,10 +118,16 @@ son cosas distintas, ver RF-08 y `07-modelo-datos.md`.
 > **La misma transición sale de dos plazos, y ninguno avisa** (RF-08.10). Si no se
 > retiró nada, se espera desde el inicio de la clase (40 min por defecto); si el
 > docente se llevó una parte, lo que dejó cae a los 15 minutos de esa entrega. En
-> los dos casos la liberación es **silenciosa**: el aviso al docente ya salió a
-> los 15 minutos del inicio (RF-08.20), cuando todavía podía ir a buscarlas,
-> cambiar la máquina o cancelar. Es la única transición del sistema que no genera
-> ninguna notificación, y la razón es esa.
+> los dos casos la liberación es **silenciosa**, y desde la 1.18.0 tampoco la
+> precede ningún aviso —el de los 15 minutos, RF-08.20, se retiró—. Es la única
+> transición del sistema que no genera ninguna notificación.
+>
+> Lo que la hace confiable no es un aviso previo sino **la condición del
+> mostrador** (RF-07.6): esta transición solo ocurre si había un Admin de
+> guardia registrando entregas. Sin nadie operando el sistema, "ninguna máquina
+> figura entregada" no significa que nadie vino, así que la reserva **no pasa a
+> `NO_RETIRADA`**: sigue `CONFIRMADA` y termina en `FINALIZADA` por RF-04.9,
+> como cualquier clase que se dio.
 
 - Equipo en `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` o `dado_de_baja=true` rechaza nuevas reservas, **y también rechaza entregas**: está físicamente en el laboratorio y no se le da a nadie (RF-08.17). Llevarle una máquina rota al técnico sigue registrándose, pero como *salida a reparación* (RF-08.21), que exige decir a dónde va y vive en un panel aparte del mostrador. Lo dado de baja no sale por ningún camino.
 - `Reserva` `CANCELADA` o `FINALIZADA` es inmutable; lo mismo aplica a `ReservaGrupo`. Ambas se eliminan físicamente al archivar el ciclo lectivo de su materia (no antes).

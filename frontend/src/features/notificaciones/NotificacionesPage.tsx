@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import * as notificacionesApi from "@/features/notificaciones/api"
 import { PreferenciasDeCorreo } from "@/features/notificaciones/PreferenciasDeCorreo"
 import { PanelDeSoporte } from "@/features/sugerencias/PanelDeSoporte"
-import type { Notificacion } from "@/features/notificaciones/types"
+import type { Notificacion, TipoNotificacion } from "@/features/notificaciones/types"
 import { NOTIFICACIONES_KEY } from "@/features/notificaciones/useNoLeidas"
 import { getErrorMessage } from "@/lib/api-client"
 import { formatearFechaYHora } from "@/lib/fechas"
@@ -19,6 +19,37 @@ import { formatearFechaYHora } from "@/lib/fechas"
 /** Fecha y hora en la zona del navegador. */
 function formatearFecha(iso: string): string {
   return formatearFechaYHora(iso)
+}
+
+/**
+ * A qué pantalla lleva cada aviso.
+ *
+ * Es un Record COMPLETO sobre TipoNotificacion y no una cadena de `if`: con la
+ * cadena, agregar un tipo nuevo al backend no rompía nada acá, simplemente el
+ * aviso llegaba sin botón y quedaba sin salida. Así pasó con los tres pedidos
+ * —el de liberación, el de materia y su resolución—, que estuvieron llegando a
+ * la campana sin ninguna forma de actuar sobre ellos. Ahora TypeScript exige
+ * que cada tipo diga a dónde va, aunque sea `null`.
+ *
+ * `null` no es un olvido: es "este aviso ya está en la pantalla que le
+ * corresponde". Los dos del buzón son eso — el panel de conversaciones vive
+ * en esta misma página, y un botón que lleva acá mismo no ayuda a nadie.
+ */
+const ACCION_POR_TIPO: Record<TipoNotificacion, { a: string; texto: string } | null> = {
+  GENERAL: null,
+  DOCENTE_PENDIENTE: { a: "/admin/aprobacion", texto: "Ir a aprobar" },
+  RESERVA_CANCELADA: { a: "/reservas", texto: "Ver mis reservas" },
+  LICENCIA_POR_VENCER: { a: "/admin/licencias", texto: "Ver licencias" },
+  EQUIPO_SIN_DEVOLVER: { a: "/admin/entregas", texto: "Ver entregas" },
+  // Le llega al dueño de la reserva: la decisión de liberar o no es suya y se
+  // toma desde sus reservas.
+  PEDIDO_DE_LIBERACION: { a: "/reservas", texto: "Ver mis reservas" },
+  PEDIDO_DE_MATERIA: { a: "/admin/pedidos-de-materia", texto: "Ver los pedidos" },
+  // La resolución le llega al docente, y sus materias se ven en su perfil,
+  // que es desde donde pidió.
+  PEDIDO_DE_MATERIA_RESUELTO: { a: "/perfil", texto: "Ver mi perfil" },
+  SUGERENCIA: null,
+  SUGERENCIA_RESPONDIDA: null,
 }
 
 /** RF-05: notificaciones internas. */
@@ -139,30 +170,11 @@ export function NotificacionesPage() {
                   {/* La acción sale del `tipo`, no de leer el mensaje: la
                       redacción de un aviso puede cambiar y el botón tiene que
                       seguir funcionando. */}
-                  {n.tipo === "DOCENTE_PENDIENTE" && (
+                  {ACCION_POR_TIPO[n.tipo] && (
                     <Button asChild variant="outline" size="sm">
-                      <Link to="/admin/aprobacion">Ir a aprobar</Link>
-                    </Button>
-                  )}
-                  {n.tipo === "RESERVA_CANCELADA" && (
-                    <Button asChild variant="outline" size="sm">
-                      <Link to="/reservas">Ver mis reservas</Link>
-                    </Button>
-                  )}
-                  {n.tipo === "LICENCIA_POR_VENCER" && (
-                    <Button asChild variant="outline" size="sm">
-                      <Link to="/admin/licencias">Ver licencias</Link>
-                    </Button>
-                  )}
-                  {(n.tipo === "RESERVA_POR_COMENZAR" ||
-                    n.tipo === "RESERVA_NO_RETIRADA") && (
-                    <Button asChild variant="outline" size="sm">
-                      <Link to="/reservas">Ver mis reservas</Link>
-                    </Button>
-                  )}
-                  {n.tipo === "EQUIPO_SIN_DEVOLVER" && (
-                    <Button asChild variant="outline" size="sm">
-                      <Link to="/admin/entregas">Ver entregas</Link>
+                      <Link to={ACCION_POR_TIPO[n.tipo]!.a}>
+                        {ACCION_POR_TIPO[n.tipo]!.texto}
+                      </Link>
                     </Button>
                   )}
                   {n.estado === "NO_LEIDA" && (

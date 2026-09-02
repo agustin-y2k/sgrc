@@ -176,32 +176,66 @@ func horaAvisoLicencias() int {
 	return hora
 }
 
-// configDeVigilancia lee los tres plazos del barrido de reservas y entregas
-// (RF-08.10 a RF-08.13).
+// intervaloDeLicenciasPorDefecto: una hora. El job es barato —una consulta
+// acotada por índice— y correrlo seguido no cuesta nada; lo que decide cuándo
+// sale el aviso no es este intervalo sino LICENCIAS_HORA_AVISO.
+const intervaloDeLicenciasPorDefecto = time.Hour
+
+// intervaloDeLicencias es cada cuánto se revisa si hay licencias por vencer.
+//
+// Es configurable por una razón práctica: con una hora fija, ver el aviso
+// aparecer —al probar el sistema, al preparar una capacitación— obliga a
+// esperar hasta una hora sin nada que mirar. Bajarlo a un minuto en el .env
+// local muestra el ciclo entero en el momento. En producción no hay motivo
+// para tocarlo.
+func intervaloDeLicencias() time.Duration {
+	crudo := strings.TrimSpace(os.Getenv("LICENCIAS_INTERVALO_MINUTOS"))
+	if crudo == "" {
+		return intervaloDeLicenciasPorDefecto
+	}
+	minutos, err := strconv.Atoi(crudo)
+	if err != nil || minutos < 1 || minutos > 1440 {
+		log.Fatalf("LICENCIAS_INTERVALO_MINUTOS (%q) tiene que ser un número entero de 1 a 1440 "+
+			"(cada cuántos minutos se revisa si hay licencias por vencer)", crudo)
+	}
+	return time.Duration(minutos) * time.Minute
+}
+
+// sufijoMostrador agrega al log del barrido la razón por la que pudo no haber
+// hecho nada. Un barrido callado porque no había nadie operando y uno callado
+// porque se rompió se ven idénticos en el log, y esa es justo la diferencia
+// que alguien va a querer saber a las nueve de la mañana.
+func sufijoMostrador(sinAtender bool) string {
+	if !sinAtender {
+		return ""
+	}
+	return " (el mostrador no estaba atendido: no se liberó ni se avisó nada)"
+}
+
+// configDeVigilancia lee los dos plazos del barrido de reservas y entregas
+// (RF-08.10, RF-08.13).
 func configDeVigilancia() reservationapp.ConfigDeVigilancia {
 	cfg := reservationapp.ConfigDeVigilanciaPorDefecto()
 
-	if v := minutosDeEntorno("RETIRO_AVISO_MINUTOS"); v > 0 {
-		cfg.DemoraDelAvisoDeNoRetiro = v
-	}
 	if v := minutosDeEntorno("RETIRO_GRACIA_MINUTOS"); v > 0 {
 		cfg.GraciaDeRetiro = v
 	}
 	if v := minutosDeEntorno("RETIRO_PARCIAL_GRACIA_MINUTOS"); v > 0 {
 		cfg.GraciaTrasEntregaParcial = v
 	}
-	if v := minutosDeEntorno("DEVOLUCION_DEMORA_MINUTOS"); v > 0 {
-		cfg.DemoraParaReclamar = v
+
+	// RETIRO_AVISO_MINUTOS y DEVOLUCION_DEMORA_MINUTOS ya no se leen: el aviso
+	// de no retiro y el reclamo de devolución dejaron de existir en la 1.18.0.
+	// Se avisa en vez de ignorarlas en silencio, porque un .env que las trae
+	// viene de un despliegue anterior y quien lo mantiene tiene que enterarse
+	// de que ya no hacen nada.
+	for _, obsoleta := range []string{"RETIRO_AVISO_MINUTOS", "DEVOLUCION_DEMORA_MINUTOS"} {
+		if strings.TrimSpace(os.Getenv(obsoleta)) != "" {
+			log.Printf("aviso: %s ya no se usa y se ignora — el aviso de no retiro y el "+
+				"reclamo de devolución se retiraron; se puede sacar del .env", obsoleta)
+		}
 	}
 
-	// El aviso tiene que llegar ANTES de que la reserva se libere, o no es un
-	// aviso: sería un correo diciéndole al docente que a los X minutos pierde
-	// unas máquinas que ya perdió.
-	if cfg.DemoraDelAvisoDeNoRetiro >= cfg.GraciaDeRetiro {
-		log.Fatalf("RETIRO_AVISO_MINUTOS (%v) tiene que ser menor que RETIRO_GRACIA_MINUTOS (%v): "+
-			"el aviso de que la reserva va a quedar libre sale antes de que quede libre, "+
-			"no después", cfg.DemoraDelAvisoDeNoRetiro, cfg.GraciaDeRetiro)
-	}
 	if crudo := strings.TrimSpace(os.Getenv("CIERRE_JORNADA")); crudo != "" {
 		hora, err := strconv.Atoi(crudo)
 		if err != nil || hora < 0 || hora > 23 {
@@ -551,11 +585,17 @@ func main() {
 		inventoryinfra.NuevoID,
 		ahora,
 		cifradorDeCuentas,
+		bus,
 	)
 	inventoryHandler := inventoryhttp.NewHandler(inventorySvc, auditor)
 
 	// El barrido de reservas y entregas (RF-08.10 a RF-08.13).
-	vigilante := reservationapp.NewVigilante(reservationRepo, bus, &reservationValidadorJornadaAdapter{availabilitySvc: availabilitySvc}, ahora, configDeVigilancia())
+	vigilante := reservationapp.NewVigilante(
+		reservationRepo, bus,
+		&reservationValidadorJornadaAdapter{availabilitySvc: availabilitySvc},
+		&reservationValidadorMostradorAdapter{availabilitySvc: availabilitySvc},
+		ahora, configDeVigilancia(),
+	)
 
 	// El avisador de licencias es un tipo aparte del Service porque no lo
 	// dispara un request sino un reloj (ver el job más abajo).
@@ -669,10 +709,9 @@ func main() {
 					continue
 				}
 				if resumen.HizoAlgo() {
-					log.Printf("barrido: %d recordatorios, %d avisos de no retiro, %d reservas liberadas, "+
-						"%d avisos de equipo faltante, %d reclamos de devolución, %d avisos de cierre",
-						resumen.Recordatorios, resumen.AvisosDeNoRetiro, resumen.Liberadas,
-						resumen.AvisosDeEquipoFaltante, resumen.Reclamos, resumen.AvisosDeCierre)
+					log.Printf("barrido: %d recordatorios, %d reservas liberadas, %d avisos de cierre%s",
+						resumen.Recordatorios, resumen.Liberadas, resumen.AvisosDeCierre,
+						sufijoMostrador(resumen.MostradorSinAtender))
 				}
 				avisadorDeVida.Vive(ctx, monitoreo.JobBarridoEntregas)
 			}
@@ -687,7 +726,7 @@ func main() {
 	jobTerminado.Add(1)
 	go func() {
 		defer jobTerminado.Done()
-		ticker := time.NewTicker(1 * time.Hour)
+		ticker := time.NewTicker(intervaloDeLicencias())
 		defer ticker.Stop()
 		for {
 			select {

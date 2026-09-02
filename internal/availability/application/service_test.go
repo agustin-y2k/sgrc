@@ -1125,3 +1125,161 @@ func TestReemplazarJornada_CuentaClasesYEquiposPorSeparado(t *testing.T) {
 		t.Errorf("el total también va en clases: %d", resultado.Impacto.TotalDeClases)
 	}
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// ¿Hay alguien atendiendo el mostrador? (RF-07.6)
+// ═══════════════════════════════════════════════════════════════════════
+
+// El lunes 10 de agosto de 2026, a la hora que diga cada test.
+func elLunesALas(hora int) time.Time {
+	return time.Date(2026, time.August, 10, hora, 0, 0, 0, time.UTC)
+}
+
+func servicioConAdmins(repo *fakeRepo, ids ...string) *Service {
+	admins := make([]AdminInfo, len(ids))
+	for i, id := range ids {
+		admins[i] = AdminInfo{ID: id, Nombre: "Admin", Apellido: id}
+	}
+	return NewService(repo, &fakeListadorAdmins{admins: admins}, &fakeReservas{},
+		idSecuencial(), ahoraFija(elLunesALas(9)))
+}
+
+func cargarBloque(repo *fakeRepo, id, usuarioID string, dia domain.DiaSemana, desde, hasta int) {
+	repo.bloques[id] = &domain.BloqueHorario{
+		ID: id, UsuarioID: usuarioID, DiaSemana: dia,
+		HoraInicio: time.Duration(desde) * time.Hour,
+		HoraFin:    time.Duration(hasta) * time.Hour,
+	}
+}
+
+func TestMostradorEn_DentroYFueraDelHorario(t *testing.T) {
+	repo := nuevoFakeRepo()
+	cargarBloque(repo, "b1", "admin1", domain.Lunes, 8, 12)
+	svc := servicioConAdmins(repo, "admin1")
+
+	dentro, err := svc.MostradorEn(context.Background(), elLunesALas(9))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !dentro.Atendido || !dentro.Declarado || !dentro.Opera() {
+		t.Errorf("a las 9 del lunes hay alguien: %+v", dentro)
+	}
+
+	fuera, err := svc.MostradorEn(context.Background(), elLunesALas(15))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if fuera.Atendido {
+		t.Errorf("a las 15 ya se fue: %+v", fuera)
+	}
+	if !fuera.Declarado || fuera.Opera() {
+		t.Errorf("declaró horario y no cubre: el barrido tiene que callarse: %+v", fuera)
+	}
+}
+
+// Alcanza con que UNO esté: el mostrador lo atiende quien esté de guardia.
+func TestMostradorEn_AlcanzaConQueHayaUnAdmin(t *testing.T) {
+	repo := nuevoFakeRepo()
+	cargarBloque(repo, "b1", "admin1", domain.Lunes, 8, 12)
+	cargarBloque(repo, "b2", "admin2", domain.Lunes, 12, 18)
+	svc := servicioConAdmins(repo, "admin1", "admin2")
+
+	c, err := svc.MostradorEn(context.Background(), elLunesALas(15))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !c.Atendido {
+		t.Errorf("a las 15 está el segundo: %+v", c)
+	}
+}
+
+// El caso que motivó todo: el Admin declara que falta y ese día el sistema no
+// concluye nada, aunque su patrón semanal diga que tendría que estar.
+func TestMostradorEn_LaAusenciaDeclaradaApagaElBarrido(t *testing.T) {
+	repo := nuevoFakeRepo()
+	cargarBloque(repo, "b1", "admin1", domain.Lunes, 8, 18)
+	repo.excepciones[claveExcepcion("admin1", elLunesALas(0))] = &domain.Excepcion{
+		UsuarioID: "admin1", Fecha: domain.FechaSolo(elLunesALas(0)), Tipo: domain.NoDisponible,
+	}
+	svc := servicioConAdmins(repo, "admin1")
+
+	c, err := svc.MostradorEn(context.Background(), elLunesALas(9))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if c.Atendido || c.Opera() {
+		t.Errorf("faltó y lo declaró: el barrido no puede concluir nada: %+v", c)
+	}
+}
+
+// Sin horarios cargados no hay declaración de nadie, y el barrido opera como
+// antes de que RF-07.6 existiera. Es lo que evita que desplegar esta versión
+// apague el sistema solo y en silencio.
+func TestMostradorEn_SinHorariosCargados_ElBarridoSigueOperando(t *testing.T) {
+	svc := servicioConAdmins(nuevoFakeRepo(), "admin1", "admin2")
+
+	c, err := svc.MostradorEn(context.Background(), elLunesALas(9))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if c.Declarado {
+		t.Errorf("nadie declaró nada: %+v", c)
+	}
+	if !c.Opera() {
+		t.Error("sin declaración, el barrido tiene que seguir operando")
+	}
+}
+
+// Una escuela sin ningún Admin aprobado tampoco declaró nada.
+func TestMostradorEn_SinAdmins_ElBarridoSigueOperando(t *testing.T) {
+	svc := servicioConAdmins(nuevoFakeRepo())
+
+	c, err := svc.MostradorEn(context.Background(), elLunesALas(9))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !c.Opera() {
+		t.Errorf("sin Admins no hay declaración que respetar: %+v", c)
+	}
+}
+
+// MostradorEseDia mira el día entero y no el instante: es lo que necesita el
+// corte de fin de jornada, que sale cuando el Admin ya se fue.
+func TestMostradorEseDia_MiraElDiaEnteroNoLaHora(t *testing.T) {
+	repo := nuevoFakeRepo()
+	cargarBloque(repo, "b1", "admin1", domain.Lunes, 8, 12)
+	svc := servicioConAdmins(repo, "admin1")
+
+	// A las 23:00 no hay nadie…
+	instante, err := svc.MostradorEn(context.Background(), elLunesALas(23))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if instante.Atendido {
+		t.Errorf("a las 23 no hay nadie: %+v", instante)
+	}
+
+	// …pero ese día sí hubo, y de eso depende que el corte tenga sentido.
+	elDia, err := svc.MostradorEseDia(context.Background(), elLunesALas(23))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if !elDia.Atendido || !elDia.Opera() {
+		t.Errorf("hubo alguien de 8 a 12: el corte tiene que salir: %+v", elDia)
+	}
+}
+
+func TestMostradorEseDia_ElDiaQueNadieAtendio(t *testing.T) {
+	repo := nuevoFakeRepo()
+	// Solo atiende los martes: el lunes no hay nadie en todo el día.
+	cargarBloque(repo, "b1", "admin1", domain.Martes, 8, 12)
+	svc := servicioConAdmins(repo, "admin1")
+
+	c, err := svc.MostradorEseDia(context.Background(), elLunesALas(23))
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if c.Atendido || c.Opera() {
+		t.Errorf("el lunes no atendió nadie: %+v", c)
+	}
+}

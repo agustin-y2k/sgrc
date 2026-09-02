@@ -89,10 +89,6 @@ var textoDeCategoria = map[domain.CategoriaEmail]struct{ etiqueta, descripcion s
 		"Te cancelaron una computadora",
 		"Cuando una computadora que tenías reservada se cancela: pasó a mantenimiento, se rompió, o se bloqueó la franja para un acto o una evaluación. Cancela solo las máquinas que nombra, no toda la clase.",
 	},
-	domain.CatEquipoNoDisponible: {
-		"Una computadora tuya puede no estar",
-		"Antes de tu clase, si una de las que reservaste no volvió al laboratorio, y al cierre del día si la que tenés para mañana quedó afuera. Es lo que te da tiempo a conseguir otra.",
-	},
 	domain.CatPedidoDeLiberacion: {
 		"Alguien te pide una computadora que reservaste",
 		"Otro docente necesita un equipo que tenés tomado. Tu reserva no cambia: decidís vos.",
@@ -101,25 +97,13 @@ var textoDeCategoria = map[domain.CategoriaEmail]struct{ etiqueta, descripcion s
 		"Resolvieron tu pedido de materia",
 		"Cuando aprueban o rechazan el pedido para dictar una materia que hiciste desde tu perfil.",
 	},
-	domain.CatPedidoSobreMiMateria: {
-		"Alguien pidió dictar una materia tuya",
-		"Cuando otro docente pide que lo asignen a una materia que vos ya das. No hay nada que tengas que hacer: es para que no te enteres tarde.",
-	},
 	domain.CatSugerenciaRespondida: {
 		"Te contestaron lo que escribiste",
 		"La respuesta a una sugerencia o a un problema que reportaste por el buzón.",
 	},
 	domain.CatRecordatorioDeReserva: {
 		"Tenés clase en un rato",
-		"Una hora antes de cada reserva, con las computadoras y la materia. Uno por clase, no uno por máquina.",
-	},
-	domain.CatReservaSinRetirar: {
-		"Todavía no retiraste tus computadoras",
-		"Quince minutos después de empezada la clase, si nadie fue a buscarlas. A los cuarenta la reserva se libera para otro.",
-	},
-	domain.CatDevolucionPendiente: {
-		"Acordate de devolver",
-		"Diez minutos después de la hora en que un equipo que retiraste tenía que volver. Sale uno por equipo.",
+		"Una hora antes de cada reserva, con las computadoras y la materia. Uno por clase, no uno por máquina. No tiene aviso en la campana: si lo querés, es por acá.",
 	},
 
 	// ── De administración ─────────────────────────────────────────────────
@@ -131,13 +115,9 @@ var textoDeCategoria = map[domain.CategoriaEmail]struct{ etiqueta, descripcion s
 		"Cuentas esperando aprobación",
 		"Cada vez que alguien se registra y queda pendiente. Hasta que no la apruebes, esa persona no puede entrar al sistema.",
 	},
-	domain.CatDevolucionDemorada: {
-		"Equipos que no volvieron a horario",
-		"Cuando vence el plazo de una entrega y el equipo sigue afuera. Un correo por equipo, sin insistir.",
-	},
 	domain.CatCierreSinDevolver: {
 		"Equipos afuera al cerrar la jornada",
-		"El resumen de lo que quedó sin devolver al terminar el día, con el docente que lo tiene reservado mañana. Como mucho, uno por día.",
+		"El resumen de lo que quedó sin devolver al terminar el día. Como mucho, uno por día, y solo los días en que hubo alguien atendiendo el mostrador.",
 	},
 	domain.CatLicenciaPorVencer: {
 		"Licencias de software por vencer",

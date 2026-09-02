@@ -183,7 +183,7 @@ flowchart LR
   1. Admin da de baja al docente → `Usuario.estado = BAJA`.
   2. Sistema identifica todas las `Materia` donde el docente tenía `DocenteMateria`.
   3. Para cada una, verifica si queda al menos otro docente en estado `APROBADA` asignado:
-     - **Sí queda otro docente** → no se toca ninguna reserva. Se genera una notificación informativa a todos los `ADMIN` listando los `ReservaGrupo` futuros creados por el docente dado de baja en esa materia, para revisión manual.
+     - **Sí queda otro docente** → no se toca ninguna reserva **y no se avisa nada** (RF-05.4, retirada en la 1.18.0): no hay ninguna acción que pedir, y el aviso le llegaba a todos los `ADMIN` por algo que uno de ellos acababa de hacer.
      - **No queda ningún docente** → se cancelan automáticamente todos los `ReservaGrupo` futuros de esa materia (con sus `Reserva`), y se notifica a todos los `ADMIN` (no hay un docente al cual avisar).
   4. **Recién después** de resolver el destino de las reservas de todas sus materias, el sistema elimina los vínculos `DocenteMateria` del docente dado de baja — el orden importa: si se borraran antes, el paso 3 no podría distinguir "quedan otros docentes" de "este era el único".
   5. El docente pierde acceso al login (estado `BAJA` no puede autenticarse).
@@ -204,7 +204,7 @@ flowchart LR
 - **Flujo:**
   1. Admin remueve el vínculo `DocenteMateria` de esa materia puntual.
   2. Sistema verifica si queda al menos otro docente `APROBADA` asignado a esa materia:
-     - **Sí queda otro docente** → no se toca ninguna reserva. Aviso informativo al `ADMIN`.
+     - **Sí queda otro docente** → no se toca ninguna reserva y no se avisa nada (ver RF-05.4).
      - **No queda ningún docente** → se cancelan los `ReservaGrupo` futuros de esa materia y se notifica al `ADMIN`.
 - **Diferencia con la baja completa:** misma política de cascada (RF-02.10), pero acá el docente conserva su cuenta y el resto de sus materias — solo se ve afectado el vínculo puntual que se removió.
 
@@ -401,7 +401,8 @@ flowchart LR
   1. Usuario consulta la lista de Admins.
   2. Por cada uno, el sistema calcula "disponible ahora" comparando el día/hora actual contra: primero, si existe una excepción para hoy (la excepción manda); si no, contra el patrón semanal habitual.
   3. También se muestra el horario semanal completo de cada Admin, como referencia para saber cuándo volver.
-- **Nota:** esto es puramente informativo (RF-07.6) — no habilita ni restringe ninguna acción del sistema.
+- **Nota:** esto no restringe ninguna acción que haga una persona (RF-07.6) — reservar, entregar y aprobar funcionan igual esté quien esté. Pero **sí decide si el barrido automático puede sacar conclusiones**: el día que no hay ningún Admin de guardia, el sistema no libera reservas ni avisa que faltan máquinas, porque sin nadie registrando entregas no puede distinguir "nadie vino" de "nadie lo anotó".
+- Por eso **declarar la ausencia importa**: un Admin que sabe que falta lo carga como excepción (RF-07.4) y ese día el sistema se queda quieto, en vez de castigar a docentes que hicieron todo bien.
 
 ### UC: Pedir ayuda al equipo de administración (RF-09)
 - **Actor:** Cualquier usuario autenticado

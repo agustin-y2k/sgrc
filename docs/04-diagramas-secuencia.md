@@ -425,6 +425,7 @@ sequenceDiagram
     participant T2 as ticker 5 min
     participant T3 as ticker 1 h
     participant RES as reservation
+    participant AV as availability
     participant INV as inventory
     participant EB as eventbus
     participant DB as sgrc_db
@@ -436,9 +437,10 @@ sequenceDiagram
     end
 
     loop cada 5 minutos
-        T2->>RES: Vigilante.Barrer (RF-08.10 a 08.13, 08.20)
-        RES->>DB: recordatorios pendientes, reservas sin retirar,<br/>préstamos demorados, corte de jornada
-        RES->>EB: reserva.recordatorio, reserva.sin-retirar,<br/>prestamo.demorado, prestamo.sin-devolver.cierre
+        T2->>RES: Vigilante.Barrer (RF-08.10, 08.11, 08.13)
+        RES->>AV: ¿hay algún Admin de guardia? (RF-07.6)
+        RES->>DB: recordatorios pendientes, corte de jornada
+        RES->>EB: reserva.recordatorio,<br/>prestamo.sin-devolver.cierre
         RES->>DB: marcar cada fila como avisada
         RES->>DB: liberar lo que venció su plazo (sin publicar nada)
     end
@@ -460,15 +462,23 @@ sequenceDiagram
 > deja su marca en la fila, así que reiniciar el proceso o estar caído dos
 > horas cambia *cuándo* sale el aviso, nunca *cuántas veces* (RF-08).
 
-> **El aviso y la liberación son dos momentos distintos** (RF-08.20 y RF-08.10).
-> A los 15 minutos del inicio, si no salió ninguna máquina de esa reserva, el
-> barrido publica `reserva.sin-retirar` y marca `aviso_sin_retirar_en`: ese es el
-> único aviso, y llega cuando el docente todavía puede ir, cambiar la máquina o
-> cancelar. **Liberar no publica nada** — ni a los 40 sin retiro, ni a los 15 de
-> una entrega parcial. Es el único punto del barrido donde una reserva cambia de
-> estado sin que salga un aviso, y es a propósito: el correo ya salió antes, y
-> repetirlo al liberar sería un segundo mensaje por la misma clase para contar
-> algo que ya no se puede cambiar.
+> **Liberar no publica nada** (RF-08.10) — ni a los 40 sin retiro, ni a los 15
+> de una entrega parcial. Es el único punto del barrido donde una reserva cambia
+> de estado sin que salga ningún aviso, y desde la 1.18.0 tampoco lo precede
+> uno: el de los 15 minutos (RF-08.20) se retiró. Liberar le devuelve la máquina
+> al resto de la escuela; no es un reproche que haya que anunciar.
+
+> **Antes de deducir nada, el barrido pregunta si había alguien** (RF-07.6).
+> Las dos pasadas que concluyen algo a partir de un registro FALTANTE —liberar
+> y el corte de fin de jornada— consultan primero a `availability` si algún
+> Admin tenía horario que cubriera ese momento
+> y no declaró ausencia. Sin nadie atendiendo el mostrador, el barrido lee su
+> propio silencio y no la realidad del laboratorio, así que no escribe ni avisa
+> nada. El recordatorio es la excepción: no deduce nada de lo que falta.
+>
+> El corte de jornada usa la variante **por día** y no por instante, porque sale
+> una hora después de que la escuela cerró: para entonces el Admin ya se fue, y
+> preguntar por ese momento daría "no hay nadie" siempre.
 
 ## 10. Ver disponibilidad de Admins
 
@@ -496,4 +506,8 @@ sequenceDiagram
 > docente; el cálculo en sí no toca la base, así que se traen los dos conjuntos
 > de una vez y se cruzan en memoria.
 
-> Puramente informativo (RF-07.6): este cálculo no habilita ni bloquea ninguna otra acción del sistema — es solo para que el docente sepa cuándo pasar por el laboratorio.
+> Este cálculo **no habilita ni bloquea ninguna acción que haga una persona**
+> (RF-07.6): reservar, entregar y aprobar funcionan igual esté quien esté. Pero
+> desde la 1.18.0 **sí decide si el barrido automático puede sacar
+> conclusiones** — es la misma consulta que responde `MostradorEn`. Un horario
+> mal cargado ya no es solo una pantalla que miente.

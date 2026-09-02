@@ -46,7 +46,8 @@ func claimsDelContexto(c *fiber.Ctx) (*middleware.Claims, error) {
 }
 
 // GET /api/availability/admins — cualquier usuario autenticado (RF-07.2).
-// Puramente informativo: no afecta ninguna otra funcionalidad (RF-07.6).
+// No restringe ninguna operación que haga una persona, pero de estos horarios
+// depende que el barrido automático actúe (RF-07.6).
 func (h *Handler) DisponibilidadDeAdmins(c *fiber.Ctx) error {
 	resultado, err := h.svc.DisponibilidadDeTodosLosAdmins(c.UserContext())
 	if err != nil {

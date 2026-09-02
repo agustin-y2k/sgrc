@@ -330,12 +330,6 @@ func eventosQueVanATodosLosAdmins() []struct {
 			}},
 		},
 		{
-			"devolución demorada", domain.CatDevolucionDemorada,
-			eventbus.Evento{Tipo: "prestamo.demorado", Payload: eventbus.PrestamosDemorados{
-				Prestamos: []eventbus.PrestamoDemorado{{Etiqueta: "PC 7", Quien: "Ana", MinutosDeDemora: 40}},
-			}},
-		},
-		{
 			"cierre de jornada", domain.CatCierreSinDevolver,
 			eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{
 				Equipos: []eventbus.EquipoSinDevolverAlCierre{{Etiqueta: "PC 7", Quien: "Ana"}},
@@ -394,23 +388,22 @@ func TestCorreo_CadaCategoriaLlegaSoloAQuienLaTildo(t *testing.T) {
 	}
 }
 
-// El correo personal no pasa por el panel: el docente al que se le demoró una
-// devolución recibe el suyo aunque ningún Admin haya tildado la categoría.
-func TestCorreo_DemoraDelDocente_NoDependeDeLaSuscripcionDeLosAdmins(t *testing.T) {
+// El correo personal no pasa por el panel de los Admin: la docente que tiene
+// clase en una hora recibe el suyo aunque ningún Admin haya tildado nada.
+func TestCorreo_RecordatorioDelDocente_NoDependeDeLaSuscripcionDeLosAdmins(t *testing.T) {
 	bus := eventbus.NewInMemoryEventBus()
 	enviador := &fakeEnviador{}
 	m := NewMensajero(enviador, &fakeListadorAdmins{
 		adminEmails: []string{"admin1@escuela.edu.ar"},
 		suscriptos:  map[domain.CategoriaEmail][]string{},
 	}, &fakePreferencias{porEmail: map[string]map[domain.CategoriaEmail]bool{
-		"ana@escuela.edu.ar": {domain.CatDevolucionPendiente: true},
+		"ana@escuela.edu.ar": {domain.CatRecordatorioDeReserva: true},
 	}}, urlDePrueba)
 	RegisterEmailHandlersSincronos(bus, m)
 
-	bus.Publish(eventbus.Evento{Tipo: "prestamo.demorado", Payload: eventbus.PrestamosDemorados{
-		Prestamos: []eventbus.PrestamoDemorado{{
-			Etiqueta: "PC 7", Quien: "Ana", Email: "ana@escuela.edu.ar", MinutosDeDemora: 40,
-		}},
+	bus.Publish(eventbus.Evento{Tipo: "reserva.recordatorio", Payload: eventbus.RecordatorioDeReserva{
+		Email: "ana@escuela.edu.ar", Nombre: "Ana", MateriaNombre: "Física",
+		HoraInicio: 8 * time.Hour, Equipos: []string{"PC 7"}, MinutosDeGracia: 40,
 	}})
 
 	if len(enviador.enviados) != 1 {
@@ -463,35 +456,6 @@ func TestCorreo_Recordatorio_LlegaSiLoPidio(t *testing.T) {
 	}
 }
 
-// El aviso de que una computadora suya puede no estar arranca ENCENDIDO: es
-// lo único que le da tiempo a conseguir otra antes de la clase.
-func TestCorreo_EquipoNoDisponible_EncendidoPorDefecto(t *testing.T) {
-	bus, enviador := mensajeroConPreferencias(nil)
-
-	bus.Publish(eventbus.Evento{Tipo: "reserva.equipo-no-disponible", Payload: eventbus.EquipoNoDisponibleParaReserva{
-		UsuarioID: "usr-1", Email: "ana@escuela.edu.ar", Nombre: "Ana", Equipos: []string{"PC 3"},
-	}})
-
-	if len(enviador.enviados) != 1 {
-		t.Fatalf("tendría que haber llegado sin que nadie lo pida, hubo %d", len(enviador.enviados))
-	}
-}
-
-// Y se puede apagar: es una preferencia, no una regla.
-func TestCorreo_EquipoNoDisponible_SePuedeApagar(t *testing.T) {
-	bus, enviador := mensajeroConPreferencias(map[string]map[domain.CategoriaEmail]bool{
-		"ana@escuela.edu.ar": {domain.CatEquipoNoDisponible: false},
-	})
-
-	bus.Publish(eventbus.Evento{Tipo: "reserva.equipo-no-disponible", Payload: eventbus.EquipoNoDisponibleParaReserva{
-		UsuarioID: "usr-1", Email: "ana@escuela.edu.ar", Nombre: "Ana", Equipos: []string{"PC 3"},
-	}})
-
-	if len(enviador.enviados) != 0 {
-		t.Fatalf("lo apagó y llegó igual: %+v", enviador.enviados)
-	}
-}
-
 // Los tres de la cuenta salen SIEMPRE, aunque esa persona haya apagado todo
 // lo que se puede apagar. El del código es el caso que importa: quien lo
 // necesita no puede entrar a leer la campana.
@@ -537,10 +501,32 @@ func TestCorreo_LosDeLaCuenta_NoLosApagaNadie(t *testing.T) {
 
 // ── La cancelación (RF-05.1/05.2/05.3) ──────────────────────────────────
 
-// Arranca encendida: es la noticia de algo que decidió otro, y cuanto antes
-// llegue más chances hay de conseguir otra máquina para esa clase.
-func TestCorreo_Cancelacion_EncendidaPorDefecto(t *testing.T) {
+// Arranca APAGADA, como todo lo configurable desde la 1.18.0: el aviso está
+// igual en la campana, que no se puede apagar, y un correo que nadie pidió se
+// archiva sin leer. Este test prueba el contenido con la casilla encendida —
+// que es lo que importa de este correo— y el de al lado prueba el default.
+func TestCorreo_Cancelacion_ApagadaPorDefecto(t *testing.T) {
 	bus, enviador := mensajeroConPreferencias(nil)
+
+	bus.Publish(eventbus.Evento{Tipo: "reserva.cancelada", Payload: eventbus.CancelacionesDeUsuario{
+		UsuarioID: "usr-1", Nombre: "Ana", Email: "ana@escuela.edu.ar",
+		Motivo: "la computadora pasó a mantenimiento",
+		Reservas: []eventbus.ReservaCancelada{
+			{ReservaID: "r-1", Etiqueta: "PC 3", Fecha: time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)},
+		},
+	}})
+
+	if len(enviador.enviados) != 0 {
+		t.Fatalf("nadie lo pidió: no tendría que salir, salieron %d", len(enviador.enviados))
+	}
+}
+
+// El contenido del correo, con la casilla encendida. Es lo que el docente
+// necesita leer para no dar por perdida una clase que todavía tiene.
+func TestCorreo_Cancelacion_DiceQueSeCancelaYQueSigueEnPie(t *testing.T) {
+	bus, enviador := mensajeroConPreferencias(map[string]map[domain.CategoriaEmail]bool{
+		"ana@escuela.edu.ar": {domain.CatReservaCancelada: true},
+	})
 
 	bus.Publish(eventbus.Evento{Tipo: "reserva.cancelada", Payload: eventbus.CancelacionesDeUsuario{
 		UsuarioID: "usr-1", Nombre: "Ana", Email: "ana@escuela.edu.ar",
@@ -569,7 +555,9 @@ func TestCorreo_Cancelacion_EncendidaPorDefecto(t *testing.T) {
 // Un bloqueo sobre varias máquinas del mismo día es UN correo que las nombra,
 // no uno por máquina.
 func TestCorreo_Cancelacion_VariasDelMismoDia_UnSoloCorreo(t *testing.T) {
-	bus, enviador := mensajeroConPreferencias(nil)
+	bus, enviador := mensajeroConPreferencias(map[string]map[domain.CategoriaEmail]bool{
+		"ana@escuela.edu.ar": {domain.CatReservaCancelada: true},
+	})
 	elDia := time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)
 
 	bus.Publish(eventbus.Evento{Tipo: "reserva.cancelada", Payload: eventbus.CancelacionesDeUsuario{

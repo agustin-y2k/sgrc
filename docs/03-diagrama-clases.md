@@ -123,7 +123,6 @@ classDiagram
         +DateTime devueltoEn
         +UUID recibidoPor
         +string observaciones
-        +DateTime avisadoDemoraEn
         +Date avisadoCierrePara
         +estaAbierto() bool
         +demorado(ahora) bool
@@ -310,7 +309,7 @@ classDiagram
 | `Gravedad` | `LEVE`, `MODERADA`, `GRAVE` |
 | `EstadoIncidencia` | `ABIERTA`, `EN_REPARACION`, `ENVIADA_A_SOPORTE`, `RESUELTA` |
 | `EstadoNotif` | `NO_LEIDA`, `LEIDA` |
-| `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `LICENCIA_POR_VENCER`, `RESERVA_POR_COMENZAR`, `RESERVA_NO_RETIRADA`, `EQUIPO_SIN_DEVOLVER`, `PEDIDO_DE_LIBERACION` |
+| `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `LICENCIA_POR_VENCER`, `EQUIPO_SIN_DEVOLVER`, `PEDIDO_DE_LIBERACION`, `PEDIDO_DE_MATERIA`, `PEDIDO_DE_MATERIA_RESUELTO`, `SUGERENCIA`, `SUGERENCIA_RESPONDIDA` |
 | `PrivilegioDeCuenta` | `COMUN`, `ADMINISTRADOR` — qué puede hacer esa cuenta en la máquina |
 | `VisibilidadDeCuenta` | `PUBLICA`, `SOLO_ADMIN` — quién puede ver su **contraseña**; la cuenta y su privilegio se listan siempre |
 | `EstadoLicencia` | `SIN_FECHA`, `VENCIDA`, `POR_VENCER`, `VIGENTE` — **derivado**, nunca una columna: se calcula contra la fecha de hoy |

@@ -26,14 +26,14 @@ func esViolacionUnica(err error) bool {
 const columnasPrestamo = `id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre, ` +
 	`COALESCE(retirado_por, ''), ` +
 	`motivo, devolucion_estimada, entregado_por, entregado_en, devuelto_en, recibido_por, observaciones, ` +
-	`avisado_demora_en, avisado_cierre_para`
+	`avisado_cierre_para`
 
 // columnasPrestamoDetallado agrega la ubicación de la PC y, si el préstamo
 // salió contra una reserva, el nombre de la materia.
 const columnasPrestamoDetallado = `p.id, p.equipo_id, p.reserva_id, p.entregado_a_usuario_id, p.entregado_a_nombre, ` +
 	`COALESCE(p.retirado_por, ''), ` +
 	`p.motivo, p.devolucion_estimada, p.entregado_por, p.entregado_en, p.devuelto_en, p.recibido_por, p.observaciones, ` +
-	`p.avisado_demora_en, p.avisado_cierre_para, ` +
+	`p.avisado_cierre_para, ` +
 	`COALESCE(eq.identificador, 0), COALESCE(eq.nombre, 'PC ' || eq.identificador), COALESCE(c.nombre, ''), m.nombre`
 
 // joinsDelPrestamo: la PC y su carro son INNER —un préstamo sin PC no existe—
@@ -101,7 +101,7 @@ func escanearPrestamo(row pgx.Row) (*domain.Prestamo, error) {
 		&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 		&p.RetiradoPor, &motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 		&p.DevueltoEn, &p.RecibidoPor, &observaciones,
-		&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
+		&p.AvisadoCierrePara,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -183,7 +183,7 @@ func escanearPrestamosDetallados(rows pgx.Rows) ([]*application.PrestamoDetallad
 			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 			&p.RetiradoPor, &motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
-			&p.AvisadoDemoraEn, &p.AvisadoCierrePara,
+			&p.AvisadoCierrePara,
 			&d.Identificador, &d.Etiqueta, &d.CarroNombre, &d.MateriaNombre,
 		)
 		if err != nil {

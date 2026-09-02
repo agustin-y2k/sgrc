@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/ramiro/sgrc/internal/shared/eventbus"
 )
 
 // hoyDeTest es el día que devuelve el reloj de nuevoServicioDeTest.
@@ -437,5 +438,82 @@ func TestBorrarLicencia(t *testing.T) {
 	}
 	if err := svc.BorrarLicencia(ctx, "lic-1"); !errors.Is(err, ErrLicenciaNoEncontrada) {
 		t.Errorf("borrar dos veces debería dar ErrLicenciaNoEncontrada, obtuve %v", err)
+	}
+}
+
+// ── El aviso se cierra cuando no queda ninguna pendiente (RF-03.14) ──────
+//
+// Las licencias NO vencen todas el mismo día: cada notebook tiene su propia
+// fila con su propia fecha, y el aviso junta las que caen esa mañana. Por eso
+// el cierre no puede ser "se renovó una": es "ya no queda ninguna".
+
+// servicioConBus es servicioSimple pero devolviendo también el bus, para
+// poder mirar qué publicó.
+func servicioConBus(repo Repo) (*Service, *eventbus.InMemoryEventBus) {
+	contadorID = 0
+	bus := eventbus.NewInMemoryEventBus()
+	svc := NewService(repo, &fakeValidadorReservas{}, idSecuencial, func() time.Time {
+		return hoyDeTest
+	}, cifradorDeTest(), bus)
+	return svc, bus
+}
+
+func TestRenovarLicencias_PublicaCuantasQuedanPendientes(t *testing.T) {
+	repo := repoConCarroYEquipos(2)
+	// Dos notebooks distintas, vencidas en días distintos. Es el caso real:
+	// se cargaron en momentos distintos y cada una corre su propio reloj.
+	licenciaCargada(t, repo, "lic-1", "equipo-1", dia(2025, time.December, 30))
+	licenciaCargada(t, repo, "lic-2", "equipo-2", dia(2025, time.December, 31))
+	svc, bus := servicioConBus(repo)
+
+	var pendientes []int
+	bus.Subscribe("licencia.pendientes", func(e eventbus.Evento) {
+		pendientes = append(pendientes, e.Payload.(eventbus.PendientesDeLicencia).Pendientes)
+	})
+
+	// Se renueva la primera: queda una, el aviso sigue diciendo la verdad.
+	if _, err := svc.RenovarLicencias(context.Background(), []string{"lic-1"}, nil, "admin-1"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(pendientes) != 1 || pendientes[0] != 1 {
+		t.Fatalf("esperaba que avisara que queda 1 pendiente, publicó %v", pendientes)
+	}
+
+	// Y la segunda: ya no queda ninguna.
+	if _, err := svc.RenovarLicencias(context.Background(), []string{"lic-2"}, nil, "admin-1"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(pendientes) != 2 || pendientes[1] != 0 {
+		t.Fatalf("esperaba que avisara que no queda ninguna, publicó %v", pendientes)
+	}
+}
+
+// Renovar le da a esa fila los días de duración QUE ESA FILA tiene cargados,
+// contados desde la fecha de renovación. No hay ninguna duración global: dos
+// notebooks con el mismo software pueden tener duraciones distintas.
+func TestRenovarLicencias_CadaFilaUsaSuPropiaDuracion(t *testing.T) {
+	repo := repoConCarroYEquipos(2)
+	licenciaCargada(t, repo, "lic-1", "equipo-1", dia(2026, time.January, 2))
+	deNoventa := licenciaCargada(t, repo, "lic-2", "equipo-2", dia(2026, time.January, 2))
+	if err := deNoventa.CambiarDuracion(90); err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	svc := servicioSimple(repo)
+
+	resultado, err := svc.RenovarLicencias(context.Background(), []string{"lic-1", "lic-2"}, nil, "admin-1")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	vencimientos := map[string]time.Time{}
+	for _, l := range resultado.Renovadas {
+		vencimientos[l.ID] = *l.FechaVencimiento
+	}
+	// Renovadas el mismo día, vencen en fechas distintas: 30 y 90 días.
+	if !vencimientos["lic-1"].Equal(dia(2026, time.January, 31)) {
+		t.Errorf("lic-1 (30 días) venció el %v, esperaba 2026-01-31", vencimientos["lic-1"])
+	}
+	if !vencimientos["lic-2"].Equal(dia(2026, time.April, 1)) {
+		t.Errorf("lic-2 (90 días) venció el %v, esperaba 2026-04-01", vencimientos["lic-2"])
 	}
 }

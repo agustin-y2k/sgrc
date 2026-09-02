@@ -23,6 +23,18 @@ type Repo interface {
 	// MarcarTodasLeidasDe marca de una todas las NO_LEIDA de un usuario y
 	// devuelve cuántas cambió.
 	MarcarTodasLeidasDe(ctx context.Context, usuarioID string, ahora time.Time) (int, error)
+
+	// MarcarLeidasPorTipo cierra todas las NO_LEIDA de un tipo, de TODOS los
+	// usuarios, y devuelve cuántas cambió.
+	//
+	// Es el cierre de los avisos que no hablan de una persona sino de un
+	// conjunto de cosas —licencias por renovar, equipos que quedaron afuera—.
+	// Esos no se pueden cerrar uno por uno como los de
+	// CerrarAvisosSobreUsuario: un solo aviso resume varias licencias y no
+	// guarda cuáles, así que lo que se cierra no es "esta licencia" sino "ya
+	// no queda ninguna pendiente", que es cuando el aviso deja de tener a qué
+	// apuntar.
+	MarcarLeidasPorTipo(ctx context.Context, tipo domain.Tipo, ahora time.Time) (int, error)
 }
 
 // ListadorAdmins es el puerto hacia auth — SQL directo contra usuario, sin

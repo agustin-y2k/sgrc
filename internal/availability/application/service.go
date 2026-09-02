@@ -454,3 +454,93 @@ func (s *Service) CierreDeLaJornada(ctx context.Context, fecha time.Time) (decla
 	cierre, abre := domain.CierreDe(jornada, dia)
 	return true, abre, cierre, nil
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// ¿Hay alguien atendiendo el mostrador? (RF-07.6)
+// ═══════════════════════════════════════════════════════════════════════
+// Lo consulta el barrido de reservas y entregas, a través del puerto
+// ValidadorMostrador de reservation. Ver domain/mostrador.go para por qué
+// existe.
+
+// CoberturaDelMostrador es la respuesta completa, y tiene tres estados y no
+// dos a propósito. "No hay nadie" y "acá nadie declaró nunca un horario" son
+// cosas distintas: la primera apaga el barrido, la segunda no puede apagarlo
+// porque no es una declaración de nadie, es una instalación sin configurar.
+type CoberturaDelMostrador struct {
+	// Atendido: hay al menos un Admin cuyo horario cubre ese momento.
+	Atendido bool
+	// Declarado: al menos un Admin cargó su horario semanal. Con esto en
+	// false, Atendido no significa nada y el barrido opera como siempre.
+	Declarado bool
+}
+
+// Opera dice si el barrido puede sacar conclusiones. Sin horarios declarados
+// se comporta como antes de que RF-07.6 existiera.
+func (c CoberturaDelMostrador) Opera() bool {
+	return !c.Declarado || c.Atendido
+}
+
+// MostradorEn resuelve la cobertura para un instante puntual — el que usan
+// las pasadas del barrido que miran "¿esto está pasando ahora?".
+func (s *Service) MostradorEn(ctx context.Context, momento time.Time) (CoberturaDelMostrador, error) {
+	dia, hora := domain.DiaYHoraDe(momento)
+	return s.cobertura(ctx, momento, func(tramos []domain.Tramo) bool {
+		return domain.CubreLaHora(tramos, hora)
+	}, dia)
+}
+
+// MostradorEseDia resuelve si alguien atendió en algún momento de ese día.
+//
+// Existe aparte de MostradorEn por el corte de fin de jornada, que sale una
+// hora DESPUÉS de que la escuela cerró: para entonces el Admin ya se fue, y
+// preguntar por ese instante daría siempre que no hay nadie. Lo que el corte
+// necesita saber es otra cosa —si hubo alguien operando el sistema durante el
+// día que se está cerrando— porque de eso depende que los datos sirvan.
+func (s *Service) MostradorEseDia(ctx context.Context, fecha time.Time) (CoberturaDelMostrador, error) {
+	dia, _ := domain.DiaYHoraDe(fecha)
+	return s.cobertura(ctx, fecha, func(tramos []domain.Tramo) bool {
+		return len(tramos) > 0
+	}, dia)
+}
+
+// cobertura es el tronco común: una consulta de bloques y otra de excepciones
+// para TODOS los Admin aprobados, y después el criterio que le pasen.
+func (s *Service) cobertura(ctx context.Context, momento time.Time, cubre func([]domain.Tramo) bool, dia domain.DiaSemana) (CoberturaDelMostrador, error) {
+	admins, err := s.listadorAdmins.AdminsAprobados(ctx)
+	if err != nil {
+		return CoberturaDelMostrador{}, fmt.Errorf("listando admins aprobados: %w", err)
+	}
+	if len(admins) == 0 {
+		// Una escuela sin ningún Admin aprobado no declaró nada: el barrido
+		// sigue operando, igual que antes.
+		return CoberturaDelMostrador{}, nil
+	}
+
+	ids := make([]string, len(admins))
+	for i, admin := range admins {
+		ids[i] = admin.ID
+	}
+
+	// Dos consultas en total y no dos por Admin, por lo mismo que
+	// DisponibilidadDeTodosLosAdmins: esto corre cada cinco minutos.
+	bloquesPorAdmin, err := s.repo.ListarBloquesDeUsuarios(ctx, ids)
+	if err != nil {
+		return CoberturaDelMostrador{}, fmt.Errorf("listando horarios de los admins: %w", err)
+	}
+	excepcionesPorAdmin, err := s.repo.BuscarExcepcionesDeFecha(ctx, ids, domain.FechaSolo(momento))
+	if err != nil {
+		return CoberturaDelMostrador{}, fmt.Errorf("buscando las excepciones del día: %w", err)
+	}
+
+	var cobertura CoberturaDelMostrador
+	for _, admin := range admins {
+		bloques := bloquesPorAdmin[admin.ID]
+		if domain.DeclaroHorario(bloques) {
+			cobertura.Declarado = true
+		}
+		if cubre(domain.TramosDelDia(bloques, excepcionesPorAdmin[admin.ID], dia)) {
+			cobertura.Atendido = true
+		}
+	}
+	return cobertura, nil
+}

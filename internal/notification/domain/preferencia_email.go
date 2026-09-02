@@ -36,27 +36,16 @@ const (
 	// CatReservaCancelada: le cancelaron una o varias computadoras de una
 	// reserva (RF-05.1/05.2/05.3). Arranca encendida.
 	CatReservaCancelada CategoriaEmail = "RESERVA_CANCELADA"
-	// CatEquipoNoDisponible: una computadora que reservó puede no estar cuando
-	// llegue. Arranca encendida — es lo único que le permite conseguir otra
-	// antes de la clase.
-	CatEquipoNoDisponible CategoriaEmail = "EQUIPO_NO_DISPONIBLE"
 	// CatPedidoDeLiberacion: otro docente le pide un equipo que tiene
 	// reservado (RF-04.12).
 	CatPedidoDeLiberacion CategoriaEmail = "PEDIDO_DE_LIBERACION"
 	// CatPedidoDeMateriaResuelto: le aprobaron o le rechazaron el pedido para
 	// dictar una materia.
 	CatPedidoDeMateriaResuelto CategoriaEmail = "PEDIDO_DE_MATERIA_RESUELTO"
-	// CatPedidoSobreMiMateria: alguien pidió dictar una materia que esta
-	// persona ya dicta.
-	CatPedidoSobreMiMateria CategoriaEmail = "PEDIDO_SOBRE_MI_MATERIA"
 	// CatSugerenciaRespondida: le contestaron lo que escribió en el buzón.
 	CatSugerenciaRespondida CategoriaEmail = "SUGERENCIA_RESPONDIDA"
 	// CatRecordatorioDeReserva: en un rato tiene clase.
 	CatRecordatorioDeReserva CategoriaEmail = "RECORDATORIO_DE_RESERVA"
-	// CatReservaSinRetirar: pasaron los minutos y todavía no retiró.
-	CatReservaSinRetirar CategoriaEmail = "RESERVA_SIN_RETIRAR"
-	// CatDevolucionPendiente: tiene un equipo que ya tenía que haber vuelto.
-	CatDevolucionPendiente CategoriaEmail = "DEVOLUCION_PENDIENTE"
 )
 
 // Las de administración: los avisos que van a TODOS los Admin.
@@ -73,8 +62,6 @@ const (
 	CatSugerencia CategoriaEmail = "SUGERENCIA"
 	// CatPedidoDeMateria: alguien pidió dictar una materia.
 	CatPedidoDeMateria CategoriaEmail = "PEDIDO_DE_MATERIA"
-	// CatDevolucionDemorada: un equipo entregado no volvió a horario.
-	CatDevolucionDemorada CategoriaEmail = "DEVOLUCION_DEMORADA"
 	// CatCierreSinDevolver: qué quedó afuera al cerrar la jornada.
 	CatCierreSinDevolver CategoriaEmail = "CIERRE_SIN_DEVOLVER"
 )
@@ -96,7 +83,7 @@ func (c CategoriaEmail) Grupo() Grupo {
 	switch c {
 	case CatRecuperacionDeCuenta, CatCuentaAprobada:
 		return GrupoCuenta
-	case CatSoporte, CatCuentaPendiente, CatDevolucionDemorada, CatCierreSinDevolver,
+	case CatSoporte, CatCuentaPendiente, CatCierreSinDevolver,
 		CatLicenciaPorVencer, CatPedidoDeMateria, CatSugerencia:
 		return GrupoAdministracion
 	default:
@@ -127,28 +114,27 @@ func (c CategoriaEmail) EsFija() bool {
 
 // ActivaPorDefecto dice qué recibe quien nunca abrió el panel.
 //
-// La regla que separa una lista de la otra: arranca encendido lo que trae
-// noticias de algo que hizo OTRO —le pidieron un equipo, le contestaron, le
-// resolvieron un pedido, o la computadora que tenía reservada dejó de estar—
-// porque quien lo recibe no tiene forma de enterarse a tiempo por su cuenta.
-// Arranca apagado lo que le cuenta a alguien algo que ya sabe: que tiene
-// clase, que no retiró, que no devolvió.
+// **Casi nada.** De fábrica salen los cuatro correos fijos —los dos de la
+// cuenta y los dos de soporte— y una sola categoría más. Todo el resto arranca
+// apagado y se enciende si esa persona lo pide.
 //
-// Y arranca encendido el aviso de cuenta esperando aprobación, aunque sea de
-// administración, porque su demora la sufre un tercero: un docente que no
-// puede entrar hasta que alguien lo mire.
+// El criterio cambió en la 1.18.0. Antes arrancaba encendido todo lo que
+// traía noticias de algo que hizo otro, con el argumento de que quien lo
+// recibe no tiene forma de enterarse a tiempo por su cuenta. En la práctica
+// eso llenaba la casilla de gente que no lo había pedido, y el aviso igual
+// estaba en la campana, que es la fuente de verdad y no se puede apagar. Un
+// correo que nadie pidió no informa: se archiva sin leer, y de paso entrena a
+// no mirar los que sí importan.
+//
+// La única excepción es **cuenta esperando aprobación**, y no por quien lo
+// recibe sino por quien lo sufre: un docente que no puede entrar al sistema
+// hasta que un Admin lo mire, y que no tiene forma de apurar a nadie. Ese
+// correo no es una cortesía para el Admin, es la única garantía del tercero.
 func (c CategoriaEmail) ActivaPorDefecto() bool {
 	if c.EsFija() {
 		return true
 	}
-	switch c {
-	case CatReservaCancelada, CatEquipoNoDisponible, CatPedidoDeLiberacion,
-		CatPedidoDeMateriaResuelto, CatPedidoSobreMiMateria, CatSugerenciaRespondida,
-		CatCuentaPendiente:
-		return true
-	default:
-		return false
-	}
+	return c == CatCuentaPendiente
 }
 
 // CategoriasDeEmail son todas, en el orden en que se muestran: primero las de
@@ -163,18 +149,13 @@ func CategoriasDeEmail() []CategoriaEmail {
 		// Personales.
 		CatSoporteRespondido,
 		CatReservaCancelada,
-		CatEquipoNoDisponible,
 		CatPedidoDeLiberacion,
 		CatPedidoDeMateriaResuelto,
-		CatPedidoSobreMiMateria,
 		CatSugerenciaRespondida,
 		CatRecordatorioDeReserva,
-		CatReservaSinRetirar,
-		CatDevolucionPendiente,
 		// De administración.
 		CatSoporte,
 		CatCuentaPendiente,
-		CatDevolucionDemorada,
 		CatCierreSinDevolver,
 		CatLicenciaPorVencer,
 		CatPedidoDeMateria,

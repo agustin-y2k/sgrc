@@ -56,6 +56,7 @@ func (s *Service) Escribir(ctx context.Context, usuarioID, tipo, asunto, texto, 
 		Tipo: "sugerencia.nueva",
 		Payload: eventbus.SugerenciaNueva{
 			SugerenciaID: sug.ID,
+			UsuarioID:    usuarioID,
 			Quien:        nombre,
 			Tipo:         string(sug.Tipo),
 			Asunto:       sug.Asunto,
@@ -121,6 +122,7 @@ func (s *Service) Responder(ctx context.Context, sugerenciaID, autorID string, d
 		Tipo: "sugerencia.seguimiento",
 		Payload: eventbus.SugerenciaSeguimiento{
 			SugerenciaID: sug.ID,
+			UsuarioID:    sug.UsuarioID,
 			Quien:        nombre,
 			Tipo:         string(sug.Tipo),
 			Asunto:       sug.Asunto,

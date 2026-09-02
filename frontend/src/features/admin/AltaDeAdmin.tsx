@@ -14,9 +14,22 @@ import { getErrorMessage } from "@/lib/api-client"
 
 const MIN_PASSWORD = 8
 
-export function AltaDeAdmin({ usuariosKey }: { usuariosKey: unknown[] }) {
+/**
+ * El panel para crear otro Admin.
+ *
+ * Quien decide si está abierto es la PÁGINA, no este componente. El botón vive
+ * en la acción del encabezado, que es un slot `shrink-0` para un control chico:
+ * un panel entero ahí adentro se niega a encoger y aplasta el título y la
+ * descripción de la pantalla. El panel va debajo, a lo ancho de la página.
+ */
+export function AltaDeAdmin({
+  usuariosKey,
+  onCerrar,
+}: {
+  usuariosKey: unknown[]
+  onCerrar: () => void
+}) {
   const queryClient = useQueryClient()
-  const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState("")
   const [apellido, setApellido] = useState("")
   const [email, setEmail] = useState("")
@@ -45,14 +58,6 @@ export function AltaDeAdmin({ usuariosKey }: { usuariosKey: unknown[] }) {
     },
   })
 
-  if (!abierto) {
-    return (
-      <Button variant="outline" onClick={() => setAbierto(true)}>
-        Crear otro Admin
-      </Button>
-    )
-  }
-
   const completo =
     nombre.trim() !== "" &&
     apellido.trim() !== "" &&
@@ -60,7 +65,7 @@ export function AltaDeAdmin({ usuariosKey }: { usuariosKey: unknown[] }) {
     password.length >= MIN_PASSWORD
 
   return (
-    <Card className="mb-4">
+    <Card className="mb-6">
       <CardHeader>
         <CardTitle>Nuevo Admin</CardTitle>
       </CardHeader>
@@ -144,9 +149,9 @@ export function AltaDeAdmin({ usuariosKey }: { usuariosKey: unknown[] }) {
               type="button"
               variant="outline"
               onClick={() => {
-                setAbierto(false)
                 setCreado(null)
                 limpiar()
+                onCerrar()
               }}
             >
               Cerrar

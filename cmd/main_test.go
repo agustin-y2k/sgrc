@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // buildDSN se testea porque el modo de falla es especialmente ingrato: una
 // contraseña "buena" (larga y aleatoria, como pide RNF-04) tiene muchas más
@@ -53,6 +56,56 @@ func TestOrigenDelFrontend_ValoresValidos(t *testing.T) {
 		t.Setenv("FRONTEND_ORIGIN", c.env)
 		if obtenido := origenDelFrontend(); obtenido != c.esperado {
 			t.Errorf("origenDelFrontend() con %q = %q, esperaba %q", c.env, obtenido, c.esperado)
+		}
+	}
+}
+
+// LICENCIAS_INTERVALO_MINUTOS existe para poder ver el ciclo de un aviso sin
+// esperar una hora. Lo que este test protege es el DEFAULT: si un despliegue
+// que no la declara terminara revisando cada minuto, el job pasaría de correr
+// 24 veces por día a 1440 sin que nadie lo haya pedido.
+func TestIntervaloDeLicencias_DefaultYValores(t *testing.T) {
+	casos := []struct {
+		nombre   string
+		env      string
+		esperado time.Duration
+	}{
+		{"sin declarar, el default", "", time.Hour},
+		{"vacía es como no declararla", "   ", time.Hour},
+		{"el valor de prueba", "1", time.Minute},
+		{"un valor intermedio", "15", 15 * time.Minute},
+		{"el tope, un día", "1440", 24 * time.Hour},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			t.Setenv("LICENCIAS_INTERVALO_MINUTOS", c.env)
+			if obtenido := intervaloDeLicencias(); obtenido != c.esperado {
+				t.Errorf("intervaloDeLicencias() con %q = %v, esperaba %v", c.env, obtenido, c.esperado)
+			}
+		})
+	}
+}
+
+// LICENCIAS_HORA_AVISO decide a partir de qué hora puede salir el aviso del
+// día. Nunca tuvo test, y su default importa: con un 0 mal leído el correo
+// saldría a medianoche.
+func TestHoraAvisoLicencias_DefaultYValores(t *testing.T) {
+	casos := []struct {
+		env      string
+		esperado int
+	}{
+		{"", horaAvisoLicenciasPorDefecto},
+		{"  ", horaAvisoLicenciasPorDefecto},
+		{"0", 0},
+		{"7", 7},
+		{"23", 23},
+	}
+
+	for _, c := range casos {
+		t.Setenv("LICENCIAS_HORA_AVISO", c.env)
+		if obtenido := horaAvisoLicencias(); obtenido != c.esperado {
+			t.Errorf("horaAvisoLicencias() con %q = %d, esperaba %d", c.env, obtenido, c.esperado)
 		}
 	}
 }

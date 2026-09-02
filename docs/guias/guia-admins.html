@@ -223,7 +223,7 @@
     por paso, qué botón toca en cada caso.
   </div>
   <div class="pie">
-    Sistema de Gestión y Reserva de Computadoras · versión 1.17<br>
+    Sistema de Gestión y Reserva de Computadoras · versión 1.18<br>
     Agosto de 2026
   </div>
 </div>
@@ -967,9 +967,10 @@
 
   <div class="ojo">
     <span class="titulo">Si algo no vuelve a horario</span>
-    El sistema avisa solo: al docente le llega un recordatorio y a los Admin un aviso
-    de devolución demorada. Una hora después de que cierra la escuela, además, sale
-    un resumen de lo que quedó afuera — <b>una sola vez</b>, no todos los días.
+    El sistema <b>no reclama nada al pasar la hora</b>: diez minutos de demora en
+    devolver una notebook es lo normal, y un correo por cada una molesta más de lo
+    que ayuda. Una hora después de que cierra la escuela sí sale un resumen de lo
+    que quedó afuera — <b>una sola vez</b>, no todos los días.
     <br><br>
     Lo que sí no se va nunca es el <b>número al lado de «Entregas»</b> en el menú:
     cuenta las computadoras que están fuera del laboratorio y no baja hasta que
@@ -1281,7 +1282,8 @@
 
   <p class="entrada">
     Los docentes tienen una pantalla que les dice en qué días y horarios está cada
-    Admin. La cargás vos, para vos.
+    Admin. La cargás vos, para vos — y además es lo que le dice al sistema cuándo
+    puede confiar en lo que ve.
   </p>
 
   <figure>
@@ -1313,10 +1315,33 @@
     Si cargás dos veces la misma fecha, la última reemplaza a la anterior.
   </p>
 
+  <div class="ojo">
+    <span class="titulo">Esto no es solo informativo: el sistema depende de que esté al día</span>
+    No cambia nada de lo que vos podés hacer —reservar, entregar y aprobar funcionan
+    igual, estés o no—, pero <b>sí decide si el sistema actúa solo</b>.
+    <br><br>
+    El sistema deduce cosas de lo que <b>no</b> está anotado: si a los cuarenta
+    minutos de empezada una clase ninguna computadora figura entregada, da por hecho
+    que nadie las fue a buscar y le libera la reserva a ese docente. Eso solo es
+    cierto si hay alguien en el mostrador anotando las entregas.
+    <br><br>
+    El día que faltás y te cubre un preceptor o un directivo que prefiere el papel,
+    nadie anota nada — y sin esta pantalla el sistema leería ese silencio como
+    <i>«ningún docente vino»</i> y les sacaría las reservas a todos. Por eso, si
+    ningún Admin figura de guardia en ese momento, el sistema <b>no libera nada y no
+    avisa nada</b>: se queda quieto, como si estuviera apagado. Lo que se entregó a
+    mano ese día se anota después, o no se anota; lo que no pasa es que alguien
+    salga perjudicado.
+    <br><br>
+    <b>Por eso importan las dos cosas:</b> cargar tu horario, y <b>declarar cuando
+    faltás</b>. Si no lo declarás, el sistema cree que estás y sigue actuando.
+  </div>
+
   <div class="nota">
-    <span class="titulo">Es informativo</span>
-    No cambia nada de lo que el sistema permite hacer. Sirve para que un docente no
-    camine hasta el laboratorio cuando no hay nadie.
+    <span class="titulo">Si todavía nadie cargó horarios</span>
+    El sistema funciona como siempre. Que nadie haya cargado nada no es lo mismo que
+    decir que no hay nadie: es una escuela que todavía no configuró esto, y ahí no
+    se apaga nada.
   </div>
 </section>
 
@@ -1326,7 +1351,8 @@
 
   <p class="entrada">
     Un Admin recibe, además de sus propios avisos, los del laboratorio: cuentas
-    pendientes, licencias por vencer, devoluciones demoradas, pedidos de ayuda.
+    pendientes, licencias por vencer, pedidos de ayuda, equipos que quedaron
+    afuera al cerrar.
   </p>
 
   <figure>

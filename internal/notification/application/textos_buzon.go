@@ -159,15 +159,6 @@ func mensajeDePedidoDeMateria(a eventbus.PedidoDeMateriaNuevo) string {
 	return base + fmt.Sprintf(". Motivo: «%s»", recortar(a.Motivo))
 }
 
-// mensajeDePedidoParaElTitular es lo que le llega a quien YA dicta esa
-// materia.
-func mensajeDePedidoParaElTitular(a eventbus.PedidoDeMateriaNuevo) string {
-	return fmt.Sprintf(
-		"%s pidió dictar %s, que también das vos. Lo resuelve el equipo de administración; "+
-			"si tenés algo que decir al respecto, habla con ellos.",
-		quienODefecto(a.Nombre), nombreDeLaMateria(a.MateriaNombre, a.CursoNombre))
-}
-
 func mensajeDePedidoResuelto(a eventbus.PedidoDeMateriaResuelto) string {
 	if a.Aprobado {
 		return fmt.Sprintf("Ya podés reservar computadoras para %s. %s",
@@ -202,18 +193,6 @@ func (m *Mensajero) textoDePedidoDeMateria(a eventbus.PedidoDeMateriaNuevo) (asu
 
 	cuerpo = sb.String()
 	cuerpo += m.enlace("Se resuelve desde:")
-	cuerpo += firma
-	return asunto, cuerpo
-}
-
-func (m *Mensajero) textoDePedidoParaElTitular(a eventbus.PedidoDeMateriaNuevo) (asunto, cuerpo string) {
-	asunto = fmt.Sprintf("Alguien pidió dictar %s", a.MateriaNombre)
-
-	cuerpo = fmt.Sprintf(
-		"%s pidió poder reservar computadoras para %s, que también das vos.\n\n"+
-			"No hay nada que tengas que hacer: lo resuelve el equipo de administración. "+
-			"Te llega para que no te enteres tarde — si tenés algo que decir, hablalo con ellos.\n",
-		quienODefecto(a.Nombre), nombreDeLaMateria(a.MateriaNombre, a.CursoNombre))
 	cuerpo += firma
 	return asunto, cuerpo
 }

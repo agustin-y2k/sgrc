@@ -101,35 +101,6 @@ func TestCorrespondeLiberar_GraciaConfigurable(t *testing.T) {
 	}
 }
 
-// TestCorrespondeAvisarEquipoNoDisponible_MaxDeteccionOInicioMenosUnaHora es
-// la regla que se definió para el docente siguiente.
-func TestCorrespondeAvisarEquipoNoDisponible_MaxDeteccionOInicioMenosUnaHora(t *testing.T) {
-	casos := []struct {
-		nombre   string
-		ahora    time.Time
-		esperado bool
-	}{
-		// Se detectó la demora a las 9:15 y su reserva es a las 11: el aviso
-		// espera hasta las 10.
-		{"falta más de una hora", alas(9, 15), false},
-		{"justo una hora antes", alas(7, 0), true},
-		// Reserva contigua o a menos de una hora: sale al detectarla.
-		{"media hora antes", alas(7, 30), true},
-		{"ya empezó", alas(8, 15), true},
-		{"ya terminó", alas(9, 30), false},
-	}
-
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
-			got := CorrespondeAvisarEquipoNoDisponible(diaDeClase, deOchoANue[0], deOchoANue[1],
-				AntelacionDelRecordatorio, c.ahora)
-			if got != c.esperado {
-				t.Errorf("CorrespondeAvisarEquipoNoDisponible = %v, esperaba %v", got, c.esperado)
-			}
-		})
-	}
-}
-
 // ── Estados ─────────────────────────────────────────────────────────────
 
 func TestEstadoReserva_NoRetirada(t *testing.T) {

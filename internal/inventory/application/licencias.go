@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/ramiro/sgrc/internal/shared/eventbus"
 )
 
 // Casos de uso de las licencias de software (RF-03.11 a RF-03.14).
@@ -165,7 +167,33 @@ func (s *Service) RenovarLicencias(ctx context.Context, ids []string, renovadaEl
 		resultado.Renovadas = append(resultado.Renovadas, l)
 	}
 
+	s.avisarSiNoQuedanPendientes(ctx)
 	return resultado, nil
+}
+
+// avisarSiNoQuedanPendientes publica cuántas licencias siguen por vencer o
+// vencidas después de este cambio. Con cero, el aviso de la campana se cierra
+// para todos los Admin (ver notification).
+//
+// Se publica SIEMPRE el número y no solo el cero: quien escucha decide, y así
+// el evento sirve igual el día que haga falta mostrar el contador en algún
+// lado. Un fallo al contar no puede voltear la renovación, que ya está
+// guardada: se loguea y sigue, y el peor caso es un aviso que queda abierto
+// hasta el próximo cambio.
+func (s *Service) avisarSiNoQuedanPendientes(ctx context.Context) {
+	if s.bus == nil {
+		return
+	}
+	pendientes, err := s.repo.ContarPendientesDeRenovar(ctx, s.Hoy())
+	if err != nil {
+		log.Printf("licencias: no se pudo contar las pendientes tras el cambio "+
+			"(el aviso de la campana puede quedar abierto de más): %v", err)
+		return
+	}
+	s.bus.Publish(eventbus.Evento{
+		Tipo:    "licencia.pendientes",
+		Payload: eventbus.PendientesDeLicencia{Pendientes: pendientes},
+	})
 }
 
 // ── Edición ─────────────────────────────────────────────────────────────
@@ -208,13 +236,23 @@ func (s *Service) EditarLicencia(ctx context.Context, licenciaID string, params 
 	// Va último a propósito: si en el mismo request cambian la duración y
 	// declaran "renovada el martes", el vencimiento nuevo tiene que salir de la
 	// duración nueva.
-	if params.Vencimiento.declarado() {
+	cambioElVencimiento := params.Vencimiento.declarado()
+	if cambioElVencimiento {
 		if err := params.Vencimiento.aplicarA(l, s.Hoy(), s.ahora(), params.PorUsuario); err != nil {
 			return err
 		}
 	}
 
-	return s.repo.GuardarLicencia(ctx, l)
+	if err := s.repo.GuardarLicencia(ctx, l); err != nil {
+		return err
+	}
+	// Solo si se tocó la fecha: renombrar el software o cambiarle los días de
+	// duración no resuelve nada pendiente. Los días de AVISO sí mueven la
+	// ventana, y por eso también cuentan.
+	if cambioElVencimiento || params.DiasAviso != nil {
+		s.avisarSiNoQuedanPendientes(ctx)
+	}
+	return nil
 }
 
 // ── Lecturas y baja ─────────────────────────────────────────────────────

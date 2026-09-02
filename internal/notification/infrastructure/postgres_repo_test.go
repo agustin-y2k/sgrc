@@ -366,3 +366,84 @@ func TestPostgresRepo_ListarNoLeidasSobreUsuario(t *testing.T) {
 		t.Errorf("esperaba 1 sin leer, obtuve %d", len(quedan))
 	}
 }
+
+// MarcarLeidasPorTipo cierra de una todas las NO_LEIDA de un tipo, de todos
+// los usuarios: es el cierre de los avisos que hablan de un conjunto de cosas
+// y no de una persona (licencias por renovar, equipos que quedaron afuera).
+//
+// Lo que este test protege es que el UPDATE esté acotado por las DOS
+// condiciones. Sin el filtro de tipo se llevaría puesta la campana entera; sin
+// el de estado pisaría el `leida_en` de avisos que alguien ya había leído
+// hace días, y el historial pasaría a decir que se leyeron todos hoy.
+func TestPostgresRepo_MarcarLeidasPorTipo(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	admin1 := crearUsuarioDeTest(t, pool, "ADMIN", "APROBADA")
+	admin2 := crearUsuarioDeTest(t, pool, "ADMIN", "APROBADA")
+
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	nueva := func(destinatario string, tipo domain.Tipo) *domain.Notificacion {
+		n, err := domain.NuevaNotificacion(NuevoID(), destinatario, "hay licencias por renovar",
+			tipo, domain.Referencias{}, ahora)
+		if err != nil {
+			t.Fatalf("error de dominio inesperado: %v", err)
+		}
+		if err := repo.Crear(ctx, n); err != nil {
+			t.Fatalf("creando notificación: %v", err)
+		}
+		return n
+	}
+
+	// El aviso de licencias, a los dos Admin.
+	nueva(admin1, domain.TipoLicenciaPorVencer)
+	nueva(admin2, domain.TipoLicenciaPorVencer)
+	// Un aviso de otro tipo, sin leer: no se puede tocar.
+	otroTipo := nueva(admin1, domain.TipoDocentePendiente)
+	// Y uno del MISMO tipo que alguien ya leyó ayer: tampoco, porque
+	// reescribirlo movería su leida_en a hoy.
+	yaLeido := nueva(admin2, domain.TipoLicenciaPorVencer)
+	ayer := ahora.AddDate(0, 0, -1)
+	if err := yaLeido.MarcarLeida(ayer); err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.Guardar(ctx, yaLeido); err != nil {
+		t.Fatalf("guardando el ya leído: %v", err)
+	}
+
+	cerradas, err := repo.MarcarLeidasPorTipo(ctx, domain.TipoLicenciaPorVencer, ahora)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if cerradas != 2 {
+		t.Fatalf("esperaba cerrar los 2 sin leer de ese tipo, cerró %d", cerradas)
+	}
+
+	// El de otro tipo sigue esperando.
+	sigueAbierto, err := repo.BuscarPorID(ctx, otroTipo.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if sigueAbierto.Estado != domain.NoLeida {
+		t.Error("el cierre por tipo se llevó puesto un aviso de otro tipo")
+	}
+
+	// Y el que ya estaba leído conserva CUÁNDO se leyó.
+	intacto, err := repo.BuscarPorID(ctx, yaLeido.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if intacto.LeidaEn == nil || !intacto.LeidaEn.Equal(ayer) {
+		t.Errorf("se pisó la fecha en que se había leído: %v, esperaba %v", intacto.LeidaEn, ayer)
+	}
+
+	// Y es idempotente: correrlo de nuevo no cierra nada porque no queda nada.
+	cerradas, err = repo.MarcarLeidasPorTipo(ctx, domain.TipoLicenciaPorVencer, ahora)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if cerradas != 0 {
+		t.Errorf("no quedaba nada por cerrar, cerró %d", cerradas)
+	}
+}
