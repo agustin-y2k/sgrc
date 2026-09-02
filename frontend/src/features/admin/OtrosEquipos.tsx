@@ -525,11 +525,13 @@ export function OtrosEquipos() {
                     futuras. Si está prestado, el sistema no deja darlo de baja: marcá
                     primero que volvió.
                   </p>
-                  {/* El nombre se libera al dar de baja: un cargador que se
-                      rompe y se reemplaza se va a seguir llamando igual. */}
+                  {/* El nombre y la serie se liberan al dar de baja: un
+                      cargador que se rompe y se reemplaza se va a seguir
+                      llamando igual, y la misma máquina se puede volver a
+                      cargar con la serie que trae de fábrica. */}
                   <p className="text-muted-foreground text-sm">
-                    El nombre queda libre para volver a usarlo en el equipo que lo
-                    reemplace.
+                    El nombre y el número de serie quedan libres para volver a usarlos en
+                    el equipo que lo reemplace.
                   </p>
                   {darDeBaja.error && (
                     <Alert variant="destructive">

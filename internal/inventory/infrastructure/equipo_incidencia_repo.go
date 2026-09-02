@@ -284,15 +284,17 @@ func (r *PostgresRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID 
 }
 
 // errorDeUnicidadDeEquipo traduce cuál de las tres restricciones de unicidad
-// de `equipo` se violó.
+// de `equipo` se violó. Las tres son índices parciales que excluyen los
+// equipos dados de baja (migración 005): un equipo que salió del inventario
+// libera su nombre, su número de serie y su zócalo.
 func errorDeUnicidadDeEquipo(err error) error {
 	switch nombreDeConstraint(err) {
 	case "ux_equipo_suelto_nombre":
 		return application.ErrNombreDeEquipoDuplicado
-	case "equipo_numero_serie_key":
+	case "ux_equipo_numero_serie":
 		return application.ErrNumeroSerieDuplicado
 	default:
-		// UNIQUE (carro_id, identificador), que es el caso habitual.
+		// ux_equipo_carro_identificador, que es el caso habitual.
 		return application.ErrIdentificadorDuplicado
 	}
 }

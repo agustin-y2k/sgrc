@@ -188,8 +188,8 @@ func TestPostgresRepo_NumeroSerieDuplicado_Error(t *testing.T) {
 		t.Fatalf("la primera no debería fallar: %v", err)
 	}
 	err := repo.CrearEquipo(ctx, pc2)
-	if err == nil {
-		t.Fatal("esperaba un error por número de serie duplicado (constraint global)")
+	if !errors.Is(err, application.ErrNumeroSerieDuplicado) {
+		t.Fatalf("esperaba ErrNumeroSerieDuplicado, obtuve %v", err)
 	}
 }
 
@@ -425,6 +425,83 @@ func TestPostgresRepo_EquipoSuelto_NombreSeReusaTrasLaBaja(t *testing.T) {
 	nuevo, _ := domain.NuevoEquipoSuelto(NuevoID(), "CARGADOR", "Cargador 1", "", false, time.Now().UTC())
 	if err := repo.CrearEquipo(ctx, nuevo); err != nil {
 		t.Fatalf("el nombre de un equipo dado de baja debería poder reusarse: %v", err)
+	}
+}
+
+// Dar de baja es una baja lógica: la fila se queda con su historial. Pero no
+// se queda con el número de serie, que es de la máquina y no de la fila —si
+// esa misma máquina se vuelve a cargar, con otro tipo o fuera del carro, tiene
+// que poder entrar con la serie que trae de fábrica.
+func TestPostgresRepo_NumeroSerieSeReusaTrasLaBaja(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	carro := crearCarroDeTest(t, repo, "Carro 1")
+	vieja := crearEquipoDeCarroDeTest(t, repo, carro.ID, 31, "SERIE-REUSO-1")
+	if err := vieja.DarDeBaja(time.Now().UTC()); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if err := repo.GuardarEquipo(ctx, vieja); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	// Vuelve como equipo suelto, que es el caso que motivó la 005: la notebook
+	// tiene otro hardware y deja de pertenecer al carro.
+	nueva, err := domain.NuevoEquipoSuelto(NuevoID(), "NOTEBOOK", "Notebook del taller", "SERIE-REUSO-1", true, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearEquipo(ctx, nueva); err != nil {
+		t.Fatalf("la serie de un equipo dado de baja debería poder reusarse: %v", err)
+	}
+}
+
+// Y tampoco se queda con el zócalo: el "31" del carro es un lugar físico, y
+// la máquina que lo ocupe después tiene que poder llamarse igual.
+func TestPostgresRepo_IdentificadorSeReusaTrasLaBaja(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	carro := crearCarroDeTest(t, repo, "Carro 1")
+	vieja := crearEquipoDeCarroDeTest(t, repo, carro.ID, 31, "SERIE-REUSO-2")
+	if err := vieja.DarDeBaja(time.Now().UTC()); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if err := repo.GuardarEquipo(ctx, vieja); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	nueva, err := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 31, "SERIE-REUSO-3", false, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearEquipo(ctx, nueva); err != nil {
+		t.Fatalf("el zócalo de un equipo dado de baja debería poder reusarse: %v", err)
+	}
+}
+
+// El contrapeso de los dos anteriores: entre equipos VIVOS la serie y el
+// zócalo siguen siendo únicos. Un índice parcial mal escrito —sin el WHERE, o
+// con el WHERE al revés— rompe uno de estos dos lados.
+func TestPostgresRepo_DarDeBajaNoAflojaLaUnicidadEntreEquiposVivos(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	carro := crearCarroDeTest(t, repo, "Carro 1")
+	crearEquipoDeCarroDeTest(t, repo, carro.ID, 31, "SERIE-VIVA-1")
+	crearEquipoSueltoDeTest(t, repo, "PROYECTOR", "Proyector Epson", true)
+
+	mismaSerie, _ := domain.NuevoEquipoSuelto(NuevoID(), "NOTEBOOK", "Otra notebook", "SERIE-VIVA-1", true, time.Now().UTC())
+	if err := repo.CrearEquipo(ctx, mismaSerie); !errors.Is(err, application.ErrNumeroSerieDuplicado) {
+		t.Errorf("esperaba ErrNumeroSerieDuplicado, obtuve %v", err)
+	}
+
+	mismoZocalo, _ := domain.NuevoEquipoDeCarro(NuevoID(), carro.ID, 31, "SERIE-VIVA-2", false, time.Now().UTC())
+	if err := repo.CrearEquipo(ctx, mismoZocalo); !errors.Is(err, application.ErrIdentificadorDuplicado) {
+		t.Errorf("esperaba ErrIdentificadorDuplicado, obtuve %v", err)
 	}
 }
 

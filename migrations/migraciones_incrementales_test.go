@@ -83,6 +83,10 @@ func TestUnaActualizacionNoSeLlevaLosDatosPuestos(t *testing.T) {
 	verificarQueLaReservaSigueEntera(ctx, t, pool)
 	verificarQueElAvisoViejoSobrevivioConvertido(ctx, t, pool)
 	verificarQueLaVersionEsLaUltima(ctx, t, pool)
+
+	// Va último porque escribe: da de baja el equipo sembrado y carga otro
+	// encima de sus identificadores.
+	verificarQueLaBajaLiberaSerieYZocalo(ctx, t, pool)
 }
 
 // sembrarInstalacionEnUso escribe una muestra de cada familia de datos que la
@@ -317,6 +321,43 @@ func verificarQueLaReservaSigueEntera(ctx context.Context, t *testing.T, pool *p
 	comprobar("estado", estado, "CONFIRMADA")
 	if esperada := "2026-05-04"; fecha.Format("2006-01-02") != esperada {
 		t.Errorf("la reserva cambió de fecha: %q en vez de %q", fecha.Format("2006-01-02"), esperada)
+	}
+}
+
+// verificarQueLaBajaLiberaSerieYZocalo comprueba el efecto de la 005 sobre una
+// base que YA tenía datos, que es donde importa: los índices únicos parciales
+// tienen que haber reemplazado a los UNIQUE globales de la 001 sin perder por
+// el camino ninguna de las filas que ya usaban esa serie y ese zócalo.
+//
+// El equipo sembrado es la PC 7 del carro, con la serie SERIE-007, y arrastra
+// una reserva, un préstamo y una incidencia: exactamente el caso en el que la
+// baja tiene que ser lógica y aun así devolver los identificadores.
+func verificarQueLaBajaLiberaSerieYZocalo(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	ejecutar(ctx, t, pool,
+		`UPDATE equipo SET dado_de_baja = true, fecha_baja = now() WHERE id = $1`, idEquipo)
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO equipo (carro_id, identificador, tipo, numero_serie)
+		VALUES ($1, 7, 'PC', 'SERIE-007')`, idCarro)
+	if err != nil {
+		t.Errorf("tras dar de baja la PC 7 su serie y su zócalo deberían quedar libres, "+
+			"y volver a cargarla falló: %v", err)
+	}
+
+	// Y el equipo dado de baja sigue entero: la baja no se lleva su historial
+	// ni le borra la serie para hacerle lugar al nuevo.
+	var serie string
+	var incidencias int
+	if err := pool.QueryRow(ctx, `
+		SELECT e.numero_serie, (SELECT count(*) FROM incidencia WHERE equipo_id = e.id)
+		  FROM equipo e WHERE e.id = $1`, idEquipo).Scan(&serie, &incidencias); err != nil {
+		t.Fatalf("el equipo dado de baja no se pudo recuperar: %v", err)
+	}
+	if serie != "SERIE-007" || incidencias != 1 {
+		t.Errorf("el equipo dado de baja quedó con serie %q y %d incidencia(s); "+
+			"esperaba SERIE-007 y 1", serie, incidencias)
 	}
 }
 
