@@ -96,8 +96,11 @@ dominio:
   Si está mal, el proceso no arranca y lo dice en el log — es a propósito:
   con este valor mal puesto el navegador rechazaría todos los requests sin
   ninguna explicación visible.
-- **`VITE_API_URL`**: va **vacío**. El navegador pide `/api/...` al mismo
-  host que le sirvió la página (ver README, "Cómo entra el tráfico").
+`VITE_API_URL` **no está en este archivo**, aunque se le parezca a
+`FRONTEND_ORIGIN`: es una variable de compilación del frontend y Vite la lee de
+`frontend/.env`. Va vacía —el navegador pide `/api/...` al mismo host que le
+sirvió la página (ver README, "Cómo entra el tráfico")— y ponerla en el `.env`
+de la raíz no tiene ningún efecto.
 
 > El `.env` no se comparte ni se publica: tiene la contraseña de la base y el
 > secreto de las sesiones.
@@ -985,8 +988,9 @@ falsificar el header con la IP del cliente.
    Los de `.env.example` dicen `cambiar_...` y el backend **se niega a
    arrancar** con un `JWT_SECRET` de menos de 32 bytes.
 2. **`FRONTEND_ORIGIN`** con el dominio real (§9.3).
-3. **`VITE_API_URL` vacío.** Se parece a `FRONTEND_ORIGIN` pero no se comporta
-   igual: vacío es lo correcto, porque el navegador pide `/api/...` al mismo
+3. **`VITE_API_URL` vacío**, y en `frontend/.env`, no en el `.env` de la raíz.
+   Se parece a `FRONTEND_ORIGIN` pero no se comporta igual ni vive en el mismo
+   lado: vacío es lo correcto, porque el navegador pide `/api/...` al mismo
    host que le sirvió la página.
 4. **El ingress del túnel apunta a `http://frontend:80`** — se configura en el
    panel de Cloudflare, no en el repo.
@@ -1025,8 +1029,9 @@ Lo que **no** hay que tocar:
   salen como `/api/...` contra el mismo origen.
 
 Si algún día la SPA se sirviera desde **otro** host que la API, ahí sí habría
-que setear `VITE_API_URL` y recompilar el frontend — es una variable de
-compilación, no de runtime, así que un `restart` no alcanza.
+que setear `VITE_API_URL` **en `frontend/.env`** y recompilar el frontend — es
+una variable de compilación, no de runtime, así que un `restart` no alcanza y
+el `.env` de la raíz no la ve.
 
 ### 9.4 No hay ningún `localhost` que reemplazar por el dominio
 
