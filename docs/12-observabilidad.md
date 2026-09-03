@@ -101,10 +101,23 @@ Host paneles
     User usuario
     LocalForward 3000 localhost:3000
     LocalForward 8888 localhost:8888
+    ExitOnForwardFailure yes
     RequestTTY no
 ```
 
 Después alcanza con `ssh -N paneles`.
+
+> **Si ya tenés un `Host` para ese servidor, las líneas van adentro de ese
+> bloque**, no en uno nuevo. Es el error que más cuesta ver: cuando el bloque
+> que ya existe reenvía uno de los puertos, agregar el mismo `-L` en la línea
+> de comandos hace que la conexión nueva choque contra la anterior — y falla
+> por un puerto que aparentemente no está usando nadie, cuando en realidad lo
+> tiene tomado tu propia sesión.
+
+`ExitOnForwardFailure yes` hace que la conexión falle entera si algún reenvío
+no se pudo abrir. Sin eso, ssh avisa del que falló pero se conecta igual, y
+te quedás con medio túnel: un panel abre y el otro no, sin ninguna razón
+visible.
 
 ### Desde el celular
 
@@ -118,7 +131,7 @@ computadora.
 
 | Lo que ves | Qué pasa |
 |---|---|
-| `bind: Address already in use` | El puerto de la izquierda ya está ocupado en **tu** máquina. Cambialo (`-L 3300:localhost:3000`). |
+| `bind: Address already in use` | El puerto de la izquierda ya está ocupado en **tu** máquina, y casi siempre es **otra sesión de SSH tuya** que ya lo abrió: una terminal que quedó colgada, o un `~/.ssh/config` que ya reenvía ese puerto. `ss -ltnp \| grep 3000` dice qué proceso lo tiene. Si es algo que no conviene cerrar, cambiá el número de la izquierda (`-L 3300:localhost:3000`). |
 | `channel N: open failed: connect failed: Connection refused` | El túnel está bien; **el contenedor no está levantado**. Los paneles están detrás del perfil: `make observabilidad` en el servidor. |
 | La página no carga y no hay ningún error | Casi siempre es el navegador yendo a `https://`. Es `http://`, sin la ese. |
 
