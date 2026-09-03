@@ -1,3 +1,10 @@
+# La etiqueta que Dozzle mira para saber qué contenedores mostrar (ver el
+# servicio `dozzle`, más abajo). Un contenedor que no la lleve NO aparece en
+# el panel: así, en un servidor compartido con otros servicios, abrir Dozzle
+# no muestra los logs de todo lo que corra en la máquina, solo los de acá.
+x-etiquetas-sgrc: &etiquetas-sgrc
+  sgrc.logs: "si"
+
 services:
   sgrc-app:
     build: .
@@ -42,6 +49,8 @@ services:
     # atajo desde la LAN de la escuela que se saltea el túnel, y con él la
     # posibilidad de falsificar CF-Connecting-IP (ver cmd/main.go).
     # docker-compose.dev.yml lo expone para desarrollo.
+
+    labels: *etiquetas-sgrc
     networks:
       - sgrc-net
 
@@ -60,6 +69,7 @@ services:
     depends_on:
       sgrc-app:
         condition: service_healthy
+    labels: *etiquetas-sgrc
     networks:
       - sgrc-net
 
@@ -106,6 +116,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+
+    labels: *etiquetas-sgrc
     networks:
       - sgrc-net
 
@@ -118,11 +130,12 @@ services:
     env_file: .env
     depends_on:
       - frontend
+    labels: *etiquetas-sgrc
     networks:
       - sgrc-net
 
   # ── Observabilidad (opcional) ─────────────────────────────────────
-  # Los dos servicios de abajo NO arrancan con `docker compose up`: están
+  # Los tres servicios de abajo NO arrancan con `docker compose up`: están
   # detrás de un profile, así que hay que pedirlos:
   #
   #   docker compose --profile observabilidad up -d
@@ -150,6 +163,7 @@ services:
     # consulta Grafana por la red interna. Para mirarlo a mano está el túnel
     # de SSH que se explica en la documentación.
     restart: unless-stopped
+    labels: *etiquetas-sgrc
     networks:
       - sgrc-net
 
@@ -178,6 +192,57 @@ services:
       # un panel de administración expuesto en la red de la institución.
       - "127.0.0.1:3000:3000"
     restart: unless-stopped
+    labels: *etiquetas-sgrc
+    networks:
+      - sgrc-net
+
+  # Los logs de los contenedores en el navegador, en vivo: Prometheus y
+  # Grafana contestan "cuánto" y "desde cuándo", esto contesta "qué dijo".
+  # No reemplaza a `docker compose logs -f`, que sigue siendo el camino
+  # corto; sirve para lo que en la terminal cuesta: seguir cuatro servicios
+  # a la vez, buscar un texto en lo que ya pasó, o mirar desde el celular
+  # por el túnel de SSH sin pelear con el scrollback.
+  #
+  # Ojo con lo que guarda: Dozzle no almacena nada, LEE lo que Docker tenga
+  # en disco para cada contenedor. Si el demonio rota los logs —o si se
+  # recrea el contenedor con `up --build`— lo anterior no está, y Dozzle
+  # tampoco lo tiene. Para historia de verdad hay que juntarla en otro lado.
+  dozzle:
+    image: amir20/dozzle:v10.9.0
+    profiles: [observabilidad]
+    # Le alcanza de sobra: no indexa ni guarda, transmite lo que lee.
+    mem_limit: 128m
+    environment:
+      # Sin esto mostraría TODOS los contenedores del demonio, incluidos los
+      # de otros servicios que compartan el servidor. Ver el anchor del
+      # principio del archivo.
+      DOZZLE_FILTER: label=sgrc.logs=si
+      # Nada de llamadas afuera desde el servidor de una institución: ni
+      # analítica anónima, ni consultas al registro para avisar que hay una
+      # versión nueva. La versión se sube a mano, acá, cuando se decide.
+      DOZZLE_NO_ANALYTICS: "true"
+      DOZZLE_RELEASE_CHECK_MODE: manual
+      DOZZLE_IMAGE_CHECK_MODE: "off"
+      # DOZZLE_ENABLE_ACTIONS y DOZZLE_ENABLE_SHELL se quedan apagados (es
+      # el valor por defecto, y por eso no están escritos): la primera deja
+      # reiniciar y parar contenedores desde el navegador, la segunda abre
+      # una terminal DENTRO del contenedor. Es un visor de logs; que no
+      # pueda tocar nada es la mitad de por qué se puede dejar prendido.
+    volumes:
+      # Es lo que necesita para leer los logs, y también lo más delicado de
+      # todo el archivo: el socket del demonio es acceso de root al host, y
+      # el `:ro` engaña —hace de solo lectura el archivo, no la API que hay
+      # del otro lado—. Por eso este contenedor solo se levanta cuando se
+      # pide, no publica su puerto a la red, y no tiene habilitada ninguna
+      # acción sobre los contenedores.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      # SOLO a 127.0.0.1, igual que Grafana y por una razón más: los logs
+      # de la aplicación llevan nombres y direcciones de correo de gente
+      # real. Desde otra máquina se llega con un túnel de SSH.
+      - "127.0.0.1:8888:8080"
+    restart: unless-stopped
+    labels: *etiquetas-sgrc
     networks:
       - sgrc-net
 

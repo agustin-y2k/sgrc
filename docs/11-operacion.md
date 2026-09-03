@@ -299,7 +299,7 @@ Para esos casos:
 
 ```bash
 make levantar              # postgres, sgrc-app y frontend, nada más
-make levantar TABLEROS=1   # además Prometheus y Grafana
+make levantar TABLEROS=1   # además Prometheus, Grafana y Dozzle
 ```
 
 Levanta nombrando los servicios y, al terminar, **reconecta el túnel externo a
@@ -355,6 +355,12 @@ make logs                          # todo, en vivo
 docker compose logs -f sgrc-app    # solo la API
 docker compose logs --tail=100 postgres
 ```
+
+Para lo que en la terminal cuesta —seguir los cuatro servicios a la vez,
+buscar un texto en lo que ya pasó— hay un visor en el navegador, Dozzle, que
+se levanta con los tableros y queda en `http://localhost:8888` del servidor
+(§5 de [`12-observabilidad.md`](12-observabilidad.md)). Es opcional: todo lo
+que sigue se puede hacer con los comandos de arriba.
 
 Qué buscar en el arranque de `sgrc-app`:
 
@@ -446,7 +452,7 @@ Hay dos caminos, y el sistema no depende de ninguno en particular porque lo
 
 Las dos secciones anteriores sirven para **enterarse** de que pasó algo. Para
 investigarlo hay una tercera pieza, opcional y también apagada por defecto:
-tableros de Prometheus y Grafana, en
+tableros de Prometheus y Grafana —más Dozzle para los logs—, en
 [`12-observabilidad.md`](12-observabilidad.md). Contestan qué ruta está
 lenta, qué se está rompiendo y desde cuándo.
 
