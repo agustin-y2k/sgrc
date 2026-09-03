@@ -1,7 +1,8 @@
-# Observabilidad — Prometheus y Grafana
+# Observabilidad — Prometheus, Grafana y Dozzle
 
 Cómo mirar lo que el sistema está haciendo por dentro: qué se pide, qué
-tarda, qué se rompe y si los procesos de fondo siguen corriendo.
+tarda, qué se rompe, qué dijo cuando se rompió y si los procesos de fondo
+siguen corriendo.
 
 Es **opcional**. El sistema funciona igual sin nada de esto, y quien clone el
 repositorio para probarlo no necesita levantarlo.
@@ -17,7 +18,7 @@ confunden con "monitoreo" y cubren cosas distintas:
 |---|---|---|---|
 | **Monitor externo** (§4 de `11-operacion.md`) | ¿El sitio responde desde afuera? | fuera de la institución | **avisa** |
 | **Aviso de vida de los barridos** (ídem) | ¿Los procesos de fondo siguen corriendo? | el sistema avisa, un servicio externo alerta | **avisa** |
-| **Esto: Prometheus y Grafana** | ¿Por qué está lento? ¿Qué se rompe? ¿Desde cuándo? | el mismo servidor | **se apaga con él** |
+| **Esto: Prometheus, Grafana y Dozzle** | ¿Por qué está lento? ¿Qué se rompe? ¿Desde cuándo? ¿Qué dijo el log? | el mismo servidor | **se apaga con él** |
 
 De ahí la regla para no llevarse una decepción: **esto no sirve para
 enterarse de que el sistema se cayó** —se cae junto con él—, sirve para
@@ -29,37 +30,121 @@ todavía no se rompió.
 ## 2. Levantarlo
 
 ```bash
-make observabilidad        # el sistema + Prometheus + Grafana
-make observabilidad-stop   # apaga los tableros, el sistema sigue
+make observabilidad        # el sistema + Prometheus + Grafana + Dozzle
+make observabilidad-stop   # apaga los paneles, el sistema sigue
 ```
 
-Sin ese comando, los dos contenedores no existen: están detrás de un
+Sin ese comando, los tres contenedores no existen: están detrás de un
 *profile* del compose (`docker compose --profile observabilidad up -d` es lo
 que hace el atajo). Un `make run-prod` normal no los levanta.
 
-**Lo que cuesta**: unos 400 MB de memoria entre los dos, y hasta 1 GB de
-disco para el histórico. En un servidor compartido con otros usos, es lo
-primero a apagar si falta memoria.
+**Lo que cuesta**: unos 400 MB de memoria entre Prometheus y Grafana, más
+unas pocas decenas para Dozzle, y hasta 1 GB de disco para el histórico de
+métricas. En un servidor compartido con otros usos, es lo primero a apagar si
+falta memoria — y si hay que quedarse con uno solo, Dozzle es el barato.
 
 Antes de levantarlo, poné `GRAFANA_PASSWORD` en el `.env`: es la contraseña
-del usuario `admin`.
+del usuario `admin`. Dozzle no pide ninguna variable.
 
 ---
 
-## 3. Entrar a Grafana
+## 3. Llegar desde otra máquina: el túnel de SSH
+
+Ni Grafana ni Dozzle salen a la red: los dos se publican en `127.0.0.1` del
+servidor, así que desde otra computadora no se llega escribiendo su dirección
+IP. Se llega con un túnel de SSH, y con **un solo comando alcanza para los
+dos**:
+
+```bash
+ssh -N -L 3000:localhost:3000 -L 8888:localhost:8888 usuario@servidor
+```
+
+Mientras ese comando siga corriendo, en el navegador **de tu propia máquina**:
+
+| Dirección | Qué es |
+|---|---|
+| `http://localhost:3000` | Grafana (§4) |
+| `http://localhost:8888` | Dozzle, los logs (§5) |
+
+Se corta con `Ctrl+C`, o al cerrar la terminal.
+
+### Qué dice ese comando
+
+`-L 3000:localhost:3000` se lee de izquierda a derecha: *abrí el puerto 3000
+en mi computadora y mandá lo que llegue ahí, por adentro de la conexión SSH,
+al puerto 3000 de `localhost`*.
+
+La palabra del medio es la clave y es la que más se malinterpreta: ese
+`localhost` **se resuelve en el servidor, no en tu máquina**. Por eso el
+túnel funciona aunque los paneles estén publicados solo en `127.0.0.1` y no
+haya ningún puerto abierto a la red. Desde el punto de vista de Docker, quien
+pide la página es el propio servidor.
+
+El `-N` es opcional y conviene: dice "no me abras una shell, solo el túnel",
+así esa terminal queda dedicada a esto y no hay riesgo de tipear algo por
+error en el servidor.
+
+**El número de la izquierda es tuyo y podés cambiarlo.** Si ya tenés algo
+usando el 3000 en tu computadora:
+
+```bash
+ssh -N -L 3300:localhost:3000 usuario@servidor    # y entrás por localhost:3300
+```
+
+### Para no escribirlo cada vez
+
+En `~/.ssh/config` de tu máquina:
+
+```
+Host paneles
+    HostName servidor.o.la.ip
+    User usuario
+    LocalForward 3000 localhost:3000
+    LocalForward 8888 localhost:8888
+    RequestTTY no
+```
+
+Después alcanza con `ssh -N paneles`.
+
+### Desde el celular
+
+Cualquier cliente de SSH con reenvío de puertos sirve (Termius, JuiceSSH y
+similares): se configura el mismo par de puertos y se abre
+`http://localhost:8888` en el navegador del teléfono. Es la forma práctica de
+mirar los logs cuando alguien avisa que algo anda mal y no estás frente a una
+computadora.
+
+### Cuando no anda
+
+| Lo que ves | Qué pasa |
+|---|---|
+| `bind: Address already in use` | El puerto de la izquierda ya está ocupado en **tu** máquina. Cambialo (`-L 3300:localhost:3000`). |
+| `channel N: open failed: connect failed: Connection refused` | El túnel está bien; **el contenedor no está levantado**. Los paneles están detrás del perfil: `make observabilidad` en el servidor. |
+| La página no carga y no hay ningún error | Casi siempre es el navegador yendo a `https://`. Es `http://`, sin la ese. |
+
+### Por qué esto y no publicarlos por el túnel de Cloudflare
+
+Se evaluó darles un subdominio con Cloudflare Access adelante y se decidió
+que no. Dozzle no tiene usuario ni contraseña propios, así que un error de
+política en Access —una regla de prueba que quedó, un bypass mal puesto—
+dejaría los logs, con nombres y direcciones de correo de gente real, servidos
+en internet. Además obligaría a dejar los paneles prendidos todo el tiempo
+para que el hostname no devuelva 502, y no mejoraría lo único que de verdad
+importa: siguen viviendo en el mismo servidor, así que se apagan junto con lo
+que habría que vigilar (§1).
+
+El túnel de SSH da el mismo acceso remoto, no agrega ninguna superficie
+nueva, y se corta solo cuando cerrás la terminal.
+
+---
+
+## 4. Entrar a Grafana
 
 Queda en `http://localhost:3000` **del propio servidor**, publicado solo en
 `127.0.0.1` a propósito: es un panel de administración y no tiene por qué
-estar a la vista del resto de la red de la institución.
-
-Desde otra computadora se llega con un túnel de SSH:
-
-```bash
-ssh -L 3000:localhost:3000 usuario@servidor
-```
-
-y después `http://localhost:3000` en el navegador propio. Usuario `admin`,
-contraseña la del `.env`.
+estar a la vista del resto de la red de la institución. Desde otra
+computadora se llega con el túnel de SSH de §3. Usuario `admin`, contraseña
+la del `.env`.
 
 El tablero **SGRC — funcionamiento** ya viene cargado. No hay que configurar
 el origen de datos: se aprovisiona solo al arrancar
@@ -72,7 +157,65 @@ el origen de datos: se aprovisiona solo al arrancar
 
 ---
 
-## 4. Qué se mide y qué pregunta contesta
+## 5. Los logs en el navegador (Dozzle)
+
+Queda en `http://localhost:8888` **del propio servidor**, con las mismas
+condiciones que Grafana: publicado solo en `127.0.0.1`, y desde otra máquina
+por el túnel de SSH de §3.
+
+Muestra los logs de los contenedores en vivo, sin usuario ni contraseña
+—cualquiera que llegue al puerto entra—, y por eso el puerto no sale de
+`127.0.0.1`: en ese servidor, llegar ahí ya supone tener una sesión de SSH.
+
+**No reemplaza a `docker compose logs -f`**, que sigue siendo el camino corto
+para una mirada rápida (§4 de [`11-operacion.md`](11-operacion.md)). Sirve
+para lo que en la terminal cuesta: seguir los cuatro servicios a la vez en
+columnas, buscar un texto en lo que ya pasó sin volver a pedir el log entero,
+o mirarlo desde el celular mientras alguien reporta algo por teléfono.
+
+### Lo que no hace
+
+- **No guarda nada.** Lee lo que Docker tiene en disco para cada contenedor.
+  Si el demonio rota los logs, o si un `up --build` recrea el contenedor, lo
+  anterior no está y Dozzle tampoco lo tiene. Para conservar historia hay que
+  juntarla en otro lado, y eso no está incluido.
+- **No toca los contenedores.** Reiniciarlos desde el navegador y abrir una
+  terminal adentro son dos funciones que Dozzle trae y que acá quedan
+  apagadas (`DOZZLE_ENABLE_ACTIONS` y `DOZZLE_ENABLE_SHELL`). Que sea solo un
+  visor es la mitad de la razón por la que se puede dejar prendido.
+- **No sale a internet.** Ni analítica anónima ni consultas al registro para
+  avisar de versiones nuevas: la versión se sube a mano en el compose.
+
+### Solo muestra los contenedores de este proyecto
+
+El filtro es una etiqueta, `sgrc.logs=si`, que el `docker-compose.yml` le
+pone a sus servicios. Un contenedor que no la lleve no aparece: en un
+servidor que además corre otras cosas, abrir Dozzle no destapa los logs de
+todo lo que haya en la máquina.
+
+El costo de esa decisión es que **un contenedor ajeno al compose tampoco se
+ve** — el caso típico es un Cloudflare Tunnel creado desde el panel, fuera de
+este proyecto (§2 de [`11-operacion.md`](11-operacion.md)). Para verlo hay
+dos caminos: recrearlo con la etiqueta, o sacar la línea `DOZZLE_FILTER` del
+compose y aceptar que se vea todo el demonio.
+
+### El socket de Docker
+
+Dozzle lee los logs por el socket del demonio, que le montamos como solo
+lectura. Conviene saber exactamente qué significa eso: **el `:ro` protege el
+archivo, no la API que hay del otro lado**, y quien habla con ese socket
+tiene el poder de root en el host. No es un detalle de Dozzle, es cómo
+funciona cualquier visor de este tipo.
+
+Lo que hace que valga la pena igual: el contenedor solo existe cuando se lo
+pide, no publica su puerto fuera de `127.0.0.1`, y no tiene habilitada
+ninguna acción sobre los contenedores. Si eso no alcanzara, el paso
+siguiente es un *socket proxy* de solo lectura delante — una pieza más, que
+no se incluyó porque en un servidor de una sola persona no cambia nada.
+
+---
+
+## 6. Qué se mide y qué pregunta contesta
 
 | Métrica | La pregunta detrás |
 |---|---|
@@ -98,7 +241,7 @@ Dos decisiones del diseño que conviene conocer antes de agregar métricas:
 
 ---
 
-## 5. `/metrics` no se publica a internet
+## 7. `/metrics` no se publica a internet
 
 El backend expone las métricas en `/metrics`, y **eso no sale por el túnel**:
 nginx solo proxea `/api` y `/health`; cualquier otra ruta cae en la interfaz
@@ -110,7 +253,7 @@ ningún puerto publicado para eso.
 
 ---
 
-## 6. Alertas: se ven, pero no notifican
+## 8. Alertas: se ven, pero no notifican
 
 `observabilidad/alertas.yml` define cinco reglas —barrido detenido, errores
 5xx sostenidos, pool saturado, backend sin responder—. **Se disparan y se ven
@@ -126,7 +269,7 @@ que falló.
 
 ---
 
-## 7. Tableros de uso (reservas por mes, equipo más pedido)
+## 9. Tableros de uso (reservas por mes, equipo más pedido)
 
 Para eso **no hace falta Prometheus**: esos datos ya están en Postgres, con
 tablas históricas que sobreviven al cierre del ciclo lectivo
@@ -165,7 +308,7 @@ GROUP BY 1 ORDER BY 1;
 
 ---
 
-## 8. Cuánto guarda
+## 10. Cuánto guarda
 
 Prometheus está limitado a **30 días o 1 GB**, lo que pase primero. Los dos
 topes existen porque esto corre en el servidor de una institución y no en

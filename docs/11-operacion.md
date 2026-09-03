@@ -96,8 +96,11 @@ dominio:
   Si está mal, el proceso no arranca y lo dice en el log — es a propósito:
   con este valor mal puesto el navegador rechazaría todos los requests sin
   ninguna explicación visible.
-- **`VITE_API_URL`**: va **vacío**. El navegador pide `/api/...` al mismo
-  host que le sirvió la página (ver README, "Cómo entra el tráfico").
+`VITE_API_URL` **no está en este archivo**, aunque se le parezca a
+`FRONTEND_ORIGIN`: es una variable de compilación del frontend y Vite la lee de
+`frontend/.env`. Va vacía —el navegador pide `/api/...` al mismo host que le
+sirvió la página (ver README, "Cómo entra el tráfico")— y ponerla en el `.env`
+de la raíz no tiene ningún efecto.
 
 > El `.env` no se comparte ni se publica: tiene la contraseña de la base y el
 > secreto de las sesiones.
@@ -296,7 +299,7 @@ Para esos casos:
 
 ```bash
 make levantar              # postgres, sgrc-app y frontend, nada más
-make levantar TABLEROS=1   # además Prometheus y Grafana
+make levantar TABLEROS=1   # además Prometheus, Grafana y Dozzle
 ```
 
 Levanta nombrando los servicios y, al terminar, **reconecta el túnel externo a
@@ -352,6 +355,12 @@ make logs                          # todo, en vivo
 docker compose logs -f sgrc-app    # solo la API
 docker compose logs --tail=100 postgres
 ```
+
+Para lo que en la terminal cuesta —seguir los cuatro servicios a la vez,
+buscar un texto en lo que ya pasó— hay un visor en el navegador, Dozzle, que
+se levanta con los tableros y queda en `http://localhost:8888` del servidor
+(§5 de [`12-observabilidad.md`](12-observabilidad.md)). Es opcional: todo lo
+que sigue se puede hacer con los comandos de arriba.
 
 Qué buscar en el arranque de `sgrc-app`:
 
@@ -443,7 +452,7 @@ Hay dos caminos, y el sistema no depende de ninguno en particular porque lo
 
 Las dos secciones anteriores sirven para **enterarse** de que pasó algo. Para
 investigarlo hay una tercera pieza, opcional y también apagada por defecto:
-tableros de Prometheus y Grafana, en
+tableros de Prometheus y Grafana —más Dozzle para los logs—, en
 [`12-observabilidad.md`](12-observabilidad.md). Contestan qué ruta está
 lenta, qué se está rompiendo y desde cuándo.
 
@@ -985,8 +994,9 @@ falsificar el header con la IP del cliente.
    Los de `.env.example` dicen `cambiar_...` y el backend **se niega a
    arrancar** con un `JWT_SECRET` de menos de 32 bytes.
 2. **`FRONTEND_ORIGIN`** con el dominio real (§9.3).
-3. **`VITE_API_URL` vacío.** Se parece a `FRONTEND_ORIGIN` pero no se comporta
-   igual: vacío es lo correcto, porque el navegador pide `/api/...` al mismo
+3. **`VITE_API_URL` vacío**, y en `frontend/.env`, no en el `.env` de la raíz.
+   Se parece a `FRONTEND_ORIGIN` pero no se comporta igual ni vive en el mismo
+   lado: vacío es lo correcto, porque el navegador pide `/api/...` al mismo
    host que le sirvió la página.
 4. **El ingress del túnel apunta a `http://frontend:80`** — se configura en el
    panel de Cloudflare, no en el repo.
@@ -1025,8 +1035,9 @@ Lo que **no** hay que tocar:
   salen como `/api/...` contra el mismo origen.
 
 Si algún día la SPA se sirviera desde **otro** host que la API, ahí sí habría
-que setear `VITE_API_URL` y recompilar el frontend — es una variable de
-compilación, no de runtime, así que un `restart` no alcanza.
+que setear `VITE_API_URL` **en `frontend/.env`** y recompilar el frontend — es
+una variable de compilación, no de runtime, así que un `restart` no alcanza y
+el `.env` de la raíz no la ve.
 
 ### 9.4 No hay ningún `localhost` que reemplazar por el dominio
 

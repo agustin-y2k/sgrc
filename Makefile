@@ -67,15 +67,15 @@ run-prod:
 # acuerde de la lista.
 #
 #   make levantar                 el sistema
-#   make levantar TABLEROS=1      además Prometheus y Grafana
+#   make levantar TABLEROS=1      además Prometheus, Grafana y Dozzle
 #
-# Nombrar prometheus y grafana alcanza para levantarlos aunque estén en el
-# perfil `observabilidad`: Compose activa el perfil de un servicio que se
-# pide explícitamente.
+# Nombrar esos tres alcanza para levantarlos aunque estén en el perfil
+# `observabilidad`: Compose activa el perfil de un servicio que se pide
+# explícitamente.
 SERVICIOS := postgres sgrc-app frontend
 
 levantar:
-	docker compose up -d --build $(SERVICIOS) $(if $(TABLEROS),prometheus grafana)
+	docker compose up -d --build $(SERVICIOS) $(if $(TABLEROS),prometheus grafana dozzle)
 	@$(MAKE) --no-print-directory reconectar-tunel
 
 # Un `docker compose down` borra la red y la recrea al levantar, y el túnel
@@ -119,19 +119,20 @@ ps:
 
 # ── Observabilidad (el detalle está en docs/12-observabilidad.md) ─────
 
-# Levanta el sistema MÁS Prometheus y Grafana. Sin este comando, esos dos no
-# arrancan: están detrás de un profile del compose justamente para que quien
-# solo quiera usar el sistema no cargue con ellos.
+# Levanta el sistema MÁS Prometheus, Grafana y Dozzle. Sin este comando, esos
+# tres no arrancan: están detrás de un profile del compose justamente para que
+# quien solo quiera usar el sistema no cargue con ellos.
 #
-# Grafana queda en http://localhost:3000 (usuario admin, contraseña del
-# .env). Desde otra máquina se llega por un túnel de SSH: publicarlo en la
-# red de la institución sería dejar un panel de administración a la vista.
+# Grafana queda en http://localhost:3000 (usuario admin, contraseña del .env)
+# y Dozzle —los logs en el navegador— en http://localhost:8888. Desde otra
+# máquina se llega por un túnel de SSH: publicarlos en la red de la
+# institución sería dejar dos paneles de administración a la vista.
 observabilidad:
 	docker compose --profile observabilidad up -d
 
 # Apaga solo los tableros y deja el sistema andando.
 observabilidad-stop:
-	docker compose --profile observabilidad stop prometheus grafana
+	docker compose --profile observabilidad stop prometheus grafana dozzle
 
 # ── Esquema de la base ────────────────────────────────────────────────
 #

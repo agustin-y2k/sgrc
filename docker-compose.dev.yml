@@ -62,5 +62,11 @@ services:
       - ./scripts:/scripts:ro
     entrypoint: ["sh", "/scripts/sembrar-datos-de-prueba.sh"]
     restart: "no"
+    # La etiqueta que mira Dozzle. Acá va escrita a mano porque el anchor
+    # del archivo base no cruza a los overlays, y sin ella la siembra sería
+    # el único servicio invisible en el panel — justo el que hay que mirar
+    # cuando la base queda vacía después de un `down -v`.
+    labels:
+      sgrc.logs: "si"
     networks:
       - sgrc-net
