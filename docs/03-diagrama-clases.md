@@ -125,7 +125,7 @@ classDiagram
         +UUID entregadoAUsuarioId
         +string entregadoANombre
         +string retiradoPor
-        +string motivo
+        +string destino
         +DateTime devolucionEstimada
         +UUID entregadoPor
         +DateTime entregadoEn
@@ -161,9 +161,13 @@ classDiagram
     class Curso {
         +UUID id
         +UUID cicloLectivoId
+        +int anio
+        +string division
+        +string modalidad
         +string nombre
         +boolean activo
         +boolean archivado
+        +etiqueta() string
     }
 
     class Materia {

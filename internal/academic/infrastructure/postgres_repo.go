@@ -200,7 +200,11 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 		return 0, 0, fmt.Errorf("creando ciclo clonado: %w", err)
 	}
 
-	rows, err := tx.Query(ctx, `SELECT id, nombre FROM curso WHERE ciclo_lectivo_id=$1`, cicloOrigenID)
+	// Los tres datos viajan con el curso. Sin esto la escuela perdería sus
+	// divisiones y sus modalidades cada 31 de diciembre, en silencio. `nombre`
+	// no se clona: la base lo recalcula de las partes.
+	rows, err := tx.Query(ctx,
+		`SELECT id, nombre, anio, division, modalidad FROM curso WHERE ciclo_lectivo_id=$1`, cicloOrigenID)
 	if err != nil {
 		if esIDInvalido(err) {
 			return 0, 0, application.ErrIDInvalido
@@ -208,11 +212,15 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 		return 0, 0, fmt.Errorf("leyendo cursos a clonar: %w", err)
 	}
 
-	type cursoOrigen struct{ id, nombre string }
+	type cursoOrigen struct {
+		id, nombre          string
+		anio                int
+		division, modalidad *string
+	}
 	var cursos []cursoOrigen
 	for rows.Next() {
 		var c cursoOrigen
-		if err := rows.Scan(&c.id, &c.nombre); err != nil {
+		if err := rows.Scan(&c.id, &c.nombre, &c.anio, &c.division, &c.modalidad); err != nil {
 			rows.Close()
 			return 0, 0, fmt.Errorf("escaneando curso a clonar: %w", err)
 		}
@@ -232,8 +240,9 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 	for _, co := range cursos {
 		nuevoCursoID := uuidNuevo()
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO curso (id, ciclo_lectivo_id, nombre, activo, archivado) VALUES ($1, $2, $3, true, false)`,
-			nuevoCursoID, nuevoCiclo.ID, co.nombre,
+			`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad, activo, archivado)
+			 VALUES ($1, $2, $3, $4, $5, true, false)`,
+			nuevoCursoID, nuevoCiclo.ID, co.anio, co.division, co.modalidad,
 		); err != nil {
 			return 0, 0, fmt.Errorf("clonando curso %s: %w", co.nombre, err)
 		}
@@ -276,9 +285,46 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 
 // ListarMateriasReservables: materias de ciclos y cursos no archivados,
 // filtradas opcionalmente por el docente asignado (RF-04.1).
+// ListarAsignaciones: quién dicta qué en un ciclo, en una sola consulta.
+//
+// El ciclo es obligatorio a propósito. La relación docente-materia se recrea
+// entera cada año (RF-02.5), así que sin acotar por ciclo la respuesta mezcla
+// asignaciones de años archivados con las de ahora, y las dos pantallas que la
+// usan hablan siempre de un ciclo concreto.
+func (r *PostgresRepo) ListarAsignaciones(ctx context.Context, cicloID string) ([]application.AsignacionDocente, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT dm.id, dm.usuario_id, u.nombre || ' ' || u.apellido, dm.rol,
+		       m.id, m.nombre, c.id, c.nombre, COALESCE(c.modalidad, '')
+		FROM docente_materia dm
+		JOIN usuario u ON u.id = dm.usuario_id
+		JOIN materia m ON m.id = dm.materia_id
+		JOIN curso   c ON c.id = m.curso_id
+		WHERE c.ciclo_lectivo_id = $1
+		ORDER BY c.modalidad NULLS FIRST, c.anio NULLS LAST, c.nombre, m.nombre, u.apellido, u.nombre`, cicloID)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("listando asignaciones docente-materia: %w", err)
+	}
+	defer rows.Close()
+
+	var resultado []application.AsignacionDocente
+	for rows.Next() {
+		var a application.AsignacionDocente
+		if err := rows.Scan(&a.ID, &a.UsuarioID, &a.DocenteNombre, &a.Rol,
+			&a.MateriaID, &a.MateriaNombre, &a.CursoID, &a.CursoNombre,
+			&a.CursoModalidad); err != nil {
+			return nil, fmt.Errorf("escaneando asignación docente-materia: %w", err)
+		}
+		resultado = append(resultado, a)
+	}
+	return resultado, errorDeFilas(rows)
+}
+
 func (r *PostgresRepo) ListarMateriasReservables(ctx context.Context, soloDelDocente *string) ([]application.MateriaReservable, error) {
 	query := `
-		SELECT m.id, m.nombre, c.id, c.nombre, cl.id, cl.anio
+		SELECT m.id, m.nombre, c.id, c.nombre, COALESCE(c.modalidad, ''), cl.id, cl.anio
 		FROM materia m
 		JOIN curso c ON c.id = m.curso_id
 		JOIN ciclo_lectivo cl ON cl.id = c.ciclo_lectivo_id
@@ -293,7 +339,7 @@ func (r *PostgresRepo) ListarMateriasReservables(ctx context.Context, soloDelDoc
 			WHERE dm.materia_id = m.id AND dm.usuario_id = $1
 		  )`
 	}
-	query += ` ORDER BY cl.anio DESC, c.nombre, m.nombre`
+	query += ` ORDER BY cl.anio DESC, c.modalidad NULLS FIRST, c.anio NULLS LAST, c.nombre, m.nombre`
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -308,7 +354,7 @@ func (r *PostgresRepo) ListarMateriasReservables(ctx context.Context, soloDelDoc
 	for rows.Next() {
 		var m application.MateriaReservable
 		if err := rows.Scan(&m.MateriaID, &m.MateriaNombre, &m.CursoID, &m.CursoNombre,
-			&m.CicloID, &m.CicloAnio); err != nil {
+			&m.CursoModalidad, &m.CicloID, &m.CicloAnio); err != nil {
 			return nil, fmt.Errorf("escaneando materia reservable: %w", err)
 		}
 		resultado = append(resultado, m)

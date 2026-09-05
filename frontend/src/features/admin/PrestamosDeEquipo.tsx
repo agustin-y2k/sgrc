@@ -56,7 +56,7 @@ export function PrestamosDeEquipo({ equipoId }: { equipoId: string }) {
                 Salió {cuando(p.entregadoEn)}
                 {p.devueltoEn ? ` · volvió ${cuando(p.devueltoEn)}` : " · todavía afuera"}
                 {p.materiaNombre && ` · ${p.materiaNombre}`}
-                {p.motivo && ` · ${p.motivo}`}
+                {p.destino && ` · ${p.destino}`}
               </span>
               {/* La observación es el renglón al margen del papel, y el
                   único lugar del sistema donde queda escrita. */}

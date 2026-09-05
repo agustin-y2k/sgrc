@@ -3,24 +3,24 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { MateriasDeCurso } from "@/features/academico/MateriasDeCurso"
 import { SelectorDeCurso } from "@/features/academico/SelectorDeCurso"
+import type { DatosDeCurso } from "@/features/academico/SelectorDeCurso"
 import * as academicoApi from "@/features/academico/api"
 import {
-  componerNombreDeCurso,
-  esNombreDeCursoValido,
-  separarNombreDeCurso,
+  divisionesEnUso,
+  etiquetaDeCurso,
+  modalidadesEnUso,
 } from "@/features/academico/types"
 import type { CicloLectivo, Curso } from "@/features/academico/types"
 import { getErrorMessage } from "@/lib/api-client"
 
 export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   const queryClient = useQueryClient()
-  const [anioNuevo, setAnioNuevo] = useState("1")
-  const [divisionNueva, setDivisionNueva] = useState("A")
-  const [editando, setEditando] = useState<{ curso: Curso; nombre: string } | null>(null)
+  const [nuevo, setNuevo] = useState<DatosDeCurso>(CURSO_EN_BLANCO)
+  const [editando, setEditando] = useState<{ curso: Curso; datos: DatosDeCurso } | null>(
+    null
+  )
   const [eliminando, setEliminando] = useState<Curso | null>(null)
   const [cursoAbierto, setCursoAbierto] = useState<string | null>(null)
 
@@ -35,18 +35,19 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   const invalidar = () => queryClient.invalidateQueries({ queryKey: cursosKey })
 
   const crear = useMutation({
-    mutationFn: () =>
-      academicoApi.crearCurso(ciclo.id, componerNombreDeCurso(anioNuevo, divisionNueva)),
+    mutationFn: () => academicoApi.crearCurso(ciclo.id, aDatosDeAPI(nuevo)),
     onSuccess: async () => {
-      setAnioNuevo("1")
-      setDivisionNueva("A")
+      setNuevo(CURSO_EN_BLANCO)
       await invalidar()
     },
   })
 
   const editar = useMutation({
-    mutationFn: ({ curso, nombre }: { curso: Curso; nombre: string }) =>
-      academicoApi.editarCurso(curso.id, nombre.trim().toUpperCase()),
+    // Los tres datos van juntos: son un solo curso descrito de tres formas, y
+    // corregir el nombre sin poder corregir el año que le corresponde dejaría
+    // al curso describiéndose mal.
+    mutationFn: ({ curso, datos }: { curso: Curso; datos: DatosDeCurso }) =>
+      academicoApi.editarCurso(curso.id, aDatosDeAPI(datos)),
     onSuccess: async () => {
       setEditando(null)
       await invalidar()
@@ -64,6 +65,8 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   if (isLoading) return <p className="text-muted-foreground text-sm">Cargando cursos…</p>
 
   const cursos = data?.data ?? []
+  const divisiones = divisionesEnUso(cursos)
+  const modalidades = modalidadesEnUso(cursos)
   const error = crear.error ?? editar.error ?? eliminar.error
 
   return (
@@ -93,12 +96,10 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
             <p className="text-sm font-medium">Nuevo curso</p>
             <SelectorDeCurso
               idPrefijo={`curso-${ciclo.id}`}
-              anio={anioNuevo}
-              division={divisionNueva}
-              onCambio={(a, d) => {
-                setAnioNuevo(a)
-                setDivisionNueva(d)
-              }}
+              valor={nuevo}
+              divisionesSugeridas={divisiones}
+              modalidadesSugeridas={modalidades}
+              onCambio={setNuevo}
             />
           </div>
           <Button type="submit" size="sm" disabled={crear.isPending}>
@@ -128,45 +129,14 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
                   editar.mutate(editando)
                 }}
               >
-                <div className="grid gap-1.5">
-                  {/* Un nombre que no matchee el patrón —una fila vieja o
-                      cargada por API— cae al campo de texto, para no quedarse
-                      sin poder editarla. */}
-                  {separarNombreDeCurso(editando.nombre) ? (
-                    <SelectorDeCurso
-                      idPrefijo={`editar-curso-${curso.id}`}
-                      anio={separarNombreDeCurso(editando.nombre)!.anio}
-                      division={separarNombreDeCurso(editando.nombre)!.division}
-                      onCambio={(a, d) =>
-                        setEditando({ ...editando, nombre: componerNombreDeCurso(a, d) })
-                      }
-                    />
-                  ) : (
-                    <>
-                      <Label htmlFor={`editar-curso-${curso.id}`}>Nombre</Label>
-                      <Input
-                        id={`editar-curso-${curso.id}`}
-                        value={editando.nombre}
-                        onChange={(e) =>
-                          setEditando({ ...editando, nombre: e.target.value })
-                        }
-                      />
-                      {!esNombreDeCursoValido(editando.nombre.trim().toUpperCase()) && (
-                        <p className="text-destructive text-sm">
-                          Formato inválido. Por ejemplo: 1°A, 6°Z.
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={
-                    !esNombreDeCursoValido(editando.nombre.trim().toUpperCase()) ||
-                    editar.isPending
-                  }
-                >
+                <SelectorDeCurso
+                  idPrefijo={`editar-curso-${curso.id}`}
+                  valor={editando.datos}
+                  divisionesSugeridas={divisiones}
+                  modalidadesSugeridas={modalidades}
+                  onCambio={(datos) => setEditando({ ...editando, datos })}
+                />
+                <Button type="submit" size="sm" disabled={editar.isPending}>
                   Guardar
                 </Button>
                 <Button
@@ -180,7 +150,10 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
               </form>
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium">{curso.nombre}</span>
+                {/* La modalidad al lado del nombre: dos carreras pueden tener
+                    cada una su "1°A" y en la lista serían dos renglones
+                    idénticos. */}
+                <span className="font-medium">{etiquetaDeCurso(curso)}</span>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
@@ -195,7 +168,9 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setEditando({ curso, nombre: curso.nombre })}
+                        onClick={() =>
+                          setEditando({ curso, datos: aDatosDeCurso(curso) })
+                        }
                       >
                         Renombrar
                       </Button>
@@ -217,8 +192,8 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
                 {/* RF-02.11: eliminar un curso arrastra sus materias. El
                     backend lo rechaza si alguna tiene reservas. */}
                 <p className="text-destructive text-sm">
-                  Eliminar «{curso.nombre}» borra también todas sus materias. Solo se
-                  puede si ninguna tiene reservas.
+                  Eliminar «{etiquetaDeCurso(curso)}» borra también todas sus materias.
+                  Solo se puede si ninguna tiene reservas.
                 </p>
                 <div className="flex gap-2">
                   <Button
@@ -246,4 +221,27 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
       })}
     </div>
   )
+}
+
+/** Un curso en blanco: primer año, sin división y sin modalidad. */
+const CURSO_EN_BLANCO: DatosDeCurso = { anio: 1, division: "", modalidad: "" }
+
+function aDatosDeCurso(curso: Curso): DatosDeCurso {
+  return {
+    anio: curso.anio,
+    division: curso.division ?? "",
+    modalidad: curso.modalidad ?? "",
+  }
+}
+
+/**
+ * Los dos opcionales viajan ausentes y no como cadena vacía: en la base son
+ * NULL, que es lo que significa "este curso no tiene ese dato".
+ */
+function aDatosDeAPI(datos: DatosDeCurso) {
+  return {
+    anio: datos.anio,
+    division: datos.division.trim() || undefined,
+    modalidad: datos.modalidad.trim() || undefined,
+  }
 }

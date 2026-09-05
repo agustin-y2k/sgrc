@@ -35,6 +35,8 @@ type fakeRepo struct {
 	docentesMateria       map[string]*domain.DocenteMateria
 	materiasReservables   []application.MateriaReservable
 	filtroDocenteRecibido *string
+	asignaciones          []application.AsignacionDocente
+	cicloDeAsignaciones   string
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -167,6 +169,11 @@ func (r *fakeRepo) RemoverDocenteMateria(ctx context.Context, id string) error {
 	delete(r.docentesMateria, id)
 	return nil
 }
+func (r *fakeRepo) ListarAsignaciones(ctx context.Context, cicloID string) ([]application.AsignacionDocente, error) {
+	r.cicloDeAsignaciones = cicloID
+	return r.asignaciones, nil
+}
+
 func (r *fakeRepo) ListarDocentesDeMateria(ctx context.Context, materiaID string) ([]*domain.DocenteMateria, error) {
 	var resultado []*domain.DocenteMateria
 	for _, dm := range r.docentesMateria {
@@ -349,10 +356,12 @@ func TestHTTP_ArchivarCiclo_YaArchivado_409(t *testing.T) {
 
 // ── Curso ───────────────────────────────────────────────────────────────
 
-func TestHTTP_CrearCurso_NombreInvalido_400(t *testing.T) {
+// El año es lo único obligatorio de un curso: la división y la modalidad
+// pueden faltar porque no todos los ámbitos las tienen (RF-02.2).
+func TestHTTP_CrearCurso_SinAnio_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/academic/ciclos/c1/cursos", jsonBody(crearCursoRequest{Nombre: "primero A"}))
+	req := httptest.NewRequest("POST", "/api/academic/ciclos/c1/cursos", jsonBody(crearCursoRequest{Division: "A"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -365,7 +374,7 @@ func TestHTTP_CrearCurso_NombreInvalido_400(t *testing.T) {
 func TestHTTP_CrearCurso_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/academic/ciclos/c1/cursos", jsonBody(crearCursoRequest{Nombre: "1°A"}))
+	req := httptest.NewRequest("POST", "/api/academic/ciclos/c1/cursos", jsonBody(crearCursoRequest{Anio: 1, Division: "A"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -746,6 +755,122 @@ func TestHTTP_ListarPedidos_MateriaNueva_SinNombreResuelto(t *testing.T) {
 	if cuerpo.Data[0].MateriaNombre != "" || cuerpo.Data[0].CursoNombre != "" {
 		t.Errorf("esperaba los dos nombres vacíos, obtuve %q / %q",
 			cuerpo.Data[0].MateriaNombre, cuerpo.Data[0].CursoNombre)
+	}
+}
+
+// Quién dicta qué, en una sola respuesta y con los nombres resueltos. Las dos
+// pantallas que muestran esta relación —las materias de un curso y el listado
+// de usuarios— la leían a medias, y pedirla materia por materia es un N+1 en
+// cada carga.
+func TestHTTP_Asignaciones_TraeLosNombresResueltos(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.asignaciones = []application.AsignacionDocente{
+		{
+			ID: "dm1", UsuarioID: "u1", DocenteNombre: "Ana Gómez", Rol: "TITULAR",
+			MateriaID: "m1", MateriaNombre: "Programación",
+			CursoID: "c1", CursoNombre: "1°4°",
+		},
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET", "/api/academic/ciclos/ciclo1/asignaciones", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if repo.cicloDeAsignaciones != "ciclo1" {
+		t.Errorf("pidió el ciclo %q, esperaba ciclo1", repo.cicloDeAsignaciones)
+	}
+
+	var cuerpo struct {
+		Data []asignacionDocenteResponse `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+		t.Fatalf("no se pudo leer la respuesta: %v", err)
+	}
+	if len(cuerpo.Data) != 1 {
+		t.Fatalf("esperaba 1 asignación, obtuve %d", len(cuerpo.Data))
+	}
+	a := cuerpo.Data[0]
+	// Los nombres son la razón de ser de este endpoint: sin ellos la pantalla
+	// tendría que cruzarlos contra el listado de usuarios, que es justo lo que
+	// no hacía.
+	if a.DocenteNombre != "Ana Gómez" || a.MateriaNombre != "Programación" || a.CursoNombre != "1°4°" {
+		t.Errorf("respuesta sin los nombres resueltos: %+v", a)
+	}
+}
+
+// Quién dicta qué es información de gestión: la muestra el panel académico y
+// el listado de usuarios, los dos solo para Admin.
+func TestHTTP_Asignaciones_UnDocenteNoPuede(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("GET", "/api/academic/ciclos/ciclo1/asignaciones", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != 403 {
+		t.Errorf("status = %d, esperaba 403", resp.StatusCode)
+	}
+}
+
+// El mostrador pregunta qué dicta OTRA persona: cuando quien viene a buscar un
+// equipo tiene cuenta, sus cursos son el destino más probable de la entrega
+// (RF-08.23). Filtra por esa persona y no por quien pregunta, que es un Admin
+// y no dicta nada.
+func TestHTTP_MateriasDeDocente_FiltraPorEsaPersona(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.materiasReservables = []application.MateriaReservable{
+		{MateriaID: "m1", MateriaNombre: "Programación", CursoNombre: "1°4°", CicloAnio: 2026},
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET", "/api/academic/docentes/docente7/materias", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if repo.filtroDocenteRecibido == nil {
+		t.Fatal("tenía que filtrar por la persona consultada, no filtró")
+	}
+	if *repo.filtroDocenteRecibido != "docente7" {
+		t.Errorf("filtró por %q, esperaba docente7", *repo.filtroDocenteRecibido)
+	}
+
+	var cuerpo struct {
+		Data []materiaReservableResponse `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+		t.Fatalf("no se pudo leer la respuesta: %v", err)
+	}
+	if len(cuerpo.Data) != 1 || cuerpo.Data[0].CursoNombre != "1°4°" {
+		t.Errorf("respuesta inesperada: %+v", cuerpo.Data)
+	}
+}
+
+// Un docente no tiene por qué saber qué dicta otro: el mostrador lo opera el
+// Admin y es el único que necesita esta respuesta.
+func TestHTTP_MateriasDeDocente_UnDocenteNoPuede(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("GET", "/api/academic/docentes/otro/materias", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != 403 {
+		t.Errorf("status = %d, esperaba 403", resp.StatusCode)
 	}
 }
 

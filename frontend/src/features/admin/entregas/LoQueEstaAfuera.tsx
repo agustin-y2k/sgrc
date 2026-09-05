@@ -130,7 +130,7 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
                   {p.entregadoANombre}
                   {p.retiradoPor && ` · retiró ${p.retiradoPor}`}
                   {p.materiaNombre && ` · ${p.materiaNombre}`}
-                  {p.motivo && ` · ${p.motivo}`}
+                  {p.destino && ` · ${p.destino}`}
                 </p>
                 {!compacto && (
                   <p className="text-muted-foreground text-xs">

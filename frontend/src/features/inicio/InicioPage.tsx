@@ -117,6 +117,9 @@ export function InicioPage() {
   const { user } = useAuth()
   const esAdmin = user?.rol === "ADMIN"
   const [entregandoSuelta, setEntregandoSuelta] = useState(false)
+  // El resumen de la última entrega vive acá y no en el formulario, que se
+  // cierra solo al terminar (RF-08.24): adentro se iría con él.
+  const [resumenDeEntrega, setResumenDeEntrega] = useState<string | null>(null)
   const hoy = hoyISO()
   const noLeidas = useNoLeidas()
 
@@ -214,8 +217,18 @@ export function InicioPage() {
           {entregandoSuelta && (
             <EntregaSuelta
               yaAfuera={yaAfuera}
-              onCerrar={() => setEntregandoSuelta(false)}
+              onCerrar={(resumen) => {
+                setEntregandoSuelta(false)
+                setResumenDeEntrega(resumen ?? null)
+              }}
             />
+          )}
+          {/* Arriba de «Afuera del laboratorio», que es donde las máquinas que
+              acaban de salir ya figuran. */}
+          {resumenDeEntrega && (
+            <Alert>
+              <AlertDescription>{resumenDeEntrega}</AlertDescription>
+            </Alert>
           )}
           <div className="grid gap-4 lg:grid-cols-2">
             <LoQueEstaAfuera compacto />
@@ -232,7 +245,12 @@ export function InicioPage() {
                       puntual. La persona no necesita tener cuenta en el sistema.
                     </p>
                     <div>
-                      <Button onClick={() => setEntregandoSuelta(true)}>
+                      <Button
+                        onClick={() => {
+                          setResumenDeEntrega(null)
+                          setEntregandoSuelta(true)
+                        }}
+                      >
                         Entregar sin reserva
                       </Button>
                     </div>

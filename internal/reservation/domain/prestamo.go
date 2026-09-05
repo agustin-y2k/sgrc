@@ -43,7 +43,10 @@ type Prestamo struct {
 	// responde.
 	RetiradoPor string
 
-	Motivo string
+	// Destino es a dónde va el equipo: un curso ("1°4°"), una dependencia
+	// ("Biblioteca") o el service. Texto libre: la lista de destinos de una
+	// institución no se puede cerrar.
+	Destino string
 	// DevolucionEstimada nil = no se pactó hora. Sin ella no se le puede
 	// reclamar nada hasta el cierre de la jornada.
 	DevolucionEstimada *time.Time
@@ -71,7 +74,8 @@ type DatosDeEntrega struct {
 	Nombre string
 	// RetiradoPor es opcional: quién vino a buscarlo, si no fue quien responde.
 	RetiradoPor string
-	Motivo      string
+	// Destino: a dónde va el equipo.
+	Destino string
 	// DevolucionEstimada: en una entrega contra reserva sale del fin de esa
 	// reserva; en una espontánea es opcional a propósito.
 	DevolucionEstimada *time.Time
@@ -104,7 +108,7 @@ func NuevoPrestamo(id string, d DatosDeEntrega, ahora time.Time) (*Prestamo, err
 		EntregadoAUsuarioID: d.UsuarioID,
 		EntregadoANombre:    nombre,
 		RetiradoPor:         retiradoPor,
-		Motivo:              strings.TrimSpace(d.Motivo),
+		Destino:             strings.TrimSpace(d.Destino),
 		DevolucionEstimada:  d.DevolucionEstimada,
 		EntregadoEn:         ahora,
 	}

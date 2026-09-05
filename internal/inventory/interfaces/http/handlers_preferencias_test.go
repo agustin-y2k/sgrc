@@ -46,12 +46,13 @@ func TestHTTP_MarcarPreferencia_EnVariosEquipos_201(t *testing.T) {
 	}
 }
 
-func TestHTTP_MarcarPreferencia_ConAnioYDivision_ArmaElAlcance(t *testing.T) {
+func TestHTTP_MarcarPreferencia_ConCursoYModalidad_ArmaElAlcance(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	tres, be := 3, "B"
+	cuatro, division, modalidad := 4, "2", "Electromecánica"
 	req := httptest.NewRequest("POST", "/api/inventory/preferencias", jsonBody(marcarPreferenciaRequest{
-		EquipoIDs: []string{"e1"}, MateriaNombre: "Matemática", Anio: &tres, Division: &be,
+		EquipoIDs: []string{"e1"}, MateriaNombre: "Matemática",
+		Anio: &cuatro, Division: &division, Modalidad: &modalidad,
 	}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
@@ -65,19 +66,19 @@ func TestHTTP_MarcarPreferencia_ConAnioYDivision_ArmaElAlcance(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if len(body.Creadas) != 1 || body.Creadas[0].Alcance != "Matemática de 3°B" {
+	if len(body.Creadas) != 1 || body.Creadas[0].Alcance != "Matemática de 4°2, Electromecánica" {
 		t.Fatalf("alcance inesperado: %+v", body.Creadas)
 	}
 }
 
-// Una división sin año no significa nada y tiene que salir como 400 con
-// explicación, no como el 500 de un CHECK de la base.
-func TestHTTP_MarcarPreferencia_DivisionSinAnio_400(t *testing.T) {
+// Un eje en blanco tiene que salir como 400 con explicación, no como el 500
+// de un CHECK de la base.
+func TestHTTP_MarcarPreferencia_ModalidadEnBlanco_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	be := "B"
+	enBlanco := "   "
 	req := httptest.NewRequest("POST", "/api/inventory/preferencias", jsonBody(marcarPreferenciaRequest{
-		EquipoIDs: []string{"e1"}, MateriaNombre: "Matemática", Division: &be,
+		EquipoIDs: []string{"e1"}, MateriaNombre: "Matemática", Modalidad: &enBlanco,
 	}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
@@ -107,7 +108,7 @@ func TestHTTP_MarcarPreferencia_ComoDocente_403(t *testing.T) {
 // que ya ve al reservar.
 func TestHTTP_ListarPreferenciasDeEquipo_ComoDocente_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
-	p, _ := domain.NuevaPreferencia("p1", "e1", "Matemática", nil, nil, 1)
+	p, _ := domain.NuevaPreferencia("p1", "e1", "Matemática", nil, nil, nil, 1)
 	repo.preferencias["p1"] = p
 	app := nuevaAppDeTest(repo)
 
@@ -135,13 +136,13 @@ func TestHTTP_ListarPreferenciasDeEquipo_ComoDocente_OK(t *testing.T) {
 
 func TestHTTP_EditarPreferencia_CambiaElAlcance(t *testing.T) {
 	repo := nuevoFakeRepo()
-	p, _ := domain.NuevaPreferencia("p1", "e1", "Matemática", nil, nil, 1)
+	p, _ := domain.NuevaPreferencia("p1", "e1", "Matemática", nil, nil, nil, 1)
 	repo.preferencias["p1"] = p
 	app := nuevaAppDeTest(repo)
 
-	cinco, a := 5, "A"
+	cinco := 5
 	req := httptest.NewRequest("PATCH", "/api/inventory/preferencias/p1", jsonBody(editarPreferenciaRequest{
-		Anio: &cinco, Division: &a,
+		Anio: &cinco,
 	}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
@@ -158,7 +159,7 @@ func TestHTTP_EditarPreferencia_CambiaElAlcance(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Alcance != "Matemática de 5°A" {
+	if body.Alcance != "Matemática de 5°" {
 		t.Errorf("alcance = %q", body.Alcance)
 	}
 }
@@ -178,7 +179,7 @@ func TestHTTP_EditarPreferencia_NoExiste_404(t *testing.T) {
 
 func TestHTTP_BorrarPreferencia_204(t *testing.T) {
 	repo := nuevoFakeRepo()
-	p, _ := domain.NuevaPreferencia("p1", "e1", "Matemática", nil, nil, 1)
+	p, _ := domain.NuevaPreferencia("p1", "e1", "Matemática", nil, nil, nil, 1)
 	repo.preferencias["p1"] = p
 	app := nuevaAppDeTest(repo)
 

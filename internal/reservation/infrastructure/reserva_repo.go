@@ -869,14 +869,18 @@ const sqlTramosDePreferencia = `
 		-- definida cuando reserva 3°B.
 		propia AS (
 			SELECT DISTINCT ON (ep.equipo_id)
-			       ep.equipo_id, ep.prioridad, ep.materia_nombre, ep.anio, ep.division
+			       ep.equipo_id, ep.prioridad, ep.materia_nombre, ep.anio,
+			       ep.modalidad, ep.modalidad_norm, ep.division, ep.division_norm
 			FROM equipo_preferencia ep
 			JOIN ctx_materia cm ON true
 			WHERE ep.materia_norm = cm.norm
-			  AND (ep.anio     IS NULL OR ep.anio     = cm.anio)
-			  AND (ep.division IS NULL OR ep.division = cm.division)
+			  AND (ep.anio IS NULL OR ep.anio = cm.anio)
+			  AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cm.modalidad_norm)
+			  AND (ep.division_norm  = '' OR ep.division_norm  = cm.division_norm)
 			ORDER BY ep.equipo_id,
-			         (ep.anio IS NOT NULL)::int + (ep.division IS NOT NULL)::int DESC,
+			         (ep.anio IS NOT NULL)::int
+			         + (ep.modalidad_norm <> '')::int
+			         + (ep.division_norm  <> '')::int DESC,
 			         ep.prioridad
 		),
 		-- La marca de otro. Compartir el nombre de la materia no alcanza: una
@@ -884,13 +888,15 @@ const sqlTramosDePreferencia = `
 		-- exactamente para lo que el Admin acotó el alcance.
 		ajena AS (
 			SELECT DISTINCT ON (ep.equipo_id)
-			       ep.equipo_id, ep.prioridad, ep.materia_nombre, ep.anio, ep.division
+			       ep.equipo_id, ep.prioridad, ep.materia_nombre, ep.anio,
+			       ep.modalidad, ep.modalidad_norm, ep.division, ep.division_norm
 			FROM equipo_preferencia ep
 			JOIN ctx_materia cm ON true
 			WHERE NOT EXISTS (SELECT 1 FROM propia pr WHERE pr.equipo_id = ep.equipo_id)
 			  AND NOT (ep.materia_norm = cm.norm
-			           AND (ep.anio     IS NULL OR ep.anio     = cm.anio)
-			           AND (ep.division IS NULL OR ep.division = cm.division))
+			           AND (ep.anio IS NULL OR ep.anio = cm.anio)
+			           AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cm.modalidad_norm)
+			           AND (ep.division_norm  = '' OR ep.division_norm  = cm.division_norm))
 			ORDER BY ep.equipo_id, ep.prioridad
 		)`
 
@@ -902,6 +908,7 @@ const sqlColumnasDePreferencia = `
 		            ELSE 1 END,
 		       COALESCE(pr.materia_nombre, aj.materia_nombre, ''),
 		       COALESCE(pr.anio, aj.anio, 0),
+		       COALESCE(pr.modalidad, aj.modalidad, ''),
 		       COALESCE(pr.division, aj.division, '')`
 
 const sqlJoinsDePreferencia = `
@@ -956,10 +963,13 @@ func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID
 		-- La materia sale del propio grupo: cambiar el equipo de una reserva
 		-- ya sabe para qué es, así que el ordenamiento de RF-03.21 no
 		-- necesita ningún dato extra del cliente.
+		--
+		-- Los tres ejes salen de COLUMNAS del curso y no de partir su nombre.
+		-- Desde la 009 el nombre es una columna GENERADA a partir del año y la
+		-- división, así que partirlo sería deshacer lo que la base ya hizo.
 		ctx_materia AS (
-			SELECT m.nombre_norm AS norm,
-			       substring(cu.nombre from 1 for 1)::smallint AS anio,
-			       substring(cu.nombre from 3 for 1)           AS division
+			SELECT m.nombre_norm AS norm, cu.anio,
+			       cu.modalidad_norm, cu.division_norm
 			FROM reserva_grupo g
 			JOIN materia m  ON m.id = g.materia_id
 			JOIN curso   cu ON cu.id = m.curso_id
@@ -1009,9 +1019,8 @@ func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID
 func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]application.EquipoDisponible, error) {
 	rows, err := r.db.Query(ctx, `
 		WITH ctx_materia AS (
-			SELECT m.nombre_norm AS norm,
-			       substring(cu.nombre from 1 for 1)::smallint AS anio,
-			       substring(cu.nombre from 3 for 1)           AS division
+			SELECT m.nombre_norm AS norm, cu.anio,
+			       cu.modalidad_norm, cu.division_norm
 			FROM materia m
 			JOIN curso cu ON cu.id = m.curso_id
 			WHERE m.id = NULLIF($4, '')::uuid
@@ -1056,7 +1065,8 @@ func escanearEquiposDisponibles(rows pgx.Rows) ([]application.EquipoDisponible, 
 		if err := rows.Scan(&pc.EquipoID, &pc.Identificador, &pc.Etiqueta, &pc.Tipo,
 			&pc.CarroID, &pc.CarroNombre,
 			&pc.Freezado, &pc.SoftwareInstalado,
-			&tramo, &pc.PreferenciaMateria, &pc.PreferenciaAnio, &pc.PreferenciaDivision); err != nil {
+			&tramo, &pc.PreferenciaMateria, &pc.PreferenciaAnio,
+			&pc.PreferenciaModalidad, &pc.PreferenciaDivision); err != nil {
 			return nil, fmt.Errorf("escaneando equipo disponible: %w", err)
 		}
 		pc.Tramo = tramoDePreferencia(tramo)

@@ -14,9 +14,11 @@ import (
 type NuevaPreferenciaParams struct {
 	EquipoIDs     []string
 	MateriaNombre string
-	Anio          *int
-	Division      *string
-	Prioridad     int
+	// Los tres ejes del alcance, independientes y opcionales.
+	Modalidad *string
+	Anio      *int
+	Division  *string
+	Prioridad int
 }
 
 // ResultadoAltaDePreferencias separa lo creado de lo que ya estaba.
@@ -34,7 +36,7 @@ func (s *Service) MarcarPreferencia(ctx context.Context, params NuevaPreferencia
 	resultado := &ResultadoAltaDePreferencias{}
 	for _, equipoID := range params.EquipoIDs {
 		p, err := domain.NuevaPreferencia(s.nuevoID(), equipoID, params.MateriaNombre,
-			params.Anio, params.Division, params.Prioridad)
+			params.Modalidad, params.Anio, params.Division, params.Prioridad)
 		if err != nil {
 			// La materia, el alcance y la prioridad son los mismos para todo el lote:
 			// si no validan, no validan para ninguno y seguir intentando con las demás
@@ -55,17 +57,18 @@ func (s *Service) MarcarPreferencia(ctx context.Context, params NuevaPreferencia
 }
 
 // EditarPreferencia cambia el alcance y la prioridad de una marca existente.
-func (s *Service) EditarPreferencia(ctx context.Context, id string, anio *int, division *string, prioridad int) (*domain.PreferenciaDeEquipo, error) {
+func (s *Service) EditarPreferencia(ctx context.Context, id string, modalidad *string, anio *int,
+	division *string, prioridad int) (*domain.PreferenciaDeEquipo, error) {
 	actual, err := s.repo.BuscarPreferenciaPorID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Se reconstruye por el constructor en vez de asignar campos sueltos: así el
-	// alcance editado pasa por las mismas validaciones que el nuevo (una
-	// división sin año, por ejemplo).
+	// Se reconstruye por el constructor en vez de asignar campos sueltos: así
+	// el alcance editado pasa por las mismas validaciones y los mismos
+	// recortes que el nuevo.
 	editada, err := domain.NuevaPreferencia(actual.ID, actual.EquipoID, actual.MateriaNombre,
-		anio, division, prioridad)
+		modalidad, anio, division, prioridad)
 	if err != nil {
 		return nil, err
 	}

@@ -26,6 +26,8 @@ function curso(over: Partial<Curso> = {}): Curso {
     id: "curso1",
     cicloLectivoId: "ciclo1",
     nombre: "1°A",
+    anio: 1,
+    division: "A",
     activo: true,
     archivado: false,
     ...over,
@@ -78,6 +80,7 @@ describe("AcademicoPage", () => {
     vi.mocked(academicoApi.listarCursos).mockResolvedValue({ data: [curso()] })
     vi.mocked(academicoApi.listarMaterias).mockResolvedValue({ data: [materia()] })
     vi.mocked(academicoApi.listarDocentesDeMateria).mockResolvedValue({ data: [] })
+    vi.mocked(academicoApi.listarAsignaciones).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.listarUsuarios).mockResolvedValue({
       data: [usuario()],
       meta: { total: 1, page: 1, pageSize: 1 },
@@ -139,36 +142,75 @@ describe("AcademicoPage", () => {
       await user.click(await screen.findByRole("button", { name: "Cursos" }))
     }
 
-    // RF-02.2: el nombre sigue el patrón ^[1-6]°[A-Z]$, pero no se escribe:
-    // se elige el año y la división.
-    it("arma el nombre del curso con los selectores de año y división", async () => {
+    /**
+     * RF-02.2: el año es lo único obligatorio y el nombre no se escribe — sale
+     * del año y la división, y el eco muestra cómo va a quedar.
+     */
+    it("crea el curso con el año, la división y la modalidad", async () => {
       vi.mocked(academicoApi.crearCurso).mockResolvedValue(curso({ id: "nuevo" }))
       const user = userEvent.setup()
       renderPagina()
       await abrirCiclo(user)
 
-      await user.selectOptions(await screen.findByLabelText("Año del curso"), "3")
-      await user.selectOptions(screen.getByLabelText("División"), "B")
+      await user.selectOptions(await screen.findByLabelText("Año del curso"), "4")
+      await user.type(screen.getByLabelText("División (opcional)"), "2")
+      await user.type(
+        screen.getByLabelText("Modalidad o carrera (opcional)"),
+        "Electromecánica"
+      )
 
-      // Se muestra cómo va a quedar antes de confirmar.
-      expect(screen.getByText("3°B")).toBeInTheDocument()
+      // El eco: el `°` lo pone el sistema, no quien carga.
+      expect(screen.getByText("4°2", { selector: "strong" })).toBeInTheDocument()
 
       await user.click(screen.getByRole("button", { name: "Agregar" }))
 
       await waitFor(() => {
-        expect(academicoApi.crearCurso).toHaveBeenCalledWith("ciclo1", "3°B")
+        expect(academicoApi.crearCurso).toHaveBeenCalledWith("ciclo1", {
+          anio: 4,
+          division: "2",
+          modalidad: "Electromecánica",
+        })
       })
     })
 
-    // Ya no hay forma de escribir un nombre inválido: el valor sale siempre
-    // de dos listas cerradas.
-    it("no hay campo de texto libre para el nombre del curso nuevo", async () => {
+    /**
+     * La división y la modalidad son opcionales porque no todos los ámbitos
+     * las tienen: una universidad no divide sus cursos, una primaria no tiene
+     * modalidades. El año sí va siempre.
+     */
+    it("crea un curso sin división ni modalidad", async () => {
+      vi.mocked(academicoApi.crearCurso).mockResolvedValue(curso({ id: "nuevo" }))
       const user = userEvent.setup()
       renderPagina()
       await abrirCiclo(user)
 
-      await screen.findByLabelText("Año del curso")
-      expect(screen.queryByLabelText("Nuevo curso")).not.toBeInTheDocument()
+      await user.selectOptions(await screen.findByLabelText("Año del curso"), "2")
+
+      expect(screen.getByText("2°", { selector: "strong" })).toBeInTheDocument()
+
+      await user.click(screen.getByRole("button", { name: "Agregar" }))
+
+      await waitFor(() => {
+        expect(academicoApi.crearCurso).toHaveBeenCalledWith("ciclo1", {
+          anio: 2,
+          division: undefined,
+          modalidad: undefined,
+        })
+      })
+    })
+
+    // Séptimo año existe en primaria; el tope alto cubre además una carrera de
+    // grado. El rango es de sanidad, no una regla de dominio.
+    it("ofrece años más allá del sexto", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirCiclo(user)
+
+      const anio = await screen.findByLabelText("Año del curso")
+      const opciones = [...anio.querySelectorAll("option")].map((o) => o.value)
+
+      expect(opciones).toContain("7")
+      expect(opciones).toContain("15")
     })
 
     it("muestra el error del backend al eliminar un curso con reservas", async () => {

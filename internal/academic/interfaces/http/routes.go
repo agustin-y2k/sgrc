@@ -21,6 +21,11 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 
 	// RF-04.1: en qué materias puede reservar quien está autenticado.
 	academic.Get("/mis-materias", autenticado, h.ListarMisMaterias)
+	// Quién dicta qué en un ciclo, para las dos pantallas que muestran la
+	// relación docente-materia (RF-02.6).
+	academic.Get("/ciclos/:cicloId/asignaciones", autenticado, soloAdmin, h.ListarAsignaciones)
+	// La misma pregunta sobre otra persona, para el mostrador (RF-08.23).
+	academic.Get("/docentes/:usuarioId/materias", autenticado, soloAdmin, h.ListarMateriasDeDocente)
 	academic.Post("/ciclos/:id/archivar", autenticado, soloAdmin, h.ArchivarCiclo)
 
 	// Curso

@@ -2,11 +2,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
+import * as academicoApi from "@/features/academico/api"
 import * as adminApi from "@/features/admin/api"
 import { PreferenciasDeEquipo } from "@/features/admin/PreferenciasDeEquipo"
 import type { PreferenciaDeEquipo } from "@/features/inventory/types"
 
 vi.mock("@/features/admin/api")
+vi.mock("@/features/academico/api")
 
 function preferencia(over: Partial<PreferenciaDeEquipo> = {}): PreferenciaDeEquipo {
   return {
@@ -23,6 +25,34 @@ function renderPanel(preferencias: PreferenciaDeEquipo[] = []) {
   vi.mocked(adminApi.listarPreferenciasDeEquipo).mockResolvedValue({ data: preferencias })
   vi.mocked(adminApi.materiasEnUso).mockResolvedValue({
     data: ["Dibujo Técnico", "Matemática"],
+  })
+  // Los cursos y las modalidades se sugieren a partir de lo que la escuela
+  // tiene cargado: son los únicos que existen de verdad.
+  vi.mocked(academicoApi.listarCiclos).mockResolvedValue({
+    data: [{ id: "ciclo1", anio: 2026, activo: true, archivado: false }],
+  })
+  vi.mocked(academicoApi.listarCursos).mockResolvedValue({
+    data: [
+      {
+        id: "c1",
+        cicloLectivoId: "ciclo1",
+        nombre: "3°B",
+        anio: 3,
+        division: "B",
+        activo: true,
+        archivado: false,
+      },
+      {
+        id: "c2",
+        cicloLectivoId: "ciclo1",
+        nombre: "4°2",
+        anio: 4,
+        division: "2",
+        modalidad: "Electromecánica",
+        activo: true,
+        archivado: false,
+      },
+    ],
   })
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -80,14 +110,15 @@ describe("PreferenciasDeEquipo", () => {
     renderPanel()
 
     await user.selectOptions(await screen.findByLabelText("Materia"), "Matemática")
-    await user.selectOptions(screen.getByLabelText("Año"), "3")
-    await user.selectOptions(screen.getByLabelText("División"), "B")
+    await user.type(screen.getByLabelText("Año"), "3")
+    await user.type(screen.getByLabelText("División"), "B")
     await user.click(screen.getByRole("button", { name: "Marcar" }))
 
     await waitFor(() => {
       expect(adminApi.marcarPreferencia).toHaveBeenCalledWith({
         equipoIds: ["pc1"],
         materiaNombre: "Matemática",
+        modalidad: undefined,
         anio: 3,
         division: "B",
         prioridad: 1,
@@ -95,11 +126,50 @@ describe("PreferenciasDeEquipo", () => {
     })
   })
 
-  /** Sin año, una división no significa nada: no existen "todas las B". */
-  it("no deja elegir división sin año", async () => {
+  /**
+   * Los tres ejes son independientes: cada uno se sostiene solo y ninguno
+   * depende de otro. "Matemática de Electromecánica" es un alcance válido sin
+   * decir de qué año.
+   */
+  it("deja acotar por un eje sin los otros dos", async () => {
+    const user = userEvent.setup()
+    vi.mocked(adminApi.marcarPreferencia).mockResolvedValue({ creadas: [] })
     renderPanel()
 
-    expect(await screen.findByLabelText("División")).toBeDisabled()
+    await user.selectOptions(await screen.findByLabelText("Materia"), "Matemática")
+    await user.type(screen.getByLabelText("Modalidad"), "Electromecánica")
+    await user.click(screen.getByRole("button", { name: "Marcar" }))
+
+    await waitFor(() => {
+      expect(adminApi.marcarPreferencia).toHaveBeenCalledWith({
+        equipoIds: ["pc1"],
+        materiaNombre: "Matemática",
+        modalidad: "Electromecánica",
+        anio: undefined,
+        division: undefined,
+        prioridad: 1,
+      })
+    })
+  })
+
+  /**
+   * La división y la modalidad de la marca tienen que estar escritas como las
+   * del curso de verdad. Por eso se escriben libres y se sugieren las que ya
+   * existen.
+   */
+  it("sugiere las divisiones y las modalidades que la escuela ya tiene", async () => {
+    renderPanel()
+
+    // Las dos listas aparecen recién cuando llegan los cursos del ciclo: hasta
+    // entonces el campo es libre y sin sugerencias, que es lo correcto.
+    const opcionesDe = (etiqueta: string) => {
+      const campo = screen.getByLabelText(etiqueta)
+      const lista = document.getElementById(campo.getAttribute("list") ?? "")
+      return lista ? [...lista.querySelectorAll("option")].map((o) => o.value) : null
+    }
+
+    await waitFor(() => expect(opcionesDe("División")).toEqual(["2", "B"]))
+    expect(opcionesDe("Modalidad")).toEqual(["Electromecánica"])
   })
 
   it("sin año manda el alcance sin acotar", async () => {
@@ -114,6 +184,7 @@ describe("PreferenciasDeEquipo", () => {
       expect(adminApi.marcarPreferencia).toHaveBeenCalledWith({
         equipoIds: ["pc1"],
         materiaNombre: "Dibujo Técnico",
+        modalidad: undefined,
         anio: undefined,
         division: undefined,
         prioridad: 1,

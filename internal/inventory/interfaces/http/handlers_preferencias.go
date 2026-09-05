@@ -47,6 +47,7 @@ func (h *Handler) MarcarPreferencia(c *fiber.Ctx) error {
 	resultado, err := h.svc.MarcarPreferencia(c.UserContext(), application.NuevaPreferenciaParams{
 		EquipoIDs:     req.EquipoIDs,
 		MateriaNombre: req.MateriaNombre,
+		Modalidad:     req.Modalidad,
 		Anio:          req.Anio,
 		Division:      req.Division,
 		Prioridad:     req.prioridadOPorDefecto(),
@@ -75,7 +76,8 @@ func (h *Handler) EditarPreferencia(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	p, err := h.svc.EditarPreferencia(c.UserContext(), id, req.Anio, req.Division, req.prioridadOPorDefecto())
+	p, err := h.svc.EditarPreferencia(c.UserContext(), id,
+		req.Modalidad, req.Anio, req.Division, req.prioridadOPorDefecto())
 	if err != nil {
 		return mapearError(err)
 	}

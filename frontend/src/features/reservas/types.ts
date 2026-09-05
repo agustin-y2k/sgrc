@@ -178,6 +178,12 @@ export type MateriaReservable = {
   materiaNombre: string
   cursoId: string
   cursoNombre: string
+  /**
+   * Acompaña al nombre porque el nombre solo dejó de ser único: dos carreras
+   * pueden tener cada una su "1°A" (RF-02.2). Ausente = el curso no pertenece
+   * a ninguna agrupación.
+   */
+  cursoModalidad?: string
   cicloId: string
   cicloAnio: number
 }
@@ -279,7 +285,8 @@ export type Prestamo = {
   entregadoANombre: string
   /** Quién vino a buscarlo, si no fue quien responde. Ausente = fue él. */
   retiradoPor?: string
-  motivo?: string
+  /** A dónde fue: un curso, una dependencia, el service. */
+  destino?: string
 
   /** ISO 8601. Ausente = no se pactó hora; no se le reclama nada. */
   devolucionEstimada?: string

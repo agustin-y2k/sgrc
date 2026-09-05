@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import * as academicoApi from "@/features/academico/api"
 import type { DocenteMateria, Materia, RolDocente } from "@/features/academico/types"
+import { useInvalidarAsignaciones } from "@/features/academico/useAsignaciones"
 import * as adminApi from "@/features/admin/api"
 import { getErrorMessage } from "@/lib/api-client"
 import { contar, plural } from "@/lib/plural"
@@ -26,6 +27,7 @@ export function DocentesDeMateria({
   soloLectura: boolean
 }) {
   const queryClient = useQueryClient()
+  const invalidarAsignaciones = useInvalidarAsignaciones()
   const [usuarioId, setUsuarioId] = useState("")
   const [rol, setRol] = useState<RolDocente>("TITULAR")
   const [ultimaCascada, setUltimaCascada] = useState<number | null>(null)
@@ -42,7 +44,13 @@ export function DocentesDeMateria({
     queryFn: () => adminApi.listarUsuarios({ estado: "APROBADA" }),
   })
 
-  const invalidar = () => queryClient.invalidateQueries({ queryKey: docentesKey })
+  // Las dos: la lista de este panel y la del ciclo entero, que es la que
+  // muestra los docentes en la fila de cada materia y en Usuarios. Sin la
+  // segunda, asignar a alguien no se ve hasta recargar la página.
+  const invalidar = async () => {
+    await queryClient.invalidateQueries({ queryKey: docentesKey })
+    await invalidarAsignaciones()
+  }
 
   const asignar = useMutation({
     mutationFn: () => academicoApi.asignarDocente(materia.id, usuarioId, rol),

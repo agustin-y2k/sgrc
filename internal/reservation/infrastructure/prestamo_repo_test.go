@@ -40,7 +40,7 @@ func TestPostgresRepo_Prestamo_EspontaneoIdaYVuelta(t *testing.T) {
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
 
 	d := entregaDeTest(equipoID)
-	d.Motivo = "trámite en secretaría"
+	d.Destino = "Sección Alumnos"
 	p := crearPrestamoDeTest(t, repo, d, ahora)
 
 	encontrado, err := repo.BuscarPrestamoPorID(ctx, p.ID)
@@ -50,7 +50,7 @@ func TestPostgresRepo_Prestamo_EspontaneoIdaYVuelta(t *testing.T) {
 	if encontrado.ReservaID != nil || encontrado.EntregadoAUsuarioID != nil || encontrado.DevolucionEstimada != nil {
 		t.Errorf("los tres campos opcionales deberían volver nulos: %+v", encontrado)
 	}
-	if encontrado.EntregadoANombre != "Ana Pérez" || encontrado.Motivo != "trámite en secretaría" {
+	if encontrado.EntregadoANombre != "Ana Pérez" || encontrado.Destino != "Sección Alumnos" {
 		t.Errorf("datos de la entrega no coinciden: %+v", encontrado)
 	}
 	if !encontrado.EstaAbierto() {

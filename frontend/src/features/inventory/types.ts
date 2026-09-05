@@ -185,7 +185,11 @@ export type PreferenciaDeEquipo = {
   materiaNombre: string
   /** Ausente = toda materia con ese nombre, en cualquier curso. */
   anio?: number
-  /** Ausente = todas las divisiones de ese año. Nunca viene sin `anio`. */
+  /**
+   * Los tres ejes del alcance (RF-03.21), independientes y opcionales:
+   * ausente = la marca no acota por ese eje.
+   */
+  modalidad?: string
   division?: string
   /** 1 es la más fuerte. */
   prioridad: number

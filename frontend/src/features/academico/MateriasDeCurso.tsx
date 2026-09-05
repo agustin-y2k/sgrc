@@ -7,8 +7,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DocentesDeMateria } from "@/features/academico/DocentesDeMateria"
 import * as academicoApi from "@/features/academico/api"
-import type { Curso, Materia } from "@/features/academico/types"
+import type { AsignacionDocente, Curso, Materia } from "@/features/academico/types"
+import { useAsignacionesDelCiclo } from "@/features/academico/useAsignaciones"
 import { getErrorMessage } from "@/lib/api-client"
+
+/** "Ana Gómez (titular), Juan Pérez (suplente)", o "" si no hay ninguno. */
+function docentesDe(asignaciones: AsignacionDocente[], materiaId: string): string {
+  return asignaciones
+    .filter((a) => a.materiaId === materiaId)
+    .sort((a, b) => (a.rol === b.rol ? 0 : a.rol === "TITULAR" ? -1 : 1))
+    .map((a) => `${a.docenteNombre} (${a.rol === "TITULAR" ? "titular" : "suplente"})`)
+    .join(", ")
+}
 
 export function MateriasDeCurso({
   curso,
@@ -30,6 +40,11 @@ export function MateriasDeCurso({
     queryKey: materiasKey,
     queryFn: () => academicoApi.listarMaterias(curso.id),
   })
+
+  // Quién dicta cada materia, para poder decirlo en la fila. Antes había que
+  // desplegar materia por materia para enterarse, así que la pregunta más
+  // frecuente —"¿esta materia tiene docente?"— costaba un clic por materia.
+  const asignaciones = useAsignacionesDelCiclo(curso.cicloLectivoId)
 
   const invalidar = () => queryClient.invalidateQueries({ queryKey: materiasKey })
 
@@ -145,7 +160,16 @@ export function MateriasDeCurso({
               </form>
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium">{materia.nombre}</span>
+                <div className="min-w-0">
+                  <span className="font-medium">{materia.nombre}</span>
+                  {/* Los titulares primero: es quien responde por la materia.
+                      «Sin docentes» se dice con todas las letras, porque una
+                      materia sin nadie asignado es algo para resolver y no un
+                      dato que falta. */}
+                  <p className="text-muted-foreground text-sm">
+                    {docentesDe(asignaciones, materia.id) || "Sin docentes asignados"}
+                  </p>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"

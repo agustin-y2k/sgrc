@@ -358,7 +358,11 @@ describe("NotificacionesPage", () => {
     { tipo: "LICENCIA_POR_VENCER", texto: "Ver licencias", href: "/admin/licencias" },
     { tipo: "EQUIPO_SIN_DEVOLVER", texto: "Ver entregas", href: "/admin/entregas" },
     { tipo: "PEDIDO_DE_LIBERACION", texto: "Ver mis reservas", href: "/reservas" },
-    { tipo: "PEDIDO_DE_MATERIA", texto: "Ver los pedidos", href: "/admin/pedidos-de-materia" },
+    {
+      tipo: "PEDIDO_DE_MATERIA",
+      texto: "Ver los pedidos",
+      href: "/admin/pedidos-de-materia",
+    },
     { tipo: "PEDIDO_DE_MATERIA_RESUELTO", texto: "Ver mi perfil", href: "/perfil" },
     { tipo: "SUGERENCIA", texto: null },
     { tipo: "SUGERENCIA_RESPONDIDA", texto: null },
@@ -366,7 +370,9 @@ describe("NotificacionesPage", () => {
 
   it.each(destinos)("el aviso $tipo lleva a donde corresponde", async (destino) => {
     vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(
-      paginada([notificacion({ tipo: destino.tipo, mensaje: `aviso de ${destino.tipo}` })])
+      paginada([
+        notificacion({ tipo: destino.tipo, mensaje: `aviso de ${destino.tipo}` }),
+      ])
     )
     renderPagina()
     await screen.findByText(`aviso de ${destino.tipo}`)

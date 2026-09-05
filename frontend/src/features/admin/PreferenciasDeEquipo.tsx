@@ -4,22 +4,30 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import {
+  MAX_ANIO_CURSO,
+  MAX_LARGO_DIVISION,
+  MAX_LARGO_MODALIDAD,
+  MIN_ANIO_CURSO,
+  divisionesEnUso,
+  modalidadesEnUso,
+} from "@/features/academico/types"
+import { useCursosDelCicloActivo } from "@/features/academico/useCursosDelCicloActivo"
 import * as adminApi from "@/features/admin/api"
 import { getErrorMessage } from "@/lib/api-client"
 
 /** RF-03.21 — para qué materias es preferente este equipo. */
 
-/** Los años que admite un curso, igual que el CHECK de `curso.nombre`. */
-const ANIOS = [1, 2, 3, 4, 5, 6]
-const DIVISIONES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
 /** Nueve escalones son muchos más de los que una escuela va a usar. */
 const PRIORIDADES = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
   const queryClient = useQueryClient()
   const [materiaNombre, setMateriaNombre] = useState("")
+  const [modalidad, setModalidad] = useState("")
   const [anio, setAnio] = useState("")
   const [division, setDivision] = useState("")
   const [prioridad, setPrioridad] = useState("1")
@@ -37,6 +45,13 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
     queryFn: () => adminApi.materiasEnUso(),
   })
 
+  // Los cursos y las modalidades que la escuela usa de verdad: acotar una
+  // marca a algo que no existe no marca nada, y los nombres tienen que estar
+  // escritos igual que los del curso para que el cruce los encuentre.
+  const cursos = useCursosDelCicloActivo()
+  const divisiones = divisionesEnUso(cursos)
+  const modalidades = modalidadesEnUso(cursos)
+
   const invalidar = () => queryClient.invalidateQueries({ queryKey: preferenciasKey })
 
   const marcar = useMutation({
@@ -46,12 +61,14 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
         materiaNombre,
         // Vacío se manda como ausente: "toda materia con ese nombre" es un
         // alcance, no un dato faltante.
+        modalidad: modalidad.trim() || undefined,
         anio: anio ? Number(anio) : undefined,
-        division: division || undefined,
+        division: division.trim() || undefined,
         prioridad: Number(prioridad),
       }),
     onSuccess: async () => {
       setMateriaNombre("")
+      setModalidad("")
       setAnio("")
       setDivision("")
       setPrioridad("1")
@@ -146,43 +163,61 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
               ))}
             </Select>
           </div>
+          {/* Los tres ejes son independientes y todos opcionales: cada uno
+              vacío significa "no acota por esto". Se combinan —"Matemática de
+              4°2, Electromecánica"— y a más ejes puestos, más específica es la
+              marca y antes gana. */}
+          <div className="grid gap-1.5">
+            <Label htmlFor={`modalidad-pref-${equipoId}`}>Modalidad</Label>
+            <Input
+              id={`modalidad-pref-${equipoId}`}
+              className="w-44"
+              value={modalidad}
+              maxLength={MAX_LARGO_MODALIDAD}
+              list={modalidades.length > 0 ? `modalidades-pref-${equipoId}` : undefined}
+              placeholder="Todas"
+              onChange={(e) => setModalidad(e.target.value)}
+            />
+            {modalidades.length > 0 && (
+              <datalist id={`modalidades-pref-${equipoId}`}>
+                {modalidades.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+            )}
+          </div>
           <div className="grid gap-1.5">
             <Label htmlFor={`anio-pref-${equipoId}`}>Año</Label>
-            <Select
+            <Input
               id={`anio-pref-${equipoId}`}
-              className="w-auto"
+              className="w-24"
+              type="number"
+              inputMode="numeric"
+              min={MIN_ANIO_CURSO}
+              max={MAX_ANIO_CURSO}
               value={anio}
-              onChange={(e) => {
-                setAnio(e.target.value)
-                // Sin año, una división no significa nada: no existen "todas
-                // las B".
-                if (e.target.value === "") setDivision("")
-              }}
-            >
-              <option value="">Todos</option>
-              {ANIOS.map((a) => (
-                <option key={a} value={a}>
-                  {a}°
-                </option>
-              ))}
-            </Select>
+              placeholder="Todos"
+              onChange={(e) => setAnio(e.target.value)}
+            />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor={`division-pref-${equipoId}`}>División</Label>
-            <Select
+            <Input
               id={`division-pref-${equipoId}`}
-              className="w-auto"
+              className="w-28"
               value={division}
-              disabled={anio === ""}
+              maxLength={MAX_LARGO_DIVISION}
+              list={divisiones.length > 0 ? `divisiones-pref-${equipoId}` : undefined}
+              placeholder="Todas"
               onChange={(e) => setDivision(e.target.value)}
-            >
-              <option value="">Todas</option>
-              {DIVISIONES.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </Select>
+            />
+            {divisiones.length > 0 && (
+              <datalist id={`divisiones-pref-${equipoId}`}>
+                {divisiones.map((d) => (
+                  <option key={d} value={d} />
+                ))}
+              </datalist>
+            )}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor={`prioridad-pref-${equipoId}`}>Prioridad</Label>

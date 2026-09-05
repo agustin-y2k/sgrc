@@ -8,6 +8,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select } from "@/components/ui/select"
+import type { AsignacionDocente } from "@/features/academico/types"
+import { cursoDe, etiquetaDeCurso } from "@/features/academico/types"
+import { useAsignacionesDelCicloActivo } from "@/features/academico/useAsignaciones"
 import { useAuth } from "@/features/auth/AuthContext"
 import { LoQueDeclaro } from "@/features/auth/LoQueDeclaro"
 import type { Estado, Usuario } from "@/features/auth/types"
@@ -51,6 +54,49 @@ const TEXTO_CONFIRMACION: Record<Confirmacion["accion"], (u: Usuario) => string>
 const esCambioDeRol = (accion: Confirmacion["accion"]) =>
   accion === "PROMOVER" || accion === "DEGRADAR"
 
+/**
+ * Qué dicta una persona, con el curso al lado: "Matemática · 1°4° (titular)".
+ *
+ * El curso va SIEMPRE pegado a la materia. "Matemática" a secas no distingue
+ * la de 1°4° de la de 5°A, y son materias distintas con docentes distintos.
+ */
+function QueDicta({
+  usuario: u,
+  asignaciones,
+}: {
+  usuario: Usuario
+  asignaciones: AsignacionDocente[]
+}) {
+  const suyas = asignaciones
+    .filter((a) => a.usuarioId === u.id)
+    .sort((a, b) => a.cursoNombre.localeCompare(b.cursoNombre, "es"))
+
+  if (suyas.length === 0) {
+    // De un Admin no se dice nada: administrar el sistema no implica dar
+    // clase, y "no tiene materias" sería ruido en la mayoría de las fichas.
+    // De un docente aprobado sí, porque sin materia no puede reservar nada y
+    // eso es algo para resolver.
+    if (u.rol !== "DOCENTE" || u.estado !== "APROBADA") return null
+    return (
+      <p className="text-muted-foreground text-sm">
+        Sin materias asignadas: todavía no puede reservar.
+      </p>
+    )
+  }
+
+  return (
+    <p className="text-muted-foreground text-sm">
+      Dicta{" "}
+      {suyas
+        .map(
+          (a) =>
+            `${a.materiaNombre} · ${etiquetaDeCurso(cursoDe(a))} (${a.rol === "TITULAR" ? "titular" : "suplente"})`
+        )
+        .join(", ")}
+    </p>
+  )
+}
+
 // RF-01/RF-02: panel de usuarios.
 export function UsuariosPage() {
   const { user } = useAuth()
@@ -58,6 +104,10 @@ export function UsuariosPage() {
   const [filtroEstado, setFiltroEstado] = useState<Estado | "">("")
   const [pagina, setPagina] = useState(1)
   const [altaAbierta, setAltaAbierta] = useState(false)
+
+  // Qué dicta cada quien, del ciclo activo: una consulta para toda la página,
+  // no una por usuario.
+  const asignaciones = useAsignacionesDelCicloActivo()
   const [confirmando, setConfirmando] = useState<Confirmacion | null>(null)
   const [passwordTemporal, setPasswordTemporal] = useState<{
     usuario: string
@@ -227,6 +277,10 @@ export function UsuariosPage() {
                     )}
                   </p>
                   <p className="text-muted-foreground text-sm break-all">{u.email}</p>
+                  {/* Qué dicta, del ciclo activo. Sin esto, la única forma de
+                      saber si una persona tiene materias era ir a Académico y
+                      abrirlas una por una desde el otro lado. */}
+                  <QueDicta usuario={u} asignaciones={asignaciones} />
                 </div>
 
                 {/* Lo que declaró al registrarse, con el mismo detalle que

@@ -17,12 +17,19 @@ type archivarCicloRequest struct {
 	ClonarA *int `json:"clonarA,omitempty"`
 }
 
+// crearCursoRequest y editarCursoRequest llevan los tres datos del curso: el
+// año —lo único obligatorio— y los dos opcionales. El NOMBRE no viaja: lo
+// calcula la base a partir del año y la división (RF-02.2).
 type crearCursoRequest struct {
-	Nombre string `json:"nombre"`
+	Anio      int    `json:"anio"`
+	Division  string `json:"division,omitempty"`
+	Modalidad string `json:"modalidad,omitempty"`
 }
 
 type editarCursoRequest struct {
-	Nombre string `json:"nombre"`
+	Anio      int    `json:"anio"`
+	Division  string `json:"division,omitempty"`
+	Modalidad string `json:"modalidad,omitempty"`
 }
 
 type crearMateriaRequest struct {
@@ -60,13 +67,21 @@ func toCicloResponse(c *domain.CicloLectivo) cicloLectivoResponse {
 type cursoResponse struct {
 	ID             string `json:"id"`
 	CicloLectivoID string `json:"cicloLectivoId"`
-	Nombre         string `json:"nombre"`
-	Activo         bool   `json:"activo"`
-	Archivado      bool   `json:"archivado"`
+	// Nombre es de sólo lectura: sale de anio + division.
+	Nombre    string `json:"nombre"`
+	Anio      int    `json:"anio"`
+	Division  string `json:"division,omitempty"`
+	Modalidad string `json:"modalidad,omitempty"`
+	Activo    bool   `json:"activo"`
+	Archivado bool   `json:"archivado"`
 }
 
 func toCursoResponse(c *domain.Curso) cursoResponse {
-	return cursoResponse{ID: c.ID, CicloLectivoID: c.CicloLectivoID, Nombre: c.Nombre, Activo: c.Activo, Archivado: c.Archivado}
+	return cursoResponse{
+		ID: c.ID, CicloLectivoID: c.CicloLectivoID, Nombre: c.Nombre,
+		Anio: c.Anio, Division: c.Division, Modalidad: c.Modalidad,
+		Activo: c.Activo, Archivado: c.Archivado,
+	}
 }
 
 type materiaResponse struct {
@@ -81,9 +96,12 @@ func toMateriaResponse(m *domain.Materia) materiaResponse {
 	return materiaResponse{ID: m.ID, CursoID: m.CursoID, Nombre: m.Nombre, Activo: m.Activo, Archivado: m.Archivado}
 }
 
-// docenteMateriaResponse no incluye nombre/apellido del docente todavía — eso
-// requeriría consultar la tabla usuario (de auth) desde acá, lo cual no está
-// en el alcance de esta pasada.
+// docenteMateriaResponse es la relación cruda, para administrarla: asignar,
+// cambiar el rol, quitar. No trae el nombre del docente porque quien la usa ya
+// tiene el listado de usuarios cargado para poder elegir.
+//
+// Para MOSTRAR quién dicta qué está asignacionDocenteResponse, que sí resuelve
+// los nombres.
 type docenteMateriaResponse struct {
 	ID        string `json:"id"`
 	UsuarioID string `json:"usuarioId"`
@@ -92,6 +110,21 @@ type docenteMateriaResponse struct {
 
 func toDocenteMateriaResponse(dm *domain.DocenteMateria) docenteMateriaResponse {
 	return docenteMateriaResponse{ID: dm.ID, UsuarioID: dm.UsuarioID, Rol: string(dm.Rol)}
+}
+
+// asignacionDocenteResponse es la misma relación que docenteMateriaResponse
+// pero con los nombres de las dos puntas resueltos, para las pantallas que la
+// muestran en vez de administrarla.
+type asignacionDocenteResponse struct {
+	ID             string `json:"id"`
+	UsuarioID      string `json:"usuarioId"`
+	DocenteNombre  string `json:"docenteNombre"`
+	Rol            string `json:"rol"`
+	MateriaID      string `json:"materiaId"`
+	MateriaNombre  string `json:"materiaNombre"`
+	CursoID        string `json:"cursoId"`
+	CursoNombre    string `json:"cursoNombre"`
+	CursoModalidad string `json:"cursoModalidad,omitempty"`
 }
 
 type archivarCicloResponse struct {
@@ -113,12 +146,13 @@ func toArchivarCicloResponse(res *application.ResultadoArchivado) archivarCicloR
 // materiaReservableResponse: RF-04.1 — trae curso y año resueltos porque
 // "Matemáticas" a secas no distingue la de 1°A de la de 3°B.
 type materiaReservableResponse struct {
-	MateriaID     string `json:"materiaId"`
-	MateriaNombre string `json:"materiaNombre"`
-	CursoID       string `json:"cursoId"`
-	CursoNombre   string `json:"cursoNombre"`
-	CicloID       string `json:"cicloId"`
-	CicloAnio     int    `json:"cicloAnio"`
+	MateriaID      string `json:"materiaId"`
+	MateriaNombre  string `json:"materiaNombre"`
+	CursoID        string `json:"cursoId"`
+	CursoNombre    string `json:"cursoNombre"`
+	CursoModalidad string `json:"cursoModalidad,omitempty"`
+	CicloID        string `json:"cicloId"`
+	CicloAnio      int    `json:"cicloAnio"`
 }
 
 // removerDocenteResponse: RF-02.8 — quitar al único docente de una materia

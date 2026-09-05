@@ -217,7 +217,9 @@ func mismaMarca(a, b *domain.PreferenciaDeEquipo) bool {
 	}
 	return a.EquipoID == b.EquipoID &&
 		strings.EqualFold(a.MateriaNombre, b.MateriaNombre) &&
-		igualPtr(a.Anio, b.Anio) && igualStr(a.Division, b.Division)
+		igualPtr(a.Anio, b.Anio) &&
+		igualStr(a.Modalidad, b.Modalidad) &&
+		igualStr(a.Division, b.Division)
 }
 
 func (r *fakeRepo) CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {

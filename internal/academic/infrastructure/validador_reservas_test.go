@@ -30,7 +30,7 @@ func crearMateriaConCursoDeTest(t *testing.T, pool *pgxpool.Pool) (cursoID, mate
 		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
 	}
 
-	curso, err := domain.NuevoCurso(NuevoID(), ciclo.ID, "1°A")
+	curso, err := domain.NuevoCurso(NuevoID(), ciclo.ID, 1, "A", "")
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}

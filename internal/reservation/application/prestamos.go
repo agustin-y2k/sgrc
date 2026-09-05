@@ -49,10 +49,10 @@ var porQueNoCircula = map[string]string{
 	"FUERA_DE_SERVICIO": "ese equipo está fuera de servicio",
 }
 
-// ErrSalidaAReparacionSinMotivo: sacar del laboratorio algo que no está en
+// ErrSalidaAReparacionSinDestino: sacar del laboratorio algo que no está en
 // condiciones de prestarse necesita decir a dónde va. Es la constancia, y es
 // lo único que distingue esa salida de un préstamo común mal cargado.
-var ErrSalidaAReparacionSinMotivo = errors.New("una salida a reparación tiene que decir a dónde va el equipo")
+var ErrSalidaAReparacionSinDestino = errors.New("una salida a reparación tiene que decir a dónde va el equipo")
 
 // EquipoNoEntregado explica por qué una PC del lote no salió.
 type EquipoNoEntregado struct {
@@ -193,7 +193,9 @@ type EntregaSueltaParams struct {
 	UsuarioID *string
 	// RetiradoPor: si la pide una persona y la viene a buscar otra.
 	RetiradoPor string
-	Motivo      string
+	// Destino es a dónde va el equipo. Opcional en la entrega del día a día
+	// y obligatorio en una salida a reparación.
+	Destino string
 	// DevolucionEstimada opcional: "vengo en un rato" es la respuesta
 	// honesta, y una hora inventada solo generaría reclamos falsos.
 	DevolucionEstimada *time.Time
@@ -210,8 +212,8 @@ func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams
 	if err := verificarCantidadDeEquipos(params.EquipoIDs); err != nil {
 		return nil, err
 	}
-	if params.SalidaAReparacion && strings.TrimSpace(params.Motivo) == "" {
-		return nil, ErrSalidaAReparacionSinMotivo
+	if params.SalidaAReparacion && strings.TrimSpace(params.Destino) == "" {
+		return nil, ErrSalidaAReparacionSinDestino
 	}
 
 	ahora := s.ahora()
@@ -223,7 +225,7 @@ func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams
 			UsuarioID:          params.UsuarioID,
 			Nombre:             params.Nombre,
 			RetiradoPor:        params.RetiradoPor,
-			Motivo:             params.Motivo,
+			Destino:            params.Destino,
 			DevolucionEstimada: params.DevolucionEstimada,
 			EntregadoPor:       params.EntregadoPor,
 		}

@@ -34,7 +34,10 @@ func mapearError(err error) error {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
 	case errors.Is(err, domain.ErrAnioInvalido),
-		errors.Is(err, domain.ErrNombreCursoInvalido),
+		errors.Is(err, domain.ErrAnioCursoInvalido),
+		errors.Is(err, domain.ErrDivisionLarga),
+		errors.Is(err, domain.ErrModalidadLarga),
+		errors.Is(err, domain.ErrTextoIlegible),
 		errors.Is(err, domain.ErrNombreMateriaVacio),
 		errors.Is(err, domain.ErrRolDocenteInvalido),
 		errors.Is(err, application.ErrIDInvalido),

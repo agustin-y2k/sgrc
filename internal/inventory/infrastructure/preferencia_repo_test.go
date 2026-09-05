@@ -15,9 +15,10 @@ import (
 func ptrInt(n int) *int       { return &n }
 func ptrStr(s string) *string { return &s }
 
-func nuevaPreferenciaDeTest(t *testing.T, repo *PostgresRepo, equipoID, materia string, anio *int, division *string, prioridad int) *domain.PreferenciaDeEquipo {
+func nuevaPreferenciaDeTest(t *testing.T, repo *PostgresRepo, equipoID, materia string,
+	modalidad *string, anio *int, division *string, prioridad int) *domain.PreferenciaDeEquipo {
 	t.Helper()
-	p, err := domain.NuevaPreferencia(NuevoID(), equipoID, materia, anio, division, prioridad)
+	p, err := domain.NuevaPreferencia(NuevoID(), equipoID, materia, modalidad, anio, division, prioridad)
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -38,13 +39,14 @@ func TestPostgresRepo_PreferenciaRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	equipoID := equipoParaPreferencias(t, repo, "SERIE-PREF-1")
 
-	creada := nuevaPreferenciaDeTest(t, repo, equipoID, "Dibujo Técnico", ptrInt(3), ptrStr("B"), 2)
+	creada := nuevaPreferenciaDeTest(t, repo, equipoID, "Dibujo Técnico", ptrStr("Construcción"), ptrInt(3), ptrStr("B"), 2)
 
 	guardada, err := repo.BuscarPreferenciaPorID(ctx, creada.ID)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if guardada.MateriaNombre != "Dibujo Técnico" || *guardada.Anio != 3 || *guardada.Division != "B" {
+	if guardada.MateriaNombre != "Dibujo Técnico" || *guardada.Anio != 3 ||
+		*guardada.Division != "B" || *guardada.Modalidad != "Construcción" {
 		t.Errorf("volvió distinta: %+v", guardada)
 	}
 	if guardada.Prioridad != 2 {
@@ -60,9 +62,9 @@ func TestPostgresRepo_PreferenciaSinCurso_NoSePuedeDuplicar(t *testing.T) {
 	ctx := context.Background()
 	equipoID := equipoParaPreferencias(t, repo, "SERIE-PREF-2")
 
-	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, nil, 1)
+	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, nil, nil, 1)
 
-	otra, _ := domain.NuevaPreferencia(NuevoID(), equipoID, "Matemática", nil, nil, 3)
+	otra, _ := domain.NuevaPreferencia(NuevoID(), equipoID, "Matemática", nil, nil, nil, 3)
 	err := repo.CrearPreferencia(ctx, otra)
 
 	if !errors.Is(err, domain.ErrPreferenciaDuplicada) {
@@ -77,9 +79,9 @@ func TestPostgresRepo_PreferenciaDuplicadaSinAcentos(t *testing.T) {
 	ctx := context.Background()
 	equipoID := equipoParaPreferencias(t, repo, "SERIE-PREF-3")
 
-	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, nil, 1)
+	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, nil, nil, 1)
 
-	otra, _ := domain.NuevaPreferencia(NuevoID(), equipoID, "matematica", nil, nil, 1)
+	otra, _ := domain.NuevaPreferencia(NuevoID(), equipoID, "matematica", nil, nil, nil, 1)
 	err := repo.CrearPreferencia(ctx, otra)
 
 	if !errors.Is(err, domain.ErrPreferenciaDuplicada) {
@@ -95,9 +97,9 @@ func TestPostgresRepo_PreferenciaDistintoAlcance_Conviven(t *testing.T) {
 	ctx := context.Background()
 	equipoID := equipoParaPreferencias(t, repo, "SERIE-PREF-4")
 
-	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, nil, 1)
-	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", ptrInt(3), nil, 2)
-	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", ptrInt(3), ptrStr("B"), 3)
+	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, nil, nil, 1)
+	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, ptrInt(3), nil, 2)
+	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, ptrInt(3), ptrStr("B"), 3)
 
 	marcas, err := repo.ListarPreferenciasPorEquipo(ctx, equipoID)
 	if err != nil {
@@ -114,7 +116,7 @@ func TestPostgresRepo_BorrarPreferencia(t *testing.T) {
 	ctx := context.Background()
 	equipoID := equipoParaPreferencias(t, repo, "SERIE-PREF-5")
 
-	p := nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, nil, 1)
+	p := nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, nil, nil, 1)
 
 	if err := repo.BorrarPreferencia(ctx, p.ID); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -134,7 +136,7 @@ func TestPostgresRepo_PreferenciasSeBorranConElEquipo(t *testing.T) {
 	ctx := context.Background()
 	equipoID := equipoParaPreferencias(t, repo, "SERIE-PREF-6")
 
-	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, nil, 1)
+	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, nil, nil, 1)
 
 	if _, err := pool.Exec(ctx, `DELETE FROM equipo WHERE id = $1`, equipoID); err != nil {
 		t.Fatal(err)
@@ -176,7 +178,7 @@ func sembrarMaterias(t *testing.T, pool *pgxpool.Pool, nombres ...string) {
 	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, 3001, false)`, cicloID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, '3°B')`, cursoID, cicloID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, anio, division) VALUES ($1, $2, 3, 'B')`, cursoID, cicloID); err != nil {
 		t.Fatal(err)
 	}
 	for _, n := range nombres {
