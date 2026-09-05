@@ -113,7 +113,7 @@ echo "→ curso 1°A"
 CURSO=$(reusar_o_crear "1°A" \
   "/api/academic/ciclos/$CICLO/cursos" \
   "/api/academic/ciclos/$CICLO/cursos" \
-  '{"nombre":"1°A"}')
+  '{"anio":1,"division":"A"}')
 
 echo "→ materia Programación"
 MATERIA=$(reusar_o_crear "Programación" \

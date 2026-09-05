@@ -28,3 +28,15 @@ services:
     env_file: .env.capturas
   frontend:
     env_file: .env.capturas
+
+# La subred de `sgrc-net` está fijada en docker-compose.yml para poder
+# nombrarla en TRUSTED_PROXIES, y una subred fija no se puede usar dos veces:
+# con la red del proyecto de desarrollo creada —basta con haberlo levantado
+# alguna vez, aunque ahora esté apagado— Docker rechaza esta con "Pool
+# overlaps with other one on this address space". La de capturas usa la de al
+# lado, y el TRUSTED_PROXIES de .env.capturas la acompaña.
+networks:
+  sgrc-net:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/16

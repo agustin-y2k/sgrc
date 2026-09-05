@@ -37,6 +37,13 @@ await paso("academico", async () => {
   await page.goto(`${BASE}/admin/academico`)
   await page.getByRole("button", { name: /^cursos$/i }).first().click()
   await page.waitForTimeout(600)
+  // El formulario se completa antes de la foto: vacío sale con «Queda como 1°»
+  // y la modalidad en blanco, que es correcto pero no muestra lo que la guía
+  // explica. Cargado se ve el eco completo, que la división no tiene por qué
+  // ser una letra, y para qué sirve la modalidad.
+  await page.getByLabel("Año del curso").first().selectOption("4")
+  await page.getByLabel("División (opcional)").first().fill("2")
+  await page.getByLabel("Modalidad o carrera (opcional)").first().fill("Electromecánica")
   await page.getByRole("button", { name: /^materias$/i }).first().click()
   await foto("adm2-academico")
 })
