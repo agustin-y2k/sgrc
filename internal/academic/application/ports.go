@@ -36,6 +36,13 @@ type Repo interface {
 	GuardarDocenteMateria(ctx context.Context, dm *domain.DocenteMateria) error
 	RemoverDocenteMateria(ctx context.Context, id string) error
 	ListarDocentesDeMateria(ctx context.Context, materiaID string) ([]*domain.DocenteMateria, error)
+	// ListarAsignaciones son TODAS las asignaciones docente-materia de un
+	// ciclo, con los nombres ya resueltos. Es la misma información que
+	// ListarDocentesDeMateria materia por materia, en una sola consulta:
+	// las dos pantallas que la muestran —las materias de un curso y el
+	// listado de usuarios— la necesitan entera, y pedirla de a una es un
+	// N+1 sobre una tabla que se lee en cada carga.
+	ListarAsignaciones(ctx context.Context, cicloID string) ([]AsignacionDocente, error)
 
 	// Pedidos para dictar una materia
 	CrearPedido(ctx context.Context, p *domain.PedidoDeMateria) error
@@ -125,8 +132,33 @@ type MateriaReservable struct {
 	MateriaNombre string
 	CursoID       string
 	CursoNombre   string
-	CicloID       string
-	CicloAnio     int
+	// CursoModalidad acompaña al nombre porque el nombre solo dejó de ser
+	// único: dos carreras pueden tener cada una su "1°A" (RF-02.2). Vacía
+	// cuando el curso no pertenece a ninguna agrupación.
+	CursoModalidad string
+	CicloID        string
+	CicloAnio      int
+}
+
+// AsignacionDocente es una fila de docente_materia con los nombres de las dos
+// puntas ya resueltos: quién dicta y qué materia de qué curso. Mismo criterio
+// que MateriaReservable.
+//
+// Existe porque la relación se mira desde los dos lados y en las dos pantallas
+// se leía a medias: las materias de un curso mostraban sus docentes sólo al
+// desplegar una por una, y el listado de usuarios no decía qué dictaba cada
+// quien.
+type AsignacionDocente struct {
+	ID        string
+	UsuarioID string
+	// DocenteNombre es "Nombre Apellido", tal como se muestra.
+	DocenteNombre  string
+	Rol            string
+	MateriaID      string
+	MateriaNombre  string
+	CursoID        string
+	CursoNombre    string
+	CursoModalidad string
 }
 
 // PedidoDetallado es un PedidoDeMateria con el nombre de lo que se pidió ya

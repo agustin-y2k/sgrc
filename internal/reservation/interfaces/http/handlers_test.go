@@ -514,7 +514,8 @@ func TestHTTP_ListarEquiposDisponibles_DevuelveTramoYMotivo(t *testing.T) {
 	repo.pcsDisponibles = []application.EquipoDisponible{{
 		EquipoID: "pc1", Etiqueta: "PC 1",
 		Tramo:              application.TramoPreferente,
-		PreferenciaMateria: "Matemática", PreferenciaAnio: 3, PreferenciaDivision: "B",
+		PreferenciaMateria: "Matemática", PreferenciaAnio: 4, PreferenciaDivision: "2",
+		PreferenciaModalidad: "Electromecánica",
 	}}
 	app := nuevaAppDeTest(repo)
 
@@ -537,7 +538,7 @@ func TestHTTP_ListarEquiposDisponibles_DevuelveTramoYMotivo(t *testing.T) {
 	if body.Data[0].Tramo != "PREFERENTE" {
 		t.Errorf("tramo = %q, esperaba PREFERENTE", body.Data[0].Tramo)
 	}
-	if body.Data[0].Motivo != "Preferente para Matemática de 3°B" {
+	if body.Data[0].Motivo != "Preferente para Matemática de 4°2, Electromecánica" {
 		t.Errorf("motivo = %q", body.Data[0].Motivo)
 	}
 }

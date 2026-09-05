@@ -347,7 +347,10 @@ components:
       properties:
         id: { type: string, format: uuid }
         cicloLectivoId: { type: string, format: uuid }
-        nombre: { type: string, pattern: '^[1-6]°[A-Z]$', example: "1°A" }
+        nombre: { type: string, readOnly: true, example: "4°2", description: "De sólo lectura: lo calcula la base con el año y la división" }
+        anio: { type: integer, minimum: 1, maximum: 15, example: 4, description: "Obligatorio: todos los ámbitos organizan sus cursos por año" }
+        division: { type: string, maxLength: 12, nullable: true, example: "2", description: "Opcional. Ausente = la institución no divide sus cursos, que es lo habitual en una universidad" }
+        modalidad: { type: string, maxLength: 80, nullable: true, example: "Electromecánica", description: "Opcional. Modalidad, orientación o carrera. Ausente = la institución no tiene ninguna, o este curso no pertenece a una (el ciclo básico de una técnica)" }
         activo: { type: boolean }
         archivado: { type: boolean }
         materias: { type: array, items: { $ref: '#/components/schemas/Materia' } }
@@ -376,7 +379,8 @@ components:
         equipoId: { type: string, format: uuid }
         materiaNombre: { type: string, example: "Dibujo Técnico" }
         anio: { type: integer, example: 3, description: "Ausente = toda materia con ese nombre, en cualquier curso" }
-        division: { type: string, example: "B", description: "Ausente = todas las divisiones de ese año. Nunca viene sin anio" }
+        modalidad: { type: string, maxLength: 80, example: "Electromecánica", description: "Ausente = la marca no acota por modalidad" }
+        division: { type: string, maxLength: 12, example: "2", description: "Ausente = la marca no acota por división" }
         prioridad: { type: integer, example: 1, description: "1 es la más fuerte" }
         alcance: { type: string, example: "Dibujo Técnico de 3°B", description: "La frase ya armada. La resuelve el servidor para que no se reconstruya distinta en cada pantalla" }
 
@@ -510,7 +514,7 @@ components:
         entregadoAUsuarioId: { type: string, format: uuid, nullable: true, description: "Solo si quien responde tiene cuenta en el sistema" }
         entregadoANombre: { type: string, maxLength: 200, description: "Quién RESPONDE por el equipo — contra una reserva, siempre el docente. Va siempre, aunque haya cuenta: es un snapshot, para que el registro siga diciendo de quién era la responsabilidad si esa cuenta se elimina" }
         retiradoPor: { type: string, maxLength: 200, nullable: true, description: "Quién vino físicamente a buscarlo, si no fue quien responde. Ausente es el caso normal y significa que lo retiró esa misma persona (RF-08.19)" }
-        motivo: { type: string, nullable: true }
+        destino: { type: string, nullable: true, description: "A dónde fue el equipo: un curso, una dependencia de la escuela o el service (RF-08.23). Ausente = no se anotó" }
         devolucionEstimada:
           type: string
           format: date-time
@@ -1468,12 +1472,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [nombre]
+              required: [anio]
               properties:
-                nombre: { type: string, pattern: '^[1-6]°[A-Z]$', example: "1°A" }
+                anio: { type: integer, minimum: 1, maximum: 15, example: 4, description: "Obligatorio: todos los ámbitos organizan sus cursos por año" }
+        division: { type: string, maxLength: 12, example: "2", description: "Opcional. Ausente = la institución no divide sus cursos" }
+        modalidad: { type: string, maxLength: 80, example: "Electromecánica", description: "Opcional. Modalidad, orientación o carrera" }
       responses:
         "201": { description: Curso creado }
-        "400": { description: "Nombre no cumple el patrón {año}°{división}, ej. 1°A" }
+        "400": { description: "Falta el año o está fuera del rango 1-15, o la división o la modalidad son demasiado largas" }
 
   /api/academic/cursos/{id}:
     patch:
@@ -1491,11 +1497,13 @@ paths:
             schema:
               type: object
               properties:
-                nombre: { type: string, pattern: '^[1-6]°[A-Z]$', example: "1°A" }
+                anio: { type: integer, minimum: 1, maximum: 15, example: 4, description: "Obligatorio: todos los ámbitos organizan sus cursos por año" }
+        division: { type: string, maxLength: 12, example: "2", description: "Opcional. Ausente = la institución no divide sus cursos" }
+        modalidad: { type: string, maxLength: 80, example: "Electromecánica", description: "Opcional. Modalidad, orientación o carrera" }
       responses:
         "200": { description: Curso actualizado }
-        "400": { description: "Nombre no cumple el patrón {año}°{división}, ej. 1°A" }
-        "409": { description: Ya existe otro curso con ese nombre en el mismo ciclo lectivo }
+        "400": { description: "Falta el año o está fuera del rango 1-15, o la división o la modalidad son demasiado largas" }
+        "409": { description: Ya existe otro curso con ese año, esa división y esa modalidad en el mismo ciclo (sin distinguir tildes ni mayúsculas). Dos modalidades distintas SÍ pueden tener cada una su "1°A" }
     delete:
       tags: [academic]
       summary: Eliminar un curso (Admin)
@@ -1545,7 +1553,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [nombre]
+              required: [anio]
               properties:
                 nombre: { type: string, example: "Matemáticas" }
       responses:
@@ -1734,7 +1742,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [nombre]
+              required: [anio]
               properties:
                 nombre: { type: string }
                 descripcion: { type: string }
@@ -2217,8 +2225,26 @@ paths:
                   minItems: 1
                   items: { type: string, format: uuid }
                 nombre: { type: string, maxLength: 200, example: "Marta (secretaría)" }
-                usuarioId: { type: string, format: uuid }
-                motivo: { type: string, example: "trámite" }
+                usuarioId:
+                  type: string
+                  format: uuid
+                  description: |
+                    RF-08.25 — sólo si quien se lleva el equipo tiene cuenta. El
+                    formulario del mostrador la reconoce por coincidencia exacta
+                    del nombre completo; quien no tiene cuenta —lo habitual—
+                    viaja sólo con `nombre`, que se guarda igual en los dos
+                    casos. Asociarla hace que la entrega aparezca en el
+                    historial de esa persona y que el reclamo de devolución le
+                    llegue por correo.
+                destino:
+                  type: string
+                  example: "1°4°"
+                  description: |
+                    RF-08.23 — a dónde va el equipo: un curso, una dependencia
+                    ("Biblioteca", "Dirección", "Sección Alumnos") o, en una
+                    salida a reparación, el service. Texto libre: ninguna lista
+                    de destinos se puede cerrar. Opcional acá y obligatorio con
+                    `salidaAReparacion`.
                 devolucionEstimada: { type: string, format: date-time, description: "Opcional. Sin ella no se le reclama la devolución." }
                 salidaAReparacion:
                   type: boolean
@@ -2228,7 +2254,7 @@ paths:
                     al técnico. Es el único modo de sacar del laboratorio algo
                     en mantenimiento o fuera de servicio: sin esta marca el
                     equipo se rechaza con razon FUERA_DE_CIRCULACION. Obliga a
-                    mandar `motivo` — es la constancia de a dónde fue. Lo dado
+                    mandar `destino` — es la constancia de a dónde fue. Lo dado
                     de baja no sale ni así.
       responses:
         "201":
@@ -2236,7 +2262,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ResultadoEntrega' }
-        "400": { description: "Sin equipos, sin nombre, o salidaAReparacion sin motivo" }
+        "400": { description: "Sin equipos, sin nombre, o salidaAReparacion sin destino" }
 
   /api/reservation/prestamos/por-reserva:
     post:
@@ -2834,12 +2860,18 @@ paths:
                 anio:
                   type: integer
                   minimum: 1
-                  maximum: 6
-                  description: "Opcional — ausente vale para toda materia con ese nombre, en cualquier curso"
+                  maximum: 15
+                  description: "Opcional — ausente vale para toda materia con ese nombre, en cualquier año. Los tres ejes (modalidad, año, curso) son independientes: cada uno se sostiene solo"
+                modalidad:
+                  type: string
+                  maxLength: 80
+                  example: "Electromecánica"
+                  description: "Opcional — ausente vale para todas las modalidades. Se escribe como la del curso (RF-02.2), y el cruce ignora tildes y mayúsculas"
                 division:
                   type: string
-                  pattern: "^[A-Za-z]$"
-                  description: "Opcional — ausente vale para todas las divisiones de ese año. Sin `anio` es un 400: no existen 'todas las B'"
+                  maxLength: 12
+                  example: "2"
+                  description: "Opcional — ausente vale para todas las divisiones. Se escribe como la del curso (RF-02.2), y el cruce ignora tildes y mayúsculas"
                 prioridad:
                   type: integer
                   minimum: 1
@@ -2883,8 +2915,9 @@ paths:
             schema:
               type: object
               properties:
-                anio: { type: integer, minimum: 1, maximum: 6 }
-                division: { type: string, pattern: "^[A-Za-z]$" }
+                anio: { type: integer, minimum: 1, maximum: 15 }
+                modalidad: { type: string, maxLength: 80, example: "Electromecánica" }
+                division: { type: string, maxLength: 12, example: "2" }
                 prioridad: { type: integer, minimum: 1, maximum: 9, default: 1 }
       responses:
         "200":
@@ -4123,13 +4156,107 @@ paths:
                         materiaId: { type: string, format: uuid }
                         materiaNombre: { type: string }
                         cursoId: { type: string, format: uuid }
-                        cursoNombre: { type: string }
+                        cursoNombre: { type: string, example: "4°2" }
+                        cursoModalidad: { type: string, example: "Electromecánica", description: "Ausente = el curso no pertenece a ninguna agrupación" }
                         cicloId: { type: string, format: uuid }
                         cicloAnio: { type: integer }
 
   # ─────────────────────────────────────────
   # PERFIL: MIS DATOS
   # ─────────────────────────────────────────
+  /api/academic/ciclos/{cicloId}/asignaciones:
+    get:
+      tags: [academic]
+      summary: Quién dicta qué en un ciclo (Admin)
+      description: |
+        RF-02.6 — todas las asignaciones docente-materia del ciclo, con los
+        nombres de las dos puntas ya resueltos.
+
+        La relación se mira desde los dos lados y las dos pantallas la leían a
+        medias: las materias de un curso mostraban sus docentes sólo al
+        desplegar una por una, y el listado de usuarios no decía qué dictaba
+        cada quien. Las dos la necesitan entera, así que se pide **una vez por
+        ciclo** en vez de una por materia o una por usuario: de a una es un N+1
+        sobre una tabla que se lee en cada carga.
+
+        El ciclo es obligatorio porque la relación se recrea entera cada año
+        (RF-02.5): sin acotarlo, la respuesta mezcla años archivados con el
+        actual.
+
+        Para administrar la relación —asignar, cambiar el rol, quitar— están
+        los endpoints de `/materias/{materiaId}/docentes`, que devuelven la
+        fila cruda. Éste es para mostrarla.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: cicloId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Las asignaciones del ciclo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid, description: "El de la fila docente_materia" }
+                        usuarioId: { type: string, format: uuid }
+                        docenteNombre: { type: string, example: "Ana Gómez" }
+                        rol: { type: string, enum: [TITULAR, SUPLENTE] }
+                        materiaId: { type: string, format: uuid }
+                        materiaNombre: { type: string, example: "Programación" }
+                        cursoId: { type: string, format: uuid }
+                        cursoNombre: { type: string, example: "4°2" }
+                        cursoModalidad: { type: string, example: "Electromecánica", description: "Ausente = el curso no pertenece a ninguna agrupación. Acompaña al nombre porque el nombre solo dejó de ser único (RF-02.2)" }
+        "403": { description: No es Admin }
+
+  /api/academic/docentes/{usuarioId}/materias:
+    get:
+      tags: [academic]
+      summary: En qué materias está asignada otra persona (Admin)
+      description: |
+        La misma pregunta que `mis-materias?asignadas=true`, hecha sobre alguien
+        más. La hace el mostrador: cuando quien viene a buscar un equipo tiene
+        cuenta, sus cursos son el destino más probable de esa entrega
+        (RF-08.26), y el Admin no tiene por qué acordarse de qué dicta cada
+        docente.
+
+        Solo Admin: es el único rol que opera el mostrador, y saber qué dicta
+        otro no le hace falta a nadie más.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: usuarioId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Las materias asignadas a esa persona
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        materiaId: { type: string, format: uuid }
+                        materiaNombre: { type: string }
+                        cursoId: { type: string, format: uuid }
+                        cursoNombre: { type: string, example: "4°2" }
+                        cursoModalidad: { type: string, example: "Electromecánica", description: "Ausente = el curso no pertenece a ninguna agrupación. Acompaña al nombre porque el nombre solo dejó de ser único (RF-02.2)" }
+                        cicloId: { type: string, format: uuid }
+                        cicloAnio: { type: integer }
+        "403": { description: No es Admin }
+
   /api/auth/mi-perfil:
     patch:
       tags: [auth]

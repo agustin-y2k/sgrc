@@ -223,7 +223,7 @@
     por paso, qué botón toca en cada caso.
   </div>
   <div class="pie">
-    Sistema de Gestión y Reserva de Computadoras · versión 1.19<br>
+    Sistema de Gestión y Reserva de Computadoras · versión 1.20<br>
     Agosto de 2026
   </div>
 </div>
@@ -429,12 +429,29 @@
     <li>En <b>Académico</b>, escribí el año en <b>Nuevo ciclo lectivo</b> y tocá
       <span class="boton">Crear ciclo</span>.</li>
     <li>Abrí el ciclo con <span class="boton">Cursos</span> y agregá cada curso:
-      elegís el año (1° a 6°) y la división (A, B, C…). Queda como «1°A».</li>
+      elegí el <b>año</b> y escribí la <b>división</b> como la nombra tu escuela — «A»,
+      «2», «1ra». Abajo ves cómo va a quedar el nombre («4°2») antes de agregarlo, con
+      el «°» que el sistema pone solo.</li>
+    <li>Si tus cursos <b>no se dividen</b> —pasa en muchos terciarios y universidades—
+      dejá la división vacía: el curso queda como «2°».</li>
+    <li>Si tu escuela tiene <b>modalidades, orientaciones o carreras</b> —Construcción,
+      Electromecánica, un bachiller— escribilas en <b>Modalidad</b>. Las que ya usaste
+      se te ofrecen como sugerencia. Si tu escuela no tiene ninguna, o si es un curso
+      del ciclo básico que no pertenece a una, dejalo vacío.</li>
     <li>En cada curso, tocá <span class="boton">Materias</span> y agregá las materias
       que se dictan ahí.</li>
     <li>En cada materia, asigná los docentes que la dan, indicando si son
       <b>titular</b> o <b>suplente</b>.</li>
   </ol>
+
+  <div class="ojo">
+    <span class="titulo">El sistema no te pide lo que tu escuela no tiene</span>
+    El <b>año</b> va siempre —lo tienen todos los ámbitos—, pero la <b>división</b> y la
+    <b>modalidad</b> son opcionales. Una primaria no tiene modalidades; una técnica las
+    usa recién de 4° en adelante y deja el ciclo básico sin ninguna; un terciario tiene
+    carreras pero muchas veces no divide sus cursos. Completá lo que uses y dejá vacío
+    el resto.
+  </div>
 
   <div class="ojo">
     <span class="titulo">Solo puede haber un ciclo activo</span>
@@ -945,12 +962,23 @@
 
   <ol class="pasos">
     <li>Tocá <span class="boton">Entregar sin reserva</span>.</li>
-    <li>Escribí <b>a quién</b> se la entregás. Alcanza con el nombre y, si sirve, de
-      dónde es: «Secretaría», «Marta (preceptoría)».</li>
-    <li>Si querés, poné <b>para qué</b> y <b>cuándo la devuelve</b>. Si no sabés
-      cuándo vuelve, dejalo vacío: en ese caso no se le va a reclamar.</li>
+    <li>Escribí <b>a quién</b> se la entregás. Mientras escribís, el campo te ofrece
+      las cuentas del sistema: si elegís una, la entrega le queda anotada a esa
+      persona y, si se pasa de hora, el reclamo le llega por correo. Si quien viene
+      no tiene cuenta —lo más común: alguien de secretaría, de preceptoría, un
+      alumno— escribí el nombre nomás: «Secretaría», «Marta (preceptoría)».</li>
+    <li>Si querés, poné <b>a dónde va</b> y <b>cuándo la devuelve</b>. En «a dónde
+      va» el campo te sugiere los cursos del ciclo y los lugares de la escuela
+      —Biblioteca, Dirección, Sección Alumnos—, y podés escribir cualquier otra
+      cosa. Es lo que dentro de dos meses va a explicar por dónde anduvo esa
+      máquina. Si no sabés cuándo vuelve, dejá la hora vacía: en ese caso no se
+      le va a reclamar.</li>
+    <li>Si la persona que elegiste da clase en <b>un solo curso</b>, el destino se
+      completa solo con ese curso. Es una sugerencia: <b>borrala o cambiala</b> si
+      se la lleva a otro lado, si la pidió para ella o si no dijo a dónde va.</li>
     <li>Tildá los equipos y confirmá. Están agrupados por carro, y si hay muchos
-      tenés un buscador arriba de la lista.</li>
+      tenés un buscador arriba de la lista. Al confirmar, <b>el cuadro se cierra
+      solo</b> y arriba te queda escrito qué salió.</li>
   </ol>
 
   <figure>
@@ -979,7 +1007,8 @@
     <li>Escribí <b>quién se lo lleva</b> (el técnico, el service).</li>
     <li>Escribí <b>a dónde va y por qué</b>. Este no es opcional: dentro de dos meses
       es lo único que va a explicar por qué el equipo no está.</li>
-    <li>Tildá el equipo y confirmá.</li>
+    <li>Tildá el equipo y confirmá. Como en la entrega, el cuadro se cierra solo y
+      arriba te queda escrito qué salió.</li>
   </ol>
 
   <div class="nota">
@@ -1577,7 +1606,7 @@
       cerrarlo, lo de ese año queda como histórico.</dd>
 
     <dt>Curso y materia</dt>
-    <dd>1°A es un curso; Matemática de 1°A es una materia. Los docentes reservan para
+    <dd>1°A —o 4°2, o «2°» a secas si tus cursos no se dividen— es un curso; Matemática de ese curso es una materia. Los docentes reservan para
       una materia, no para un curso.</dd>
 
     <dt>Carro y equipo</dt>

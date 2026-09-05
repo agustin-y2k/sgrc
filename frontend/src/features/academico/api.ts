@@ -1,4 +1,5 @@
 import type {
+  AsignacionDocente,
   CicloLectivo,
   Curso,
   DocenteMateria,
@@ -7,6 +8,7 @@ import type {
   ResultadoArchivado,
   RolDocente,
 } from "@/features/academico/types"
+import type { MateriaReservable } from "@/features/reservas/types"
 import { apiFetch } from "@/lib/api-client"
 
 // ── Ciclo lectivo (RF-02.1) ───────────────────────────────────────────
@@ -29,17 +31,49 @@ export function listarCursos(cicloId: string) {
   return apiFetch<RespuestaLista<Curso>>(`/api/academic/ciclos/${cicloId}/cursos`)
 }
 
-export function crearCurso(cicloId: string, nombre: string) {
+/**
+ * Quién dicta qué en un ciclo, con los nombres resueltos y en una sola
+ * consulta (solo Admin). Lo usan las dos pantallas que muestran la relación:
+ * las materias de un curso y el listado de usuarios.
+ */
+export function listarAsignaciones(cicloId: string) {
+  return apiFetch<RespuestaLista<AsignacionDocente>>(
+    `/api/academic/ciclos/${cicloId}/asignaciones`
+  )
+}
+
+/**
+ * En qué materias está asignada OTRA persona (solo Admin). Lo pregunta el
+ * mostrador: cuando quien viene a buscar un equipo tiene cuenta, sus cursos
+ * son el destino más probable de esa entrega (RF-08.23).
+ */
+export function materiasDeDocente(usuarioId: string) {
+  return apiFetch<RespuestaLista<MateriaReservable>>(
+    `/api/academic/docentes/${usuarioId}/materias`
+  )
+}
+
+/**
+ * Los tres datos del curso (RF-02.2): el año y los dos opcionales. El nombre
+ * no viaja — lo calcula la base con el año y la división.
+ */
+export type DatosDeCursoAPI = {
+  anio: number
+  division?: string
+  modalidad?: string
+}
+
+export function crearCurso(cicloId: string, datos: DatosDeCursoAPI) {
   return apiFetch<Curso>(`/api/academic/ciclos/${cicloId}/cursos`, {
     method: "POST",
-    body: { nombre },
+    body: datos,
   })
 }
 
-export function editarCurso(id: string, nombre: string) {
+export function editarCurso(id: string, datos: DatosDeCursoAPI) {
   return apiFetch<void>(`/api/academic/cursos/${id}`, {
     method: "PATCH",
-    body: { nombre },
+    body: datos,
   })
 }
 

@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
+import * as academicoApi from "@/features/academico/api"
 import { useAuth } from "@/features/auth/AuthContext"
 import type { Estado, Usuario } from "@/features/auth/types"
 import { UsuariosPage } from "@/features/admin/UsuariosPage"
@@ -11,6 +12,7 @@ import { ApiError } from "@/lib/api-client"
 
 vi.mock("@/features/admin/api")
 vi.mock("@/features/auth/AuthContext")
+vi.mock("@/features/academico/api")
 
 const ADMIN: Usuario = {
   id: "admin1",
@@ -68,6 +70,10 @@ describe("UsuariosPage", () => {
     vi.mocked(adminApi.eliminarUsuario).mockResolvedValue(undefined)
     vi.mocked(adminApi.promoverAAdmin).mockResolvedValue(undefined)
     vi.mocked(adminApi.degradarADocente).mockResolvedValue(undefined)
+    vi.mocked(academicoApi.listarCiclos).mockResolvedValue({
+      data: [{ id: "ciclo1", anio: 2026, activo: true, archivado: false }],
+    })
+    vi.mocked(academicoApi.listarAsignaciones).mockResolvedValue({ data: [] })
   })
 
   afterEach(() => {
@@ -80,6 +86,57 @@ describe("UsuariosPage", () => {
       meta: { total: us.length, page: 1, pageSize: us.length },
     })
   }
+
+  /**
+   * RF-02.6: qué dicta cada persona, con el curso al lado. Antes la única
+   * forma de saberlo era ir a Académico y abrir las materias una por una
+   * desde el otro lado de la relación.
+   */
+  it("dice qué materias dicta cada usuario, con su curso", async () => {
+    conUsuarios(usuario({ estado: "APROBADA" }))
+    vi.mocked(academicoApi.listarAsignaciones).mockResolvedValue({
+      data: [
+        {
+          id: "dm1",
+          usuarioId: "u1",
+          docenteNombre: "Ada Lovelace",
+          rol: "TITULAR",
+          materiaId: "m1",
+          materiaNombre: "Programación",
+          cursoId: "c1",
+          cursoNombre: "1°4",
+        },
+      ],
+    })
+    renderPagina()
+
+    // El curso va pegado a la materia: "Programación" a secas no distingue la
+    // de 1°4 de la de 5°A.
+    expect(
+      await screen.findByText(/Dicta Programación · 1°4 \(titular\)/)
+    ).toBeInTheDocument()
+  })
+
+  // Un docente aprobado sin materias no puede reservar nada, así que es algo
+  // para resolver y la ficha lo dice.
+  it("avisa cuando un docente aprobado no tiene ninguna materia", async () => {
+    conUsuarios(usuario({ estado: "APROBADA" }))
+    renderPagina()
+
+    expect(
+      await screen.findByText(/Sin materias asignadas: todavía no puede reservar/)
+    ).toBeInTheDocument()
+  })
+
+  // De un Admin no se dice nada: administrar no implica dar clase, y el aviso
+  // sería ruido en casi todas las fichas.
+  it("no le reclama materias a un Admin", async () => {
+    conUsuarios(usuario({ estado: "APROBADA", rol: "ADMIN" }))
+    renderPagina()
+
+    await screen.findByText(/Ada Lovelace/)
+    expect(screen.queryByText(/Sin materias asignadas/)).not.toBeInTheDocument()
+  })
 
   it("lista los usuarios con su estado", async () => {
     conUsuarios(usuario({ estado: "APROBADA" }))

@@ -25,14 +25,14 @@ func esViolacionUnica(err error) bool {
 
 const columnasPrestamo = `id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre, ` +
 	`COALESCE(retirado_por, ''), ` +
-	`motivo, devolucion_estimada, entregado_por, entregado_en, devuelto_en, recibido_por, observaciones, ` +
+	`destino, devolucion_estimada, entregado_por, entregado_en, devuelto_en, recibido_por, observaciones, ` +
 	`avisado_cierre_para`
 
 // columnasPrestamoDetallado agrega la ubicación de la PC y, si el préstamo
 // salió contra una reserva, el nombre de la materia.
 const columnasPrestamoDetallado = `p.id, p.equipo_id, p.reserva_id, p.entregado_a_usuario_id, p.entregado_a_nombre, ` +
 	`COALESCE(p.retirado_por, ''), ` +
-	`p.motivo, p.devolucion_estimada, p.entregado_por, p.entregado_en, p.devuelto_en, p.recibido_por, p.observaciones, ` +
+	`p.destino, p.devolucion_estimada, p.entregado_por, p.entregado_en, p.devuelto_en, p.recibido_por, p.observaciones, ` +
 	`p.avisado_cierre_para, ` +
 	`COALESCE(eq.identificador, 0), COALESCE(eq.nombre, 'PC ' || eq.identificador), COALESCE(c.nombre, ''), m.nombre`
 
@@ -55,11 +55,11 @@ func (r *PostgresRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) er
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO prestamo (
 			id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre,
-			retirado_por, motivo, devolucion_estimada, entregado_por, entregado_en,
+			retirado_por, destino, devolucion_estimada, entregado_por, entregado_en,
 			devuelto_en, recibido_por, observaciones
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`, p.ID, p.EquipoID, p.ReservaID, p.EntregadoAUsuarioID, p.EntregadoANombre,
-		nullSiVacio(p.RetiradoPor), nullSiVacio(p.Motivo), p.DevolucionEstimada,
+		nullSiVacio(p.RetiradoPor), nullSiVacio(p.Destino), p.DevolucionEstimada,
 		p.EntregadoPor, p.EntregadoEn, p.DevueltoEn, p.RecibidoPor,
 		nullSiVacio(p.Observaciones))
 	if err != nil {
@@ -95,11 +95,11 @@ func (r *PostgresRepo) BuscarPrestamoAbiertoDeEquipo(ctx context.Context, equipo
 
 func escanearPrestamo(row pgx.Row) (*domain.Prestamo, error) {
 	var p domain.Prestamo
-	var motivo, observaciones *string
+	var destino, observaciones *string
 
 	err := row.Scan(
 		&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
-		&p.RetiradoPor, &motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
+		&p.RetiradoPor, &destino, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 		&p.DevueltoEn, &p.RecibidoPor, &observaciones,
 		&p.AvisadoCierrePara,
 	)
@@ -112,8 +112,8 @@ func escanearPrestamo(row pgx.Row) (*domain.Prestamo, error) {
 		}
 		return nil, fmt.Errorf("escaneando el registro de entrega: %w", err)
 	}
-	if motivo != nil {
-		p.Motivo = *motivo
+	if destino != nil {
+		p.Destino = *destino
 	}
 	if observaciones != nil {
 		p.Observaciones = *observaciones
@@ -177,11 +177,11 @@ func escanearPrestamosDetallados(rows pgx.Rows) ([]*application.PrestamoDetallad
 	for rows.Next() {
 		var p domain.Prestamo
 		var d application.PrestamoDetallado
-		var motivo, observaciones *string
+		var destino, observaciones *string
 
 		err := rows.Scan(
 			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
-			&p.RetiradoPor, &motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
+			&p.RetiradoPor, &destino, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
 			&p.AvisadoCierrePara,
 			&d.Identificador, &d.Etiqueta, &d.CarroNombre, &d.MateriaNombre,
@@ -189,8 +189,8 @@ func escanearPrestamosDetallados(rows pgx.Rows) ([]*application.PrestamoDetallad
 		if err != nil {
 			return nil, fmt.Errorf("escaneando fila de entrega: %w", err)
 		}
-		if motivo != nil {
-			p.Motivo = *motivo
+		if destino != nil {
+			p.Destino = *destino
 		}
 		if observaciones != nil {
 			p.Observaciones = *observaciones
@@ -202,7 +202,7 @@ func escanearPrestamosDetallados(rows pgx.Rows) ([]*application.PrestamoDetallad
 }
 
 // nullSiVacio guarda NULL en vez de una cadena vacía en las columnas de texto
-// opcionales (motivo, observaciones).
+// opcionales (destino, observaciones).
 func nullSiVacio(s string) *string {
 	if s == "" {
 		return nil

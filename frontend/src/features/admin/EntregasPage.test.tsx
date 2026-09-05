@@ -2,15 +2,24 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
+import * as academicoApi from "@/features/academico/api"
+import * as adminApi from "@/features/admin/api"
 import { EntregasPage } from "@/features/admin/EntregasPage"
 import * as inventoryApi from "@/features/inventory/api"
 import type { Equipo } from "@/features/inventory/types"
+import type { Usuario } from "@/features/auth/types"
 import * as reservasApi from "@/features/reservas/api"
-import type { Prestamo, ReservaDetallada } from "@/features/reservas/types"
+import type {
+  MateriaReservable,
+  Prestamo,
+  ReservaDetallada,
+} from "@/features/reservas/types"
 import { paginada } from "@/test/respuestas"
 
 vi.mock("@/features/reservas/api")
 vi.mock("@/features/inventory/api")
+vi.mock("@/features/academico/api")
+vi.mock("@/features/admin/api")
 
 function prestamo(over: Partial<Prestamo> = {}): Prestamo {
   return {
@@ -24,6 +33,34 @@ function prestamo(over: Partial<Prestamo> = {}): Prestamo {
     carroNombre: "Carro 1",
     etiqueta: `PC ${over.identificador ?? 3}`,
     ...over,
+  }
+}
+
+function usuario(over: Partial<Usuario> = {}): Usuario {
+  return {
+    id: "u1",
+    nombre: "Ana",
+    apellido: "Gómez",
+    email: "ana.gomez@escuela.edu.ar",
+    rol: "DOCENTE",
+    estado: "APROBADA",
+    fechaRegistro: "2026-03-01T00:00:00Z",
+    fechaAprobacion: "2026-03-02T00:00:00Z",
+    debeCambiarPassword: false,
+    tienePassword: true,
+    vinculadaAGoogle: false,
+    ...over,
+  }
+}
+
+function materiaDe(cursoNombre: string): MateriaReservable {
+  return {
+    materiaId: `m-${cursoNombre}`,
+    materiaNombre: "Programación",
+    cursoId: `c-${cursoNombre}`,
+    cursoNombre,
+    cicloId: "ciclo1",
+    cicloAnio: 2026,
   }
 }
 
@@ -80,6 +117,30 @@ describe("EntregasPage", () => {
     vi.mocked(reservasApi.entregarPorReserva).mockResolvedValue({ entregadas: [] })
     vi.mocked(reservasApi.entregarSuelta).mockResolvedValue({ entregadas: [] })
     vi.mocked(reservasApi.recibirEquipos).mockResolvedValue({ recibidos: [] })
+    // Los cursos del ciclo son la mitad de las sugerencias de destino.
+    vi.mocked(academicoApi.listarCiclos).mockResolvedValue({
+      data: [{ id: "ciclo1", anio: 2026, activo: true, archivado: false }],
+    })
+    vi.mocked(academicoApi.listarCursos).mockResolvedValue({
+      data: [
+        {
+          id: "cur1",
+          cicloLectivoId: "ciclo1",
+          nombre: "1°4",
+          anio: 1,
+          division: "4",
+          activo: true,
+          archivado: false,
+        },
+      ],
+    })
+    // Las cuentas aprobadas: se ofrecen para reconocer a quien viene al
+    // mostrador, sin dejar de admitir a quien no tiene ninguna.
+    vi.mocked(adminApi.listarUsuarios).mockResolvedValue({
+      data: [usuario()],
+      meta: { total: 1, page: 1, pageSize: 200 },
+    })
+    vi.mocked(academicoApi.materiasDeDocente).mockResolvedValue({ data: [] })
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
       data: [{ id: "c1", nombre: "Carro 1" }],
     })
@@ -139,7 +200,7 @@ describe("EntregasPage", () => {
    */
   it("distingue las que no tienen hora de devolución", async () => {
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
-      data: [prestamo({ motivo: "trámite" })],
+      data: [prestamo({ destino: "Biblioteca" })],
     })
     renderPagina()
 
@@ -288,16 +349,149 @@ describe("EntregasPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
     await user.type(screen.getByLabelText("¿A quién?"), "Marta (secretaría)")
-    await user.type(screen.getByLabelText(/Para qué/), "trámite")
+    await user.type(screen.getByLabelText(/A dónde va/), "Sección Alumnos")
     await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
     await user.click(screen.getByRole("button", { name: /^Entregar 1 equipo/ }))
 
     expect(reservasApi.entregarSuelta).toHaveBeenCalledWith({
       equipoIds: ["pc1"],
       nombre: "Marta (secretaría)",
-      motivo: "trámite",
+      destino: "Sección Alumnos",
       devolucionEstimada: undefined,
     })
+  })
+
+  /**
+   * El destino se sugiere con los cursos que la escuela tiene cargados y con
+   * los lugares que no son un curso, pero el campo es libre: una lista
+   * cerrada dejaría sin poder anotarse el primer destino no previsto.
+   */
+  it("sugiere los cursos del ciclo y los lugares de la escuela como destino", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+    const campo = await screen.findByLabelText(/A dónde va/)
+    const sugerencias = document.getElementById(campo.getAttribute("list")!)
+
+    expect(sugerencias).toHaveTextContent("")
+    const valores = [...sugerencias!.querySelectorAll("option")].map((o) => o.value)
+    expect(valores).toContain("1°4")
+    expect(valores).toContain("Biblioteca")
+  })
+
+  /**
+   * Reconocer a quien viene no cambia lo que se puede hacer —el nombre sigue
+   * siendo libre— pero sí lo que queda anotado: la entrega se asocia a esa
+   * cuenta, así aparece en su historial y el reclamo de devolución le llega.
+   */
+  it("asocia la entrega a la cuenta cuando el nombre coincide con una", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+    await user.type(screen.getByLabelText("¿A quién?"), "ana gómez")
+    await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
+    await user.click(screen.getByRole("button", { name: /^Entregar 1 equipo/ }))
+
+    expect(reservasApi.entregarSuelta).toHaveBeenCalledWith(
+      expect.objectContaining({ nombre: "ana gómez", usuarioId: "u1" })
+    )
+  })
+
+  // El caso normal del mostrador: quien viene a buscar una máquina para un
+  // trámite no tiene cuenta, y la entrega sale igual.
+  it("entrega a nombre de alguien que no tiene cuenta, sin asociar ninguna", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+    await user.type(screen.getByLabelText("¿A quién?"), "Marta (secretaría)")
+    await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
+    await user.click(screen.getByRole("button", { name: /^Entregar 1 equipo/ }))
+
+    expect(reservasApi.entregarSuelta).toHaveBeenCalledWith(
+      expect.objectContaining({ nombre: "Marta (secretaría)", usuarioId: undefined })
+    )
+  })
+
+  /**
+   * Con un solo curso el destino se completa solo. Es lo más probable, y el
+   * Admin lo tiene a la vista para corregirlo.
+   */
+  it("completa el destino con el curso de quien retira, si da uno solo", async () => {
+    vi.mocked(academicoApi.materiasDeDocente).mockResolvedValue({
+      data: [materiaDe("1°4")],
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+    await user.type(screen.getByLabelText("¿A quién?"), "Ana Gómez")
+
+    expect(await screen.findByLabelText(/A dónde va/)).toHaveValue("1°4")
+  })
+
+  // Puede que la pida para ella, que la lleve a sala de profesores o que no
+  // lo declare: lo sugerido se borra y la entrega sale sin destino.
+  it("deja borrar el destino que completó solo", async () => {
+    vi.mocked(academicoApi.materiasDeDocente).mockResolvedValue({
+      data: [materiaDe("1°4")],
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+    await user.type(screen.getByLabelText("¿A quién?"), "Ana Gómez")
+    await user.clear(await screen.findByLabelText(/A dónde va/))
+    await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
+    await user.click(screen.getByRole("button", { name: /^Entregar 1 equipo/ }))
+
+    expect(reservasApi.entregarSuelta).toHaveBeenCalledWith(
+      expect.objectContaining({ destino: undefined })
+    )
+  })
+
+  // Con dos cursos no hay cuál elegir, así que no se adivina: el campo queda
+  // vacío y los dos se ofrecen como sugerencia.
+  it("no adivina el destino si la persona da clase en varios cursos", async () => {
+    vi.mocked(academicoApi.materiasDeDocente).mockResolvedValue({
+      data: [materiaDe("1°4"), materiaDe("2°1°")],
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+    await user.type(screen.getByLabelText("¿A quién?"), "Ana Gómez")
+    await screen.findByText(/Da clase en 1°4, 2°1°/)
+
+    expect(screen.getByLabelText(/A dónde va/)).toHaveValue("")
+  })
+
+  /**
+   * El cuadro se cierra solo al entregar: quien lo completa tiene a alguien
+   * esperando enfrente, y apretar «Cerrar» después de entregar es un paso que
+   * no decide nada. El resumen queda en la página, arriba de la lista donde
+   * las máquinas que salieron ya figuran.
+   */
+  it("cierra el cuadro solo al entregar y deja el resumen a la vista", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.entregarSuelta).mockResolvedValue({
+      entregadas: [prestamo()],
+    })
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+    await user.type(screen.getByLabelText("¿A quién?"), "Marta")
+    await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
+    await user.click(screen.getByRole("button", { name: /^Entregar 1 equipo/ }))
+
+    expect(await screen.findByText(/Salieron 1 equipo/)).toBeInTheDocument()
+    expect(screen.queryByLabelText("¿A quién?")).not.toBeInTheDocument()
+    // Y el botón que lo vuelve a abrir está de nuevo en su lugar.
+    expect(
+      screen.getByRole("button", { name: "Entregar sin reserva" })
+    ).toBeInTheDocument()
   })
 
   /**
@@ -603,7 +797,7 @@ describe("EntregasPage", () => {
     ).not.toBeInTheDocument()
   })
 
-  // El motivo es la constancia: dentro de dos meses es lo único que explica
+  // El destino es la constancia: dentro de dos meses es lo único que explica
   // por qué el equipo no está.
   it("registra la salida a reparación con a dónde va el equipo", async () => {
     const user = userEvent.setup()
@@ -616,7 +810,7 @@ describe("EntregasPage", () => {
       await screen.findByRole("button", { name: "Sacar un equipo a reparación" })
     )
     await user.type(screen.getByLabelText(/Quién se lo lleva/), "Service Rossi")
-    await user.type(screen.getByLabelText(/A dónde va/), "no enciende")
+    await user.type(screen.getByLabelText(/A dónde va/), "al service, no enciende")
     await user.click(await screen.findByRole("checkbox", { name: /^Proyector Epson/ }))
     await user.click(
       screen.getByRole("button", { name: /^Registrar la salida de 1 equipo/ })
@@ -625,7 +819,7 @@ describe("EntregasPage", () => {
     expect(reservasApi.entregarSuelta).toHaveBeenCalledWith({
       equipoIds: ["eq1"],
       nombre: "Service Rossi",
-      motivo: "no enciende",
+      destino: "al service, no enciende",
       devolucionEstimada: undefined,
       salidaAReparacion: true,
     })

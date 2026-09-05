@@ -46,6 +46,8 @@ describe("PedidosDeMateriaPage", () => {
           id: "cur1",
           cicloLectivoId: "c1",
           nombre: "3°C",
+          anio: 3,
+          division: "C",
           activo: true,
           archivado: false,
         },

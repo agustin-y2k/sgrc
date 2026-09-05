@@ -9,10 +9,22 @@ export type CicloLectivo = {
   archivado: boolean
 }
 
+/**
+ * RF-02.2 — un curso es un AÑO más dos datos opcionales. El año lo tienen
+ * todos los ámbitos —primaria, secundaria, terciario, universidad—; la
+ * división y la modalidad no: una universidad no divide sus cursos y una
+ * primaria no tiene modalidades.
+ */
 export type Curso = {
   id: string
   cicloLectivoId: string
+  /** De sólo lectura: lo calcula la base con el año y la división ("4°2", "2°"). */
   nombre: string
+  anio: number
+  /** "A", "2", "1ra". Ausente = la institución no divide sus cursos. */
+  division?: string
+  /** Modalidad, orientación o carrera. Ausente = este curso no está en ninguna. */
+  modalidad?: string
   activo: boolean
   archivado: boolean
 }
@@ -47,31 +59,78 @@ export type ResultadoArchivado = {
 }
 
 /**
- * RF-02.2: el nombre de un curso no es libre — año (1° a 6°) más división (A
- * a Z).
+ * RF-02.6 — una asignación docente-materia con los nombres de las dos puntas
+ * ya resueltos. Es la relación mirada para MOSTRARLA; `DocenteMateria` es la
+ * misma fila para administrarla.
  */
-export const PATRON_NOMBRE_CURSO = /^[1-6]°[A-Z]$/
-
-export function esNombreDeCursoValido(nombre: string): boolean {
-  return PATRON_NOMBRE_CURSO.test(nombre)
+export type AsignacionDocente = {
+  id: string
+  usuarioId: string
+  /** "Nombre Apellido". */
+  docenteNombre: string
+  rol: RolDocente
+  materiaId: string
+  materiaNombre: string
+  cursoId: string
+  cursoNombre: string
+  cursoModalidad?: string
 }
 
-/** Los años y divisiones que se pueden elegir, para armar los selectores. */
-export const ANIOS_DE_CURSO = ["1", "2", "3", "4", "5", "6"] as const
-export const DIVISIONES_DE_CURSO = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
+/** Lo que entra en cada campo, igual que los topes del dominio. */
+export const MAX_LARGO_DIVISION = 12
+export const MAX_LARGO_MODALIDAD = 80
+export const MIN_ANIO_CURSO = 1
+export const MAX_ANIO_CURSO = 15
 
-/** Arma el nombre canónico a partir del año y la división. */
-export function componerNombreDeCurso(anio: string, division: string): string {
-  return `${anio}°${division.toUpperCase()}`
+/**
+ * El nombre de un curso: año + grado + división ("4°2", "2°", "1°A"). Es la
+ * misma expresión que calcula la columna generada `curso.nombre`, y existe de
+ * este lado para poder mostrar cómo va a quedar antes de guardarlo.
+ */
+export function componerNombreDeCurso(anio: number | "", division: string): string {
+  return `${anio === "" ? "" : anio}°${division.trim()}`
 }
 
 /**
- * El inverso: separa un nombre existente para poder editarlo con los mismos
- * selectores.
+ * Cómo se nombra un curso cuando hay que distinguirlo de otro: "1°A ·
+ * Enfermería". El nombre puede repetirse entre dos carreras, así que donde se
+ * elige o se busca un curso hace falta la modalidad al lado.
+ *
+ * Mismo criterio que nombreDeEquipo() en el mostrador, donde "PC 1" hay una
+ * por carro.
  */
-export function separarNombreDeCurso(
+export function etiquetaDeCurso(curso: { nombre: string; modalidad?: string }): string {
+  return curso.modalidad ? `${curso.nombre} · ${curso.modalidad}` : curso.nombre
+}
+
+/**
+ * Adapta un listado que trae el curso resuelto por JOIN —una materia
+ * reservable, una asignación docente— a lo que espera etiquetaDeCurso.
+ */
+export function cursoDe(fila: { cursoNombre: string; cursoModalidad?: string }): {
   nombre: string
-): { anio: string; division: string } | null {
-  const m = /^([1-6])°([A-Z])$/.exec(nombre.trim().toUpperCase())
-  return m ? { anio: m[1], division: m[2] } : null
+  modalidad?: string
+} {
+  return { nombre: fila.cursoNombre, modalidad: fila.cursoModalidad }
+}
+
+/**
+ * Las divisiones y las modalidades que la institución ya usa, sin repetir. Son
+ * lo que se ofrece como sugerencia: nadie tiene que acordarse de si acá se
+ * escribió "Electromecánica" o "Electromecanica", que serían dos.
+ */
+export function divisionesEnUso(cursos: { division?: string }[]): string[] {
+  return sinRepetir(cursos.map((c) => c.division))
+}
+
+export function modalidadesEnUso(cursos: { modalidad?: string }[]): string[] {
+  return sinRepetir(cursos.map((c) => c.modalidad))
+}
+
+function sinRepetir(valores: (string | undefined)[]): string[] {
+  const vistos = new Set<string>()
+  for (const v of valores) {
+    if (v) vistos.add(v)
+  }
+  return [...vistos].sort((a, b) => a.localeCompare(b, "es"))
 }

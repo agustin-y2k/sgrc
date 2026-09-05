@@ -79,7 +79,7 @@ func (h *Handler) EntregarSuelta(c *fiber.Ctx) error {
 		Nombre:             req.Nombre,
 		UsuarioID:          req.UsuarioID,
 		RetiradoPor:        req.RetiradoPor,
-		Motivo:             req.Motivo,
+		Destino:            req.Destino,
 		DevolucionEstimada: req.DevolucionEstimada,
 		EntregadoPor:       claims.UserID,
 		SalidaAReparacion:  req.SalidaAReparacion,

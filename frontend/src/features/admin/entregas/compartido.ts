@@ -36,3 +36,20 @@ export function nombreDeEquipo(p: { etiqueta?: string; carroNombre?: string }): 
 
 /** Cada cuánto se vuelve a preguntar qué hay afuera. */
 export const REFRESCO_DEL_MOSTRADOR = 60_000
+
+/**
+ * Los lugares de una escuela a los que se lleva un equipo y que no son un
+ * curso. Se ofrecen como sugerencia junto a los cursos del ciclo, y el campo
+ * sigue siendo libre: ninguna lista de destinos se puede cerrar sin que el
+ * primer caso no previsto quede sin poder anotarse.
+ */
+export const LUGARES_DE_LA_ESCUELA = [
+  "Biblioteca",
+  "Dirección",
+  "Secretaría",
+  "Sección Alumnos",
+  "Preceptoría",
+  "Sala de profesores",
+  "Laboratorio",
+  "Taller",
+]

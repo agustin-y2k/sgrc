@@ -78,7 +78,7 @@ func crearCicloDeTest(t *testing.T, pool *pgxpool.Pool) (cicloID, materiaID stri
 	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
 		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, '1°A')`, cursoID, cicloID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, anio, division) VALUES ($1, $2, 1, 'A')`, cursoID, cicloID); err != nil {
 		t.Fatalf("no se pudo crear curso de prueba: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, 'Matemáticas')`, materiaID, cursoID); err != nil {

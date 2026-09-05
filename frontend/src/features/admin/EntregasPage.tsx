@@ -22,6 +22,10 @@ import { getErrorMessage } from "@/lib/api-client"
 export function EntregasPage() {
   const [entregandoSuelta, setEntregandoSuelta] = useState(false)
   const [sacandoAReparacion, setSacandoAReparacion] = useState(false)
+  // Lo que salió en la última entrega. Vive en la página y no en el
+  // formulario porque el formulario se cierra solo al terminar: si el resumen
+  // viviera adentro, se iría con él justo cuando hay algo que leer.
+  const [resumen, setResumen] = useState<string | null>(null)
 
   const { data, error } = useQuery({
     queryKey: PRESTAMOS_KEY,
@@ -42,7 +46,12 @@ export function EntregasPage() {
         descripcion="Qué computadoras están afuera del laboratorio, quién se las llevó y cuándo tienen que volver. Reemplaza el registro en papel."
         accion={
           !entregandoSuelta && (
-            <Button onClick={() => setEntregandoSuelta(true)}>
+            <Button
+              onClick={() => {
+                setResumen(null)
+                setEntregandoSuelta(true)
+              }}
+            >
               Entregar sin reserva
             </Button>
           )
@@ -59,6 +68,14 @@ export function EntregasPage() {
         </Alert>
       )}
 
+      {/* Arriba de la lista de lo que está afuera, que es donde las máquinas
+          que acaban de salir ya figuran. */}
+      {resumen && (
+        <Alert className="mb-4">
+          <AlertDescription>{resumen}</AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid gap-4">
         {/* El formulario va en el cuerpo y no en el slot de acción del
             encabezado: ese slot es `shrink-0` y está pensado para botones,
@@ -67,7 +84,10 @@ export function EntregasPage() {
         {entregandoSuelta && (
           <EntregaSuelta
             yaAfuera={yaAfuera}
-            onCerrar={() => setEntregandoSuelta(false)}
+            onCerrar={(resumenDeLaEntrega) => {
+              setEntregandoSuelta(false)
+              setResumen(resumenDeLaEntrega ?? null)
+            }}
           />
         )}
         <LoQueEstaAfuera />
@@ -79,11 +99,20 @@ export function EntregasPage() {
         {sacandoAReparacion ? (
           <SalidaAReparacion
             yaAfuera={yaAfuera}
-            onCerrar={() => setSacandoAReparacion(false)}
+            onCerrar={(resumenDeLaSalida) => {
+              setSacandoAReparacion(false)
+              setResumen(resumenDeLaSalida ?? null)
+            }}
           />
         ) : (
           <div>
-            <Button variant="outline" onClick={() => setSacandoAReparacion(true)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setResumen(null)
+                setSacandoAReparacion(true)
+              }}
+            >
               Sacar un equipo a reparación
             </Button>
           </div>

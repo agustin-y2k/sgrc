@@ -5,6 +5,7 @@ package infrastructure
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -90,7 +91,7 @@ func crearMateriaDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
 		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, '1°A')`, cursoID, cicloID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, anio, division) VALUES ($1, $2, 1, 'A')`, cursoID, cicloID); err != nil {
 		t.Fatalf("no se pudo crear curso de prueba: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, 'Matemáticas')`, materiaID, cursoID); err != nil {
@@ -846,7 +847,7 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo(t *testing.T) {
 	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
 		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, '1°A')`, cursoID, cicloID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, anio, division) VALUES ($1, $2, 1, 'A')`, cursoID, cicloID); err != nil {
 		t.Fatalf("no se pudo crear curso de prueba: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, 'Matemáticas')`, materiaDelCiclo, cursoID); err != nil {
@@ -909,7 +910,7 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *tes
 	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
 		t.Fatalf("no se pudo crear ciclo: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, '1°A')`, cursoID, cicloID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, anio, division) VALUES ($1, $2, 1, 'A')`, cursoID, cicloID); err != nil {
 		t.Fatalf("no se pudo crear curso: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, 'Matemáticas')`, materiaID, cursoID); err != nil {
@@ -1206,16 +1207,37 @@ func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testi
 
 // materiaEnCursoDeTest crea una materia con el nombre y el curso pedidos,
 // para poder probar el alcance por año y división.
+// materiaEnCursoDeTest crea la materia en un curso SIN modalidad —el caso de
+// la mayoría de las instituciones—, partiendo un nombre como "3°B" en sus dos
+// partes. Para probar el eje de la modalidad está materiaEnModalidadDeTest.
 func materiaEnCursoDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria, nombreCurso string) string {
 	t.Helper()
+	anio, division, encontrado := strings.Cut(nombreCurso, "°")
+	if !encontrado {
+		t.Fatalf("el curso de prueba %q tiene que tener la forma 3°B", nombreCurso)
+	}
+	n, err := strconv.Atoi(anio)
+	if err != nil {
+		t.Fatalf("año inválido en %q: %v", nombreCurso, err)
+	}
+	return materiaEnModalidadDeTest(t, pool, nombreMateria, n, division, nil)
+}
+
+// materiaEnModalidadDeTest arma ciclo → curso → materia con los tres datos del
+// curso, que son los tres ejes que puede acotar una marca de preferencia.
+func materiaEnModalidadDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria string,
+	anio int, division string, modalidad *string) string {
+	t.Helper()
 	ctx := context.Background()
-	anio := int(atomic.AddInt32(&contadorAnioDeTest, 1)) + 3000
+	anioDelCiclo := int(atomic.AddInt32(&contadorAnioDeTest, 1)) + 3000
 	cicloID, cursoID, materiaID := NuevoID(), NuevoID(), NuevoID()
 
-	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anioDelCiclo); err != nil {
 		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, $3)`, cursoID, cicloID, nombreCurso); err != nil {
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad) VALUES ($1, $2, $3, $4, $5)`,
+		cursoID, cicloID, anio, nullSiVacia(division), modalidad); err != nil {
 		t.Fatalf("no se pudo crear curso de prueba: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, $3)`, materiaID, cursoID, nombreMateria); err != nil {
@@ -1224,11 +1246,22 @@ func materiaEnCursoDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria, nombr
 	return materiaID
 }
 
-func marcarPreferencia(t *testing.T, pool *pgxpool.Pool, equipoID, materia string, anio *int, division *string, prioridad int) {
+// nullSiVacia: la división vacía se guarda como NULL, que es lo que significa
+// "este curso no se divide".
+func nullSiVacia(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func marcarPreferencia(t *testing.T, pool *pgxpool.Pool, equipoID, materia string,
+	modalidad *string, anio *int, division *string, prioridad int) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO equipo_preferencia (equipo_id, materia_nombre, anio, division, prioridad) VALUES ($1, $2, $3, $4, $5)`,
-		equipoID, materia, anio, division, prioridad)
+		`INSERT INTO equipo_preferencia (equipo_id, materia_nombre, modalidad, anio, division, prioridad)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		equipoID, materia, modalidad, anio, division, prioridad)
 	if err != nil {
 		t.Fatalf("no se pudo marcar la preferencia: %v", err)
 	}
@@ -1250,9 +1283,9 @@ func TestListarEquiposDisponiblesEn_OrdenaPorPreferenciaDeMateria(t *testing.T) 
 	tres, be := 3, "B"
 	// Sin acento y en minúscula a propósito: el match va por nombre
 	// normalizado, así que "matematica" tiene que encontrar a "Matemática".
-	marcarPreferencia(t, pool, miPreferida, "matematica", &tres, &be, 2)
-	marcarPreferencia(t, pool, ajenaDebil, "Dibujo Técnico", nil, nil, 3)
-	marcarPreferencia(t, pool, ajenaFuerte, "Dibujo Técnico", nil, nil, 1)
+	marcarPreferencia(t, pool, miPreferida, "matematica", nil, &tres, &be, 2)
+	marcarPreferencia(t, pool, ajenaDebil, "Dibujo Técnico", nil, nil, nil, 3)
+	marcarPreferencia(t, pool, ajenaFuerte, "Dibujo Técnico", nil, nil, nil, 1)
 
 	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
 	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, materiaID)
@@ -1310,7 +1343,7 @@ func TestListarEquiposDisponiblesEn_LaMarcaAcotadaNoAplicaAOtroCurso(t *testing.
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	tres, be := 3, "B"
-	marcarPreferencia(t, pool, equipoID, "Matemática", &tres, &be, 1)
+	marcarPreferencia(t, pool, equipoID, "Matemática", nil, &tres, &be, 1)
 
 	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
 	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, otroCurso)
@@ -1330,6 +1363,78 @@ func TestListarEquiposDisponiblesEn_LaMarcaAcotadaNoAplicaAOtroCurso(t *testing.
 	t.Fatal("el equipo tendría que estar en la lista: la preferencia ordena, no oculta")
 }
 
+// El eje que trajo la 009: en una técnica, "esta máquina es de
+// Electromecánica" es más útil que "esta es de todo 3er año". La marca acota
+// por modalidad y tiene que encontrar a las materias de sus cursos, sin
+// importar de qué año sean ni cómo se llamen.
+func TestListarEquiposDisponiblesEn_AcotadaPorModalidad(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	modalidad := "Electromecánica"
+	materiaID := materiaEnModalidadDeTest(t, pool, "Matemática", 4, "2", &modalidad)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+
+	// En minúscula y sin tilde a propósito: el cruce va por la forma
+	// normalizada, igual que el de la materia.
+	suMarca := "electromecanica"
+	marcarPreferencia(t, pool, equipoID, "Matemática", &suMarca, nil, nil, 1)
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, materiaID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	for _, e := range disponibles {
+		if e.EquipoID != equipoID {
+			continue
+		}
+		if e.Tramo != application.TramoPreferente {
+			t.Errorf("esperaba PREFERENTE para su propia modalidad, obtuve %s", e.Tramo)
+		}
+		if e.MotivoDePreferencia() != "Preferente para Matemática de electromecanica" {
+			t.Errorf("motivo inesperado: %q", e.MotivoDePreferencia())
+		}
+		return
+	}
+	t.Fatal("el equipo tendría que estar en la lista")
+}
+
+// Y al revés: la marca de una modalidad NO alcanza a la materia de otra. Es lo
+// mismo que ya valía para el curso — acotar el alcance tiene que acotarlo de
+// verdad, o la marca no sirve para nada.
+func TestListarEquiposDisponiblesEn_OtraModalidadEsAjena(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	construccion := "Construcción"
+	materiaID := materiaEnModalidadDeTest(t, pool, "Matemática", 4, "1", &construccion)
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+
+	otra := "Electromecánica"
+	marcarPreferencia(t, pool, equipoID, "Matemática", &otra, nil, nil, 1)
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, materiaID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	for _, e := range disponibles {
+		if e.EquipoID != equipoID {
+			continue
+		}
+		if e.Tramo != application.TramoDeOtraMateria {
+			t.Errorf("esperaba DE_OTRA_MATERIA para otra modalidad, obtuve %s", e.Tramo)
+		}
+		return
+	}
+	t.Fatal("el equipo tendría que estar en la lista: la preferencia ordena, no oculta")
+}
+
 // La marca más específica gana: un equipo preferente de toda la materia Y de
 // 3°B en particular tiene que resolver por la de 3°B cuando reserva 3°B.
 func TestListarEquiposDisponiblesEn_GanaLaMarcaMasEspecifica(t *testing.T) {
@@ -1341,8 +1446,8 @@ func TestListarEquiposDisponiblesEn_GanaLaMarcaMasEspecifica(t *testing.T) {
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	tres, be := 3, "B"
-	marcarPreferencia(t, pool, equipoID, "Matemática", nil, nil, 1)
-	marcarPreferencia(t, pool, equipoID, "Matemática", &tres, &be, 4)
+	marcarPreferencia(t, pool, equipoID, "Matemática", nil, nil, nil, 1)
+	marcarPreferencia(t, pool, equipoID, "Matemática", nil, &tres, &be, 4)
 
 	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
 	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, materiaID)
@@ -1355,7 +1460,8 @@ func TestListarEquiposDisponiblesEn_GanaLaMarcaMasEspecifica(t *testing.T) {
 			continue
 		}
 		if e.PreferenciaAnio != 3 || e.PreferenciaDivision != "B" {
-			t.Errorf("esperaba que ganara la marca de 3°B, obtuve %d°%s", e.PreferenciaAnio, e.PreferenciaDivision)
+			t.Errorf("esperaba que ganara la marca de 3°B, obtuve año %d división %q",
+				e.PreferenciaAnio, e.PreferenciaDivision)
 		}
 		return
 	}
@@ -1370,7 +1476,7 @@ func TestListarEquiposDisponiblesEn_SinMateria_TodoNeutral(t *testing.T) {
 	ctx := context.Background()
 
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	marcarPreferencia(t, pool, equipoID, "Dibujo Técnico", nil, nil, 1)
+	marcarPreferencia(t, pool, equipoID, "Dibujo Técnico", nil, nil, nil, 1)
 
 	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
 	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, "")
@@ -1394,7 +1500,7 @@ func TestListarEquiposLibresEnLaSerie_OrdenaPorPreferencia(t *testing.T) {
 
 	materiaID := materiaEnCursoDeTest(t, pool, "Matemática", "3°B")
 	preferida := crearEquipoDeCarroDeTest(t, pool)
-	marcarPreferencia(t, pool, preferida, "Matemática", nil, nil, 1)
+	marcarPreferencia(t, pool, preferida, "Matemática", nil, nil, nil, 1)
 	crearEquipoDeCarroDeTest(t, pool)
 
 	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
@@ -1434,7 +1540,7 @@ func TestMateriaAceptaReservas_FalsoSiEstaArchivadaEnCualquierNivel(t *testing.T
 			t.Fatal(err)
 		}
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO curso (id, ciclo_lectivo_id, nombre, archivado) VALUES ($1, $2, '1°A', $3)`,
+			`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, archivado) VALUES ($1, $2, 1, 'A', $3)`,
 			cursoID, cicloID, archivarCurso); err != nil {
 			t.Fatal(err)
 		}

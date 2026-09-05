@@ -28,13 +28,14 @@ type entregarSueltaRequest struct {
 	UsuarioID *string `json:"usuarioId,omitempty"`
 	// RetiradoPor opcional: si la pide una persona y la viene a buscar otra.
 	RetiradoPor string `json:"retiradoPor,omitempty"`
-	Motivo      string `json:"motivo,omitempty"`
+	// Destino: a dónde va el equipo — un curso, una dependencia, el service.
+	Destino string `json:"destino,omitempty"`
 	// DevolucionEstimada opcional, ISO 8601. Sin ella no se le reclama nada:
 	// "vengo en un rato" es la respuesta honesta.
 	DevolucionEstimada *time.Time `json:"devolucionEstimada,omitempty"`
 	// SalidaAReparacion: este equipo NO está disponible y sale igual, camino
 	// al técnico. Es el único modo de sacar del laboratorio algo que está en
-	// mantenimiento o fuera de servicio, y obliga a completar `motivo`.
+	// mantenimiento o fuera de servicio, y obliga a completar `destino`.
 	SalidaAReparacion bool `json:"salidaAReparacion,omitempty"`
 }
 
@@ -56,7 +57,7 @@ type prestamoResponse struct {
 	EntregadoAUsuarioID *string `json:"entregadoAUsuarioId,omitempty"`
 	EntregadoANombre    string  `json:"entregadoANombre"`
 	RetiradoPor         string  `json:"retiradoPor,omitempty"`
-	Motivo              string  `json:"motivo,omitempty"`
+	Destino             string  `json:"destino,omitempty"`
 
 	DevolucionEstimada *time.Time `json:"devolucionEstimada,omitempty"`
 	EntregadoPor       *string    `json:"entregadoPor,omitempty"`
@@ -83,7 +84,7 @@ func toPrestamoResponse(p *domain.Prestamo, ahora time.Time) prestamoResponse {
 		EntregadoAUsuarioID: p.EntregadoAUsuarioID,
 		EntregadoANombre:    p.EntregadoANombre,
 		RetiradoPor:         p.RetiradoPor,
-		Motivo:              p.Motivo,
+		Destino:             p.Destino,
 		DevolucionEstimada:  p.DevolucionEstimada,
 		EntregadoPor:        p.EntregadoPor,
 		EntregadoEn:         p.EntregadoEn,

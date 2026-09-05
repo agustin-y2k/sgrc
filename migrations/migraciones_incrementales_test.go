@@ -85,6 +85,8 @@ func TestUnaActualizacionNoSeLlevaLosDatosPuestos(t *testing.T) {
 	verificarQueLaVersionEsLaUltima(ctx, t, pool)
 
 	verificarQueLoDeUnCarroQuedoComoComputadora(ctx, t, pool)
+	verificarQueElDestinoSeQuedoConLoQueDecia(ctx, t, pool)
+	verificarQueElCursoSePartioEnAnioYDivision(ctx, t, pool)
 
 	// Va último porque escribe: da de baja el equipo sembrado y carga otro
 	// encima de sus identificadores.
@@ -127,9 +129,13 @@ func sembrarInstalacionEnUso(ctx context.Context, t *testing.T, pool *pgxpool.Po
 		VALUES ($1, $2, $3, $4, 'Blas Docente', DATE '2026-05-04', TIME '08:00', TIME '09:20', $5)`,
 		idReserva, idGrupo, idEquipo, idMateria, idDocente)
 
+	// Con `motivo` cargado a propósito: la 008 renombra esa columna a
+	// `destino`, y lo que hay que probar es que el contenido viaja con ella.
 	ejecutar(ctx, t, pool, `
-		INSERT INTO prestamo (equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre, entregado_por, devuelto_en)
-		VALUES ($1, $2, $3, 'Blas Docente', $4, now())`, idEquipo, idReserva, idDocente, idAdmin)
+		INSERT INTO prestamo (equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre,
+		                      motivo, entregado_por, devuelto_en)
+		VALUES ($1, $2, $3, 'Blas Docente', 'trámite en secretaría', $4, now())`,
+		idEquipo, idReserva, idDocente, idAdmin)
 
 	ejecutar(ctx, t, pool, `
 		INSERT INTO incidencia (equipo_id, reportado_por, descripcion, gravedad)
@@ -352,6 +358,76 @@ func verificarQueLoDeUnCarroQuedoComoComputadora(ctx context.Context, t *testing
 // El equipo sembrado es la PC 7 del carro, con la serie SERIE-007, y arrastra
 // una reserva, un préstamo y una incidencia: exactamente el caso en el que la
 // baja tiene que ser lógica y aun así devolver los identificadores.
+// La 008 renombra prestamo.motivo a destino. Un rename conserva el contenido
+// —para eso se eligió antes que una columna nueva—, y esto lo fija: si alguien
+// lo cambia por un ADD COLUMN, el historial de por dónde anduvo cada máquina
+// se queda en una columna que ya nadie lee.
+func verificarQueElDestinoSeQuedoConLoQueDecia(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	var destino string
+	if err := pool.QueryRow(ctx, `
+		SELECT destino FROM prestamo WHERE equipo_id = $1`, idEquipo).Scan(&destino); err != nil {
+		t.Fatalf("no se pudo leer prestamo.destino: %v", err)
+	}
+	if destino != "trámite en secretaría" {
+		t.Errorf("destino = %q; el rename tenía que traer lo que decía motivo", destino)
+	}
+}
+
+// El curso quedó descrito por sus partes: año obligatorio, división y
+// modalidad opcionales, y el nombre calculado por la base (009). Se
+// prueba sobre la base con datos porque lo que se cambia son CHECKs, columnas
+// generadas e índices, y eso es lo que falla al ACTUALIZAR y no al instalar.
+func verificarQueElCursoSePartioEnAnioYDivision(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	// El curso sembrado se llamaba "3°B": la 009 lo partió en año y división, y
+	// el nombre volvió a armarse igual desde la columna generada.
+	var nombre, division string
+	var anio int
+	if err := pool.QueryRow(ctx,
+		`SELECT nombre, anio, coalesce(division, '') FROM curso WHERE id = $1`,
+		idCurso).Scan(&nombre, &anio, &division); err != nil {
+		t.Fatalf("no se pudo leer el curso sembrado: %v", err)
+	}
+	if nombre != "3°B" || anio != 3 || division != "B" {
+		t.Errorf("el curso quedó como %q (año %d, división %q); esperaba 3°B partido en 3 y B",
+			nombre, anio, division)
+	}
+
+	// Un terciario: con carrera y SIN división. El nombre queda "2°".
+	var nombreTerciario string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO curso (ciclo_lectivo_id, anio, modalidad)
+		VALUES ($1, 2, 'Tec. Sup. en Enfermería') RETURNING nombre`, idCiclo).Scan(&nombreTerciario); err != nil {
+		t.Errorf("no se pudo cargar un curso sin división: %v", err)
+	} else if nombreTerciario != "2°" {
+		t.Errorf("nombre = %q, esperaba 2°", nombreTerciario)
+	}
+
+	// El año es obligatorio: sin él la fila no entra.
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO curso (ciclo_lectivo_id, division) VALUES ($1, 'X')`, idCiclo); err == nil {
+		t.Error("un curso sin año tendría que ser rechazado por la base")
+	}
+
+	// La unicidad ignora tildes y mayúsculas: "3°b" es el mismo curso que "3°B".
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO curso (ciclo_lectivo_id, anio, division) VALUES ($1, 3, 'b')`, idCiclo); err == nil {
+		t.Error("3°b entró como un curso distinto de 3°B en el mismo ciclo")
+	}
+
+	// Pero el mismo año y división en OTRA modalidad sí entra: dos carreras
+	// pueden tener cada una su "1°A". Es lo que obliga a mostrar la modalidad
+	// al lado del nombre donde se elige un curso.
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO curso (ciclo_lectivo_id, anio, division, modalidad)
+		VALUES ($1, 3, 'B', 'Construcción')`, idCiclo); err != nil {
+		t.Errorf("el mismo curso en otra modalidad tenía que entrar: %v", err)
+	}
+}
+
 func verificarQueLaBajaLiberaSerieYZocalo(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 

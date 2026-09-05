@@ -495,7 +495,10 @@ export function LicenciasPage() {
       />
 
       {altaAbierta && (
-        <AltaDeLicencias sugerencias={sugerencias} onCerrar={() => setAltaAbierta(false)} />
+        <AltaDeLicencias
+          sugerencias={sugerencias}
+          onCerrar={() => setAltaAbierta(false)}
+        />
       )}
 
       {error && (

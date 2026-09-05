@@ -128,7 +128,7 @@ func TestPostgresRepo_ArchivarCiclo_MarcaCicloCursosYMaterias(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	curso, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, "1°A")
+	curso, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 1, "A", "")
 	if err := repo.CrearCurso(ctx, curso); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -199,8 +199,8 @@ func TestPostgresRepo_ClonarCicloA_ClonaCursosYMaterias(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	curso1, _ := domain.NuevoCurso(uuidNuevo(), origen.ID, "1°A")
-	curso2, _ := domain.NuevoCurso(uuidNuevo(), origen.ID, "2°B")
+	curso1, _ := domain.NuevoCurso(uuidNuevo(), origen.ID, 1, "A", "")
+	curso2, _ := domain.NuevoCurso(uuidNuevo(), origen.ID, 2, "B", "")
 	for _, c := range []*domain.Curso{curso1, curso2} {
 		if err := repo.CrearCurso(ctx, c); err != nil {
 			t.Fatalf("no debería fallar creando curso: %v", err)
@@ -259,8 +259,8 @@ func TestPostgresRepo_Curso_NombreDuplicadoEnMismoCiclo_Error(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	c1, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, "1°A")
-	c2, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, "1°A") // mismo nombre, mismo ciclo
+	c1, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 1, "A", "")
+	c2, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 1, "A", "") // mismo nombre, mismo ciclo
 
 	if err := repo.CrearCurso(ctx, c1); err != nil {
 		t.Fatalf("el primero no debería fallar: %v", err)
@@ -271,6 +271,119 @@ func TestPostgresRepo_Curso_NombreDuplicadoEnMismoCiclo_Error(t *testing.T) {
 	}
 }
 
+// La división se guarda como la escribió la institución —"1ra" no tiene por
+// qué quedar "1RA"—, así que la unicidad dentro del ciclo ignora las
+// mayúsculas. Sin eso, "3°B" y "3°b" serían dos cursos, cada uno con sus
+// materias y sus reservas, y nada avisaría que son el mismo.
+func TestPostgresRepo_Curso_MismoNombreConOtraCapitalizacion_Error(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	ciclo, _ := domain.NuevoCicloLectivo(uuidNuevo(), 2026)
+	if err := repo.CrearCiclo(ctx, ciclo); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	c1, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 3, "B", "")
+	c2, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 3, "b", "")
+
+	if err := repo.CrearCurso(ctx, c1); err != nil {
+		t.Fatalf("el primero no debería fallar: %v", err)
+	}
+	if err := repo.CrearCurso(ctx, c2); err != application.ErrCursoNombreDuplicado {
+		t.Fatalf("esperaba ErrCursoNombreDuplicado, obtuve %v", err)
+	}
+}
+
+// El curso de un terciario: con carrera y SIN división, que es lo habitual
+// fuera de la escuela media.
+func TestPostgresRepo_Curso_DeCualquierAmbito(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	ciclo, _ := domain.NuevoCicloLectivo(uuidNuevo(), 2026)
+	if err := repo.CrearCiclo(ctx, ciclo); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	curso, err := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 2, "", "Tec. Sup. en Enfermería")
+	if err != nil {
+		t.Fatalf("debería ser un curso válido: %v", err)
+	}
+	if err := repo.CrearCurso(ctx, curso); err != nil {
+		t.Fatalf("no se pudo guardar: %v", err)
+	}
+
+	cursos, err := repo.ListarCursosPorCiclo(ctx, ciclo.ID)
+	if err != nil {
+		t.Fatalf("no se pudieron listar: %v", err)
+	}
+	if len(cursos) != 1 {
+		t.Fatalf("esperaba 1 curso, obtuve %d", len(cursos))
+	}
+	// El nombre lo calculó la base a partir del año y la división vacía.
+	c := cursos[0]
+	if c.Nombre != "2°" || c.Anio != 2 || c.Division != "" ||
+		c.Modalidad != "Tec. Sup. en Enfermería" {
+		t.Errorf("el curso volvió como %+v", c)
+	}
+}
+
+// Los NULL de división y modalidad tienen que sobrevivir la ida y vuelta: una
+// primaria no tiene modalidad, una universidad no tiene división.
+func TestPostgresRepo_Curso_SinDivisionNiModalidad(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	ciclo, _ := domain.NuevoCicloLectivo(uuidNuevo(), 2026)
+	if err := repo.CrearCiclo(ctx, ciclo); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	curso, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 3, "", "")
+	if err := repo.CrearCurso(ctx, curso); err != nil {
+		t.Fatalf("no se pudo guardar: %v", err)
+	}
+
+	vuelto, err := repo.BuscarCursoPorID(ctx, curso.ID)
+	if err != nil {
+		t.Fatalf("no se pudo recuperar: %v", err)
+	}
+	if vuelto.Division != "" || vuelto.Modalidad != "" {
+		t.Errorf("no tenía que inventar nada: %+v", vuelto)
+	}
+	if vuelto.Nombre != "3°" {
+		t.Errorf("nombre = %q, esperaba 3°", vuelto.Nombre)
+	}
+}
+
+// El mismo nombre en otra modalidad es otro curso: dos carreras pueden tener
+// cada una su "1°A", y es lo que obliga a mostrar la modalidad al lado del
+// nombre donde se elige un curso.
+func TestPostgresRepo_Curso_MismoNombreEnOtraModalidad_Entra(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	ciclo, _ := domain.NuevoCicloLectivo(uuidNuevo(), 2026)
+	if err := repo.CrearCiclo(ctx, ciclo); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	c1, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 1, "A", "Enfermería")
+	c2, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 1, "A", "Contabilidad")
+
+	if err := repo.CrearCurso(ctx, c1); err != nil {
+		t.Fatalf("el primero no debería fallar: %v", err)
+	}
+	if err := repo.CrearCurso(ctx, c2); err != nil {
+		t.Errorf("el mismo nombre en otra carrera tenía que entrar: %v", err)
+	}
+}
+
 func TestPostgresRepo_EliminarCurso_CascadeAMaterias(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
@@ -278,7 +391,7 @@ func TestPostgresRepo_EliminarCurso_CascadeAMaterias(t *testing.T) {
 
 	ciclo, _ := domain.NuevoCicloLectivo(uuidNuevo(), 2026)
 	repo.CrearCiclo(ctx, ciclo)
-	curso, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, "1°A")
+	curso, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 1, "A", "")
 	repo.CrearCurso(ctx, curso)
 	materia, _ := domain.NuevaMateria(uuidNuevo(), curso.ID, "Matemáticas")
 	repo.CrearMateria(ctx, materia)
@@ -300,7 +413,7 @@ func TestPostgresRepo_AsignarYRemoverDocenteMateria_OK(t *testing.T) {
 
 	ciclo, _ := domain.NuevoCicloLectivo(uuidNuevo(), 2026)
 	repo.CrearCiclo(ctx, ciclo)
-	curso, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, "1°A")
+	curso, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 1, "A", "")
 	repo.CrearCurso(ctx, curso)
 	materia, _ := domain.NuevaMateria(uuidNuevo(), curso.ID, "Matemáticas")
 	repo.CrearMateria(ctx, materia)
@@ -340,7 +453,7 @@ func TestPostgresRepo_GuardarDocenteMateria_CambiaSoloElRol(t *testing.T) {
 
 	ciclo, _ := domain.NuevoCicloLectivo(uuidNuevo(), 2026)
 	repo.CrearCiclo(ctx, ciclo)
-	curso, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, "1°A")
+	curso, _ := domain.NuevoCurso(uuidNuevo(), ciclo.ID, 1, "A", "")
 	repo.CrearCurso(ctx, curso)
 	materia, _ := domain.NuevaMateria(uuidNuevo(), curso.ID, "Matemáticas")
 	repo.CrearMateria(ctx, materia)
@@ -466,7 +579,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 		{"EliminarCurso", func() error { return repo.EliminarCurso(ctx, "CURSO_ID") }},
 		{"EliminarMateria", func() error { return repo.EliminarMateria(ctx, "MATERIA_ID") }},
 		{"CrearCurso_CicloInvalido", func() error {
-			c, _ := domain.NuevoCurso(uuidNuevo(), "CICLO_ID", "1°A")
+			c, _ := domain.NuevoCurso(uuidNuevo(), "CICLO_ID", 1, "A", "")
 			return repo.CrearCurso(ctx, c)
 		}},
 		{"CrearMateria_CursoInvalido", func() error {
@@ -498,7 +611,7 @@ func TestListarMateriasReservables_FiltraArchivadasYPorDocente(t *testing.T) {
 		t.Fatal(err)
 	}
 	cursoID := uuidNuevo()
-	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, '1°A')`, cursoID, cicloID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, anio, division) VALUES ($1, $2, 1, 'A')`, cursoID, cicloID); err != nil {
 		t.Fatal(err)
 	}
 

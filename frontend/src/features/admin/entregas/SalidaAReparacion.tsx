@@ -38,14 +38,14 @@ export function SalidaAReparacion({
   onCerrar,
 }: {
   yaAfuera: Set<string>
-  onCerrar: () => void
+  /** Con un resumen cuando la salida se registró; sin nada si lo cerraron. */
+  onCerrar: (resumen?: string) => void
 }) {
   const queryClient = useQueryClient()
   const [nombre, setNombre] = useState("")
-  const [motivo, setMotivo] = useState("")
+  const [destino, setDestino] = useState("")
   const [devolucion, setDevolucion] = useState("")
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set())
-  const [resumen, setResumen] = useState<string | null>(null)
 
   const { data: carros } = useQuery({
     queryKey: ["carros"],
@@ -86,7 +86,7 @@ export function SalidaAReparacion({
       reservasApi.entregarSuelta({
         equipoIds: [...seleccionadas],
         nombre: nombre.trim(),
-        motivo: motivo.trim(),
+        destino: destino.trim(),
         devolucionEstimada: devolucion ? new Date(devolucion).toISOString() : undefined,
         salidaAReparacion: true,
       }),
@@ -98,12 +98,10 @@ export function SalidaAReparacion({
           `No salieron ${noSalieron.length}: ${noSalieron.map((n) => n.detalle).join("; ")}`
         )
       }
-      setResumen(partes.join(" "))
-      setSeleccionadas(new Set())
-      setNombre("")
-      setMotivo("")
-      setDevolucion("")
       await queryClient.invalidateQueries({ queryKey: PRESTAMOS_KEY })
+      // Igual que la entrega del mostrador: registrada la salida no queda
+      // nada más que hacer en este cuadro, y el resumen se lee arriba.
+      onCerrar(partes.join(" "))
     },
   })
 
@@ -123,7 +121,6 @@ export function SalidaAReparacion({
           className="grid gap-6"
           onSubmit={(e) => {
             e.preventDefault()
-            setResumen(null)
             enviar.mutate()
           }}
         >
@@ -144,11 +141,11 @@ export function SalidaAReparacion({
                   salida a reparación es un préstamo mal cargado, y el registro
                   de que la máquina se fue no dice a dónde. */}
               <div className="grid gap-1.5">
-                <Label htmlFor="reparacion-motivo">¿A dónde va y por qué?</Label>
+                <Label htmlFor="reparacion-destino">¿A dónde va y por qué?</Label>
                 <Input
-                  id="reparacion-motivo"
-                  value={motivo}
-                  onChange={(e) => setMotivo(e.target.value)}
+                  id="reparacion-destino"
+                  value={destino}
+                  onChange={(e) => setDestino(e.target.value)}
                   placeholder="Ej.: al service, no enciende"
                   required
                 />
@@ -186,11 +183,6 @@ export function SalidaAReparacion({
               <AlertDescription>{getErrorMessage(enviar.error)}</AlertDescription>
             </Alert>
           )}
-          {resumen && (
-            <Alert>
-              <AlertDescription>{resumen}</AlertDescription>
-            </Alert>
-          )}
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-4">
             <Button type="submit" disabled={enviar.isPending || seleccionadas.size === 0}>
@@ -198,7 +190,7 @@ export function SalidaAReparacion({
                 ? "Registrar la salida"
                 : `Registrar la salida de ${contar(seleccionadas.size, "equipo")}`}
             </Button>
-            <Button type="button" variant="outline" onClick={onCerrar}>
+            <Button type="button" variant="outline" onClick={() => onCerrar()}>
               Cerrar
             </Button>
           </div>

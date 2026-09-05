@@ -129,12 +129,12 @@ func TestEditarPreferencia_CambiaElAlcanceYLaPrioridad(t *testing.T) {
 	}
 	original := creadas.Creadas[0]
 
-	editada, err := svc.EditarPreferencia(ctx, original.ID, ptrInt(5), ptrStr("A"), 3)
+	editada, err := svc.EditarPreferencia(ctx, original.ID, ptrStr("Construcción"), ptrInt(5), nil, 3)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if editada.Alcance() != "Matemática de 5°A" {
+	if editada.Alcance() != "Matemática de 5°, Construcción" {
 		t.Errorf("alcance = %q", editada.Alcance())
 	}
 	if editada.Prioridad != 3 {
@@ -146,7 +146,8 @@ func TestEditarPreferencia_CambiaElAlcanceYLaPrioridad(t *testing.T) {
 	}
 }
 
-// El alcance editado pasa por las mismas validaciones que el nuevo.
+// La edición pasa por el mismo constructor que el alta, así que un alcance
+// que no valida se rechaza igual que si fuera nuevo.
 func TestEditarPreferencia_AlcanceInvalido_Error(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := servicioSimple(repo)
@@ -156,17 +157,17 @@ func TestEditarPreferencia_AlcanceInvalido_Error(t *testing.T) {
 		EquipoIDs: []string{"e1"}, MateriaNombre: "Matemática", Prioridad: 1,
 	})
 
-	_, err := svc.EditarPreferencia(ctx, creadas.Creadas[0].ID, nil, ptrStr("B"), 1)
+	_, err := svc.EditarPreferencia(ctx, creadas.Creadas[0].ID, ptrStr("   "), nil, nil, 1)
 
-	if !errors.Is(err, domain.ErrDivisionSinAnio) {
-		t.Fatalf("esperaba ErrDivisionSinAnio, obtuve %v", err)
+	if !errors.Is(err, domain.ErrModalidadPreferenciaInvalida) {
+		t.Fatalf("esperaba ErrModalidadPreferenciaInvalida, obtuve %v", err)
 	}
 }
 
 func TestEditarPreferencia_NoExiste_Error(t *testing.T) {
 	svc := servicioSimple(nuevoFakeRepo())
 
-	_, err := svc.EditarPreferencia(context.Background(), "no-existe", nil, nil, 1)
+	_, err := svc.EditarPreferencia(context.Background(), "no-existe", nil, nil, nil, 1)
 
 	if !errors.Is(err, domain.ErrPreferenciaNoEncontr) {
 		t.Fatalf("esperaba ErrPreferenciaNoEncontr, obtuve %v", err)

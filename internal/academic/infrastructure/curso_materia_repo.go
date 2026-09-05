@@ -13,10 +13,21 @@ import (
 
 // ── Curso ───────────────────────────────────────────────────────────────
 
+// columnasCurso incluye `nombre`, que es GENERADA por la base (año + grado +
+// división): se lee pero nunca se escribe.
+//
+// `division` y `modalidad` viajan como cadena vacía cuando no hay ninguna y la
+// base las guarda como NULL. Los dos significan lo mismo —este curso no tiene
+// ese dato— y el NULL es lo que hace que los índices los comparen entre sí por
+// las columnas generadas.
+const columnasCurso = `id, ciclo_lectivo_id, nombre, anio, division, modalidad, activo, archivado`
+
 func (r *PostgresRepo) CrearCurso(ctx context.Context, c *domain.Curso) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO curso (id, ciclo_lectivo_id, nombre, activo, archivado) VALUES ($1, $2, $3, $4, $5)`,
-		c.ID, c.CicloLectivoID, c.Nombre, c.Activo, c.Archivado)
+		`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad, activo, archivado)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		c.ID, c.CicloLectivoID, c.Anio, nullSiVacio(c.Division), nullSiVacio(c.Modalidad),
+		c.Activo, c.Archivado)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return application.ErrCursoNombreDuplicado
@@ -33,14 +44,15 @@ func (r *PostgresRepo) CrearCurso(ctx context.Context, c *domain.Curso) error {
 }
 
 func (r *PostgresRepo) BuscarCursoPorID(ctx context.Context, id string) (*domain.Curso, error) {
-	row := r.pool.QueryRow(ctx,
-		`SELECT id, ciclo_lectivo_id, nombre, activo, archivado FROM curso WHERE id = $1`, id)
+	row := r.pool.QueryRow(ctx, `SELECT `+columnasCurso+` FROM curso WHERE id = $1`, id)
 	return escanearCurso(row)
 }
 
 func escanearCurso(row pgx.Row) (*domain.Curso, error) {
 	var c domain.Curso
-	if err := row.Scan(&c.ID, &c.CicloLectivoID, &c.Nombre, &c.Activo, &c.Archivado); err != nil {
+	var division, modalidad *string
+	if err := row.Scan(&c.ID, &c.CicloLectivoID, &c.Nombre, &c.Anio, &division, &modalidad,
+		&c.Activo, &c.Archivado); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, application.ErrCursoNoEncontrado
 		}
@@ -49,13 +61,19 @@ func escanearCurso(row pgx.Row) (*domain.Curso, error) {
 		}
 		return nil, fmt.Errorf("escaneando curso: %w", err)
 	}
+	if division != nil {
+		c.Division = *division
+	}
+	if modalidad != nil {
+		c.Modalidad = *modalidad
+	}
 	return &c, nil
 }
 
 func (r *PostgresRepo) GuardarCurso(ctx context.Context, c *domain.Curso) error {
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE curso SET nombre=$2, activo=$3, archivado=$4 WHERE id=$1`,
-		c.ID, c.Nombre, c.Activo, c.Archivado)
+		`UPDATE curso SET anio=$2, division=$3, modalidad=$4, activo=$5, archivado=$6 WHERE id=$1`,
+		c.ID, c.Anio, nullSiVacio(c.Division), nullSiVacio(c.Modalidad), c.Activo, c.Archivado)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return application.ErrCursoNombreDuplicado
@@ -89,7 +107,8 @@ func (r *PostgresRepo) EliminarCurso(ctx context.Context, id string) error {
 
 func (r *PostgresRepo) ListarCursosPorCiclo(ctx context.Context, cicloID string) ([]*domain.Curso, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, ciclo_lectivo_id, nombre, activo, archivado FROM curso WHERE ciclo_lectivo_id = $1 ORDER BY nombre`,
+		`SELECT `+columnasCurso+` FROM curso WHERE ciclo_lectivo_id = $1
+		 ORDER BY modalidad NULLS FIRST, anio, division NULLS FIRST`,
 		cicloID)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -310,4 +329,15 @@ func (r *PostgresRepo) ListarDocentesDeMateria(ctx context.Context, materiaID st
 		resultado = append(resultado, dm)
 	}
 	return resultado, errorDeFilas(rows)
+}
+
+// nullSiVacio guarda NULL en vez de una cadena vacía en las columnas de texto
+// opcionales. Para `curso.modalidad` no es cosmético: el índice único compara
+// por la columna generada, que hace COALESCE del NULL a cadena vacía, así que
+// guardar "" y guardar NULL tienen que terminar en el mismo lugar.
+func nullSiVacio(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

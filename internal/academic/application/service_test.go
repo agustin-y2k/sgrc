@@ -31,6 +31,7 @@ type fakeRepo struct {
 	archivarCicloLlamado  bool
 	materiasReservables   []MateriaReservable
 	filtroDocenteRecibido *string
+	asignaciones          []AsignacionDocente
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -191,6 +192,10 @@ func (r *fakeRepo) RemoverDocenteMateria(ctx context.Context, id string) error {
 	}
 	delete(r.docentesMateria, id)
 	return nil
+}
+
+func (r *fakeRepo) ListarAsignaciones(ctx context.Context, cicloID string) ([]AsignacionDocente, error) {
+	return r.asignaciones, nil
 }
 
 func (r *fakeRepo) ListarDocentesDeMateria(ctx context.Context, materiaID string) ([]*domain.DocenteMateria, error) {
@@ -614,32 +619,50 @@ func TestArchivarYClonar_ErrorEnCascada_NoArchivaElCiclo(t *testing.T) {
 func TestCrearCurso_OK(t *testing.T) {
 	svc := servicioSimple(nuevoFakeRepo())
 
-	c, err := svc.CrearCurso(context.Background(), "ciclo1", "1°A")
+	c, err := svc.CrearCurso(context.Background(), "ciclo1", 4, "2", "Electromecánica")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if c.Nombre != "1°A" {
-		t.Errorf("nombre incorrecto: %s", c.Nombre)
+	if c.Nombre != "4°2" || c.Anio != 4 || c.Modalidad != "Electromecánica" {
+		t.Errorf("datos del curso: %+v", c)
 	}
 }
 
-func TestCrearCurso_NombreInvalido_Error(t *testing.T) {
+// La división y la modalidad son opcionales: una universidad no divide sus
+// cursos y una primaria no tiene modalidades. El año sí va siempre.
+func TestCrearCurso_SinDivisionNiModalidad(t *testing.T) {
 	svc := servicioSimple(nuevoFakeRepo())
 
-	_, err := svc.CrearCurso(context.Background(), "ciclo1", "primero A")
+	c, err := svc.CrearCurso(context.Background(), "ciclo1", 2, "", "")
 
-	if !errors.Is(err, domain.ErrNombreCursoInvalido) {
-		t.Fatalf("esperaba ErrNombreCursoInvalido, obtuve %v", err)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if c.Division != "" || c.Modalidad != "" {
+		t.Errorf("no tendría que haber inventado nada: %+v", c)
+	}
+	if c.Nombre != "2°" {
+		t.Errorf("nombre = %q, esperaba 2°", c.Nombre)
+	}
+}
+
+func TestCrearCurso_SinAnio_Error(t *testing.T) {
+	svc := servicioSimple(nuevoFakeRepo())
+
+	_, err := svc.CrearCurso(context.Background(), "ciclo1", 0, "", "")
+
+	if !errors.Is(err, domain.ErrAnioCursoInvalido) {
+		t.Fatalf("esperaba ErrAnioCursoInvalido, obtuve %v", err)
 	}
 }
 
 func TestEditarCurso_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", Nombre: "1°A", Activo: true}
+	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", Anio: 1, Division: "A", Nombre: "1°A", Activo: true}
 	svc := servicioSimple(repo)
 
-	err := svc.EditarCurso(context.Background(), "curso1", "2°B")
+	err := svc.EditarCurso(context.Background(), "curso1", 2, "B", "")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -652,7 +675,7 @@ func TestEditarCurso_OK(t *testing.T) {
 func TestEditarCurso_NoExiste_Error(t *testing.T) {
 	svc := servicioSimple(nuevoFakeRepo())
 
-	err := svc.EditarCurso(context.Background(), "no-existe", "2°B")
+	err := svc.EditarCurso(context.Background(), "no-existe", 2, "B", "")
 
 	if !errors.Is(err, ErrCursoNoEncontrado) {
 		t.Fatalf("esperaba ErrCursoNoEncontrado, obtuve %v", err)

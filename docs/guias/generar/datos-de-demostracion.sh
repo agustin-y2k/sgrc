@@ -32,6 +32,18 @@ if [ -z "$MAT_MAT" ]; then
 fi
 echo "→ materia Matemática $MAT_MAT"
 
+# Un segundo curso CON modalidad, para que la captura de Académico muestre las
+# tres partes de un curso y no sólo el caso más simple (RF-02.2).
+CURSO_TEC=$(api "$AT" GET "/api/academic/ciclos/$CICLO/cursos" | jq -r '.data[]? // .[]? | select(.nombre=="4°2") | .id' | head -1)
+if [ -z "$CURSO_TEC" ]; then
+  CURSO_TEC=$(api "$AT" POST "/api/academic/ciclos/$CICLO/cursos" \
+    '{"anio":4,"division":"2","modalidad":"Electromecánica"}' | jq -r .id)
+fi
+if [ -n "$CURSO_TEC" ] && [ "$CURSO_TEC" != null ]; then
+  api "$AT" POST "/api/academic/cursos/$CURSO_TEC/materias" '{"nombre":"Taller"}' >/dev/null || true
+  echo "→ curso 4°2 · Electromecánica con su materia"
+fi
+
 # Docente de la guía.
 api "" POST /api/auth/registro \
   "{\"nombre\":\"Ana\",\"apellido\":\"Gómez\",\"email\":\"$DOC_EMAIL\",\"password\":\"$DOC_PASS\",\"cargoSolicitado\":\"DOCENTE\",\"rolSolicitado\":\"TITULAR\"}" >/dev/null || true
@@ -118,7 +130,7 @@ echo "→ cuentas de la PC 1 cargadas"
 # Una entrega en curso, para que Entregas no esté vacía.
 EQ3=$(api "$AT" GET "/api/inventory/equipos?pageSize=200" | jq -c '[.data[7].id]')
 api "$AT" POST /api/reservation/prestamos \
-  "{\"equipoIds\":$EQ3,\"nombre\":\"Secretaría\",\"motivo\":\"inscripciones\",\"devolucionEstimada\":\"$(date -d '+2 hours' -u +%FT%TZ)\"}" >/dev/null || true
+  "{\"equipoIds\":$EQ3,\"nombre\":\"Secretaría\",\"destino\":\"Sección Alumnos\",\"devolucionEstimada\":\"$(date -d '+2 hours' -u +%FT%TZ)\"}" >/dev/null || true
 echo "→ entrega registrada"
 
 # Una conversación de soporte con respuesta, para la captura del buzón.

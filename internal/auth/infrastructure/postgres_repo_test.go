@@ -317,7 +317,7 @@ func TestPostgresRepo_Eliminar_ConReglaRecurrenteEHistorico_OK(t *testing.T) {
 		args []any
 	}{
 		{`INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, 2026, false)`, []any{cicloID}},
-		{`INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, '1°A')`, []any{cursoID, cicloID}},
+		{`INSERT INTO curso (id, ciclo_lectivo_id, anio, division) VALUES ($1, $2, 1, 'A')`, []any{cursoID, cicloID}},
 		{`INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, 'Matemáticas')`, []any{materiaID, cursoID}},
 		{`INSERT INTO carro (id, nombre) VALUES ($1, 'Carro de prueba')`, []any{carroID}},
 		{`INSERT INTO equipo (id, carro_id, identificador, numero_serie) VALUES ($1, $2, 1, 'SERIE-12345')`, []any{equipoID, carroID}},

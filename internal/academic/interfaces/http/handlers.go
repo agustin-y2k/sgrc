@@ -121,7 +121,7 @@ func (h *Handler) CrearCurso(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	curso, err := h.svc.CrearCurso(c.UserContext(), cicloID, req.Nombre)
+	curso, err := h.svc.CrearCurso(c.UserContext(), cicloID, req.Anio, req.Division, req.Modalidad)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -153,7 +153,7 @@ func (h *Handler) EditarCurso(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	if err := h.svc.EditarCurso(c.UserContext(), id, req.Nombre); err != nil {
+	if err := h.svc.EditarCurso(c.UserContext(), id, req.Anio, req.Division, req.Modalidad); err != nil {
 		return mapearError(err)
 	}
 	return c.SendStatus(fiber.StatusOK)
@@ -362,7 +362,65 @@ func (h *Handler) ListarMisMaterias(c *fiber.Ctx) error {
 		data[i] = materiaReservableResponse{
 			MateriaID: m.MateriaID, MateriaNombre: m.MateriaNombre,
 			CursoID: m.CursoID, CursoNombre: m.CursoNombre,
-			CicloID: m.CicloID, CicloAnio: m.CicloAnio,
+			CursoModalidad: m.CursoModalidad,
+			CicloID:        m.CicloID, CicloAnio: m.CicloAnio,
+		}
+	}
+	return c.JSON(fiber.Map{"data": data})
+}
+
+// GET /api/academic/ciclos/{cicloId}/asignaciones (Admin) — quién dicta qué en
+// ese ciclo, en una sola respuesta.
+//
+// Las dos pantallas que muestran esta relación la leían a medias: las materias
+// de un curso mostraban sus docentes sólo al desplegar una por una, y el
+// listado de usuarios no decía qué dictaba cada quien. Las dos la necesitan
+// entera, así que se pide una vez y cada una la mira desde su punta.
+func (h *Handler) ListarAsignaciones(c *fiber.Ctx) error {
+	asignaciones, err := h.svc.ListarAsignaciones(c.UserContext(), c.Params("cicloId"))
+	if err != nil {
+		return mapearError(err)
+	}
+
+	data := make([]asignacionDocenteResponse, len(asignaciones))
+	for i, a := range asignaciones {
+		data[i] = asignacionDocenteResponse{
+			ID: a.ID, UsuarioID: a.UsuarioID, DocenteNombre: a.DocenteNombre,
+			Rol: a.Rol, MateriaID: a.MateriaID, MateriaNombre: a.MateriaNombre,
+			CursoID: a.CursoID, CursoNombre: a.CursoNombre,
+			CursoModalidad: a.CursoModalidad,
+		}
+	}
+	return c.JSON(fiber.Map{"data": data})
+}
+
+// GET /api/academic/docentes/{usuarioId}/materias (Admin) — en qué materias
+// está asignada OTRA persona.
+//
+// Es la misma pregunta que `mis-materias?asignadas=true`, hecha sobre alguien
+// más, y la hace el mostrador: cuando quien viene a buscar un equipo tiene
+// cuenta, sus cursos son el destino más probable de esa entrega (RF-08.23), y
+// el Admin no tiene por qué acordarse de qué dicta cada docente.
+//
+// Sólo Admin: es el único rol que opera el mostrador, y saber qué dicta otro
+// no le hace falta a nadie más.
+func (h *Handler) ListarMateriasDeDocente(c *fiber.Ctx) error {
+	usuarioID := c.Params("usuarioId")
+
+	// esAdmin=false a propósito, aunque quien pregunta sea Admin: lo que se
+	// pide es lo que dicta ESA persona, no lo que podría reservar.
+	materias, err := h.svc.ListarMateriasReservables(c.UserContext(), usuarioID, false)
+	if err != nil {
+		return mapearError(err)
+	}
+
+	data := make([]materiaReservableResponse, len(materias))
+	for i, m := range materias {
+		data[i] = materiaReservableResponse{
+			MateriaID: m.MateriaID, MateriaNombre: m.MateriaNombre,
+			CursoID: m.CursoID, CursoNombre: m.CursoNombre,
+			CursoModalidad: m.CursoModalidad,
+			CicloID:        m.CicloID, CicloAnio: m.CicloAnio,
 		}
 	}
 	return c.JSON(fiber.Map{"data": data})

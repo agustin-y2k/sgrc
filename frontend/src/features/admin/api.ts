@@ -32,11 +32,18 @@ import type {
 
 // ── Usuarios (RF-01.x / RF-02.x) ──────────────────────────────────────
 
-export function listarUsuarios(filtros?: { estado?: Estado; rol?: Rol; page?: number }) {
+export function listarUsuarios(filtros?: {
+  estado?: Estado
+  rol?: Rol
+  page?: number
+  /** Hasta 200. Para listas que se recorren enteras, no de a páginas. */
+  pageSize?: number
+}) {
   const params = new URLSearchParams()
   if (filtros?.estado) params.set("estado", filtros.estado)
   if (filtros?.rol) params.set("rol", filtros.rol)
   if (filtros?.page && filtros.page > 1) params.set("page", String(filtros.page))
+  if (filtros?.pageSize) params.set("pageSize", String(filtros.pageSize))
   const query = params.toString()
   return apiFetch<ListarUsuariosResponse>(`/api/auth/usuarios${query ? `?${query}` : ""}`)
 }
@@ -356,6 +363,7 @@ export function materiasEnUso() {
 export function marcarPreferencia(req: {
   equipoIds: string[]
   materiaNombre: string
+  modalidad?: string
   anio?: number
   division?: string
   prioridad?: number
@@ -369,7 +377,7 @@ export function marcarPreferencia(req: {
 /** La materia no se edita: apuntar a otra es otra marca. */
 export function editarPreferencia(
   id: string,
-  req: { anio?: number; division?: string; prioridad?: number }
+  req: { modalidad?: string; anio?: number; division?: string; prioridad?: number }
 ) {
   return apiFetch<PreferenciaDeEquipo>(`/api/inventory/preferencias/${id}`, {
     method: "PATCH",

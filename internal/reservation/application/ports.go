@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ramiro/sgrc/internal/reservation/domain"
@@ -197,12 +198,14 @@ type EquipoDisponible struct {
 	// Tramo es en qué grupo cae este equipo para la materia que se está
 	// reservando (RF-03.21). Es lo que parte la lista en tres bloques.
 	Tramo TramoPreferencia
-	// PreferenciaMateria, PreferenciaAnio y PreferenciaDivision describen la
-	// marca que puso al equipo en su tramo — la de la materia propia si es
-	// preferente, la ajena más fuerte si no.
-	PreferenciaMateria  string
-	PreferenciaAnio     int
-	PreferenciaDivision string
+	// Los cuatro Preferencia* describen la marca que puso al equipo en su
+	// tramo — la de la materia propia si es preferente, la ajena más fuerte si
+	// no. Los tres ejes del alcance son los de un curso (RF-02.2): vacío o 0
+	// significa que la marca no acota por ese eje.
+	PreferenciaMateria   string
+	PreferenciaAnio      int
+	PreferenciaModalidad string
+	PreferenciaDivision  string
 }
 
 // TramoPreferencia agrupa los equipos libres según qué materia los prefiere
@@ -221,17 +224,31 @@ const (
 )
 
 // MotivoDePreferencia arma el texto que explica por qué el equipo está donde
-// está: "Preferente para Matemática de 3°B".
+// está: "Preferente para Matemática de 4°2, Electromecánica".
+//
+// El año y la división se dicen juntos, como se lee un curso, y la modalidad
+// va después. Es la misma regla que domain.PreferenciaDeEquipo.Alcance() del
+// lado del inventario.
 func (e EquipoDisponible) MotivoDePreferencia() string {
 	if e.PreferenciaMateria == "" {
 		return ""
 	}
+	var partes []string
+	switch {
+	case e.PreferenciaAnio != 0:
+		partes = append(partes, fmt.Sprintf("%d°%s", e.PreferenciaAnio, e.PreferenciaDivision))
+	case e.PreferenciaDivision != "":
+		partes = append(partes, "división "+e.PreferenciaDivision)
+	}
+	if e.PreferenciaModalidad != "" {
+		partes = append(partes, e.PreferenciaModalidad)
+	}
+
 	motivo := "Preferente para " + e.PreferenciaMateria
-	if e.PreferenciaAnio == 0 {
+	if len(partes) == 0 {
 		return motivo
 	}
-	motivo += fmt.Sprintf(" de %d°", e.PreferenciaAnio)
-	return motivo + e.PreferenciaDivision
+	return motivo + " de " + strings.Join(partes, ", ")
 }
 
 // EquipoOcupado es un equipo que ya tiene dueño en la franja consultada

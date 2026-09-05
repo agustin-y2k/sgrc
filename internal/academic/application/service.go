@@ -177,10 +177,16 @@ func (s *Service) ListarMateriasReservables(ctx context.Context, usuarioID strin
 	return s.repo.ListarMateriasReservables(ctx, &usuarioID)
 }
 
+// ListarAsignaciones: quién dicta qué en un ciclo. Lo piden las dos pantallas
+// que muestran la relación docente-materia, cada una desde su punta.
+func (s *Service) ListarAsignaciones(ctx context.Context, cicloID string) ([]AsignacionDocente, error) {
+	return s.repo.ListarAsignaciones(ctx, cicloID)
+}
+
 // ── Curso ───────────────────────────────────────────────────────────────
 
-func (s *Service) CrearCurso(ctx context.Context, cicloLectivoID, nombre string) (*domain.Curso, error) {
-	c, err := domain.NuevoCurso(s.nuevoID(), cicloLectivoID, nombre)
+func (s *Service) CrearCurso(ctx context.Context, cicloLectivoID string, anio int, division, modalidad string) (*domain.Curso, error) {
+	c, err := domain.NuevoCurso(s.nuevoID(), cicloLectivoID, anio, division, modalidad)
 	if err != nil {
 		return nil, err
 	}
@@ -190,13 +196,15 @@ func (s *Service) CrearCurso(ctx context.Context, cicloLectivoID, nombre string)
 	return c, nil
 }
 
-// EditarCurso implementa RF-02.11: renombrar mientras el ciclo está activo.
-func (s *Service) EditarCurso(ctx context.Context, cursoID, nuevoNombre string) error {
+// EditarCurso implementa RF-02.11: corregir el curso mientras el ciclo está
+// activo. Los tres datos van juntos porque son un solo curso descrito de tres
+// formas — ver domain.Curso.Editar.
+func (s *Service) EditarCurso(ctx context.Context, cursoID string, anio int, division, modalidad string) error {
 	c, err := s.repo.BuscarCursoPorID(ctx, cursoID)
 	if err != nil {
 		return err
 	}
-	if err := c.RenombrarA(nuevoNombre); err != nil {
+	if err := c.Editar(anio, division, modalidad); err != nil {
 		return err
 	}
 	return s.repo.GuardarCurso(ctx, c)

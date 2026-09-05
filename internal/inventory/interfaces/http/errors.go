@@ -89,8 +89,8 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrMateriaPreferidaVacia),
 		errors.Is(err, domain.ErrMateriaPreferidaLarga),
 		errors.Is(err, domain.ErrAnioPreferenciaInvalido),
+		errors.Is(err, domain.ErrModalidadPreferenciaInvalida),
 		errors.Is(err, domain.ErrDivisionPreferenciaInvalida),
-		errors.Is(err, domain.ErrDivisionSinAnio),
 		errors.Is(err, domain.ErrPrioridadInvalida),
 		errors.Is(err, domain.ErrSinEquiposParaPreferi),
 		// Las cuentas de cada equipo (RF-03.22). Sin estos casos, escribir mal

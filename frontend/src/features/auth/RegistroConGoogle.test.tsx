@@ -90,8 +90,7 @@ describe("RegistroConGoogle", () => {
     const user = userEvent.setup()
 
     await declarar(user)
-    await user.selectOptions(screen.getByLabelText("Año"), "5")
-    await user.selectOptions(screen.getByLabelText("División"), "A")
+    await user.type(screen.getByLabelText("Curso"), "5°A")
     await user.type(screen.getByLabelText("Materia"), "Programación")
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 

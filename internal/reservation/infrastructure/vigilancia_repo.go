@@ -103,7 +103,7 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 	for rows.Next() {
 		var p domain.Prestamo
 		var v application.PrestamoParaVigilar
-		var motivo, observaciones *string
+		var destino, observaciones *string
 		var materiaNombre *string
 
 		// El orden y la cantidad los manda columnasPrestamoDetallado, que es
@@ -113,7 +113,7 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 		// de correr en silencio.
 		if err := rows.Scan(
 			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
-			&p.RetiradoPor, &motivo, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
+			&p.RetiradoPor, &destino, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
 			&p.AvisadoCierrePara,
 			&v.Identificador, &v.Etiqueta, &v.CarroNombre, &materiaNombre,
@@ -121,8 +121,8 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 		); err != nil {
 			return nil, fmt.Errorf("escaneando préstamo a vigilar: %w", err)
 		}
-		if motivo != nil {
-			p.Motivo = *motivo
+		if destino != nil {
+			p.Destino = *destino
 		}
 		if observaciones != nil {
 			p.Observaciones = *observaciones

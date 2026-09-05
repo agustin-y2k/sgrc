@@ -11,15 +11,15 @@ import (
 	"github.com/ramiro/sgrc/internal/inventory/domain"
 )
 
-// materia_norm no se escribe nunca desde acá: es una columna generada por la
-// base a partir de materia_nombre (ver migrations/003).
-const columnasPreferencia = `id, equipo_id, materia_nombre, anio, division, prioridad`
+// Las columnas `*_norm` no se escriben nunca desde acá: son generadas por la
+// base a partir de materia_nombre, modalidad y curso_nombre.
+const columnasPreferencia = `id, equipo_id, materia_nombre, modalidad, anio, division, prioridad`
 
 func (r *PostgresRepo) CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO equipo_preferencia (id, equipo_id, materia_nombre, anio, division, prioridad)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, p.ID, p.EquipoID, p.MateriaNombre, p.Anio, p.Division, p.Prioridad)
+		INSERT INTO equipo_preferencia (`+columnasPreferencia+`)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, p.ID, p.EquipoID, p.MateriaNombre, p.Modalidad, p.Anio, p.Division, p.Prioridad)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return domain.ErrPreferenciaDuplicada
@@ -39,8 +39,10 @@ func (r *PostgresRepo) CrearPreferencia(ctx context.Context, p *domain.Preferenc
 // equipo no se editan: cambiar cualquiera de los dos es otra marca.
 func (r *PostgresRepo) GuardarPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {
 	tag, err := r.pool.Exec(ctx, `
-		UPDATE equipo_preferencia SET anio = $2, division = $3, prioridad = $4 WHERE id = $1
-	`, p.ID, p.Anio, p.Division, p.Prioridad)
+		UPDATE equipo_preferencia
+		   SET modalidad = $2, anio = $3, division = $4, prioridad = $5
+		 WHERE id = $1
+	`, p.ID, p.Modalidad, p.Anio, p.Division, p.Prioridad)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return domain.ErrPreferenciaDuplicada
@@ -82,7 +84,7 @@ func (r *PostgresRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+columnasPreferencia+` FROM equipo_preferencia
 		WHERE equipo_id = $1
-		ORDER BY prioridad, materia_nombre, anio NULLS LAST, division NULLS LAST
+		ORDER BY prioridad, materia_nombre, modalidad NULLS LAST, anio NULLS LAST, division NULLS LAST
 	`, equipoID)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -129,7 +131,8 @@ func (r *PostgresRepo) NombresDeMateriaEnUso(ctx context.Context) ([]string, err
 
 func escanearPreferencia(row pgx.Row) (*domain.PreferenciaDeEquipo, error) {
 	var p domain.PreferenciaDeEquipo
-	if err := row.Scan(&p.ID, &p.EquipoID, &p.MateriaNombre, &p.Anio, &p.Division, &p.Prioridad); err != nil {
+	if err := row.Scan(&p.ID, &p.EquipoID, &p.MateriaNombre, &p.Modalidad, &p.Anio,
+		&p.Division, &p.Prioridad); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrPreferenciaNoEncontr
 		}

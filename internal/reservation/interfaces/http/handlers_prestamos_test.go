@@ -36,7 +36,7 @@ func TestHTTP_EntregarSuelta(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", entregarSueltaRequest{
-		EquipoIDs: []string{"pc1"}, Nombre: "Marta (secretaría)", Motivo: "trámite",
+		EquipoIDs: []string{"pc1"}, Nombre: "Marta (secretaría)", Destino: "Biblioteca",
 	}, "ADMIN")
 
 	if codigo != fiber.StatusCreated {

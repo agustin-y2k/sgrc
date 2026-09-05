@@ -174,13 +174,14 @@ export function entregarSuelta(req: {
   equipoIds: string[]
   nombre: string
   usuarioId?: string
-  motivo?: string
+  /** A dónde va: un curso, una dependencia, el service. */
+  destino?: string
   /** ISO 8601. Opcional: "vengo en un rato" es una respuesta válida. */
   devolucionEstimada?: string
   /**
    * El equipo NO está disponible y sale igual, camino al técnico. Es el único
    * modo de sacar del laboratorio algo en mantenimiento o fuera de servicio,
-   * y obliga a mandar `motivo`.
+   * y obliga a mandar `destino`.
    */
   salidaAReparacion?: boolean
 }) {

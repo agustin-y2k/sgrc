@@ -6,6 +6,7 @@ import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { EstadoBadge } from "@/components/EstadoBadge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { cursoDe, etiquetaDeCurso } from "@/features/academico/types"
 import { useAuth } from "@/features/auth/AuthContext"
 import { FotoDePerfil } from "@/features/perfil/FotoDePerfil"
 import { MisDatos } from "@/features/perfil/MisDatos"
@@ -81,7 +82,9 @@ export function PerfilPage() {
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
                 >
                   <span className="font-medium">{m.materiaNombre}</span>
-                  <span className="text-muted-foreground text-sm">{m.cursoNombre}</span>
+                  <span className="text-muted-foreground text-sm">
+                    {etiquetaDeCurso(cursoDe(m))}
+                  </span>
                 </li>
               ))}
             </ul>

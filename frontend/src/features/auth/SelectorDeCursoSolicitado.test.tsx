@@ -5,10 +5,11 @@ import { useState } from "react"
 import { SelectorDeCursoSolicitado } from "@/features/auth/SelectorDeCursoSolicitado"
 
 /**
- * Lo que importa acá es que el valor que sale sea el nombre canónico del
- * curso —el mismo que el Admin ve del otro lado— y que "no lo declaré" siga
- * siendo posible: el campo es opcional y un desplegable siempre tiene algo
- * elegido.
+ * Lo que importa acá es que el curso que se declara sea **texto libre**: esta
+ * pantalla se ve sin haber iniciado sesión, así que no puede ofrecer los
+ * cursos de la institución, y de todos modos el nombre de un curso no tiene
+ * formato (RF-02.2). Y que "no lo declaré" siga siendo posible: el campo es
+ * opcional.
  */
 function Anfitrion({ inicial = "" }: { inicial?: string }) {
   const [valor, setValor] = useState(inicial)
@@ -21,54 +22,38 @@ function Anfitrion({ inicial = "" }: { inicial?: string }) {
 }
 
 describe("SelectorDeCursoSolicitado", () => {
-  it("arranca sin nada elegido y con la división bloqueada", () => {
+  it("arranca vacío: el curso es opcional", () => {
     render(<Anfitrion />)
 
-    expect(screen.getByLabelText("Año")).toHaveValue("")
-    // Una división suelta no se puede componer en un nombre de curso.
-    expect(screen.getByLabelText("División")).toBeDisabled()
+    expect(screen.getByLabelText("Curso")).toHaveValue("")
     expect(screen.getByTestId("valor")).toHaveTextContent("")
   })
 
-  // Elegir el año solo ya alcanza para tener un curso válido: la "A" existe
-  // en todos los años y el desplegable de al lado queda a la vista.
-  it("con solo elegir el año compone el curso con la división A", async () => {
+  // El nombre viaja tal como se escribió: el sistema no lo compone ni lo
+  // corrige, porque cada institución nombra sus cursos como los nombra.
+  it("manda el curso tal como se escribió", async () => {
     const user = userEvent.setup()
     render(<Anfitrion />)
 
-    await user.selectOptions(screen.getByLabelText("Año"), "5")
+    await user.type(screen.getByLabelText("Curso"), "4°2")
 
-    expect(screen.getByTestId("valor")).toHaveTextContent("5°A")
-    expect(screen.getByLabelText("División")).toBeEnabled()
+    expect(screen.getByTestId("valor")).toHaveTextContent("4°2")
   })
 
-  it("compone el nombre con el ° que pone el sistema", async () => {
+  // Los cuatro ámbitos que el sistema tiene que poder atender.
+  it("acepta el nombre de cualquier ámbito", async () => {
     const user = userEvent.setup()
-    render(<Anfitrion />)
-
-    await user.selectOptions(screen.getByLabelText("Año"), "3")
-    await user.selectOptions(screen.getByLabelText("División"), "C")
-
-    expect(screen.getByTestId("valor")).toHaveTextContent("3°C")
+    for (const curso of ["1°1", "2° Enfermería", "Comisión 3B", "Sala Verde"]) {
+      const { unmount } = render(<Anfitrion />)
+      await user.type(screen.getByLabelText("Curso"), curso)
+      expect(screen.getByTestId("valor")).toHaveTextContent(curso)
+      unmount()
+    }
   })
 
-  // Sin esta salida, quien abrió el desplegable por curiosidad se queda con
-  // un curso declarado que nunca quiso declarar, y el Admin no puede
-  // distinguirlo de uno elegido a propósito.
-  it("volver a Sin especificar limpia el campo entero", async () => {
-    const user = userEvent.setup()
-    render(<Anfitrion inicial="4°B" />)
-
-    await user.selectOptions(screen.getByLabelText("Año"), "")
-
-    expect(screen.getByTestId("valor")).toHaveTextContent("")
-    expect(screen.getByLabelText("División")).toBeDisabled()
-  })
-
-  it("muestra los dos selects ya puestos si viene con un valor", () => {
+  it("muestra el valor que viene puesto", () => {
     render(<Anfitrion inicial="6°D" />)
 
-    expect(screen.getByLabelText("Año")).toHaveValue("6")
-    expect(screen.getByLabelText("División")).toHaveValue("D")
+    expect(screen.getByLabelText("Curso")).toHaveValue("6°D")
   })
 })

@@ -6,13 +6,16 @@ import (
 	"strings"
 )
 
-// Topes de PreferenciaDeEquipo.
+// Topes de PreferenciaDeEquipo. Acompañan a los de un curso, porque los tres
+// ejes de una marca son los tres datos que un curso tiene (RF-02.2).
 const (
 	MaxLargoNombreMateriaPreferida = 100
-	// MinAnioPreferencia y MaxAnioPreferencia son los mismos años que admite el
-	// nombre de un curso ('^[1-6]°[A-Z]$').
+	MaxLargoModalidadPreferencia   = 80
+	MaxLargoDivisionPreferencia    = 12
+	// MinAnioPreferencia y MaxAnioPreferencia son topes de sanidad, no reglas
+	// de dominio: una primaria llega a 7° y una carrera de grado también.
 	MinAnioPreferencia = 1
-	MaxAnioPreferencia = 6
+	MaxAnioPreferencia = 15
 	// MaxPrioridadPreferencia deja nueve escalones.
 	MaxPrioridadPreferencia = 9
 )
@@ -23,10 +26,10 @@ var (
 		MaxLargoNombreMateriaPreferida)
 	ErrAnioPreferenciaInvalido = fmt.Errorf("el año tiene que estar entre %d y %d",
 		MinAnioPreferencia, MaxAnioPreferencia)
-	ErrDivisionPreferenciaInvalida = errors.New("la división tiene que ser una sola letra de la A a la Z")
-	// ErrDivisionSinAnio: no existen "todas las divisiones B". El alcance se
-	// abre de a un nivel: toda la materia, un año entero, o un año y división.
-	ErrDivisionSinAnio       = errors.New("para acotar por división hay que indicar también el año")
+	ErrModalidadPreferenciaInvalida = fmt.Errorf("la modalidad no puede estar vacía ni tener más de %d caracteres",
+		MaxLargoModalidadPreferencia)
+	ErrDivisionPreferenciaInvalida = fmt.Errorf("la división no puede estar vacía ni tener más de %d caracteres",
+		MaxLargoDivisionPreferencia)
 	ErrPrioridadInvalida     = fmt.Errorf("la prioridad tiene que estar entre 1 y %d", MaxPrioridadPreferencia)
 	ErrPreferenciaDuplicada  = errors.New("este equipo ya tiene una marca para esa materia y ese alcance")
 	ErrPreferenciaNoEncontr  = errors.New("la marca de preferencia no existe")
@@ -42,18 +45,39 @@ type PreferenciaDeEquipo struct {
 	// es lo que se muestra ("Preferente para Dibujo Técnico").
 	MateriaNombre string
 
-	// Anio y Division acotan el alcance, de menos a más específico: nil, nil →
-	// toda materia con ese nombre, en cualquier curso 3, nil → sólo las de
-	// tercer año 3, "B" → sólo 3°B
-	Anio     *int
-	Division *string
+	// Modalidad, Anio y Division acotan el alcance. Son los tres datos que
+	// tiene un curso (RF-02.2) y son INDEPENDIENTES entre sí: cada uno se
+	// sostiene solo y se pueden combinar. "Matemática de Electromecánica" es
+	// un alcance válido sin decir de qué año, y para acotar a 4°2 se ponen el
+	// año y la división.
+	//
+	// Los tres en nil = toda materia con ese nombre, en cualquier curso.
+	Modalidad *string
+	Anio      *int
+	Division  *string
 
 	// Prioridad ordena entre varias marcas del mismo equipo: 1 es la más fuerte.
 	Prioridad int
 }
 
+// textoAcotado valida uno de los ejes de texto: se recorta pero NO se pasa a
+// mayúsculas, porque es el nombre que escribió la institución y forzarlo sólo
+// desfigura lo que tipearon. El cruce contra el curso ignora la
+// capitalización por su cuenta.
+func textoAcotado(valor *string, maxLargo int, invalido error) (*string, error) {
+	if valor == nil {
+		return nil, nil
+	}
+	v := strings.TrimSpace(*valor)
+	if v == "" || len([]rune(v)) > maxLargo {
+		return nil, invalido
+	}
+	return &v, nil
+}
+
 // NuevaPreferencia valida y arma la marca.
-func NuevaPreferencia(id, equipoID, materiaNombre string, anio *int, division *string, prioridad int) (*PreferenciaDeEquipo, error) {
+func NuevaPreferencia(id, equipoID, materiaNombre string, modalidad *string, anio *int,
+	division *string, prioridad int) (*PreferenciaDeEquipo, error) {
 	// Normalizar antes de validar: un nombre de puros espacios pasaría el
 	// "no vacío" y chocaría contra el CHECK de la base como un 500.
 	materiaNombre = strings.TrimSpace(materiaNombre)
@@ -66,16 +90,16 @@ func NuevaPreferencia(id, equipoID, materiaNombre string, anio *int, division *s
 	if anio != nil && (*anio < MinAnioPreferencia || *anio > MaxAnioPreferencia) {
 		return nil, ErrAnioPreferenciaInvalido
 	}
-	if division != nil {
-		d := strings.ToUpper(strings.TrimSpace(*division))
-		if len([]rune(d)) != 1 || d < "A" || d > "Z" {
-			return nil, ErrDivisionPreferenciaInvalida
-		}
-		if anio == nil {
-			return nil, ErrDivisionSinAnio
-		}
-		division = &d
+
+	modalidad, err := textoAcotado(modalidad, MaxLargoModalidadPreferencia, ErrModalidadPreferenciaInvalida)
+	if err != nil {
+		return nil, err
 	}
+	division, err = textoAcotado(division, MaxLargoDivisionPreferencia, ErrDivisionPreferenciaInvalida)
+	if err != nil {
+		return nil, err
+	}
+
 	if prioridad < 1 || prioridad > MaxPrioridadPreferencia {
 		return nil, ErrPrioridadInvalida
 	}
@@ -84,6 +108,7 @@ func NuevaPreferencia(id, equipoID, materiaNombre string, anio *int, division *s
 		ID:            id,
 		EquipoID:      equipoID,
 		MateriaNombre: materiaNombre,
+		Modalidad:     modalidad,
 		Anio:          anio,
 		Division:      division,
 		Prioridad:     prioridad,
@@ -91,15 +116,29 @@ func NuevaPreferencia(id, equipoID, materiaNombre string, anio *int, division *s
 }
 
 // Alcance describe en palabras a qué llega la marca, para mostrarla en el
-// inventario: "Dibujo Técnico", "Dibujo Técnico de 3°" o "Dibujo Técnico de
-// 3°B".
+// inventario: "Dibujo Técnico", "Dibujo Técnico de 3°", "Dibujo Técnico de
+// Electromecánica" o "Dibujo Técnico de 4°2, Electromecánica".
+//
+// El año y la división se dicen juntos, como se lee un curso ("4°2"), y la
+// modalidad va después. Una división sin año no se puede escribir así, y se
+// enuncia aparte.
 func (p *PreferenciaDeEquipo) Alcance() string {
-	if p.Anio == nil {
+	var partes []string
+	switch {
+	case p.Anio != nil:
+		curso := fmt.Sprintf("%d°", *p.Anio)
+		if p.Division != nil {
+			curso += *p.Division
+		}
+		partes = append(partes, curso)
+	case p.Division != nil:
+		partes = append(partes, "división "+*p.Division)
+	}
+	if p.Modalidad != nil {
+		partes = append(partes, *p.Modalidad)
+	}
+	if len(partes) == 0 {
 		return p.MateriaNombre
 	}
-	alcance := fmt.Sprintf("%s de %d°", p.MateriaNombre, *p.Anio)
-	if p.Division != nil {
-		alcance += *p.Division
-	}
-	return alcance
+	return p.MateriaNombre + " de " + strings.Join(partes, ", ")
 }

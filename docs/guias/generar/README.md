@@ -18,6 +18,22 @@ El mismo pipeline actualiza las capturas del README (`../../capturas/`).
   Playwright que ya está en `frontend/node_modules` y lo resuelven por ruta, así
   que se pueden correr desde cualquier directorio.
 - Python con Pillow, para recortar y numerar las capturas.
+  - **Sin Node en la máquina**, los scripts de captura y `hacer-pdf.mjs`
+    corren igual dentro de la imagen oficial de Playwright, que ya trae el
+    navegador y sus dependencias de sistema. Hay que montar el repositorio y
+    darle la red del host, y conviene el `--user` propio para no quedarse con
+    imágenes de root:
+
+    ```bash
+    docker run --rm --network host --user "$(id -u):$(id -g)" \
+      -v "$PWD":/repo -e HOME=/tmp -e SALIDA=/salida -v /tmp/capturas-sgrc:/salida \
+      -e GUIA_ADMIN_PASSWORD="..." -w /repo \
+      mcr.microsoft.com/playwright:v1.62.1-noble \
+      node docs/guias/generar/capturar-admin.mjs
+    ```
+
+    La versión de la imagen tiene que ser la misma que la de
+    `@playwright/test` en `frontend/package.json`.
 - `jq` y `curl`, para el script de datos.
 
 ## Levantarlo aparte, sin tocar la base de desarrollo
@@ -54,7 +70,16 @@ docker compose --env-file .env.capturas -p sgrc-capturas \
 El `-v` del final es seguro **porque el proyecto es otro**: borra
 `sgrc-capturas_pgdata` y no toca `sgrc-monolotico_pgdata`.
 
-Dos detalles que ya costaron una corrida:
+Tres detalles que ya costaron una corrida:
+
+- **La subred no se puede compartir.** `sgrc-net` tiene subred fija en
+  `docker-compose.yml` para poder nombrarla en `TRUSTED_PROXIES`, y una subred
+  fija no entra dos veces: con la red del proyecto de desarrollo ya creada
+  —basta con haberlo levantado alguna vez, aunque esté apagado— Docker corta
+  con `invalid pool request: Pool overlaps with other one on this address
+  space`. Por eso `docker-compose.capturas.yml` la mueve a `172.29.0.0/16` y
+  `.env.capturas` lleva ese mismo rango en `TRUSTED_PROXIES`. Si los dos no
+  coinciden, el backend deja de confiar en el proxy y no lo avisa.
 
 - **`DOCENTE_EMAIL` tiene que ser distinto del docente de la guía**
   (`ana.gomez@escuela.edu.ar`). Son dos personas: Ada Lovelace la siembra el

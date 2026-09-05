@@ -289,7 +289,7 @@ func TestEntregarSuelta_SinReservaSinCuentaSinHora(t *testing.T) {
 
 	resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
 		EquipoIDs: []string{"pc1"}, Nombre: "Marta (secretaría)",
-		Motivo: "trámite", EntregadoPor: "admin1",
+		Destino: "Biblioteca", EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -299,7 +299,7 @@ func TestEntregarSuelta_SinReservaSinCuentaSinHora(t *testing.T) {
 	if p.ReservaID != nil || p.EntregadoAUsuarioID != nil || p.DevolucionEstimada != nil {
 		t.Errorf("los tres opcionales deberían quedar vacíos: %+v", p)
 	}
-	if p.EntregadoANombre != "Marta (secretaría)" || p.Motivo != "trámite" {
+	if p.EntregadoANombre != "Marta (secretaría)" || p.Destino != "Biblioteca" {
 		t.Errorf("datos de la entrega: %+v", p)
 	}
 	// Sin hora pactada no se le puede reclamar nada.
@@ -768,7 +768,7 @@ func TestEntregarSuelta_SalidaAReparacionSacaLoQueNoCircula(t *testing.T) {
 	})
 
 	resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		EquipoIDs: []string{"pc1"}, Nombre: "Service Rossi", Motivo: "no enciende",
+		EquipoIDs: []string{"pc1"}, Nombre: "Service Rossi", Destino: "al service, no enciende",
 		SalidaAReparacion: true, EntregadoPor: "admin1",
 	})
 
@@ -778,24 +778,24 @@ func TestEntregarSuelta_SalidaAReparacionSacaLoQueNoCircula(t *testing.T) {
 	if len(resultado.Entregadas) != 1 {
 		t.Fatalf("esperaba que saliera: %+v", resultado.NoEntregadas)
 	}
-	if resultado.Entregadas[0].Motivo != "no enciende" {
-		t.Errorf("motivo = %q, es la constancia de a dónde fue", resultado.Entregadas[0].Motivo)
+	if resultado.Entregadas[0].Destino != "al service, no enciende" {
+		t.Errorf("destino = %q, es la constancia de a dónde fue", resultado.Entregadas[0].Destino)
 	}
 }
 
-// Sin motivo no hay constancia, y sin constancia la salida a reparación es
-// un préstamo común mal cargado. Falla el lote entero: el motivo es uno solo
+// Sin destino no hay constancia, y sin constancia la salida a reparación es
+// un préstamo común mal cargado. Falla el lote entero: el destino es uno solo
 // para todas las máquinas.
-func TestEntregarSuelta_SalidaAReparacionSinMotivo(t *testing.T) {
+func TestEntregarSuelta_SalidaAReparacionSinDestino(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
 	_, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		EquipoIDs: []string{"pc1"}, Nombre: "Service Rossi", Motivo: "  ",
+		EquipoIDs: []string{"pc1"}, Nombre: "Service Rossi", Destino: "  ",
 		SalidaAReparacion: true, EntregadoPor: "admin1",
 	})
 
-	if !errors.Is(err, ErrSalidaAReparacionSinMotivo) {
-		t.Errorf("esperaba ErrSalidaAReparacionSinMotivo, obtuve %v", err)
+	if !errors.Is(err, ErrSalidaAReparacionSinDestino) {
+		t.Errorf("esperaba ErrSalidaAReparacionSinDestino, obtuve %v", err)
 	}
 }
 
@@ -809,7 +809,7 @@ func TestEntregarSuelta_SalidaAReparacionNoSacaLoDadoDeBaja(t *testing.T) {
 	})
 
 	resultado, err := svc.EntregarSuelta(context.Background(), EntregaSueltaParams{
-		EquipoIDs: []string{"pc1"}, Nombre: "Service Rossi", Motivo: "no enciende",
+		EquipoIDs: []string{"pc1"}, Nombre: "Service Rossi", Destino: "al service, no enciende",
 		SalidaAReparacion: true, EntregadoPor: "admin1",
 	})
 

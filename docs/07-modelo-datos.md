@@ -41,15 +41,15 @@ erDiagram
     INCIDENCIA { uuid id; uuid equipo_id; uuid reportado_por; string descripcion; string categoria; string gravedad; timestamptz fecha; bool enviado_a_soporte; timestamptz fecha_envio_a_soporte; string estado }
     LICENCIA_SOFTWARE { uuid id; uuid equipo_id; string nombre; int dias_duracion; int dias_aviso; date fecha_vencimiento; date ultima_renovacion; uuid vencimiento_fijado_por; timestamptz vencimiento_fijado_en; date avisado_previo_para; date avisado_vencimiento_para; timestamptz creada_en }
     EQUIPO_CUENTA { uuid id; uuid equipo_id; string usuario; string usuario_normalizado; string clase; string privilegio; bool tiene_password; string password_cifrada; string visibilidad; string notas; timestamptz creada_en; timestamptz actualizada_en }
-    EQUIPO_PREFERENCIA { uuid id; uuid equipo_id; string materia_nombre; string materia_norm; int anio; string division; int prioridad; timestamptz creada_en }
+    EQUIPO_PREFERENCIA { uuid id; uuid equipo_id; string materia_nombre; string materia_norm; string modalidad; int anio; string division; int prioridad; timestamptz creada_en }
     CICLO_LECTIVO { uuid id; int anio; bool activo; bool archivado }
-    CURSO { uuid id; uuid ciclo_lectivo_id; string nombre; bool activo; bool archivado }
+    CURSO { uuid id; uuid ciclo_lectivo_id; int anio; string division; string modalidad; string nombre; string division_norm; string modalidad_norm; bool activo; bool archivado }
     MATERIA { uuid id; uuid curso_id; string nombre; string nombre_norm; bool activo; bool archivado }
     DOCENTE_MATERIA { uuid id; uuid usuario_id; uuid materia_id; string rol }
     REGLA_RECURRENCIA { uuid id; uuid materia_id; uuid creado_por; string dia_semana; time hora_inicio; time hora_fin; date fecha_inicio; date fecha_fin }
     RESERVA_GRUPO { uuid id; uuid materia_id; uuid creado_por; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; uuid regla_recurrencia_id; timestamptz creada_en; timestamptz recordatorio_enviado_en }
     RESERVA { uuid id; uuid reserva_grupo_id; uuid equipo_id; uuid materia_id; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; string tipo; string motivo_bloqueo; uuid creado_por; timestamptz creada_en; uuid cancelado_por; string motivo_cancelacion; timestamptz cancelada_en; timestamptz avisado_equipo_no_disponible_en }
-    PRESTAMO { uuid id; uuid equipo_id; uuid reserva_id; uuid entregado_a_usuario_id; string entregado_a_nombre; string retirado_por; string motivo; timestamptz devolucion_estimada; uuid entregado_por; timestamptz entregado_en; timestamptz devuelto_en; uuid recibido_por; string observaciones; date avisado_cierre_para }
+    PRESTAMO { uuid id; uuid equipo_id; uuid reserva_id; uuid entregado_a_usuario_id; string entregado_a_nombre; string retirado_por; string destino; timestamptz devolucion_estimada; uuid entregado_por; timestamptz entregado_en; timestamptz devuelto_en; uuid recibido_por; string observaciones; date avisado_cierre_para }
     NOTIFICACION { uuid id; uuid usuario_id; uuid reserva_id; uuid sobre_usuario_id; string mensaje; string tipo; string estado; timestamptz creada_en; timestamptz leida_en }
     HORARIO_ADMIN { uuid id; uuid usuario_id; string dia_semana; time hora_inicio; time hora_fin }
     HORARIO_ADMIN_EXCEPCION { uuid id; uuid usuario_id; date fecha; string tipo; time hora_inicio; time hora_fin; string motivo }
@@ -256,14 +256,37 @@ CREATE UNIQUE INDEX idx_ciclo_lectivo_activo_unico ON ciclo_lectivo (activo) WHE
 |---|---|---|
 | id | UUID | PK |
 | ciclo_lectivo_id | UUID | FK → ciclo_lectivo.id, NOT NULL |
-| nombre | VARCHAR(4) | NOT NULL, CHECK (nombre ~ '^[1-6]°[A-Z]$') |
+| anio | SMALLINT | **NOT NULL**, CHECK entre 1 y 15 |
+| division | VARCHAR(12) | NULL, CHECK no vacía y sin espacios al borde |
+| modalidad | VARCHAR(80) | NULL, CHECK no vacía y sin espacios al borde |
+| nombre | VARCHAR(20) | **GENERATED** — `anio::text \|\| '°' \|\| coalesce(division, '')` |
+| division_norm | VARCHAR(12) | GENERATED — `translate(lower(coalesce(division,'')), 'áéíóúüñ', 'aeiouun')` |
+| modalidad_norm | VARCHAR(80) | GENERATED — igual, sobre `modalidad` |
 | activo | BOOLEAN | NOT NULL DEFAULT true |
 | archivado | BOOLEAN | NOT NULL DEFAULT false |
-| | | UNIQUE (ciclo_lectivo_id, nombre) |
+| | | UNIQUE (ciclo_lectivo_id, modalidad_norm, anio, division_norm) — índice `ux_curso_ciclo_nombre` |
 
-> `nombre` no es libre: año (`1°`-`6°`) + división (`A`-`Z`), ej. `1°A`, `6°Z`.
-> La validación vive tanto en el `CHECK` de la base como en la capa de
-> aplicación, para devolver un 400 claro antes de llegar a la constraint.
+> Un curso es **un año más dos datos opcionales** (migración 009).
+>
+> **El año es obligatorio** porque lo tienen todos los ámbitos: primaria,
+> secundaria, terciario y universidad organizan sus cursos por año. Lo que
+> varía es si además hay división —una universidad muchas veces no divide— y si
+> además hay modalidad o carrera.
+>
+> **El nombre no se escribe: lo calcula la base.** Con el año obligatorio deja
+> de ser un dato y pasa a ser la consecuencia de los otros dos. Calcularlo acá
+> tiene dos ventajas sobre hacerlo en la aplicación: no puede desincronizarse,
+> y los cincuenta y pico de lugares que muestran `curso.nombre` siguen leyendo
+> lo mismo.
+>
+> **La modalidad no es una tabla padre**, y es deliberado: en una técnica el
+> ciclo básico (1° a 3°) no pertenece a ninguna, así que un padre obligaría a
+> inventarle una o a soportar igual el curso sin padre. Ver RF-02.2.
+>
+> **El UNIQUE va sobre las partes y no sobre el nombre** —es lo mismo, porque
+> el nombre se deriva de ellas— y así el índice no depende de una columna
+> generada, que Postgres no permite encadenar. Incluye la modalidad, así que
+> dos carreras pueden tener cada una su `1°A`.
 
 ### `materia`
 | Campo | Tipo | Restricciones |
@@ -638,11 +661,13 @@ reservar**: no es un permiso, no oculta nada y no afecta ninguna reserva.
 | materia_nombre | VARCHAR(100) | NOT NULL, CHECK no vacío y sin espacios en los bordes |
 | materia_norm | VARCHAR(100) | GENERATED ALWAYS AS `translate(lower(materia_nombre), …)` STORED |
 | anio | SMALLINT | NULL, CHECK entre 1 y 6 |
-| division | CHAR(1) | NULL, CHECK `^[A-Z]$` |
+| modalidad | VARCHAR(80) | NULL, CHECK no vacía y sin espacios al borde |
+| division | VARCHAR(12) | NULL, CHECK no vacía y sin espacios al borde |
+| modalidad_norm | VARCHAR(80) | GENERATED, con COALESCE del NULL a cadena vacía |
+| division_norm | VARCHAR(12) | GENERATED, igual |
 | prioridad | SMALLINT | NOT NULL DEFAULT 1, CHECK entre 1 y 9 |
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
-| | | CHECK `division IS NULL OR anio IS NOT NULL` |
-| | | UNIQUE **NULLS NOT DISTINCT** (equipo_id, materia_norm, anio, division) |
+| | | UNIQUE **NULLS NOT DISTINCT** (equipo_id, materia_norm, modalidad_norm, anio, division_norm) |
 
 ```sql
 CREATE INDEX idx_equipo_preferencia_materia ON equipo_preferencia (materia_norm);
@@ -668,10 +693,19 @@ CREATE INDEX idx_equipo_preferencia_equipo  ON equipo_preferencia (equipo_id);
 
 > **Los tres alcances y cuál gana.** `(NULL, NULL)` vale para toda materia con
 > ese nombre; `(3, NULL)` para todo tercer año; `(3, 'B')` sólo para 3°B. Un
-> mismo equipo puede tener los tres, y al reservar **gana el más específico**;
-> a igual especificidad, la prioridad más fuerte. El rango de `anio` y el patrón
-> de `division` son los mismos del CHECK de `curso.nombre` (`^[1-6]°[A-Z]$`):
-> una institución con otra nomenclatura cambia los tres juntos.
+> mismo equipo puede tener varias, y al reservar **gana la más específica** —la
+> que tiene más ejes puestos—; a igual especificidad, la prioridad más fuerte.
+>
+> **Los tres ejes son independientes y opcionales** (migración 009): son los
+> tres datos que tiene un curso, y la consulta que ordena los equipos los lee
+> de sus COLUMNAS, no partiendo su nombre. El cruce de los dos textos va por
+> las columnas generadas, así que **ignora tildes y mayúsculas** igual que el
+> de la materia.
+>
+> Se fue la regla "una división sin año no significa nada": los ejes de ahora
+> se sostienen cada uno solo. `NULLS NOT DISTINCT` sigue haciendo falta por
+> `anio`, que es el único de los tres que puede ser NULL — las otras dos
+> columnas del índice son generadas y nunca lo son.
 
 > **`ON DELETE CASCADE`** porque una marca no significa nada sin su equipo: dar
 > de baja la máquina se lleva sus marcas y no hay nada que preservar.
@@ -912,7 +946,7 @@ La custodia física de un equipo: quién lo tiene **ahora**. Ver RF-08.
 | entregado_a_usuario_id | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | entregado_a_nombre | VARCHAR(200) | NOT NULL, CHECK no vacío y sin espacios al borde |
 | retirado_por | VARCHAR(200) | NULL, CHECK no vacío y sin espacios al borde |
-| motivo | TEXT | NULL |
+| destino | TEXT | NULL = no se anotó a dónde iba |
 | devolucion_estimada | TIMESTAMPTZ | NULL = no se pactó hora |
 | entregado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | entregado_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
