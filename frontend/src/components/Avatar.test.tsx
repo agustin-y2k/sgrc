@@ -71,6 +71,41 @@ describe("Avatar", () => {
     expect(container.querySelector("img")).toBeNull()
   })
 
+  /**
+   * "Sin foto" es una RESPUESTA y por eso se cachea. Mientras el 404 se
+   * traducía a una excepción, react-query lo trataba como consulta fallida —y
+   * `staleTime` no aplica a una que falló, así que la reintentaba en cada
+   * montaje—: había un 404 por cada navegación, para siempre y para la mayoría
+   * de la gente, que no sube foto.
+   */
+  it("no vuelve a pedir la foto de quien no tiene, al remontarse", async () => {
+    setToken("un-token")
+    const espia: ReturnType<typeof vi.fn<typeof fetch>> = vi.fn(
+      async () => new Response("", { status: 404 })
+    )
+    globalThis.fetch = espia
+
+    // Un solo QueryClient para los dos montajes, como al navegar entre
+    // pantallas: el avatar se desmonta y se vuelve a montar.
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const avatar = (
+      <QueryClientProvider client={queryClient}>
+        <Avatar usuarioId="u1" nombre="Ada" apellido="Lovelace" />
+      </QueryClientProvider>
+    )
+
+    const primera = render(avatar)
+    expect(await screen.findByText("AL")).toBeInTheDocument()
+    await waitFor(() => expect(espia).toHaveBeenCalledTimes(1))
+    primera.unmount()
+
+    render(avatar)
+    expect(await screen.findByText("AL")).toBeInTheDocument()
+    expect(espia).toHaveBeenCalledTimes(1)
+  })
+
   // Cuando la pantalla ya sabe que no hay foto, ni se pide.
   it("con tieneFoto en false no consulta nada", async () => {
     const espia: ReturnType<typeof vi.fn<typeof fetch>> = vi.fn()

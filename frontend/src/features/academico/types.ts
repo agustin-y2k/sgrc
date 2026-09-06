@@ -1,5 +1,7 @@
 // Espeja los DTOs de internal/academic/interfaces/http/dto.go.
 
+import { sinTildes } from "@/lib/texto"
+
 export type RespuestaLista<T> = { data: T[] }
 
 export type CicloLectivo = {
@@ -101,6 +103,43 @@ export function componerNombreDeCurso(anio: number | "", division: string): stri
  */
 export function etiquetaDeCurso(curso: { nombre: string; modalidad?: string }): string {
   return curso.modalidad ? `${curso.nombre} · ${curso.modalidad}` : curso.nombre
+}
+
+/**
+ * Los nombres de curso que aparecen más de una vez en el ciclo, comparados sin
+ * tildes ni mayúsculas.
+ *
+ * Un nombre repetido sólo puede venir de dos modalidades distintas —el índice
+ * único lo garantiza dentro de una— y es el único caso en el que el nombre
+ * solo no alcanza para saber de qué curso se habla.
+ */
+export function nombresRepetidos(cursos: { nombre: string }[]): Set<string> {
+  const vistos = new Set<string>()
+  const repetidos = new Set<string>()
+  for (const c of cursos) {
+    const clave = sinTildes(c.nombre)
+    if (vistos.has(clave)) repetidos.add(clave)
+    else vistos.add(clave)
+  }
+  return repetidos
+}
+
+/**
+ * Lo más corto que alcanza para saber de qué curso se habla: el nombre solo, y
+ * la modalidad al lado únicamente cuando ese nombre se repite.
+ *
+ * Es lo que se guarda como destino de una entrega (RF-08.26). La ambigüedad es
+ * un hecho de los datos y no una propiedad del sistema: mostrar la modalidad
+ * cuando no hace falta es tan incorrecto como esconderla cuando sí. En una
+ * escuela que numera sus divisiones de corrido —4°1 es Construcción y 4°2
+ * Electromecánica— el nombre ya identifica, y agregarle la modalidad sólo
+ * alarga el registro.
+ */
+export function etiquetaCortaDeCurso(
+  curso: { nombre: string; modalidad?: string },
+  repetidos: Set<string>
+): string {
+  return repetidos.has(sinTildes(curso.nombre)) ? etiquetaDeCurso(curso) : curso.nombre
 }
 
 /**

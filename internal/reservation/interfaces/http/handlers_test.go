@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -694,6 +695,73 @@ func TestHTTP_BloquearEquipos_ComoAdmin_OK(t *testing.T) {
 	}
 	if resp.StatusCode != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d", resp.StatusCode)
+	}
+}
+
+/**
+ * Un bloqueo sin motivo tiene que salir como 400 con explicación (RF-04.7), no
+ * como el 500 de un error de dominio que nadie mapeó.
+ *
+ * El agujero estuvo tapado por la pantalla, que exige el motivo antes de
+ * mandar: sólo aparecía llamando a la API directamente.
+ */
+func TestHTTP_BloquearEquipos_SinMotivo_400(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("POST", "/api/reservation/bloqueos", jsonBody(bloquearRequest{
+		EquipoIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+}
+
+// Lo mismo con un motivo que no entra en la columna.
+func TestHTTP_BloquearEquipos_MotivoLarguisimo_400(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("POST", "/api/reservation/bloqueos", jsonBody(bloquearRequest{
+		EquipoIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00",
+		Motivo: strings.Repeat("a", domain.MaxLargoMotivoBloqueo+1),
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+}
+
+// Y el nombre de quien retira, que comparte columna de largo con el de quien
+// responde por el equipo (RF-08.19).
+func TestHTTP_EntregarPorReserva_RetiradoPorLarguisimo_400(t *testing.T) {
+	repo := nuevoFakeRepo()
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("POST", "/api/reservation/prestamos", jsonBody(entregarSueltaRequest{
+		EquipoIDs: []string{"pc1"}, Nombre: "Alguien",
+		RetiradoPor: strings.Repeat("a", domain.MaxLargoNombreDestinatario+1),
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
 }
 
