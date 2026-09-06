@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import * as academicoApi from "@/features/academico/api"
@@ -7,6 +7,7 @@ import * as adminApi from "@/features/admin/api"
 import { EntregasPage } from "@/features/admin/EntregasPage"
 import * as inventoryApi from "@/features/inventory/api"
 import type { Equipo } from "@/features/inventory/types"
+import type { Curso } from "@/features/academico/types"
 import type { Usuario } from "@/features/auth/types"
 import * as reservasApi from "@/features/reservas/api"
 import type {
@@ -53,14 +54,30 @@ function usuario(over: Partial<Usuario> = {}): Usuario {
   }
 }
 
-function materiaDe(cursoNombre: string): MateriaReservable {
+function materiaDe(cursoNombre: string, cursoModalidad?: string): MateriaReservable {
   return {
-    materiaId: `m-${cursoNombre}`,
+    materiaId: `m-${cursoNombre}${cursoModalidad ?? ""}`,
     materiaNombre: "Programación",
-    cursoId: `c-${cursoNombre}`,
+    cursoId: `c-${cursoNombre}${cursoModalidad ?? ""}`,
     cursoNombre,
+    cursoModalidad,
     cicloId: "ciclo1",
     cicloAnio: 2026,
+  }
+}
+
+/** Un curso del ciclo, para las sugerencias de destino. */
+function cursoDelCiclo(nombre: string, modalidad?: string): Curso {
+  const [anio, division] = nombre.split("°")
+  return {
+    id: `c-${nombre}${modalidad ?? ""}`,
+    cicloLectivoId: "ciclo1",
+    nombre,
+    anio: Number(anio),
+    division,
+    modalidad,
+    activo: true,
+    archivado: false,
   }
 }
 
@@ -122,17 +139,7 @@ describe("EntregasPage", () => {
       data: [{ id: "ciclo1", anio: 2026, activo: true, archivado: false }],
     })
     vi.mocked(academicoApi.listarCursos).mockResolvedValue({
-      data: [
-        {
-          id: "cur1",
-          cicloLectivoId: "ciclo1",
-          nombre: "1°4",
-          anio: 1,
-          division: "4",
-          activo: true,
-          archivado: false,
-        },
-      ],
+      data: [cursoDelCiclo("1°4")],
     })
     // Las cuentas aprobadas: se ofrecen para reconocer a quien viene al
     // mostrador, sin dejar de admitir a quien no tiene ninguna.
@@ -466,6 +473,54 @@ describe("EntregasPage", () => {
     await screen.findByText(/Da clase en 1°4, 2°1°/)
 
     expect(screen.getByLabelText(/A dónde va/)).toHaveValue("")
+  })
+
+  /**
+   * RF-08.26: el destino se guarda con el nombre pelado del curso. En una
+   * escuela que numera sus divisiones de corrido el nombre ya identifica, y
+   * agregarle la modalidad sólo alarga el registro que alguien va a leer
+   * dentro de dos meses.
+   */
+  it("usa el nombre pelado del curso cuando no se repite", async () => {
+    vi.mocked(academicoApi.listarCursos).mockResolvedValue({
+      data: [
+        cursoDelCiclo("4°1", "Construcción"),
+        cursoDelCiclo("4°2", "Electromecánica"),
+      ],
+    })
+    vi.mocked(academicoApi.materiasDeDocente).mockResolvedValue({
+      data: [materiaDe("4°2", "Electromecánica")],
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+    await user.type(screen.getByLabelText("¿A quién?"), "Ana Gómez")
+
+    await waitFor(() => expect(screen.getByLabelText(/A dónde va/)).toHaveValue("4°2"))
+  })
+
+  /**
+   * Y lleva la modalidad al lado en cuanto ese nombre se repite: dos carreras
+   * con su "1°A" son dos lugares distintos, y "1°A" a secas no dice a cuál se
+   * fue la máquina.
+   */
+  it("agrega la modalidad cuando el nombre del curso se repite", async () => {
+    vi.mocked(academicoApi.listarCursos).mockResolvedValue({
+      data: [cursoDelCiclo("1°A", "Enfermería"), cursoDelCiclo("1°A", "Contabilidad")],
+    })
+    vi.mocked(academicoApi.materiasDeDocente).mockResolvedValue({
+      data: [materiaDe("1°A", "Enfermería")],
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Entregar sin reserva" }))
+    await user.type(screen.getByLabelText("¿A quién?"), "Ana Gómez")
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/A dónde va/)).toHaveValue("1°A · Enfermería")
+    )
   })
 
   /**

@@ -3293,9 +3293,10 @@ paths:
                   docentesNotificados: { type: integer }
         "400":
           description: |
-            El bloque ya terminó. RF-04.7 tampoco tiene el tope de duración de una
-            reserva normal: un bloqueo dura lo que el Admin decida — es excepcional
-            por naturaleza.
+            Falta el motivo, o es más largo de lo que entra; o el bloque ya
+            terminó. RF-04.7 tampoco tiene el tope de duración de una reserva
+            normal: un bloqueo dura lo que el Admin decida — es excepcional por
+            naturaleza.
 
   # ══════════════════════════════
   # NOTIFICATIONS

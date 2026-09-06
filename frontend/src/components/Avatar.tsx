@@ -15,8 +15,8 @@ export function Avatar({
   apellido: string
   /**
    * Falso cuando ya se sabe que no hay foto, para ni siquiera pedirla. En las
-   * pantallas que no lo saben se deja en true: el 404 se cachea y se dibujan
-   * las iniciales.
+   * pantallas que no lo saben se deja en true: "sin foto" se cachea como
+   * cualquier otra respuesta y se dibujan las iniciales.
    */
   tieneFoto?: boolean
   /** Cambia cuando la foto cambia, para saltear la caché del navegador. */

@@ -13,7 +13,11 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import * as academicoApi from "@/features/academico/api"
-import { cursoDe, etiquetaDeCurso } from "@/features/academico/types"
+import {
+  cursoDe,
+  etiquetaCortaDeCurso,
+  nombresRepetidos,
+} from "@/features/academico/types"
 import { useCursosDelCicloActivo } from "@/features/academico/useCursosDelCicloActivo"
 import * as adminApi from "@/features/admin/api"
 import {
@@ -61,6 +65,11 @@ export function EntregaSuelta({
   // lista: la otra son los lugares que no son un curso.
   const cursos = useCursosDelCicloActivo()
 
+  // El destino se escribe con el nombre pelado, y lleva la modalidad al lado
+  // sólo cuando ese nombre se repite entre dos modalidades: es lo más corto
+  // que igual dice a dónde fue la máquina.
+  const repetidos = useMemo(() => nombresRepetidos(cursos), [cursos])
+
   // Quién puede estar del otro lado del mostrador. Sólo las cuentas
   // aprobadas: una pendiente todavía no es nadie para el sistema, y asociarle
   // una entrega sería darle una existencia que no tiene.
@@ -98,16 +107,16 @@ export function EntregaSuelta({
     enabled: !!persona,
   })
 
-  // Dónde da clase, sin repetir: es el destino más probable de la entrega. Con
-  // la modalidad al lado cuando la hay, porque el nombre solo puede repetirse
-  // entre dos carreras y el destino tiene que decir a cuál se fue.
+  // Dónde da clase, sin repetir: es el destino más probable de la entrega.
   const cursosDeLaPersona = useMemo(
     () => [
       ...new Set(
-        (materiasDeLaPersona?.data ?? []).map((m) => etiquetaDeCurso(cursoDe(m)))
+        (materiasDeLaPersona?.data ?? []).map((m) =>
+          etiquetaCortaDeCurso(cursoDe(m), repetidos)
+        )
       ),
     ],
-    [materiasDeLaPersona]
+    [materiasDeLaPersona, repetidos]
   )
 
   // Con un solo curso el destino se completa solo; con varios no se adivina,
@@ -286,9 +295,12 @@ export function EntregaSuelta({
                     <option key={`suyo-${c}`} value={c} />
                   ))}
                   {cursos
-                    .filter((c) => !cursosDeLaPersona.includes(etiquetaDeCurso(c)))
+                    .filter(
+                      (c) =>
+                        !cursosDeLaPersona.includes(etiquetaCortaDeCurso(c, repetidos))
+                    )
                     .map((c) => (
-                      <option key={c.id} value={etiquetaDeCurso(c)} />
+                      <option key={c.id} value={etiquetaCortaDeCurso(c, repetidos)} />
                     ))}
                   {LUGARES_DE_LA_ESCUELA.map((l) => (
                     <option key={l} value={l} />

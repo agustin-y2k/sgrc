@@ -38,16 +38,22 @@ export function actualizarMisDatos(req: ActualizarMisDatosRequest) {
  * `version` no viaja al servidor: solo entra en la clave de caché de quien
  * llama, para que cambiar la foto propia no siga mostrando la vieja.
  */
-export async function descargarFoto(usuarioId: string): Promise<Blob> {
+export async function descargarFoto(usuarioId: string): Promise<Blob | null> {
   const token = getToken()
   const respuesta = await fetch(
     `${import.meta.env.VITE_API_URL ?? ""}/api/auth/usuarios/${usuarioId}/foto`,
     { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
   )
+  // 404 es "esa persona no subió foto", que es el caso más común y una
+  // RESPUESTA, no una falla. Devolverlo como null y no como excepción es lo
+  // que hace que se pueda cachear: react-query no aplica `staleTime` a una
+  // consulta que falló y la reintenta en cada montaje, así que mientras esto
+  // lanzaba había un 404 por cada navegación, para siempre.
+  if (respuesta.status === 404) {
+    return null
+  }
   if (!respuesta.ok) {
-    // 404 es el caso normal —esa persona no subió foto— y no un error que
-    // haya que mostrar: quien llama dibuja las iniciales.
-    throw new Error(`sin foto (${respuesta.status})`)
+    throw new Error(`no se pudo leer la foto (${respuesta.status})`)
   }
   return await respuesta.blob()
 }

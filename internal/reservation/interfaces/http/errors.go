@@ -49,7 +49,13 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrReservaEnElPasado),
 		errors.Is(err, domain.ErrDuracionExcesiva),
 		errors.Is(err, domain.ErrNombreDestinatarioVacio),
-		errors.Is(err, domain.ErrNombreDestinatarioLargo):
+		errors.Is(err, domain.ErrNombreDestinatarioLargo),
+		errors.Is(err, domain.ErrRetiradoPorLargo),
+		// Los dos del bloqueo (RF-04.7). Faltaban, y como el formulario los
+		// valida antes de mandar, el 500 sólo aparecía llamando a la API
+		// directamente: la pantalla tapaba el agujero.
+		errors.Is(err, domain.ErrMotivoBloqueoVacio),
+		errors.Is(err, domain.ErrMotivoBloqueoLargo):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 
 	case errors.Is(err, domain.ErrTransicionReservaInvalida),
