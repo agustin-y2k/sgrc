@@ -5,9 +5,10 @@
 # el resultado con lo que está commiteado — si alguien mueve un botón y no
 # regenera, la corrida se pone roja y dice qué imagen quedó vieja.
 #
-# Funciona porque el pipeline es DETERMINISTA: regenerándolo sin tocar nada, las
-# imágenes salen idénticas byte a byte. Es lo que lo vuelve utilizable como un
-# test de archivo dorado y no sólo como una tarea programada.
+# Funciona porque el pipeline es determinista **para las pantallas que no
+# muestran la hora**: regenerándolo sin tocar nada, esas salen idénticas byte a
+# byte. Las que sí tienen reloj cambian siempre y están listadas aparte, en
+# docs/guias/generar/capturas-con-reloj.txt — se informan pero no frenan nada.
 #
 # No corre en cada push: levanta la pila entera con Postgres, siembra datos y
 # saca cincuenta capturas con un navegador de verdad, así que sólo se despierta
@@ -86,24 +87,47 @@ jobs:
       - name: Regenerar todas las capturas y los PDF
         run: make capturas
 
-      # El corazón del asunto. `git status` sobre lo que el pipeline escribe:
-      # si algo cambió, la copia commiteada estaba vieja.
+      # El portón: las capturas SIN reloj tienen que salir idénticas. Si alguna
+      # cambió, la interfaz se movió y nadie regeneró.
       #
-      # Los PDF se excluyen porque no son reproducibles byte a byte —Chromium
-      # les mete una fecha de creación— así que compararlos daría rojo siempre.
-      # Lo que se vigila son las imágenes, que sí lo son.
+      # Las que muestran fecha u hora quedan afuera —están listadas en
+      # capturas-con-reloj.txt, con el porqué— porque cambian en cada corrida
+      # por el reloj y pondrían esto en rojo todas las semanas. Los PDF también:
+      # Chromium les estampa una fecha de creación.
+      #
+      # Lo que sí cubre a TODAS es el paso anterior: `make capturas` corre con
+      # --estricto y falla si alguna no se generó. Ese es el que atrapa un
+      # selector podrido, que es como estas cosas se rompían de verdad.
       - name: ¿Quedó alguna captura vieja?
         run: |
-          cambios=$(git status --porcelain docs/guias/imagenes docs/capturas)
-          if [ -n "$cambios" ]; then
-            echo "Estas capturas no coinciden con lo que muestra el sistema hoy:"
-            echo "$cambios"
+          con_reloj=$(grep -vE '^\s*(#|$)' docs/guias/generar/capturas-con-reloj.txt)
+          cambiadas=$(git status --porcelain docs/guias/imagenes docs/capturas | awk '{print $NF}')
+
+          gate=""
+          reloj=""
+          for f in $cambiadas; do
+            if echo "$con_reloj" | grep -qxF "$f"; then
+              reloj="$reloj $f"
+            else
+              gate="$gate $f"
+            fi
+          done
+
+          if [ -n "$reloj" ]; then
+            echo "Cambiaron por el reloj (no es un problema):"
+            for f in $reloj; do echo "  $f"; done
+            echo
+          fi
+
+          if [ -n "$gate" ]; then
+            echo "Estas capturas ya no coinciden con lo que muestra el sistema:"
+            for f in $gate; do echo "  $f"; done
             echo
             echo "Regeneralas y commitealas:"
             echo "  make capturas"
             exit 1
           fi
-          echo "Todas las capturas están al día."
+          echo "Las capturas sin reloj están todas al día."
 
       # Cuando falla, las imágenes nuevas quedan acá para poder mirarlas sin
       # tener que reproducir la corrida en local.

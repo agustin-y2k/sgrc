@@ -1,0 +1,31 @@
+# Las capturas que muestran una fecha o una hora en pantalla.
+#
+# Cambian en CADA corrida aunque no se toque una línea de código, porque los
+# datos de demostración se siembran con `now()` y la pantalla los muestra. La
+# diferencia es chica —entre 0,01% y 0,4% de los píxeles, siempre en la franja
+# donde va el reloj— pero es una diferencia, y un archivo distinto es un archivo
+# distinto.
+#
+# Por eso el job de CI no las usa como portón: comparar por igualdad exacta las
+# pondría en rojo todas las semanas, y una alarma que suena siempre deja de
+# mirarse. Sí se verifica que se GENEREN (eso es lo que atrapa un selector
+# podrido, que es como se rompían de verdad) y el job informa si cambiaron, para
+# que alguien decida si fue el reloj o la pantalla.
+#
+# Las demás ~49 sí se comparan exacto: no tienen reloj, así que si cambian es
+# porque cambió la interfaz y nadie regeneró.
+#
+# Cómo se arma esta lista: correr `make capturas` dos veces seguidas sin tocar
+# nada y mirar qué quedó distinto.
+
+docs/capturas/06-entregas.png
+docs/guias/imagenes/admin-07-entregas.png
+docs/guias/imagenes/admin-08-entregar-sin-reserva.png
+docs/guias/imagenes/admin-14-soporte.png
+docs/guias/imagenes/admin-15-soporte-conversacion.png
+docs/guias/imagenes/admin-18-avisos.png
+docs/guias/imagenes/admin-25-auditoria.png
+docs/guias/imagenes/docente-12-avisos.png
+docs/guias/imagenes/docente-13-conversacion.png
+docs/guias/imagenes/docente-14-copias-por-correo.png
+docs/guias/imagenes/docente-20-como-entrar.png

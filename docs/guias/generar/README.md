@@ -17,14 +17,24 @@ capturas en el orden que hace falta, las numera, las recorta, arma los dos PDF
 y baja la pila, pase lo que pase. La base de desarrollo no se toca: es otro
 proyecto y por lo tanto otro volumen.
 
-Después, `git status` dice qué cambió de verdad: el pipeline es determinista y
-las pantallas que no se tocaron salen idénticas byte a byte.
+Después, `git status` dice qué cambió. Las pantallas que no se tocaron salen
+idénticas byte a byte, **salvo las que muestran una fecha o una hora**: esas
+cambian en cada corrida porque los datos se siembran con `now()`. Están
+listadas en `capturas-con-reloj.txt`, son once, y la diferencia es siempre la
+franja del reloj.
 
 **Y no depende de que nadie se acuerde.** El workflow `capturas.yml` lo corre
-solo cuando cambia `frontend/src/**` o `docs/guias/**`, y **falla si alguna
-imagen commiteada ya no coincide** con lo que muestra el sistema. Ese es el
-punto: hasta la 1.21 el pipeline estaba automatizado pero había que invocarlo,
-y por eso las capturas envejecían igual.
+solo cuando cambia `frontend/src/**` o `docs/guias/**`, y hace dos cosas:
+
+- **Falla si alguna captura no se generó** —`--estricto`—, que es lo que atrapa
+  un selector podrido. Vale para las sesenta.
+- **Falla si una captura sin reloj dejó de coincidir** con lo que muestra el
+  sistema: la interfaz se movió y nadie regeneró. Las once con reloj se informan
+  y no frenan nada; compararlas por igualdad las pondría en rojo todas las
+  semanas, y una alarma que suena siempre deja de mirarse.
+
+Ese es el punto: hasta la 1.21 el pipeline estaba automatizado pero había que
+invocarlo, y por eso las capturas envejecían igual.
 
 ## Cuando sólo cambia el texto o la versión
 

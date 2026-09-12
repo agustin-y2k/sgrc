@@ -19,15 +19,28 @@
 #
 # borra SOLO el volumen de este proyecto. El `-v` acá es seguro justamente
 # porque el proyecto es otro.
+# `!override` y no una lista a secas: Compose FUSIONA las listas entre archivos,
+# así que sin el tag el env_file efectivo queda `[.env, .env.capturas]` — la pila
+# de capturas terminaba leyendo el .env de desarrollo y .env.capturas solo pisaba
+# las claves que define. Cualquier clave presente en uno y ausente en el otro se
+# colaba, incluido un correo personal, que es justo lo que este overlay existe
+# para evitar. Con el tag se lee .env.capturas y nada más.
 services:
   sgrc-app:
-    env_file: .env.capturas
+    env_file: !override [.env.capturas]
   postgres:
-    env_file: .env.capturas
+    env_file: !override [.env.capturas]
   seed-datos:
-    env_file: .env.capturas
+    env_file: !override [.env.capturas]
   frontend:
-    env_file: .env.capturas
+    env_file: !override [.env.capturas]
+  # cloudflared no se levanta nunca acá, pero igual hay que nombrarlo: Compose
+  # interpreta el archivo ENTERO antes de decidir qué servicios arranca, y un
+  # `env_file:` que apunta a algo inexistente corta ahí. En una máquina de
+  # desarrollo no se nota porque el .env está; en un checkout limpio —o en CI—
+  # no hay ninguno.
+  cloudflared:
+    env_file: !override [.env.capturas]
 
 # La subred de `sgrc-net` está fijada en docker-compose.yml para poder
 # nombrarla en TRUSTED_PROXIES, y una subred fija no se puede usar dos veces:
