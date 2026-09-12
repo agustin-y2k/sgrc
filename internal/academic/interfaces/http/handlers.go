@@ -9,6 +9,7 @@ import (
 	"github.com/ramiro/sgrc/internal/academic/domain"
 	"github.com/ramiro/sgrc/internal/shared/audit"
 	"github.com/ramiro/sgrc/internal/shared/middleware"
+	"github.com/ramiro/sgrc/internal/shared/respuesta"
 )
 
 type Handler struct {
@@ -47,7 +48,7 @@ func (h *Handler) auditar(c *fiber.Ctx, actorID, accion, entidad string, entidad
 
 // ── Ciclo lectivo ───────────────────────────────────────────────────────
 
-// POST /api/academic/ciclos (Admin)
+// POST /api/ciclos (Admin)
 func (h *Handler) CrearCiclo(c *fiber.Ctx) error {
 	var req crearCicloRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -58,10 +59,10 @@ func (h *Handler) CrearCiclo(c *fiber.Ctx) error {
 	if err != nil {
 		return mapearError(err)
 	}
-	return c.Status(fiber.StatusCreated).JSON(toCicloResponse(ciclo))
+	return respuesta.Creado(c, "/api/ciclos", ciclo.ID, toCicloResponse(ciclo))
 }
 
-// GET /api/academic/ciclos (cualquier usuario autenticado)
+// GET /api/ciclos (cualquier usuario autenticado)
 func (h *Handler) ListarCiclos(c *fiber.Ctx) error {
 	var filtroArchivado *bool
 	if v := c.Query("archivado"); v != "" {
@@ -81,7 +82,69 @@ func (h *Handler) ListarCiclos(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// POST /api/academic/ciclos/{id}/archivar (Admin)
+// POST /api/ciclos/{id}/archivar (Admin)
+// PATCH /api/ciclos/{id} (Admin) — corregir el año.
+//
+// El valor viejo va en la auditoría junto al nuevo porque el año ES el nombre
+// del ciclo en pantalla: sin él, una entrada anterior que hable del «ciclo
+// 2026» se leería después como si fuera sobre otro ciclo.
+func (h *Handler) CorregirCiclo(c *fiber.Ctx) error {
+	id := c.Params("id")
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	var req corregirCicloRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+
+	anterior, err := h.svc.ObtenerCiclo(c.UserContext(), id)
+	if err != nil {
+		return mapearError(err)
+	}
+
+	if err := h.svc.CorregirAnioDeCiclo(c.UserContext(), id, req.Anio); err != nil {
+		return mapearError(err)
+	}
+
+	if anterior.Anio != req.Anio {
+		h.auditar(c, claims.UserID, audit.CicloAnioCorregido, "ciclo_lectivo", &id, map[string]any{
+			"anioAnterior": anterior.Anio,
+			"anioNuevo":    req.Anio,
+		})
+	}
+	return c.SendStatus(fiber.StatusOK)
+}
+
+// DELETE /api/ciclos/{id} (Admin) — eliminar un ciclo vacío.
+//
+// Se audita con el año adentro y no sólo con el id: después del borrado el id
+// no se puede resolver contra nada, así que sin el año la entrada diría que
+// alguien eliminó un ciclo sin decir cuál.
+func (h *Handler) EliminarCiclo(c *fiber.Ctx) error {
+	id := c.Params("id")
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	ciclo, err := h.svc.ObtenerCiclo(c.UserContext(), id)
+	if err != nil {
+		return mapearError(err)
+	}
+
+	if err := h.svc.EliminarCiclo(c.UserContext(), id); err != nil {
+		return mapearError(err)
+	}
+
+	h.auditar(c, claims.UserID, audit.CicloEliminado, "ciclo_lectivo", &id, map[string]any{
+		"anio": ciclo.Anio,
+	})
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 func (h *Handler) ArchivarCiclo(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)
@@ -112,7 +175,7 @@ func (h *Handler) ArchivarCiclo(c *fiber.Ctx) error {
 
 // ── Curso ───────────────────────────────────────────────────────────────
 
-// POST /api/academic/ciclos/{cicloId}/cursos (Admin)
+// POST /api/ciclos/{cicloId}/cursos (Admin)
 func (h *Handler) CrearCurso(c *fiber.Ctx) error {
 	cicloID := c.Params("cicloId")
 
@@ -125,10 +188,10 @@ func (h *Handler) CrearCurso(c *fiber.Ctx) error {
 	if err != nil {
 		return mapearError(err)
 	}
-	return c.Status(fiber.StatusCreated).JSON(toCursoResponse(curso))
+	return respuesta.Creado(c, "/api/cursos", curso.ID, toCursoResponse(curso))
 }
 
-// GET /api/academic/ciclos/{cicloId}/cursos (cualquier usuario autenticado)
+// GET /api/ciclos/{cicloId}/cursos (cualquier usuario autenticado)
 func (h *Handler) ListarCursos(c *fiber.Ctx) error {
 	cicloID := c.Params("cicloId")
 
@@ -144,7 +207,7 @@ func (h *Handler) ListarCursos(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// PATCH /api/academic/cursos/{id} (Admin)
+// PATCH /api/cursos/{id} (Admin)
 func (h *Handler) EditarCurso(c *fiber.Ctx) error {
 	id := c.Params("id")
 
@@ -159,7 +222,7 @@ func (h *Handler) EditarCurso(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
-// DELETE /api/academic/cursos/{id} (Admin)
+// DELETE /api/cursos/{id} (Admin)
 func (h *Handler) EliminarCurso(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)
@@ -176,7 +239,7 @@ func (h *Handler) EliminarCurso(c *fiber.Ctx) error {
 
 // ── Materia ─────────────────────────────────────────────────────────────
 
-// POST /api/academic/cursos/{cursoId}/materias (Admin)
+// POST /api/cursos/{cursoId}/materias (Admin)
 func (h *Handler) CrearMateria(c *fiber.Ctx) error {
 	cursoID := c.Params("cursoId")
 
@@ -189,10 +252,10 @@ func (h *Handler) CrearMateria(c *fiber.Ctx) error {
 	if err != nil {
 		return mapearError(err)
 	}
-	return c.Status(fiber.StatusCreated).JSON(toMateriaResponse(materia))
+	return respuesta.Creado(c, "/api/materias", materia.ID, toMateriaResponse(materia))
 }
 
-// GET /api/academic/cursos/{cursoId}/materias (cualquier usuario autenticado)
+// GET /api/cursos/{cursoId}/materias (cualquier usuario autenticado)
 func (h *Handler) ListarMaterias(c *fiber.Ctx) error {
 	cursoID := c.Params("cursoId")
 
@@ -208,7 +271,7 @@ func (h *Handler) ListarMaterias(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// PATCH /api/academic/materias/{id} (Admin)
+// PATCH /api/materias/{id} (Admin)
 func (h *Handler) EditarMateria(c *fiber.Ctx) error {
 	id := c.Params("id")
 
@@ -217,13 +280,21 @@ func (h *Handler) EditarMateria(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	if err := h.svc.EditarMateria(c.UserContext(), id, req.Nombre); err != nil {
+	// Renombrar devuelve cuántas marcas de preferencia de equipo dejaron de
+	// aplicar: la marca se vincula a la materia por NOMBRE (RF-03.21), así que
+	// un renombre las deja apuntando a algo que ya no está. Antes eso pasaba en
+	// silencio y la marca seguía viéndose como si valiera.
+	//
+	// Es un 200 con un dato, no un error: corregir un nombre mal escrito es
+	// legítimo y no puede depender de cuántas máquinas quedaron marcadas.
+	marcasAfectadas, err := h.svc.EditarMateria(c.UserContext(), id, req.Nombre)
+	if err != nil {
 		return mapearError(err)
 	}
-	return c.SendStatus(fiber.StatusOK)
+	return c.JSON(editarMateriaResponse{MarcasDeEquipoAfectadas: marcasAfectadas})
 }
 
-// DELETE /api/academic/materias/{id} (Admin)
+// DELETE /api/materias/{id} (Admin)
 func (h *Handler) EliminarMateria(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)
@@ -240,7 +311,7 @@ func (h *Handler) EliminarMateria(c *fiber.Ctx) error {
 
 // ── DocenteMateria ──────────────────────────────────────────────────────
 
-// POST /api/academic/materias/{materiaId}/docentes (Admin)
+// POST /api/materias/{materiaId}/docentes (Admin)
 func (h *Handler) AsignarDocente(c *fiber.Ctx) error {
 	materiaID := c.Params("materiaId")
 
@@ -261,7 +332,7 @@ func (h *Handler) AsignarDocente(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toDocenteMateriaResponse(dm))
 }
 
-// GET /api/academic/materias/{materiaId}/docentes (cualquier usuario autenticado)
+// GET /api/materias/{materiaId}/docentes (cualquier usuario autenticado)
 func (h *Handler) ListarDocentesDeMateria(c *fiber.Ctx) error {
 	materiaID := c.Params("materiaId")
 
@@ -277,7 +348,7 @@ func (h *Handler) ListarDocentesDeMateria(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// PATCH /api/academic/materias/{materiaId}/docentes/{docenteMateriaId}
+// PATCH /api/materias/{materiaId}/docentes/{docenteMateriaId}
 // (Admin) Es el único camino para corregir un rol.
 func (h *Handler) CambiarRolDocente(c *fiber.Ctx) error {
 	materiaID := c.Params("materiaId")
@@ -309,7 +380,7 @@ func (h *Handler) CambiarRolDocente(c *fiber.Ctx) error {
 	return c.JSON(toDocenteMateriaResponse(dm))
 }
 
-// DELETE /api/academic/materias/{materiaId}/docentes/{docenteMateriaId} (Admin)
+// DELETE /api/materias/{materiaId}/docentes/{docenteMateriaId} (Admin)
 func (h *Handler) RemoverDocenteMateria(c *fiber.Ctx) error {
 	materiaID := c.Params("materiaId")
 	id := c.Params("docenteMateriaId")
@@ -331,7 +402,7 @@ func (h *Handler) RemoverDocenteMateria(c *fiber.Ctx) error {
 	return c.JSON(removerDocenteResponse{ReservasCanceladas: canceladas})
 }
 
-// GET /api/academic/mis-materias — RF-04.1: las materias en las que el
+// GET /api/mis-materias — RF-04.1: las materias en las que el
 // usuario autenticado puede reservar.
 //
 // `?asignadas=true` cambia la pregunta: en qué materias está ASIGNADA esa
@@ -369,7 +440,7 @@ func (h *Handler) ListarMisMaterias(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/academic/ciclos/{cicloId}/asignaciones (Admin) — quién dicta qué en
+// GET /api/ciclos/{cicloId}/asignaciones (Admin) — quién dicta qué en
 // ese ciclo, en una sola respuesta.
 //
 // Las dos pantallas que muestran esta relación la leían a medias: las materias
@@ -394,7 +465,7 @@ func (h *Handler) ListarAsignaciones(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/academic/docentes/{usuarioId}/materias (Admin) — en qué materias
+// GET /api/docentes/{usuarioId}/materias (Admin) — en qué materias
 // está asignada OTRA persona.
 //
 // Es la misma pregunta que `mis-materias?asignadas=true`, hecha sobre alguien
@@ -424,4 +495,37 @@ func (h *Handler) ListarMateriasDeDocente(c *fiber.Ctx) error {
 		}
 	}
 	return c.JSON(fiber.Map{"data": data})
+}
+
+// ── GET de un recurso solo ──────────────────────────────────────────────
+//
+// Los tres se podían editar y eliminar sin poder pedirlos. El permiso es el de
+// su listado: cualquier usuario autenticado, porque un docente necesita ver la
+// estructura académica para saber sobre qué reserva.
+
+// GET /api/ciclos/{id}
+func (h *Handler) ObtenerCiclo(c *fiber.Ctx) error {
+	ciclo, err := h.svc.ObtenerCiclo(c.UserContext(), c.Params("id"))
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toCicloResponse(ciclo))
+}
+
+// GET /api/cursos/{id}
+func (h *Handler) ObtenerCurso(c *fiber.Ctx) error {
+	curso, err := h.svc.ObtenerCurso(c.UserContext(), c.Params("id"))
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toCursoResponse(curso))
+}
+
+// GET /api/materias/{id}
+func (h *Handler) ObtenerMateria(c *fiber.Ctx) error {
+	materia, err := h.svc.ObtenerMateria(c.UserContext(), c.Params("id"))
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toMateriaResponse(materia))
 }

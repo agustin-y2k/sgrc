@@ -171,15 +171,6 @@ func (r *PostgresRepo) ListarPedidosDeUsuario(ctx context.Context, usuarioID str
 	return escanearPedidosDetallados(rows)
 }
 
-func (r *PostgresRepo) ContarPedidosPendientes(ctx context.Context) (int, error) {
-	var n int
-	if err := r.pool.QueryRow(ctx,
-		`SELECT count(*) FROM pedido_de_materia WHERE estado = 'PENDIENTE'`).Scan(&n); err != nil {
-		return 0, fmt.Errorf("contando pedidos pendientes: %w", err)
-	}
-	return n, nil
-}
-
 func (r *PostgresRepo) TienePedidoAbierto(ctx context.Context, usuarioID, materiaID string) (bool, error) {
 	var existe bool
 	err := r.pool.QueryRow(ctx, `

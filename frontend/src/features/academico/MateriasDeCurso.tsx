@@ -5,11 +5,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { CopiarMateriasACursos } from "@/features/academico/CopiarMateriasACursos"
 import { DocentesDeMateria } from "@/features/academico/DocentesDeMateria"
 import * as academicoApi from "@/features/academico/api"
 import type { AsignacionDocente, Curso, Materia } from "@/features/academico/types"
 import { useAsignacionesDelCiclo } from "@/features/academico/useAsignaciones"
 import { getErrorMessage } from "@/lib/api-client"
+import { claveDeNombre } from "@/lib/texto"
 
 /** "Ana Gómez (titular), Juan Pérez (suplente)", o "" si no hay ninguno. */
 function docentesDe(asignaciones: AsignacionDocente[], materiaId: string): string {
@@ -23,9 +25,12 @@ function docentesDe(asignaciones: AsignacionDocente[], materiaId: string): strin
 export function MateriasDeCurso({
   curso,
   soloLectura,
+  cursosDelCiclo = [],
 }: {
   curso: Curso
   soloLectura: boolean
+  /** Los demás cursos del ciclo, para poder copiarles estas materias. */
+  cursosDelCiclo?: Curso[]
 }) {
   const queryClient = useQueryClient()
   const [nombreNueva, setNombreNueva] = useState("")
@@ -34,6 +39,7 @@ export function MateriasDeCurso({
   )
   const [eliminando, setEliminando] = useState<Materia | null>(null)
   const [docentesAbiertos, setDocentesAbiertos] = useState<string | null>(null)
+  const [copiando, setCopiando] = useState(false)
 
   const materiasKey = ["materias", curso.id]
   const { data, isLoading } = useQuery({
@@ -79,6 +85,15 @@ export function MateriasDeCurso({
   const materias = data?.data ?? []
   const error = crear.error ?? editar.error ?? eliminar.error
 
+  // La misma materia no entra dos veces en el mismo curso, y la comparación
+  // ignora tildes y mayúsculas — igual que el índice único de la base, que es
+  // quien lo garantiza de verdad. Esto sólo lo dice ANTES: el 409 llega igual
+  // si dos pestañas cargan a la vez, pero enterarse al apretar el botón
+  // convierte un error evitable en algo que parece una falla del sistema.
+  const yaEstaCargada = materias.some(
+    (m) => claveDeNombre(m.nombre) === claveDeNombre(nombreNueva)
+  )
+
   return (
     <div className="grid gap-3">
       {error && (
@@ -102,12 +117,21 @@ export function MateriasDeCurso({
               value={nombreNueva}
               onChange={(e) => setNombreNueva(e.target.value)}
               placeholder="Ej: Matemáticas"
+              aria-invalid={yaEstaCargada}
+              aria-describedby={
+                yaEstaCargada ? `materia-repetida-${curso.id}` : undefined
+              }
             />
+            {yaEstaCargada && (
+              <p id={`materia-repetida-${curso.id}`} className="text-destructive text-xs">
+                Este curso ya tiene esa materia.
+              </p>
+            )}
           </div>
           <Button
             type="submit"
             size="sm"
-            disabled={nombreNueva.trim() === "" || crear.isPending}
+            disabled={nombreNueva.trim() === "" || yaEstaCargada || crear.isPending}
           >
             Agregar
           </Button>
@@ -119,6 +143,27 @@ export function MateriasDeCurso({
           Este curso todavía no tiene materias.
         </p>
       )}
+
+      {/* RF-02.12 — las mismas materias en varias divisiones del año se cargan
+          una vez y se copian, no diez veces a mano. Sólo con algo que copiar y
+          con algún curso al que copiarlo. */}
+      {!soloLectura &&
+        materias.length > 0 &&
+        cursosDelCiclo.length > 1 &&
+        (copiando ? (
+          <CopiarMateriasACursos
+            origen={curso}
+            materias={materias}
+            cursosDelCiclo={cursosDelCiclo}
+            onCerrar={() => setCopiando(false)}
+          />
+        ) : (
+          <div>
+            <Button variant="outline" size="sm" onClick={() => setCopiando(true)}>
+              Copiar estas materias a otros cursos
+            </Button>
+          </div>
+        ))}
 
       {materias.map((materia) => {
         const editandoEsta = editando?.materia.id === materia.id

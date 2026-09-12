@@ -106,10 +106,36 @@ func (r *PostgresRepo) GuardarCiclo(ctx context.Context, c *domain.CicloLectivo)
 		`UPDATE ciclo_lectivo SET anio=$2, activo=$3, archivado=$4 WHERE id=$1`,
 		c.ID, c.Anio, c.Activo, c.Archivado)
 	if err != nil {
+		// Desde que el año se puede corregir, este UPDATE puede chocar contra el
+		// único de `anio`. Sin este caso salía como 500, que es lo contrario de lo
+		// que hay que contestarle a quien tipeó un año que ya existe.
+		if esViolacionUnica(err) {
+			return application.ErrCicloYaTieneAnio
+		}
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
 		return fmt.Errorf("actualizando ciclo lectivo: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return application.ErrCicloNoEncontrado
+	}
+	return nil
+}
+
+// EliminarCiclo borra la fila del ciclo. El servicio ya verificó que esté
+// vacío; la violación de foránea se traduce igual, porque entre esa
+// verificación y este DELETE alguien pudo haber cargado un curso.
+func (r *PostgresRepo) EliminarCiclo(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM ciclo_lectivo WHERE id = $1`, id)
+	if err != nil {
+		if esViolacionFK(err) {
+			return application.ErrCicloConCursos
+		}
+		if esIDInvalido(err) {
+			return application.ErrIDInvalido
+		}
+		return fmt.Errorf("eliminando ciclo lectivo: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return application.ErrCicloNoEncontrado
@@ -240,8 +266,8 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 	for _, co := range cursos {
 		nuevoCursoID := uuidNuevo()
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad, activo, archivado)
-			 VALUES ($1, $2, $3, $4, $5, true, false)`,
+			`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad, archivado)
+			 VALUES ($1, $2, $3, $4, $5, false)`,
 			nuevoCursoID, nuevoCiclo.ID, co.anio, co.division, co.modalidad,
 		); err != nil {
 			return 0, 0, fmt.Errorf("clonando curso %s: %w", co.nombre, err)
@@ -268,7 +294,7 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 
 		for _, nombreMateria := range nombresMaterias {
 			if _, err := tx.Exec(ctx,
-				`INSERT INTO materia (id, curso_id, nombre, activo, archivado) VALUES ($1, $2, $3, true, false)`,
+				`INSERT INTO materia (id, curso_id, nombre, archivado) VALUES ($1, $2, $3, false)`,
 				uuidNuevo(), nuevoCursoID, nombreMateria,
 			); err != nil {
 				return 0, 0, fmt.Errorf("clonando materia %s: %w", nombreMateria, err)

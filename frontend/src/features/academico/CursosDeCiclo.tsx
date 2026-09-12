@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { EstructuraDelCiclo } from "@/features/academico/EstructuraDelCiclo"
 import { MateriasDeCurso } from "@/features/academico/MateriasDeCurso"
 import { SelectorDeCurso } from "@/features/academico/SelectorDeCurso"
 import type { DatosDeCurso } from "@/features/academico/SelectorDeCurso"
@@ -83,6 +84,11 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
           pero no se pueden modificar ni reservar sobre ellos.
         </p>
       )}
+
+      {/* La carga masiva va ARRIBA del formulario de a uno: es lo primero que
+          hay que ver en un ciclo vacío, que es cuando más caro sale no
+          enterarse de que existe. */}
+      {!soloLectura && <EstructuraDelCiclo ciclo={ciclo} />}
 
       {!soloLectura && (
         <form
@@ -213,7 +219,11 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
 
             {abierto && (
               <div className="border-t pt-3">
-                <MateriasDeCurso curso={curso} soloLectura={soloLectura} />
+                <MateriasDeCurso
+                  curso={curso}
+                  soloLectura={soloLectura}
+                  cursosDelCiclo={cursos}
+                />
               </div>
             )}
           </div>

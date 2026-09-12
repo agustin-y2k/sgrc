@@ -32,6 +32,13 @@ export function AcademicoPage() {
   const [anioNuevo, setAnioNuevo] = useState(String(new Date().getFullYear()))
   const [cicloAbierto, setCicloAbierto] = useState<string | null>(null)
   const [archivando, setArchivando] = useState<Archivado | null>(null)
+  // Corregir el año y eliminar el ciclo son las dos formas de deshacer un
+  // ciclo creado mal. Van juntas en el mismo panel plegable porque son la misma
+  // situación vista de dos maneras: el año está equivocado, o el ciclo entero
+  // sobra.
+  const [corrigiendo, setCorrigiendo] = useState<{ ciclo: CicloLectivo; anio: string } | null>(
+    null
+  )
   const [resultadoArchivado, setResultadoArchivado] = useState<ResultadoArchivado | null>(
     null
   )
@@ -46,6 +53,25 @@ export function AcademicoPage() {
     onSuccess: async (nuevo) => {
       await queryClient.invalidateQueries({ queryKey: CICLOS_KEY })
       setCicloAbierto(nuevo.id)
+    },
+  })
+
+  const corregir = useMutation({
+    mutationFn: ({ ciclo, anio }: { ciclo: CicloLectivo; anio: string }) =>
+      academicoApi.corregirCiclo(ciclo.id, Number(anio)),
+    onSuccess: async () => {
+      setCorrigiendo(null)
+      await queryClient.invalidateQueries({ queryKey: CICLOS_KEY })
+    },
+  })
+
+  const eliminar = useMutation({
+    mutationFn: (ciclo: CicloLectivo) => academicoApi.eliminarCiclo(ciclo.id),
+    onSuccess: async () => {
+      setCorrigiendo(null)
+      // Eliminarlo libera el único lugar de ciclo activo, así que el formulario
+      // de arriba vuelve a habilitarse solo.
+      await queryClient.invalidateQueries({ queryKey: CICLOS_KEY })
     },
   })
 
@@ -107,7 +133,7 @@ export function AcademicoPage() {
             {/* RF-02.1: el índice único de Postgres garantiza un solo ciclo
                 activo; se avisa antes de que el backend responda 409. */}
             {hayActivo
-              ? "Ya hay un ciclo activo. Para abrir el siguiente hay que archivar el actual primero."
+              ? "Ya hay un ciclo activo. El siguiente se abre desde «Cerrar el año y abrir el siguiente», que además copia los cursos y las materias de este."
               : "Solo puede haber un ciclo activo a la vez."}
           </CardDescription>
         </CardHeader>
@@ -162,7 +188,22 @@ export function AcademicoPage() {
                     >
                       {abierto ? "Ocultar cursos" : "Cursos"}
                     </Button>
-                    {!ciclo.archivado && archivando?.ciclo.id !== ciclo.id && (
+                    {!ciclo.archivado &&
+                      archivando?.ciclo.id !== ciclo.id &&
+                      corrigiendo?.ciclo.id !== ciclo.id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setCorrigiendo({ ciclo, anio: String(ciclo.anio) })
+                          }
+                        >
+                          Corregir
+                        </Button>
+                      )}
+                    {!ciclo.archivado &&
+                      archivando?.ciclo.id !== ciclo.id &&
+                      corrigiendo?.ciclo.id !== ciclo.id && (
                       <Button
                         variant="destructive"
                         size="sm"
@@ -170,12 +211,96 @@ export function AcademicoPage() {
                           setArchivando({ ciclo, clonarA: String(ciclo.anio + 1) })
                         }
                       >
-                        Cerrar el año
+                        {/* El botón dice las DOS cosas que hace. Decía sólo
+                            «Cerrar el año», y como pasar los cursos y materias
+                            al año siguiente vive adentro de este mismo paso
+                            (RF-02.5), quien buscaba renovar el ciclo no tenía
+                            cómo saber que estaba acá: el único botón a la vista
+                            anunciaba lo que iba a borrar. */}
+                        Cerrar el año y abrir el siguiente
                       </Button>
                     )}
                   </span>
                 </CardTitle>
               </CardHeader>
+
+              {corrigiendo?.ciclo.id === ciclo.id && (
+                <CardContent>
+                  <div className="grid gap-3 rounded-md border p-3">
+                    <p className="text-sm font-medium">
+                      Corregir el ciclo {ciclo.anio}
+                    </p>
+                    <p className="text-muted-foreground text-sm">
+                      Cambiarle el año sólo se puede mientras no tenga reservas: una
+                      reserva lleva su propia fecha y no se mueve con el ciclo.
+                    </p>
+
+                    <form
+                      className="grid gap-3 sm:grid-cols-[auto_auto_1fr] sm:items-end"
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        corregir.mutate(corrigiendo)
+                      }}
+                    >
+                      <div className="grid gap-1.5">
+                        {/* No dice sólo «Año»: el formulario de crear un ciclo,
+                            más arriba en la misma página, ya tiene un campo con
+                            esa etiqueta, y dos controles con el mismo nombre son
+                            ambiguos para quien navega con lector de pantalla. */}
+                        <Label htmlFor={`corregir-${ciclo.id}`}>Nuevo año</Label>
+                        <Input
+                          id={`corregir-${ciclo.id}`}
+                          type="number"
+                          className="w-28"
+                          value={corrigiendo.anio}
+                          onChange={(e) =>
+                            setCorrigiendo({ ciclo, anio: e.target.value })
+                          }
+                        />
+                      </div>
+                      <Button type="submit" size="sm" disabled={corregir.isPending}>
+                        Guardar el año
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="justify-self-start"
+                        onClick={() => setCorrigiendo(null)}
+                      >
+                        Volver
+                      </Button>
+                    </form>
+
+                    {/* Eliminarlo es la otra mitad de la misma situación: no es
+                        que el año esté mal, es que el ciclo sobra. Sólo sirve
+                        con el ciclo vacío — uno con cursos cargados se cierra,
+                        no se borra. */}
+                    <div className="border-t pt-3">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={eliminar.isPending}
+                        onClick={() => eliminar.mutate(ciclo)}
+                      >
+                        Eliminar el ciclo {ciclo.anio}
+                      </Button>
+                      <p className="text-muted-foreground mt-2 text-sm">
+                        Sólo si todavía no tiene ningún curso cargado. Libera el año y
+                        el lugar de ciclo activo, para poder crear el correcto.
+                      </p>
+                    </div>
+
+                    {(corregir.error || eliminar.error) && (
+                      <Alert variant="destructive">
+                        <AlertDescription>
+                          {getErrorMessage(corregir.error ?? eliminar.error)}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                </CardContent>
+              )}
 
               {archivando?.ciclo.id === ciclo.id && (
                 <CardContent>
@@ -202,7 +327,8 @@ export function AcademicoPage() {
 
                     <div className="grid gap-1.5">
                       <Label htmlFor={`clonar-${ciclo.id}`}>
-                        Crear el ciclo siguiente copiando cursos y materias (opcional)
+                        Año del ciclo siguiente — se crea copiando todos los cursos y
+                        materias de {ciclo.anio} (dejar vacío para no crearlo)
                       </Label>
                       <Input
                         id={`clonar-${ciclo.id}`}

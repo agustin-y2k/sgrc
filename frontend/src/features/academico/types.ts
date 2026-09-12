@@ -27,7 +27,11 @@ export type Curso = {
   division?: string
   /** Modalidad, orientación o carrera. Ausente = este curso no está en ninguna. */
   modalidad?: string
-  activo: boolean
+  /**
+   * Único estado de un curso: se enciende al archivar su ciclo (RF-02.4).
+   * Tenía al lado un `activo` que el servidor mandaba siempre en true y que no
+   * decidía nada; se quitó con la migración 016.
+   */
   archivado: boolean
 }
 
@@ -35,7 +39,7 @@ export type Materia = {
   id: string
   cursoId: string
   nombre: string
-  activo: boolean
+  /** Ver Curso.archivado. */
   archivado: boolean
 }
 
@@ -58,6 +62,24 @@ export type ResultadoArchivado = {
   nuevoCicloId?: string
   cursosClonados: number
   materiasClonadas: number
+}
+
+/**
+ * RF-02.12 — lo creado y lo que ya estaba, separado. Son dos noticias distintas
+ * para quien acaba de subir un archivo: una carga que no creó nada no falló, y
+ * decirlo evita el segundo intento.
+ */
+export type ResultadoImportacion = {
+  cursosCreados: number
+  cursosExistentes: number
+  materiasCreadas: number
+  materiasExistentes: number
+}
+
+export type ResultadoCopia = {
+  materiasCreadas: number
+  materiasExistentes: number
+  cursosDestino: number
 }
 
 /**

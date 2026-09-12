@@ -28,7 +28,6 @@ function curso(over: Partial<Curso> = {}): Curso {
     nombre: "1°A",
     anio: 1,
     division: "A",
-    activo: true,
     archivado: false,
     ...over,
   }
@@ -39,7 +38,6 @@ function materia(over: Partial<Materia> = {}): Materia {
     id: "materia1",
     cursoId: "curso1",
     nombre: "Matemáticas",
-    activo: true,
     archivado: false,
     ...over,
   }
@@ -81,6 +79,7 @@ describe("AcademicoPage", () => {
     vi.mocked(academicoApi.listarMaterias).mockResolvedValue({ data: [materia()] })
     vi.mocked(academicoApi.listarDocentesDeMateria).mockResolvedValue({ data: [] })
     vi.mocked(academicoApi.listarAsignaciones).mockResolvedValue({ data: [] })
+    vi.mocked(academicoApi.exportarEstructura).mockResolvedValue({ cursos: [] })
     vi.mocked(adminApi.listarUsuarios).mockResolvedValue({
       data: [usuario()],
       meta: { total: 1, page: 1, pageSize: 1 },
@@ -432,7 +431,9 @@ describe("AcademicoPage", () => {
 
   describe("archivado (RF-02.4 / RF-02.5)", () => {
     async function abrirCierre(user: ReturnType<typeof userEvent.setup>) {
-      await user.click(await screen.findByRole("button", { name: "Cerrar el año" }))
+      await user.click(
+        await screen.findByRole("button", { name: "Cerrar el año y abrir el siguiente" })
+      )
     }
 
     it("advierte que el borrado de reservas es definitivo", async () => {
@@ -475,9 +476,7 @@ describe("AcademicoPage", () => {
       renderPagina()
       await abrirCierre(user)
 
-      await user.clear(
-        screen.getByLabelText(/Crear el ciclo siguiente copiando cursos y materias/)
-      )
+      await user.clear(screen.getByLabelText(/Año del ciclo siguiente/))
       await user.click(screen.getByRole("button", { name: "Cerrar 2026" }))
 
       await waitFor(() => {
@@ -494,8 +493,330 @@ describe("AcademicoPage", () => {
 
       await screen.findByText("Archivado")
       expect(
-        screen.queryByRole("button", { name: "Cerrar el año" })
+        screen.queryByRole("button", { name: "Cerrar el año y abrir el siguiente" })
       ).not.toBeInTheDocument()
+    })
+  })
+
+  // RF-02.12 — cargar y descargar la estructura del ciclo, y copiar las
+  // materias de un curso a otros. Existen porque cargar una institución curso
+  // por curso son cientos de formularios, y el año siguiente los mismos otra
+  // vez.
+  describe("carga y descarga de la planilla (RF-02.12)", () => {
+    async function abrirCiclo(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(await screen.findByRole("button", { name: "Cursos" }))
+    }
+
+    /** Simula elegir un archivo en el input de tipo file. */
+    async function subir(
+      user: ReturnType<typeof userEvent.setup>,
+      contenido: string,
+      nombre = "planilla.csv"
+    ) {
+      const input = await screen.findByLabelText("Cargar desde una planilla")
+      await user.upload(input, new File([contenido], nombre, { type: "text/csv" }))
+    }
+
+    const PLANILLA =
+      'Año,Modalidad / Carrera,División,Materias\n1°,,1,"Lengua, Matemática"\n1°,,2,"Lengua"'
+
+    it("muestra qué va a crear antes de cargar nada", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirCiclo(user)
+      await subir(user, PLANILLA)
+
+      expect(await screen.findByText(/Trae 2 cursos/)).toBeInTheDocument()
+      expect(screen.getByText(/Se van a crear 2 cursos y 3 materias/)).toBeInTheDocument()
+      // Nada se mandó todavía: la vista previa es previa.
+      expect(academicoApi.importarEstructura).not.toHaveBeenCalled()
+    })
+
+    it("manda los cursos leídos del archivo al confirmar", async () => {
+      vi.mocked(academicoApi.importarEstructura).mockResolvedValue({
+        cursosCreados: 2,
+        cursosExistentes: 0,
+        materiasCreadas: 3,
+        materiasExistentes: 0,
+      })
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirCiclo(user)
+      await subir(user, PLANILLA)
+
+      await user.click(await screen.findByRole("button", { name: "Cargar en el ciclo" }))
+
+      await waitFor(() => {
+        expect(academicoApi.importarEstructura).toHaveBeenCalledWith("ciclo1", [
+          { anio: 1, division: "1", materias: ["Lengua", "Matemática"] },
+          { anio: 1, division: "2", materias: ["Lengua"] },
+        ])
+      })
+      expect(
+        await screen.findByText(/Se cargaron 2 cursos y 3 materias/)
+      ).toBeInTheDocument()
+    })
+
+    // Lo que ya está cargado no se cuenta dos veces: quien sube el archivo
+    // corregido tiene que ver que sólo se agrega lo que falta.
+    it("descuenta de la vista previa lo que el ciclo ya tiene", async () => {
+      vi.mocked(academicoApi.exportarEstructura).mockResolvedValue({
+        cursos: [{ anio: 1, division: "1", materias: ["Lengua"] }],
+      })
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirCiclo(user)
+      await subir(user, PLANILLA)
+
+      // 1°1 ya existe y ya tiene Lengua: quedan Matemática, y 1°2 entero.
+      expect(
+        await screen.findByText(/Se van a crear 1 curso y 2 materias/)
+      ).toBeInTheDocument()
+    })
+
+    // Frenar treinta cursos buenos por tres renglones malos convierte la carga
+    // en prueba y error.
+    it("nombra las filas ilegibles y deja cargar el resto", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirCiclo(user)
+      await subir(user, "Año,Materias\n1°,Lengua\nPrimero,Lengua")
+
+      expect(
+        await screen.findByText(/1 fila del archivo no se van a cargar/)
+      ).toBeInTheDocument()
+      expect(screen.getByText(/Fila 3:/)).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Cargar en el ciclo" })).toBeEnabled()
+    })
+
+    it("avisa cuando el archivo no tiene un encabezado reconocible", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirCiclo(user)
+      await subir(user, "Nombre;Apellido\nJuan;Pérez")
+
+      expect(await screen.findByText(/No se reconoció el encabezado/)).toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: "Cargar en el ciclo" })
+      ).not.toBeInTheDocument()
+    })
+
+    it("no ofrece descargar un ciclo sin cursos cargados", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirCiclo(user)
+
+      expect(
+        await screen.findByRole("button", { name: /Descargar los 0 cursos/ })
+      ).toBeDisabled()
+    })
+  })
+
+  // La misma materia no entra dos veces en el mismo curso. Lo garantiza el
+  // índice único de la base; esto sólo lo dice ANTES de apretar el botón, que
+  // es la diferencia entre "ya está cargada" y un error rojo que parece una
+  // falla del sistema.
+  describe("una materia no se repite en el curso (RF-02.3)", () => {
+    /** El segundo: el primero es el «Agregar» del formulario de curso. */
+    function botonAgregarMateria() {
+      return screen.getAllByRole("button", { name: "Agregar" })[1]
+    }
+
+    async function abrirMateriasDe1A(user: ReturnType<typeof userEvent.setup>) {
+      renderPagina()
+      await user.click(await screen.findByRole("button", { name: "Cursos" }))
+      await user.click(await screen.findByRole("button", { name: "Materias" }))
+      return screen.findByLabelText("Nueva materia")
+    }
+
+    it("avisa y no deja agregar una que ya está", async () => {
+      const user = userEvent.setup()
+      const campo = await abrirMateriasDe1A(user)
+
+      await user.type(campo, "Matemáticas")
+
+      expect(
+        await screen.findByText("Este curso ya tiene esa materia.")
+      ).toBeInTheDocument()
+      expect(botonAgregarMateria()).toBeDisabled()
+    })
+
+    // El caso que el UNIQUE por nombre exacto dejaba pasar, y que llenaba el
+    // curso de materias que en pantalla se ven iguales.
+    it("la compara sin tildes ni mayúsculas", async () => {
+      const user = userEvent.setup()
+      const campo = await abrirMateriasDe1A(user)
+
+      await user.type(campo, "  MATEMATICAS  ")
+
+      expect(
+        await screen.findByText("Este curso ya tiene esa materia.")
+      ).toBeInTheDocument()
+      expect(botonAgregarMateria()).toBeDisabled()
+    })
+
+    it("deja agregar una que no está", async () => {
+      const user = userEvent.setup()
+      const campo = await abrirMateriasDe1A(user)
+
+      await user.type(campo, "Historia")
+
+      expect(
+        screen.queryByText("Este curso ya tiene esa materia.")
+      ).not.toBeInTheDocument()
+      expect(botonAgregarMateria()).toBeEnabled()
+    })
+  })
+
+  describe("copiar materias a otros cursos (RF-02.12)", () => {
+    const CURSOS = [
+      curso({ id: "curso1", nombre: "1°1", division: "1" }),
+      curso({ id: "curso2", nombre: "1°2", division: "2" }),
+      curso({ id: "curso3", nombre: "2°1", division: "1", anio: 2 }),
+    ]
+
+    async function abrirCopia(user: ReturnType<typeof userEvent.setup>) {
+      vi.mocked(academicoApi.listarCursos).mockResolvedValue({ data: CURSOS })
+      renderPagina()
+      await user.click(await screen.findByRole("button", { name: "Cursos" }))
+      await user.click((await screen.findAllByRole("button", { name: "Materias" }))[0])
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Copiar estas materias a otros cursos",
+        })
+      )
+    }
+
+    it("copia a los cursos elegidos y no al de origen", async () => {
+      vi.mocked(academicoApi.copiarMaterias).mockResolvedValue({
+        materiasCreadas: 1,
+        materiasExistentes: 0,
+        cursosDestino: 1,
+      })
+      const user = userEvent.setup()
+      await abrirCopia(user)
+
+      // El curso de origen no está entre los destinos posibles.
+      expect(screen.queryByLabelText("1°1")).not.toBeInTheDocument()
+
+      await user.click(screen.getByLabelText("1°2"))
+      await user.click(screen.getByRole("button", { name: "Copiar a 1 curso" }))
+
+      await waitFor(() => {
+        expect(academicoApi.copiarMaterias).toHaveBeenCalledWith("curso1", ["curso2"])
+      })
+      expect(
+        await screen.findByText(/Se agregaron 1 materia en 1 curso/)
+      ).toBeInTheDocument()
+    })
+
+    // Que el destino ya las tenga no es un error, y decirlo evita el segundo
+    // intento.
+    it("dice cuando el destino ya tenía todo", async () => {
+      vi.mocked(academicoApi.copiarMaterias).mockResolvedValue({
+        materiasCreadas: 0,
+        materiasExistentes: 1,
+        cursosDestino: 1,
+      })
+      const user = userEvent.setup()
+      await abrirCopia(user)
+
+      await user.click(screen.getByLabelText("1°2"))
+      await user.click(screen.getByRole("button", { name: "Copiar a 1 curso" }))
+
+      expect(
+        await screen.findByText(/ya tenían todas estas materias/)
+      ).toBeInTheDocument()
+    })
+
+    it("no se puede copiar sin elegir ningún destino", async () => {
+      const user = userEvent.setup()
+      await abrirCopia(user)
+
+      expect(screen.getByRole("button", { name: "Copiar a 0 cursos" })).toBeDisabled()
+    })
+  })
+
+  // ── Corregir y eliminar un ciclo ──────────────────────────────────────
+  //
+  // El ciclo era la única entidad sin corrección posible, y el año es único:
+  // uno creado mal se quedaba con ese año para siempre y además ocupaba el
+  // único lugar de ciclo activo.
+
+  describe("corregir un ciclo creado con el año equivocado", () => {
+    async function abrirCorreccion(user: ReturnType<typeof userEvent.setup>) {
+      renderPagina()
+      await user.click(await screen.findByRole("button", { name: "Corregir" }))
+    }
+
+    it("guarda el año nuevo", async () => {
+      const user = userEvent.setup()
+      vi.mocked(academicoApi.corregirCiclo).mockResolvedValue(undefined)
+      await abrirCorreccion(user)
+
+      const campo = await screen.findByLabelText("Nuevo año")
+      await user.clear(campo)
+      await user.type(campo, "2027")
+      await user.click(screen.getByRole("button", { name: "Guardar el año" }))
+
+      await waitFor(() =>
+        expect(academicoApi.corregirCiclo).toHaveBeenCalledWith("ciclo1", 2027)
+      )
+    })
+
+    // El error que más se va a ver: el ciclo ya arrancó y tiene clases dadas.
+    it("explica por qué un ciclo con reservas no se puede mover de año", async () => {
+      const user = userEvent.setup()
+      vi.mocked(academicoApi.corregirCiclo).mockRejectedValue(
+        new ApiError(
+          409,
+          "el ciclo lectivo ya tiene reservas: corregirle el año dejaría esas clases en el año anterior"
+        )
+      )
+      await abrirCorreccion(user)
+
+      await user.click(screen.getByRole("button", { name: "Guardar el año" }))
+
+      expect(await screen.findByText(/ya tiene reservas/)).toBeInTheDocument()
+    })
+
+    it("elimina un ciclo vacío", async () => {
+      const user = userEvent.setup()
+      vi.mocked(academicoApi.eliminarCiclo).mockResolvedValue(undefined)
+      await abrirCorreccion(user)
+
+      await user.click(screen.getByRole("button", { name: "Eliminar el ciclo 2026" }))
+
+      await waitFor(() =>
+        expect(academicoApi.eliminarCiclo).toHaveBeenCalledWith("ciclo1")
+      )
+    })
+
+    it("explica que un ciclo con cursos se cierra en vez de borrarse", async () => {
+      const user = userEvent.setup()
+      vi.mocked(academicoApi.eliminarCiclo).mockRejectedValue(
+        new ApiError(
+          409,
+          "el ciclo lectivo tiene cursos cargados: archivalo en vez de eliminarlo"
+        )
+      )
+      await abrirCorreccion(user)
+
+      await user.click(screen.getByRole("button", { name: "Eliminar el ciclo 2026" }))
+
+      expect(await screen.findByText(/archivalo en vez de eliminarlo/)).toBeInTheDocument()
+    })
+
+    // Un ciclo archivado es el registro de un año cerrado: no se corrige ni se
+    // borra, y por eso no ofrece ninguno de los dos botones.
+    it("un ciclo archivado no ofrece corregirlo", async () => {
+      vi.mocked(academicoApi.listarCiclos).mockResolvedValue({
+        data: [ciclo({ activo: false, archivado: true })],
+      })
+      renderPagina()
+
+      expect(await screen.findByText("Archivado")).toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: "Corregir" })).toBeNull()
     })
   })
 })
