@@ -1,5 +1,7 @@
 // Espeja internal/sugerencias/interfaces/http/dto.go.
 
+import type { PaginacionMeta } from "@/components/Paginador"
+
 /**
  * De qué se trata la conversación. AYUDA es el pedido de soporte y se
  * distingue de los otros dos en algo que no es cosmético: sus correos no se
@@ -34,7 +36,12 @@ export type Sugerencia = {
   ultimaActividadEn: string
 }
 
-export type RespuestaLista<T> = { data: T[]; meta?: { total: number } }
+/**
+ * Los dos listados del buzón vienen paginados de a 50 (ver
+ * internal/shared/paginacion): `meta` no es opcional, y sin leerla el panel
+ * mostraba la primera página como si fuera todo.
+ */
+export type RespuestaLista<T> = { data: T[]; meta: PaginacionMeta }
 
 /** Cómo se nombra cada tipo en pantalla. */
 export const ETIQUETA_TIPO: Record<TipoDeMensaje, string> = {

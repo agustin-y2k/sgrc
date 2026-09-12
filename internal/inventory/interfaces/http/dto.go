@@ -3,6 +3,8 @@
 package http
 
 import (
+	"strconv"
+
 	"time"
 
 	"github.com/ramiro/sgrc/internal/inventory/application"
@@ -107,10 +109,15 @@ type carroResponse struct {
 	ID          string `json:"id"`
 	Nombre      string `json:"nombre"`
 	Descripcion string `json:"descripcion,omitempty"`
+	// DadoDeBaja sólo puede venir en true si se pidieron los retirados, y es lo
+	// que le permite a la pantalla distinguirlos de los que están en
+	// circulación. Sin omitempty: un false explícito es información, y el
+	// selector de destino necesita poder confiar en el campo.
+	DadoDeBaja bool `json:"dadoDeBaja"`
 }
 
 func toCarroResponse(c *domain.Carro) carroResponse {
-	return carroResponse{ID: c.ID, Nombre: c.Nombre, Descripcion: c.Descripcion}
+	return carroResponse{ID: c.ID, Nombre: c.Nombre, Descripcion: c.Descripcion, DadoDeBaja: c.DadoDeBaja}
 }
 
 type equipoResponse struct {
@@ -255,4 +262,46 @@ func toCuentaResponse(c application.CuentaVisible) cuentaResponse {
 		PuedeVerLaPassword: c.PuedeVerLaPassword,
 		Notas:              c.Notas,
 	}
+}
+
+// preferenciaHuerfanaResponse: una marca que quedó apuntando a una materia que
+// ya no existe con ese nombre.
+type preferenciaHuerfanaResponse struct {
+	ID string `json:"id"`
+	// MateriaNombre es el nombre al que la marca apunta y que ya no cruza con
+	// nada. Se muestra tal como se guardó: es el dato que permite entender qué
+	// pasó («ah, esto era para Matemática, que renombré»).
+	MateriaNombre string `json:"materiaNombre"`
+	Alcance       string `json:"alcance"`
+	Prioridad     int    `json:"prioridad"`
+	// EquipoEtiqueta y CarroNombre: la marca sola no dice nada accionable, lo
+	// que hace falta saber es QUÉ máquina quedó marcada.
+	EquipoEtiqueta   string `json:"equipoEtiqueta"`
+	CarroNombre      string `json:"carroNombre,omitempty"`
+	EquipoDadoDeBaja bool   `json:"equipoDadoDeBaja"`
+}
+
+func toPreferenciaHuerfanaResponse(p *application.PreferenciaHuerfana) preferenciaHuerfanaResponse {
+	return preferenciaHuerfanaResponse{
+		ID: p.ID, MateriaNombre: p.MateriaNombre,
+		Alcance:        alcanceDeHuerfana(p),
+		Prioridad:      p.Prioridad,
+		EquipoEtiqueta: p.EquipoEtiqueta, CarroNombre: p.CarroNombre,
+		EquipoDadoDeBaja: p.EquipoDadoDeBaja,
+	}
+}
+
+// alcanceDeHuerfana arma el mismo texto que muestra una marca normal
+// —«Matemática de 1°2»— para que las dos se lean igual en pantalla.
+func alcanceDeHuerfana(p *application.PreferenciaHuerfana) string {
+	alcance := p.MateriaNombre
+	if p.Anio != nil {
+		alcance += " de " + strconv.Itoa(*p.Anio) + "°" + p.Division
+	} else if p.Division != "" {
+		alcance += " de la división " + p.Division
+	}
+	if p.Modalidad != "" {
+		alcance += " · " + p.Modalidad
+	}
+	return alcance
 }

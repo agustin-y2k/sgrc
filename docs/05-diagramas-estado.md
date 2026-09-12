@@ -14,7 +14,9 @@ stateDiagram-v2
     DISPONIBLE --> DADA_DE_BAJA: Admin lo elimina del inventario (soft delete)
     EN_MANTENIMIENTO --> DADA_DE_BAJA: Admin lo elimina del inventario
     FUERA_DE_SERVICIO --> DADA_DE_BAJA: Admin lo elimina del inventario
-    DADA_DE_BAJA --> [*]
+    DADA_DE_BAJA --> DISPONIBLE: Admin deshace la baja (vuelve con el estado que tenía)
+    DADA_DE_BAJA --> EN_MANTENIMIENTO: ídem
+    DADA_DE_BAJA --> FUERA_DE_SERVICIO: ídem
 ```
 
 > **El estado lo decide una persona, no el sistema.** Registrar una incidencia
@@ -24,7 +26,11 @@ stateDiagram-v2
 > conocimiento o la autorización—, y eso no se deduce de un diagnóstico
 > (RF-03.5).
 
-> `DADA_DE_BAJA` es independiente del campo `estado` (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO`) — es el flag `equipo.dado_de_baja`, no un cuarto valor de ese enum. Se muestra acá junto al resto porque es, en la práctica, el estado terminal del ciclo de vida del equipo. Dar de baja fija además `estado = FUERA_DE_SERVICIO`, y **no se permite sobre un equipo prestado** (RF-03.20): primero hay que registrar que volvió.
+> `DADA_DE_BAJA` es independiente del campo `estado` (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO`) — es el flag `equipo.dado_de_baja`, no un cuarto valor de ese enum. Se muestra acá junto al resto porque es el final del ciclo de vida habitual del equipo. **No se permite sobre un equipo prestado** (RF-03.20): primero hay que registrar que volvió.
+
+> **La baja NO fija `estado = FUERA_DE_SERVICIO`.** Este archivo lo afirmaba y nunca fue cierto: `DarDeBaja` mueve `dado_de_baja` y `fecha_baja`, y nada más. Es exactamente lo que permite que deshacerla devuelva el equipo con el estado que tenía — si estaba roto vuelve roto, y ponerlo `DISPONIBLE` sería inventar que alguien lo arregló. El mismo error estaba en `04-diagramas-secuencia.md` §6b; los dos corregidos el 2026-09-12.
+
+> **La baja tampoco es terminal.** Se deshace: `POST /api/equipos/{id}/reactivar` devuelve el equipo al inventario con el estado que tenía. Lo que no vuelve es la cascada — las reservas que la baja canceló quedan canceladas y los avisos ya salieron—, y puede fallar si alguien se quedó con lo que la baja liberó: el zócalo, el nombre suelto o el número de serie. Lo único terminal del sistema es una **cuenta** en `BAJA` (ver `02-casos-de-uso.md`), y la asimetría es deliberada: un equipo retirado por error sigue siendo el mismo equipo.
 
 > Los tránsitos hacia `EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` son de duración **indefinida** y disparan cancelación en cascada de las reservas futuras de ese equipo puntual (RF-03.8). El regreso a `DISPONIBLE` no restaura nada automáticamente.
 

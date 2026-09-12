@@ -31,7 +31,12 @@ var (
 	// ErrTextoIlegible: caracteres de control. No es una regla de formato — es
 	// que un texto con un salto de línea adentro no se puede mostrar en
 	// ninguna de las pantallas que lo imprimen.
-	ErrTextoIlegible = errors.New("la división o la modalidad tienen caracteres que no se pueden mostrar")
+	//
+	// El texto es genérico porque lo comparten los cuatro campos libres de este
+	// paquete: la división, la modalidad y el nombre de una materia. Desde que
+	// cualquiera de ellos puede llegar de una celda de una planilla, el caso
+	// dejó de ser hipotético.
+	ErrTextoIlegible = errors.New("el texto tiene caracteres que no se pueden mostrar")
 )
 
 // Curso pertenece a un CicloLectivo.
@@ -53,8 +58,10 @@ type Curso struct {
 	// curso no pertenece a una —el ciclo básico de una técnica.
 	Modalidad string
 	// Nombre viene de la base y no se escribe: "4°2", "2°", "1°A".
-	Nombre    string
-	Activo    bool
+	Nombre string
+	// Archivado es el único estado de un curso: se enciende cuando se archiva
+	// su ciclo (RF-02.4). Lo acompañaba un `Activo` que nunca se puso en false
+	// y que no decidía nada; se quitó en la migración 016.
 	Archivado bool
 }
 
@@ -70,19 +77,29 @@ func ValidarCurso(anio int, division, modalidad string) (string, string, error) 
 		return "", "", ErrAnioCursoInvalido
 	}
 
+	// Los tres pasos en el mismo orden que ValidarNombreMateria, por los mismos
+	// motivos: recortar el borde, mirar los caracteres de control antes de
+	// colapsar —o un salto de línea interno se disfraza del espacio que separa
+	// dos palabras—, y recién ahí canonizar.
 	division = strings.TrimSpace(division)
-	if len([]rune(division)) > MaxLargoDivision {
-		return "", "", ErrDivisionLarga
-	}
-
 	modalidad = strings.TrimSpace(modalidad)
-	if len([]rune(modalidad)) > MaxLargoModalidad {
-		return "", "", ErrModalidadLarga
-	}
 
 	if strings.ContainsFunc(division, unicode.IsControl) ||
 		strings.ContainsFunc(modalidad, unicode.IsControl) {
 		return "", "", ErrTextoIlegible
+	}
+
+	// Misma canonización que el nombre de una materia, y por el mismo motivo:
+	// «Ciclo Básico» y «Ciclo  Básico» se ven iguales y serían dos modalidades,
+	// que en el índice único son dos cursos distintos con el mismo nombre.
+	division = CanonizarEspacios(division)
+	if len([]rune(division)) > MaxLargoDivision {
+		return "", "", ErrDivisionLarga
+	}
+
+	modalidad = CanonizarEspacios(modalidad)
+	if len([]rune(modalidad)) > MaxLargoModalidad {
+		return "", "", ErrModalidadLarga
 	}
 
 	return division, modalidad, nil
@@ -99,7 +116,6 @@ func NuevoCurso(id, cicloLectivoID string, anio int, division, modalidad string)
 		Anio:           anio,
 		Division:       division,
 		Modalidad:      modalidad,
-		Activo:         true,
 	}
 	// Se arma acá también para que quien crea el curso pueda mostrarlo sin
 	// releerlo de la base. La base lo recalcula igual: es la misma regla.

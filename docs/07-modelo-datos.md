@@ -43,12 +43,12 @@ erDiagram
     EQUIPO_CUENTA { uuid id; uuid equipo_id; string usuario; string usuario_normalizado; string clase; string privilegio; bool tiene_password; string password_cifrada; string visibilidad; string notas; timestamptz creada_en; timestamptz actualizada_en }
     EQUIPO_PREFERENCIA { uuid id; uuid equipo_id; string materia_nombre; string materia_norm; string modalidad; int anio; string division; int prioridad; timestamptz creada_en }
     CICLO_LECTIVO { uuid id; int anio; bool activo; bool archivado }
-    CURSO { uuid id; uuid ciclo_lectivo_id; int anio; string division; string modalidad; string nombre; string division_norm; string modalidad_norm; bool activo; bool archivado }
-    MATERIA { uuid id; uuid curso_id; string nombre; string nombre_norm; bool activo; bool archivado }
+    CURSO { uuid id; uuid ciclo_lectivo_id; int anio; string division; string modalidad; string nombre; string division_norm; string modalidad_norm; bool archivado }
+    MATERIA { uuid id; uuid curso_id; string nombre; string nombre_norm; bool archivado }
     DOCENTE_MATERIA { uuid id; uuid usuario_id; uuid materia_id; string rol }
     REGLA_RECURRENCIA { uuid id; uuid materia_id; uuid creado_por; string dia_semana; time hora_inicio; time hora_fin; date fecha_inicio; date fecha_fin }
     RESERVA_GRUPO { uuid id; uuid materia_id; uuid creado_por; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; uuid regla_recurrencia_id; timestamptz creada_en; timestamptz recordatorio_enviado_en }
-    RESERVA { uuid id; uuid reserva_grupo_id; uuid equipo_id; uuid materia_id; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; string tipo; string motivo_bloqueo; uuid creado_por; timestamptz creada_en; uuid cancelado_por; string motivo_cancelacion; timestamptz cancelada_en; timestamptz avisado_equipo_no_disponible_en }
+    RESERVA { uuid id; uuid reserva_grupo_id; uuid equipo_id; uuid materia_id; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; string tipo; string motivo_bloqueo; uuid creado_por; timestamptz creada_en; uuid cancelado_por; string motivo_cancelacion; timestamptz cancelada_en }
     PRESTAMO { uuid id; uuid equipo_id; uuid reserva_id; uuid entregado_a_usuario_id; string entregado_a_nombre; string retirado_por; string destino; timestamptz devolucion_estimada; uuid entregado_por; timestamptz entregado_en; timestamptz devuelto_en; uuid recibido_por; string observaciones; date avisado_cierre_para }
     NOTIFICACION { uuid id; uuid usuario_id; uuid reserva_id; uuid sobre_usuario_id; string mensaje; string tipo; string estado; timestamptz creada_en; timestamptz leida_en }
     HORARIO_ADMIN { uuid id; uuid usuario_id; string dia_semana; time hora_inicio; time hora_fin }
@@ -288,6 +288,47 @@ CREATE UNIQUE INDEX idx_ciclo_lectivo_activo_unico ON ciclo_lectivo (activo) WHE
 > generada, que Postgres no permite encadenar. Incluye la modalidad, así que
 > dos carreras pueden tener cada una su `1°A`.
 
+### `carro`
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| nombre | VARCHAR(100) | NOT NULL, CHECK `btrim(nombre) <> ''` |
+| descripcion | TEXT | |
+| dado_de_baja | BOOLEAN | NOT NULL DEFAULT false |
+| fecha_baja | TIMESTAMPTZ | |
+| | | UNIQUE (`clave_texto(nombre)`) WHERE `dado_de_baja = false` |
+| | | CHECK: las dos columnas de la baja van juntas o no van |
+
+> **La baja es lógica, no un DELETE** (migración 014). El nombre del carro vive
+> congelado en `historico_uso_equipo.carro_nombre_snapshot` de cada máquina que
+> tuvo adentro, y borrarlo dejaría ese histórico hablando de algo que el sistema
+> ya no puede explicar. Además `equipo.carro_id` no tiene `ON DELETE`: borrar el
+> padre sería un error de clave foránea contra un equipo vivo.
+>
+> **El índice único es parcial sobre los vivos**, con el mismo criterio que la
+> 005 usó para el número de serie y el zócalo: retirar un carro libera su
+> nombre, porque para el usuario dar de baja es sacar del medio, y que el nombre
+> del retirado siga bloqueando el del reemplazo convierte una baja en un
+> problema a resolver con un nombre inventado.
+>
+> Sólo se permite con el carro **vacío**: ver RF-03.1.
+
+> **Qué es un carro, literalmente**: un mueble metálico con ruedas y zócalos
+> numerados donde las notebooks se guardan y se cargan cuando no se usan. Está
+> siempre en el laboratorio de informática.
+>
+> **La cantidad de zócalos varía de un carro a otro** y el modelo no la
+> presupone en ningún lado: no hay columna de capacidad, ni tope en el
+> `identificador` —solo que sea un entero—, ni constraint que cuente equipos
+> por carro.
+>
+> Eso explica el modelo mejor que cualquier otra cosa: `equipo.identificador`
+> **es el número del zócalo**. Por eso `UNIQUE (carro_id, identificador)` y no
+> un único global —el zócalo 7 existe en cada carro— y por eso la etiqueta
+> "PC 7" le sirve a alguien parado frente al mueble buscando cuál sacar.
+>
+> El `ADMIN` edita `nombre`/`descripcion` en cualquier momento.
+
 ### `materia`
 | Campo | Tipo | Restricciones |
 |---|---|---|
@@ -297,7 +338,7 @@ CREATE UNIQUE INDEX idx_ciclo_lectivo_activo_unico ON ciclo_lectivo (activo) WHE
 | nombre_norm | VARCHAR(100) | GENERATED ALWAYS AS `translate(lower(nombre), 'áéíóúüñ', 'aeiouun')` STORED |
 | activo | BOOLEAN | NOT NULL DEFAULT true |
 | archivado | BOOLEAN | NOT NULL DEFAULT false |
-| | | UNIQUE (curso_id, nombre) |
+| | | UNIQUE (curso_id, `clave_texto(nombre)`) — índice `ux_materia_curso_nombre` |
 
 > `nombre_norm` es la forma canónica del nombre —sin mayúsculas ni acentos—
 > contra la que se cruzan las marcas de preferencia de `equipo_preferencia`
@@ -305,6 +346,35 @@ CREATE UNIQUE INDEX idx_ciclo_lectivo_activo_unico ON ciclo_lectivo (activo) WHE
 > función vive en una extensión, depende de un diccionario y por eso no es
 > IMMUTABLE, así que no se puede usar ni en una columna generada ni en un
 > índice.
+
+> **La unicidad va sobre `clave_texto(nombre)`, no sobre `nombre`**
+> (migraciones 010 y 011). Ver §Unicidad de texto más abajo: es la misma regla
+> que rige para carros, equipos sueltos, licencias y números de serie. No es
+> un problema estético: la materia es la unidad sobre la que se reserva
+> (RF-04.1) y a la que se asigna un docente (RF-02.6), así que dos filas para la
+> misma materia parten sus reservas y sus docentes en dos mitades que nadie ve
+> juntas — el docente elige una de dos opciones idénticas en pantalla y el
+> reporte de uso cuenta cada mitad por separado. Mismo criterio que
+> `ux_curso_ciclo_nombre` para `curso`.
+>
+> `idx_materia_nombre_norm` **no** es redundante con el índice único: éste es
+> compuesto, arranca por `curso_id` y va sobre otra expresión, así que no sirve
+> para la búsqueda por nombre suelto de RF-03.21. `nombre_norm` se conserva
+> justamente para eso — es lo que cruza las marcas de preferencia de equipo.
+>
+> **Antes de desambiguar, la 010 limpia los espacios de más** de todos los
+> nombres («Educación  Física» → «Educación Física»). Un espacio doble no es un
+> dato sino un accidente de una planilla o un copiado, y sin limpiarlo primero
+> el desempate lo trata como un nombre más: puede dejarle el nombre limpio a la
+> fila malformada y ponerle el sufijo a la correcta.
+>
+> **La 010 no borra los duplicados que ya estaban: los renombra** («Matemática
+> (2)»). Una materia duplicada puede tener reservas, docentes y pedidos
+> colgando, y una migración que corre sola al arrancar el contenedor no puede
+> llevárselos puestos. El nombre limpio se lo queda **la más usada** —se cuentan
+> `docente_materia`, `reserva_grupo` y `regla_recurrencia`—, porque renombrar la
+> fila que está en uso para dejarle el nombre bueno a una copia huérfana le
+> cambia el nombre a la materia que aparece en las reservas ya hechas.
 
 > **Edición y eliminación mientras el ciclo está activo (RF-02.11):** `nombre`
 > se puede editar en cualquier momento, revalidando el patrón y la unicidad. La
@@ -338,30 +408,6 @@ CREATE INDEX idx_materia_curso           ON materia (curso_id);
 >
 > **Solo pueden asignarse docentes con `estado = APROBADA`.** Lo valida la capa
 > de aplicación: Postgres no tiene un CHECK que mire otra tabla.
-
-### `carro`
-| Campo | Tipo | Restricciones |
-|---|---|---|
-| id | UUID | PK |
-| nombre | VARCHAR(100) | NOT NULL, UNIQUE |
-| descripcion | TEXT | NULL |
-
-> **Qué es un carro, literalmente**: un mueble metálico con ruedas y zócalos
-> numerados donde las notebooks se guardan y se cargan cuando no se usan. Está
-> siempre en el laboratorio de informática.
->
-> **La cantidad de zócalos varía de un carro a otro** y el modelo no la
-> presupone en ningún lado: no hay columna de capacidad, ni tope en el
-> `identificador` —solo que sea un entero—, ni constraint que cuente equipos
-> por carro.
->
-> Eso explica el modelo mejor que cualquier otra cosa: `equipo.identificador`
-> **es el número del zócalo**. Por eso `UNIQUE (carro_id, identificador)` y no
-> un único global —el zócalo 7 existe en cada carro— y por eso la etiqueta
-> "PC 7" le sirve a alguien parado frente al mueble buscando cuál sacar.
->
-> El `ADMIN` edita `nombre`/`descripcion` en cualquier momento. No hay
-> "eliminar carro": un carro se vacía dando de baja sus equipos.
 
 ### `equipo`
 Todo lo que la institución presta, en una sola tabla: las computadoras de un
@@ -864,7 +910,6 @@ grupo ni materia.
 | cancelado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | motivo_cancelacion | TEXT | NULL |
 | cancelada_en | TIMESTAMPTZ | NULL |
-| avisado_equipo_no_disponible_en | TIMESTAMPTZ | NULL |
 
 ```sql
 -- Invariante: NORMAL siempre pertenece a un grupo y a una materia;
@@ -930,10 +975,13 @@ CREATE INDEX idx_reserva_confirmadas_del_dia ON reserva (fecha, hora_inicio) WHE
 > prohibido en las `NORMAL`, para que no haya dos lugares donde decir para qué
 > es una franja.
 
-> `avisado_equipo_no_disponible_en` va en `reserva` y no en `prestamo`, y **es
-> la diferencia que importa**: la misma máquina demorada toda la mañana le
-> falta a la clase de las 10 y también a la de las 12, y a las dos hay que
-> avisarles. Con la marca del lado del préstamo, solo se enteraría la primera.
+> **`reserva` ya no tiene `avisado_equipo_no_disponible_en`.** La eliminó la
+> migración 004 junto con el aviso que la usaba: era la marca de "a esta reserva
+> ya le avisamos que le falta una máquina", y ese aviso se retiró porque deducía
+> un problema que el sistema no podía confirmar —una PC que no volvió a horario no
+> es necesariamente una PC que va a faltar en la clase siguiente—. El recorte
+> completo de avisos está en `01-requisitos.md` RF-05; acá interesa que la columna
+> no existe, ni en el esquema ni en la entidad.
 
 ### `prestamo`
 La custodia física de un equipo: quién lo tiene **ahora**. Ver RF-08.
@@ -1350,7 +1398,14 @@ asignaciones docente↔materia el año siguiente; **no** es preservar el detalle
 de cada reserva.
 
 1. Se preservan (`archivado = true`, sin borrar): `curso`, `materia`,
-   `docente_materia`.
+   `docente_materia`. **`archivado` es el único estado de un curso y de una
+   materia**: hasta la migración 016 lo acompañaba una bandera `activo` que
+   ninguna línea del código ponía en `false` y que ninguna regla consultaba, pero
+   que viajaba en la respuesta de la API. Se quitó — el significado que aparentaba
+   ya lo tiene `archivado`, y darle uno aparte habría agregado un segundo eje de
+   estados que explicar en cada pantalla. Cuidado con el nombre: el `activo` de
+   `ciclo_lectivo` **no** se tocó y no tiene nada que ver, marca cuál es el único
+   ciclo abierto y lo sostiene un índice único parcial.
 2. Antes de borrar nada, se calcula y persiste un **snapshot histórico
    agregado** (`historico_uso_equipo` / `historico_uso_docente`) con las
    estadísticas del año que termina.
@@ -1492,7 +1547,236 @@ WHERE anio = $1;
 > de RF-06.3). Con `INNER`, un equipo suelto no queda sin nombre: **desaparece
 > de la consulta**, que es un modo de fallar mucho peor.
 
-## 5. Notas de diseño
+## 5. Unicidad de texto: una sola regla para todos los nombres
+
+Seis cosas del sistema se identifican por un texto que escribe una persona: el
+carro, el equipo suelto, la materia, la licencia de software, el número de serie
+y el curso dentro de su ciclo. Para las seis, **dos textos nombran la misma cosa
+si coinciden sin tildes, sin mayúsculas y con los espacios colapsados.**
+
+Lo sostiene `clave_texto(text)` —una función `IMMUTABLE`, que es lo que permite
+indexarla— y los seis índices únicos cuelgan de ella:
+
+| índice | sobre |
+|---|---|
+| `ux_carro_nombre` | `clave_texto(nombre)` |
+| `ux_equipo_suelto_nombre` | `clave_texto(nombre)`, parcial sobre los sueltos y vivos |
+| `ux_equipo_numero_serie` | `clave_texto(numero_serie)`, parcial sobre los vivos |
+| `ux_materia_curso_nombre` | `(curso_id, clave_texto(nombre))` |
+| `ux_licencia_equipo_nombre` | `(equipo_id, clave_texto(nombre))` |
+| `ux_curso_ciclo_nombre` | `(ciclo_lectivo_id, clave_texto(COALESCE(modalidad,'')), anio, clave_texto(COALESCE(division,'')))` |
+
+El `COALESCE` del curso no es decorativo: `clave_texto()` es `STRICT`, así que
+sobre `NULL` devuelve `NULL`, y en un índice único dos `NULL` no son iguales
+entre sí. Sin él, dos cursos de 1° sin división ni modalidad —el caso normal de
+una universidad— dejarían de ser el mismo curso para la base.
+
+**Por qué una función y no la expresión repetida en cada índice.** Una expresión
+copiada seis veces funciona hasta que alguien toca una copia. Con la función,
+que se separen deja de ser posible.
+
+El curso lo demuestra: fue el último en sumarse (migración 015) y, mientras su
+índice dependió de las columnas generadas de la 009, la carga masiva de RF-02.12
+tenía que **replicar esa expresión en Go** para buscar un curso existente,
+mientras que para buscar una materia llamaba a la función. Esa constante ya no
+existe.
+
+**Por qué no la columna generada `nombre_norm`.** Esa columna saca tildes y
+mayúsculas pero no colapsa espacios, y el espacio de más es el peor de los tres
+casos: «Educación Física» y «Educación  Física» se imprimen idénticas en todas
+las pantallas, así que si entran las dos nadie puede ver por qué la cosa aparece
+duplicada ni cuál borrar. Con las tildes al menos se ve la diferencia.
+
+### Las dos funciones, y por qué son dos
+
+- `canonizar_texto(t)` — el texto tal como se **guarda**: colapsa espacios y
+  conserva caja y tildes.
+- `clave_texto(t)` — el texto con el que se **compara**: además baja a
+  minúsculas y saca las tildes.
+
+Son dos preguntas distintas —«¿cómo se escribe esto?» y «¿esto y aquello son la
+misma cosa?»— y guardar la clave sería mostrarle al Admin sus carros en
+minúsculas y sin tildes.
+
+### El espejo en Go, y el test que lo sostiene
+
+`internal/shared/texto` tiene las mismas dos: `Canonizar` y `Clave`. Existe
+porque Go decide, antes de escribir, si una fila es un duplicado —y devuelve un
+409 legible en vez del error crudo del índice—. Si las dos definiciones se
+separan, el síntoma no es un test en rojo sino una carga masiva que revienta
+contra un índice en el medio.
+
+Por eso hay un test de **paridad contra Postgres real**
+(`migrations/clave_texto_test.go`): compara las dos implementaciones sobre una
+batería de entradas. No es ceremonia — encontró una divergencia real apenas se
+escribió: el `\s` de Postgres **no** matchea el espacio duro (U+00A0) y
+`strings.Fields` de Go **sí**. Por eso las dos listas de qué cuenta como espacio
+están escritas a mano y explícitas en los dos lados.
+
+### Qué pasó con los duplicados que ya estaban
+
+Las migraciones 010 y 011 los **renombran, nunca los borran**: un carro
+duplicado tiene equipos colgando, una licencia tiene avisos, una materia tiene
+reservas y docentes. Una migración que corre sola al arrancar el contenedor no
+puede llevarse eso puesto.
+
+Primero se canonizan los espacios de todos los nombres —un espacio doble es un
+accidente, no un dato—, y a lo que siga repitiéndose se le agrega « (2)», que lo
+deja visible en la pantalla para que un Admin decida a mano cuál sobrevive. El
+nombre limpio se lo queda **el que está en uso** (el carro con más equipos, el
+equipo con más préstamos, la materia con más reservas), porque renombrar la fila
+que todo el mundo usa para dejarle el nombre bueno a una copia huérfana es
+exactamente al revés.
+
+**El número de serie es la excepción: ahí la migración falla en vez de
+renombrar.** Una serie inventada deja de coincidir con la etiqueta pegada a la
+máquina, y dos equipos vivos con la misma serie son dos máquinas mal cargadas —
+eso lo resuelve una persona, no un `UPDATE`.
+
+### La cadena vacía
+
+`NOT NULL` no impide `''`. La 011 agrega `CHECK (btrim(x) <> '')` sobre lo que
+escribe una persona y se muestra como la identidad de algo: `carro.nombre`,
+`materia.nombre`, `incidencia.descripcion`, `usuario.nombre`/`apellido`/`email`
+y `notificacion.mensaje`.
+
+Los snapshots históricos quedan afuera a propósito: son copias congeladas de un
+texto que ya se validó cuando estaba vivo, y un CHECK ahí podría hacer fallar un
+archivado por un dato viejo que ya no se puede corregir.
+
+## 6. Eliminar una cuenta: qué sobrevive y qué no
+
+Diez foráneas apuntan a `usuario`, y el borrado definitivo (RF-01.9) las ejerce
+todas a la vez. La pregunta no es qué hace cada `ON DELETE` —eso está en la
+tabla de cada entidad— sino **cuál de las dos mitades toca cada una**, porque
+quien aprieta el botón lo hace para liberar un email y se lleva más que eso.
+
+### Sobrevive perdiendo la referencia (`SET NULL`)
+
+Todo lo que es **registro de algo que pasó**: reservas, incidencias, entregas y
+devoluciones, el histórico de uso, las cancelaciones. Ninguna pierde
+información legible: donde hacía falta el nombre hay un snapshot ya guardado
+(`nombre_docente_snapshot`, `entregado_a_nombre`), justamente para que el
+registro siga contestando quién fue cuando la cuenta ya no está. Una entrada de
+auditoría hecha por esa cuenta también sobrevive, con el identificador del actor
+y sin su nombre.
+
+### Se borra (`CASCADE`)
+
+| Tabla | Por qué no sobrevive |
+|---|---|
+| `notificacion` | Un aviso sin destinatario no es nada: nadie lo va a leer. |
+| `preferencia_notificacion` | Son ajustes de esa persona sobre sus propios avisos. |
+| `sugerencia` + `sugerencia_mensaje` | El hilo de soporte entero, **incluidas las respuestas que escribió el Admin**. |
+| `pedido_de_materia` | Un pedido para dictar algo, de alguien que ya no está. |
+| `docente_materia` | Ya no hay quién dicte: la materia queda sin ese docente (y si era el único, RF-02.8 ya canceló sus reservas al darlo de baja). |
+| `horario_admin` y `horario_admin_excepcion` | Un horario de guardia sin persona no significa nada. |
+| `foto_perfil` | Es de la cuenta. |
+| `codigo_recuperacion` | Vence solo; sin cuenta no sirve para nada. |
+
+### Por qué la operación lo informa
+
+Dos de esas cascadas **destruyen algo que nadie pidió destruir**: el hilo de
+soporte se lleva las respuestas del propio Admin, y el horario de guardia decide,
+desde RF-07.6, si el barrido actúa en esos tramos. Borrar la cuenta del último
+Admin con guardia cargada cambia el comportamiento del sistema, y el efecto
+aparece semanas después, cuando ya nadie lo relaciona con aquel borrado.
+
+Que se borren está bien —ninguna de esas filas significa algo sin su dueño—; lo
+que no estaba bien es que se borraran en silencio. `DELETE /api/auth/usuarios/{id}`
+devuelve cuántas filas se llevó cada cascada, y el mismo detalle queda en la
+auditoría (`CUENTA_ELIMINADA_DEFINITIVAMENTE`), que es donde hay que mirar
+cuando la pregunta llega tarde y las filas ya no están. El conteo va **dentro de
+la misma transacción y antes del `DELETE`**: después no hay nada que contar.
+
+## 7. Índices de claves foráneas
+
+Postgres indexa sola la columna **referenciada** de una clave foránea (es la
+PK), pero no la que **referencia**. Sin ese índice, cada borrado del padre
+recorre la tabla hija entera para cumplir el `ON DELETE` — una vez por fila
+borrada.
+
+No se nota con la base recién cargada. Se nota en las dos operaciones que borran
+de a muchas, que además corren desatendidas: **cerrar el año** (RF-02.4, borra
+todas las reservas del ciclo) y **eliminar una cuenta** (RF-01.9, toca diez
+columnas que apuntan a `usuario`).
+
+Medido sobre la base de desarrollo, con 16.000 avisos cargados:
+
+| reservas borradas | sin índice | con índice |
+|---|---|---|
+| 400 | 4,5 s | 0,88 s |
+| 1.600 | 18,7 s | 1,03 s |
+
+Lo que importa no es el 5× de la primera fila sino la **forma de las dos
+columnas**: cuadruplicar las reservas cuadruplica el tiempo sin índice y deja el
+otro casi igual. El trabajo inevitable —poner en NULL los avisos que de verdad
+apuntan a algo— no depende de cuántas reservas se borren; el recorrido de la
+tabla, sí, una vez por cada una.
+
+### Son índices parciales
+
+Todos llevan `WHERE columna IS NOT NULL`, salvo el único de la lista que es NOT
+NULL. Sale gratis: el chequeo de una foránea busca siempre por un valor
+concreto, nunca por NULL. Y Postgres deduce que `col = $1` implica
+`col IS NOT NULL`, que es lo que le permite usar el índice parcial igual —
+**verificado con EXPLAIN sobre la forma exacta que usa el trigger de integridad
+referencial** (sentencia preparada, con parámetro, `FOR KEY SHARE`), no asumido.
+Hay un test que lo fija.
+
+Cuánto achica depende de la columna: en `notificacion.reserva_id` y
+`reserva.cancelado_por` es la enorme mayoría de las filas; en
+`prestamo.entregado_por` casi ninguna es nula y el índice queda igual de grande
+que uno entero. Ahí no gana nada y tampoco pierde.
+
+### Dos foráneas a propósito SIN índice
+
+- `historico_uso_equipo.equipo_id` — un equipo nunca se borra de verdad (la baja
+  es lógica, `equipo.dado_de_baja`), así que esta foránea no se ejerce jamás en
+  un DELETE. Y la tabla se consulta sólo por `anio`, que ya tiene índice.
+- `historico_uso_docente.usuario_id` — acá el padre sí se borra, pero la tabla
+  tiene una fila por docente por año: cientos, no millones.
+
+El criterio no es «toda foránea lleva índice» sino **«lleva índice la foránea
+cuyo padre se borra y cuya tabla hija crece»**. La lista de excepciones vive en
+el test (`migrations/indices_de_foraneas_test.go`), no sólo acá: agregar una
+foránea nueva sin índice lo hace fallar, así que el autor tiene que decidir y
+dejar escrito de qué lado cae. Sin eso la deuda se acumula en silencio, que es
+como llegaron a ser quince.
+
+## 8. Cuánto crecen las tablas que nada limpia
+
+Cuatro tablas no se borran nunca: `audit_log`, `notificacion`, `prestamo` e
+`incidencia`. La pregunta obvia es si hace falta una política de retención. **La
+respuesta, medida, es que no**, y conviene dejar el número escrito para que
+nadie la vuelva a abrir por las dudas.
+
+Costo marginal real por fila, medido insertando veinte mil filas y comparando el
+tamaño (no dividiendo el total, que a pocos cientos de filas es casi todo piso
+fijo de índices):
+
+| tabla | bytes por fila | filas al año | crecimiento |
+|---|---|---|---|
+| `audit_log` | 296 | ~4.400 | **1,3 MB/año** |
+| `notificacion` | del mismo orden | ~6.000 | ~1,8 MB/año |
+
+Veinte años de auditoría son 26 MB. Construir un trabajo de borrado para eso
+sería agregar riesgo —borrar datos— y una pieza más que mantener, para un
+problema que no existe. Y en `audit_log` específicamente, borrar es exactamente
+lo que una auditoría no debe hacer.
+
+**Cuándo volver a mirarlo**: si alguna pasa del millón de filas, o si el tamaño
+en disco se vuelve un problema para la copia de seguridad diaria. Ninguna de las
+dos cosas está cerca.
+
+> **Un tamaño inflado no siempre es crecimiento.** Durante esta revisión
+> `notificacion` figuraba con 17 MB para 27 filas: era hinchazón de índices
+> dejada por un banco de pruebas que insertó y deshizo doscientas mil filas. Un
+> `REINDEX` la dejó en 104 kB. Antes de concluir que una tabla creció, conviene
+> mirar `pg_stat_user_tables` —`n_tup_ins` contra `n_live_tup`— y separar la
+> tabla de sus índices.
+
+## 9. Notas de diseño
 
 - `equipo.freezado` es informativo (Deep Freeze instalado), sin efecto
   funcional sobre reservas.

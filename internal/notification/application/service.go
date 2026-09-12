@@ -164,23 +164,77 @@ func (s *Service) CerrarAvisosPendientesDe(ctx context.Context, tipo domain.Tipo
 	return cerradas, nil
 }
 
-// ObtenerNotificacion es un passthrough directo al repo — usado por
-// interfaces/http para verificar la titularidad de una notificación antes de
-// dejarla marcar como leída.
-func (s *Service) ObtenerNotificacion(ctx context.Context, id string) (*domain.Notificacion, error) {
-	return s.repo.BuscarPorID(ctx, id)
+// ObtenerNotificacion trae un aviso, y sólo a su destinatario.
+//
+// Era un passthrough sin regla, y su comentario decía que la titularidad la
+// verificaba interfaces/http antes de dejar marcar como leído. Dejó de ser
+// cierto con el barrido de RF-00.3 —la regla bajó al servicio— y desde entonces
+// no la llamaba nadie: quedó una consulta, un método y dos tests sin ningún
+// consumidor. Es el mismo fósil que había quedado en ObtenerReserva.
+//
+// Ahora sostiene el GET de un aviso solo, que faltaba: el recurso tiene PATCH
+// y DELETE, así que se podía marcar leído y borrar algo que no se podía pedir.
+func (s *Service) ObtenerNotificacion(ctx context.Context, id, solicitanteID string) (*domain.Notificacion, error) {
+	n, err := s.repo.BuscarPorID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if n.UsuarioID != solicitanteID {
+		return nil, ErrNoEsTuAviso
+	}
+	return n, nil
 }
 
 // MarcarLeida marca una notificación puntual como leída.
-func (s *Service) MarcarLeida(ctx context.Context, notificacionID string) error {
+// MarcarLeida cierra un aviso. Sólo su destinatario puede hacerlo.
+//
+// La comprobación de pertenencia vive ACÁ y no en el handler, que es donde
+// estaba: una regla que sólo aplica el transporte la saltea cualquier otro
+// llamador del servicio. Y de paso ahorra una lectura — el handler leía la
+// notificación para comprobar, y el servicio la volvía a leer para guardarla.
+func (s *Service) MarcarLeida(ctx context.Context, notificacionID, solicitanteID string) error {
 	n, err := s.repo.BuscarPorID(ctx, notificacionID)
 	if err != nil {
 		return err
+	}
+	if n.UsuarioID != solicitanteID {
+		return ErrNoEsTuAviso
 	}
 	if err := n.MarcarLeida(s.ahora()); err != nil {
 		return err
 	}
 	return s.repo.Guardar(ctx, n)
+}
+
+// Borrar saca un aviso de la lista de su destinatario.
+//
+// Sólo el destinatario, y sólo si YA LO LEYÓ. Lo primero es la misma regla de
+// pertenencia que MarcarLeida. Lo segundo es una decisión: un aviso sin leer es
+// algo que todavía no pasó por los ojos de nadie —una cuenta esperando
+// aprobación, una reserva que se canceló—, y dejarlo borrar de un clic hace
+// desaparecer la tarea sin que nadie se entere de que existió. Marcarlo leído
+// es un clic que ya existe, y después sí.
+//
+// Existe porque hasta acá un docente podía marcar un aviso como leído pero no
+// sacárselo de encima: los suyos se le acumulaban para siempre y la única forma
+// de perderlos era que le borraran la cuenta.
+func (s *Service) Borrar(ctx context.Context, notificacionID, solicitanteID string) error {
+	n, err := s.repo.BuscarPorID(ctx, notificacionID)
+	if err != nil {
+		return err
+	}
+	if n.UsuarioID != solicitanteID {
+		return ErrNoEsTuAviso
+	}
+	if !n.EstaLeida() {
+		return ErrAvisoSinLeer
+	}
+	return s.repo.Borrar(ctx, notificacionID)
+}
+
+// BorrarLeidas vacía de una vez los avisos ya leídos de quien lo pide.
+func (s *Service) BorrarLeidas(ctx context.Context, usuarioID string) (int, error) {
+	return s.repo.BorrarLeidasDe(ctx, usuarioID)
 }
 
 // MarcarTodasLeidas marca como leídas todas las notificaciones sin leer

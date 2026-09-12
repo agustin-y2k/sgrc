@@ -11,7 +11,7 @@ import (
 
 // La foto de perfil.
 
-// PUT /api/auth/mi-foto — multipart con el campo `foto`.
+// PUT /api/mi-foto — multipart con el campo `foto`.
 func (h *Handler) SubirMiFoto(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -73,7 +73,7 @@ func (h *Handler) VerFoto(c *fiber.Ctx) error {
 	return c.Send(foto.Contenido)
 }
 
-// DELETE /api/auth/mi-foto — vuelve a las iniciales.
+// DELETE /api/mi-foto — vuelve a las iniciales.
 func (h *Handler) EliminarMiFoto(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {

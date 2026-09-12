@@ -11,6 +11,9 @@ import (
 
 func mapearError(err error) error {
 	switch {
+	// 403 y no 404: la reserva existe, lo que pasa es que es de otro.
+	case errors.Is(err, application.ErrNoEsTuReserva):
+		return fiber.NewError(fiber.StatusForbidden, err.Error())
 	case errors.Is(err, application.ErrReservaGrupoNoEncontrado),
 		errors.Is(err, application.ErrReservaNoEncontrada),
 		errors.Is(err, application.ErrPrestamoNoEncontrado),
@@ -63,10 +66,9 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrPrestamoYaDevuelto):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, application.ErrReservaAjena),
-		// Pedirse a uno mismo no es un conflicto de estado sino de permiso:
-		// sobre la reserva propia esta acción no existe.
-		errors.Is(err, application.ErrReservaPropia):
+	// Pedirse a uno mismo no es un conflicto de estado sino de permiso: sobre la
+	// reserva propia esta acción no existe.
+	case errors.Is(err, application.ErrReservaPropia):
 		return fiber.NewError(fiber.StatusForbidden, err.Error())
 
 	default:

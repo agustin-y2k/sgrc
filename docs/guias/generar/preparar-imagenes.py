@@ -1,7 +1,17 @@
 import sys, os
 from PIL import Image, ImageOps
 
-ORIGEN, DESTINO = sys.argv[1], sys.argv[2]
+# --estricto: faltar un origen es un ERROR y no un aviso.
+#
+# Sin esto, un script de captura que falló dejaba un "✗ falta" en el log, la
+# imagen vieja intacta en imagenes/ y el proceso terminando en 0. Así estuvieron
+# rotas cuatro capturas durante semanas: nada distinguía una corrida completa de
+# una a la que le faltó media pantalla. En una corrida PARCIAL —regenerar sólo
+# lo que cambió, que es lo normal a mano— faltar es lo esperado y sigue siendo
+# un aviso; en una corrida completa, es lo que tiene que frenar todo.
+ESTRICTO = "--estricto" in sys.argv
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+ORIGEN, DESTINO = args[0], args[1]
 
 # nombre_de_origen -> nombre_publicado
 MAPA = {
@@ -57,6 +67,10 @@ MAPA = {
     "form-cuenta-nueva": "admin-23-cuenta-nueva",
     "cue-03-cuentas-docente": "docente-20-como-entrar",
     "cue-04-cuentas-telefono": "docente-21-como-entrar-telefono",
+    # Las dos que documentan lo que se sumó en la 1.21: las marcas de materia
+    # preferente y el registro de auditoría.
+    "adm2-preferencias": "admin-24-preferencias",
+    "adm2-auditoria": "admin-25-auditoria",
 }
 
 def recortar_vacio(img, margen=40, pie=280):
@@ -76,10 +90,13 @@ def recortar_vacio(img, margen=40, pie=280):
             break
     return img.crop((0, 0, ancho, min(alto, fila_util + margen)))
 
+faltantes = []
+
 for origen, destino in MAPA.items():
     ruta = os.path.join(ORIGEN, origen + ".png")
     if not os.path.exists(ruta):
         print("  ✗ falta", origen)
+        faltantes.append(origen)
         continue
     img = Image.open(ruta).convert("RGB")
     antes = img.size
@@ -96,3 +113,12 @@ for origen, destino in MAPA.items():
     img = ImageOps.expand(img, border=2, fill=(210, 214, 220))
     img.save(os.path.join(DESTINO, destino + ".png"), optimize=True)
     print(f"  ✓ {destino:38s} {antes[0]}x{antes[1]} → {img.size[0]}x{img.size[1]}")
+
+if faltantes:
+    print(f"\n{len(faltantes)} de {len(MAPA)} capturas no se generaron:")
+    for f in faltantes:
+        print("   ", f)
+    if ESTRICTO:
+        print("\nLas imágenes viejas de esas pantallas siguen en su lugar y "
+              "viajarían al PDF como si estuvieran al día.")
+        sys.exit(1)

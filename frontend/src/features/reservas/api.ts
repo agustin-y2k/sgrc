@@ -22,7 +22,7 @@ type RespuestaPaginada<T> = { data: T[]; meta: PaginacionMeta }
 
 /** RF-04.1 — en qué materias puede reservar quien está autenticado. */
 export function misMaterias() {
-  return apiFetch<RespuestaLista<MateriaReservable>>("/api/academic/mis-materias")
+  return apiFetch<RespuestaLista<MateriaReservable>>("/api/mis-materias")
 }
 
 /**
@@ -33,7 +33,7 @@ export function misMaterias() {
  */
 export function misMateriasAsignadas() {
   return apiFetch<RespuestaLista<MateriaReservable>>(
-    "/api/academic/mis-materias?asignadas=true"
+    "/api/mis-materias?asignadas=true"
   )
 }
 
@@ -59,7 +59,7 @@ export function equiposDisponibles({
   if (serieDesdeGrupoId) params.set("serieDesdeGrupoId", serieDesdeGrupoId)
   if (materiaId) params.set("materiaId", materiaId)
   return apiFetch<RespuestaLista<EquipoDisponible> & { ocupados?: EquipoOcupado[] }>(
-    `/api/reservation/equipos-disponibles?${params}`
+    `/api/equipos-disponibles?${params}`
   )
 }
 
@@ -67,7 +67,7 @@ export function equiposDisponibles({
  * RF-04.12 — pedirle al docente que tiene esa reserva que libere el equipo.
  */
 export function pedirLiberacion(reservaId: string, mensaje: string) {
-  return apiFetch<void>(`/api/reservation/reservas/${reservaId}/pedido-de-liberacion`, {
+  return apiFetch<void>(`/api/reservas/${reservaId}/pedido-de-liberacion`, {
     method: "POST",
     body: { mensaje },
   })
@@ -95,12 +95,12 @@ export function listarReservas(filtros?: {
   if (filtros?.pageSize) params.set("pageSize", String(filtros.pageSize))
   const query = params.toString()
   return apiFetch<RespuestaPaginada<ReservaDetallada>>(
-    `/api/reservation/reservas${query ? `?${query}` : ""}`
+    `/api/reservas${query ? `?${query}` : ""}`
   )
 }
 
 export function crearReserva(req: CrearReservaRequest) {
-  return apiFetch<{ grupo: unknown; reservas: Reserva[] }>("/api/reservation/reservas", {
+  return apiFetch<{ grupo: unknown; reservas: Reserva[] }>("/api/reservas", {
     method: "POST",
     body: req,
   })
@@ -109,14 +109,14 @@ export function crearReserva(req: CrearReservaRequest) {
 /** RF-04.5 — si una sola ocurrencia choca, el backend no crea ninguna. */
 export function crearReservaRecurrente(req: CrearReservaRecurrenteRequest) {
   return apiFetch<{ reglaId: string; grupos: unknown[] }>(
-    "/api/reservation/reservas/recurrentes",
+    "/api/reservas/recurrentes",
     { method: "POST", body: req }
   )
 }
 
 /** RF-04.8 — el motivo es obligatorio si la reserva es de otra persona. */
 export function cancelarReserva(reservaId: string, motivo: string) {
-  return apiFetch<void>(`/api/reservation/reservas/${reservaId}/cancelar`, {
+  return apiFetch<void>(`/api/reservas/${reservaId}/cancelar`, {
     method: "POST",
     body: { motivo },
   })
@@ -127,7 +127,7 @@ export function cancelarReserva(reservaId: string, motivo: string) {
  * se solapen.
  */
 export function bloquearEquipos(req: BloquearRequest) {
-  return apiFetch<ResultadoBloqueo>("/api/reservation/bloqueos", {
+  return apiFetch<ResultadoBloqueo>("/api/bloqueos", {
     method: "POST",
     body: req,
   })
@@ -136,7 +136,7 @@ export function bloquearEquipos(req: BloquearRequest) {
 /** RF-04.6 — `soloEsta: false` cancela también las ocurrencias futuras. */
 export function cancelarGrupo(grupoId: string, motivo: string, soloEsta: boolean) {
   return apiFetch<{ reservasCanceladas: number }>(
-    `/api/reservation/grupos/${grupoId}/cancelar`,
+    `/api/grupos/${grupoId}/cancelar`,
     { method: "POST", body: { motivo, soloEsta } }
   )
 }
@@ -147,13 +147,13 @@ export function cancelarGrupo(grupoId: string, motivo: string, soloEsta: boolean
 
 /** Qué hay afuera ahora mismo. Lo más atrasado viene primero. */
 export function listarPrestamosAbiertos() {
-  return apiFetch<RespuestaLista<Prestamo>>("/api/reservation/prestamos")
+  return apiFetch<RespuestaLista<Prestamo>>("/api/prestamos")
 }
 
 /** El historial de entregas de una máquina, de lo más reciente a lo más viejo. */
 export function historialDePrestamosDeEquipo(equipoId: string) {
   return apiFetch<RespuestaLista<Prestamo>>(
-    `/api/reservation/equipos/${equipoId}/prestamos`
+    `/api/equipos/${equipoId}/prestamos`
   )
 }
 
@@ -163,7 +163,7 @@ export function entregarPorReserva(req: {
   /** Quién vino a buscarlas, si no fue el docente de la reserva. */
   retiradoPor?: string
 }) {
-  return apiFetch<ResultadoEntrega>("/api/reservation/prestamos/por-reserva", {
+  return apiFetch<ResultadoEntrega>("/api/prestamos/por-reserva", {
     method: "POST",
     body: req,
   })
@@ -185,7 +185,7 @@ export function entregarSuelta(req: {
    */
   salidaAReparacion?: boolean
 }) {
-  return apiFetch<ResultadoEntrega>("/api/reservation/prestamos", {
+  return apiFetch<ResultadoEntrega>("/api/prestamos", {
     method: "POST",
     body: req,
   })
@@ -193,7 +193,7 @@ export function entregarSuelta(req: {
 
 /** Las máquinas volvieron. */
 export function recibirEquipos(req: { prestamoIds: string[]; observaciones?: string }) {
-  return apiFetch<ResultadoDevolucion>("/api/reservation/prestamos/recibir", {
+  return apiFetch<ResultadoDevolucion>("/api/prestamos/recibir", {
     method: "POST",
     body: req,
   })
@@ -205,7 +205,7 @@ export function cambiarEquipoDeReserva(
   equipoId: string,
   soloEsta = true
 ) {
-  return apiFetch<Reserva>(`/api/reservation/reservas/${reservaId}/equipo`, {
+  return apiFetch<Reserva>(`/api/reservas/${reservaId}/equipo`, {
     method: "PATCH",
     body: { equipoId, soloEsta },
   })

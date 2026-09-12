@@ -109,3 +109,33 @@ func TestHoraAvisoLicencias_DefaultYValores(t *testing.T) {
 		}
 	}
 }
+
+// Los tres timeouts del servidor: sin ellos fasthttp no tiene límite y una
+// conexión que manda un byte cada tanto se queda abierta para siempre. Hoy
+// nginx cubre ese caso, pero el overlay de desarrollo publica el 8080 al host
+// sin nginx adelante, y "el borde nos cubre" es una propiedad de la topología,
+// no del programa. El test existe porque quitar los tres campos no rompe nada
+// visible: compila, arranca, y atiende igual.
+func TestConfigDeFiber_TieneLosTresTimeouts(t *testing.T) {
+	t.Setenv("TRUSTED_PROXIES", "")
+	cfg := configDeFiber()
+
+	casos := []struct {
+		nombre string
+		valor  time.Duration
+	}{
+		{"ReadTimeout", cfg.ReadTimeout},
+		{"WriteTimeout", cfg.WriteTimeout},
+		{"IdleTimeout", cfg.IdleTimeout},
+	}
+	for _, c := range casos {
+		if c.valor <= 0 {
+			t.Errorf("%s quedó sin límite (%v): fasthttp lo trata como infinito", c.nombre, c.valor)
+		}
+		// El otro lado del error: un timeout corto corta pedidos legítimos. Lo
+		// más lento que existe es subir una foto de 200 KB por una conexión mala.
+		if c.valor < 10*time.Second {
+			t.Errorf("%s es de %v, demasiado corto para una subida por una conexión lenta", c.nombre, c.valor)
+		}
+	}
+}

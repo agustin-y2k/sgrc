@@ -122,3 +122,30 @@ func TestSinSecreto_NoEstaDisponibleYNoRompe(t *testing.T) {
 		t.Fatalf("Descifrar: esperaba ErrSinClave, obtuve %v", err)
 	}
 }
+
+// Vacío arranca y corto no. La diferencia es la que hace que este test valga:
+// si el corto también devolviera nil sin error, el despliegue que puso
+// `CUENTAS_SECRET=1234` creería que está guardando las contraseñas cifradas
+// cuando en realidad no está guardando nada, y el que puso algo corto pero no
+// tanto las estaría cifrando con una clave que se adivina.
+func TestSecretoDemasiadoCorto_FrenaElArranque(t *testing.T) {
+	corto := strings.Repeat("x", MinLongitudSecreto-1)
+
+	c, err := Nuevo(corto)
+	if !errors.Is(err, ErrSecretoCorto) {
+		t.Fatalf("esperaba ErrSecretoCorto, obtuve %v", err)
+	}
+	if c != nil {
+		t.Fatal("con un secreto inválido no tendría que devolver un cifrador")
+	}
+	// El mensaje tiene que decir cuánto falta y cómo generarlo: lo lee quien
+	// despliega en la salida de un contenedor que no levanta.
+	if !strings.Contains(err.Error(), "openssl") {
+		t.Fatalf("el error tendría que decir cómo generar uno: %q", err)
+	}
+
+	// Y el del largo justo pasa: el mínimo es mínimo, no "más que".
+	if _, err := Nuevo(strings.Repeat("x", MinLongitudSecreto)); err != nil {
+		t.Fatalf("con el largo mínimo exacto tendría que andar: %v", err)
+	}
+}

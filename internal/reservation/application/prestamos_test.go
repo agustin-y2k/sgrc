@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -981,5 +982,67 @@ func TestRecibirEquipos_SinDevolucionesNoPublicaNada(t *testing.T) {
 	}
 	if n := len(bus.de("prestamo.cierre.pendientes")); n != 1 {
 		t.Errorf("esperaba 1 evento (el de la devolución real), hubo %d", n)
+	}
+}
+
+// ── Lo que el paso a lecturas por lote no puede romper ──────────────────
+//
+// Las operaciones de lote pasaron de pedir de a una a una sola consulta que
+// devuelve un mapa. Un mapa en Go no tiene orden, así que estos dos tests
+// existen para que la conversión no se lleve puesto ni el orden del resultado
+// ni lo que pasa con un id inexistente — las dos cosas que un refactor así
+// rompe sin que falle nada más.
+
+func TestEntregarPorReserva_ElResultadoSigueElOrdenDelPedido(t *testing.T) {
+	repo := nuevoFakeRepo()
+	// Diez, para que un recorrido de mapa se note: con dos o tres podría
+	// coincidir por casualidad.
+	ids := []string{"res9", "res3", "res7", "res1", "res5", "res8", "res2", "res6", "res4", "res0"}
+	for i, id := range ids {
+		reservaDeTest(t, repo, id, fmt.Sprintf("pc%d", i))
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
+		ReservaIDs: ids, EntregadoPor: "admin1",
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.Entregadas) != len(ids) {
+		t.Fatalf("esperaba %d entregas, obtuve %d", len(ids), len(resultado.Entregadas))
+	}
+	for i, p := range resultado.Entregadas {
+		if p.ReservaID == nil || *p.ReservaID != ids[i] {
+			t.Fatalf("posición %d: esperaba %s, obtuve %v — el resultado dejó de seguir el orden del pedido",
+				i, ids[i], p.ReservaID)
+		}
+	}
+}
+
+// En las entregas un id que no existe es un error del cliente: la pantalla
+// mandó algo que no corresponde. NO es "una máquina que no se pudo entregar".
+func TestEntregarPorReserva_UnIDInexistente_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaDeTest(t, repo, "res1", "pc1")
+	svc := nuevoServicioDeTest(repo)
+
+	_, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
+		ReservaIDs: []string{"res1", "no-existe"}, EntregadoPor: "admin1",
+	})
+
+	if !errors.Is(err, ErrReservaNoEncontrada) {
+		t.Fatalf("esperaba ErrReservaNoEncontrada, obtuve %v", err)
+	}
+}
+
+func TestRecibirEquipos_UnIDInexistente_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo)
+
+	_, err := svc.RecibirEquipos(context.Background(), []string{"no-existe"}, "admin1", "")
+
+	if !errors.Is(err, ErrPrestamoNoEncontrado) {
+		t.Fatalf("esperaba ErrPrestamoNoEncontrado, obtuve %v", err)
 	}
 }

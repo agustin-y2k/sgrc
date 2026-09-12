@@ -615,3 +615,150 @@ func TestHTTP_GuardarPreferenciasEmail_DocenteGuardaLasSuyas_200(t *testing.T) {
 			len(prefs.porUsuario["docente1"]))
 	}
 }
+
+func (r *fakeRepo) Borrar(_ context.Context, id string) error {
+	if _, hay := r.notificaciones[id]; !hay {
+		return application.ErrNotificacionNoEncontrada
+	}
+	delete(r.notificaciones, id)
+	return nil
+}
+
+func (r *fakeRepo) BorrarLeidasDe(_ context.Context, usuarioID string) (int, error) {
+	n := 0
+	for id, notif := range r.notificaciones {
+		if notif.UsuarioID == usuarioID && notif.EstaLeida() {
+			delete(r.notificaciones, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
+// ── Borrar un aviso ─────────────────────────────────────────────────────
+
+func TestHTTP_BorrarNotificacion_PropiaYLeida_204(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.Leida}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("DELETE", "/api/notifications/n1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("esperaba 204, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_BorrarNotificacion_SinLeer_409(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.NoLeida}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("DELETE", "/api/notifications/n1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_BorrarNotificacion_DeOtro_403(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.Leida}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("DELETE", "/api/notifications/n1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("otro", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	}
+}
+
+// El riesgo de ruteo: "leidas" es un literal en la misma posición que el id.
+// Si la ruta con parámetro se registrara primero, se lo comería y esto daría
+// 404 o 409 en vez de vaciar la lista.
+func TestHTTP_BorrarLeidas_NoLaComeLaRutaConParametro(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.Leida}
+	repo.notificaciones["n2"] = &domain.Notificacion{ID: "n2", UsuarioID: "u1", Estado: domain.NoLeida}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("DELETE", "/api/notifications/leidas", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+
+	var cuerpo struct {
+		Borradas int `json:"borradas"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+		t.Fatalf("decodificando: %v", err)
+	}
+	if cuerpo.Borradas != 1 {
+		t.Errorf("esperaba 1 borrada, obtuve %d", cuerpo.Borradas)
+	}
+}
+
+func TestHTTP_ObtenerNotificacion_Propia_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.NoLeida}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET", "/api/notifications/n1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_ObtenerNotificacion_DeOtro_403(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.NoLeida}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET", "/api/notifications/n1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("otro", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	}
+}
+
+// El otro literal que comparte posición con el id. Agregar GET /{id} lo puso en
+// riesgo, y sólo el orden de registro lo salva.
+func TestHTTP_PreferenciasEmail_NoLaComeLaRutaConParametro(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("GET", "/api/notifications/preferencias-email", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	// Si la resolviera GET /{id}, "preferencias-email" sería un aviso
+	// inexistente y contestaría 404 en vez de las categorías.
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200 de las preferencias, obtuve %d", resp.StatusCode)
+	}
+}

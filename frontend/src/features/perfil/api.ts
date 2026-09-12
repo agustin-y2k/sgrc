@@ -14,7 +14,7 @@ import { getToken } from "@/lib/token-store"
  * internal/auth/application/service_perfil.go).
  */
 export function actualizarMisDatos(req: ActualizarMisDatosRequest) {
-  return apiFetch<ActualizarMisDatosResponse>("/api/auth/mi-perfil", {
+  return apiFetch<ActualizarMisDatosResponse>("/api/mi-perfil", {
     method: "PATCH",
     body: req,
   })
@@ -65,7 +65,7 @@ export async function subirMiFoto(archivo: Blob) {
 
   const token = getToken()
   const respuesta = await fetch(
-    `${import.meta.env.VITE_API_URL ?? ""}/api/auth/mi-foto`,
+    `${import.meta.env.VITE_API_URL ?? ""}/api/mi-foto`,
     {
       method: "PUT",
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -79,14 +79,14 @@ export async function subirMiFoto(archivo: Blob) {
 }
 
 export function eliminarMiFoto() {
-  return apiFetch<void>("/api/auth/mi-foto", { method: "DELETE" })
+  return apiFetch<void>("/api/mi-foto", { method: "DELETE" })
 }
 
 // ── Pedidos para dictar una materia ───────────────────────────────────
 
 /** Elegida de la lista. */
 export function pedirMateriaExistente(materiaId: string, motivo: string) {
-  return apiFetch<PedidoDeMateria>("/api/academic/pedidos-de-materia", {
+  return apiFetch<PedidoDeMateria>("/api/pedidos-de-materia", {
     method: "POST",
     body: { materiaId, motivo },
   })
@@ -98,7 +98,7 @@ export function pedirMateriaNueva(
   cursoSolicitado: string,
   motivo: string
 ) {
-  return apiFetch<PedidoDeMateria>("/api/academic/pedidos-de-materia", {
+  return apiFetch<PedidoDeMateria>("/api/pedidos-de-materia", {
     method: "POST",
     body: { materiaSolicitada, cursoSolicitado, motivo },
   })
@@ -106,7 +106,7 @@ export function pedirMateriaNueva(
 
 export function misPedidos() {
   return apiFetch<RespuestaLista<PedidoDeMateria>>(
-    "/api/academic/pedidos-de-materia/mios"
+    "/api/mis-pedidos-de-materia"
   )
 }
 
@@ -115,7 +115,7 @@ export function misPedidos() {
 export function listarPedidos(soloPendientes: boolean) {
   const query = soloPendientes ? "?pendientes=true" : ""
   return apiFetch<RespuestaLista<PedidoDeMateria>>(
-    `/api/academic/pedidos-de-materia${query}`
+    `/api/pedidos-de-materia${query}`
   )
 }
 
@@ -123,7 +123,7 @@ export function resolverPedido(
   id: string,
   datos: { aprobar: boolean; respuesta: string; cursoId?: string; rol?: string }
 ) {
-  return apiFetch<PedidoDeMateria>(`/api/academic/pedidos-de-materia/${id}/resolver`, {
+  return apiFetch<PedidoDeMateria>(`/api/pedidos-de-materia/${id}/resolver`, {
     method: "POST",
     body: datos,
   })

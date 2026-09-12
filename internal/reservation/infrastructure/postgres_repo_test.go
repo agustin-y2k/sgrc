@@ -2558,3 +2558,134 @@ func TestPostgresRepo_ListarReservasFuturas_NoTocaLaClaseEnCurso(t *testing.T) {
 		t.Errorf("a las 12:00 ninguna empezó: %+v", futuras)
 	}
 }
+
+// ── Las lecturas por lote ───────────────────────────────────────────────
+//
+// Reemplazaron un recorrido que pedía de a una. Lo que hay que probar contra
+// Postgres de verdad no es que anden, sino que devuelvan EXACTAMENTE lo mismo
+// que la consulta individual: el `= ANY($1)` y el escaneo son SQL, y si se
+// separan de la versión de a uno el fake no lo vería.
+
+func TestPostgresRepo_BuscarReservasPorIDs_DaLoMismoQueDeAUna(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	materiaID := crearMateriaDeTest(t, pool)
+
+	g := nuevoReservaGrupoDeTest(materiaID, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatalf("creando grupo: %v", err)
+	}
+
+	var ids []string
+	for i := 0; i < 3; i++ {
+		equipoID := crearEquipoDeCarroDeTest(t, pool)
+		res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace", nil,
+			g.Fecha, g.HoraInicio, g.HoraFin, time.Now().UTC().Truncate(time.Microsecond))
+		if err != nil {
+			t.Fatalf("error de dominio inesperado: %v", err)
+		}
+		if err := repo.CrearReserva(ctx, res); err != nil {
+			t.Fatalf("creando reserva: %v", err)
+		}
+		ids = append(ids, res.ID)
+	}
+
+	// Un id que no existe: la de lote no falla, simplemente no lo trae.
+	pedidos := append(append([]string{}, ids...), NuevoID())
+
+	porID, err := repo.BuscarReservasPorIDs(ctx, pedidos)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(porID) != len(ids) {
+		t.Fatalf("esperaba %d reservas (el id inexistente no cuenta), obtuve %d", len(ids), len(porID))
+	}
+
+	for _, id := range ids {
+		unaAUna, err := repo.BuscarReservaPorID(ctx, id)
+		if err != nil {
+			t.Fatalf("buscando de a una: %v", err)
+		}
+		enLote, hay := porID[id]
+		if !hay {
+			t.Fatalf("el lote no trajo %s", id)
+		}
+		if enLote.EquipoID != unaAUna.EquipoID || enLote.Estado != unaAUna.Estado ||
+			!enLote.Fecha.Equal(unaAUna.Fecha) || enLote.HoraInicio != unaAUna.HoraInicio ||
+			enLote.HoraFin != unaAUna.HoraFin || enLote.Tipo != unaAUna.Tipo {
+			t.Errorf("%s: el lote y la individual devolvieron distinto\n  lote: %+v\n  una:  %+v", id, enLote, unaAUna)
+		}
+	}
+}
+
+// Agrupa por equipo, y cada lista queda ordenada como la de a uno —por fecha y
+// hora— porque quien llama puede necesitar LA PRÓXIMA de cada máquina.
+func TestPostgresRepo_ListarReservasFuturasDeEquipos_AgrupaYOrdena(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	materiaID := crearMateriaDeTest(t, pool)
+	pc1 := crearEquipoDeCarroDeTest(t, pool)
+	pc2 := crearEquipoDeCarroDeTest(t, pool)
+
+	desde := time.Now().UTC().Truncate(time.Microsecond)
+	base := desde.AddDate(0, 0, 7).Truncate(24 * time.Hour)
+
+	// A pc1 dos reservas, la segunda ANTES que la primera en el tiempo, para que
+	// el orden no pueda salir bien por el orden de inserción.
+	horarios := []struct {
+		equipo      string
+		dias        int
+		inicio, fin time.Duration
+	}{
+		{pc1, 3, 14 * time.Hour, 15 * time.Hour},
+		{pc1, 1, 8 * time.Hour, 9 * time.Hour},
+		{pc2, 2, 10 * time.Hour, 11 * time.Hour},
+	}
+	for _, h := range horarios {
+		fechaRes := base.AddDate(0, 0, h.dias)
+		g := nuevoReservaGrupoDeTest(materiaID, fechaRes, h.inicio, h.fin)
+		if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+			t.Fatalf("creando grupo: %v", err)
+		}
+		res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, h.equipo, materiaID, "Ada Lovelace", nil,
+			fechaRes, h.inicio, h.fin, desde)
+		if err != nil {
+			t.Fatalf("error de dominio inesperado: %v", err)
+		}
+		if err := repo.CrearReserva(ctx, res); err != nil {
+			t.Fatalf("creando reserva: %v", err)
+		}
+	}
+
+	// Se pide también un equipo sin reservas: no tiene que aparecer en el mapa.
+	pc3 := crearEquipoDeCarroDeTest(t, pool)
+	porEquipo, err := repo.ListarReservasFuturasDeEquipos(ctx, []string{pc1, pc2, pc3}, desde)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if len(porEquipo[pc1]) != 2 {
+		t.Fatalf("pc1 tenía 2 reservas futuras, el mapa trajo %d", len(porEquipo[pc1]))
+	}
+	if len(porEquipo[pc2]) != 1 {
+		t.Errorf("pc2 tenía 1, el mapa trajo %d", len(porEquipo[pc2]))
+	}
+	if _, hay := porEquipo[pc3]; hay {
+		t.Error("un equipo sin reservas futuras no tiene que estar en el mapa")
+	}
+	// La más cercana primero: es la del día 1, no la del día 3.
+	if !porEquipo[pc1][0].Fecha.Before(porEquipo[pc1][1].Fecha) {
+		t.Errorf("las de pc1 quedaron desordenadas: %v antes que %v",
+			porEquipo[pc1][0].Fecha, porEquipo[pc1][1].Fecha)
+	}
+	// Y coincide con lo que devuelve la de a uno.
+	unaAUna, err := repo.ListarReservasFuturasDeEquipo(ctx, pc1, desde)
+	if err != nil {
+		t.Fatalf("buscando de a uno: %v", err)
+	}
+	if len(unaAUna) != len(porEquipo[pc1]) || unaAUna[0].ID != porEquipo[pc1][0].ID {
+		t.Errorf("el lote y la individual no coinciden para pc1")
+	}
+}

@@ -166,6 +166,20 @@ flowchart LR
 - **Por qué se conserva la estructura académica pero no las reservas:** recrear "1°A" + "Matemáticas" + "el titular es Fulano" cada año es el trabajo tedioso que la clonación evita. Las reservas puntuales de un año que ya terminó no tienen valor operativo — solo estadístico, y ese valor queda cubierto por el snapshot histórico.
 - **El clonado se valida antes de empezar**: si el año destino ya existe o no es un año válido, la operación rebota sin archivar ni borrar nada. El archivado es irreversible y el clonado es el único paso que puede fallar por algo que el Admin tipeó, así que se comprueba primero. Si igual queda a medias, reintentar el archivado completa el clonado.
 
+### UC: Corregir o eliminar un ciclo lectivo mal creado
+- **Actor:** Admin
+- **Motivo:** el ciclo era la única cosa del sistema que se creaba y no se podía tocar más. Con el año equivocado se quedaba con ese año para siempre —el año es único— y encima ocupaba el único lugar de ciclo activo, así que tampoco se podía crear el correcto sin archivar el error.
+- **Flujo:**
+  1. Admin abre el ciclo y elige **Corregir**.
+  2. Cambia el año, o **elimina el ciclo** si lo que sobra es el ciclo entero.
+- **Reglas que no son obvias:**
+  - **Corregir el año exige que el ciclo no tenga reservas.** Una reserva lleva su propia fecha y no se muda con el ciclo: correrlo de 2026 a 2027 lo dejaría diciendo que sus clases fueron en un año en el que no pasó nada.
+  - **Y que el año de destino no tenga bloqueos administrativos.** Un bloqueo no referencia al ciclo: se le atribuye a uno por el año de su fecha, así que mudarse a un año que ya tiene alguno es adoptarlo en silencio. Crear un bloqueo en un año sin ciclo está permitido, así que el caso no es hipotético.
+  - **Eliminar exige que no tenga ningún curso cargado.** Uno con cursos es cómo se organizó ese año: eso se archiva, no se borra. Un ciclo sin cursos tampoco tiene reservas, porque una reserva cuelga de una materia que cuelga de un curso.
+  - **Un ciclo archivado no admite ninguna de las dos.** Archivar es cómo se cierra un año, y el histórico de uso que el archivado guardó está indexado por **ese** año: cambiarlo dejaría las dos mitades hablando de años distintos, y borrarlo dejaría ese histórico hablando de un año que para el sistema no existió.
+  - Eliminar el ciclo activo **libera el lugar de "activo"**, que es justamente para lo que existe: crear el correcto a continuación.
+  - Las dos quedan auditadas, y la del año guarda el valor anterior y el nuevo: el año **es** el nombre del ciclo en pantalla, así que sin el valor viejo una entrada anterior sobre «el ciclo 2026» se leería después como si hablara de otro.
+
 ### UC: Aprobar una cuenta pendiente
 - **Actor:** Admin
 - **Precondición:** Alguien se autorregistró y su cuenta está en estado `PENDIENTE`.
@@ -188,6 +202,7 @@ flowchart LR
   4. **Recién después** de resolver el destino de las reservas de todas sus materias, el sistema elimina los vínculos `DocenteMateria` del docente dado de baja — el orden importa: si se borraran antes, el paso 3 no podría distinguir "quedan otros docentes" de "este era el único".
   5. El docente pierde acceso al login (estado `BAJA` no puede autenticarse).
 - **La baja es permanente:** no existe "reactivar cuenta" — la API lo rechaza explícitamente. Si la persona vuelve, se autorregistra de nuevo como cuenta nueva.
+  - Es la asimetría deliberada con el inventario, donde la baja de un equipo o de un carro **sí** se deshace. Un equipo retirado por error sigue siendo el mismo equipo; una cuenta dada de baja ya corrió su cascada —se cancelaron sus reservas, se removieron sus asignaciones— y revivirla no las devuelve. Volver a registrarse deja además el rastro de que hubo dos incorporaciones, que es lo que pasó.
 
 ### UC: Eliminar definitivamente una cuenta en BAJA
 - **Actor:** Admin
@@ -216,7 +231,15 @@ flowchart LR
   3. Admin edita los datos de un equipo en cualquier momento, y puede moverlo a otro carro.
   4. Admin cambia el estado de circulación (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` — ver la cascada de cancelación más arriba).
   5. Admin puede dar de baja un equipo (soft delete: deja de listarse y de poder reservarse, pero su historial de incidencias, préstamos y reservas se conserva).
-  6. Lo que se presta y **no está en ningún carro** se carga aparte; ver el UC siguiente.
+  6. Y puede **deshacer esa baja**: los equipos retirados se ven desde la misma tarjeta donde se los dio de baja, plegados al final, y vuelven al inventario con el estado que tenían.
+  7. Lo mismo con un carro: se retira vacío y se puede devolver a circulación.
+  8. Lo que se presta y **no está en ningún carro** se carga aparte; ver el UC siguiente.
+- **Reglas de deshacer una baja:**
+  - **No revierte la cascada.** Las reservas que la baja canceló quedan canceladas y los avisos ya salieron: eso pasó y no se puede despasar. Lo que vuelve es la máquina al inventario.
+  - **El estado no se toca**: si estaba `FUERA_DE_SERVICIO` vuelve así. Devolverla `DISPONIBLE` sería inventar que alguien la arregló.
+  - Puede **fallar porque alguien se quedó con lo que la baja liberó**: el zócalo dentro del carro, el nombre si es un equipo suelto, o el número de serie. No es un caso raro — liberarlos existe justamente para que otro los tome, y el sistema dice cuál de los tres está ocupado.
+  - Un equipo tampoco vuelve si **su carro se retiró** mientras estaba afuera: quedaría dentro de un contenedor que ninguna pantalla lista, que es peor que seguir dado de baja.
+  - **Editar un equipo queda registrado** en la auditoría con cada campo que cambió y sus dos valores, el anterior y el nuevo. Un pedido que no mueve nada no deja entrada.
 - **Visibilidad:** el listado de carros y equipos —incluidos `software_instalado` y `freezado`— lo ve **cualquier usuario autenticado**, no solo Admin: un docente lo necesita para elegir qué reservar, por ejemplo cuáles tienen instalada la versión del programa que su clase requiere.
 
 ### UC: Registrar equipos que no son computadoras de un carro
@@ -380,6 +403,34 @@ flowchart LR
      - **Sin reservas** → se elimina (hard delete).
      - **Con reservas** → rechaza la eliminación; la única forma de sacarlo de circulación es archivar el ciclo completo (ver UC de archivado).
 
+### UC: Cargar los cursos y las materias del año (RF-02.12)
+- **Actor:** Admin
+- **Precondición:** Existe un ciclo lectivo sin archivar.
+- **Por qué existe:** cargar una institución curso por curso y materia por materia son cientos de formularios, y el año siguiente son los mismos cientos otra vez. La estructura académica se repite entre divisiones del mismo año y entre ciclos, y normalmente ya está escrita en la planilla con la que la institución arma los horarios.
+- **Flujo A — copiar entre cursos:**
+  1. Admin carga las materias de un curso a mano, una vez.
+  2. Desde ese curso elige a qué otros cursos del ciclo copiarlas y confirma.
+  3. El sistema crea en cada destino las materias que le falten y saltea las que ya tenga. No copia las asignaciones de docentes.
+- **Flujo B — desde una planilla:**
+  1. Admin elige un archivo con una fila por curso y sus materias en una celda.
+  2. El sistema lo lee **en el navegador** y muestra qué va a crear: cuántos cursos y materias nuevas, y qué filas no pudo leer y por qué —con su número de línea—.
+  3. Admin confirma. El sistema crea lo que falta, en una transacción, y responde cuántos cursos y materias creó y cuántos ya estaban.
+- **Flujo C — armar el año siguiente:** Admin descarga la planilla del ciclo actual, la corrige y la carga sobre el ciclo nuevo. Es la alternativa al clonado del archivado para cuando la estructura del año que viene **no** es la del anterior.
+- **La carga nunca borra.** No elimina cursos ni materias que la planilla no nombre, no renombra y no toca docentes ni reservas. Es lo que permite reintentar sin mirar antes qué entró, y lo que impide que una planilla desactualizada se lleve por delante una materia agregada a mano — con sus reservas.
+- **Una fila mala no frena las otras treinta.** Se apartan las ilegibles nombrando la línea y el resto se carga igual. Rechazar el archivo entero convierte la carga en prueba y error, y como la carga no duplica nada, corregir esas filas y volver a subir es seguro.
+
+### UC: Averiguar quién hizo algo
+- **Actor:** Admin
+- **Disparador:** apareció algo cambiado —un curso que ya no está, un equipo fuera de servicio, una materia que nadie recuerda haber agregado— y hay que saber quién y cuándo.
+- **Flujo:**
+  1. Admin entra a **Auditoría**.
+  2. Acota por acción, por qué tipo de cosa se tocó, por quién, o por fechas. Los selectores ofrecen únicamente lo que de verdad ocurrió en esta instalación.
+  3. Cada renglón dice la acción, quién la hizo, sobre qué, cuándo y desde qué dirección. El detalle de esa acción se despliega aparte.
+- **Por qué existe:** el registro se escribía desde siempre y **no había forma de leerlo**: la única manera era entrar a la base con `psql`. Un registro que sólo puede consultar quien tiene acceso de administrador de base de datos no está disponible para el Admin que tiene la pregunta — y la pregunta aparece justo cuando ya no se puede reconstruir de memoria.
+- **Una entrada puede no tener nombre.** Si la cuenta que hizo la acción se eliminó después (RF-01.9), la entrada sigue ahí con su identificador: `audit_log` no tiene clave foránea a propósito, para que lo que hizo una cuenta sobreviva a su eliminación. Que el actor ya no exista es parte de la respuesta, no un dato que falta.
+- **Consultar el registro no se registra.** Una auditoría que se audita a sí misma crece con cada consulta y entierra los cambios de verdad bajo el ruido de quien fue a mirarlos.
+- **No hay forma de editar ni de borrar**, por ninguna vía: el puerto de lectura no tiene un solo método de escritura.
+
 ### UC: Mover un equipo de carro
 - **Actor:** Admin
 - **Flujo:**
@@ -425,6 +476,17 @@ flowchart LR
   - **Es una sola bandeja, no tres.** Para quien contesta son todos "alguien escribió y espera respuesta", y separarlos en pantallas distintas garantiza que una de ellas se mire menos.
   - **La lista se ordena por última actividad**, no por fecha de creación: un hilo de la semana pasada al que le acaban de escribir es el que tiene a alguien esperando.
   - **No reemplaza al reporte de incidencias** (RF-03.5): aquello marca una computadora rota y la saca de circulación; esto es una conversación con una persona.
+
+### UC: Sacarse un aviso de encima
+- **Actor:** cualquier usuario
+- **Motivo:** hasta acá un aviso sólo se podía marcar como leído. Los propios se acumulaban para siempre, y la única forma de perderlos era que borraran la cuenta.
+- **Flujo:**
+  1. La persona marca el aviso como leído.
+  2. Y desde ahí puede **borrarlo**, de a uno o todos los leídos de una vez.
+- **Reglas que no son obvias:**
+  - **Sólo se borra lo ya leído.** Un aviso sin leer es algo que todavía no pasó por los ojos de nadie —una cuenta esperando aprobación, una reserva que se canceló— y borrarlo de un clic haría desaparecer la tarea sin que nadie sepa que existió. La pantalla no ofrece el botón en los que están sin leer, que es la misma regla que aplica el servidor.
+  - Es un **borrado de verdad**, no lógico: un aviso es un mensaje, y un mensaje borrado no deja nada atrás que haya que explicar después. Lo que generó el aviso sigue en la auditoría, que es otra cosa y no se borra.
+  - **No hay purga automática** de avisos ni de auditoría. A 421 bytes por entrada el problema de espacio no existe, y el valor de la auditoría es precisamente que no se borre sola.
 
 ### UC: Elegir qué avisos llegan por correo (RF-05.13)
 - **Actor:** Cualquier usuario autenticado

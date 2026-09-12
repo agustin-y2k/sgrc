@@ -21,7 +21,6 @@ type Repo interface {
 	// ListarTodas es la pantalla del Admin.
 	ListarTodas(ctx context.Context, soloAbiertas bool, p paginacion.Pagina) ([]*domain.Sugerencia, int, error)
 	ListarDeUsuario(ctx context.Context, usuarioID string, p paginacion.Pagina) ([]*domain.Sugerencia, int, error)
-	ContarAbiertas(ctx context.Context) (int, error)
 }
 
 // IDGenerator existe para no atar el dominio a una librería de UUID, igual

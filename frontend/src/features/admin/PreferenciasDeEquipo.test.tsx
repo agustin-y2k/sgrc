@@ -39,7 +39,6 @@ function renderPanel(preferencias: PreferenciaDeEquipo[] = []) {
         nombre: "3°B",
         anio: 3,
         division: "B",
-        activo: true,
         archivado: false,
       },
       {
@@ -49,7 +48,6 @@ function renderPanel(preferencias: PreferenciaDeEquipo[] = []) {
         anio: 4,
         division: "2",
         modalidad: "Electromecánica",
-        activo: true,
         archivado: false,
       },
     ],
@@ -216,5 +214,61 @@ describe("PreferenciasDeEquipo", () => {
     )
 
     expect(await screen.findByText(/se crean desde Académico/i)).toBeInTheDocument()
+  })
+
+  // El backend acepta corregir el alcance y la prioridad desde siempre; la
+  // pantalla sólo sabía quitar y volver a cargar los cuatro campos a mano.
+  describe("corregir una marca", () => {
+    it("carga la marca en el formulario y guarda el cambio", async () => {
+      const user = userEvent.setup()
+      vi.mocked(adminApi.editarPreferencia).mockResolvedValue(
+        preferencia({ id: "p1", prioridad: 3 })
+      )
+      renderPanel([
+        preferencia({ id: "p1", materiaNombre: "Matemática", anio: 4, division: "2" }),
+      ])
+
+      await user.click(await screen.findByRole("button", { name: "Editar" }))
+
+      // Los campos llegan con lo que la marca ya decía: corregir la prioridad
+      // no puede obligar a reescribir el alcance.
+      expect(screen.getByLabelText("Año")).toHaveValue(4)
+      expect(screen.getByLabelText("División")).toHaveValue("2")
+
+      await user.selectOptions(screen.getByLabelText("Prioridad"), "3")
+      await user.click(screen.getByRole("button", { name: "Guardar" }))
+
+      await waitFor(() => {
+        expect(adminApi.editarPreferencia).toHaveBeenCalledWith("p1", {
+          modalidad: undefined,
+          anio: 4,
+          division: "2",
+          prioridad: 3,
+        })
+      })
+    })
+
+    // Apuntar a otra materia es otra marca, no una corrección de ésta: el
+    // PATCH del backend ni siquiera acepta el campo.
+    it("no deja cambiar la materia mientras se corrige", async () => {
+      const user = userEvent.setup()
+      renderPanel([preferencia({ id: "p1" })])
+
+      await user.click(await screen.findByRole("button", { name: "Editar" }))
+
+      expect(screen.getByLabelText("Materia")).toBeDisabled()
+    })
+
+    it("cancelar deja el formulario como estaba", async () => {
+      const user = userEvent.setup()
+      renderPanel([preferencia({ id: "p1", anio: 4 })])
+
+      await user.click(await screen.findByRole("button", { name: "Editar" }))
+      await user.click(screen.getByRole("button", { name: "Cancelar" }))
+
+      expect(screen.getByRole("button", { name: "Marcar" })).toBeInTheDocument()
+      expect(screen.getByLabelText("Año")).toHaveValue(null)
+      expect(adminApi.editarPreferencia).not.toHaveBeenCalled()
+    })
   })
 })

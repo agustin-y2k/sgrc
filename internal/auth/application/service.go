@@ -808,15 +808,33 @@ func (s *Service) DegradarADocente(ctx context.Context, usuarioID, solicitanteID
 // EliminarDefinitivamente implementa RF-01.9: hard delete desde cualquiera de
 // los dos estados terminales, BAJA o RECHAZADA. Que RECHAZADA cuente es lo
 // que hace que rechazar deje de ser una trampa.
-func (s *Service) EliminarDefinitivamente(ctx context.Context, usuarioID string) error {
+//
+// Devuelve QUÉ se llevó la cascada. El propósito de la operación es liberar el
+// email, pero de paso dispara diez borrados encadenados y hasta acá no
+// informaba ninguno. Dos importan:
+//
+//   - el hilo de soporte se va entero, **incluidas las respuestas que escribió
+//     el Admin**;
+//   - el horario de guardia también, y desde RF-07.6 eso decide si el barrido
+//     actúa en esos tramos.
+//
+// Que se vayan está bien: sin la cuenta, un aviso no tiene destinatario y un
+// horario de guardia no tiene a quién. Lo que no está bien es que se vayan sin
+// decirlo.
+func (s *Service) EliminarDefinitivamente(ctx context.Context, usuarioID string) (*ResultadoEliminacion, error) {
 	u, err := s.repo.BuscarPorID(ctx, usuarioID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if u.Estado != domain.EstadoBaja && u.Estado != domain.EstadoRechazada {
-		return ErrSoloDesdeBajaORechazada
+		return nil, ErrSoloDesdeBajaORechazada
 	}
-	return s.repo.Eliminar(ctx, usuarioID)
+
+	res, err := s.repo.Eliminar(ctx, usuarioID)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
 // Listar devuelve una página de usuarios filtrados por estado/rol (nil = sin
@@ -829,7 +847,14 @@ func (s *Service) Listar(ctx context.Context, filtroEstado *domain.Estado, filtr
 }
 
 // ObtenerPerfil devuelve los datos del propio usuario autenticado (GET
-// /api/auth/me).
+// /api/mi-perfil).
+// ObtenerUsuario es la ficha de OTRA persona, para el Admin. ObtenerPerfil, más
+// abajo, es la propia — son la misma consulta con permisos distintos, y por eso
+// son dos métodos y no uno con una bandera.
+func (s *Service) ObtenerUsuario(ctx context.Context, usuarioID string) (*domain.Usuario, error) {
+	return s.repo.BuscarPorID(ctx, usuarioID)
+}
+
 func (s *Service) ObtenerPerfil(ctx context.Context, usuarioID string) (*domain.Usuario, error) {
 	return s.repo.BuscarPorID(ctx, usuarioID)
 }

@@ -88,7 +88,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("docente.registro.pendiente", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(map[string]string)
 		if !ok {
-			log.Printf("notification: payload inesperado para docente.registro.pendiente: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para docente.registro.pendiente (tipo %T)", e.Payload)
 			return
 		}
 		mensaje := fmt.Sprintf("%s %s se registró y está pendiente de aprobación", payload["nombre"], payload["apellido"])
@@ -117,7 +117,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		bus.Subscribe(evento, func(e eventbus.Evento) {
 			payload, ok := e.Payload.(map[string]any)
 			if !ok {
-				log.Printf("notification: payload inesperado para %s: %+v", evento, e.Payload)
+				log.Printf("notification: payload inesperado para %s (tipo %T)", evento, e.Payload)
 				return
 			}
 			mensaje := fmt.Sprintf("Se cancelaron %v reserva(s): %s", payload["reservasCanceladas"], motivo)
@@ -137,7 +137,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("cuenta.pendiente.resuelta", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(map[string]string)
 		if !ok {
-			log.Printf("notification: payload inesperado para cuenta.pendiente.resuelta: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para cuenta.pendiente.resuelta (tipo %T)", e.Payload)
 			return
 		}
 		usuarioID := payload["usuarioId"]
@@ -153,7 +153,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("sugerencia.nueva", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaNueva)
 		if !ok {
-			log.Printf("notification: payload inesperado para sugerencia.nueva: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para sugerencia.nueva (tipo %T)", e.Payload)
 			return
 		}
 		mensaje := mensajeDeSugerencia(payload)
@@ -170,7 +170,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("sugerencia.seguimiento", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaSeguimiento)
 		if !ok {
-			log.Printf("notification: payload inesperado para sugerencia.seguimiento: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para sugerencia.seguimiento (tipo %T)", e.Payload)
 			return
 		}
 		mensaje := mensajeDeSeguimiento(payload)
@@ -187,7 +187,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("sugerencia.respondida", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaRespondida)
 		if !ok {
-			log.Printf("notification: payload inesperado para sugerencia.respondida: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para sugerencia.respondida (tipo %T)", e.Payload)
 			return
 		}
 		mensaje := mensajeDeRespuestaASugerencia(payload)
@@ -205,7 +205,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("materia.pedido.nuevo", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PedidoDeMateriaNuevo)
 		if !ok {
-			log.Printf("notification: payload inesperado para materia.pedido.nuevo: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para materia.pedido.nuevo (tipo %T)", e.Payload)
 			return
 		}
 		// Solo a los Admin, que son quienes deciden. A quien ya dicta la
@@ -225,7 +225,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("materia.pedido.resuelto", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PedidoDeMateriaResuelto)
 		if !ok {
-			log.Printf("notification: payload inesperado para materia.pedido.resuelto: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para materia.pedido.resuelto (tipo %T)", e.Payload)
 			return
 		}
 		mensaje := mensajeDePedidoResuelto(payload)
@@ -244,7 +244,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("licencia.por-vencer", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.AvisoDeLicencias)
 		if !ok {
-			log.Printf("notification: payload inesperado para licencia.por-vencer: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para licencia.por-vencer (tipo %T)", e.Payload)
 			return
 		}
 		if payload.Total() == 0 {
@@ -270,7 +270,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("licencia.pendientes", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PendientesDeLicencia)
 		if !ok {
-			log.Printf("notification: payload inesperado para licencia.pendientes: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para licencia.pendientes (tipo %T)", e.Payload)
 			return
 		}
 		if payload.Pendientes > 0 {
@@ -285,7 +285,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("prestamo.cierre.pendientes", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PendientesDelCierre)
 		if !ok {
-			log.Printf("notification: payload inesperado para prestamo.cierre.pendientes: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para prestamo.cierre.pendientes (tipo %T)", e.Payload)
 			return
 		}
 		if payload.Pendientes > 0 {
@@ -317,7 +317,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("reserva.pedido-de-liberacion", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PedidoDeLiberacion)
 		if !ok {
-			log.Printf("notification: payload inesperado para reserva.pedido-de-liberacion: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para reserva.pedido-de-liberacion (tipo %T)", e.Payload)
 			return
 		}
 		if payload.UsuarioID == "" {
@@ -342,7 +342,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("prestamo.sin-devolver.cierre", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.EquiposSinDevolverAlCierre)
 		if !ok {
-			log.Printf("notification: payload inesperado para prestamo.sin-devolver.cierre: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para prestamo.sin-devolver.cierre (tipo %T)", e.Payload)
 			return
 		}
 		if len(payload.Equipos) == 0 {
@@ -368,7 +368,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	bus.Subscribe("reserva.cancelada", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.CancelacionesDeUsuario)
 		if !ok {
-			log.Printf("notification: payload inesperado para reserva.cancelada: %+v", e.Payload)
+			log.Printf("notification: payload inesperado para reserva.cancelada (tipo %T)", e.Payload)
 			return
 		}
 		mensaje := mensajeDeCancelacion(payload)

@@ -41,7 +41,7 @@ func (h *Handler) Escribir(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toSugerenciaResponse(s, false))
 }
 
-// GET /api/sugerencias/mias — lo que escribí yo, con las respuestas.
+// GET /api/mis-sugerencias — lo que escribí yo, con las respuestas.
 func (h *Handler) ListarPropias(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {

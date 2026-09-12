@@ -3,8 +3,9 @@ package domain
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
+
+	"github.com/ramiro/sgrc/internal/shared/texto"
 )
 
 // Topes de LicenciaSoftware.
@@ -28,9 +29,14 @@ var (
 	ErrSinFechaDeVencimiento = errors.New("la licencia todavía no tiene fecha de vencimiento cargada")
 )
 
-// NormalizarNombreLicencia recorta los bordes y nada más.
+// NormalizarNombreLicencia recorta los bordes y colapsa los espacios internos.
+//
+// El colapso lo agregó la revisión de unicidad: el índice de la tabla compara
+// por nombre normalizado dentro de cada equipo, y "Office 365" con dos espacios
+// entraba como una segunda licencia del mismo programa en la misma máquina —
+// con su propio vencimiento y su propio aviso.
 func NormalizarNombreLicencia(s string) string {
-	return strings.TrimSpace(s)
+	return texto.Canonizar(s)
 }
 
 // EstadoLicencia es una lectura derivada de la fecha, nunca una columna.

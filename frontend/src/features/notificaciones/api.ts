@@ -27,6 +27,22 @@ export function marcarTodasLeidas() {
   return apiFetch<void>("/api/notifications/leer-todas", { method: "POST" })
 }
 
+/**
+ * Sacar un aviso de la lista. Falla con 409 si todavía no se leyó: un aviso sin
+ * leer es algo que no pasó por los ojos de nadie, y borrarlo haría desaparecer
+ * la tarea sin que nadie sepa que existió.
+ */
+export function borrar(id: string) {
+  return apiFetch<void>(`/api/notifications/${id}`, { method: "DELETE" })
+}
+
+/** Vaciar de una vez lo ya leído. Devuelve cuántos se fueron. */
+export function borrarLeidas() {
+  return apiFetch<{ borradas: number }>("/api/notifications/leidas", {
+    method: "DELETE",
+  })
+}
+
 /** Las categorías que le corresponden a quien pregunta (RF-05.13). */
 export function listarPreferenciasEmail() {
   return apiFetch<RespuestaLista<PreferenciaEmail>>(

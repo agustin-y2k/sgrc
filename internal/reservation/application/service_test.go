@@ -1001,7 +1001,7 @@ func TestCancelarReserva_UnaDeVarias_GrupoQuedaParcial(t *testing.T) {
 	}
 
 	canceladoPor := "admin1"
-	err = svc.CancelarReserva(context.Background(), reservas[0].ID, &canceladoPor, "PC rota")
+	err = svc.CancelarReserva(context.Background(), reservas[0].ID, canceladoPor, true, "PC rota")
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -1024,7 +1024,7 @@ func TestCancelarReserva_TodasLasDelGrupo_GrupoQuedaCancelado(t *testing.T) {
 
 	canceladoPor := "admin1"
 	for _, r := range reservas {
-		if err := svc.CancelarReserva(context.Background(), r.ID, &canceladoPor, "Bloqueo administrativo"); err != nil {
+		if err := svc.CancelarReserva(context.Background(), r.ID, canceladoPor, true, "Bloqueo administrativo"); err != nil {
 			t.Fatalf("no debería fallar: %v", err)
 		}
 	}
@@ -1038,7 +1038,7 @@ func TestCancelarReserva_TodasLasDelGrupo_GrupoQuedaCancelado(t *testing.T) {
 func TestCancelarReserva_NoExiste_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	err := svc.CancelarReserva(context.Background(), "no-existe", nil, "motivo")
+	err := svc.CancelarReserva(context.Background(), "no-existe", "un-admin", true, "motivo")
 
 	if !errors.Is(err, ErrReservaNoEncontrada) {
 		t.Fatalf("esperaba ErrReservaNoEncontrada, obtuve %v", err)
@@ -1050,7 +1050,7 @@ func TestCancelarReserva_YaCancelada_Error(t *testing.T) {
 	repo.reservas["r1"] = &domain.Reserva{ID: "r1", Estado: domain.ReservaCancelada}
 	svc := nuevoServicioDeTest(repo)
 
-	err := svc.CancelarReserva(context.Background(), "r1", nil, "motivo")
+	err := svc.CancelarReserva(context.Background(), "r1", "un-admin", true, "motivo")
 
 	if !errors.Is(err, domain.ErrTransicionReservaInvalida) {
 		t.Fatalf("esperaba ErrTransicionReservaInvalida, obtuve %v", err)
@@ -1064,7 +1064,7 @@ func TestCancelarReserva_DeBloqueoAdministrativo_NoTocaNingunGrupo(t *testing.T)
 	repo.reservas["r1"] = &domain.Reserva{ID: "r1", Estado: domain.ReservaConfirmada, Tipo: domain.TipoBloqueo}
 	svc := nuevoServicioDeTest(repo)
 
-	err := svc.CancelarReserva(context.Background(), "r1", nil, "motivo")
+	err := svc.CancelarReserva(context.Background(), "r1", "un-admin", true, "motivo")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1087,7 +1087,7 @@ func TestCancelarReserva_PublicaEventoReservaCancelada(t *testing.T) {
 	})
 
 	canceladoPor := "admin1"
-	if err := svc.CancelarReserva(context.Background(), reservas[0].ID, &canceladoPor, "PC rota"); err != nil {
+	if err := svc.CancelarReserva(context.Background(), reservas[0].ID, canceladoPor, true, "PC rota"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -1228,7 +1228,7 @@ func TestPublicarCancelaciones_SinIdentificadores_ElAvisoSaleIgual(t *testing.T)
 	svc.bus.Subscribe("reserva.cancelada", func(e eventbus.Evento) { recibido <- e })
 
 	canceladoPor := "admin1"
-	if err := svc.CancelarReserva(context.Background(), reservas[0].ID, &canceladoPor, "PC rota"); err != nil {
+	if err := svc.CancelarReserva(context.Background(), reservas[0].ID, canceladoPor, true, "PC rota"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -1260,7 +1260,7 @@ func TestCancelarReserva_ElDocenteCancelaLaPropia_NoPublicaEvento(t *testing.T) 
 	})
 
 	elMismoDocente := "docente1"
-	if err := svc.CancelarReserva(context.Background(), reservas[0].ID, &elMismoDocente, ""); err != nil {
+	if err := svc.CancelarReserva(context.Background(), reservas[0].ID, elMismoDocente, false, ""); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	if publicado {
@@ -1319,7 +1319,7 @@ func TestCancelarReserva_BloqueoAdministrativoCancelado_NoPublicaEvento(t *testi
 		publicado = true
 	})
 
-	if err := svc.CancelarReserva(context.Background(), "r1", nil, "motivo"); err != nil {
+	if err := svc.CancelarReserva(context.Background(), "r1", "un-admin", true, "motivo"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	if publicado {
@@ -1428,7 +1428,7 @@ func TestCancelarOcurrenciaRecurrente_SoloEsta_NoAfectaLasDemas(t *testing.T) {
 	// Cancelamos solo la segunda ocurrencia (9 de marzo).
 	segunda := res.Grupos[1]
 	canceladoPor := "admin1"
-	n, err := svc.CancelarOcurrenciaRecurrente(context.Background(), segunda.ID, &canceladoPor, "no hay clase", true)
+	n, err := svc.CancelarOcurrenciaRecurrente(context.Background(), segunda.ID, canceladoPor, true, "no hay clase", true)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1457,7 +1457,7 @@ func TestCancelarOcurrenciaRecurrente_EstaYSiguientes_CancelaElRestoNoLasAnterio
 
 	tercera := res.Grupos[2] // 16 de marzo
 	canceladoPor := "admin1"
-	n, err := svc.CancelarOcurrenciaRecurrente(context.Background(), tercera.ID, &canceladoPor, "docente de licencia", false)
+	n, err := svc.CancelarOcurrenciaRecurrente(context.Background(), tercera.ID, canceladoPor, true, "docente de licencia", false)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1485,7 +1485,7 @@ func TestCancelarOcurrenciaRecurrente_EstaYSiguientes_CancelaElRestoNoLasAnterio
 func TestCancelarOcurrenciaRecurrente_NoExiste_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.CancelarOcurrenciaRecurrente(context.Background(), "no-existe", nil, "motivo", true)
+	_, err := svc.CancelarOcurrenciaRecurrente(context.Background(), "no-existe", "un-admin", true, "motivo", true)
 
 	if !errors.Is(err, ErrReservaGrupoNoEncontrado) {
 		t.Fatalf("esperaba ErrReservaGrupoNoEncontrado, obtuve %v", err)
@@ -1514,6 +1514,40 @@ func TestBloquearEquipos_SinConflictos_OK(t *testing.T) {
 		if b.Tipo != domain.TipoBloqueo {
 			t.Errorf("tipo incorrecto: %s", b.Tipo)
 		}
+	}
+}
+
+// Un bloqueo de duración cero no bloquea nada —el rango es vacío, no entra ni
+// en la restricción de solapamiento— y hasta este arreglo llegaba hasta el
+// CHECK `reserva_check` de la base, que lo rechazaba con un error crudo. Como
+// ninguna capa traduce las violaciones de CHECK, salía como 500.
+func TestBloquearEquipos_DuracionCero_Error(t *testing.T) {
+	svc := nuevoServicioDeTest(nuevoFakeRepo())
+	creadoPor := "admin1"
+
+	_, err := svc.BloquearEquipos(context.Background(), []string{"pc1"}, &creadoPor,
+		fecha(2026, 3, 9), 10*time.Hour, 10*time.Hour, "Evaluación provincial")
+
+	if !errors.Is(err, domain.ErrRangoHorarioInvalido) {
+		t.Fatalf("esperaba ErrRangoHorarioInvalido, obtuve %v", err)
+	}
+}
+
+// Lo que un bloqueo SÍ puede hacer y una reserva no: durar más que una clase.
+// Una capacitación o una obra en el aula ocupan la jornada entera, así que el
+// tope de ocho horas no le corre.
+func TestBloquearEquipos_MasLargoQueUnaClase_Entra(t *testing.T) {
+	svc := nuevoServicioDeTest(nuevoFakeRepo())
+	creadoPor := "admin1"
+
+	res, err := svc.BloquearEquipos(context.Background(), []string{"pc1"}, &creadoPor,
+		fecha(2026, 3, 9), 7*time.Hour, 22*time.Hour, "Jornada institucional")
+
+	if err != nil {
+		t.Fatalf("un bloqueo de quince horas es legítimo: %v", err)
+	}
+	if len(res.Bloqueos) != 1 {
+		t.Fatalf("esperaba 1 bloqueo, obtuve %d", len(res.Bloqueos))
 	}
 }
 
@@ -1778,7 +1812,7 @@ func TestFinalizarVencidas_GrupoConAlgunaCanceladaYOtraFinalizada_GrupoFinalizaI
 
 	// Cancelamos una de las dos manualmente antes de que venza la otra.
 	canceladoPor := "admin1"
-	if err := svc.CancelarReserva(context.Background(), reservas[0].ID, &canceladoPor, "PC rota"); err != nil {
+	if err := svc.CancelarReserva(context.Background(), reservas[0].ID, canceladoPor, true, "PC rota"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -1811,45 +1845,105 @@ func TestFinalizarVencidas_SinVencidas_NoHaceNada(t *testing.T) {
 	}
 }
 
-// ── ObtenerReserva / ObtenerReservaGrupo (passthroughs) ────────────────
+// ── ObtenerReserva / ObtenerReservaGrupo ───────────────────────────────
+//
+// Las dos resuelven la titularidad en el servicio y con la misma función, así
+// que lo que se prueba acá es que la reserva suelta no se quedó atrás del
+// grupo.
 
-func TestObtenerReserva_OK(t *testing.T) {
-	repo := nuevoFakeRepo()
-	repo.reservas["r1"] = &domain.Reserva{ID: "r1", EquipoID: "pc1"}
-	svc := nuevoServicioDeTest(repo)
+func TestObtenerReserva_Titularidad(t *testing.T) {
+	dueno := "docente-1"
 
-	r, err := svc.ObtenerReserva(context.Background(), "r1")
-
-	if err != nil {
-		t.Fatalf("no debería fallar: %v", err)
+	casos := []struct {
+		nombre        string
+		creadoPor     *string
+		solicitanteID string
+		esAdmin       bool
+		esperaError   error
+	}{
+		{"la propia, el dueño la ve", &dueno, "docente-1", false, nil},
+		{"la de otro docente, no", &dueno, "docente-2", false, ErrNoEsTuReserva},
+		{"el Admin ve la de cualquiera", &dueno, "admin-1", true, nil},
+		{"un bloqueo no tiene dueño: el docente no lo ve", nil, "docente-1", false, ErrNoEsTuReserva},
+		{"y el Admin sí", nil, "admin-1", true, nil},
 	}
-	if r.EquipoID != "pc1" {
-		t.Errorf("reserva incorrecta: %+v", r)
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			repo := nuevoFakeRepo()
+			repo.reservas["r1"] = &domain.Reserva{ID: "r1", EquipoID: "pc1", CreadoPor: c.creadoPor}
+			svc := nuevoServicioDeTest(repo)
+
+			r, err := svc.ObtenerReserva(context.Background(), "r1", c.solicitanteID, c.esAdmin)
+
+			if c.esperaError != nil {
+				if !errors.Is(err, c.esperaError) {
+					t.Fatalf("esperaba %v, obtuve %v", c.esperaError, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("no debería fallar: %v", err)
+			}
+			if r.EquipoID != "pc1" {
+				t.Errorf("reserva incorrecta: %+v", r)
+			}
+		})
 	}
 }
 
 func TestObtenerReserva_NoExiste_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.ObtenerReserva(context.Background(), "no-existe")
+	_, err := svc.ObtenerReserva(context.Background(), "no-existe", "docente-1", false)
 
 	if !errors.Is(err, ErrReservaNoEncontrada) {
 		t.Fatalf("esperaba ErrReservaNoEncontrada, obtuve %v", err)
 	}
 }
 
-func TestObtenerReservaGrupo_OK(t *testing.T) {
-	repo := nuevoFakeRepo()
-	repo.grupos["g1"] = &domain.ReservaGrupo{ID: "g1", MateriaID: "materia1"}
-	svc := nuevoServicioDeTest(repo)
+// La titularidad de una serie se decide en el servicio, no en el handler: la
+// misma regla tiene que valer para cualquier llamador, entre o no por HTTP.
+func TestObtenerReservaGrupo_Titularidad(t *testing.T) {
+	dueno := "docente-1"
 
-	g, err := svc.ObtenerReservaGrupo(context.Background(), "g1")
-
-	if err != nil {
-		t.Fatalf("no debería fallar: %v", err)
+	casos := []struct {
+		nombre        string
+		creadoPor     *string
+		solicitanteID string
+		esAdmin       bool
+		esperaError   error
+	}{
+		{"la propia, el dueño la ve", &dueno, "docente-1", false, nil},
+		{"la de otro docente, no", &dueno, "docente-2", false, ErrNoEsTuReserva},
+		{"el Admin ve la de cualquiera", &dueno, "admin-1", true, nil},
+		// Un bloqueo administrativo no tiene dueño, así que no es "propio" de
+		// nadie: sólo un Admin lo mira.
+		{"sin dueño, un docente no", nil, "docente-1", false, ErrNoEsTuReserva},
+		{"sin dueño, el Admin sí", nil, "admin-1", true, nil},
 	}
-	if g.MateriaID != "materia1" {
-		t.Errorf("grupo incorrecto: %+v", g)
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			repo := nuevoFakeRepo()
+			repo.grupos["g1"] = &domain.ReservaGrupo{ID: "g1", MateriaID: "materia1", CreadoPor: c.creadoPor}
+			svc := nuevoServicioDeTest(repo)
+
+			g, err := svc.ObtenerReservaGrupo(context.Background(), "g1", c.solicitanteID, c.esAdmin)
+
+			if c.esperaError != nil {
+				if !errors.Is(err, c.esperaError) {
+					t.Fatalf("esperaba %v, obtuve %v", c.esperaError, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("no debería fallar: %v", err)
+			}
+			if g.MateriaID != "materia1" {
+				t.Errorf("grupo incorrecto: %+v", g)
+			}
+		})
 	}
 }
 
@@ -2136,7 +2230,7 @@ func TestCancelarReserva_EstadoDelGrupoSeGuardaDentroDeLaTransaccion(t *testing.
 	// Cancelar una de las dos PCs deja el grupo PARCIALMENTE_CANCELADA:
 	// obliga a actualizarEstadoGrupo a escribir.
 	admin := "admin1"
-	if err := svc.CancelarReserva(context.Background(), reservas[0].ID, &admin, "acto escolar"); err != nil {
+	if err := svc.CancelarReserva(context.Background(), reservas[0].ID, admin, true, "acto escolar"); err != nil {
 		t.Fatalf("no debería fallar cancelando: %v", err)
 	}
 
@@ -2691,4 +2785,181 @@ func mostradorAtendido() *fakeValidadorMostrador {
 // usa el sistema.
 func mostradorSinAtender() *fakeValidadorMostrador {
 	return &fakeValidadorMostrador{declarado: true, atendido: false}
+}
+
+// ── puedeCancelar: la regla que se mudó del handler al servicio ─────────
+//
+// Vivía en interfaces/http, así que cualquier otro llamador del servicio la
+// salteaba sin enterarse. Estos casos fijan que ahora sea del dominio.
+
+func TestPuedeCancelar(t *testing.T) {
+	dueno := "docente-1"
+	casos := []struct {
+		nombre      string
+		creadoPor   *string
+		solicitante string
+		esAdmin     bool
+		motivo      string
+		esperado    error
+	}{
+		{"lo propio, sin motivo", &dueno, dueno, false, "", nil},
+		{"lo propio siendo Admin", &dueno, dueno, true, "", nil},
+		{"lo ajeno, docente", &dueno, "otro-docente", false, "tengo una prueba", ErrNoEsTuReserva},
+		{"lo ajeno, Admin con motivo", &dueno, "admin-1", true, "acto escolar", nil},
+		{"lo ajeno, Admin sin motivo", &dueno, "admin-1", true, "", ErrMotivoObligatorio},
+		{"lo ajeno, Admin con motivo en blanco", &dueno, "admin-1", true, "   ", ErrMotivoObligatorio},
+		// Sin dueño es un bloqueo administrativo: no hay nadie de quien sea
+		// «propia», así que sólo un Admin lo toca y con motivo.
+		{"un bloqueo, docente", nil, "docente-1", false, "lo necesito", ErrNoEsTuReserva},
+		{"un bloqueo, Admin con motivo", nil, "admin-1", true, "se levantó el bloqueo", nil},
+		{"un bloqueo, Admin sin motivo", nil, "admin-1", true, "", ErrMotivoObligatorio},
+	}
+
+	for _, c := range casos {
+		err := puedeCancelar(c.creadoPor, c.solicitante, c.esAdmin, c.motivo)
+		if !errors.Is(err, c.esperado) {
+			t.Errorf("%s: obtuve %v, esperaba %v", c.nombre, err, c.esperado)
+		}
+	}
+}
+
+// Y que la regla frene de verdad la operación, no sólo que la función la
+// conteste: un docente no puede cancelar la reserva de otro ni aunque llame al
+// servicio directo.
+func TestCancelarReserva_DeOtroDocente_NoSePuede(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo)
+	dueno := "docente-dueño"
+	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", dueno, false,
+		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
+	if err != nil {
+		t.Fatalf("no debería fallar creando: %v", err)
+	}
+
+	err = svc.CancelarReserva(context.Background(), reservas[0].ID, "otro-docente", false, "la necesito")
+
+	if !errors.Is(err, ErrNoEsTuReserva) {
+		t.Fatalf("esperaba ErrNoEsTuReserva, obtuve %v", err)
+	}
+	sinTocar, errLectura := repo.BuscarReservaPorID(context.Background(), reservas[0].ID)
+	if errLectura != nil {
+		t.Fatalf("releyendo la reserva: %v", errLectura)
+	}
+	if sinTocar.Estado != domain.ReservaConfirmada {
+		t.Errorf("la reserva ajena quedó en %s; no tendría que haberse tocado", sinTocar.Estado)
+	}
+}
+
+// ── Las lecturas por lote ───────────────────────────────────────────────
+//
+// El fake las implementa en términos de las de a uno para que no puedan
+// divergir: si la búsqueda individual cambia de criterio, la del lote cambia
+// con ella.
+
+func (r *fakeRepo) BuscarReservasPorIDs(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	porID := map[string]*domain.Reserva{}
+	for _, id := range ids {
+		res, err := r.BuscarReservaPorID(ctx, id)
+		if err != nil {
+			// Como la de verdad: el id que no está simplemente no aparece.
+			continue
+		}
+		porID[id] = res
+	}
+	return porID, nil
+}
+
+func (r *fakeRepo) BuscarPrestamosPorIDs(ctx context.Context, ids []string) (map[string]*domain.Prestamo, error) {
+	porID := map[string]*domain.Prestamo{}
+	for _, id := range ids {
+		p, err := r.BuscarPrestamoPorID(ctx, id)
+		if err != nil {
+			continue
+		}
+		porID[id] = p
+	}
+	return porID, nil
+}
+
+func (r *fakeRepo) ListarReservasFuturasDeEquipos(ctx context.Context, equipoIDs []string, desde time.Time) (map[string][]*domain.Reserva, error) {
+	porEquipo := map[string][]*domain.Reserva{}
+	for _, id := range equipoIDs {
+		futuras, err := r.ListarReservasFuturasDeEquipo(ctx, id, desde)
+		if err != nil {
+			return nil, err
+		}
+		if len(futuras) > 0 {
+			porEquipo[id] = futuras
+		}
+	}
+	return porEquipo, nil
+}
+
+// ── La otra mitad de la semántica del lote ──────────────────────────────
+//
+// En las entregas, un id inexistente es un error del cliente. Acá es lo
+// contrario y a propósito: esta cascada la disparan otras operaciones —dar de
+// baja un equipo, quitar al último docente de una materia— así que una reserva
+// que desapareció en el medio es una menos que cancelar, no un pedido mal
+// armado. Al pasar a la lectura por lote, esa diferencia es exactamente lo que
+// se podía perder.
+func TestCancelarReservasPorIDs_SalteaLoQueNoExiste(t *testing.T) {
+	repo := nuevoFakeRepo()
+	creadoPor := "docente1"
+	repo.reservas["viva"] = &domain.Reserva{
+		ID: "viva", EquipoID: "pc1", Fecha: fecha(2026, 3, 9),
+		HoraInicio: 8 * time.Hour, HoraFin: 9 * time.Hour,
+		Estado: domain.ReservaConfirmada, CreadoPor: &creadoPor,
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	canceladas, err := svc.CancelarReservasPorIDs(context.Background(),
+		[]string{"no-existe", "viva", "tampoco"}, "el equipo se dio de baja")
+
+	if err != nil {
+		t.Fatalf("los ids que no están se saltean, no fallan: %v", err)
+	}
+	if canceladas != 1 {
+		t.Errorf("esperaba 1 cancelada, obtuve %d", canceladas)
+	}
+	if repo.reservas["viva"].Estado != domain.ReservaCancelada {
+		t.Errorf("la que sí existía tenía que cancelarse, quedó %s", repo.reservas["viva"].Estado)
+	}
+}
+
+// Bloquear equipos pasó a pedir las reservas futuras de TODAS las máquinas en
+// una consulta. Lo que no puede cambiar: que cada equipo cancele lo suyo y sólo
+// lo suyo.
+func TestBloquearEquipos_CadaEquipoCancelaLoSuyo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	creadoPor := "docente1"
+	for _, pc := range []string{"pc1", "pc2", "pc3"} {
+		repo.reservas["res-"+pc] = &domain.Reserva{
+			ID: "res-" + pc, EquipoID: pc, Fecha: fecha(2026, 3, 9),
+			HoraInicio: 10 * time.Hour, HoraFin: 12 * time.Hour,
+			Estado: domain.ReservaConfirmada, Tipo: domain.TipoNormal, CreadoPor: &creadoPor,
+		}
+	}
+	admin := "admin1"
+	svc := nuevoServicioDeTest(repo)
+
+	// Se bloquean dos de las tres.
+	res, err := svc.BloquearEquipos(context.Background(), []string{"pc1", "pc3"}, &admin,
+		fecha(2026, 3, 9), 10*time.Hour, 12*time.Hour, "Evaluación provincial")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if res.ReservasCanceladas != 2 {
+		t.Fatalf("esperaba 2 canceladas, obtuve %d", res.ReservasCanceladas)
+	}
+	// La del equipo que no se bloqueó queda intacta: el mapa por equipo no
+	// puede haber mezclado las listas.
+	if repo.reservas["res-pc2"].Estado != domain.ReservaConfirmada {
+		t.Errorf("pc2 no se bloqueó y su reserva quedó %s", repo.reservas["res-pc2"].Estado)
+	}
+	for _, pc := range []string{"pc1", "pc3"} {
+		if repo.reservas["res-"+pc].Estado != domain.ReservaCancelada {
+			t.Errorf("%s se bloqueó y su reserva quedó %s", pc, repo.reservas["res-"+pc].Estado)
+		}
+	}
 }

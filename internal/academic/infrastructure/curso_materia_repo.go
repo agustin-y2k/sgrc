@@ -20,14 +20,31 @@ import (
 // base las guarda como NULL. Los dos significan lo mismo —este curso no tiene
 // ese dato— y el NULL es lo que hace que los índices los comparen entre sí por
 // las columnas generadas.
-const columnasCurso = `id, ciclo_lectivo_id, nombre, anio, division, modalidad, activo, archivado`
+const columnasCurso = `id, ciclo_lectivo_id, nombre, anio, division, modalidad, archivado`
+
+// ordenDeCurso: por AÑO primero, y recién después por división y modalidad.
+//
+// Antes ordenaba por modalidad primero, y con una institución de verdad
+// adentro eso es ilegible: agrupar por modalidad deja los años salteados
+// —3°, 6°, 3°, 4°, 5°, 1°…— porque cada modalidad recorre los suyos de nuevo.
+// El año es el eje por el que una escuela mira sus cursos, y las modalidades
+// quedan igual de juntas dentro de cada año.
+//
+// La división se ordena como NÚMERO cuando lo es. Ordenada como texto, "10"
+// cae entre "1" y "2", y una institución con diez divisiones por año no es un
+// caso raro. Las divisiones sin dígitos ("A", "1ra" ordena por el 1) caen en
+// el NULL y las desempata el texto.
+const ordenDeCurso = `anio,
+	 nullif(regexp_replace(coalesce(division, ''), '\D', '', 'g'), '')::int NULLS FIRST,
+	 division NULLS FIRST,
+	 modalidad NULLS FIRST`
 
 func (r *PostgresRepo) CrearCurso(ctx context.Context, c *domain.Curso) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad, activo, archivado)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad, archivado)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		c.ID, c.CicloLectivoID, c.Anio, nullSiVacio(c.Division), nullSiVacio(c.Modalidad),
-		c.Activo, c.Archivado)
+		c.Archivado)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return application.ErrCursoNombreDuplicado
@@ -52,7 +69,7 @@ func escanearCurso(row pgx.Row) (*domain.Curso, error) {
 	var c domain.Curso
 	var division, modalidad *string
 	if err := row.Scan(&c.ID, &c.CicloLectivoID, &c.Nombre, &c.Anio, &division, &modalidad,
-		&c.Activo, &c.Archivado); err != nil {
+		&c.Archivado); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, application.ErrCursoNoEncontrado
 		}
@@ -72,8 +89,8 @@ func escanearCurso(row pgx.Row) (*domain.Curso, error) {
 
 func (r *PostgresRepo) GuardarCurso(ctx context.Context, c *domain.Curso) error {
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE curso SET anio=$2, division=$3, modalidad=$4, activo=$5, archivado=$6 WHERE id=$1`,
-		c.ID, c.Anio, nullSiVacio(c.Division), nullSiVacio(c.Modalidad), c.Activo, c.Archivado)
+		`UPDATE curso SET anio=$2, division=$3, modalidad=$4, archivado=$5 WHERE id=$1`,
+		c.ID, c.Anio, nullSiVacio(c.Division), nullSiVacio(c.Modalidad), c.Archivado)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return application.ErrCursoNombreDuplicado
@@ -91,9 +108,20 @@ func (r *PostgresRepo) GuardarCurso(ctx context.Context, c *domain.Curso) error 
 
 // EliminarCurso hace cascade a materia y docente_materia por las FK
 // ON DELETE CASCADE ya definidas en la migración (ver docs/07-modelo-datos.md).
+//
+// La violación de foránea se traduce al MISMO error que devuelve la
+// comprobación previa del servicio, y no es redundante: entre esa comprobación
+// y este DELETE hay una ventana en la que alguien puede crear una reserva sobre
+// una materia del curso. Sin esta traducción, esa carrera —rara pero real—
+// devolvía un 500 en vez del 409 que explica qué pasó. La comprobación previa
+// sigue existiendo porque da el mejor mensaje y no depende de qué foránea
+// saltó.
 func (r *PostgresRepo) EliminarCurso(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM curso WHERE id = $1`, id)
 	if err != nil {
+		if esViolacionFK(err) {
+			return application.ErrCursoConReservas
+		}
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
@@ -108,7 +136,7 @@ func (r *PostgresRepo) EliminarCurso(ctx context.Context, id string) error {
 func (r *PostgresRepo) ListarCursosPorCiclo(ctx context.Context, cicloID string) ([]*domain.Curso, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+columnasCurso+` FROM curso WHERE ciclo_lectivo_id = $1
-		 ORDER BY modalidad NULLS FIRST, anio, division NULLS FIRST`,
+		 ORDER BY `+ordenDeCurso,
 		cicloID)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -133,8 +161,8 @@ func (r *PostgresRepo) ListarCursosPorCiclo(ctx context.Context, cicloID string)
 
 func (r *PostgresRepo) CrearMateria(ctx context.Context, m *domain.Materia) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO materia (id, curso_id, nombre, activo, archivado) VALUES ($1, $2, $3, $4, $5)`,
-		m.ID, m.CursoID, m.Nombre, m.Activo, m.Archivado)
+		`INSERT INTO materia (id, curso_id, nombre, archivado) VALUES ($1, $2, $3, $4)`,
+		m.ID, m.CursoID, m.Nombre, m.Archivado)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return application.ErrMateriaNombreDuplicado
@@ -152,13 +180,13 @@ func (r *PostgresRepo) CrearMateria(ctx context.Context, m *domain.Materia) erro
 
 func (r *PostgresRepo) BuscarMateriaPorID(ctx context.Context, id string) (*domain.Materia, error) {
 	row := r.pool.QueryRow(ctx,
-		`SELECT id, curso_id, nombre, activo, archivado FROM materia WHERE id = $1`, id)
+		`SELECT id, curso_id, nombre, archivado FROM materia WHERE id = $1`, id)
 	return escanearMateria(row)
 }
 
 func escanearMateria(row pgx.Row) (*domain.Materia, error) {
 	var m domain.Materia
-	if err := row.Scan(&m.ID, &m.CursoID, &m.Nombre, &m.Activo, &m.Archivado); err != nil {
+	if err := row.Scan(&m.ID, &m.CursoID, &m.Nombre, &m.Archivado); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, application.ErrMateriaNoEncontrada
 		}
@@ -172,8 +200,8 @@ func escanearMateria(row pgx.Row) (*domain.Materia, error) {
 
 func (r *PostgresRepo) GuardarMateria(ctx context.Context, m *domain.Materia) error {
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE materia SET nombre=$2, activo=$3, archivado=$4 WHERE id=$1`,
-		m.ID, m.Nombre, m.Activo, m.Archivado)
+		`UPDATE materia SET nombre=$2, archivado=$3 WHERE id=$1`,
+		m.ID, m.Nombre, m.Archivado)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return application.ErrMateriaNombreDuplicado
@@ -189,11 +217,19 @@ func (r *PostgresRepo) GuardarMateria(ctx context.Context, m *domain.Materia) er
 	return nil
 }
 
-// EliminarMateria hace cascade a docente_materia por la FK ON DELETE
-// CASCADE ya definida en la migración.
+// EliminarMateria hace cascade a docente_materia y a pedido_de_materia por las
+// FK ON DELETE CASCADE de la migración.
+//
+// Las tres que NO son cascade —reserva_grupo, regla_recurrencia y reserva—
+// frenan el borrado, y las tres quieren decir lo mismo: la materia tiene
+// reservas. Ver EliminarCurso para por qué se traduce acá además de
+// comprobarlo antes.
 func (r *PostgresRepo) EliminarMateria(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM materia WHERE id = $1`, id)
 	if err != nil {
+		if esViolacionFK(err) {
+			return application.ErrMateriaConReservas
+		}
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
@@ -207,7 +243,7 @@ func (r *PostgresRepo) EliminarMateria(ctx context.Context, id string) error {
 
 func (r *PostgresRepo) ListarMateriasPorCurso(ctx context.Context, cursoID string) ([]*domain.Materia, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, curso_id, nombre, activo, archivado FROM materia WHERE curso_id = $1 ORDER BY nombre`,
+		`SELECT id, curso_id, nombre, archivado FROM materia WHERE curso_id = $1 ORDER BY nombre`,
 		cursoID)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -340,4 +376,36 @@ func nullSiVacio(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// CiclosDeCursos: a qué ciclo pertenece cada uno de los ids pedidos, en UNA
+// consulta. Los que no existen no aparecen en el mapa.
+//
+// `= ANY($1)` y no un IN con placeholders armados a mano: el arreglo viaja como
+// un solo parámetro, así que la consulta preparada es la misma para uno o para
+// doscientos destinos y no hay SQL concatenado.
+func (r *PostgresRepo) CiclosDeCursos(ctx context.Context, ids []string) (map[string]string, error) {
+	if len(ids) == 0 {
+		return map[string]string{}, nil
+	}
+
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, ciclo_lectivo_id FROM curso WHERE id = ANY($1)`, ids)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("leyendo los ciclos de los cursos: %w", err)
+	}
+	defer rows.Close()
+
+	ciclos := make(map[string]string, len(ids))
+	for rows.Next() {
+		var id, cicloID string
+		if err := rows.Scan(&id, &cicloID); err != nil {
+			return nil, fmt.Errorf("escaneando el ciclo de un curso: %w", err)
+		}
+		ciclos[id] = cicloID
+	}
+	return ciclos, errorDeFilas(rows)
 }

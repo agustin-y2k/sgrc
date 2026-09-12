@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/ramiro/sgrc/internal/inventory/domain"
@@ -34,24 +33,38 @@ func (s *Service) MarcarPreferencia(ctx context.Context, params NuevaPreferencia
 	}
 
 	resultado := &ResultadoAltaDePreferencias{}
-	for _, equipoID := range params.EquipoIDs {
-		p, err := domain.NuevaPreferencia(s.nuevoID(), equipoID, params.MateriaNombre,
-			params.Modalidad, params.Anio, params.Division, params.Prioridad)
-		if err != nil {
-			// La materia, el alcance y la prioridad son los mismos para todo el lote:
-			// si no validan, no validan para ninguno y seguir intentando con las demás
-			// máquinas no puede cambiar nada.
-			return nil, err
-		}
 
-		if err := s.repo.CrearPreferencia(ctx, p); err != nil {
-			if errors.Is(err, domain.ErrPreferenciaDuplicada) {
+	// El lote entero en una transacción: marcar veinte máquinas y que se
+	// marquen doce deja el inventario a medio camino, y la pantalla no dice
+	// cuáles quedaron sin marcar.
+	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		resultado = &ResultadoAltaDePreferencias{}
+
+		for _, equipoID := range params.EquipoIDs {
+			p, err := domain.NuevaPreferencia(s.nuevoID(), equipoID, params.MateriaNombre,
+				params.Modalidad, params.Anio, params.Division, params.Prioridad)
+			if err != nil {
+				// La materia, el alcance y la prioridad son los mismos para todo el
+				// lote: si no validan, no validan para ninguno y seguir intentando
+				// con las demás máquinas no puede cambiar nada.
+				return err
+			}
+
+			creada, err := repo.CrearPreferencia(ctx, p)
+			if err != nil {
+				return fmt.Errorf("marcando la preferencia en el equipo %s: %w", equipoID, err)
+			}
+			if !creada {
+				// Ya la tenía: se informa aparte y no voltea el lote.
 				resultado.EquiposQueYaTeni = append(resultado.EquiposQueYaTeni, equipoID)
 				continue
 			}
-			return nil, fmt.Errorf("marcando la preferencia en el equipo %s: %w", equipoID, err)
+			resultado.Creadas = append(resultado.Creadas, p)
 		}
-		resultado.Creadas = append(resultado.Creadas, p)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return resultado, nil
 }
@@ -93,4 +106,32 @@ func (s *Service) ListarPreferenciasDeEquipo(ctx context.Context, equipoID strin
 // marcar. Ver el puerto sobre por qué son nombres y no materias.
 func (s *Service) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {
 	return s.repo.NombresDeMateriaEnUso(ctx)
+}
+
+// ListarPreferenciasHuerfanas: las marcas que ya no cruzan con ninguna materia
+// cargada (RF-03.21).
+//
+// Aparecen al renombrar o borrar una materia, porque la marca se vincula por
+// NOMBRE y no por referencia — un diseño deliberado, para que las marcas
+// sobrevivan al clonado anual del ciclo, y cuya contracara es justamente ésta.
+//
+// Sin esta consulta las huérfanas son invisibles: siguen mostrándose en la
+// ficha del equipo exactamente igual que una marca que sí aplica.
+func (s *Service) ListarPreferenciasHuerfanas(ctx context.Context) ([]*PreferenciaHuerfana, error) {
+	return s.repo.ListarPreferenciasHuerfanas(ctx)
+}
+
+// ContarMarcasDeMateria: cuántas marcas de preferencia apuntan a ese nombre de
+// materia.
+//
+// Lo pregunta academic antes de renombrar una materia, para poder avisar en vez
+// de romper en silencio. Es una lectura, no una regla: el renombre se hace
+// igual, con el número o sin él.
+func (s *Service) ContarMarcasDeMateria(ctx context.Context, materiaNombre string) (int, error) {
+	return s.repo.ContarPreferenciasQueDejarianDeAplicar(ctx, materiaNombre)
+}
+
+// ObtenerPreferencia — ver el bloque «Obtener uno solo» de service.go.
+func (s *Service) ObtenerPreferencia(ctx context.Context, id string) (*domain.PreferenciaDeEquipo, error) {
+	return s.repo.BuscarPreferenciaPorID(ctx, id)
 }

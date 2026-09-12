@@ -272,18 +272,37 @@ func InicioDePared(fecha time.Time, horaInicio time.Duration, loc *time.Location
 	return InstanteDePared(fecha, horaInicio, loc)
 }
 
-// ValidarVentanaTemporal reúne las tres reglas que todo bloque tiene que
-// cumplir, sea una reserva normal o un bloqueo administrativo: rango horario
-// coherente, duración acotada y que no esté en el pasado.
-func ValidarVentanaTemporal(fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) error {
+// ValidarVentanaDeBloqueo son las dos reglas que cumple CUALQUIER bloque de
+// tiempo del sistema, sea una clase o un bloqueo administrativo: el rango tiene
+// que decir algo, y no puede estar ya terminado.
+//
+// La primera parecía no hacer falta y sí hacía: un rango de duración cero no lo
+// frena nadie del lado de Go, y llega hasta el CHECK `reserva_check` de la
+// base, que lo rechaza con un error crudo. Como ninguna capa traduce las
+// violaciones de CHECK, eso salía como un 500 —«error interno»— en vez del 400
+// que dice qué está mal. Un bloqueo de las 10:00 a las 10:00 no bloquea nada:
+// el rango es vacío, así que ni siquiera entra en la restricción de
+// solapamiento.
+func ValidarVentanaDeBloqueo(fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) error {
 	if horaFin == horaInicio {
 		return ErrRangoHorarioInvalido
 	}
-	if DuracionDe(horaInicio, horaFin) > MaxDuracionReserva {
-		return ErrDuracionExcesiva
-	}
 	if YaTermino(fecha, horaInicio, horaFin, ahora) {
 		return ErrReservaEnElPasado
+	}
+	return nil
+}
+
+// ValidarVentanaTemporal es lo anterior más el tope de duración, que es lo
+// único que NO comparten los dos casos: una clase de más de ocho horas es un
+// error de carga, pero un bloqueo de la jornada entera —una capacitación, una
+// obra en el aula— es exactamente para lo que existe el bloqueo.
+func ValidarVentanaTemporal(fecha time.Time, horaInicio, horaFin time.Duration, ahora time.Time) error {
+	if err := ValidarVentanaDeBloqueo(fecha, horaInicio, horaFin, ahora); err != nil {
+		return err
+	}
+	if DuracionDe(horaInicio, horaFin) > MaxDuracionReserva {
+		return ErrDuracionExcesiva
 	}
 	return nil
 }

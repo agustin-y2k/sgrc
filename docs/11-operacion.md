@@ -42,9 +42,11 @@ Los crea `make run` / `make dev` mediante el servicio `seed-datos` (§7).
 | Admin | el `SEED_ADMIN_EMAIL` del `.env` (por defecto `admin@tuinstitucion.edu.ar`) | el `SEED_ADMIN_PASSWORD` del `.env` |
 | Docente | `docente@escuela.edu.ar` | `docente_password_123` |
 
-Esa contraseña de docente está escrita en `scripts/sembrar-datos-de-prueba.sh`
-y es pública. Por eso el script **se niega a correr contra algo que no sea
-local**: en el servidor de producción ese usuario no existe.
+Esa contraseña de docente es el valor por omisión de
+`scripts/sembrar-datos-de-prueba.sh` y es pública; se puede cambiar poniendo
+`DOCENTE_EMAIL` y `DOCENTE_PASSWORD` en el `.env`. Aun así el script **se niega a
+correr contra algo que no sea local**: en el servidor de producción ese usuario no
+existe.
 
 ### Y si compré el dominio, ¿qué toco?
 
@@ -72,16 +74,24 @@ necesitás: **§10** para los puertos (ojo con la trampa de `APP_PORT`) y
 cp .env.example .env
 ```
 
-Después hay que **completar los valores reales**. Los cuatro que no se pueden
+Después hay que **completar los valores reales**. Los cinco que no se pueden
 dejar como vienen:
 
 | Variable | Qué poner | Cómo generarla |
 |---|---|---|
 | `POSTGRES_PASSWORD` | La contraseña de la base | `openssl rand -base64 24` |
-| `JWT_SECRET` | El secreto que firma las sesiones | `openssl rand -base64 48` |
+| `JWT_SECRET` | El secreto que firma las sesiones, **32 bytes como mínimo** | `openssl rand -base64 48` |
 | `SEED_ADMIN_PASSWORD` | La contraseña del primer Admin | La elegís vos, mínimo 8 caracteres |
 | `TUNNEL_TOKEN` | El token del túnel | Lo da el panel de Cloudflare |
 | `GRAFANA_PASSWORD` | La contraseña de `admin` en Grafana, solo si vas a levantar los tableros | `openssl rand -base64 24` |
+
+> **El valor de ejemplo de `JWT_SECRET` está corto a propósito.** En
+> `.env.example` dice `CAMBIAME`, que son 8 bytes, así que un despliegue que copie
+> el archivo y se olvide de esta línea **no arranca** y el log dice cuántos bytes
+> faltan. Antes el ejemplo tenía 40 caracteres y pasaba la validación: el sistema
+> levantaba firmando las sesiones con una clave publicada en el repositorio, que es
+> peor que no arrancar. Cualquiera que lea el repo podría emitirse un token de
+> Admin.
 
 > `GRAFANA_PASSWORD` se siembra **una sola vez, en el primer arranque de
 > Grafana**: después el usuario vive en el volumen `grafana-datos` y editar el
@@ -203,6 +213,12 @@ entra, si tiene privilegios de administrador, si pide contraseña y cuál es
 ```
 CUENTAS_SECRET=<lo que devuelva openssl rand -base64 48>
 ```
+
+**Vacío está bien; corto no.** Si la variable tiene algo, tiene que tener al
+menos 32 bytes —el mismo piso que `JWT_SECRET`— y si no el proceso no arranca.
+La clave de AES sale de un SHA-256 de este texto, así que lo que hay que adivinar
+para abrir el volcado es el texto, no la clave: un `CUENTAS_SECRET=1234` daría una
+clave de 32 bytes perfectamente formada y trivial de romper.
 
 Sin la variable el sistema **arranca igual** y lo dice en el log. Se pueden
 anotar cuentas, ver quién es administrador y quién no, y marcar si la máquina
@@ -813,9 +829,16 @@ make backup                    # deja backup-sgrc-AAAA-MM-DD.sql en la carpeta
 o el comando completo:
 
 ```bash
-docker compose exec -T postgres sh -c \
+umask 077; docker compose exec -T postgres sh -c \
   'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backup-sgrc-$(date +%F).sql
 ```
+
+> **El `umask 077` es parte del comando, no un adorno.** El archivo lo crea la
+> shell, y con el umask normal queda `0644`: legible por cualquier usuario del
+> servidor. Contraseñas no tiene —las de las personas van hasheadas y las de las
+> máquinas cifradas con `CUENTAS_SECRET` (§1.1.c)— pero sí el nombre, el apellido,
+> el correo y el cargo de toda la planta docente en texto plano. Con `umask 077`
+> queda `0600`. `make backup` ya lo hace.
 
 **Restaurar** (sobre una base vacía; borra lo que haya):
 
@@ -989,10 +1012,13 @@ falsificar el header con la IP del cliente.
 
 ### 9.2 Lista de control antes de desplegar
 
-1. **`.env` propio del servidor**, con los cuatro valores reales (§1.1):
-   `POSTGRES_PASSWORD`, `JWT_SECRET`, `SEED_ADMIN_PASSWORD`, `TUNNEL_TOKEN`.
-   Los de `.env.example` dicen `cambiar_...` y el backend **se niega a
-   arrancar** con un `JWT_SECRET` de menos de 32 bytes.
+1. **`.env` propio del servidor**, con los cinco valores reales (§1.1):
+   `POSTGRES_PASSWORD`, `JWT_SECRET`, `SEED_ADMIN_PASSWORD`, `TUNNEL_TOKEN` y
+   —si vas a levantar los tableros— `GRAFANA_PASSWORD`. Los de `.env.example`
+   dicen `cambiar_...` o `CAMBIAME`, y el backend **se niega a arrancar** con un
+   `JWT_SECRET` o un `CUENTAS_SECRET` de menos de 32 bytes. El de Grafana no lo
+   puede validar el backend, porque es otro contenedor: lo verifica
+   `make observabilidad` antes de levantar el perfil.
 2. **`FRONTEND_ORIGIN`** con el dominio real (§9.3).
 3. **`VITE_API_URL` vacío**, y en `frontend/.env`, no en el `.env` de la raíz.
    Se parece a `FRONTEND_ORIGIN` pero no se comporta igual ni vive en el mismo

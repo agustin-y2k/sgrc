@@ -7,6 +7,7 @@ import (
 	"github.com/ramiro/sgrc/internal/inventory/domain"
 	"github.com/ramiro/sgrc/internal/shared/audit"
 	"github.com/ramiro/sgrc/internal/shared/middleware"
+	"github.com/ramiro/sgrc/internal/shared/respuesta"
 )
 
 // Las cuentas de usuario de cada equipo (RF-03.22).
@@ -19,7 +20,7 @@ func esAdmin(c *fiber.Ctx) bool {
 	return claims != nil && claims.Rol == "ADMIN"
 }
 
-// GET /api/inventory/equipos/{equipoId}/cuentas — cualquier autenticado.
+// GET /api/equipos/{equipoId}/cuentas — cualquier autenticado.
 //
 // La lista sale para todos: la cuenta y su privilegio no son el secreto. Lo
 // que cambia según quién pregunta es el campo `puedeVerLaPassword` de cada
@@ -39,7 +40,7 @@ func (h *Handler) ListarCuentasDeEquipo(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": respuesta})
 }
 
-// GET /api/inventory/clases-de-cuenta — las clases ya usadas, para sugerir.
+// GET /api/clases-de-cuenta — las clases ya usadas, para sugerir.
 //
 // Colección propia y no algo colgado de un equipo, igual que
 // /categorias-de-falla: no son cuentas, son el vocabulario con el que se las
@@ -55,7 +56,7 @@ func (h *Handler) ListarClasesDeCuenta(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": clases})
 }
 
-// POST /api/inventory/equipos/{equipoId}/cuentas (Admin)
+// POST /api/equipos/{equipoId}/cuentas (Admin)
 func (h *Handler) CrearCuentaDeEquipo(c *fiber.Ctx) error {
 	equipoID := c.Params("equipoId")
 	claims, err := claimsDelContexto(c)
@@ -87,14 +88,14 @@ func (h *Handler) CrearCuentaDeEquipo(c *fiber.Ctx) error {
 		"visibilidad": string(cuenta.Visibilidad),
 	})
 
-	return c.Status(fiber.StatusCreated).JSON(toCuentaResponse(application.CuentaVisible{
+	return respuesta.Creado(c, "/api/cuentas", cuenta.ID, toCuentaResponse(application.CuentaVisible{
 		CuentaDeEquipo:     cuenta,
 		PuedeVerLaPassword: true, // lo acaba de crear un Admin
 		HayPasswordParaVer: cuenta.HayPasswordGuardada(),
 	}))
 }
 
-// PATCH /api/inventory/cuentas/{id} (Admin)
+// PATCH /api/cuentas/{id} (Admin)
 func (h *Handler) EditarCuentaDeEquipo(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)
@@ -131,7 +132,7 @@ func (h *Handler) EditarCuentaDeEquipo(c *fiber.Ctx) error {
 	}))
 }
 
-// DELETE /api/inventory/cuentas/{id} (Admin)
+// DELETE /api/cuentas/{id} (Admin)
 func (h *Handler) BorrarCuentaDeEquipo(c *fiber.Ctx) error {
 	id := c.Params("id")
 	claims, err := claimsDelContexto(c)
@@ -147,7 +148,7 @@ func (h *Handler) BorrarCuentaDeEquipo(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// POST /api/inventory/cuentas/{id}/password — cualquier autenticado; el
+// POST /api/cuentas/{id}/password — cualquier autenticado; el
 // servicio decide si le corresponde.
 //
 // Es POST y no GET a propósito, por dos razones: un GET termina en el historial

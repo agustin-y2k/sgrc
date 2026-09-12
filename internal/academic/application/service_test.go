@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -27,6 +28,8 @@ type fakeRepo struct {
 	errAsignarDocente error
 	errArchivar       error
 	errClonar         error
+	errImportar       error
+	errCopiar         error
 
 	archivarCicloLlamado  bool
 	materiasReservables   []MateriaReservable
@@ -69,7 +72,22 @@ func (r *fakeRepo) BuscarCicloPorID(ctx context.Context, id string) (*domain.Cic
 }
 
 func (r *fakeRepo) GuardarCiclo(ctx context.Context, c *domain.CicloLectivo) error {
+	// El único de `anio` lo sostiene la base; acá se imita para que el test del
+	// año ocupado pruebe la ruta completa y no sólo la del servicio.
+	for _, otro := range r.ciclos {
+		if otro.ID != c.ID && otro.Anio == c.Anio {
+			return ErrCicloYaTieneAnio
+		}
+	}
 	r.ciclos[c.ID] = c
+	return nil
+}
+
+func (r *fakeRepo) EliminarCiclo(ctx context.Context, id string) error {
+	if _, ok := r.ciclos[id]; !ok {
+		return ErrCicloNoEncontrado
+	}
+	delete(r.ciclos, id)
 	return nil
 }
 
@@ -253,6 +271,111 @@ func (r *fakeRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, nuevo
 	return cursosClonados, materiasClonadas, nil
 }
 
+// Las tres de RF-02.12. Se implementan de verdad y no como stubs: lo que
+// verifican los tests del servicio es que la misma materia no entre dos veces
+// y que un curso repetido en el archivo no se cree dos veces, y eso solo se ve
+// si el fake compara igual que la base —por nombre NORMALIZADO—.
+
+func (r *fakeRepo) ListarEstructuraDeCiclo(ctx context.Context, cicloID string) ([]CursoConMaterias, error) {
+	var resultado []CursoConMaterias
+	for _, curso := range r.cursos {
+		if curso.CicloLectivoID != cicloID {
+			continue
+		}
+		fila := CursoConMaterias{Anio: curso.Anio, Division: curso.Division, Modalidad: curso.Modalidad}
+		for _, m := range r.materias {
+			if m.CursoID == curso.ID {
+				fila.Materias = append(fila.Materias, m.Nombre)
+			}
+		}
+		sort.Strings(fila.Materias)
+		resultado = append(resultado, fila)
+	}
+	sort.Slice(resultado, func(i, j int) bool {
+		if resultado[i].Anio != resultado[j].Anio {
+			return resultado[i].Anio < resultado[j].Anio
+		}
+		return resultado[i].Division < resultado[j].Division
+	})
+	return resultado, nil
+}
+
+func (r *fakeRepo) ImportarEstructura(ctx context.Context, cicloID string, cursos []CursoConMaterias) (ResultadoImportacion, error) {
+	if r.errImportar != nil {
+		return ResultadoImportacion{}, r.errImportar
+	}
+	var res ResultadoImportacion
+	for _, fila := range cursos {
+		cursoID, creado := r.buscarOCrearCurso(cicloID, fila)
+		if creado {
+			res.CursosCreados++
+		} else {
+			res.CursosExistentes++
+		}
+		for _, nombre := range fila.Materias {
+			if r.crearMateriaSiFalta(cursoID, nombre) {
+				res.MateriasCreadas++
+			} else {
+				res.MateriasExistentes++
+			}
+		}
+	}
+	return res, nil
+}
+
+func (r *fakeRepo) CopiarMateriasA(ctx context.Context, cursoOrigenID string, cursosDestinoIDs []string) (ResultadoCopia, error) {
+	if r.errCopiar != nil {
+		return ResultadoCopia{}, r.errCopiar
+	}
+	var nombres []string
+	for _, m := range r.materias {
+		if m.CursoID == cursoOrigenID {
+			nombres = append(nombres, m.Nombre)
+		}
+	}
+	sort.Strings(nombres)
+
+	res := ResultadoCopia{CursosDestino: len(cursosDestinoIDs)}
+	for _, destinoID := range cursosDestinoIDs {
+		for _, nombre := range nombres {
+			if r.crearMateriaSiFalta(destinoID, nombre) {
+				res.MateriasCreadas++
+			} else {
+				res.MateriasExistentes++
+			}
+		}
+	}
+	return res, nil
+}
+
+func (r *fakeRepo) buscarOCrearCurso(cicloID string, fila CursoConMaterias) (string, bool) {
+	clave := claveDeCurso(fila.Anio, fila.Division, fila.Modalidad)
+	for _, c := range r.cursos {
+		if c.CicloLectivoID == cicloID && claveDeCurso(c.Anio, c.Division, c.Modalidad) == clave {
+			return c.ID, false
+		}
+	}
+	id := fmt.Sprintf("curso-importado-%d", len(r.cursos)+1)
+	r.cursos[id] = &domain.Curso{
+		ID: id, CicloLectivoID: cicloID, Anio: fila.Anio,
+		Division: fila.Division, Modalidad: fila.Modalidad,
+		Nombre: domain.ComponerNombre(fila.Anio, fila.Division),
+	}
+	return id, true
+}
+
+func (r *fakeRepo) crearMateriaSiFalta(cursoID, nombre string) bool {
+	norm := domain.NormalizarNombre(nombre)
+	for _, m := range r.materias {
+		if m.CursoID == cursoID && domain.NormalizarNombre(m.Nombre) == norm {
+			return false
+		}
+	}
+	id := fmt.Sprintf("materia-importada-%d", len(r.materias)+1)
+	r.materias[id] = &domain.Materia{ID: id, CursoID: cursoID, Nombre: nombre}
+	return true
+}
+
 // ── fakeValidadorUsuario / fakeValidadorReservas ───────────────────────
 
 type fakeValidadorUsuario struct {
@@ -271,10 +394,26 @@ func (f *fakeValidadorUsuario) ExisteYAprobado(ctx context.Context, usuarioID st
 	return f.valido, f.err
 }
 
+// AlgunoAprobado comparte la decisión con ExisteYAprobado, para que un test que
+// configura `validoPorUsuario` obtenga lo mismo por los dos caminos.
+func (f *fakeValidadorUsuario) AlgunoAprobado(ctx context.Context, usuarioIDs []string) (bool, error) {
+	for _, id := range usuarioIDs {
+		valido, err := f.ExisteYAprobado(ctx, id)
+		if err != nil {
+			return false, err
+		}
+		if valido {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 type fakeValidadorReservas struct {
 	tieneReservasCurso   bool
 	tieneReservasMateria bool
 	tieneReservasCiclo   bool
+	hayBloqueosEnElAnio  bool
 	err                  error
 }
 
@@ -286,6 +425,9 @@ func (f *fakeValidadorReservas) TieneReservasMateria(ctx context.Context, materi
 }
 func (f *fakeValidadorReservas) TieneReservasDeCiclo(ctx context.Context, cicloID string) (bool, error) {
 	return f.tieneReservasCiclo, f.err
+}
+func (f *fakeValidadorReservas) HayBloqueosEnElAnio(ctx context.Context, anio int) (bool, error) {
+	return f.hayBloqueosEnElAnio, f.err
 }
 
 type fakeArchivadorHistorico struct {
@@ -356,14 +498,14 @@ func relojDeTest() time.Time {
 func nuevoServicioDeTest(repo Repo, validadorUsuario ValidadorUsuario, validadorReservas ValidadorReservas) *Service {
 	contadorID = 0
 	return NewService(repo, validadorUsuario, validadorReservas, &fakeArchivadorHistorico{},
-		&fakeCanceladorReservas{}, &fakeDatosDeUsuario{}, idSecuencial, relojDeTest,
+		&fakeCanceladorReservas{}, &fakeDatosDeUsuario{}, &fakeMarcas{}, idSecuencial, relojDeTest,
 		eventbus.NewInMemoryEventBus())
 }
 
 func nuevoServicioConArchivador(repo Repo, validadorUsuario ValidadorUsuario, validadorReservas ValidadorReservas, archivador ArchivadorHistorico) *Service {
 	contadorID = 0
 	return NewService(repo, validadorUsuario, validadorReservas, archivador,
-		&fakeCanceladorReservas{}, &fakeDatosDeUsuario{}, idSecuencial, relojDeTest,
+		&fakeCanceladorReservas{}, &fakeDatosDeUsuario{}, &fakeMarcas{}, idSecuencial, relojDeTest,
 		eventbus.NewInMemoryEventBus())
 }
 
@@ -394,7 +536,7 @@ func servicioSimple(repo Repo) *Service {
 func servicioConCancelador(repo Repo, cancelador *fakeCanceladorReservas, validadorUsuario ValidadorUsuario) *Service {
 	contadorID = 0
 	return NewService(repo, validadorUsuario, &fakeValidadorReservas{}, &fakeArchivadorHistorico{},
-		cancelador, &fakeDatosDeUsuario{}, idSecuencial, relojDeTest,
+		cancelador, &fakeDatosDeUsuario{}, &fakeMarcas{}, idSecuencial, relojDeTest,
 		eventbus.NewInMemoryEventBus())
 }
 
@@ -458,8 +600,8 @@ func TestArchivarYClonar_SinClonar_OK(t *testing.T) {
 func TestArchivarYClonar_ConClonar_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: true}
-	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", CicloLectivoID: "c1", Nombre: "1°A", Activo: true}
-	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "curso1", Nombre: "Matemáticas", Activo: true}
+	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", CicloLectivoID: "c1", Nombre: "1°A"}
+	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "curso1", Nombre: "Matemáticas"}
 	svc := servicioSimple(repo)
 
 	anio2026 := 2026
@@ -535,8 +677,8 @@ func TestArchivarYClonar_ReintentoCompletaElClonadoPendiente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	// Como quedó tras un primer intento que archivó y borró, pero no clonó.
 	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: false, Archivado: true}
-	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", CicloLectivoID: "c1", Nombre: "1°A", Activo: true}
-	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "curso1", Nombre: "Matemáticas", Activo: true}
+	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", CicloLectivoID: "c1", Nombre: "1°A"}
+	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "curso1", Nombre: "Matemáticas"}
 	// Sin limpieza pendiente: el borrado del intento anterior sí terminó.
 	svc := nuevoServicioConArchivador(repo, &fakeValidadorUsuario{valido: true},
 		&fakeValidadorReservas{}, &fakeArchivadorHistorico{})
@@ -659,7 +801,7 @@ func TestCrearCurso_SinAnio_Error(t *testing.T) {
 
 func TestEditarCurso_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", Anio: 1, Division: "A", Nombre: "1°A", Activo: true}
+	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", Anio: 1, Division: "A", Nombre: "1°A"}
 	svc := servicioSimple(repo)
 
 	err := svc.EditarCurso(context.Background(), "curso1", 2, "B", "")
@@ -1134,16 +1276,6 @@ func (r *fakeRepo) ListarPedidosDeUsuario(_ context.Context, usuarioID string) (
 	return out, nil
 }
 
-func (r *fakeRepo) ContarPedidosPendientes(_ context.Context) (int, error) {
-	n := 0
-	for _, p := range r.pedidos {
-		if p.Estado == domain.PedidoPendiente {
-			n++
-		}
-	}
-	return n, nil
-}
-
 func (r *fakeRepo) TienePedidoAbierto(_ context.Context, usuarioID, materiaID string) (bool, error) {
 	for _, p := range r.pedidos {
 		if p.UsuarioID == usuarioID && p.Estado == domain.PedidoPendiente &&
@@ -1152,4 +1284,293 @@ func (r *fakeRepo) TienePedidoAbierto(_ context.Context, usuarioID, materiaID st
 		}
 	}
 	return false, nil
+}
+
+func (r *fakeRepo) CiclosDeCursos(ctx context.Context, ids []string) (map[string]string, error) {
+	ciclos := make(map[string]string, len(ids))
+	for _, id := range ids {
+		if c, existe := r.cursos[id]; existe {
+			ciclos[id] = c.CicloLectivoID
+		}
+	}
+	return ciclos, nil
+}
+
+// fakeMarcas: cuántas marcas de preferencia de equipo dejan de aplicar al
+// renombrar una materia. Cero salvo que un test diga otra cosa — el aviso es
+// información, no una regla, así que la mayoría de los tests no lo mira.
+type fakeMarcas struct {
+	cuantas        int
+	err            error
+	nombreRecibido string
+}
+
+func (f *fakeMarcas) CuantasDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error) {
+	f.nombreRecibido = materiaNombre
+	return f.cuantas, f.err
+}
+
+// ── El aviso al renombrar una materia (RF-03.21) ───────────────────────
+//
+// Las marcas de preferencia de equipo se vinculan a la materia POR NOMBRE, no
+// por referencia: es deliberado, para que sobrevivan al clonado anual del
+// ciclo. El precio es que un renombre las deja apuntando a un nombre que ya no
+// existe — y hasta acá eso pasaba en silencio, con la marca siguiendo a la
+// vista como si valiera.
+
+func servicioConMarcas(repo Repo, marcas MarcasDeInventario) *Service {
+	contadorID = 0
+	return NewService(repo, &fakeValidadorUsuario{valido: true}, &fakeValidadorReservas{},
+		&fakeArchivadorHistorico{}, &fakeCanceladorReservas{}, &fakeDatosDeUsuario{},
+		marcas, idSecuencial, relojDeTest, eventbus.NewInMemoryEventBus())
+}
+
+func TestEditarMateria_AvisaCuantasMarcasQuedanHuerfanas(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "c1", Nombre: "Matemática"}
+	marcas := &fakeMarcas{cuantas: 8}
+	svc := servicioConMarcas(repo, marcas)
+
+	afectadas, err := svc.EditarMateria(context.Background(), "m1", "Matemática I")
+
+	if err != nil {
+		t.Fatalf("renombrar es legítimo y no puede fallar por esto: %v", err)
+	}
+	if afectadas != 8 {
+		t.Errorf("esperaba 8 marcas afectadas, obtuve %d", afectadas)
+	}
+	// Se cuenta contra el nombre VIEJO: después del UPDATE ya no habría forma
+	// de saber cuántas apuntaban a él.
+	if marcas.nombreRecibido != "Matemática" {
+		t.Errorf("contó contra %q; tenía que ser el nombre viejo", marcas.nombreRecibido)
+	}
+	if repo.materias["m1"].Nombre != "Matemática I" {
+		t.Errorf("el renombre tenía que aplicarse igual, quedó %q", repo.materias["m1"].Nombre)
+	}
+}
+
+// Corregir espacios o mayúsculas no es un renombre para la base —la
+// comparación los ignora (RF-00.1)— así que ninguna marca se ve afectada y no
+// hay que ir a contar.
+func TestEditarMateria_ArreglarEspaciosNoAfectaNingunaMarca(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "c1", Nombre: "Matemática"}
+	marcas := &fakeMarcas{cuantas: 8}
+	svc := servicioConMarcas(repo, marcas)
+
+	afectadas, err := svc.EditarMateria(context.Background(), "m1", "  MATEMÁTICA  ")
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if afectadas != 0 {
+		t.Errorf("esperaba 0 marcas afectadas, obtuve %d", afectadas)
+	}
+	if marcas.nombreRecibido != "" {
+		t.Error("ni siquiera tendría que haber preguntado")
+	}
+}
+
+// Contar es informativo: que falle no puede impedir corregir un nombre mal
+// escrito.
+func TestEditarMateria_SiNoSePuedeContarElRenombreSigue(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "c1", Nombre: "Matemática"}
+	svc := servicioConMarcas(repo, &fakeMarcas{err: errors.New("se cayó la conexión")})
+
+	afectadas, err := svc.EditarMateria(context.Background(), "m1", "Matemática I")
+
+	if err != nil {
+		t.Fatalf("el renombre tenía que seguir igual: %v", err)
+	}
+	if afectadas != 0 {
+		t.Errorf("sin poder contar, el número es 0; obtuve %d", afectadas)
+	}
+	if repo.materias["m1"].Nombre != "Matemática I" {
+		t.Error("el renombre no se aplicó")
+	}
+}
+
+// El puerto puede ser nil: el aviso es información y un servicio armado sin él
+// renombra igual.
+func TestEditarMateria_SinPuertoDeMarcas(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "c1", Nombre: "Matemática"}
+	svc := servicioConMarcas(repo, nil)
+
+	if _, err := svc.EditarMateria(context.Background(), "m1", "Matemática I"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if repo.materias["m1"].Nombre != "Matemática I" {
+		t.Error("el renombre no se aplicó")
+	}
+}
+
+// ── Corregir y eliminar un ciclo ────────────────────────────────────────
+//
+// El ciclo era la única entidad del sistema sin corrección posible, y la peor
+// candidata para serlo: el año es único, así que uno creado con el año
+// equivocado se quedaba con ese año para siempre y encima ocupaba el único
+// lugar de ciclo activo.
+
+func TestCorregirAnioDeCiclo_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2027, Activo: true}
+	svc := servicioSimple(repo)
+
+	if err := svc.CorregirAnioDeCiclo(context.Background(), "c1", 2026); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if repo.ciclos["c1"].Anio != 2026 {
+		t.Errorf("el año tenía que quedar en 2026, quedó %d", repo.ciclos["c1"].Anio)
+	}
+}
+
+// Mandar el año que el ciclo ya tiene es un formulario enviado sin cambios, no
+// un error: hacerlo fallar sólo obligaría a la pantalla a comparar antes.
+func TestCorregirAnioDeCiclo_MismoAnio_NoEsError(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2026, Activo: true}
+	svc := servicioSimple(repo)
+
+	if err := svc.CorregirAnioDeCiclo(context.Background(), "c1", 2026); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+}
+
+// Una reserva lleva su propia fecha y no se muda con el ciclo: correrlo de año
+// lo dejaría diciendo que sus clases fueron en un año en el que no pasó nada.
+func TestCorregirAnioDeCiclo_ConReservas_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2026, Activo: true}
+	svc := nuevoServicioDeTest(repo, &fakeValidadorUsuario{valido: true},
+		&fakeValidadorReservas{tieneReservasCiclo: true})
+
+	err := svc.CorregirAnioDeCiclo(context.Background(), "c1", 2027)
+
+	if !errors.Is(err, ErrCicloConReservas) {
+		t.Fatalf("esperaba ErrCicloConReservas, obtuve %v", err)
+	}
+	if repo.ciclos["c1"].Anio != 2026 {
+		t.Error("el año no tenía que cambiar")
+	}
+}
+
+// Un bloqueo administrativo no tiene clave foránea al ciclo: se le atribuye a
+// uno por el año de su fecha. Mudarse a un año que ya tiene bloqueos sería
+// adoptarlos sin que nadie lo pida.
+func TestCorregirAnioDeCiclo_ElAnioDestinoTieneBloqueos_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2026, Activo: true}
+	svc := nuevoServicioDeTest(repo, &fakeValidadorUsuario{valido: true},
+		&fakeValidadorReservas{hayBloqueosEnElAnio: true})
+
+	err := svc.CorregirAnioDeCiclo(context.Background(), "c1", 2027)
+
+	if !errors.Is(err, ErrAnioConBloqueos) {
+		t.Fatalf("esperaba ErrAnioConBloqueos, obtuve %v", err)
+	}
+}
+
+func TestCorregirAnioDeCiclo_AnioOcupadoPorOtroCiclo_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2027, Activo: true}
+	repo.ciclos["c2"] = &domain.CicloLectivo{ID: "c2", Anio: 2026, Archivado: true}
+	svc := servicioSimple(repo)
+
+	err := svc.CorregirAnioDeCiclo(context.Background(), "c1", 2026)
+
+	if !errors.Is(err, ErrCicloYaTieneAnio) {
+		t.Fatalf("esperaba ErrCicloYaTieneAnio, obtuve %v", err)
+	}
+}
+
+// Archivar es cómo se cierra un año, y el histórico que dejó guardado está
+// indexado por ESE año.
+func TestCorregirAnioDeCiclo_Archivado_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Archivado: true}
+	svc := servicioSimple(repo)
+
+	err := svc.CorregirAnioDeCiclo(context.Background(), "c1", 2026)
+
+	if !errors.Is(err, domain.ErrCicloArchivadoNoSeCorrige) {
+		t.Fatalf("esperaba ErrCicloArchivadoNoSeCorrige, obtuve %v", err)
+	}
+}
+
+func TestCorregirAnioDeCiclo_AnioFueraDeRango_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2026, Activo: true}
+	svc := servicioSimple(repo)
+
+	err := svc.CorregirAnioDeCiclo(context.Background(), "c1", 20026)
+
+	if !errors.Is(err, domain.ErrAnioInvalido) {
+		t.Fatalf("esperaba ErrAnioInvalido, obtuve %v", err)
+	}
+}
+
+func TestEliminarCiclo_VacioSeBorra(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2027, Activo: true}
+	svc := servicioSimple(repo)
+
+	if err := svc.EliminarCiclo(context.Background(), "c1"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if _, quedó := repo.ciclos["c1"]; quedó {
+		t.Error("el ciclo tenía que borrarse")
+	}
+}
+
+// Un ciclo con cursos es cómo se organizó ese año: eso se archiva, no se borra.
+func TestEliminarCiclo_ConCursos_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2026, Activo: true}
+	repo.cursos["cu1"] = &domain.Curso{ID: "cu1", CicloLectivoID: "c1", Anio: 1}
+	svc := servicioSimple(repo)
+
+	err := svc.EliminarCiclo(context.Background(), "c1")
+
+	if !errors.Is(err, ErrCicloConCursos) {
+		t.Fatalf("esperaba ErrCicloConCursos, obtuve %v", err)
+	}
+	if _, quedó := repo.ciclos["c1"]; !quedó {
+		t.Error("el ciclo no tenía que borrarse")
+	}
+}
+
+// Borrar un ciclo archivado dejaría el histórico de uso —indexado por año—
+// hablando de un año que para el sistema no existió.
+func TestEliminarCiclo_Archivado_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Archivado: true}
+	svc := servicioSimple(repo)
+
+	err := svc.EliminarCiclo(context.Background(), "c1")
+
+	if !errors.Is(err, domain.ErrCicloArchivadoNoSeCorrige) {
+		t.Fatalf("esperaba ErrCicloArchivadoNoSeCorrige, obtuve %v", err)
+	}
+}
+
+// Eliminar el ciclo activo libera el único lugar de "activo", que es
+// justamente para lo que existe: crear el correcto a continuación.
+func TestEliminarCiclo_LiberaElLugarDeCicloActivo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2027, Activo: true}
+	svc := servicioSimple(repo)
+
+	if err := svc.EliminarCiclo(context.Background(), "c1"); err != nil {
+		t.Fatalf("eliminando: %v", err)
+	}
+
+	nuevo, err := svc.CrearCiclo(context.Background(), 2026)
+	if err != nil {
+		t.Fatalf("después de eliminar tenía que poder crearse el correcto: %v", err)
+	}
+	if nuevo.Anio != 2026 || !nuevo.Activo {
+		t.Errorf("ciclo nuevo incorrecto: %+v", nuevo)
+	}
 }

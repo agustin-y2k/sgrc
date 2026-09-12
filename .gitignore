@@ -8,6 +8,11 @@
 .env
 .env.*
 !.env.example
+# La pila de capturas se crea y se destruye en la misma corrida y nunca sale de
+# la máquina, así que su ejemplo lleva claves fijas de juguete y no hay nada que
+# reemplazar. Se versiona para que `make capturas` corra en una máquina limpia
+# —y en CI— sin que nadie tenga que reconstruir el archivo a mano.
+!.env.capturas.example
 
 # Volcados de la base: tienen los datos de la institución y los hashes de
 # contraseña de todas las cuentas. No salen del servidor.
@@ -77,3 +82,9 @@ frontend/.vite/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Planillas con las que se importa la estructura de un ciclo. Son datos de una
+# institución concreta —su lista real de materias por división— y este repo es
+# un producto público: la planilla se carga desde la pantalla y no vive acá.
+/materias_por_division.csv
+/*-materias*.csv

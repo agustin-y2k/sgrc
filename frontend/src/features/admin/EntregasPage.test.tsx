@@ -76,7 +76,6 @@ function cursoDelCiclo(nombre: string, modalidad?: string): Curso {
     anio: Number(anio),
     division,
     modalidad,
-    activo: true,
     archivado: false,
   }
 }
@@ -149,7 +148,7 @@ describe("EntregasPage", () => {
     })
     vi.mocked(academicoApi.materiasDeDocente).mockResolvedValue({ data: [] })
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
-      data: [{ id: "c1", nombre: "Carro 1" }],
+      data: [{ id: "c1", nombre: "Carro 1", dadoDeBaja: false }],
     })
     // Una sola consulta trae todo el inventario: la de carro y las sueltas.
     vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({

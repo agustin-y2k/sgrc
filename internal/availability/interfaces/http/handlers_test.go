@@ -191,7 +191,7 @@ func conBody(v any) *bytes.Reader {
 func TestHTTP_DisponibilidadDeAdmins_SinToken_401(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	resp, _ := app.Test(httptest.NewRequest("GET", "/api/availability/admins", nil))
+	resp, _ := app.Test(httptest.NewRequest("GET", "/api/guardia", nil))
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Fatalf("esperaba 401, obtuve %d", resp.StatusCode)
 	}
@@ -203,7 +203,7 @@ func TestHTTP_DisponibilidadDeAdmins_ComoDocente_200(t *testing.T) {
 	// su propio horario.
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("GET", "/api/availability/admins", nil)
+	req := httptest.NewRequest("GET", "/api/guardia", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -220,7 +220,7 @@ func TestHTTP_DisponibilidadDeAdmins_ComoDocente_200(t *testing.T) {
 func TestHTTP_MiHorario_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("GET", "/api/availability/mi-horario", nil)
+	req := httptest.NewRequest("GET", "/api/mi-horario", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
@@ -235,7 +235,7 @@ func TestHTTP_MiHorario_ComoAdmin_SoloLosPropios(t *testing.T) {
 	repo.bloques["b2"] = &domain.BloqueHorario{ID: "b2", UsuarioID: "otro-admin", DiaSemana: domain.Martes, HoraInicio: 9 * time.Hour, HoraFin: 10 * time.Hour}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/availability/mi-horario", nil)
+	req := httptest.NewRequest("GET", "/api/mi-horario", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, err := app.Test(req)
@@ -261,7 +261,7 @@ func TestHTTP_AgregarBloque_OK_201(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/availability/mi-horario",
+	req := httptest.NewRequest("POST", "/api/mi-horario",
 		conBody(bloqueRequest{DiaSemana: "LUNES", HoraInicio: "08:00", HoraFin: "12:00"}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
@@ -287,7 +287,7 @@ func TestHTTP_AgregarBloque_OK_201(t *testing.T) {
 func TestHTTP_AgregarBloque_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/availability/mi-horario",
+	req := httptest.NewRequest("POST", "/api/mi-horario",
 		conBody(bloqueRequest{DiaSemana: "LUNES", HoraInicio: "08:00", HoraFin: "12:00"}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 	req.Header.Set("Content-Type", "application/json")
@@ -301,7 +301,7 @@ func TestHTTP_AgregarBloque_ComoDocente_403(t *testing.T) {
 func TestHTTP_AgregarBloque_DiaInvalido_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/availability/mi-horario",
+	req := httptest.NewRequest("POST", "/api/mi-horario",
 		conBody(bloqueRequest{DiaSemana: "FERIADO", HoraInicio: "08:00", HoraFin: "12:00"}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
@@ -315,7 +315,7 @@ func TestHTTP_AgregarBloque_DiaInvalido_400(t *testing.T) {
 func TestHTTP_AgregarBloque_RangoHorarioInvalido_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/availability/mi-horario",
+	req := httptest.NewRequest("POST", "/api/mi-horario",
 		conBody(bloqueRequest{DiaSemana: "LUNES", HoraInicio: "12:00", HoraFin: "08:00"}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
@@ -329,7 +329,7 @@ func TestHTTP_AgregarBloque_RangoHorarioInvalido_400(t *testing.T) {
 func TestHTTP_AgregarBloque_HoraConFormatoInvalido_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/availability/mi-horario",
+	req := httptest.NewRequest("POST", "/api/mi-horario",
 		conBody(bloqueRequest{DiaSemana: "LUNES", HoraInicio: "8am", HoraFin: "12:00"}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
@@ -348,7 +348,7 @@ func TestHTTP_EditarBloque_Propio_200(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	nuevoDia := "MARTES"
-	req := httptest.NewRequest("PATCH", "/api/availability/mi-horario/b1",
+	req := httptest.NewRequest("PATCH", "/api/mi-horario/b1",
 		conBody(editarBloqueRequest{DiaSemana: &nuevoDia}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
@@ -371,7 +371,7 @@ func TestHTTP_EditarBloque_DeOtroAdmin_404(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	nuevoDia := "MARTES"
-	req := httptest.NewRequest("PATCH", "/api/availability/mi-horario/b1",
+	req := httptest.NewRequest("PATCH", "/api/mi-horario/b1",
 		conBody(editarBloqueRequest{DiaSemana: &nuevoDia}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("otro-admin", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
@@ -392,7 +392,7 @@ func TestHTTP_EliminarBloque_Propio_200(t *testing.T) {
 	repo.bloques["b1"] = &domain.BloqueHorario{ID: "b1", UsuarioID: "admin1", DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("DELETE", "/api/availability/mi-horario/b1", nil)
+	req := httptest.NewRequest("DELETE", "/api/mi-horario/b1", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, err := app.Test(req)
@@ -412,7 +412,7 @@ func TestHTTP_EliminarBloque_DeOtroAdmin_404(t *testing.T) {
 	repo.bloques["b1"] = &domain.BloqueHorario{ID: "b1", UsuarioID: "dueño", DiaSemana: domain.Lunes, HoraInicio: 8 * time.Hour, HoraFin: 12 * time.Hour}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("DELETE", "/api/availability/mi-horario/b1", nil)
+	req := httptest.NewRequest("DELETE", "/api/mi-horario/b1", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("otro-admin", "ADMIN"))
 
 	resp, _ := app.Test(req)
@@ -429,7 +429,7 @@ func TestHTTP_EliminarBloque_DeOtroAdmin_404(t *testing.T) {
 func TestHTTP_CargarExcepcion_NoDisponible_201(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/availability/mi-excepcion",
+	req := httptest.NewRequest("POST", "/api/mi-excepcion",
 		conBody(excepcionRequest{Fecha: "2026-03-09", Tipo: "NO_DISPONIBLE"}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
@@ -446,7 +446,7 @@ func TestHTTP_CargarExcepcion_NoDisponible_201(t *testing.T) {
 func TestHTTP_CargarExcepcion_HorarioModificadoSinHoras_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/availability/mi-excepcion",
+	req := httptest.NewRequest("POST", "/api/mi-excepcion",
 		conBody(excepcionRequest{Fecha: "2026-03-09", Tipo: "HORARIO_MODIFICADO"}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
@@ -461,7 +461,7 @@ func TestHTTP_CargarExcepcion_HorarioModificado_201(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 	horaInicio, horaFin := "09:00", "11:00"
 
-	req := httptest.NewRequest("POST", "/api/availability/mi-excepcion",
+	req := httptest.NewRequest("POST", "/api/mi-excepcion",
 		conBody(excepcionRequest{Fecha: "2026-03-09", Tipo: "HORARIO_MODIFICADO", HoraInicio: &horaInicio, HoraFin: &horaFin}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	req.Header.Set("Content-Type", "application/json")
@@ -484,7 +484,7 @@ func TestHTTP_CargarExcepcion_HorarioModificado_201(t *testing.T) {
 func TestHTTP_CargarExcepcion_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/availability/mi-excepcion",
+	req := httptest.NewRequest("POST", "/api/mi-excepcion",
 		conBody(excepcionRequest{Fecha: "2026-03-09", Tipo: "NO_DISPONIBLE"}))
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 	req.Header.Set("Content-Type", "application/json")
@@ -501,7 +501,7 @@ func TestHTTP_MarcarNoDisponibleAhora_201(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/availability/no-disponible-ahora", nil)
+	req := httptest.NewRequest("POST", "/api/no-disponible-ahora", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, err := app.Test(req)
@@ -535,7 +535,7 @@ func TestHTTP_DisponibilidadDeAdmins_ExcepcionDeHoyPisaElBloque(t *testing.T) {
 	app := fiber.New()
 	RegisterRoutes(app, NewHandler(svc, &auditorEspia{}), registroDePrueba.Autenticacion(testSecret))
 
-	req := httptest.NewRequest("GET", "/api/availability/admins", nil)
+	req := httptest.NewRequest("GET", "/api/guardia", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, err := app.Test(req)

@@ -86,9 +86,21 @@ export function NotificacionesPage() {
     onSuccess: invalidar,
   })
 
+  const borrar = useMutation({
+    mutationFn: (n: Notificacion) => notificacionesApi.borrar(n.id),
+    onSuccess: invalidar,
+  })
+
+  const borrarLeidas = useMutation({
+    mutationFn: notificacionesApi.borrarLeidas,
+    onSuccess: invalidar,
+  })
+
   const notificaciones = data?.data ?? []
   const noLeidas = notificaciones.filter((n) => n.estado === "NO_LEIDA")
-  const errorAccion = marcarLeida.error ?? marcarTodas.error
+  const leidas = notificaciones.filter((n) => n.estado === "LEIDA")
+  const errorAccion =
+    marcarLeida.error ?? marcarTodas.error ?? borrar.error ?? borrarLeidas.error
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -96,15 +108,32 @@ export function NotificacionesPage() {
         titulo="Notificaciones"
         descripcion="Avisos del sistema: cancelaciones, cuentas pendientes y cambios que te afectan."
         accion={
-          noLeidas.length > 0 ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={marcarTodas.isPending}
-              onClick={() => marcarTodas.mutate()}
-            >
-              Marcar todas como leídas
-            </Button>
+          /* Los dos gestos del mismo movimiento: cerrar lo pendiente y, un paso
+             después, sacárselo de encima. Cada botón aparece sólo si hay algo
+             sobre lo que actuar. */
+          noLeidas.length > 0 || leidas.length > 0 ? (
+            <span className="flex flex-wrap gap-2">
+              {noLeidas.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={marcarTodas.isPending}
+                  onClick={() => marcarTodas.mutate()}
+                >
+                  Marcar todas como leídas
+                </Button>
+              )}
+              {leidas.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={borrarLeidas.isPending}
+                  onClick={() => borrarLeidas.mutate()}
+                >
+                  Borrar las {leidas.length} leídas
+                </Button>
+              )}
+            </span>
           ) : undefined
         }
       />
@@ -185,6 +214,19 @@ export function NotificacionesPage() {
                       onClick={() => marcarLeida.mutate(n)}
                     >
                       Marcar como leída
+                    </Button>
+                  )}
+                  {/* Borrar aparece sólo en los leídos, que es la misma regla
+                      que aplica el servidor: un aviso sin leer todavía es una
+                      tarea, y hacerla desaparecer de un clic la pierde. */}
+                  {n.estado === "LEIDA" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={borrar.isPending}
+                      onClick={() => borrar.mutate(n)}
+                    >
+                      Borrar
                     </Button>
                   )}
                 </div>

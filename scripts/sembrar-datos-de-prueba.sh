@@ -105,20 +105,20 @@ if [ -z "$TOKEN" ]; then
 fi
 
 echo "→ ciclo lectivo $ANIO"
-CICLO=$(api POST /api/academic/ciclos "{\"anio\":$ANIO}" | campo id)
+CICLO=$(api POST /api/ciclos "{\"anio\":$ANIO}" | campo id)
 # Si ya había un ciclo activo el POST devuelve 409: se reutiliza el que exista.
-[ -n "$CICLO" ] || CICLO=$(api GET /api/academic/ciclos | campo id)
+[ -n "$CICLO" ] || CICLO=$(api GET /api/ciclos | campo id)
 
 echo "→ curso 1°A"
 CURSO=$(reusar_o_crear "1°A" \
-  "/api/academic/ciclos/$CICLO/cursos" \
-  "/api/academic/ciclos/$CICLO/cursos" \
+  "/api/ciclos/$CICLO/cursos" \
+  "/api/ciclos/$CICLO/cursos" \
   '{"anio":1,"division":"A"}')
 
 echo "→ materia Programación"
 MATERIA=$(reusar_o_crear "Programación" \
-  "/api/academic/cursos/$CURSO/materias" \
-  "/api/academic/cursos/$CURSO/materias" \
+  "/api/cursos/$CURSO/materias" \
+  "/api/cursos/$CURSO/materias" \
   '{"nombre":"Programación"}')
 
 echo "→ docente (autorregistro + aprobación)"
@@ -142,21 +142,21 @@ api PATCH "/api/auth/usuarios/$DOCENTE/estado" '{"estado":"APROBADA"}' >/dev/nul
 
 echo "→ asignación del docente a la materia"
 # Si ya estaba asignado, el backend responde 409 y no pasa nada.
-api POST "/api/academic/materias/$MATERIA/docentes" \
+api POST "/api/materias/$MATERIA/docentes" \
   "{\"usuarioId\":\"$DOCENTE\",\"rol\":\"TITULAR\"}" >/dev/null || true
 
 echo "→ carro y $CANTIDAD_EQUIPOS equipos"
 CARRO=$(reusar_o_crear "Carro 1" \
-  "/api/inventory/carros" \
-  "/api/inventory/carros" \
+  "/api/carros" \
+  "/api/carros" \
   '{"nombre":"Carro 1","descripcion":"Laboratorio de informática"}')
 
-EQUIPOS_EXISTENTES=$(api GET "/api/inventory/carros/$CARRO/equipos" | grep -o '"identificador":' | wc -l)
+EQUIPOS_EXISTENTES=$(api GET "/api/carros/$CARRO/equipos" | grep -o '"identificador":' | wc -l)
 i=1
 while [ "$i" -le "$CANTIDAD_EQUIPOS" ]; do
   # El identificador es único dentro del carro: si el equipo ya está, el
   # backend responde 409 y se sigue con el siguiente.
-  api POST "/api/inventory/carros/$CARRO/equipos" \
+  api POST "/api/carros/$CARRO/equipos" \
     "{\"identificador\":$i,\"numeroSerie\":\"5CD100${i}ABC\",\"freezado\":true,\"cpu\":\"i5\",\"ram\":\"8GB\",\"sistemaOperativo\":\"Windows 10\",\"softwareInstalado\":\"AutoCAD 2027, Office\"}" >/dev/null || true
   i=$((i + 1))
 done

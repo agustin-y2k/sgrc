@@ -13,6 +13,13 @@ type crearCicloRequest struct {
 	Anio int `json:"anio"`
 }
 
+// corregirCicloRequest: el año es lo único corregible de un ciclo. Lo demás
+// —activo, archivado— no son datos que se editen sino el resultado de
+// archivarlo.
+type corregirCicloRequest struct {
+	Anio int `json:"anio"`
+}
+
 type archivarCicloRequest struct {
 	ClonarA *int `json:"clonarA,omitempty"`
 }
@@ -38,6 +45,28 @@ type crearMateriaRequest struct {
 
 type editarMateriaRequest struct {
 	Nombre string `json:"nombre"`
+}
+
+// importarEstructuraRequest es la carga masiva de RF-02.12. Lleva la estructura
+// ya parseada y NO el archivo: leer un CSV —separador, comillas, BOM, el acento
+// de la codificación— es un problema de presentación, y el cliente que lo
+// resuelve es el que tiene el archivo en la mano y puede mostrar la vista previa
+// antes de mandar nada. La API acepta y devuelve la misma forma, así que lo que
+// se descarga se vuelve a cargar sin traducción.
+type importarEstructuraRequest struct {
+	Cursos []cursoConMateriasDTO `json:"cursos"`
+}
+
+type cursoConMateriasDTO struct {
+	Anio      int      `json:"anio"`
+	Division  string   `json:"division,omitempty"`
+	Modalidad string   `json:"modalidad,omitempty"`
+	Materias  []string `json:"materias"`
+}
+
+// copiarMateriasRequest: RF-02.12 — las materias de un curso a varios de una vez.
+type copiarMateriasRequest struct {
+	CursosDestinoIDs []string `json:"cursosDestinoIds"`
 }
 
 type asignarDocenteRequest struct {
@@ -72,7 +101,6 @@ type cursoResponse struct {
 	Anio      int    `json:"anio"`
 	Division  string `json:"division,omitempty"`
 	Modalidad string `json:"modalidad,omitempty"`
-	Activo    bool   `json:"activo"`
 	Archivado bool   `json:"archivado"`
 }
 
@@ -80,20 +108,21 @@ func toCursoResponse(c *domain.Curso) cursoResponse {
 	return cursoResponse{
 		ID: c.ID, CicloLectivoID: c.CicloLectivoID, Nombre: c.Nombre,
 		Anio: c.Anio, Division: c.Division, Modalidad: c.Modalidad,
-		Activo: c.Activo, Archivado: c.Archivado,
+		Archivado: c.Archivado,
 	}
 }
 
 type materiaResponse struct {
-	ID        string `json:"id"`
-	CursoID   string `json:"cursoId"`
-	Nombre    string `json:"nombre"`
-	Activo    bool   `json:"activo"`
-	Archivado bool   `json:"archivado"`
+	ID      string `json:"id"`
+	CursoID string `json:"cursoId"`
+	Nombre  string `json:"nombre"`
+	// Archivado y nada más: el `activo` que acompañaba a los dos nunca se puso
+	// en false y no decidía nada (migración 016).
+	Archivado bool `json:"archivado"`
 }
 
 func toMateriaResponse(m *domain.Materia) materiaResponse {
-	return materiaResponse{ID: m.ID, CursoID: m.CursoID, Nombre: m.Nombre, Activo: m.Activo, Archivado: m.Archivado}
+	return materiaResponse{ID: m.ID, CursoID: m.CursoID, Nombre: m.Nombre, Archivado: m.Archivado}
 }
 
 // docenteMateriaResponse es la relación cruda, para administrarla: asignar,
@@ -159,4 +188,58 @@ type materiaReservableResponse struct {
 // cancela sus reservas futuras en cascada.
 type removerDocenteResponse struct {
 	ReservasCanceladas int `json:"reservasCanceladas"`
+}
+
+// ── Estructura del ciclo (RF-02.12) ─────────────────────────────────────
+
+func toCursosConMateriasDTO(cursos []application.CursoConMaterias) []cursoConMateriasDTO {
+	data := make([]cursoConMateriasDTO, len(cursos))
+	for i, c := range cursos {
+		// El array nunca sale nulo: un curso sin materias es `[]`, no `null`.
+		// Quien consume esto lo recorre sin preguntar, y el JSON es el mismo que
+		// después se vuelve a mandar.
+		materias := c.Materias
+		if materias == nil {
+			materias = []string{}
+		}
+		data[i] = cursoConMateriasDTO{
+			Anio: c.Anio, Division: c.Division, Modalidad: c.Modalidad, Materias: materias,
+		}
+	}
+	return data
+}
+
+func deCursosConMateriasDTO(dtos []cursoConMateriasDTO) []application.CursoConMaterias {
+	cursos := make([]application.CursoConMaterias, len(dtos))
+	for i, d := range dtos {
+		cursos[i] = application.CursoConMaterias{
+			Anio: d.Anio, Division: d.Division, Modalidad: d.Modalidad, Materias: d.Materias,
+		}
+	}
+	return cursos
+}
+
+// importarEstructuraResponse dice qué se creó y qué ya estaba, porque una
+// importación que no creó nada no falló.
+type importarEstructuraResponse struct {
+	CursosCreados      int `json:"cursosCreados"`
+	CursosExistentes   int `json:"cursosExistentes"`
+	MateriasCreadas    int `json:"materiasCreadas"`
+	MateriasExistentes int `json:"materiasExistentes"`
+}
+
+type copiarMateriasResponse struct {
+	MateriasCreadas    int `json:"materiasCreadas"`
+	MateriasExistentes int `json:"materiasExistentes"`
+	CursosDestino      int `json:"cursosDestino"`
+}
+
+// editarMateriaResponse dice cuántas marcas de preferencia de equipo dejaron de
+// aplicar por el renombre.
+//
+// Cero es la respuesta normal. Un número mayor significa que esas máquinas
+// quedaron marcadas para un nombre de materia que ya no existe: se listan en
+// GET /api/preferencias/huerfanas.
+type editarMateriaResponse struct {
+	MarcasDeEquipoAfectadas int `json:"marcasDeEquipoAfectadas"`
 }

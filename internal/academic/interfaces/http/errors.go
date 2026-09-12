@@ -29,7 +29,14 @@ func mapearError(err error) error {
 		errors.Is(err, application.ErrUsuarioNoValidoParaAsignar),
 		errors.Is(err, application.ErrYaDictaLaMateria),
 		errors.Is(err, application.ErrPedidoDuplicado),
+		errors.Is(err, application.ErrCicloArchivado),
 		errors.Is(err, domain.ErrPedidoResuelto),
+		// Las cuatro de corregir o eliminar un ciclo: el pedido está bien
+		// formado, lo que no se puede es hacerlo con el ciclo en ese estado.
+		errors.Is(err, application.ErrCicloConReservas),
+		errors.Is(err, application.ErrAnioConBloqueos),
+		errors.Is(err, application.ErrCicloConCursos),
+		errors.Is(err, domain.ErrCicloArchivadoNoSeCorrige),
 		errors.Is(err, domain.ErrCicloYaArchivado):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
@@ -39,7 +46,15 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrModalidadLarga),
 		errors.Is(err, domain.ErrTextoIlegible),
 		errors.Is(err, domain.ErrNombreMateriaVacio),
+		errors.Is(err, domain.ErrNombreMateriaLargo),
 		errors.Is(err, domain.ErrRolDocenteInvalido),
+		errors.Is(err, application.ErrSinCursosParaImportar),
+		errors.Is(err, application.ErrImportacionDemasiadoGrande),
+		errors.Is(err, application.ErrSinCursosDestino),
+		errors.Is(err, application.ErrCopiaAlMismoCurso),
+		errors.Is(err, application.ErrCopiaEntreCiclos),
+		errors.Is(err, application.ErrCursoOrigenSinMat),
+		errors.Is(err, application.ErrDemasiadosDestinos),
 		errors.Is(err, application.ErrIDInvalido),
 		errors.Is(err, application.ErrFaltaCursoParaMateriaNueva),
 		errors.Is(err, domain.ErrPedidoSinMateria),

@@ -63,8 +63,6 @@ func (f *fakeRepo) ListarDeUsuario(context.Context, string, paginacion.Pagina) (
 	return nil, 0, nil
 }
 
-func (f *fakeRepo) ContarAbiertas(context.Context) (int, error) { return 0, nil }
-
 type fakeUsuario struct {
 	nombre, email string
 	err           error

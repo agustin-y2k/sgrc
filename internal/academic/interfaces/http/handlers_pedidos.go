@@ -12,7 +12,7 @@ import (
 
 // Los pedidos para dictar una materia (ver domain.PedidoDeMateria).
 
-// POST /api/academic/pedidos-de-materia — lo hace un docente.
+// POST /api/pedidos-de-materia — lo hace un docente.
 func (h *Handler) PedirMateria(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -38,7 +38,7 @@ func (h *Handler) PedirMateria(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toPedidoResponse(p))
 }
 
-// GET /api/academic/pedidos-de-materia/mios — los propios, con su estado.
+// GET /api/mis-pedidos-de-materia — los propios, con su estado.
 func (h *Handler) MisPedidosDeMateria(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -52,7 +52,7 @@ func (h *Handler) MisPedidosDeMateria(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": aRespuestas(pedidos)})
 }
 
-// GET /api/academic/pedidos-de-materia (Admin) — `?pendientes=true` deja
+// GET /api/pedidos-de-materia (Admin) — `?pendientes=true` deja
 // solo lo que falta resolver.
 func (h *Handler) ListarPedidosDeMateria(c *fiber.Ctx) error {
 	pedidos, err := h.svc.ListarPedidos(c.UserContext(), c.Query("pendientes") == "true")
@@ -62,7 +62,7 @@ func (h *Handler) ListarPedidosDeMateria(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": aRespuestas(pedidos)})
 }
 
-// POST /api/academic/pedidos-de-materia/{id}/resolver (Admin).
+// POST /api/pedidos-de-materia/{id}/resolver (Admin).
 func (h *Handler) ResolverPedidoDeMateria(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {

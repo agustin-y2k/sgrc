@@ -45,3 +45,27 @@ func (v *ValidadorUsuarioPostgres) ExisteYAprobado(ctx context.Context, usuarioI
 	}
 	return estado == "APROBADA", nil
 }
+
+// AlgunoAprobado contesta si queda al menos uno de esos usuarios con la cuenta
+// APROBADA, en una sola consulta.
+//
+// Es un EXISTS y no un conteo: la pregunta es «¿queda alguno?», y contar
+// obligaría a Postgres a recorrer todas las filas cuando con la primera
+// coincidencia ya alcanza.
+func (v *ValidadorUsuarioPostgres) AlgunoAprobado(ctx context.Context, usuarioIDs []string) (bool, error) {
+	if len(usuarioIDs) == 0 {
+		return false, nil
+	}
+
+	var alguno bool
+	err := v.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM usuario WHERE id = ANY($1) AND estado = 'APROBADA')`,
+		usuarioIDs).Scan(&alguno)
+	if err != nil {
+		if esIDInvalido(err) {
+			return false, application.ErrIDInvalido
+		}
+		return false, fmt.Errorf("verificando si queda algún usuario aprobado: %w", err)
+	}
+	return alguno, nil
+}

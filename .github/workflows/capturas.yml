@@ -1,0 +1,142 @@
+# Las capturas de las guías, al día por construcción.
+#
+# El pipeline de capturas siempre estuvo automatizado y aun así las imágenes
+# envejecían: había que acordarse de correrlo. Este job lo corre solo y compara
+# el resultado con lo que está commiteado — si alguien mueve un botón y no
+# regenera, la corrida se pone roja y dice qué imagen quedó vieja.
+#
+# Funciona porque el pipeline es determinista **para las pantallas que no
+# muestran la hora**: regenerándolo sin tocar nada, esas salen idénticas byte a
+# byte. Las que sí tienen reloj cambian siempre y están listadas aparte, en
+# docs/guias/generar/capturas-con-reloj.txt — se informan pero no frenan nada.
+#
+# No corre en cada push: levanta la pila entera con Postgres, siembra datos y
+# saca cincuenta capturas con un navegador de verdad, así que sólo se despierta
+# cuando cambia algo que las puede invalidar.
+name: Capturas
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "frontend/src/**"
+      - "docs/guias/**"
+      - "scripts/sembrar-datos-de-prueba.sh"
+      - ".env.capturas.example"
+      - "docker-compose*.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "frontend/src/**"
+      - "docs/guias/**"
+      - "scripts/sembrar-datos-de-prueba.sh"
+      - ".env.capturas.example"
+      - "docker-compose*.yml"
+  # Y a mano, para poder regenerar sin esperar a que cambie una pantalla.
+  workflow_dispatch:
+
+concurrency:
+  group: capturas-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  capturas:
+    name: Guías — capturas y PDF al día
+    runs-on: ubuntu-latest
+    # Levantar la pila, sembrar y sacar ~50 capturas con Chromium lleva su
+    # tiempo; el build de las imágenes de Docker es la mayor parte.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      # El runner sí tiene Node, así que capturar-todo.sh usa el local y se
+      # ahorra bajar la imagen de Playwright. Los navegadores no vienen con
+      # Node: los instala `npx playwright install` de abajo.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias del frontend
+        working-directory: frontend
+        run: npm ci
+
+      # Sólo Chromium y sus dependencias de sistema: es el único navegador que
+      # usan los scripts de captura y el que arma los PDF.
+      - name: Instalar Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Pillow, jq y pdftotext
+        run: |
+          python3 -m pip install --quiet pillow
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq poppler-utils
+
+      # El .env de la pila de capturas no tiene secretos: se crea y se destruye
+      # en esta misma corrida y nunca se expone. Por eso el ejemplo se versiona
+      # y acá alcanza con copiarlo — no hay ningún secreto de repositorio que
+      # configurar para que esto ande.
+      - name: Configurar la pila de capturas
+        run: cp .env.capturas.example .env.capturas
+
+      - name: Regenerar todas las capturas y los PDF
+        run: make capturas
+
+      # El portón: las capturas SIN reloj tienen que salir idénticas. Si alguna
+      # cambió, la interfaz se movió y nadie regeneró.
+      #
+      # Las que muestran fecha u hora quedan afuera —están listadas en
+      # capturas-con-reloj.txt, con el porqué— porque cambian en cada corrida
+      # por el reloj y pondrían esto en rojo todas las semanas. Los PDF también:
+      # Chromium les estampa una fecha de creación.
+      #
+      # Lo que sí cubre a TODAS es el paso anterior: `make capturas` corre con
+      # --estricto y falla si alguna no se generó. Ese es el que atrapa un
+      # selector podrido, que es como estas cosas se rompían de verdad.
+      - name: ¿Quedó alguna captura vieja?
+        run: |
+          con_reloj=$(grep -vE '^\s*(#|$)' docs/guias/generar/capturas-con-reloj.txt)
+          cambiadas=$(git status --porcelain docs/guias/imagenes docs/capturas | awk '{print $NF}')
+
+          gate=""
+          reloj=""
+          for f in $cambiadas; do
+            if echo "$con_reloj" | grep -qxF "$f"; then
+              reloj="$reloj $f"
+            else
+              gate="$gate $f"
+            fi
+          done
+
+          if [ -n "$reloj" ]; then
+            echo "Cambiaron por el reloj (no es un problema):"
+            for f in $reloj; do echo "  $f"; done
+            echo
+          fi
+
+          if [ -n "$gate" ]; then
+            echo "Estas capturas ya no coinciden con lo que muestra el sistema:"
+            for f in $gate; do echo "  $f"; done
+            echo
+            echo "Regeneralas y commitealas:"
+            echo "  make capturas"
+            exit 1
+          fi
+          echo "Las capturas sin reloj están todas al día."
+
+      # Cuando falla, las imágenes nuevas quedan acá para poder mirarlas sin
+      # tener que reproducir la corrida en local.
+      - name: Guardar las capturas generadas
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-generadas
+          path: |
+            docs/guias/imagenes/
+            docs/capturas/
+          retention-days: 7

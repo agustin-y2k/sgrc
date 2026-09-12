@@ -2,7 +2,7 @@
 
 ## 1. Autenticación
 - Passwords con hash `argon2id` (resistente a ataques GPU).
-- JWT firmados **`HS256`** (secreto simétrico) — un solo proceso firma y verifica, así que un secreto simétrico cumple la función sin la gestión de un par de claves asimétricas (ver `06-arquitectura.md` §7).
+- JWT firmados **`HS256`** (secreto simétrico) — un solo proceso firma y verifica, así que un secreto simétrico cumple la función sin la gestión de un par de claves asimétricas (ver `06-arquitectura.md` §10).
 - Access token: 24h (`JWT_ACCESS_TTL`). **No hay refresh token**: cuando el access expira se vuelve a iniciar sesión. Para una jornada escolar, renovar la sesión una vez al día es aceptable, y evita el segundo token con su propio almacenamiento, su rotación y su revocación.
 - **"Mantener la sesión iniciada": 30 días** (`JWT_REMEMBER_TTL`), pedido con las casillas de la pantalla de ingreso —una por camino, contraseña y Google (RF-01.13)—. Es la misma sesión de siempre con otra vigencia: mismo token, mismos claims de identidad, mismo RBAC. Lo único que cambia es el `exp`.
 
@@ -142,10 +142,12 @@ de la base al verificar la cuenta (§1).
 | Password temporal | La API responde 403 mientras `debe_cambiar_password` siga en `true` |
 | Revocación de sesiones | Cambiar la contraseña invalida los tokens ya emitidos de esa cuenta (`usuario.version_sesion` vs. el claim `vs`) |
 | Headers | `HSTS`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `CSP` restrictiva. En **dos** lugares: el binario Go los pone en `/api` y nginx en el HTML y los assets (ver abajo) |
-| CORS | Solo dominio del frontend, sin wildcard |
+| CORS | Solo dominio del frontend, sin wildcard. Los verbos permitidos son los cinco que la API usa: `GET,POST,PUT,PATCH,DELETE` |
 | Validación | Estricta en cada handler; nunca se confía en el frontend |
-| Secrets | `.env` fuera de git + Docker secrets. Secreto JWT nunca en el repo |
+| Secrets | `.env` fuera de git. `JWT_SECRET` y `CUENTAS_SECRET` exigen 32 bytes como mínimo y el proceso no arranca con menos; los valores de `.env.example` están escritos para que **no** pasen esa validación |
+| Dependencias | `govulncheck` sobre todo el árbol: 0 vulnerabilidades alcanzables desde el código |
 | Permisos DB | Un usuario Postgres de aplicación con GRANT sobre `sgrc_db`, sin permisos de `SUPERUSER` |
+| Timeouts del servidor | `ReadTimeout` y `WriteTimeout` 30s, `IdleTimeout` 75s. Sin ellos fasthttp no tiene límite y una conexión que manda un byte cada tanto queda abierta para siempre |
 
 ### Cómo se dan y cómo se quitan los permisos de Admin
 
@@ -165,6 +167,54 @@ Degradar sí puede reducir la cantidad de Admins, así que le corresponden dos f
 Lo que degradar **no** toca es el resto de la cuenta, por lo mismo que promover: conserva materias, reservas y formas de ingreso. Lo único que deja de figurar es su horario de atención, porque la lista de Admins se arma filtrando por rol — y si más adelante lo vuelven a promover, reaparece con el horario que ya tenía cargado.
 
 El cambio **tiene efecto en el request siguiente, sin volver a iniciar sesión**, por lo mismo que una baja es inmediata (§1): el middleware lee el rol de la base en cada pedido y pisa el del token. La contracara es que un token viejo no conserva el rol viejo, ni para bien ni para mal.
+
+### Por qué los secretos de ejemplo están rotos a propósito
+
+`JWT_SECRET` y `CUENTAS_SECRET` tienen un piso de 32 bytes y el proceso no
+arranca si no lo cumplen (RFC 8725 §3.5 para HS256; el mismo número para el otro,
+porque la clave de AES-256 sale de un SHA-256 del secreto y lo que hay que
+adivinar es el secreto, no la clave).
+
+Una validación así protege contra el secreto corto, pero no contra el secreto
+**conocido**, y el camino más probable hacia un secreto conocido es copiar
+`.env.example` y no cambiarlo. Por eso el placeholder de `JWT_SECRET` en ese
+archivo mide menos de 32 bytes: un despliegue que lo copie tal cual no levanta, y
+el mensaje dice qué falta y cómo generarlo. Un placeholder que pase la validación
+sería peor que ninguno, porque el sistema arrancaría firmando sesiones con una
+clave publicada en el repositorio.
+
+`CUENTAS_SECRET` tiene una diferencia: **vacío es válido** —es esta función
+apagada, igual que SMTP o el ingreso con Google— y corto no. Son dos casos
+distintos y el arranque los trata distinto.
+
+La contraseña de Grafana no se puede validar desde el binario, porque Grafana es
+otro contenedor. El compose necesita un valor por defecto para esa variable —con
+`${GRAFANA_PASSWORD:?...}` el archivo entero deja de interpretarse aunque el
+perfil de observabilidad esté apagado, y nadie podría levantar el sistema sin
+configurar un panel que no va a usar—, así que la puerta está en `make
+observabilidad`, que es como se levanta ese perfil: verifica el `.env` y se niega
+a arrancar si la variable falta o quedó con el valor de ejemplo.
+
+### Qué tiene el volcado de `make backup`
+
+Lo que **no** tiene: contraseñas de usuario en claro (van en argon2id) ni
+contraseñas de las cuentas de cada equipo en claro (van cifradas con
+`CUENTAS_SECRET`, §6).
+
+Lo que **sí** tiene: nombre, apellido, correo y cargo de todas las personas del
+sistema, en texto plano. Por eso el archivo se crea con `umask 077` —queda `0600`,
+no `0644`— y está en `.gitignore`. En un servidor con varias cuentas de usuario,
+un volcado legible por todos es una lista de la planta docente.
+
+### Qué se loguea de un evento que llega mal
+
+Cuando un suscriptor del bus recibe un payload del tipo que no esperaba, loguea el
+**tipo** (`%T`) y nunca el contenido (`%+v`). El motivo es un evento puntual:
+`password.recuperacion.solicitada` lleva el código de recuperación en claro, y si
+el tipo no es el esperado no se sabe qué llegó. La regla es uniforme en los 27
+suscriptores y no solo en ese, porque la excepción de a uno es la que se olvida —
+y los logs del contenedor se leen desde el navegador con Dozzle. Para diagnosticar
+un payload del tipo equivocado, además, el tipo es justamente el dato que sirve.
 
 ### Por qué la CSP está en dos lugares y no en uno
 
@@ -216,7 +266,7 @@ Se usa `CF-Connecting-IP` y no `X-Forwarded-For` porque Cloudflare la **sobrescr
 
 `debe_cambiar_password` viaja dentro del JWT para poder exigirlo sin consultar la base en cada request, pero eso lo deja congelado en el token. `POST /api/auth/cambiar-password` responde con un token nuevo y el cliente tiene que reemplazar el anterior; si no, quien acaba de cambiar la contraseña quedaría bloqueado por su propio cambio exitoso hasta que el token expirara.
 
-Las únicas dos rutas que aceptan un token con la contraseña temporal sin cambiar son `GET /api/auth/me` y `POST /api/auth/cambiar-password` — justamente las que hacen falta para salir de esa situación. Se marcan explícitamente con `JWTAuthPermitiendoPasswordVencida`; todo lo demás usa `JWTAuth`, que ya incluye la restricción, de modo que una ruta nueva queda protegida por omisión.
+Las únicas dos rutas que aceptan un token con la contraseña temporal sin cambiar son `GET /api/mi-perfil` y `POST /api/auth/cambiar-password` — justamente las que hacen falta para salir de esa situación. Se marcan explícitamente con `JWTAuthPermitiendoPasswordVencida`; todo lo demás usa `JWTAuth`, que ya incluye la restricción, de modo que una ruta nueva queda protegida por omisión.
 
 ### Cada 401 dice por qué, en el header `X-Sesion-Motivo`
 
@@ -258,21 +308,66 @@ CREATE TABLE audit_log (
     ip_origen   INET,
     creado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_audit_usuario ON audit_log (usuario_id, creado_en DESC);
+CREATE INDEX idx_audit_usuario  ON audit_log (usuario_id, creado_en DESC);
+CREATE INDEX idx_audit_creado_en ON audit_log (creado_en DESC);
+CREATE INDEX idx_audit_entidad   ON audit_log (entidad, entidad_id, creado_en DESC);
+CREATE INDEX idx_audit_accion    ON audit_log (accion, creado_en DESC);
 ```
+
+Los tres últimos los agregó la migración 013, junto con la forma de **leer** el
+registro. Uno por cada pregunta que se le hace de verdad: «¿qué pasó
+últimamente?», «¿quién tocó ESTA cosa?» y «¿quién hizo esta acción?». El
+original, por actor, ya estaba.
+
+### Cómo se lee
+
+`GET /api/auditoria` (**sólo Admin**), paginado, de lo más nuevo a lo más viejo,
+con filtros combinables por acción, entidad, entidad puntual, actor y rango de
+fechas. `GET /api/auditoria/opciones` devuelve qué acciones y entidades existen
+**hoy** en el registro, para armar los selectores con eso y no con el catálogo
+completo — ofrecer treinta acciones de las que la mitad nunca ocurrió convierte
+un filtro en una lista de callejones sin salida.
+
+Del lado del Admin es la pantalla **Auditoría**.
+
+> **Hasta la migración 013 no había forma de leerlo.** Se escribía desde
+> siempre, y la única manera de consultarlo era entrar a la base con `psql`. Un
+> registro que sólo puede mirar quien tiene acceso de administrador de base de
+> datos no está disponible para el Admin que tiene la pregunta — y la pregunta
+> aparece justo cuando ya no se puede reconstruir de memoria.
+
+**Tres decisiones de esa lectura:**
+
+- **El JOIN con `usuario` es un LEFT JOIN y no puede ser otra cosa.** `audit_log`
+  no tiene clave foránea a propósito, para que lo que hizo una cuenta sobreviva
+  a su eliminación (RF-01.9). Con un INNER JOIN, eliminar una cuenta borraría de
+  la vista todo lo que esa cuenta hizo, que es exactamente lo que el registro
+  existe para impedir. Cuando el actor ya no existe, la entrada sale con su
+  identificador y sin nombre.
+- **Consultar el registro NO se audita.** Una auditoría que se audita a sí misma
+  crece con cada consulta y entierra los cambios de verdad bajo el ruido de
+  quien fue a mirarlos.
+- **El puerto de lectura no sabe escribir.** `internal/auditoria` tiene un
+  `Repo` sin un solo método de escritura: es la forma más barata de garantizar
+  que esa parte del sistema no pueda reescribir el registro ni por accidente. La
+  escritura sigue viviendo en `internal/shared/audit`, donde la alcanza cada
+  módulo — auditar es transversal, como loguear; leer es una función más, con su
+  pantalla y sus permisos.
 
 `accion` es texto libre y no un enum a propósito: los valores guardados son el
 nombre que tenía una operación **en su momento**. Si el sistema renombra algo,
 las filas viejas conservan el nombre viejo — reescribir un registro de
 auditoría es precisamente lo que un registro de auditoría no debe permitir.
 
-Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `ROL_DEGRADADO_A_DOCENTE`, `PASSWORD_RESETEADA`, `PASSWORD_RECUPERADA_POR_EMAIL`, `NOMBRE_CAMBIADO`, `DOCENTE_REMOVIDO_DE_MATERIA`, `DOCENTE_ROL_CAMBIADO`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_CREADO`, `EQUIPO_ESTADO_CAMBIADO`, `EQUIPO_DADO_DE_BAJA`, `EQUIPO_MOVIDO_DE_CARRO`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`, `JORNADA_CAMBIADA`.
+Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `ROL_DEGRADADO_A_DOCENTE`, `PASSWORD_RESETEADA`, `NOMBRE_CAMBIADO`, `PASSWORD_RECUPERADA_POR_EMAIL`, `DOCENTE_REMOVIDO_DE_MATERIA`, `DOCENTE_ROL_CAMBIADO`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_CREADO`, `EQUIPO_ESTADO_CAMBIADO`, `EQUIPO_DADO_DE_BAJA`, `EQUIPO_MOVIDO_DE_CARRO`, `EQUIPO_EDITADO`, `CARRO_DADO_DE_BAJA`, `EQUIPO_REACTIVADO`, `CARRO_REACTIVADO`, `CUENTA_DE_EQUIPO_CREADA`, `CUENTA_DE_EQUIPO_EDITADA`, `CUENTA_DE_EQUIPO_BORRADA`, `PASSWORD_DE_EQUIPO_REVELADA`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`, `CICLO_ANIO_CORREGIDO`, `CICLO_ELIMINADO`, `ESTRUCTURA_IMPORTADA`, `MATERIAS_COPIADAS_ENTRE_CURSOS`, `PEDIDO_DE_MATERIA_APROBADO`, `PEDIDO_DE_MATERIA_RECHAZADO`, `JORNADA_CAMBIADA`.
 
 > `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS` tiene su propio nombre (en vez de un `CICLO_ARCHIVADO` genérico) porque implica un borrado físico de datos — vale la pena que quede explícito en el log qué admin lo disparó y cuántas filas se eliminaron (`detalle` puede guardar el conteo).
 
 > `JORNADA_CAMBIADA` está por el mismo motivo, y es la acción de mayor alcance del sistema: cambiar el horario de la escuela puede cancelar las clases de todos los docentes en una sola llamada. El `detalle` guarda cuántos tramos quedaron y cuánto se canceló, en clases y en equipos. Si la cancelación falla después de haber guardado la jornada, la entrada sale igual con `cascadaIncompleta`: el horario cambió, y eso es justamente lo que el registro no puede perderse.
 >
 > **Una previsualización no se audita.** El pedido sin confirmar no cambia nada, y un registro lleno de intentos esconde los cambios de verdad.
+
+> `CUENTA_ELIMINADA_DEFINITIVAMENTE` guarda en `detalle` **qué se llevó la cascada** (RF-01.9): hilos y mensajes de soporte, tramos de horario de guardia, avisos y pedidos de materia. No es adorno — es la única forma de contestar después "¿por qué este Admin no tiene horario de guardia?" o "¿dónde está el hilo donde le respondimos?", porque las filas ya no están y no hay a quién preguntarle. Si no se llevó nada, `detalle` va nulo: cinco ceros en cada borrado son ruido en el registro que después hay que leer.
 
 > `NOMBRE_CAMBIADO` es la única acción del catálogo que alguien hace **sobre su propia cuenta y sin ser `ADMIN`** (RF-01.12). Se audita igual porque el nombre es con lo que el resto de la escuela identifica a esa persona en las reservas y en las entregas: sin esta fila, "la reserva la había pedido otro" no tendría cómo verificarse. `usuario_id` es la propia cuenta, y `detalle` guarda el nombre con el que quedó.
 
@@ -295,7 +390,7 @@ Eso obliga a separar dos cosas que suelen confundirse:
 
 **La regla vive en el servicio, no en el handler ni en la pantalla** (`puedeRevelar`, en `internal/inventory/application/cuentas.go`). Si viviera en la capa HTTP, una ruta nueva podría devolver la contraseña sin pasar por ella; y el frontend recibe `puedeVerLaPassword` ya resuelto, así que solo dibuja el botón.
 
-**La contraseña no viaja en el listado, ni para un `ADMIN`.** Se pide de a una, con `POST /api/inventory/cuentas/{id}/password`, y **cada llamada queda auditada** (`PASSWORD_DE_EQUIPO_REVELADA`) — también cuando la cuenta es pública. Si viajara en el listado, abrir la ficha de un equipo sería revelar todas sus contraseñas de una vez y la auditoría no distinguiría "miró la lista" de "necesitaba entrar a esta máquina". Es POST y no GET por lo mismo: un GET termina en el historial del navegador y en los logs de acceso, y esto no es una lectura inocua.
+**La contraseña no viaja en el listado, ni para un `ADMIN`.** Se pide de a una, con `POST /api/cuentas/{id}/password`, y **cada llamada queda auditada** (`PASSWORD_DE_EQUIPO_REVELADA`) — también cuando la cuenta es pública. Si viajara en el listado, abrir la ficha de un equipo sería revelar todas sus contraseñas de una vez y la auditoría no distinguiría "miró la lista" de "necesitaba entrar a esta máquina". Es POST y no GET por lo mismo: un GET termina en el historial del navegador y en los logs de acceso, y esto no es una lectura inocua.
 
 Ninguna entrada de auditoría guarda la contraseña en su detalle: el registro de quién tocó qué no puede ser, él mismo, otra copia de las contraseñas.
 

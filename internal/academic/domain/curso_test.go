@@ -107,8 +107,8 @@ func TestNuevoCurso_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if !c.Activo || c.Archivado {
-		t.Errorf("un curso nuevo debería ser Activo=true, Archivado=false: %+v", c)
+	if c.Archivado {
+		t.Errorf("un curso nuevo debería ser Archivado=false: %+v", c)
 	}
 	if c.Anio != 4 || c.Division != "2" || c.Modalidad != "Electromecánica" {
 		t.Errorf("datos del curso: %+v", c)
@@ -162,5 +162,21 @@ func TestEtiqueta(t *testing.T) {
 	sinModalidad, _ := NuevoCurso("id2", "ciclo1", 1, "1", "")
 	if sinModalidad.Etiqueta() != "1°1" {
 		t.Errorf("sin modalidad la etiqueta es el nombre pelado, es %q", sinModalidad.Etiqueta())
+	}
+}
+
+// La división y la modalidad se canonizan igual que el nombre de una materia:
+// «Ciclo Básico» y «Ciclo  Básico» se ven iguales y serían dos modalidades, o
+// sea dos cursos distintos con el mismo nombre en la pantalla.
+func TestValidarCurso_CanonizaLosEspacios(t *testing.T) {
+	division, modalidad, err := ValidarCurso(4, "  1  ra  ", "Sector   Electromecánico")
+	if err != nil {
+		t.Fatalf("no esperaba error: %v", err)
+	}
+	if division != "1 ra" {
+		t.Errorf("division = %q; esperaba %q", division, "1 ra")
+	}
+	if modalidad != "Sector Electromecánico" {
+		t.Errorf("modalidad = %q; esperaba %q", modalidad, "Sector Electromecánico")
 	}
 }

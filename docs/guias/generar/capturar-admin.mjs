@@ -32,6 +32,29 @@ await page.waitForURL((u) => !u.pathname.endsWith("/login"))
 const foto = async (n) => { await page.waitForTimeout(800); await page.screenshot({ path: `${SALIDA}/${n}.png`, fullPage: true }); console.log("  ✓", n) }
 const paso = async (n, f) => { try { await f() } catch (e) { console.log("  ✗", n, String(e).split("\n")[0].slice(0,100)) } }
 
+// El panel solo, no la pantalla entera. En Gestión del inventario un panel
+// cuelga debajo de una lista larga: fotografiada completa, la página entra en
+// la hoja como una tira donde no se lee ni un rótulo. Mismo criterio que
+// capturar-cuentas.mjs.
+const fotoDelPanel = async (n, textoDelTitulo, margenArriba = 150) => {
+  await page.waitForTimeout(800)
+  const caja = await page.evaluate(([texto, arriba]) => {
+    const titulo = [...document.querySelectorAll("h3, p")].find((e) =>
+      (e.textContent || "").trim().startsWith(texto)
+    )
+    const panel = titulo.closest("div.rounded-md")
+    const r = panel.getBoundingClientRect()
+    return {
+      x: Math.max(0, r.x + window.scrollX - 8),
+      y: Math.max(0, r.y + window.scrollY - arriba),
+      width: r.width + 16,
+      height: r.height + arriba + 8,
+    }
+  }, [textoDelTitulo, margenArriba])
+  await page.screenshot({ path: `${SALIDA}/${n}.png`, fullPage: true, clip: caja })
+  console.log("  ✓", n)
+}
+
 await paso("aprobacion", async () => { await page.goto(`${BASE}/admin/aprobacion`); await foto("adm2-aprobacion") })
 await paso("academico", async () => {
   await page.goto(`${BASE}/admin/academico`)
@@ -74,4 +97,30 @@ await paso("bloquear lleno", async () => {
 })
 await paso("pedidos", async () => { await page.goto(`${BASE}/admin/pedidos-de-materia`); await foto("adm2-pedidos") })
 await paso("reportes", async () => { await page.goto(`${BASE}/admin/reportes`); await foto("adm2-reportes") })
+
+// Las marcas de «preferente para una materia» (RF-03.21). Hay que apuntar a una
+// computadora DE CARRO: en esa pantalla «Otros equipos» va arriba, así que el
+// primer «Preferencias» de la página es el del proyector, que no tiene ninguna
+// marca cargada y saldría vacío. Se filtra por la ficha que rotula «N° serie».
+await paso("preferencias", async () => {
+  await page.goto(`${BASE}/admin/inventario`)
+  await page.getByRole("button", { name: /gestionar equipos/i }).first().click()
+  await page.waitForTimeout(600)
+  const ficha = page.locator("div.rounded-md.border").filter({ hasText: "N° serie" }).first()
+  await ficha.getByRole("button", { name: /^preferencias$/i }).click()
+  await page.waitForTimeout(600)
+  // El panel tiene que tener marcas cargadas. Una foto de «Sin marcas» es un
+  // archivo correcto que no ilustra nada, y el modo estricto no la puede
+  // distinguir: el PNG existe. La única forma de que esto no pase en silencio
+  // es exigirlo acá.
+  if (await page.getByText(/^Sin marcas:/).count()) {
+    throw new Error(
+      "el panel de preferencias salió vacío — datos-de-demostracion.sh marcó otra máquina"
+    )
+  }
+  await fotoDelPanel("adm2-preferencias", "Preferente para")
+})
+
+await paso("auditoria", async () => { await page.goto(`${BASE}/admin/auditoria`); await foto("adm2-auditoria") })
+
 await nav.close()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"testing"
@@ -12,17 +13,19 @@ import (
 	"github.com/ramiro/sgrc/internal/inventory/domain"
 	"github.com/ramiro/sgrc/internal/shared/eventbus"
 	"github.com/ramiro/sgrc/internal/shared/secretos"
+	"github.com/ramiro/sgrc/internal/shared/texto"
 )
 
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
-	carros       map[string]*domain.Carro
-	equipos      map[string]*domain.Equipo
-	incidencias  map[string]*domain.Incidencia
-	licencias    map[string]*domain.LicenciaSoftware
-	preferencias map[string]*domain.PreferenciaDeEquipo
-	cuentas      map[string]*domain.CuentaDeEquipo
+	preferenciasHuerfanas []*PreferenciaHuerfana
+	carros                map[string]*domain.Carro
+	equipos               map[string]*domain.Equipo
+	incidencias           map[string]*domain.Incidencia
+	licencias             map[string]*domain.LicenciaSoftware
+	preferencias          map[string]*domain.PreferenciaDeEquipo
+	cuentas               map[string]*domain.CuentaDeEquipo
 	// nombresDeMateria es lo que el selector del inventario ofrece.
 	nombresDeMateria []string
 	// errAlCrearLicenciaEnEquipo fuerza un fallo que NO es un duplicado, para
@@ -57,9 +60,12 @@ func (r *fakeRepo) GuardarCarro(ctx context.Context, c *domain.Carro) error {
 	r.carros[c.ID] = c
 	return nil
 }
-func (r *fakeRepo) ListarCarros(ctx context.Context) ([]*domain.Carro, error) {
+func (r *fakeRepo) ListarCarros(ctx context.Context, incluirRetirados bool) ([]*domain.Carro, error) {
 	var resultado []*domain.Carro
 	for _, c := range r.carros {
+		if c.DadoDeBaja && !incluirRetirados {
+			continue
+		}
 		resultado = append(resultado, c)
 	}
 	return resultado, nil
@@ -125,12 +131,18 @@ func (r *fakeRepo) GuardarIncidencia(ctx context.Context, i *domain.Incidencia) 
 	r.incidencias[i.ID] = i
 	return nil
 }
-func (r *fakeRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error) {
+func (r *fakeRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string, limite int) ([]*domain.Incidencia, error) {
 	var resultado []*domain.Incidencia
 	for _, i := range r.incidencias {
 		if i.EquipoID == equipoID {
 			resultado = append(resultado, i)
 		}
+	}
+	// El recorte se imita para que el test del tope pueda probar algo. El orden
+	// de la de verdad lo pone el ORDER BY; acá alcanza con no devolver más de lo
+	// pedido.
+	if limite > 0 && len(resultado) > limite {
+		resultado = resultado[:limite]
 	}
 	return resultado, nil
 }
@@ -149,19 +161,22 @@ func (r *fakeRepo) CategoriasDeFallaUsadas(ctx context.Context) ([]string, error
 	return resultado, nil
 }
 
-func (r *fakeRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
+// CrearLicencia devuelve `false` cuando ya estaba, igual que el repo real: el
+// duplicado no es un error porque una sentencia fallida abortaría la
+// transacción del lote entero.
+func (r *fakeRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) (bool, error) {
 	if err := r.errAlCrearLicenciaEnEquipo[l.EquipoID]; err != nil {
-		return err
+		return false, err
 	}
 	// Mismo criterio que el índice funcional ux_licencia_equipo_nombre: única
-	// por equipo, sin distinguir mayúsculas.
+	// por equipo, comparando con la clave de texto del sistema (RF-00.1).
 	for _, existente := range r.licencias {
-		if existente.EquipoID == l.EquipoID && strings.EqualFold(existente.Nombre, l.Nombre) {
-			return ErrLicenciaDuplicada
+		if existente.EquipoID == l.EquipoID && texto.SonElMismo(existente.Nombre, l.Nombre) {
+			return false, nil
 		}
 	}
 	r.licencias[l.ID] = l
-	return nil
+	return true, nil
 }
 
 func (r *fakeRepo) BuscarLicenciaPorID(ctx context.Context, id string) (*domain.LicenciaSoftware, error) {
@@ -222,14 +237,33 @@ func mismaMarca(a, b *domain.PreferenciaDeEquipo) bool {
 		igualStr(a.Division, b.Division)
 }
 
-func (r *fakeRepo) CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {
+// EnTransaccion corre fn contra el mismo fake y, si devuelve error, DESHACE lo
+// que se haya escrito adentro.
+//
+// Deshacer de verdad —y no sólo llamar a fn— es lo que permite que un test de
+// este paquete verifique que un lote que falla en el medio no deja nada: con un
+// paso a través, el fake mentiría diciendo que sí quedaron escritas las
+// anteriores, que es justo el bug que esto vino a cerrar.
+func (r *fakeRepo) EnTransaccion(ctx context.Context, fn func(Repo) error) error {
+	licencias := maps.Clone(r.licencias)
+	preferencias := maps.Clone(r.preferencias)
+
+	if err := fn(r); err != nil {
+		r.licencias = licencias
+		r.preferencias = preferencias
+		return err
+	}
+	return nil
+}
+
+func (r *fakeRepo) CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) (bool, error) {
 	for _, existente := range r.preferencias {
 		if mismaMarca(existente, p) {
-			return domain.ErrPreferenciaDuplicada
+			return false, nil
 		}
 	}
 	r.preferencias[p.ID] = p
-	return nil
+	return true, nil
 }
 
 func (r *fakeRepo) GuardarPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {
@@ -387,7 +421,7 @@ func nuevoServicioDeTest(repo Repo, validador ValidadorReservas) *Service {
 // hace internal/shared/secretos— sino que el servicio cifre antes de guardar y
 // descifre al revelar.
 func cifradorDeTest() *secretos.Cifrador {
-	c, err := secretos.Nuevo("clave-de-test-para-las-cuentas")
+	c, err := secretos.Nuevo("clave-de-test-para-las-cuentas-de-equipo")
 	if err != nil {
 		panic(err)
 	}
@@ -512,8 +546,21 @@ func TestEditarCarro_NoExiste_Error(t *testing.T) {
 
 // ── PC ──────────────────────────────────────────────────────────────────
 
+// repoConCarros deja creados los carros que estos tests dan por existentes.
+//
+// Hizo falta al validar el destino: antes se creaban equipos en carros que no
+// existían, algo que la base real rechazaba igual por la clave foránea. El
+// armado estaba describiendo un mundo imposible.
+func repoConCarros(nombres ...string) *fakeRepo {
+	repo := nuevoFakeRepo()
+	for _, id := range nombres {
+		repo.carros[id] = &domain.Carro{ID: id, Nombre: "Carro " + id}
+	}
+	return repo
+}
+
 func TestCrearEquipo_OK(t *testing.T) {
-	svc := servicioSimple(nuevoFakeRepo())
+	svc := servicioSimple(repoConCarros("c1"))
 
 	equipo, err := svc.CrearEquipoDeCarro(context.Background(), "c1", 27, "5CD1234ABC", true, "i5", "8GB", "Windows 11", "Office")
 
@@ -526,7 +573,7 @@ func TestCrearEquipo_OK(t *testing.T) {
 }
 
 func TestCrearEquipo_IdentificadorDuplicadoEnMismoCarro_Error(t *testing.T) {
-	repo := nuevoFakeRepo()
+	repo := repoConCarros("c1")
 	svc := servicioSimple(repo)
 
 	_, err := svc.CrearEquipoDeCarro(context.Background(), "c1", 27, "SERIE-111", false, "", "", "", "")
@@ -543,7 +590,7 @@ func TestCrearEquipo_IdentificadorDuplicadoEnMismoCarro_Error(t *testing.T) {
 func TestCrearEquipo_MismoIdentificadorOtroCarro_OK(t *testing.T) {
 	// Confirma la regla de negocio: el identificador se repite entre
 	// carros distintos sin problema.
-	svc := servicioSimple(nuevoFakeRepo())
+	svc := servicioSimple(repoConCarros("c1", "c2"))
 
 	_, err1 := svc.CrearEquipoDeCarro(context.Background(), "c1", 27, "SERIE-111", false, "", "", "", "")
 	_, err2 := svc.CrearEquipoDeCarro(context.Background(), "c2", 27, "SERIE-222", false, "", "", "", "")
@@ -553,13 +600,49 @@ func TestCrearEquipo_MismoIdentificadorOtroCarro_OK(t *testing.T) {
 	}
 }
 
+// El bug que cerró esto: mover un equipo a un carro RETIRADO devolvía 200 y
+// dejaba la máquina en un contenedor que ninguna pantalla lista —los listados
+// de carros traen sólo los vivos—, sin estar ella misma dada de baja.
+//
+// La clave foránea no lo impedía: un carro dado de baja sigue siendo una fila
+// válida.
+func TestEditarEquipo_NoSePuedeMoverAUnCarroDadoDeBaja(t *testing.T) {
+	repo := repoConCarros("c1", "c2")
+	repo.carros["c2"].DadoDeBaja = true
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", CarroID: "c1", Identificador: 1}
+	svc := servicioSimple(repo)
+
+	destino := "c2"
+	_, err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{CarroID: &destino})
+
+	if !errors.Is(err, ErrCarroDadoDeBaja) {
+		t.Fatalf("esperaba ErrCarroDadoDeBaja, obtuve %v", err)
+	}
+	if repo.equipos["pc1"].CarroID != "c1" {
+		t.Errorf("el equipo se movió igual: quedó en %s", repo.equipos["pc1"].CarroID)
+	}
+}
+
+// Y tampoco se puede crear uno adentro.
+func TestCrearEquipoDeCarro_EnUnCarroDadoDeBaja(t *testing.T) {
+	repo := repoConCarros("c1")
+	repo.carros["c1"].DadoDeBaja = true
+	svc := servicioSimple(repo)
+
+	_, err := svc.CrearEquipoDeCarro(context.Background(), "c1", 1, "SERIE-X", false, "", "", "", "")
+
+	if !errors.Is(err, ErrCarroDadoDeBaja) {
+		t.Fatalf("esperaba ErrCarroDadoDeBaja, obtuve %v", err)
+	}
+}
+
 func TestEditarEquipo_MoverDeCarro(t *testing.T) {
-	repo := nuevoFakeRepo()
+	repo := repoConCarros("c1", "c2")
 	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", CarroID: "c1", Identificador: 1}
 	svc := servicioSimple(repo)
 
 	nuevoCarro := "c2"
-	err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{CarroID: &nuevoCarro})
+	_, err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{CarroID: &nuevoCarro})
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -577,7 +660,7 @@ func TestEditarEquipo_EquipoSueltoNoPuedeQuedarSinNombre(t *testing.T) {
 	svc := servicioSimple(repo)
 
 	vacio := ""
-	err := svc.EditarEquipo(context.Background(), "eq1", EditarEquipoParams{Nombre: &vacio})
+	_, err := svc.EditarEquipo(context.Background(), "eq1", EditarEquipoParams{Nombre: &vacio})
 
 	if !errors.Is(err, domain.ErrNombreEquipoVacio) {
 		t.Fatalf("esperaba ErrNombreEquipoVacio, obtuve %v", err)
@@ -593,7 +676,7 @@ func TestEditarEquipo_TipoVacioSeRechaza(t *testing.T) {
 	svc := servicioSimple(repo)
 
 	espacios := "   "
-	err := svc.EditarEquipo(context.Background(), "eq1", EditarEquipoParams{Tipo: &espacios})
+	_, err := svc.EditarEquipo(context.Background(), "eq1", EditarEquipoParams{Tipo: &espacios})
 
 	if !errors.Is(err, domain.ErrTipoEquipoVacio) {
 		t.Fatalf("esperaba ErrTipoEquipoVacio, obtuve %v", err)
@@ -608,7 +691,7 @@ func TestEditarEquipo_UnaEquipoDeCarroSiPuedeQuedarSinNombre(t *testing.T) {
 	svc := servicioSimple(repo)
 
 	vacio := ""
-	if err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{Nombre: &vacio}); err != nil {
+	if _, err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{Nombre: &vacio}); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	if repo.equipos["pc1"].Nombre != "" {
@@ -628,7 +711,7 @@ func TestEditarEquipo_CargarNumeroDeSerieAUnSuelto(t *testing.T) {
 	svc := servicioSimple(repo)
 
 	serie := "  abc-123x "
-	if err := svc.EditarEquipo(context.Background(), "eq1", EditarEquipoParams{NumeroSerie: &serie}); err != nil {
+	if _, err := svc.EditarEquipo(context.Background(), "eq1", EditarEquipoParams{NumeroSerie: &serie}); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -644,7 +727,7 @@ func TestEditarEquipo_UnSueltoSiPuedeQuedarSinNumeroDeSerie(t *testing.T) {
 	svc := servicioSimple(repo)
 
 	vacio := ""
-	if err := svc.EditarEquipo(context.Background(), "eq1", EditarEquipoParams{NumeroSerie: &vacio}); err != nil {
+	if _, err := svc.EditarEquipo(context.Background(), "eq1", EditarEquipoParams{NumeroSerie: &vacio}); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	if repo.equipos["eq1"].NumeroSerie != "" {
@@ -660,7 +743,7 @@ func TestEditarEquipo_UnaDeCarroNoPuedeQuedarSinNumeroDeSerie(t *testing.T) {
 	svc := servicioSimple(repo)
 
 	vacio := ""
-	err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{NumeroSerie: &vacio})
+	_, err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{NumeroSerie: &vacio})
 
 	if !errors.Is(err, domain.ErrNumeroSerieInvalido) {
 		t.Fatalf("esperaba ErrNumeroSerieInvalido, obtuve %v", err)
@@ -1118,5 +1201,288 @@ func TestCambiarEstado_MotivoDelAdmin_MandaSobreElDeDefecto(t *testing.T) {
 
 	if validador.motivoRecibido != suyo {
 		t.Errorf("obtuve: %q", validador.motivoRecibido)
+	}
+}
+
+func (r *fakeRepo) BuscarLicenciasPorIDs(ctx context.Context, ids []string) (map[string]*domain.LicenciaSoftware, error) {
+	licencias := make(map[string]*domain.LicenciaSoftware, len(ids))
+	for _, id := range ids {
+		if l, existe := r.licencias[id]; existe {
+			licencias[id] = l
+		}
+	}
+	return licencias, nil
+}
+
+func (r *fakeRepo) ListarPreferenciasHuerfanas(ctx context.Context) ([]*PreferenciaHuerfana, error) {
+	// Huérfana = su nombre de materia no cruza con ninguna materia cargada. El
+	// fake no tiene tabla de materias, así que devuelve lo que el test le dejó
+	// preparado.
+	return r.preferenciasHuerfanas, nil
+}
+
+func (r *fakeRepo) ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error) {
+	n := 0
+	for _, p := range r.preferencias {
+		if texto.SonElMismo(p.MateriaNombre, materiaNombre) {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// ── Reactivar: deshacer una baja ────────────────────────────────────────
+//
+// Los conflictos de unicidad —el zócalo, el nombre suelto y el número de serie
+// que otro pudo haberse llevado mientras el equipo estaba afuera— no se prueban
+// acá: los decide un índice parcial de la base y el fake no los tiene. Viven en
+// infrastructure/reactivar_test.go, contra Postgres de verdad.
+
+func TestReactivarEquipo_LoDevuelveAlInventarioYLimpiaLaFecha(t *testing.T) {
+	repo := nuevoFakeRepo()
+	baja := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	repo.carros["carro1"] = &domain.Carro{ID: "carro1", Nombre: "Carro 1"}
+	repo.equipos["pc1"] = &domain.Equipo{
+		ID: "pc1", CarroID: "carro1", Identificador: 7,
+		Estado: domain.EstadoFueraDeServicio, DadoDeBaja: true, FechaBaja: &baja,
+	}
+	svc := servicioSimple(repo)
+
+	if err := svc.ReactivarEquipo(context.Background(), "pc1"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	pc := repo.equipos["pc1"]
+	if pc.DadoDeBaja {
+		t.Error("el equipo tenía que volver al inventario")
+	}
+	if pc.FechaBaja != nil {
+		t.Errorf("la fecha de baja tenía que limpiarse, quedó %v", pc.FechaBaja)
+	}
+	// El estado NO se toca: la baja no lo había cambiado, así que la máquina
+	// vuelve rota si estaba rota. Devolverla DISPONIBLE sería inventar que
+	// alguien la arregló.
+	if pc.Estado != domain.EstadoFueraDeServicio {
+		t.Errorf("el estado no tenía que cambiar, quedó %s", pc.Estado)
+	}
+}
+
+func TestReactivarEquipo_QueNoEstabaDeBaja_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.carros["carro1"] = &domain.Carro{ID: "carro1", Nombre: "Carro 1"}
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", CarroID: "carro1", Identificador: 7}
+	svc := servicioSimple(repo)
+
+	err := svc.ReactivarEquipo(context.Background(), "pc1")
+
+	if !errors.Is(err, domain.ErrEquipoNoEstaDadoDeBaja) {
+		t.Fatalf("esperaba ErrEquipoNoEstaDadoDeBaja, obtuve %v", err)
+	}
+}
+
+// El caso que la base no puede ver: el carro del equipo se retiró mientras la
+// máquina estaba de baja. Reactivarla ahí adentro la dejaría invisible —ningún
+// selector lista un carro retirado— sin estar dada de baja, que es peor que
+// seguir de baja.
+func TestReactivarEquipo_ConSuCarroRetirado_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.carros["carro1"] = &domain.Carro{ID: "carro1", Nombre: "Carro 1", DadoDeBaja: true}
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", CarroID: "carro1", Identificador: 7, DadoDeBaja: true}
+	svc := servicioSimple(repo)
+
+	err := svc.ReactivarEquipo(context.Background(), "pc1")
+
+	if !errors.Is(err, ErrCarroDadoDeBaja) {
+		t.Fatalf("esperaba ErrCarroDadoDeBaja, obtuve %v", err)
+	}
+	if !repo.equipos["pc1"].DadoDeBaja {
+		t.Error("el equipo no tenía que reactivarse")
+	}
+}
+
+// Un equipo suelto no tiene carro, así que no hay nada que verificar antes.
+func TestReactivarEquipo_Suelto_NoMiraNingunCarro(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["proyector"] = &domain.Equipo{
+		ID: "proyector", Tipo: "PROYECTOR", Nombre: "Proyector 1", DadoDeBaja: true,
+	}
+	svc := servicioSimple(repo)
+
+	if err := svc.ReactivarEquipo(context.Background(), "proyector"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if repo.equipos["proyector"].DadoDeBaja {
+		t.Error("el equipo suelto tenía que volver al inventario")
+	}
+}
+
+func TestReactivarCarro_LoDevuelveACirculacion(t *testing.T) {
+	repo := nuevoFakeRepo()
+	baja := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	repo.carros["carro1"] = &domain.Carro{ID: "carro1", Nombre: "Carro 1", DadoDeBaja: true, FechaBaja: &baja}
+	svc := servicioSimple(repo)
+
+	if err := svc.ReactivarCarro(context.Background(), "carro1"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	c := repo.carros["carro1"]
+	if c.DadoDeBaja || c.FechaBaja != nil {
+		t.Errorf("el carro tenía que volver a circulación sin fecha de baja: %+v", c)
+	}
+}
+
+func TestReactivarCarro_QueNoEstabaDeBaja_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.carros["carro1"] = &domain.Carro{ID: "carro1", Nombre: "Carro 1"}
+	svc := servicioSimple(repo)
+
+	err := svc.ReactivarCarro(context.Background(), "carro1")
+
+	if !errors.Is(err, domain.ErrCarroNoEstaDadoDeBaja) {
+		t.Fatalf("esperaba ErrCarroNoEstaDadoDeBaja, obtuve %v", err)
+	}
+}
+
+// Los retirados sólo salen si se los pide: el selector de "dónde va este
+// equipo" se llena con esta misma lista.
+func TestListarCarros_LosRetiradosSoloSiSePiden(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.carros["vivo"] = &domain.Carro{ID: "vivo", Nombre: "Carro 1"}
+	repo.carros["retirado"] = &domain.Carro{ID: "retirado", Nombre: "Carro viejo", DadoDeBaja: true}
+	svc := servicioSimple(repo)
+
+	soloVivos, err := svc.ListarCarros(context.Background(), false)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(soloVivos) != 1 || soloVivos[0].ID != "vivo" {
+		t.Errorf("esperaba sólo el carro en circulación, obtuve %+v", soloVivos)
+	}
+
+	todos, err := svc.ListarCarros(context.Background(), true)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(todos) != 2 {
+		t.Errorf("esperaba los dos carros, obtuve %d", len(todos))
+	}
+}
+
+// ── Qué deja registrado una edición ─────────────────────────────────────
+//
+// Hasta que esto existió, lo único auditado de una edición era el cambio de
+// carro: el nombre, el tipo, el número de serie y si el equipo es reservable
+// cambiaban sin dejar rastro, contra lo que dice RF-00.2.
+
+func TestEditarEquipo_DevuelveLoQueCambioConSusDosPuntas(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["pc1"] = &domain.Equipo{
+		ID: "pc1", Tipo: "PROYECTOR", Nombre: "Proyector viejo",
+		NumeroSerie: "ABC123", Reservable: true, RAM: "8GB",
+	}
+	svc := servicioSimple(repo)
+
+	nombre, reservable := "Proyector del SUM", false
+	cambios, err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{
+		Nombre: &nombre, Reservable: &reservable,
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	if len(cambios) != 2 {
+		t.Fatalf("esperaba 2 campos cambiados, obtuve %d: %+v", len(cambios), cambios)
+	}
+	if c := cambios["nombre"]; c.Antes != "Proyector viejo" || c.Despues != "Proyector del SUM" {
+		t.Errorf("el cambio de nombre tenía que traer las dos puntas: %+v", c)
+	}
+	if c := cambios["reservable"]; c.Antes != true || c.Despues != false {
+		t.Errorf("el cambio de reservable tenía que traer las dos puntas: %+v", c)
+	}
+	// Lo que no se tocó no aparece: el registro dice qué cambió, no qué se mandó.
+	if _, hay := cambios["ram"]; hay {
+		t.Error("la RAM no cambió y no tenía que figurar")
+	}
+}
+
+// Un PATCH que manda los mismos datos no es una edición. Sin esto, cada
+// guardado sin cambios dejaría una entrada que dice «editó» sin decir qué.
+func TestEditarEquipo_SinCambiosNoRegistraNada(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Tipo: "PROYECTOR", Nombre: "Proyector", Reservable: true}
+	svc := servicioSimple(repo)
+
+	mismoNombre, mismoReservable := "Proyector", true
+	cambios, err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{
+		Nombre: &mismoNombre, Reservable: &mismoReservable,
+	})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(cambios) != 0 {
+		t.Errorf("nada cambió y sin embargo registró: %+v", cambios)
+	}
+}
+
+// El campo que alguien agregue mañana a la edición entra solo en la auditoría,
+// porque el registro sale de comparar dos fotos y no de anotar en cada rama.
+// Esto lo fija: la ficha técnica nunca se anotó a mano y aun así se registra.
+func TestEditarEquipo_RegistraTambienLaFichaTecnica(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.carros["c1"] = &domain.Carro{ID: "c1", Nombre: "Carro 1"}
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", CarroID: "c1", Identificador: 3, RAM: "4GB", CPU: "i3"}
+	svc := servicioSimple(repo)
+
+	ram := "8GB"
+	cambios, err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{RAM: &ram})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if c := cambios["ram"]; c.Antes != "4GB" || c.Despues != "8GB" {
+		t.Errorf("el cambio de RAM tenía que quedar registrado: %+v", cambios)
+	}
+}
+
+// El cambio de carro tiene su propia acción en el catálogo, así que no se
+// cuenta dos veces.
+func TestEditarEquipo_ElCarroNoSeDuplicaEnElDetalle(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.carros["c1"] = &domain.Carro{ID: "c1", Nombre: "Carro 1"}
+	repo.carros["c2"] = &domain.Carro{ID: "c2", Nombre: "Carro 2"}
+	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", CarroID: "c1", Identificador: 3}
+	svc := servicioSimple(repo)
+
+	destino := "c2"
+	cambios, err := svc.EditarEquipo(context.Background(), "pc1", EditarEquipoParams{CarroID: &destino})
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(cambios) != 0 {
+		t.Errorf("el carro lo registra EQUIPO_MOVIDO_DE_CARRO, no este detalle: %+v", cambios)
+	}
+}
+
+// El historial de fallas de una máquina tiene tope, con el mismo criterio y el
+// mismo número que el de entregas: es una pantalla para mirar los últimos
+// movimientos, no un reporte. Sin él devolvía todo lo acumulado desde que el
+// equipo entró al inventario.
+func TestListarIncidenciasPorEquipo_TieneTope(t *testing.T) {
+	repo := nuevoFakeRepo()
+	for i := 0; i < maxIncidenciasDeEquipo+20; i++ {
+		id := fmt.Sprintf("i%d", i)
+		repo.incidencias[id] = &domain.Incidencia{
+			ID: id, EquipoID: "pc1", Descripcion: "No arranca",
+			Gravedad: domain.GravedadLeve, Estado: domain.IncidenciaAbierta,
+		}
+	}
+	svc := servicioSimple(repo)
+
+	incidencias, err := svc.ListarIncidenciasPorEquipo(context.Background(), "pc1")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(incidencias) != maxIncidenciasDeEquipo {
+		t.Errorf("esperaba el tope de %d, obtuve %d", maxIncidenciasDeEquipo, len(incidencias))
 	}
 }

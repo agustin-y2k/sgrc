@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate, RouterProvider } from "react-router"
 
 import { AppLayout } from "@/components/layout/AppLayout"
 import { AcademicoPage } from "@/features/academico/AcademicoPage"
+import { AuditoriaPage } from "@/features/auditoria/AuditoriaPage"
 import { AprobacionPage } from "@/features/auth/AprobacionPage"
 import { CambiarPasswordPage } from "@/features/auth/CambiarPasswordPage"
 import { LoginPage } from "@/features/auth/LoginPage"
@@ -88,6 +89,7 @@ const router = createBrowserRouter([
               { path: "/admin/entregas", element: <EntregasPage /> },
               { path: "/admin/reportes", element: <ReportesPage /> },
               { path: "/admin/jornada", element: <JornadaPage /> },
+              { path: "/admin/auditoria", element: <AuditoriaPage /> },
               {
                 path: "/admin/pedidos-de-materia",
                 element: <PedidosDeMateriaPage />,

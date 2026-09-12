@@ -53,6 +53,11 @@ const (
 	// convertidos a GENERAL.
 	idAvisoNoRetirada  = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 	idAvisoPorComenzar = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+	// La misma materia cargada tres veces en el mismo curso, que el UNIQUE por
+	// nombre EXACTO de la 001 dejaba entrar. La 010 las desambigua.
+	idMateriaDup1 = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	idMateriaDup2 = "dddddddd-dddd-dddd-dddd-dddddddddddd"
 )
 
 func TestUnaActualizacionNoSeLlevaLosDatosPuestos(t *testing.T) {
@@ -87,6 +92,7 @@ func TestUnaActualizacionNoSeLlevaLosDatosPuestos(t *testing.T) {
 	verificarQueLoDeUnCarroQuedoComoComputadora(ctx, t, pool)
 	verificarQueElDestinoSeQuedoConLoQueDecia(ctx, t, pool)
 	verificarQueElCursoSePartioEnAnioYDivision(ctx, t, pool)
+	verificarQueLasMateriasRepetidasSeDesambiguaron(ctx, t, pool)
 
 	// Va último porque escribe: da de baja el equipo sembrado y carga otro
 	// encima de sus identificadores.
@@ -111,6 +117,15 @@ func sembrarInstalacionEnUso(ctx context.Context, t *testing.T, pool *pgxpool.Po
 	ejecutar(ctx, t, pool, `INSERT INTO ciclo_lectivo (id, anio) VALUES ($1, 2026)`, idCiclo)
 	ejecutar(ctx, t, pool, `INSERT INTO curso (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, '3°B')`, idCurso, idCiclo)
 	ejecutar(ctx, t, pool, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, 'Matemática')`, idMateria, idCurso)
+
+	// La misma materia, escrita de tres formas, en el MISMO curso. Entra porque
+	// hasta la 010 el único era por nombre exacto, y es exactamente la basura
+	// que una institución acumula cargando a mano durante meses. Las tres tienen
+	// que sobrevivir a la actualización: la de arriba tiene una reserva y un
+	// docente colgando, y cuál de las otras dos es "la buena" no lo puede
+	// decidir una migración.
+	ejecutar(ctx, t, pool, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, 'MATEMATICA')`, idMateriaDup1, idCurso)
+	ejecutar(ctx, t, pool, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, 'matematica')`, idMateriaDup2, idCurso)
 	ejecutar(ctx, t, pool, `
 		INSERT INTO docente_materia (usuario_id, materia_id, rol) VALUES ($1, $2, 'TITULAR')`, idDocente, idMateria)
 
@@ -521,4 +536,138 @@ func levantarPostgresDeTest(t *testing.T) (*pgxpool.Pool, string) {
 	t.Cleanup(pool.Close)
 
 	return pool, connStr
+}
+
+// La 010 pasa la unicidad de `materia` al nombre NORMALIZADO, y para eso tiene
+// que hacer algo con los duplicados que ya están cargados.
+//
+// Lo que hace es RENOMBRARLOS, y esto verifica las dos mitades de esa decisión:
+// que después de actualizar la regla rige de verdad, y que ninguna de las filas
+// viejas se perdió en el camino. Borrarlas habría sido más corto y se habría
+// llevado puestas las reservas y los docentes que cuelgan de ellas — en una
+// migración que corre sola al arrancar el contenedor, sin nadie mirando.
+func verificarQueLasMateriasRepetidasSeDesambiguaron(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	// Las tres siguen ahí. (verificarQueNingunaTablaPerdioFilas ya lo cubre a
+	// nivel tabla; acá se mira que sean ESTAS tres y no otras).
+	for _, id := range []string{idMateria, idMateriaDup1, idMateriaDup2} {
+		var existe bool
+		if err := pool.QueryRow(ctx,
+			`SELECT true FROM materia WHERE id = $1`, id).Scan(&existe); err != nil {
+			t.Errorf("la materia %s desapareció al migrar: %v", id, err)
+		}
+	}
+
+	// Y quedaron distinguibles: tres nombres normalizados distintos donde antes
+	// había uno solo repetido tres veces.
+	var normDistintos int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(DISTINCT nombre_norm) FROM materia WHERE curso_id = $1`,
+		idCurso).Scan(&normDistintos); err != nil {
+		t.Fatalf("no se pudieron contar los nombres normalizados: %v", err)
+	}
+	if normDistintos != 3 {
+		t.Errorf("el curso quedó con %d nombres normalizados distintos, esperaba 3", normDistintos)
+	}
+
+	// La que conserva el nombre limpio es la que está EN USO, no una al azar.
+	// idMateria es la que tiene la reserva y el docente colgando; las otras dos
+	// son copias que nadie miró nunca. Renombrar la de verdad para dejarle el
+	// nombre bueno a una huérfana le cambiaría el nombre a la materia que
+	// aparece en las reservas ya hechas y en la lista de lo que dicta el
+	// docente.
+	var nombreDeLaUsada string
+	if err := pool.QueryRow(ctx,
+		`SELECT nombre FROM materia WHERE id = $1`, idMateria).Scan(&nombreDeLaUsada); err != nil {
+		t.Fatalf("no se pudo leer la materia con reserva: %v", err)
+	}
+	if nombreDeLaUsada != "Matemática" {
+		t.Errorf("la materia con reserva y docente quedó como %q; tenía que conservar «Matemática» "+
+			"y que el sufijo se lo llevaran las copias sin usar", nombreDeLaUsada)
+	}
+
+	// Y una sola se queda sin sufijo, claro.
+	var conNombreLimpio int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM materia
+		 WHERE curso_id = $1 AND nombre_norm = 'matematica'`, idCurso).Scan(&conNombreLimpio); err != nil {
+		t.Fatalf("no se pudo contar la materia sin sufijo: %v", err)
+	}
+	if conNombreLimpio != 1 {
+		t.Errorf("quedaron %d materias con el nombre sin desambiguar, esperaba exactamente 1", conNombreLimpio)
+	}
+
+	// Desde ahora la regla rige: ninguna variante entra de nuevo.
+	for _, variante := range []string{"Matemática", "MATEMATICA", "matematica", "MaTeMáTiCa"} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO materia (curso_id, nombre) VALUES ($1, $2)`, idCurso, variante); err == nil {
+			t.Errorf("«%s» entró en un curso que ya tiene esa materia", variante)
+		}
+	}
+
+	// Pero en OTRO curso sí: una materia es propia de su curso, la Matemática
+	// de 3°B no es la de 1°A.
+	var idOtroCurso string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO curso (ciclo_lectivo_id, anio, division) VALUES ($1, 1, 'Z')
+		RETURNING id`, idCiclo).Scan(&idOtroCurso); err != nil {
+		t.Fatalf("no se pudo crear el curso de control: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO materia (curso_id, nombre) VALUES ($1, 'Matemática')`, idOtroCurso); err != nil {
+		t.Errorf("la misma materia en otro curso tenía que entrar: %v", err)
+	}
+}
+
+// Migración 016 — las dos banderas que nunca significaron nada.
+//
+// `curso.activo` y `materia.activo` existían desde el esquema inicial, no las
+// escribía nadie con otro valor que el true del alta y ninguna regla las
+// consultaba, pero viajaban en la respuesta de la API. Este test es la
+// constancia de que se fueron, y de que lo que sí decide —`archivado`— y lo
+// que se llama parecido —`ciclo_lectivo.activo`— siguen en pie.
+func TestMigracion016_CursoYMateriaSinActivo(t *testing.T) {
+	ctx := context.Background()
+	pool, dsn := levantarPostgresDeTest(t)
+
+	if err := testdb.AplicarEsquema(ctx, dsn); err != nil {
+		t.Fatalf("no se pudo aplicar el esquema: %v", err)
+	}
+
+	existe := func(tabla, columna string) bool {
+		var hay bool
+		err := pool.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = $1 AND column_name = $2)`, tabla, columna).Scan(&hay)
+		if err != nil {
+			t.Fatalf("consultando el esquema: %v", err)
+		}
+		return hay
+	}
+
+	casos := []struct {
+		tabla, columna string
+		esperado       bool
+		porque         string
+	}{
+		{"curso", "activo", false, "se quitó: no la escribía nadie ni decidía nada"},
+		{"materia", "activo", false, "se quitó por el mismo motivo que la del curso"},
+		{"curso", "archivado", true, "es el único estado de un curso y lo enciende el archivado del ciclo"},
+		{"materia", "archivado", true, "lo mismo, y es lo que mira MateriaAceptaReservas"},
+		// El que se llama parecido y no tiene nada que ver: marca cuál es el
+		// único ciclo abierto y lo sostiene un índice único parcial.
+		{"ciclo_lectivo", "activo", true, "marca el único ciclo abierto"},
+	}
+
+	for _, c := range casos {
+		if existe(c.tabla, c.columna) != c.esperado {
+			estado := "no debería existir"
+			if c.esperado {
+				estado = "debería existir"
+			}
+			t.Errorf("%s.%s %s (%s)", c.tabla, c.columna, estado, c.porque)
+		}
+	}
 }

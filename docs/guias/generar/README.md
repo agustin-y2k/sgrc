@@ -3,142 +3,89 @@
 Las dos guías en PDF (`../SGRC-guia-docentes.pdf` y
 `../SGRC-guia-administradores.pdf`) no se escriben a mano: el texto vive en los
 dos `.html` de la carpeta de arriba y **todas las capturas salen del sistema
-corriendo en local**. Cuando una pantalla cambia, se vuelven a generar y las
-guías quedan al día sin retocar imágenes a mano.
-
-El mismo pipeline actualiza las capturas del README (`../../capturas/`).
-
-## Lo que hace falta
-
-- El sistema levantado en local: `make dev` (SPA en `localhost:8081`, API en
-  `localhost:8080`). **Si la base local tiene datos que no se pueden perder
-  —un volcado del servidor, por ejemplo— no uses esa pila: levantá la de
-  capturas, que va aparte (ver abajo).**
-- Node con las dependencias del frontend instaladas: los scripts usan el
-  Playwright que ya está en `frontend/node_modules` y lo resuelven por ruta, así
-  que se pueden correr desde cualquier directorio.
-- Python con Pillow, para recortar y numerar las capturas.
-  - **Sin Node en la máquina**, los scripts de captura y `hacer-pdf.mjs`
-    corren igual dentro de la imagen oficial de Playwright, que ya trae el
-    navegador y sus dependencias de sistema. Hay que montar el repositorio y
-    darle la red del host, y conviene el `--user` propio para no quedarse con
-    imágenes de root:
-
-    ```bash
-    docker run --rm --network host --user "$(id -u):$(id -g)" \
-      -v "$PWD":/repo -e HOME=/tmp -e SALIDA=/salida -v /tmp/capturas-sgrc:/salida \
-      -e GUIA_ADMIN_PASSWORD="..." -w /repo \
-      mcr.microsoft.com/playwright:v1.62.1-noble \
-      node docs/guias/generar/capturar-admin.mjs
-    ```
-
-    La versión de la imagen tiene que ser la misma que la de
-    `@playwright/test` en `frontend/package.json`.
-- `jq` y `curl`, para el script de datos.
-
-## Levantarlo aparte, sin tocar la base de desarrollo
-
-El pipeline necesita **una base recién creada y datos neutros**: los correos
-del `.env` de desarrollo suelen ser personales, y las capturas de Usuarios y
-Mi perfil los publican. Recrear la base de desarrollo para eso no siempre es
-una opción —puede tener el volcado del servidor adentro—, así que todo esto
-corre en **otro proyecto de Compose**, con su propio volumen:
+corriendo de verdad**. El mismo pipeline actualiza las capturas del README
+(`../../capturas/`).
 
 ```bash
-# 1. Un .env propio, copia del de desarrollo con lo que se VE en las capturas
-#    cambiado por valores neutros. No va al repo (.gitignore cubre .env.*).
-cp .env .env.capturas
-#    y editar en .env.capturas:
-#      SEED_ADMIN_EMAIL=admin@escuela.edu.ar
-#      DOCENTE_EMAIL=ada.lovelace@escuela.edu.ar   ← distinto del de la guía
-#      SMTP_HOST=  SMTP_USER=  SMTP_PASSWORD=  SMTP_FROM=
-#    GOOGLE_CLIENT_ID se DEJA como está: sin él, la captura del ingreso pierde
-#    el botón «Acceder con Google» que la guía explica. Es público —el
-#    navegador ya lo recibe en /api/auth/config—, no un secreto.
-
-# 2. La pila, en el proyecto sgrc-capturas
-docker compose --env-file .env.capturas -p sgrc-capturas \
-  -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.capturas.yml \
-  up -d --build postgres sgrc-app frontend seed-datos
-
-# 3. … los pasos de abajo, y al terminar:
-docker compose --env-file .env.capturas -p sgrc-capturas \
-  -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.capturas.yml \
-  down -v
+cp .env.capturas.example .env.capturas   # una sola vez
+make capturas
 ```
 
-El `-v` del final es seguro **porque el proyecto es otro**: borra
-`sgrc-capturas_pgdata` y no toca `sgrc-monolotico_pgdata`.
+Eso es todo. `capturar-todo.sh` levanta su propia pila en el proyecto de
+Compose `sgrc-capturas` —base recién creada, datos neutros—, siembra, saca las
+capturas en el orden que hace falta, las numera, las recorta, arma los dos PDF
+y baja la pila, pase lo que pase. La base de desarrollo no se toca: es otro
+proyecto y por lo tanto otro volumen.
 
-Tres detalles que ya costaron una corrida:
+Después, `git status` dice qué cambió. Las pantallas que no se tocaron salen
+idénticas byte a byte, **salvo las que muestran una fecha o una hora**: esas
+cambian en cada corrida porque los datos se siembran con `now()`. Están
+listadas en `capturas-con-reloj.txt`, son once, y la diferencia es siempre la
+franja del reloj.
 
-- **La subred no se puede compartir.** `sgrc-net` tiene subred fija en
-  `docker-compose.yml` para poder nombrarla en `TRUSTED_PROXIES`, y una subred
-  fija no entra dos veces: con la red del proyecto de desarrollo ya creada
-  —basta con haberlo levantado alguna vez, aunque esté apagado— Docker corta
-  con `invalid pool request: Pool overlaps with other one on this address
-  space`. Por eso `docker-compose.capturas.yml` la mueve a `172.29.0.0/16` y
-  `.env.capturas` lleva ese mismo rango en `TRUSTED_PROXIES`. Si los dos no
-  coinciden, el backend deja de confiar en el proxy y no lo avisa.
+**Y no depende de que nadie se acuerde.** El workflow `capturas.yml` lo corre
+solo cuando cambia `frontend/src/**` o `docs/guias/**`, y hace dos cosas:
 
-- **`DOCENTE_EMAIL` tiene que ser distinto del docente de la guía**
-  (`ana.gomez@escuela.edu.ar`). Son dos personas: Ada Lovelace la siembra el
-  overlay de desarrollo y es quien pide una materia; Ana Gómez la crea
-  `datos-de-demostracion.sh` y es quien reserva. Con el mismo correo, la
-  segunda reusa la cuenta de la primera y el paso del pedido de materia muere
-  con un `jq: parse error` que no dice qué pasó.
-- **La contraseña del Admin sale del mismo `.env.capturas`**
-  (`SEED_ADMIN_PASSWORD`), y es la que hay que exportar como
-  `GUIA_ADMIN_PASSWORD`.
+- **Falla si alguna captura no se generó** —`--estricto`—, que es lo que atrapa
+  un selector podrido. Vale para las sesenta.
+- **Falla si una captura sin reloj dejó de coincidir** con lo que muestra el
+  sistema: la interfaz se movió y nadie regeneró. Las once con reloj se informan
+  y no frenan nada; compararlas por igualdad las pondría en rojo todas las
+  semanas, y una alarma que suena siempre deja de mirarse.
 
-## Los pasos
+Ese es el punto: hasta la 1.21 el pipeline estaba automatizado pero había que
+invocarlo, y por eso las capturas envejecían igual.
+
+## Cuando sólo cambia el texto o la versión
 
 ```bash
-export GUIA_ADMIN_PASSWORD='...'      # la de SEED_ADMIN_PASSWORD del .env
-export GUIA_ADMIN_EMAIL='...'         # opcional, si tu Admin no es admin@escuela.edu.ar
+make capturas-pdf
+```
 
-# 0. SOBRE UNA BASE RECIÉN CREADA, esto va primero: crea el ciclo lectivo, el
-#    curso 1°A, la materia, un docente y un carro con 8 equipos. Sin esto, el
-#    paso 1 muere con "jq: error ... Cannot index object with number", que no
-#    dice en ningún lado que lo que falta es el ciclo.
-#
-#    Ojo con los nombres de las variables: este script NO lee las GUIA_* ni las
-#    SEED_ADMIN_* del .env, lee ADMIN_EMAIL y ADMIN_PASSWORD.
-ADMIN_EMAIL="$GUIA_ADMIN_EMAIL" ADMIN_PASSWORD="$GUIA_ADMIN_PASSWORD" \
-  ./scripts/sembrar-datos-de-prueba.sh
+Rehace únicamente los dos documentos, sin levantar nada y sin Docker: dos
+minutos. Es lo que hace falta cuando sube la versión —la portada es parte del
+documento— o cuando se corrige el texto de un capítulo. Las capturas muestran a
+propósito el pie de la versión anterior: se sacan antes del bump, y regenerar
+cincuenta imágenes por un dígito no se justifica.
 
-# 1. Datos de demostración: docente, materias, reservas, licencias con
-#    vencimiento, una entrega en curso y una conversación de soporte.
-#    Da por sentado que el ciclo y el curso "1°A" ya existen (paso 0).
-./docs/guias/generar/datos-de-demostracion.sh
+## Lo que hace falta tener instalado
 
-# 2. Capturas. Escriben todas en $SALIDA; se corren desde donde quieras.
+- **Docker**, para la pila de capturas.
+- **Node**, para Playwright. Si no hay en la máquina, `capturar-todo.sh` usa
+  la imagen oficial `mcr.microsoft.com/playwright:v<versión>-noble` —que ya
+  trae el navegador— y resuelve sola la versión leyendo
+  `frontend/package.json`. No hay nada que configurar.
+- **Python con Pillow**, para recortar y numerar.
+- **`jq` y `curl`**, para los scripts de datos.
+- **`pdftotext`** (opcional): si está, el script verifica que los PDF no
+  salieran truncados.
+
+## Correr una sola parte
+
+Cada script de captura es independiente y se puede correr suelto contra una
+pila ya levantada, que es lo cómodo cuando se está peleando con UNA pantalla:
+
+```bash
 export SALIDA=/tmp/capturas-sgrc
-node docs/guias/generar/capturar-jornada.mjs      # PRIMERO: ver abajo por qué
-node docs/guias/generar/capturar-guia.mjs         # pantallas completas
-node docs/guias/generar/capturar-pasos.mjs        # diálogos y formularios en uso
-node docs/guias/generar/capturar-pasos-2.mjs      # los que necesitan otro camino
-node docs/guias/generar/capturar-admin.mjs        # pantallas de Admin desplegadas
-node docs/guias/generar/capturar-formularios.mjs  # login, registro y recuperación
-node docs/guias/generar/capturar-cuentas.mjs      # las cuentas de un equipo, con las dos sesiones
-node docs/guias/generar/capturar-nuevas.mjs       # cerrar el año, los calendarios y el perfil del Admin
-node docs/guias/generar/capturar-marcas.mjs       # las que llevan números en rojo
-node docs/guias/generar/capturar-readme.mjs       # las del README (otro encuadre)
-
-# Las del README no pasan por preparar-imagenes.py —van sin recorte ni
-# numeración— así que se copian a mano, con el mismo nombre:
-#   for f in docs/capturas/*.png; do cp "$SALIDA/$(basename $f)" "$f"; done
-
-# 3. Numerar en rojo lo que la guía explica, y preparar las imágenes
-#    (recorte del vacío, tope de alto, borde).
-python3 docs/guias/generar/marcar.py /tmp/capturas-sgrc
-python3 docs/guias/generar/preparar-imagenes.py /tmp/capturas-sgrc docs/guias/imagenes
-
-# 4. Los PDF.
-node docs/guias/generar/hacer-pdf.mjs \
-  docs/guias/guia-docentes.html docs/guias/SGRC-guia-docentes.pdf \
-  docs/guias/guia-admins.html   docs/guias/SGRC-guia-administradores.pdf
+node docs/guias/generar/capturar-formularios.mjs
+python3 docs/guias/generar/preparar-imagenes.py "$SALIDA" docs/guias/imagenes
 ```
+
+Sin `--estricto`, `preparar-imagenes.py` saltea con `✗ falta` lo que no
+encuentra, que es lo correcto en una corrida parcial. **`capturar-todo.sh` sí lo
+pasa**, y ahí faltar es un error que corta: ese mensaje era idéntico cuando se
+salteaba un script a propósito y cuando uno fallaba, y así estuvieron rotas
+cuatro capturas durante semanas sin que nada lo señalara.
+
+Dos cosas al correr suelto:
+
+- **`capturar-jornada.mjs` deja la jornada declarada, y los demás la
+  necesitan.** Sobre una base nueva, cualquier otro script corrido primero deja
+  al Admin atrapado en el asistente de la primera jornada, y todas sus capturas
+  salen mostrando eso.
+- **El login falla de a ratos con `waitForURL: Timeout`** cuando se encadenan
+  varias corridas. No es la contraseña —el mismo login por curl da 200—:
+  repetir el script alcanza. `capturar-todo.sh` ya reintenta una vez por eso.
 
 ## `capturar-jornada.mjs` va primero, y no es un detalle de orden
 
@@ -156,44 +103,23 @@ La confirmación del impacto se toma **sin aplicarla**: se propone un horario
 que deja clases afuera, se fotografía la pregunta y se sale con «Volver sin
 cambiar nada», así los datos de demostración quedan intactos.
 
-## Correr solo una parte, que es lo normal
-
-Cada script de captura es independiente y `preparar-imagenes.py` saltea con
-`✗ falta` los orígenes que no encuentra, así que **regenerar solo el que toca
-la pantalla que cambió deja las demás imágenes intactas**. Dos cosas a tener
-en cuenta cuando se hace así:
-
-- **`capturar-jornada.mjs` deja la jornada declarada, y los demás la
-  necesitan.** Si la base es nueva y se corre cualquier otro script primero,
-  el Admin queda atrapado en el asistente de la primera jornada y todas sus
-  capturas salen mostrando eso.
-- **Un `✗ falta` de `preparar-imagenes.py` no siempre es intencional.** Ese
-  mensaje es el mismo cuando se salteó un script a propósito —lo normal, y para
-  eso está— que cuando se olvidó uno: en los dos casos la imagen vieja queda en
-  `imagenes/` y viaja al PDF sin que nada la señale. Si estás regenerando
-  TODO, un `✗ falta` es un script que no corriste.
-- **El login falla de a ratos con `waitForURL: Timeout`** cuando se encadenan
-  varias corridas seguidas. No es la contraseña: volver a correr el mismo
-  script alcanza.
-
 ## Decisiones que conviene no deshacer
 
 - **Las credenciales van por entorno.** Este repositorio es público y la
   instalación de cada escuela tiene las suyas. Ningún script las trae adentro.
 - **Los datos de demostración son neutros a propósito** —Ana Gómez, Carro 1,
-  1°A— y ninguna captura muestra correos ni nombres reales. Si vas a
-  regenerarlas contra una base con datos de verdad, revisá antes qué queda a la
-  vista, sobre todo en Usuarios y en Avisos.
-- **El Admin y el docente de prueba salen de TU `.env`, y terminan en los
-  PDF.** `SEED_ADMIN_EMAIL` es la cuenta que se ve en Usuarios, en Mi perfil y
-  en el pie de los avisos; `DOCENTE_EMAIL` es la que siembra el overlay de
-  desarrollo. Si en tu instalación local son tu correo personal, las capturas
-  lo publican. Antes de regenerar, poné valores neutros
-  —`admin@escuela.edu.ar`, `docente@escuela.edu.ar`—, recreá la base con
-  `docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v` y
-  volvé a levantar; después restaurá tu `.env`. Conviene apagar también
-  `SMTP_HOST` mientras dure: aprobar cuentas y cancelar reservas manda correos
-  de verdad.
+  1°A— y ninguna captura muestra correos ni nombres reales. La pila de capturas
+  arranca siempre de una base vacía, así que no hay forma de que se cuele un
+  dato real de la instalación: no es una precaución que haya que recordar.
+- **El Admin y el docente salen de `.env.capturas`, y terminan en los PDF.**
+  `SEED_ADMIN_EMAIL` es la cuenta que se ve en Usuarios, en Mi perfil y en el
+  pie de los avisos; `DOCENTE_EMAIL` es la que siembra el overlay de
+  desarrollo. Con el `.env` de desarrollo copiado sin mirar, las capturas
+  publican el correo personal en un repositorio público — pasó dos veces. Por
+  eso hay un `.env.capturas` aparte, por eso `capturar-todo.sh` **se niega a
+  arrancar** si detecta un dominio personal, y por eso el ejemplo trae
+  `SMTP_HOST` vacío: el pipeline aprueba cuentas y cancela reservas, y con un
+  servidor configurado esos correos se mandan de verdad.
 - **Las capturas son imágenes, así que buscar texto en el PDF no alcanza para
   auditarlas.** Un `pdftotext` no ve lo que dice una pantalla fotografiada: si
   hace falta confirmar que no quedó nada personal, hay que mirar las imágenes

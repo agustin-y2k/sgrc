@@ -252,3 +252,38 @@ func (r *PostgresRepo) MarcarTodasLeidasDe(ctx context.Context, usuarioID string
 	}
 	return int(tag.RowsAffected()), nil
 }
+
+// Borrar saca la fila. El servicio ya verificó que el aviso sea de quien lo
+// pide y que esté leído; acá sólo queda el borrado.
+//
+// No hay baja lógica: un aviso es un mensaje, y un mensaje borrado no deja nada
+// atrás que haya que explicar después. Lo que sí queda es la acción que lo
+// generó, en `audit_log`, que es otra cosa y no se borra.
+func (r *PostgresRepo) Borrar(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM notificacion WHERE id = $1`, id)
+	if err != nil {
+		if esIDInvalido(err) {
+			return application.ErrIDInvalido
+		}
+		return fmt.Errorf("borrando notificación: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return application.ErrNotificacionNoEncontrada
+	}
+	return nil
+}
+
+// BorrarLeidasDe vacía los avisos ya leídos de una persona. El filtro por
+// `usuario_id` es la regla de pertenencia: no hay forma de invocarla sobre los
+// de otro.
+func (r *PostgresRepo) BorrarLeidasDe(ctx context.Context, usuarioID string) (int, error) {
+	tag, err := r.pool.Exec(ctx,
+		`DELETE FROM notificacion WHERE usuario_id = $1 AND estado = 'LEIDA'`, usuarioID)
+	if err != nil {
+		if esIDInvalido(err) {
+			return 0, application.ErrIDInvalido
+		}
+		return 0, fmt.Errorf("borrando las notificaciones leídas: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}

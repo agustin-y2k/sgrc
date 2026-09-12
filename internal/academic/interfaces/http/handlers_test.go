@@ -37,6 +37,9 @@ type fakeRepo struct {
 	filtroDocenteRecibido *string
 	asignaciones          []application.AsignacionDocente
 	cicloDeAsignaciones   string
+	estructura            []application.CursoConMaterias
+	cursosImportados      []application.CursoConMaterias
+	destinosDeCopia       []string
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -70,6 +73,13 @@ func (r *fakeRepo) BuscarCicloPorID(ctx context.Context, id string) (*domain.Cic
 }
 func (r *fakeRepo) GuardarCiclo(ctx context.Context, c *domain.CicloLectivo) error {
 	r.ciclos[c.ID] = c
+	return nil
+}
+func (r *fakeRepo) EliminarCiclo(ctx context.Context, id string) error {
+	if _, ok := r.ciclos[id]; !ok {
+		return application.ErrCicloNoEncontrado
+	}
+	delete(r.ciclos, id)
 	return nil
 }
 func (r *fakeRepo) ListarCiclos(ctx context.Context, filtroArchivado *bool) ([]*domain.CicloLectivo, error) {
@@ -202,10 +212,57 @@ func (r *fakeRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, nuevo
 	return 0, 0, nil
 }
 
+// Las tres de RF-02.12. Acá alcanza con registrar lo que llegó: lo que prueban
+// los tests de esta capa es el contrato HTTP —códigos, forma del JSON, qué
+// queda auditado—, no la semántica de la carga, que se prueba en application/ y
+// contra Postgres.
+
+func (r *fakeRepo) ListarEstructuraDeCiclo(ctx context.Context, cicloID string) ([]application.CursoConMaterias, error) {
+	return r.estructura, nil
+}
+
+func (r *fakeRepo) ImportarEstructura(ctx context.Context, cicloID string, cursos []application.CursoConMaterias) (application.ResultadoImportacion, error) {
+	r.cursosImportados = cursos
+	res := application.ResultadoImportacion{CursosCreados: len(cursos)}
+	for _, c := range cursos {
+		res.MateriasCreadas += len(c.Materias)
+	}
+	return res, nil
+}
+
+func (r *fakeRepo) CopiarMateriasA(ctx context.Context, cursoOrigenID string, cursosDestinoIDs []string) (application.ResultadoCopia, error) {
+	r.destinosDeCopia = cursosDestinoIDs
+	var materias int
+	for _, m := range r.materias {
+		if m.CursoID == cursoOrigenID {
+			materias++
+		}
+	}
+	return application.ResultadoCopia{
+		MateriasCreadas: materias * len(cursosDestinoIDs),
+		CursosDestino:   len(cursosDestinoIDs),
+	}, nil
+}
+
 type fakeValidadorUsuario struct{ valido bool }
 
 func (f *fakeValidadorUsuario) ExisteYAprobado(ctx context.Context, usuarioID string) (bool, error) {
 	return f.valido, nil
+}
+
+// AlgunoAprobado comparte la decisión con ExisteYAprobado, para que un test que
+// configura `validoPorUsuario` obtenga lo mismo por los dos caminos.
+func (f *fakeValidadorUsuario) AlgunoAprobado(ctx context.Context, usuarioIDs []string) (bool, error) {
+	for _, id := range usuarioIDs {
+		valido, err := f.ExisteYAprobado(ctx, id)
+		if err != nil {
+			return false, err
+		}
+		if valido {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 type fakeValidadorReservas struct{}
@@ -217,6 +274,9 @@ func (f *fakeValidadorReservas) TieneReservasMateria(ctx context.Context, materi
 	return false, nil
 }
 func (f *fakeValidadorReservas) TieneReservasDeCiclo(ctx context.Context, cicloID string) (bool, error) {
+	return false, nil
+}
+func (f *fakeValidadorReservas) HayBloqueosEnElAnio(ctx context.Context, anio int) (bool, error) {
 	return false, nil
 }
 
@@ -251,7 +311,7 @@ func (f *fakeCanceladorReservas) CancelarReservasFuturasDeMateria(ctx context.Co
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	contadorID = 0
 	svc := application.NewService(repo, &fakeValidadorUsuario{valido: true}, &fakeValidadorReservas{},
-		&fakeArchivadorHistorico{}, &fakeCanceladorReservas{}, &fakeDatosDeUsuario{}, idSecuencial,
+		&fakeArchivadorHistorico{}, &fakeCanceladorReservas{}, &fakeDatosDeUsuario{}, &fakeMarcas{}, idSecuencial,
 		relojDeTest, eventbus.NewInMemoryEventBus())
 	h := NewHandler(svc, fakeAuditor{})
 
@@ -282,7 +342,7 @@ func jsonBody(v any) *bytes.Buffer {
 func TestHTTP_CrearCiclo_ComoAdmin_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/academic/ciclos", jsonBody(crearCicloRequest{Anio: 2026}))
+	req := httptest.NewRequest("POST", "/api/ciclos", jsonBody(crearCicloRequest{Anio: 2026}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -298,7 +358,7 @@ func TestHTTP_CrearCiclo_ComoAdmin_OK(t *testing.T) {
 func TestHTTP_CrearCiclo_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/academic/ciclos", jsonBody(crearCicloRequest{Anio: 2026}))
+	req := httptest.NewRequest("POST", "/api/ciclos", jsonBody(crearCicloRequest{Anio: 2026}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
@@ -311,7 +371,7 @@ func TestHTTP_CrearCiclo_ComoDocente_403(t *testing.T) {
 func TestHTTP_CrearCiclo_AnioInvalido_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/academic/ciclos", jsonBody(crearCicloRequest{Anio: 1500}))
+	req := httptest.NewRequest("POST", "/api/ciclos", jsonBody(crearCicloRequest{Anio: 1500}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -327,7 +387,7 @@ func TestHTTP_ListarCiclos_ComoDocente_OK(t *testing.T) {
 	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2026, Activo: true}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/academic/ciclos", nil)
+	req := httptest.NewRequest("GET", "/api/ciclos", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -344,13 +404,140 @@ func TestHTTP_ArchivarCiclo_YaArchivado_409(t *testing.T) {
 	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Archivado: true}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/academic/ciclos/c1/archivar", jsonBody(archivarCicloRequest{}))
+	req := httptest.NewRequest("POST", "/api/ciclos/c1/archivar", jsonBody(archivarCicloRequest{}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
 	if resp.StatusCode != fiber.StatusConflict {
 		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
+	}
+}
+
+// ── Corregir y eliminar un ciclo ────────────────────────────────────────
+
+func TestHTTP_CorregirCiclo_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2027, Activo: true}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/ciclos/c1", jsonBody(corregirCicloRequest{Anio: 2026}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+	if repo.ciclos["c1"].Anio != 2026 {
+		t.Errorf("el año tenía que quedar en 2026, quedó %d", repo.ciclos["c1"].Anio)
+	}
+}
+
+func TestHTTP_CorregirCiclo_ComoDocente_403(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2027, Activo: true}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/ciclos/c1", jsonBody(corregirCicloRequest{Anio: 2026}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_CorregirCiclo_Archivado_409(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Archivado: true}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/ciclos/c1", jsonBody(corregirCicloRequest{Anio: 2026}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_CorregirCiclo_AnioFueraDeRango_400(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2026, Activo: true}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("PATCH", "/api/ciclos/c1", jsonBody(corregirCicloRequest{Anio: 20026}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_CorregirCiclo_NoExiste_404(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("PATCH", "/api/ciclos/no-existe", jsonBody(corregirCicloRequest{Anio: 2026}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("esperaba 404, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_EliminarCiclo_204(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2027, Activo: true}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("DELETE", "/api/ciclos/c1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("esperaba 204, obtuve %d", resp.StatusCode)
+	}
+	if _, quedó := repo.ciclos["c1"]; quedó {
+		t.Error("el ciclo tenía que borrarse")
+	}
+}
+
+func TestHTTP_EliminarCiclo_ConCursos_409(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2026, Activo: true}
+	repo.cursos["cu1"] = &domain.Curso{ID: "cu1", CicloLectivoID: "c1", Anio: 1}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("DELETE", "/api/ciclos/c1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_EliminarCiclo_ComoDocente_403(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2027, Activo: true}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("DELETE", "/api/ciclos/c1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	}
+	if _, quedó := repo.ciclos["c1"]; !quedó {
+		t.Error("el ciclo no tenía que borrarse")
 	}
 }
 
@@ -361,7 +548,7 @@ func TestHTTP_ArchivarCiclo_YaArchivado_409(t *testing.T) {
 func TestHTTP_CrearCurso_SinAnio_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/academic/ciclos/c1/cursos", jsonBody(crearCursoRequest{Division: "A"}))
+	req := httptest.NewRequest("POST", "/api/ciclos/c1/cursos", jsonBody(crearCursoRequest{Division: "A"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -374,7 +561,7 @@ func TestHTTP_CrearCurso_SinAnio_400(t *testing.T) {
 func TestHTTP_CrearCurso_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/academic/ciclos/c1/cursos", jsonBody(crearCursoRequest{Anio: 1, Division: "A"}))
+	req := httptest.NewRequest("POST", "/api/ciclos/c1/cursos", jsonBody(crearCursoRequest{Anio: 1, Division: "A"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -390,7 +577,7 @@ func TestHTTP_CrearCurso_OK(t *testing.T) {
 func TestHTTP_EliminarCurso_NoExiste_404(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("DELETE", "/api/academic/cursos/no-existe", nil)
+	req := httptest.NewRequest("DELETE", "/api/cursos/no-existe", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
@@ -410,7 +597,7 @@ func TestHTTP_IDInvalido_ContratoDocumentado(t *testing.T) {
 func TestHTTP_CrearMateria_NombreVacio_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/academic/cursos/curso1/materias", jsonBody(crearMateriaRequest{Nombre: "   "}))
+	req := httptest.NewRequest("POST", "/api/cursos/curso1/materias", jsonBody(crearMateriaRequest{Nombre: "   "}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -427,7 +614,7 @@ func TestHTTP_AsignarDocente_RolInvalido_400(t *testing.T) {
 	repo.materias["m1"] = &domain.Materia{ID: "m1", Nombre: "Matemáticas"}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/academic/materias/m1/docentes",
+	req := httptest.NewRequest("POST", "/api/materias/m1/docentes",
 		jsonBody(asignarDocenteRequest{UsuarioID: "u1", Rol: "PROFESOR"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
@@ -443,7 +630,7 @@ func TestHTTP_AsignarDocente_OK(t *testing.T) {
 	repo.materias["m1"] = &domain.Materia{ID: "m1", Nombre: "Matemáticas"}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/academic/materias/m1/docentes",
+	req := httptest.NewRequest("POST", "/api/materias/m1/docentes",
 		jsonBody(asignarDocenteRequest{UsuarioID: "u1", Rol: "TITULAR"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
@@ -462,7 +649,7 @@ func TestHTTP_CambiarRolDocente_OK(t *testing.T) {
 	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "u1", MateriaID: "m1", Rol: domain.RolTitular}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("PATCH", "/api/academic/materias/m1/docentes/dm1",
+	req := httptest.NewRequest("PATCH", "/api/materias/m1/docentes/dm1",
 		jsonBody(cambiarRolDocenteRequest{Rol: "SUPLENTE"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
@@ -489,7 +676,7 @@ func TestHTTP_CambiarRolDocente_RolInvalido_400(t *testing.T) {
 	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "u1", MateriaID: "m1", Rol: domain.RolTitular}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("PATCH", "/api/academic/materias/m1/docentes/dm1",
+	req := httptest.NewRequest("PATCH", "/api/materias/m1/docentes/dm1",
 		jsonBody(cambiarRolDocenteRequest{Rol: "PROFESOR"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
@@ -503,7 +690,7 @@ func TestHTTP_CambiarRolDocente_RolInvalido_400(t *testing.T) {
 func TestHTTP_CambiarRolDocente_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("PATCH", "/api/academic/materias/m1/docentes/dm1",
+	req := httptest.NewRequest("PATCH", "/api/materias/m1/docentes/dm1",
 		jsonBody(cambiarRolDocenteRequest{Rol: "SUPLENTE"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
@@ -520,11 +707,12 @@ func TestHTTP_RemoverDocenteMateria_DevuelveLasReservasCanceladas(t *testing.T) 
 	repo.docentesMateria["dm1"] = &domain.DocenteMateria{ID: "dm1", UsuarioID: "d1", MateriaID: "m1"}
 	svc := application.NewService(repo, &fakeValidadorUsuario{valido: true}, &fakeValidadorReservas{},
 		&fakeArchivadorHistorico{}, &fakeCanceladorReservas{canceladas: 3}, &fakeDatosDeUsuario{},
+		&fakeMarcas{},
 		idSecuencial, relojDeTest, eventbus.NewInMemoryEventBus())
 	app := fiber.New()
 	RegisterRoutes(app, NewHandler(svc, fakeAuditor{}), registroDePrueba.Autenticacion(testSecret))
 
-	req := httptest.NewRequest("DELETE", "/api/academic/materias/m1/docentes/dm1", nil)
+	req := httptest.NewRequest("DELETE", "/api/materias/m1/docentes/dm1", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, err := app.Test(req)
@@ -547,7 +735,7 @@ func TestHTTP_RemoverDocenteMateria_DevuelveLasReservasCanceladas(t *testing.T) 
 func TestHTTP_RemoverDocenteMateria_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("DELETE", "/api/academic/materias/m1/docentes/dm1", nil)
+	req := httptest.NewRequest("DELETE", "/api/materias/m1/docentes/dm1", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
@@ -643,16 +831,6 @@ func (r *fakeRepo) ListarPedidosDeUsuario(_ context.Context, usuarioID string) (
 	return out, nil
 }
 
-func (r *fakeRepo) ContarPedidosPendientes(_ context.Context) (int, error) {
-	n := 0
-	for _, p := range r.pedidos {
-		if p.Estado == domain.PedidoPendiente {
-			n++
-		}
-	}
-	return n, nil
-}
-
 func (r *fakeRepo) TienePedidoAbierto(_ context.Context, usuarioID, materiaID string) (bool, error) {
 	for _, p := range r.pedidos {
 		if p.UsuarioID == usuarioID && p.Estado == domain.PedidoPendiente &&
@@ -688,7 +866,7 @@ func TestHTTP_ListarPedidos_NombraLaMateriaPedida(t *testing.T) {
 	}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/academic/pedidos-de-materia", nil)
+	req := httptest.NewRequest("GET", "/api/pedidos-de-materia", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, err := app.Test(req)
@@ -736,7 +914,7 @@ func TestHTTP_ListarPedidos_MateriaNueva_SinNombreResuelto(t *testing.T) {
 	}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/academic/pedidos-de-materia", nil)
+	req := httptest.NewRequest("GET", "/api/pedidos-de-materia", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
@@ -773,7 +951,7 @@ func TestHTTP_Asignaciones_TraeLosNombresResueltos(t *testing.T) {
 	}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/academic/ciclos/ciclo1/asignaciones", nil)
+	req := httptest.NewRequest("GET", "/api/ciclos/ciclo1/asignaciones", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	resp, err := app.Test(req)
 	if err != nil {
@@ -809,7 +987,7 @@ func TestHTTP_Asignaciones_TraeLosNombresResueltos(t *testing.T) {
 func TestHTTP_Asignaciones_UnDocenteNoPuede(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("GET", "/api/academic/ciclos/ciclo1/asignaciones", nil)
+	req := httptest.NewRequest("GET", "/api/ciclos/ciclo1/asignaciones", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 	resp, err := app.Test(req)
 	if err != nil {
@@ -831,7 +1009,7 @@ func TestHTTP_MateriasDeDocente_FiltraPorEsaPersona(t *testing.T) {
 	}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/academic/docentes/docente7/materias", nil)
+	req := httptest.NewRequest("GET", "/api/docentes/docente7/materias", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 	resp, err := app.Test(req)
 	if err != nil {
@@ -863,7 +1041,7 @@ func TestHTTP_MateriasDeDocente_FiltraPorEsaPersona(t *testing.T) {
 func TestHTTP_MateriasDeDocente_UnDocenteNoPuede(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("GET", "/api/academic/docentes/otro/materias", nil)
+	req := httptest.NewRequest("GET", "/api/docentes/otro/materias", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 	resp, err := app.Test(req)
 	if err != nil {
@@ -906,7 +1084,7 @@ func TestHTTP_MisMaterias_Asignadas_UnAdminNoDictaNinguna(t *testing.T) {
 
 	// Sin el parámetro sigue valiendo lo de siempre: el Admin reserva en todas,
 	// y el fake devuelve su lista completa porque no le llega filtro.
-	if n := pedir("/api/academic/mis-materias"); n != 1 {
+	if n := pedir("/api/mis-materias"); n != 1 {
 		t.Fatalf("esperaba la lista completa, obtuve %d", n)
 	}
 	if repo.filtroDocenteRecibido != nil {
@@ -914,11 +1092,74 @@ func TestHTTP_MisMaterias_Asignadas_UnAdminNoDictaNinguna(t *testing.T) {
 	}
 
 	// Con el parámetro pregunta por asignación, y ahí el rol no cambia nada.
-	pedir("/api/academic/mis-materias?asignadas=true")
+	pedir("/api/mis-materias?asignadas=true")
 	if repo.filtroDocenteRecibido == nil {
 		t.Fatal("con asignadas=true tiene que filtrar por la persona, no filtró")
 	}
 	if *repo.filtroDocenteRecibido != "admin1" {
 		t.Errorf("filtró por %q, esperaba admin1", *repo.filtroDocenteRecibido)
+	}
+}
+
+func (r *fakeRepo) CiclosDeCursos(ctx context.Context, ids []string) (map[string]string, error) {
+	ciclos := make(map[string]string, len(ids))
+	for _, id := range ids {
+		if c, existe := r.cursos[id]; existe {
+			ciclos[id] = c.CicloLectivoID
+		}
+	}
+	return ciclos, nil
+}
+
+// fakeMarcas: cuántas marcas de preferencia de equipo dejan de aplicar al
+// renombrar una materia. Cero salvo que un test diga otra cosa — el aviso es
+// información, no una regla, así que la mayoría de los tests no lo mira.
+type fakeMarcas struct {
+	cuantas        int
+	err            error
+	nombreRecibido string
+}
+
+func (f *fakeMarcas) CuantasDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error) {
+	f.nombreRecibido = materiaNombre
+	return f.cuantas, f.err
+}
+
+// ── GET de un recurso solo ──────────────────────────────────────────────
+
+func TestHTTP_ObtenerCicloCursoYMateria(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.ciclos["ciclo1"] = &domain.CicloLectivo{ID: "ciclo1", Anio: 2026, Activo: true}
+	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", CicloLectivoID: "ciclo1", Anio: 1, Division: "A"}
+	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "curso1", Nombre: "Matemáticas"}
+	app := nuevaAppDeTest(repo)
+
+	// Como DOCENTE a propósito: la estructura académica se lee sin ser Admin,
+	// igual que en los listados — un docente necesita verla para reservar.
+	for _, ruta := range []string{"/api/ciclos/ciclo1", "/api/cursos/curso1", "/api/materias/m1"} {
+		t.Run(ruta, func(t *testing.T) {
+			req := httptest.NewRequest("GET", ruta, nil)
+			req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
+
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatalf("error inesperado: %v", err)
+			}
+			if resp.StatusCode != fiber.StatusOK {
+				t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+			}
+		})
+	}
+}
+
+func TestHTTP_ObtenerCurso_NoExiste_404(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("GET", "/api/cursos/no-existe", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("esperaba 404, obtuve %d", resp.StatusCode)
 	}
 }

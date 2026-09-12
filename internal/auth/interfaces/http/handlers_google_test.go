@@ -296,7 +296,7 @@ func TestHTTP_RegistrarConGoogle_NoConfigurado_503(t *testing.T) {
 
 // ── Convivencia con el resto de auth ──────────────────────────────────
 
-// GET /api/auth/me tiene que decir cómo entra la cuenta, para que la pantalla
+// GET /api/mi-perfil tiene que decir cómo entra la cuenta, para que la pantalla
 // de perfil no le ofrezca "cambiar contraseña" a quien no tiene ninguna.
 func TestHTTP_Me_InformaComoIngresaLaCuenta(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -306,7 +306,7 @@ func TestHTTP_Me_InformaComoIngresaLaCuenta(t *testing.T) {
 	}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/auth/me", nil)
+	req := httptest.NewRequest("GET", "/api/mi-perfil", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
 	resp, err := app.Test(req)
 	if err != nil {

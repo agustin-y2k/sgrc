@@ -1,4 +1,4 @@
-.PHONY: test lint build docker-build run dev rebuild dev-down run-prod levantar reconectar-tunel stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report observabilidad observabilidad-stop
+.PHONY: test lint build docker-build run dev rebuild dev-down run-prod levantar reconectar-tunel stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report observabilidad observabilidad-stop capturas capturas-pdf
 
 test:
 	go test ./... -coverprofile=coverage.out
@@ -128,6 +128,19 @@ ps:
 # máquina se llega por un túnel de SSH: publicarlos en la red de la
 # institución sería dejar dos paneles de administración a la vista.
 observabilidad:
+# Antes de levantar nada, la contraseña de Grafana. El compose tiene un valor
+# por defecto —lo necesita para que el archivo se pueda interpretar incluso en
+# un despliegue que nunca use este perfil— y ese valor está escrito en el
+# repositorio, así que si nadie lo cambia el panel queda con una contraseña
+# pública. Este chequeo es la puerta: el perfil se levanta desde acá, y desde
+# acá se puede mirar el .env y negarse.
+	@clave=$$(grep -E '^GRAFANA_PASSWORD=' .env 2>/dev/null | cut -d= -f2-); \
+	if [ -z "$$clave" ] || [ "$$clave" = "cambiar_por_una_contrasena_larga" ]; then \
+		echo "GRAFANA_PASSWORD no está definida en el .env (o quedó con el valor de ejemplo)."; \
+		echo "Grafana queda con una contraseña que está publicada en el repositorio."; \
+		echo "Generá una con \`openssl rand -base64 24\` y ponela en el .env."; \
+		exit 1; \
+	fi
 	docker compose --profile observabilidad up -d
 
 # Apaga solo los tableros y deja el sistema andando.
@@ -184,9 +197,15 @@ endif
 # se vuelven a compilar, los datos no. Conviene correrlo antes de actualizar
 # y antes de aplicar una migración.
 backup:
-	@docker compose exec -T postgres sh -c \
+# `umask 077` antes de la redirección: el archivo lo crea la shell de make, y
+# con el umask normal queda 0644, o sea legible por cualquier usuario del
+# servidor. El volcado tiene el nombre, el correo y el cargo de todo el mundo en
+# texto plano —las contraseñas de las máquinas no, esas van cifradas con
+# CUENTAS_SECRET, ver internal/shared/secretos—. Con 0600 lo lee solo quien lo
+# generó.
+	@umask 077; docker compose exec -T postgres sh -c \
 		'pg_dump -U "$$POSTGRES_USER" "$$POSTGRES_DB"' > backup-sgrc-$$(date +%F).sql
-	@echo "Backup en backup-sgrc-$$(date +%F).sql"
+	@echo "Backup en backup-sgrc-$$(date +%F).sql (solo lo podés leer vos: 0600)"
 
 # ── Datos iniciales ───────────────────────────────────────────────────
 
@@ -207,3 +226,23 @@ seed-datos:
 
 coverage-report:
 	go tool cover -html=coverage.out -o coverage.html
+
+# ── Las guías (el detalle está en docs/guias/generar/README.md) ───────
+
+# Regenera TODAS las capturas y los dos PDF, de punta a punta.
+#
+# Levanta su propia pila en el proyecto `sgrc-capturas` y la baja al terminar:
+# la base de desarrollo no se toca. Tarda varios minutos y necesita los puertos
+# 8080/8081/5432 libres, así que si tenés la pila de desarrollo arriba hay que
+# pararla antes (`make stop`) — las dos usan los mismos puertos y no conviven.
+capturas:
+	./docs/guias/generar/capturar-todo.sh
+
+# Solo los dos PDF, sin capturas, sin base y sin Docker Compose.
+#
+# Es lo único que hace falta cuando cambia la VERSIÓN o el texto de una guía:
+# la portada es parte del documento, pero las capturas muestran a propósito el
+# pie de la versión anterior —se sacan antes del bump— y regenerar cincuenta
+# imágenes por un dígito no se justifica. Son dos minutos.
+capturas-pdf:
+	./docs/guias/generar/capturar-todo.sh --solo-pdf

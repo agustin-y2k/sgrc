@@ -44,7 +44,7 @@ describe("LicenciasPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
-      data: [{ id: "c1", nombre: "Carro 1" }],
+      data: [{ id: "c1", nombre: "Carro 1", dadoDeBaja: false }],
     })
     // El inventario entero, en una sola consulta: la lista incluye lo que no
     // está en ningún carro, que también puede tener software licenciado.

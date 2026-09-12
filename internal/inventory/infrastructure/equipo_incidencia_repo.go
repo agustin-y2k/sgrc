@@ -22,7 +22,7 @@ const columnasEquipo = `id, carro_id, identificador, numero_serie, freezado, cpu
 	EXISTS (SELECT 1 FROM equipo_cuenta ec WHERE ec.equipo_id = equipo.id) AS tiene_cuentas`
 
 func (r *PostgresRepo) CrearEquipo(ctx context.Context, pc *domain.Equipo) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := r.db.Exec(ctx, `
 		INSERT INTO equipo (id, carro_id, identificador, numero_serie, freezado, cpu, ram, sistema_operativo, software_instalado, estado, dado_de_baja, fecha_alta, tipo, nombre, reservable, es_computadora)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`, pc.ID, nullIfEmpty(pc.CarroID), nullSiCero(pc.Identificador), nullIfEmpty(pc.NumeroSerie), pc.Freezado,
@@ -44,7 +44,7 @@ func (r *PostgresRepo) CrearEquipo(ctx context.Context, pc *domain.Equipo) error
 }
 
 func (r *PostgresRepo) BuscarEquipoPorID(ctx context.Context, id string) (*domain.Equipo, error) {
-	row := r.pool.QueryRow(ctx, `SELECT `+columnasEquipo+` FROM equipo WHERE id = $1`, id)
+	row := r.db.QueryRow(ctx, `SELECT `+columnasEquipo+` FROM equipo WHERE id = $1`, id)
 	return escanearEquipo(row)
 }
 
@@ -106,7 +106,7 @@ func escanearEquipo(row pgx.Row) (*domain.Equipo, error) {
 }
 
 func (r *PostgresRepo) GuardarEquipo(ctx context.Context, pc *domain.Equipo) error {
-	tag, err := r.pool.Exec(ctx, `
+	tag, err := r.db.Exec(ctx, `
 		UPDATE equipo SET
 			carro_id=$2, identificador=$3, numero_serie=$4, freezado=$5,
 			cpu=$6, ram=$7, sistema_operativo=$8, software_instalado=$9,
@@ -136,7 +136,7 @@ func (r *PostgresRepo) GuardarEquipo(ctx context.Context, pc *domain.Equipo) err
 }
 
 func (r *PostgresRepo) ListarEquiposPorCarro(ctx context.Context, carroID string) ([]*domain.Equipo, error) {
-	rows, err := r.pool.Query(ctx, `SELECT `+columnasEquipo+` FROM equipo WHERE carro_id = $1 ORDER BY identificador`, carroID)
+	rows, err := r.db.Query(ctx, `SELECT `+columnasEquipo+` FROM equipo WHERE carro_id = $1 ORDER BY identificador`, carroID)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
@@ -164,7 +164,7 @@ func (r *PostgresRepo) ListarEquiposPorCarro(ctx context.Context, carroID string
 const columnasIncidencia = `id, equipo_id, reportado_por, descripcion, COALESCE(categoria, ''), gravedad, fecha, enviado_a_soporte, fecha_envio_a_soporte, estado`
 
 func (r *PostgresRepo) CrearIncidencia(ctx context.Context, i *domain.Incidencia) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := r.db.Exec(ctx, `
 		INSERT INTO incidencia (id, equipo_id, reportado_por, descripcion, categoria, gravedad, fecha, enviado_a_soporte, estado)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`, i.ID, i.EquipoID, i.ReportadoPor, i.Descripcion, nullIfEmpty(i.Categoria),
@@ -182,7 +182,7 @@ func (r *PostgresRepo) CrearIncidencia(ctx context.Context, i *domain.Incidencia
 }
 
 func (r *PostgresRepo) BuscarIncidenciaPorID(ctx context.Context, id string) (*domain.Incidencia, error) {
-	row := r.pool.QueryRow(ctx, `SELECT `+columnasIncidencia+` FROM incidencia WHERE id = $1`, id)
+	row := r.db.QueryRow(ctx, `SELECT `+columnasIncidencia+` FROM incidencia WHERE id = $1`, id)
 	return escanearIncidencia(row)
 }
 
@@ -219,7 +219,7 @@ func escanearIncidencia(row pgx.Row) (*domain.Incidencia, error) {
 }
 
 func (r *PostgresRepo) GuardarIncidencia(ctx context.Context, i *domain.Incidencia) error {
-	tag, err := r.pool.Exec(ctx, `
+	tag, err := r.db.Exec(ctx, `
 		UPDATE incidencia SET
 			descripcion=$2, categoria=$3, gravedad=$4, enviado_a_soporte=$5, fecha_envio_a_soporte=$6, estado=$7
 		WHERE id=$1
@@ -240,7 +240,7 @@ func (r *PostgresRepo) GuardarIncidencia(ctx context.Context, i *domain.Incidenc
 // CategoriasDeFallaUsadas devuelve las categorías ya cargadas, una sola vez
 // cada una y en orden alfabético.
 func (r *PostgresRepo) CategoriasDeFallaUsadas(ctx context.Context) ([]string, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT DISTINCT ON (lower(categoria)) categoria
 		FROM incidencia
 		WHERE categoria IS NOT NULL
@@ -262,8 +262,16 @@ func (r *PostgresRepo) CategoriasDeFallaUsadas(ctx context.Context) ([]string, e
 	return resultado, errorDeFilas(rows)
 }
 
-func (r *PostgresRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error) {
-	rows, err := r.pool.Query(ctx, `SELECT `+columnasIncidencia+` FROM incidencia WHERE equipo_id = $1 ORDER BY fecha DESC`, equipoID)
+// ListarIncidenciasPorEquipo: las últimas `limite` fallas de una máquina, de la
+// más nueva a la más vieja. El ORDER BY y el LIMIT van juntos: sin el orden, el
+// recorte se quedaría con fallas cualesquiera en vez de las últimas.
+//
+// El índice `(equipo_id, fecha DESC)` sirve exactamente a esta forma, así que el
+// recorte lo hace la base sin ordenar nada.
+func (r *PostgresRepo) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string, limite int) ([]*domain.Incidencia, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT `+columnasIncidencia+` FROM incidencia WHERE equipo_id = $1 ORDER BY fecha DESC LIMIT $2`,
+		equipoID, limite)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
@@ -326,7 +334,7 @@ func (r *PostgresRepo) ListarEquipos(ctx context.Context, soloSueltos bool) ([]*
 	if soloSueltos {
 		filtro = " WHERE carro_id IS NULL"
 	}
-	rows, err := r.pool.Query(ctx,
+	rows, err := r.db.Query(ctx,
 		`SELECT `+columnasEquipo+` FROM equipo`+filtro+
 			` ORDER BY carro_id NULLS FIRST, tipo, nombre, identificador`)
 	if err != nil {

@@ -32,7 +32,10 @@ type Repo interface {
 	Crear(ctx context.Context, u *domain.Usuario) error
 	Guardar(ctx context.Context, u *domain.Usuario) error
 	ContarAdminsAprobados(ctx context.Context) (int, error)
-	Eliminar(ctx context.Context, id string) error
+	// Eliminar borra la cuenta y devuelve qué se llevó con ella en cascada
+	// (RF-01.9). El conteo va con el borrado y no aparte: después del DELETE ya
+	// no hay nada que contar.
+	Eliminar(ctx context.Context, id string) (ResultadoEliminacion, error)
 
 	// ── Recuperación de contraseña ────────────────── CrearCodigoRecuperacion
 	// invalida los códigos anteriores de esa persona y guarda el nuevo, de forma
@@ -107,4 +110,30 @@ type GestorMateriasDocente interface {
 // infrastructure/ de este paquete.
 type CanceladorReservasDeMateria interface {
 	CancelarReservasFuturasDeMateria(ctx context.Context, materiaID, motivo string) (canceladas int, err error)
+}
+
+// ResultadoEliminacion es lo que se fue con la cuenta.
+//
+// Sólo lo que se BORRA y el Admin no espera: pide la eliminación para liberar
+// un email (RF-01.9) y se lleva también el hilo de soporte con las respuestas
+// que él mismo escribió, y el horario de guardia —que desde RF-07.6 decide si
+// el barrido actúa en esos tramos—.
+//
+// Lo que SOBREVIVE perdiendo la referencia —reservas, préstamos, incidencias,
+// el histórico de uso— no se cuenta: no se pierde nada y el número sería ruido.
+type ResultadoEliminacion struct {
+	HilosDeSoporte    int
+	MensajesDeSoporte int
+	// BloquesDeGuardia es el que más consecuencias tiene y menos se espera:
+	// sin horarios de guardia cargados, el barrido de RF-07.6 cambia de
+	// comportamiento.
+	BloquesDeGuardia int
+	Notificaciones   int
+	PedidosDeMateria int
+}
+
+// SeLlevoAlgo dice si hay algo que valga la pena contarle a quien la pidió.
+func (r ResultadoEliminacion) SeLlevoAlgo() bool {
+	return r.HilosDeSoporte > 0 || r.BloquesDeGuardia > 0 ||
+		r.Notificaciones > 0 || r.PedidosDeMateria > 0
 }

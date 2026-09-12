@@ -117,6 +117,13 @@ func NuevaNotificacion(id, usuarioID, mensaje string, tipo Tipo, ref Referencias
 
 var ErrYaLeida = errors.New("la notificación ya está marcada como leída")
 
+// EstaLeida es la pregunta del otro lado de MarcarLeida. Existe para que quien
+// necesita saberlo —borrar un aviso exige que ya se haya leído— no tenga que
+// comparar contra la constante de estado por su cuenta.
+func (n *Notificacion) EstaLeida() bool {
+	return n.Estado == Leida
+}
+
 // MarcarLeida es idempotente a propósito de NO serlo silenciosamente:
 // devuelve ErrYaLeida si se llama dos veces, para que la capa de arriba
 // decida si eso es un error real o algo que puede ignorar (ej.

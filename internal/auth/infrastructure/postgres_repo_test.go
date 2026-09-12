@@ -288,7 +288,7 @@ func TestPostgresRepo_Eliminar_OK(t *testing.T) {
 		t.Fatalf("no debería fallar creando: %v", err)
 	}
 
-	if err := repo.Eliminar(ctx, u.ID); err != nil {
+	if _, err := repo.Eliminar(ctx, u.ID); err != nil {
 		t.Fatalf("no debería fallar eliminando: %v", err)
 	}
 
@@ -332,7 +332,7 @@ func TestPostgresRepo_Eliminar_ConReglaRecurrenteEHistorico_OK(t *testing.T) {
 		}
 	}
 
-	if err := repo.Eliminar(ctx, u.ID); err != nil {
+	if _, err := repo.Eliminar(ctx, u.ID); err != nil {
 		t.Fatalf("el hard delete de RF-01.9 no debería fallar: %v", err)
 	}
 
@@ -363,7 +363,7 @@ func TestPostgresRepo_Eliminar_Inexistente_ErrUsuarioNoEncontrado(t *testing.T) 
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 
-	err := repo.Eliminar(context.Background(), NuevoID())
+	_, err := repo.Eliminar(context.Background(), NuevoID())
 
 	if err != application.ErrUsuarioNoEncontrado {
 		t.Fatalf("esperaba ErrUsuarioNoEncontrado, obtuve %v", err)
@@ -527,7 +527,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 		fn     func() error
 	}{
 		{"BuscarPorID", func() error { _, err := repo.BuscarPorID(ctx, "USUARIO_ID"); return err }},
-		{"Eliminar", func() error { return repo.Eliminar(ctx, "USUARIO_ID") }},
+		{"Eliminar", func() error { _, err := repo.Eliminar(ctx, "USUARIO_ID"); return err }},
 	}
 
 	for _, c := range casos {

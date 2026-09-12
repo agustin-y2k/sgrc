@@ -9,7 +9,7 @@
 | Paquete | Responsabilidad |
 |---|---|
 | `internal/auth` | Usuarios, JWT, aprobación de cuentas docentes |
-| `internal/academic` | Ciclos lectivos, cursos, materias, DocenteMateria, clonado |
+| `internal/academic` | Ciclos lectivos, cursos, materias, DocenteMateria, clonado y carga masiva |
 | `internal/inventory` | Carros, equipos, incidencias, licencias |
 | `internal/reservation` | Reservas, solapamiento, recurrencias, bloqueo, job de vencimiento |
 | `internal/notification` | Notificaciones internas y las copias por email de algunas de ellas (RF-05.8) |
@@ -22,6 +22,8 @@
 | `internal/shared/secretos` | Cifra y descifra lo que el sistema tiene que poder **leer de vuelta** (AES-256-GCM). Hoy lo usa una sola cosa: las contraseñas de las cuentas de cada equipo (RF-03.22), que no se pueden hashear como la de un usuario porque a un hash no se le pregunta cuál era. Sin `CUENTAS_SECRET` queda en `nil` y responde "esta función no está disponible" en vez de romper |
 | `internal/shared/audit` | Escritura del `audit_log` (ver `09-seguridad-rbac.md` §5) |
 | `internal/shared/paginacion` | Ventana de resultados y `meta` de los listados paginados |
+| `internal/shared/texto` | La única regla que decide si dos textos nombran la misma cosa. Espeja `clave_texto()` de la base, con un test de paridad contra Postgres (RF-00.1) |
+| `internal/shared/respuesta` | Lo que todas las capas HTTP contestan igual. Hoy: el `201` con su `Location`. Está en `shared/` por lo mismo que `paginacion` — escrita nueve veces, la regla se despega de a poco hasta dejar de ser una regla |
 | `internal/shared/adminseed` | Decisión de "sembrar el primer Admin si hace falta", sin dependencias externas |
 | `internal/shared/archtest`, `authtest`, `testdb` | Solo para tests: el que verifica los límites de paquete, el armado de autenticación y el Postgres efímero |
 
@@ -104,6 +106,12 @@ type EventBus interface {
 
 La convención evita el problema en vez de documentarlo: **una condición sobre una colección es un query param** (`/equipos?enCarro=false`), y **un concepto distinto es una colección hermana** (`/categorias-de-falla`, que no son incidencias sino el vocabulario con el que se las clasifica). Lo que sí puede ir en el path es una relación real de pertenencia: `/carros/{id}/equipos` son los equipos DE ese carro.
 
+**Tres casos no se pudieron evitar, y ahí el orden lo sostiene un test.** `/preferencias/huerfanas`, `/notifications/leidas` y `/notifications/preferencias-email` son conceptos distintos que comparten posición con un `:id`, y los tres se volvieron frágiles el día que se agregó el `GET` o el `DELETE` de ese recurso individual. Están registrados **antes** que la ruta con parámetro, y cada uno tiene un test que pide la ruta literal y exige un 200: si alguien reordena las líneas, el test falla en vez de que la ruta desaparezca en silencio. Es la única forma de convertir "no reordenes esto" en una garantía.
+
+**El prefijo de cada ruta es el recurso, no el módulo.** Todas cuelgan de `/api` y el segmento siguiente nombra la cosa: `/api/equipos`, `/api/ciclos`, `/api/reservas`. Hasta la 1.21.0 el prefijo era el paquete de Go que servía la ruta —`/api/inventory/equipos`, `/api/academic/ciclos`— y eso obligaba a saber cómo está partido el servidor por dentro: el calendario de una máquina lo sirve `reservation` aunque la máquina sea de `inventory`, así que estaba en `/api/reservation/equipos/{id}/calendario`. Cuatro recursos vivían bajo dos módulos a la vez.
+
+Las cuatro excepciones son recursos que **ya** se llamaban por su nombre y se quedaron: `/api/auditoria`, `/api/notifications`, `/api/sugerencias` y `/api/jornada`. Y `/api/auth`, donde el segmento sí es el recurso: autenticarse. Lo propio de cada persona cuelga de `/api/mi-…` o `/api/mis-…` en la raíz, porque no es parte de autenticarse sino el usuario mirando lo suyo.
+
 **`Publish` corre en la goroutine de quien publica.** Eso no es un detalle: significa que un suscriptor lento se traduce directamente en un request HTTP lento. Por eso los handlers de `notification` no hacen su trabajo adentro del handler, sino que lo lanzan en su propia goroutine con un contexto y un timeout propios (el del request se cancela apenas se responde). Es lo que hace que registrar un docente no espere a que se abra una conexión SMTP, y lo que permite que cancelar una recurrencia de 40 fechas × 5 PCs no haga 200 `INSERT` en serie dentro del request. Un `sync.WaitGroup` en `main.go` registra las entregas en curso para que el apagado ordenado no se las lleve puestas.
 
 **Un mismo evento puede tener varios suscriptores, y se usa.** `docente.registro.pendiente` tiene dos: el que escribe el aviso interno y el que manda el mail (RF-05.8). `reserva.pedido-de-liberacion` (RF-04.12) sigue el mismo patrón, y es el caso donde más importa: el pedido de un docente a otro no puede quedarse sin llegar porque el SMTP esté caído, y al revés, la campana sola no alcanza cuando la clase es mañana. Están registrados por separado a propósito — el aviso interno es la fuente de verdad y el correo una copia, así que un fallo de SMTP no puede impedir que el aviso se escriba. `Publish` además recupera el panic de cada handler por separado, así que uno roto no se lleva a los demás.
@@ -116,7 +124,108 @@ La convención evita el problema en vez de documentarlo: **una condición sobre 
 
 Se modela como pub/sub (en vez de que `reservation` llame directo a `notification.Notificar()`) porque preserva un patrón de event-driven design real y deja la puerta abierta a que la implementación pase a un message broker (NATS, Kafka) sin tocar quién publica o se suscribe, si en el futuro hace falta desacoplar procesos.
 
-## 5. Diagrama de arquitectura
+## 5. Transacciones: `EnTransaccion` en el puerto
+
+Una operación que escribe varias filas se envuelve en una transacción, y la
+forma es siempre la misma: el puerto `Repo` del paquete expone
+
+```go
+EnTransaccion(ctx context.Context, fn func(Repo) error) error
+```
+
+y el servicio hace sus escrituras contra el `Repo` que recibe adentro. La
+implementación abre la transacción, corre `fn` con un repo atado a ella, y
+commitea sólo si `fn` no devolvió error.
+
+**Por qué en el puerto y no en el servicio.** El servicio no sabe que existe una
+base de datos, y no debería: lo que declara es «esto va junto». Que eso se
+resuelva con `BEGIN`/`COMMIT`, con un lote, o con nada —como en los tests, donde
+el fake corre `fn` derecho— es problema de quien implementa el puerto.
+
+**Reentrante a propósito.** Si el repo ya viene atado a una transacción,
+`EnTransaccion` reusa la misma en vez de anidar, para que el alcance del commit
+siga siendo el de afuera.
+
+**Lo que obliga a que el duplicado no sea un error.** En Postgres una sentencia
+que falla **aborta la transacción entera**: de ahí en adelante todo responde
+«current transaction is aborted». Eso choca de frente con las altas masivas, que
+tienen que poder saltear lo que ya existe y seguir. Por eso las inserciones de
+un lote usan `ON CONFLICT DO NOTHING` y devuelven un `bool` —«la creé» o «ya
+estaba»— en lugar de dejar reventar el INSERT y atrapar el 23505.
+
+Es la diferencia entre dos cosas que parecen la misma: *un duplicado* no es un
+error del lote y no lo voltea; *un fallo real* sí, y deshace todo.
+
+**Qué NO se envuelve.** El barrido que marca las licencias ya avisadas
+(`avisador_licencias.go`) escribe fila por fila a propósito: el correo ya salió,
+así que marcar la mitad es estrictamente mejor que marcar ninguna. Una
+transacción ahí garantizaría que un fallo repita el aviso para todas en vez de
+para algunas. La regla no es «todo va en una transacción» sino «lo que tiene que
+ser todo o nada, va».
+
+## 6. Topes: pool, consultas y transacciones
+
+`pgxpool` con los defaults deja dos huecos que sólo se notan el día que algo va
+mal, y los dos se cierran en `abrirPool` (`cmd/main.go`):
+
+| tope | valor | qué evita |
+|---|---|---|
+| `MaxConns` | 20 | Un pool que se dimensiona solo según los núcleos de la máquina es difícil de razonar cuando algo va lento. 20 deja lugar de sobra bajo el límite de 100 de Postgres para psql, las migraciones y una segunda instancia durante un despliegue. |
+| `statement_timeout` | 30 s | **El que faltaba.** Sin él, una consulta que se va de las manos se queda con una conexión indefinidamente, y con veinte alcanzan veinte de ésas para que el sistema deje de responder aunque Postgres esté perfecto. |
+| `idle_in_transaction_session_timeout` | 60 s | Una transacción abierta y quieta es peor que una consulta lenta: retiene su conexión **y** bloquea la limpieza de filas viejas en toda la base. |
+| `MaxConnLifetime` / `MaxConnIdleTime` | 30 / 5 min | Que una caída del otro lado —un reinicio, un cortafuegos que olvida la sesión— se note y se reponga, en vez de quedar como una conexión muerta que falla recién cuando alguien la usa. |
+
+Los dos timeouts van en la **configuración de la conexión** y no en un `SET`
+suelto: así los hereda toda conexión que el pool abra, incluidas las que reponga
+más tarde. Un `SET` después de conectar se aplicaría a una sola. Hay un test de
+integración que lo comprueba y otro que verifica que el tope **corte** de
+verdad.
+
+Cerrar el año no corre por este camino —va en su propia transacción— así que el
+tope de 30 segundos no lo limita.
+
+**Las operaciones de lote leen de a una consulta, no de a un elemento.** Un
+pedido puede traer hasta `MaxEquiposPorOperacion` = 200 máquinas —entregar contra
+reserva, recibir un lote, cancelar por ids, bloquear equipos— y hasta la 1.21.0
+cada uno de esos bucles pedía su fila por separado. Ahora hay tres lecturas por
+lote (`BuscarReservasPorIDs`, `BuscarPrestamosPorIDs`,
+`ListarReservasFuturasDeEquipos`) y el bucle sólo consulta el mapa que ya tiene.
+
+Las tres devuelven un **mapa por id** y no una lista, y eso no es estilo: es lo
+que preserva las dos cosas que la conversión rompe en silencio. El **orden** lo
+pone quien llama recorriendo su propia lista de ids, porque el resultado de una
+entrega se arma en el orden en que la pantalla mandó las máquinas y el recorrido
+de un mapa en Go es aleatorio entre corridas. Y **qué significa un id que no
+está** lo decide cada llamador, que no todos deciden igual: entregar y recibir
+devuelven error —el cliente mandó algo que no corresponde— mientras que cancelar
+en lote lo saltea, porque esa cascada la disparan otras operaciones y una reserva
+que desapareció en el medio es una menos que cancelar. Un mapa con lo que
+encontró preserva las dos; una lista "en el mismo orden" no.
+
+Donde el bucle **escribe** sigue habiendo una consulta por elemento, y es
+inherente: clonar un ciclo inserta curso por curso dentro de una transacción, y
+el tamaño lo acota el ciclo.
+
+## 7. Dónde vive cada regla
+
+- **El dominio** (`domain/`) valida lo que puede entrar: formatos, largos,
+  transiciones de estado. No sabe que existe una base de datos.
+- **El servicio** (`application/`) decide **quién puede hacer qué**. Las reglas
+  de pertenencia son del dominio, no del transporte: una comprobación que sólo
+  hace el handler la saltea cualquier otro llamador sin enterarse. El servicio
+  recibe quién pide y con qué rol, y devuelve un error de negocio.
+- **El transporte** (`interfaces/http/`) traduce: parsea el pedido, aporta los
+  claims y mapea cada error de negocio a su código. **No decide nada.**
+- **La base** sostiene los invariantes que no pueden depender de que el código
+  se acuerde: unicidad, integridad referencial, coherencia entre columnas. El
+  chequeo previo en Go existe para devolver un mensaje legible, no para
+  garantizar la regla.
+
+Lo que hace útil esta división es la pregunta que contesta: *si mañana esto se
+llamara desde un script, una cola o un test, ¿seguiría valiendo?* Si la
+respuesta es que sí, la regla no va en el handler.
+
+## 8. Diagrama de arquitectura
 
 ```mermaid
 flowchart TB
@@ -149,7 +258,7 @@ flowchart TB
     EB -.consume.-> NOTIF & REP
 ```
 
-## 6. Diagrama de despliegue
+## 9. Diagrama de despliegue
 
 ```mermaid
 flowchart TB
@@ -183,7 +292,7 @@ institución permitiría falsificar el header con la IP real del cliente
 
 **Presupuesto de RAM estimado: ~150–200 MB total**, cómodo dentro de los 8 GB compartidos del servidor.
 
-## 7. Decisiones de diseño
+## 10. Decisiones de diseño
 
 | Decisión | Justificación |
 |---|---|

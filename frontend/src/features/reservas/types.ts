@@ -95,7 +95,7 @@ export type Reserva = {
 
 /**
  * Una Reserva con los nombres que resuelve el JOIN de `GET
- * /api/reservation/reservas` (espeja reservaDetalladaResponse).
+ * /api/reservas` (espeja reservaDetalladaResponse).
  */
 export type ReservaDetallada = Reserva & {
   /** Cómo se nombra el equipo: "PC 3" o "Proyector Epson". */

@@ -193,10 +193,6 @@ func (s *Service) ListarMisPedidos(ctx context.Context, usuarioID string) ([]*Pe
 	return s.repo.ListarPedidosDeUsuario(ctx, usuarioID)
 }
 
-func (s *Service) ContarPedidosPendientes(ctx context.Context) (int, error) {
-	return s.repo.ContarPedidosPendientes(ctx)
-}
-
 func aDocentesDeEvento(cs []ContactoDeDocente) []eventbus.DocenteDeMateria {
 	if len(cs) == 0 {
 		return nil

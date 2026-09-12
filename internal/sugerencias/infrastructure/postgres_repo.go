@@ -209,15 +209,6 @@ func (r *PostgresRepo) ListarDeUsuario(ctx context.Context, usuarioID string, p 
 	return resultado, total, err
 }
 
-func (r *PostgresRepo) ContarAbiertas(ctx context.Context) (int, error) {
-	var n int
-	if err := r.db.QueryRow(ctx,
-		`SELECT count(*) FROM sugerencia WHERE estado = 'ABIERTA'`).Scan(&n); err != nil {
-		return 0, fmt.Errorf("contando sugerencias abiertas: %w", err)
-	}
-	return n, nil
-}
-
 // escanearConMensajes trae los hilos de la página y DESPUÉS todos sus
 // mensajes en una sola consulta más. Con una consulta por hilo, una bandeja
 // de veinte serían veintiuna idas a la base para dibujar una lista.

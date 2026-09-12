@@ -64,7 +64,7 @@ describe("InventarioAdminPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
-      data: [{ id: "c1", nombre: "Carro 1" }],
+      data: [{ id: "c1", nombre: "Carro 1", dadoDeBaja: false }],
     })
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo()] })
     vi.mocked(adminApi.cambiarEstadoEquipo).mockResolvedValue({
@@ -75,7 +75,7 @@ describe("InventarioAdminPage", () => {
       reservasCanceladas: 0,
       docentesNotificados: 0,
     })
-    vi.mocked(adminApi.crearCarro).mockResolvedValue({ id: "c2", nombre: "Carro 2" })
+    vi.mocked(adminApi.crearCarro).mockResolvedValue({ id: "c2", nombre: "Carro 2", dadoDeBaja: false })
     vi.mocked(adminApi.editarCarro).mockResolvedValue(undefined)
     vi.mocked(adminApi.crearEquipoDeCarro).mockResolvedValue(
       equipo({ id: "pc9", identificador: 9 })
@@ -324,8 +324,8 @@ describe("InventarioAdminPage", () => {
   it("mueve un equipo a otro carro", async () => {
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
       data: [
-        { id: "c1", nombre: "Carro 1" },
-        { id: "c2", nombre: "Carro 2" },
+        { id: "c1", nombre: "Carro 1", dadoDeBaja: false },
+        { id: "c2", nombre: "Carro 2", dadoDeBaja: false },
       ],
     })
     const user = userEvent.setup()
@@ -526,5 +526,166 @@ describe("InventarioAdminPage", () => {
     // Y desde acá se pueden cargar, que es el motivo de que el botón exista.
     expect(screen.getByRole("button", { name: "Agregar cuenta" })).toBeInTheDocument()
     expect(inventoryApi.listarCuentasDeEquipo).toHaveBeenCalledWith("pc1")
+  })
+
+  // ── Deshacer una baja ────────────────────────────────────────────────
+  //
+  // Hasta que esto existió, una baja hecha sobre la fila equivocada sólo se
+  // revertía con un UPDATE a mano en el servidor.
+
+  it("muestra los equipos dados de baja recién cuando se los pide", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+      data: [equipo(), equipo({ id: "pc2", identificador: 2, dadoDeBaja: true })],
+    })
+    renderPagina()
+    await abrirCarro(user)
+
+    // De entrada no está: el inventario del día a día es el que sigue vivo.
+    expect(screen.queryByRole("button", { name: "Devolver al inventario" })).toBeNull()
+
+    await user.click(
+      await screen.findByRole("button", { name: /Ver los 1 equipos dados de baja/ })
+    )
+
+    expect(
+      await screen.findByRole("button", { name: "Devolver al inventario" })
+    ).toBeInTheDocument()
+  })
+
+  it("devuelve un equipo al inventario", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+      data: [equipo({ id: "pc2", identificador: 2, dadoDeBaja: true })],
+    })
+    vi.mocked(adminApi.reactivarEquipo).mockResolvedValue(undefined)
+    renderPagina()
+    await abrirCarro(user)
+
+    await user.click(
+      await screen.findByRole("button", { name: /Ver los 1 equipos dados de baja/ })
+    )
+    await user.click(await screen.findByRole("button", { name: "Devolver al inventario" }))
+
+    expect(adminApi.reactivarEquipo).toHaveBeenCalledWith("pc2")
+  })
+
+  // El error que importa: la baja libera el zócalo, el nombre y la serie, así
+  // que otro pudo habérselos llevado. El mensaje del servidor dice cuál.
+  it("explica por qué un equipo no puede volver", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+      data: [equipo({ id: "pc2", identificador: 2, dadoDeBaja: true })],
+    })
+    vi.mocked(adminApi.reactivarEquipo).mockRejectedValue(
+      new ApiError(409, "ya existe un equipo con ese identificador en el carro")
+    )
+    renderPagina()
+    await abrirCarro(user)
+
+    await user.click(
+      await screen.findByRole("button", { name: /Ver los 1 equipos dados de baja/ })
+    )
+    await user.click(await screen.findByRole("button", { name: "Devolver al inventario" }))
+
+    expect(
+      await screen.findByText("ya existe un equipo con ese identificador en el carro")
+    ).toBeInTheDocument()
+  })
+
+  it("devuelve un carro a circulación", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarCarrosConRetirados).mockResolvedValue({
+      data: [
+        { id: "c1", nombre: "Carro 1", dadoDeBaja: false },
+        { id: "c9", nombre: "Carro viejo", dadoDeBaja: true },
+      ],
+    })
+    vi.mocked(adminApi.reactivarCarro).mockResolvedValue(undefined)
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Ver los carros retirados" })
+    )
+
+    expect(await screen.findByText("Carro viejo")).toBeInTheDocument()
+    await user.click(await screen.findByRole("button", { name: "Devolver a circulación" }))
+
+    expect(adminApi.reactivarCarro).toHaveBeenCalledWith("c9")
+  })
+
+  // Sin esto, "Ver los carros retirados" no podía mostrar nada nunca: el
+  // backend tenía la baja desde el principio y la pantalla sólo sabía
+  // reactivar.
+  it("da de baja un carro", async () => {
+    const user = userEvent.setup()
+    vi.mocked(adminApi.darDeBajaCarro).mockResolvedValue(undefined)
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Dar de baja el carro" })
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "Confirmar la baja del carro" })
+    )
+
+    expect(adminApi.darDeBajaCarro).toHaveBeenCalledWith("c1")
+  })
+
+  // Las dos cosas que no se ven desde la tarjeta y cambian la decisión.
+  it("avisa que el carro tiene que estar vacío y que el nombre se libera", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Dar de baja el carro" })
+    )
+
+    expect(await screen.findByText(/ningún equipo activo adentro/)).toBeInTheDocument()
+    expect(screen.getByText(/nombre queda libre/)).toBeInTheDocument()
+  })
+
+  // El caso normal, no el excepcional: nadie vacía un carro antes de decidir
+  // sacarlo, así que el 409 es lo primero que ve casi siempre.
+  it("muestra el rechazo del servidor si el carro todavía tiene equipos", async () => {
+    const user = userEvent.setup()
+    vi.mocked(adminApi.darDeBajaCarro).mockRejectedValue(
+      new ApiError(409, "el carro todavía tiene equipos adentro — movelos a otro carro o dalos de baja primero")
+    )
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Dar de baja el carro" })
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "Confirmar la baja del carro" })
+    )
+
+    expect(await screen.findByText(/todavía tiene equipos adentro/)).toBeInTheDocument()
+  })
+
+  // Un carro retirado no puede ofrecerse como destino al mover un equipo: es
+  // el mismo agujero que verificarCarroDisponible tapa del lado del servidor.
+  it("no ofrece los carros retirados como destino de un equipo", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarCarrosConRetirados).mockResolvedValue({
+      data: [
+        { id: "c1", nombre: "Carro 1", dadoDeBaja: false },
+        { id: "c9", nombre: "Carro viejo", dadoDeBaja: true },
+      ],
+    })
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Ver los carros retirados" })
+    )
+    await abrirCarro(user)
+    await user.click(await screen.findByRole("button", { name: "Editar" }))
+
+    // El positivo primero: sin él, agarrar el elemento equivocado haría pasar
+    // la aserción de abajo sin probar nada.
+    const destinos = await screen.findByLabelText("Carro")
+    expect(destinos).toHaveTextContent("Carro 1")
+    expect(destinos).not.toHaveTextContent("Carro viejo")
   })
 })

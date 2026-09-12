@@ -45,7 +45,7 @@ func claimsDelContexto(c *fiber.Ctx) (*middleware.Claims, error) {
 	return claims, nil
 }
 
-// GET /api/availability/admins — cualquier usuario autenticado (RF-07.2).
+// GET /api/guardia — cualquier usuario autenticado (RF-07.2).
 // No restringe ninguna operación que haga una persona, pero de estos horarios
 // depende que el barrido automático actúe (RF-07.6).
 func (h *Handler) DisponibilidadDeAdmins(c *fiber.Ctx) error {
@@ -61,7 +61,7 @@ func (h *Handler) DisponibilidadDeAdmins(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/availability/mi-horario (Admin) — el patrón semanal propio.
+// GET /api/mi-horario (Admin) — el patrón semanal propio.
 func (h *Handler) MiHorario(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -80,7 +80,7 @@ func (h *Handler) MiHorario(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// POST /api/availability/mi-horario (Admin) — RF-07.1/07.3, aplica de
+// POST /api/mi-horario (Admin) — RF-07.1/07.3, aplica de
 // inmediato para todas las semanas futuras.
 func (h *Handler) AgregarBloque(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
@@ -113,7 +113,7 @@ func (h *Handler) AgregarBloque(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toBloqueResponse(bloque))
 }
 
-// PATCH /api/availability/mi-horario/{id} (Admin) — la titularidad se
+// PATCH /api/mi-horario/{id} (Admin) — la titularidad se
 // resuelve en application/Repo (acotada por usuario_id), no acá: si el bloque
 // no es del usuario autenticado, el resultado es indistinguible de "no
 // existe" (404).
@@ -161,7 +161,7 @@ func (h *Handler) EditarBloque(c *fiber.Ctx) error {
 	return c.JSON(toBloqueResponse(bloque))
 }
 
-// DELETE /api/availability/mi-horario/{id} (Admin) — mismo criterio de
+// DELETE /api/mi-horario/{id} (Admin) — mismo criterio de
 // titularidad que EditarBloque.
 func (h *Handler) EliminarBloque(c *fiber.Ctx) error {
 	id := c.Params("id")
@@ -176,7 +176,7 @@ func (h *Handler) EliminarBloque(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
-// POST /api/availability/mi-excepcion (Admin) — RF-07.4. Reemplaza la
+// POST /api/mi-excepcion (Admin) — RF-07.4. Reemplaza la
 // excepción existente para esa fecha si ya había una.
 func (h *Handler) CargarExcepcion(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
@@ -221,7 +221,7 @@ func (h *Handler) CargarExcepcion(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toExcepcionResponse(excepcion))
 }
 
-// POST /api/availability/no-disponible-ahora (Admin) — RF-07.5, atajo de un
+// POST /api/no-disponible-ahora (Admin) — RF-07.5, atajo de un
 // solo paso equivalente a POST /mi-excepcion con tipo=NO_DISPONIBLE para hoy.
 func (h *Handler) MarcarNoDisponibleAhora(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)

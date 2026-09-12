@@ -15,7 +15,7 @@ import (
 func TestHTTP_MarcarPreferencia_EnVariosEquipos_201(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/inventory/preferencias", jsonBody(marcarPreferenciaRequest{
+	req := httptest.NewRequest("POST", "/api/preferencias", jsonBody(marcarPreferenciaRequest{
 		EquipoIDs: []string{"e1", "e2"}, MateriaNombre: "Dibujo Técnico",
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -50,7 +50,7 @@ func TestHTTP_MarcarPreferencia_ConCursoYModalidad_ArmaElAlcance(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	cuatro, division, modalidad := 4, "2", "Electromecánica"
-	req := httptest.NewRequest("POST", "/api/inventory/preferencias", jsonBody(marcarPreferenciaRequest{
+	req := httptest.NewRequest("POST", "/api/preferencias", jsonBody(marcarPreferenciaRequest{
 		EquipoIDs: []string{"e1"}, MateriaNombre: "Matemática",
 		Anio: &cuatro, Division: &division, Modalidad: &modalidad,
 	}))
@@ -77,7 +77,7 @@ func TestHTTP_MarcarPreferencia_ModalidadEnBlanco_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	enBlanco := "   "
-	req := httptest.NewRequest("POST", "/api/inventory/preferencias", jsonBody(marcarPreferenciaRequest{
+	req := httptest.NewRequest("POST", "/api/preferencias", jsonBody(marcarPreferenciaRequest{
 		EquipoIDs: []string{"e1"}, MateriaNombre: "Matemática", Modalidad: &enBlanco,
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -92,7 +92,7 @@ func TestHTTP_MarcarPreferencia_ModalidadEnBlanco_400(t *testing.T) {
 func TestHTTP_MarcarPreferencia_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/inventory/preferencias", jsonBody(marcarPreferenciaRequest{
+	req := httptest.NewRequest("POST", "/api/preferencias", jsonBody(marcarPreferenciaRequest{
 		EquipoIDs: []string{"e1"}, MateriaNombre: "Matemática",
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -112,7 +112,7 @@ func TestHTTP_ListarPreferenciasDeEquipo_ComoDocente_OK(t *testing.T) {
 	repo.preferencias["p1"] = p
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/inventory/equipos/e1/preferencias", nil)
+	req := httptest.NewRequest("GET", "/api/equipos/e1/preferencias", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -141,7 +141,7 @@ func TestHTTP_EditarPreferencia_CambiaElAlcance(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	cinco := 5
-	req := httptest.NewRequest("PATCH", "/api/inventory/preferencias/p1", jsonBody(editarPreferenciaRequest{
+	req := httptest.NewRequest("PATCH", "/api/preferencias/p1", jsonBody(editarPreferenciaRequest{
 		Anio: &cinco,
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -167,7 +167,7 @@ func TestHTTP_EditarPreferencia_CambiaElAlcance(t *testing.T) {
 func TestHTTP_EditarPreferencia_NoExiste_404(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("PATCH", "/api/inventory/preferencias/no-existe", jsonBody(editarPreferenciaRequest{}))
+	req := httptest.NewRequest("PATCH", "/api/preferencias/no-existe", jsonBody(editarPreferenciaRequest{}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -183,7 +183,7 @@ func TestHTTP_BorrarPreferencia_204(t *testing.T) {
 	repo.preferencias["p1"] = p
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("DELETE", "/api/inventory/preferencias/p1", nil)
+	req := httptest.NewRequest("DELETE", "/api/preferencias/p1", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, err := app.Test(req)
@@ -203,7 +203,7 @@ func TestHTTP_ListarMateriasEnUso_OK(t *testing.T) {
 	repo.nombresDeMateria = []string{"Dibujo Técnico", "Matemática"}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/inventory/materias-en-uso", nil)
+	req := httptest.NewRequest("GET", "/api/materias-en-uso", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, err := app.Test(req)

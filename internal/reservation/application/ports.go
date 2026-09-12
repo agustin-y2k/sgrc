@@ -22,6 +22,20 @@ type Repo interface {
 
 	CrearReserva(ctx context.Context, r *domain.Reserva) error
 	BuscarReservaPorID(ctx context.Context, id string) (*domain.Reserva, error)
+
+	// BuscarReservasPorIDs es la versión por lote, y devuelve un MAPA por id en
+	// vez de una lista por dos razones que no son de estilo:
+	//
+	//   - el orden lo pone quien llama recorriendo su propia lista de ids, no la
+	//     base. El resultado de una entrega se arma en el orden en que la
+	//     pantalla mandó las máquinas, y el recorrido de un mapa en Go es
+	//     aleatorio entre corridas;
+	//   - qué hacer con un id que no está lo decide cada llamador, y no todos
+	//     deciden igual: entregar y recibir devuelven error porque el cliente
+	//     mandó algo que no corresponde, mientras que cancelar en lote lo
+	//     saltea porque la reserva pudo haberse borrado en el medio. Un mapa con
+	//     lo que encontró preserva las dos; una lista "en el mismo orden" no.
+	BuscarReservasPorIDs(ctx context.Context, ids []string) (map[string]*domain.Reserva, error)
 	GuardarReserva(ctx context.Context, r *domain.Reserva) error
 	ListarReservasPorGrupo(ctx context.Context, reservaGrupoID string) ([]*domain.Reserva, error)
 
@@ -30,6 +44,15 @@ type Repo interface {
 	// (RF-04.7) — todas las Reserva CONFIRMADA de un equipo a partir de cierta
 	// fecha/hora.
 	ListarReservasFuturasDeEquipo(ctx context.Context, equipoID string, desde time.Time) ([]*domain.Reserva, error)
+
+	// ListarReservasFuturasDeEquipos es la de arriba para muchos equipos a la
+	// vez, agrupada por equipo. La usa el bloqueo administrativo, que recibe
+	// hasta doscientas máquinas en un solo pedido; el índice
+	// `idx_reserva_equipo_fecha` sirve igual a las dos.
+	//
+	// Un equipo sin reservas futuras NO aparece en el mapa: recorrer los ids
+	// pedidos y leer el mapa da la lista vacía sola.
+	ListarReservasFuturasDeEquipos(ctx context.Context, equipoIDs []string, desde time.Time) (map[string][]*domain.Reserva, error)
 
 	// BuscarSolapamientos resuelve el pre-chequeo de TODO el lote —todos los
 	// equipos contra todas las fechas— en una sola consulta, y devuelve qué
@@ -64,6 +87,9 @@ type Repo interface {
 	// siguiente, quién es el próximo que la tiene reservada.
 	CrearPrestamo(ctx context.Context, p *domain.Prestamo) error
 	BuscarPrestamoPorID(ctx context.Context, id string) (*domain.Prestamo, error)
+	// BuscarPrestamosPorIDs — ver BuscarReservasPorIDs: mismo criterio y mismos
+	// motivos para devolver un mapa.
+	BuscarPrestamosPorIDs(ctx context.Context, ids []string) (map[string]*domain.Prestamo, error)
 	GuardarPrestamo(ctx context.Context, p *domain.Prestamo) error
 	// BuscarPrestamoAbiertoDeEquipo devuelve el préstamo sin devolver de esa PC,
 	// o ErrPrestamoNoEncontrado si la máquina está en el laboratorio.

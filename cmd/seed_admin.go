@@ -28,11 +28,18 @@ func (r *pgxUsuarioRepo) ExisteAdminActivo(ctx context.Context) (bool, error) {
 }
 
 // CrearAdmin siembra —o reactiva— la cuenta administrativa inicial.
+//
+// El ON CONFLICT nombra la EXPRESIÓN del índice y no la columna: la migración
+// 011 quitó `usuario_email_key UNIQUE (email)` por redundante —el índice único
+// sobre lower(email) que existe desde la 001 es estrictamente más fuerte— y
+// desde entonces `ON CONFLICT (email)` no encuentra ningún árbitro y el INSERT
+// muere con 42P10. Eso deja al sistema sin poder crear su primer Admin, o sea
+// sin poder arrancar sobre una base nueva.
 func (r *pgxUsuarioRepo) CrearAdmin(ctx context.Context, email, passwordHash string) error {
 	tag, err := r.pool.Exec(ctx, `
 		INSERT INTO usuario (nombre, apellido, email, password_hash, rol, estado, fecha_aprobacion)
 		VALUES ('Admin', 'Inicial', $1, $2, 'ADMIN', 'APROBADA', now())
-		ON CONFLICT (email) DO UPDATE
+		ON CONFLICT (lower(email)) DO UPDATE
 		SET rol = 'ADMIN', estado = 'APROBADA', password_hash = EXCLUDED.password_hash,
 		    fecha_aprobacion = now(), debe_cambiar_password = TRUE
 	`, email, passwordHash)
@@ -55,8 +62,9 @@ func seedAdminSiHaceFalta(ctx context.Context, pool *pgxpool.Pool, getenv func(s
 	repo := &pgxUsuarioRepo{pool: pool}
 	// Se normaliza con la misma función que usa el registro: si el .env trae
 	// "Admin@Escuela.edu.ar", la fila tiene que quedar igual que si esa cuenta
-	// se hubiera creado desde la aplicación, o el ON CONFLICT (email) de arriba
-	// compararía contra otra forma de la misma dirección.
+	// se hubiera creado desde la aplicación. El ON CONFLICT de arriba ya compara
+	// por lower(email) y no se dejaría engañar, pero la fila guardada sí queda
+	// con la caja que venga del .env, y esa es la que se ve en pantalla.
 	email := authdomain.NormalizarEmail(getenv("SEED_ADMIN_EMAIL"))
 	password := getenv("SEED_ADMIN_PASSWORD")
 	return adminseed.SembrarSiHaceFalta(ctx, repo, security.HashPassword, email, password)

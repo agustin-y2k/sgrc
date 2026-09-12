@@ -38,13 +38,22 @@ Sin ese comando, los tres contenedores no existen: están detrás de un
 *profile* del compose (`docker compose --profile observabilidad up -d` es lo
 que hace el atajo). Un `make run-prod` normal no los levanta.
 
+Conviene usar el atajo y no el comando de compose a mano, porque el atajo hace
+una cosa más: verifica que `GRAFANA_PASSWORD` esté puesta en el `.env` y no haya
+quedado con el valor de ejemplo. El compose tiene un valor por defecto para esa
+variable —lo necesita para poder interpretar el archivo en un despliegue que
+nunca levante este perfil— y ese valor está escrito en el repositorio. Levantando
+el perfil a mano sin configurar la variable, el panel queda con una contraseña
+pública.
+
 **Lo que cuesta**: unos 400 MB de memoria entre Prometheus y Grafana, más
 unas pocas decenas para Dozzle, y hasta 1 GB de disco para el histórico de
 métricas. En un servidor compartido con otros usos, es lo primero a apagar si
 falta memoria — y si hay que quedarse con uno solo, Dozzle es el barato.
 
 Antes de levantarlo, poné `GRAFANA_PASSWORD` en el `.env`: es la contraseña
-del usuario `admin`. Dozzle no pide ninguna variable.
+del usuario `admin`, y `make observabilidad` no arranca sin ella. Generala con
+`openssl rand -base64 24`. Dozzle no pide ninguna variable.
 
 ---
 
@@ -242,7 +251,7 @@ no se incluyó porque en un servidor de una sola persona no cambia nada.
 Dos decisiones del diseño que conviene conocer antes de agregar métricas:
 
 - **La etiqueta `ruta` es el patrón, no la URL.** Se cuenta
-  `/api/reservation/:id`, no `/api/reservation/3f9d…`. Con la URL cruda, cada
+  `/api/:id`, no `/api/3f9d…`. Con la URL cruda, cada
   identificador —y cada dirección inventada que pruebe un escaneo
   automático— crearía su propia serie, que es la forma clásica de que
   Prometheus termine consumiendo toda la memoria del servidor. Las rutas que
@@ -331,3 +340,24 @@ escribir.
 
 Si hiciera falta más historia, conviene subir el tope de tamaño antes que el
 de días: es el que realmente protege el disco.
+
+### La base es al revés: no se purga nada
+
+Las dos tablas que crecen sin techo dentro de Postgres —`audit_log` y
+`notificacion`— **no tienen purga automática, y es una decisión**, no un
+pendiente.
+
+Medido sobre la base real: una entrada de auditoría ocupa **421 bytes**. Incluso
+a cien acciones sensibles por día —bastante más de lo que registra esta
+institución— son unos 15 MB de tabla al año, y diez años son 150 MB. El problema
+de espacio que justificaría un barrido no existe.
+
+Y para la auditoría hay un argumento en contra: su valor es que no se borre. Con
+purga automática contesta «¿quién hizo esto?» sólo dentro de la ventana, y esas
+preguntas llegan tarde por naturaleza. Si alguna vez hace falta retención, tiene
+que ser **una política escrita** —«se conservan N años»— y no un barrido que
+aparezca en el código sin que nadie lo haya decidido.
+
+Los avisos sí se borran, pero los borra **cada persona**: un aviso leído ya
+cumplió su función y de ahí en adelante es del usuario decidir si lo quiere en su
+lista (RF-05.7). Eso no es retención, es una función.

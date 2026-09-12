@@ -8,7 +8,7 @@ import (
 
 // Entregas y devoluciones de PCs (RF-08) — el mostrador.
 
-// GET /api/reservation/prestamos — qué hay afuera ahora mismo.
+// GET /api/prestamos — qué hay afuera ahora mismo.
 func (h *Handler) ListarPrestamosAbiertos(c *fiber.Ctx) error {
 	prestamos, err := h.svc.ListarPrestamosAbiertos(c.UserContext())
 	if err != nil {
@@ -23,7 +23,7 @@ func (h *Handler) ListarPrestamosAbiertos(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/reservation/equipos/{equipoId}/prestamos — el historial de una máquina.
+// GET /api/equipos/{equipoId}/prestamos — el historial de una máquina.
 func (h *Handler) HistorialDePrestamosDeEquipo(c *fiber.Ctx) error {
 	prestamos, err := h.svc.HistorialDeEquipo(c.UserContext(), c.Params("equipoId"))
 	if err != nil {
@@ -38,7 +38,7 @@ func (h *Handler) HistorialDePrestamosDeEquipo(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// POST /api/reservation/prestamos/por-reserva — entregar las máquinas de una
+// POST /api/prestamos/por-reserva — entregar las máquinas de una
 // reserva.
 func (h *Handler) EntregarPorReserva(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
@@ -62,7 +62,7 @@ func (h *Handler) EntregarPorReserva(c *fiber.Ctx) error {
 	return c.JSON(toResultadoEntregaResponse(resultado, h.svc.Ahora()))
 }
 
-// POST /api/reservation/prestamos — entrega espontánea, sin reserva detrás.
+// POST /api/prestamos — entrega espontánea, sin reserva detrás.
 func (h *Handler) EntregarSuelta(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -90,7 +90,7 @@ func (h *Handler) EntregarSuelta(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toResultadoEntregaResponse(resultado, h.svc.Ahora()))
 }
 
-// POST /api/reservation/prestamos/recibir — las máquinas volvieron.
+// POST /api/prestamos/recibir — las máquinas volvieron.
 func (h *Handler) RecibirEquipos(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {

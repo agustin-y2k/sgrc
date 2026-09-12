@@ -35,7 +35,7 @@ func TestHTTP_EntregarSuelta(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
 
-	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", entregarSueltaRequest{
+	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos", entregarSueltaRequest{
 		EquipoIDs: []string{"pc1"}, Nombre: "Marta (secretaría)", Destino: "Biblioteca",
 	}, "ADMIN")
 
@@ -62,7 +62,7 @@ func TestHTTP_EntregarSuelta(t *testing.T) {
 func TestHTTP_EntregarSuelta_SinNombre(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	codigo, _ := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", entregarSueltaRequest{
+	codigo, _ := pedirPrestamos(t, app, "POST", "/api/prestamos", entregarSueltaRequest{
 		EquipoIDs: []string{"pc1"}, Nombre: "   ",
 	}, "ADMIN")
 
@@ -79,11 +79,11 @@ func TestHTTP_EntregarSuelta_EquipoYaAfuera(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 	req := entregarSueltaRequest{EquipoIDs: []string{"pc1"}, Nombre: "Ada"}
 
-	if codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", req, "ADMIN"); codigo != fiber.StatusCreated {
+	if codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos", req, "ADMIN"); codigo != fiber.StatusCreated {
 		t.Fatalf("la primera: esperaba 201, obtuve %d: %s", codigo, cuerpo)
 	}
 
-	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", req, "ADMIN")
+	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos", req, "ADMIN")
 
 	if codigo != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d: %s", codigo, cuerpo)
@@ -115,7 +115,7 @@ func TestHTTP_EntregarPorReserva(t *testing.T) {
 	repo.reservas["res1"] = r
 	app := nuevaAppDeTest(repo)
 
-	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos/por-reserva",
+	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos/por-reserva",
 		entregarPorReservaRequest{ReservaIDs: []string{"res1"}}, "ADMIN")
 
 	if codigo != fiber.StatusOK {
@@ -141,7 +141,7 @@ func TestHTTP_RecibirYListarLoQueEstaAfuera(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
 
-	_, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", entregarSueltaRequest{
+	_, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos", entregarSueltaRequest{
 		EquipoIDs: []string{"pc1", "pc2"}, Nombre: "Ada",
 	}, "ADMIN")
 	var entrega resultadoEntregaResponse
@@ -149,7 +149,7 @@ func TestHTTP_RecibirYListarLoQueEstaAfuera(t *testing.T) {
 		t.Fatalf("respuesta ilegible: %v", err)
 	}
 
-	codigo, cuerpo := pedirPrestamos(t, app, "GET", "/api/reservation/prestamos", nil, "ADMIN")
+	codigo, cuerpo := pedirPrestamos(t, app, "GET", "/api/prestamos", nil, "ADMIN")
 	if codigo != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
 	}
@@ -169,7 +169,7 @@ func TestHTTP_RecibirYListarLoQueEstaAfuera(t *testing.T) {
 	}
 
 	// Se devuelve una sola: la otra sigue afuera.
-	codigo, cuerpo = pedirPrestamos(t, app, "POST", "/api/reservation/prestamos/recibir", recibirRequest{
+	codigo, cuerpo = pedirPrestamos(t, app, "POST", "/api/prestamos/recibir", recibirRequest{
 		PrestamoIDs: []string{entrega.Entregadas[0].ID}, Observaciones: "volvió sin el cargador",
 	}, "ADMIN")
 	if codigo != fiber.StatusOK {
@@ -186,7 +186,7 @@ func TestHTTP_RecibirYListarLoQueEstaAfuera(t *testing.T) {
 		t.Error("una máquina devuelta no está abierta")
 	}
 
-	_, cuerpo = pedirPrestamos(t, app, "GET", "/api/reservation/prestamos", nil, "ADMIN")
+	_, cuerpo = pedirPrestamos(t, app, "GET", "/api/prestamos", nil, "ADMIN")
 	if err := json.Unmarshal(cuerpo, &listado); err != nil {
 		t.Fatalf("respuesta ilegible: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestHTTP_RecibirYListarLoQueEstaAfuera(t *testing.T) {
 func TestHTTP_Recibir_DosVecesSeInforma(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
-	_, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos", entregarSueltaRequest{
+	_, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos", entregarSueltaRequest{
 		EquipoIDs: []string{"pc1"}, Nombre: "Ada",
 	}, "ADMIN")
 	var entrega resultadoEntregaResponse
@@ -206,9 +206,9 @@ func TestHTTP_Recibir_DosVecesSeInforma(t *testing.T) {
 		t.Fatalf("respuesta ilegible: %v", err)
 	}
 	req := recibirRequest{PrestamoIDs: []string{entrega.Entregadas[0].ID}}
-	pedirPrestamos(t, app, "POST", "/api/reservation/prestamos/recibir", req, "ADMIN")
+	pedirPrestamos(t, app, "POST", "/api/prestamos/recibir", req, "ADMIN")
 
-	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos/recibir", req, "ADMIN")
+	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos/recibir", req, "ADMIN")
 
 	// 200: lo que el Admin quería —que la máquina figure adentro— ya pasó.
 	if codigo != fiber.StatusOK {
@@ -226,7 +226,7 @@ func TestHTTP_Recibir_DosVecesSeInforma(t *testing.T) {
 func TestHTTP_Recibir_PrestamoInexistente(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	codigo, _ := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos/recibir", recibirRequest{
+	codigo, _ := pedirPrestamos(t, app, "POST", "/api/prestamos/recibir", recibirRequest{
 		PrestamoIDs: []string{"no-existe"},
 	}, "ADMIN")
 
@@ -241,11 +241,11 @@ func TestHTTP_Prestamos_SoloAdmin(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
 	rutas := []struct{ metodo, ruta string }{
-		{"GET", "/api/reservation/prestamos"},
-		{"POST", "/api/reservation/prestamos"},
-		{"POST", "/api/reservation/prestamos/por-reserva"},
-		{"POST", "/api/reservation/prestamos/recibir"},
-		{"GET", "/api/reservation/equipos/pc1/prestamos"},
+		{"GET", "/api/prestamos"},
+		{"POST", "/api/prestamos"},
+		{"POST", "/api/prestamos/por-reserva"},
+		{"POST", "/api/prestamos/recibir"},
+		{"GET", "/api/equipos/pc1/prestamos"},
 	}
 
 	for _, r := range rutas {
@@ -269,7 +269,7 @@ func TestHTTP_EntregarPorReserva_BloqueoSinDocente(t *testing.T) {
 	repo.reservas["bloq1"] = bloqueo
 	app := nuevaAppDeTest(repo)
 
-	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/reservation/prestamos/por-reserva",
+	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos/por-reserva",
 		entregarPorReservaRequest{ReservaIDs: []string{"bloq1"}}, "ADMIN")
 
 	if codigo != fiber.StatusOK {
@@ -284,7 +284,7 @@ func TestHTTP_EntregarPorReserva_BloqueoSinDocente(t *testing.T) {
 	}
 
 	// Con un nombre a mano sí sale.
-	codigo, cuerpo = pedirPrestamos(t, app, "POST", "/api/reservation/prestamos/por-reserva",
+	codigo, cuerpo = pedirPrestamos(t, app, "POST", "/api/prestamos/por-reserva",
 		entregarPorReservaRequest{ReservaIDs: []string{"bloq1"}, RetiradoPor: "Mesa de examen"}, "ADMIN")
 	if codigo != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
@@ -316,7 +316,7 @@ func TestHTTP_CambiarEquipoDeReserva(t *testing.T) {
 	reservaEnRepo(t, repo, "res1", "pc1", "admin1")
 	app := nuevaAppDeTest(repo)
 
-	codigo, cuerpo := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/equipo",
+	codigo, cuerpo := pedirPrestamos(t, app, "PATCH", "/api/reservas/res1/equipo",
 		cambiarEquipoRequest{EquipoID: "pc9"}, "ADMIN")
 
 	if codigo != fiber.StatusOK {
@@ -336,7 +336,7 @@ func TestHTTP_CambiarEquipoDeReserva_Ajena(t *testing.T) {
 	reservaEnRepo(t, repo, "res1", "pc1", "otro-docente")
 	app := nuevaAppDeTest(repo)
 
-	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/equipo",
+	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservas/res1/equipo",
 		cambiarEquipoRequest{EquipoID: "pc9"}, "DOCENTE")
 
 	if codigo != fiber.StatusForbidden {
@@ -349,7 +349,7 @@ func TestHTTP_CambiarEquipoDeReserva_SinEquipo(t *testing.T) {
 	reservaEnRepo(t, repo, "res1", "pc1", "admin1")
 	app := nuevaAppDeTest(repo)
 
-	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/equipo",
+	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservas/res1/equipo",
 		cambiarEquipoRequest{EquipoID: "  "}, "ADMIN")
 
 	if codigo != fiber.StatusBadRequest {
@@ -367,7 +367,7 @@ func TestHTTP_CambiarEquipoDeReserva_YaLiberada(t *testing.T) {
 	}
 	app := nuevaAppDeTest(repo)
 
-	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/equipo",
+	codigo, _ := pedirPrestamos(t, app, "PATCH", "/api/reservas/res1/equipo",
 		cambiarEquipoRequest{EquipoID: "pc9"}, "ADMIN")
 
 	if codigo != fiber.StatusConflict {
@@ -382,7 +382,7 @@ func TestHTTP_CambiarEquipoDeReserva_SinAlcanceEsSoloEsta(t *testing.T) {
 	reservaEnRepo(t, repo, "res1", "pc1", "admin1")
 	app := nuevaAppDeTest(repo)
 
-	codigo, cuerpo := pedirPrestamos(t, app, "PATCH", "/api/reservation/reservas/res1/equipo",
+	codigo, cuerpo := pedirPrestamos(t, app, "PATCH", "/api/reservas/res1/equipo",
 		map[string]string{"equipoId": "pc9"}, "ADMIN")
 
 	if codigo != fiber.StatusOK {
@@ -418,7 +418,7 @@ func TestHTTP_PedirLiberacion(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	codigo, cuerpo := pedirPrestamos(t, app, "POST",
-		"/api/reservation/reservas/res1/pedido-de-liberacion",
+		"/api/reservas/res1/pedido-de-liberacion",
 		pedirLiberacionRequest{Mensaje: "La necesito para una evaluación"}, "DOCENTE")
 
 	if codigo != fiber.StatusAccepted {
@@ -433,7 +433,7 @@ func TestHTTP_PedirLiberacion_ReservaPropia(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	codigo, _ := pedirPrestamos(t, app, "POST",
-		"/api/reservation/reservas/res1/pedido-de-liberacion",
+		"/api/reservas/res1/pedido-de-liberacion",
 		pedirLiberacionRequest{}, "DOCENTE")
 
 	if codigo != fiber.StatusForbidden {
@@ -449,7 +449,7 @@ func TestHTTP_PedirLiberacion_RepetidoElMismoDia(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	codigo, _ := pedirPrestamos(t, app, "POST",
-		"/api/reservation/reservas/res1/pedido-de-liberacion",
+		"/api/reservas/res1/pedido-de-liberacion",
 		pedirLiberacionRequest{}, "DOCENTE")
 
 	if codigo != fiber.StatusConflict {
@@ -467,7 +467,7 @@ func TestHTTP_PedirLiberacion_SobreUnBloqueo(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	codigo, _ := pedirPrestamos(t, app, "POST",
-		"/api/reservation/reservas/res1/pedido-de-liberacion",
+		"/api/reservas/res1/pedido-de-liberacion",
 		pedirLiberacionRequest{}, "DOCENTE")
 
 	if codigo != fiber.StatusConflict {
@@ -482,7 +482,7 @@ func TestHTTP_PedirLiberacion_SinCuerpo(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	codigo, cuerpo := pedirPrestamos(t, app, "POST",
-		"/api/reservation/reservas/res1/pedido-de-liberacion", nil, "DOCENTE")
+		"/api/reservas/res1/pedido-de-liberacion", nil, "DOCENTE")
 
 	if codigo != fiber.StatusAccepted {
 		t.Fatalf("esperaba 202, obtuve %d: %s", codigo, cuerpo)

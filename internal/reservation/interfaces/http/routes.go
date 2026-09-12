@@ -6,14 +6,21 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/middleware"
 )
 
-// RegisterRoutes monta todas las rutas de reservation bajo /api/reservation.
+// RegisterRoutes monta todas las rutas de reservation bajo /api.
 func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
-	reservation := app.Group("/api/reservation")
+	// El prefijo es "/api" y no "/api": lo que va en la URL es el
+	// RECURSO, no el módulo de Go que lo sirve. Con el nombre del módulo, pedir
+	// el calendario de una máquina obligaba a saber que el calendario lo sirve
+	// `reservation` aunque la máquina sea de `inventory` — o sea, a aprender
+	// cómo está partido el servidor por dentro. Mismo criterio que /api/jornada,
+	// que ya lo hacía.
+	reservation := app.Group("/api")
 
 	autenticado := aut.Requerida()
 	soloAdmin := middleware.RequireRol("ADMIN")
 
 	reservation.Get("/reservas", autenticado, h.ListarReservas)
+	reservation.Get("/reservas/:id", autenticado, h.ObtenerReserva)
 	reservation.Post("/reservas", autenticado, h.CrearReserva)
 	reservation.Post("/reservas/recurrentes", autenticado, h.CrearReservaRecurrente)
 	reservation.Post("/reservas/:id/cancelar", autenticado, h.CancelarReserva)

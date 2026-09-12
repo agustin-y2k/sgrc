@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/ramiro/sgrc/internal/academic/domain"
@@ -23,9 +24,13 @@ type Service struct {
 	// (service_pedidos.go): el pedido lleva fecha, y sus avisos necesitan nombre
 	// y correo de quien pide y de quienes ya dictan esa materia.
 	datosDeUsuario DatosDeUsuario
-	ahora          func() time.Time
-	nuevoID        IDGenerator
-	bus            eventbus.EventBus
+	// marcas avisa cuántas preferencias de equipo dejan de aplicar al renombrar
+	// una materia. Puede ser nil: el aviso es información, no una regla, y un
+	// servicio armado sin este puerto renombra igual.
+	marcas  MarcasDeInventario
+	ahora   func() time.Time
+	nuevoID IDGenerator
+	bus     eventbus.EventBus
 }
 
 func NewService(
@@ -35,6 +40,7 @@ func NewService(
 	archivadorHistorico ArchivadorHistorico,
 	canceladorReservas CanceladorReservasDeMateria,
 	datosDeUsuario DatosDeUsuario,
+	marcas MarcasDeInventario,
 	nuevoID IDGenerator,
 	ahora func() time.Time,
 	bus eventbus.EventBus,
@@ -46,6 +52,7 @@ func NewService(
 		archivadorHistorico: archivadorHistorico,
 		canceladorReservas:  canceladorReservas,
 		datosDeUsuario:      datosDeUsuario,
+		marcas:              marcas,
 		nuevoID:             nuevoID,
 		ahora:               ahora,
 		bus:                 bus,
@@ -73,6 +80,104 @@ func (s *Service) CrearCiclo(ctx context.Context, anio int) (*domain.CicloLectiv
 		return nil, err
 	}
 	return c, nil
+}
+
+// CorregirAnioDeCiclo arregla un ciclo creado con el año equivocado (RF-02.1).
+//
+// Era la única entidad del sistema sin corrección posible, y la que peor lo
+// llevaba: el año es único, así que el ciclo mal creado se quedaba con ese año
+// para siempre, y además ocupaba el único lugar de ciclo activo.
+//
+// Las dos condiciones que no puede ver el dominio:
+//
+//   - **Sin reservas.** Una reserva lleva su propia fecha y no se muda con el
+//     ciclo: correr un ciclo de 2026 a 2027 lo dejaría diciendo que sus clases
+//     fueron en 2027 cuando las filas dicen 2026. Se reusa la misma pregunta
+//     que hace el archivado, que ya cubre los grupos, las recurrencias y los
+//     bloqueos del año viejo.
+//   - **El año de destino sin bloqueos.** Un bloqueo se atribuye a un ciclo por
+//     el año de su fecha, así que mudarse a un año que ya tiene alguno es
+//     adoptarlo en silencio.
+//
+// La tercera —que el año no lo tenga otro ciclo— la decide el índice único de
+// la base, no una comprobación previa.
+func (s *Service) CorregirAnioDeCiclo(ctx context.Context, cicloID string, nuevoAnio int) error {
+	c, err := s.repo.BuscarCicloPorID(ctx, cicloID)
+	if err != nil {
+		return err
+	}
+	if c.Archivado {
+		return domain.ErrCicloArchivadoNoSeCorrige
+	}
+	// Corregirlo al año que ya tiene no es un error: es un formulario enviado
+	// sin cambios, y hacerlo fallar sólo obligaría a la pantalla a comparar
+	// antes de mandar.
+	if c.Anio == nuevoAnio {
+		return nil
+	}
+
+	tieneReservas, err := s.validadorReservas.TieneReservasDeCiclo(ctx, cicloID)
+	if err != nil {
+		return fmt.Errorf("verificando reservas del ciclo: %w", err)
+	}
+	if tieneReservas {
+		return ErrCicloConReservas
+	}
+
+	hayBloqueos, err := s.validadorReservas.HayBloqueosEnElAnio(ctx, nuevoAnio)
+	if err != nil {
+		return fmt.Errorf("verificando bloqueos del año de destino: %w", err)
+	}
+	if hayBloqueos {
+		return ErrAnioConBloqueos
+	}
+
+	if err := c.CorregirAnio(nuevoAnio); err != nil {
+		return err
+	}
+	return s.repo.GuardarCiclo(ctx, c)
+}
+
+// EliminarCiclo borra un ciclo lectivo — de verdad, no lógicamente.
+//
+// Es para deshacer un ciclo recién creado, que es el único momento en que un
+// ciclo no significa nada todavía. Por eso las dos condiciones:
+//
+//   - **Sin cursos.** Un ciclo con cursos cargados es cómo se organizó ese año;
+//     eso se archiva, no se borra. Además la clave foránea de `curso` lo
+//     impediría igual, y el error crudo de la base sería un 500 en vez de una
+//     explicación.
+//   - **Sin archivar.** Un ciclo archivado es el registro de un año cerrado, y
+//     el histórico de uso que el archivado guardó está indexado por ese año:
+//     borrar el ciclo dejaría ese histórico hablando de un año que para el
+//     sistema no existió.
+//
+// Un ciclo sin cursos no tiene reservas —una reserva cuelga de una materia, que
+// cuelga de un curso—, así que no hace falta preguntarlo por separado.
+func (s *Service) EliminarCiclo(ctx context.Context, cicloID string) error {
+	c, err := s.repo.BuscarCicloPorID(ctx, cicloID)
+	if err != nil {
+		return err
+	}
+	if c.Archivado {
+		return domain.ErrCicloArchivadoNoSeCorrige
+	}
+
+	cursos, err := s.repo.ListarCursosPorCiclo(ctx, cicloID)
+	if err != nil {
+		return fmt.Errorf("verificando si el ciclo tiene cursos: %w", err)
+	}
+	if len(cursos) > 0 {
+		return ErrCicloConCursos
+	}
+
+	return s.repo.EliminarCiclo(ctx, cicloID)
+}
+
+// ObtenerCiclo es un passthrough al repo, para que el handler pueda registrar
+// en la auditoría el año que el ciclo tenía antes de corregirlo o eliminarlo.
+func (s *Service) ObtenerCiclo(ctx context.Context, cicloID string) (*domain.CicloLectivo, error) {
+	return s.repo.BuscarCicloPorID(ctx, cicloID)
 }
 
 func (s *Service) ListarCiclos(ctx context.Context, filtroArchivado *bool) ([]*domain.CicloLectivo, error) {
@@ -223,6 +328,12 @@ func (s *Service) EliminarCurso(ctx context.Context, cursoID string) error {
 	return s.repo.EliminarCurso(ctx, cursoID)
 }
 
+// ObtenerCurso — ver ObtenerCiclo: la API dejaba editar y borrar un curso sin
+// poder pedirlo.
+func (s *Service) ObtenerCurso(ctx context.Context, cursoID string) (*domain.Curso, error) {
+	return s.repo.BuscarCursoPorID(ctx, cursoID)
+}
+
 func (s *Service) ListarCursos(ctx context.Context, cicloID string) ([]*domain.Curso, error) {
 	return s.repo.ListarCursosPorCiclo(ctx, cicloID)
 }
@@ -240,15 +351,46 @@ func (s *Service) CrearMateria(ctx context.Context, cursoID, nombre string) (*do
 	return m, nil
 }
 
-func (s *Service) EditarMateria(ctx context.Context, materiaID, nuevoNombre string) error {
+// EditarMateria renombra una materia y devuelve CUÁNTAS marcas de preferencia
+// de equipo dejaron de aplicar por ese cambio.
+//
+// El número no frena nada: renombrar es legítimo (RF-02.11) y corregir un
+// nombre mal escrito no puede depender de cuántas máquinas quedaron marcadas.
+// Lo que sí hace falta es que el Admin se entere, porque hasta acá la marca
+// dejaba de aplicar en silencio y seguía viéndose en la ficha del equipo
+// exactamente igual que una que sí vale.
+//
+// Se cuenta ANTES de guardar, contra el nombre VIEJO: después del UPDATE ya no
+// habría forma de saber cuántas apuntaban a él.
+func (s *Service) EditarMateria(ctx context.Context, materiaID, nuevoNombre string) (int, error) {
 	m, err := s.repo.BuscarMateriaPorID(ctx, materiaID)
 	if err != nil {
-		return err
+		return 0, err
 	}
+
+	nombreViejo := m.Nombre
 	if err := m.RenombrarA(nuevoNombre); err != nil {
-		return err
+		return 0, err
 	}
-	return s.repo.GuardarMateria(ctx, m)
+
+	// Si el nombre no cambió de verdad —sólo espacios o mayúsculas— ninguna
+	// marca se ve afectada: la comparación de la base ignora las dos cosas.
+	marcasAfectadas := 0
+	if s.marcas != nil && domain.NormalizarNombre(nombreViejo) != domain.NormalizarNombre(m.Nombre) {
+		marcasAfectadas, err = s.marcas.CuantasDejarianDeAplicar(ctx, nombreViejo)
+		if err != nil {
+			// Contar es informativo: que falle no puede impedir corregir un
+			// nombre mal escrito. Se sigue con cero y queda en el log.
+			log.Printf("academic: no se pudo contar las marcas de equipo afectadas por renombrar %q: %v",
+				nombreViejo, err)
+			marcasAfectadas = 0
+		}
+	}
+
+	if err := s.repo.GuardarMateria(ctx, m); err != nil {
+		return 0, err
+	}
+	return marcasAfectadas, nil
 }
 
 // EliminarMateria implementa RF-02.11: solo si no tiene reservas asociadas.
@@ -261,6 +403,11 @@ func (s *Service) EliminarMateria(ctx context.Context, materiaID string) error {
 		return ErrMateriaConReservas
 	}
 	return s.repo.EliminarMateria(ctx, materiaID)
+}
+
+// ObtenerMateria — ídem ObtenerCurso.
+func (s *Service) ObtenerMateria(ctx context.Context, materiaID string) (*domain.Materia, error) {
+	return s.repo.BuscarMateriaPorID(ctx, materiaID)
 }
 
 func (s *Service) ListarMaterias(ctx context.Context, cursoID string) ([]*domain.Materia, error) {
@@ -367,19 +514,25 @@ func (s *Service) quedaOtroDocenteActivo(ctx context.Context, materiaID, usuario
 	if err != nil {
 		return false, fmt.Errorf("listando docentes de la materia: %w", err)
 	}
+	otros := make([]string, 0, len(docentes))
 	for _, d := range docentes {
 		if d.UsuarioID == usuarioIDExcluido {
 			continue
 		}
-		activo, err := s.validadorUsuario.ExisteYAprobado(ctx, d.UsuarioID)
-		if err != nil {
-			return false, fmt.Errorf("validando al docente %s de la materia: %w", d.UsuarioID, err)
-		}
-		if activo {
-			return true, nil
-		}
+		otros = append(otros, d.UsuarioID)
 	}
-	return false, nil
+	if len(otros) == 0 {
+		return false, nil
+	}
+
+	// Una sola consulta para todos: la pregunta es un EXISTS, no una revisión
+	// uno por uno. Importa porque esto corre en el camino de una baja, con
+	// alguien esperando.
+	quedaAlguno, err := s.validadorUsuario.AlgunoAprobado(ctx, otros)
+	if err != nil {
+		return false, fmt.Errorf("validando a los demás docentes de la materia: %w", err)
+	}
+	return quedaAlguno, nil
 }
 
 func (s *Service) ListarDocentesDeMateria(ctx context.Context, materiaID string) ([]*domain.DocenteMateria, error) {

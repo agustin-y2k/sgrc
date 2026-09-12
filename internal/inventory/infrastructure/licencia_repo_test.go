@@ -34,7 +34,7 @@ func crearLicenciaDeTest(t *testing.T, repo *PostgresRepo, equipoID, nombre stri
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
-	if err := repo.CrearLicencia(context.Background(), l); err != nil {
+	if _, err := repo.CrearLicencia(context.Background(), l); err != nil {
 		t.Fatalf("no se pudo crear la licencia de prueba: %v", err)
 	}
 	return l
@@ -108,8 +108,24 @@ func TestPostgresRepo_Licencia_MismoSoftwareDosVecesEnLaMismaEquipo_Error(t *tes
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
-	if err := repo.CrearLicencia(ctx, otra); err != application.ErrLicenciaDuplicada {
-		t.Fatalf("esperaba ErrLicenciaDuplicada, obtuve %v", err)
+	// El duplicado NO vuelve como error: vuelve como «no la creé». La
+	// diferencia es lo que permite que el alta de un lote de sesenta equipos
+	// saltee los repetidos sin abortar la transacción (ver transaccion_test.go).
+	creada, err := repo.CrearLicencia(ctx, otra)
+	if err != nil {
+		t.Fatalf("un duplicado no tendría que dar error: %v", err)
+	}
+	if creada {
+		t.Error("«autocad 2027» no tendría que crearse al lado de «AutoCAD 2027»")
+	}
+
+	// Y de verdad no quedó una segunda fila.
+	licencias, err := repo.ListarLicenciasPorEquipo(ctx, equipo.ID)
+	if err != nil {
+		t.Fatalf("listando: %v", err)
+	}
+	if len(licencias) != 1 {
+		t.Errorf("el equipo quedó con %d licencias, esperaba 1", len(licencias))
 	}
 }
 

@@ -158,8 +158,3 @@ func (s *Service) ListarTodas(ctx context.Context, soloAbiertas bool, p paginaci
 func (s *Service) ListarPropias(ctx context.Context, usuarioID string, p paginacion.Pagina) ([]*domain.Sugerencia, int, error) {
 	return s.repo.ListarDeUsuario(ctx, usuarioID, p)
 }
-
-// ContarAbiertas alimenta el número del panel del Admin.
-func (s *Service) ContarAbiertas(ctx context.Context) (int, error) {
-	return s.repo.ContarAbiertas(ctx)
-}

@@ -8,7 +8,7 @@ import (
 
 // Licencias de software (RF-03.11 a RF-03.14).
 
-// GET /api/inventory/licencias (Admin) Sin paginar, como los demás listados
+// GET /api/licencias (Admin) Sin paginar, como los demás listados
 // acotados por el dominio (ciclos, cursos, carros): la cantidad la limita el
 // inventario, no el uso.
 func (h *Handler) ListarLicencias(c *fiber.Ctx) error {
@@ -25,7 +25,7 @@ func (h *Handler) ListarLicencias(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/inventory/equipos/{equipoId}/licencias (Admin)
+// GET /api/equipos/{equipoId}/licencias (Admin)
 func (h *Handler) ListarLicenciasPorEquipo(c *fiber.Ctx) error {
 	equipoID := c.Params("equipoId")
 
@@ -42,7 +42,7 @@ func (h *Handler) ListarLicenciasPorEquipo(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// POST /api/inventory/licencias (Admin) — alta de la misma licencia en varios
+// POST /api/licencias (Admin) — alta de la misma licencia en varios
 // equipos de una vez.
 func (h *Handler) CrearLicencias(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
@@ -88,7 +88,7 @@ func (h *Handler) CrearLicencias(c *fiber.Ctx) error {
 	})
 }
 
-// POST /api/inventory/licencias/renovar (Admin) Es POST sobre un sub-recurso
+// POST /api/licencias/renovar (Admin) Es POST sobre un sub-recurso
 // y no PATCH sobre cada licencia porque renovar ocho máquinas es UNA acción
 // del Admin: partirla en ocho requests dejaría la pantalla mostrando cuatro
 // renovadas y cuatro no si se corta la conexión en el medio.
@@ -124,7 +124,7 @@ func (h *Handler) RenovarLicencias(c *fiber.Ctx) error {
 	})
 }
 
-// PATCH /api/inventory/licencias/{id} (Admin) — el "editar el contador en
+// PATCH /api/licencias/{id} (Admin) — el "editar el contador en
 // cualquier momento": corregir la fecha, cambiar la duración de 30 a 60 días,
 // o cargar el vencimiento de una licencia que se dio de alta sin él.
 func (h *Handler) EditarLicencia(c *fiber.Ctx) error {
@@ -156,7 +156,7 @@ func (h *Handler) EditarLicencia(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
-// DELETE /api/inventory/licencias/{id} (Admin) — borrado real: de una
+// DELETE /api/licencias/{id} (Admin) — borrado real: de una
 // licencia no cuelga nada que valga la pena conservar.
 func (h *Handler) BorrarLicencia(c *fiber.Ctx) error {
 	if err := h.svc.BorrarLicencia(c.UserContext(), c.Params("id")); err != nil {

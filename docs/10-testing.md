@@ -73,8 +73,16 @@ la cobertura actual es:
 
 | Capa | Cobertura |
 |---|---|
-| `domain/` de los 7 paquetes | 89–100% |
-| `application/` de los 7 paquetes | 62–90% |
+| `domain/` de los 9 módulos | 86–100% |
+| `application/` de los 9 módulos | 62–86% |
+
+El total que imprime `make test` da **49,7%**, y ese número mezcla lo de arriba
+con la infraestructura, que solo cubren los tests de integración — así que no
+sirve como meta: bajaría agregando un repositorio y subiría borrándolo.
+
+Un cero que no significa lo que parece: **`auditoria/application` figura en 0%**.
+No tiene tests propios, y sus tres funciones son pasamanos al repositorio; lo que
+no tiene son tests de handler, y eso sí es un hueco de verdad — ver §4.
 
 Lo que se busca cubrir siempre: las tres cascadas de cancelación (bloqueo
 administrativo, equipo fuera de servicio, materia sin docente), el archivado de
@@ -99,7 +107,7 @@ make coverage-report   # genera coverage.html navegable
 
 Se prueba **por pantalla y por rol**, no por componente aislado: lo que
 importa es que un docente no vea acciones de Admin y que un formulario no
-deje mandar algo que el backend va a rechazar. Son 622 tests en 57 archivos.
+deje mandar algo que el backend va a rechazar. Son **757 tests en 61 archivos**.
 
 Dos criterios que ya evitaron falsos verdes:
 
@@ -162,6 +170,12 @@ iguales y fallaba por ambigüedad en vez de por un problema real.
 
 Vale tenerlo escrito, porque es donde hay que mirar a mano:
 
+- **Dos módulos no tienen ningún test de handler**: `auditoria` (su
+  `application`, su `infrastructure` y su `http`, todo sin un `_test.go`) y el
+  `http` de `sugerencias`. Los dos son de lectura y filtrado, que es justo donde
+  se esconden los errores de paginación y de permisos: nadie verifica que
+  `/api/auditoria/` rechace a un docente, ni que los `$n` del `LIMIT/OFFSET`
+  queden bien cuando hay filtros. El resto de los módulos sí los tiene.
 - **Los tests de pantalla mockean la capa `api`**, así que no prueban que el
   backend acepte esos cuerpos. Cuando se agrega un endpoint conviene pegarle
   una vez con el payload real (el sistema levantado + `curl`), o el
@@ -185,11 +199,18 @@ Vale tenerlo escrito, porque es donde hay que mirar a mano:
 ```bash
 make test              # tests rápidos (sin Docker) + cobertura total
 make lint              # golangci-lint
-go test -tags integration ./...   # + Postgres real en contenedores (lento)
+go test -tags integration ./... -timeout 25m   # + Postgres real (lento)
 
 cd frontend && npx vitest run       # tests de pantalla
 cd frontend && npx playwright test  # e2e contra el sistema levantado
 ```
+
+> **El `-timeout 25m` no es decorativo.** Go corta cada paquete a los 10 minutos
+> por omisión, y los paquetes grandes de integración levantan su propio Postgres
+> y lo pasan: sin el flag la corrida muere con un panic de timeout que parece un
+> test colgado y no lo es. CI lo lleva puesto (`ci.yml`), y a mano hay que
+> acordarse. Los de vitest tardan unos diez minutos en total; los E2E necesitan
+> el sistema levantado y la base sembrada.
 
 ---
 
@@ -222,6 +243,19 @@ Cuatro decisiones que conviene conocer antes de tocar el archivo:
   despliega. Falla solo si el código **llama** a la función vulnerable: una
   dependencia con un CVE que nadie invoca no rompe la corrida, porque una
   alarma que suena por todo se aprende a ignorar.
+
+  **El precio de esa decisión, con un caso concreto.** La auditoría de seguridad
+  encontró que `fasthttp v1.51.0` —el que fija Fiber v2— tenía GO-2026-4950, un
+  *bypass de autorización por rutas doblemente codificadas*. Con esa versión en
+  `go.mod`, `govulncheck ./...` **termina con código 0**: lo lista bajo "packages
+  you import" y aclara que el código no parece llamarla, porque a esa función se
+  llega por dentro del router de Fiber y no desde el repositorio. O sea que el job
+  estuvo verde todo ese tiempo, con un CVE de ruteo en el servidor HTTP sobre el
+  que se apoya todo el RBAC por grupo de rutas. La decisión sigue siendo
+  defendible —fallar por todo se ignora—, pero conviene saber que **el verde de
+  este job no dice "no hay CVE en el árbol"**, dice "ninguno alcanzable desde
+  nuestro código". Lo que sí lo dice es leer la salida, o correr
+  `govulncheck -show verbose ./...` de tanto en tanto.
 - **Por eso la línea `go` de `go.mod` lleva el parche**, `1.25.13` y no
   `1.25.0`: es el piso de versión con el que se acepta compilar este módulo,
   y `setup-go` instala exactamente lo que ahí diga. Con `1.25.0` la corrida

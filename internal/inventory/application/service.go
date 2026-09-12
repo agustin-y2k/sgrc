@@ -46,6 +46,59 @@ func (s *Service) CrearCarro(ctx context.Context, nombre, descripcion string) (*
 	return c, nil
 }
 
+// DarDeBajaCarro retira un carro de circulación (RF-03.1).
+//
+// Es una baja LÓGICA: el nombre del carro vive congelado en el histórico de uso
+// de cada equipo que tuvo adentro, y borrarlo dejaría ese histórico hablando de
+// algo que el sistema ya no puede explicar. Lo que sí se libera es el nombre,
+// para que el carro que lo reemplaza pueda llamarse igual.
+//
+// Sólo se permite con el carro VACÍO. Dar de baja uno con máquinas adentro las
+// dejaría en un contenedor que para el sistema ya no existe: no aparecerían en
+// ningún selector de carro y sólo se las podría encontrar buscándolas sueltas.
+// Moverlas o darlas de baja es una decisión de quien conoce dónde fueron a
+// parar, no algo que se pueda deducir acá.
+func (s *Service) DarDeBajaCarro(ctx context.Context, carroID string) error {
+	c, err := s.repo.BuscarCarroPorID(ctx, carroID)
+	if err != nil {
+		return err
+	}
+
+	equipos, err := s.repo.ListarEquiposPorCarro(ctx, carroID)
+	if err != nil {
+		return fmt.Errorf("verificando si el carro está vacío: %w", err)
+	}
+	for _, e := range equipos {
+		if !e.DadoDeBaja {
+			return ErrCarroConEquipos
+		}
+	}
+
+	if err := c.DarDeBaja(s.ahora()); err != nil {
+		return err
+	}
+	return s.repo.GuardarCarro(ctx, c)
+}
+
+// ReactivarCarro deshace la baja de un carro.
+//
+// Lo único que puede impedirlo es que su nombre ya no esté libre: el índice
+// único excluye a los retirados, así que mientras el carro estuvo afuera otro
+// pudo haberse quedado con «Carro 1». No lo comprueba este servicio sino la
+// base, y el error que devuelve es el mismo que da el alta —que es justo lo que
+// el Admin necesita leer: no es que no se pueda reactivar, es que el nombre está
+// ocupado y hay que renombrar a uno de los dos.
+func (s *Service) ReactivarCarro(ctx context.Context, carroID string) error {
+	c, err := s.repo.BuscarCarroPorID(ctx, carroID)
+	if err != nil {
+		return err
+	}
+	if err := c.Reactivar(); err != nil {
+		return err
+	}
+	return s.repo.GuardarCarro(ctx, c)
+}
+
 // EditarCarro actualiza nombre y/o descripción — nil significa "no tocar
 // ese campo" (RF-03.1: edición parcial).
 func (s *Service) EditarCarro(ctx context.Context, carroID string, nombre, descripcion *string) error {
@@ -59,18 +112,39 @@ func (s *Service) EditarCarro(ctx context.Context, carroID string, nombre, descr
 		}
 	}
 	if descripcion != nil {
-		c.Descripcion = *descripcion
+		c.CambiarDescripcion(*descripcion)
 	}
 	return s.repo.GuardarCarro(ctx, c)
 }
 
-func (s *Service) ListarCarros(ctx context.Context) ([]*domain.Carro, error) {
-	return s.repo.ListarCarros(ctx)
+func (s *Service) ListarCarros(ctx context.Context, incluirRetirados bool) ([]*domain.Carro, error) {
+	return s.repo.ListarCarros(ctx, incluirRetirados)
 }
 
 // ── PC ──────────────────────────────────────────────────────────────────
 
+// verificarCarroDisponible falla si el carro no existe o está dado de baja.
+//
+// Lo segundo NO lo cubre la clave foránea —un carro retirado sigue siendo una
+// fila válida— y es justo el caso que deja una máquina invisible: los listados
+// de carros traen sólo los vivos, así que el equipo queda adentro de algo que
+// ninguna pantalla muestra, sin estar él mismo dado de baja.
+func (s *Service) verificarCarroDisponible(ctx context.Context, carroID string) error {
+	c, err := s.repo.BuscarCarroPorID(ctx, carroID)
+	if err != nil {
+		return err
+	}
+	if c.DadoDeBaja {
+		return ErrCarroDadoDeBaja
+	}
+	return nil
+}
+
 func (s *Service) CrearEquipoDeCarro(ctx context.Context, carroID string, identificador int, numeroSerie string, freezado bool, cpu, ram, sistemaOperativo, softwareInstalado string) (*domain.Equipo, error) {
+	if err := s.verificarCarroDisponible(ctx, carroID); err != nil {
+		return nil, err
+	}
+
 	pc, err := domain.NuevoEquipoDeCarro(s.nuevoID(), carroID, identificador, numeroSerie, freezado, s.ahora())
 	if err != nil {
 		return nil, err
@@ -112,13 +186,71 @@ type EditarEquipoParams struct {
 	NumeroSerie *string
 }
 
-func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params EditarEquipoParams) error {
-	pc, err := s.repo.BuscarEquipoPorID(ctx, equipoID)
-	if err != nil {
-		return err
+// CambioDeCampo es un dato que cambió, con sus dos puntas. La auditoría
+// necesita las dos: sin el valor anterior, «alguien editó el nombre» no
+// contesta la pregunta que se hace meses después, que es qué decía antes.
+type CambioDeCampo struct {
+	Antes   any `json:"antes"`
+	Despues any `json:"despues"`
+}
+
+// cambiosDeEquipo compara dos fotos del mismo equipo y devuelve sólo lo que se
+// movió.
+//
+// Se hace por comparación y no anotando en cada rama de la edición a propósito:
+// las ramas son once y crecen, y la que alguien agregue mañana entra sola en la
+// auditoría en vez de quedarse afuera en silencio — que es exactamente cómo
+// llegamos a que sólo el cambio de carro dejara rastro.
+//
+// `carroId` queda afuera porque tiene su propia acción, EQUIPO_MOVIDO_DE_CARRO:
+// registrarlo en las dos sería contar el mismo movimiento dos veces.
+func cambiosDeEquipo(antes, despues domain.Equipo) map[string]CambioDeCampo {
+	campos := []struct {
+		nombre         string
+		antes, despues any
+	}{
+		{"identificador", antes.Identificador, despues.Identificador},
+		{"tipo", antes.Tipo, despues.Tipo},
+		{"nombre", antes.Nombre, despues.Nombre},
+		{"numeroSerie", antes.NumeroSerie, despues.NumeroSerie},
+		{"reservable", antes.Reservable, despues.Reservable},
+		{"esComputadora", antes.EsComputadora, despues.EsComputadora},
+		{"freezado", antes.Freezado, despues.Freezado},
+		{"cpu", antes.CPU, despues.CPU},
+		{"ram", antes.RAM, despues.RAM},
+		{"sistemaOperativo", antes.SistemaOperativo, despues.SistemaOperativo},
+		{"softwareInstalado", antes.SoftwareInstalado, despues.SoftwareInstalado},
 	}
 
+	cambios := map[string]CambioDeCampo{}
+	for _, c := range campos {
+		if c.antes != c.despues {
+			cambios[c.nombre] = CambioDeCampo{Antes: c.antes, Despues: c.despues}
+		}
+	}
+	return cambios
+}
+
+// EditarEquipo devuelve qué cambió, para que el handler lo audite. Un mapa
+// vacío significa que el pedido no movió nada — y entonces no se audita: una
+// entrada que dice «editó» sin decir qué es ruido en el registro.
+func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params EditarEquipoParams) (map[string]CambioDeCampo, error) {
+	pc, err := s.repo.BuscarEquipoPorID(ctx, equipoID)
+	if err != nil {
+		return nil, err
+	}
+
+	// La foto de antes. Se copia por valor: los campos que se comparan son
+	// todos escalares.
+	antes := *pc
+
 	if params.CarroID != nil {
+		// El destino se valida ANTES de tocar el equipo: mover a un carro
+		// retirado devolvía 200 y dejaba la máquina en un contenedor que ninguna
+		// pantalla lista.
+		if err := s.verificarCarroDisponible(ctx, *params.CarroID); err != nil {
+			return nil, err
+		}
 		pc.MoverACarro(*params.CarroID)
 	}
 	if params.Freezado != nil {
@@ -139,7 +271,7 @@ func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params Edit
 	if params.Tipo != nil {
 		tipo, err := domain.TipoDeEquipoValido(*params.Tipo)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		pc.Tipo = tipo
 	}
@@ -148,7 +280,7 @@ func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params Edit
 		// Un equipo suelto no puede quedarse sin nombre: es lo único que lo
 		// distingue, y el índice `ux_equipo_suelto_nombre` lo exige en la base.
 		if err != nil && (*params.Nombre != "" || !pc.EstaEnUnCarro()) {
-			return err
+			return nil, err
 		}
 		pc.Nombre = nombre
 	}
@@ -161,18 +293,21 @@ func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params Edit
 	if params.NumeroSerie != nil {
 		serie, err := domain.NumeroSerieOpcionalValido(*params.NumeroSerie)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		// Vaciarlo solo se permite fuera de un carro. Una computadora de
 		// laboratorio nace con serie obligatoria, y dejar que una edición se la
 		// saque abriría por la puerta de atrás un estado que el alta prohíbe.
 		if serie == "" && pc.EstaEnUnCarro() {
-			return domain.ErrNumeroSerieInvalido
+			return nil, domain.ErrNumeroSerieInvalido
 		}
 		pc.NumeroSerie = serie
 	}
 
-	return s.repo.GuardarEquipo(ctx, pc)
+	if err := s.repo.GuardarEquipo(ctx, pc); err != nil {
+		return nil, err
+	}
+	return cambiosDeEquipo(antes, *pc), nil
 }
 
 // ResultadoCascada es lo que el handler HTTP necesita para armar la respuesta
@@ -292,6 +427,41 @@ func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*Result
 	}
 
 	return &ResultadoCascada{ReservasCanceladas: canceladas, DocentesNotificados: notificados}, nil
+}
+
+// ReactivarEquipo deshace la baja de un equipo (RF-03.4).
+//
+// Tres cosas pueden impedirlo, y las tres son "alguien se quedó con lo tuyo
+// mientras no estabas", porque los índices únicos que sostienen esos tres datos
+// excluyen a los dados de baja:
+//
+//   - su zócalo en el carro (PC 7 del Carro 1 ahora es otra máquina),
+//   - su nombre, si es un equipo suelto,
+//   - su número de serie.
+//
+// Ninguna la comprueba este servicio: las decide la base y el repositorio
+// traduce cuál de las tres fue, que es lo que hay que decirle al Admin para que
+// sepa qué renombrar.
+//
+// La que sí va acá es la cuarta, porque la base no la puede ver: el carro al que
+// el equipo pertenece pudo haberse retirado en el medio. Reactivar ahí adentro
+// devolvería la máquina a un contenedor que ninguna pantalla lista —es el mismo
+// caso que verificarCarroDisponible cubre al crear y al mover—, y el equipo
+// quedaría invisible sin estar dado de baja, que es peor que seguir de baja.
+func (s *Service) ReactivarEquipo(ctx context.Context, equipoID string) error {
+	pc, err := s.repo.BuscarEquipoPorID(ctx, equipoID)
+	if err != nil {
+		return err
+	}
+	if pc.EstaEnUnCarro() {
+		if err := s.verificarCarroDisponible(ctx, pc.CarroID); err != nil {
+			return err
+		}
+	}
+	if err := pc.Reactivar(); err != nil {
+		return err
+	}
+	return s.repo.GuardarEquipo(ctx, pc)
 }
 
 // motivoPorDefecto arma la RAZÓN de la cancelación, no el aviso completo: el
@@ -417,10 +587,40 @@ func (s *Service) EditarIncidencia(ctx context.Context, incidenciaID string, par
 	return s.repo.GuardarIncidencia(ctx, i)
 }
 
+// maxIncidenciasDeEquipo acota el historial de fallas de una máquina, con el
+// mismo criterio y el mismo número que el de entregas (maxHistorialDeEquipo en
+// reservation): son las dos la misma pantalla —los últimos movimientos de un
+// equipo— y la decisión estaba tomada para una sola de las dos.
+const maxIncidenciasDeEquipo = 50
+
 func (s *Service) ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error) {
-	return s.repo.ListarIncidenciasPorEquipo(ctx, equipoID)
+	return s.repo.ListarIncidenciasPorEquipo(ctx, equipoID, maxIncidenciasDeEquipo)
 }
 
 func (s *Service) CategoriasDeFallaUsadas(ctx context.Context) ([]string, error) {
 	return s.repo.CategoriasDeFallaUsadas(ctx)
+}
+
+// ── Obtener uno solo ────────────────────────────────────────────────────
+//
+// Cada uno de estos recursos se podía editar y dar de baja, pero no PEDIR: la
+// API tenía PATCH y DELETE de /equipos/{id} y ningún GET. Funcionaba porque la
+// pantalla trae todo de los listados y se guarda el objeto en memoria;
+// cualquier otro consumidor —un script, una integración, la propia pantalla
+// después de recargar en una dirección profunda— tenía que traerse la colección
+// entera para encontrar uno.
+//
+// El permiso de cada uno es el mismo que el de su listado: si ya se podía ver
+// en la lista, se puede ver solo.
+
+func (s *Service) ObtenerCarro(ctx context.Context, id string) (*domain.Carro, error) {
+	return s.repo.BuscarCarroPorID(ctx, id)
+}
+
+func (s *Service) ObtenerEquipo(ctx context.Context, id string) (*domain.Equipo, error) {
+	return s.repo.BuscarEquipoPorID(ctx, id)
+}
+
+func (s *Service) ObtenerIncidencia(ctx context.Context, id string) (*domain.Incidencia, error) {
+	return s.repo.BuscarIncidenciaPorID(ctx, id)
 }
