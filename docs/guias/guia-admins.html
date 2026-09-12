@@ -163,14 +163,6 @@
     white-space: nowrap;
   }
 
-  figure { margin: 5mm 0 6mm 0; break-inside: avoid; text-align: center; }
-  figure img {
-    max-width: 100%;
-    max-height: 140mm;
-    border-radius: 6px;
-    box-shadow: 0 1px 4px rgba(20, 24, 31, .18);
-  }
-  figcaption { color: var(--gris); font-size: 9.5pt; margin-top: 2.5mm; }
 
   .nota, .ojo, .listo, .peligro {
     padding: 4mm 5mm;
@@ -301,11 +293,6 @@
     mostrador: lo urgente arriba y a la izquierda.
   </p>
 
-  <figure>
-    <img src="imagenes/admin-01-mostrador.png" alt="Pantalla de inicio del administrador con seis zonas señaladas">
-    <figcaption>La pantalla de inicio del Admin, con las zonas señaladas.</figcaption>
-  </figure>
-
   <ol class="referencias">
     <li><b>Para entregar ahora.</b> Las clases que están empezando y todavía no
       retiraron sus computadoras. Es lo primero que mirás cuando llega un docente.</li>
@@ -335,11 +322,6 @@
   <p class="entrada">
     En la barra de arriba, el menú <b>Administración</b> abre todo lo que es tuyo.
   </p>
-
-  <figure>
-    <img src="imagenes/admin-02-menu.png" alt="Menú Administración desplegado">
-    <figcaption>El menú Administración, desplegado.</figcaption>
-  </figure>
 
   <ul class="simple">
     <li><b>Usuarios</b> — todas las cuentas: contraseñas, roles, bajas.</li>
@@ -378,11 +360,6 @@
       materia asignada, el docente entra pero no puede reservar.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/admin-03-aprobacion.png" alt="Pantalla de cuentas pendientes">
-    <figcaption>Una cuenta esperando aprobación.</figcaption>
-  </figure>
-
   <div class="nota">
     <span class="titulo">Al registrarse te dejaron una pista</span>
     En el formulario de registro, la persona dijo <b>con qué cargo</b> se registra y
@@ -418,11 +395,6 @@
     (1°A, 2°B), cada curso tiene sus <b>materias</b>, y los docentes reservan
     <b>para una materia</b>. Si esto no está cargado, nadie puede reservar nada.
   </p>
-
-  <figure>
-    <img src="imagenes/admin-04-academico.png" alt="Pantalla de ciclos, cursos y materias">
-    <figcaption>El ciclo activo, con sus cursos y materias.</figcaption>
-  </figure>
 
   <h3>Empezar el año</h3>
   <ol class="pasos">
@@ -478,11 +450,6 @@
     hacerlo: no hay botón de deshacer.
   </p>
 
-  <figure>
-    <img src="imagenes/admin-19-cerrar-anio.png" alt="El recuadro que aparece al tocar «Cerrar el año»">
-    <figcaption>El sistema te dice qué va a pasar antes de que confirmes.</figcaption>
-  </figure>
-
   <div class="peligro">
     <span class="titulo">Cerrar el año borra todas las reservas de ese año</span>
     Todas: las que ya pasaron y las que estaban por venir. Por eso se hace
@@ -514,11 +481,11 @@
   <h3>Cómo se hace</h3>
   <ol class="pasos">
     <li>Entrá a <b>Administración → Académico</b>.</li>
-    <li>En la tarjeta del ciclo activo, tocá <span class="boton">Cerrar el año</span>.
+    <li>En la tarjeta del ciclo activo, tocá <span class="boton">Cerrar el año y abrir el siguiente</span>.
       Todavía no pasó nada: se abre un recuadro que explica qué va a pasar.</li>
     <li>Leé el recuadro. Si te arrepentís, <span class="boton">Volver</span> cierra
       el recuadro y no cambia nada.</li>
-    <li>Mirá el campo <b>«Crear el ciclo siguiente copiando cursos y materias»</b>:
+    <li>Mirá el campo <b>«Año del ciclo siguiente»</b>:
       viene con el año que viene ya escrito. Si lo dejás así, el sistema crea el
       ciclo nuevo con los mismos cursos y las mismas materias, y te ahorra cargar
       todo de nuevo. Si lo <b>borrás</b>, no se crea ningún ciclo y lo hacés a mano
@@ -553,11 +520,6 @@
     alta una cuenta de administración directamente, sin que la persona tenga que
     registrarse y esperar aprobación.
   </p>
-
-  <figure>
-    <img src="imagenes/admin-05-usuarios.png" alt="Listado de usuarios del sistema">
-    <figcaption>Cada cuenta, con su estado y lo que se puede hacer con ella.</figcaption>
-  </figure>
 
   <h3>Aprobar o rechazar desde acá</h3>
   <p>
@@ -649,11 +611,6 @@
     En <b>Administración → Gestión del inventario</b> se cargan los carros y las
     computadoras, y se cambia su estado.
   </p>
-
-  <figure>
-    <img src="imagenes/admin-06-inventario.png" alt="Gestión del inventario con los equipos de un carro">
-    <figcaption>Cada equipo, con su número de serie, sus programas y sus acciones.</figcaption>
-  </figure>
 
   <h3>Cargar un carro y sus computadoras</h3>
   <ol class="pasos">
@@ -785,11 +742,6 @@
     está libre el jueves a las 10?» sin abrir ninguna reserva.
   </p>
 
-  <figure>
-    <img src="imagenes/admin-20-calendario-equipo.png" alt="Calendario semanal de una computadora">
-    <figcaption>Una semana de una sola máquina: en azul las clases, en rojo los bloqueos.</figcaption>
-  </figure>
-
   <ul class="simple">
     <li><b>En azul</b>, las reservas de clase, con la materia y el docente.</li>
     <li><b>En rojo</b>, los bloqueos que hiciste vos o cualquier Admin, con el
@@ -827,11 +779,6 @@
     <li>Tocá <span class="boton">Agregar cuenta</span> y completá lo que sepas.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/admin-22-cuentas-de-equipo.png" alt="Las cuentas anotadas de una computadora, desde la gestión del inventario">
-    <figcaption>Las cuentas de una máquina, con sus botones para editar y quitar.</figcaption>
-  </figure>
-
   <div class="nota">
     <span class="titulo">También está en «Computadoras»</span>
     El mismo panel se abre desde <b>Computadoras</b>, en la barra de arriba: ahí es
@@ -841,11 +788,6 @@
   </div>
 
   <h3>Qué se anota de cada cuenta</h3>
-
-  <figure>
-    <img src="imagenes/admin-23-cuenta-nueva.png" alt="Formulario para anotar una cuenta de un equipo">
-    <figcaption>Lo único obligatorio es con qué usuario se entra.</figcaption>
-  </figure>
 
   <ul class="simple">
     <li><b>¿Con qué usuario se entra?</b> — es lo único obligatorio: sin eso la
@@ -933,11 +875,6 @@
     inicio.
   </p>
 
-  <figure>
-    <img src="imagenes/admin-07-entregas.png" alt="Pantalla de entregas y devoluciones">
-    <figcaption>Arriba, lo que está afuera; abajo, las reservas de hoy sin retirar.</figcaption>
-  </figure>
-
   <h3>Entregar las computadoras de una reserva</h3>
   <ol class="pasos">
     <li>Buscá la clase en <b>Entregar las de una reserva</b> —o en «Para entregar
@@ -980,11 +917,6 @@
       tenés un buscador arriba de la lista. Al confirmar, <b>el cuadro se cierra
       solo</b> y arriba te queda escrito qué salió.</li>
   </ol>
-
-  <figure>
-    <img src="imagenes/admin-08-entregar-sin-reserva.png" alt="Formulario de entrega sin reserva">
-    <figcaption>Con el nombre alcanza; lo demás es opcional.</figcaption>
-  </figure>
 
   <div class="nota">
     <span class="titulo">Solo aparece lo que se puede entregar</span>
@@ -1050,11 +982,6 @@
     dar su clase.
   </p>
 
-  <figure>
-    <img src="imagenes/admin-09-licencias.png" alt="Listado de licencias con su estado">
-    <figcaption>Cada máquina lleva su propio contador. Primero, las que están por vencer.</figcaption>
-  </figure>
-
   <h3>Cargar una licencia</h3>
   <ol class="pasos">
     <li>Tocá <span class="boton">Cargar una licencia</span>.</li>
@@ -1065,11 +992,6 @@
     <li>Decí <b>cuándo vence</b>. Hay tres formas: le quedan N días, se renovó el…, o
       vence el… Si no lo sabés, elegí «todavía no sé».</li>
   </ol>
-
-  <figure>
-    <img src="imagenes/admin-10-cargar-licencia.png" alt="Formulario de carga de licencia">
-    <figcaption>Se carga el mismo software en varios equipos de una sola vez.</figcaption>
-  </figure>
 
   <div class="nota">
     <span class="titulo">«Todavía no sé» es una respuesta válida</span>
@@ -1116,11 +1038,6 @@
       para que lo veas antes de confirmar.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/admin-11-bloquear.png" alt="Pantalla para bloquear equipos">
-    <figcaption>Antes de bloquear, se ve qué máquinas tienen reserva en esa franja.</figcaption>
-  </figure>
-
   <div class="ojo">
     <span class="titulo">Bloquear cancela clases de otros</span>
     Las reservas que se pisan con el bloqueo se cancelan, y a cada docente le llega un
@@ -1150,11 +1067,6 @@
     horario se rechazan solas.
   </p>
 
-  <figure>
-    <img src="imagenes/admin-12-jornada.png" alt="Pantalla de la jornada de la escuela">
-    <figcaption>Se carga por tramos: qué días, desde qué hora y hasta cuál.</figcaption>
-  </figure>
-
   <ol class="pasos">
     <li>Entrá a <b>Administración → Jornada de la escuela</b>.</li>
     <li>Tildá los <b>días</b> del tramo. Hay atajos: «Lunes a viernes», «Todos los
@@ -1179,13 +1091,6 @@
     horario que todavía no sabés— pero el pedido vuelve en la próxima entrada.
   </div>
 
-  <figure>
-    <img src="imagenes/admin-12c-primera-jornada.png"
-         alt="Pantalla que pide declarar la jornada al entrar">
-    <figcaption>Lo primero que ves si la escuela todavía no tiene horario
-      cargado. Se puede declarar acá mismo o dejarlo para después.</figcaption>
-  </figure>
-
   <h3>Si cambiás el horario y ya hay clases reservadas</h3>
 
   <p>
@@ -1193,13 +1098,6 @@
     <b>cuántas clases quedan afuera y de cuántos docentes</b>, con la lista, y
     recién ahí decidís.
   </p>
-
-  <figure>
-    <img src="imagenes/admin-12b-jornada-impacto.png"
-         alt="Confirmación antes de cancelar clases por un cambio de horario">
-    <figcaption>Se cuenta en clases; los equipos van al lado porque una clase
-      puede tener varias computadoras.</figcaption>
-  </figure>
 
   <ul class="lista">
     <li><b>Ampliar el horario no afecta a nadie</b> y no te pregunta nada.</li>
@@ -1233,11 +1131,6 @@
     Un docente puede pedir, desde su perfil, que lo anoten en una materia. Acá se
     resuelven.
   </p>
-
-  <figure>
-    <img src="imagenes/admin-13-pedidos-de-materia.png" alt="Pantalla de pedidos para dictar una materia">
-    <figcaption>Cada pedido trae el motivo que escribió el docente.</figcaption>
-  </figure>
 
   <ol class="pasos">
     <li>Entrá a <b>Administración → Pedidos de materia</b>.</li>
@@ -1278,12 +1171,6 @@
       <span class="boton">Dar por resuelta</span>.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/admin-15-soporte-conversacion.png" alt="Conversación de soporte abierta con la respuesta del Admin">
-    <figcaption>La conversación completa: lo que escribió el docente y lo que
-      contestaron.</figcaption>
-  </figure>
-
   <div class="nota">
     <span class="titulo">Contestar no cierra el tema</span>
     Podés contestar las veces que haga falta; recién se cierra cuando alguien la da
@@ -1314,11 +1201,6 @@
     máquina, quién reserva, qué se rompe.
   </p>
 
-  <figure>
-    <img src="imagenes/admin-16-reportes.png" alt="Pantalla de reportes">
-    <figcaption>Todos los reportes en una sola pantalla, filtrados por ciclo y por fechas.</figcaption>
-  </figure>
-
   <ul class="simple">
     <li><b>Uso por equipo</b> — cuántas reservas y cuántas horas tuvo cada máquina.
       Sirve para repartir el desgaste y para justificar una compra.</li>
@@ -1346,11 +1228,6 @@
     Admin. La cargás vos, para vos — y además es lo que le dice al sistema cuándo
     puede confiar en lo que ve.
   </p>
-
-  <figure>
-    <img src="imagenes/admin-17-horarios-admin.png" alt="Pantalla de disponibilidad de los Admin">
-    <figcaption>Tu horario, cargado por vos; los docentes lo ven en «Horario Admins».</figcaption>
-  </figure>
 
   <ol class="pasos">
     <li>Entrá a <b>Horario Admins</b>, en la barra de arriba.</li>
@@ -1416,11 +1293,6 @@
     afuera al cerrar.
   </p>
 
-  <figure>
-    <img src="imagenes/admin-18-avisos.png" alt="Pantalla de avisos de un administrador">
-    <figcaption>Los avisos de administración, más el buzón de pedidos de ayuda.</figcaption>
-  </figure>
-
   <p>
     Si te llegan demasiados correos, en <b>Copias por correo</b> →
     <span class="boton">Elegir cuáles</span> podés apagar los que no querés recibir
@@ -1445,11 +1317,6 @@
     Se llega desde tu inicial o tu foto, arriba a la derecha, en
     <b>Mi cuenta → Mi perfil</b>.
   </p>
-
-  <figure>
-    <img src="imagenes/admin-21-perfil.png" alt="La pantalla Mi perfil de un Admin">
-    <figcaption>Tu foto, tu nombre, tus materias y tu contraseña, todo en un lugar.</figcaption>
-  </figure>
 
   <h3>Tu foto</h3>
   <p>
@@ -1584,7 +1451,7 @@
 
   <div class="pregunta">
     <h3>No puedo crear el ciclo del año que viene</h3>
-    <p>Solo puede haber un ciclo activo. Cerrá el actual con <b>Cerrar el año</b> y
+    <p>Solo puede haber un ciclo activo. Cerrá el actual con <b>Cerrar el año y abrir el siguiente</b> y
       después creá el nuevo.</p>
   </div>
 

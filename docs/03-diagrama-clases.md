@@ -21,6 +21,8 @@ classDiagram
         +UUID aprobadoPor
         +string cursoSolicitado
         +string materiaSolicitada
+        +string rolSolicitado
+        +string cargoSolicitado
         +int versionSesion
         +puedeTransicionarA(estado) boolean
     }
@@ -40,6 +42,8 @@ classDiagram
         +UUID id
         +string nombre
         +string descripcion
+        +boolean dadoDeBaja
+        +DateTime fechaBaja
     }
 
     class Equipo {
@@ -60,6 +64,7 @@ classDiagram
         +boolean dadoDeBaja
         +DateTime fechaBaja
         +DateTime fechaAlta
+        +boolean tieneCuentas
         +etiqueta() string
         +estaEnUnCarro() boolean
     }
@@ -113,6 +118,7 @@ classDiagram
         +DateTime vencimientoFijadoEn
         +Date avisadoPrevioPara
         +Date avisadoVencimientoPara
+        +DateTime creadaEn
         +diasRestantes(hoy) int
         +estado(hoy) EstadoLicencia
         +renovar(fecha, por, ahora)
@@ -165,7 +171,6 @@ classDiagram
         +string division
         +string modalidad
         +string nombre
-        +boolean activo
         +boolean archivado
         +etiqueta() string
     }
@@ -174,7 +179,6 @@ classDiagram
         +UUID id
         +UUID cursoId
         +string nombre
-        +boolean activo
         +boolean archivado
     }
 
@@ -208,7 +212,6 @@ classDiagram
         +EstadoReservaGrupo estado
         +UUID reglaRecurrenciaId
         +DateTime creadaEn
-        +DateTime recordatorioEnviadoEn
         +recalcularEstado(reservas)
     }
 
@@ -229,7 +232,6 @@ classDiagram
         +UUID canceladoPor
         +string motivoCancelacion
         +DateTime canceladaEn
-        +DateTime avisadoEquipoNoDisponibleEn
         +seSolapaCon(otra) boolean
         +cancelar(por, motivo, ahora)
     }
@@ -246,22 +248,29 @@ classDiagram
         +DateTime leidaEn
     }
 
-    class HorarioAdmin {
+    class BloqueHorario {
         +UUID id
         +UUID usuarioId
         +DiaSemana diaSemana
-        +Time horaInicio
-        +Time horaFin
+        +Duration horaInicio
+        +Duration horaFin
     }
 
-    class HorarioAdminExcepcion {
+    class Excepcion {
         +UUID id
         +UUID usuarioId
         +Date fecha
-        +TipoExcepcionHorario tipo
-        +Time horaInicio
-        +Time horaFin
+        +TipoExcepcion tipo
+        +Duration horaInicio
+        +Duration horaFin
         +string motivo
+    }
+
+    class BloqueJornada {
+        +UUID id
+        +DiaSemana diaSemana
+        +Duration horaInicio
+        +Duration horaFin
     }
 
     class HistoricoUsoEquipo {
@@ -301,8 +310,8 @@ classDiagram
     Usuario "1" --> "N" ReservaGrupo : creadoPor
     Usuario "1" --> "N" Notificacion
     Usuario "1" --> "N" CodigoRecuperacion
-    Usuario "1" --> "N" HorarioAdmin
-    Usuario "1" --> "N" HorarioAdminExcepcion
+    Usuario "1" --> "N" BloqueHorario
+    Usuario "1" --> "N" Excepcion
     Usuario "1" --> "N" HistoricoUsoDocente
     ReglaRecurrencia "1" --> "N" ReservaGrupo : materializa
     ReservaGrupo "1" --> "N" Reserva : contiene (una por equipo)
@@ -374,7 +383,14 @@ local es texto libre.
 - **`Equipo.dadoDeBaja` / `Equipo.fechaBaja`**: el "eliminar" de la interfaz es
   un soft delete — el equipo se oculta de los listados activos y no puede
   reservarse, pero conserva su historial de incidencias, préstamos y reservas.
-- **`HorarioAdmin` es un patrón recurrente simple, sin versionar**: a diferencia
+- **Los tipos de `availability` no se llaman como sus tablas.** `BloqueHorario`
+  vive en `horario_admin`, `Excepcion` en `horario_admin_excepcion` y
+  `BloqueJornada` en `jornada_institucion`. El diagrama usa los nombres de los
+  tipos, como el resto; `07-modelo-datos.md` usa los de las tablas.
+- **`BloqueJornada` es la jornada de la institución**, no de una persona: a qué
+  hora abre y cierra cada día. Por eso es el único de los tres sin `usuarioId`, y
+  es lo que reemplazó al "lunes a viernes" que antes estaba escrito en el código.
+- **`BloqueHorario` es un patrón recurrente simple, sin versionar**: a diferencia
   de `ReglaRecurrencia` (que materializa una fila por ocurrencia porque cada una
   puede reservarse o cancelarse individualmente), acá no hace falta — se evalúa
   en el momento de la consulta. Editar un bloque cambia el patrón para todas las
@@ -399,8 +415,15 @@ local es texto libre.
   hace idempotente al barrido sin resetear nada — al renovar cambia
   `fechaVencimiento`, las marcas dejan de coincidir solas, y el ciclo nuevo
   vuelve a avisar.
-- **`HorarioAdminExcepcion`** cubre tanto una excepción planificada como el
-  botón rápido "marcarme no disponible ahora" (la misma fila, con
-  `tipo = NO_DISPONIBLE` y `fecha = hoy`). Si existe una excepción para la fecha
-  consultada, siempre pisa al patrón semanal de `HorarioAdmin`.
+- **`Excepcion`** cubre tanto una excepción planificada como el botón rápido
+  "marcarme no disponible ahora" (la misma fila, con `tipo = NO_DISPONIBLE` y
+  `fecha = hoy`). Si existe una excepción para la fecha consultada, siempre pisa
+  al patrón semanal de `BloqueHorario`.
+- **Dos columnas que están en la base y no son campos de dominio.**
+  `reserva_grupo.recordatorio_enviado_en` existe y se usa, pero no a través de la
+  entidad: el barrido la lee como un booleano en una proyección aparte
+  (`internal/reservation/infrastructure/vigilancia_repo.go`) y la marca con un
+  `UPDATE` puntual. Y `curso.activo` / `materia.activo`, que este diagrama
+  listaba, ya no existen: los eliminó la migración 016 porque nadie los leía.
+  `ciclo_lectivo.activo` sí sigue, y no tiene nada que ver con esos dos.
 </content>

@@ -99,12 +99,12 @@ sequenceDiagram
 
     U->>FE: Selecciona materia, fecha, horario
     Note over FE: Antes de la franja no hay lista que mostrar
-    FE->>RES: GET /api/reservation/equipos-disponibles?fecha&horaInicio&horaFin
+    FE->>RES: GET /api/equipos-disponibles?fecha&horaInicio&horaFin
     RES->>INV: Listar equipos DISPONIBLE y reservables
     RES->>DB: SELECT reservas y bloqueos que pisan esa franja
     RES-->>FE: { data: libres para tildar, ocupados: con docente/materia/franja o motivo }
     U->>FE: Tilda los equipos que necesita (uno o varios)
-    FE->>RES: POST /api/reservation/reservas { materiaId, fecha, horaInicio, horaFin, equipoIds: [...] }
+    FE->>RES: POST /api/reservas { materiaId, fecha, horaInicio, horaFin, equipoIds: [...] }
     RES->>RES: Verifica permiso sobre la materia (rol + docente_materia)
     RES->>DB: INSERT reserva_grupo (CONFIRMADA)
     loop por cada equipoId
@@ -139,7 +139,7 @@ sequenceDiagram
     actor D as Docente dueño de la reserva
 
     U->>FE: En la lista de la franja, "pedir" sobre un equipo tomado
-    FE->>RES: POST /api/reservation/reservas/{id}/pedido-de-liberacion { mensaje? }
+    FE->>RES: POST /api/reservas/{id}/pedido-de-liberacion { mensaje? }
     RES->>RES: ¿La reserva está CONFIRMADA y su franja todavía no empezó?
     RES->>NOT: ¿Ya hay un pedido de este solicitante por esta reserva hoy?
     alt Ya pidió hoy, o la reserva no admite pedido
@@ -169,7 +169,7 @@ sequenceDiagram
     participant DB as sgrc_db
 
     U->>FE: Materia, equipos elegidos, día de semana, horario, rango de fechas
-    FE->>RES: POST /api/reservation/reservas/recurrentes { materiaId, equipoIds: [...], diaSemana, ... }
+    FE->>RES: POST /api/reservas/recurrentes { materiaId, equipoIds: [...], diaSemana, ... }
     RES->>RES: Calcula todas las ocurrencias (cada fecha × cada equipo elegido)
     RES->>DB: UNA consulta: todos los equipos × todas las fechas, un rango horario
     alt Sin conflictos
@@ -203,12 +203,12 @@ sequenceDiagram
     FE-->>U: Popup "¿Solo esta fecha o esta y siguientes?"
     alt Solo esta fecha
         U->>FE: "Solo esta"
-        FE->>RES: POST /api/reservation/grupos/{reservaGrupoId}/cancelar { soloEsta: true }
+        FE->>RES: POST /api/grupos/{reservaGrupoId}/cancelar { soloEsta: true }
         RES->>DB: UPDATE reserva SET estado=CANCELADA WHERE reserva_grupo_id={id}
         RES->>DB: UPDATE reserva_grupo SET estado=CANCELADA WHERE id={id}
     else Esta fecha y siguientes
         U->>FE: "Esta y siguientes"
-        FE->>RES: POST /api/reservation/grupos/{reservaGrupoId}/cancelar { soloEsta: false }
+        FE->>RES: POST /api/grupos/{reservaGrupoId}/cancelar { soloEsta: false }
         RES->>DB: SELECT reserva_grupo WHERE regla_recurrencia_id={reglaId} AND fecha >= {fecha}
         RES->>DB: UPDATE reserva SET estado=CANCELADA WHERE reserva_grupo_id IN (...)
         RES->>DB: UPDATE reserva_grupo SET estado=CANCELADA WHERE id IN (...)
@@ -229,7 +229,7 @@ sequenceDiagram
     participant DB as sgrc_db
 
     ADM->>FE: Selecciona los equipos, el rango fecha/hora y escribe el motivo
-    FE->>RES: POST /api/reservation/bloqueos (JWT)
+    FE->>RES: POST /api/bloqueos (JWT)
     RES->>DB: SELECT reserva CONFIRMADA en conflicto (solo esos equipos, ese rango exacto)
     DB-->>RES: [reservas puntuales con reserva_grupo_id, docenteId]
     loop por cada reserva en conflicto
@@ -266,7 +266,7 @@ sequenceDiagram
     participant DB as sgrc_db
 
     ADM->>FE: Cambia estado del equipo a EN_MANTENIMIENTO/FUERA_DE_SERVICIO (+ motivo opcional)
-    FE->>INV: PATCH /api/inventory/equipos/{id}/estado
+    FE->>INV: PATCH /api/equipos/{id}/estado
     INV->>DB: UPDATE equipo SET estado=...
     INV->>DB: SELECT reserva CONFIRMADA de ese equipo puntual con fecha/hora futura
     DB-->>INV: [reservas puntuales con reserva_grupo_id, docenteId]
@@ -293,14 +293,41 @@ sequenceDiagram
     participant DB as sgrc_db
 
     ADM->>FE: Elimina un equipo del inventario
-    FE->>INV: DELETE /api/inventory/equipos/{id}
-    INV->>DB: UPDATE equipo SET dado_de_baja=true, fecha_baja=now(), estado=FUERA_DE_SERVICIO
+    FE->>INV: DELETE /api/equipos/{id}
+    INV->>DB: SELECT: ¿está prestado y sin devolver?
+    INV->>DB: UPDATE equipo SET dado_de_baja=true, fecha_baja=now()
     Note over INV,DB: Soft delete: no se borra la fila — incidencia y reserva la referencian por FK
+    INV->>INV: Cancela las reservas futuras y avisa a cada docente
     INV-->>FE: 200 { reservasCanceladas: N, docentesNotificados: N }
     FE-->>ADM: ✅ Equipo dado de baja. Ya no aparece en listados activos ni puede reservarse.
 ```
 
 > Un `DELETE` en la API es, puertas adentro, un soft delete: si se borrara la fila físicamente, se perdería la referencia de todo el historial de incidencias y reservas pasadas de ese equipo. Distinto del borrado de reservas al archivar un ciclo lectivo (§7), que sí es físico porque ahí se preserva un snapshot agregado aparte.
+
+> **El `estado` no se toca.** El diagrama decía que la baja lo pasaba a `FUERA_DE_SERVICIO` y eso nunca fue cierto: `dado_de_baja` y `estado` son dos ejes distintos, y la baja sólo mueve el primero. Importa porque es lo que permite que deshacerla devuelva el equipo tal como estaba.
+
+## 6c. Deshacer la baja de un equipo
+
+```mermaid
+sequenceDiagram
+    actor ADM as Admin
+    participant FE as Frontend
+    participant INV as inventory (paquete)
+    participant DB as sgrc_db
+
+    ADM->>FE: Abre los equipos retirados del carro y devuelve uno al inventario
+    FE->>INV: POST /api/equipos/{id}/reactivar
+    INV->>DB: SELECT: ¿el carro del equipo sigue en circulación?
+    Note over INV,DB: Si el carro se retiró en el medio, 409: el equipo quedaría<br/>dentro de algo que ninguna pantalla lista
+    INV->>DB: UPDATE equipo SET dado_de_baja=false, fecha_baja=NULL
+    Note over DB: Puede fallar con 409 contra uno de los tres índices únicos<br/>parciales: el zócalo, el nombre suelto o el número de serie<br/>que la baja liberó y otro equipo tomó
+    INV-->>FE: 200
+    FE-->>ADM: ✅ Volvió al inventario, con el estado que tenía
+```
+
+> **No revierte la cascada.** Las reservas que la baja canceló quedan canceladas y los avisos ya salieron. Lo que vuelve es la máquina; por eso esta respuesta no trae ningún contador, a diferencia de la baja.
+
+> El carro sigue el mismo camino con `POST /api/carros/{id}/reactivar`, y ahí lo único que puede fallar es que otro carro se haya quedado con el nombre.
 
 ## 7. Archivar y clonar ciclo lectivo
 
@@ -314,7 +341,7 @@ sequenceDiagram
     participant DB as sgrc_db
 
     ADM->>FE: Archivar ciclo {año} y clonar a {año+1}
-    FE->>ACAD: POST /api/academic/ciclos/{id}/archivar { clonarA: año+1 }
+    FE->>ACAD: POST /api/ciclos/{id}/archivar { clonarA: año+1 }
     ACAD->>REP: CalcularSnapshotAnual(cicloId) — antes de borrar nada
     REP->>DB: SELECT agregados de reserva/reserva_grupo de las materias del ciclo
     REP->>DB: INSERT historico_uso_equipo, historico_uso_docente (permanentes)
@@ -490,7 +517,7 @@ sequenceDiagram
     participant DB as sgrc_db
 
     U->>FE: Abre la vista de disponibilidad
-    FE->>AVAIL: GET /api/availability/admins
+    FE->>AVAIL: GET /api/guardia
     AVAIL->>DB: SELECT admins con rol=ADMIN y estado=APROBADA
     AVAIL->>DB: SELECT bloques de horario_admin de TODOS esos ids
     AVAIL->>DB: SELECT excepciones de TODOS esos ids con fecha = hoy

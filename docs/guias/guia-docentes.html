@@ -169,19 +169,6 @@
   }
 
   /* ── Capturas ─────────────────────────────────────────────── */
-  figure { margin: 5mm 0 6mm 0; break-inside: avoid; text-align: center; }
-  figure img {
-    max-width: 100%;
-    max-height: 140mm;
-    border-radius: 6px;
-    box-shadow: 0 1px 4px rgba(20, 24, 31, .18);
-  }
-  figcaption {
-    color: var(--gris);
-    font-size: 9.5pt;
-    margin-top: 2.5mm;
-    text-align: center;
-  }
 
   /* ── Recuadros ────────────────────────────────────────────── */
   .nota, .ojo, .listo, .peligro {
@@ -317,13 +304,6 @@
     <li>Tocá <span class="boton">Crear cuenta</span>.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-02-crear-cuenta.png" alt="Formulario de creación de cuenta">
-    <figcaption>La pantalla de crear cuenta. El cargo y el titular/suplente son
-      obligatorios; lo de abajo es opcional, pero es lo que mira el Admin para
-      asignarte tu materia.</figcaption>
-  </figure>
-
   <div class="ojo">
     <span class="titulo">Todavía no vas a poder entrar</span>
     Una cuenta nueva queda <b>esperando aprobación</b>: alguien del equipo de
@@ -371,12 +351,6 @@
     de tu cuenta, en cualquier máquina.
   </div>
 
-  <figure>
-    <img src="imagenes/docente-01-entrar.png" alt="Pantalla de inicio de sesión">
-    <figcaption>La pantalla de entrada. El botón gris de abajo sirve si tu cuenta de
-      la escuela es de Gmail.</figcaption>
-  </figure>
-
   <h3>Entrar con Google</h3>
   <p>
     Si tu cuenta de la escuela es de Gmail, podés tocar
@@ -417,11 +391,6 @@
     <li>Volvé al sistema, escribí ese código y elegí una contraseña nueva.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-03-olvide-contrasena.png" alt="Pantalla de recuperar contraseña">
-    <figcaption>Solo hace falta tu email: el código llega ahí.</figcaption>
-  </figure>
-
   <div class="nota">
     <span class="titulo">Si entrás con Google</span>
     Puede que el correo te diga que tu cuenta no tiene contraseña propia porque
@@ -444,11 +413,6 @@
     Es lo primero que ves al entrar. Está pensada para que todo lo que necesitás
     esté a la vista, sin buscar en menús.
   </p>
-
-  <figure>
-    <img src="imagenes/docente-04-pantalla-de-inicio.png" alt="Pantalla de inicio del docente, con siete zonas señaladas">
-    <figcaption>La pantalla de inicio, con cada zona señalada en rojo.</figcaption>
-  </figure>
 
   <ol class="referencias">
     <li><b>Reservas.</b> La lista de todo lo que reservaste. También se llega desde
@@ -496,12 +460,6 @@
       carro tiene un <b>Marcar N equipos</b> a la derecha de su título, para
       llevarte el carro entero de una sola vez en lugar de tildar de a una.</li>
   </ol>
-
-  <figure>
-    <img src="imagenes/docente-05-nueva-reserva.png" alt="Formulario de nueva reserva completo">
-    <figcaption>El formulario completo, con tres computadoras tildadas y listo para
-      confirmar.</figcaption>
-  </figure>
 
   <ol class="referencias">
     <li>Una sola fecha o todas las semanas.</li>
@@ -555,11 +513,6 @@
     <li>Confirmá.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-06-reserva-semanal.png" alt="Formulario de reserva que se repite todas las semanas">
-    <figcaption>La reserva semanal pide, además, entre qué fechas se repite.</figcaption>
-  </figure>
-
   <div class="nota">
     <span class="titulo">Después podés tocar una sola clase</span>
     Si una semana no vas a dar la clase, cancelás <b>solo esa fecha</b> y las demás
@@ -574,11 +527,6 @@
   <p class="entrada">
     Todo junto está en <b>Reservas</b>, arriba a la izquierda.
   </p>
-
-  <figure>
-    <img src="imagenes/docente-07-mis-reservas.png" alt="Lista de reservas con sus botones">
-    <figcaption>Cada tarjeta es una clase.</figcaption>
-  </figure>
 
   <ol class="referencias">
     <li>Empezar una reserva nueva.</li>
@@ -602,11 +550,6 @@
     <li>Tocá <span class="boton">Cambiar</span>.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-09-cambiar-computadora.png" alt="Panel para cambiar una computadora de la reserva">
-    <figcaption>Solo aparecen las computadoras que están libres en ese horario.</figcaption>
-  </figure>
-
   <h3>Cancelar una clase</h3>
 
   <ol class="pasos">
@@ -617,11 +560,6 @@
       <b>solo esa fecha</b> o <b>esa y todas las siguientes</b>.</li>
     <li>Tocá <span class="boton">Confirmar cancelación</span>.</li>
   </ol>
-
-  <figure>
-    <img src="imagenes/docente-08-cancelar.png" alt="Panel de confirmación de cancelación">
-    <figcaption>Antes de cancelar, el sistema te dice cuántas computadoras se liberan.</figcaption>
-  </figure>
 
   <div class="ojo">
     <span class="titulo">Cancelar es para la clase entera</span>
@@ -655,11 +593,6 @@
     <li>Elegí qué tan <b>grave</b> es y mandalo.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-11-avisar-falla.png" alt="Formulario para reportar que un equipo no funciona">
-    <figcaption>Cuanto más concreto, mejor: qué hiciste y qué pasó.</figcaption>
-  </figure>
-
   <div class="nota">
     <span class="titulo">Qué pasa después</span>
     El aviso queda cargado en esa computadora. Si la falla es seria, un Admin la
@@ -683,11 +616,6 @@
       ves qué días y horas está reservada, y por quién.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-10-computadoras.png" alt="Listado de computadoras de un carro">
-    <figcaption>Cada máquina, con sus programas y su estado.</figcaption>
-  </figure>
-
   <div class="nota">
     <span class="titulo">Para qué te sirve el calendario</span>
     Si necesitás una máquina puntual —la única que tiene cierto programa— podés
@@ -695,11 +623,6 @@
   </div>
 
   <h3>Cómo se lee el calendario de una computadora</h3>
-
-  <figure>
-    <img src="imagenes/docente-19-calendario-equipo.png" alt="Calendario semanal de una computadora">
-    <figcaption>Una semana completa de una sola máquina, hora por hora.</figcaption>
-  </figure>
 
   <ul class="simple">
     <li><b>En azul</b> están las clases reservadas, con la materia.</li>
@@ -746,11 +669,6 @@
     fallando: no hay nada que mostrar.
   </div>
 
-  <figure>
-    <img src="imagenes/docente-20-como-entrar.png" alt="Las cuentas anotadas de una computadora, con una contraseña a la vista">
-    <figcaption>Cada cuenta, con lo que hace falta saber para sentarse a usar la máquina.</figcaption>
-  </figure>
-
   <h3>Qué dice cada cuenta</h3>
 
   <ul class="simple">
@@ -790,11 +708,6 @@
     desde el teléfono igual que desde una computadora y se ve así:
   </p>
 
-  <figure>
-    <img src="imagenes/docente-21-como-entrar-telefono.png" alt="Las cuentas de una computadora vistas en un teléfono">
-    <figcaption>Lo mismo en el teléfono, sin tener que agrandar nada.</figcaption>
-  </figure>
-
   <div class="nota">
     <span class="titulo">Vos no las podés cambiar</span>
     Anotar, corregir o borrar cuentas lo hace el equipo de administración. Si
@@ -819,12 +732,6 @@
     <li>Tocá <span class="boton">Marcar como leída</span> para sacarlo de la lista, o
       <span class="boton">Marcar todas como leídas</span> si querés limpiar todo.</li>
   </ol>
-
-  <figure>
-    <img src="imagenes/docente-12-avisos.png" alt="Pantalla de avisos">
-    <figcaption>Los avisos sin leer quedan primero. Tildando «Mostrar también las
-      leídas» aparecen los viejos.</figcaption>
-  </figure>
 
   <div class="nota">
     <span class="titulo">Los avisos no se pierden</span>
@@ -856,11 +763,6 @@
     <li>Destildá los que no querés recibir por mail y tildá los que sí.</li>
     <li>Guardá.</li>
   </ol>
-
-  <figure>
-    <img src="imagenes/docente-14-copias-por-correo.png" alt="Panel para elegir qué avisos llegan por correo">
-    <figcaption>Cada renglón explica de qué avisa ese correo.</figcaption>
-  </figure>
 
   <div class="ojo">
     <span class="titulo">Hay tres que no se pueden apagar</span>
@@ -902,12 +804,6 @@
     respuesta no cierra el tema: podés seguir escribiendo si no se resolvió, y la
     conversación queda completa en un solo lugar.
   </p>
-
-  <figure>
-    <img src="imagenes/docente-13-conversacion.png" alt="Conversación de un pedido de ayuda">
-    <figcaption>Tu mensaje y la respuesta, uno abajo del otro. Abajo escribís de nuevo
-      si hace falta.</figcaption>
-  </figure>
 </section>
 
 <!-- 15 ────────────────────────────────────────────────────────── -->
@@ -918,11 +814,6 @@
     Se llega tocando tus iniciales, arriba a la derecha. Ahí están tu nombre, tu
     foto, las materias que dictás y tu contraseña.
   </p>
-
-  <figure>
-    <img src="imagenes/docente-15-perfil.png" alt="Pantalla de perfil del docente">
-    <figcaption>Todo lo tuyo, en una sola pantalla.</figcaption>
-  </figure>
 
   <h3>Tu nombre</h3>
   <p>
@@ -962,12 +853,6 @@
     <li>Escribí la contraseña que usás <b>hoy</b>.</li>
     <li>Escribí la <b>nueva</b> y confirmá.</li>
   </ol>
-
-  <figure>
-    <img src="imagenes/docente-16-cambiar-contrasena.png" alt="Pantalla para cambiar la contraseña">
-    <figcaption>Hace falta la actual: es lo que impide que otro te la cambie si dejaste
-      la sesión abierta.</figcaption>
-  </figure>
 </section>
 
 <!-- 16 ────────────────────────────────────────────────────────── -->
@@ -977,11 +862,6 @@
   <p class="entrada">
     En <b>Horario Admins</b> ves en qué días y horarios está cada Admin.
   </p>
-
-  <figure>
-    <img src="imagenes/docente-17-horario-admins.png" alt="Pantalla con la disponibilidad de los Admin">
-    <figcaption>Es informativo: sirve para saber a quién buscar y cuándo.</figcaption>
-  </figure>
 
   <p>
     Esta pantalla no cambia nada de lo que podés hacer en el sistema. Está para que
@@ -996,11 +876,6 @@
   <p class="entrada">
     El sistema anda igual en el celular. Es la misma dirección y la misma cuenta.
   </p>
-
-  <figure>
-    <img src="imagenes/docente-18-telefono.png" alt="El sistema visto en un teléfono">
-    <figcaption>En el teléfono, el menú se abre con el botón <b>Menú</b>, arriba a la derecha.</figcaption>
-  </figure>
 
   <ul class="simple">
     <li>Todo lo que hacés en la computadora lo podés hacer en el teléfono.</li>
