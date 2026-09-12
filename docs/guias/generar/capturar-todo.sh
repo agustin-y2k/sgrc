@@ -75,6 +75,7 @@ else
     docker run --rm --network host --user "$(id -u):$(id -g)" \
       -v "$RAIZ":/repo -e HOME=/tmp -e SALIDA=/salida -v "$SALIDA":/salida \
       -e GUIA_ADMIN_EMAIL -e GUIA_ADMIN_PASSWORD -e GUIA_DOCENTE_EMAIL -e GUIA_DOCENTE_PASSWORD \
+      -e TZ \
       -w /repo "mcr.microsoft.com/playwright:v${VERSION_PW}-noble" node "$@"
   }
 fi
@@ -118,6 +119,14 @@ fi
 
 export GUIA_ADMIN_EMAIL="$SEED_ADMIN_EMAIL"
 export GUIA_ADMIN_PASSWORD="$SEED_ADMIN_PASSWORD"
+
+# El navegador toma la zona horaria de la máquina, y de ahí salen las fechas y
+# el saludo de la pantalla de inicio. Sin fijarla, la misma corrida da «Buenas
+# tardes» en una máquina de Buenos Aires y «Buenas noches» en un runner que
+# anda en UTC — una diferencia que no es del sistema sino de dónde se sacó la
+# foto. Se usa la misma zona que el servidor.
+TZ_ESCUELA=$(leer_env APP_TIMEZONE)
+export TZ="${TZ_ESCUELA:-America/Argentina/Buenos_Aires}"
 
 mkdir -p "$SALIDA"
 export SALIDA

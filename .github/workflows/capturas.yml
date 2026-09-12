@@ -5,10 +5,10 @@
 # el resultado con lo que está commiteado — si alguien mueve un botón y no
 # regenera, la corrida se pone roja y dice qué imagen quedó vieja.
 #
-# Funciona porque el pipeline es determinista **para las pantallas que no
-# muestran la hora**: regenerándolo sin tocar nada, esas salen idénticas byte a
-# byte. Las que sí tienen reloj cambian siempre y están listadas aparte, en
-# docs/guias/generar/capturas-con-reloj.txt — se informan pero no frenan nada.
+# Dos corridas sobre el mismo código no dan imágenes idénticas —las pantallas
+# muestran fechas, y la de inicio saluda según la hora— así que la comparación
+# es por cuánto cambió cada una y no por igualdad exacta. El criterio, medido,
+# está escrito arriba de comparar-capturas.py.
 #
 # No corre en cada push: levanta la pila entera con Postgres, siembra datos y
 # saca cincuenta capturas con un navegador de verdad, así que sólo se despierta
@@ -92,47 +92,15 @@ jobs:
       - name: Regenerar todas las capturas y los PDF
         run: make capturas
 
-      # El portón: las capturas SIN reloj tienen que salir idénticas. Si alguna
-      # cambió, la interfaz se movió y nadie regeneró.
+      # El portón. Compara lo generado contra lo commiteado y falla si alguna
+      # captura cambió de verdad — el porqué del umbral, y por qué no alcanza
+      # con comparar por igualdad, está escrito arriba del script.
       #
-      # Las que muestran fecha u hora quedan afuera —están listadas en
-      # capturas-con-reloj.txt, con el porqué— porque cambian en cada corrida
-      # por el reloj y pondrían esto en rojo todas las semanas. Los PDF también:
-      # Chromium les estampa una fecha de creación.
-      #
-      # Lo que sí cubre a TODAS es el paso anterior: `make capturas` corre con
-      # --estricto y falla si alguna no se generó. Ese es el que atrapa un
+      # Lo que cubre a las sesenta es el paso anterior: `make capturas` corre
+      # con --estricto y falla si alguna no se generó. Ese es el que atrapa un
       # selector podrido, que es como estas cosas se rompían de verdad.
       - name: ¿Quedó alguna captura vieja?
-        run: |
-          con_reloj=$(grep -vE '^\s*(#|$)' docs/guias/generar/capturas-con-reloj.txt)
-          cambiadas=$(git status --porcelain docs/guias/imagenes docs/capturas | awk '{print $NF}')
-
-          gate=""
-          reloj=""
-          for f in $cambiadas; do
-            if echo "$con_reloj" | grep -qxF "$f"; then
-              reloj="$reloj $f"
-            else
-              gate="$gate $f"
-            fi
-          done
-
-          if [ -n "$reloj" ]; then
-            echo "Cambiaron por el reloj (no es un problema):"
-            for f in $reloj; do echo "  $f"; done
-            echo
-          fi
-
-          if [ -n "$gate" ]; then
-            echo "Estas capturas ya no coinciden con lo que muestra el sistema:"
-            for f in $gate; do echo "  $f"; done
-            echo
-            echo "Regeneralas y commitealas:"
-            echo "  make capturas"
-            exit 1
-          fi
-          echo "Las capturas sin reloj están todas al día."
+        run: python3 docs/guias/generar/comparar-capturas.py
 
       # Cuando falla, las imágenes nuevas quedan acá para poder mirarlas sin
       # tener que reproducir la corrida en local.
