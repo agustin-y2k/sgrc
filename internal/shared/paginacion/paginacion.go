@@ -1,6 +1,7 @@
 // Package paginacion define la ventana de resultados que un listado devuelve,
-// para que los tres endpoints que pueden crecer sin límite —reservas,
-// notificaciones y usuarios— la interpreten igual.
+// para que los endpoints que pueden crecer sin límite —reservas,
+// notificaciones, usuarios, el buzón y el registro de auditoría— la
+// interpreten igual.
 package paginacion
 
 import (

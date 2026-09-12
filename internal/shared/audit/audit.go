@@ -34,6 +34,23 @@ const (
 	EquipoEstadoCambiado = "EQUIPO_ESTADO_CAMBIADO"
 	EquipoDadoDeBaja     = "EQUIPO_DADO_DE_BAJA"
 	EquipoMovidoDeCarro  = "EQUIPO_MOVIDO_DE_CARRO"
+	// EquipoEditado cubre TODO lo demás que cambia en una edición. Hasta que
+	// existió, lo único que dejaba rastro era el cambio de carro: el nombre, el
+	// tipo, el número de serie y si el equipo es reservable cambiaban sin que
+	// la auditoría se enterara, que es justo lo que RF-00.2 dice que no puede
+	// pasar. El detalle lleva cada campo con su valor anterior y el nuevo,
+	// porque la pregunta que contesta —«esta máquina apareció con algo
+	// cambiado, ¿quién?»— necesita las dos puntas.
+	EquipoEditado = "EQUIPO_EDITADO"
+	// CarroDadoDeBaja: retirar un carro libera su nombre para el que lo
+	// reemplace, así que sin esta entrada no quedaría rastro de que el «Carro 1»
+	// de hoy no es el «Carro 1» del año pasado.
+	CarroDadoDeBaja = "CARRO_DADO_DE_BAJA"
+	// Las dos vueltas atrás. Se registran por lo mismo que la baja: entre las dos
+	// entradas queda dicho por qué un nombre o un número de serie estuvo un
+	// tiempo libre y después dejó de estarlo.
+	EquipoReactivado = "EQUIPO_REACTIVADO"
+	CarroReactivado  = "CARRO_REACTIVADO"
 
 	// Cuentas de usuario de cada equipo (RF-03.22). PasswordDeEquipoRevelada
 	// se registra cada vez que alguien MIRA una contraseña, también cuando la
@@ -49,6 +66,18 @@ const (
 	MateriaEliminada           = "MATERIA_ELIMINADA"
 	CicloArchivadoReservasElim = "CICLO_ARCHIVADO_RESERVAS_ELIMINADAS"
 	CicloClonado               = "CICLO_CLONADO"
+	// Las dos correcciones de un ciclo. La del año se registra con el valor
+	// viejo y el nuevo: el año es lo único que identifica a un ciclo en
+	// pantalla, así que sin eso una entrada anterior sobre «el ciclo 2026»
+	// pasaría a leerse como si hablara de otro.
+	CicloAnioCorregido = "CICLO_ANIO_CORREGIDO"
+	CicloEliminado     = "CICLO_ELIMINADO"
+	// Las dos cargas masivas de cursos y materias (RF-02.12). Se registran
+	// aunque no creen nada: lo que contestan es quién cargó la estructura del
+	// año y cuándo, que es la pregunta que aparece meses después, cuando un
+	// curso tiene una materia que nadie recuerda haber agregado.
+	EstructuraImportada = "ESTRUCTURA_IMPORTADA"
+	MateriasCopiadas    = "MATERIAS_COPIADAS_ENTRE_CURSOS"
 	// Un pedido para dictar una materia se resolvió.
 	PedidoDeMateriaAprobado  = "PEDIDO_DE_MATERIA_APROBADO"
 	PedidoDeMateriaRechazado = "PEDIDO_DE_MATERIA_RECHAZADO"
