@@ -216,9 +216,9 @@ cd frontend && npx playwright test  # e2e contra el sistema levantado
 
 ## 6. Integración continua
 
-`.github/workflows/ci.yml` corre en cada push a `main` y a `develop`, y en
-cada Pull Request contra esas ramas, lo mismo que §5 salvo los E2E. Son seis
-jobs independientes —si uno falla, los demás igual terminan—:
+`.github/workflows/ci.yml` corre en cada push a `develop` y en cada Pull
+Request contra ella, lo mismo que §5 salvo los E2E. Son seis jobs
+independientes —si uno falla, los demás igual terminan—:
 
 | Job | Qué corre |
 |---|---|
@@ -228,6 +228,16 @@ jobs independientes —si uno falla, los demás igual terminan—:
 | **Backend — integración** | `go test -tags integration ./...` (Docker del runner) |
 | **Frontend — lint, build y tests** | `npm ci`, `npm run lint`, `npm run build`, `vitest run` |
 | **Imágenes de Docker** | `docker build` de las dos imágenes, sin publicarlas |
+
+Hay un segundo workflow, `capturas.yml`, que regenera las capturas de las guías
+y verifica que las commiteadas no hayan quedado viejas (ver
+`docs/guias/generar/README.md`). Corre sólo cuando cambia la interfaz o las
+guías, porque levanta el sistema entero.
+
+**Ninguno de los dos corre en `main`**, y es a propósito: todo lo que llega ahí
+llega por un merge de `develop`, así que sería el mismo árbol validado dos
+veces. Lo que importa es que el rojo aparezca **antes** del merge, que es cuando
+todavía sirve para decidir algo.
 
 Cuatro decisiones que conviene conocer antes de tocar el archivo:
 
@@ -243,6 +253,16 @@ Cuatro decisiones que conviene conocer antes de tocar el archivo:
   despliega. Falla solo si el código **llama** a la función vulnerable: una
   dependencia con un CVE que nadie invoca no rompe la corrida, porque una
   alarma que suena por todo se aprende a ignorar.
+
+  Pero la herramienta **se construye** con `GOTOOLCHAIN: auto`, puesto explícito
+  en ese paso y sólo en ése. govulncheck v1.8.0 pide Go ≥ 1.26 para compilarse,
+  el proyecto está en 1.25.13, y `setup-go@v7` fija `GOTOOLCHAIN=local`: el
+  `go install` moría con «requires go >= 1.26.0» y el job estuvo en rojo sin
+  analizar una línea. Vale la pena notar el modo de falla, porque se repite: un
+  chequeo de seguridad que no arranca se ve **igual** que uno que encontró algo,
+  y el rojo se lee como «hay una vulnerabilidad conocida y pendiente». Bajar el
+  toolchain nuevo es sólo para construir el binario; el análisis sigue corriendo
+  con el Go del proyecto, que es el punto de todo el job.
 
   **El precio de esa decisión, con un caso concreto.** La auditoría de seguridad
   encontró que `fasthttp v1.51.0` —el que fija Fiber v2— tenía GO-2026-4950, un

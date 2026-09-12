@@ -13,11 +13,16 @@
 # No corre en cada push: levanta la pila entera con Postgres, siembra datos y
 # saca cincuenta capturas con un navegador de verdad, así que sólo se despierta
 # cuando cambia algo que las puede invalidar.
+#
+# Y sólo en `develop`, por lo mismo que el workflow de CI: lo que entra a `main`
+# entra por un merge de `develop` y ya pasó por acá. Este job es el más caro de
+# los dos —cuarenta minutos— así que correrlo de nuevo sobre el mismo árbol es
+# justamente lo que no conviene.
 name: Capturas
 
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]
     paths:
       - "frontend/src/**"
       - "docs/guias/**"
@@ -25,7 +30,7 @@ on:
       - ".env.capturas.example"
       - "docker-compose*.yml"
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
     paths:
       - "frontend/src/**"
       - "docs/guias/**"
