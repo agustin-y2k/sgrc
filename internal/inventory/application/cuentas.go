@@ -249,3 +249,19 @@ func (s *Service) RevelarPasswordDeCuenta(ctx context.Context, cuentaID string, 
 	}
 	return cuenta, password, nil
 }
+
+// ObtenerCuentaDeEquipo devuelve una cuenta sola, con la misma regla de
+// visibilidad que el listado: la cuenta y su privilegio se ven siempre, y lo
+// que cambia según quién pregunta es si PUEDE revelar la contraseña. Acá no se
+// revela ninguna —para eso está RevelarPasswordDeCuenta, que además audita—.
+func (s *Service) ObtenerCuentaDeEquipo(ctx context.Context, id string, esAdmin bool) (CuentaVisible, error) {
+	c, err := s.repo.BuscarCuentaDeEquipoPorID(ctx, id)
+	if err != nil {
+		return CuentaVisible{}, err
+	}
+	return CuentaVisible{
+		CuentaDeEquipo:     c,
+		PuedeVerLaPassword: puedeRevelar(c, esAdmin),
+		HayPasswordParaVer: c.HayPasswordGuardada(),
+	}, nil
+}

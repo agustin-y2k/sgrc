@@ -259,7 +259,7 @@ func TestPostgresRepo_Incidencia_CrearYListar(t *testing.T) {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	incidencias, err := repo.ListarIncidenciasPorEquipo(ctx, equipo.ID)
+	incidencias, err := repo.ListarIncidenciasPorEquipo(ctx, equipo.ID, 50)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 		{"BuscarEquipoPorID", func() error { _, err := repo.BuscarEquipoPorID(ctx, "PC_ID"); return err }},
 		{"BuscarIncidenciaPorID", func() error { _, err := repo.BuscarIncidenciaPorID(ctx, "INCIDENCIA_ID"); return err }},
 		{"ListarEquiposPorCarro", func() error { _, err := repo.ListarEquiposPorCarro(ctx, "CARRO_ID"); return err }},
-		{"ListarIncidenciasPorEquipo", func() error { _, err := repo.ListarIncidenciasPorEquipo(ctx, "PC_ID"); return err }},
+		{"ListarIncidenciasPorEquipo", func() error { _, err := repo.ListarIncidenciasPorEquipo(ctx, "PC_ID", 50); return err }},
 		{"CrearEquipo_CarroInvalido", func() error {
 			equipo, _ := domain.NuevoEquipoDeCarro(NuevoID(), "CARRO_ID", 1, "SERIE-UNICA", false, time.Now())
 			return repo.CrearEquipo(ctx, equipo)

@@ -23,36 +23,81 @@ const columnasLicenciaConUbicacion = `l.id, l.equipo_id, l.nombre, l.dias_duraci
 	`COALESCE(p.nombre, 'PC ' || p.identificador), COALESCE(p.identificador, 0), ` +
 	`p.dado_de_baja, COALESCE(c.id::text, ''), COALESCE(c.nombre, '')`
 
-func (r *PostgresRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
-	_, err := r.pool.Exec(ctx, `
+// CrearLicencia devuelve `false` —sin error— cuando ese equipo ya tenía una
+// licencia de ese software. El duplicado NO se resuelve dejando fallar el
+// INSERT y atrapando el 23505, y esa diferencia es lo que permite que el alta
+// masiva sea atómica: en Postgres, una sentencia que falla **aborta la
+// transacción entera**, así que al segundo equipo repetido del lote todas las
+// siguientes darían "current transaction is aborted".
+//
+// Con ON CONFLICT DO NOTHING no hay sentencia fallida: el equipo repetido se
+// saltea y la transacción sigue viva. Mismo criterio que crearMateriaSiFalta en
+// academic.
+//
+// El ON CONFLICT nombra la EXPRESIÓN del índice, no las columnas: desde la
+// migración 011 la unicidad va sobre `clave_texto(nombre)`, y Postgres necesita
+// la expresión exacta para reconocer de qué índice se habla.
+func (r *PostgresRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) (bool, error) {
+	tag, err := r.db.Exec(ctx, `
 		INSERT INTO licencia_software (
 			id, equipo_id, nombre, dias_duracion, dias_aviso, fecha_vencimiento,
 			ultima_renovacion, vencimiento_fijado_por, vencimiento_fijado_en,
 			avisado_previo_para, avisado_vencimiento_para, creada_en
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (equipo_id, clave_texto(nombre)) DO NOTHING
 	`, l.ID, l.EquipoID, l.Nombre, l.DiasDuracion, l.DiasAviso, l.FechaVencimiento,
 		l.UltimaRenovacion, l.VencimientoFijadoPor, l.VencimientoFijadoEn,
 		l.AvisadoPrevioPara, l.AvisadoVencimientoPara, l.CreadaEn)
 	if err != nil {
-		// Acá el UNIQUE es uno solo (equipo_id + lower(nombre)), así que a
-		// diferencia de CrearEquipo no hay ambigüedad sobre cuál se violó.
-		if esViolacionUnica(err) {
-			return application.ErrLicenciaDuplicada
-		}
 		if esViolacionFK(err) {
-			return application.ErrReferenciaInexistente
+			return false, application.ErrReferenciaInexistente
 		}
 		if esIDInvalido(err) {
-			return application.ErrIDInvalido
+			return false, application.ErrIDInvalido
 		}
-		return fmt.Errorf("creando licencia: %w", err)
+		return false, fmt.Errorf("creando licencia: %w", err)
 	}
-	return nil
+	return tag.RowsAffected() == 1, nil
 }
 
 func (r *PostgresRepo) BuscarLicenciaPorID(ctx context.Context, id string) (*domain.LicenciaSoftware, error) {
-	row := r.pool.QueryRow(ctx, `SELECT `+columnasLicencia+` FROM licencia_software WHERE id = $1`, id)
+	row := r.db.QueryRow(ctx, `SELECT `+columnasLicencia+` FROM licencia_software WHERE id = $1`, id)
 	return escanearLicencia(row)
+}
+
+// BuscarLicenciasPorIDs trae el lote entero en UNA consulta, indexado por id.
+// Un id que no existe simplemente no aparece en el mapa.
+//
+// `= ANY($1)` y no un IN con placeholders armados a mano: el arreglo viaja como
+// un solo parámetro, así que la consulta preparada es la misma para una o para
+// doscientas licencias y no hay SQL concatenado.
+func (r *PostgresRepo) BuscarLicenciasPorIDs(ctx context.Context, ids []string) (map[string]*domain.LicenciaSoftware, error) {
+	if len(ids) == 0 {
+		return map[string]*domain.LicenciaSoftware{}, nil
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT `+columnasLicencia+` FROM licencia_software WHERE id = ANY($1)`, ids)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("leyendo el lote de licencias: %w", err)
+	}
+	defer rows.Close()
+
+	licencias := make(map[string]*domain.LicenciaSoftware, len(ids))
+	for rows.Next() {
+		l, err := escanearLicencia(rows)
+		if err != nil {
+			return nil, err
+		}
+		licencias[l.ID] = l
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterando el lote de licencias: %w", err)
+	}
+	return licencias, nil
 }
 
 func escanearLicencia(row pgx.Row) (*domain.LicenciaSoftware, error) {
@@ -98,7 +143,7 @@ func escanearLicenciaConUbicacion(row pgx.Row) (*application.LicenciaConUbicacio
 }
 
 func (r *PostgresRepo) GuardarLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
-	tag, err := r.pool.Exec(ctx, `
+	tag, err := r.db.Exec(ctx, `
 		UPDATE licencia_software SET
 			nombre=$2, dias_duracion=$3, dias_aviso=$4, fecha_vencimiento=$5,
 			ultima_renovacion=$6, vencimiento_fijado_por=$7, vencimiento_fijado_en=$8,
@@ -127,7 +172,7 @@ func (r *PostgresRepo) GuardarLicencia(ctx context.Context, l *domain.LicenciaSo
 
 // MarcarAvisosEnviados toca SOLO las dos marcas.
 func (r *PostgresRepo) MarcarAvisosEnviados(ctx context.Context, l *domain.LicenciaSoftware) error {
-	tag, err := r.pool.Exec(ctx, `
+	tag, err := r.db.Exec(ctx, `
 		UPDATE licencia_software SET
 			avisado_previo_para=$2, avisado_vencimiento_para=$3
 		WHERE id=$1
@@ -145,7 +190,7 @@ func (r *PostgresRepo) MarcarAvisosEnviados(ctx context.Context, l *domain.Licen
 }
 
 func (r *PostgresRepo) BorrarLicencia(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM licencia_software WHERE id = $1`, id)
+	tag, err := r.db.Exec(ctx, `DELETE FROM licencia_software WHERE id = $1`, id)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -159,7 +204,7 @@ func (r *PostgresRepo) BorrarLicencia(ctx context.Context, id string) error {
 }
 
 func (r *PostgresRepo) ListarLicenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.LicenciaSoftware, error) {
-	rows, err := r.pool.Query(ctx,
+	rows, err := r.db.Query(ctx,
 		`SELECT `+columnasLicencia+` FROM licencia_software WHERE equipo_id = $1 ORDER BY nombre`, equipoID)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -185,7 +230,7 @@ const ordenDeLaPantalla = `ORDER BY l.fecha_vencimiento IS NOT NULL, l.fecha_ven
 	`COALESCE(c.nombre, ''), COALESCE(p.identificador, 0), COALESCE(p.nombre, ''), l.nombre`
 
 func (r *PostgresRepo) ListarLicencias(ctx context.Context) ([]*application.LicenciaConUbicacion, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasLicenciaConUbicacion+`
 		FROM licencia_software l
 		JOIN equipo p ON p.id = l.equipo_id
@@ -210,7 +255,7 @@ func (r *PostgresRepo) ListarLicencias(ctx context.Context) ([]*application.Lice
 // de la campana todavía tiene a qué apuntar.
 func (r *PostgresRepo) ContarPendientesDeRenovar(ctx context.Context, hoy time.Time) (int, error) {
 	var n int
-	err := r.pool.QueryRow(ctx, `
+	err := r.db.QueryRow(ctx, `
 		SELECT count(*)
 		FROM licencia_software l
 		JOIN equipo p ON p.id = l.equipo_id
@@ -226,7 +271,7 @@ func (r *PostgresRepo) ContarPendientesDeRenovar(ctx context.Context, hoy time.T
 
 // ListarCandidatasAAviso es el filtro grueso del job.
 func (r *PostgresRepo) ListarCandidatasAAviso(ctx context.Context, hoy time.Time) ([]*application.LicenciaConUbicacion, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasLicenciaConUbicacion+`
 		FROM licencia_software l
 		JOIN equipo p ON p.id = l.equipo_id

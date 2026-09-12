@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/ramiro/sgrc/internal/shared/texto"
 )
 
 // Estado de una PC (RF-03.3).
@@ -91,12 +93,19 @@ var (
 	ErrNumeroSerieInvalido = errors.New("el número de serie no puede estar vacío")
 	ErrNumeroSerieLargo    = fmt.Errorf("el número de serie no puede tener más de %d caracteres", MaxLargoNumeroSerie)
 	ErrEquipoYaDadoDeBaja  = errors.New("el equipo ya está dado de baja")
+	// ErrEquipoNoEstaDadoDeBaja: pidieron reactivar algo que nunca salió del
+	// inventario. Es un error y no un no-op por lo mismo que ErrEquipoYaDadoDeBaja:
+	// quien lo pide cree que está arreglando algo y no está arreglando nada.
+	ErrEquipoNoEstaDadoDeBaja = errors.New("el equipo no está dado de baja")
 )
 
-// NormalizarNumeroSerie devuelve la forma canónica: sin espacios al borde y
-// en mayúsculas.
+// NormalizarNumeroSerie devuelve la forma canónica: en mayúsculas, sin espacios
+// al borde y sin espacios dobles adentro.
+//
+// Los dobles importan porque una serie se tipea mirando una etiqueta pegada a
+// la máquina, y "5CD 1234 ABC" sale con la cantidad de espacios que salga.
 func NormalizarNumeroSerie(s string) string {
-	return strings.ToUpper(strings.TrimSpace(s))
+	return strings.ToUpper(texto.Canonizar(s))
 }
 
 // Equipo es el equipo individual dentro de un Carro.
@@ -192,6 +201,30 @@ func (p *Equipo) DarDeBaja(ahora time.Time) error {
 	return nil
 }
 
+// Reactivar devuelve el equipo al inventario: deshace una baja.
+//
+// La baja es la operación más destructiva del sistema —cancela las reservas
+// futuras y le avisa a cada docente— y hasta acá era la única sin vuelta atrás:
+// un clic en la fila equivocada sólo se revertía con un UPDATE a mano en el
+// servidor.
+//
+// Deshacer NO es volver atrás todo lo que la baja disparó. Las reservas
+// canceladas quedan canceladas y los avisos ya salieron: eso pasó y no se
+// puede despasar. Lo que se recupera es la máquina en el inventario, con el
+// estado que tenía — si estaba FUERA_DE_SERVICIO vuelve así, porque la baja no
+// lo tocó.
+//
+// La fecha de baja se limpia: dejarla puesta haría que un equipo en circulación
+// dijera que salió del inventario tal día.
+func (p *Equipo) Reactivar() error {
+	if !p.DadoDeBaja {
+		return ErrEquipoNoEstaDadoDeBaja
+	}
+	p.DadoDeBaja = false
+	p.FechaBaja = nil
+	return nil
+}
+
 // MoverACarro cambia el carro al que pertenece la PC (RF-03.10).
 func (p *Equipo) MoverACarro(nuevoCarroID string) {
 	p.CarroID = nuevoCarroID
@@ -217,8 +250,13 @@ var (
 
 // NormalizarTextoDeEquipo recorta los bordes y colapsa los espacios internos,
 // sin tocar la caja: "Proyector Epson" se muestra tal cual se escribió.
+//
+// Delega en shared/texto: esta función estaba escrita idéntica acá y en
+// academic/domain, cada una por su lado, y faltaba en los otros dos lugares que
+// la necesitaban. Se conserva el nombre local porque es el que usa el resto del
+// paquete.
 func NormalizarTextoDeEquipo(s string) string {
-	return strings.Join(strings.Fields(s), " ")
+	return texto.Canonizar(s)
 }
 
 // TipoDeEquipoValido y NombreDeEquipoValido normalizan y validan, y devuelven

@@ -23,7 +23,7 @@ func appConNotebook(t *testing.T) (*fiber.App, *fakeRepo) {
 
 func crearCuentaDePrueba(t *testing.T, app *fiber.App, visibilidad, password string) string {
 	t.Helper()
-	status, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos/eq1/cuentas",
+	status, cuerpo := pedir(t, app, "POST", "/api/equipos/eq1/cuentas",
 		cuentaRequest{
 			Usuario:       "Alumno",
 			Clase:         "Local",
@@ -50,7 +50,7 @@ func TestHTTP_ListarCuentas_UnDocenteLasVe(t *testing.T) {
 	app, _ := appConNotebook(t)
 	crearCuentaDePrueba(t, app, "SOLO_ADMIN", "SecretaDeLaMaquina")
 
-	status, cuerpo := pedir(t, app, "GET", "/api/inventory/equipos/eq1/cuentas", nil, "DOCENTE")
+	status, cuerpo := pedir(t, app, "GET", "/api/equipos/eq1/cuentas", nil, "DOCENTE")
 
 	if status != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", status, cuerpo)
@@ -77,7 +77,7 @@ func TestHTTP_ListarCuentas_NoLlevaLaPasswordNiParaUnAdmin(t *testing.T) {
 	app, _ := appConNotebook(t)
 	crearCuentaDePrueba(t, app, "PUBLICA", "SecretaDeLaMaquina")
 
-	_, cuerpo := pedir(t, app, "GET", "/api/inventory/equipos/eq1/cuentas", nil, "ADMIN")
+	_, cuerpo := pedir(t, app, "GET", "/api/equipos/eq1/cuentas", nil, "ADMIN")
 
 	if strings.Contains(string(cuerpo), "SecretaDeLaMaquina") {
 		t.Fatalf("la contraseña viajó en el listado: %s", cuerpo)
@@ -90,7 +90,7 @@ func TestHTTP_RevelarPassword_PublicaComoDocente_OK(t *testing.T) {
 	app, _ := appConNotebook(t)
 	id := crearCuentaDePrueba(t, app, "PUBLICA", "SecretaDeLaMaquina")
 
-	status, cuerpo := pedir(t, app, "POST", "/api/inventory/cuentas/"+id+"/password", nil, "DOCENTE")
+	status, cuerpo := pedir(t, app, "POST", "/api/cuentas/"+id+"/password", nil, "DOCENTE")
 
 	if status != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", status, cuerpo)
@@ -110,7 +110,7 @@ func TestHTTP_RevelarPassword_ReservadaComoDocente_403(t *testing.T) {
 	app, _ := appConNotebook(t)
 	id := crearCuentaDePrueba(t, app, "SOLO_ADMIN", "SecretaDeLaMaquina")
 
-	status, cuerpo := pedir(t, app, "POST", "/api/inventory/cuentas/"+id+"/password", nil, "DOCENTE")
+	status, cuerpo := pedir(t, app, "POST", "/api/cuentas/"+id+"/password", nil, "DOCENTE")
 
 	if status != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d: %s", status, cuerpo)
@@ -124,7 +124,7 @@ func TestHTTP_RevelarPassword_ReservadaComoAdmin_OK(t *testing.T) {
 	app, _ := appConNotebook(t)
 	id := crearCuentaDePrueba(t, app, "SOLO_ADMIN", "SecretaDeLaMaquina")
 
-	status, _ := pedir(t, app, "POST", "/api/inventory/cuentas/"+id+"/password", nil, "ADMIN")
+	status, _ := pedir(t, app, "POST", "/api/cuentas/"+id+"/password", nil, "ADMIN")
 
 	if status != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", status)
@@ -135,7 +135,7 @@ func TestHTTP_RevelarPassword_ReservadaComoAdmin_OK(t *testing.T) {
 func TestHTTP_RevelarPassword_SinAnotar_404(t *testing.T) {
 	app, _ := appConNotebook(t)
 	// TienePassword=true y Password vacía.
-	status, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos/eq1/cuentas",
+	status, cuerpo := pedir(t, app, "POST", "/api/equipos/eq1/cuentas",
 		cuentaRequest{Usuario: "Alumno", Clase: "Local", Privilegio: "COMUN", Visibilidad: "PUBLICA", TienePassword: true}, "ADMIN")
 	if status != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d: %s", status, cuerpo)
@@ -150,7 +150,7 @@ func TestHTTP_RevelarPassword_SinAnotar_404(t *testing.T) {
 		t.Error("pero la cuenta sí pide contraseña")
 	}
 
-	status, _ = pedir(t, app, "POST", "/api/inventory/cuentas/"+creada.ID+"/password", nil, "ADMIN")
+	status, _ = pedir(t, app, "POST", "/api/cuentas/"+creada.ID+"/password", nil, "ADMIN")
 	if status != fiber.StatusNotFound {
 		t.Fatalf("esperaba 404, obtuve %d", status)
 	}
@@ -169,10 +169,10 @@ func TestHTTP_CuentasComoDocente_NoPuedeEscribir(t *testing.T) {
 		ruta   string
 		body   any
 	}{
-		{"crear", "POST", "/api/inventory/equipos/eq1/cuentas", cuentaRequest{
+		{"crear", "POST", "/api/equipos/eq1/cuentas", cuentaRequest{
 			Usuario: "Otra", Clase: "Local", Privilegio: "COMUN", Visibilidad: "PUBLICA"}},
-		{"editar", "PATCH", "/api/inventory/cuentas/" + id, editarCuentaRequest{}},
-		{"borrar", "DELETE", "/api/inventory/cuentas/" + id, nil},
+		{"editar", "PATCH", "/api/cuentas/" + id, editarCuentaRequest{}},
+		{"borrar", "DELETE", "/api/cuentas/" + id, nil},
 	}
 
 	for _, c := range casos {
@@ -192,18 +192,18 @@ func TestHTTP_EditarCuenta_CambiarVisibilidadSinMandarLaPassword(t *testing.T) {
 	id := crearCuentaDePrueba(t, app, "PUBLICA", "SecretaDeLaMaquina")
 
 	reservada := "SOLO_ADMIN"
-	status, cuerpo := pedir(t, app, "PATCH", "/api/inventory/cuentas/"+id,
+	status, cuerpo := pedir(t, app, "PATCH", "/api/cuentas/"+id,
 		editarCuentaRequest{Visibilidad: &reservada}, "ADMIN")
 	if status != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", status, cuerpo)
 	}
 
 	// La contraseña sigue ahí, y ahora un docente no la ve.
-	status, _ = pedir(t, app, "POST", "/api/inventory/cuentas/"+id+"/password", nil, "ADMIN")
+	status, _ = pedir(t, app, "POST", "/api/cuentas/"+id+"/password", nil, "ADMIN")
 	if status != fiber.StatusOK {
 		t.Fatalf("el Admin la tenía que seguir viendo, obtuve %d", status)
 	}
-	status, _ = pedir(t, app, "POST", "/api/inventory/cuentas/"+id+"/password", nil, "DOCENTE")
+	status, _ = pedir(t, app, "POST", "/api/cuentas/"+id+"/password", nil, "DOCENTE")
 	if status != fiber.StatusForbidden {
 		t.Fatalf("el docente ya no la ve, esperaba 403 y obtuve %d", status)
 	}
@@ -213,7 +213,7 @@ func TestHTTP_CrearCuenta_UsuarioRepetidoEnElMismoEquipo_409(t *testing.T) {
 	app, _ := appConNotebook(t)
 	crearCuentaDePrueba(t, app, "PUBLICA", "abc")
 
-	status, _ := pedir(t, app, "POST", "/api/inventory/equipos/eq1/cuentas",
+	status, _ := pedir(t, app, "POST", "/api/equipos/eq1/cuentas",
 		cuentaRequest{Usuario: "alumno", Clase: "Local", Privilegio: "COMUN", Visibilidad: "PUBLICA"}, "ADMIN")
 
 	if status != fiber.StatusConflict {
@@ -229,7 +229,7 @@ func TestHTTP_CrearCuenta_UsuarioRepetidoEnElMismoEquipo_409(t *testing.T) {
 func TestHTTP_Opcional_EquipoSinCuentas_200YListaVacia(t *testing.T) {
 	app, _ := appConNotebook(t)
 
-	status, cuerpo := pedir(t, app, "GET", "/api/inventory/equipos/eq1/cuentas", nil, "DOCENTE")
+	status, cuerpo := pedir(t, app, "GET", "/api/equipos/eq1/cuentas", nil, "DOCENTE")
 
 	if status != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", status, cuerpo)
@@ -268,7 +268,7 @@ func TestHTTP_Opcional_CuentaSinContrasena(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
-			status, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos/eq1/cuentas",
+			status, cuerpo := pedir(t, app, "POST", "/api/equipos/eq1/cuentas",
 				cuentaRequest{
 					Usuario: c.usuario, Clase: "Local", Privilegio: "COMUN",
 					Visibilidad: "PUBLICA", TienePassword: c.tienePassword,
@@ -294,7 +294,7 @@ func TestHTTP_Opcional_CuentaSinContrasena(t *testing.T) {
 func TestHTTP_Opcional_AltaDeEquipoNoPideCuentas(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	status, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos",
+	status, cuerpo := pedir(t, app, "POST", "/api/equipos",
 		crearEquipoSueltoRequest{Tipo: "NOTEBOOK", Nombre: "Notebook Dirección"}, "ADMIN")
 
 	if status != fiber.StatusCreated {
@@ -344,7 +344,7 @@ func TestHTTP_CuentaInvalida_Da400ConElMotivo(t *testing.T) {
 		t.Run(c.nombre, func(t *testing.T) {
 			app, _ := appConNotebook(t)
 
-			status, cuerpo := pedir(t, app, "POST", "/api/inventory/equipos/eq1/cuentas", c.req, "ADMIN")
+			status, cuerpo := pedir(t, app, "POST", "/api/equipos/eq1/cuentas", c.req, "ADMIN")
 
 			if status != fiber.StatusBadRequest {
 				t.Fatalf("esperaba 400, obtuve %d: %s", status, cuerpo)

@@ -50,6 +50,7 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
   const [viendoPreferencias, setViendoPreferencias] = useState<string | null>(null)
   const [viendoEntregas, setViendoEntregas] = useState<string | null>(null)
   const [viendoCuentas, setViendoCuentas] = useState<string | null>(null)
+  const [verRetirados, setVerRetirados] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ["equipos", carroId],
@@ -82,9 +83,16 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
     },
   })
 
+  const reactivar = useMutation({
+    mutationFn: (equipo: Equipo) => adminApi.reactivarEquipo(equipo.id),
+    onSuccess: invalidar,
+  })
+
   if (isLoading) return <p className="text-muted-foreground text-sm">Cargando equipos…</p>
 
-  const equipos = (data?.data ?? []).filter((equipo) => !equipo.dadoDeBaja)
+  const todos = data?.data ?? []
+  const equipos = todos.filter((equipo) => !equipo.dadoDeBaja)
+  const retirados = todos.filter((equipo) => equipo.dadoDeBaja)
 
   return (
     <div className="grid gap-3">
@@ -343,6 +351,56 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
         )
       })}
 
+      {/* Lo dado de baja. Va plegado y al final porque no es parte del trabajo
+          de todos los días: se abre el día que alguien se equivocó de fila.
+          Antes no se mostraba en ninguna parte, y eso convertía una baja
+          equivocada en algo que sólo se arreglaba entrando a la base. */}
+      {retirados.length > 0 && (
+        <div className="grid gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-self-start"
+            aria-expanded={verRetirados}
+            onClick={() => setVerRetirados(!verRetirados)}
+          >
+            {verRetirados ? "Ocultar" : "Ver"} los {retirados.length} equipos dados de
+            baja
+          </Button>
+
+          {verRetirados &&
+            retirados.map((equipo) => (
+              <div
+                key={equipo.id}
+                className="text-muted-foreground flex flex-col gap-2 rounded-md border border-dashed p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <span className="min-w-0 break-words">
+                  {equipo.nombre ?? `PC ${equipo.identificador}`}
+                  {equipo.numeroSerie && ` · ${equipo.numeroSerie}`}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={reactivar.isPending}
+                  onClick={() => reactivar.mutate(equipo)}
+                >
+                  Devolver al inventario
+                </Button>
+              </div>
+            ))}
+
+          {/* El error va acá abajo y no arriba de todo: dice cuál de las tres
+              cosas que la baja liberó —el número, el nombre o la serie— se la
+              llevó otro equipo, y se lee al lado del botón que se apretó. */}
+          {reactivar.error && (
+            <Alert variant="destructive">
+              <AlertDescription>{getErrorMessage(reactivar.error)}</AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
+
       {/* Mientras se edita un equipo no se muestra: los dos formularios tienen
           los mismos campos, y verlos juntos no deja saber cuál se está
           completando. */}
@@ -422,10 +480,17 @@ export function InventarioAdminPage() {
   const [carroEnEdicion, setCarroEnEdicion] = useState<string | null>(null)
   const [nombreCarro, setNombreCarro] = useState("")
   const [descripcionCarro, setDescripcionCarro] = useState("")
+  const [verRetirados, setVerRetirados] = useState(false)
 
+  // Los retirados se piden sólo cuando se los quiere ver, y la clave de la
+  // consulta los incluye: si no, al encender el interruptor react-query
+  // devolvería la lista vieja de la caché y no pasaría nada.
   const { data, isLoading, error } = useQuery({
-    queryKey: CARROS_KEY,
-    queryFn: inventoryApi.listarCarros,
+    queryKey: [...CARROS_KEY, { retirados: verRetirados }],
+    queryFn: () =>
+      verRetirados
+        ? inventoryApi.listarCarrosConRetirados()
+        : inventoryApi.listarCarros(),
   })
 
   const crearCarro = useMutation({
@@ -441,7 +506,9 @@ export function InventarioAdminPage() {
     },
   })
 
-  const carros = data?.data ?? []
+  const todos = data?.data ?? []
+  const carros = todos.filter((carro) => !carro.dadoDeBaja)
+  const retirados = todos.filter((carro) => carro.dadoDeBaja)
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -560,6 +627,83 @@ export function InventarioAdminPage() {
           )
         })}
       </div>
+
+      <CarrosRetirados
+        retirados={retirados}
+        mostrando={verRetirados}
+        onAlternar={() => setVerRetirados(!verRetirados)}
+      />
+    </div>
+  )
+}
+
+// Los carros dados de baja, y la forma de traerlos de vuelta.
+//
+// Un carro retirado no aparece en ningún listado —el selector de "dónde va este
+// equipo" se llena con la misma consulta—, así que sin esta sección no había
+// manera de llegar a uno para reactivarlo.
+//
+// El interruptor se muestra SIEMPRE, incluso sin retirados, porque es la única
+// pista de que los retirados existen en alguna parte: escondido detrás de
+// "si hay alguno" no se lo encuentra el día que hace falta.
+function CarrosRetirados({
+  retirados,
+  mostrando,
+  onAlternar,
+}: {
+  retirados: Carro[]
+  mostrando: boolean
+  onAlternar: () => void
+}) {
+  const queryClient = useQueryClient()
+
+  const reactivar = useMutation({
+    mutationFn: (carro: Carro) => adminApi.reactivarCarro(carro.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CARROS_KEY }),
+  })
+
+  return (
+    <div className="mt-4 grid gap-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="justify-self-start"
+        aria-expanded={mostrando}
+        onClick={onAlternar}
+      >
+        {mostrando ? "Ocultar los carros retirados" : "Ver los carros retirados"}
+      </Button>
+
+      {mostrando && retirados.length === 0 && (
+        <p className="text-muted-foreground text-sm">No hay ningún carro retirado.</p>
+      )}
+
+      {mostrando &&
+        retirados.map((carro) => (
+          <div
+            key={carro.id}
+            className="text-muted-foreground flex flex-col gap-2 rounded-md border border-dashed p-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <span className="min-w-0 break-words">{carro.nombre}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={reactivar.isPending}
+              onClick={() => reactivar.mutate(carro)}
+            >
+              Devolver a circulación
+            </Button>
+          </div>
+        ))}
+
+      {/* Falla si otro carro se quedó con el nombre mientras éste estaba
+          retirado — que es justo para lo que la baja lo liberó. */}
+      {reactivar.error && (
+        <Alert variant="destructive">
+          <AlertDescription>{getErrorMessage(reactivar.error)}</AlertDescription>
+        </Alert>
+      )}
     </div>
   )
 }

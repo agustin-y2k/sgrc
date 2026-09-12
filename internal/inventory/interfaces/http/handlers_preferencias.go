@@ -8,7 +8,7 @@ import (
 
 // Marcas de preferencia de materia (RF-03.21).
 
-// GET /api/inventory/equipos/{equipoId}/preferencias
+// GET /api/equipos/{equipoId}/preferencias
 func (h *Handler) ListarPreferenciasDeEquipo(c *fiber.Ctx) error {
 	equipoID := c.Params("equipoId")
 
@@ -24,7 +24,7 @@ func (h *Handler) ListarPreferenciasDeEquipo(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/inventory/materias-en-uso (Admin) — el selector del formulario.
+// GET /api/materias-en-uso (Admin) — el selector del formulario.
 func (h *Handler) ListarMateriasEnUso(c *fiber.Ctx) error {
 	nombres, err := h.svc.NombresDeMateriaEnUso(c.UserContext())
 	if err != nil {
@@ -36,7 +36,7 @@ func (h *Handler) ListarMateriasEnUso(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": nombres})
 }
 
-// POST /api/inventory/preferencias (Admin) — la misma marca en varios equipos
+// POST /api/preferencias (Admin) — la misma marca en varios equipos
 // de una vez.
 func (h *Handler) MarcarPreferencia(c *fiber.Ctx) error {
 	var req marcarPreferenciaRequest
@@ -66,7 +66,7 @@ func (h *Handler) MarcarPreferencia(c *fiber.Ctx) error {
 	})
 }
 
-// PATCH /api/inventory/preferencias/{id} (Admin) — corrige el alcance y la
+// PATCH /api/preferencias/{id} (Admin) — corrige el alcance y la
 // prioridad. La materia no se edita: apuntar a otra es otra marca.
 func (h *Handler) EditarPreferencia(c *fiber.Ctx) error {
 	id := c.Params("id")
@@ -84,7 +84,7 @@ func (h *Handler) EditarPreferencia(c *fiber.Ctx) error {
 	return c.JSON(toPreferenciaResponse(p))
 }
 
-// DELETE /api/inventory/preferencias/{id} (Admin) No hay nada que confirmar
+// DELETE /api/preferencias/{id} (Admin) No hay nada que confirmar
 // ni ninguna cascada que avisar: sacar la marca devuelve el equipo al orden
 // neutral y no toca ninguna reserva.
 func (h *Handler) BorrarPreferencia(c *fiber.Ctx) error {

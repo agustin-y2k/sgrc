@@ -42,7 +42,13 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrPasswordIlegible):
 		return fiber.NewError(fiber.StatusConflict, application.ErrPasswordIlegible.Error())
 
-	case errors.Is(err, application.ErrNombreCarroDuplicado),
+	case errors.Is(err, application.ErrCarroDadoDeBaja),
+		errors.Is(err, application.ErrCarroConEquipos),
+		errors.Is(err, domain.ErrCarroYaDadoDeBaja),
+		// Reactivar algo que está en circulación: el pedido está bien formado,
+		// lo que no se puede es deshacer una baja que no ocurrió.
+		errors.Is(err, domain.ErrCarroNoEstaDadoDeBaja),
+		errors.Is(err, application.ErrNombreCarroDuplicado),
 		errors.Is(err, application.ErrIdentificadorDuplicado),
 		errors.Is(err, application.ErrNumeroSerieDuplicado),
 		// El alta masiva saltea los duplicados y los informa en el cuerpo; esto
@@ -59,6 +65,7 @@ func mapearError(err error) error {
 
 	case errors.Is(err, domain.ErrTransicionEstadoEquipoInvalida),
 		errors.Is(err, domain.ErrEquipoYaDadoDeBaja),
+		errors.Is(err, domain.ErrEquipoNoEstaDadoDeBaja),
 		// 409 y no 400: el pedido está bien formado, lo que pasa es que el
 		// estado actual del equipo no lo admite.
 		errors.Is(err, application.ErrEquipoPrestado):

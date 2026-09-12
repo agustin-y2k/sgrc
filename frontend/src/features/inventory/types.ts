@@ -8,6 +8,8 @@ export type Carro = {
   id: string
   nombre: string
   descripcion?: string
+  // Sólo puede venir en true si se pidieron los retirados (`incluirRetirados`).
+  dadoDeBaja: boolean
 }
 
 export type Equipo = {

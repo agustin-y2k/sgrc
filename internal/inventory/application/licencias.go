@@ -101,27 +101,44 @@ func (s *Service) CrearLicencias(ctx context.Context, params NuevaLicenciaParams
 	hoy := s.Hoy()
 	resultado := &ResultadoAltaMasiva{}
 
-	for _, equipoID := range params.EquipoIDs {
-		l, err := domain.NuevaLicencia(s.nuevoID(), equipoID, params.Nombre,
-			params.DiasDuracion, params.DiasAviso, ahora)
-		if err != nil {
-			// El nombre y los días son los mismos para todas: si la validación falla,
-			// falla para el lote entero y no tiene sentido seguir intentando con las
-			// demás PCs.
-			return nil, err
-		}
-		if err := params.Vencimiento.aplicarA(l, hoy, ahora, params.PorUsuario); err != nil {
-			return nil, err
-		}
+	// Todo el lote en una transacción: un alta de sesenta máquinas que falla en
+	// la cuarenta dejaba las treinta y nueve anteriores cargadas y devolvía un
+	// error, sin decir cuáles. Revisar equipo por equipo para averiguarlo es
+	// justo el trabajo que el alta masiva viene a evitar.
+	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		// Se reinicia adentro: si la transacción se reintentara, el resultado no
+		// puede arrastrar lo contado en el intento anterior.
+		resultado = &ResultadoAltaMasiva{}
 
-		if err := s.repo.CrearLicencia(ctx, l); err != nil {
-			if errors.Is(err, ErrLicenciaDuplicada) {
+		for _, equipoID := range params.EquipoIDs {
+			l, err := domain.NuevaLicencia(s.nuevoID(), equipoID, params.Nombre,
+				params.DiasDuracion, params.DiasAviso, ahora)
+			if err != nil {
+				// El nombre y los días son los mismos para todas: si la validación
+				// falla, falla para el lote entero y no tiene sentido seguir
+				// intentando con las demás PCs.
+				return err
+			}
+			if err := params.Vencimiento.aplicarA(l, hoy, ahora, params.PorUsuario); err != nil {
+				return err
+			}
+
+			creada, err := repo.CrearLicencia(ctx, l)
+			if err != nil {
+				return fmt.Errorf("creando la licencia en el equipo %s: %w", equipoID, err)
+			}
+			if !creada {
+				// Que ese equipo ya la tuviera no es un error y no voltea el lote:
+				// se informa aparte y se sigue con el siguiente.
 				resultado.EquiposQueYaLaTenian = append(resultado.EquiposQueYaLaTenian, equipoID)
 				continue
 			}
-			return nil, fmt.Errorf("creando la licencia en el equipo %s: %w", equipoID, err)
+			resultado.Creadas = append(resultado.Creadas, l)
 		}
-		resultado.Creadas = append(resultado.Creadas, l)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return resultado, nil
@@ -149,24 +166,49 @@ func (s *Service) RenovarLicencias(ctx context.Context, ids []string, renovadaEl
 	}
 
 	resultado := &ResultadoRenovacion{}
-	for _, id := range ids {
-		l, err := s.repo.BuscarLicenciaPorID(ctx, id)
+
+	// Mismo motivo que el alta: renovar treinta licencias y que se guarden
+	// diecisiete deja al Admin sin saber cuáles quedaron sin renovar, y la
+	// pantalla no se lo puede decir.
+	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		resultado = &ResultadoRenovacion{}
+
+		// El lote entero de una: preguntar de a una eran treinta viajes a la
+		// base con la conexión de la transacción tomada todo ese tiempo.
+		licencias, err := repo.BuscarLicenciasPorIDs(ctx, ids)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if err := l.Renovar(fechaRenovacion, porUsuario, ahora); err != nil {
-			if errors.Is(err, domain.ErrSinFechaDeVencimiento) {
-				resultado.SinFechaPrevia = append(resultado.SinFechaPrevia, id)
-				continue
+
+		// Se recorre `ids` y no el mapa: el orden del resultado tiene que ser el
+		// que mandó quien pidió la renovación, no el que devuelva la base.
+		for _, id := range ids {
+			l, existe := licencias[id]
+			if !existe {
+				return ErrLicenciaNoEncontrada
 			}
-			return nil, err
+			if err := l.Renovar(fechaRenovacion, porUsuario, ahora); err != nil {
+				if errors.Is(err, domain.ErrSinFechaDeVencimiento) {
+					// No tiene fecha cargada todavía: no hay nada que renovar y no es
+					// un error del lote. Se informa aparte.
+					resultado.SinFechaPrevia = append(resultado.SinFechaPrevia, id)
+					continue
+				}
+				return err
+			}
+			if err := repo.GuardarLicencia(ctx, l); err != nil {
+				return fmt.Errorf("guardando la renovación de la licencia %s: %w", id, err)
+			}
+			resultado.Renovadas = append(resultado.Renovadas, l)
 		}
-		if err := s.repo.GuardarLicencia(ctx, l); err != nil {
-			return nil, fmt.Errorf("guardando la renovación de la licencia %s: %w", id, err)
-		}
-		resultado.Renovadas = append(resultado.Renovadas, l)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
+	// Fuera de la transacción a propósito: el aviso es una consecuencia de que
+	// la renovación ya esté firme, y un fallo al contar no puede voltearla.
 	s.avisarSiNoQuedanPendientes(ctx)
 	return resultado, nil
 }
@@ -271,4 +313,9 @@ func (s *Service) ListarLicenciasPorEquipo(ctx context.Context, equipoID string)
 // BorrarLicencia elimina la fila.
 func (s *Service) BorrarLicencia(ctx context.Context, licenciaID string) error {
 	return s.repo.BorrarLicencia(ctx, licenciaID)
+}
+
+// ObtenerLicencia — ver el bloque «Obtener uno solo» de service.go.
+func (s *Service) ObtenerLicencia(ctx context.Context, id string) (*domain.LicenciaSoftware, error) {
+	return s.repo.BuscarLicenciaPorID(ctx, id)
 }

@@ -36,7 +36,7 @@ function renderInventario() {
   )
 }
 
-const carros: Carro[] = [{ id: "c1", nombre: "Carro 1", descripcion: "Planta baja" }]
+const carros: Carro[] = [{ id: "c1", nombre: "Carro 1", descripcion: "Planta baja", dadoDeBaja: false }]
 
 function equipo(over: Partial<Equipo>): Equipo {
   return {

@@ -17,7 +17,7 @@ const columnasCuenta = `id, equipo_id, usuario, clase, privilegio, tiene_passwor
 	password_cifrada, visibilidad, notas, creada_en, actualizada_en`
 
 func (r *PostgresRepo) CrearCuentaDeEquipo(ctx context.Context, c *domain.CuentaDeEquipo) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := r.db.Exec(ctx, `
 		INSERT INTO equipo_cuenta (id, equipo_id, usuario, clase, privilegio, tiene_password,
 		                           password_cifrada, visibilidad, notas, creada_en, actualizada_en)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -42,7 +42,7 @@ func (r *PostgresRepo) CrearCuentaDeEquipo(ctx context.Context, c *domain.Cuenta
 }
 
 func (r *PostgresRepo) BuscarCuentaDeEquipoPorID(ctx context.Context, id string) (*domain.CuentaDeEquipo, error) {
-	row := r.pool.QueryRow(ctx, `SELECT `+columnasCuenta+` FROM equipo_cuenta WHERE id = $1`, id)
+	row := r.db.QueryRow(ctx, `SELECT `+columnasCuenta+` FROM equipo_cuenta WHERE id = $1`, id)
 	c, err := escanearCuenta(row)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -54,7 +54,7 @@ func (r *PostgresRepo) BuscarCuentaDeEquipoPorID(ctx context.Context, id string)
 }
 
 func (r *PostgresRepo) GuardarCuentaDeEquipo(ctx context.Context, c *domain.CuentaDeEquipo) error {
-	tag, err := r.pool.Exec(ctx, `
+	tag, err := r.db.Exec(ctx, `
 		UPDATE equipo_cuenta SET
 			usuario=$2, clase=$3, privilegio=$4, tiene_password=$5,
 			password_cifrada=$6, visibilidad=$7, notas=$8, actualizada_en=$9
@@ -81,7 +81,7 @@ func (r *PostgresRepo) GuardarCuentaDeEquipo(ctx context.Context, c *domain.Cuen
 // que ya no existe en la máquina y queda listada es peor que no tenerla —
 // alguien la va a intentar usar.
 func (r *PostgresRepo) BorrarCuentaDeEquipo(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM equipo_cuenta WHERE id = $1`, id)
+	tag, err := r.db.Exec(ctx, `DELETE FROM equipo_cuenta WHERE id = $1`, id)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrCuentaDeEquipoNoEncontrada
@@ -99,7 +99,7 @@ func (r *PostgresRepo) BorrarCuentaDeEquipo(ctx context.Context, id string) erro
 // entre recargas: en una pantalla que se consulta parada frente a la máquina,
 // que las filas cambien de lugar hace perder el renglón.
 func (r *PostgresRepo) ListarCuentasDeEquipo(ctx context.Context, equipoID string) ([]*domain.CuentaDeEquipo, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasCuenta+`
 		FROM equipo_cuenta
 		WHERE equipo_id = $1
@@ -128,7 +128,7 @@ func (r *PostgresRepo) ListarCuentasDeEquipo(ctx context.Context, equipoID strin
 // categorías de falla y los tipos de equipo: es lo que evita que convivan
 // "Microsoft" y "MICROSOFT" sin cerrar la lista.
 func (r *PostgresRepo) ClasesDeCuentaUsadas(ctx context.Context) ([]string, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT DISTINCT clase FROM equipo_cuenta ORDER BY clase`)
 	if err != nil {
 		return nil, fmt.Errorf("listando las clases de cuenta usadas: %w", err)

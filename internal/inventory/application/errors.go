@@ -3,7 +3,18 @@ package application
 import "errors"
 
 var (
-	ErrCarroNoEncontrado      = errors.New("carro no encontrado")
+	ErrCarroNoEncontrado = errors.New("carro no encontrado")
+	// ErrCarroDadoDeBaja: se quiso poner un equipo en un carro retirado. La
+	// clave foránea no lo impide —el carro existe— pero la máquina quedaría en
+	// un contenedor que ninguna pantalla muestra: los listados de carros sólo
+	// traen los vivos, así que el equipo desaparecería de la vista sin estar
+	// dado de baja.
+	ErrCarroDadoDeBaja = errors.New("ese carro está dado de baja — elegí uno en circulación")
+
+	// ErrCarroConEquipos: dar de baja un carro que todavía tiene máquinas
+	// adentro dejaría esas máquinas en un contenedor que ya no existe para el
+	// sistema. Primero se mueven o se dan de baja ellas.
+	ErrCarroConEquipos        = errors.New("el carro todavía tiene equipos adentro — movelos a otro carro o dalos de baja primero")
 	ErrEquipoNoEncontrado     = errors.New("equipo no encontrado")
 	ErrIncidenciaNoEncontrada = errors.New("incidencia no encontrada")
 	ErrLicenciaNoEncontrada   = errors.New("licencia no encontrada")
@@ -18,7 +29,7 @@ var (
 	// ErrNombreCarroDuplicado: UNIQUE en carro.nombre — el nombre es lo único
 	// que distingue a un carro en la pantalla de reservas, así que dos "Carro 1"
 	// harían imposible saber cuál se está eligiendo.
-	ErrNombreCarroDuplicado = errors.New("ya existe un carro con ese nombre")
+	ErrNombreCarroDuplicado = errors.New("ya existe un carro con ese nombre, sin distinguir tildes, mayúsculas ni espacios de más")
 
 	// ErrIdentificadorDuplicado: UNIQUE(carro_id, identificador) — "PC 27"
 	// ya existe en ese carro puntual (puede repetirse en otro carro).

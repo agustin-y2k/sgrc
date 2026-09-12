@@ -88,6 +88,12 @@ func TestCrearLicencias_LasQueYaLaTenianSeSalteanYSeInforman(t *testing.T) {
 // TestCrearLicencias_ElLoteEsReintentable es la razón por la que un duplicado
 // no aborta: si algo se rompe en el medio, volver a mandar el mismo request
 // termina el trabajo sin duplicar nada.
+//
+// Lo que cambió al hacer el lote atómico es QUÉ queda tras el fallo —antes las
+// anteriores al error quedaban escritas, ahora no queda ninguna—, y la
+// propiedad que importa se conserva y se refuerza: reenviar el mismo request es
+// seguro, converge, y ahora además el Admin sabe exactamente qué pasó. Antes
+// veía un error y un estado intermedio que la pantalla no le podía describir.
 func TestCrearLicencias_ElLoteEsReintentable(t *testing.T) {
 	repo := repoConCarroYEquipos(3)
 	svc := servicioSimple(repo)
@@ -101,8 +107,11 @@ func TestCrearLicencias_ElLoteEsReintentable(t *testing.T) {
 	if _, err := svc.CrearLicencias(ctx, params); !errors.Is(err, fallaDeRed) {
 		t.Fatalf("esperaba que el lote cortara con el error real, obtuve %v", err)
 	}
-	if len(repo.licencias) != 2 {
-		t.Fatalf("esperaba que quedaran creadas las dos primeras, quedaron %d", len(repo.licencias))
+	// El lote es atómico: la falla en el equipo 3 deshace también las dos
+	// anteriores. Es lo que le permite al Admin leer el error como «no se cargó
+	// nada» en vez de tener que ir a averiguar qué quedó.
+	if len(repo.licencias) != 0 {
+		t.Fatalf("un lote que falla no debería dejar nada escrito, quedaron %d", len(repo.licencias))
 	}
 
 	// Se arregla lo que fallaba y se reintenta el MISMO request.
@@ -112,8 +121,8 @@ func TestCrearLicencias_ElLoteEsReintentable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("el reintento no debería fallar: %v", err)
 	}
-	if len(resultado.Creadas) != 1 || len(resultado.EquiposQueYaLaTenian) != 2 {
-		t.Errorf("el reintento debería crear solo la que faltaba: creadas=%d salteadas=%d",
+	if len(resultado.Creadas) != 3 || len(resultado.EquiposQueYaLaTenian) != 0 {
+		t.Errorf("el reintento debería crear las tres: creadas=%d salteadas=%d",
 			len(resultado.Creadas), len(resultado.EquiposQueYaLaTenian))
 	}
 	if len(repo.licencias) != 3 {

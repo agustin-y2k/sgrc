@@ -39,7 +39,6 @@ function renderPanel(preferencias: PreferenciaDeEquipo[] = []) {
         nombre: "3°B",
         anio: 3,
         division: "B",
-        activo: true,
         archivado: false,
       },
       {
@@ -49,7 +48,6 @@ function renderPanel(preferencias: PreferenciaDeEquipo[] = []) {
         anio: 4,
         division: "2",
         modalidad: "Electromecánica",
-        activo: true,
         archivado: false,
       },
     ],

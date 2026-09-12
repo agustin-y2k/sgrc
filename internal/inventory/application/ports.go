@@ -9,10 +9,23 @@ import (
 
 // Repo es el único contrato que este paquete necesita de infrastructure/.
 type Repo interface {
+	// EnTransaccion corre fn de forma atómica: o se aplican todas las escrituras
+	// que haga adentro, o no queda ninguna.
+	//
+	// La necesitan las cuatro operaciones que escriben de a muchas filas —dar de
+	// alta licencias en un lote de equipos, renovarlas, marcar preferencias y
+	// anotar los avisos ya enviados—. Sin ella, una que falla en la máquina 40 de
+	// 60 deja las 39 anteriores escritas y devuelve un error: el Admin no tiene
+	// forma de saber qué entró, y el único camino es revisar equipo por equipo.
+	EnTransaccion(ctx context.Context, fn func(Repo) error) error
+
 	CrearCarro(ctx context.Context, c *domain.Carro) error
 	BuscarCarroPorID(ctx context.Context, id string) (*domain.Carro, error)
 	GuardarCarro(ctx context.Context, c *domain.Carro) error
-	ListarCarros(ctx context.Context) ([]*domain.Carro, error)
+	// ListarCarros: `incluirRetirados` es lo que hace alcanzable un carro dado
+	// de baja. Sin eso no hay forma de reactivarlo, porque la consulta que lo
+	// listaba lo excluía y ninguna pantalla lo mostraba.
+	ListarCarros(ctx context.Context, incluirRetirados bool) ([]*domain.Carro, error)
 
 	CrearEquipo(ctx context.Context, pc *domain.Equipo) error
 	BuscarEquipoPorID(ctx context.Context, id string) (*domain.Equipo, error)
@@ -36,13 +49,28 @@ type Repo interface {
 	CrearIncidencia(ctx context.Context, i *domain.Incidencia) error
 	BuscarIncidenciaPorID(ctx context.Context, id string) (*domain.Incidencia, error)
 	GuardarIncidencia(ctx context.Context, i *domain.Incidencia) error
-	ListarIncidenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.Incidencia, error)
+	// ListarIncidenciasPorEquipo lleva tope por lo mismo que el historial de
+	// entregas de una máquina (ver maxHistorialDeEquipo en reservation): es una
+	// pantalla para mirar las últimas fallas, no un reporte. Sin él devolvía
+	// todo lo que el equipo acumuló desde que entró al inventario.
+	ListarIncidenciasPorEquipo(ctx context.Context, equipoID string, limite int) ([]*domain.Incidencia, error)
 
 	// CategoriasDeFallaUsadas alimenta las sugerencias del formulario.
 	CategoriasDeFallaUsadas(ctx context.Context) ([]string, error)
 
-	CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) error
+	// CrearLicencia devuelve `false` —sin error— si ese equipo ya tenía una
+	// licencia de ese software. El duplicado no viaja como error porque en
+	// Postgres una sentencia fallida aborta la transacción entera, y el alta
+	// masiva tiene que poder saltear los repetidos y seguir.
+	CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) (creada bool, err error)
 	BuscarLicenciaPorID(ctx context.Context, id string) (*domain.LicenciaSoftware, error)
+	// BuscarLicenciasPorIDs trae el lote entero en UNA consulta, indexado por id.
+	// Un id que no existe no aparece en el mapa.
+	//
+	// La renovación masiva pedía una por una: con treinta licencias eran treinta
+	// viajes a la base, todos adentro de la misma transacción —o sea, con una
+	// conexión tomada todo ese tiempo.
+	BuscarLicenciasPorIDs(ctx context.Context, ids []string) (map[string]*domain.LicenciaSoftware, error)
 	GuardarLicencia(ctx context.Context, l *domain.LicenciaSoftware) error
 	BorrarLicencia(ctx context.Context, id string) error
 	ListarLicenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.LicenciaSoftware, error)
@@ -61,11 +89,21 @@ type Repo interface {
 	MarcarAvisosEnviados(ctx context.Context, l *domain.LicenciaSoftware) error
 
 	// Preferencias de materia por equipo (RF-03.21).
-	CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error
+	// CrearPreferencia devuelve `false` —sin error— si ese equipo ya tenía esa
+	// marca, por el mismo motivo que CrearLicencia.
+	CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) (creada bool, err error)
 	GuardarPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error
 	BuscarPreferenciaPorID(ctx context.Context, id string) (*domain.PreferenciaDeEquipo, error)
 	BorrarPreferencia(ctx context.Context, id string) error
 	ListarPreferenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.PreferenciaDeEquipo, error)
+
+	// ListarPreferenciasHuerfanas: las marcas que ya no cruzan con ninguna
+	// materia. Aparecen al renombrar o borrar una materia, porque el vínculo es
+	// por nombre y no por referencia (RF-03.21).
+	ListarPreferenciasHuerfanas(ctx context.Context) ([]*PreferenciaHuerfana, error)
+	// ContarPreferenciasQueDejarianDeAplicar contesta, antes de renombrar una
+	// materia, cuántas marcas dejarían de cruzar.
+	ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error)
 
 	// NombresDeMateriaEnUso alimenta el selector del inventario: los nombres
 	// distintos de materia que existen en el sistema.
@@ -102,3 +140,23 @@ type ValidadorReservas interface {
 }
 
 type IDGenerator func() string
+
+// PreferenciaHuerfana es una marca de equipo que ya no cruza con ninguna
+// materia cargada: quedó apuntando a un nombre que se renombró o se borró.
+//
+// Trae el equipo resuelto porque la marca sola no dice nada accionable: lo que
+// el Admin necesita saber es QUÉ máquina quedó marcada para una materia que ya
+// no existe.
+type PreferenciaHuerfana struct {
+	ID            string
+	MateriaNombre string
+	Modalidad     string
+	Anio          *int
+	Division      string
+	Prioridad     int
+	// EquipoEtiqueta es "PC 7" o el nombre del equipo suelto.
+	EquipoEtiqueta string
+	// CarroNombre vacío cuando el equipo no está en ninguno.
+	CarroNombre      string
+	EquipoDadoDeBaja bool
+}
