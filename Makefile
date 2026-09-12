@@ -128,6 +128,19 @@ ps:
 # máquina se llega por un túnel de SSH: publicarlos en la red de la
 # institución sería dejar dos paneles de administración a la vista.
 observabilidad:
+# Antes de levantar nada, la contraseña de Grafana. El compose tiene un valor
+# por defecto —lo necesita para que el archivo se pueda interpretar incluso en
+# un despliegue que nunca use este perfil— y ese valor está escrito en el
+# repositorio, así que si nadie lo cambia el panel queda con una contraseña
+# pública. Este chequeo es la puerta: el perfil se levanta desde acá, y desde
+# acá se puede mirar el .env y negarse.
+	@clave=$$(grep -E '^GRAFANA_PASSWORD=' .env 2>/dev/null | cut -d= -f2-); \
+	if [ -z "$$clave" ] || [ "$$clave" = "cambiar_por_una_contrasena_larga" ]; then \
+		echo "GRAFANA_PASSWORD no está definida en el .env (o quedó con el valor de ejemplo)."; \
+		echo "Grafana queda con una contraseña que está publicada en el repositorio."; \
+		echo "Generá una con \`openssl rand -base64 24\` y ponela en el .env."; \
+		exit 1; \
+	fi
 	docker compose --profile observabilidad up -d
 
 # Apaga solo los tableros y deja el sistema andando.
@@ -184,9 +197,15 @@ endif
 # se vuelven a compilar, los datos no. Conviene correrlo antes de actualizar
 # y antes de aplicar una migración.
 backup:
-	@docker compose exec -T postgres sh -c \
+# `umask 077` antes de la redirección: el archivo lo crea la shell de make, y
+# con el umask normal queda 0644, o sea legible por cualquier usuario del
+# servidor. El volcado tiene el nombre, el correo y el cargo de todo el mundo en
+# texto plano —las contraseñas de las máquinas no, esas van cifradas con
+# CUENTAS_SECRET, ver internal/shared/secretos—. Con 0600 lo lee solo quien lo
+# generó.
+	@umask 077; docker compose exec -T postgres sh -c \
 		'pg_dump -U "$$POSTGRES_USER" "$$POSTGRES_DB"' > backup-sgrc-$$(date +%F).sql
-	@echo "Backup en backup-sgrc-$$(date +%F).sql"
+	@echo "Backup en backup-sgrc-$$(date +%F).sql (solo lo podés leer vos: 0600)"
 
 # ── Datos iniciales ───────────────────────────────────────────────────
 

@@ -161,3 +161,32 @@ func TestRateLimitPorEmail_NormalizaMayusculasYEspacios(t *testing.T) {
 		t.Fatalf("misma cuenta con otro casing: esperaba 429, obtuve %d", got)
 	}
 }
+
+// ── Los verbos del preflight ────────────────────────────────────────────
+
+// La lista de AllowMethods tiene que contener todos los verbos que la API
+// sirve de verdad. Faltaba PUT, y no se notaba: en producción la SPA y la API
+// comparten origen, así que el navegador no hace preflight y nada falla. En
+// desarrollo, con VITE_API_URL en otro puerto, los tres PUT de la API —la foto
+// de perfil, la jornada institucional y las preferencias de correo— los
+// bloqueaba el navegador antes de salir.
+func TestCORS_PreflightPermiteTodosLosVerbosDeLaAPI(t *testing.T) {
+	const origen = "http://localhost:5173"
+	app := fiber.New()
+	app.Use(CORS(origen))
+
+	for _, verbo := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
+		req := httptest.NewRequest("OPTIONS", "/x", nil)
+		req.Header.Set("Origin", origen)
+		req.Header.Set("Access-Control-Request-Method", verbo)
+
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("%s: error inesperado: %v", verbo, err)
+		}
+		permitidos := resp.Header.Get("Access-Control-Allow-Methods")
+		if !strings.Contains(permitidos, verbo) {
+			t.Fatalf("%s no está permitido en el preflight (Allow-Methods: %q)", verbo, permitidos)
+		}
+	}
+}

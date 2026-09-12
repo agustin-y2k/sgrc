@@ -77,3 +77,9 @@ frontend/.vite/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Planillas con las que se importa la estructura de un ciclo. Son datos de una
+# institución concreta —su lista real de materias por división— y este repo es
+# un producto público: la planilla se carga desde la pantalla y no vive acá.
+/materias_por_division.csv
+/*-materias*.csv

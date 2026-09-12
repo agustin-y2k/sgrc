@@ -34,6 +34,17 @@ var (
 	// despliegue no habilitó, igual que el correo o el ingreso con Google.
 	ErrSinClave = errors.New("este despliegue no tiene configurada la clave para guardar contraseñas (CUENTAS_SECRET en el .env)")
 
+	// ErrSecretoCorto es el piso de entropía. No hay un RFC que lo fije para
+	// esto como el 8725 §3.5 lo fija para HS256, pero el razonamiento es el
+	// mismo: la clave de AES-256 sale de un SHA-256 del secreto, así que por más
+	// que la clave derivada siempre mida 32 bytes, lo que un atacante tiene que
+	// adivinar es el secreto, no la clave. Con un secreto corto, el volcado de
+	// la base se abre probando palabras.
+	//
+	// Se pide el mismo mínimo que JWT_SECRET a propósito: son los dos secretos
+	// del .env y no hay ninguna razón para que uno se valide y el otro no.
+	ErrSecretoCorto = errors.New("el secreto es demasiado corto")
+
 	// ErrNoSePudoDescifrar cubre los tres casos que son el mismo problema
 	// desde afuera: la clave cambió, el texto se corrompió, o alguien lo
 	// alteró. No se distinguen a propósito — un mensaje que dijera "la clave
@@ -41,6 +52,10 @@ var (
 	// cuál de las dos cosas tiene mal.
 	ErrNoSePudoDescifrar = errors.New("no se pudo descifrar el dato guardado")
 )
+
+// MinLongitudSecreto es el largo mínimo que se le acepta a CUENTAS_SECRET, en
+// bytes. Es el mismo número que el mínimo de JWT_SECRET; ver ErrSecretoCorto.
+const MinLongitudSecreto = 32
 
 // Cifrador guarda y recupera secretos con AES-256-GCM. GCM y no CBC porque
 // además de cifrar autentica: un valor alterado en la base no descifra a
@@ -58,9 +73,19 @@ func Nuevo(secreto string) (*Cifrador, error) {
 	if secreto == "" {
 		return nil, nil
 	}
-	// SHA-256 del secreto y no el secreto crudo: AES-256 necesita exactamente
-	// 32 bytes, y pedirle a quien despliega que escriba 32 bytes exactos en el
-	// .env es una restricción que no aporta nada y que se equivoca fácil.
+	// Vacío es "no configurado" y corto es "configurado mal": son dos casos
+	// distintos y por eso uno devuelve nil y el otro un error. El corto tiene
+	// que frenar el arranque, porque si no el despliegue queda cifrando las
+	// contraseñas de todas las máquinas con algo que se adivina.
+	if len(secreto) < MinLongitudSecreto {
+		return nil, fmt.Errorf("%w: tiene %d bytes y hacen falta al menos %d "+
+			"(generalo con `openssl rand -base64 48`)",
+			ErrSecretoCorto, len(secreto), MinLongitudSecreto)
+	}
+	// SHA-256 del secreto y no el secreto crudo: AES-256 necesita una clave de
+	// exactamente 32 bytes, y pedirle a quien despliega que escriba 32 bytes
+	// exactos —ni uno más— es una restricción que no aporta nada y que se
+	// equivoca fácil. El mínimo de arriba sí aporta; un máximo no.
 	clave := sha256.Sum256([]byte(secreto))
 	bloque, err := aes.NewCipher(clave[:])
 	if err != nil {

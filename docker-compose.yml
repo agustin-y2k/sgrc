@@ -177,7 +177,15 @@ services:
       # La contraseña sale del .env y no queda "admin/admin": los tableros
       # muestran cómo se comporta el sistema por dentro, y esto va a estar
       # escuchando en un servidor compartido.
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-cambiar_en_el_env}
+      #
+      # El valor por defecto de acá NO es una contraseña aceptable —está escrito
+      # en el repositorio—; está para que este archivo se pueda interpretar en un
+      # despliegue que nunca levante este perfil. Con `${GRAFANA_PASSWORD:?...}`
+      # el compose se niega a interpretar el archivo ENTERO aunque el perfil esté
+      # apagado, y entonces nadie podría levantar el sistema sin configurar un
+      # panel que no va a usar. La puerta está en `make observabilidad`, que es
+      # como se levanta este perfil: ahí se verifica el .env antes de arrancar.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-sin-configurar-ver-make-observabilidad}
       # Nadie se registra solo ni entra sin usuario.
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"

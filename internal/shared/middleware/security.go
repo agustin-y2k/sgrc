@@ -31,8 +31,13 @@ func SecurityHeaders() fiber.Handler {
 // docs/09-seguridad-rbac.md §4).
 func CORS(allowedOrigin string) fiber.Handler {
 	return cors.New(cors.Config{
-		AllowOrigins:     allowedOrigin,
-		AllowMethods:     "GET,POST,PATCH,DELETE",
+		AllowOrigins: allowedOrigin,
+		// PUT incluido: la API tiene tres —la foto de perfil, la jornada de la
+		// institución y las preferencias de correo—. Faltaba, y no se notaba en
+		// producción porque ahí el frontend y la API comparten origen y el
+		// navegador no hace preflight. En desarrollo, con VITE_API_URL apuntando a
+		// otro puerto, esos tres pedidos los bloqueaba el navegador.
+		AllowMethods:     "GET,POST,PUT,PATCH,DELETE",
 		AllowHeaders:     "Origin,Content-Type,Authorization",
 		AllowCredentials: true,
 		// Sin esto el navegador recibe el header pero no deja leerlo desde otro

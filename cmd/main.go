@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -27,6 +28,9 @@ import (
 	academicapp "github.com/ramiro/sgrc/internal/academic/application"
 	academicinfra "github.com/ramiro/sgrc/internal/academic/infrastructure"
 	academichttp "github.com/ramiro/sgrc/internal/academic/interfaces/http"
+	auditoriaapp "github.com/ramiro/sgrc/internal/auditoria/application"
+	auditoriainfra "github.com/ramiro/sgrc/internal/auditoria/infrastructure"
+	auditoriahttp "github.com/ramiro/sgrc/internal/auditoria/interfaces/http"
 	authapp "github.com/ramiro/sgrc/internal/auth/application"
 	authinfra "github.com/ramiro/sgrc/internal/auth/infrastructure"
 	authhttp "github.com/ramiro/sgrc/internal/auth/interfaces/http"
@@ -81,6 +85,21 @@ func proxiesConfiables() []string {
 // debajo de eso el secreto es atacable por fuerza bruta offline con cualquier
 // token que el servidor haya emitido.
 const minLongitudJWTSecret = 32
+
+// configDeFiber está aparte de main para poder testearla: los tres timeouts se
+// agregaron a raíz de una auditoría y sin un test que los mire, quitarlos no
+// rompe nada visible.
+func configDeFiber() fiber.Config {
+	return fiber.Config{
+		AppName:                 "sgrc-app",
+		ProxyHeader:             "CF-Connecting-IP",
+		EnableTrustedProxyCheck: true,
+		TrustedProxies:          proxiesConfiables(),
+		ReadTimeout:             timeoutDeLectura,
+		WriteTimeout:            timeoutDeEscritura,
+		IdleTimeout:             timeoutDeInactividad,
+	}
+}
 
 // origenDelFrontend valida FRONTEND_ORIGIN antes de dárselo al middleware de
 // CORS. Fiber valida lo mismo, pero con un panic: con el valor vacío lo
@@ -143,6 +162,33 @@ func handlerHealth(pool *pgxpool.Pool, ahora func() time.Time) fiber.Handler {
 // tiempoDeApagado es lo que se le da a los requests en vuelo para terminar
 // antes de cerrar.
 const tiempoDeApagado = 15 * time.Second
+
+// Los tres timeouts del servidor. Fiber, sin estos, usa los de fasthttp, que
+// son "sin límite": una conexión que manda un byte cada tanto se queda
+// abierta para siempre.
+//
+// En esta topología eso no lo puede hacer nadie de afuera: la cadena es
+// cloudflared → nginx → sgrc-app, así que el binario solo habla con nginx y es
+// nginx quien termina las conexiones de internet. Están igual, por dos razones.
+// Una es que "el borde nos cubre" es una propiedad de la topología, no del
+// programa, y el programa se despliega también sin ese borde —el overlay de
+// desarrollo publica el 8080 al host—. La otra es que un límite explícito es
+// una decisión escrita, y su ausencia no se distingue de un olvido.
+//
+// Los valores son holgados a propósito: lo más grande que entra es una foto de
+// perfil de 200 KB o el JSON de una importación de estructura, y lo más grande
+// que sale es una página de un listado. Nada de eso se acerca a 30 segundos, ni
+// con una conexión mala. Un timeout que corta algo legítimo es peor que no
+// tener ninguno.
+const (
+	timeoutDeLectura   = 30 * time.Second
+	timeoutDeEscritura = 30 * time.Second
+	// La inactividad entre pedidos de una misma conexión. Hoy casi no aplica,
+	// porque nginx no reusa las conexiones hacia arriba —manda Connection:
+	// close— pero es el límite que evita que queden conexiones colgadas si eso
+	// cambia.
+	timeoutDeInactividad = 75 * time.Second
+)
 
 func zonaHorariaDeLaEscuela() *time.Location {
 	nombre := os.Getenv("APP_TIMEZONE")
@@ -338,7 +384,7 @@ func main() {
 
 	// ── Base de datos ──────────────────────────────────────────────
 	dsn := buildDSN()
-	pool, err := pgxpool.New(ctx, dsn)
+	pool, err := abrirPool(ctx, dsn)
 	if err != nil {
 		log.Fatalf("no se pudo conectar a postgres: %v", err)
 	}
@@ -540,25 +586,9 @@ func main() {
 	// cmd/wiring_adapters.go).
 	archivadorHistorico := &academicArchivadorHistoricoAdapter{reportingSvc: reportingSvc, reservationSvc: reservationSvc}
 
-	academicSvc := academicapp.NewService(
-		academicRepo,
-		validadorUsuario,
-		validadorReservas,
-		archivadorHistorico,
-		// El MISMO adaptador que usa auth: quitar la asignación y dar de baja al
-		// docente son dos caminos al mismo estado (RF-02.8), y los dos tienen que
-		// cancelar las reservas de la materia que queda sin nadie.
-		&authCanceladorReservasAdapter{reservationSvc: reservationSvc},
-		// Nombre y correo de quien pide una materia, y de quienes ya la
-		// dictan: los necesitan los avisos de un pedido (service_pedidos.go).
-		academicinfra.NewDatosDeUsuarioPostgres(pool),
-		academicinfra.NuevoID,
-		ahora,
-		bus,
-	)
-	academicHandler := academichttp.NewHandler(academicSvc, auditor)
-
-	// ── inventory ─────────────────────────────────────────────────
+	// Inventory se arma ANTES que academic: academic le pregunta cuántas marcas
+	// de preferencia de equipo deja huérfanas un renombre de materia
+	// (RF-03.21). La dependencia va en un solo sentido, así que no hay ciclo.
 	inventoryRepo := inventoryinfra.NewPostgresRepo(pool)
 	// inventoryValidadorReservasAdapter envuelve reservationSvc para satisfacer
 	// inventory/application.ValidadorReservas — inventory/ nunca importa
@@ -569,10 +599,13 @@ func main() {
 	// Sin CUENTAS_SECRET queda en nil y el sistema arranca igual: se pueden
 	// registrar cuentas, no guardar sus contraseñas. Es el mismo criterio que
 	// SMTP y que el ingreso con Google — una función de menos, no un arranque
-	// roto — y por eso no se valida como JWT_SECRET, que sí es obligatorio.
+	// roto — a diferencia de JWT_SECRET, que sí es obligatorio. Lo que no se
+	// perdona es configurarlo corto: vacío arranca, corto no (ver
+	// secretos.MinLongitudSecreto).
 	cifradorDeCuentas, err := secretos.Nuevo(os.Getenv("CUENTAS_SECRET"))
 	if err != nil {
-		log.Fatalf("no se pudo preparar el cifrado de las contraseñas de equipos: %v", err)
+		log.Fatalf("CUENTAS_SECRET: %v. Dejalo vacío si este despliegue no guarda "+
+			"contraseñas de equipos (ver .env.example).", err)
 	}
 	if !cifradorDeCuentas.Disponible() {
 		log.Println("CUENTAS_SECRET no configurado: se pueden registrar cuentas de equipos, " +
@@ -588,6 +621,30 @@ func main() {
 		bus,
 	)
 	inventoryHandler := inventoryhttp.NewHandler(inventorySvc, auditor)
+
+	academicSvc := academicapp.NewService(
+		academicRepo,
+		validadorUsuario,
+		validadorReservas,
+		archivadorHistorico,
+		// El MISMO adaptador que usa auth: quitar la asignación y dar de baja al
+		// docente son dos caminos al mismo estado (RF-02.8), y los dos tienen que
+		// cancelar las reservas de la materia que queda sin nadie.
+		&authCanceladorReservasAdapter{reservationSvc: reservationSvc},
+		// Nombre y correo de quien pide una materia, y de quienes ya la
+		// dictan: los necesitan los avisos de un pedido (service_pedidos.go).
+		academicinfra.NewDatosDeUsuarioPostgres(pool),
+		// Cuántas marcas de preferencia de equipo dejan de aplicar al renombrar
+		// una materia (RF-03.21): el vínculo es por nombre, así que un renombre
+		// las deja huérfanas. Sirve para avisar, no para arreglar.
+		&academicMarcasAdapter{inventorySvc: inventorySvc},
+		academicinfra.NuevoID,
+		ahora,
+		bus,
+	)
+	academicHandler := academichttp.NewHandler(academicSvc, auditor)
+
+	// ── inventory ─────────────────────────────────────────────────
 
 	// El barrido de reservas y entregas (RF-08.10 a RF-08.13).
 	vigilante := reservationapp.NewVigilante(
@@ -644,6 +701,13 @@ func main() {
 		bus,
 	)
 	sugerenciasHandler := sugerenciashttp.NewHandler(sugerenciasSvc)
+
+	// La LECTURA del registro de auditoría. La escritura es `auditor`, de
+	// internal/shared/audit, que usa cada módulo: son dos paquetes a propósito
+	// —ver internal/auditoria/domain— y este de acá no sabe escribir.
+	auditoriaHandler := auditoriahttp.NewHandler(
+		auditoriaapp.NewService(auditoriainfra.NewPostgresRepo(pool)),
+	)
 
 	// ── Job de vencimiento de reservas (RF-04.9) ──────────────────── Corre
 	// como goroutine desde el arranque, sin infraestructura extra (ver
@@ -761,12 +825,7 @@ func main() {
 	// ProxyHeader/TrustedProxies: sin esto c.IP() devuelve la IP del salto
 	// anterior —nginx— en todos los requests, porque el tráfico entra Cloudflare
 	// → cloudflared → nginx → acá.
-	app := fiber.New(fiber.Config{
-		AppName:                 "sgrc-app",
-		ProxyHeader:             "CF-Connecting-IP",
-		EnableTrustedProxyCheck: true,
-		TrustedProxies:          proxiesConfiables(),
-	})
+	app := fiber.New(configDeFiber())
 
 	// ── Seguridad de borde (RNF-04, ver docs/09-seguridad-rbac.md §4) ── CORS
 	// restringido al dominio del frontend (sin wildcard) y headers de seguridad
@@ -795,6 +854,7 @@ func main() {
 	reportinghttp.RegisterRoutes(app, reportingHandler, autenticacion)
 	availabilityhttp.RegisterRoutes(app, availabilityHandler, autenticacion)
 	sugerenciashttp.RegisterRoutes(app, sugerenciasHandler, autenticacion)
+	auditoriahttp.RegisterRoutes(app, auditoriaHandler, autenticacion)
 
 	port := puertoHTTP()
 
@@ -831,6 +891,78 @@ func main() {
 }
 
 // buildDSN arma la URL de conexión con net/url en vez de concatenar.
+// Topes del pool y de las consultas. No son afinados para una carga medida:
+// son barandas para que una consulta que se va de las manos no se lleve puesto
+// al resto.
+const (
+	// maxConexiones es el techo del pool. El default de pgx es
+	// max(4, núcleos), que en un servidor de ocho núcleos son ocho conexiones
+	// —suficiente— pero depende del hardware donde toque correr, y una cifra
+	// que cambia sola según la máquina es difícil de razonar cuando algo anda
+	// lento. Postgres viene con 100 de límite: 20 deja lugar de sobra para
+	// psql, el proceso de migraciones y una segunda instancia durante un
+	// despliegue.
+	maxConexiones = 20
+
+	// conexionesMinimas mantiene unas pocas abiertas. Abrir una conexión a
+	// Postgres cuesta decenas de milisegundos, y los barridos de fondo corren
+	// cada pocos minutos sobre un pool que si no quedaría en cero.
+	conexionesMinimas = 2
+
+	// vidaMaximaDeConexion recicla las conexiones cada tanto. Es lo que hace
+	// que una caída del otro lado —un reinicio de Postgres, un cortafuegos que
+	// olvida la sesión— se note y se reponga en vez de quedar como una conexión
+	// muerta que falla recién cuando alguien la usa.
+	vidaMaximaDeConexion = 30 * time.Minute
+	inactividadMaxima    = 5 * time.Minute
+
+	// timeoutDeConsulta es el tope que Postgres le pone a CUALQUIER sentencia.
+	//
+	// Es la baranda que faltaba: sin él, una consulta que se va de las manos
+	// —un rango de fechas enorme, un plan que eligió mal, una tabla que creció
+	// más de lo previsto— se queda con una conexión del pool indefinidamente, y
+	// con veinte conexiones alcanzan veinte de esas para que el sistema entero
+	// deje de responder aunque Postgres esté perfecto.
+	//
+	// Treinta segundos es holgado para todo lo que hace este sistema en el
+	// camino de un pedido HTTP. Lo único que se le acerca es cerrar el año, que
+	// NO corre por acá: corre en su propia transacción y puede subirlo.
+	timeoutDeConsulta = "30s"
+)
+
+// abrirPool arma el pool con los topes de arriba.
+//
+// `statement_timeout` va en la configuración de la conexión y no en un `SET`
+// suelto a propósito: así lo hereda toda conexión que el pool abra, incluidas
+// las que reponga más tarde. Un `SET` después de conectar se aplica a una sola.
+func abrirPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("leyendo la configuración de conexión: %w", err)
+	}
+
+	config.MaxConns = maxConexiones
+	config.MinConns = conexionesMinimas
+	config.MaxConnLifetime = vidaMaximaDeConexion
+	config.MaxConnIdleTime = inactividadMaxima
+
+	if config.ConnConfig.RuntimeParams == nil {
+		config.ConnConfig.RuntimeParams = map[string]string{}
+	}
+	config.ConnConfig.RuntimeParams["statement_timeout"] = timeoutDeConsulta
+	// Una transacción abierta y quieta es peor que una consulta lenta: retiene
+	// su conexión Y bloquea la limpieza de filas viejas en toda la base. El
+	// tope va más alto que el de consulta porque una transacción legítima
+	// encadena varias.
+	config.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = "60s"
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("abriendo el pool: %w", err)
+	}
+	return pool, nil
+}
+
 func buildDSN() string {
 	u := url.URL{
 		Scheme:   "postgres",
