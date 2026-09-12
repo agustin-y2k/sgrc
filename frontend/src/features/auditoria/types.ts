@@ -60,8 +60,50 @@ export function accionLegible(accion: string): string {
   return palabras.charAt(0).toUpperCase() + palabras.slice(1)
 }
 
-/** `ciclo_lectivo` → `Ciclo lectivo`. Mismo criterio. */
+/**
+ * Cómo se llama en pantalla cada cosa que el registro anota, con su género.
+ *
+ * Es una tabla y no un `replace("_", " ")` por dos razones que se vieron recién
+ * en una captura de la guía: el nombre guardado no lleva tildes
+ * (`jornada_institucion`) y el género no se puede adivinar del texto, así que
+ * un «esta» fijo producía «Ver todo lo de esta usuario».
+ *
+ * Es un conjunto cerrado —lo que existe es lo que el backend audita— pero una
+ * entidad nueva no tiene por qué esperar a esta tabla: cae en el respaldo de
+ * abajo, que es neutro y siempre está bien escrito.
+ */
+const ENTIDADES: Record<string, { nombre: string; genero: "el" | "la" }> = {
+  carro: { nombre: "carro", genero: "el" },
+  ciclo_lectivo: { nombre: "ciclo lectivo", genero: "el" },
+  curso: { nombre: "curso", genero: "el" },
+  docente_materia: { nombre: "asignación de docente", genero: "la" },
+  equipo: { nombre: "equipo", genero: "el" },
+  pc: { nombre: "equipo", genero: "el" },
+  equipo_cuenta: { nombre: "cuenta de equipo", genero: "la" },
+  jornada_institucion: { nombre: "jornada de la escuela", genero: "la" },
+  licencia: { nombre: "licencia", genero: "la" },
+  materia: { nombre: "materia", genero: "la" },
+  pedido_de_materia: { nombre: "pedido de materia", genero: "el" },
+  reserva: { nombre: "reserva", genero: "la" },
+  usuario: { nombre: "usuario", genero: "el" },
+}
+
+/** `ciclo_lectivo` → `Ciclo lectivo`. */
 export function entidadLegible(entidad: string): string {
-  const palabras = entidad.toLowerCase().replace(/_/g, " ")
+  const conocida = ENTIDADES[entidad.toLowerCase()]
+  const palabras = conocida
+    ? conocida.nombre
+    : entidad.toLowerCase().replace(/_/g, " ")
   return palabras.charAt(0).toUpperCase() + palabras.slice(1)
+}
+
+/**
+ * Cómo se la nombra dentro de una frase: «este usuario», «esta cuenta de
+ * equipo». Lo que no está en la tabla se dice «esta ficha», que no es tan
+ * preciso pero nunca está mal escrito.
+ */
+export function entidadEnFrase(entidad: string): string {
+  const conocida = ENTIDADES[entidad.toLowerCase()]
+  if (!conocida) return "esta ficha"
+  return `${conocida.genero === "el" ? "este" : "esta"} ${conocida.nombre}`
 }

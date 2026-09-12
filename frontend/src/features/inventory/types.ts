@@ -205,6 +205,29 @@ export type AltaDePreferencias = {
   equiposQueYaLaTenian?: string[]
 }
 
+/**
+ * Una marca que quedó apuntando a una materia que ya no existe con ese nombre
+ * — casi siempre porque la renombraron desde Académico.
+ *
+ * No trae los tres ejes por separado como `PreferenciaDeEquipo`, sólo el
+ * `alcance` ya armado: una huérfana se lee y se quita, no se edita. Volver a
+ * marcar con el nombre nuevo es otra marca, y se hace desde el equipo.
+ */
+export type PreferenciaHuerfana = {
+  id: string
+  /** El nombre al que la marca apunta y que ya no cruza con ninguna materia. */
+  materiaNombre: string
+  /** La misma frase que muestra una marca normal: "Matemática de 1°2". */
+  alcance: string
+  prioridad: number
+  /** Qué máquina quedó marcada: sin esto la marca no es accionable. */
+  equipoEtiqueta: string
+  /** Ausente cuando el equipo no está en ningún carro. */
+  carroNombre?: string
+  /** Un equipo retirado explica por qué la marca puede no importar. */
+  equipoDadoDeBaja: boolean
+}
+
 // ── Cuentas de usuario de cada equipo (RF-03.22) ────────────────────────
 
 export type PrivilegioDeCuenta = "COMUN" | "ADMINISTRADOR"

@@ -52,12 +52,16 @@ export type CategoriaEmail =
   | "RECUPERACION_DE_CUENTA"
   | "CUENTA_APROBADA"
   // Personales: las tiene cualquiera por sus reservas y pedidos.
+  /** Le contestaron un pedido de ayuda. Fija: está esperando. */
+  | "SOPORTE_RESPONDIDO"
   | "RESERVA_CANCELADA"
   | "PEDIDO_DE_LIBERACION"
   | "PEDIDO_DE_MATERIA_RESUELTO"
   | "SUGERENCIA_RESPONDIDA"
   | "RECORDATORIO_DE_RESERVA"
   // De administración: los avisos que van a todos los Admin.
+  /** Alguien pidió ayuda por el buzón. Fija: es el único canal de auxilio. */
+  | "SOPORTE"
   | "CUENTA_PENDIENTE"
   | "CIERRE_SIN_DEVOLVER"
   | "LICENCIA_POR_VENCER"

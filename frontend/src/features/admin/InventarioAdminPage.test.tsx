@@ -614,6 +614,56 @@ describe("InventarioAdminPage", () => {
     expect(adminApi.reactivarCarro).toHaveBeenCalledWith("c9")
   })
 
+  // Sin esto, "Ver los carros retirados" no podía mostrar nada nunca: el
+  // backend tenía la baja desde el principio y la pantalla sólo sabía
+  // reactivar.
+  it("da de baja un carro", async () => {
+    const user = userEvent.setup()
+    vi.mocked(adminApi.darDeBajaCarro).mockResolvedValue(undefined)
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Dar de baja el carro" })
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "Confirmar la baja del carro" })
+    )
+
+    expect(adminApi.darDeBajaCarro).toHaveBeenCalledWith("c1")
+  })
+
+  // Las dos cosas que no se ven desde la tarjeta y cambian la decisión.
+  it("avisa que el carro tiene que estar vacío y que el nombre se libera", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Dar de baja el carro" })
+    )
+
+    expect(await screen.findByText(/ningún equipo activo adentro/)).toBeInTheDocument()
+    expect(screen.getByText(/nombre queda libre/)).toBeInTheDocument()
+  })
+
+  // El caso normal, no el excepcional: nadie vacía un carro antes de decidir
+  // sacarlo, así que el 409 es lo primero que ve casi siempre.
+  it("muestra el rechazo del servidor si el carro todavía tiene equipos", async () => {
+    const user = userEvent.setup()
+    vi.mocked(adminApi.darDeBajaCarro).mockRejectedValue(
+      new ApiError(409, "el carro todavía tiene equipos adentro — movelos a otro carro o dalos de baja primero")
+    )
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Dar de baja el carro" })
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "Confirmar la baja del carro" })
+    )
+
+    expect(await screen.findByText(/todavía tiene equipos adentro/)).toBeInTheDocument()
+  })
+
   // Un carro retirado no puede ofrecerse como destino al mover un equipo: es
   // el mismo agujero que verificarCarroDisponible tapa del lado del servidor.
   it("no ofrece los carros retirados como destino de un equipo", async () => {

@@ -38,6 +38,12 @@ export function MateriasDeCurso({
     null
   )
   const [eliminando, setEliminando] = useState<Materia | null>(null)
+  // Las marcas que el último renombre dejó huérfanas. `null` es "todavía no se
+  // renombró nada"; 0 no se guarda porque no hay nada que contar.
+  const [marcasHuerfanas, setMarcasHuerfanas] = useState<{
+    nombre: string
+    cantidad: number
+  } | null>(null)
   const [docentesAbiertos, setDocentesAbiertos] = useState<string | null>(null)
   const [copiando, setCopiando] = useState(false)
 
@@ -65,8 +71,13 @@ export function MateriasDeCurso({
   const editar = useMutation({
     mutationFn: ({ materia, nombre }: { materia: Materia; nombre: string }) =>
       academicoApi.editarMateria(materia.id, nombre.trim()),
-    onSuccess: async () => {
+    onSuccess: async (resultado, { nombre }) => {
       setEditando(null)
+      setMarcasHuerfanas(
+        resultado.marcasDeEquipoAfectadas > 0
+          ? { nombre: nombre.trim(), cantidad: resultado.marcasDeEquipoAfectadas }
+          : null
+      )
       await invalidar()
     },
   })
@@ -99,6 +110,24 @@ export function MateriasDeCurso({
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{getErrorMessage(error)}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* El renombre se hizo: esto no es un error, es la consecuencia que no se
+          ve desde acá. Las marcas siguen existiendo apuntando al nombre viejo,
+          así que esas máquinas dejaron de aparecer primero para esta materia y
+          nadie lo pidió. Se resuelven en Inventario, que es donde viven. */}
+      {marcasHuerfanas && (
+        <Alert>
+          <AlertDescription>
+            Se renombró la materia.{" "}
+            {marcasHuerfanas.cantidad === 1
+              ? "Una marca de equipo quedó"
+              : `${marcasHuerfanas.cantidad} marcas de equipo quedaron`}{" "}
+            apuntando al nombre anterior, así que esos equipos ya no aparecen primero al
+            reservar «{marcasHuerfanas.nombre}». Se revisan en Gestión del inventario, en
+            «Marcas que quedaron sin materia».
+          </AlertDescription>
         </Alert>
       )}
 

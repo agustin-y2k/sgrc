@@ -2,11 +2,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
+import * as adminApi from "@/features/admin/api"
 import { AuditoriaPage } from "@/features/auditoria/AuditoriaPage"
 import * as auditoriaApi from "@/features/auditoria/api"
 import type { EntradaDeAuditoria } from "@/features/auditoria/types"
+import type { Usuario } from "@/features/auth/types"
 
 vi.mock("@/features/auditoria/api")
+vi.mock("@/features/admin/api")
 
 function entrada(over: Partial<EntradaDeAuditoria> = {}): EntradaDeAuditoria {
   return {
@@ -18,6 +21,21 @@ function entrada(over: Partial<EntradaDeAuditoria> = {}): EntradaDeAuditoria {
     entidadId: "c1",
     ipOrigen: "10.0.0.7",
     creadoEn: "2026-09-11T05:00:57Z",
+    ...over,
+  }
+}
+
+function usuario(over: Partial<Usuario> = {}): Usuario {
+  return {
+    id: "u1",
+    nombre: "Marta",
+    apellido: "Fernández",
+    email: "marta@example.com",
+    rol: "ADMIN",
+    estado: "APROBADA",
+    fechaRegistro: "2026-01-01T00:00:00Z",
+    fechaAprobacion: "2026-01-02T00:00:00Z",
+    debeCambiarPassword: false,
     ...over,
   }
 }
@@ -41,6 +59,10 @@ describe("AuditoriaPage", () => {
     vi.mocked(auditoriaApi.listarAuditoria).mockResolvedValue({
       data: [entrada()],
       meta: { total: 1, page: 1, pageSize: 50 },
+    })
+    vi.mocked(adminApi.listarUsuarios).mockResolvedValue({
+      data: [usuario(), usuario({ id: "u2", nombre: "Juan", apellido: "Pérez" })],
+      meta: { total: 2, page: 1, pageSize: 200 },
     })
   })
 
@@ -167,5 +189,66 @@ describe("AuditoriaPage", () => {
     expect(
       screen.queryByRole("button", { name: "Ver el detalle" })
     ).not.toBeInTheDocument()
+  })
+
+  // Las dos preguntas para las que existe un registro de auditoría, y que el
+  // backend sabía contestar desde el primer día: qué hizo esta persona y qué le
+  // pasó a esta cosa.
+  describe("quién y sobre qué ficha", () => {
+    it("filtra por persona, eligiéndola por nombre y no por id", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+
+      // La lista de personas llega por su propia consulta: sin esperarla, el
+      // selector todavía tiene sólo «Cualquiera».
+      await screen.findByRole("option", { name: "Pérez, Juan" })
+      await user.selectOptions(screen.getByLabelText("Quién"), "u2")
+
+      await waitFor(() => {
+        expect(auditoriaApi.listarAuditoria).toHaveBeenCalledWith(
+          expect.objectContaining({ usuarioId: "u2" }),
+          1
+        )
+      })
+    })
+
+    it("filtra por la ficha de una fila sin escribir el id", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+
+      await user.click(await screen.findByRole("button", { name: /Ver todo lo de este curso/ }))
+
+      await waitFor(() => {
+        expect(auditoriaApi.listarAuditoria).toHaveBeenCalledWith(
+          expect.objectContaining({ entidad: "curso", entidadId: "c1" }),
+          1
+        )
+      })
+    })
+
+    // Acotada sin explicación, la lista parece "no pasó casi nada".
+    it("dice que está mirando una sola ficha y deja volver", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+
+      await user.click(await screen.findByRole("button", { name: /Ver todo lo de este curso/ }))
+
+      expect(
+        await screen.findByText(/Mostrando solo lo que le pasó a/)
+      ).toBeInTheDocument()
+      // Y deja de ofrecerse en la fila: ya se está mirando esa ficha.
+      expect(
+        screen.queryByRole("button", { name: /Ver todo lo de este curso/ })
+      ).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole("button", { name: "Ver todas" }))
+
+      await waitFor(() => {
+        expect(auditoriaApi.listarAuditoria).toHaveBeenLastCalledWith(
+          expect.objectContaining({ entidadId: undefined }),
+          1
+        )
+      })
+    })
   })
 })

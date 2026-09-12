@@ -275,7 +275,9 @@ describe("AcademicoPage", () => {
     })
 
     it("renombra una materia", async () => {
-      vi.mocked(academicoApi.editarMateria).mockResolvedValue(undefined)
+      vi.mocked(academicoApi.editarMateria).mockResolvedValue({
+        marcasDeEquipoAfectadas: 0,
+      })
       const user = userEvent.setup()
       renderPagina()
       await abrirMaterias(user)
@@ -294,6 +296,50 @@ describe("AcademicoPage", () => {
           "Análisis Matemático"
         )
       })
+    })
+
+    // Renombrar es legítimo y el backend no lo frena, pero deja marcas de
+    // equipo apuntando a un nombre que ya no existe. Eso no se ve desde
+    // Académico: si no se dice acá, el síntoma aparece semanas después como
+    // "el orden de las máquinas cambió" y no lleva a la causa.
+    it("avisa si el renombre dejó marcas de equipo sin materia", async () => {
+      vi.mocked(academicoApi.editarMateria).mockResolvedValue({
+        marcasDeEquipoAfectadas: 3,
+      })
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirMaterias(user)
+
+      const renombrar = await screen.findAllByRole("button", { name: "Renombrar" })
+      await user.click(renombrar[1])
+      const campo = screen.getByLabelText("Nombre")
+      await user.clear(campo)
+      await user.type(campo, "Análisis Matemático")
+      await user.click(screen.getByRole("button", { name: "Guardar" }))
+
+      expect(await screen.findByText(/3 marcas de equipo quedaron/)).toBeInTheDocument()
+    })
+
+    it("no dice nada del renombre cuando no había ninguna marca", async () => {
+      vi.mocked(academicoApi.editarMateria).mockResolvedValue({
+        marcasDeEquipoAfectadas: 0,
+      })
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirMaterias(user)
+
+      const renombrar = await screen.findAllByRole("button", { name: "Renombrar" })
+      await user.click(renombrar[1])
+      const campo = screen.getByLabelText("Nombre")
+      await user.clear(campo)
+      await user.type(campo, "Análisis Matemático")
+      await user.click(screen.getByRole("button", { name: "Guardar" }))
+
+      await waitFor(() => {
+        expect(academicoApi.editarMateria).toHaveBeenCalled()
+      })
+      expect(screen.queryByText(/marca de equipo/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/marcas de equipo/)).not.toBeInTheDocument()
     })
 
     it("avisa cuando el curso no tiene materias", async () => {

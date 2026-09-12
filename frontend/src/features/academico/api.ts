@@ -8,6 +8,7 @@ import type {
   RespuestaLista,
   ResultadoArchivado,
   ResultadoCopia,
+  ResultadoEdicionDeMateria,
   ResultadoImportacion,
   RolDocente,
 } from "@/features/academico/types"
@@ -118,8 +119,13 @@ export function crearMateria(cursoId: string, nombre: string) {
   })
 }
 
+/**
+ * Devuelve cuántas marcas de preferencia de equipo quedaron apuntando al
+ * nombre viejo: renombrar es legítimo y el backend nunca lo frena por eso, pero
+ * la pantalla tiene que decirlo (ver ResultadoEdicionDeMateria).
+ */
 export function editarMateria(id: string, nombre: string) {
-  return apiFetch<void>(`/api/materias/${id}`, {
+  return apiFetch<ResultadoEdicionDeMateria>(`/api/materias/${id}`, {
     method: "PATCH",
     body: { nombre },
   })

@@ -21,8 +21,9 @@ export function escribir(
   })
 }
 
-export function misSugerencias() {
-  return apiFetch<RespuestaLista<Sugerencia>>("/api/mis-sugerencias")
+export function misSugerencias(pagina = 1) {
+  const query = pagina > 1 ? `?page=${pagina}` : ""
+  return apiFetch<RespuestaLista<Sugerencia>>(`/api/mis-sugerencias${query}`)
 }
 
 /**
@@ -38,9 +39,18 @@ export function responder(id: string, texto: string) {
 
 // ── Del lado del Admin ────────────────────────────────────────────────
 
-export function listar(soloAbiertas: boolean) {
+/**
+ * El buzón entero, de a 50 por página. La página se manda solo a partir de la
+ * segunda: el backend ya devuelve la primera cuando no viene, y agregarla
+ * cambiaría la URL de la consulta más común sin cambiar la respuesta.
+ */
+export function listar(soloAbiertas: boolean, pagina = 1) {
+  const params = new URLSearchParams()
+  if (soloAbiertas) params.set("abiertas", "true")
+  if (pagina > 1) params.set("page", String(pagina))
+  const query = params.toString()
   return apiFetch<RespuestaLista<Sugerencia>>(
-    `/api/sugerencias/${soloAbiertas ? "?abiertas=true" : ""}`
+    `/api/sugerencias/${query ? `?${query}` : ""}`
   )
 }
 

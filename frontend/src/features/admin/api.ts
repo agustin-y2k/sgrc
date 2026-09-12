@@ -13,6 +13,7 @@ import type {
   Licencia,
   Equipo,
   PreferenciaDeEquipo,
+  PreferenciaHuerfana,
   RenovacionLicencias,
   RespuestaLista,
   VencimientoDeclarado,
@@ -202,6 +203,18 @@ export function darDeBajaEquipo(id: string) {
  */
 export function reactivarEquipo(id: string) {
   return apiFetch<void>(`/api/equipos/${id}/reactivar`, { method: "POST" })
+}
+
+/**
+ * Retira un carro de circulación. Solo se puede si no le queda ningún equipo
+ * activo adentro: el backend rechaza con 409 y el mensaje dice qué hacer
+ * —moverlos a otro carro o darlos de baja— porque la salida no es obvia.
+ *
+ * El nombre se libera: el índice único excluye a los retirados, así que otro
+ * carro puede pasar a llamarse «Carro 1» mientras éste está afuera.
+ */
+export function darDeBajaCarro(id: string) {
+  return apiFetch<void>(`/api/carros/${id}`, { method: "DELETE" })
 }
 
 export function reactivarCarro(id: string) {
@@ -417,4 +430,16 @@ export function editarPreferencia(
 
 export function borrarPreferencia(id: string) {
   return apiFetch<void>(`/api/preferencias/${id}`, { method: "DELETE" })
+}
+
+/**
+ * Las marcas que quedaron apuntando a una materia inexistente. Es una consulta
+ * de todo el inventario y no de un equipo: la huérfana la produce renombrar una
+ * materia, que no pasa por ninguna máquina en particular.
+ *
+ * Va antes que `/preferencias/{id}` en el router del backend, para que
+ * "huerfanas" no se lea como un id.
+ */
+export function listarPreferenciasHuerfanas() {
+  return apiFetch<RespuestaLista<PreferenciaHuerfana>>("/api/preferencias/huerfanas")
 }

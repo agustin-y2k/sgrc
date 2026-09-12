@@ -17,6 +17,7 @@ import {
 } from "@/features/academico/types"
 import { useCursosDelCicloActivo } from "@/features/academico/useCursosDelCicloActivo"
 import * as adminApi from "@/features/admin/api"
+import type { PreferenciaDeEquipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
 /** RF-03.21 — para qué materias es preferente este equipo. */
@@ -31,6 +32,10 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
   const [anio, setAnio] = useState("")
   const [division, setDivision] = useState("")
   const [prioridad, setPrioridad] = useState("1")
+  // La marca que se está corrigiendo, o null para dar una nueva de alta. El
+  // formulario es el mismo: los campos son los mismos y la materia no se
+  // edita, así que un segundo formulario sería el mismo repetido.
+  const [editando, setEditando] = useState<PreferenciaDeEquipo | null>(null)
 
   const preferenciasKey = ["preferencias", "equipo", equipoId]
   const { data, isLoading, error } = useQuery({
@@ -54,6 +59,25 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
 
   const invalidar = () => queryClient.invalidateQueries({ queryKey: preferenciasKey })
 
+  const limpiar = () => {
+    setEditando(null)
+    setMateriaNombre("")
+    setModalidad("")
+    setAnio("")
+    setDivision("")
+    setPrioridad("1")
+  }
+
+  /** Carga la marca en el formulario para corregirla. */
+  const empezarAEditar = (p: PreferenciaDeEquipo) => {
+    setEditando(p)
+    setMateriaNombre(p.materiaNombre)
+    setModalidad(p.modalidad ?? "")
+    setAnio(p.anio === undefined ? "" : String(p.anio))
+    setDivision(p.division ?? "")
+    setPrioridad(String(p.prioridad))
+  }
+
   const marcar = useMutation({
     mutationFn: () =>
       adminApi.marcarPreferencia({
@@ -67,11 +91,24 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
         prioridad: Number(prioridad),
       }),
     onSuccess: async () => {
-      setMateriaNombre("")
-      setModalidad("")
-      setAnio("")
-      setDivision("")
-      setPrioridad("1")
+      limpiar()
+      await invalidar()
+    },
+  })
+
+  // Corregir el alcance o la prioridad de una marca que ya existe. La materia
+  // NO se manda: apuntar a otra es otra marca, no una corrección de ésta, y el
+  // backend no la acepta en este PATCH.
+  const corregir = useMutation({
+    mutationFn: (p: PreferenciaDeEquipo) =>
+      adminApi.editarPreferencia(p.id, {
+        modalidad: modalidad.trim() || undefined,
+        anio: anio ? Number(anio) : undefined,
+        division: division.trim() || undefined,
+        prioridad: Number(prioridad),
+      }),
+    onSuccess: async () => {
+      limpiar()
       await invalidar()
     },
   })
@@ -94,7 +131,7 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
 
   const preferencias = data?.data ?? []
   const nombres = materias?.data ?? []
-  const errorDeAccion = marcar.error ?? borrar.error
+  const errorDeAccion = marcar.error ?? corregir.error ?? borrar.error
 
   return (
     <div className="grid gap-3 rounded-md border p-3">
@@ -123,20 +160,32 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
               <span className="text-sm">
                 {p.alcance} <Badge variant="outline">Prioridad {p.prioridad}</Badge>
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={borrar.isPending}
-                onClick={() => borrar.mutate(p.id)}
-              >
-                Quitar
-              </Button>
+              <span className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={corregir.isPending}
+                  onClick={() => empezarAEditar(p)}
+                >
+                  Editar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={borrar.isPending}
+                  onClick={() => borrar.mutate(p.id)}
+                >
+                  Quitar
+                </Button>
+              </span>
             </li>
           ))}
         </ul>
       )}
 
-      {nombres.length === 0 ? (
+      {/* Sin materias cargadas no hay nada que marcar — pero sí puede haber
+          marcas viejas que corregir, así que editar abre el formulario igual. */}
+      {nombres.length === 0 && !editando ? (
         <p className="text-muted-foreground text-sm">
           Todavía no hay materias cargadas. Se crean desde Académico.
         </p>
@@ -145,14 +194,19 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
           className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto] sm:items-end"
           onSubmit={(e) => {
             e.preventDefault()
-            marcar.mutate()
+            if (editando) corregir.mutate(editando)
+            else marcar.mutate()
           }}
         >
           <div className="grid gap-1.5">
             <Label htmlFor={`materia-pref-${equipoId}`}>Materia</Label>
+            {/* Corregir una marca no cambia de materia: para eso está quitarla
+                y hacer otra. El selector se deshabilita en vez de esconderse
+                para que el formulario siga diciendo de qué marca habla. */}
             <Select
               id={`materia-pref-${equipoId}`}
               value={materiaNombre}
+              disabled={editando !== null}
               onChange={(e) => setMateriaNombre(e.target.value)}
             >
               <option value="">Elegí una materia…</option>
@@ -234,13 +288,24 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
               ))}
             </Select>
           </div>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={materiaNombre === "" || marcar.isPending}
-          >
-            Marcar
-          </Button>
+          {editando ? (
+            <span className="flex gap-2">
+              <Button type="submit" size="sm" disabled={corregir.isPending}>
+                Guardar
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={limpiar}>
+                Cancelar
+              </Button>
+            </span>
+          ) : (
+            <Button
+              type="submit"
+              size="sm"
+              disabled={materiaNombre === "" || marcar.isPending}
+            >
+              Marcar
+            </Button>
+          )}
         </form>
       )}
     </div>

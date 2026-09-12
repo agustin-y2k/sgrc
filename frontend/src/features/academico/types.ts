@@ -83,6 +83,20 @@ export type ResultadoCopia = {
 }
 
 /**
+ * Lo que deja atrás renombrar una materia: las marcas de preferencia de equipo
+ * (RF-03.21) se guardan por NOMBRE de materia, así que al renombrarla dejan de
+ * cruzar con nada y quedan huérfanas.
+ *
+ * Cero es la respuesta normal y no se muestra. Un número mayor es una
+ * consecuencia que el Admin no pidió y no ve desde acá —las marcas viven en
+ * Inventario—, así que hay que contarla en el momento: descubrirla más tarde
+ * es descubrir que el orden de equipos cambió sin motivo aparente.
+ */
+export type ResultadoEdicionDeMateria = {
+  marcasDeEquipoAfectadas: number
+}
+
+/**
  * RF-02.6 — una asignación docente-materia con los nombres de las dos puntas
  * ya resueltos. Es la relación mirada para MOSTRARLA; `DocenteMateria` es la
  * misma fila para administrarla.

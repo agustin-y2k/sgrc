@@ -9,9 +9,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import * as adminApi from "@/features/admin/api"
 import * as auditoriaApi from "@/features/auditoria/api"
 import {
   accionLegible,
+  entidadEnFrase,
   entidadLegible,
   type EntradaDeAuditoria,
   type FiltroDeAuditoria,
@@ -39,6 +41,14 @@ export function AuditoriaPage() {
   const { data: opciones } = useQuery({
     queryKey: ["auditoria-opciones"],
     queryFn: auditoriaApi.opcionesDeAuditoria,
+  })
+
+  // Quién: la lista entera de una vez, que es para lo que está el tope de 200.
+  // Se pide acá y no se escribe el id a mano porque el filtro del backend es
+  // por id, y nadie tiene a mano el UUID de una persona.
+  const { data: usuarios } = useQuery({
+    queryKey: ["usuarios", "para-auditoria"],
+    queryFn: () => adminApi.listarUsuarios({ pageSize: 200 }),
   })
 
   const { data, isLoading, error } = useQuery({
@@ -70,7 +80,7 @@ export function AuditoriaPage() {
       )}
 
       <Card className="mb-4">
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="grid gap-1.5">
             <Label htmlFor="filtro-accion">Acción</Label>
             {/* Las opciones salen de lo que de verdad ocurrió en ESTA
@@ -108,6 +118,22 @@ export function AuditoriaPage() {
           </div>
 
           <div className="grid gap-1.5">
+            <Label htmlFor="filtro-usuario">Quién</Label>
+            <Select
+              id="filtro-usuario"
+              value={filtro.usuarioId ?? ""}
+              onChange={(e) => cambiar("usuarioId", e.target.value)}
+            >
+              <option value="">Cualquiera</option>
+              {(usuarios?.data ?? []).map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.apellido}, {u.nombre}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="grid gap-1.5">
             <Label htmlFor="filtro-desde">Desde</Label>
             <Input
               id="filtro-desde"
@@ -127,8 +153,30 @@ export function AuditoriaPage() {
             />
           </div>
 
+          {/* El id de una ficha no se escribe: se llega acá desde el botón de
+              una fila. Por eso no hay campo, pero sí hace falta decir que está
+              puesto — si no, la lista aparece acotada sin explicación. */}
+          {filtro.entidadId && (
+            <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm sm:col-span-2 lg:col-span-5">
+              <span>
+                Mostrando solo lo que le pasó a{" "}
+                {filtro.entidad
+                  ? entidadEnFrase(filtro.entidad).replace(/^est[ea] /, "")
+                  : "una ficha"}{" "}
+                en particular.
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => cambiar("entidadId", "")}
+              >
+                Ver todas
+              </Button>
+            </div>
+          )}
+
           {hayFiltro && (
-            <div className="sm:col-span-2 lg:col-span-4">
+            <div className="sm:col-span-2 lg:col-span-5">
               <Button
                 variant="outline"
                 size="sm"
@@ -163,7 +211,22 @@ export function AuditoriaPage() {
           </p>
           <div className="grid gap-2">
             {entradas.map((entrada) => (
-              <FilaDeAuditoria key={entrada.id} entrada={entrada} />
+              <FilaDeAuditoria
+                key={entrada.id}
+                entrada={entrada}
+                filtradaPorFicha={filtro.entidadId !== undefined}
+                onVerLaFicha={() => {
+                  // La entidad va junto con el id: el mismo UUID no se repite
+                  // entre tablas, pero decir cuál es hace que el aviso de
+                  // arriba pueda nombrarla.
+                  setPagina(1)
+                  setFiltro((previo) => ({
+                    ...previo,
+                    entidad: entrada.entidad,
+                    entidadId: entrada.entidadId,
+                  }))
+                }}
+              />
             ))}
           </div>
           {data && (
@@ -181,7 +244,16 @@ export function AuditoriaPage() {
   )
 }
 
-function FilaDeAuditoria({ entrada }: { entrada: EntradaDeAuditoria }) {
+function FilaDeAuditoria({
+  entrada,
+  filtradaPorFicha,
+  onVerLaFicha,
+}: {
+  entrada: EntradaDeAuditoria
+  /** Ya se está mirando una ficha sola: ofrecerlo de nuevo no lleva a ningún lado. */
+  filtradaPorFicha: boolean
+  onVerLaFicha: () => void
+}) {
   const [detalleAbierto, setDetalleAbierto] = useState(false)
   const tieneDetalle = entrada.detalle !== undefined && entrada.detalle !== null
 
@@ -202,6 +274,18 @@ function FilaDeAuditoria({ entrada }: { entrada: EntradaDeAuditoria }) {
         {entidadLegible(entrada.entidad)}
         {entrada.ipOrigen && ` · desde ${entrada.ipOrigen}`}
       </p>
+
+      <div className="flex flex-wrap gap-2">
+        {/* «Todo lo que le pasó a esta cosa» es media razón de ser de un
+            registro de auditoría, y el backend ya la sabía contestar. Se llega
+            desde la fila y no desde un campo porque lo que el filtro pide es un
+            UUID, que nadie tiene a mano ni reconoce si lo ve. */}
+        {entrada.entidadId && !filtradaPorFicha && (
+          <Button variant="outline" size="sm" onClick={onVerLaFicha}>
+            Ver todo lo de {entidadEnFrase(entrada.entidad)}
+          </Button>
+        )}
+      </div>
 
       {tieneDetalle && (
         <div>

@@ -68,10 +68,15 @@ function montar(rol: Usuario["rol"] = "DOCENTE") {
   )
 }
 
+/** Una respuesta del buzón: los dos listados vienen paginados de a 50. */
+function pagina(hilos: Sugerencia[], total = hilos.length, page = 1) {
+  return { data: hilos, meta: { total, page, pageSize: 50 } }
+}
+
 describe("PanelDeSoporte", () => {
   beforeEach(() => {
-    vi.mocked(sugerenciasApi.misSugerencias).mockResolvedValue({ data: [hilo()] })
-    vi.mocked(sugerenciasApi.listar).mockResolvedValue({ data: [hilo()] })
+    vi.mocked(sugerenciasApi.misSugerencias).mockResolvedValue(pagina([hilo()]))
+    vi.mocked(sugerenciasApi.listar).mockResolvedValue(pagina([hilo()]))
     vi.mocked(sugerenciasApi.responder).mockResolvedValue(hilo())
     vi.mocked(sugerenciasApi.resolver).mockResolvedValue(hilo({ estado: "RESUELTA" }))
     vi.mocked(sugerenciasApi.escribir).mockResolvedValue(hilo())
@@ -180,5 +185,62 @@ describe("PanelDeSoporte", () => {
 
     await screen.findByText(/esperando respuesta/)
     expect(screen.queryByRole("button", { name: "Pedir ayuda" })).not.toBeInTheDocument()
+  })
+
+  // El backend pagina de a 50 desde siempre; la pantalla pedía la primera
+  // página y la mostraba como si fuera el buzón entero.
+  describe("paginación", () => {
+    it("deja ir a la página siguiente", async () => {
+      const user = userEvent.setup()
+      vi.mocked(sugerenciasApi.listar).mockResolvedValue(pagina([hilo()], 60))
+      montar("ADMIN")
+
+      await user.click(await screen.findByRole("button", { name: "Ver conversaciones" }))
+      await user.click(await screen.findByRole("button", { name: "Siguiente" }))
+
+      await waitFor(() => {
+        expect(sugerenciasApi.listar).toHaveBeenCalledWith(true, 2)
+      })
+    })
+
+    it("no muestra controles cuando entra todo en una página", async () => {
+      const user = userEvent.setup()
+      montar("ADMIN")
+
+      await user.click(await screen.findByRole("button", { name: "Ver conversaciones" }))
+      await screen.findByText("No arranca la PC 3")
+
+      expect(screen.queryByRole("button", { name: "Siguiente" })).not.toBeInTheDocument()
+    })
+
+    // Contando sobre la página, una bandeja con 60 pendientes decía "hay 50":
+    // el tamaño de la página, no un dato del buzón.
+    it("cuenta los pendientes con el total del servidor, no con la página", async () => {
+      vi.mocked(sugerenciasApi.listar).mockResolvedValue(pagina([hilo()], 60))
+      montar("ADMIN")
+
+      expect(
+        await screen.findByText(/Hay 60 conversaciones esperando respuesta/)
+      ).toBeInTheDocument()
+    })
+
+    // Quedarse en la página 4 de una lista que ahora tiene 2 es mirar el vacío.
+    it("vuelve a la primera página al cambiar el filtro", async () => {
+      const user = userEvent.setup()
+      vi.mocked(sugerenciasApi.listar).mockResolvedValue(pagina([hilo()], 60))
+      montar("ADMIN")
+
+      await user.click(await screen.findByRole("button", { name: "Ver conversaciones" }))
+      await user.click(await screen.findByRole("button", { name: "Siguiente" }))
+      await waitFor(() => {
+        expect(sugerenciasApi.listar).toHaveBeenCalledWith(true, 2)
+      })
+
+      await user.click(screen.getByLabelText("Ver solo lo que falta contestar"))
+
+      await waitFor(() => {
+        expect(sugerenciasApi.listar).toHaveBeenCalledWith(false, 1)
+      })
+    })
   })
 })

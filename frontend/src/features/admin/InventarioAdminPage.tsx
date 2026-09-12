@@ -18,6 +18,7 @@ import { AvisoDeCascada } from "@/features/admin/AvisoDeCascada"
 import { AltaDeEquipo, EdicionDeEquipo } from "@/features/admin/FormularioEquipo"
 import { IncidenciasDeEquipo } from "@/features/admin/IncidenciasDeEquipo"
 import { LicenciasDeEquipo } from "@/features/admin/LicenciasDeEquipo"
+import { MarcasHuerfanas } from "@/features/admin/MarcasHuerfanas"
 import { PreferenciasDeEquipo } from "@/features/admin/PreferenciasDeEquipo"
 import { OtrosEquipos } from "@/features/admin/OtrosEquipos"
 import { PrestamosDeEquipo } from "@/features/admin/PrestamosDeEquipo"
@@ -478,6 +479,7 @@ export function InventarioAdminPage() {
   const queryClient = useQueryClient()
   const [carroAbierto, setCarroAbierto] = useState<string | null>(null)
   const [carroEnEdicion, setCarroEnEdicion] = useState<string | null>(null)
+  const [carroEnBaja, setCarroEnBaja] = useState<Carro | null>(null)
   const [nombreCarro, setNombreCarro] = useState("")
   const [descripcionCarro, setDescripcionCarro] = useState("")
   const [verRetirados, setVerRetirados] = useState(false)
@@ -491,6 +493,16 @@ export function InventarioAdminPage() {
       verRetirados
         ? inventoryApi.listarCarrosConRetirados()
         : inventoryApi.listarCarros(),
+  })
+
+  // Retirar un carro. El 409 por "todavía tiene equipos adentro" es el caso
+  // normal, no el excepcional: nadie vacía un carro antes de decidir sacarlo.
+  const darDeBajaCarro = useMutation({
+    mutationFn: (carro: Carro) => adminApi.darDeBajaCarro(carro.id),
+    onSuccess: async () => {
+      setCarroEnBaja(null)
+      await queryClient.invalidateQueries({ queryKey: CARROS_KEY })
+    },
   })
 
   const crearCarro = useMutation({
@@ -563,6 +575,12 @@ export function InventarioAdminPage() {
         </CardContent>
       </Card>
 
+      {/* Va antes que el inventario y no al final: es lo único de esta pantalla
+          que aparece por algo que pasó en OTRO módulo, y pide una decisión. Al
+          final, debajo de una lista de carros que puede ser larga, sería un
+          aviso que nadie ve. No ocupa nada cuando no hay huérfanas. */}
+      <MarcasHuerfanas />
+
       {/* Los equipos que no están en ningún carro van en su propia sección,
           antes de la lista de carros: no pertenecen a ninguno, y meterlos en
           un carro llamado "Sueltos" sería volver a la mentira que el modelo
@@ -577,6 +595,7 @@ export function InventarioAdminPage() {
         {carros.map((carro) => {
           const abierto = carroAbierto === carro.id
           const editandoCarro = carroEnEdicion === carro.id
+          const bajandoCarro = carroEnBaja?.id === carro.id
           return (
             <Card key={carro.id}>
               <CardHeader>
@@ -591,7 +610,7 @@ export function InventarioAdminPage() {
                     tarjeta en vez de cortarse. */}
                 <CardTitle className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <span className="min-w-0 break-words">{carro.nombre}</span>
-                  {!editandoCarro && (
+                  {!editandoCarro && !bajandoCarro && (
                     <span className="flex shrink-0 flex-wrap gap-2">
                       <Button
                         variant="outline"
@@ -608,14 +627,68 @@ export function InventarioAdminPage() {
                       >
                         {abierto ? "Ocultar equipos" : "Gestionar equipos"}
                       </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          // Sin el reset, el 409 de un carro anterior aparece
+                          // dentro de este recuadro recién abierto.
+                          darDeBajaCarro.reset()
+                          setCarroEnBaja(carro)
+                        }}
+                      >
+                        Dar de baja el carro
+                      </Button>
                     </span>
                   )}
                 </CardTitle>
-                {carro.descripcion && !editandoCarro && (
+                {carro.descripcion && !editandoCarro && !bajandoCarro && (
                   <CardDescription>{carro.descripcion}</CardDescription>
                 )}
                 {editandoCarro && (
                   <EdicionDeCarro carro={carro} onListo={() => setCarroEnEdicion(null)} />
+                )}
+                {bajandoCarro && (
+                  <div className="grid gap-2 rounded-md border p-3">
+                    <p className="text-destructive text-sm">
+                      Dar de baja «{carro.nombre}» lo saca de circulación: deja de
+                      aparecer en los listados y en el selector de a qué carro va un
+                      equipo.
+                    </p>
+                    {/* Las dos cosas que no se ven y cambian la decisión: que
+                        tiene que estar vacío —el error que más va a salir— y
+                        que el nombre se libera, que es lo que permite que el
+                        carro nuevo se llame igual que el que reemplaza. */}
+                    <p className="text-muted-foreground text-sm">
+                      Solo se puede si no le queda ningún equipo activo adentro. Su nombre
+                      queda libre para el carro que lo reemplace, y se lo puede devolver a
+                      circulación desde «Ver los carros retirados».
+                    </p>
+                    {darDeBajaCarro.error && (
+                      <Alert variant="destructive">
+                        <AlertDescription>
+                          {getErrorMessage(darDeBajaCarro.error)}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={darDeBajaCarro.isPending}
+                        onClick={() => darDeBajaCarro.mutate(carro)}
+                      >
+                        Confirmar la baja del carro
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCarroEnBaja(null)}
+                      >
+                        Volver
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </CardHeader>
               {abierto && (

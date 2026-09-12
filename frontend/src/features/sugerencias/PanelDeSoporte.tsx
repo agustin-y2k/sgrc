@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { EstadoBadge } from "@/components/EstadoBadge"
+import { Paginador } from "@/components/Paginador"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -32,13 +33,18 @@ export function PanelDeSoporte({
   const [abierto, setAbierto] = useState(abiertoDeEntrada)
   const [escribiendo, setEscribiendo] = useState(abiertoDeEntrada && !esAdmin)
   const [soloPendientes, setSoloPendientes] = useState(true)
+  const [pagina, setPagina] = useState(1)
 
   const { data, error, isLoading } = useQuery({
+    // La página va en la clave: sin ella, react-query devolvería la página
+    // anterior de la caché y "Siguiente" no haría nada visible.
     queryKey: esAdmin
-      ? ["sugerencias", "todas", soloPendientes]
-      : ["sugerencias", "mias"],
+      ? ["sugerencias", "todas", soloPendientes, pagina]
+      : ["sugerencias", "mias", pagina],
     queryFn: () =>
-      esAdmin ? sugerenciasApi.listar(soloPendientes) : sugerenciasApi.misSugerencias(),
+      esAdmin
+        ? sugerenciasApi.listar(soloPendientes, pagina)
+        : sugerenciasApi.misSugerencias(pagina),
   })
 
   const hilos = data?.data ?? []
@@ -52,7 +58,7 @@ export function PanelDeSoporte({
               {esAdmin ? "Pedidos de ayuda" : "Ayuda y mensajes"}
             </p>
             <p className="text-muted-foreground text-sm">
-              {resumen(hilos, esAdmin, isLoading)}
+              {resumen(hilos, esAdmin, isLoading, soloPendientes, data?.meta.total)}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -95,7 +101,12 @@ export function PanelDeSoporte({
                 <Checkbox
                   id="solo-pendientes"
                   checked={soloPendientes}
-                  onCheckedChange={(v) => setSoloPendientes(v === true)}
+                  onCheckedChange={(v) => {
+                    setSoloPendientes(v === true)
+                    // Cambiar el filtro cambia cuántas páginas hay: quedarse en
+                    // la 4 de una lista que ahora tiene 2 muestra el vacío.
+                    setPagina(1)
+                  }}
                 />
                 <Label htmlFor="solo-pendientes">Ver solo lo que falta contestar</Label>
               </div>
@@ -112,6 +123,16 @@ export function PanelDeSoporte({
             {hilos.map((h) => (
               <Hilo key={h.id} hilo={h} esAdmin={esAdmin} />
             ))}
+
+            {/* El buzón viene de a 50. Sin esto, el hilo 51 no existía para la
+                pantalla: no había ni paginador ni aviso de que faltaba algo. */}
+            {data && (
+              <Paginador
+                meta={data.meta}
+                onCambiarPagina={setPagina}
+                etiqueta="conversaciones"
+              />
+            )}
           </div>
         )}
       </CardContent>
@@ -244,15 +265,40 @@ function Hilo({ hilo, esAdmin }: { hilo: Sugerencia; esAdmin: boolean }) {
   )
 }
 
-function resumen(hilos: Sugerencia[], esAdmin: boolean, cargando: boolean): string {
+/**
+ * La frase de arriba de todo, que es lo único que mucha gente lee.
+ *
+ * `total` viene de la paginación y cuenta la colección entera; `hilos` es la
+ * página que se está viendo. Donde el número se puede saber exacto se usa el
+ * total: contando sobre la página, una bandeja con 60 pendientes decía "hay
+ * 50", que es el tamaño de la página y no un dato del buzón.
+ */
+function resumen(
+  hilos: Sugerencia[],
+  esAdmin: boolean,
+  cargando: boolean,
+  soloPendientes: boolean,
+  total: number | undefined
+): string {
   if (cargando) return "Cargando…"
 
   if (esAdmin) {
+    // Con el filtro puesto, TODO lo que hay son pendientes: el total del
+    // servidor es la respuesta exacta. Sin él hay que contar sobre la página,
+    // y entonces la frase no promete un número cerrado.
+    if (soloPendientes) {
+      const pendientes = total ?? 0
+      if (pendientes === 0) return "No hay nadie esperando respuesta."
+      return pendientes === 1
+        ? "Hay 1 conversación esperando respuesta."
+        : `Hay ${pendientes} conversaciones esperando respuesta.`
+    }
+
     const pendientes = hilos.filter((h) => h.esperaRespuesta).length
-    if (pendientes === 0) return "No hay nadie esperando respuesta."
+    if (pendientes === 0) return "No hay nadie esperando respuesta en esta página."
     return pendientes === 1
-      ? "Hay 1 conversación esperando respuesta."
-      : `Hay ${pendientes} conversaciones esperando respuesta.`
+      ? "Hay 1 conversación esperando respuesta en esta página."
+      : `Hay ${pendientes} conversaciones esperando respuesta en esta página.`
   }
 
   const contestadas = hilos.filter(
