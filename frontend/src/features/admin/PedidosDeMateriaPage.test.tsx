@@ -48,7 +48,6 @@ describe("PedidosDeMateriaPage", () => {
           nombre: "3°C",
           anio: 3,
           division: "C",
-          activo: true,
           archivado: false,
         },
       ],

@@ -44,6 +44,18 @@ var (
 	// persona tiene que decir por qué.
 	ErrMotivoObligatorio = errors.New("el motivo es obligatorio para cancelar una reserva ajena")
 
+	// ErrNoEsTuReserva: un docente quiso tocar la reserva de otro. Vive acá y no
+	// en el handler porque es una regla del dominio —quién puede hacer qué sobre
+	// una reserva—, no una decisión de transporte: un llamador que no pase por
+	// HTTP tiene que toparse con la misma regla. Mismo criterio que ErrNoEsTuya
+	// en sugerencias.
+	//
+	// Es UNA sola para las tres operaciones que hacen la misma pregunta —verla,
+	// cancelarla y cambiarle el equipo— y por eso el texto dice el hecho y no
+	// nombra el verbo: con un error por operación, la misma regla se explicaba
+	// de tres formas distintas y había que acordarse de mapear las tres.
+	ErrNoEsTuReserva = errors.New("esa reserva no es tuya")
+
 	// ── Préstamos ───────────────────────────────────────────────────
 
 	ErrPrestamoNoEncontrado = errors.New("no se encontró ese registro de entrega")
@@ -64,10 +76,6 @@ var (
 	// de "este equipo está libre toda la semana". Es un 404 y no un 400: la
 	// dirección está bien formada, lo que no hay es el recurso.
 	ErrEquipoNoEncontrado = errors.New("ese equipo no está en el inventario")
-
-	// ErrReservaAjena: RF-04.4 — un docente solo toca sus propias reservas.
-	// El Admin puede tocar cualquiera.
-	ErrReservaAjena = errors.New("esa reserva es de otra persona")
 
 	// Los tres del pedido de liberación (RF-04.12).
 

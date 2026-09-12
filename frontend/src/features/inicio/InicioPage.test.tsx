@@ -113,7 +113,7 @@ describe("InicioPage", () => {
     vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({ data: [] })
     vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
     vi.mocked(inventoryApi.listarCarros).mockResolvedValue({
-      data: [{ id: "c1", nombre: "Carro 1" }],
+      data: [{ id: "c1", nombre: "Carro 1", dadoDeBaja: false }],
     })
     vi.mocked(inventoryApi.listarCategoriasDeFalla).mockResolvedValue({ data: [] })
   })

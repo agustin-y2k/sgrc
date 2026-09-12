@@ -63,9 +63,23 @@ export function resetearPassword(id: string) {
   )
 }
 
+/**
+ * Lo que el borrado definitivo se llevó en cascada. Sólo lo que DESAPARECE y
+ * el Admin no espera: el resto (reservas, préstamos, incidencias) sobrevive
+ * perdiendo la referencia al usuario, así que no se cuenta.
+ */
+export interface ArrastreDeEliminacion {
+  hilosDeSoporte: number
+  mensajesDeSoporte: number
+  /** El que más consecuencias tiene: sin tramos de guardia, el barrido cambia. */
+  bloquesDeGuardia: number
+  notificaciones: number
+  pedidosDeMateria: number
+}
+
 /** RF-01.9 — hard delete, permitido desde BAJA o RECHAZADA. Libera el email. */
 export function eliminarUsuario(id: string) {
-  return apiFetch<void>(`/api/auth/usuarios/${id}`, { method: "DELETE" })
+  return apiFetch<ArrastreDeEliminacion>(`/api/auth/usuarios/${id}`, { method: "DELETE" })
 }
 
 /** Le da rol ADMIN a un docente ya aprobado. */
@@ -90,11 +104,11 @@ export function crearAdmin(req: CrearAdminRequest) {
 // ── Inventario (RF-03.x) ──────────────────────────────────────────────
 
 export function crearCarro(req: { nombre: string; descripcion?: string }) {
-  return apiFetch<Carro>("/api/inventory/carros", { method: "POST", body: req })
+  return apiFetch<Carro>("/api/carros", { method: "POST", body: req })
 }
 
 export function editarCarro(id: string, req: { nombre?: string; descripcion?: string }) {
-  return apiFetch<void>(`/api/inventory/carros/${id}`, { method: "PATCH", body: req })
+  return apiFetch<void>(`/api/carros/${id}`, { method: "PATCH", body: req })
 }
 
 export function crearEquipoDeCarro(
@@ -109,7 +123,7 @@ export function crearEquipoDeCarro(
     softwareInstalado?: string
   }
 ) {
-  return apiFetch<Equipo>(`/api/inventory/carros/${carroId}/equipos`, {
+  return apiFetch<Equipo>(`/api/carros/${carroId}/equipos`, {
     method: "POST",
     body: req,
   })
@@ -135,7 +149,7 @@ export function crearEquipoSuelto(req: {
 }) {
   // A qué colección se hace POST decide dónde nace el equipo: acá nace
   // suelto, en /carros/{id}/equipos nace adentro de ese carro.
-  return apiFetch<Equipo>("/api/inventory/equipos", { method: "POST", body: req })
+  return apiFetch<Equipo>("/api/equipos", { method: "POST", body: req })
 }
 
 export function editarEquipo(
@@ -155,7 +169,7 @@ export function editarEquipo(
     numeroSerie?: string
   }
 ) {
-  return apiFetch<void>(`/api/inventory/equipos/${id}`, { method: "PATCH", body: req })
+  return apiFetch<void>(`/api/equipos/${id}`, { method: "PATCH", body: req })
 }
 
 /**
@@ -167,7 +181,7 @@ export function cambiarEstadoEquipo(
   estado: Equipo["estado"],
   motivo?: string
 ) {
-  return apiFetch<ResultadoCascada>(`/api/inventory/equipos/${id}/estado`, {
+  return apiFetch<ResultadoCascada>(`/api/equipos/${id}/estado`, {
     method: "PATCH",
     body: { estado, motivo },
   })
@@ -175,7 +189,23 @@ export function cambiarEstadoEquipo(
 
 /** RF-03.9 — dar de baja dispara la misma cascada que RF-03.8. */
 export function darDeBajaEquipo(id: string) {
-  return apiFetch<ResultadoCascada>(`/api/inventory/equipos/${id}`, { method: "DELETE" })
+  return apiFetch<ResultadoCascada>(`/api/equipos/${id}`, { method: "DELETE" })
+}
+
+/**
+ * Deshacer una baja. No devuelve cascada porque no hay ninguna que deshacer:
+ * las reservas que la baja canceló quedan canceladas y los avisos ya salieron.
+ *
+ * Puede fallar con 409 si mientras el equipo estuvo afuera otro se quedó con su
+ * lugar en el carro, con su nombre o con su número de serie — los tres se
+ * liberan al dar de baja. El mensaje del servidor dice cuál de los tres es.
+ */
+export function reactivarEquipo(id: string) {
+  return apiFetch<void>(`/api/equipos/${id}/reactivar`, { method: "POST" })
+}
+
+export function reactivarCarro(id: string) {
+  return apiFetch<void>(`/api/carros/${id}/reactivar`, { method: "POST" })
 }
 
 // Listar y reportar incidencias viven en features/inventory/api.ts: las
@@ -184,7 +214,7 @@ export function editarIncidencia(
   id: string,
   req: { estado?: Incidencia["estado"]; marcarEnviadaASoporte?: boolean }
 ) {
-  return apiFetch<void>(`/api/inventory/incidencias/${id}`, {
+  return apiFetch<void>(`/api/incidencias/${id}`, {
     method: "PATCH",
     body: {
       estado: req.estado,
@@ -206,14 +236,14 @@ function conRango(base: string, desde?: string, hasta?: string) {
 /** RF-06.1 — uso por equipo del ciclo, filtrable por rango de fechas. */
 export function reporteUsoEquipos(cicloId: string, desde?: string, hasta?: string) {
   return apiFetch<RespuestaLista<ResumenUsoEquipo>>(
-    conRango(`/api/reporting/ciclos/${cicloId}/uso-equipos`, desde, hasta)
+    conRango(`/api/ciclos/${cicloId}/uso-equipos`, desde, hasta)
   )
 }
 
 /** RF-06.2 */
 export function reporteUsoDocentes(cicloId: string, desde?: string, hasta?: string) {
   return apiFetch<RespuestaLista<ResumenUsoDocente>>(
-    conRango(`/api/reporting/ciclos/${cicloId}/uso-docentes`, desde, hasta)
+    conRango(`/api/ciclos/${cicloId}/uso-docentes`, desde, hasta)
   )
 }
 
@@ -223,26 +253,26 @@ export function reporteUsoDocentes(cicloId: string, desde?: string, hasta?: stri
  */
 export function historicoUsoEquipos(anio: number) {
   return apiFetch<RespuestaLista<HistoricoUsoEquipo>>(
-    `/api/reporting/historico/${anio}/uso-equipos`
+    `/api/historico/${anio}/uso-equipos`
   )
 }
 
 export function historicoUsoDocentes(anio: number) {
   return apiFetch<RespuestaLista<HistoricoUsoDocente>>(
-    `/api/reporting/historico/${anio}/uso-docentes`
+    `/api/historico/${anio}/uso-docentes`
   )
 }
 
 /** RF-06.3 — no depende del ciclo: Incidencia sobrevive al archivado. */
 export function reporteIncidenciasPorEquipo(desde?: string, hasta?: string) {
   return apiFetch<RespuestaLista<ResumenIncidenciasEquipo>>(
-    conRango("/api/reporting/incidencias/equipos", desde, hasta)
+    conRango("/api/incidencias/equipos", desde, hasta)
   )
 }
 
 export function reporteIncidenciasPorCarro(desde?: string, hasta?: string) {
   return apiFetch<RespuestaLista<ResumenIncidenciasCarro>>(
-    conRango("/api/reporting/incidencias/carros", desde, hasta)
+    conRango("/api/incidencias/carros", desde, hasta)
   )
 }
 
@@ -252,26 +282,26 @@ export function reporteIncidenciasPorCarro(desde?: string, hasta?: string) {
  * responder con el estado actual.
  */
 export function reporteEstadoDelInventario() {
-  return apiFetch<RespuestaLista<EstadoDelInventario>>("/api/reporting/inventario/estado")
+  return apiFetch<RespuestaLista<EstadoDelInventario>>("/api/inventario/estado")
 }
 
 export function reporteEquiposFueraDeCirculacion() {
   return apiFetch<RespuestaLista<EquipoFueraDeCirculacion>>(
-    "/api/reporting/inventario/fuera-de-circulacion"
+    "/api/inventario/fuera-de-circulacion"
   )
 }
 
 /** Este sí acepta fechas: la pregunta es qué se rompió en un período. */
 export function reporteIncidenciasPorCategoria(desde?: string, hasta?: string) {
   return apiFetch<RespuestaLista<ResumenPorCategoriaDeFalla>>(
-    conRango("/api/reporting/incidencias/categorias", desde, hasta)
+    conRango("/api/incidencias/categorias", desde, hasta)
   )
 }
 
 export function listarCiclos() {
   return apiFetch<
     RespuestaLista<{ id: string; anio: number; activo: boolean; archivado: boolean }>
-  >("/api/academic/ciclos")
+  >("/api/ciclos")
 }
 
 // ── Licencias de software (RF-03.11 a RF-03.14) ─────────────────────── Todo
@@ -280,12 +310,12 @@ export function listarCiclos() {
 // licencia es trabajo administrativo.
 
 export function listarLicencias() {
-  return apiFetch<RespuestaLista<Licencia>>("/api/inventory/licencias")
+  return apiFetch<RespuestaLista<Licencia>>("/api/licencias")
 }
 
 export function listarLicenciasDeEquipo(equipoId: string) {
   return apiFetch<RespuestaLista<Licencia>>(
-    `/api/inventory/equipos/${equipoId}/licencias`
+    `/api/equipos/${equipoId}/licencias`
   )
 }
 
@@ -301,7 +331,7 @@ export function crearLicencias(
     diasAviso?: number
   } & VencimientoDeclarado
 ) {
-  return apiFetch<AltaMasivaLicencias>("/api/inventory/licencias", {
+  return apiFetch<AltaMasivaLicencias>("/api/licencias", {
     method: "POST",
     body: req,
   })
@@ -312,7 +342,7 @@ export function crearLicencias(
  * de las veces.
  */
 export function renovarLicencias(req: { licenciaIds: string[]; renovadaEl?: string }) {
-  return apiFetch<RenovacionLicencias>("/api/inventory/licencias/renovar", {
+  return apiFetch<RenovacionLicencias>("/api/licencias/renovar", {
     method: "POST",
     body: req,
   })
@@ -331,11 +361,11 @@ export function editarLicencia(
     diasAviso?: number
   } & VencimientoDeclarado
 ) {
-  return apiFetch<void>(`/api/inventory/licencias/${id}`, { method: "PATCH", body: req })
+  return apiFetch<void>(`/api/licencias/${id}`, { method: "PATCH", body: req })
 }
 
 export function borrarLicencia(id: string) {
-  return apiFetch<void>(`/api/inventory/licencias/${id}`, { method: "DELETE" })
+  return apiFetch<void>(`/api/licencias/${id}`, { method: "DELETE" })
 }
 
 // ── Preferencia de materia por equipo (RF-03.21) ─────────────────────── La
@@ -343,7 +373,7 @@ export function borrarLicencia(id: string) {
 
 export function listarPreferenciasDeEquipo(equipoId: string) {
   return apiFetch<RespuestaLista<PreferenciaDeEquipo>>(
-    `/api/inventory/equipos/${equipoId}/preferencias`
+    `/api/equipos/${equipoId}/preferencias`
   )
 }
 
@@ -353,7 +383,7 @@ export function listarPreferenciasDeEquipo(equipoId: string) {
  * impide que "Matemática" y "Matematica" nazcan como dos marcas distintas.
  */
 export function materiasEnUso() {
-  return apiFetch<RespuestaLista<string>>("/api/inventory/materias-en-uso")
+  return apiFetch<RespuestaLista<string>>("/api/materias-en-uso")
 }
 
 /**
@@ -368,7 +398,7 @@ export function marcarPreferencia(req: {
   division?: string
   prioridad?: number
 }) {
-  return apiFetch<AltaDePreferencias>("/api/inventory/preferencias", {
+  return apiFetch<AltaDePreferencias>("/api/preferencias", {
     method: "POST",
     body: req,
   })
@@ -379,12 +409,12 @@ export function editarPreferencia(
   id: string,
   req: { modalidad?: string; anio?: number; division?: string; prioridad?: number }
 ) {
-  return apiFetch<PreferenciaDeEquipo>(`/api/inventory/preferencias/${id}`, {
+  return apiFetch<PreferenciaDeEquipo>(`/api/preferencias/${id}`, {
     method: "PATCH",
     body: req,
   })
 }
 
 export function borrarPreferencia(id: string) {
-  return apiFetch<void>(`/api/inventory/preferencias/${id}`, { method: "DELETE" })
+  return apiFetch<void>(`/api/preferencias/${id}`, { method: "DELETE" })
 }

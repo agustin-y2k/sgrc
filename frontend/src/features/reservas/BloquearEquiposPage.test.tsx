@@ -17,7 +17,7 @@ vi.mock("@/features/reservas/api")
 // un horario que ya pasó (ver src/test/fechas.ts).
 const FECHA = fechaFuturaEnDias(7)
 
-const CARRO: Carro = { id: "carro1", nombre: "Carro A" }
+const CARRO: Carro = { id: "carro1", nombre: "Carro A", dadoDeBaja: false }
 
 function equipo(over: Partial<Equipo> = {}): Equipo {
   return {

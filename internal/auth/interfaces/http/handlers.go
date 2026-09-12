@@ -173,7 +173,7 @@ func (h *Handler) RegistrarConGoogle(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusCreated)
 }
 
-// GET /api/auth/me
+// GET /api/mi-perfil
 func (h *Handler) Me(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -187,7 +187,7 @@ func (h *Handler) Me(c *fiber.Ctx) error {
 	return c.JSON(toUsuarioResponse(u))
 }
 
-// PATCH /api/auth/mi-perfil — cambiar el propio nombre y apellido.
+// PATCH /api/mi-perfil — cambiar el propio nombre y apellido.
 func (h *Handler) ActualizarMisDatos(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -375,11 +375,16 @@ func (h *Handler) EliminarDefinitivamente(c *fiber.Ctx) error {
 		return err
 	}
 
-	if err := h.svc.EliminarDefinitivamente(c.UserContext(), id); err != nil {
+	res, err := h.svc.EliminarDefinitivamente(c.UserContext(), id)
+	if err != nil {
 		return mapearError(err)
 	}
-	h.auditar(c, claims.UserID, audit.CuentaEliminadaDefinitiva, "usuario", &id, nil)
-	return c.SendStatus(fiber.StatusOK)
+	// El detalle va a la auditoría además de a la respuesta: la respuesta la lee
+	// quien apretó el botón, y el registro contesta la pregunta que aparece
+	// después —«¿por qué este docente no aparece en el horario de guardia?»—
+	// cuando ya no hay nada que consultar porque las filas no están.
+	h.auditar(c, claims.UserID, audit.CuentaEliminadaDefinitiva, "usuario", &id, detalleDeEliminacion(res))
+	return c.JSON(toEliminacionResponse(res))
 }
 
 // POST /api/auth/admins (Admin) — crea otro Admin, auto-aprobado
@@ -400,4 +405,17 @@ func (h *Handler) CrearAdmin(c *fiber.Ctx) error {
 	}
 	h.auditar(c, claims.UserID, audit.AdminCreado, "usuario", &nuevoAdmin.ID, nil)
 	return c.SendStatus(fiber.StatusCreated)
+}
+
+// GET /api/auth/usuarios/{id} (Admin) — la ficha de una persona.
+//
+// Existe por lo mismo que los demás GET individuales: la API dejaba ELIMINAR
+// una cuenta que no se podía pedir. El permiso es el del listado, Admin; la
+// ficha propia se pide por /api/mi-perfil, que no necesita serlo.
+func (h *Handler) ObtenerUsuario(c *fiber.Ctx) error {
+	u, err := h.svc.ObtenerUsuario(c.UserContext(), c.Params("id"))
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toUsuarioResponse(u))
 }

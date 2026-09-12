@@ -99,7 +99,7 @@ func TestHTTP_ReporteUsoEquipos_ComoAdmin_OK(t *testing.T) {
 	repo := &fakeRepo{usoEquipos: []domain.ResumenUsoEquipo{{EquipoID: "pc1", CantidadReservas: 5, MinutosReservados: 300}}}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/reporting/ciclos/ciclo1/uso-equipos", nil)
+	req := httptest.NewRequest("GET", "/api/ciclos/ciclo1/uso-equipos", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, err := app.Test(req)
@@ -114,7 +114,7 @@ func TestHTTP_ReporteUsoEquipos_ComoAdmin_OK(t *testing.T) {
 func TestHTTP_ReporteUsoEquipos_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(&fakeRepo{})
 
-	req := httptest.NewRequest("GET", "/api/reporting/ciclos/ciclo1/uso-equipos", nil)
+	req := httptest.NewRequest("GET", "/api/ciclos/ciclo1/uso-equipos", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
@@ -126,7 +126,7 @@ func TestHTTP_ReporteUsoEquipos_ComoDocente_403(t *testing.T) {
 func TestHTTP_ReporteUsoEquipos_SinToken_401(t *testing.T) {
 	app := nuevaAppDeTest(&fakeRepo{})
 
-	resp, _ := app.Test(httptest.NewRequest("GET", "/api/reporting/ciclos/ciclo1/uso-equipos", nil))
+	resp, _ := app.Test(httptest.NewRequest("GET", "/api/ciclos/ciclo1/uso-equipos", nil))
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Fatalf("esperaba 401, obtuve %d", resp.StatusCode)
 	}
@@ -136,7 +136,7 @@ func TestHTTP_ReporteUsoDocentes_ComoAdmin_OK(t *testing.T) {
 	repo := &fakeRepo{usoDocentes: []domain.ResumenUsoDocente{{UsuarioID: ptr("docente1"), CantidadReservas: 3, MinutosReservados: 180}}}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/reporting/ciclos/ciclo1/uso-docentes", nil)
+	req := httptest.NewRequest("GET", "/api/ciclos/ciclo1/uso-docentes", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, err := app.Test(req)
@@ -154,7 +154,7 @@ func TestHTTP_HistoricoUsoEquipos_ComoAdmin_OK(t *testing.T) {
 	repo := &fakeRepo{historicoEquipo: []*domain.HistoricoUsoEquipo{{ID: "h1", Anio: 2025, EquipoID: "pc1"}}}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/reporting/historico/2025/uso-equipos", nil)
+	req := httptest.NewRequest("GET", "/api/historico/2025/uso-equipos", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, err := app.Test(req)
@@ -169,7 +169,7 @@ func TestHTTP_HistoricoUsoEquipos_ComoAdmin_OK(t *testing.T) {
 func TestHTTP_HistoricoUsoEquipos_AnioInvalido_400(t *testing.T) {
 	app := nuevaAppDeTest(&fakeRepo{})
 
-	req := httptest.NewRequest("GET", "/api/reporting/historico/no-es-un-numero/uso-equipos", nil)
+	req := httptest.NewRequest("GET", "/api/historico/no-es-un-numero/uso-equipos", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
@@ -181,7 +181,7 @@ func TestHTTP_HistoricoUsoEquipos_AnioInvalido_400(t *testing.T) {
 func TestHTTP_HistoricoUsoDocentes_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(&fakeRepo{})
 
-	req := httptest.NewRequest("GET", "/api/reporting/historico/2025/uso-docentes", nil)
+	req := httptest.NewRequest("GET", "/api/historico/2025/uso-docentes", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, _ := app.Test(req)

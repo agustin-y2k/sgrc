@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { MemoryRouter } from "react-router"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import * as academicoApi from "@/features/academico/api"
@@ -67,7 +67,13 @@ describe("UsuariosPage", () => {
       refetchUser: vi.fn(),
     })
     vi.mocked(adminApi.cambiarEstadoUsuario).mockResolvedValue(undefined)
-    vi.mocked(adminApi.eliminarUsuario).mockResolvedValue(undefined)
+    vi.mocked(adminApi.eliminarUsuario).mockResolvedValue({
+      hilosDeSoporte: 0,
+      mensajesDeSoporte: 0,
+      bloquesDeGuardia: 0,
+      notificaciones: 0,
+      pedidosDeMateria: 0,
+    })
     vi.mocked(adminApi.promoverAAdmin).mockResolvedValue(undefined)
     vi.mocked(adminApi.degradarADocente).mockResolvedValue(undefined)
     vi.mocked(academicoApi.listarCiclos).mockResolvedValue({
@@ -204,6 +210,51 @@ describe("UsuariosPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Confirmar" }))
     expect(adminApi.eliminarUsuario).toHaveBeenCalledWith("u1")
+  })
+
+  // El borrado se lleva el hilo de soporte y el horario de guardia, y eso no
+  // se puede deshacer. Si el Admin no se entera en el momento, se entera
+  // semanas después, cuando el barrido se comporta distinto y nadie lo
+  // relaciona con una cuenta borrada.
+  it("avisa qué se llevó el borrado cuando se llevó algo", async () => {
+    conUsuarios(usuario({ estado: "BAJA" }))
+    vi.mocked(adminApi.eliminarUsuario).mockResolvedValue({
+      hilosDeSoporte: 1,
+      mensajesDeSoporte: 4,
+      bloquesDeGuardia: 2,
+      notificaciones: 12,
+      pedidosDeMateria: 0,
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Eliminar definitivamente" })
+    )
+    await user.click(screen.getByRole("button", { name: "Confirmar" }))
+
+    const aviso = await screen.findByText(/Se borró la cuenta de/)
+    expect(aviso).toHaveTextContent("su hilo de soporte (4 mensajes)")
+    expect(aviso).toHaveTextContent("los 2 tramos de su horario de guardia")
+    expect(aviso).toHaveTextContent("12 avisos")
+    // Lo que no se llevó nada no se nombra.
+    expect(aviso).not.toHaveTextContent("pedido de materia")
+  })
+
+  // El caso normal es que no se lleve nada, y ahí no tiene que aparecer nada:
+  // un cartel que sale siempre se deja de leer justo cuando importa.
+  it("no muestra el aviso cuando el borrado no se llevó nada", async () => {
+    conUsuarios(usuario({ estado: "BAJA" }))
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Eliminar definitivamente" })
+    )
+    await user.click(screen.getByRole("button", { name: "Confirmar" }))
+
+    await waitFor(() => expect(adminApi.eliminarUsuario).toHaveBeenCalled())
+    expect(screen.queryByText(/Se borró la cuenta de/)).not.toBeInTheDocument()
   })
 
   // Darse de baja a uno mismo dejaría al Admin fuera del sistema en el acto.

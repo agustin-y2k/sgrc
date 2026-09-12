@@ -120,7 +120,7 @@ export type RegistroRequest = {
   materiaSolicitada?: string
 }
 
-/** PATCH /api/auth/mi-perfil — cambiar el propio nombre y apellido. */
+/** PATCH /api/mi-perfil — cambiar el propio nombre y apellido. */
 export type ActualizarMisDatosRequest = {
   nombre: string
   apellido: string

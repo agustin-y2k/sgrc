@@ -47,7 +47,7 @@ export function configPublica() {
 }
 
 export function me() {
-  return apiFetch<Usuario>("/api/auth/me")
+  return apiFetch<Usuario>("/api/mi-perfil")
 }
 
 /**

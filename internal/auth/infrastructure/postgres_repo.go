@@ -325,16 +325,71 @@ func (r *PostgresRepo) ContarAdminsAprobados(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-func (r *PostgresRepo) Eliminar(ctx context.Context, id string) error {
-	tag, err := r.db.Exec(ctx, `DELETE FROM usuario WHERE id = $1`, id)
+// Eliminar borra la cuenta y devuelve QUÉ se llevó con ella.
+//
+// El conteo se hace ANTES del DELETE, en la misma transacción: después ya no
+// hay nada que contar. Y en una transacción porque si el borrado falla, el
+// conteo que se devolvería no describiría nada que haya pasado.
+//
+// Existe porque la eliminación dispara diez cascadas y hasta acá no informaba
+// ninguna. El Admin la pide para liberar un email (RF-01.9) y se lleva también
+// el hilo de soporte con las respuestas que él mismo escribió, y el horario de
+// guardia —que desde RF-07.6 decide si el barrido actúa—. Que eso pase está
+// bien; que pase sin decirlo, no.
+func (r *PostgresRepo) Eliminar(ctx context.Context, id string) (application.ResultadoEliminacion, error) {
+	var res application.ResultadoEliminacion
+
+	if r.pool == nil {
+		return r.eliminarEn(ctx, r.db, id)
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return res, fmt.Errorf("iniciando transacción: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	res, err = r.eliminarEn(ctx, tx, id)
+	if err != nil {
+		return application.ResultadoEliminacion{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return application.ResultadoEliminacion{}, fmt.Errorf("confirmando la eliminación: %w", err)
+	}
+	return res, nil
+}
+
+func (r *PostgresRepo) eliminarEn(ctx context.Context, db consultor, id string) (application.ResultadoEliminacion, error) {
+	var res application.ResultadoEliminacion
+
+	// Sólo lo que se BORRA en cascada y el Admin no espera. Lo que sobrevive
+	// perdiendo la referencia —reservas, préstamos, incidencias, el histórico—
+	// no se cuenta: no se pierde nada y el número sería ruido.
+	err := db.QueryRow(ctx, `
+		SELECT (SELECT count(*) FROM sugerencia          WHERE usuario_id = $1),
+		       (SELECT count(*) FROM sugerencia_mensaje sm
+		          JOIN sugerencia s ON s.id = sm.sugerencia_id WHERE s.usuario_id = $1),
+		       (SELECT count(*) FROM horario_admin       WHERE usuario_id = $1),
+		       (SELECT count(*) FROM notificacion        WHERE usuario_id = $1),
+		       (SELECT count(*) FROM pedido_de_materia   WHERE usuario_id = $1)`,
+		id).Scan(&res.HilosDeSoporte, &res.MensajesDeSoporte, &res.BloquesDeGuardia,
+		&res.Notificaciones, &res.PedidosDeMateria)
 	if err != nil {
 		if esIDInvalido(err) {
-			return application.ErrIDInvalido
+			return res, application.ErrIDInvalido
 		}
-		return fmt.Errorf("eliminando usuario: %w", err)
+		return res, fmt.Errorf("contando lo que se va con la cuenta: %w", err)
+	}
+
+	tag, err := db.Exec(ctx, `DELETE FROM usuario WHERE id = $1`, id)
+	if err != nil {
+		if esIDInvalido(err) {
+			return application.ResultadoEliminacion{}, application.ErrIDInvalido
+		}
+		return application.ResultadoEliminacion{}, fmt.Errorf("eliminando usuario: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return application.ErrUsuarioNoEncontrado
+		return application.ResultadoEliminacion{}, application.ErrUsuarioNoEncontrado
 	}
-	return nil
+	return res, nil
 }

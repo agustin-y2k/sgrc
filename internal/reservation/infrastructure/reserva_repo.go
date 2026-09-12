@@ -1074,3 +1074,73 @@ func escanearEquiposDisponibles(rows pgx.Rows) ([]application.EquipoDisponible, 
 	}
 	return resultado, errorDeFilas(rows)
 }
+
+// BuscarReservasPorIDs trae varias reservas en UNA consulta.
+//
+// Reemplaza el recorrido que pedía de a una: las operaciones de lote —entregar
+// contra reserva, cancelar por ids— reciben hasta doscientas y hacían una ida y
+// vuelta a Postgres por cada una. Con el servidor hablando con la base por un
+// túnel, eso se siente en el mostrador, con alguien esperando enfrente.
+//
+// Los ids que no existen simplemente no están en el mapa. Qué significa eso lo
+// decide quien llama (ver el comentario del puerto).
+func (r *PostgresRepo) BuscarReservasPorIDs(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	if len(ids) == 0 {
+		return map[string]*domain.Reserva{}, nil
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT `+columnasReserva+` FROM reserva WHERE id = ANY($1)`, ids)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("buscando las reservas por id: %w", err)
+	}
+	defer rows.Close()
+
+	porID := make(map[string]*domain.Reserva, len(ids))
+	for rows.Next() {
+		res, err := escanearReserva(rows)
+		if err != nil {
+			return nil, fmt.Errorf("escaneando fila de reserva: %w", err)
+		}
+		porID[res.ID] = res
+	}
+	return porID, errorDeFilas(rows)
+}
+
+// ListarReservasFuturasDeEquipos es ListarReservasFuturasDeEquipo para muchos
+// equipos, en una consulta y agrupada por equipo.
+//
+// El ORDER BY mantiene el de la versión de a uno —por fecha y hora— porque
+// quien llama puede necesitar LA PRÓXIMA de cada máquina, no una cualquiera: al
+// agrupar en Go, cada lista queda ordenada igual que antes.
+func (r *PostgresRepo) ListarReservasFuturasDeEquipos(ctx context.Context, equipoIDs []string, desde time.Time) (map[string][]*domain.Reserva, error) {
+	if len(equipoIDs) == 0 {
+		return map[string][]*domain.Reserva{}, nil
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT `+columnasReserva+` FROM reserva
+		WHERE equipo_id = ANY($1) AND `+condicionNoTerminada("reserva", "$2", "$3")+` AND estado = 'CONFIRMADA'
+		ORDER BY equipo_id, fecha, hora_inicio
+	`, equipoIDs, desde, desde)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("listando las reservas futuras de los equipos: %w", err)
+	}
+	defer rows.Close()
+
+	porEquipo := make(map[string][]*domain.Reserva, len(equipoIDs))
+	for rows.Next() {
+		res, err := escanearReserva(rows)
+		if err != nil {
+			return nil, fmt.Errorf("escaneando fila de reserva: %w", err)
+		}
+		porEquipo[res.EquipoID] = append(porEquipo[res.EquipoID], res)
+	}
+	return porEquipo, errorDeFilas(rows)
+}

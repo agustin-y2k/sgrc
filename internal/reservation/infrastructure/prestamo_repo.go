@@ -209,3 +209,31 @@ func nullSiVacio(s string) *string {
 	}
 	return &s
 }
+
+// BuscarPrestamosPorIDs — ver BuscarReservasPorIDs en reserva_repo.go: la
+// devolución de un lote recibía hasta doscientos ids y pedía de a uno.
+func (r *PostgresRepo) BuscarPrestamosPorIDs(ctx context.Context, ids []string) (map[string]*domain.Prestamo, error) {
+	if len(ids) == 0 {
+		return map[string]*domain.Prestamo{}, nil
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT `+columnasPrestamo+` FROM prestamo WHERE id = ANY($1)`, ids)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("buscando las entregas por id: %w", err)
+	}
+	defer rows.Close()
+
+	porID := make(map[string]*domain.Prestamo, len(ids))
+	for rows.Next() {
+		p, err := escanearPrestamo(rows)
+		if err != nil {
+			return nil, fmt.Errorf("escaneando fila de entrega: %w", err)
+		}
+		porID[p.ID] = p
+	}
+	return porID, errorDeFilas(rows)
+}

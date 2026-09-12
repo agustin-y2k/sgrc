@@ -37,7 +37,7 @@ func NewHandler(svc *application.Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// GET /api/reporting/ciclos/:cicloId/uso-equipos — RF-06.1, en vivo.
+// GET /api/ciclos/:cicloId/uso-equipos — RF-06.1, en vivo.
 func (h *Handler) ReporteUsoEquipos(c *fiber.Ctx) error {
 	cicloID := c.Params("cicloId")
 
@@ -58,7 +58,7 @@ func (h *Handler) ReporteUsoEquipos(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/reporting/ciclos/:cicloId/uso-docentes — RF-06.2, en vivo.
+// GET /api/ciclos/:cicloId/uso-docentes — RF-06.2, en vivo.
 func (h *Handler) ReporteUsoDocentes(c *fiber.Ctx) error {
 	cicloID := c.Params("cicloId")
 
@@ -89,7 +89,7 @@ func parseAnio(c *fiber.Ctx) (int, error) {
 	return anio, nil
 }
 
-// GET /api/reporting/historico/:anio/uso-equipos — RF-06.3, ya archivado.
+// GET /api/historico/:anio/uso-equipos — RF-06.3, ya archivado.
 func (h *Handler) HistoricoUsoEquipos(c *fiber.Ctx) error {
 	anio, err := parseAnio(c)
 	if err != nil {
@@ -108,7 +108,7 @@ func (h *Handler) HistoricoUsoEquipos(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/reporting/historico/:anio/uso-docentes — RF-06.3, ya archivado.
+// GET /api/historico/:anio/uso-docentes — RF-06.3, ya archivado.
 func (h *Handler) HistoricoUsoDocentes(c *fiber.Ctx) error {
 	anio, err := parseAnio(c)
 	if err != nil {
@@ -127,7 +127,7 @@ func (h *Handler) HistoricoUsoDocentes(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/reporting/incidencias/equipos — RF-06.3, incidencias por equipo.
+// GET /api/incidencias/equipos — RF-06.3, incidencias por equipo.
 func (h *Handler) ReporteIncidenciasPorEquipo(c *fiber.Ctx) error {
 	desde, hasta, err := rangoDeQuery(c)
 	if err != nil {
@@ -146,7 +146,7 @@ func (h *Handler) ReporteIncidenciasPorEquipo(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/reporting/incidencias/carros — RF-06.3, incidencias por carro.
+// GET /api/incidencias/carros — RF-06.3, incidencias por carro.
 func (h *Handler) ReporteIncidenciasPorCarro(c *fiber.Ctx) error {
 	desde, hasta, err := rangoDeQuery(c)
 	if err != nil {
@@ -167,7 +167,7 @@ func (h *Handler) ReporteIncidenciasPorCarro(c *fiber.Ctx) error {
 
 // ── RF-06.5: el estado del parque de equipos ────────────────────────────
 
-// GET /api/reporting/inventario/estado Sin rango de fechas a propósito: es
+// GET /api/inventario/estado Sin rango de fechas a propósito: es
 // una foto de AHORA. "Cuántas estaban rotas en marzo" no se puede responder
 // con el estado actual, y aceptar el parámetro daría un número que parece esa
 // respuesta sin serlo.
@@ -184,7 +184,7 @@ func (h *Handler) ReporteEstadoDelInventario(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/reporting/inventario/fuera-de-circulacion — la lista que se manda
+// GET /api/inventario/fuera-de-circulacion — la lista que se manda
 // a reparar: qué máquinas están afuera y qué se sabe de cada una.
 func (h *Handler) ReporteEquiposFueraDeCirculacion(c *fiber.Ctx) error {
 	filas, err := h.svc.EquiposFueraDeCirculacion(c.UserContext())
@@ -199,7 +199,7 @@ func (h *Handler) ReporteEquiposFueraDeCirculacion(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/reporting/incidencias/categorias — qué se rompe, agrupado por tipo
+// GET /api/incidencias/categorias — qué se rompe, agrupado por tipo
 // de falla.
 func (h *Handler) ReporteIncidenciasPorCategoria(c *fiber.Ctx) error {
 	desde, hasta, err := rangoDeQuery(c)

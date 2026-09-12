@@ -453,7 +453,7 @@ func jsonBody(v any) *bytes.Buffer {
 func TestHTTP_CrearReserva_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/reservation/reservas", jsonBody(crearReservaRequest{
+	req := httptest.NewRequest("POST", "/api/reservas", jsonBody(crearReservaRequest{
 		MateriaID: "materia1", Fecha: "2026-03-09", HoraInicio: "08:00", HoraFin: "09:00", EquipoIDs: []string{"pc1"},
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -474,7 +474,7 @@ func TestHTTP_ListarEquiposDisponibles_PasaLaMateriaParaOrdenar(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	req := httptest.NewRequest("GET",
-		"/api/reservation/equipos-disponibles?fecha=2026-03-09&horaInicio=08:00&horaFin=09:00&materiaId=materia1", nil)
+		"/api/equipos-disponibles?fecha=2026-03-09&horaInicio=08:00&horaFin=09:00&materiaId=materia1", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -496,7 +496,7 @@ func TestHTTP_ListarEquiposDisponibles_SinMateria_OK(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	req := httptest.NewRequest("GET",
-		"/api/reservation/equipos-disponibles?fecha=2026-03-09&horaInicio=08:00&horaFin=09:00", nil)
+		"/api/equipos-disponibles?fecha=2026-03-09&horaInicio=08:00&horaFin=09:00", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
@@ -521,7 +521,7 @@ func TestHTTP_ListarEquiposDisponibles_DevuelveTramoYMotivo(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	req := httptest.NewRequest("GET",
-		"/api/reservation/equipos-disponibles?fecha=2026-03-09&horaInicio=08:00&horaFin=09:00&materiaId=materia1", nil)
+		"/api/equipos-disponibles?fecha=2026-03-09&horaInicio=08:00&horaFin=09:00&materiaId=materia1", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -547,7 +547,7 @@ func TestHTTP_ListarEquiposDisponibles_DevuelveTramoYMotivo(t *testing.T) {
 func TestHTTP_CrearReserva_FechaInvalida_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/reservation/reservas", jsonBody(crearReservaRequest{
+	req := httptest.NewRequest("POST", "/api/reservas", jsonBody(crearReservaRequest{
 		MateriaID: "materia1", Fecha: "09-03-2026", HoraInicio: "08:00", HoraFin: "09:00", EquipoIDs: []string{"pc1"},
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -562,7 +562,7 @@ func TestHTTP_CrearReserva_FechaInvalida_400(t *testing.T) {
 func TestHTTP_CrearReserva_SinToken_401(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/reservation/reservas", jsonBody(crearReservaRequest{
+	req := httptest.NewRequest("POST", "/api/reservas", jsonBody(crearReservaRequest{
 		MateriaID: "materia1", Fecha: "2026-03-09", HoraInicio: "08:00", HoraFin: "09:00", EquipoIDs: []string{"pc1"},
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -581,7 +581,7 @@ func TestHTTP_CancelarReserva_Propietario_OK(t *testing.T) {
 	repo.reservas["r1"] = &domain.Reserva{ID: "r1", Estado: domain.ReservaConfirmada, CreadoPor: &dueño}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/reservation/reservas/r1/cancelar", jsonBody(cancelarReservaRequest{Motivo: "no puedo dar clase"}))
+	req := httptest.NewRequest("POST", "/api/reservas/r1/cancelar", jsonBody(cancelarReservaRequest{Motivo: "no puedo dar clase"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
@@ -600,7 +600,7 @@ func TestHTTP_CancelarReserva_OtroDocente_403(t *testing.T) {
 	repo.reservas["r1"] = &domain.Reserva{ID: "r1", Estado: domain.ReservaConfirmada, CreadoPor: &dueño}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/reservation/reservas/r1/cancelar", jsonBody(cancelarReservaRequest{Motivo: "motivo"}))
+	req := httptest.NewRequest("POST", "/api/reservas/r1/cancelar", jsonBody(cancelarReservaRequest{Motivo: "motivo"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("otro-docente", "DOCENTE"))
 
@@ -619,7 +619,7 @@ func TestHTTP_CancelarReserva_ComoAdmin_PuedeCancelarLaDeOtro(t *testing.T) {
 	repo.reservas["r1"] = &domain.Reserva{ID: "r1", Estado: domain.ReservaConfirmada, CreadoPor: &dueño}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/reservation/reservas/r1/cancelar", jsonBody(cancelarReservaRequest{Motivo: "PC en mantenimiento"}))
+	req := httptest.NewRequest("POST", "/api/reservas/r1/cancelar", jsonBody(cancelarReservaRequest{Motivo: "PC en mantenimiento"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
@@ -635,7 +635,7 @@ func TestHTTP_CancelarReserva_ComoAdmin_PuedeCancelarLaDeOtro(t *testing.T) {
 func TestHTTP_CancelarReserva_NoExiste_404(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/reservation/reservas/no-existe/cancelar", jsonBody(cancelarReservaRequest{Motivo: "motivo"}))
+	req := httptest.NewRequest("POST", "/api/reservas/no-existe/cancelar", jsonBody(cancelarReservaRequest{Motivo: "motivo"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
@@ -653,7 +653,7 @@ func TestHTTP_CancelarOcurrenciaRecurrente_OtroDocente_403(t *testing.T) {
 	repo.grupos["g1"] = &domain.ReservaGrupo{ID: "g1", Estado: domain.GrupoConfirmada, CreadoPor: &dueño}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/reservation/grupos/g1/cancelar", jsonBody(cancelarOcurrenciaRequest{Motivo: "motivo", SoloEsta: true}))
+	req := httptest.NewRequest("POST", "/api/grupos/g1/cancelar", jsonBody(cancelarOcurrenciaRequest{Motivo: "motivo", SoloEsta: true}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("otro-docente", "DOCENTE"))
 
@@ -668,7 +668,7 @@ func TestHTTP_CancelarOcurrenciaRecurrente_OtroDocente_403(t *testing.T) {
 func TestHTTP_BloquearEquipos_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/reservation/bloqueos", jsonBody(bloquearRequest{
+	req := httptest.NewRequest("POST", "/api/bloqueos", jsonBody(bloquearRequest{
 		EquipoIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00", Motivo: "Evaluación",
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -683,7 +683,7 @@ func TestHTTP_BloquearEquipos_ComoDocente_403(t *testing.T) {
 func TestHTTP_BloquearEquipos_ComoAdmin_OK(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/reservation/bloqueos", jsonBody(bloquearRequest{
+	req := httptest.NewRequest("POST", "/api/bloqueos", jsonBody(bloquearRequest{
 		EquipoIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00", Motivo: "Evaluación",
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -708,7 +708,7 @@ func TestHTTP_BloquearEquipos_ComoAdmin_OK(t *testing.T) {
 func TestHTTP_BloquearEquipos_SinMotivo_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/reservation/bloqueos", jsonBody(bloquearRequest{
+	req := httptest.NewRequest("POST", "/api/bloqueos", jsonBody(bloquearRequest{
 		EquipoIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00",
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -727,7 +727,7 @@ func TestHTTP_BloquearEquipos_SinMotivo_400(t *testing.T) {
 func TestHTTP_BloquearEquipos_MotivoLarguisimo_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("POST", "/api/reservation/bloqueos", jsonBody(bloquearRequest{
+	req := httptest.NewRequest("POST", "/api/bloqueos", jsonBody(bloquearRequest{
 		EquipoIDs: []string{"pc1"}, Fecha: "2026-03-09", HoraInicio: "10:00", HoraFin: "12:00",
 		Motivo: strings.Repeat("a", domain.MaxLargoMotivoBloqueo+1),
 	}))
@@ -749,7 +749,7 @@ func TestHTTP_EntregarPorReserva_RetiradoPorLarguisimo_400(t *testing.T) {
 	repo := nuevoFakeRepo()
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/reservation/prestamos", jsonBody(entregarSueltaRequest{
+	req := httptest.NewRequest("POST", "/api/prestamos", jsonBody(entregarSueltaRequest{
 		EquipoIDs: []string{"pc1"}, Nombre: "Alguien",
 		RetiradoPor: strings.Repeat("a", domain.MaxLargoNombreDestinatario+1),
 	}))
@@ -775,7 +775,7 @@ func grupoDeTest(repo *fakeRepo, id, creadoPor string) {
 
 func pedirGrupo(t *testing.T, app *fiber.App, grupoID, usuarioID, rol string) int {
 	t.Helper()
-	req := httptest.NewRequest("GET", "/api/reservation/grupos/"+grupoID, nil)
+	req := httptest.NewRequest("GET", "/api/grupos/"+grupoID, nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara(usuarioID, rol))
 	resp, err := app.Test(req)
 	if err != nil {
@@ -858,7 +858,7 @@ func TestHTTP_ListarReservas_UnDocenteSoloVeLasSuyas(t *testing.T) {
 	reservaDeTest(repo, "r2", "pc2", "otroDocente")
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/reservation/reservas", nil)
+	req := httptest.NewRequest("GET", "/api/reservas", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -887,7 +887,7 @@ func TestHTTP_ListarReservas_TraeNombresResueltos(t *testing.T) {
 	reservaDeTest(repo, "r1", "pc1", "docente1")
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/reservation/reservas", nil)
+	req := httptest.NewRequest("GET", "/api/reservas", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -917,7 +917,7 @@ func TestHTTP_ListarReservas_UnAdminLasVeTodas(t *testing.T) {
 	reservaDeTest(repo, "r2", "pc2", "otroDocente")
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/reservation/reservas", nil)
+	req := httptest.NewRequest("GET", "/api/reservas", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
@@ -941,7 +941,7 @@ func TestHTTP_ListarReservas_PaginaYTotal(t *testing.T) {
 	}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/reservation/reservas?page=2&pageSize=2", nil)
+	req := httptest.NewRequest("GET", "/api/reservas?page=2&pageSize=2", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -977,7 +977,7 @@ func TestHTTP_ListarReservas_SinParametros_UsaLaVentanaPorDefecto(t *testing.T) 
 	reservaDeTest(repo, "r1", "pc1", "docente1")
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/reservation/reservas", nil)
+	req := httptest.NewRequest("GET", "/api/reservas", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
@@ -1001,7 +1001,7 @@ func TestHTTP_ListarReservas_ParametrosInvalidos_400(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	for _, query := range []string{"?page=0", "?page=abc", "?pageSize=0", "?pageSize=100000"} {
-		req := httptest.NewRequest("GET", "/api/reservation/reservas"+query, nil)
+		req := httptest.NewRequest("GET", "/api/reservas"+query, nil)
 		req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 		resp, err := app.Test(req)
@@ -1020,7 +1020,7 @@ func TestHTTP_CalendarioDeEquipo_DevuelveDocenteYMateria(t *testing.T) {
 	reservaDeTest(repo, "r1", "pc1", "docente1")
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/reservation/equipos/pc1/calendario?desde=2026-03-01&hasta=2026-03-31", nil)
+	req := httptest.NewRequest("GET", "/api/equipos/pc1/calendario?desde=2026-03-01&hasta=2026-03-31", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente2", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -1056,7 +1056,7 @@ func TestHTTP_CalendarioDeEquipo_EquipoInexistente_404(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET",
-		"/api/reservation/equipos/pc-que-no-existe/calendario?desde=2026-03-01&hasta=2026-03-31", nil)
+		"/api/equipos/pc-que-no-existe/calendario?desde=2026-03-01&hasta=2026-03-31", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -1078,7 +1078,7 @@ func TestHTTP_CalendarioDeEquipo_EnMantenimiento_SigueTeniendoCalendario(t *test
 	app := nuevaAppConValidadorDeEquipo(repo, &fakeValidadorEquipo{disponible: false})
 
 	req := httptest.NewRequest("GET",
-		"/api/reservation/equipos/pc1/calendario?desde=2026-03-01&hasta=2026-03-31", nil)
+		"/api/equipos/pc1/calendario?desde=2026-03-01&hasta=2026-03-31", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -1093,7 +1093,7 @@ func TestHTTP_CalendarioDeEquipo_EnMantenimiento_SigueTeniendoCalendario(t *test
 func TestHTTP_CalendarioDeEquipo_SinRango_400(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("GET", "/api/reservation/equipos/pc1/calendario", nil)
+	req := httptest.NewRequest("GET", "/api/equipos/pc1/calendario", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
@@ -1109,7 +1109,7 @@ func TestHTTP_CancelarReservaAjena_SinMotivo_400(t *testing.T) {
 	reservaDeTest(repo, "r1", "pc1", "docente1")
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/reservation/reservas/r1/cancelar",
+	req := httptest.NewRequest("POST", "/api/reservas/r1/cancelar",
 		jsonBody(cancelarReservaRequest{Motivo: "   "}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
@@ -1125,7 +1125,7 @@ func TestHTTP_CancelarReservaAjena_ConMotivo_OK(t *testing.T) {
 	reservaDeTest(repo, "r1", "pc1", "docente1")
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/reservation/reservas/r1/cancelar",
+	req := httptest.NewRequest("POST", "/api/reservas/r1/cancelar",
 		jsonBody(cancelarReservaRequest{Motivo: "se necesita el laboratorio para un acto"}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
@@ -1142,7 +1142,7 @@ func TestHTTP_CancelarReservaPropia_SinMotivo_OK(t *testing.T) {
 	reservaDeTest(repo, "r1", "pc1", "docente1")
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("POST", "/api/reservation/reservas/r1/cancelar",
+	req := httptest.NewRequest("POST", "/api/reservas/r1/cancelar",
 		jsonBody(cancelarReservaRequest{Motivo: ""}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
@@ -1165,4 +1165,87 @@ func (f *fakeValidadorJornada) PermiteReserva(_ context.Context, _ time.Time, _,
 
 func (f *fakeValidadorJornada) CierreDeLaJornada(_ context.Context, _ time.Time) (application.CierreDeJornada, error) {
 	return application.CierreDeJornada{}, nil
+}
+
+// ── GET de una reserva sola ─────────────────────────────────────────────
+//
+// Completa el par con GET /api/grupos/{id} y comparte su regla de titularidad,
+// que vive en el servicio.
+
+func TestHTTP_ObtenerReserva_Propia_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	dueno := "docente-1"
+	repo.reservas["r1"] = &domain.Reserva{ID: "r1", EquipoID: "pc1", CreadoPor: &dueno}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET", "/api/reservas/r1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente-1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_ObtenerReserva_DeOtroDocente_403(t *testing.T) {
+	repo := nuevoFakeRepo()
+	dueno := "docente-1"
+	repo.reservas["r1"] = &domain.Reserva{ID: "r1", EquipoID: "pc1", CreadoPor: &dueno}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET", "/api/reservas/r1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente-2", "DOCENTE"))
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	}
+}
+
+// ── Las lecturas por lote ───────────────────────────────────────────────
+//
+// El fake las implementa en términos de las de a uno para que no puedan
+// divergir: si la búsqueda individual cambia de criterio, la del lote cambia
+// con ella.
+
+func (r *fakeRepo) BuscarReservasPorIDs(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	porID := map[string]*domain.Reserva{}
+	for _, id := range ids {
+		res, err := r.BuscarReservaPorID(ctx, id)
+		if err != nil {
+			// Como la de verdad: el id que no está simplemente no aparece.
+			continue
+		}
+		porID[id] = res
+	}
+	return porID, nil
+}
+
+func (r *fakeRepo) BuscarPrestamosPorIDs(ctx context.Context, ids []string) (map[string]*domain.Prestamo, error) {
+	porID := map[string]*domain.Prestamo{}
+	for _, id := range ids {
+		p, err := r.BuscarPrestamoPorID(ctx, id)
+		if err != nil {
+			continue
+		}
+		porID[id] = p
+	}
+	return porID, nil
+}
+
+func (r *fakeRepo) ListarReservasFuturasDeEquipos(ctx context.Context, equipoIDs []string, desde time.Time) (map[string][]*domain.Reserva, error) {
+	porEquipo := map[string][]*domain.Reserva{}
+	for _, id := range equipoIDs {
+		futuras, err := r.ListarReservasFuturasDeEquipo(ctx, id, desde)
+		if err != nil {
+			return nil, err
+		}
+		if len(futuras) > 0 {
+			porEquipo[id] = futuras
+		}
+	}
+	return porEquipo, nil
 }

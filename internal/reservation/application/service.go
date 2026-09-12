@@ -311,6 +311,53 @@ func (s *Service) materializarGrupo(ctx context.Context, repo Repo, materiaID st
 	return grupo, reservas, nil
 }
 
+// puedeCancelar decide si quien pide puede cancelar eso, y con qué requisitos.
+//
+// Dos reglas en una función porque van juntas y se explican juntas:
+//
+//   - **Lo propio se cancela sin explicar nada**: el docente decide sobre su
+//     clase.
+//   - **Lo ajeno sólo lo cancela un Admin, y con motivo** (RF-04.8). El motivo
+//     no es burocracia: es el texto exacto que el docente recibe en el aviso
+//     (RF-05.1), así que vacío lo dejaría enterándose de que le cancelaron la
+//     clase sin ninguna explicación.
+//
+// `creadoPor` es nil cuando la reserva la creó el sistema (un bloqueo
+// administrativo): ahí no hay dueño, así que sólo un Admin la toca.
+func puedeCancelar(creadoPor *string, solicitanteID string, esAdmin bool, motivo string) error {
+	esPropia := creadoPor != nil && *creadoPor == solicitanteID
+	if esPropia {
+		return nil
+	}
+	if !esAdmin {
+		return ErrNoEsTuReserva
+	}
+	if strings.TrimSpace(motivo) == "" {
+		return ErrMotivoObligatorio
+	}
+	return nil
+}
+
+// puedeVer es la mitad de puedeCancelar que pregunta sólo por la titularidad:
+// es tuyo, o sos Admin.
+//
+// Va aparte y no reusa puedeCancelar porque aquélla suma la regla de RF-04.8 —
+// el Admin que toca algo ajeno tiene que decir por qué—, y sobre una lectura
+// ese motivo no existe: nadie recibe un aviso por que le hayan mirado la
+// reserva.
+//
+// `creadoPor` nil es un bloqueo administrativo: no tiene dueño, así que sólo un
+// Admin lo ve.
+func puedeVer(creadoPor *string, solicitanteID string, esAdmin bool) error {
+	if esAdmin {
+		return nil
+	}
+	if creadoPor == nil || *creadoPor != solicitanteID {
+		return ErrNoEsTuReserva
+	}
+	return nil
+}
+
 // verificarSinSolapamiento es una validación anticipada (mejor mensaje de
 // error que esperar la constraint EXCLUDE de la base) — no reemplaza esa
 // constraint, que sigue siendo la garantía real ante condiciones de carrera
@@ -330,23 +377,40 @@ func mismaFecha(a, b time.Time) bool {
 	return a.Year() == b.Year() && a.Month() == b.Month() && a.Day() == b.Day()
 }
 
-// ObtenerReserva es un passthrough directo al repo — usado por
-// interfaces/http para verificar la titularidad de una reserva antes de
-// dejarla cancelar (un docente solo puede cancelar las suyas; un Admin puede
-// cancelar cualquiera — esa verificación de rol vive en http/, acá solo se
-// expone el dato).
-func (s *Service) ObtenerReserva(ctx context.Context, id string) (*domain.Reserva, error) {
-	return s.repo.BuscarReservaPorID(ctx, id)
+// ObtenerReserva trae una reserva, y sólo a quien le corresponde verla.
+//
+// Era un passthrough sin regla, y su comentario decía que la titularidad la
+// verificaba interfaces/http antes de dejar cancelar. Dejó de ser cierto con el
+// barrido de RF-00.3 —la regla bajó al servicio— y desde entonces esta función
+// no la llamaba nadie. Ahora sostiene el GET de una reserva sola, con la misma
+// regla que el grupo: es tuya, o sos Admin.
+func (s *Service) ObtenerReserva(ctx context.Context, id, solicitanteID string, esAdmin bool) (*domain.Reserva, error) {
+	r, err := s.repo.BuscarReservaPorID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := puedeVer(r.CreadoPor, solicitanteID, esAdmin); err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 // CancelarReserva implementa RF-04.4: cancelación manual de una PC puntual
 // dentro de un grupo (motivo obligatorio).
-func (s *Service) CancelarReserva(ctx context.Context, reservaID string, canceladoPor *string, motivo string) error {
+func (s *Service) CancelarReserva(ctx context.Context, reservaID, solicitanteID string, esAdmin bool, motivo string) error {
 	var pendientes []cancelacionPendiente
+	canceladoPor := &solicitanteID
 
 	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
 		r, err := repo.BuscarReservaPorID(ctx, reservaID)
 		if err != nil {
+			return err
+		}
+
+		// Quién puede cancelar qué, y con qué requisitos, se decide ACÁ y no en
+		// el handler: es una regla del dominio, y dejarla afuera significa que
+		// cualquier otro llamador del servicio la saltea sin enterarse.
+		if err := puedeCancelar(r.CreadoPor, solicitanteID, esAdmin, motivo); err != nil {
 			return err
 		}
 
@@ -568,11 +632,22 @@ func (s *Service) PedirLiberacionDeReserva(ctx context.Context, reservaID, solic
 	return nil
 }
 
-// ObtenerReservaGrupo es un passthrough directo al repo — mismo criterio que
-// ObtenerReserva, para verificar titularidad antes de
-// CancelarOcurrenciaRecurrente.
-func (s *Service) ObtenerReservaGrupo(ctx context.Context, id string) (*domain.ReservaGrupo, error) {
-	return s.repo.BuscarReservaGrupoPorID(ctx, id)
+// ObtenerReservaGrupo trae una serie de reservas, y sólo a quien le
+// corresponde verla.
+//
+// La titularidad se resuelve acá y no en el handler por lo mismo que en
+// CancelarReserva: quién puede ver qué es una regla del dominio, y una
+// comprobación que sólo hace el transporte la saltea cualquier llamador que no
+// entre por HTTP.
+func (s *Service) ObtenerReservaGrupo(ctx context.Context, id, solicitanteID string, esAdmin bool) (*domain.ReservaGrupo, error) {
+	g, err := s.repo.BuscarReservaGrupoPorID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := puedeVer(g.CreadoPor, solicitanteID, esAdmin); err != nil {
+		return nil, err
+	}
+	return g, nil
 }
 
 // ── Recurrencia (RF-04.2) ───────────────────────────────────────────────
@@ -680,9 +755,10 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 
 // CancelarOcurrenciaRecurrente implementa RF-04.6: cancela un ReservaGrupo
 // puntual de una serie recurrente.
-func (s *Service) CancelarOcurrenciaRecurrente(ctx context.Context, reservaGrupoID string, canceladoPor *string, motivo string, soloEsta bool) (int, error) {
+func (s *Service) CancelarOcurrenciaRecurrente(ctx context.Context, reservaGrupoID, solicitanteID string, esAdmin bool, motivo string, soloEsta bool) (int, error) {
 	totalCancelado := 0
 	var pendientes []cancelacionPendiente
+	canceladoPor := &solicitanteID
 
 	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
 		totalCancelado = 0
@@ -690,6 +766,11 @@ func (s *Service) CancelarOcurrenciaRecurrente(ctx context.Context, reservaGrupo
 
 		grupo, err := repo.BuscarReservaGrupoPorID(ctx, reservaGrupoID)
 		if err != nil {
+			return err
+		}
+
+		// Mismo criterio que CancelarReserva: la regla vive en el servicio.
+		if err := puedeCancelar(grupo.CreadoPor, solicitanteID, esAdmin, motivo); err != nil {
 			return err
 		}
 
@@ -754,11 +835,17 @@ func (s *Service) BloquearEquipos(ctx context.Context, equipoIDs []string, cread
 
 	ahora := s.ahora()
 
-	// Un bloqueo sobre un horario que ya terminó no bloquea nada: no cancela
-	// reservas (la cascada de abajo solo mira las que siguen vivas) y deja una
-	// fila que solo sirve para ensuciar los reportes.
-	if domain.YaTermino(fecha, horaInicio, horaFin, ahora) {
-		return nil, domain.ErrReservaEnElPasado
+	// Las dos reglas que comparte con una reserva: que el rango diga algo y que
+	// no esté ya terminado. Un bloqueo sobre un horario que pasó no bloquea
+	// nada —no cancela reservas, porque la cascada de abajo sólo mira las que
+	// siguen vivas— y deja una fila que sólo ensucia los reportes. Un bloqueo de
+	// duración cero tampoco bloquea nada, y hasta acá llegaba a la base y salía
+	// como 500.
+	//
+	// Lo que NO se aplica es el tope de ocho horas: un bloqueo de la jornada
+	// entera es un caso legítimo.
+	if err := domain.ValidarVentanaDeBloqueo(fecha, horaInicio, horaFin, ahora); err != nil {
+		return nil, err
 	}
 
 	if err := s.verificarEquiposReservables(ctx, equipoIDs); err != nil {
@@ -777,13 +864,18 @@ func (s *Service) BloquearEquipos(ctx context.Context, equipoIDs []string, cread
 		bloqueos = bloqueos[:0]
 		pendientes = nil
 
-		for _, equipoID := range equipoIDs {
-			futuras, err := repo.ListarReservasFuturasDeEquipo(ctx, equipoID, fecha)
-			if err != nil {
-				return fmt.Errorf("listando reservas del equipo %s: %w", equipoID, err)
-			}
+		// Las reservas futuras de TODOS los equipos del lote en una consulta. Un
+		// bloqueo puede llegar con doscientas máquinas y antes preguntaba por
+		// cada una; el índice `(equipo_id, fecha)` sirve igual a las dos formas.
+		futurasPorEquipo, err := repo.ListarReservasFuturasDeEquipos(ctx, equipoIDs, fecha)
+		if err != nil {
+			return fmt.Errorf("listando las reservas de los equipos a bloquear: %w", err)
+		}
 
-			for _, r := range futuras {
+		for _, equipoID := range equipoIDs {
+			// Un equipo sin reservas futuras no está en el mapa y la lista sale
+			// vacía sola.
+			for _, r := range futurasPorEquipo[equipoID] {
 				if r.Estado != domain.ReservaConfirmada || r.Tipo != domain.TipoNormal {
 					continue
 				}
@@ -1053,19 +1145,24 @@ func (s *Service) CancelarReservasPorIDs(ctx context.Context, reservaIDs []strin
 	var pendientes []cancelacionPendiente
 
 	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		// Una consulta para todo el lote. Acá el id que no está se SALTEA y no es
+		// un error, a diferencia de las entregas: esta cascada la disparan otras
+		// operaciones —dar de baja un equipo, quitar al último docente de una
+		// materia— y una reserva que desapareció en el medio es una menos que
+		// cancelar, no un pedido mal armado.
+		//
+		// El orden lo sigue poniendo `reservaIDs` y no el mapa.
+		porID, err := repo.BuscarReservasPorIDs(ctx, reservaIDs)
+		if err != nil {
+			return fmt.Errorf("buscando las reservas a cancelar: %w", err)
+		}
 		reservas := make([]*domain.Reserva, 0, len(reservaIDs))
 		for _, id := range reservaIDs {
-			r, err := repo.BuscarReservaPorID(ctx, id)
-			if err != nil {
-				if errors.Is(err, ErrReservaNoEncontrada) {
-					continue
-				}
-				return fmt.Errorf("buscando la reserva %s: %w", id, err)
+			if r, hay := porID[id]; hay {
+				reservas = append(reservas, r)
 			}
-			reservas = append(reservas, r)
 		}
 
-		var err error
 		canceladas, _, pendientes, err = s.cancelarEnCascada(ctx, repo, reservas, motivo, ahora)
 		return err
 	})
@@ -1138,9 +1235,9 @@ func (s *Service) CambiarEquipoDeReserva(ctx context.Context, reservaID, pcNuevo
 		if r.Estado != domain.ReservaConfirmada {
 			return ErrReservaNoModificable
 		}
-		// Misma regla de titularidad que cancelar: es tuya, o sos Admin.
-		if !esAdmin && (r.CreadoPor == nil || *r.CreadoPor != quien) {
-			return ErrReservaAjena
+		// Misma regla de titularidad que ver y que cancelar: es tuya, o sos Admin.
+		if err := puedeVer(r.CreadoPor, quien, esAdmin); err != nil {
+			return err
 		}
 		if r.EquipoID == pcNuevoID {
 			cambiada = r

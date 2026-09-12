@@ -100,12 +100,20 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 	ahora := s.ahora()
 	resultado := &ResultadoEntrega{}
 
+	// Las reservas del lote en UNA consulta. Se recorre `params.ReservaIDs` y no
+	// el mapa: el resultado se arma en el orden en que la pantalla mandó las
+	// máquinas, y el recorrido de un mapa en Go es aleatorio entre corridas.
+	reservas, err := s.repo.BuscarReservasPorIDs(ctx, params.ReservaIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, reservaID := range params.ReservaIDs {
-		reserva, err := s.repo.BuscarReservaPorID(ctx, reservaID)
-		if err != nil {
+		reserva, hay := reservas[reservaID]
+		if !hay {
 			// Un ID que no existe es un error del cliente, no una PC que no
 			// se pudo entregar: la pantalla mandó algo que no corresponde.
-			return nil, err
+			return nil, ErrReservaNoEncontrada
 		}
 
 		if reserva.Estado == domain.ReservaCancelada {
@@ -358,10 +366,17 @@ func (s *Service) RecibirEquipos(ctx context.Context, prestamoIDs []string, reci
 	ahora := s.ahora()
 	resultado := &ResultadoDevolucion{}
 
+	// Ídem EntregarPorReserva: una consulta para el lote, y el orden lo pone la
+	// lista de entrada.
+	prestamos, err := s.repo.BuscarPrestamosPorIDs(ctx, prestamoIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, id := range prestamoIDs {
-		prestamo, err := s.repo.BuscarPrestamoPorID(ctx, id)
-		if err != nil {
-			return nil, err
+		prestamo, hay := prestamos[id]
+		if !hay {
+			return nil, ErrPrestamoNoEncontrado
 		}
 
 		if err := prestamo.Devolver(recibidoPor, observaciones, ahora); err != nil {

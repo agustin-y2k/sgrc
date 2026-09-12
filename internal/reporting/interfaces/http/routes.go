@@ -6,11 +6,17 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/middleware"
 )
 
-// RegisterRoutes monta las rutas de reporting bajo /api/reporting — todas
+// RegisterRoutes monta las rutas de reporting bajo /api — todas
 // exclusivas de Admin (RF-06 es una funcionalidad de gestión, no algo que un
 // docente necesite consultar sobre otros).
 func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
-	reporting := app.Group("/api/reporting")
+	// El prefijo es "/api" y no "/api": lo que va en la URL es el
+	// RECURSO, no el módulo de Go que lo sirve. Con el nombre del módulo, pedir
+	// el calendario de una máquina obligaba a saber que el calendario lo sirve
+	// `reservation` aunque la máquina sea de `inventory` — o sea, a aprender
+	// cómo está partido el servidor por dentro. Mismo criterio que /api/jornada,
+	// que ya lo hacía.
+	reporting := app.Group("/api")
 
 	autenticado := aut.Requerida()
 	soloAdmin := middleware.RequireRol("ADMIN")

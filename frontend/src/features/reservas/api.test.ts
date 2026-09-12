@@ -53,7 +53,7 @@ describe("api de reservas, lo que se manda", () => {
       await reservasApi.pedirLiberacion("res1", "")
 
       const { url, init } = llamada(fetchMock)
-      expect(url).toContain("/api/reservation/reservas/res1/pedido-de-liberacion")
+      expect(url).toContain("/api/reservas/res1/pedido-de-liberacion")
       expect(init.method).toBe("POST")
     })
   })

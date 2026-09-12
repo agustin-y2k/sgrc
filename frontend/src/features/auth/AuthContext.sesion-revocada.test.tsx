@@ -90,7 +90,7 @@ describe("sesión revocada por el backend", () => {
     )
 
     // Un request cualquiera del sistema, no /me ni el login.
-    await expect(apiFetch("/api/reservation/reservas")).rejects.toBeInstanceOf(ApiError)
+    await expect(apiFetch("/api/reservas")).rejects.toBeInstanceOf(ApiError)
 
     await waitFor(() =>
       expect(screen.getByTestId("user")).toHaveTextContent("sin sesión")
@@ -139,7 +139,7 @@ describe("sesión revocada por el backend", () => {
     await montarConSesion()
     responderCon(500, "error interno")
 
-    await expect(apiFetch("/api/reservation/reservas")).rejects.toBeInstanceOf(ApiError)
+    await expect(apiFetch("/api/reservas")).rejects.toBeInstanceOf(ApiError)
 
     expect(screen.getByTestId("user")).toHaveTextContent("ana@test.com")
   })
@@ -169,7 +169,7 @@ describe("qué se explica al cerrarse una sesión", () => {
     await montarConSesion()
     responderCon(401, "la sesión venció", "expirada")
 
-    await apiFetch("/api/reservation/reservas").catch(() => {})
+    await apiFetch("/api/reservas").catch(() => {})
 
     await waitFor(() =>
       expect(screen.getByTestId("user")).toHaveTextContent("sin sesión")
@@ -184,7 +184,7 @@ describe("qué se explica al cerrarse una sesión", () => {
     // es justamente lo que este test verifica. Con `me` devolviendo un error
     // ya armado, ese camino no se recorre y el test no probaría nada.
     responderCon(401, "la sesión venció", "expirada")
-    vi.mocked(authApi.me).mockImplementation(() => apiFetch("/api/auth/me"))
+    vi.mocked(authApi.me).mockImplementation(() => apiFetch("/api/mi-perfil"))
 
     render(
       <AuthProvider>
@@ -205,7 +205,7 @@ describe("qué se explica al cerrarse una sesión", () => {
       "password-cambiada"
     )
 
-    await apiFetch("/api/reservation/reservas").catch(() => {})
+    await apiFetch("/api/reservas").catch(() => {})
 
     await waitFor(() =>
       expect(screen.getByTestId("motivo")).toHaveTextContent(
@@ -220,7 +220,7 @@ describe("qué se explica al cerrarse una sesión", () => {
     await montarConSesion()
     responderCon(401, "la sesión ya no es válida", "revocada")
 
-    await apiFetch("/api/reservation/reservas").catch(() => {})
+    await apiFetch("/api/reservas").catch(() => {})
 
     await waitFor(() =>
       expect(screen.getByTestId("motivo")).toHaveTextContent("la sesión ya no es válida")
@@ -233,7 +233,7 @@ describe("qué se explica al cerrarse una sesión", () => {
     await montarConSesion()
     responderCon(401, "token inválido o expirado")
 
-    await apiFetch("/api/reservation/reservas").catch(() => {})
+    await apiFetch("/api/reservas").catch(() => {})
 
     await waitFor(() =>
       expect(screen.getByTestId("user")).toHaveTextContent("sin sesión")

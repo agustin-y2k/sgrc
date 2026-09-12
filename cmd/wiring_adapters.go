@@ -8,6 +8,7 @@ import (
 	"time"
 
 	availabilityapp "github.com/ramiro/sgrc/internal/availability/application"
+	inventoryapp "github.com/ramiro/sgrc/internal/inventory/application"
 	reportingapp "github.com/ramiro/sgrc/internal/reporting/application"
 	reservationapp "github.com/ramiro/sgrc/internal/reservation/application"
 )
@@ -60,6 +61,22 @@ func (a *academicArchivadorHistoricoAdapter) GuardarSnapshotDeCiclo(ctx context.
 func (a *academicArchivadorHistoricoAdapter) EliminarReservasDeCiclo(ctx context.Context, cicloID string) error {
 	_, _, err := a.reservationSvc.EliminarReservasDeCiclo(ctx, cicloID)
 	return err
+}
+
+// academicMarcasAdapter satisface academic/application.MarcasDeInventario
+// envolviendo inventory/application.Service — academic/ nunca lo importa
+// directamente.
+//
+// Sirve para AVISAR, no para arreglar: al renombrar una materia dice cuántas
+// marcas de preferencia de equipo dejan de aplicar. Arrastrarlas al nombre
+// nuevo sería peor —una marca sin alcance vale para TODAS las materias que se
+// llamen igual— así que el número se muestra y el Admin decide.
+type academicMarcasAdapter struct {
+	inventorySvc *inventoryapp.Service
+}
+
+func (a *academicMarcasAdapter) CuantasDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error) {
+	return a.inventorySvc.ContarMarcasDeMateria(ctx, materiaNombre)
 }
 
 // reservationValidadorJornadaAdapter satisface

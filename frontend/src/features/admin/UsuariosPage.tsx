@@ -44,12 +44,50 @@ const TEXTO_CONFIRMACION: Record<Confirmacion["accion"], (u: Usuario) => string>
   BAJA: (u) =>
     `Dar de baja a ${u.nombre} ${u.apellido} es permanente: no se puede reactivar la cuenta. Si sus materias quedan sin ningún otro docente, sus reservas futuras se cancelan.`,
   ELIMINAR: (u) =>
-    `Eliminar la cuenta de ${u.nombre} ${u.apellido} la borra definitivamente y libera el email ${u.email} para un registro nuevo. Sus reservas e incidencias se conservan, pero pierden la referencia a la persona.`,
+    `Eliminar la cuenta de ${u.nombre} ${u.apellido} la borra definitivamente y libera el email ${u.email} para un registro nuevo. Sus reservas e incidencias se conservan, pero pierden la referencia a la persona. Lo que sí se borra: su hilo de soporte con las respuestas que se le dieron, sus avisos, sus pedidos de materia y —si es Admin— su horario de guardia.`,
   PROMOVER: (u) =>
     `${u.nombre} ${u.apellido} va a pasar a tener permisos de Admin: aprobar cuentas, editar el inventario y el ciclo lectivo, y dar de baja a otros usuarios. Conserva sus materias y sus reservas, y el cambio le aplica de inmediato, sin que tenga que volver a entrar.`,
   DEGRADAR: (u) =>
     `${u.nombre} ${u.apellido} deja de tener permisos de Admin y queda como docente. La cuenta sigue abierta: conserva sus materias, sus reservas y su forma de ingreso — lo único que pierde son las pantallas de administración, y deja de figurar en la lista de Admins con su horario de atención. Cualquier Admin puede volver a promoverlo.`,
 }
+
+// El plural del cartel de arrastre. Los mensajes del hilo no se cuentan
+// aparte: se van con el hilo, y "1 hilo de soporte (4 mensajes)" dice en una
+// sola frase lo que dos contadores sueltos hacen leer dos veces.
+function describirArrastre(d: adminApi.ArrastreDeEliminacion): string {
+  const partes: string[] = []
+  if (d.hilosDeSoporte > 0) {
+    const hilos = d.hilosDeSoporte === 1 ? "su hilo de soporte" : `sus ${d.hilosDeSoporte} hilos de soporte`
+    partes.push(
+      d.mensajesDeSoporte > 0 ? `${hilos} (${d.mensajesDeSoporte} mensajes)` : hilos
+    )
+  }
+  if (d.bloquesDeGuardia > 0) {
+    partes.push(
+      d.bloquesDeGuardia === 1
+        ? "1 tramo de su horario de guardia"
+        : `los ${d.bloquesDeGuardia} tramos de su horario de guardia`
+    )
+  }
+  if (d.pedidosDeMateria > 0) {
+    partes.push(
+      d.pedidosDeMateria === 1 ? "1 pedido de materia" : `${d.pedidosDeMateria} pedidos de materia`
+    )
+  }
+  if (d.notificaciones > 0) {
+    partes.push(
+      d.notificaciones === 1 ? "1 aviso" : `${d.notificaciones} avisos`
+    )
+  }
+  if (partes.length === 1) return partes[0]
+  return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`
+}
+
+const arrastreTieneAlgo = (d: adminApi.ArrastreDeEliminacion) =>
+  d.hilosDeSoporte > 0 ||
+  d.bloquesDeGuardia > 0 ||
+  d.pedidosDeMateria > 0 ||
+  d.notificaciones > 0
 
 const esCambioDeRol = (accion: Confirmacion["accion"]) =>
   accion === "PROMOVER" || accion === "DEGRADAR"
@@ -113,6 +151,13 @@ export function UsuariosPage() {
     usuario: string
     password: string
   } | null>(null)
+  // Qué se llevó el último borrado definitivo. Sólo se muestra si se llevó
+  // algo: el caso normal es que no, y un cartel que aparece siempre deja de
+  // leerse justo cuando tiene algo que decir.
+  const [arrastre, setArrastre] = useState<{
+    usuario: string
+    detalle: adminApi.ArrastreDeEliminacion
+  } | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: [...USUARIOS_KEY, filtroEstado, pagina],
@@ -135,9 +180,18 @@ export function UsuariosPage() {
   })
 
   const eliminar = useMutation({
-    mutationFn: (id: string) => adminApi.eliminarUsuario(id),
-    onSuccess: async () => {
+    mutationFn: (u: Usuario) => adminApi.eliminarUsuario(u.id),
+    onSuccess: async (detalle, u) => {
       setConfirmando(null)
+      // El borrado dispara diez cascadas. Dos importan y no se pueden deshacer:
+      // el hilo de soporte se va con las respuestas que escribió el propio
+      // Admin, y el horario de guardia decide si el barrido actúa (RF-07.6).
+      // El `detalle &&` no sobra: si el servidor contesta 200 con el cuerpo
+      // vacío —una versión anterior, un proxy que lo recorta— el borrado igual
+      // tiene que terminar bien.
+      if (detalle && arrastreTieneAlgo(detalle)) {
+        setArrastre({ usuario: `${u.nombre} ${u.apellido}`, detalle })
+      }
       await invalidar()
     },
   })
@@ -241,6 +295,18 @@ export function UsuariosPage() {
         </Alert>
       )}
 
+      {arrastre && (
+        <Alert className="mb-4">
+          <AlertDescription>
+            Se borró la cuenta de {arrastre.usuario} y con ella{" "}
+            {describirArrastre(arrastre.detalle)}. Eso no se puede deshacer.{" "}
+            <Button variant="outline" size="sm" onClick={() => setArrastre(null)}>
+              Entendido
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {isLoading && <p className="text-muted-foreground">Cargando…</p>}
       {!isLoading && usuarios.length === 0 && (
         <p className="text-muted-foreground">No hay usuarios con ese filtro.</p>
@@ -252,7 +318,7 @@ export function UsuariosPage() {
           const confirmandoEste = confirmando?.usuario.id === u.id
           const trabajando =
             (cambiarEstado.isPending && cambiarEstado.variables?.id === u.id) ||
-            (eliminar.isPending && eliminar.variables === u.id) ||
+            (eliminar.isPending && eliminar.variables?.id === u.id) ||
             (promover.isPending && promover.variables === u.id) ||
             (degradar.isPending && degradar.variables === u.id)
 
@@ -423,7 +489,7 @@ export function UsuariosPage() {
                           } else if (confirmando.accion === "DEGRADAR") {
                             degradar.mutate(u.id)
                           } else {
-                            eliminar.mutate(u.id)
+                            eliminar.mutate(u)
                           }
                         }}
                       >

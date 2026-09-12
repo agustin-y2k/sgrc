@@ -14,13 +14,13 @@ import { apiFetch } from "@/lib/api-client"
 
 /** Cualquier usuario autenticado, no solo Admins. */
 export function listarDisponibilidadDeAdmins() {
-  return apiFetch<RespuestaLista<AdminDisponibilidad>>("/api/availability/admins")
+  return apiFetch<RespuestaLista<AdminDisponibilidad>>("/api/guardia")
 }
 
 // ── Horario semanal propio (RF-07.1, RF-07.3) ─────────────────────────
 
 export function miHorario() {
-  return apiFetch<RespuestaLista<BloqueHorario>>("/api/availability/mi-horario")
+  return apiFetch<RespuestaLista<BloqueHorario>>("/api/mi-horario")
 }
 
 /**
@@ -29,7 +29,7 @@ export function miHorario() {
  * serie de semanas materializadas.
  */
 export function agregarBloque(diaSemana: DiaSemana, horaInicio: string, horaFin: string) {
-  return apiFetch<BloqueHorario>("/api/availability/mi-horario", {
+  return apiFetch<BloqueHorario>("/api/mi-horario", {
     method: "POST",
     body: { diaSemana, horaInicio, horaFin },
   })
@@ -40,7 +40,7 @@ export function editarBloque(
   id: string,
   cambios: { diaSemana?: DiaSemana; horaInicio?: string; horaFin?: string }
 ) {
-  return apiFetch<BloqueHorario>(`/api/availability/mi-horario/${id}`, {
+  return apiFetch<BloqueHorario>(`/api/mi-horario/${id}`, {
     method: "PATCH",
     body: cambios,
   })
@@ -51,7 +51,7 @@ export function editarBloque(
  * otro Admin devuelve 404, no 403.
  */
 export function eliminarBloque(id: string) {
-  return apiFetch<void>(`/api/availability/mi-horario/${id}`, { method: "DELETE" })
+  return apiFetch<void>(`/api/mi-horario/${id}`, { method: "DELETE" })
 }
 
 // ── Excepciones puntuales (RF-07.4, RF-07.5) ──────────────────────────
@@ -67,7 +67,7 @@ export function cargarExcepcion(excepcion: {
   horaFin?: string
   motivo?: string
 }) {
-  return apiFetch<Excepcion>("/api/availability/mi-excepcion", {
+  return apiFetch<Excepcion>("/api/mi-excepcion", {
     method: "POST",
     body: excepcion,
   })
@@ -78,7 +78,7 @@ export function cargarExcepcion(excepcion: {
  * para hoy.
  */
 export function marcarNoDisponibleAhora() {
-  return apiFetch<Excepcion>("/api/availability/no-disponible-ahora", {
+  return apiFetch<Excepcion>("/api/no-disponible-ahora", {
     method: "POST",
   })
 }
@@ -86,7 +86,7 @@ export function marcarNoDisponibleAhora() {
 // ── Jornada de la institución ───────────────────────────────────────── Vive
 // en este archivo porque comparte el tipo BloqueHorario y las mismas
 // conversiones de "HH:MM", pero cuelga de /api/jornada y no de
-// /api/availability: es un dato de la escuela, no la disponibilidad de una
+// /api: es un dato de la escuela, no la disponibilidad de una
 // persona.
 
 /** La jornada declarada por la institución: qué días y en qué horas abre. */

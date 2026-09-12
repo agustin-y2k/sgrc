@@ -5,6 +5,7 @@ package http
 import (
 	"time"
 
+	"github.com/ramiro/sgrc/internal/auth/application"
 	"github.com/ramiro/sgrc/internal/auth/domain"
 	"github.com/ramiro/sgrc/internal/shared/paginacion"
 )
@@ -192,4 +193,44 @@ type resetPasswordResponse struct {
 type listarUsuariosResponse struct {
 	Data []usuarioResponse `json:"data"`
 	Meta paginacion.Meta   `json:"meta"`
+}
+
+// eliminacionResponse dice qué se llevó el borrado definitivo (RF-01.9).
+//
+// Antes la operación contestaba 200 y nada más, y de paso desaparecían el hilo
+// de soporte —con las respuestas del propio Admin— y el horario de guardia, que
+// desde RF-07.6 decide si el barrido actúa. Los que sobreviven perdiendo la
+// referencia (reservas, préstamos, incidencias) no se listan: no se perdió nada.
+type eliminacionResponse struct {
+	HilosDeSoporte    int `json:"hilosDeSoporte"`
+	MensajesDeSoporte int `json:"mensajesDeSoporte"`
+	BloquesDeGuardia  int `json:"bloquesDeGuardia"`
+	Notificaciones    int `json:"notificaciones"`
+	PedidosDeMateria  int `json:"pedidosDeMateria"`
+}
+
+func toEliminacionResponse(r *application.ResultadoEliminacion) eliminacionResponse {
+	return eliminacionResponse{
+		HilosDeSoporte:    r.HilosDeSoporte,
+		MensajesDeSoporte: r.MensajesDeSoporte,
+		BloquesDeGuardia:  r.BloquesDeGuardia,
+		Notificaciones:    r.Notificaciones,
+		PedidosDeMateria:  r.PedidosDeMateria,
+	}
+}
+
+// detalleDeEliminacion arma el detalle de auditoría. Devuelve nil cuando no se
+// llevó nada: un detalle con cinco ceros ocupa lugar y no dice nada que la
+// acción no diga ya.
+func detalleDeEliminacion(r *application.ResultadoEliminacion) map[string]any {
+	if !r.SeLlevoAlgo() {
+		return nil
+	}
+	return map[string]any{
+		"hilosDeSoporte":    r.HilosDeSoporte,
+		"mensajesDeSoporte": r.MensajesDeSoporte,
+		"bloquesDeGuardia":  r.BloquesDeGuardia,
+		"notificaciones":    r.Notificaciones,
+		"pedidosDeMateria":  r.PedidosDeMateria,
+	}
 }

@@ -22,7 +22,7 @@ export function escribir(
 }
 
 export function misSugerencias() {
-  return apiFetch<RespuestaLista<Sugerencia>>("/api/sugerencias/mias")
+  return apiFetch<RespuestaLista<Sugerencia>>("/api/mis-sugerencias")
 }
 
 /**

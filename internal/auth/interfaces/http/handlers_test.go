@@ -34,6 +34,8 @@ type fakeRepo struct {
 	fotos    map[string]*domain.FotoDePerfil
 	usuarios map[string]*domain.Usuario
 	codigos  map[string]*domain.CodigoRecuperacion
+	// arrastre es lo que el repo dice que se llevó la cascada del borrado.
+	arrastre application.ResultadoEliminacion
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -150,9 +152,9 @@ func (r *fakeRepo) ContarAdminsAprobados(ctx context.Context) (int, error) {
 	}
 	return n, nil
 }
-func (r *fakeRepo) Eliminar(ctx context.Context, id string) error {
+func (r *fakeRepo) Eliminar(ctx context.Context, id string) (application.ResultadoEliminacion, error) {
 	delete(r.usuarios, id)
-	return nil
+	return r.arrastre, nil
 }
 
 func hashFalso(password string) (string, error) { return "hash:" + password, nil }
@@ -416,7 +418,7 @@ func TestHTTP_Login_CuentaPendiente_403(t *testing.T) {
 func TestHTTP_Me_SinToken_401(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	resp, _ := app.Test(httptest.NewRequest("GET", "/api/auth/me", nil))
+	resp, _ := app.Test(httptest.NewRequest("GET", "/api/mi-perfil", nil))
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Fatalf("esperaba 401, obtuve %d", resp.StatusCode)
 	}
@@ -427,7 +429,7 @@ func TestHTTP_Me_ConToken_OK(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Email: "ada@x.com", Estado: domain.EstadoAprobada}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("GET", "/api/auth/me", nil)
+	req := httptest.NewRequest("GET", "/api/mi-perfil", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenPara("u1", "DOCENTE"))
 
 	resp, err := app.Test(req)
@@ -511,7 +513,7 @@ func TestHTTP_Registrar_ComoAdminDeSistema_QuedaDocentePendiente(t *testing.T) {
 	}
 }
 
-// ── PATCH /api/auth/mi-perfil ───────────────────────────────────────────
+// ── PATCH /api/mi-perfil ───────────────────────────────────────────
 
 func TestHTTP_ActualizarMisDatos_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
@@ -519,7 +521,7 @@ func TestHTTP_ActualizarMisDatos_OK(t *testing.T) {
 		Email: "ada@x.com", Estado: domain.EstadoAprobada}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+	req := httptest.NewRequest("PATCH", "/api/mi-perfil", jsonBody(actualizarMisDatosRequest{
 		Nombre: "Ada", Apellido: "Lovelace",
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -552,7 +554,7 @@ func TestHTTP_ActualizarMisDatos_OK(t *testing.T) {
 func TestHTTP_ActualizarMisDatos_SinToken_401(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
-	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+	req := httptest.NewRequest("PATCH", "/api/mi-perfil", jsonBody(actualizarMisDatosRequest{
 		Nombre: "Ada", Apellido: "Lovelace",
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -568,7 +570,7 @@ func TestHTTP_ActualizarMisDatos_NombreVacio_400(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron"}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+	req := httptest.NewRequest("PATCH", "/api/mi-perfil", jsonBody(actualizarMisDatosRequest{
 		Nombre: "  ", Apellido: "Lovelace",
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -585,7 +587,7 @@ func TestHTTP_ActualizarMisDatos_DemasiadoLargo_400(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron"}
 	app := nuevaAppDeTest(repo)
 
-	req := httptest.NewRequest("PATCH", "/api/auth/mi-perfil", jsonBody(actualizarMisDatosRequest{
+	req := httptest.NewRequest("PATCH", "/api/mi-perfil", jsonBody(actualizarMisDatosRequest{
 		Nombre: strings.Repeat("a", domain.LargoMaxNombre+1), Apellido: "Lovelace",
 	}))
 	req.Header.Set("Content-Type", "application/json")
@@ -820,6 +822,61 @@ func TestHTTP_EliminarDefinitivamente_DesdeBaja_OK(t *testing.T) {
 	}
 }
 
+// El borrado dejó de contestar 200 a secas: el cuerpo dice qué se llevó, para
+// que el Admin no descubra dentro de un mes que el horario de guardia de esa
+// persona se fue con la cuenta.
+func TestHTTP_EliminarDefinitivamente_DevuelveElArrastre(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["d1"] = &domain.Usuario{ID: "d1", Estado: domain.EstadoBaja}
+	repo.arrastre = application.ResultadoEliminacion{
+		HilosDeSoporte: 1, MensajesDeSoporte: 4, BloquesDeGuardia: 2,
+		Notificaciones: 12, PedidosDeMateria: 0,
+	}
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("DELETE", "/api/auth/usuarios/d1", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+
+	var body map[string]int
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("el cuerpo no es JSON: %v", err)
+	}
+	esperado := map[string]int{
+		"hilosDeSoporte": 1, "mensajesDeSoporte": 4, "bloquesDeGuardia": 2,
+		"notificaciones": 12, "pedidosDeMateria": 0,
+	}
+	for campo, valor := range esperado {
+		if body[campo] != valor {
+			t.Errorf("%s: esperaba %d, obtuve %d", campo, valor, body[campo])
+		}
+	}
+}
+
+// El detalle de auditoría se calla cuando no hay nada que contar: cinco ceros
+// guardados en cada borrado son ruido en el registro que después hay que leer.
+func TestDetalleDeEliminacion_SinArrastre_EsNil(t *testing.T) {
+	if d := detalleDeEliminacion(&application.ResultadoEliminacion{}); d != nil {
+		t.Errorf("esperaba nil, obtuve %v", d)
+	}
+	// Los mensajes solos no cuentan: vienen siempre con su hilo, así que un
+	// hilo en cero con mensajes en positivo no existe.
+	d := detalleDeEliminacion(&application.ResultadoEliminacion{BloquesDeGuardia: 1})
+	if d == nil {
+		t.Fatal("con un bloque de guardia borrado, el detalle no puede ser nil")
+	}
+	if d["bloquesDeGuardia"] != 1 {
+		t.Errorf("el detalle no lleva el número: %v", d)
+	}
+}
+
 func TestHTTP_CrearAdmin_ComoDocente_403(t *testing.T) {
 	app := nuevaAppDeTest(nuevoFakeRepo())
 
@@ -862,7 +919,7 @@ func TestRutasProtegidas_TokenDeCuentaDadaDeBaja_401(t *testing.T) {
 	tok := tokenPara("docente-baja", "DOCENTE")
 
 	// Antes de la baja el token sirve.
-	req := httptest.NewRequest("GET", "/api/auth/me", nil)
+	req := httptest.NewRequest("GET", "/api/mi-perfil", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
 	if resp, _ := app.Test(req); resp.StatusCode == fiber.StatusUnauthorized {
 		t.Fatalf("el token debería servir antes de la baja")
@@ -872,7 +929,7 @@ func TestRutasProtegidas_TokenDeCuentaDadaDeBaja_401(t *testing.T) {
 
 	// El token no cambió — sigue firmado y sin expirar. Lo que cambió es el
 	// estado de la cuenta, y eso alcanza para que deje de valer.
-	for _, ruta := range []string{"/api/auth/me", "/api/auth/usuarios"} {
+	for _, ruta := range []string{"/api/mi-perfil", "/api/auth/usuarios"} {
 		req := httptest.NewRequest("GET", ruta, nil)
 		req.Header.Set("Authorization", "Bearer "+tok)
 

@@ -26,8 +26,10 @@ type fakeRepo struct {
 	errGuardar            error
 	errContarAdmins       error
 	errEliminar           error
-	errListar             error
-	adminsAprobadosCount  int
+	// arrastre es lo que el repo dice que se llevó la cascada del borrado.
+	arrastre             ResultadoEliminacion
+	errListar            error
+	adminsAprobadosCount int
 
 	// Códigos de recuperación, indexados por usuario.
 	codigos          map[string]*domain.CodigoRecuperacion
@@ -149,12 +151,12 @@ func (r *fakeRepo) ContarAdminsAprobados(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-func (r *fakeRepo) Eliminar(ctx context.Context, id string) error {
+func (r *fakeRepo) Eliminar(ctx context.Context, id string) (ResultadoEliminacion, error) {
 	if r.errEliminar != nil {
-		return r.errEliminar
+		return ResultadoEliminacion{}, r.errEliminar
 	}
 	delete(r.usuarios, id)
-	return nil
+	return r.arrastre, nil
 }
 
 func (r *fakeRepo) Listar(ctx context.Context, filtroEstado *domain.Estado, filtroRol *domain.Rol, pagina paginacion.Pagina) ([]*domain.Usuario, int, error) {
@@ -992,7 +994,7 @@ func TestEliminarDefinitivamente_DesdeEstadoTerminal_OK(t *testing.T) {
 		repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Estado: estado}
 		svc := nuevoServicioDeTest(repo)
 
-		err := svc.EliminarDefinitivamente(context.Background(), "u1")
+		_, err := svc.EliminarDefinitivamente(context.Background(), "u1")
 
 		if err != nil {
 			t.Fatalf("estado %s: no debería fallar: %v", estado, err)
@@ -1013,7 +1015,7 @@ func TestEliminarDefinitivamente_CuentaNoCerrada_Rechazado(t *testing.T) {
 		repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Estado: estado}
 		svc := nuevoServicioDeTest(repo)
 
-		err := svc.EliminarDefinitivamente(context.Background(), "u1")
+		_, err := svc.EliminarDefinitivamente(context.Background(), "u1")
 
 		if !errors.Is(err, ErrSoloDesdeBajaORechazada) {
 			t.Errorf("estado %s: esperaba ErrSoloDesdeBajaORechazada, obtuve %v", estado, err)
@@ -1021,6 +1023,52 @@ func TestEliminarDefinitivamente_CuentaNoCerrada_Rechazado(t *testing.T) {
 		if _, existe := repo.usuarios["u1"]; !existe {
 			t.Errorf("estado %s: no debería haberse eliminado", estado)
 		}
+	}
+}
+
+// El Admin tiene que enterarse de lo que se llevó el borrado. Le importa sobre
+// todo el horario de guardia: sin esos tramos cargados, el barrido de RF-07.6
+// cambia de comportamiento, y nadie relaciona eso con haber borrado una cuenta
+// tres semanas antes.
+func TestEliminarDefinitivamente_DevuelveQueSeLlevo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Estado: domain.EstadoBaja}
+	repo.arrastre = ResultadoEliminacion{
+		HilosDeSoporte: 2, MensajesDeSoporte: 7, BloquesDeGuardia: 3,
+		Notificaciones: 40, PedidosDeMateria: 1,
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	res, err := svc.EliminarDefinitivamente(context.Background(), "u1")
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if res == nil {
+		t.Fatal("esperaba el detalle de lo que se borró, obtuve nil")
+	}
+	if res.BloquesDeGuardia != 3 || res.HilosDeSoporte != 2 || res.MensajesDeSoporte != 7 {
+		t.Errorf("el detalle no llegó entero: %+v", res)
+	}
+	if !res.SeLlevoAlgo() {
+		t.Error("SeLlevoAlgo() debería ser true con cinco contadores en positivo")
+	}
+}
+
+// Borrar una cuenta que no dejó nada atrás es el caso normal, y tiene que
+// poder distinguirse del anterior sin mirar cinco campos.
+func TestEliminarDefinitivamente_SinArrastre_NoAvisaNada(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Estado: domain.EstadoRechazada}
+	svc := nuevoServicioDeTest(repo)
+
+	res, err := svc.EliminarDefinitivamente(context.Background(), "u1")
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if res.SeLlevoAlgo() {
+		t.Errorf("no se llevó nada, pero SeLlevoAlgo() dijo que sí: %+v", res)
 	}
 }
 

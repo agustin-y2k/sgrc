@@ -265,7 +265,7 @@ func TestCodigoRecuperacion_SeVanConLaCuenta(t *testing.T) {
 
 	// ON DELETE CASCADE: sin el hard delete de RF-01.9 fallaría por FK, y
 	// además un código sin cuenta no le sirve a nadie.
-	if err := repo.Eliminar(ctx, usuarioID); err != nil {
+	if _, err := repo.Eliminar(ctx, usuarioID); err != nil {
 		t.Fatalf("eliminando la cuenta: %v", err)
 	}
 

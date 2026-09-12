@@ -12,6 +12,7 @@ import (
 	"github.com/ramiro/sgrc/internal/shared/audit"
 	"github.com/ramiro/sgrc/internal/shared/middleware"
 	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/ramiro/sgrc/internal/shared/respuesta"
 )
 
 type Handler struct {
@@ -46,7 +47,7 @@ func claimsDelContexto(c *fiber.Ctx) (*middleware.Claims, error) {
 	return claims, nil
 }
 
-// POST /api/reservation/reservas (cualquier usuario autenticado — la
+// POST /api/reservas (cualquier usuario autenticado — la
 // validación real de "está asignado a esa materia" la hace application/)
 func (h *Handler) CrearReserva(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
@@ -84,12 +85,15 @@ func (h *Handler) CrearReserva(c *fiber.Ctx) error {
 	for i, r := range reservas {
 		reservasResp[i] = toReservaResponse(r)
 	}
-	return c.Status(fiber.StatusCreated).JSON(crearReservaResponse{
+	// El Location apunta al GRUPO y no a una de las reservas: lo que se creó es
+	// una clase —una materia en un horario— que ocupa N máquinas, y el grupo es
+	// el recurso que la representa entera.
+	return respuesta.Creado(c, "/api/grupos", grupo.ID, crearReservaResponse{
 		Grupo: toReservaGrupoResponse(grupo), Reservas: reservasResp,
 	})
 }
 
-// POST /api/reservation/reservas/recurrentes (cualquier usuario autenticado)
+// POST /api/reservas/recurrentes (cualquier usuario autenticado)
 func (h *Handler) CrearReservaRecurrente(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -135,7 +139,7 @@ func (h *Handler) CrearReservaRecurrente(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(crearReservaRecurrenteResponse{ReglaID: res.Regla.ID, Grupos: grupos})
 }
 
-// POST /api/reservation/reservas/{id}/cancelar — RF-04.4. Un Admin puede
+// POST /api/reservas/{id}/cancelar — RF-04.4. Un Admin puede
 // cancelar cualquier reserva; un docente solo las suyas.
 func (h *Handler) CancelarReserva(c *fiber.Ctx) error {
 	id := c.Params("id")
@@ -149,25 +153,11 @@ func (h *Handler) CancelarReserva(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	reserva, err := h.svc.ObtenerReserva(c.UserContext(), id)
-	if err != nil {
-		return mapearError(err)
-	}
-	esPropia := reserva.CreadoPor != nil && *reserva.CreadoPor == claims.UserID
-
-	if claims.Rol != "ADMIN" && !esPropia {
-		return fiber.NewError(fiber.StatusForbidden, "solo podés cancelar tus propias reservas")
-	}
-
-	// RF-04.8: cancelar la reserva de otra persona exige motivo — es el texto
-	// que el docente va a recibir en la notificación (RF-05.1), así que vacío lo
-	// dejaría sin ninguna explicación.
-	if !esPropia && strings.TrimSpace(req.Motivo) == "" {
-		return mapearError(application.ErrMotivoObligatorio)
-	}
-
-	usuarioID := claims.UserID
-	if err := h.svc.CancelarReserva(c.UserContext(), id, &usuarioID, req.Motivo); err != nil {
+	// Quién puede cancelar qué, y si hace falta motivo, lo decide el servicio
+	// (ver application.puedeCancelar). Acá sólo se le pasa quién pide y si es
+	// Admin: la regla es del dominio y tiene que valer para cualquier llamador,
+	// no sólo para el que entra por HTTP.
+	if err := h.svc.CancelarReserva(c.UserContext(), id, claims.UserID, claims.Rol == "ADMIN", req.Motivo); err != nil {
 		return mapearError(err)
 	}
 	if claims.Rol == "ADMIN" {
@@ -176,7 +166,7 @@ func (h *Handler) CancelarReserva(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
-// POST /api/reservation/grupos/{id}/cancelar — RF-04.6, con soloEsta /
+// POST /api/grupos/{id}/cancelar — RF-04.6, con soloEsta /
 // esta-y-siguientes. Mismo criterio de titularidad que CancelarReserva.
 func (h *Handler) CancelarOcurrenciaRecurrente(c *fiber.Ctx) error {
 	id := c.Params("id")
@@ -190,30 +180,16 @@ func (h *Handler) CancelarOcurrenciaRecurrente(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	grupo, err := h.svc.ObtenerReservaGrupo(c.UserContext(), id)
-	if err != nil {
-		return mapearError(err)
-	}
-	esPropia := grupo.CreadoPor != nil && *grupo.CreadoPor == claims.UserID
-
-	if claims.Rol != "ADMIN" && !esPropia {
-		return fiber.NewError(fiber.StatusForbidden, "solo podés cancelar tus propias reservas")
-	}
-	// Mismo criterio que CancelarReserva (RF-04.8): cancelar lo ajeno pide
-	// motivo, cancelar lo propio no.
-	if !esPropia && strings.TrimSpace(req.Motivo) == "" {
-		return mapearError(application.ErrMotivoObligatorio)
-	}
-
-	usuarioID := claims.UserID
-	n, err := h.svc.CancelarOcurrenciaRecurrente(c.UserContext(), id, &usuarioID, req.Motivo, req.SoloEsta)
+	// Mismo criterio que CancelarReserva: la regla vive en el servicio.
+	n, err := h.svc.CancelarOcurrenciaRecurrente(c.UserContext(), id,
+		claims.UserID, claims.Rol == "ADMIN", req.Motivo, req.SoloEsta)
 	if err != nil {
 		return mapearError(err)
 	}
 	return c.JSON(cancelarOcurrenciaResponse{ReservasCanceladas: n})
 }
 
-// POST /api/reservation/bloqueos (Admin)
+// POST /api/bloqueos (Admin)
 func (h *Handler) BloquearEquipos(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
 	if err != nil {
@@ -253,7 +229,7 @@ func (h *Handler) BloquearEquipos(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toBloquearResponse(res))
 }
 
-// GET /api/reservation/grupos/{id} — la reserva propia; un Admin puede ver
+// GET /api/grupos/{id} — la reserva propia; un Admin puede ver
 // cualquiera.
 func (h *Handler) ObtenerReservaGrupo(c *fiber.Ctx) error {
 	id := c.Params("id")
@@ -262,20 +238,15 @@ func (h *Handler) ObtenerReservaGrupo(c *fiber.Ctx) error {
 		return err
 	}
 
-	grupo, err := h.svc.ObtenerReservaGrupo(c.UserContext(), id)
+	grupo, err := h.svc.ObtenerReservaGrupo(c.UserContext(), id, claims.UserID, claims.Rol == "ADMIN")
 	if err != nil {
 		return mapearError(err)
-	}
-
-	esPropia := grupo.CreadoPor != nil && *grupo.CreadoPor == claims.UserID
-	if claims.Rol != "ADMIN" && !esPropia {
-		return fiber.NewError(fiber.StatusForbidden, "solo podés ver tus propias reservas")
 	}
 
 	return c.JSON(toReservaGrupoResponse(grupo))
 }
 
-// GET /api/reservation/reservas — lista reservas con filtros opcionales
+// GET /api/reservas — lista reservas con filtros opcionales
 // (materiaId, equipoId, desde, hasta, incluirCanceladas).
 func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
@@ -338,7 +309,7 @@ func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 	})
 }
 
-// GET /api/reservation/equipos/{equipoId}/calendario?desde&hasta — RF-04.4.
+// GET /api/equipos/{equipoId}/calendario?desde&hasta — RF-04.4.
 // Cualquier usuario autenticado puede consultarlo: un docente necesita ver
 // qué equipos están libres antes de elegir cuáles reservar.
 func (h *Handler) CalendarioDeEquipo(c *fiber.Ctx) error {
@@ -371,7 +342,7 @@ func (h *Handler) CalendarioDeEquipo(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// GET /api/reservation/equipos-disponibles?fecha&horaInicio&horaFin —
+// GET /api/equipos-disponibles?fecha&horaInicio&horaFin —
 // RF-04.2. La lista de la que el docente tilda las PCs que necesita; no está
 // restringida a un solo carro.
 func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
@@ -425,7 +396,7 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 	return c.JSON(equiposDisponiblesResponse{Data: data, Ocupados: tomados})
 }
 
-// PATCH /api/reservation/reservas/{id}/equipo — cambiar una reserva de
+// PATCH /api/reservas/{id}/equipo — cambiar una reserva de
 // máquina.
 func (h *Handler) CambiarEquipoDeReserva(c *fiber.Ctx) error {
 	claims, err := claimsDelContexto(c)
@@ -450,7 +421,7 @@ func (h *Handler) CambiarEquipoDeReserva(c *fiber.Ctx) error {
 	return c.JSON(toReservaResponse(reserva))
 }
 
-// POST /api/reservation/reservas/{id}/pedido-de-liberacion — RF-04.12. Le
+// POST /api/reservas/{id}/pedido-de-liberacion — RF-04.12. Le
 // manda al dueño de esa reserva un aviso y un correo diciendo que otro
 // docente necesita ese equipo.
 func (h *Handler) PedirLiberacionDeReserva(c *fiber.Ctx) error {
@@ -480,3 +451,21 @@ func (h *Handler) PedirLiberacionDeReserva(c *fiber.Ctx) error {
 
 // maxMensajeDelPedido acota el texto libre del pedido.
 const maxMensajeDelPedido = 500
+
+// GET /api/reservas/{id} — la reserva propia; un Admin ve cualquiera.
+//
+// Completa el par con GET /api/grupos/{id}: una reserva es una máquina en un
+// horario, el grupo es la clase entera. Se podía cancelar y cambiarle el equipo
+// a una reserva que no se podía pedir.
+func (h *Handler) ObtenerReserva(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	r, err := h.svc.ObtenerReserva(c.UserContext(), c.Params("id"), claims.UserID, claims.Rol == "ADMIN")
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toReservaResponse(r))
+}
