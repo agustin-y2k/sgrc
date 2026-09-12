@@ -1,4 +1,4 @@
-.PHONY: test lint build docker-build run dev rebuild dev-down run-prod levantar reconectar-tunel stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report observabilidad observabilidad-stop
+.PHONY: test lint build docker-build run dev rebuild dev-down run-prod levantar reconectar-tunel stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report observabilidad observabilidad-stop capturas capturas-pdf
 
 test:
 	go test ./... -coverprofile=coverage.out
@@ -226,3 +226,23 @@ seed-datos:
 
 coverage-report:
 	go tool cover -html=coverage.out -o coverage.html
+
+# ── Las guías (el detalle está en docs/guias/generar/README.md) ───────
+
+# Regenera TODAS las capturas y los dos PDF, de punta a punta.
+#
+# Levanta su propia pila en el proyecto `sgrc-capturas` y la baja al terminar:
+# la base de desarrollo no se toca. Tarda varios minutos y necesita los puertos
+# 8080/8081/5432 libres, así que si tenés la pila de desarrollo arriba hay que
+# pararla antes (`make stop`) — las dos usan los mismos puertos y no conviven.
+capturas:
+	./docs/guias/generar/capturar-todo.sh
+
+# Solo los dos PDF, sin capturas, sin base y sin Docker Compose.
+#
+# Es lo único que hace falta cuando cambia la VERSIÓN o el texto de una guía:
+# la portada es parte del documento, pero las capturas muestran a propósito el
+# pie de la versión anterior —se sacan antes del bump— y regenerar cincuenta
+# imágenes por un dígito no se justifica. Son dos minutos.
+capturas-pdf:
+	./docs/guias/generar/capturar-todo.sh --solo-pdf

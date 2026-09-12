@@ -1,0 +1,118 @@
+# Las capturas de las guías, al día por construcción.
+#
+# El pipeline de capturas siempre estuvo automatizado y aun así las imágenes
+# envejecían: había que acordarse de correrlo. Este job lo corre solo y compara
+# el resultado con lo que está commiteado — si alguien mueve un botón y no
+# regenera, la corrida se pone roja y dice qué imagen quedó vieja.
+#
+# Funciona porque el pipeline es DETERMINISTA: regenerándolo sin tocar nada, las
+# imágenes salen idénticas byte a byte. Es lo que lo vuelve utilizable como un
+# test de archivo dorado y no sólo como una tarea programada.
+#
+# No corre en cada push: levanta la pila entera con Postgres, siembra datos y
+# saca cincuenta capturas con un navegador de verdad, así que sólo se despierta
+# cuando cambia algo que las puede invalidar.
+name: Capturas
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "frontend/src/**"
+      - "docs/guias/**"
+      - "scripts/sembrar-datos-de-prueba.sh"
+      - ".env.capturas.example"
+      - "docker-compose*.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "frontend/src/**"
+      - "docs/guias/**"
+      - "scripts/sembrar-datos-de-prueba.sh"
+      - ".env.capturas.example"
+      - "docker-compose*.yml"
+  # Y a mano, para poder regenerar sin esperar a que cambie una pantalla.
+  workflow_dispatch:
+
+concurrency:
+  group: capturas-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  capturas:
+    name: Guías — capturas y PDF al día
+    runs-on: ubuntu-latest
+    # Levantar la pila, sembrar y sacar ~50 capturas con Chromium lleva su
+    # tiempo; el build de las imágenes de Docker es la mayor parte.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      # El runner sí tiene Node, así que capturar-todo.sh usa el local y se
+      # ahorra bajar la imagen de Playwright. Los navegadores no vienen con
+      # Node: los instala `npx playwright install` de abajo.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias del frontend
+        working-directory: frontend
+        run: npm ci
+
+      # Sólo Chromium y sus dependencias de sistema: es el único navegador que
+      # usan los scripts de captura y el que arma los PDF.
+      - name: Instalar Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Pillow, jq y pdftotext
+        run: |
+          python3 -m pip install --quiet pillow
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq poppler-utils
+
+      # El .env de la pila de capturas no tiene secretos: se crea y se destruye
+      # en esta misma corrida y nunca se expone. Por eso el ejemplo se versiona
+      # y acá alcanza con copiarlo — no hay ningún secreto de repositorio que
+      # configurar para que esto ande.
+      - name: Configurar la pila de capturas
+        run: cp .env.capturas.example .env.capturas
+
+      - name: Regenerar todas las capturas y los PDF
+        run: make capturas
+
+      # El corazón del asunto. `git status` sobre lo que el pipeline escribe:
+      # si algo cambió, la copia commiteada estaba vieja.
+      #
+      # Los PDF se excluyen porque no son reproducibles byte a byte —Chromium
+      # les mete una fecha de creación— así que compararlos daría rojo siempre.
+      # Lo que se vigila son las imágenes, que sí lo son.
+      - name: ¿Quedó alguna captura vieja?
+        run: |
+          cambios=$(git status --porcelain docs/guias/imagenes docs/capturas)
+          if [ -n "$cambios" ]; then
+            echo "Estas capturas no coinciden con lo que muestra el sistema hoy:"
+            echo "$cambios"
+            echo
+            echo "Regeneralas y commitealas:"
+            echo "  make capturas"
+            exit 1
+          fi
+          echo "Todas las capturas están al día."
+
+      # Cuando falla, las imágenes nuevas quedan acá para poder mirarlas sin
+      # tener que reproducir la corrida en local.
+      - name: Guardar las capturas generadas
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-generadas
+          path: |
+            docs/guias/imagenes/
+            docs/capturas/
+          retention-days: 7
