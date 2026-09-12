@@ -69,15 +69,10 @@ func (h *Handler) MarcarLeida(c *fiber.Ctx) error {
 		return err
 	}
 
-	n, err := h.svc.ObtenerNotificacion(c.UserContext(), id)
-	if err != nil {
-		return mapearError(err)
-	}
-	if n.UsuarioID != claims.UserID {
-		return fiber.NewError(fiber.StatusForbidden, "no podés marcar como leída una notificación que no es tuya")
-	}
-
-	if err := h.svc.MarcarLeida(c.UserContext(), id); err != nil {
+	// La pertenencia la comprueba el servicio: es una regla del dominio, y acá
+	// además costaba una lectura de más —se leía para chequear y el servicio la
+	// volvía a leer para guardar—.
+	if err := h.svc.MarcarLeida(c.UserContext(), id, claims.UserID); err != nil {
 		return mapearError(err)
 	}
 	return c.SendStatus(fiber.StatusOK)
@@ -158,4 +153,56 @@ func (h *Handler) GuardarPreferenciasEmail(c *fiber.Ctx) error {
 
 func esAdmin(claims *middleware.Claims) bool {
 	return claims.Rol == "ADMIN"
+}
+
+// DELETE /api/notifications/{id} — sacar un aviso propio de la lista.
+//
+// Existe porque un docente podía marcar un aviso como leído pero no
+// sacárselo de encima: los suyos se le acumulaban para siempre. Quién puede
+// borrar qué, y que tenga que estar leído, lo decide el servicio (RF-00.3).
+func (h *Handler) BorrarNotificacion(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	if err := h.svc.Borrar(c.UserContext(), c.Params("id"), claims.UserID); err != nil {
+		return mapearError(err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// DELETE /api/notifications/leidas — vaciar de una vez lo ya leído.
+//
+// Es la contraparte de POST /leer-todas: el mismo gesto, un paso después.
+// Devuelve cuántos se fueron, para que la pantalla lo pueda decir.
+func (h *Handler) BorrarNotificacionesLeidas(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	n, err := h.svc.BorrarLeidas(c.UserContext(), claims.UserID)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(fiber.Map{"borradas": n})
+}
+
+// GET /api/notifications/{id} — un aviso propio.
+//
+// Completaba el par con PATCH /{id}/leida y DELETE /{id}: se podía marcar leído
+// y borrar un aviso que no se podía pedir. La titularidad la decide el
+// servicio, igual que en las otras dos.
+func (h *Handler) ObtenerNotificacion(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+
+	n, err := h.svc.ObtenerNotificacion(c.UserContext(), c.Params("id"), claims.UserID)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toNotificacionResponse(n))
 }

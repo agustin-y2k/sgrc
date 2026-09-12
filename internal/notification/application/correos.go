@@ -68,7 +68,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("docente.registro.pendiente", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(map[string]string)
 		if !ok {
-			log.Printf("correo: payload inesperado para docente.registro.pendiente: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para docente.registro.pendiente (tipo %T)", e.Payload)
 			return
 		}
 		asunto, cuerpo := m.textoDeDocentePendiente(payload["nombre"], payload["apellido"], payload["email"])
@@ -82,7 +82,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("licencia.por-vencer", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.AvisoDeLicencias)
 		if !ok {
-			log.Printf("correo: payload inesperado para licencia.por-vencer: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para licencia.por-vencer (tipo %T)", e.Payload)
 			return
 		}
 		if payload.Total() == 0 {
@@ -98,7 +98,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("reserva.cancelada", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.CancelacionesDeUsuario)
 		if !ok {
-			log.Printf("correo: payload inesperado para reserva.cancelada: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para reserva.cancelada (tipo %T)", e.Payload)
 			return
 		}
 		if len(payload.Reservas) == 0 {
@@ -115,7 +115,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("reserva.recordatorio", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.RecordatorioDeReserva)
 		if !ok {
-			log.Printf("correo: payload inesperado para reserva.recordatorio: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para reserva.recordatorio (tipo %T)", e.Payload)
 			return
 		}
 		if payload.Email == "" {
@@ -133,7 +133,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("reserva.pedido-de-liberacion", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PedidoDeLiberacion)
 		if !ok {
-			log.Printf("correo: payload inesperado para reserva.pedido-de-liberacion: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para reserva.pedido-de-liberacion (tipo %T)", e.Payload)
 			return
 		}
 		if payload.Email == "" {
@@ -152,7 +152,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("sugerencia.nueva", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaNueva)
 		if !ok {
-			log.Printf("correo: payload inesperado para sugerencia.nueva: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para sugerencia.nueva (tipo %T)", e.Payload)
 			return
 		}
 		asunto, cuerpo := m.textoDeSugerencia(payload)
@@ -164,7 +164,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("sugerencia.seguimiento", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaSeguimiento)
 		if !ok {
-			log.Printf("correo: payload inesperado para sugerencia.seguimiento: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para sugerencia.seguimiento (tipo %T)", e.Payload)
 			return
 		}
 		asunto, cuerpo := m.textoDeSeguimiento(payload)
@@ -176,7 +176,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("sugerencia.respondida", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.SugerenciaRespondida)
 		if !ok {
-			log.Printf("correo: payload inesperado para sugerencia.respondida: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para sugerencia.respondida (tipo %T)", e.Payload)
 			return
 		}
 		if payload.Email == "" {
@@ -195,7 +195,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("materia.pedido.nuevo", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PedidoDeMateriaNuevo)
 		if !ok {
-			log.Printf("correo: payload inesperado para materia.pedido.nuevo: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para materia.pedido.nuevo (tipo %T)", e.Payload)
 			return
 		}
 		asunto, cuerpo := m.textoDePedidoDeMateria(payload)
@@ -207,7 +207,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("materia.pedido.resuelto", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.PedidoDeMateriaResuelto)
 		if !ok {
-			log.Printf("correo: payload inesperado para materia.pedido.resuelto: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para materia.pedido.resuelto (tipo %T)", e.Payload)
 			return
 		}
 		if payload.Email == "" {
@@ -222,7 +222,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("prestamo.sin-devolver.cierre", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.EquiposSinDevolverAlCierre)
 		if !ok {
-			log.Printf("correo: payload inesperado para prestamo.sin-devolver.cierre: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para prestamo.sin-devolver.cierre (tipo %T)", e.Payload)
 			return
 		}
 		if len(payload.Equipos) == 0 {
@@ -242,7 +242,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("cuenta.aprobada", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.CuentaAprobada)
 		if !ok {
-			log.Printf("correo: payload inesperado para cuenta.aprobada: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para cuenta.aprobada (tipo %T)", e.Payload)
 			return
 		}
 		asunto, cuerpo := m.textoDeCuentaAprobada(payload.Nombre)
@@ -255,9 +255,12 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("password.recuperacion.solicitada", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.DatosDeRecuperacion)
 		if !ok {
-			// Único handler que NO loguea el payload: si el tipo no es el esperado
-			// igual puede contener el código en claro, y un %+v lo dejaría escrito en
-			// los logs del contenedor.
+			// Acá está el motivo de que NINGÚN handler loguee el payload, solo su
+			// tipo: este evento lleva el código de recuperación en claro, y si el
+			// tipo no es el esperado no se sabe qué es lo que llegó — un %+v lo
+			// dejaría escrito en los logs del contenedor, que además se leen desde
+			// el navegador con Dozzle. Y para diagnosticar un payload del tipo
+			// equivocado, el tipo es justamente el dato que sirve.
 			log.Printf("correo: payload inesperado para password.recuperacion.solicitada (tipo %T)", e.Payload)
 			return
 		}
@@ -271,7 +274,7 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 	bus.Subscribe("password.recuperacion.cuenta-google", func(e eventbus.Evento) {
 		payload, ok := e.Payload.(eventbus.CuentaSoloConGoogle)
 		if !ok {
-			log.Printf("correo: payload inesperado para password.recuperacion.cuenta-google: %+v", e.Payload)
+			log.Printf("correo: payload inesperado para password.recuperacion.cuenta-google (tipo %T)", e.Payload)
 			return
 		}
 		asunto, cuerpo := m.textoDeCuentaSoloConGoogle(payload.Nombre)

@@ -316,10 +316,10 @@ func TestNotificarATodosLosAdmins_ErrorListandoAdmins_SePropaga(t *testing.T) {
 
 func TestMarcarLeida_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", Estado: domain.NoLeida}
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.NoLeida}
 	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
 
-	err := svc.MarcarLeida(context.Background(), "n1")
+	err := svc.MarcarLeida(context.Background(), "n1", "u1")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -329,10 +329,27 @@ func TestMarcarLeida_OK(t *testing.T) {
 	}
 }
 
+// La regla se mudó del handler al servicio: acá se fija que de verdad viva
+// ahora en el dominio y no en el transporte.
+func TestMarcarLeida_DeOtro_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.NoLeida}
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
+
+	err := svc.MarcarLeida(context.Background(), "n1", "otro-usuario")
+
+	if !errors.Is(err, ErrNoEsTuAviso) {
+		t.Fatalf("esperaba ErrNoEsTuAviso, obtuve %v", err)
+	}
+	if repo.notificaciones["n1"].Estado != domain.NoLeida {
+		t.Error("el aviso ajeno no tendría que haberse tocado")
+	}
+}
+
 func TestMarcarLeida_NoExiste_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo(), &fakeListadorAdmins{})
 
-	err := svc.MarcarLeida(context.Background(), "no-existe")
+	err := svc.MarcarLeida(context.Background(), "no-existe", "u1")
 
 	if !errors.Is(err, ErrNotificacionNoEncontrada) {
 		t.Fatalf("esperaba ErrNotificacionNoEncontrada, obtuve %v", err)
@@ -341,10 +358,10 @@ func TestMarcarLeida_NoExiste_Error(t *testing.T) {
 
 func TestMarcarLeida_YaLeida_Error(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", Estado: domain.Leida}
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.Leida}
 	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
 
-	err := svc.MarcarLeida(context.Background(), "n1")
+	err := svc.MarcarLeida(context.Background(), "n1", "u1")
 
 	if !errors.Is(err, domain.ErrYaLeida) {
 		t.Fatalf("esperaba ErrYaLeida, obtuve %v", err)
@@ -394,12 +411,12 @@ func TestListarPorUsuario_FiltraPorEstado(t *testing.T) {
 
 // ── ObtenerNotificacion ─────────────────────────────────────────────────
 
-func TestObtenerNotificacion_OK(t *testing.T) {
+func TestObtenerNotificacion_ElPropio_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "usuario1"}
 	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
 
-	n, err := svc.ObtenerNotificacion(context.Background(), "n1")
+	n, err := svc.ObtenerNotificacion(context.Background(), "n1", "usuario1")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -409,10 +426,25 @@ func TestObtenerNotificacion_OK(t *testing.T) {
 	}
 }
 
+// La misma regla que marcar leído y borrar, y en el mismo lugar: leer el aviso
+// de otro tampoco. Ni un Admin, porque un aviso no es información del sistema
+// sino un mensaje dirigido a una persona.
+func TestObtenerNotificacion_ElDeOtro_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "usuario1"}
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
+
+	_, err := svc.ObtenerNotificacion(context.Background(), "n1", "otro")
+
+	if !errors.Is(err, ErrNoEsTuAviso) {
+		t.Fatalf("esperaba ErrNoEsTuAviso, obtuve %v", err)
+	}
+}
+
 func TestObtenerNotificacion_NoExiste_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo(), &fakeListadorAdmins{})
 
-	_, err := svc.ObtenerNotificacion(context.Background(), "no-existe")
+	_, err := svc.ObtenerNotificacion(context.Background(), "no-existe", "usuario1")
 
 	if !errors.Is(err, ErrNotificacionNoEncontrada) {
 		t.Fatalf("esperaba ErrNotificacionNoEncontrada, obtuve %v", err)
@@ -596,5 +628,99 @@ func TestGuardarCategoriasDeEmail_ErrorDelRepo_SePropaga(t *testing.T) {
 
 	if _, err := svc.GuardarCategoriasDeEmail(context.Background(), "admin1", nil, true); err == nil {
 		t.Error("esperaba error y no hubo")
+	}
+}
+
+func (r *fakeRepo) Borrar(_ context.Context, id string) error {
+	if _, hay := r.notificaciones[id]; !hay {
+		return ErrNotificacionNoEncontrada
+	}
+	delete(r.notificaciones, id)
+	return nil
+}
+
+func (r *fakeRepo) BorrarLeidasDe(_ context.Context, usuarioID string) (int, error) {
+	n := 0
+	for id, notif := range r.notificaciones {
+		if notif.UsuarioID == usuarioID && notif.EstaLeida() {
+			delete(r.notificaciones, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
+// ── Borrar un aviso ─────────────────────────────────────────────────────
+//
+// Un docente podía marcar un aviso como leído pero no sacárselo de encima: los
+// suyos se le acumulaban para siempre y la única forma de perderlos era que le
+// borraran la cuenta.
+
+func TestBorrar_ElPropioYLeido_SeVa(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.Leida}
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
+
+	if err := svc.Borrar(context.Background(), "n1", "u1"); err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if _, quedo := repo.notificaciones["n1"]; quedo {
+		t.Error("el aviso tenía que borrarse")
+	}
+}
+
+// Un aviso sin leer es algo que todavía no pasó por los ojos de nadie —una
+// cuenta esperando aprobación—; borrarlo de un clic hace desaparecer la tarea
+// sin que nadie sepa que existió.
+func TestBorrar_SinLeer_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.NoLeida}
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
+
+	err := svc.Borrar(context.Background(), "n1", "u1")
+
+	if !errors.Is(err, ErrAvisoSinLeer) {
+		t.Fatalf("esperaba ErrAvisoSinLeer, obtuve %v", err)
+	}
+	if _, quedo := repo.notificaciones["n1"]; !quedo {
+		t.Error("el aviso no tenía que borrarse")
+	}
+}
+
+// La misma regla de pertenencia que marcar leído, y en el mismo lugar.
+func TestBorrar_ElDeOtro_Error(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["n1"] = &domain.Notificacion{ID: "n1", UsuarioID: "u1", Estado: domain.Leida}
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
+
+	err := svc.Borrar(context.Background(), "n1", "otro")
+
+	if !errors.Is(err, ErrNoEsTuAviso) {
+		t.Fatalf("esperaba ErrNoEsTuAviso, obtuve %v", err)
+	}
+	if _, quedo := repo.notificaciones["n1"]; !quedo {
+		t.Error("el aviso de otro no tenía que borrarse")
+	}
+}
+
+func TestBorrarLeidas_SoloLasLeidasYSoloLasPropias(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.notificaciones["leida"] = &domain.Notificacion{ID: "leida", UsuarioID: "u1", Estado: domain.Leida}
+	repo.notificaciones["sinLeer"] = &domain.Notificacion{ID: "sinLeer", UsuarioID: "u1", Estado: domain.NoLeida}
+	repo.notificaciones["ajena"] = &domain.Notificacion{ID: "ajena", UsuarioID: "otro", Estado: domain.Leida}
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
+
+	n, err := svc.BorrarLeidas(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("esperaba 1 borrada, obtuve %d", n)
+	}
+	if _, quedo := repo.notificaciones["sinLeer"]; !quedo {
+		t.Error("la sin leer tenía que quedarse")
+	}
+	if _, quedo := repo.notificaciones["ajena"]; !quedo {
+		t.Error("la de otra persona tenía que quedarse")
 	}
 }

@@ -24,6 +24,15 @@ type Repo interface {
 	// devuelve cuántas cambió.
 	MarcarTodasLeidasDe(ctx context.Context, usuarioID string, ahora time.Time) (int, error)
 
+	// Borrar saca un aviso de la base. Es el único borrado físico del módulo, y
+	// está bien que lo sea: un aviso leído ya cumplió su función —avisar— y
+	// después de eso es del usuario decidir si lo quiere en su lista.
+	Borrar(ctx context.Context, id string) error
+
+	// BorrarLeidasDe saca todas las leídas de una persona, y devuelve cuántas.
+	// Es la contraparte de MarcarTodasLeidasDe: el mismo gesto, un paso después.
+	BorrarLeidasDe(ctx context.Context, usuarioID string) (int, error)
+
 	// MarcarLeidasPorTipo cierra todas las NO_LEIDA de un tipo, de TODOS los
 	// usuarios, y devuelve cuántas cambió.
 	//

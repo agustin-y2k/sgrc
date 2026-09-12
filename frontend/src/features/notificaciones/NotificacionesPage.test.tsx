@@ -407,4 +407,53 @@ describe("NotificacionesPage", () => {
     ]
     expect(destinos.map((d) => d.tipo).sort()).toEqual(declarados.sort())
   })
+
+  // ── Sacarse un aviso de encima ────────────────────────────────────────
+  //
+  // Antes se podía marcar leído y nada más: los avisos se acumulaban para
+  // siempre.
+
+  it("borra un aviso ya leído", async () => {
+    const user = userEvent.setup()
+    vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue({
+      data: [notificacion({ id: "n1", estado: "LEIDA" })],
+      meta: { total: 1, page: 1, pageSize: 20 },
+    })
+    vi.mocked(notificacionesApi.borrar).mockResolvedValue(undefined)
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Borrar" }))
+
+    await waitFor(() => expect(notificacionesApi.borrar).toHaveBeenCalledWith("n1"))
+  })
+
+  // El botón no está en los avisos sin leer: es la misma regla que aplica el
+  // servidor, y ofrecerlo para que falle con un 409 sería peor que no tenerlo.
+  it("no ofrece borrar un aviso sin leer", async () => {
+    vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue({
+      data: [notificacion({ id: "n1", estado: "NO_LEIDA" })],
+      meta: { total: 1, page: 1, pageSize: 20 },
+    })
+    renderPagina()
+
+    expect(await screen.findByRole("button", { name: "Marcar como leída" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Borrar" })).toBeNull()
+  })
+
+  it("vacía de una vez los avisos leídos", async () => {
+    const user = userEvent.setup()
+    vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue({
+      data: [
+        notificacion({ id: "n1", estado: "LEIDA" }),
+        notificacion({ id: "n2", estado: "LEIDA" }),
+      ],
+      meta: { total: 2, page: 1, pageSize: 20 },
+    })
+    vi.mocked(notificacionesApi.borrarLeidas).mockResolvedValue({ borradas: 2 })
+    renderPagina()
+
+    await user.click(await screen.findByRole("button", { name: "Borrar las 2 leídas" }))
+
+    await waitFor(() => expect(notificacionesApi.borrarLeidas).toHaveBeenCalled())
+  })
 })
