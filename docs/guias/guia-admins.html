@@ -163,6 +163,14 @@
     white-space: nowrap;
   }
 
+  figure { margin: 5mm 0 6mm 0; break-inside: avoid; text-align: center; }
+  figure img {
+    max-width: 100%;
+    max-height: 140mm;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(20, 24, 31, .18);
+  }
+  figcaption { color: var(--gris); font-size: 9.5pt; margin-top: 2.5mm; }
 
   .nota, .ojo, .listo, .peligro {
     padding: 4mm 5mm;
@@ -239,6 +247,7 @@
     <li>Pedidos para dictar una materia</li>
     <li>Pedidos de ayuda y mensajes <span>Contestarles a los docentes.</span></li>
     <li>Reportes <span>Cuánto se usó y qué se rompe.</span></li>
+    <li>Quién hizo qué: el registro <span>Dónde se contesta «¿quién borró esto?».</span></li>
     <li>Tus horarios de atención</li>
     <li>Tus avisos y tus correos</li>
     <li>Tu perfil <span>Tu foto, tu nombre y tu contraseña.</span></li>
@@ -293,6 +302,11 @@
     mostrador: lo urgente arriba y a la izquierda.
   </p>
 
+  <figure>
+    <img src="imagenes/admin-01-mostrador.png" alt="Pantalla de inicio del administrador con seis zonas señaladas">
+    <figcaption>La pantalla de inicio del Admin, con las zonas señaladas.</figcaption>
+  </figure>
+
   <ol class="referencias">
     <li><b>Para entregar ahora.</b> Las clases que están empezando y todavía no
       retiraron sus computadoras. Es lo primero que mirás cuando llega un docente.</li>
@@ -322,6 +336,11 @@
   <p class="entrada">
     En la barra de arriba, el menú <b>Administración</b> abre todo lo que es tuyo.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-02-menu.png" alt="Menú Administración desplegado">
+    <figcaption>El menú Administración, desplegado.</figcaption>
+  </figure>
 
   <ul class="simple">
     <li><b>Usuarios</b> — todas las cuentas: contraseñas, roles, bajas.</li>
@@ -360,6 +379,11 @@
       materia asignada, el docente entra pero no puede reservar.</li>
   </ol>
 
+  <figure>
+    <img src="imagenes/admin-03-aprobacion.png" alt="Pantalla de cuentas pendientes">
+    <figcaption>Una cuenta esperando aprobación.</figcaption>
+  </figure>
+
   <div class="nota">
     <span class="titulo">Al registrarse te dejaron una pista</span>
     En el formulario de registro, la persona dijo <b>con qué cargo</b> se registra y
@@ -395,6 +419,11 @@
     (1°A, 2°B), cada curso tiene sus <b>materias</b>, y los docentes reservan
     <b>para una materia</b>. Si esto no está cargado, nadie puede reservar nada.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-04-academico.png" alt="Pantalla de ciclos, cursos y materias">
+    <figcaption>El ciclo activo, con sus cursos y materias.</figcaption>
+  </figure>
 
   <h3>Empezar el año</h3>
   <ol class="pasos">
@@ -432,6 +461,56 @@
     propio capítulo, el 6: leelo antes de tocar ese botón.
   </div>
 
+  <h3>Copiar las materias de un curso a otros</h3>
+  <p>
+    Las divisiones de un mismo año suelen tener las mismas materias. En vez de
+    cargarlas una por una en cada curso, cargalas en uno y copialas.
+  </p>
+  <ol class="pasos">
+    <li>Abrí las <b>Materias</b> del curso que ya está completo.</li>
+    <li>Tocá <span class="boton">Copiar estas materias a otros cursos</span>.</li>
+    <li>Tildá los cursos de destino y confirmá con
+      <span class="boton">Copiar a N cursos</span>.</li>
+  </ol>
+  <p>
+    Copia <b>solo los nombres</b> de las materias. Los docentes asignados no se
+    copian: quién dicta qué se decide curso por curso. Y no pisa nada — las
+    materias que el curso de destino ya tenía quedan como están. El sistema te dice
+    al final cuántas creó y cuántas ya existían, así que <b>copiar dos veces es
+    inofensivo</b>.
+  </p>
+
+  <h3>Cargar el año entero de una vez</h3>
+  <p>
+    Si tu escuela tiene treinta cursos, cargarlos a mano es una tarde. Se pueden
+    bajar y subir en una planilla.
+  </p>
+  <ol class="pasos">
+    <li>En el ciclo, buscá <b>«Cursos y materias en una planilla»</b> y tocá
+      <span class="boton">Descargar los N cursos</span>: baja un archivo con todos
+      los cursos que ya tenés cargados y sus materias.</li>
+    <li>Abrilo con cualquier planilla de cálculo —Excel, LibreOffice, Google Hojas
+      de cálculo—, agregá las filas que falten y guardalo.</li>
+    <li>Volvé, elegilo en <b>«Cargar desde una planilla»</b> y mirá la vista previa:
+      te dice cuántos cursos y materias va a crear <b>antes</b> de tocar nada.</li>
+    <li>Si está bien, confirmá con <span class="boton">Cargar en el ciclo</span>.</li>
+  </ol>
+  <div class="nota">
+    <span class="titulo">Solo agrega, nunca borra</span>
+    Subir el archivo crea lo que falta y deja como está lo que ya existe. No
+    renombra ni elimina nada, así que subirlo dos veces no rompe nada y un archivo
+    al que le falta un curso no te lo borra. Al terminar te dice cuántos cursos y
+    materias creó, y cuántos ya estaban.
+  </div>
+
+  <div class="nota">
+    <span class="titulo">Si le cambiás el nombre a una materia</span>
+    Revisá después el inventario. Las marcas de «preferente para esta materia»
+    (capítulo 8) se guardan por el nombre, así que al renombrarla dejan de aplicar y
+    hay que rehacerlas. La pantalla te avisa en el momento cuántas quedaron
+    colgadas.
+  </div>
+
   <div class="nota">
     <span class="titulo">Si un docente pide una materia</span>
     No hace falta que lo cargues a mano: puede pedirla desde su perfil y vos la
@@ -449,6 +528,11 @@
     capítulo cuenta exactamente qué se lleva puesto y qué no. Leelo entero antes de
     hacerlo: no hay botón de deshacer.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-19-cerrar-anio.png" alt="El recuadro que aparece al tocar «Cerrar el año»">
+    <figcaption>El sistema te dice qué va a pasar antes de que confirmes.</figcaption>
+  </figure>
 
   <div class="peligro">
     <span class="titulo">Cerrar el año borra todas las reservas de ese año</span>
@@ -520,6 +604,11 @@
     alta una cuenta de administración directamente, sin que la persona tenga que
     registrarse y esperar aprobación.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-05-usuarios.png" alt="Listado de usuarios del sistema">
+    <figcaption>Cada cuenta, con su estado y lo que se puede hacer con ella.</figcaption>
+  </figure>
 
   <h3>Aprobar o rechazar desde acá</h3>
   <p>
@@ -611,6 +700,11 @@
     En <b>Administración → Gestión del inventario</b> se cargan los carros y las
     computadoras, y se cambia su estado.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-06-inventario.png" alt="Gestión del inventario con los equipos de un carro">
+    <figcaption>Cada equipo, con su número de serie, sus programas y sus acciones.</figcaption>
+  </figure>
 
   <h3>Cargar un carro y sus computadoras</h3>
   <ol class="pasos">
@@ -733,6 +827,97 @@
       hardware, la podés crear de nuevo con la misma serie.</li>
   </ul>
 
+  <h3>Marcar una computadora como preferente para una materia</h3>
+  <p class="entrada">
+    Sirve para que las máquinas que tienen lo que una materia necesita —el programa
+    de dibujo, más memoria, el teclado que no está roto— le aparezcan primero al
+    docente que reserva para esa materia.
+  </p>
+  <p>
+    No reserva nada ni bloquea nada: <b>cualquiera las puede seguir reservando</b>.
+    Lo único que cambia es el orden en que aparecen. Para la materia marcada suben
+    arriba de todo; para las demás bajan al final, con el motivo escrito al lado
+    («Preferente para Matemática de 4°2»).
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-24-preferencias.png" alt="Panel de preferencias de un equipo">
+    <figcaption>Las marcas de una máquina, con su alcance y su prioridad.</figcaption>
+  </figure>
+
+  <ol class="pasos">
+    <li>En <b>Administración → Inventario</b>, abrí el carro con
+      <span class="boton">Gestionar equipos</span> y tocá
+      <span class="boton">Preferencias</span> en la máquina que quieras marcar.</li>
+    <li>Elegí la <b>materia</b> de la lista. Se elige, no se escribe: así
+      «Matemática» y «Matematica» no nacen como dos marcas distintas que no se
+      cruzan con nada.</li>
+    <li>Si querés, acotala por <b>modalidad</b>, <b>año</b> y <b>división</b>. Los
+      tres son opcionales e independientes: dejarlos vacíos significa «toda materia
+      que se llame así», no que falte completarlos.</li>
+    <li>La <b>prioridad</b> va de 1 a 9, y 1 es la más fuerte. Solo importa cuando
+      una misma máquina tiene varias marcas.</li>
+    <li>Tocá <span class="boton">Marcar</span>.</li>
+  </ol>
+
+  <p>
+    Cada marca queda listada con su alcance. <span class="boton">Editar</span>
+    corrige el alcance y la prioridad; <span class="boton">Quitar</span> la saca y
+    devuelve la máquina al orden de siempre. Para apuntar a <b>otra materia</b> hay
+    que hacer una marca nueva: eso no es corregir ésta.
+  </p>
+
+  <div class="nota">
+    <span class="titulo">Gana la marca más específica</span>
+    Si una máquina está marcada para «Matemática» y también para «Matemática de
+    4°2», cuando reserve 4°2 manda la segunda. A igual cantidad de datos, decide la
+    prioridad.
+  </div>
+
+  <h3>Si renombraste una materia: las marcas que quedaron sin materia</h3>
+  <p>
+    Las marcas se guardan <b>por el nombre</b> de la materia. Si la renombrás desde
+    <b>Académico</b>, las marcas siguen apuntando al nombre viejo y dejan de hacer
+    efecto: esas máquinas vuelven silenciosamente al orden común.
+  </p>
+  <p>
+    Por eso, al renombrar, la pantalla te avisa en el momento cuántas marcas
+    quedaron colgadas. Y arriba de <b>Administración → Inventario</b> aparece
+    <b>«Marcas que quedaron sin materia»</b> con la lista: qué decía cada marca y
+    qué máquina es, para poder <span class="boton">Quitar</span>la o volver a
+    marcar esa máquina con el nombre nuevo.
+  </p>
+  <div class="nota">
+    <span class="titulo">Si no aparece esa sección, no hay nada que hacer</span>
+    Se muestra solo cuando hay alguna marca colgada. Que no esté es la buena
+    noticia.
+  </div>
+
+  <h3>Dar de baja un carro</h3>
+  <p>
+    Cuando un carro se rompe o se reemplaza, se lo saca de circulación: deja de
+    aparecer en los listados y en la lista de «a qué carro va este equipo».
+  </p>
+  <ol class="pasos">
+    <li><b>Primero vaciá el carro.</b> Solo se puede dar de baja si no le queda
+      ninguna computadora activa adentro: moverlas a otro carro, o darlas de baja
+      una por una. Si quedan máquinas, el sistema te lo dice y no te deja seguir.</li>
+    <li>En la tarjeta del carro, tocá
+      <span class="boton">Dar de baja el carro</span> y confirmá.</li>
+  </ol>
+  <p>
+    <b>El nombre queda libre</b> para el carro que lo reemplace: si el «Carro 1» se
+    rompió y llega uno nuevo, el nuevo se puede llamar «Carro 1» igual.
+  </p>
+  <div class="nota">
+    <span class="titulo">Se puede deshacer</span>
+    Abajo de todo, <span class="boton">Ver los carros retirados</span> los lista y
+    los devuelve a circulación con
+    <span class="boton">Devolver a circulación</span>. Lo único que puede fallar es
+    que otro carro se haya quedado con el nombre mientras tanto — que es justo para
+    lo que la baja lo liberó. Si pasa, renombrá a uno de los dos.
+  </div>
+
   <h3>El calendario de una computadora</h3>
   <p>
     Entrá a <b>Computadoras</b> en la barra de arriba, abrí el carro con
@@ -741,6 +926,11 @@
     su semana completa, hora por hora. Es la forma más rápida de contestar «¿esta PC
     está libre el jueves a las 10?» sin abrir ninguna reserva.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-20-calendario-equipo.png" alt="Calendario semanal de una computadora">
+    <figcaption>Una semana de una sola máquina: en azul las clases, en rojo los bloqueos.</figcaption>
+  </figure>
 
   <ul class="simple">
     <li><b>En azul</b>, las reservas de clase, con la materia y el docente.</li>
@@ -779,6 +969,11 @@
     <li>Tocá <span class="boton">Agregar cuenta</span> y completá lo que sepas.</li>
   </ol>
 
+  <figure>
+    <img src="imagenes/admin-22-cuentas-de-equipo.png" alt="Las cuentas anotadas de una computadora, desde la gestión del inventario">
+    <figcaption>Las cuentas de una máquina, con sus botones para editar y quitar.</figcaption>
+  </figure>
+
   <div class="nota">
     <span class="titulo">También está en «Computadoras»</span>
     El mismo panel se abre desde <b>Computadoras</b>, en la barra de arriba: ahí es
@@ -788,6 +983,11 @@
   </div>
 
   <h3>Qué se anota de cada cuenta</h3>
+
+  <figure>
+    <img src="imagenes/admin-23-cuenta-nueva.png" alt="Formulario para anotar una cuenta de un equipo">
+    <figcaption>Lo único obligatorio es con qué usuario se entra.</figcaption>
+  </figure>
 
   <ul class="simple">
     <li><b>¿Con qué usuario se entra?</b> — es lo único obligatorio: sin eso la
@@ -875,6 +1075,11 @@
     inicio.
   </p>
 
+  <figure>
+    <img src="imagenes/admin-07-entregas.png" alt="Pantalla de entregas y devoluciones">
+    <figcaption>Arriba, lo que está afuera; abajo, las reservas de hoy sin retirar.</figcaption>
+  </figure>
+
   <h3>Entregar las computadoras de una reserva</h3>
   <ol class="pasos">
     <li>Buscá la clase en <b>Entregar las de una reserva</b> —o en «Para entregar
@@ -917,6 +1122,11 @@
       tenés un buscador arriba de la lista. Al confirmar, <b>el cuadro se cierra
       solo</b> y arriba te queda escrito qué salió.</li>
   </ol>
+
+  <figure>
+    <img src="imagenes/admin-08-entregar-sin-reserva.png" alt="Formulario de entrega sin reserva">
+    <figcaption>Con el nombre alcanza; lo demás es opcional.</figcaption>
+  </figure>
 
   <div class="nota">
     <span class="titulo">Solo aparece lo que se puede entregar</span>
@@ -982,6 +1192,11 @@
     dar su clase.
   </p>
 
+  <figure>
+    <img src="imagenes/admin-09-licencias.png" alt="Listado de licencias con su estado">
+    <figcaption>Cada máquina lleva su propio contador. Primero, las que están por vencer.</figcaption>
+  </figure>
+
   <h3>Cargar una licencia</h3>
   <ol class="pasos">
     <li>Tocá <span class="boton">Cargar una licencia</span>.</li>
@@ -992,6 +1207,11 @@
     <li>Decí <b>cuándo vence</b>. Hay tres formas: le quedan N días, se renovó el…, o
       vence el… Si no lo sabés, elegí «todavía no sé».</li>
   </ol>
+
+  <figure>
+    <img src="imagenes/admin-10-cargar-licencia.png" alt="Formulario de carga de licencia">
+    <figcaption>Se carga el mismo software en varios equipos de una sola vez.</figcaption>
+  </figure>
 
   <div class="nota">
     <span class="titulo">«Todavía no sé» es una respuesta válida</span>
@@ -1038,6 +1258,11 @@
       para que lo veas antes de confirmar.</li>
   </ol>
 
+  <figure>
+    <img src="imagenes/admin-11-bloquear.png" alt="Pantalla para bloquear equipos">
+    <figcaption>Antes de bloquear, se ve qué máquinas tienen reserva en esa franja.</figcaption>
+  </figure>
+
   <div class="ojo">
     <span class="titulo">Bloquear cancela clases de otros</span>
     Las reservas que se pisan con el bloqueo se cancelan, y a cada docente le llega un
@@ -1067,6 +1292,11 @@
     horario se rechazan solas.
   </p>
 
+  <figure>
+    <img src="imagenes/admin-12-jornada.png" alt="Pantalla de la jornada de la escuela">
+    <figcaption>Se carga por tramos: qué días, desde qué hora y hasta cuál.</figcaption>
+  </figure>
+
   <ol class="pasos">
     <li>Entrá a <b>Administración → Jornada de la escuela</b>.</li>
     <li>Tildá los <b>días</b> del tramo. Hay atajos: «Lunes a viernes», «Todos los
@@ -1091,6 +1321,13 @@
     horario que todavía no sabés— pero el pedido vuelve en la próxima entrada.
   </div>
 
+  <figure>
+    <img src="imagenes/admin-12c-primera-jornada.png"
+         alt="Pantalla que pide declarar la jornada al entrar">
+    <figcaption>Lo primero que ves si la escuela todavía no tiene horario
+      cargado. Se puede declarar acá mismo o dejarlo para después.</figcaption>
+  </figure>
+
   <h3>Si cambiás el horario y ya hay clases reservadas</h3>
 
   <p>
@@ -1098,6 +1335,13 @@
     <b>cuántas clases quedan afuera y de cuántos docentes</b>, con la lista, y
     recién ahí decidís.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-12b-jornada-impacto.png"
+         alt="Confirmación antes de cancelar clases por un cambio de horario">
+    <figcaption>Se cuenta en clases; los equipos van al lado porque una clase
+      puede tener varias computadoras.</figcaption>
+  </figure>
 
   <ul class="lista">
     <li><b>Ampliar el horario no afecta a nadie</b> y no te pregunta nada.</li>
@@ -1131,6 +1375,11 @@
     Un docente puede pedir, desde su perfil, que lo anoten en una materia. Acá se
     resuelven.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-13-pedidos-de-materia.png" alt="Pantalla de pedidos para dictar una materia">
+    <figcaption>Cada pedido trae el motivo que escribió el docente.</figcaption>
+  </figure>
 
   <ol class="pasos">
     <li>Entrá a <b>Administración → Pedidos de materia</b>.</li>
@@ -1171,6 +1420,12 @@
       <span class="boton">Dar por resuelta</span>.</li>
   </ol>
 
+  <figure>
+    <img src="imagenes/admin-15-soporte-conversacion.png" alt="Conversación de soporte abierta con la respuesta del Admin">
+    <figcaption>La conversación completa: lo que escribió el docente y lo que
+      contestaron.</figcaption>
+  </figure>
+
   <div class="nota">
     <span class="titulo">Contestar no cierra el tema</span>
     Podés contestar las veces que haga falta; recién se cierra cuando alguien la da
@@ -1201,6 +1456,11 @@
     máquina, quién reserva, qué se rompe.
   </p>
 
+  <figure>
+    <img src="imagenes/admin-16-reportes.png" alt="Pantalla de reportes">
+    <figcaption>Todos los reportes en una sola pantalla, filtrados por ciclo y por fechas.</figcaption>
+  </figure>
+
   <ul class="simple">
     <li><b>Uso por equipo</b> — cuántas reservas y cuántas horas tuvo cada máquina.
       Sirve para repartir el desgaste y para justificar una compra.</li>
@@ -1221,13 +1481,69 @@
 
 <!-- 17 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">17</span>Tus horarios de atención</h2>
+  <h2><span class="n">17</span>Quién hizo qué: el registro</h2>
+
+  <p class="entrada">
+    El sistema anota sola cada acción importante: quién la hizo, sobre qué, cuándo y
+    desde qué computadora. Es donde se contesta «¿quién borró esto?» — que es una
+    pregunta que aparece justo cuando ya nadie se acuerda.
+  </p>
+
+  <figure>
+    <img src="imagenes/admin-25-auditoria.png" alt="Registro de auditoría con sus filtros">
+    <figcaption>Cada línea dice qué pasó, quién lo hizo y desde dónde.</figcaption>
+  </figure>
+
+  <p>
+    Entrá a <b>Administración → Auditoría</b>. Arriba están los filtros y abajo la
+    lista, de lo más nuevo a lo más viejo.
+  </p>
+
+  <ul class="simple">
+    <li><b>Acción</b> — qué se hizo: «Cuenta aprobada», «Equipo dado de baja»,
+      «Curso eliminado». La lista solo ofrece las cosas que de verdad pasaron en tu
+      escuela, así que no vas a elegir una y encontrar cero resultados.</li>
+    <li><b>Sobre qué</b> — sobre qué clase de cosa: un equipo, un curso, una cuenta.</li>
+    <li><b>Quién</b> — la persona, elegida por su apellido de una lista.</li>
+    <li><b>Desde</b> y <b>Hasta</b> — el período.</li>
+  </ul>
+
+  <p>
+    Cada línea trae <span class="boton">Ver el detalle</span>, que muestra lo que se
+    guardó de esa acción en particular. Y cuando la acción es sobre algo concreto
+    —una computadora, un curso—, trae también un botón que arma la
+    <b>historia completa de esa ficha</b>: todo lo que le pasó a esa máquina, de
+    principio a fin. Es la forma de reconstruir qué le viene pasando a una
+    computadora que da problemas.
+  </p>
+
+  <div class="nota">
+    <span class="titulo">No se puede editar ni borrar</span>
+    Ni vos ni nadie. Un registro que se puede retocar no sirve para lo que existe.
+    Tampoco hace falta mantenerlo: se escribe solo.
+  </div>
+
+  <div class="nota">
+    <span class="titulo">Si una línea dice «Una cuenta que después se eliminó»</span>
+    Es que quien hizo esa acción ya no tiene cuenta en el sistema. La acción queda
+    igual: que la persona se haya ido no borra lo que hizo.
+  </div>
+</section>
+
+<!-- 18 ───────────────────────────────────────────────────────────── -->
+<section class="cap">
+  <h2><span class="n">18</span>Tus horarios de atención</h2>
 
   <p class="entrada">
     Los docentes tienen una pantalla que les dice en qué días y horarios está cada
     Admin. La cargás vos, para vos — y además es lo que le dice al sistema cuándo
     puede confiar en lo que ve.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-17-horarios-admin.png" alt="Pantalla de disponibilidad de los Admin">
+    <figcaption>Tu horario, cargado por vos; los docentes lo ven en «Horario Admins».</figcaption>
+  </figure>
 
   <ol class="pasos">
     <li>Entrá a <b>Horario Admins</b>, en la barra de arriba.</li>
@@ -1285,13 +1601,18 @@
 
 <!-- 18 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">18</span>Tus avisos y tus correos</h2>
+  <h2><span class="n">19</span>Tus avisos y tus correos</h2>
 
   <p class="entrada">
     Un Admin recibe, además de sus propios avisos, los del laboratorio: cuentas
     pendientes, licencias por vencer, pedidos de ayuda, equipos que quedaron
     afuera al cerrar.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-18-avisos.png" alt="Pantalla de avisos de un administrador">
+    <figcaption>Los avisos de administración, más el buzón de pedidos de ayuda.</figcaption>
+  </figure>
 
   <p>
     Si te llegan demasiados correos, en <b>Copias por correo</b> →
@@ -1308,15 +1629,20 @@
   </div>
 </section>
 
-<!-- 19 ───────────────────────────────────────────────────────────── -->
+<!-- 20 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">19</span>Tu perfil</h2>
+  <h2><span class="n">20</span>Tu perfil</h2>
 
   <p class="entrada">
     Un Admin también tiene su cuenta, y se maneja igual que la de cualquier docente.
     Se llega desde tu inicial o tu foto, arriba a la derecha, en
     <b>Mi cuenta → Mi perfil</b>.
   </p>
+
+  <figure>
+    <img src="imagenes/admin-21-perfil.png" alt="La pantalla Mi perfil de un Admin">
+    <figcaption>Tu foto, tu nombre, tus materias y tu contraseña, todo en un lugar.</figcaption>
+  </figure>
 
   <h3>Tu foto</h3>
   <p>
@@ -1355,9 +1681,9 @@
   </div>
 </section>
 
-<!-- 20 ───────────────────────────────────────────────────────────── -->
+<!-- 21 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">20</span>Una rutina que funciona</h2>
+  <h2><span class="n">21</span>Una rutina que funciona</h2>
 
   <p class="entrada">
     No hace falta mirar todo todos los días. Con esto alcanza.
@@ -1405,9 +1731,9 @@
   </div>
 </section>
 
-<!-- 21 ───────────────────────────────────────────────────────────── -->
+<!-- 22 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">21</span>Si algo no sale como esperabas</h2>
+  <h2><span class="n">22</span>Si algo no sale como esperabas</h2>
 
   <div class="pregunta">
     <h3>Un docente dice que no puede reservar</h3>
@@ -1463,9 +1789,9 @@
   </div>
 </section>
 
-<!-- 22 ───────────────────────────────────────────────────────────── -->
+<!-- 23 ───────────────────────────────────────────────────────────── -->
 <section class="cap">
-  <h2><span class="n">22</span>Las palabras que vas a ver</h2>
+  <h2><span class="n">23</span>Las palabras que vas a ver</h2>
 
   <dl class="glosario">
     <dt>Ciclo lectivo</dt>
