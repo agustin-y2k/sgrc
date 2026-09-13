@@ -625,6 +625,29 @@ Y como el binario migra al arrancar, una migración que falla es **un
 contenedor que no levanta**. También es a propósito: prefiere no arrancar
 antes que atender con el esquema a medias.
 
+#### Después de desplegar, el navegador puede seguir en la versión vieja
+
+Los assets llevan el hash en el nombre y se sirven con `immutable, max-age=1
+año`; quien decide cuáles se usan es `index.html`, que va con `no-cache` para
+que el navegador lo revalide en cada carga. **Esa segunda mitad faltó hasta la
+1.20 y se pagó al desplegarla**: el navegador tenía guardado el `index.html`
+viejo, que apunta a los JS viejos —que también tenía cacheados, y para
+siempre—, así que corría la SPA anterior entera contra el backend nuevo. El
+síntoma fue «Cannot GET /api/auth/me» en la pantalla de ingreso: el 404 de
+Fiber a una ruta que el backend ya había renombrado a `/api/mi-perfil`.
+
+Si aparece algo así después de un deploy, antes de tocar nada conviene comparar
+qué bundle sirve el contenedor contra cuál entrega el sitio:
+
+```bash
+docker compose exec frontend grep -o '/assets/[^"]*\.js' /usr/share/nginx/html/index.html
+curl -s https://TU-DOMINIO/ | grep -o '/assets/[^"]*\.js'
+```
+
+Si coinciden, el servidor está bien y lo viejo es el navegador: un
+`Ctrl+Shift+R` lo resuelve. Si no coinciden, hay una caché intermedia (mirá
+`cf-cache-status` en los headers).
+
 #### Desplegar un cambio de esquema
 
 ```bash
