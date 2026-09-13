@@ -234,14 +234,25 @@ independientes —si uno falla, los demás igual terminan—:
 | **Frontend — lint, build y tests** | `npm ci`, `npm run lint`, `npm run build`, `vitest run` |
 | **Imágenes de Docker** | `docker build` de las dos imágenes, sin publicarlas |
 
-Hay un segundo workflow, `capturas.yml`, que regenera las capturas de las guías
-y verifica que las commiteadas no hayan quedado viejas (ver
-`docs/guias/generar/README.md`). Corre sólo cuando cambia la interfaz o las
-guías, porque levanta el sistema entero.
+**Las capturas de las guías NO las controla CI**, y es una decisión tomada
+después de probarlo. Hubo un workflow que las regeneraba en cada push y fallaba
+si alguna dejaba de coincidir con la commiteada; la comparación era por
+porcentaje de píxeles, con un umbral medido. No alcanzó: la barra es
+`sticky top-0` y en una captura de página completa se dibuja donde esté el
+scroll, así que dos corridas del mismo commit marcaban pantallas distintas por
+un 10% de diferencia que no era un cambio. A eso se sumaba que bastaba un
+`.env.capturas` distinto del de CI —el botón de Google aparece o no según la
+configuración— para que el portón no pudiera estar verde nunca.
 
-**Ninguno de los dos corre en `main`**, y es a propósito: todo lo que llega ahí
-llega por un merge de `develop`, así que sería el mismo árbol validado dos
-veces. Lo que importa es que el rojo aparezca **antes** del merge, que es cuando
+Regenerar es ahora parte de commitear: `make capturas` antes de subir un cambio
+de interfaz. Lo que sigue frenando, dentro de esa misma corrida y en la máquina
+de quien la hace, es `preparar-imagenes.py --estricto`: si un script de captura
+falló y alguna imagen no se generó, el pipeline corta. Eso es lo que atrapa un
+selector podrido, que es como esto se rompía de verdad.
+
+**El workflow que queda no corre en `main`**, y es a propósito: todo lo que
+llega ahí llega por un merge de `develop`, así que sería el mismo árbol validado
+dos veces. Lo que importa es que el rojo aparezca **antes** del merge, que es cuando
 todavía sirve para decidir algo.
 
 Cuatro decisiones que conviene conocer antes de tocar el archivo:

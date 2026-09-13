@@ -22,24 +22,23 @@ casi idénticas, **salvo las que muestran una fecha o una hora**: esas cambian e
 cada corrida porque los datos se siembran con `now()`, y la de inicio saluda
 según la hora. La diferencia es siempre la franja del reloj.
 
-**Y no depende de que nadie se acuerde.** El workflow `capturas.yml` lo corre
-solo cuando cambia `frontend/src/**` o `docs/guias/**`, y hace dos cosas:
+**Regenerar es parte de commitear, no de CI.** Hubo un workflow que las
+regeneraba en cada push y fallaba si alguna dejaba de coincidir con la
+commiteada. La idea era buena y el resultado no: la comparación por píxeles
+marcaba como cambiadas pantallas que no habían cambiado —la barra es
+`sticky top-0` y en una captura de página completa se dibuja donde esté el
+scroll, un 10% de diferencia por nada—, y bastaba con que el `.env.capturas`
+de quien regeneró no fuera igual al de CI para que el portón no pudiera estar
+verde nunca. Dos corridas seguidas del mismo commit señalaban pantallas
+distintas. Una alarma que suena sola deja de mirarse, y además frenaba pushes
+que estaban bien.
 
-- **Falla si alguna captura no se generó** —`--estricto`—, que es lo que atrapa
-  un selector podrido. Vale para las sesenta.
-- **Falla si una captura cambió de verdad** respecto de la que está en git: la
-  interfaz se movió y nadie regeneró. Lo decide `comparar-capturas.py` con un
-  umbral del 2% de píxeles, que no se estimó — se midió comparando dos corridas
-  del mismo commit. Ahí abajo del 0,6% está el ruido del reloj y arriba del 5%
-  los cambios reales; entre medio no hay nada, y el umbral vive en ese hueco. El
-  archivo mismo lo explica.
-
-  La idea anterior era una lista de pantallas a ignorar. No funcionaba: había que
-  agregarle una por cada corrida en rojo, y cada agregado apagaba el control
-  justo donde acababa de fallar.
-
-Ese es el punto: hasta la 1.21 el pipeline estaba automatizado pero había que
-invocarlo, y por eso las capturas envejecían igual.
+Así que el control es de acá: **antes de commitear un cambio de interfaz, se
+corre `make capturas` y se commitea lo que cambió.** Lo que sí sigue frenando
+—y corre en esa misma corrida, en tu máquina— es `preparar-imagenes.py
+--estricto`: si un script de captura falló y alguna imagen no se generó, el
+pipeline corta. Eso es lo que atrapa un selector podrido, que es como esto se
+rompía de verdad, y no necesita a GitHub para funcionar.
 
 ## Cuando sólo cambia el texto o la versión
 
