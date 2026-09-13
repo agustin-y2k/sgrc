@@ -10,6 +10,7 @@ import type {
   LoginRequest,
   LoginResponse,
   OlvidePasswordRequest,
+  OpcionesDeRegistro,
   RegistroRequest,
   ResetPasswordResponse,
   RestablecerPasswordRequest,
@@ -44,6 +45,18 @@ export function registrarConGoogle(req: GoogleRegistroRequest) {
 /** Configuración pública, sin sesión. */
 export function configPublica() {
   return apiFetch<ConfigPublica>("/api/auth/config")
+}
+
+/**
+ * Los cursos y las materias que existen, para que el formulario de registro los
+ * ofrezca en vez de hacerlos escribir. PÚBLICA, como el registro mismo.
+ *
+ * Trae sólo nombres del ciclo activo: no son referencias: lo que se manda al
+ * registrarse sigue siendo texto, porque quien se anota puede trabajar en algo
+ * que todavía no está cargado.
+ */
+export function opcionesDeRegistro() {
+  return apiFetch<OpcionesDeRegistro>("/api/registro/opciones")
 }
 
 export function me() {

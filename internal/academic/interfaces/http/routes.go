@@ -21,6 +21,14 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	autenticado := aut.Requerida()
 	soloAdmin := middleware.RequireRol("ADMIN")
 
+	// PÚBLICA: el formulario de registro se abre sin sesión, y necesita poder
+	// ofrecer los cursos y las materias que existen para que no se escriban a
+	// mano. Devuelve sólo nombres del ciclo activo (ver el handler).
+	//
+	// Con rate limit porque es la única ruta de este módulo que contesta sin
+	// token: sin él, es un listado gratis para cualquiera que la descubra.
+	academic.Get("/registro/opciones", middleware.RateLimit(30, time.Minute), h.OpcionesDeRegistro)
+
 	// Ciclo lectivo
 	academic.Post("/ciclos", autenticado, soloAdmin, h.CrearCiclo)
 	academic.Get("/ciclos/:id", autenticado, h.ObtenerCiclo)
@@ -52,6 +60,19 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	academic.Patch("/cursos/:id", autenticado, soloAdmin, h.EditarCurso)
 	academic.Delete("/cursos/:id", autenticado, soloAdmin, h.EliminarCurso)
 	academic.Post("/cursos/:id/copiar-materias", autenticado, soloAdmin, h.CopiarMaterias)
+
+	// Espacios (RF-02.13): Dirección, Biblioteca, Preceptoría. Colección
+	// hermana de /cursos y no un curso con una bandera — son otra cosa, y la
+	// URL lo dice.
+	//
+	// NO hay rutas de materias acá: estos lugares no dictan materias. Se
+	// reserva PARA el espacio, y la fila de materia que lo hace posible la crea
+	// y la mantiene el repositorio sin que nadie la vea (ver CrearEspacio).
+	academic.Post("/ciclos/:cicloId/espacios", autenticado, soloAdmin, h.CrearEspacio)
+	academic.Get("/ciclos/:cicloId/espacios", autenticado, h.ListarEspacios)
+	academic.Get("/espacios/:id", autenticado, h.ObtenerEspacio)
+	academic.Patch("/espacios/:id", autenticado, soloAdmin, h.EditarEspacio)
+	academic.Delete("/espacios/:id", autenticado, soloAdmin, h.EliminarEspacio)
 
 	// Materia
 	academic.Post("/cursos/:cursoId/materias", autenticado, soloAdmin, h.CrearMateria)

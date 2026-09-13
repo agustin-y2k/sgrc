@@ -159,3 +159,21 @@ export type ListarUsuariosResponse = {
   data: Usuario[]
   meta: PaginacionMeta
 }
+
+/**
+ * Lo que el registro ofrece para elegir. Sin ids a propósito: el curso y la
+ * materia que alguien declara al anotarse no son referencias a nada — son lo
+ * que dice que va a dictar, para que el Admin sepa a qué asignarlo (RF-01.3).
+ */
+export type LugarParaRegistro = {
+  nombre: string
+  modalidad?: string
+  /** Un curso dicta materias; un espacio (RF-02.13) no. */
+  tipo: "CURSO" | "ESPACIO"
+  /** Las de ESE lugar: el formulario ofrece las del curso elegido. */
+  materias: string[]
+}
+
+export type OpcionesDeRegistro = {
+  lugares: LugarParaRegistro[]
+}

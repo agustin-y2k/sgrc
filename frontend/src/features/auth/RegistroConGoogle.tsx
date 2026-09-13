@@ -26,6 +26,7 @@ import * as authApi from "@/features/auth/api"
 import {
   DeclaracionDeCargo,
   camposDeclarados,
+  exigeCursoYMateria,
   loQueDictaEseCargo,
 } from "@/features/auth/DeclaracionDeCargo"
 import { getErrorMessage } from "@/lib/api-client"
@@ -40,7 +41,7 @@ const registroGoogleSchema = z.object({
   nombre: z.string().min(1, "Requerido").max(100),
   apellido: z.string().min(1, "Requerido").max(100),
   ...camposDeclarados,
-})
+}).superRefine(exigeCursoYMateria)
 
 type RegistroGoogleValues = z.infer<typeof registroGoogleSchema>
 
