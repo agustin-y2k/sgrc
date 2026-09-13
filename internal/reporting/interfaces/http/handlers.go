@@ -127,7 +127,7 @@ func (h *Handler) HistoricoUsoDocentes(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/incidencias/equipos — RF-06.3, incidencias por equipo.
+// GET /api/incidencias/resumen/por-equipo — RF-06.3, incidencias por equipo.
 func (h *Handler) ReporteIncidenciasPorEquipo(c *fiber.Ctx) error {
 	desde, hasta, err := rangoDeQuery(c)
 	if err != nil {
@@ -146,7 +146,7 @@ func (h *Handler) ReporteIncidenciasPorEquipo(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/incidencias/carros — RF-06.3, incidencias por carro.
+// GET /api/incidencias/resumen/por-carro — RF-06.3, incidencias por carro.
 func (h *Handler) ReporteIncidenciasPorCarro(c *fiber.Ctx) error {
 	desde, hasta, err := rangoDeQuery(c)
 	if err != nil {
@@ -199,7 +199,7 @@ func (h *Handler) ReporteEquiposFueraDeCirculacion(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-// GET /api/incidencias/categorias — qué se rompe, agrupado por tipo
+// GET /api/incidencias/resumen/por-categoria — qué se rompe, agrupado por tipo
 // de falla.
 func (h *Handler) ReporteIncidenciasPorCategoria(c *fiber.Ctx) error {
 	desde, hasta, err := rangoDeQuery(c)

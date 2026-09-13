@@ -28,9 +28,25 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 
 	// RF-06.3: no dependen del ciclo lectivo — Incidencia sobrevive al
 	// archivado, así que siempre se resuelven en vivo.
-	reporting.Get("/incidencias/equipos", autenticado, soloAdmin, h.ReporteIncidenciasPorEquipo)
-	reporting.Get("/incidencias/carros", autenticado, soloAdmin, h.ReporteIncidenciasPorCarro)
-	reporting.Get("/incidencias/categorias", autenticado, soloAdmin, h.ReporteIncidenciasPorCategoria)
+	//
+	// Van bajo "/incidencias/resumen/..." y no bajo "/incidencias/<algo>", que
+	// es donde estaban: ahí chocaban con `GET /api/incidencias/:id`, que sirve
+	// `inventory`. Fiber resuelve por orden de registro y inventory se registra
+	// antes, así que "equipos" entraba como un id, no era un UUID, y las tres
+	// contestaban 400 «el ID indicado no tiene un formato válido». La pestaña de
+	// Reportes mostraba ese error y los reportes de incidencias no se ejecutaban
+	// nunca.
+	//
+	// La colisión la creó aplanar los prefijos: antes esto vivía en
+	// /api/reporting/incidencias/equipos y no se cruzaba con nada. El sistema ya
+	// tenía tres casos así, resueltos registrando el literal ANTES del :id
+	// dentro del mismo archivo (ver docs/06-arquitectura.md). Acá no alcanza:
+	// las dos rutas viven en MÓDULOS distintos, así que el orden se decide en
+	// cmd/main.go y no se ve desde ninguno de los dos routes.go. Un segmento más
+	// hace que no haya nada que ordenar.
+	reporting.Get("/incidencias/resumen/por-equipo", autenticado, soloAdmin, h.ReporteIncidenciasPorEquipo)
+	reporting.Get("/incidencias/resumen/por-carro", autenticado, soloAdmin, h.ReporteIncidenciasPorCarro)
+	reporting.Get("/incidencias/resumen/por-categoria", autenticado, soloAdmin, h.ReporteIncidenciasPorCategoria)
 
 	// RF-06.5: el estado del parque HOY. No dependen del ciclo lectivo ni
 	// aceptan rango de fechas — describen la situación actual, no un período.

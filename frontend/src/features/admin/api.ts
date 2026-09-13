@@ -279,13 +279,13 @@ export function historicoUsoDocentes(anio: number) {
 /** RF-06.3 — no depende del ciclo: Incidencia sobrevive al archivado. */
 export function reporteIncidenciasPorEquipo(desde?: string, hasta?: string) {
   return apiFetch<RespuestaLista<ResumenIncidenciasEquipo>>(
-    conRango("/api/incidencias/equipos", desde, hasta)
+    conRango("/api/incidencias/resumen/por-equipo", desde, hasta)
   )
 }
 
 export function reporteIncidenciasPorCarro(desde?: string, hasta?: string) {
   return apiFetch<RespuestaLista<ResumenIncidenciasCarro>>(
-    conRango("/api/incidencias/carros", desde, hasta)
+    conRango("/api/incidencias/resumen/por-carro", desde, hasta)
   )
 }
 
@@ -307,7 +307,7 @@ export function reporteEquiposFueraDeCirculacion() {
 /** Este sí acepta fechas: la pregunta es qué se rompió en un período. */
 export function reporteIncidenciasPorCategoria(desde?: string, hasta?: string) {
   return apiFetch<RespuestaLista<ResumenPorCategoriaDeFalla>>(
-    conRango("/api/incidencias/categorias", desde, hasta)
+    conRango("/api/incidencias/resumen/por-categoria", desde, hasta)
   )
 }
 

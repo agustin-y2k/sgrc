@@ -72,13 +72,55 @@ func idSecuencial() string {
 var testSecret = []byte("un-secreto-de-test-bastante-largo")
 
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
+	return montarEn(fiber.New(), repo)
+}
+
+// montarEn registra reporting sobre una app que ya puede tener otras rutas —
+// que es como corre de verdad: en cmd/main.go conviven los nueve módulos.
+func montarEn(app *fiber.App, repo *fakeRepo) *fiber.App {
 	contadorID = 0
 	svc := application.NewService(repo, &fakeInfoEquipo{}, &fakeInfoUsuario{}, idSecuencial)
 	h := NewHandler(svc)
 
-	app := fiber.New()
 	RegisterRoutes(app, h, registroDePrueba.Autenticacion(testSecret))
 	return app
+}
+
+// Los tres resúmenes de incidencias, con una ruta `:id` de la misma forma
+// registrada ANTES. Es la reproducción exacta de un bug que estuvo vivo:
+// `GET /api/incidencias/{id}` lo sirve `inventory`, que en cmd/main.go se
+// registra antes que `reporting`, y con los reportes colgando de
+// `/incidencias/<algo>` la palabra "equipos" entraba como id — no era un UUID,
+// y las tres respondían 400 «el ID indicado no tiene un formato válido». La
+// pestaña de Reportes mostraba ese error y estos handlers no corrían nunca.
+//
+// El test registra el intruso PRIMERO a propósito: si alguien vuelve a acortar
+// estas rutas a un solo segmento, acá se ve, y no en producción.
+func TestHTTP_ResumenDeIncidencias_NoLasComeLaRutaConParametro(t *testing.T) {
+	app := fiber.New()
+	// El de inventory, tal como se registra en cmd/main.go: antes que reporting.
+	app.Group("/api").Get("/incidencias/:id", func(c *fiber.Ctx) error {
+		return fiber.NewError(fiber.StatusBadRequest, "el ID indicado no tiene un formato válido")
+	})
+	montarEn(app, &fakeRepo{})
+
+	for _, ruta := range []string{
+		"/api/incidencias/resumen/por-equipo",
+		"/api/incidencias/resumen/por-carro",
+		"/api/incidencias/resumen/por-categoria",
+	} {
+		req := httptest.NewRequest("GET", ruta, nil)
+		req.Header.Set("Authorization", "Bearer "+tokenPara("a1", "ADMIN"))
+
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("%s: error inesperado: %v", ruta, err)
+		}
+		if resp.StatusCode != fiber.StatusOK {
+			t.Errorf("%s: esperaba 200 del reporte, obtuve %d — se la comió la ruta con parámetro",
+				ruta, resp.StatusCode)
+		}
+	}
 }
 
 // registroDePrueba hace de tabla usuario para el middleware de autenticación:
