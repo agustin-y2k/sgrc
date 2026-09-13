@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router"
 
@@ -281,6 +281,27 @@ describe("InicioPage", () => {
     expect(pendientes).toHaveAttribute("href", "/admin/aprobacion")
   })
 
+  // La portada del Admin no repite su propia barra. Los nueve atajos
+  // nombraban nueve pantallas que están arriba, a un clic, desde cualquier
+  // lado — y se llevaban un tercio del ancho de la pantalla que más usa.
+  it("a un Admin no le repite en tarjetas los enlaces que ya tiene en la barra", async () => {
+    mockUsuario(ADMIN)
+    renderInicio()
+
+    await screen.findByText("Lo que viene")
+    expect(screen.queryByText("Otras cosas que podés hacer")).not.toBeInTheDocument()
+    expect(screen.queryByText("Ver las computadoras")).not.toBeInTheDocument()
+  })
+
+  // Para el docente la barra tiene cuatro ítems y ninguno de estos: ahí los
+  // atajos no repiten nada, son el único camino.
+  it("al docente sí se los deja", async () => {
+    mockUsuario(DOCENTE)
+    renderInicio()
+
+    expect(await screen.findByText("Otras cosas que podés hacer")).toBeInTheDocument()
+  })
+
   /**
    * El fallo más caro de esta pantalla no es quedarse en blanco: es afirmar
    * que no hay nada.
@@ -337,8 +358,9 @@ describe("InicioPage", () => {
     mockUsuario(ADMIN)
     renderInicio()
 
-    expect(await screen.findByText("Para entregar ahora")).toBeInTheDocument()
+    expect(await screen.findByText("Para entregar hoy")).toBeInTheDocument()
     expect(screen.queryByText("Ahora en el laboratorio")).not.toBeInTheDocument()
+    expect(screen.queryByText("Hoy en el laboratorio")).not.toBeInTheDocument()
   })
 
   // "Afuera del laboratorio" ya estaba; faltaba la pregunta dada vuelta.
@@ -358,7 +380,9 @@ describe("InicioPage", () => {
     })
     renderInicio()
 
-    expect(await screen.findByText("13 de 13 equipos")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByText("acá ahora").closest("a")).toHaveTextContent("13 de 13")
+    )
   })
 
   // Es información de mostrador: un docente no opera entregas.
@@ -374,20 +398,72 @@ describe("InicioPage", () => {
    * El orden es la funcionalidad: entregar y recibir se opera todo el día con
    * gente esperando, y los contadores se miran una vez.
    */
-  it("al Admin le pone el mostrador antes que los contadores", async () => {
+  /**
+   * Al revés que antes, y a propósito.
+   *
+   * La razón vieja para poner el mostrador arriba de los contadores era que
+   * atender gente es más urgente que mirar números, y sigue siendo cierta. Lo
+   * que cambió es QUÉ hay en la tira: ahora lleva "acá ahora" —con cuántas
+   * máquinas cuento si golpean la puerta—, que es una pregunta del mostrador y
+   * no un contador administrativo. Son cien píxeles de alto fijo y la cola
+   * sigue entrando en la primera pantalla.
+   */
+  it("al Admin le pone los números arriba y la cola debajo", async () => {
     mockUsuario(ADMIN)
     renderInicio()
 
-    const mostrador = await screen.findByText("Para entregar ahora")
-    const contador = screen.getByText("por aprobar")
+    const numeros = await screen.findByText("por aprobar")
+    const cola = screen.getByText("Para entregar hoy")
     expect(
-      mostrador.compareDocumentPosition(contador) & Node.DOCUMENT_POSITION_FOLLOWING
+      numeros.compareDocumentPosition(cola) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
+  })
+
+  // Lo que crece va a ancho completo y abajo de la cola: "Afuera" son
+  // diecinueve equipos un lunes cualquiera, y compartía la fila con una
+  // columna de 300px que dejaba mil doscientos píxeles en blanco al lado.
+  it("pone «Afuera del laboratorio» después de la cola y a lo ancho", async () => {
+    mockUsuario(ADMIN)
+    renderInicio()
+
+    const cola = await screen.findByText("Para entregar hoy")
+    const afuera = screen.getByText("Afuera del laboratorio")
+    expect(
+      cola.compareDocumentPosition(afuera) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  /**
+   * «Lo que viene» del Admin empieza mañana: lo de hoy está arriba, en la cola
+   * del mostrador, con el docente, los equipos y el botón para entregarlos.
+   * Repetirlo abajo en un renglón más pobre llenaba la tarjeta con las mismas
+   * cinco clases que ya estaban a la vista.
+   */
+  it("a un Admin no le repite abajo las clases de hoy", async () => {
+    mockUsuario(ADMIN)
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([
+        // De hoy y todavía por empezar, para que el filtro por hora no la
+        // saque: lo que la deja afuera de «Lo que viene» es la FECHA.
+        reserva({
+          id: "r-hoy",
+          reservaGrupoId: "g-hoy",
+          horaInicio: "23:00",
+          horaFin: "23:59",
+          materiaNombre: "Clase de hoy",
+        }),
+      ])
+    )
+    renderInicio()
+
+    await screen.findByText("Lo que viene")
+    expect(screen.queryByText(/Clase de hoy/)).not.toBeInTheDocument()
+    expect(screen.getByText(/No hay nada reservado para los próximos días/)).toBeInTheDocument()
   })
 
   // Bajarlos no es sacarlos: una cuenta pendiente es un docente que no puede
   // trabajar, y nadie la va a buscar si ninguna pantalla la nombra.
-  it("los contadores siguen estando, solo que abajo", async () => {
+  it("los contadores siguen estando", async () => {
     mockUsuario(ADMIN)
     renderInicio()
 

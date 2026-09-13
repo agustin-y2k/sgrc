@@ -188,6 +188,27 @@ describe("AppLayout", () => {
     expect(screen.queryByLabelText(/fuera del laboratorio/)).not.toBeInTheDocument()
   })
 
+  // El camino de vuelta a la portada tiene que estar ESCRITO. Apretar el logo
+  // también volvía, pero eso se sabe por costumbre de navegar la web, no
+  // porque la barra lo diga — y la portada del Admin es la pantalla del
+  // mostrador, la que más se usa.
+  it("el camino de vuelta a la portada se llama Inicio", async () => {
+    renderLayout("ADMIN")
+
+    const inicio = await screen.findByRole("link", { name: "Inicio" })
+    expect(inicio).toHaveAttribute("href", "/")
+  })
+
+  // El logo es el nombre del sistema, no un control: un botón que no se
+  // anuncia como botón no es un camino, es un dato que hay que saber de antes.
+  it("el logo no es un enlace", async () => {
+    renderLayout("ADMIN")
+
+    await screen.findByRole("link", { name: "Inicio" })
+    expect(screen.getByText("SGRC")).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /SGRC/ })).not.toBeInTheDocument()
+  })
+
   // Un docente no tiene la pantalla de entregas ni permiso para consultarla:
   // pedirla igual sería un 403 en cada carga de página.
   it("a un docente no se le consultan los préstamos", async () => {

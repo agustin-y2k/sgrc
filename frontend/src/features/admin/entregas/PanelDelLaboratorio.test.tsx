@@ -41,6 +41,7 @@ function prestamo(over: Partial<Prestamo> = {}): Prestamo {
   return {
     id: "pr1",
     equipoId: "pc1",
+    reservaId: "res1",
     entregadoANombre: "Ada Lovelace",
     entregadoEn: "2026-08-11T08:05:00Z",
     abierto: true,
@@ -97,7 +98,7 @@ describe("PanelDelLaboratorio", () => {
     // El corte lo hace la hora, no el orden: a las 8:30 la de 8 a 9 está en
     // curso y la de 10 a 11 todavía no empezó.
     expect(await screen.findByText(/1 clase en curso/)).toBeInTheDocument()
-    expect(screen.getByText(/1 clase por empezar/)).toBeInTheDocument()
+    expect(screen.getByText(/1 por empezar/)).toBeInTheDocument()
     expect(screen.getByText(/08:00–09:00 · Matemáticas/)).toBeInTheDocument()
     expect(screen.getByText(/10:00–11:00 · Física/)).toBeInTheDocument()
     // Solo la que está pasando lleva el distintivo.
@@ -117,7 +118,10 @@ describe("PanelDelLaboratorio", () => {
     })
     renderPanel()
 
-    expect(await screen.findByText("PC 1 · Carro 1 entregada")).toBeInTheDocument()
+    // El resumen cuenta; los chips nombran solo lo que hay que ir a buscar.
+    // Doce chips "PC 7 · Carro 1 entregada" eran doscientos píxeles para
+    // contar hasta doce.
+    expect(await screen.findByText("1 entregada de 2 computadoras")).toBeInTheDocument()
     expect(screen.getByText("PC 2 · Carro 1 sin retirar")).toBeInTheDocument()
   })
 
@@ -203,13 +207,15 @@ describe("PanelDelLaboratorio", () => {
     )
     renderPanel()
 
-    expect(await screen.findByText("No hay ninguna clase en curso.")).toBeInTheDocument()
+    expect(
+      await screen.findByText("Hoy no hay ninguna clase con equipos reservados.")
+    ).toBeInTheDocument()
   })
 
   it("pide el día completo sin que la paginación le coma reservas", async () => {
     renderPanel()
 
-    await screen.findByText("No hay ninguna clase en curso.")
+    await screen.findByText("Hoy no hay ninguna clase con equipos reservados.")
     expect(reservasApi.listarReservas).toHaveBeenCalledWith({
       desde: HOY,
       hasta: HOY,
@@ -223,6 +229,95 @@ describe("PanelDelLaboratorio", () => {
     renderPanel()
 
     expect(await screen.findByText(/Hoy ya pasó 1 clase/)).toBeInTheDocument()
+  })
+
+  /**
+   * El bug que destapó cargar un día de verdad: nueve de once clases decían
+   * tener entregadas máquinas que nadie había sacado.
+   *
+   * La misma PC la reservan varias clases a lo largo del día. Marcando por
+   * EQUIPO, una entrega a las once pintaba de verde el día entero — y el
+   * botón ofrecía "Entregar (2)" cuando faltaban las diez. Lo que dice si una
+   * clase ya recibió sus máquinas es su propia reserva, no el equipo.
+   */
+  it("no da por entregada una clase porque su equipo salió con otra", async () => {
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([
+        reserva({
+          id: "res-tarde",
+          reservaGrupoId: "grupo-tarde",
+          horaInicio: "10:00",
+          horaFin: "11:00",
+          materiaNombre: "Física",
+        }),
+      ])
+    )
+    // El mismo equipo (pc1), pero prestado por OTRA reserva.
+    vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
+      data: [prestamo({ reservaId: "res-de-la-mañana" })],
+    })
+    renderPanel()
+
+    expect(await screen.findByText(/0 entregadas de 1 computadora/)).toBeInTheDocument()
+  })
+
+  /**
+   * Y la otra mitad: tampoco se puede ofrecer para entregar, porque la
+   * máquina está físicamente afuera. Decir por qué es más útil que dejarla
+   * en "sin retirar" y que la entrega falle contra el servidor.
+   *
+   * En una clase que todavía no empezó eso se cuenta, no se enumera: sus
+   * máquinas están con la clase de ahora y van a volver antes.
+   */
+  it("cuenta las que siguen afuera en vez de ofrecer entregarlas", async () => {
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([
+        reserva({
+          id: "res-tarde",
+          reservaGrupoId: "grupo-tarde",
+          horaInicio: "10:00",
+          horaFin: "11:00",
+        }),
+      ])
+    )
+    vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
+      data: [prestamo({ reservaId: "res-de-la-mañana" })],
+    })
+    renderPanel()
+
+    expect(await screen.findByText(/1 todavía con otra clase/)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Entregar/ })).not.toBeInTheDocument()
+  })
+
+  /**
+   * El detalle equipo por equipo solo en la clase que está pasando: es la
+   * única en la que alguien va a ir a buscar una máquina ahora.
+   *
+   * Con un día a full eran doce chips naranjas por cada clase futura, ciento
+   * treinta píxeles cada una, contando algo que a las once no se hace.
+   */
+  it("nombra máquina por máquina solo en la clase en curso", async () => {
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([
+        // En curso a las 8:30.
+        reserva(),
+        // A las 10, con su propio equipo.
+        reserva({
+          id: "res-tarde",
+          reservaGrupoId: "grupo-tarde",
+          equipoId: "pc2",
+          identificador: 2,
+          horaInicio: "10:00",
+          horaFin: "11:00",
+        }),
+      ])
+    )
+    renderPanel()
+
+    expect(await screen.findByText("PC 1 · Carro 1 sin retirar")).toBeInTheDocument()
+    expect(screen.queryByText("PC 2 · Carro 1 sin retirar")).not.toBeInTheDocument()
+    // Pero el resumen está en las dos: es lo que reemplaza a los chips.
+    expect(screen.getAllByText(/0 entregadas de 1 computadora/)).toHaveLength(2)
   })
 
   /**

@@ -1,15 +1,22 @@
 import { useQuery } from "@tanstack/react-query"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import * as adminApi from "@/features/admin/api"
 import {
   PRESTAMOS_KEY,
   REFRESCO_DEL_MOSTRADOR,
 } from "@/features/admin/entregas/compartido"
+import { Indicador } from "@/features/inicio/Indicador"
 import * as reservasApi from "@/features/reservas/api"
-import { contar, plural } from "@/lib/plural"
+import { contar } from "@/lib/plural"
 
-/** Cuántos equipos están físicamente acá en este momento. */
+/**
+ * Cuántos equipos están físicamente acá en este momento.
+ *
+ * Es una celda de la tira de estado y ya no una tarjeta propia: era un número
+ * de un vistazo dibujado como panel, arriba de la mitad de la pantalla y
+ * separado de los otros cuatro números por toda la portada. Lo que se mira de
+ * reojo va junto y arriba.
+ */
 export function EnElLaboratorio() {
   const { data: inventario, error: errorInventario } = useQuery({
     queryKey: ["reporte", "inventario", "estado"],
@@ -23,23 +30,7 @@ export function EnElLaboratorio() {
     refetchInterval: REFRESCO_DEL_MOSTRADOR,
   })
 
-  // Un fallo no puede convertirse en un cero: "0 afuera" y "no se pudo
-  // consultar" llevan a decisiones opuestas, y el mostrador se opera con esto
-  // a la vista.
-  if (errorInventario || errorPrestamos) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>En el laboratorio ahora</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground text-sm">
-            No se pudo consultar cuántos equipos hay acá.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
+  const fallo = errorInventario || errorPrestamos
 
   const filas = inventario?.data ?? []
   // El total del inventario ya viene sin los dados de baja: no son parte del
@@ -53,39 +44,26 @@ export function EnElLaboratorio() {
   // Un préstamo no cambia el estado del equipo, así que "afuera" se cuenta
   // aparte y puede incluir una máquina que salió camino al técnico.
   const afuera = prestamos?.data.length ?? 0
-  const presentes = total - afuera
 
+  // Un fallo no puede convertirse en un cero: "0 afuera" y "no se pudo
+  // consultar" llevan a decisiones opuestas, y el mostrador se opera con esto
+  // a la vista. El Indicador dibuja un guion cuando el valor es null.
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>En el laboratorio ahora</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-1">
-        <p className="text-2xl font-semibold tabular-nums">
-          {presentes} de {contar(total, "equipo")}
-        </p>
-        {/* "en circulación" es vocabulario de depósito: dice si una máquina
-            está en condiciones de prestarse, pero hay que saberlo de antes.
-            En el mostrador se atiende con alguien esperando enfrente, así que
-            la línea tiene que leerse sin traducir nada. */}
-        <p className="text-muted-foreground text-sm">
-          {afuera} afuera ·{" "}
-          {fueraDeCirculacion === 0
-            ? "todas las demás se pueden usar"
-            : `${fueraDeCirculacion} sin poder usarse`}
-        </p>
-        {fueraDeCirculacion > 0 && (
-          <p className="text-muted-foreground text-xs">
-            {plural(
-              fueraDeCirculacion,
-              "La que no se puede usar sigue",
-              "Las que no se pueden usar siguen"
-            )}{" "}
-            en el laboratorio, pero no se{" "}
-            {plural(fueraDeCirculacion, "entrega", "entregan")}.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <Indicador
+      valor={fallo ? null : total - afuera}
+      sufijo={fallo ? undefined : `de ${total}`}
+      rotulo="acá ahora"
+      detalle={
+        fallo
+          ? "No se pudo consultar"
+          : // "en circulación" es vocabulario de depósito: dice si una máquina
+            // está en condiciones de prestarse, pero hay que saberlo de antes.
+            // En el mostrador se atiende con alguien esperando enfrente.
+            fueraDeCirculacion === 0
+            ? `${contar(total, "equipo")}, todos usables`
+            : `${fueraDeCirculacion} no se pueden usar`
+      }
+      a="/inventario"
+    />
   )
 }

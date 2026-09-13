@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router"
 
@@ -27,7 +27,17 @@ import { contar, plural } from "@/lib/plural"
 /**
  * La cola del mostrador: qué clase está en curso, qué viene después, y qué
  * máquinas hay que entregarle a cada docente.
+ *
+ * **Una sola tarjeta y no dos.** «Para entregar ahora» y «Lo que sigue hoy»
+ * eran la misma lista partida por un `if` de hora, con el mismo componente
+ * adentro. En dos columnas se desbalanceaban —dos clases de un lado, cinco del
+ * otro— y en un día sin clases quedaban dos cajas vacías ocupando el mejor
+ * lugar de la portada. Una lista cronológica dice lo mismo, se lee de arriba a
+ * abajo como pasa el día, y cuando no hay nada es un renglón.
  */
+
+/** Cuántas clases por empezar se resumen antes de mandar al listado. */
+const MAX_SIGUIENTES = 4
 
 /** HH:MM a minutos, para comparar contra la hora actual. */
 function enMinutos(hhmm: string): number {
@@ -74,23 +84,50 @@ function agruparPorClase(reservas: ReservaDetallada[]): ReservaDelDia[] {
   return [...porGrupo.values()].sort((a, b) => a.horaInicio.localeCompare(b.horaInicio))
 }
 
+/** Qué está afuera, mirado desde las dos claves que hacen falta. */
+type Afuera = {
+  /**
+   * Las RESERVAS que tienen un préstamo abierto. Esta es la que dice si una
+   * clase ya recibió sus máquinas.
+   */
+  reservas: Set<string>
+  /**
+   * Los EQUIPOS que están fuera del laboratorio, por el motivo que sea. Una
+   * máquina que salió con la clase anterior no se le puede entregar a la
+   * siguiente aunque la tenga reservada.
+   */
+  equipos: Set<string>
+}
+
 function Clase({
   clase,
   afuera,
   enCurso,
 }: {
   clase: ReservaDelDia
-  afuera: Set<string>
+  afuera: Afuera
   enCurso: boolean
 }) {
   const queryClient = useQueryClient()
   const [retiradoPor, setRetiradoPor] = useState("")
   const [abriendoNombre, setAbriendoNombre] = useState(false)
 
-  const sinRetirar = clase.reservas.filter(
-    (r) => r.estado === "CONFIRMADA" && !afuera.has(r.equipoId)
+  // Entregada es la reserva que tiene SU préstamo abierto, no la que usa un
+  // equipo que está afuera.
+  //
+  // Mirar el equipo era el error: la misma máquina la reservan varias clases
+  // a lo largo del día, así que una entrega a las once pintaba de verde el día
+  // entero. Con un día real cargado, nueve de once clases decían tener
+  // entregadas máquinas que nadie había sacado, y el botón ofrecía "Entregar
+  // (2)" cuando faltaban las diez.
+  const entregadas = clase.reservas.filter((r) => afuera.reservas.has(r.id))
+  const pendientes = clase.reservas.filter(
+    (r) => r.estado === "CONFIRMADA" && !afuera.reservas.has(r.id)
   )
-  const entregadas = clase.reservas.filter((r) => afuera.has(r.equipoId))
+  // Reservada para esta clase pero todavía afuera con otro: no se puede
+  // entregar, y decirlo es más útil que no nombrarla.
+  const ocupadas = pendientes.filter((r) => afuera.equipos.has(r.equipoId))
+  const sinRetirar = pendientes.filter((r) => !afuera.equipos.has(r.equipoId))
   const liberadas = clase.reservas.filter((r) => r.estado === "NO_RETIRADA")
 
   const entregar = useMutation({
@@ -122,25 +159,48 @@ function Clase({
         {enCurso && <EstadoBadge tono="info">En curso</EstadoBadge>}
       </div>
 
-      <div className="flex flex-wrap gap-1.5 text-xs">
-        {entregadas.map((r) => (
-          <EstadoBadge key={r.id} tono="exito">
-            {nombreDeEquipo(r)} entregada
-          </EstadoBadge>
-        ))}
-        {/* "Sin retirar" no es lo mismo que "liberada": la primera todavía
-            está guardada para este docente, la segunda ya no. */}
-        {sinRetirar.map((r) => (
-          <EstadoBadge key={r.id} tono="neutro">
-            {nombreDeEquipo(r)} sin retirar
-          </EstadoBadge>
-        ))}
-        {liberadas.map((r) => (
-          <EstadoBadge key={r.id} tono="alerta">
-            {nombreDeEquipo(r)} liberada
-          </EstadoBadge>
-        ))}
-      </div>
+      {/* El resumen antes que el detalle: con doce máquinas, doce chips que
+          dicen "PC 7 · Carro 1 entregada" son doscientos píxeles para contar
+          hasta doce. El renglón dice cuántas de cuántas; los chips quedan
+          para lo que hay que ir a buscar. */}
+      <p className="text-muted-foreground text-sm">
+        {/* La concordancia va con las entregadas, que es el sujeto: "1
+            entregada de 12 computadoras", "0 entregadas de 1 computadora". */}
+        {entregadas.length} {plural(entregadas.length, "entregada")} de{" "}
+        {contar(clase.reservas.length, "computadora")}
+        {ocupadas.length > 0 && ` · ${ocupadas.length} todavía con otra clase`}
+      </p>
+
+      {/* El detalle equipo por equipo, SOLO en la clase que está pasando.
+          Para una de la tarde no es información, es ruido: sus máquinas están
+          afuera con la clase de ahora y van a volver antes. Con un día a full
+          eran doce chips naranjas por cada clase futura —ciento treinta
+          píxeles cada una— contando algo que a las once no se hace. */}
+      {(enCurso || liberadas.length > 0) && (
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          {/* "Sin retirar" no es lo mismo que "liberada": la primera todavía
+              está guardada para este docente, la segunda ya no. */}
+          {enCurso &&
+            sinRetirar.map((r) => (
+              <EstadoBadge key={r.id} tono="neutro">
+                {nombreDeEquipo(r)} sin retirar
+              </EstadoBadge>
+            ))}
+          {enCurso &&
+            ocupadas.map((r) => (
+              <EstadoBadge key={r.id} tono="alerta">
+                {nombreDeEquipo(r)} todavía afuera
+              </EstadoBadge>
+            ))}
+          {/* Las liberadas se nombran siempre: es la excepción que alguien
+              tiene que ver, empezó o no la clase. */}
+          {liberadas.map((r) => (
+            <EstadoBadge key={r.id} tono="alerta">
+              {nombreDeEquipo(r)} liberada
+            </EstadoBadge>
+          ))}
+        </div>
+      )}
 
       {entregar.error && (
         <Alert variant="destructive">
@@ -189,7 +249,7 @@ function Clase({
   )
 }
 
-export function PanelDelLaboratorio() {
+export function PanelDelLaboratorio({ accion }: { accion?: ReactNode }) {
   const hoy = hoyISO()
 
   const { data: prestamos } = useQuery({
@@ -206,10 +266,15 @@ export function PanelDelLaboratorio() {
     refetchInterval: REFRESCO_DEL_MOSTRADOR,
   })
 
-  const afuera = useMemo(
-    () => new Set((prestamos?.data ?? []).map((p) => p.equipoId)),
-    [prestamos]
-  )
+  const afuera: Afuera = useMemo(() => {
+    const abiertos = prestamos?.data ?? []
+    return {
+      reservas: new Set(
+        abiertos.map((p) => p.reservaId).filter((id): id is string => !!id)
+      ),
+      equipos: new Set(abiertos.map((p) => p.equipoId)),
+    }
+  }, [prestamos])
 
   const { enCurso, siguientes, terminadas } = useMemo(() => {
     const ahora = minutosDeAhora()
@@ -227,51 +292,51 @@ export function PanelDelLaboratorio() {
     }
   }, [reservas])
 
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>Para entregar ahora</CardTitle>
-          <CardDescription>
-            {enCurso.length === 0
-              ? "No hay ninguna clase en curso."
-              : `${contar(enCurso.length, "clase")} en curso. Entregá las máquinas desde acá.`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {isLoading && <p className="text-muted-foreground text-sm">Cargando…</p>}
-          {enCurso.map((c) => (
-            <Clase key={c.clave} clase={c} afuera={afuera} enCurso />
-          ))}
-          {!isLoading && enCurso.length === 0 && terminadas.length > 0 && (
-            <p className="text-muted-foreground text-sm">
-              Hoy ya {plural(terminadas.length, "pasó", "pasaron")}{" "}
-              {contar(terminadas.length, "clase")}.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+  const hayAlgo = enCurso.length > 0 || siguientes.length > 0
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Lo que sigue hoy</CardTitle>
+  return (
+    <Card>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+        <div className="grid gap-1.5">
+          {/* "Para entregar hoy" y no "Hoy en el laboratorio": la tarjeta
+              se nombra por lo que se hace ahí. Ya se había descartado
+              "Ahora en el laboratorio" por lo mismo —suena a un informe del
+              lugar y no a una cola de gente esperando su máquina—, y al
+              fusionar las dos tarjetas casi vuelve por la ventana. */}
+          <CardTitle>Para entregar hoy</CardTitle>
           <CardDescription>
-            {siguientes.length === 0
-              ? "No queda ninguna clase por empezar hoy."
-              : `${contar(siguientes.length, "clase")} por empezar. Se pueden entregar antes de hora.`}
+            {enCurso.length > 0 && `${contar(enCurso.length, "clase")} en curso`}
+            {enCurso.length > 0 && siguientes.length > 0 && " · "}
+            {siguientes.length > 0 && `${siguientes.length} por empezar`}
+            {!hayAlgo &&
+              (terminadas.length > 0
+                ? `Hoy ya ${plural(terminadas.length, "pasó", "pasaron")} ${contar(terminadas.length, "clase")}. No queda ninguna.`
+                : "Hoy no hay ninguna clase con equipos reservados.")}
           </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {siguientes.slice(0, 4).map((c) => (
-            <Clase key={c.clave} clase={c} afuera={afuera} enCurso={false} />
-          ))}
-          {siguientes.length > 4 && (
-            <Button asChild variant="outline" size="sm" className="justify-self-start">
-              <Link to="/admin/entregas">Ver las {siguientes.length} del día</Link>
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        {accion}
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {isLoading && <p className="text-muted-foreground text-sm">Cargando…</p>}
+
+        {/* En curso primero y después lo que viene: es el orden del día, y lo
+            que está pasando ahora es lo único que tiene a alguien esperando
+            del otro lado del mostrador. */}
+        {enCurso.map((c) => (
+          <Clase key={c.clave} clase={c} afuera={afuera} enCurso />
+        ))}
+        {siguientes.slice(0, MAX_SIGUIENTES).map((c) => (
+          <Clase key={c.clave} clase={c} afuera={afuera} enCurso={false} />
+        ))}
+
+        {siguientes.length > MAX_SIGUIENTES && (
+          <Button asChild variant="outline" size="sm" className="justify-self-start">
+            <Link to="/admin/entregas">
+              Ver las {enCurso.length + siguientes.length} del día
+            </Link>
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   )
 }

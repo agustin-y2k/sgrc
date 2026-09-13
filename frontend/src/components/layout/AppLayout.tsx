@@ -28,6 +28,13 @@ type Enlace = { a: string; texto: string }
 const ENLACE_CON_AFUERA = "/admin/entregas"
 
 const ENLACES: Enlace[] = [
+  // "Inicio" escrito, y no solo el logo de la esquina. El logo seguía
+  // llevando a la portada, pero eso es algo que se sabe por costumbre de
+  // navegar la web, no algo que la barra diga: un Admin que entraba a
+  // Reportes no tenía ningún cartel que nombrara el camino de vuelta —y la
+  // portada es la pantalla del mostrador, la que más se usa—. El logo, ahora,
+  // es solo el nombre del sistema.
+  { a: "/", texto: "Inicio" },
   { a: "/reservas", texto: "Reservas" },
   // "Computadoras" y no "Inventario": desde la pantalla de inicio se llega
   // acá por un atajo que dice "Ver las computadoras", y el cartel del destino
@@ -232,11 +239,12 @@ export function AppLayout() {
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
           {/* `min-h-11` solo en el teléfono, por el blanco táctil: en la
               barra de escritorio el alto lo fija el contenido. */}
-          <Link
-            to="/"
-            className="flex min-h-11 shrink-0 items-center gap-2 font-semibold sm:min-h-0"
-            onClick={cerrarMenu}
-          >
+          {/* El nombre del sistema, no un control. Antes era el enlace a la
+              portada y era el ÚNICO: quien no conocía esa costumbre se
+              quedaba sin forma de volver. Ahora el camino de vuelta se llama
+              "Inicio" y está en la barra, así que esto puede ser lo que
+              parece —un rótulo— en vez de un botón que no se anuncia. */}
+          <p className="flex min-h-11 shrink-0 items-center gap-2 font-semibold sm:min-h-0">
             <span
               aria-hidden="true"
               className="bg-primary text-primary-foreground grid size-7 place-items-center rounded-lg text-xs font-bold"
@@ -244,22 +252,26 @@ export function AppLayout() {
               SG
             </span>
             <span>SGRC</span>
-          </Link>
+          </p>
 
           {/* Barra horizontal solo cuando hay lugar de verdad. Con el grupo
               de administración plegado son cinco ítems y entran holgados;
               `min-w-0` + `overflow-x-auto` quedan igual de red, porque el
               nombre del usuario todavía puede crecer.
 
-              `min-[1100px]` y no `lg` (1024): entre 1024 y 1087px la barra de
+              `min-[1140px]` y no `lg` (1024): por debajo de eso la barra de
               un Admin entra, pero apretada —"Horario Admins" se partía en dos
-              renglones y el header pasaba de 57 a 73px—. A 1088px deja de
-              partirse; 1100 es ese número con un poco de aire. En esa franja
-              ahora se ve el menú del teléfono, que ahí anda bien. El valor
-              está en CINCO clases de este archivo (esta barra, "Pedir ayuda",
-              "Salir", el botón "Menú" y el menú desplegable) y las cinco
-              tienen que decir lo mismo: si una queda en `lg`, hay un ancho en
-              el que se ven los dos menús a la vez, o ninguno.
+              renglones y el header pasaba de 57 a 73px—. Medido: a 1121px
+              deja de partirse; 1140 es ese número con un poco de aire. En esa
+              franja se ve el menú del teléfono, que ahí anda bien.
+
+              El número se mide, no se estima, y hay que volver a medirlo cada
+              vez que se agrega o se renombra un ítem: era 1100 cuando la
+              barra empezaba en "Reservas", y sumar "Inicio" lo corrió 33px.
+              El valor está en CINCO clases de este archivo (esta barra,
+              "Pedir ayuda", "Salir", el botón "Menú" y el menú desplegable) y
+              las cinco tienen que decir lo mismo: si una queda atrás, hay un
+              ancho en el que se ven los dos menús a la vez, o ninguno.
 
               OJO con dónde termina ese `overflow-x-auto`: tiene que envolver
               los enlaces y nada más. El desplegable de administración va
@@ -270,11 +282,14 @@ export function AppLayout() {
               responde, el panel se monta, y no se ve nada. */}
           <nav
             aria-label="Principal"
-            className="hidden min-w-0 flex-1 items-center gap-0.5 min-[1100px]:flex"
+            className="hidden min-w-0 flex-1 items-center gap-0.5 min-[1140px]:flex"
           >
             <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
               {enlaces.map((e) => (
-                <NavLink key={e.a} to={e.a} className={claseDeEnlace}>
+                // `end` en "/": sin eso, la portada es prefijo de todas las
+                // rutas y el ítem quedaría marcado como activo en cada
+                // pantalla, que es peor que no marcar nada.
+                <NavLink key={e.a} to={e.a} end={e.a === "/"} className={claseDeEnlace}>
                   {e.texto}
                 </NavLink>
               ))}
@@ -344,7 +359,7 @@ export function AppLayout() {
             <Button
               variant="outline"
               size="sm"
-              className="hidden min-[1100px]:inline-flex"
+              className="hidden min-[1140px]:inline-flex"
               onClick={() => {
                 cerrarMenu()
                 navigate("/notificaciones?soporte=nuevo")
@@ -359,7 +374,7 @@ export function AppLayout() {
             <Button
               variant="outline"
               size="sm"
-              className="hidden min-[1100px]:inline-flex"
+              className="hidden min-[1140px]:inline-flex"
               onClick={handleLogout}
             >
               Salir
@@ -370,7 +385,7 @@ export function AppLayout() {
             <Button
               variant="outline"
               size="sm"
-              className="h-11 px-4 min-[1100px]:hidden"
+              className="h-11 px-4 min-[1140px]:hidden"
               aria-expanded={menuAbierto}
               aria-controls="menu-principal"
               onClick={() => setMenuAbierto((abierto) => !abierto)}
@@ -400,12 +415,13 @@ export function AppLayout() {
         {menuAbierto && (
           <nav
             id="menu-principal"
-            className="border-border grid gap-0.5 border-t px-4 py-2 min-[1100px]:hidden"
+            className="border-border grid gap-0.5 border-t px-4 py-2 min-[1140px]:hidden"
           >
             {enlaces.map((e) => (
               <NavLink
                 key={e.a}
                 to={e.a}
+                end={e.a === "/"}
                 className={claseDeEnlaceMovil}
                 onClick={cerrarMenu}
               >

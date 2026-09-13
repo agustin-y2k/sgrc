@@ -220,7 +220,9 @@ describe("EntregasPage", () => {
     })
     renderPagina()
 
-    await user.click(await screen.findByRole("button", { name: "Recibir" }))
+    await user.click(
+      await screen.findByRole("button", { name: /Recibir 1 equipo de Ada Lovelace/ })
+    )
 
     expect(reservasApi.recibirEquipos).toHaveBeenCalledWith({
       prestamoIds: ["pr1"],
@@ -262,7 +264,9 @@ describe("EntregasPage", () => {
     })
     renderPagina()
 
-    await user.click(await screen.findByRole("button", { name: "Recibir" }))
+    await user.click(
+      await screen.findByRole("button", { name: /Recibir 1 equipo de Ada Lovelace/ })
+    )
 
     expect(await screen.findByText(/1 ya figuraba\(n\) adentro/)).toBeInTheDocument()
   })
@@ -663,9 +667,10 @@ describe("EntregasPage", () => {
     })
     renderPagina()
 
-    expect(
-      await screen.findByText(/Ada Lovelace · retiró Juan \(alumno\)/)
-    ).toBeInTheDocument()
+    // Quien RESPONDE encabeza el grupo; quien vino a buscarla se dice al lado
+    // de su máquina, que es donde importa: a quien reclamarle no cambió.
+    expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument()
+    expect(screen.getByText(/retiró Juan \(alumno\)/)).toBeInTheDocument()
   })
 
   // Sin nadie anotado no se inventa un renglón: lo retiró quien responde.
