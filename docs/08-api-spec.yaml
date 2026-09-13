@@ -4430,7 +4430,7 @@ paths:
                         minutosTotales: { type: integer }
         "404": { description: No hay estadísticas archivadas para ese año }
 
-  /api/incidencias/equipos:
+  /api/incidencias/resumen/por-equipo:
     get:
       tags: [reports]
       summary: Incidencias agregadas por equipo (RF-06.3, Admin)
@@ -4833,7 +4833,7 @@ paths:
       responses:
         "200": { description: OK }
 
-  /api/incidencias/carros:
+  /api/incidencias/resumen/por-carro:
     get:
       tags: [reports]
       summary: Incidencias agregadas por carro (RF-06.3, Admin)
@@ -4843,7 +4843,7 @@ paths:
 
         Este reporte agrupa POR CARRO, así que los equipos sueltos (015) no
         aparecen: no pertenecen a ninguno. Sus incidencias se ven en
-        `/api/incidencias/equipos`.
+        `/api/incidencias/resumen/por-equipo`.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: query
@@ -4888,7 +4888,9 @@ paths:
         Es una colección propia y no `/incidencias/categorias`: no son
         incidencias, son el vocabulario con el que se las clasifica. Como
         hermana tampoco compite con `/incidencias/{id}` por el orden de
-        registro de las rutas.
+        registro de las rutas — que es exactamente lo que sí les pasó a los
+        tres reportes de incidencias, y por lo que hoy cuelgan de
+        `/incidencias/resumen/...`.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -4973,7 +4975,7 @@ paths:
                         ultimaFalla: { type: string, description: "Descripción de la incidencia más reciente" }
                         estadoIncidencia: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_A_SOPORTE, RESUELTA] }
 
-  /api/incidencias/categorias:
+  /api/incidencias/resumen/por-categoria:
     get:
       tags: [reports]
       summary: Incidencias agrupadas por tipo de falla (RF-06.7, Admin)

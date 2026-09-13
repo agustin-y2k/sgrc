@@ -123,7 +123,12 @@ Dos criterios que ya evitaron falsos verdes:
   ancho que la ventana, nombrando al elemento culpable. El caso que cubre es la
   barra de navegación completa de un Admin: no desborda en un monitor de
   desarrollo, sí en un portátil de 1024, no se ve en una captura, y vuelve sola
-  cada vez que se agrega un ítem al menú.
+  cada vez que se agrega un ítem al menú. El punto de corte entre la barra
+  horizontal y el menú del teléfono es un número **medido**, no elegido, y el
+  mismo valor vive en cinco clases de `AppLayout.tsx`: si una queda atrás, hay
+  un ancho en el que se ven los dos menús a la vez, o ninguno. Agregar "Inicio"
+  lo corrió de 1100 a 1140 —a 1121px la barra deja de partirse en dos
+  renglones—, que es exactamente el modo en que esto vuelve.
 - **Un E2E no puede asumir un sistema sin configurar.** `e2e/reserva.spec.ts`
   elegía su franja horaria entre las 05:00 y las 07:00 —una banda poco habitual,
   a propósito, para no chocar con reservas reales—, lo que funciona mientras la

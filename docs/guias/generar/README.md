@@ -18,20 +18,25 @@ y baja la pila, pase lo que pase. La base de desarrollo no se toca: es otro
 proyecto y por lo tanto otro volumen.
 
 Después, `git status` dice qué cambió. Las pantallas que no se tocaron salen
-idénticas byte a byte, **salvo las que muestran una fecha o una hora**: esas
-cambian en cada corrida porque los datos se siembran con `now()`. Están
-listadas en `capturas-con-reloj.txt`, son once, y la diferencia es siempre la
-franja del reloj.
+casi idénticas, **salvo las que muestran una fecha o una hora**: esas cambian en
+cada corrida porque los datos se siembran con `now()`, y la de inicio saluda
+según la hora. La diferencia es siempre la franja del reloj.
 
 **Y no depende de que nadie se acuerde.** El workflow `capturas.yml` lo corre
 solo cuando cambia `frontend/src/**` o `docs/guias/**`, y hace dos cosas:
 
 - **Falla si alguna captura no se generó** —`--estricto`—, que es lo que atrapa
   un selector podrido. Vale para las sesenta.
-- **Falla si una captura sin reloj dejó de coincidir** con lo que muestra el
-  sistema: la interfaz se movió y nadie regeneró. Las once con reloj se informan
-  y no frenan nada; compararlas por igualdad las pondría en rojo todas las
-  semanas, y una alarma que suena siempre deja de mirarse.
+- **Falla si una captura cambió de verdad** respecto de la que está en git: la
+  interfaz se movió y nadie regeneró. Lo decide `comparar-capturas.py` con un
+  umbral del 2% de píxeles, que no se estimó — se midió comparando dos corridas
+  del mismo commit. Ahí abajo del 0,6% está el ruido del reloj y arriba del 5%
+  los cambios reales; entre medio no hay nada, y el umbral vive en ese hueco. El
+  archivo mismo lo explica.
+
+  La idea anterior era una lista de pantallas a ignorar. No funcionaba: había que
+  agregarle una por cada corrida en rojo, y cada agregado apagaba el control
+  justo donde acababa de fallar.
 
 Ese es el punto: hasta la 1.21 el pipeline estaba automatizado pero había que
 invocarlo, y por eso las capturas envejecían igual.

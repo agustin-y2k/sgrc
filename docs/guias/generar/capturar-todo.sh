@@ -223,6 +223,18 @@ for script in "${CAPTURAS[@]}"; do
   fi
 done
 
+# ── Ninguna pantalla se abre rota ────────────────────────────────────────
+#
+# La pila ya está levantada y con datos, así que preguntarlo cuesta un minuto.
+# Existe porque los reportes de incidencias estuvieron rotos semanas sin que
+# nada lo dijera: sus rutas chocaban con /api/incidencias/{id} y la pestaña se
+# abría con un cartel rojo. Estuvo a la vista en una captura de esta misma guía.
+#
+# Va DESPUÉS de las capturas a propósito: si fallara antes, no habría imágenes
+# para mirar qué pasó.
+echo "── Ninguna pantalla se abre con un error"
+nodo scripts/barrer-pantallas.mjs
+
 # ── Numerar, recortar y publicar ─────────────────────────────────────────
 echo "── Globos numerados"
 python3 docs/guias/generar/marcar.py "$SALIDA"

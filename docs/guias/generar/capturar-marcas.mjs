@@ -57,8 +57,13 @@ const PLAN = [
     marcas: ["Una sola fecha", "Materia", "Fecha", "Hora de inicio", "Qué computadoras necesitás", "Confirmar reserva"] },
   { nombre: "marca-mis-reservas", quien: "docente", ruta: "/reservas",
     marcas: ["Nueva reserva", "Mostrar también las canceladas", "Confirmada", "Cambiar computadora", "Cancelar"] },
+  // El orden es el de la pantalla, y tiene que coincidir con la lista numerada
+  // de la guía: los globos se numeran 1..N en este mismo orden.
+  //
+  // "acá ahora" señala la tira de números de arriba. Se marca por el rótulo y
+  // no por el número porque el número depende de los datos sembrados.
   { nombre: "marca-inicio-admin", quien: "admin", ruta: "/",
-    marcas: ["Para entregar ahora", "Afuera del laboratorio", "En el laboratorio ahora", "Entregar sin reserva", "Administración", "Lo que viene"] },
+    marcas: ["acá ahora", "Para entregar hoy", "Entregar sin reserva", "Afuera del laboratorio", "Administración", "Lo que viene"] },
 ]
 const nav = await chromium.launch()
 const meta = {}

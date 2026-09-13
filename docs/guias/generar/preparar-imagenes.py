@@ -18,6 +18,7 @@ MAPA = {
     # docentes
     "form-login": "docente-01-entrar",
     "form-registro": "docente-02-crear-cuenta",
+    "form-registro-donde": "docente-02b-donde-vas-a-estar",
     "form-recuperar": "docente-03-olvide-contrasena",
     "marca-inicio-docente-marcada": "docente-04-pantalla-de-inicio",
     "marca-nueva-reserva-marcada": "docente-05-nueva-reserva",
