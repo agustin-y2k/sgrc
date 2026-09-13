@@ -266,12 +266,11 @@ func configDeVigilancia() reservationapp.ConfigDeVigilancia {
 	if v := minutosDeEntorno("RETIRO_GRACIA_MINUTOS"); v > 0 {
 		cfg.GraciaDeRetiro = v
 	}
-	if v := minutosDeEntorno("RETIRO_PARCIAL_GRACIA_MINUTOS"); v > 0 {
-		cfg.GraciaTrasEntregaParcial = v
-	}
 
 	// RETIRO_AVISO_MINUTOS y DEVOLUCION_DEMORA_MINUTOS ya no se leen: el aviso
 	// de no retiro y el reclamo de devolución dejaron de existir en la 1.18.0.
+	// RETIRO_PARCIAL_GRACIA_MINUTOS tampoco: lo que el docente no se llevó lo
+	// libera el Admin con el botón de entrega parcial, no un reloj.
 	// Se avisa en vez de ignorarlas en silencio, porque un .env que las trae
 	// viene de un despliegue anterior y quien lo mantiene tiene que enterarse
 	// de que ya no hacen nada.

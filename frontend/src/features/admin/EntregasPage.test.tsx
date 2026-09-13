@@ -213,6 +213,28 @@ describe("EntregasPage", () => {
     expect(await screen.findByText(/sin hora de devolución/)).toBeInTheDocument()
   })
 
+  // La otra mitad de una entrega parcial: declarar que eso es TODO lo que se
+  // llevó. Sin marcarlo, la reserva sigue siendo del docente — el caso de "ya
+  // vuelvo por las otras dos".
+  it("puede declarar que lo entregado es todo, y libera el resto", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([reserva(), reserva({ id: "res2", equipoId: "pc2" })])
+    )
+    renderPagina()
+
+    const casillas = await screen.findAllByRole("checkbox")
+    await user.click(casillas[0])
+    await user.click(screen.getByLabelText(/Es todo lo que se llevó/))
+    await user.click(screen.getByRole("button", { name: /y liberar el resto/ }))
+
+    expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
+      reservaIds: ["res1"],
+      retiradoPor: undefined,
+      liberarNoEntregadas: true,
+    })
+  })
+
   it("recibe una computadora desde su fila", async () => {
     const user = userEvent.setup()
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
@@ -284,6 +306,7 @@ describe("EntregasPage", () => {
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1", "res2"],
       retiradoPor: undefined,
+      liberarNoEntregadas: false,
     })
   })
 
@@ -301,6 +324,7 @@ describe("EntregasPage", () => {
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res2"],
       retiradoPor: undefined,
+      liberarNoEntregadas: false,
     })
   })
 
@@ -318,6 +342,7 @@ describe("EntregasPage", () => {
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
       retiradoPor: "Juan (alumno)",
+      liberarNoEntregadas: false,
     })
   })
 
@@ -334,6 +359,7 @@ describe("EntregasPage", () => {
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
       retiradoPor: undefined,
+      liberarNoEntregadas: false,
     })
   })
 

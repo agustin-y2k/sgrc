@@ -23,6 +23,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
   const queryClient = useQueryClient()
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
   const [retiradoPor, setRetiradoPor] = useState("")
+  const [esTodoLoQueSeLlevo, setEsTodoLoQueSeLlevo] = useState(false)
   const [resumen, setResumen] = useState<string | null>(null)
 
   const hoy = hoyISO()
@@ -37,6 +38,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
     mutationFn: (ids: string[]) =>
       reservasApi.entregarPorReserva({
         reservaIds: ids,
+        liberarNoEntregadas: esTodoLoQueSeLlevo,
         retiradoPor: retiradoPor.trim() || undefined,
       }),
     onSuccess: async (respuesta) => {
@@ -196,12 +198,34 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                 si no hace falta anotar quién vino a buscarlas.
               </p>
             </div>
+            {/* La otra mitad de una entrega parcial: decir que ESTO es todo.
+                Marcado, lo que quedó sin tildar de esas mismas clases deja de
+                estar guardado y vuelve al resto de la escuela en el acto —
+                antes lo hacía un reloj de quince minutos que tenía que
+                adivinar si el docente volvía—. Sin marcar, la reserva sigue
+                siendo suya: el caso de "ya vuelvo por las otras dos". */}
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={esTodoLoQueSeLlevo}
+                onChange={(e) => setEsTodoLoQueSeLlevo(e.target.checked)}
+              />
+              <span>
+                Es todo lo que se llevó
+                <span className="text-muted-foreground block text-xs">
+                  Lo que no marcaste deja de estar guardado y queda libre para otro
+                  curso. No afecta a las próximas fechas de una reserva que se repite.
+                </span>
+              </span>
+            </label>
             <div>
               <Button
                 disabled={entregar.isPending}
                 onClick={() => entregar.mutate([...marcadas])}
               >
                 Entregar {contar(marcadas.size, "equipo")}
+                {esTodoLoQueSeLlevo && " y liberar el resto"}
               </Button>
             </div>
           </div>

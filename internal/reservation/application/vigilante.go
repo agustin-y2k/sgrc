@@ -17,9 +17,6 @@ type ConfigDeVigilancia struct {
 	// GraciaDeRetiro: cuánto se espera desde el inicio de la clase antes de
 	// liberar una máquina que nadie retiró.
 	GraciaDeRetiro time.Duration
-	// GraciaTrasEntregaParcial: cuánto se espera desde la última entrega
-	// antes de liberar lo que el docente no se llevó.
-	GraciaTrasEntregaParcial time.Duration
 	// HoraDeCierre (0-23) es el corte de lo que quedó afuera para una
 	// institución que NO declaró jornada. Cuando la declaró, el corte sale de
 	// ahí: es la hora a la que cierra ese día puntual, más una hora de gracia.
@@ -30,9 +27,8 @@ type ConfigDeVigilancia struct {
 // despliegue sin configurar arranquen con lo mismo.
 func ConfigDeVigilanciaPorDefecto() ConfigDeVigilancia {
 	return ConfigDeVigilancia{
-		GraciaDeRetiro:           domain.GraciaDeRetiroPorDefecto,
-		GraciaTrasEntregaParcial: domain.GraciaTrasEntregaParcialPorDefecto,
-		HoraDeCierre:             23,
+		GraciaDeRetiro: domain.GraciaDeRetiroPorDefecto,
+		HoraDeCierre:   23,
 	}
 }
 
@@ -217,12 +213,14 @@ func (v *Vigilante) liberarNoRetiradas(ctx context.Context, reservas []ReservaPa
 	return liberadas
 }
 
-// correspondeLiberar elige cuál de los dos plazos le corre a esta reserva.
+// correspondeLiberar: un solo plazo, contado desde que la clase empezó.
+//
+// Hubo un segundo, más corto, que se contaba desde la última entrega del
+// grupo: servía para soltar lo que el docente no se había llevado en una
+// entrega parcial. Lo reemplazó un botón. El reloj tenía que adivinar algo que
+// quien está en el mostrador sabe —si el docente vuelve por las otras dos o
+// no—, y mientras adivinaba, las máquinas figuraban ocupadas sin estarlo.
 func (v *Vigilante) correspondeLiberar(primera ReservaParaVigilar, ahora time.Time) bool {
-	if primera.UltimaEntregaDelGrupo != nil {
-		return domain.CorrespondeLiberarTrasEntregaParcial(primera.Fecha, primera.HoraInicio, primera.HoraFin,
-			*primera.UltimaEntregaDelGrupo, v.cfg.GraciaTrasEntregaParcial, ahora)
-	}
 	return domain.CorrespondeLiberar(primera.Fecha, primera.HoraInicio, primera.HoraFin,
 		v.cfg.GraciaDeRetiro, ahora)
 }

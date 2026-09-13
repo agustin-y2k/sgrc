@@ -16,6 +16,10 @@ type entregarPorReservaRequest struct {
 	ReservaIDs []string `json:"reservaIds"`
 	// RetiradoPor: quién vino a buscarlas, si no fue el docente de la reserva.
 	RetiradoPor string `json:"retiradoPor,omitempty"`
+	// LiberarNoEntregadas: entrega parcial declarada. Lo que no se entregó
+	// deja de estar guardado para ese docente en el acto. Ausente = false,
+	// que es la entrega de siempre.
+	LiberarNoEntregadas bool `json:"liberarNoEntregadas,omitempty"`
 }
 
 // entregarSueltaRequest es el préstamo sin reserva: "necesito una compu para
@@ -129,10 +133,17 @@ type resultadoEntregaResponse struct {
 	Entregadas   []prestamoResponse       `json:"entregadas"`
 	NoEntregadas []pcNoEntregadaResponse  `json:"noEntregadas,omitempty"`
 	Avisos       []reservaProximaResponse `json:"avisos,omitempty"`
+	// Liberadas: las que el docente no se llevó, en una entrega parcial. La
+	// pantalla lo dice: soltar una máquina en silencio es lo que hace que
+	// después nadie entienda por qué figura libre.
+	Liberadas []string `json:"liberadas,omitempty"`
 }
 
 func toResultadoEntregaResponse(r *application.ResultadoEntrega, ahora time.Time) resultadoEntregaResponse {
-	resp := resultadoEntregaResponse{Entregadas: make([]prestamoResponse, len(r.Entregadas))}
+	resp := resultadoEntregaResponse{
+		Entregadas: make([]prestamoResponse, len(r.Entregadas)),
+		Liberadas:  r.Liberadas,
+	}
 	for i, p := range r.Entregadas {
 		resp.Entregadas[i] = toPrestamoResponse(p, ahora)
 	}

@@ -162,6 +162,11 @@ export function entregarPorReserva(req: {
   reservaIds: string[]
   /** Quién vino a buscarlas, si no fue el docente de la reserva. */
   retiradoPor?: string
+  /**
+   * Entrega parcial: esto es TODO lo que se llevó, así que lo que no va en
+   * `reservaIds` deja de estar guardado para ese docente en el acto.
+   */
+  liberarNoEntregadas?: boolean
 }) {
   return apiFetch<ResultadoEntrega>("/api/prestamos/por-reserva", {
     method: "POST",

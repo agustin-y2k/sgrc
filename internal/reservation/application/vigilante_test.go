@@ -271,52 +271,45 @@ func entregarContraLaReserva(t *testing.T, repo *fakeRepo, prestamoID, equipoID 
 	repo.prestamos[p.ID] = p
 }
 
-// TestBarrer_TrasEntregaParcialLiberaALos15DeLaEntrega: el docente vino 8:05
-// y se llevó una de las dos.
-func TestBarrer_TrasEntregaParcialLiberaALos15DeLaEntrega(t *testing.T) {
+// Una entrega parcial ya NO arranca ningún reloj corto.
+//
+// Hasta la 1.20, entregarle una de las dos máquinas al docente hacía que la
+// otra se liberara sola quince minutos después. Ese plazo tenía que adivinar
+// si el docente volvía por ella, y mientras adivinaba la máquina figuraba
+// ocupada sin estarlo. Ahora lo declara el Admin con el botón de entrega
+// parcial; al barrido le queda un solo plazo, el de "nadie vino".
+func TestBarrer_UnaEntregaParcialNoAdelantaLaLiberacion(t *testing.T) {
 	repo := repoConClase(t, "pc1", "pc2")
 	entregarContraLaReserva(t, repo, "pr1", "pc1", aLas(8, 5))
 	bus := &busEspia{}
 
-	if r := barrer(t, vigilanteALas(repo, bus, 8, 15)); r.Liberadas != 0 {
-		t.Fatalf("a los 10 minutos de la entrega todavía no: %+v", r)
+	// 8:25 son veinte minutos de la entrega: con el plazo viejo la pc2 ya
+	// estaría suelta.
+	if r := barrer(t, vigilanteALas(repo, bus, 8, 25)); r.Liberadas != 0 {
+		t.Fatalf("la entrega no adelanta nada: %+v", r)
 	}
-	publicadosAntesDeLiberar := len(bus.publicados)
-
-	resumen := barrer(t, vigilanteALas(repo, bus, 8, 20))
-
-	if resumen.Liberadas != 1 {
-		t.Fatalf("esperaba 1 liberada a los 15 de la entrega, obtuve %d", resumen.Liberadas)
+	if repo.reservas["res-pc2"].Estado != domain.ReservaConfirmada {
+		t.Errorf("res-pc2 quedó en %s, esperaba CONFIRMADA", repo.reservas["res-pc2"].Estado)
 	}
-	if repo.reservas["res-pc2"].Estado != domain.ReservaNoRetirada {
-		t.Errorf("res-pc2 quedó en %s", repo.reservas["res-pc2"].Estado)
+}
+
+// Y el plazo que queda es el de siempre, contado desde que la clase empezó,
+// sin importar que haya habido una entrega en el medio.
+func TestBarrer_ConEntregaParcialSigueValiendoElPlazoDeRetiro(t *testing.T) {
+	repo := repoConClase(t, "pc1", "pc2")
+	entregarContraLaReserva(t, repo, "pr1", "pc1", aLas(8, 5))
+	bus := &busEspia{}
+
+	// La clase empieza 8:00 y la gracia de retiro son 40 minutos.
+	if r := barrer(t, vigilanteALas(repo, bus, 8, 39)); r.Liberadas != 0 {
+		t.Fatalf("antes de los 40 no: %+v", r)
+	}
+	if r := barrer(t, vigilanteALas(repo, bus, 8, 41)); r.Liberadas != 1 {
+		t.Fatalf("a los 40 de empezada la clase sí: %+v", r)
 	}
 	// Vino a dar la clase: el grupo sigue confirmado.
 	if repo.grupos[grupoDeClase].Estado != domain.GrupoConfirmada {
 		t.Errorf("el grupo quedó en %s, esperaba CONFIRMADA", repo.grupos[grupoDeClase].Estado)
-	}
-	// Y sobre todo: ni un correo ni una campana. Lo decidió él en el mostrador.
-	if len(bus.publicados) != publicadosAntesDeLiberar {
-		t.Errorf("la entrega parcial libera en silencio, se publicó: %+v",
-			bus.publicados[publicadosAntesDeLiberar:])
-	}
-}
-
-// TestBarrer_ElPlazoCortoCuentaDesdeLaUltimaEntrega: mientras el Admin sigue
-// anotando, el docente sigue en el mostrador.
-func TestBarrer_ElPlazoCortoCuentaDesdeLaUltimaEntrega(t *testing.T) {
-	repo := repoConClase(t, "pc1", "pc2", "pc3")
-	entregarContraLaReserva(t, repo, "pr1", "pc1", aLas(8, 5))
-	entregarContraLaReserva(t, repo, "pr2", "pc2", aLas(8, 12))
-	bus := &busEspia{}
-
-	// 8:20 son quince minutos de la PRIMERA entrega, pero solo ocho de la
-	// última: la pc3 todavía es suya.
-	if r := barrer(t, vigilanteALas(repo, bus, 8, 20)); r.Liberadas != 0 {
-		t.Fatalf("el plazo corre desde la última entrega: %+v", r)
-	}
-	if r := barrer(t, vigilanteALas(repo, bus, 8, 27)); r.Liberadas != 1 {
-		t.Fatalf("a los quince de la última entrega sí: %+v", r)
 	}
 }
 

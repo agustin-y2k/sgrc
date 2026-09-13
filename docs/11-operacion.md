@@ -699,24 +699,30 @@ perder, es más barato `docker compose down -v` y arrancar limpio.
 
 El barrido corre dentro del mismo proceso, cada cinco minutos, sin cron ni
 nada que instalar. Tres variables opcionales lo ajustan:
-`RETIRO_GRACIA_MINUTOS` (40), `RETIRO_PARCIAL_GRACIA_MINUTOS` (15) y
-`CIERRE_JORNADA` (23). Un valor mal escrito **impide levantar**, a propósito:
+`RETIRO_GRACIA_MINUTOS` (40) y `CIERRE_JORNADA` (23). Un valor mal escrito **impide levantar**, a propósito:
 descubrirlo tres horas después porque un aviso no salió es peor.
 
 > `RETIRO_AVISO_MINUTOS` y `DEVOLUCION_DEMORA_MINUTOS` **ya no se usan** desde
 > la 1.18.0: el aviso de no retiro (RF-08.20) y el reclamo de devolución
-> (RF-08.12) se retiraron. Si siguen en el `.env` el sistema levanta igual y
-> lo dice en el log, para que quien lo mantenga sepa que puede sacarlas.
-
-Las dos primeras se leen juntas, porque son dos momentos de la misma clase:
+> (RF-08.12) se retiraron. **`RETIRO_PARCIAL_GRACIA_MINUTOS` tampoco, desde la
+> 1.21** — ver abajo. Si siguen en el `.env` el sistema levanta igual y lo dice
+> en el log, para que quien lo mantenga sepa que puede sacarlas.
 
 | Variable | Desde cuándo cuenta | Qué hace |
 |---|---|---|
 | `RETIRO_GRACIA_MINUTOS` (40) | el inicio de la clase | **Libera**, en silencio, si no se retiró ninguna |
-| `RETIRO_PARCIAL_GRACIA_MINUTOS` (15) | la última **entrega** | **Libera**, en silencio, lo que el docente dejó cuando vino a buscar una parte |
 
-Las dos liberan sin avisar nada, y desde la 1.18.0 tampoco las precede ningún
-aviso. Liberar le devuelve la máquina al resto de la escuela; no es un
+Hubo un segundo plazo, más corto, que contaba desde la última entrega y soltaba
+lo que el docente había dejado al venir a buscar una parte. **Lo reemplazó un
+botón** (RF-08.10.1): en el mostrador, el Admin elige entre *Entregar todas* y
+*Entrega parcial*, y en la segunda marca qué salió — lo que no marcó queda
+libre en el acto. El reloj tenía que adivinar si el docente volvía por las
+otras dos; quien atiende no adivina, lo tiene enfrente. Y mientras adivinaba,
+esas máquinas figuraban ocupadas sin estarlo, que en la práctica es la hora
+siguiente perdida para otro curso.
+
+Lo que queda libera sin avisar nada, y desde la 1.18.0 tampoco lo precede
+ningún aviso. Liberar le devuelve la máquina al resto de la escuela; no es un
 reproche, y el docente que no fue se entera al llegar.
 
 #### Sin nadie en el mostrador, el barrido no hace nada (RF-07.6)
