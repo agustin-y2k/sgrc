@@ -67,6 +67,13 @@ if [ -n "$CURSO_TEC" ] && [ "$CURSO_TEC" != null ]; then
   echo "→ curso 4°2 · Electromecánica con su materia"
 fi
 
+# Un lugar que no es un curso (RF-02.13). Sin esto, la sección «Otros lugares
+# de la escuela» sale vacía en la captura de Académico —y la guía le dedica un
+# apartado— y el desplegable del registro no muestra el caso que explica: un
+# lugar donde no se dicta ninguna materia.
+api "$AT" POST "/api/ciclos/$CICLO/espacios" '{"nombre":"Biblioteca"}' >/dev/null || true
+echo "→ espacio Biblioteca"
+
 # Docente de la guía.
 api "" POST /api/auth/registro \
   "{\"nombre\":\"Ana\",\"apellido\":\"Gómez\",\"email\":\"$DOC_EMAIL\",\"password\":\"$DOC_PASS\",\"cargoSolicitado\":\"DOCENTE\",\"rolSolicitado\":\"TITULAR\"}" >/dev/null || true

@@ -30,6 +30,7 @@ import { BotonGoogle } from "@/features/auth/BotonGoogle"
 import {
   DeclaracionDeCargo,
   camposDeclarados,
+  exigeCursoYMateria,
   loQueDictaEseCargo,
 } from "@/features/auth/DeclaracionDeCargo"
 import { RegistroConGoogle } from "@/features/auth/RegistroConGoogle"
@@ -44,7 +45,7 @@ const registroSchema = z.object({
   email: z.string().email("Ingresá un email válido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
   ...camposDeclarados,
-})
+}).superRefine(exigeCursoYMateria)
 
 type RegistroValues = z.infer<typeof registroSchema>
 

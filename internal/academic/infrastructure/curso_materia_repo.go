@@ -39,6 +39,22 @@ const ordenDeCurso = `anio,
 	 division NULLS FIRST,
 	 modalidad NULLS FIRST`
 
+// ordenDeCursoDe es el mismo orden que ordenDeCurso, con las columnas
+// calificadas por el alias de la tabla.
+//
+// Hace falta apenas la consulta une `curso` con `ciclo_lectivo`: las dos tienen
+// una columna `anio` —el año del curso y el año del ciclo— y sin calificar,
+// Postgres corta con «column reference "anio" is ambiguous». Va escrito y no
+// derivado del otro con un ReplaceAll: el fragmento tiene paréntesis y comillas
+// adentro, y un reemplazo de texto sobre eso se rompe el día que alguien le
+// agregue una columna.
+func ordenDeCursoDe(a string) string {
+	return a + `.anio,
+	 nullif(regexp_replace(coalesce(` + a + `.division, ''), '\D', '', 'g'), '')::int NULLS FIRST,
+	 ` + a + `.division NULLS FIRST,
+	 ` + a + `.modalidad NULLS FIRST`
+}
+
 func (r *PostgresRepo) CrearCurso(ctx context.Context, c *domain.Curso) error {
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad, archivado)
@@ -160,9 +176,14 @@ func (r *PostgresRepo) ListarCursosPorCiclo(ctx context.Context, cicloID string)
 // ── Materia ─────────────────────────────────────────────────────────────
 
 func (r *PostgresRepo) CrearMateria(ctx context.Context, m *domain.Materia) error {
+	// Una materia cuelga de un curso O de un espacio, nunca de los dos: se
+	// escribe el que vino y el otro va en NULL, que es lo que el CHECK de la
+	// base exige (migración 017). NULLIF convierte el vacío de Go en el NULL
+	// de Postgres sin ramificar la consulta en dos.
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO materia (id, curso_id, nombre, archivado) VALUES ($1, $2, $3, $4)`,
-		m.ID, m.CursoID, m.Nombre, m.Archivado)
+		`INSERT INTO materia (id, curso_id, espacio_id, nombre, archivado)
+		 VALUES ($1, NULLIF($2, '')::uuid, NULLIF($3, '')::uuid, $4, $5)`,
+		m.ID, m.CursoID, m.EspacioID, m.Nombre, m.Archivado)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return application.ErrMateriaNombreDuplicado
@@ -180,13 +201,14 @@ func (r *PostgresRepo) CrearMateria(ctx context.Context, m *domain.Materia) erro
 
 func (r *PostgresRepo) BuscarMateriaPorID(ctx context.Context, id string) (*domain.Materia, error) {
 	row := r.pool.QueryRow(ctx,
-		`SELECT id, curso_id, nombre, archivado FROM materia WHERE id = $1`, id)
+		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado
+		   FROM materia WHERE id = $1`, id)
 	return escanearMateria(row)
 }
 
 func escanearMateria(row pgx.Row) (*domain.Materia, error) {
 	var m domain.Materia
-	if err := row.Scan(&m.ID, &m.CursoID, &m.Nombre, &m.Archivado); err != nil {
+	if err := row.Scan(&m.ID, &m.CursoID, &m.EspacioID, &m.Nombre, &m.Archivado); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, application.ErrMateriaNoEncontrada
 		}
@@ -243,7 +265,8 @@ func (r *PostgresRepo) EliminarMateria(ctx context.Context, id string) error {
 
 func (r *PostgresRepo) ListarMateriasPorCurso(ctx context.Context, cursoID string) ([]*domain.Materia, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, curso_id, nombre, archivado FROM materia WHERE curso_id = $1 ORDER BY nombre`,
+		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado
+		   FROM materia WHERE curso_id = $1 ORDER BY nombre`,
 		cursoID)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -408,4 +431,68 @@ func (r *PostgresRepo) CiclosDeCursos(ctx context.Context, ids []string) (map[st
 		ciclos[id] = cicloID
 	}
 	return ciclos, errorDeFilas(rows)
+}
+
+// ── Lo que ve el formulario de registro ─────────────────────────────────
+
+// NombresParaRegistro devuelve dónde se puede trabajar y qué se dicta en cada
+// lugar, para que quien se registra ELIJA en vez de escribir.
+//
+// Devuelve nombres y nada más: ni ids, ni docentes, ni cuántas reservas tiene
+// cada uno. Es una consulta que el backend contesta SIN sesión —el registro es
+// una pantalla pública— así que lo que sale por acá es lo mínimo que resuelve
+// el problema de que escriban "4to 2da" donde la escuela puso "4°2". Un nombre
+// de curso o de materia está en la puerta del aula; el resto no sale.
+//
+// Las materias van ANIDADAS en su curso y no en una lista aparte: el formulario
+// muestra las de ESE curso una vez elegido, y una lista plana de las 86 materias
+// de la escuela no sirve para eso.
+//
+// Del ciclo ACTIVO solamente: los cursos de años cerrados no son a los que
+// alguien se está por sumar, y ofrecerlos sólo agrega ruido.
+func (r *PostgresRepo) NombresParaRegistro(ctx context.Context) (application.OpcionesDeRegistro, error) {
+	var out application.OpcionesDeRegistro
+
+	// Una sola consulta con las materias agregadas por contenedor: con una por
+	// curso serían 29 idas a la base para llenar un formulario público.
+	filas, err := r.pool.Query(ctx,
+		`SELECT t.nombre, t.modalidad, t.tipo,
+		        COALESCE(
+		            array_agg(m.nombre ORDER BY m.nombre) FILTER (WHERE m.id IS NOT NULL),
+		            '{}'
+		        ) AS materias
+		   FROM (
+		     SELECT c.id                      AS id,
+		            c.nombre                  AS nombre,
+		            coalesce(c.modalidad, '') AS modalidad,
+		            'CURSO'                   AS tipo,
+		            0                         AS orden,
+		            c.anio                    AS anio,
+		            c.division                AS division
+		       FROM curso c
+		       JOIN ciclo_lectivo cl ON cl.id = c.ciclo_lectivo_id
+		      WHERE cl.activo AND NOT c.archivado
+		     UNION ALL
+		     SELECT e.id, e.nombre, '', 'ESPACIO', 1, NULL, NULL
+		       FROM espacio e
+		       JOIN ciclo_lectivo cl ON cl.id = e.ciclo_lectivo_id
+		      WHERE cl.activo AND NOT e.archivado
+		   ) t
+		   LEFT JOIN materia m
+		          ON (m.curso_id = t.id OR m.espacio_id = t.id) AND NOT m.archivado
+		  GROUP BY t.nombre, t.modalidad, t.tipo, t.orden, t.anio, t.division
+		  ORDER BY t.orden, `+ordenDeCursoDe("t")+`, t.nombre`)
+	if err != nil {
+		return out, fmt.Errorf("listando los lugares para el registro: %w", err)
+	}
+	defer filas.Close()
+
+	for filas.Next() {
+		var l application.LugarParaRegistro
+		if err := filas.Scan(&l.Nombre, &l.Modalidad, &l.Tipo, &l.Materias); err != nil {
+			return out, fmt.Errorf("escaneando lugar para el registro: %w", err)
+		}
+		out.Lugares = append(out.Lugares, l)
+	}
+	return out, errorDeFilas(filas)
 }

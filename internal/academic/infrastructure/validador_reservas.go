@@ -59,12 +59,12 @@ func (v *ValidadorReservasPostgres) TieneReservasDeCiclo(ctx context.Context, ci
 		SELECT EXISTS(
 			SELECT 1 FROM reserva_grupo rg
 			JOIN materia m ON m.id = rg.materia_id
-			JOIN curso c ON c.id = m.curso_id
+			JOIN contenedor_de_materia c ON c.materia_id = m.id
 			WHERE c.ciclo_lectivo_id = $1
 		) OR EXISTS(
 			SELECT 1 FROM regla_recurrencia rr
 			JOIN materia m ON m.id = rr.materia_id
-			JOIN curso c ON c.id = m.curso_id
+			JOIN contenedor_de_materia c ON c.materia_id = m.id
 			WHERE c.ciclo_lectivo_id = $1
 		) OR EXISTS(
 			SELECT 1 FROM reserva
@@ -118,6 +118,32 @@ func (v *ValidadorReservasPostgres) TieneReservasMateria(ctx context.Context, ma
 			return false, application.ErrIDInvalido
 		}
 		return false, fmt.Errorf("verificando reservas de la materia: %w", err)
+	}
+	return existe, nil
+}
+
+// TieneReservasEspacio es TieneReservasCurso sobre el otro contenedor: las dos
+// tablas, por lo mismo — borrar un espacio arrastra sus materias en cascada, y
+// mirar sólo `reserva_grupo` dejaría que el DELETE reviente contra
+// `regla_recurrencia` con un 500.
+func (v *ValidadorReservasPostgres) TieneReservasEspacio(ctx context.Context, espacioID string) (bool, error) {
+	var existe bool
+	err := v.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM reserva_grupo rg
+			JOIN materia m ON m.id = rg.materia_id
+			WHERE m.espacio_id = $1
+		) OR EXISTS(
+			SELECT 1 FROM regla_recurrencia rr
+			JOIN materia m ON m.id = rr.materia_id
+			WHERE m.espacio_id = $1
+		)
+	`, espacioID).Scan(&existe)
+	if err != nil {
+		if esIDInvalido(err) {
+			return false, application.ErrIDInvalido
+		}
+		return false, fmt.Errorf("verificando reservas del espacio: %w", err)
 	}
 	return existe, nil
 }

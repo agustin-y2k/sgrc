@@ -529,3 +529,45 @@ func (h *Handler) ObtenerMateria(c *fiber.Ctx) error {
 	}
 	return c.JSON(toMateriaResponse(materia))
 }
+
+// ── Registro ────────────────────────────────────────────────────────────
+
+type lugarParaRegistroDTO struct {
+	Nombre    string `json:"nombre"`
+	Modalidad string `json:"modalidad,omitempty"`
+	// "CURSO" o "ESPACIO". El formulario lo mira para no pedir una materia
+	// donde no se dicta ninguna (RF-02.13).
+	Tipo     string   `json:"tipo"`
+	Materias []string `json:"materias"`
+}
+
+type opcionesDeRegistroResponse struct {
+	Lugares []lugarParaRegistroDTO `json:"lugares"`
+}
+
+// GET /api/registro/opciones — PÚBLICA, sin sesión.
+//
+// La usa el formulario de registro para que quien se anota ELIJA dónde trabaja
+// y qué dicta, en vez de escribirlo: hoy escribe "4to 2da" donde la escuela
+// puso "4°2" y el Admin tiene que adivinar a qué lo asigna.
+//
+// Devuelve NOMBRES y nada más —ni ids, ni docentes, ni conteos— y sólo los del
+// ciclo activo. Es una pantalla abierta a internet: lo que sale por acá es lo
+// mínimo para resolver ese problema, no el árbol académico de la institución.
+func (h *Handler) OpcionesDeRegistro(c *fiber.Ctx) error {
+	op, err := h.svc.OpcionesDeRegistro(c.UserContext())
+	if err != nil {
+		return mapearError(err)
+	}
+
+	lugares := make([]lugarParaRegistroDTO, len(op.Lugares))
+	for i, l := range op.Lugares {
+		if l.Materias == nil {
+			l.Materias = []string{}
+		}
+		lugares[i] = lugarParaRegistroDTO{
+			Nombre: l.Nombre, Modalidad: l.Modalidad, Tipo: l.Tipo, Materias: l.Materias,
+		}
+	}
+	return c.JSON(opcionesDeRegistroResponse{Lugares: lugares})
+}

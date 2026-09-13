@@ -303,6 +303,72 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 		}
 	}
 
+	// ── Los espacios, con sus materias ──────────────────────────────
+	//
+	// La Biblioteca, Dirección y Preceptoría siguen existiendo en marzo. Si el
+	// clonado no los copiara, desaparecerían cada 31 de diciembre y NADIE se
+	// enteraría hasta que un bibliotecario intentara reservar: es el mismo
+	// modo de falla que ya tuvo la modalidad de un curso cuando se agregó esa
+	// columna y no se la sumó acá.
+	espacioRows, err := tx.Query(ctx,
+		`SELECT id, nombre FROM espacio WHERE ciclo_lectivo_id = $1`, cicloOrigenID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("leyendo espacios a clonar: %w", err)
+	}
+	type espacioAClonar struct{ id, nombre string }
+	var espacios []espacioAClonar
+	for espacioRows.Next() {
+		var e espacioAClonar
+		if err := espacioRows.Scan(&e.id, &e.nombre); err != nil {
+			espacioRows.Close()
+			return 0, 0, fmt.Errorf("escaneando espacio a clonar: %w", err)
+		}
+		espacios = append(espacios, e)
+	}
+	espacioRows.Close()
+	if err := espacioRows.Err(); err != nil {
+		return 0, 0, fmt.Errorf("iterando espacios a clonar: %w", err)
+	}
+
+	for _, eo := range espacios {
+		nuevoEspacioID := uuidNuevo()
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO espacio (id, ciclo_lectivo_id, nombre, archivado)
+			 VALUES ($1, $2, $3, false)`,
+			nuevoEspacioID, nuevoCiclo.ID, eo.nombre,
+		); err != nil {
+			return 0, 0, fmt.Errorf("clonando espacio %s: %w", eo.nombre, err)
+		}
+
+		matRows, err := tx.Query(ctx, `SELECT nombre FROM materia WHERE espacio_id = $1`, eo.id)
+		if err != nil {
+			return 0, 0, fmt.Errorf("leyendo materias del espacio a clonar: %w", err)
+		}
+		var nombres []string
+		for matRows.Next() {
+			var n string
+			if err := matRows.Scan(&n); err != nil {
+				matRows.Close()
+				return 0, 0, fmt.Errorf("escaneando materia de espacio a clonar: %w", err)
+			}
+			nombres = append(nombres, n)
+		}
+		matRows.Close()
+		if err := matRows.Err(); err != nil {
+			return 0, 0, fmt.Errorf("iterando materias de espacio a clonar: %w", err)
+		}
+
+		for _, n := range nombres {
+			if _, err := tx.Exec(ctx,
+				`INSERT INTO materia (id, espacio_id, nombre, archivado) VALUES ($1, $2, $3, false)`,
+				uuidNuevo(), nuevoEspacioID, n,
+			); err != nil {
+				return 0, 0, fmt.Errorf("clonando materia %s del espacio: %w", n, err)
+			}
+			materiasClonadas++
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return 0, 0, fmt.Errorf("confirmando clonado: %w", err)
 	}
@@ -324,7 +390,7 @@ func (r *PostgresRepo) ListarAsignaciones(ctx context.Context, cicloID string) (
 		FROM docente_materia dm
 		JOIN usuario u ON u.id = dm.usuario_id
 		JOIN materia m ON m.id = dm.materia_id
-		JOIN curso   c ON c.id = m.curso_id
+		JOIN contenedor_de_materia c ON c.materia_id = m.id
 		WHERE c.ciclo_lectivo_id = $1
 		ORDER BY c.modalidad NULLS FIRST, c.anio NULLS LAST, c.nombre, m.nombre, u.apellido, u.nombre`, cicloID)
 	if err != nil {
@@ -352,7 +418,7 @@ func (r *PostgresRepo) ListarMateriasReservables(ctx context.Context, soloDelDoc
 	query := `
 		SELECT m.id, m.nombre, c.id, c.nombre, COALESCE(c.modalidad, ''), cl.id, cl.anio
 		FROM materia m
-		JOIN curso c ON c.id = m.curso_id
+		JOIN contenedor_de_materia c ON c.materia_id = m.id
 		JOIN ciclo_lectivo cl ON cl.id = c.ciclo_lectivo_id
 		WHERE m.archivado = false AND c.archivado = false AND cl.archivado = false`
 	args := []any{}

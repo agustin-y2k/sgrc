@@ -1,16 +1,22 @@
-# Integración continua: corre en cada push a las ramas de trabajo y en cada
-# Pull Request lo mismo que `docs/10-testing.md` §5 pide correr a mano.
+# Integración continua: corre en cada push a `develop` y en cada Pull Request
+# contra ella lo mismo que `docs/10-testing.md` §5 pide correr a mano.
 #
 # Los jobs son cuatro y deliberadamente independientes: si el lint del backend
 # falla, igual querés ver si los tests del frontend pasan. Un solo job en
 # cadena corta la corrida en el primer error y esconde el resto.
+#
+# **Sólo en `develop`, y no en `main`.** Todo lo que llega a `main` llega por un
+# merge de `develop`, así que lo que se validaría ahí ya se validó — el mismo
+# árbol, los mismos jobs, media hora antes. Correrlo dos veces no agrega una
+# señal: agrega una corrida que nadie mira y el doble de minutos. El lugar donde
+# un rojo sirve para algo es antes del merge, no después.
 name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
 
 # Un push nuevo sobre la misma rama cancela la corrida anterior: lo que
 # importa es si la punta está verde, no cada commit intermedio de un push
@@ -105,12 +111,22 @@ jobs:
 
       # La herramienta sí va en su última versión, y no está pinneada como
       # golangci-lint: acá no hay reproducibilidad que preservar —la base de
-      # datos de vulnerabilidades se consulta en vivo, así que la misma
-      # versión del binario da resultados distintos según el día—. Si algún
-      # día pide un Go más nuevo que el del proyecto, GOTOOLCHAIN en `auto`
-      # (el valor por defecto) se lo baja solo para construirla, sin cambiar
-      # con qué versión se analiza después el código.
+      # datos de vulnerabilidades se consulta en vivo, así que la misma versión
+      # del binario da resultados distintos según el día—.
+      #
+      # `GOTOOLCHAIN: auto` va explícito y es lo único que hace que eso funcione.
+      # govulncheck v1.8.0 pide Go >= 1.26 para COMPILARSE, el proyecto está en
+      # 1.25.13, y setup-go@v7 fija GOTOOLCHAIN=local — así que el `go install`
+      # moría con «requires go >= 1.26.0» y el job venía en rojo sin analizar una
+      # sola línea. Un chequeo de seguridad que falla por no poder arrancar es
+      # peor que no tenerlo: se ve igual que uno que encontró algo.
+      #
+      # Sólo en ESTE paso: se baja el toolchain nuevo para construir la
+      # herramienta y nada más. El análisis de abajo sigue corriendo con el Go
+      # del proyecto, que es el punto de todo el job.
       - name: Instalar govulncheck
+        env:
+          GOTOOLCHAIN: auto
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       # Falla el job solo si el código LLAMA a la función vulnerable. Una

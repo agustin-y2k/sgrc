@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { EstadoBadge } from "@/components/EstadoBadge"
@@ -21,12 +21,79 @@ import {
   textoDeDemora,
 } from "@/features/admin/entregas/compartido"
 import * as reservasApi from "@/features/reservas/api"
+import type { Prestamo } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { contar, plural } from "@/lib/plural"
 
 /**
  * Qué computadoras están fuera del laboratorio y el botón para recibirlas.
+ *
+ * **Agrupado por quién las tiene, no una máquina por renglón.** Las máquinas
+ * no salen ni vuelven de a una: salen con una clase y vuelven con esa clase.
+ * Con un día real cargado, la lista plana eran diecinueve renglones y mil
+ * quinientos píxeles —lo más alto de la portada—, once de ellos repitiendo
+ * palabra por palabra el mismo docente y la misma materia, y recibir un carro
+ * eran once clics. Agrupado son cuatro bloques y un botón por grupo.
+ *
+ * Las máquinas sueltas siguen pudiendo recibirse de a una: cada una es una
+ * casilla adentro de su grupo, y abajo está el botón que recibe lo marcado
+ * con una observación en común.
  */
+
+type Grupo = {
+  clave: string
+  /** Quién responde por estas máquinas. */
+  nombre: string
+  /** Materia, curso o destino: por qué salieron. */
+  detalle: string
+  prestamos: Prestamo[]
+  /** La peor demora del grupo: es la que hay que ir a reclamar. */
+  minutosDeDemora: number
+  /** La salida y la devolución más tempranas del grupo. */
+  salio: string
+  vence?: string
+}
+
+/**
+ * Un grupo es una entrega: la misma persona, por el mismo motivo. No se
+ * agrupa por reserva porque una clase de doce máquinas puede haberse entregado
+ * en dos tandas, y al mostrador le importa quién las tiene.
+ */
+export function agruparPrestamos(prestamos: Prestamo[]): Grupo[] {
+  const grupos = new Map<string, Grupo>()
+
+  for (const p of prestamos) {
+    const detalle = [p.materiaNombre, p.destino].filter(Boolean).join(" · ")
+    const clave = `${p.entregadoANombre}|${detalle}`
+    const existente = grupos.get(clave)
+
+    if (existente) {
+      existente.prestamos.push(p)
+      existente.minutosDeDemora = Math.max(existente.minutosDeDemora, p.minutosDeDemora ?? 0)
+      if (p.entregadoEn < existente.salio) existente.salio = p.entregadoEn
+      if (p.devolucionEstimada && (!existente.vence || p.devolucionEstimada < existente.vence)) {
+        existente.vence = p.devolucionEstimada
+      }
+      continue
+    }
+
+    grupos.set(clave, {
+      clave,
+      nombre: p.entregadoANombre,
+      detalle,
+      prestamos: [p],
+      minutosDeDemora: p.minutosDeDemora ?? 0,
+      salio: p.entregadoEn,
+      vence: p.devolucionEstimada,
+    })
+  }
+
+  // El orden lo decide el backend —lo que debía haber vuelto hace más tiempo
+  // va primero—, y el Map conserva el orden de inserción, así que el primer
+  // préstamo de cada grupo manda.
+  return [...grupos.values()]
+}
+
 export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
   const queryClient = useQueryClient()
   const [marcados, setMarcados] = useState<Set<string>>(new Set())
@@ -60,7 +127,8 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
     },
   })
 
-  const prestamos = data?.data ?? []
+  const prestamos = useMemo(() => data?.data ?? [], [data])
+  const grupos = useMemo(() => agruparPrestamos(prestamos), [prestamos])
   const demorados = prestamos.filter((p) => p.demorado).length
 
   const alternar = (id: string) => {
@@ -98,58 +166,68 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
           </Alert>
         )}
 
-        {/* El orden lo decide el backend: lo que debía haber vuelto hace más
-            tiempo va primero, y lo que no tiene hora pactada al final. */}
-        {prestamos.map((p) => (
-          <div
-            key={p.id}
-            className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-start sm:justify-between"
-          >
-            <div className="flex min-w-0 items-start gap-2">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={marcados.has(p.id)}
-                aria-label={`Seleccionar ${nombreDeEquipo(p)}`}
-                onChange={() => alternar(p.id)}
-              />
+        {grupos.map((g) => (
+          <div key={g.clave} className="grid gap-2 rounded-md border p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-medium">
-                  {nombreDeEquipo(p)}{" "}
-                  {p.demorado && (
+                {/* El nombre que va primero es el de quien RESPONDE por la
+                    máquina, que contra una reserva es siempre el docente. */}
+                <p className="font-medium break-words">
+                  {g.nombre}{" "}
+                  {g.minutosDeDemora > 0 && (
                     <EstadoBadge tono="peligro">
-                      {textoDeDemora(p.minutosDeDemora ?? 0)}
+                      {textoDeDemora(g.minutosDeDemora)}
                     </EstadoBadge>
                   )}
                 </p>
-                {/* El nombre que va primero es el de quien RESPONDE por la
-                    máquina, que contra una reserva es siempre el docente. Si
-                    la vino a buscar otro, se dice al lado y no en su lugar:
-                    a quien hay que reclamarle no cambió. */}
                 <p className="text-muted-foreground text-sm break-words">
-                  {p.entregadoANombre}
-                  {p.retiradoPor && ` · retiró ${p.retiradoPor}`}
-                  {p.materiaNombre && ` · ${p.materiaNombre}`}
-                  {p.destino && ` · ${p.destino}`}
+                  {[g.detalle, contar(g.prestamos.length, "equipo")]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </p>
                 {!compacto && (
                   <p className="text-muted-foreground text-xs">
-                    Salió {hora(p.entregadoEn)}
-                    {p.devolucionEstimada
-                      ? ` · tiene que volver ${hora(p.devolucionEstimada)}`
+                    Salió {hora(g.salio)}
+                    {g.vence
+                      ? ` · tiene que volver ${hora(g.vence)}`
                       : " · sin hora de devolución"}
                   </p>
                 )}
               </div>
+              <Button
+                size="sm"
+                className="shrink-0"
+                disabled={recibir.isPending}
+                // El rótulo visible se repite entre grupos; el que se lee en
+                // voz alta, no: dos botones "Recibir las 10" no dicen de quién.
+                aria-label={`Recibir ${contar(g.prestamos.length, "equipo")} de ${g.nombre}`}
+                onClick={() => recibir.mutate(g.prestamos.map((p) => p.id))}
+              >
+                {g.prestamos.length === 1 ? "Recibir" : `Recibir las ${g.prestamos.length}`}
+              </Button>
             </div>
-            <Button
-              size="sm"
-              className="shrink-0"
-              disabled={recibir.isPending}
-              onClick={() => recibir.mutate([p.id])}
-            >
-              Recibir
-            </Button>
+
+            {/* Cada máquina, una casilla. Que no volvieron todas juntas es lo
+                normal —falta una, alguien se la olvidó—, así que recibir de a
+                una tiene que seguir siendo un clic y no un menú. */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {g.prestamos.map((p) => (
+                <label key={p.id} className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={marcados.has(p.id)}
+                    aria-label={`Seleccionar ${nombreDeEquipo(p)}`}
+                    onChange={() => alternar(p.id)}
+                  />
+                  <span className="min-w-0 break-words">
+                    {nombreDeEquipo(p)}
+                    {p.retiradoPor && (
+                      <span className="text-muted-foreground"> · retiró {p.retiradoPor}</span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
         ))}
 

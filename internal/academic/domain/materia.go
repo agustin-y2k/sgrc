@@ -25,9 +25,16 @@ var (
 // Materia es propia de un Curso específico — no es un catálogo compartido
 // (1°A tiene SU Matemáticas, distinta de la de 1°B).
 type Materia struct {
-	ID      string
-	CursoID string
-	Nombre  string
+	ID string
+	// CursoID y EspacioID: una materia cuelga de UNO de los dos, nunca de los
+	// dos ni de ninguno — la base lo garantiza con un CHECK (migración 017).
+	// El vacío es el que no aplica.
+	//
+	// Casi todas las materias son de un curso; las de un espacio son las de la
+	// Biblioteca, Dirección o Preceptoría, que no tienen año (ver Espacio).
+	CursoID   string
+	EspacioID string
+	Nombre    string
 	// Archivado: ver domain.Curso — se enciende al archivar el ciclo, y es el
 	// único estado de una materia.
 	Archivado bool

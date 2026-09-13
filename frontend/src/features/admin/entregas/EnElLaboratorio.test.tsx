@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
+import { MemoryRouter } from "react-router"
 
 import * as adminApi from "@/features/admin/api"
 import { EnElLaboratorio } from "@/features/admin/entregas/EnElLaboratorio"
@@ -34,11 +35,13 @@ function prestamo(over: Partial<Prestamo> = {}): Prestamo {
   }
 }
 
-function renderTarjeta() {
+function renderIndicador() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
-      <EnElLaboratorio />
+      <MemoryRouter>
+        <EnElLaboratorio />
+      </MemoryRouter>
     </QueryClientProvider>
   )
 }
@@ -55,17 +58,18 @@ describe("EnElLaboratorio", () => {
   })
 
   /**
-   * La pregunta que la tarjeta responde: con cuántas máquinas se cuenta si
-   * alguien golpea la puerta ahora.
+   * La pregunta que responde: con cuántas máquinas se cuenta si alguien
+   * golpea la puerta ahora.
    */
   it("descuenta del inventario lo que está afuera", async () => {
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({
       data: [prestamo(), prestamo({ id: "pr2", equipoId: "pc2" })],
     })
-    renderTarjeta()
+    renderIndicador()
 
-    expect(await screen.findByText("11 de 13 equipos")).toBeInTheDocument()
-    expect(screen.getByText(/2 afuera/)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByText("acá ahora").closest("a")).toHaveTextContent("11 de 13")
+    )
   })
 
   /**
@@ -78,11 +82,10 @@ describe("EnElLaboratorio", () => {
         carro({ disponibles: 10, enMantenimiento: 2, fueraDeServicio: 1, total: 13 }),
       ],
     })
-    renderTarjeta()
+    renderIndicador()
 
-    expect(await screen.findByText("13 de 13 equipos")).toBeInTheDocument()
-    expect(screen.getByText(/3 sin poder usarse/)).toBeInTheDocument()
-    expect(screen.getByText(/no se entregan/)).toBeInTheDocument()
+    expect(await screen.findByText("3 no se pueden usar")).toBeInTheDocument()
+    expect(screen.getByText("acá ahora").closest("a")).toHaveTextContent("13 de 13")
   })
 
   // Los equipos sueltos vienen en su propia fila, sin carro. Si el total se
@@ -95,9 +98,11 @@ describe("EnElLaboratorio", () => {
         { disponibles: 1, enMantenimiento: 0, fueraDeServicio: 0, total: 1 },
       ],
     })
-    renderTarjeta()
+    renderIndicador()
 
-    expect(await screen.findByText("22 de 22 equipos")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByText("acá ahora").closest("a")).toHaveTextContent("22 de 22")
+    )
   })
 
   /**
@@ -106,9 +111,21 @@ describe("EnElLaboratorio", () => {
    */
   it("no inventa un número cuando la consulta falla", async () => {
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockRejectedValue(new Error("sin red"))
-    renderTarjeta()
+    renderIndicador()
 
-    expect(await screen.findByText(/No se pudo consultar/)).toBeInTheDocument()
-    expect(screen.queryByText(/de 13 equipos/)).not.toBeInTheDocument()
+    expect(await screen.findByText("No se pudo consultar")).toBeInTheDocument()
+    expect(screen.queryByText(/de 13/)).not.toBeInTheDocument()
+  })
+
+  // El espacio entre el número y su referencia va en el TEXTO y no en un
+  // margen: con `ml-1` a secas un lector de pantalla dice "once de trece"
+  // pegado, "11de 13".
+  it("el total se lee separado del número", async () => {
+    renderIndicador()
+
+    await waitFor(() => {
+      const celda = screen.getByText("acá ahora").closest("a")
+      expect(celda?.querySelector("p")?.textContent).toBe("13 de 13")
+    })
   })
 })

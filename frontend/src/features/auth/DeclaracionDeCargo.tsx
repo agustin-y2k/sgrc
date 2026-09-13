@@ -9,9 +9,13 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
-import { SelectorDeCursoSolicitado } from "@/features/auth/SelectorDeCursoSolicitado"
+import {
+  SelectorDeCursoSolicitado,
+  SelectorDeMateriaSolicitada,
+  etiquetaDeLugar,
+  useLugaresDeRegistro,
+} from "@/features/auth/SelectorDeCursoSolicitado"
 import { cn } from "@/lib/utils"
 
 /**
@@ -29,11 +33,53 @@ export const camposDeclarados = {
   rolSolicitado: z.enum(["TITULAR", "SUPLENTE"], {
     error: "Elegí si sos titular o suplente",
   }),
-  // Los dos siguen siendo opcionales, y siguen siendo texto libre: al
-  // registrarse la persona no está autenticada, así que no hay lista que
-  // consultar y el curso puede no existir todavía.
+  // Obligatorios para quien se registra como DOCENTE — la validación de que
+  // estén va en el formulario, que es el único que sabe qué cargo se eligió
+  // (ver `exigeCursoYMateria`). Acá quedan opcionales porque un
+  // ADMIN_SISTEMA no los manda.
   cursoSolicitado: z.string().max(100).optional(),
   materiaSolicitada: z.string().max(100).optional(),
+}
+
+/**
+ * Exige el curso y la materia cuando el cargo es DOCENTE.
+ *
+ * Va como `superRefine` del esquema completo y no como campos obligatorios
+ * sueltos porque la regla **depende del cargo**: un administrador de sistema no
+ * declara ninguno de los dos, y marcarlos requeridos a secas le bloquearía el
+ * registro con dos errores sobre campos que ni ve.
+ *
+ * Se exigen los dos porque son lo único que el Admin mira para decidir a qué
+ * asignar a alguien al aprobarlo: una cuenta que llega sin eso deja la
+ * aprobación a la adivinanza o a un intercambio de mensajes.
+ *
+ * Lo usan los dos registros —el de contraseña y el de Google—, que comparten
+ * `camposDeclarados`.
+ */
+export function exigeCursoYMateria(
+  valores: {
+    cargoSolicitado?: string
+    cursoSolicitado?: string
+    materiaSolicitada?: string
+  },
+  ctx: z.RefinementCtx
+) {
+  if (valores.cargoSolicitado !== "DOCENTE") return
+
+  if (!valores.cursoSolicitado?.trim()) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["cursoSolicitado"],
+      message: "Elegí dónde vas a estar, o escribilo con «Otro»",
+    })
+  }
+  if (!valores.materiaSolicitada?.trim()) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["materiaSolicitada"],
+      message: "Elegí la materia, o escribila con «Otro»",
+    })
+  }
 }
 
 /**
@@ -90,6 +136,14 @@ const OPCIONES_DE_CARGO = [
 export function DeclaracionDeCargo({ idPrefijo }: { idPrefijo: string }) {
   const form = useFormContext()
   const cargo = form.watch("cargoSolicitado")
+  // Se pide siempre, no sólo con el cargo DOCENTE elegido: así la lista ya está
+  // cuando el bloque aparece, y no se ve un campo que se puebla tarde.
+  const { lugares, cargado } = useLugaresDeRegistro()
+  const curso = form.watch("cursoSolicitado") as string | undefined
+
+  // El lugar de la lista que se eligió, o null si lo escribió a mano. De esto
+  // depende qué muestra el campo de materia.
+  const lugarElegido = lugares.find((l) => etiquetaDeLugar(l) === (curso ?? "")) ?? null
 
   return (
     <>
@@ -167,11 +221,10 @@ export function DeclaracionDeCargo({ idPrefijo }: { idPrefijo: string }) {
 
       {cargo === "DOCENTE" && (
         <div className="border-t pt-4">
-          <p className="mb-1 text-sm font-medium">¿Qué vas a dictar?</p>
+          <p className="mb-1 text-sm font-medium">¿Dónde vas a estar?</p>
           <p className="text-muted-foreground mb-3 text-xs">
-            Opcional, pero ayuda: es lo que el Admin va a mirar para asignarte a la
-            materia correcta al aprobar tu cuenta. Si el curso o la materia todavía no
-            existen, los crea.
+            Es lo que el Admin va a mirar para asignarte al aprobar tu cuenta. Elegí
+            de la lista, y si lo tuyo no está, elegí «Otro» y escribilo.
           </p>
           <div className="grid gap-4">
             <FormField
@@ -183,26 +236,43 @@ export function DeclaracionDeCargo({ idPrefijo }: { idPrefijo: string }) {
                     <SelectorDeCursoSolicitado
                       idPrefijo={`${idPrefijo}-curso`}
                       value={field.value ?? ""}
-                      onChange={field.onChange}
+                      onChange={(v) => {
+                        field.onChange(v)
+                        // Cambiar de curso invalida la materia: las de 4°2 no
+                        // son las de 1°A, y dejarla puesta mandaría una
+                        // combinación que no existe.
+                        form.setValue("materiaSolicitada", "")
+                      }}
+                      lugares={lugares}
+                      cargado={cargado}
                     />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+            {/* La materia aparece RECIÉN con el curso puesto. Antes no hay
+                qué ofrecer —las materias son las de ese curso— y un
+                desplegable vacío arriba invita a pelearse con él. */}
+            {(curso ?? "") !== "" && (
             <FormField
               control={form.control}
               name="materiaSolicitada"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Materia</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ej.: Programación" {...field} />
+                    <SelectorDeMateriaSolicitada
+                      idPrefijo={`${idPrefijo}-materia`}
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      lugarElegido={lugarElegido}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+            )}
           </div>
         </div>
       )}

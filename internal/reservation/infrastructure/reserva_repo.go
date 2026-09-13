@@ -264,7 +264,7 @@ func (r *PostgresRepo) ListarReservasFuturas(ctx context.Context, desde time.Tim
 		LEFT JOIN carro ca ON ca.id = p.carro_id
 		LEFT JOIN reserva_grupo rg ON rg.id = res.reserva_grupo_id
 		LEFT JOIN materia m ON m.id = res.materia_id
-		LEFT JOIN curso cu ON cu.id = m.curso_id
+		LEFT JOIN contenedor_de_materia cu ON cu.materia_id = m.id
 		WHERE `+condicionNoEmpezada("res", "$1", "$2")+`
 		  AND res.estado = 'CONFIRMADA' AND res.tipo = 'NORMAL'
 		ORDER BY res.fecha, res.hora_inicio, p.identificador NULLS LAST, res.equipo_id
@@ -420,12 +420,12 @@ func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, ciclo
 	gruposDelCiclo := `
 		SELECT rg.id FROM reserva_grupo rg
 		JOIN materia m ON m.id = rg.materia_id
-		JOIN curso c ON c.id = m.curso_id
+		JOIN contenedor_de_materia c ON c.materia_id = m.id
 		WHERE c.ciclo_lectivo_id = $1
 	`
 	materiasDelCiclo := `
 		SELECT m.id FROM materia m
-		JOIN curso c ON c.id = m.curso_id
+		JOIN contenedor_de_materia c ON c.materia_id = m.id
 		WHERE c.ciclo_lectivo_id = $1
 	`
 	bloqueosDelCiclo := `
@@ -488,7 +488,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		LEFT JOIN carro ca ON ca.id = p.carro_id
 		LEFT JOIN reserva_grupo rg ON rg.id = res.reserva_grupo_id
 		LEFT JOIN materia m ON m.id = res.materia_id
-		LEFT JOIN curso cu ON cu.id = m.curso_id
+		LEFT JOIN contenedor_de_materia cu ON cu.materia_id = m.id
 		WHERE 1=1`
 	args := []any{}
 
@@ -614,7 +614,7 @@ func (r *PostgresRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, 
 		       COALESCE(m.nombre, ''), COALESCE(c.nombre, '')
 		FROM reserva res
 		LEFT JOIN materia m ON m.id = res.materia_id
-		LEFT JOIN curso c ON c.id = m.curso_id
+		LEFT JOIN contenedor_de_materia c ON c.materia_id = m.id
 		WHERE res.equipo_id = $1
 		  AND res.fecha >= $2 AND res.fecha <= $3
 		  AND res.estado <> 'CANCELADA'
@@ -972,7 +972,7 @@ func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID
 			       cu.modalidad_norm, cu.division_norm
 			FROM reserva_grupo g
 			JOIN materia m  ON m.id = g.materia_id
-			JOIN curso   cu ON cu.id = m.curso_id
+			JOIN contenedor_de_materia cu ON cu.materia_id = m.id
 			WHERE g.id = $1
 		),
 		`+sqlTramosDePreferencia+`
@@ -1022,7 +1022,7 @@ func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha tim
 			SELECT m.nombre_norm AS norm, cu.anio,
 			       cu.modalidad_norm, cu.division_norm
 			FROM materia m
-			JOIN curso cu ON cu.id = m.curso_id
+			JOIN contenedor_de_materia cu ON cu.materia_id = m.id
 			WHERE m.id = NULLIF($4, '')::uuid
 		),
 		`+sqlTramosDePreferencia+`

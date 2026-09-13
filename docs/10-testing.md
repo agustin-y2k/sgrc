@@ -123,7 +123,12 @@ Dos criterios que ya evitaron falsos verdes:
   ancho que la ventana, nombrando al elemento culpable. El caso que cubre es la
   barra de navegación completa de un Admin: no desborda en un monitor de
   desarrollo, sí en un portátil de 1024, no se ve en una captura, y vuelve sola
-  cada vez que se agrega un ítem al menú.
+  cada vez que se agrega un ítem al menú. El punto de corte entre la barra
+  horizontal y el menú del teléfono es un número **medido**, no elegido, y el
+  mismo valor vive en cinco clases de `AppLayout.tsx`: si una queda atrás, hay
+  un ancho en el que se ven los dos menús a la vez, o ninguno. Agregar "Inicio"
+  lo corrió de 1100 a 1140 —a 1121px la barra deja de partirse en dos
+  renglones—, que es exactamente el modo en que esto vuelve.
 - **Un E2E no puede asumir un sistema sin configurar.** `e2e/reserva.spec.ts`
   elegía su franja horaria entre las 05:00 y las 07:00 —una banda poco habitual,
   a propósito, para no chocar con reservas reales—, lo que funciona mientras la
@@ -216,9 +221,9 @@ cd frontend && npx playwright test  # e2e contra el sistema levantado
 
 ## 6. Integración continua
 
-`.github/workflows/ci.yml` corre en cada push a `main` y a `develop`, y en
-cada Pull Request contra esas ramas, lo mismo que §5 salvo los E2E. Son seis
-jobs independientes —si uno falla, los demás igual terminan—:
+`.github/workflows/ci.yml` corre en cada push a `develop` y en cada Pull
+Request contra ella, lo mismo que §5 salvo los E2E. Son seis jobs
+independientes —si uno falla, los demás igual terminan—:
 
 | Job | Qué corre |
 |---|---|
@@ -228,6 +233,27 @@ jobs independientes —si uno falla, los demás igual terminan—:
 | **Backend — integración** | `go test -tags integration ./...` (Docker del runner) |
 | **Frontend — lint, build y tests** | `npm ci`, `npm run lint`, `npm run build`, `vitest run` |
 | **Imágenes de Docker** | `docker build` de las dos imágenes, sin publicarlas |
+
+**Las capturas de las guías NO las controla CI**, y es una decisión tomada
+después de probarlo. Hubo un workflow que las regeneraba en cada push y fallaba
+si alguna dejaba de coincidir con la commiteada; la comparación era por
+porcentaje de píxeles, con un umbral medido. No alcanzó: la barra es
+`sticky top-0` y en una captura de página completa se dibuja donde esté el
+scroll, así que dos corridas del mismo commit marcaban pantallas distintas por
+un 10% de diferencia que no era un cambio. A eso se sumaba que bastaba un
+`.env.capturas` distinto del de CI —el botón de Google aparece o no según la
+configuración— para que el portón no pudiera estar verde nunca.
+
+Regenerar es ahora parte de commitear: `make capturas` antes de subir un cambio
+de interfaz. Lo que sigue frenando, dentro de esa misma corrida y en la máquina
+de quien la hace, es `preparar-imagenes.py --estricto`: si un script de captura
+falló y alguna imagen no se generó, el pipeline corta. Eso es lo que atrapa un
+selector podrido, que es como esto se rompía de verdad.
+
+**El workflow que queda no corre en `main`**, y es a propósito: todo lo que
+llega ahí llega por un merge de `develop`, así que sería el mismo árbol validado
+dos veces. Lo que importa es que el rojo aparezca **antes** del merge, que es cuando
+todavía sirve para decidir algo.
 
 Cuatro decisiones que conviene conocer antes de tocar el archivo:
 
@@ -243,6 +269,16 @@ Cuatro decisiones que conviene conocer antes de tocar el archivo:
   despliega. Falla solo si el código **llama** a la función vulnerable: una
   dependencia con un CVE que nadie invoca no rompe la corrida, porque una
   alarma que suena por todo se aprende a ignorar.
+
+  Pero la herramienta **se construye** con `GOTOOLCHAIN: auto`, puesto explícito
+  en ese paso y sólo en ése. govulncheck v1.8.0 pide Go ≥ 1.26 para compilarse,
+  el proyecto está en 1.25.13, y `setup-go@v7` fija `GOTOOLCHAIN=local`: el
+  `go install` moría con «requires go >= 1.26.0» y el job estuvo en rojo sin
+  analizar una línea. Vale la pena notar el modo de falla, porque se repite: un
+  chequeo de seguridad que no arranca se ve **igual** que uno que encontró algo,
+  y el rojo se lee como «hay una vulnerabilidad conocida y pendiente». Bajar el
+  toolchain nuevo es sólo para construir el binario; el análisis sigue corriendo
+  con el Go del proyecto, que es el punto de todo el job.
 
   **El precio de esa decisión, con un caso concreto.** La auditoría de seguridad
   encontró que `fasthttp v1.51.0` —el que fija Fiber v2— tenía GO-2026-4950, un

@@ -15,6 +15,7 @@ import (
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
+	espacios         []*domain.Espacio
 	ciclos           map[string]*domain.CicloLectivo
 	cursos           map[string]*domain.Curso
 	materias         map[string]*domain.Materia
@@ -129,6 +130,90 @@ func (r *fakeRepo) EliminarCurso(ctx context.Context, id string) error {
 	}
 	delete(r.cursos, id)
 	return nil
+}
+
+// Lo que ofrece el formulario de registro. El fake devuelve lo que tenga
+// cargado: las pruebas de esta lista viven en el repo de integración, que es
+// donde se puede comprobar que sólo salen los del ciclo activo.
+// ── Espacios (RF-02.13) ─────────────────────────────────────────────────
+//
+// El fake los guarda en memoria como el resto. Lo que de verdad hay que probar
+// de un espacio —que su nombre sea único sin tildes, que sus materias cuelguen
+// bien— vive en los tests de integración, que es donde hay una base.
+
+func (r *fakeRepo) CrearEspacio(ctx context.Context, e *domain.Espacio) error {
+	r.espacios = append(r.espacios, e)
+	return nil
+}
+
+func (r *fakeRepo) BuscarEspacioPorID(ctx context.Context, id string) (*domain.Espacio, error) {
+	for _, e := range r.espacios {
+		if e.ID == id {
+			return e, nil
+		}
+	}
+	return nil, ErrEspacioNoEncontrado
+}
+
+func (r *fakeRepo) ListarEspaciosPorCiclo(ctx context.Context, cicloID string) ([]*domain.Espacio, error) {
+	var out []*domain.Espacio
+	for _, e := range r.espacios {
+		if e.CicloLectivoID == cicloID {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) GuardarEspacio(ctx context.Context, e *domain.Espacio) error {
+	for i, x := range r.espacios {
+		if x.ID == e.ID {
+			r.espacios[i] = e
+			return nil
+		}
+	}
+	return ErrEspacioNoEncontrado
+}
+
+func (r *fakeRepo) EliminarEspacio(ctx context.Context, id string) error {
+	for i, e := range r.espacios {
+		if e.ID == id {
+			r.espacios = append(r.espacios[:i], r.espacios[i+1:]...)
+			return nil
+		}
+	}
+	return ErrEspacioNoEncontrado
+}
+
+func (r *fakeRepo) ListarMateriasPorEspacio(ctx context.Context, espacioID string) ([]*domain.Materia, error) {
+	var out []*domain.Materia
+	for _, m := range r.materias {
+		if m.EspacioID == espacioID {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) NombresParaRegistro(ctx context.Context) (OpcionesDeRegistro, error) {
+	var out OpcionesDeRegistro
+	for _, c := range r.cursos {
+		var materias []string
+		for _, m := range r.materias {
+			if m.CursoID == c.ID {
+				materias = append(materias, m.Nombre)
+			}
+		}
+		out.Lugares = append(out.Lugares, LugarParaRegistro{
+			Nombre: c.Nombre, Tipo: "CURSO", Materias: materias,
+		})
+	}
+	for _, e := range r.espacios {
+		out.Lugares = append(out.Lugares, LugarParaRegistro{
+			Nombre: e.Nombre, Tipo: "ESPACIO", Materias: []string{e.Nombre},
+		})
+	}
+	return out, nil
 }
 
 func (r *fakeRepo) ListarCursosPorCiclo(ctx context.Context, cicloID string) ([]*domain.Curso, error) {
@@ -411,6 +496,7 @@ func (f *fakeValidadorUsuario) AlgunoAprobado(ctx context.Context, usuarioIDs []
 
 type fakeValidadorReservas struct {
 	tieneReservasCurso   bool
+	tieneReservasEspacio bool
 	tieneReservasMateria bool
 	tieneReservasCiclo   bool
 	hayBloqueosEnElAnio  bool
@@ -420,6 +506,10 @@ type fakeValidadorReservas struct {
 func (f *fakeValidadorReservas) TieneReservasCurso(ctx context.Context, cursoID string) (bool, error) {
 	return f.tieneReservasCurso, f.err
 }
+func (f *fakeValidadorReservas) TieneReservasEspacio(ctx context.Context, espacioID string) (bool, error) {
+	return f.tieneReservasEspacio, f.err
+}
+
 func (f *fakeValidadorReservas) TieneReservasMateria(ctx context.Context, materiaID string) (bool, error) {
 	return f.tieneReservasMateria, f.err
 }

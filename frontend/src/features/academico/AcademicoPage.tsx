@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CursosDeCiclo } from "@/features/academico/CursosDeCiclo"
+import { EspaciosDeCiclo } from "@/features/academico/EspaciosDeCiclo"
 import * as academicoApi from "@/features/academico/api"
 import type { CicloLectivo, ResultadoArchivado } from "@/features/academico/types"
 import { getErrorMessage } from "@/lib/api-client"
@@ -371,8 +372,15 @@ export function AcademicoPage() {
               )}
 
               {abierto && (
-                <CardContent>
+                <CardContent className="grid gap-6">
                   <CursosDeCiclo ciclo={ciclo} />
+                  {/* Los lugares que no son cursos van DEBAJO y separados: la
+                      enorme mayoría de las escuelas sólo usa cursos, y esto es
+                      opcional. Arriba competiría con lo que casi todos vienen a
+                      hacer acá. */}
+                  <div className="border-t pt-4">
+                    <EspaciosDeCiclo ciclo={ciclo} />
+                  </div>
                 </CardContent>
               )}
             </Card>

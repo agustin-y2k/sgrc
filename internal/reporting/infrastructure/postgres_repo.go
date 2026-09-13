@@ -187,7 +187,7 @@ func (r *PostgresRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID st
 		LEFT JOIN carro ca ON ca.id = p.carro_id
 		WHERE (
 			r.materia_id IN (
-				SELECT m.id FROM materia m JOIN curso c ON c.id = m.curso_id WHERE c.ciclo_lectivo_id = $1
+				SELECT m.id FROM materia m JOIN contenedor_de_materia c ON c.materia_id = m.id WHERE c.ciclo_lectivo_id = $1
 			)
 			-- Los bloqueos administrativos (RF-04.7) no tienen materia, así que
 			-- el filtro de arriba no los alcanza. Igual ocupan el equipo: sin
@@ -252,7 +252,7 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 		FROM reserva r
 		LEFT JOIN usuario u ON u.id = r.creado_por
 		WHERE r.materia_id IN (
-			SELECT m.id FROM materia m JOIN curso c ON c.id = m.curso_id WHERE c.ciclo_lectivo_id = $1
+			SELECT m.id FROM materia m JOIN contenedor_de_materia c ON c.materia_id = m.id WHERE c.ciclo_lectivo_id = $1
 		)
 		-- Ver CalcularUsoEquiposDeCiclo: una clase que nadie retiró no cuenta.
 		AND r.estado NOT IN ('CANCELADA','NO_RETIRADA')`+condFechasPrefijo("r", condFechas)+`

@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router"
 
-import { cursoDe, etiquetaDeCurso } from "@/features/academico/types"
+import { etiquetaDeMateriaYLugar } from "@/features/academico/types"
 import { SelectorDeHora } from "@/components/SelectorDeHora"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -212,7 +212,7 @@ export function NuevaReservaPage() {
                 <option value="">Elegí una materia…</option>
                 {materiasDisponibles.map((m) => (
                   <option key={m.materiaId} value={m.materiaId}>
-                    {m.materiaNombre} — {etiquetaDeCurso(cursoDe(m))} ({m.cicloAnio})
+                    {etiquetaDeMateriaYLugar(m)} ({m.cicloAnio})
                   </option>
                 ))}
               </Select>

@@ -35,12 +35,27 @@ type Repo interface {
 	EliminarCurso(ctx context.Context, id string) error
 	ListarCursosPorCiclo(ctx context.Context, cicloID string) ([]*domain.Curso, error)
 
+	// NombresParaRegistro: lo que ve el formulario de registro, que es una
+	// pantalla PÚBLICA. Solo nombres del ciclo activo.
+	NombresParaRegistro(ctx context.Context) (OpcionesDeRegistro, error)
+
 	// Materia
 	CrearMateria(ctx context.Context, m *domain.Materia) error
 	BuscarMateriaPorID(ctx context.Context, id string) (*domain.Materia, error)
 	GuardarMateria(ctx context.Context, m *domain.Materia) error
 	EliminarMateria(ctx context.Context, id string) error
 	ListarMateriasPorCurso(ctx context.Context, cursoID string) ([]*domain.Materia, error)
+
+	// ── Espacios (RF-02.13) ─────────────────────────────────────────
+	//
+	// Los lugares que no son cursos. Tienen su propia tabla y no una bandera
+	// dentro de `curso`: ver domain.Espacio.
+	CrearEspacio(ctx context.Context, e *domain.Espacio) error
+	BuscarEspacioPorID(ctx context.Context, id string) (*domain.Espacio, error)
+	ListarEspaciosPorCiclo(ctx context.Context, cicloID string) ([]*domain.Espacio, error)
+	GuardarEspacio(ctx context.Context, e *domain.Espacio) error
+	EliminarEspacio(ctx context.Context, id string) error
+	ListarMateriasPorEspacio(ctx context.Context, espacioID string) ([]*domain.Materia, error)
 
 	// DocenteMateria
 	AsignarDocente(ctx context.Context, dm *domain.DocenteMateria) error
@@ -139,6 +154,9 @@ type MarcasDeInventario interface {
 // siempre devuelve false (ver infrastructure/stub_reservas.go).
 type ValidadorReservas interface {
 	TieneReservasCurso(ctx context.Context, cursoID string) (bool, error)
+	// TieneReservasEspacio: lo mismo para un espacio. Va aparte y no con un
+	// parámetro de tipo porque son dos tablas distintas y la consulta cambia.
+	TieneReservasEspacio(ctx context.Context, espacioID string) (bool, error)
 	TieneReservasMateria(ctx context.Context, materiaID string) (bool, error)
 
 	// TieneReservasDeCiclo existe solo para distinguir dos situaciones que desde

@@ -196,16 +196,34 @@ endif
 # La base es lo único que no se puede reconstruir: el código y las imágenes
 # se vuelven a compilar, los datos no. Conviene correrlo antes de actualizar
 # y antes de aplicar una migración.
+#
+# El volcado va FUERA del árbol de trabajo, a una carpeta hermana. Antes caía en
+# la raíz del repo y quedaba a salvo solo porque .gitignore lo tapaba — una red
+# que protege del `git add` y de nada más: no del `git add -f`, ni de comprimir
+# la carpeta para pasársela a alguien, ni de una sincronización a la nube, ni de
+# cualquier herramienta que no lea .gitignore. Un archivo con los datos de la
+# escuela no tiene por qué estar ahí adentro para empezar.
+#
+#   make backup                      → ../sgrc-datos/
+#   make backup DIR_BACKUPS=/mnt/usb → donde quieras
+#
+# Las reglas de .gitignore se quedan igual, por si alguien corre pg_dump a mano
+# parado en el repo.
+DIR_BACKUPS ?= ../sgrc-datos
+
 backup:
 # `umask 077` antes de la redirección: el archivo lo crea la shell de make, y
 # con el umask normal queda 0644, o sea legible por cualquier usuario del
 # servidor. El volcado tiene el nombre, el correo y el cargo de todo el mundo en
 # texto plano —las contraseñas de las máquinas no, esas van cifradas con
 # CUENTAS_SECRET, ver internal/shared/secretos—. Con 0600 lo lee solo quien lo
-# generó.
-	@umask 077; docker compose exec -T postgres sh -c \
-		'pg_dump -U "$$POSTGRES_USER" "$$POSTGRES_DB"' > backup-sgrc-$$(date +%F).sql
-	@echo "Backup en backup-sgrc-$$(date +%F).sql (solo lo podés leer vos: 0600)"
+# generó. Y la carpeta va en 0700 por lo mismo: de nada sirve el archivo cerrado
+# adentro de un directorio que cualquiera puede listar.
+	@umask 077; mkdir -p "$(DIR_BACKUPS)"; chmod 700 "$(DIR_BACKUPS)"; \
+		docker compose exec -T postgres sh -c \
+		'pg_dump -U "$$POSTGRES_USER" "$$POSTGRES_DB"' \
+		> "$(DIR_BACKUPS)/backup-sgrc-$$(date +%F).sql"
+	@echo "Backup en $(DIR_BACKUPS)/backup-sgrc-$$(date +%F).sql (solo lo podés leer vos: 0600)"
 
 # ── Datos iniciales ───────────────────────────────────────────────────
 

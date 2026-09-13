@@ -26,6 +26,9 @@ const credencialDeAda = credencialCon({
 })
 
 function renderRegistro(credencial = credencialDeAda, onRegistrado = vi.fn()) {
+  // El formulario ofrece los cursos y materias que existen (RF-01.3); sin
+  // lista, los campos siguen siendo de texto libre.
+  vi.mocked(authApi.opcionesDeRegistro).mockResolvedValue({ lugares: [] })
   render(
     <MemoryRouter>
       <Routes>
@@ -49,6 +52,13 @@ async function declarar(
 ) {
   await user.click(screen.getByRole("radio", { name: cargo }))
   await user.selectOptions(screen.getByLabelText("¿Sos titular o suplente?"), "TITULAR")
+
+  // Un DOCENTE no se registra sin decir dónde va a estar y qué dicta. El campo
+  // de materia aparece recién con el curso puesto.
+  if (String(cargo).includes("Docente")) {
+    await user.type(screen.getByLabelText("Curso o lugar donde trabajás"), "5°A")
+    await user.type(screen.getByLabelText("Materia"), "Programación")
+  }
 }
 
 describe("RegistroConGoogle", () => {
@@ -90,8 +100,6 @@ describe("RegistroConGoogle", () => {
     const user = userEvent.setup()
 
     await declarar(user)
-    await user.type(screen.getByLabelText("Curso"), "5°A")
-    await user.type(screen.getByLabelText("Materia"), "Programación")
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 
     await waitFor(() =>
@@ -108,14 +116,15 @@ describe("RegistroConGoogle", () => {
     expect(onRegistrado).toHaveBeenCalled()
   })
 
-  // "No lo declaró" y "lo dejó en blanco" no son dos cosas distintas: el
-  // curso vacío se omite en vez de mandarse como cadena vacía.
-  it("omite el curso y la materia si quedaron vacíos", async () => {
+  // Un administrador de sistema no da clase, así que no declara curso ni
+  // materia — y lo que no se declaró viaja como ausente, no como cadena vacía.
+  // Para un DOCENTE los dos son obligatorios y el formulario no lo deja pasar.
+  it("un administrador de sistema no manda curso ni materia", async () => {
     vi.mocked(authApi.registrarConGoogle).mockResolvedValue(undefined)
     renderRegistro()
     const user = userEvent.setup()
 
-    await declarar(user)
+    await declarar(user, /^Administrador de Sistema/)
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 
     await waitFor(() =>
@@ -123,7 +132,7 @@ describe("RegistroConGoogle", () => {
         credential: credencialDeAda,
         nombre: "Ada",
         apellido: "Lovelace",
-        cargoSolicitado: "DOCENTE",
+        cargoSolicitado: "ADMIN_SISTEMA",
         rolSolicitado: "TITULAR",
         cursoSolicitado: undefined,
         materiaSolicitada: undefined,

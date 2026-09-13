@@ -30,12 +30,22 @@ async function llenarFormulario(
   // El cargo y el rol son obligatorios desde RF-01.3, para los dos cargos.
   await user.click(screen.getByRole("radio", { name: cargo }))
   await user.selectOptions(screen.getByLabelText("¿Sos titular o suplente?"), "TITULAR")
+
+  // Y para un DOCENTE, también el curso y la materia. El campo de materia
+  // aparece recién con el curso puesto, así que el orden no es decorativo.
+  if (String(cargo).includes("Docente")) {
+    await user.type(screen.getByLabelText("Curso o lugar donde trabajás"), "5°A")
+    await user.type(screen.getByLabelText("Materia"), "Programación")
+  }
 }
 
 describe("RegistroPage", () => {
   beforeEach(() => {
     // AvisoDeSpam (RF-05.8) pregunta el remitente al montarse.
     vi.mocked(authApi.configPublica).mockResolvedValue({ googleClientId: "" })
+    // El formulario ofrece los cursos y materias que existen (RF-01.3); sin
+    // lista, los campos siguen siendo de texto libre.
+    vi.mocked(authApi.opcionesDeRegistro).mockResolvedValue({ lugares: [] })
   })
 
   afterEach(() => {
@@ -111,7 +121,6 @@ describe("RegistroPage", () => {
     renderRegistroPage()
 
     await llenarFormulario(user)
-    await user.type(screen.getByLabelText("Materia"), "Programación")
     await user.click(screen.getByRole("radio", { name: /^Administrador de Sistema/ }))
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 
@@ -137,10 +146,10 @@ describe("RegistroPage", () => {
       password: "password123",
       cargoSolicitado: "DOCENTE",
       rolSolicitado: "TITULAR",
-      // Sin completar, no viajan: "no lo declaró" y "lo dejó en blanco" no
-      // son dos cosas distintas.
-      cursoSolicitado: undefined,
-      materiaSolicitada: undefined,
+      // Los dos viajan y no pueden faltar: para un DOCENTE son obligatorios,
+      // porque es lo único que el Admin mira para saber a qué asignarlo.
+      cursoSolicitado: "5°A",
+      materiaSolicitada: "Programación",
     })
   })
 
@@ -154,7 +163,7 @@ describe("RegistroPage", () => {
     await llenarFormulario(user)
     // El curso viaja tal como se escribió: no tiene formato, porque cada
     // institución nombra los suyos como los nombra (RF-02.2).
-    await user.type(screen.getByLabelText("Curso"), "5°A")
+    await user.type(screen.getByLabelText("Curso o lugar donde trabajás"), "5°A")
     await user.type(screen.getByLabelText("Materia"), "Programación")
     await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
 
@@ -196,5 +205,46 @@ describe("RegistroPage", () => {
     expect(
       await screen.findByText(/pedile a un Admin que la elimine/)
     ).toBeInTheDocument()
+  })
+
+  // La regla nueva: un docente no se registra sin decir dónde va a estar y qué
+  // dicta. Antes era opcional y llegaban cuentas que el Admin no sabía a qué
+  // asignar.
+  it("no deja registrarse como docente sin curso ni materia", async () => {
+    // El mock es del módulo y acumula las llamadas de los tests anteriores:
+    // sin esto, "no se llamó" mide toda la suite y no este caso.
+    vi.mocked(authApi.registrar).mockClear()
+    const user = userEvent.setup()
+    renderRegistroPage()
+
+    await user.type(screen.getByLabelText("Nombre"), "Ana")
+    await user.type(screen.getByLabelText("Apellido"), "Docente")
+    await user.type(screen.getByLabelText("Email"), "ana@test.com")
+    await user.type(screen.getByLabelText("Contraseña"), "password123")
+    await user.click(screen.getByRole("radio", { name: /^Docente/ }))
+    await user.selectOptions(screen.getByLabelText("¿Sos titular o suplente?"), "TITULAR")
+    await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
+
+    expect(await screen.findByText(/Elegí dónde vas a estar/)).toBeInTheDocument()
+    expect(authApi.registrar).not.toHaveBeenCalled()
+  })
+
+  // Pero un administrador de sistema sí: no da clase, así que no se le piden.
+  it("un administrador de sistema se registra sin curso ni materia", async () => {
+    vi.mocked(authApi.registrar).mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderRegistroPage()
+
+    await llenarFormulario(user, /^Administrador de Sistema/)
+    await user.click(screen.getByRole("button", { name: "Crear cuenta" }))
+
+    expect(await screen.findByText("Cuenta creada")).toBeInTheDocument()
+    expect(authApi.registrar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cargoSolicitado: "ADMIN_SISTEMA",
+        cursoSolicitado: undefined,
+        materiaSolicitada: undefined,
+      })
+    )
   })
 })

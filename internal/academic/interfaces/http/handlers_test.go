@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +30,7 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 // ── fakeRepo (mismo patrón que application/service_test.go) ───────────
 
 type fakeRepo struct {
+	espacios              []*domain.Espacio
 	pedidos               map[string]*domain.PedidoDeMateria
 	nombresDeUsuario      map[string]string
 	ciclos                map[string]*domain.CicloLectivo
@@ -114,6 +118,98 @@ func (r *fakeRepo) EliminarCurso(ctx context.Context, id string) error {
 	delete(r.cursos, id)
 	return nil
 }
+
+// Lo que ofrece el formulario de registro. El fake devuelve lo que tenga
+// cargado: las pruebas de esta lista viven en el repo de integración, que es
+// donde se puede comprobar que sólo salen los del ciclo activo.
+// ── Espacios (RF-02.13) ─────────────────────────────────────────────────
+//
+// El fake los guarda en memoria como el resto. Lo que de verdad hay que probar
+// de un espacio —que su nombre sea único sin tildes, que sus materias cuelguen
+// bien— vive en los tests de integración, que es donde hay una base.
+
+func (r *fakeRepo) CrearEspacio(ctx context.Context, e *domain.Espacio) error {
+	// El fake aplica la misma regla que el índice único de la base, para que
+	// los tests del handler puedan ejercer el camino del nombre repetido.
+	for _, x := range r.espacios {
+		if strings.EqualFold(x.Nombre, e.Nombre) {
+			return application.ErrNombreEspacioDuplicado
+		}
+	}
+	r.espacios = append(r.espacios, e)
+	return nil
+}
+
+func (r *fakeRepo) BuscarEspacioPorID(ctx context.Context, id string) (*domain.Espacio, error) {
+	for _, e := range r.espacios {
+		if e.ID == id {
+			return e, nil
+		}
+	}
+	return nil, application.ErrEspacioNoEncontrado
+}
+
+func (r *fakeRepo) ListarEspaciosPorCiclo(ctx context.Context, cicloID string) ([]*domain.Espacio, error) {
+	var out []*domain.Espacio
+	for _, e := range r.espacios {
+		if e.CicloLectivoID == cicloID {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) GuardarEspacio(ctx context.Context, e *domain.Espacio) error {
+	for i, x := range r.espacios {
+		if x.ID == e.ID {
+			r.espacios[i] = e
+			return nil
+		}
+	}
+	return application.ErrEspacioNoEncontrado
+}
+
+func (r *fakeRepo) EliminarEspacio(ctx context.Context, id string) error {
+	for i, e := range r.espacios {
+		if e.ID == id {
+			r.espacios = append(r.espacios[:i], r.espacios[i+1:]...)
+			return nil
+		}
+	}
+	return application.ErrEspacioNoEncontrado
+}
+
+func (r *fakeRepo) ListarMateriasPorEspacio(ctx context.Context, espacioID string) ([]*domain.Materia, error) {
+	var out []*domain.Materia
+	for _, m := range r.materias {
+		if m.EspacioID == espacioID {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) NombresParaRegistro(ctx context.Context) (application.OpcionesDeRegistro, error) {
+	var out application.OpcionesDeRegistro
+	for _, c := range r.cursos {
+		var materias []string
+		for _, m := range r.materias {
+			if m.CursoID == c.ID {
+				materias = append(materias, m.Nombre)
+			}
+		}
+		out.Lugares = append(out.Lugares, application.LugarParaRegistro{
+			Nombre: c.Nombre, Tipo: "CURSO", Materias: materias,
+		})
+	}
+	for _, e := range r.espacios {
+		out.Lugares = append(out.Lugares, application.LugarParaRegistro{
+			Nombre: e.Nombre, Tipo: "ESPACIO", Materias: []string{e.Nombre},
+		})
+	}
+	return out, nil
+}
+
 func (r *fakeRepo) ListarCursosPorCiclo(ctx context.Context, cicloID string) ([]*domain.Curso, error) {
 	var resultado []*domain.Curso
 	for _, c := range r.cursos {
@@ -270,6 +366,10 @@ type fakeValidadorReservas struct{}
 func (f *fakeValidadorReservas) TieneReservasCurso(ctx context.Context, cursoID string) (bool, error) {
 	return false, nil
 }
+func (f *fakeValidadorReservas) TieneReservasEspacio(ctx context.Context, espacioID string) (bool, error) {
+	return false, nil
+}
+
 func (f *fakeValidadorReservas) TieneReservasMateria(ctx context.Context, materiaID string) (bool, error) {
 	return false, nil
 }
@@ -350,6 +450,7 @@ func TestHTTP_CrearCiclo_ComoAdmin_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d", resp.StatusCode)
 	}
@@ -363,6 +464,7 @@ func TestHTTP_CrearCiclo_ComoDocente_403(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
 	}
@@ -376,6 +478,7 @@ func TestHTTP_CrearCiclo_AnioInvalido_400(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
@@ -394,6 +497,7 @@ func TestHTTP_ListarCiclos_ComoDocente_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
@@ -409,6 +513,7 @@ func TestHTTP_ArchivarCiclo_YaArchivado_409(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusConflict {
 		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
 	}
@@ -426,6 +531,7 @@ func TestHTTP_CorregirCiclo_OK(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
@@ -444,6 +550,7 @@ func TestHTTP_CorregirCiclo_ComoDocente_403(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
 	}
@@ -459,6 +566,7 @@ func TestHTTP_CorregirCiclo_Archivado_409(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusConflict {
 		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
 	}
@@ -474,6 +582,7 @@ func TestHTTP_CorregirCiclo_AnioFueraDeRango_400(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
@@ -487,6 +596,7 @@ func TestHTTP_CorregirCiclo_NoExiste_404(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusNotFound {
 		t.Fatalf("esperaba 404, obtuve %d", resp.StatusCode)
 	}
@@ -501,6 +611,7 @@ func TestHTTP_EliminarCiclo_204(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusNoContent {
 		t.Fatalf("esperaba 204, obtuve %d", resp.StatusCode)
 	}
@@ -519,6 +630,7 @@ func TestHTTP_EliminarCiclo_ConCursos_409(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusConflict {
 		t.Fatalf("esperaba 409, obtuve %d", resp.StatusCode)
 	}
@@ -533,6 +645,7 @@ func TestHTTP_EliminarCiclo_ComoDocente_403(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
 	}
@@ -553,6 +666,7 @@ func TestHTTP_CrearCurso_SinAnio_400(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
@@ -569,6 +683,7 @@ func TestHTTP_CrearCurso_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d", resp.StatusCode)
 	}
@@ -581,6 +696,7 @@ func TestHTTP_EliminarCurso_NoExiste_404(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusNotFound {
 		t.Fatalf("esperaba 404, obtuve %d", resp.StatusCode)
 	}
@@ -602,6 +718,7 @@ func TestHTTP_CrearMateria_NombreVacio_400(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
@@ -620,6 +737,7 @@ func TestHTTP_AsignarDocente_RolInvalido_400(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
@@ -639,6 +757,7 @@ func TestHTTP_AsignarDocente_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusCreated {
 		t.Fatalf("esperaba 201, obtuve %d", resp.StatusCode)
 	}
@@ -658,6 +777,7 @@ func TestHTTP_CambiarRolDocente_OK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
@@ -682,6 +802,7 @@ func TestHTTP_CambiarRolDocente_RolInvalido_400(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
@@ -696,6 +817,7 @@ func TestHTTP_CambiarRolDocente_ComoDocente_403(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
 	}
@@ -719,6 +841,7 @@ func TestHTTP_RemoverDocenteMateria_DevuelveLasReservasCanceladas(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
@@ -739,6 +862,7 @@ func TestHTTP_RemoverDocenteMateria_ComoDocente_403(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
 	}
@@ -873,6 +997,7 @@ func TestHTTP_ListarPedidos_NombraLaMateriaPedida(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 	}
@@ -918,6 +1043,7 @@ func TestHTTP_ListarPedidos_MateriaNueva_SinNombreResuelto(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	var cuerpo struct {
 		Data []pedidoResponse `json:"data"`
 	}
@@ -957,6 +1083,7 @@ func TestHTTP_Asignaciones_TraeLosNombresResueltos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -993,6 +1120,7 @@ func TestHTTP_Asignaciones_UnDocenteNoPuede(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 403 {
 		t.Errorf("status = %d, esperaba 403", resp.StatusCode)
 	}
@@ -1015,6 +1143,7 @@ func TestHTTP_MateriasDeDocente_FiltraPorEsaPersona(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -1047,6 +1176,7 @@ func TestHTTP_MateriasDeDocente_UnDocenteNoPuede(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 403 {
 		t.Errorf("status = %d, esperaba 403", resp.StatusCode)
 	}
@@ -1073,6 +1203,7 @@ func TestHTTP_MisMaterias_Asignadas_UnAdminNoDictaNinguna(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error inesperado: %v", err)
 		}
+		defer resp.Body.Close()
 		var cuerpo struct {
 			Data []materiaReservableResponse `json:"data"`
 		}
@@ -1145,6 +1276,7 @@ func TestHTTP_ObtenerCicloCursoYMateria(t *testing.T) {
 			if err != nil {
 				t.Fatalf("error inesperado: %v", err)
 			}
+			defer resp.Body.Close()
 			if resp.StatusCode != fiber.StatusOK {
 				t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
 			}
@@ -1159,7 +1291,61 @@ func TestHTTP_ObtenerCurso_NoExiste_404(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenPara("d1", "DOCENTE"))
 
 	resp, _ := app.Test(req)
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusNotFound {
 		t.Fatalf("esperaba 404, obtuve %d", resp.StatusCode)
+	}
+}
+
+// Un nombre de lugar repetido tiene que llegar como 409 con su mensaje, no como
+// «error interno». Salió de probarlo a mano: los errores de espacio estaban
+// definidos pero no traducidos a HTTP, así que caían en el 500 genérico y quien
+// creaba dos veces la Biblioteca no tenía forma de saber qué pasó.
+func TestHTTP_CrearEspacio_NombreRepetido_409(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	crear := func() *http.Response {
+		req := httptest.NewRequest("POST", "/api/ciclos/c1/espacios",
+			jsonBody(espacioRequest{Nombre: "Biblioteca"}))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("error inesperado: %v", err)
+		}
+		// Sin cerrar acá: la respuesta se devuelve y la cierra quien la pidió.
+		return resp
+	}
+
+	primera := crear()
+	defer primera.Body.Close()
+	if primera.StatusCode != fiber.StatusCreated {
+		t.Fatalf("el primero tenía que crearse: %d", primera.StatusCode)
+	}
+
+	resp := crear()
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("esperaba 409 por nombre repetido, obtuve %d", resp.StatusCode)
+	}
+	cuerpo, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(cuerpo), "ya existe un espacio con ese nombre") {
+		t.Errorf("el mensaje tiene que explicar qué pasó; dijo %q", cuerpo)
+	}
+}
+
+// Un lugar sin nombre es 400 y no 500: no hay nada que guardar.
+func TestHTTP_CrearEspacio_SinNombre_400(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("POST", "/api/ciclos/c1/espacios",
+		jsonBody(espacioRequest{Nombre: "   "}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
 }

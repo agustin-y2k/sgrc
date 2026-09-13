@@ -34,6 +34,12 @@ async function login(page, quien) {
   await page.waitForURL((u) => !u.pathname.endsWith("/login"), { timeout: 15000 })
 }
 async function foto(page, nombre, completa = true) {
+  // Al tope antes de disparar: la barra de navegación es `sticky top-0`, así que
+  // en una captura de página completa se dibuja donde esté el scroll en ese
+  // momento. Dos corridas del mismo commit daban la misma pantalla con la barra
+  // arriba en una y por la mitad en la otra —10% de píxeles distintos, suficiente
+  // para que el portón la marque como cambiada sin que nada haya cambiado—.
+  await page.evaluate(() => window.scrollTo(0, 0))
   await page.waitForTimeout(800)
   await page.screenshot({ path: `${SALIDA}/${nombre}.png`, fullPage: completa })
   console.log("  ✓", nombre)
