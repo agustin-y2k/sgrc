@@ -343,6 +343,8 @@ export type ResultadoEntrega = {
   entregadas: Prestamo[]
   noEntregadas?: EquipoNoEntregada[]
   avisos?: ReservaProxima[]
+  /** Las que el docente no se llevó, en una entrega parcial declarada. */
+  liberadas?: string[]
 }
 
 export type ResultadoDevolucion = {

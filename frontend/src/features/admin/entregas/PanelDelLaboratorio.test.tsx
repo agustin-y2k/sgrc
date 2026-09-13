@@ -149,6 +149,7 @@ describe("PanelDelLaboratorio", () => {
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1", "res2"],
       retiradoPor: undefined,
+      liberarNoEntregadas: false,
     })
   })
 
@@ -162,12 +163,70 @@ describe("PanelDelLaboratorio", () => {
     })
     renderPanel()
 
-    await user.click(await screen.findByRole("button", { name: /Entregar \(1\)/ }))
+    await user.click(await screen.findByRole("button", { name: /Entregar todas \(1\)/ }))
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res2"],
       retiradoPor: undefined,
+      liberarNoEntregadas: false,
     })
+  })
+
+  /**
+   * La entrega parcial declarada, que reemplazó al reloj de quince minutos.
+   *
+   * Antes, entregarle una de las dos al docente dejaba la otra guardada y un
+   * barrido la soltaba un cuarto de hora después. Ese plazo tenía que adivinar
+   * si el docente volvía; quien está en el mostrador no adivina, lo tiene
+   * enfrente. Un cuarto de hora figurando ocupada sin estarlo es, en la
+   * práctica, la hora siguiente perdida para otro curso.
+   */
+  it("en la entrega parcial manda solo lo que se llevó, y libera el resto", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([reserva(), reserva({ id: "res2", equipoId: "pc2", identificador: 2 })])
+    )
+    renderPanel()
+
+    await user.click(await screen.findByRole("button", { name: "Entrega parcial" }))
+    await user.click(screen.getByLabelText("Se llevó PC 1 · Carro 1"))
+    await user.click(screen.getByRole("button", { name: /Entregar 1 y liberar el resto/ }))
+
+    expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
+      reservaIds: ["res1"],
+      retiradoPor: undefined,
+      liberarNoEntregadas: true,
+    })
+  })
+
+  // Lo que queda suelto se dice ANTES de confirmar: soltar una máquina en
+  // silencio es lo que hace que después nadie entienda por qué figura libre.
+  it("avisa cuántas quedan libres antes de confirmar", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([
+        reserva(),
+        reserva({ id: "res2", equipoId: "pc2", identificador: 2 }),
+        reserva({ id: "res3", equipoId: "pc3", identificador: 3 }),
+      ])
+    )
+    renderPanel()
+
+    await user.click(await screen.findByRole("button", { name: "Entrega parcial" }))
+    await user.click(screen.getByLabelText("Se llevó PC 1 · Carro 1"))
+
+    expect(screen.getByText(/2 computadoras quedan libres/)).toBeInTheDocument()
+  })
+
+  // Con una sola máquina no hay nada que partir.
+  it("no ofrece entrega parcial cuando hay un solo equipo", async () => {
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
+    renderPanel()
+
+    await screen.findByRole("button", { name: /Entregar todas \(1\)/ })
+    expect(
+      screen.queryByRole("button", { name: "Entrega parcial" })
+    ).not.toBeInTheDocument()
   })
 
   it("anota quién retira sin cambiar de quién es la responsabilidad", async () => {
@@ -187,6 +246,7 @@ describe("PanelDelLaboratorio", () => {
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
       retiradoPor: "Juan (alumno)",
+      liberarNoEntregadas: false,
     })
   })
 

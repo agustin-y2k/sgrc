@@ -77,6 +77,11 @@ type ResultadoEntrega struct {
 	NoEntregadas []EquipoNoEntregado
 	// Avisos: "ojo que este equipo tiene una reserva encima".
 	Avisos []ReservaProxima
+	// Liberadas: las que el docente no se llevó y dejaron de estar guardadas
+	// para él, en una entrega parcial declarada. Se devuelven para poder
+	// decirlo en pantalla: soltar una máquina en silencio es lo que hace que
+	// después nadie entienda por qué figura libre.
+	Liberadas []string
 }
 
 // ── Entrega contra una reserva ──────────────────────────────────────────
@@ -89,6 +94,17 @@ type EntregaPorReservaParams struct {
 	// RetiradoPor: quién vino a buscarlas, si no fue el docente de la reserva.
 	RetiradoPor  string
 	EntregadoPor string
+	// LiberarNoEntregadas es la ENTREGA PARCIAL declarada: el Admin dice que
+	// esto es todo lo que se llevó, así que lo que no marcó deja de estar
+	// guardado y vuelve al resto de la escuela en el acto.
+	//
+	// Antes esto lo decidía un reloj —quince minutos desde la última entrega,
+	// RETIRO_PARCIAL_GRACIA_MINUTOS— porque el sistema no tenía cómo saber si
+	// el docente iba a volver por las otras dos. Preguntárselo a quien está en
+	// el mostrador es más barato y más exacto que adivinarlo: él lo tiene
+	// enfrente. Un cuarto de hora en que la máquina figura ocupada sin estarlo
+	// es, en la práctica, la hora siguiente perdida para otro curso.
+	LiberarNoEntregadas bool
 }
 
 // EntregarPorReserva registra que las máquinas de una reserva salieron.
@@ -187,7 +203,59 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 		}
 	}
 
+	if params.LiberarNoEntregadas {
+		liberadas, err := s.liberarElResto(ctx, reservas, params.ReservaIDs)
+		if err != nil {
+			return nil, err
+		}
+		resultado.Liberadas = liberadas
+	}
+
 	return resultado, nil
+}
+
+// liberarElResto suelta lo que el docente NO se llevó, y sólo eso.
+//
+// El alcance es el GRUPO de las reservas entregadas — una clase, un día, un
+// horario— y ahí termina. Una serie que se repite todos los martes tiene un
+// grupo por fecha, con sus propias reservas: liberar las de hoy no puede tocar
+// las del martes que viene ni por descuido, porque el martes que viene es otro
+// grupo y esta función nunca lo lee. Es la garantía por construcción, no por
+// cuidado al escribir la consulta.
+func (s *Service) liberarElResto(ctx context.Context, entregadas map[string]*domain.Reserva, ids []string) ([]string, error) {
+	grupos := map[string]bool{}
+	for _, id := range ids {
+		if r := entregadas[id]; r != nil && r.ReservaGrupoID != nil {
+			grupos[*r.ReservaGrupoID] = true
+		}
+	}
+	entregada := map[string]bool{}
+	for _, id := range ids {
+		entregada[id] = true
+	}
+
+	var liberadas []string
+	for grupoID := range grupos {
+		hermanas, err := s.repo.ListarReservasPorGrupo(ctx, grupoID)
+		if err != nil {
+			return nil, err
+		}
+		for _, h := range hermanas {
+			// Sólo lo que quedó esperando. Una reserva ya cancelada, ya
+			// liberada antes, o entregada en esta misma tanda, no se toca.
+			if entregada[h.ID] || h.Estado != domain.ReservaConfirmada {
+				continue
+			}
+			if err := h.Liberar(); err != nil {
+				return nil, err
+			}
+			if err := s.repo.GuardarReserva(ctx, h); err != nil {
+				return nil, err
+			}
+			liberadas = append(liberadas, h.ID)
+		}
+	}
+	return liberadas, nil
 }
 
 // ── Entrega espontánea ──────────────────────────────────────────────────

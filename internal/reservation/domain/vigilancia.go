@@ -14,9 +14,6 @@ const (
 	// AntelacionDelRecordatorio: una hora antes. Alcanza para que el docente
 	// llegue, avise, o modifique la reserva antes de que empiece.
 	AntelacionDelRecordatorio = time.Hour
-	// GraciaTrasEntregaParcialPorDefecto: quince minutos desde que el Admin
-	// anotó la entrega.
-	GraciaTrasEntregaParcialPorDefecto = 15 * time.Minute
 )
 
 // CorrespondeRecordar dice si ya es hora de mandarle al docente el aviso de
@@ -35,14 +32,4 @@ func CorrespondeLiberar(fecha time.Time, horaInicio, horaFin time.Duration, grac
 		return false
 	}
 	return !horaDePared(ahora, horaDelDia(ahora)).Before(horaDePared(fecha, horaInicio).Add(gracia))
-}
-
-// CorrespondeLiberarTrasEntregaParcial es el plazo corto: el docente vino, se
-// llevó una parte, y lo que dejó deja de estar guardado a su nombre pasados
-// unos minutos desde esa entrega (RF-08.10).
-func CorrespondeLiberarTrasEntregaParcial(fecha time.Time, horaInicio, horaFin time.Duration, entregadoEn time.Time, gracia time.Duration, ahora time.Time) bool {
-	if YaTermino(fecha, horaInicio, horaFin, ahora) {
-		return false
-	}
-	return !ahora.Before(entregadoEn.Add(gracia))
 }

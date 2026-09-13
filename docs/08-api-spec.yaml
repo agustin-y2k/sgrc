@@ -3022,6 +3022,21 @@ paths:
                   type: array
                   minItems: 1
                   items: { type: string, format: uuid }
+                liberarNoEntregadas:
+                  type: boolean
+                  default: false
+                  description: |
+                    Entrega parcial declarada (RF-08.10.1): esto es TODO lo que
+                    el docente se llevó, así que las reservas del mismo grupo
+                    que no vengan en `reservaIds` pasan a `NO_RETIRADA` en el
+                    acto y sus equipos quedan libres.
+
+                    El alcance es el grupo de lo entregado —una materia, un día,
+                    un horario—. Una reserva que se repite tiene un grupo por
+                    fecha, así que esto nunca alcanza a las fechas siguientes.
+
+                    Ausente o `false` es la entrega de siempre: lo que no se
+                    entregó sigue guardado para ese docente.
                 retiradoPor:
                   type: string
                   maxLength: 200

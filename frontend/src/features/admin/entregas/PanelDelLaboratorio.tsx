@@ -111,6 +111,10 @@ function Clase({
   const queryClient = useQueryClient()
   const [retiradoPor, setRetiradoPor] = useState("")
   const [abriendoNombre, setAbriendoNombre] = useState(false)
+  // La entrega parcial es un modo aparte y no el caso por defecto: lo normal
+  // es que el docente se lleve todo, y eso tiene que ser un clic.
+  const [modoParcial, setModoParcial] = useState(false)
+  const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
 
   // Entregada es la reserva que tiene SU préstamo abierto, no la que usa un
   // equipo que está afuera.
@@ -131,18 +135,29 @@ function Clase({
   const liberadas = clase.reservas.filter((r) => r.estado === "NO_RETIRADA")
 
   const entregar = useMutation({
-    mutationFn: (ids: string[]) =>
+    mutationFn: ({ ids, liberarElResto }: { ids: string[]; liberarElResto: boolean }) =>
       reservasApi.entregarPorReserva({
         reservaIds: ids,
         retiradoPor: retiradoPor.trim() || undefined,
+        liberarNoEntregadas: liberarElResto,
       }),
     onSuccess: async () => {
       setRetiradoPor("")
       setAbriendoNombre(false)
+      setModoParcial(false)
+      setMarcadas(new Set())
       await queryClient.invalidateQueries({ queryKey: PRESTAMOS_KEY })
       await queryClient.invalidateQueries({ queryKey: ["reservas"] })
     },
   })
+
+  const alternar = (id: string) => {
+    const nueva = new Set(marcadas)
+    if (nueva.has(id)) nueva.delete(id)
+    else nueva.add(id)
+    setMarcadas(nueva)
+  }
+  const quedanSueltas = sinRetirar.length - marcadas.size
 
   return (
     <div className="grid gap-2 rounded-md border p-3">
@@ -228,19 +243,87 @@ function Clase({
               </p>
             </div>
           )}
+          {/* Máquina por máquina, sólo en el modo parcial. Lo que no se
+              marca deja de estar guardado para este docente en cuanto se
+              confirma: es el Admin diciendo "esto es todo lo que se llevó",
+              que es un dato que él tiene enfrente y el sistema no. */}
+          {modoParcial && (
+            <div className="grid gap-2 rounded-md border border-dashed p-3">
+              <p className="text-sm font-medium">¿Cuáles se llevó?</p>
+              <div className="grid gap-1 sm:grid-cols-2">
+                {sinRetirar.map((r) => (
+                  <label key={r.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={marcadas.has(r.id)}
+                      aria-label={`Se llevó ${nombreDeEquipo(r)}`}
+                      onChange={() => alternar(r.id)}
+                    />
+                    {nombreDeEquipo(r)}
+                  </label>
+                ))}
+              </div>
+              <p className="text-muted-foreground text-xs">
+                {quedanSueltas === 0
+                  ? "Si se las lleva todas, usá «Entregar todas»."
+                  : `${contar(quedanSueltas, "computadora")} ${plural(quedanSueltas, "queda", "quedan")} libre${plural(quedanSueltas, "", "s")} para otro curso en el acto.`}
+              </p>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={entregar.isPending}
-              onClick={() => entregar.mutate(sinRetirar.map((r) => r.id))}
-            >
-              Entregar {sinRetirar.length === clase.reservas.length ? "todas" : ""} (
-              {sinRetirar.length})
-            </Button>
-            {!abriendoNombre && (
-              <Button variant="outline" size="sm" onClick={() => setAbriendoNombre(true)}>
-                Anotar quién las retira
-              </Button>
+            {modoParcial ? (
+              <>
+                <Button
+                  size="sm"
+                  disabled={entregar.isPending || marcadas.size === 0}
+                  onClick={() =>
+                    entregar.mutate({ ids: [...marcadas], liberarElResto: true })
+                  }
+                >
+                  Entregar {marcadas.size} y liberar el resto
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setModoParcial(false)
+                    setMarcadas(new Set())
+                  }}
+                >
+                  Volver
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  disabled={entregar.isPending}
+                  onClick={() =>
+                    entregar.mutate({
+                      ids: sinRetirar.map((r) => r.id),
+                      liberarElResto: false,
+                    })
+                  }
+                >
+                  Entregar todas ({sinRetirar.length})
+                </Button>
+                {/* Con una sola máquina no hay nada que partir. */}
+                {sinRetirar.length > 1 && (
+                  <Button variant="outline" size="sm" onClick={() => setModoParcial(true)}>
+                    Entrega parcial
+                  </Button>
+                )}
+                {!abriendoNombre && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAbriendoNombre(true)}
+                  >
+                    Anotar quién las retira
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>

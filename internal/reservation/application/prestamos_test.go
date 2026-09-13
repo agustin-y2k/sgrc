@@ -38,6 +38,22 @@ func reservaDeTest(t *testing.T, repo *fakeRepo, id, equipoID string) *domain.Re
 	return r
 }
 
+// reservaDeOtraFecha arma la misma clase una semana después: otro
+// reserva_grupo, que es como el sistema modela cada ocurrencia de una serie
+// que se repite.
+func reservaDeOtraFecha(t *testing.T, repo *fakeRepo, id, grupoID, equipoID string) *domain.Reserva {
+	t.Helper()
+	docente := "Ada Lovelace"
+	creadoPor := "docente1"
+	r, err := domain.NuevaReservaNormal(id, grupoID, equipoID, "materia1", docente, &creadoPor,
+		fecha(2026, time.March, 9), 8*time.Hour, 9*time.Hour, mediodiaDeTest.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	repo.reservas[id] = r
+	return r
+}
+
 // ── Entrega contra reserva ──────────────────────────────────────────────
 
 func TestEntregarPorReserva_TomaLaHoraDeDevolucionDeLaReserva(t *testing.T) {
@@ -144,6 +160,101 @@ func TestEntregarPorReserva_RetiroParcial(t *testing.T) {
 	}
 	if len(repo.prestamos) != 3 {
 		t.Errorf("las otras dos máquinas no deberían haber salido: %d préstamos", len(repo.prestamos))
+	}
+}
+
+// La entrega parcial declarada: el Admin dice "esto es todo lo que se llevó",
+// y lo que no marcó deja de estar guardado en el acto.
+//
+// Antes esto lo decidía un reloj de quince minutos, que tenía que adivinar si
+// el docente volvía por las otras. Quien está en el mostrador no necesita
+// adivinar: lo tiene enfrente.
+func TestEntregarPorReserva_ParcialLiberaLoQueNoSeLlevo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	for i, equipo := range []string{"pc1", "pc2", "pc3", "pc4", "pc5"} {
+		reservaDeTest(t, repo, string(rune('a'+i)), equipo)
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
+		ReservaIDs: []string{"a", "b", "c"}, EntregadoPor: "admin1",
+		LiberarNoEntregadas: true,
+	})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.Entregadas) != 3 {
+		t.Fatalf("esperaba 3 entregas, obtuve %d", len(resultado.Entregadas))
+	}
+	if len(resultado.Liberadas) != 2 {
+		t.Fatalf("esperaba 2 liberadas, obtuve %v", resultado.Liberadas)
+	}
+	for _, id := range []string{"d", "e"} {
+		if repo.reservas[id].Estado != domain.ReservaNoRetirada {
+			t.Errorf("%s quedó en %s, esperaba NO_RETIRADA", id, repo.reservas[id].Estado)
+		}
+	}
+	// Y las entregadas siguen siendo suyas.
+	for _, id := range []string{"a", "b", "c"} {
+		if repo.reservas[id].Estado == domain.ReservaNoRetirada {
+			t.Errorf("%s se entregó: no puede quedar liberada", id)
+		}
+	}
+}
+
+// Sin declararlo, la entrega parcial no suelta nada: es la entrega de siempre.
+func TestEntregarPorReserva_ParcialSinDeclararNoLibera(t *testing.T) {
+	repo := nuevoFakeRepo()
+	for i, equipo := range []string{"pc1", "pc2"} {
+		reservaDeTest(t, repo, string(rune('a'+i)), equipo)
+	}
+	svc := nuevoServicioDeTest(repo)
+
+	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
+		ReservaIDs: []string{"a"}, EntregadoPor: "admin1",
+	})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(resultado.Liberadas) != 0 {
+		t.Errorf("no se pidió liberar nada: %v", resultado.Liberadas)
+	}
+	if repo.reservas["b"].Estado != domain.ReservaConfirmada {
+		t.Errorf("b quedó en %s, esperaba CONFIRMADA", repo.reservas["b"].Estado)
+	}
+}
+
+// Lo que el docente no se llevó HOY no puede tocar la clase del martes que
+// viene. Cada fecha de una serie es su propio reserva_grupo, y liberar recorre
+// UN grupo: el de las reservas que se acaban de entregar.
+func TestEntregarPorReserva_ParcialNoAfectaLaFechaSiguienteDeLaSerie(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaDeTest(t, repo, "hoy-pc1", "pc1")
+	reservaDeTest(t, repo, "hoy-pc2", "pc2")
+	// La misma clase, una semana después: otro grupo, los mismos equipos.
+	reservaDeOtraFecha(t, repo, "prox-pc1", "grupo2", "pc1")
+	reservaDeOtraFecha(t, repo, "prox-pc2", "grupo2", "pc2")
+	svc := nuevoServicioDeTest(repo)
+
+	_, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
+		ReservaIDs: []string{"hoy-pc1"}, EntregadoPor: "admin1",
+		LiberarNoEntregadas: true,
+	})
+
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if repo.reservas["hoy-pc2"].Estado != domain.ReservaNoRetirada {
+		t.Errorf("la de hoy sin retirar tenía que liberarse, quedó en %s",
+			repo.reservas["hoy-pc2"].Estado)
+	}
+	for _, id := range []string{"prox-pc1", "prox-pc2"} {
+		if repo.reservas[id].Estado != domain.ReservaConfirmada {
+			t.Errorf("%s es de la semana que viene y quedó en %s: la liberación se propagó",
+				id, repo.reservas[id].Estado)
+		}
 	}
 }
 
