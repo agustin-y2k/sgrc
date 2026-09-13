@@ -481,12 +481,7 @@ func (r *PostgresRepo) NombresParaRegistro(ctx context.Context) (application.Opc
 		   LEFT JOIN materia m
 		          ON (m.curso_id = t.id OR m.espacio_id = t.id) AND NOT m.archivado
 		  GROUP BY t.nombre, t.modalidad, t.tipo, t.orden, t.anio, t.division
-		  ORDER BY t.orden,
-		           t.anio,
-		           nullif(regexp_replace(coalesce(t.division, ''), '\D', '', 'g'), '')::int NULLS FIRST,
-		           t.division NULLS FIRST,
-		           t.modalidad NULLS FIRST,
-		           t.nombre`)
+		  ORDER BY t.orden, `+ordenDeCursoDe("t")+`, t.nombre`)
 	if err != nil {
 		return out, fmt.Errorf("listando los lugares para el registro: %w", err)
 	}
