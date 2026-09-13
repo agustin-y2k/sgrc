@@ -203,7 +203,11 @@ contraseñas de las cuentas de cada equipo en claro (van cifradas con
 
 Lo que **sí** tiene: nombre, apellido, correo y cargo de todas las personas del
 sistema, en texto plano. Por eso el archivo se crea con `umask 077` —queda `0600`,
-no `0644`— y está en `.gitignore`. En un servidor con varias cuentas de usuario,
+no `0644`— y **fuera del árbol de trabajo** (`../sgrc-datos/`, ver `make backup`).
+Las reglas de `.gitignore` siguen cubriéndolo por si alguien corre `pg_dump` a mano
+parado en el repo, pero no son la defensa: `.gitignore` protege del `git add` y de
+nada más —ni del `git add -f`, ni de comprimir la carpeta para pasársela a alguien,
+ni de una sincronización a la nube—. En un servidor con varias cuentas de usuario,
 un volcado legible por todos es una lista de la planta docente.
 
 ### Qué se loguea de un evento que llega mal

@@ -823,14 +823,16 @@ vuelven a compilar, los datos no.
 **Hacer un backup:**
 
 ```bash
-make backup                    # deja backup-sgrc-AAAA-MM-DD.sql en la carpeta
+make backup                        # deja ../sgrc-datos/backup-sgrc-AAAA-MM-DD.sql
+make backup DIR_BACKUPS=/mnt/usb   # o donde quieras
 ```
 
 o el comando completo:
 
 ```bash
-umask 077; docker compose exec -T postgres sh -c \
-  'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backup-sgrc-$(date +%F).sql
+umask 077; mkdir -p ../sgrc-datos; chmod 700 ../sgrc-datos
+docker compose exec -T postgres sh -c \
+  'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > ../sgrc-datos/backup-sgrc-$(date +%F).sql
 ```
 
 > **El `umask 077` es parte del comando, no un adorno.** El archivo lo crea la
@@ -838,13 +840,24 @@ umask 077; docker compose exec -T postgres sh -c \
 > servidor. Contraseñas no tiene —las de las personas van hasheadas y las de las
 > máquinas cifradas con `CUENTAS_SECRET` (§1.1.c)— pero sí el nombre, el apellido,
 > el correo y el cargo de toda la planta docente en texto plano. Con `umask 077`
-> queda `0600`. `make backup` ya lo hace.
+> queda `0600`, y la carpeta en `0700` porque de poco sirve un archivo cerrado
+> adentro de un directorio que cualquiera puede listar. `make backup` hace las dos.
+
+> **Y va FUERA del árbol de trabajo, no en la raíz del repo.** Ahí estuvo hasta la
+> 1.21, a salvo únicamente porque `.gitignore` lo tapaba — una red que protege del
+> `git add` y de nada más: ni del `git add -f`, ni de comprimir la carpeta para
+> pasársela a alguien, ni de una sincronización a la nube, ni de una herramienta
+> que no lea `.gitignore`. Las reglas de `.gitignore` siguen ahí por si alguien
+> corre `pg_dump` a mano parado en el repo, pero el camino normal ya no las
+> necesita. Lo mismo vale para la **planilla de materias** con la que se importa un
+> ciclo: es la lista real de una institución y se carga desde la pantalla, no vive
+> en el repositorio.
 
 **Restaurar** (sobre una base vacía; borra lo que haya):
 
 ```bash
 docker compose exec -T postgres sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backup-sgrc-2026-08-03.sql
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../sgrc-datos/backup-sgrc-2026-08-03.sql
 ```
 
 Conviene sacar un backup **antes de actualizar** y **antes de aplicar una
