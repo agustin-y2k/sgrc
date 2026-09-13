@@ -17,6 +17,7 @@ import { CambiarEquipoDeReserva } from "@/features/reservas/CambiarEquipoDeReser
 import { CancelarReserva } from "@/features/reservas/CancelarReserva"
 import type { EstadoReserva, GrupoDeReservas } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
+import { etiquetaDeMateriaYLugar } from "@/features/academico/types"
 
 const RESERVAS_KEY = ["reservas"]
 
@@ -148,7 +149,10 @@ export function MisReservasPage() {
                   <div>
                     <p className="font-medium">
                       {grupo.materiaNombre
-                        ? `${grupo.materiaNombre} — ${grupo.cursoNombre}`
+                        ? etiquetaDeMateriaYLugar({
+                            materiaNombre: grupo.materiaNombre,
+                            cursoNombre: grupo.cursoNombre ?? "",
+                          })
                         : `${grupo.motivoBloqueo ?? "Bloqueado"} · ${grupo.reservas.length} equipo${grupo.reservas.length === 1 ? "" : "s"}`}
                     </p>
                     <p className="text-sm">

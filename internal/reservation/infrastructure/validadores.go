@@ -276,7 +276,7 @@ func (v *ValidadorMateriaPostgres) MateriaAceptaReservas(ctx context.Context, ma
 	err := v.pool.QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM materia m
-			JOIN curso c ON c.id = m.curso_id
+			JOIN contenedor_de_materia c ON c.materia_id = m.id
 			JOIN ciclo_lectivo cl ON cl.id = c.ciclo_lectivo_id
 			WHERE m.id = $1
 			  AND m.archivado = false

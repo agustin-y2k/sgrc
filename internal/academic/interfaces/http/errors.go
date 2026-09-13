@@ -17,6 +17,7 @@ func mapearError(err error) error {
 		errors.Is(err, application.ErrCursoNoEncontrado),
 		errors.Is(err, application.ErrMateriaNoEncontrada),
 		errors.Is(err, application.ErrDocenteMateriaNoEncontrado),
+		errors.Is(err, application.ErrEspacioNoEncontrado),
 		errors.Is(err, domain.ErrPedidoNoExiste):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 
@@ -26,6 +27,8 @@ func mapearError(err error) error {
 		errors.Is(err, application.ErrCursoConReservas),
 		errors.Is(err, application.ErrMateriaNombreDuplicado),
 		errors.Is(err, application.ErrMateriaConReservas),
+		errors.Is(err, application.ErrNombreEspacioDuplicado),
+		errors.Is(err, application.ErrEspacioConReservas),
 		errors.Is(err, application.ErrUsuarioNoValidoParaAsignar),
 		errors.Is(err, application.ErrYaDictaLaMateria),
 		errors.Is(err, application.ErrPedidoDuplicado),
@@ -47,6 +50,8 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrTextoIlegible),
 		errors.Is(err, domain.ErrNombreMateriaVacio),
 		errors.Is(err, domain.ErrNombreMateriaLargo),
+		errors.Is(err, domain.ErrNombreEspacioVacio),
+		errors.Is(err, domain.ErrNombreEspacioLargo),
 		errors.Is(err, domain.ErrRolDocenteInvalido),
 		errors.Is(err, application.ErrSinCursosParaImportar),
 		errors.Is(err, application.ErrImportacionDemasiadoGrande),

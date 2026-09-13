@@ -4,6 +4,7 @@ import type {
   CicloLectivo,
   Curso,
   DocenteMateria,
+  Espacio,
   Materia,
   RespuestaLista,
   ResultadoArchivado,
@@ -219,4 +220,40 @@ export function copiarMaterias(cursoOrigenId: string, cursosDestinoIds: string[]
     `/api/cursos/${cursoOrigenId}/copiar-materias`,
     { method: "POST", body: { cursosDestinoIds } }
   )
+}
+
+// ── Espacios (RF-02.13) ───────────────────────────────────────────────
+//
+// Los lugares que no son cursos. Colección hermana de /cursos, con las mismas
+// operaciones: la diferencia es que un espacio es sólo un nombre.
+
+export function listarEspacios(cicloId: string) {
+  return apiFetch<RespuestaLista<Espacio>>(`/api/ciclos/${cicloId}/espacios`)
+}
+
+export function crearEspacio(cicloId: string, nombre: string) {
+  return apiFetch<Espacio>(`/api/ciclos/${cicloId}/espacios`, {
+    method: "POST",
+    body: { nombre },
+  })
+}
+
+export function editarEspacio(id: string, nombre: string) {
+  return apiFetch<void>(`/api/espacios/${id}`, { method: "PATCH", body: { nombre } })
+}
+
+/** Falla con 409 si alguna de sus materias tiene reservas (RF-02.11). */
+export function eliminarEspacio(id: string) {
+  return apiFetch<void>(`/api/espacios/${id}`, { method: "DELETE" })
+}
+
+export function listarMateriasDeEspacio(espacioId: string) {
+  return apiFetch<RespuestaLista<Materia>>(`/api/espacios/${espacioId}/materias`)
+}
+
+export function crearMateriaDeEspacio(espacioId: string, nombre: string) {
+  return apiFetch<Materia>(`/api/espacios/${espacioId}/materias`, {
+    method: "POST",
+    body: { nombre },
+  })
 }

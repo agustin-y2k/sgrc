@@ -38,7 +38,7 @@ const columnasPedidoDetallado = `p.id, p.usuario_id, p.materia_id,
 // donde enterarse de lo contrario.
 const desdePedidoDetallado = `FROM pedido_de_materia p
 	LEFT JOIN materia m ON m.id = p.materia_id
-	LEFT JOIN curso   c ON c.id = m.curso_id
+	LEFT JOIN contenedor_de_materia c ON c.materia_id = m.id
 	LEFT JOIN usuario u ON u.id = p.usuario_id`
 
 func escanearPedidoDetallado(fila pgx.Row) (*application.PedidoDetallado, error) {

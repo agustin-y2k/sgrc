@@ -538,3 +538,84 @@ func (s *Service) quedaOtroDocenteActivo(ctx context.Context, materiaID, usuario
 func (s *Service) ListarDocentesDeMateria(ctx context.Context, materiaID string) ([]*domain.DocenteMateria, error) {
 	return s.repo.ListarDocentesDeMateria(ctx, materiaID)
 }
+
+// ── Registro ────────────────────────────────────────────────────────────
+
+// LugarParaRegistro es un lugar donde alguien puede trabajar, reducido a lo que
+// hace falta para nombrarlo: "4°2" y, si la escuela usa modalidades,
+// "Electromecánica". Sin id — quien se registra no está eligiendo una
+// referencia, está diciendo dónde va a estar para que el Admin sepa a qué
+// asignarlo.
+//
+// Tipo distingue un curso de un espacio (RF-02.13), y el formulario lo usa para
+// no preguntar una materia donde no se dicta ninguna.
+type LugarParaRegistro struct {
+	Nombre    string
+	Modalidad string
+	Tipo      string
+	// Materias de ESE lugar. Van anidadas porque el formulario ofrece las del
+	// curso elegido, no las 86 de la escuela.
+	Materias []string
+}
+
+// OpcionesDeRegistro es lo que el formulario de registro ofrece para elegir.
+type OpcionesDeRegistro struct {
+	Lugares []LugarParaRegistro
+}
+
+// OpcionesDeRegistro devuelve los nombres que el formulario de registro ofrece.
+//
+// No exige sesión: el registro se abre sin haber entrado. Por eso devuelve
+// nombres y nada más, y sólo los del ciclo activo.
+func (s *Service) OpcionesDeRegistro(ctx context.Context) (OpcionesDeRegistro, error) {
+	return s.repo.NombresParaRegistro(ctx)
+}
+
+// ── Espacios (RF-02.13) ─────────────────────────────────────────────────
+//
+// Los lugares de la institución que no son cursos: Dirección, Biblioteca,
+// Preceptoría. Tienen materias y se reserva para ellas igual que para las de un
+// curso — ver domain.Espacio para por qué no se modelaron aflojando el curso.
+
+func (s *Service) CrearEspacio(ctx context.Context, cicloLectivoID, nombre string) (*domain.Espacio, error) {
+	e, err := domain.NuevoEspacio(s.nuevoID(), cicloLectivoID, nombre)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.CrearEspacio(ctx, e); err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+func (s *Service) ListarEspacios(ctx context.Context, cicloID string) ([]*domain.Espacio, error) {
+	return s.repo.ListarEspaciosPorCiclo(ctx, cicloID)
+}
+
+func (s *Service) ObtenerEspacio(ctx context.Context, id string) (*domain.Espacio, error) {
+	return s.repo.BuscarEspacioPorID(ctx, id)
+}
+
+func (s *Service) EditarEspacio(ctx context.Context, id, nombre string) error {
+	e, err := s.repo.BuscarEspacioPorID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := e.Renombrar(nombre); err != nil {
+		return err
+	}
+	return s.repo.GuardarEspacio(ctx, e)
+}
+
+// EliminarEspacio: mismo criterio que un curso (RF-02.11) — lo que tiene clases
+// dadas no se borra. La pregunta la contesta el módulo de reservas.
+func (s *Service) EliminarEspacio(ctx context.Context, id string) error {
+	tieneReservas, err := s.validadorReservas.TieneReservasEspacio(ctx, id)
+	if err != nil {
+		return fmt.Errorf("verificando reservas del espacio: %w", err)
+	}
+	if tieneReservas {
+		return ErrEspacioConReservas
+	}
+	return s.repo.EliminarEspacio(ctx, id)
+}

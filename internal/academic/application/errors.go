@@ -26,6 +26,18 @@ var (
 	ErrCursoConReservas     = errors.New("el curso tiene materias con reservas asociadas — no se puede eliminar")
 
 	ErrMateriaNoEncontrada = errors.New("materia no encontrada")
+
+	// ── Espacios (RF-02.13) ─────────────────────────────────────────
+	ErrEspacioNoEncontrado = errors.New("espacio no encontrado")
+	// ErrNombreEspacioDuplicado usa la misma regla que el resto del sistema:
+	// dos nombres son el mismo sin tildes, sin mayúsculas y sin espacios de
+	// más, así que «Biblioteca» y «biblioteca » no entran las dos.
+	ErrNombreEspacioDuplicado = errors.New(
+		"ya existe un espacio con ese nombre en este ciclo, sin distinguir tildes, mayúsculas ni espacios de más")
+	// ErrEspacioConReservas: mismo criterio que un curso (RF-02.11) — lo que
+	// tiene clases dadas no se borra, se archiva con el ciclo.
+	ErrEspacioConReservas = errors.New(
+		"el espacio tiene materias con reservas: no se puede eliminar")
 	// El "sin distinguir" no es un detalle: sin decirlo, quien acaba de
 	// escribir «Matematica» en un curso que ya tiene «Matemática» lee que ya
 	// existe "ese nombre" mirando dos textos que no son iguales, y el mensaje

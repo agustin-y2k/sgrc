@@ -37,6 +37,9 @@ function materia(over: Partial<Materia> = {}): Materia {
   return {
     id: "materia1",
     cursoId: "curso1",
+    // Vacío: esta materia cuelga de un curso, así que el otro contenedor no
+    // aplica (RF-02.13).
+    espacioId: "",
     nombre: "Matemáticas",
     archivado: false,
     ...over,

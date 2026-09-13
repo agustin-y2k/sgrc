@@ -35,9 +35,32 @@ export type Curso = {
   archivado: boolean
 }
 
+/**
+ * RF-02.13 — un lugar de la institución que NO es un curso: Dirección,
+ * Biblioteca, Preceptoría, un laboratorio.
+ *
+ * Es una entidad aparte y no un curso con una bandera: un curso es un año
+ * obligatorio (ver Curso), y aflojar esa regla para meter algo que no es un
+ * curso abriría la puerta a crear cursos sin año por error. Lo que sí comparte
+ * con un curso es que tiene materias, y se reserva para ellas igual.
+ */
+export type Espacio = {
+  id: string
+  cicloLectivoId: string
+  /** Libre: es lo único que lo identifica. */
+  nombre: string
+  /** Ver Curso.archivado: se enciende al archivar su ciclo. */
+  archivado: boolean
+}
+
 export type Materia = {
   id: string
+  /**
+   * Una materia cuelga de UN contenedor: un curso o un espacio, nunca los dos
+   * ni ninguno (lo garantiza la base). El que no aplica llega vacío.
+   */
   cursoId: string
+  espacioId: string
   nombre: string
   /** Ver Curso.archivado. */
   archivado: boolean
@@ -176,6 +199,26 @@ export function etiquetaCortaDeCurso(
   repetidos: Set<string>
 ): string {
   return repetidos.has(sinTildes(curso.nombre)) ? etiquetaDeCurso(curso) : curso.nombre
+}
+
+/**
+ * Cómo se nombra aquello para lo que se reserva: «Matemática — 4°2», pero
+ * «Biblioteca» a secas.
+ *
+ * Un espacio (RF-02.13) no dicta materias: se reserva PARA el lugar, y la fila
+ * de materia que lo hace posible lleva su mismo nombre. Sin esto, la pantalla
+ * mostraría «Biblioteca — Biblioteca», que es el detalle de implementación
+ * asomándose donde no corresponde.
+ */
+export function etiquetaDeMateriaYLugar(fila: {
+  materiaNombre: string
+  cursoNombre: string
+  cursoModalidad?: string
+}): string {
+  const lugar = etiquetaDeCurso(cursoDe(fila))
+  return fila.materiaNombre === fila.cursoNombre
+    ? lugar
+    : `${fila.materiaNombre} — ${lugar}`
 }
 
 /**
