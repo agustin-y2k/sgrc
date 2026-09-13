@@ -50,40 +50,57 @@ async function foto(page, nombre) {
   await page.screenshot({ path: `${SALIDA}/${nombre}.png`, fullPage: true })
   console.log("  ✓", nombre)
 }
-const nav = await chromium.launch()
-
-// 00 acceso (sin sesión)
-{
-  const page = await (await contexto(nav)).newPage()
-  await page.goto(`${BASE}/login`)
-  await foto(page, "00-acceso")
+/**
+ * Un teléfono de 390 px de ancho, que es el que declara el viewport de la app.
+ * DPR 3 porque es lo que tiene cualquier teléfono de los últimos diez años, y
+ * porque la captura se sirve después a tamaño real: con DPR 1 el texto saldría
+ * borroso apenas se lo mira en una pantalla densa.
+ */
+const TELEFONO = {
+  viewport: { width: 390, height: 844 },
+  deviceScaleFactor: 3,
+  isMobile: true,
+  hasTouch: true,
 }
-// admin
-{
-  const page = await (await contexto(nav)).newPage()
+
+// ── Los recorridos ──────────────────────────────────────────────────────────
+// Cada uno se hace dos veces: una en escritorio, que es lo que va al README, y
+// otra en un teléfono, que termina en `-movil`. Las de teléfono existen para la
+// galería del sitio: abajo de cierto ancho no puede mostrar una página de
+// 1440 px encogida —el texto queda en tres píxeles— y necesita la interfaz tal
+// como el sistema la arma en un teléfono, no un recorte de la de escritorio.
+
+async function acceso(nav, opciones, sufijo) {
+  const page = await (await contexto(nav, opciones)).newPage()
+  await page.goto(`${BASE}/login`)
+  await foto(page, `00-acceso${sufijo}`)
+}
+
+async function admin(nav, opciones, sufijo) {
+  const page = await (await contexto(nav, opciones)).newPage()
   await login(page, "admin")
-  await foto(page, "01-mostrador")
+  await foto(page, `01-mostrador${sufijo}`)
   await page.goto(`${BASE}/admin/inventario`)
   await page.getByRole("button", { name: /gestionar equipos/i }).first().click().catch(() => {})
-  await foto(page, "04-inventario-admin")
-  await page.goto(`${BASE}/admin/reportes`); await foto(page, "05-reportes")
-  await page.goto(`${BASE}/admin/entregas`); await foto(page, "06-entregas")
-  await page.goto(`${BASE}/admin/licencias`); await foto(page, "07-licencias")
+  await foto(page, `04-inventario-admin${sufijo}`)
+  await page.goto(`${BASE}/admin/reportes`); await foto(page, `05-reportes${sufijo}`)
+  await page.goto(`${BASE}/admin/entregas`); await foto(page, `06-entregas${sufijo}`)
+  await page.goto(`${BASE}/admin/licencias`); await foto(page, `07-licencias${sufijo}`)
   await page.goto(`${BASE}/admin/academico`)
   await page.getByRole("button", { name: /^cursos$/i }).first().click().catch(() => {})
   await page.waitForTimeout(500)
   await page.getByRole("button", { name: /^materias$/i }).first().click().catch(() => {})
-  await foto(page, "08-academico")
+  await foto(page, `08-academico${sufijo}`)
 }
-// reportes en oscuro
-{
-  const page = await (await contexto(nav, { tema: "oscuro", colorScheme: "dark" })).newPage()
+
+async function oscuro(nav, opciones, sufijo) {
+  const page = await (await contexto(nav, { ...opciones, tema: "oscuro", colorScheme: "dark" })).newPage()
   await login(page, "admin")
-  await page.goto(`${BASE}/admin/reportes`); await foto(page, "09-reportes-oscuro")
+  await page.goto(`${BASE}/admin/reportes`); await foto(page, `09-reportes-oscuro${sufijo}`)
 }
-// docente
-{
-  const page = await (await contexto(nav)).newPage()
+
+async function docente(nav, opciones, sufijo) {
+  const page = await (await contexto(nav, opciones)).newPage()
   await login(page, "docente")
   await page.goto(`${BASE}/reservas/nueva`)
   await page.getByLabel(/materia/i).selectOption({ index: 1 })
@@ -94,16 +111,30 @@ const nav = await chromium.launch()
   await page.waitForTimeout(1500)
   const c = page.getByRole("checkbox")
   for (let i = 0; i < Math.min(3, await c.count()); i++) await c.nth(i).check().catch(() => {})
-  await foto(page, "02-nueva-reserva")
-  await page.goto(`${BASE}/reservas`); await foto(page, "03-mis-reservas")
+  await foto(page, `02-nueva-reserva${sufijo}`)
+  await page.goto(`${BASE}/reservas`); await foto(page, `03-mis-reservas${sufijo}`)
   await page.goto(`${BASE}/inventario`)
   await page.getByRole("button", { name: /ver equipos/i }).first().click().catch(() => {})
-  await foto(page, "10-inventario-docente")
+  await foto(page, `10-inventario-docente${sufijo}`)
 }
-// móvil
+
+const nav = await chromium.launch()
+
+for (const [opciones, sufijo] of [
+  [{}, ""],
+  [TELEFONO, "-movil"],
+]) {
+  await acceso(nav, opciones, sufijo)
+  await admin(nav, opciones, sufijo)
+  await oscuro(nav, opciones, sufijo)
+  await docente(nav, opciones, sufijo)
+}
+
+// El inicio del docente en el teléfono. Es la única pantalla que se captura
+// solo en un tamaño: es la que muestra que la aplicación se usa desde el aula,
+// y en escritorio no diría nada que las otras no digan ya.
 {
-  const ctx = await nav.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true })
-  const page = await ctx.newPage()
+  const page = await (await contexto(nav, TELEFONO)).newPage()
   await login(page, "docente")
   await foto(page, "11-movil")
 }
