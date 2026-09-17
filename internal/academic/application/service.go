@@ -377,7 +377,7 @@ func (s *Service) EditarMateria(ctx context.Context, materiaID, nuevoNombre stri
 	// marca se ve afectada: la comparación de la base ignora las dos cosas.
 	marcasAfectadas := 0
 	if s.marcas != nil && domain.NormalizarNombre(nombreViejo) != domain.NormalizarNombre(m.Nombre) {
-		marcasAfectadas, err = s.marcas.CuantasDejarianDeAplicar(ctx, nombreViejo)
+		marcasAfectadas, err = s.marcas.CuantasDejarianDeAplicar(ctx, materiaID, nombreViejo)
 		if err != nil {
 			// Contar es informativo: que falle no puede impedir corregir un
 			// nombre mal escrito. Se sigue con cero y queda en el log.

@@ -75,8 +75,8 @@ type academicMarcasAdapter struct {
 	inventorySvc *inventoryapp.Service
 }
 
-func (a *academicMarcasAdapter) CuantasDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error) {
-	return a.inventorySvc.ContarMarcasDeMateria(ctx, materiaNombre)
+func (a *academicMarcasAdapter) CuantasDejarianDeAplicar(ctx context.Context, materiaID, materiaNombre string) (int, error) {
+	return a.inventorySvc.ContarMarcasDeMateria(ctx, materiaID, materiaNombre)
 }
 
 // reservationValidadorJornadaAdapter satisface

@@ -146,7 +146,7 @@ type DatosDeUsuario interface {
 // marca dejaría a las otras veinticinco sin ella.
 type MarcasDeInventario interface {
 	// CuantasDejarianDeAplicar: cuántas marcas apuntan a ese nombre de materia.
-	CuantasDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error)
+	CuantasDejarianDeAplicar(ctx context.Context, materiaID, materiaNombre string) (int, error)
 }
 
 // ValidadorReservas es el puerto hacia reservation — todavía no existe ese

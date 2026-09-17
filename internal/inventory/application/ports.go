@@ -103,7 +103,7 @@ type Repo interface {
 	ListarPreferenciasHuerfanas(ctx context.Context) ([]*PreferenciaHuerfana, error)
 	// ContarPreferenciasQueDejarianDeAplicar contesta, antes de renombrar una
 	// materia, cuántas marcas dejarían de cruzar.
-	ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error)
+	ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaID, materiaNombre string) (int, error)
 
 	// NombresDeMateriaEnUso alimenta el selector del inventario: los nombres
 	// distintos de materia que existen en el sistema.

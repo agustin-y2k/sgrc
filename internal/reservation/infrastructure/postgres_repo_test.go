@@ -1246,6 +1246,31 @@ func materiaEnModalidadDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria st
 	return materiaID
 }
 
+// materiaEnEspacioDeTest arma ciclo → espacio → materia: el contenedor que NO
+// es un curso (migración 017). Un espacio no tiene año, ni modalidad, ni
+// división, así que es el caso donde el lado del contenedor llega en NULL.
+func materiaEnEspacioDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria, nombreEspacio string) string {
+	t.Helper()
+	ctx := context.Background()
+	anioDelCiclo := int(atomic.AddInt32(&contadorAnioDeTest, 1)) + 3000
+	cicloID, espacioID, materiaID := NuevoID(), NuevoID(), NuevoID()
+
+	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anioDelCiclo); err != nil {
+		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO espacio (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, $3)`,
+		espacioID, cicloID, nombreEspacio); err != nil {
+		t.Fatalf("no se pudo crear espacio de prueba: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO materia (id, espacio_id, nombre) VALUES ($1, $2, $3)`,
+		materiaID, espacioID, nombreMateria); err != nil {
+		t.Fatalf("no se pudo crear materia de prueba: %v", err)
+	}
+	return materiaID
+}
+
 // nullSiVacia: la división vacía se guarda como NULL, que es lo que significa
 // "este curso no se divide".
 func nullSiVacia(s string) *string {
@@ -1265,6 +1290,57 @@ func marcarPreferencia(t *testing.T, pool *pgxpool.Pool, equipoID, materia strin
 	if err != nil {
 		t.Fatalf("no se pudo marcar la preferencia: %v", err)
 	}
+}
+
+// marcarPreferenciaCreadaEn es marcarPreferencia con la fecha de alta puesta a
+// mano, para poder probar el desempate por antigüedad.
+func marcarPreferenciaCreadaEn(t *testing.T, pool *pgxpool.Pool, equipoID, materia string,
+	prioridad int, creadaEn time.Time) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO equipo_preferencia (equipo_id, materia_nombre, prioridad, creada_en)
+		 VALUES ($1, $2, $3, $4)`,
+		equipoID, materia, prioridad, creadaEn)
+	if err != nil {
+		t.Fatalf("no se pudo marcar la preferencia: %v", err)
+	}
+}
+
+// Con dos marcas ajenas de IGUAL prioridad —el caso común, porque la prioridad
+// por defecto es 1— hay que elegir siempre la misma, o el motivo que lee el
+// docente cambia entre una carga y la siguiente. Gana la más vieja.
+//
+// Las filas se insertan con la MÁS NUEVA primero: así el orden físico de la
+// tabla devuelve la equivocada si no hay un desempate explícito.
+func TestListarEquiposDisponiblesEn_DesempataLaMarcaAjenaMasVieja(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	materiaID := materiaEnCursoDeTest(t, pool, "Matemática", "3°B")
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+
+	nueva := time.Date(2027, 3, 1, 9, 0, 0, 0, time.UTC)
+	vieja := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	marcarPreferenciaCreadaEn(t, pool, equipoID, "Química", 1, nueva)
+	marcarPreferenciaCreadaEn(t, pool, equipoID, "Dibujo Técnico", 1, vieja)
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, materiaID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	for _, e := range disponibles {
+		if e.EquipoID != equipoID {
+			continue
+		}
+		if e.MotivoDePreferencia() != "Preferente para Dibujo Técnico" {
+			t.Errorf("con prioridades empatadas gana la marca más vieja, obtuve %q", e.MotivoDePreferencia())
+		}
+		return
+	}
+	t.Fatal("el equipo tendría que estar en la lista")
 }
 
 func TestListarEquiposDisponiblesEn_OrdenaPorPreferenciaDeMateria(t *testing.T) {
@@ -1357,6 +1433,40 @@ func TestListarEquiposDisponiblesEn_LaMarcaAcotadaNoAplicaAOtroCurso(t *testing.
 		}
 		if e.Tramo != application.TramoDeOtraMateria {
 			t.Errorf("esperaba DE_OTRA_MATERIA para un curso distinto, obtuve %s", e.Tramo)
+		}
+		return
+	}
+	t.Fatal("el equipo tendría que estar en la lista: la preferencia ordena, no oculta")
+}
+
+// La misma regla, con el año del lado del CONTENEDOR en NULL: una materia
+// puede colgar de un espacio (Biblioteca, Dirección) y no de un curso
+// (migración 017), y un espacio no tiene año. Una marca acotada por año habla
+// de un curso, así que para esa materia es ajena igual que lo es la de 3°B
+// para 5°A.
+func TestListarEquiposDisponiblesEn_MarcaAcotadaEsAjenaParaMateriaDeEspacio(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	materiaID := materiaEnEspacioDeTest(t, pool, "Matemática", "Biblioteca")
+	equipoID := crearEquipoDeCarroDeTest(t, pool)
+
+	tres := 3
+	marcarPreferencia(t, pool, equipoID, "Matemática", nil, &tres, nil, 1)
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	disponibles, err := repo.ListarEquiposDisponiblesEn(ctx, fecha, 10*time.Hour, 11*time.Hour, materiaID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	for _, e := range disponibles {
+		if e.EquipoID != equipoID {
+			continue
+		}
+		if e.Tramo != application.TramoDeOtraMateria {
+			t.Errorf("esperaba DE_OTRA_MATERIA: la marca es de 3° y esta materia no tiene año, obtuve %s", e.Tramo)
 		}
 		return
 	}

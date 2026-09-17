@@ -861,6 +861,17 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 // cuatro fragmentos de acá abajo son las piezas de una misma consulta,
 // compartidas por las dos listas de equipos libres —la de una franja y la de
 // una serie— porque el docente tiene que ver el mismo orden en las dos.
+//
+// Los dos DISTINCT ON desempatan al final por `creada_en, id`: la prioridad
+// por defecto es 1, así que dos marcas empatadas es el caso común y no el
+// borde. Sin ese desempate Postgres elige por orden físico, y el motivo que
+// lee el docente cambia entre una carga y la siguiente.
+//
+// El año se compara con IS NOT DISTINCT FROM y no con `=`: una materia puede
+// colgar de un espacio y no de un curso (migración 017), y un espacio no tiene
+// año. Con `=`, comparar 3 contra NULL da NULL, y la condición NEGADA de
+// `ajena` convierte ese NULL en "no entra" — la marca se caía de los dos
+// tramos y el equipo salía neutral en vez de ajeno.
 const sqlTramosDePreferencia = `
 		-- La marca que apunta a MI materia. DISTINCT ON deja una sola por
 		-- equipo: gana la más específica (año+división > año > sin curso) y,
@@ -874,14 +885,14 @@ const sqlTramosDePreferencia = `
 			FROM equipo_preferencia ep
 			JOIN ctx_materia cm ON true
 			WHERE ep.materia_norm = cm.norm
-			  AND (ep.anio IS NULL OR ep.anio = cm.anio)
+			  AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cm.anio)
 			  AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cm.modalidad_norm)
 			  AND (ep.division_norm  = '' OR ep.division_norm  = cm.division_norm)
 			ORDER BY ep.equipo_id,
 			         (ep.anio IS NOT NULL)::int
 			         + (ep.modalidad_norm <> '')::int
 			         + (ep.division_norm  <> '')::int DESC,
-			         ep.prioridad
+			         ep.prioridad, ep.creada_en, ep.id
 		),
 		-- La marca de otro. Compartir el nombre de la materia no alcanza: una
 		-- marca de "Matemática de 3°B" es ajena para Matemática de 5°A, que es
@@ -894,10 +905,10 @@ const sqlTramosDePreferencia = `
 			JOIN ctx_materia cm ON true
 			WHERE NOT EXISTS (SELECT 1 FROM propia pr WHERE pr.equipo_id = ep.equipo_id)
 			  AND NOT (ep.materia_norm = cm.norm
-			           AND (ep.anio IS NULL OR ep.anio = cm.anio)
+			           AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cm.anio)
 			           AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cm.modalidad_norm)
 			           AND (ep.division_norm  = '' OR ep.division_norm  = cm.division_norm))
-			ORDER BY ep.equipo_id, ep.prioridad
+			ORDER BY ep.equipo_id, ep.prioridad, ep.creada_en, ep.id
 		)`
 
 // sqlColumnasDePreferencia: el tramo como número (0/1/2, el mismo orden en

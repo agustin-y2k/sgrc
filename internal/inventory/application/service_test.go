@@ -1221,7 +1221,7 @@ func (r *fakeRepo) ListarPreferenciasHuerfanas(ctx context.Context) ([]*Preferen
 	return r.preferenciasHuerfanas, nil
 }
 
-func (r *fakeRepo) ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error) {
+func (r *fakeRepo) ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaID, materiaNombre string) (int, error) {
 	n := 0
 	for _, p := range r.preferencias {
 		if texto.SonElMismo(p.MateriaNombre, materiaNombre) {

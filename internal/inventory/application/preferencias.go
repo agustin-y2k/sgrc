@@ -127,8 +127,8 @@ func (s *Service) ListarPreferenciasHuerfanas(ctx context.Context) ([]*Preferenc
 // Lo pregunta academic antes de renombrar una materia, para poder avisar en vez
 // de romper en silencio. Es una lectura, no una regla: el renombre se hace
 // igual, con el número o sin él.
-func (s *Service) ContarMarcasDeMateria(ctx context.Context, materiaNombre string) (int, error) {
-	return s.repo.ContarPreferenciasQueDejarianDeAplicar(ctx, materiaNombre)
+func (s *Service) ContarMarcasDeMateria(ctx context.Context, materiaID, materiaNombre string) (int, error) {
+	return s.repo.ContarPreferenciasQueDejarianDeAplicar(ctx, materiaID, materiaNombre)
 }
 
 // ObtenerPreferencia — ver el bloque «Obtener uno solo» de service.go.

@@ -88,3 +88,7 @@ desktop.ini
 # un producto público: la planilla se carga desde la pantalla y no vive acá.
 /materias_por_division.csv
 /*-materias*.csv
+
+# Documentos de diseño intermedios: material de trabajo mientras se decide algo.
+# Lo que la funcionalidad termina siendo vive en docs/01-requisitos.md.
+/docs/superpowers/

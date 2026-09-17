@@ -83,9 +83,15 @@ func (r *PostgresRepo) BorrarPreferencia(ctx context.Context, id string) error {
 	return nil
 }
 
-// ListarPreferenciasPorEquipo devuelve las marcas de la más específica a la
-// más general, que es el orden en que se leen: primero lo puntual ("3°B") y
-// después lo que vale para todo.
+// ListarPreferenciasPorEquipo devuelve las marcas de un equipo por PRIORIDAD,
+// de la más fuerte a la más débil, y recién dentro de cada prioridad agrupa por
+// materia y va de lo más acotado a lo que vale para todo.
+//
+// Ojo con leer este orden como el de la resolución: cuál marca gana al reservar
+// lo decide primero la especificidad y después la prioridad, y además depende
+// del curso que se esté reservando, que esta lista no conoce. Acá el criterio
+// es otro: la ficha del equipo muestra arriba lo que la escuela declaró más
+// importante.
 func (r *PostgresRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.PreferenciaDeEquipo, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+columnasPreferencia+` FROM equipo_preferencia
@@ -150,6 +156,32 @@ func escanearPreferencia(row pgx.Row) (*domain.PreferenciaDeEquipo, error) {
 	return &p, nil
 }
 
+// sqlLeAplicaAAlgunaMateria contesta «¿la marca `ep` le alcanza a alguna
+// materia cargada?», con las mismas cuatro condiciones que aplica la consulta
+// de reservas al armar el tramo propio (RF-03.21).
+//
+// Vive una sola vez porque la comparten las dos preguntas que se hacen sobre
+// una marca —si quedó huérfana, y cuántas mueren al renombrar—. Separadas,
+// cada pantalla medía algo distinto y las dos se contradecían.
+//
+// Dos cosas que tuvo que aprender:
+//
+//   - **Mira el ALCANCE, no sólo el nombre.** Una marca de "Matemática de 3°B"
+//     cuando no hay ningún 3°B no le aplica a nadie, por más que exista una
+//     Matemática en 5°A. Sin esto esas marcas muertas eran invisibles.
+//   - **Compara por `nombre_norm` y no por `clave_texto`.** Es la columna que
+//     usa el cruce real al reservar. `clave_texto` además colapsa los espacios,
+//     así que daba por viva una marca con un espacio de más que el sistema no
+//     iba a usar nunca.
+const sqlLeAplicaAAlgunaMateria = `
+		SELECT 1
+		  FROM materia m
+		  JOIN contenedor_de_materia cu ON cu.materia_id = m.id
+		 WHERE m.nombre_norm = ep.materia_norm
+		   AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cu.anio)
+		   AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cu.modalidad_norm)
+		   AND (ep.division_norm  = '' OR ep.division_norm  = cu.division_norm)`
+
 // ListarPreferenciasHuerfanas: las marcas que ya no cruzan con ninguna materia
 // cargada.
 //
@@ -173,9 +205,7 @@ func (r *PostgresRepo) ListarPreferenciasHuerfanas(ctx context.Context) ([]*appl
 		  FROM equipo_preferencia ep
 		  JOIN equipo e ON e.id = ep.equipo_id
 		  LEFT JOIN carro c ON c.id = e.carro_id
-		 WHERE NOT EXISTS (
-		       SELECT 1 FROM materia m
-		        WHERE clave_texto(m.nombre) = clave_texto(ep.materia_nombre))
+		 WHERE NOT EXISTS (`+sqlLeAplicaAAlgunaMateria+`)
 		 ORDER BY ep.materia_nombre, 7`)
 	if err != nil {
 		return nil, fmt.Errorf("listando preferencias huérfanas: %w", err)
@@ -204,17 +234,38 @@ func (r *PostgresRepo) ListarPreferenciasHuerfanas(ctx context.Context) ([]*appl
 	return huerfanas, rows.Err()
 }
 
-// ContarPreferenciasQueDejarianDeAplicar: cuántas marcas apuntan a ese nombre
-// de materia y dejarían de cruzar si se renombrara.
+// ContarPreferenciasQueDejarianDeAplicar: cuántas marcas se quedan sin NINGUNA
+// materia si se renombra ésta.
 //
 // Es la pregunta que hay que poder contestar ANTES de renombrar, para avisar en
-// vez de romper en silencio.
-func (r *PostgresRepo) ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error) {
+// vez de romper en silencio. Se corre con el nombre viejo todavía en la base.
+//
+// Cuenta las que mueren de verdad, y para eso hacen falta las dos mitades:
+//
+//  1. que la marca le aplicara a ESTA materia (si estaba acotada a otro curso,
+//     el renombre no la toca);
+//  2. que después no le quede ninguna otra. Es lo que descarta a las marcas sin
+//     alcance cuando la escuela tiene la misma materia en varios cursos:
+//     renombrar la de 3°A no las deja sin trabajo, siguen sirviendo en 5°B.
+//
+// Sin (2) el número era casi siempre "todas", y contradecía a la lista de
+// huérfanas, que sí veía que la marca seguía cruzando.
+func (r *PostgresRepo) ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaID, materiaNombre string) (int, error) {
 	var n int
 	err := r.db.QueryRow(ctx, `
-		SELECT count(*) FROM equipo_preferencia
-		 WHERE clave_texto(materia_nombre) = clave_texto($1)`, materiaNombre).Scan(&n)
+		SELECT count(*)
+		  FROM equipo_preferencia ep
+		  JOIN contenedor_de_materia obj ON obj.materia_id = $1
+		 WHERE ep.materia_norm = translate(lower(btrim($2::text)), 'áéíóúüñ', 'aeiouun')
+		   AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM obj.anio)
+		   AND (ep.modalidad_norm = '' OR ep.modalidad_norm = obj.modalidad_norm)
+		   AND (ep.division_norm  = '' OR ep.division_norm  = obj.division_norm)
+		   AND NOT EXISTS (`+sqlLeAplicaAAlgunaMateria+` AND m.id <> $1)`,
+		materiaID, materiaNombre).Scan(&n)
 	if err != nil {
+		if esIDInvalido(err) {
+			return 0, application.ErrIDInvalido
+		}
 		return 0, fmt.Errorf("contando las marcas que dejarían de aplicar: %w", err)
 	}
 	return n, nil

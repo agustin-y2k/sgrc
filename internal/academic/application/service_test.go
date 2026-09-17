@@ -1395,7 +1395,7 @@ type fakeMarcas struct {
 	nombreRecibido string
 }
 
-func (f *fakeMarcas) CuantasDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error) {
+func (f *fakeMarcas) CuantasDejarianDeAplicar(ctx context.Context, materiaID, materiaNombre string) (int, error) {
 	f.nombreRecibido = materiaNombre
 	return f.cuantas, f.err
 }
