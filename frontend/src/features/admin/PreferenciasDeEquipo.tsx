@@ -4,34 +4,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select } from "@/components/ui/select"
-import {
-  MAX_ANIO_CURSO,
-  MAX_LARGO_DIVISION,
-  MAX_LARGO_MODALIDAD,
-  MIN_ANIO_CURSO,
-  divisionesEnUso,
-  modalidadesEnUso,
-} from "@/features/academico/types"
-import { useCursosDelCicloActivo } from "@/features/academico/useCursosDelCicloActivo"
+import { CamposDeMarca, MARCA_VACIA, type ValoresDeMarca } from "@/features/admin/CamposDeMarca"
 import * as adminApi from "@/features/admin/api"
 import type { PreferenciaDeEquipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
 /** RF-03.21 — para qué materias es preferente este equipo. */
 
-/** Nueve escalones son muchos más de los que una escuela va a usar. */
-const PRIORIDADES = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-
 export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
   const queryClient = useQueryClient()
-  const [materiaNombre, setMateriaNombre] = useState("")
-  const [modalidad, setModalidad] = useState("")
-  const [anio, setAnio] = useState("")
-  const [division, setDivision] = useState("")
-  const [prioridad, setPrioridad] = useState("1")
+  const [valores, setValores] = useState<ValoresDeMarca>(MARCA_VACIA)
   // La marca que se está corrigiendo, o null para dar una nueva de alta. El
   // formulario es el mismo: los campos son los mismos y la materia no se
   // edita, así que un segundo formulario sería el mismo repetido.
@@ -50,45 +32,36 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
     queryFn: () => adminApi.materiasEnUso(),
   })
 
-  // Los cursos y las modalidades que la escuela usa de verdad: acotar una
-  // marca a algo que no existe no marca nada, y los nombres tienen que estar
-  // escritos igual que los del curso para que el cruce los encuentre.
-  const cursos = useCursosDelCicloActivo()
-  const divisiones = divisionesEnUso(cursos)
-  const modalidades = modalidadesEnUso(cursos)
-
   const invalidar = () => queryClient.invalidateQueries({ queryKey: preferenciasKey })
 
   const limpiar = () => {
     setEditando(null)
-    setMateriaNombre("")
-    setModalidad("")
-    setAnio("")
-    setDivision("")
-    setPrioridad("1")
+    setValores(MARCA_VACIA)
   }
 
   /** Carga la marca en el formulario para corregirla. */
   const empezarAEditar = (p: PreferenciaDeEquipo) => {
     setEditando(p)
-    setMateriaNombre(p.materiaNombre)
-    setModalidad(p.modalidad ?? "")
-    setAnio(p.anio === undefined ? "" : String(p.anio))
-    setDivision(p.division ?? "")
-    setPrioridad(String(p.prioridad))
+    setValores({
+      materiaNombre: p.materiaNombre,
+      modalidad: p.modalidad ?? "",
+      anio: p.anio === undefined ? "" : String(p.anio),
+      division: p.division ?? "",
+      prioridad: String(p.prioridad),
+    })
   }
 
   const marcar = useMutation({
     mutationFn: () =>
       adminApi.marcarPreferencia({
         equipoIds: [equipoId],
-        materiaNombre,
+        materiaNombre: valores.materiaNombre,
         // Vacío se manda como ausente: "toda materia con ese nombre" es un
         // alcance, no un dato faltante.
-        modalidad: modalidad.trim() || undefined,
-        anio: anio ? Number(anio) : undefined,
-        division: division.trim() || undefined,
-        prioridad: Number(prioridad),
+        modalidad: valores.modalidad.trim() || undefined,
+        anio: valores.anio ? Number(valores.anio) : undefined,
+        division: valores.division.trim() || undefined,
+        prioridad: Number(valores.prioridad),
       }),
     onSuccess: async () => {
       limpiar()
@@ -102,10 +75,10 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
   const corregir = useMutation({
     mutationFn: (p: PreferenciaDeEquipo) =>
       adminApi.editarPreferencia(p.id, {
-        modalidad: modalidad.trim() || undefined,
-        anio: anio ? Number(anio) : undefined,
-        division: division.trim() || undefined,
-        prioridad: Number(prioridad),
+        modalidad: valores.modalidad.trim() || undefined,
+        anio: valores.anio ? Number(valores.anio) : undefined,
+        division: valores.division.trim() || undefined,
+        prioridad: Number(valores.prioridad),
       }),
     onSuccess: async () => {
       limpiar()
@@ -198,96 +171,13 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
             else marcar.mutate()
           }}
         >
-          <div className="grid gap-1.5">
-            <Label htmlFor={`materia-pref-${equipoId}`}>Materia</Label>
-            {/* Corregir una marca no cambia de materia: para eso está quitarla
-                y hacer otra. El selector se deshabilita en vez de esconderse
-                para que el formulario siga diciendo de qué marca habla. */}
-            <Select
-              id={`materia-pref-${equipoId}`}
-              value={materiaNombre}
-              disabled={editando !== null}
-              onChange={(e) => setMateriaNombre(e.target.value)}
-            >
-              <option value="">Elegí una materia…</option>
-              {nombres.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </Select>
-          </div>
-          {/* Los tres ejes son independientes y todos opcionales: cada uno
-              vacío significa "no acota por esto". Se combinan —"Matemática de
-              4°2, Electromecánica"— y a más ejes puestos, más específica es la
-              marca y antes gana. */}
-          <div className="grid gap-1.5">
-            <Label htmlFor={`modalidad-pref-${equipoId}`}>Modalidad</Label>
-            <Input
-              id={`modalidad-pref-${equipoId}`}
-              className="w-44"
-              value={modalidad}
-              maxLength={MAX_LARGO_MODALIDAD}
-              list={modalidades.length > 0 ? `modalidades-pref-${equipoId}` : undefined}
-              placeholder="Todas"
-              onChange={(e) => setModalidad(e.target.value)}
-            />
-            {modalidades.length > 0 && (
-              <datalist id={`modalidades-pref-${equipoId}`}>
-                {modalidades.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
-            )}
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor={`anio-pref-${equipoId}`}>Año</Label>
-            <Input
-              id={`anio-pref-${equipoId}`}
-              className="w-24"
-              type="number"
-              inputMode="numeric"
-              min={MIN_ANIO_CURSO}
-              max={MAX_ANIO_CURSO}
-              value={anio}
-              placeholder="Todos"
-              onChange={(e) => setAnio(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor={`division-pref-${equipoId}`}>División</Label>
-            <Input
-              id={`division-pref-${equipoId}`}
-              className="w-28"
-              value={division}
-              maxLength={MAX_LARGO_DIVISION}
-              list={divisiones.length > 0 ? `divisiones-pref-${equipoId}` : undefined}
-              placeholder="Todas"
-              onChange={(e) => setDivision(e.target.value)}
-            />
-            {divisiones.length > 0 && (
-              <datalist id={`divisiones-pref-${equipoId}`}>
-                {divisiones.map((d) => (
-                  <option key={d} value={d} />
-                ))}
-              </datalist>
-            )}
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor={`prioridad-pref-${equipoId}`}>Prioridad</Label>
-            <Select
-              id={`prioridad-pref-${equipoId}`}
-              className="w-auto"
-              value={prioridad}
-              onChange={(e) => setPrioridad(e.target.value)}
-            >
-              {PRIORIDADES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <CamposDeMarca
+            valores={valores}
+            onChange={setValores}
+            materias={nombres}
+            materiaBloqueada={editando !== null}
+            idBase={equipoId}
+          />
           {editando ? (
             <span className="flex gap-2">
               <Button type="submit" size="sm" disabled={corregir.isPending}>
@@ -301,7 +191,7 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
             <Button
               type="submit"
               size="sm"
-              disabled={materiaNombre === "" || marcar.isPending}
+              disabled={valores.materiaNombre === "" || marcar.isPending}
             >
               Marcar
             </Button>
