@@ -19,6 +19,7 @@ import { AltaDeEquipo, EdicionDeEquipo } from "@/features/admin/FormularioEquipo
 import { IncidenciasDeEquipo } from "@/features/admin/IncidenciasDeEquipo"
 import { LicenciasDeEquipo } from "@/features/admin/LicenciasDeEquipo"
 import { MarcasHuerfanas } from "@/features/admin/MarcasHuerfanas"
+import { PreferenciaDeCarro } from "@/features/admin/PreferenciaDeCarro"
 import { PreferenciasDeEquipo } from "@/features/admin/PreferenciasDeEquipo"
 import { OtrosEquipos } from "@/features/admin/OtrosEquipos"
 import { PrestamosDeEquipo } from "@/features/admin/PrestamosDeEquipo"
@@ -479,6 +480,7 @@ export function InventarioAdminPage() {
   const queryClient = useQueryClient()
   const [carroAbierto, setCarroAbierto] = useState<string | null>(null)
   const [carroEnEdicion, setCarroEnEdicion] = useState<string | null>(null)
+  const [carroEnPreferencia, setCarroEnPreferencia] = useState<string | null>(null)
   const [carroEnBaja, setCarroEnBaja] = useState<Carro | null>(null)
   const [nombreCarro, setNombreCarro] = useState("")
   const [descripcionCarro, setDescripcionCarro] = useState("")
@@ -622,6 +624,15 @@ export function InventarioAdminPage() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() =>
+                          setCarroEnPreferencia(carroEnPreferencia === carro.id ? null : carro.id)
+                        }
+                      >
+                        Preferencia del carro
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         aria-expanded={abierto}
                         onClick={() => setCarroAbierto(abierto ? null : carro.id)}
                       >
@@ -647,6 +658,12 @@ export function InventarioAdminPage() {
                 )}
                 {editandoCarro && (
                   <EdicionDeCarro carro={carro} onListo={() => setCarroEnEdicion(null)} />
+                )}
+                {carroEnPreferencia === carro.id && (
+                  <PreferenciaDeCarro
+                    carroId={carro.id}
+                    onListo={() => setCarroEnPreferencia(null)}
+                  />
                 )}
                 {bajandoCarro && (
                   <div className="grid gap-2 rounded-md border p-3">
