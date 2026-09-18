@@ -33,7 +33,10 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
     queryFn: () => adminApi.materiasEnUso(),
   })
 
-  const invalidar = () => queryClient.invalidateQueries({ queryKey: preferenciasKey })
+  // Invalida el prefijo y no sólo la clave de este equipo: en el inventario el
+  // panel del carro puede estar abierto al mismo tiempo, y su aviso de empate
+  // se arma con las marcas de todos estos equipos.
+  const invalidar = () => queryClient.invalidateQueries({ queryKey: ["preferencias"] })
 
   const limpiar = () => {
     setEditando(null)
@@ -107,11 +110,16 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
   const nombres = materias?.data ?? []
   const errorDeAccion = marcar.error ?? corregir.error ?? borrar.error
 
-  // Sólo al dar de alta y con una materia elegida: corrigiendo una marca que ya
-  // existe, ella misma está en la lista y se avisaría a sí misma; y sin materia
-  // todavía no hay nada que comparar, sólo el string vacío del formulario en blanco.
+  // Sólo con una materia elegida: el string vacío del formulario en blanco no
+  // coincide con ninguna marca, así que sin este guard toda marca en prioridad 1
+  // se leería como empate apenas se abre la ficha.
+  //
+  // Corrigiendo también avisa: subirle la prioridad a una marca existente hasta
+  // la de otra es la forma natural de "hacer que ésta mande", y es exactamente
+  // el empate del que hay que avisar. La marca editada no se avisa a sí misma
+  // porque se compara por nombre de materia, y el suyo queda fijo.
   const empatadas =
-    editando || valores.materiaNombre === ""
+    valores.materiaNombre === ""
       ? []
       : materiasConLaMismaPrioridad(
           preferencias,

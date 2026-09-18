@@ -271,6 +271,30 @@ describe("PreferenciasDeEquipo", () => {
       expect(screen.getByLabelText("Materia")).toBeDisabled()
     })
 
+    // Subirle la prioridad a una marca hasta la de otra es la forma natural de
+    // "hacer que ésta mande", y deja el empate exacto del que hay que avisar.
+    it("avisa si al corregir la prioridad queda empatada con otra materia", async () => {
+      const user = userEvent.setup()
+      renderPanel([
+        preferencia({ id: "p1", materiaNombre: "Dibujo Técnico", prioridad: 1 }),
+        preferencia({
+          id: "p2",
+          materiaNombre: "Matemática",
+          prioridad: 2,
+          alcance: "Matemática",
+        }),
+      ])
+
+      const marcas = within(await screen.findByRole("list"))
+      const deMatematica = marcas.getByText(/Matemática/).closest("li")!
+      await user.click(within(deMatematica).getByRole("button", { name: "Editar" }))
+      await user.selectOptions(screen.getByLabelText("Prioridad"), "1")
+
+      expect(
+        await screen.findByText(/ya es preferente de Dibujo Técnico con prioridad 1/),
+      ).toBeInTheDocument()
+    })
+
     it("cancelar deja el formulario como estaba", async () => {
       const user = userEvent.setup()
       renderPanel([preferencia({ id: "p1", anio: 4 })])
