@@ -258,6 +258,9 @@ func (r *fakeRepo) GuardarReserva(ctx context.Context, res *domain.Reserva) erro
 	r.reservas[res.ID] = res
 	return nil
 }
+func (r *fakeRepo) BuscarReservasParaActualizar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	return r.BuscarReservasPorIDs(ctx, ids)
+}
 func (r *fakeRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoID string) ([]*domain.Reserva, error) {
 	var resultado []*domain.Reserva
 	for _, res := range r.reservas {
@@ -326,6 +329,10 @@ type fakeValidadorMateria struct {
 	asignado bool
 	// archivada simula una materia de un ciclo ya cerrado (RF-04.1).
 	archivada bool
+}
+
+func (f *fakeValidadorMateria) NombreDeMateria(ctx context.Context, materiaID string) (string, error) {
+	return "Dibujo Técnico", nil
 }
 
 func (f *fakeValidadorMateria) MateriaAceptaReservas(ctx context.Context, materiaID string) (bool, error) {

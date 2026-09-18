@@ -1213,12 +1213,26 @@ func escanearEquiposDisponibles(rows pgx.Rows) ([]application.EquipoDisponible, 
 // Los ids que no existen simplemente no están en el mapa. Qué significa eso lo
 // decide quien llama (ver el comentario del puerto).
 func (r *PostgresRepo) BuscarReservasPorIDs(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	return r.buscarReservasPorIDs(ctx, ids, "")
+}
+
+// BuscarReservasParaActualizar es la misma consulta con la fila tomada.
+//
+// El ORDER BY no es cosmético y por eso va acá y no en la versión de lectura:
+// dos pedidos simultáneos que tomen las mismas dos reservas en orden distinto
+// se abrazan y Postgres mata a uno por deadlock. Con un orden fijo, el segundo
+// espera al primero y sigue.
+func (r *PostgresRepo) BuscarReservasParaActualizar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	return r.buscarReservasPorIDs(ctx, ids, ` ORDER BY id FOR UPDATE`)
+}
+
+func (r *PostgresRepo) buscarReservasPorIDs(ctx context.Context, ids []string, cola string) (map[string]*domain.Reserva, error) {
 	if len(ids) == 0 {
 		return map[string]*domain.Reserva{}, nil
 	}
 
 	rows, err := r.db.Query(ctx,
-		`SELECT `+columnasReserva+` FROM reserva WHERE id = ANY($1)`, ids)
+		`SELECT `+columnasReserva+` FROM reserva WHERE id = ANY($1)`+cola, ids)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido

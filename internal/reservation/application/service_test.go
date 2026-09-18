@@ -442,6 +442,14 @@ func (r *fakeRepo) BuscarReservaPorID(ctx context.Context, id string) (*domain.R
 	}
 	return res, nil
 }
+
+// BuscarReservasParaActualizar: el fake no tiene filas que bloquear, así que
+// el "FOR UPDATE" es lo único que no reproduce. Lo que sí reproduce es el
+// estado que la clasificación va a leer, que es de lo que habla el método.
+func (r *fakeRepo) BuscarReservasParaActualizar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	return r.BuscarReservasPorIDs(ctx, ids)
+}
+
 func (r *fakeRepo) GuardarReserva(ctx context.Context, res *domain.Reserva) error {
 	r.reservas[res.ID] = res
 	return nil
@@ -486,6 +494,10 @@ func (r *fakeRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []string, 
 			EquipoID: res.EquipoID, Etiqueta: "PC " + res.EquipoID,
 			Fecha: res.Fecha, HoraInicio: res.HoraInicio, HoraFin: res.HoraFin,
 			MotivoBloqueo: res.MotivoBloqueo,
+			ReservaID:     res.ID,
+		}
+		if res.MateriaID != nil {
+			sol.MateriaID = *res.MateriaID
 		}
 		if res.NombreDocenteSnapshot != nil {
 			sol.Docente = *res.NombreDocenteSnapshot
@@ -682,6 +694,10 @@ func (f *fakeValidadorMateria) DocenteEstaAsignado(ctx context.Context, materiaI
 	return f.asignado, nil
 }
 
+func (f *fakeValidadorMateria) NombreDeMateria(ctx context.Context, materiaID string) (string, error) {
+	return "Dibujo Técnico", nil
+}
+
 type fakeValidadorEquipo struct {
 	disponible         bool
 	errIdentificadores error
@@ -797,7 +813,7 @@ func fecha(anio int, mes time.Month, dia int) time.Time {
 func TestCrearReserva_OK(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	grupo, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	grupo, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1", "pc2"})
 
 	if err != nil {
@@ -824,7 +840,7 @@ func TestCrearReserva_FinDeSemana_SePuede(t *testing.T) {
 	} {
 		svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-		grupo, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+		grupo, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 			dia, 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
 		if err != nil {
@@ -851,7 +867,7 @@ func TestCrearReserva_FueraDeLaJornada_Error(t *testing.T) {
 		eventbus.NewInMemoryEventBus(),
 	)
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
 	if !errors.Is(err, ErrFueraDeJornada) {
@@ -873,7 +889,7 @@ func TestCrearReserva_EnElPasado_Error(t *testing.T) {
 	for nombre, c := range casos {
 		svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-		_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+		_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 			c.dia, c.inicio, c.fin, []string{"pc1"})
 
 		if !errors.Is(err, domain.ErrReservaEnElPasado) {
@@ -888,7 +904,7 @@ func TestCrearReserva_EnElPasado_Error(t *testing.T) {
 func TestCrearReserva_HoyEnCurso_SeAcepta(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 2), 11*time.Hour+30*time.Minute, 13*time.Hour, []string{"pc1"})
 
 	if err != nil {
@@ -899,7 +915,7 @@ func TestCrearReserva_HoyEnCurso_SeAcepta(t *testing.T) {
 func TestCrearReserva_DuracionExcesiva_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 0, 23*time.Hour+59*time.Minute, []string{"pc1"})
 
 	if !errors.Is(err, domain.ErrDuracionExcesiva) {
@@ -910,7 +926,7 @@ func TestCrearReserva_DuracionExcesiva_Error(t *testing.T) {
 func TestCrearReserva_SinEquipos_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, nil)
 
 	if !errors.Is(err, ErrSinEquipos) {
@@ -922,7 +938,7 @@ func TestCrearReserva_DocenteNoAsignado_Error(t *testing.T) {
 	svc := NewService(nuevoFakeRepo(), &fakeValidadorMateria{asignado: false}, &fakeValidadorEquipo{disponible: true},
 		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
 	if !errors.Is(err, ErrDocenteNoAsignado) {
@@ -934,7 +950,7 @@ func TestCrearReserva_EquipoNoDisponible_Error(t *testing.T) {
 	svc := NewService(nuevoFakeRepo(), &fakeValidadorMateria{asignado: true}, &fakeValidadorEquipo{disponible: false},
 		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Ada"}, idSecuencial, func() time.Time { return fecha(2026, 3, 2) }, eventbus.NewInMemoryEventBus())
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
 	if !errors.Is(err, ErrEquipoNoDisponible) {
@@ -952,7 +968,7 @@ func TestCrearReserva_Solapamiento_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	// Pide el mismo horario, misma PC, misma fecha — debería solapar.
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour+30*time.Minute, 9*time.Hour+30*time.Minute, []string{"pc1"})
 
 	if !errors.Is(err, ErrSolapamiento) {
@@ -969,7 +985,7 @@ func TestCrearReserva_MismaEquipoOtroDia_NoSolapaAunqueMismoHorario(t *testing.T
 	repo.reservas[existente.ID] = existente
 	svc := nuevoServicioDeTest(repo)
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 16), 8*time.Hour, 9*time.Hour, []string{"pc1"}) // otro lunes
 
 	if err != nil {
@@ -986,7 +1002,7 @@ func TestCrearReserva_ReservaCanceladaNoCuentaParaSolapamiento(t *testing.T) {
 	repo.reservas[cancelada.ID] = cancelada
 	svc := nuevoServicioDeTest(repo)
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
 	if err != nil {
@@ -1000,7 +1016,7 @@ func TestCancelarReserva_UnaDeVarias_GrupoQuedaParcial(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	grupo, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	grupo, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1", "pc2"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1022,7 +1038,7 @@ func TestCancelarReserva_TodasLasDelGrupo_GrupoQuedaCancelado(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	grupo, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	grupo, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1", "pc2"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1081,7 +1097,7 @@ func TestCancelarReserva_PublicaEventoReservaCancelada(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1120,7 +1136,7 @@ func TestBloquearEquipos_UnSoloEventoPorDocente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 10*time.Hour, 12*time.Hour, []string{"pc1", "pc2", "pc3"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1178,7 +1194,7 @@ func TestBloquearEquipos_UnEventoPorCadaDocente(t *testing.T) {
 		if docente == "docente2" {
 			equipo = "pc2"
 		}
-		if _, _, err := svc.CrearReserva(context.Background(), "materia1", docente, false,
+		if _, _, _, err := svc.CrearReserva(context.Background(), "materia1", docente, false,
 			fecha(2026, 3, 9), 10*time.Hour, 12*time.Hour, []string{equipo}); err != nil {
 			t.Fatalf("no debería fallar: %v", err)
 		}
@@ -1224,7 +1240,7 @@ func TestPublicarCancelaciones_SinIdentificadores_ElAvisoSaleIgual(t *testing.T)
 		func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus())
 
-	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1254,7 +1270,7 @@ func TestCancelarReserva_ElDocenteCancelaLaPropia_NoPublicaEvento(t *testing.T) 
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1280,7 +1296,7 @@ func TestBloquearEquipos_ElMotivoNoTraeElPrefijoDelAviso(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 10*time.Hour, []string{"pc1"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1779,7 +1795,7 @@ func TestFinalizarVencidas_MarcaFinalizadaYPropagaAlGrupo(t *testing.T) {
 	base := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(base)
 
-	grupo, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	grupo, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1810,7 +1826,7 @@ func TestFinalizarVencidas_GrupoConAlgunaCanceladaYOtraFinalizada_GrupoFinalizaI
 	base := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(base)
 
-	grupo, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	grupo, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1", "pc2"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1959,7 +1975,7 @@ func TestCancelarReservasFuturasDeEquipo_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1", "pc2"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -2005,7 +2021,7 @@ func TestCancelarReservasFuturasDeMateria_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	grupo, reservas, err := svc.CrearReserva(context.Background(), "materia-huerfana", "docente1", false,
+	grupo, reservas, _, err := svc.CrearReserva(context.Background(), "materia-huerfana", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -2032,7 +2048,7 @@ func TestCancelarReservasFuturasDeMateria_OtraMateriaNoSeToca(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	_, reservasOtra, err := svc.CrearReserva(context.Background(), "materia-normal", "docente1", false,
+	_, reservasOtra, _, err := svc.CrearReserva(context.Background(), "materia-normal", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -2103,7 +2119,7 @@ func TestCrearReserva_UnAdminNoAsignadoPuedeReservar(t *testing.T) {
 		eventbus.NewInMemoryEventBus(),
 	)
 
-	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", "admin1", true,
+	_, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "admin1", true,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
 	if err != nil {
@@ -2125,7 +2141,7 @@ func TestCrearReserva_UnDocenteNoAsignadoSigueSinPoder(t *testing.T) {
 		eventbus.NewInMemoryEventBus(),
 	)
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
 	if !errors.Is(err, ErrDocenteNoAsignado) {
@@ -2146,7 +2162,7 @@ func TestCrearReserva_MateriaArchivada_NoAdmiteReservas(t *testing.T) {
 		eventbus.NewInMemoryEventBus(),
 	)
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
 	if !errors.Is(err, ErrMateriaArchivada) {
@@ -2167,7 +2183,7 @@ func TestCrearReserva_UnAdminTampocoPuedeSobreMateriaArchivada(t *testing.T) {
 		eventbus.NewInMemoryEventBus(),
 	)
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "admin1", true,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "admin1", true,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 
 	if !errors.Is(err, ErrMateriaArchivada) {
@@ -2226,7 +2242,7 @@ func TestCancelarReserva_EstadoDelGrupoSeGuardaDentroDeLaTransaccion(t *testing.
 	svc := nuevoServicioDeTest(espia)
 
 	docente := "docente1"
-	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", docente, false,
+	_, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", docente, false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1", "pc2"})
 	if err != nil {
 		t.Fatalf("no debería fallar creando: %v", err)
@@ -2254,7 +2270,7 @@ func TestBloquearEquipos_SiFallaElBloqueoNoQuedaNingunGrupoTocado(t *testing.T) 
 	svc := nuevoServicioDeTest(base)
 
 	docente := "docente1"
-	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", docente, false,
+	_, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", docente, false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 	if err != nil {
 		t.Fatalf("no debería fallar creando: %v", err)
@@ -2352,7 +2368,7 @@ func TestTieneReservasFuturasDeEquipo_ConReservaConfirmada_True(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	if _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	if _, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, time.March, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"}); err != nil {
 		t.Fatalf("preparando la reserva: %v", err)
 	}
@@ -2385,7 +2401,7 @@ func TestTieneReservasFuturasDeEquipo_DespuesDeLaCascada_False(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	if _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	if _, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, time.March, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"}); err != nil {
 		t.Fatalf("preparando la reserva: %v", err)
 	}
@@ -2415,7 +2431,7 @@ func TestCrearReserva_DemasiadosEquipos_SeRechaza(t *testing.T) {
 		muchos[i] = fmt.Sprintf("pc%d", i)
 	}
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, time.March, 3), 8*time.Hour, 9*time.Hour, muchos)
 
 	if !errors.Is(err, ErrDemasiadosEquipos) {
@@ -2438,7 +2454,7 @@ func TestCrearReserva_UnCarroEnteroEntraSinProblema(t *testing.T) {
 		carro[i] = fmt.Sprintf("pc%d", i)
 	}
 
-	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	_, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, time.March, 3), 8*time.Hour, 9*time.Hour, carro)
 
 	if err != nil {
@@ -2462,7 +2478,7 @@ func TestCrearReserva_ValidaLaDisponibilidadEnUnaSolaConsulta(t *testing.T) {
 		carro[i] = fmt.Sprintf("pc%d", i)
 	}
 
-	if _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	if _, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, time.March, 3), 8*time.Hour, 9*time.Hour, carro); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -2480,12 +2496,12 @@ func TestCrearReserva_Solapamiento_ElMensajeNombraLoQueChoco(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 	dia := fecha(2026, 3, 9)
 
-	if _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	if _, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		dia, 10*time.Hour, 12*time.Hour, []string{"pc1"}); err != nil {
 		t.Fatalf("la primera reserva no debería fallar: %v", err)
 	}
 
-	_, _, err := svc.CrearReserva(context.Background(), "materia1", "docente2", true,
+	_, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente2", true,
 		dia, 11*time.Hour, 13*time.Hour, []string{"pc1", "pc2"})
 
 	if !errors.Is(err, ErrSolapamiento) {
@@ -2513,11 +2529,11 @@ func TestCrearReserva_HorariosContiguos_NoSolapan(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 	dia := fecha(2026, 3, 9)
 
-	if _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	if _, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		dia, 8*time.Hour, 10*time.Hour, []string{"pc1"}); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	if _, _, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		dia, 10*time.Hour, 12*time.Hour, []string{"pc1"}); err != nil {
 		t.Fatalf("una reserva contigua no debería chocar: %v", err)
 	}
@@ -2640,7 +2656,7 @@ func TestCambiarEquipoDeReserva_SinSerie_ElAlcanceNoCambiaNada(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	grupo, reservas, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
+	grupo, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", "docente1", false,
 		fecha(2026, time.March, 3), 14*time.Hour, 15*time.Hour, []string{"pc1"})
 	if err != nil {
 		t.Fatalf("creando la reserva: %v", err)
@@ -2836,7 +2852,7 @@ func TestCancelarReserva_DeOtroDocente_NoSePuede(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 	dueno := "docente-dueño"
-	_, reservas, err := svc.CrearReserva(context.Background(), "materia1", dueno, false,
+	_, reservas, _, err := svc.CrearReserva(context.Background(), "materia1", dueno, false,
 		fecha(2026, 3, 9), 8*time.Hour, 9*time.Hour, []string{"pc1"})
 	if err != nil {
 		t.Fatalf("no debería fallar creando: %v", err)

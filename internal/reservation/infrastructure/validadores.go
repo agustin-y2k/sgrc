@@ -292,3 +292,25 @@ func (v *ValidadorMateriaPostgres) MateriaAceptaReservas(ctx context.Context, ma
 	}
 	return acepta, nil
 }
+
+// NombreDeMateria: el nombre tal como lo cargó el Admin, sin normalizar — es
+// para leerlo, no para comparar marcas.
+//
+// Una materia que no está devuelve error y no el string vacío: el único
+// llamador lo mete en el motivo de una cancelación, y "Un equipo preferente de
+//
+//	lo necesitaba" sería lo que el desplazado lee en el correo.
+func (v *ValidadorMateriaPostgres) NombreDeMateria(ctx context.Context, materiaID string) (string, error) {
+	var nombre string
+	err := v.pool.QueryRow(ctx, `SELECT nombre FROM materia WHERE id = $1`, materiaID).Scan(&nombre)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", application.ErrReferenciaInexistente
+		}
+		if esIDInvalido(err) {
+			return "", application.ErrIDInvalido
+		}
+		return "", fmt.Errorf("obteniendo el nombre de la materia: %w", err)
+	}
+	return nombre, nil
+}

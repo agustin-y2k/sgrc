@@ -4,6 +4,7 @@ package infrastructure
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -995,7 +996,7 @@ func TestCrearReserva_ConflictoAMitadDelLote_NoDejaGrupoParcial(t *testing.T) {
 		validadorMateriaOK{}, validadorEquipoOK{}, jornadaLibre{}, nombreDocenteFijo{}, NuevoID,
 		func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
-	_, _, err := svc.CrearReserva(ctx, materiaID, docenteID, false, fecha,
+	_, _, _, err := svc.CrearReserva(ctx, materiaID, docenteID, false, fecha,
 		14*time.Hour, 15*time.Hour, []string{equipoID, equipoID})
 	if err == nil {
 		t.Fatalf("se esperaba un error de solapamiento")
@@ -1084,6 +1085,10 @@ func (validadorMateriaOK) DocenteEstaAsignado(context.Context, string, string) (
 
 func (validadorMateriaOK) MateriaAceptaReservas(context.Context, string) (bool, error) {
 	return true, nil
+}
+
+func (validadorMateriaOK) NombreDeMateria(context.Context, string) (string, error) {
+	return "Dibujo Técnico", nil
 }
 
 type validadorEquipoOK struct{}
@@ -3068,4 +3073,406 @@ func TestReservasRobablesPor(t *testing.T) {
 			t.Error("a veinte minutos del inicio ya no se roba, aunque la marca gane")
 		}
 	})
+}
+
+// ── El robo al crear la reserva (RF-03.21) ─────────────────────────────
+//
+// Van contra la base y no contra el fake porque la regla del robo vive en el
+// SQL. Lo que se prueba acá es el ENGANCHE: que la creación clasifique los
+// conflictos y cancele de verdad los que puede correr.
+
+// asignarDocenteAMateria pone la fila que RF-04.1 exige para dejar reservar.
+func asignarDocenteAMateria(t *testing.T, pool *pgxpool.Pool, usuarioID, materiaID string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO docente_materia (id, usuario_id, materia_id, rol) VALUES ($1, $2, $3, 'TITULAR')`,
+		NuevoID(), usuarioID, materiaID)
+	if err != nil {
+		t.Fatalf("no se pudo asignar el docente a la materia: %v", err)
+	}
+}
+
+// reservaConDuenoDeTest deja la reserva que el robo va a desplazar, con dueño
+// de verdad — a diferencia de reservaDeOtraMateriaDeTest, que lo deja en NULL:
+// acá se afirma a quién se le canceló y quién quedó anotado como el que
+// canceló, y las dos cosas necesitan una persona atrás.
+func reservaConDuenoDeTest(t *testing.T, pool *pgxpool.Pool, materiaID string, equipoIDs []string,
+	duenoID string, fecha time.Time, horaInicio, horaFin time.Duration, reglaID *string,
+) (*domain.ReservaGrupo, []*domain.Reserva) {
+	t.Helper()
+	ctx := context.Background()
+	repo := NewPostgresRepo(pool)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	g, err := domain.NuevoReservaGrupo(NuevoID(), materiaID, &duenoID, "Alan Turing",
+		fecha, horaInicio, horaFin, reglaID, ahora)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatalf("no se pudo crear el grupo de la reserva a desplazar: %v", err)
+	}
+
+	reservas := make([]*domain.Reserva, 0, len(equipoIDs))
+	for _, equipoID := range equipoIDs {
+		res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Alan Turing", &duenoID,
+			fecha, horaInicio, horaFin, ahora)
+		if err != nil {
+			t.Fatalf("error de dominio inesperado: %v", err)
+		}
+		if err := repo.CrearReserva(ctx, res); err != nil {
+			t.Fatalf("no se pudo crear la reserva a desplazar: %v", err)
+		}
+		reservas = append(reservas, res)
+	}
+	return g, reservas
+}
+
+// servicioDeRoboDeTest arma el servicio con los adaptadores REALES y no con
+// los fakes de este archivo: el nombre de la materia que va en el motivo de
+// cancelación sale de la base, y ese texto es lo que el docente desplazado lee
+// en el aviso.
+func servicioDeRoboDeTest(t *testing.T, pool *pgxpool.Pool, ahora time.Time) *application.Service {
+	t.Helper()
+	return application.NewService(NewPostgresRepo(pool),
+		NewValidadorMateriaPostgres(pool), NewValidadorEquipoPostgres(pool), jornadaLibre{},
+		NewObtenedorNombrePostgres(pool), NuevoID, func() time.Time { return ahora },
+		eventbus.NewInMemoryEventBus())
+}
+
+// El caso central: la máquina es preferente de Dibujo Técnico con un reclamo
+// más fuerte que el de Informática, que la tenía reservada.
+func TestCrearReserva_RobaLaReservaConReclamoMasDebil(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
+
+	queRoba := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	asignarDocenteAMateria(t, pool, queRoba, dibujo)
+	desplazado := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
+		fecha, 10*time.Hour, 12*time.Hour, nil)
+
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	svc := servicioDeRoboDeTest(t, pool, ahora)
+
+	_, reservas, impacto, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
+
+	if err != nil {
+		t.Fatalf("la reserva tendría que crearse desplazando a la otra: %v", err)
+	}
+	if len(reservas) != 1 {
+		t.Fatalf("esperaba 1 reserva nueva, obtuve %d", len(reservas))
+	}
+
+	robada, err := repo.BuscarReservaPorID(ctx, ajenas[0].ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if robada.Estado != domain.ReservaCancelada {
+		t.Errorf("la reserva desplazada quedó en %s", robada.Estado)
+	}
+	// Lo que la distingue de las otras cascadas: acá hay una persona atrás.
+	if robada.CanceladoPor == nil || *robada.CanceladoPor != queRoba {
+		t.Errorf("cancelado_por tendría que ser el docente que robó, es %v", robada.CanceladoPor)
+	}
+	const motivo = "Un equipo preferente de Dibujo Técnico lo necesitaba"
+	if robada.MotivoCancelacion == nil || *robada.MotivoCancelacion != motivo {
+		t.Errorf("motivo = %v, esperaba %q", robada.MotivoCancelacion, motivo)
+	}
+	if impacto.ReservasCanceladas != 1 || impacto.DocentesAfectados != 1 {
+		t.Errorf("impacto = %+v, esperaba 1 reserva cancelada y 1 docente afectado", impacto)
+	}
+}
+
+// El contracaso, que es el que protege: con la marca ajena más fuerte no se
+// roba nada y la creación falla entera, como antes de que el robo existiera.
+func TestCrearReserva_RobaNada_SiElReclamoAjenoEsMasFuerte(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 3)
+	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 1)
+
+	queRoba := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	asignarDocenteAMateria(t, pool, queRoba, dibujo)
+	desplazado := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
+		fecha, 10*time.Hour, 12*time.Hour, nil)
+
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	svc := servicioDeRoboDeTest(t, pool, ahora)
+
+	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
+
+	if !errors.Is(err, application.ErrSolapamiento) {
+		t.Fatalf("esperaba el error de solapamiento de siempre, obtuve %v", err)
+	}
+
+	intacta, err := repo.BuscarReservaPorID(ctx, ajenas[0].ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if intacta.Estado != domain.ReservaConfirmada {
+		t.Errorf("la reserva ajena tenía que quedar intacta, quedó en %s", intacta.Estado)
+	}
+
+	var creadas int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM reserva WHERE materia_id=$1`, dibujo).Scan(&creadas); err != nil {
+		t.Fatal(err)
+	}
+	if creadas != 0 {
+		t.Errorf("la creación falló y sin embargo dejó %d reserva(s)", creadas)
+	}
+}
+
+// El todo-o-nada, que es la garantía más cara de esta funcionalidad: con un
+// solo conflicto no robable en el lote no se cancela NADA, ni siquiera lo que
+// sí se podía correr. Cancelar tres clases ajenas y después fallar sería el
+// peor resultado posible.
+func TestCrearReserva_RobaNada_SiUnSoloConflictoDelLoteNoEsRobable(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+
+	seLaPuedeRobar := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, seLaPuedeRobar, "Dibujo Técnico", nil, nil, nil, 1)
+	marcarPreferencia(t, pool, seLaPuedeRobar, "Informática", nil, nil, nil, 3)
+
+	noSeLaPuedeRobar := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, noSeLaPuedeRobar, "Dibujo Técnico", nil, nil, nil, 3)
+	marcarPreferencia(t, pool, noSeLaPuedeRobar, "Informática", nil, nil, nil, 1)
+
+	queRoba := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	asignarDocenteAMateria(t, pool, queRoba, dibujo)
+	desplazado := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	_, ajenas := reservaConDuenoDeTest(t, pool, informatica,
+		[]string{seLaPuedeRobar, noSeLaPuedeRobar}, desplazado, fecha, 10*time.Hour, 12*time.Hour, nil)
+
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	svc := servicioDeRoboDeTest(t, pool, ahora)
+
+	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
+		fecha, 10*time.Hour, 12*time.Hour, []string{seLaPuedeRobar, noSeLaPuedeRobar})
+
+	if !errors.Is(err, application.ErrSolapamiento) {
+		t.Fatalf("esperaba el error de solapamiento de siempre, obtuve %v", err)
+	}
+	for i, ajena := range ajenas {
+		recargada, err := repo.BuscarReservaPorID(ctx, ajena.ID)
+		if err != nil {
+			t.Fatalf("no debería fallar: %v", err)
+		}
+		if recargada.Estado != domain.ReservaConfirmada {
+			t.Errorf("la reserva ajena %d quedó en %s: la creación falló y sin embargo canceló", i, recargada.Estado)
+		}
+	}
+}
+
+// La otra mitad de la regla, la que NO vive en el SQL: con la marca ganada
+// —el mismo escenario que en el caso central sí desplaza— pero la clase ajena
+// a veinte minutos de empezar, no se roba nada. El docente desplazado ya está
+// yendo al aula.
+func TestCrearReserva_RobaNada_SiLaClaseAjenaEstaPorEmpezar(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
+
+	queRoba := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	asignarDocenteAMateria(t, pool, queRoba, dibujo)
+	desplazado := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
+		fecha, 10*time.Hour, 12*time.Hour, nil)
+
+	// Veinte minutos antes de que arranque: la preferencia alcanza y el reloj no.
+	ahora := fecha.Add(9*time.Hour + 40*time.Minute)
+	svc := servicioDeRoboDeTest(t, pool, ahora)
+
+	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
+
+	if !errors.Is(err, application.ErrSolapamiento) {
+		t.Fatalf("esperaba el error de solapamiento de siempre, obtuve %v", err)
+	}
+
+	intacta, err := repo.BuscarReservaPorID(ctx, ajenas[0].ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if intacta.Estado != domain.ReservaConfirmada {
+		t.Errorf("la clase que estaba por empezar quedó en %s", intacta.Estado)
+	}
+}
+
+// La recurrencia roba ocurrencia por ocurrencia: la víctima pierde sólo las
+// fechas que chocan, y el resto de SU serie sigue en pie.
+func TestCrearReservaRecurrente_RobaSoloLaOcurrenciaQueChoca(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	pcNeutra := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
+
+	queRoba := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	asignarDocenteAMateria(t, pool, queRoba, dibujo)
+	desplazado := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+
+	// Lunes 3, 10, 17 y 24 de mayo de 2027.
+	primerLunes := time.Date(2027, 5, 3, 0, 0, 0, 0, time.UTC)
+	segundoLunes := primerLunes.AddDate(0, 0, 7)
+	tercerLunes := primerLunes.AddDate(0, 0, 14)
+	ultimoLunes := primerLunes.AddDate(0, 0, 21)
+
+	// La serie de la víctima son dos lunes, y sólo en el primero de ellos usa
+	// la máquina marcada: en el otro está sobre una PC neutral (que es lo que
+	// pasa cuando a una ocurrencia se le cambió el equipo, RF-08.14). Así la
+	// serie que roba choca con UNA sola de sus fechas.
+	regla, err := domain.NuevaReglaRecurrencia(NuevoID(), informatica, desplazado, domain.Lunes,
+		10*time.Hour, 12*time.Hour, segundoLunes, tercerLunes)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReglaRecurrencia(ctx, regla); err != nil {
+		t.Fatalf("no se pudo crear la regla de la víctima: %v", err)
+	}
+	grupoChocado, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc, pcNeutra}, desplazado,
+		segundoLunes, 10*time.Hour, 12*time.Hour, &regla.ID)
+	grupoIntacto, ajenasIntactas := reservaConDuenoDeTest(t, pool, informatica, []string{pcNeutra}, desplazado,
+		tercerLunes, 10*time.Hour, 12*time.Hour, &regla.ID)
+
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	svc := servicioDeRoboDeTest(t, pool, ahora)
+
+	res, err := svc.CrearReservaRecurrente(ctx, dibujo, queRoba, false, domain.Lunes,
+		10*time.Hour, 12*time.Hour, primerLunes, ultimoLunes, []string{pc})
+
+	if err != nil {
+		t.Fatalf("la serie tendría que crearse entera: %v", err)
+	}
+	if len(res.Grupos) != 4 {
+		t.Fatalf("esperaba las 4 ocurrencias, obtuve %d", len(res.Grupos))
+	}
+	if res.Impacto.ReservasCanceladas != 1 || res.Impacto.DocentesAfectados != 1 {
+		t.Errorf("impacto = %+v, esperaba 1 reserva cancelada y 1 docente afectado", res.Impacto)
+	}
+
+	robada, err := repo.BuscarReservaPorID(ctx, ajenas[0].ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if robada.Estado != domain.ReservaCancelada {
+		t.Errorf("la ocurrencia que chocaba quedó en %s", robada.Estado)
+	}
+	// La otra máquina de esa misma clase no la pidió nadie: sigue siendo suya.
+	sobreviviente, err := repo.BuscarReservaPorID(ctx, ajenas[1].ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if sobreviviente.Estado != domain.ReservaConfirmada {
+		t.Errorf("la PC neutral de esa clase quedó en %s y nadie se la pidió", sobreviviente.Estado)
+	}
+
+	chocado, err := repo.BuscarReservaGrupoPorID(ctx, grupoChocado.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if chocado.Estado != domain.GrupoParcialmenteCancelada {
+		t.Errorf("el grupo con una sola PC robada quedó en %s", chocado.Estado)
+	}
+
+	intacto, err := repo.BuscarReservaGrupoPorID(ctx, grupoIntacto.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if intacto.Estado != domain.GrupoConfirmada {
+		t.Errorf("la otra ocurrencia de la serie de la víctima quedó en %s", intacto.Estado)
+	}
+	restoDeLaSerie, err := repo.BuscarReservaPorID(ctx, ajenasIntactas[0].ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if restoDeLaSerie.Estado != domain.ReservaConfirmada {
+		t.Errorf("el resto de la serie de la víctima quedó en %s", restoDeLaSerie.Estado)
+	}
+}
+
+// Sección 6 del spec: MEDIR el robo más grande que el sistema permite, no
+// arreglarlo. Un solo click de un docente dispara la cascada entera.
+func TestCrearReservaRecurrente_RoboDeLaSerieMasLarga_CuantoTarda(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	ctx := context.Background()
+
+	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+
+	queRoba := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	asignarDocenteAMateria(t, pool, queRoba, dibujo)
+	desplazado := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+
+	primerLunes := time.Date(2027, 5, 3, 0, 0, 0, 0, time.UTC)
+	ocurrencias := application.MaxOcurrenciasRecurrencia
+	ultimoLunes := primerLunes.AddDate(0, 0, 7*(ocurrencias-1))
+
+	// Todas las fechas tomadas por la materia más débil: el peor caso, que es
+	// el que hay que medir.
+	for i := 0; i < ocurrencias; i++ {
+		reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
+			primerLunes.AddDate(0, 0, 7*i), 10*time.Hour, 12*time.Hour, nil)
+	}
+
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	svc := servicioDeRoboDeTest(t, pool, ahora)
+
+	arranque := time.Now()
+	res, err := svc.CrearReservaRecurrente(ctx, dibujo, queRoba, false, domain.Lunes,
+		10*time.Hour, 12*time.Hour, primerLunes, ultimoLunes, []string{pc})
+	tardo := time.Since(arranque)
+
+	if err != nil {
+		t.Fatalf("la serie más larga tendría que crearse entera: %v", err)
+	}
+	if len(res.Grupos) != ocurrencias {
+		t.Fatalf("esperaba %d ocurrencias, obtuve %d", ocurrencias, len(res.Grupos))
+	}
+	if res.Impacto.ReservasCanceladas != ocurrencias || res.Impacto.DocentesAfectados != 1 {
+		t.Errorf("impacto = %+v, esperaba %d reservas canceladas y 1 docente", res.Impacto, ocurrencias)
+	}
+
+	t.Logf("robo de %d ocurrencias: %s", ocurrencias, tardo)
 }

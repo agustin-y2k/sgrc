@@ -36,6 +36,18 @@ type Repo interface {
 	//     saltea porque la reserva pudo haberse borrado en el medio. Un mapa con
 	//     lo que encontró preserva las dos; una lista "en el mismo orden" no.
 	BuscarReservasPorIDs(ctx context.Context, ids []string) (map[string]*domain.Reserva, error)
+
+	// BuscarReservasParaActualizar es BuscarReservasPorIDs con la fila tomada
+	// (SELECT … FOR UPDATE), y sólo tiene sentido dentro de una transacción.
+	//
+	// La pide el robo (RF-03.21): entre listar los conflictos y cancelarlos,
+	// otro pedido puede haberlos tocado, y clasificar sobre una lectura vieja
+	// es cancelarle la clase a alguien por un estado que ya no existe. No
+	// reemplaza a la constraint EXCLUDE, que sigue siendo lo que impide dos
+	// reservas pisadas; esto es para que la DECISIÓN de robar no se tome sobre
+	// datos viejos, que es otra cosa.
+	BuscarReservasParaActualizar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error)
+
 	GuardarReserva(ctx context.Context, r *domain.Reserva) error
 	ListarReservasPorGrupo(ctx context.Context, reservaGrupoID string) ([]*domain.Reserva, error)
 
@@ -350,6 +362,12 @@ type ValidadorMateria interface {
 	// MateriaAceptaReservas: la materia existe y ni ella, ni su curso, ni su
 	// ciclo están archivados.
 	MateriaAceptaReservas(ctx context.Context, materiaID string) (bool, error)
+
+	// NombreDeMateria es cómo se llama, para poder nombrarla en el motivo con
+	// el que se cancela la reserva de otro docente al desplazarlo (RF-03.21).
+	// Ese texto es todo lo que el desplazado recibe: sin el nombre, el aviso
+	// diría que le cancelaron la clase y no por culpa de quién.
+	NombreDeMateria(ctx context.Context, materiaID string) (string, error)
 }
 
 // CondicionDeEquipo es el estado de un equipo visto desde acá: si sigue en el

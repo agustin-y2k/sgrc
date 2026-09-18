@@ -143,11 +143,21 @@ func toReservaDetalladaResponse(d application.ReservaDetallada) reservaDetallada
 type crearReservaResponse struct {
 	Grupo    reservaGrupoResponse `json:"grupo"`
 	Reservas []reservaResponse    `json:"reservas"`
+	// Los dos del robo (RF-03.21): a cuántos desplazó esta reserva. Van en la
+	// respuesta de la creación y no en un aviso aparte porque es lo único que
+	// le dice a quien reservó que corrió a alguien; la pantalla no muestra el
+	// cero, que es el caso de casi todas las reservas.
+	ReservasCanceladas int `json:"reservasCanceladas"`
+	DocentesAfectados  int `json:"docentesAfectados"`
 }
 
 type crearReservaRecurrenteResponse struct {
 	ReglaID string                 `json:"reglaId"`
 	Grupos  []reservaGrupoResponse `json:"grupos"`
+	// El impacto de la serie ENTERA: una recurrencia roba ocurrencia por
+	// ocurrencia y un solo click puede correr decenas de clases.
+	ReservasCanceladas int `json:"reservasCanceladas"`
+	DocentesAfectados  int `json:"docentesAfectados"`
 }
 
 type cancelarOcurrenciaResponse struct {

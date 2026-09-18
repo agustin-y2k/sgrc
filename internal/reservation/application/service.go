@@ -175,53 +175,96 @@ func verificarCantidadDeEquipos(equipoIDs []string) error {
 	return nil
 }
 
+// ImpactoDelRobo es el saldo del desplazamiento (RF-03.21): cuántas reservas
+// ajenas hubo que cancelar para poder crear ésta, y a cuántos docentes les
+// tocó. Queda en cero en la enorme mayoría de las reservas, que no desplazan a
+// nadie.
+//
+// Es "afectados" y no "notificados" a propósito: un docente que se desplaza a
+// sí mismo entre dos de sus cursos cuenta acá y sin embargo no recibe ningún
+// aviso.
+type ImpactoDelRobo struct {
+	ReservasCanceladas int
+	DocentesAfectados  int
+}
+
 // CrearReserva implementa RF-04.1: un docente reserva una o más PCs para
 // su materia, en una fecha y horario puntual.
-func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string, esAdmin bool, fecha time.Time, horaInicio, horaFin time.Duration, equipoIDs []string) (*domain.ReservaGrupo, []*domain.Reserva, error) {
+func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string, esAdmin bool, fecha time.Time, horaInicio, horaFin time.Duration, equipoIDs []string) (*domain.ReservaGrupo, []*domain.Reserva, ImpactoDelRobo, error) {
+	var sinRobo ImpactoDelRobo
+
 	if err := verificarCantidadDeEquipos(equipoIDs); err != nil {
-		return nil, nil, err
+		return nil, nil, sinRobo, err
 	}
 
 	if err := domain.ValidarVentanaTemporal(fecha, horaInicio, horaFin, s.ahora()); err != nil {
-		return nil, nil, err
+		return nil, nil, sinRobo, err
 	}
 
 	if err := s.verificarDentroDeLaJornada(ctx, fecha, horaInicio, horaFin); err != nil {
-		return nil, nil, err
+		return nil, nil, sinRobo, err
 	}
 
 	if err := s.verificarPuedeReservar(ctx, materiaID, usuarioID, esAdmin); err != nil {
-		return nil, nil, err
+		return nil, nil, sinRobo, err
 	}
 
 	if err := s.verificarEquiposReservables(ctx, equipoIDs); err != nil {
-		return nil, nil, err
-	}
-
-	if err := s.verificarSinSolapamiento(ctx, equipoIDs, []time.Time{fecha}, horaInicio, horaFin); err != nil {
-		return nil, nil, err
+		return nil, nil, sinRobo, err
 	}
 
 	nombreDocente, err := s.obtenedorNombre.NombreCompletoDe(ctx, usuarioID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("obteniendo nombre del docente: %w", err)
+		return nil, nil, sinRobo, fmt.Errorf("obteniendo nombre del docente: %w", err)
+	}
+
+	nombreMateria, err := s.nombreParaElMotivoDelRobo(ctx, materiaID)
+	if err != nil {
+		return nil, nil, sinRobo, err
 	}
 
 	// Todo el lote va en una sola transacción: si la PC número 3 de 5 choca
 	// contra la constraint EXCLUDE (otro pedido simultáneo se adelantó), el
 	// grupo y las dos reservas anteriores se deshacen en vez de quedar
-	// commiteadas a medias (RF-04.5).
+	// commiteadas a medias (RF-04.5). Desde que reservar puede DESPLAZAR a
+	// otro, adentro de esa misma transacción viajan además las cancelaciones:
+	// una falla posterior tiene que devolverle la clase al desplazado.
 	var grupo *domain.ReservaGrupo
 	var reservas []*domain.Reserva
+	var impacto ImpactoDelRobo
+	var pendientes []cancelacionPendiente
 	err = s.repo.EnTransaccion(ctx, func(repo Repo) error {
 		var err error
+		impacto, pendientes, err = s.despejarConflictos(ctx, repo, materiaID, nombreMateria, &usuarioID,
+			equipoIDs, []time.Time{fecha}, horaInicio, horaFin)
+		if err != nil {
+			return err
+		}
 		grupo, reservas, err = s.materializarGrupo(ctx, repo, materiaID, &usuarioID, nombreDocente, fecha, horaInicio, horaFin, equipoIDs, nil)
 		return err
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, sinRobo, err
 	}
-	return grupo, reservas, nil
+
+	s.publicarCancelaciones(ctx, pendientes)
+	return grupo, reservas, impacto, nil
+}
+
+// nombreParaElMotivoDelRobo resuelve cómo se llama la materia que reserva, que
+// es lo único que el motivo de cancelación no tiene a mano.
+//
+// Se pregunta ANTES de abrir la transacción, aunque la enorme mayoría de las
+// reservas no vayan a desplazar a nadie y la consulta no le sirva a nadie: el
+// validador va por el pool, y pedirle una conexión nueva mientras la
+// transacción tiene tomada la suya es quedarse esperando el día que el pool
+// esté justo — con las filas de las víctimas ya bloqueadas.
+func (s *Service) nombreParaElMotivoDelRobo(ctx context.Context, materiaID string) (string, error) {
+	nombre, err := s.validadorMateria.NombreDeMateria(ctx, materiaID)
+	if err != nil {
+		return "", fmt.Errorf("obteniendo el nombre de la materia: %w", err)
+	}
+	return nombre, nil
 }
 
 // verificarPuedeReservar implementa RF-04.1 completo: la materia no puede
@@ -371,6 +414,102 @@ func (s *Service) verificarSinSolapamiento(ctx context.Context, equipoIDs []stri
 		return nil
 	}
 	return &ErrorDeSolapamiento{Conflictos: conflictos}
+}
+
+// despejarConflictos es el enganche de RF-03.21 del lado de la escritura:
+// reemplaza el corte seco ante cualquier solapamiento por "clasificá, y si
+// TODO lo que estorba se puede correr, corrélo".
+//
+// Corre SIEMPRE dentro de la transacción que va a crear la reserva, y con las
+// filas en conflicto tomadas. Hasta acá el pre-chequeo de solapamiento era
+// informativo —lo que impide dos reservas pisadas es la constraint EXCLUDE, y
+// lo sigue siendo—, pero ahora además decide A QUIÉN SE LE CANCELA LA CLASE, y
+// eso no se puede decidir sobre una lectura vieja: entre listar los conflictos
+// y cancelarlos, otro pedido pudo haberlos tocado.
+//
+// El todo-o-nada se mantiene tal cual: alcanza UN conflicto que no sea robable
+// para devolver el error de siempre sin haber cancelado nada. Y como lo que
+// cancela vive en la misma transacción que la creación, una falla posterior
+// —la EXCLUDE, por ejemplo— le devuelve la clase al desplazado.
+func (s *Service) despejarConflictos(ctx context.Context, repo Repo, materiaID, nombreMateria string,
+	quienRoba *string, equipoIDs []string, fechas []time.Time, horaInicio, horaFin time.Duration,
+) (ImpactoDelRobo, []cancelacionPendiente, error) {
+	conflictos, err := repo.BuscarSolapamientos(ctx, equipoIDs, fechas, horaInicio, horaFin)
+	if err != nil {
+		return ImpactoDelRobo{}, nil, fmt.Errorf("verificando solapamiento: %w", err)
+	}
+	if len(conflictos) == 0 {
+		return ImpactoDelRobo{}, nil, nil
+	}
+
+	ids := make([]string, 0, len(conflictos))
+	for _, c := range conflictos {
+		ids = append(ids, c.ReservaID)
+	}
+
+	// Primero tomar las filas, después clasificar: al revés, la clasificación
+	// se haría sobre un estado que otro pedido todavía puede cambiar.
+	tomadas, err := repo.BuscarReservasParaActualizar(ctx, ids)
+	if err != nil {
+		return ImpactoDelRobo{}, nil, fmt.Errorf("tomando las reservas en conflicto: %w", err)
+	}
+	robables, err := repo.ReservasRobablesPor(ctx, materiaID, ids)
+	if err != nil {
+		return ImpactoDelRobo{}, nil, fmt.Errorf("clasificando las reservas en conflicto: %w", err)
+	}
+
+	ahora := s.ahora()
+	var aDesplazar []*domain.Reserva
+	var bloqueantes []Solapamiento
+	for _, c := range conflictos {
+		r, tomada := tomadas[c.ReservaID]
+		if !tomada {
+			// No se pudo mirar la fila: no se roba lo que no se puede verificar.
+			// Es el lado seguro del error, y además el que hace que un solapamiento
+			// sin ReservaID no se convierta en permiso.
+			bloqueantes = append(bloqueantes, c)
+			continue
+		}
+		if r.Estado != domain.ReservaConfirmada {
+			// Dejó de estorbar entre que la vimos y la tomamos. No es un conflicto
+			// ni es un robo: es una franja que se liberó sola.
+			continue
+		}
+		// Las dos mitades de la regla, juntas por única vez: la preferencia la
+		// contesta la base, y el corte de una hora es hora de pared y se aplica
+		// acá (ver ReservasRobablesPor en el puerto).
+		if robables[c.ReservaID] && domain.SePuedeRobarPorHorario(r.Fecha, r.HoraInicio, ahora) {
+			aDesplazar = append(aDesplazar, r)
+			continue
+		}
+		bloqueantes = append(bloqueantes, c)
+	}
+
+	if len(bloqueantes) > 0 {
+		// El error nombra SÓLO los bloqueantes: sumarle los que el sistema estaba
+		// dispuesto a correr le daría al docente un problema que no tiene.
+		return ImpactoDelRobo{}, nil, &ErrorDeSolapamiento{Conflictos: bloqueantes}
+	}
+	if len(aDesplazar) == 0 {
+		return ImpactoDelRobo{}, nil, nil
+	}
+
+	// El motivo es todo lo que el desplazado recibe, y por eso nombra a la
+	// materia y no a la persona: lo que lo corrió es una marca del Admin sobre
+	// ese equipo, no un colega.
+	motivo := "Un equipo preferente de " + nombreMateria + " lo necesitaba"
+
+	// canceladoPor con el docente que reserva, a diferencia de las otras
+	// cascadas: acá sí hay una persona atrás, y queda el rastro de quién
+	// desplazó a quién en la fila misma. De paso resuelve el auto-robo, que es
+	// un efecto buscado: publicarCancelaciones saltea el aviso cuando quien
+	// cancela es quien reservó, así que un docente que se corre a sí mismo entre
+	// dos de sus cursos no recibe ningún correo.
+	canceladas, docentes, pendientes, err := s.cancelarEnCascada(ctx, repo, aDesplazar, motivo, quienRoba, ahora)
+	if err != nil {
+		return ImpactoDelRobo{}, nil, err
+	}
+	return ImpactoDelRobo{ReservasCanceladas: canceladas, DocentesAfectados: docentes}, pendientes, nil
 }
 
 func mismaFecha(a, b time.Time) bool {
@@ -657,11 +796,15 @@ func (s *Service) ObtenerReservaGrupo(ctx context.Context, id, solicitanteID str
 type ResultadoRecurrencia struct {
 	Regla  *domain.ReglaRecurrencia
 	Grupos []*domain.ReservaGrupo
+	// Impacto: a cuántos desplazó la serie entera (RF-03.21). Una serie anual
+	// roba ocurrencia por ocurrencia, así que un solo click puede correr
+	// decenas de clases de varios docentes.
+	Impacto ImpactoDelRobo
 }
 
-// maxOcurrenciasRecurrencia acota cuántas fechas puede materializar una sola
+// MaxOcurrenciasRecurrencia acota cuántas fechas puede materializar una sola
 // serie recurrente.
-const maxOcurrenciasRecurrencia = 45
+const MaxOcurrenciasRecurrencia = 45
 
 // CrearReservaRecurrente implementa RF-04.2: crea la ReglaRecurrencia y
 // materializa un ReservaGrupo (con sus Reserva) por cada fecha que genera
@@ -701,9 +844,9 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 	if len(fechas) == 0 {
 		return nil, ErrSinOcurrencias
 	}
-	if len(fechas) > maxOcurrenciasRecurrencia {
+	if len(fechas) > MaxOcurrenciasRecurrencia {
 		return nil, fmt.Errorf("%w: son %d clases y el máximo es %d",
-			ErrDemasiadasOcurrencias, len(fechas), maxOcurrenciasRecurrencia)
+			ErrDemasiadasOcurrencias, len(fechas), MaxOcurrenciasRecurrencia)
 	}
 
 	// La ventana temporal se valida sobre la PRIMERA ocurrencia: GenerarFechas
@@ -717,21 +860,32 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 		return nil, err
 	}
 
-	// Se verifica el solapamiento de TODAS las fechas antes de crear nada — así
-	// una falla en la fecha 5 de 10 no deja 4 grupos ya creados.
-	if err := s.verificarSinSolapamiento(ctx, equipoIDs, fechas, horaInicio, horaFin); err != nil {
-		return nil, err
-	}
-
 	nombreDocente, err := s.obtenedorNombre.NombreCompletoDe(ctx, usuarioID)
 	if err != nil {
 		return nil, fmt.Errorf("obteniendo nombre del docente: %w", err)
 	}
 
-	// La regla, sus PCs y las N ocurrencias van en una sola transacción.
+	nombreMateria, err := s.nombreParaElMotivoDelRobo(ctx, materiaID)
+	if err != nil {
+		return nil, err
+	}
+
+	// La regla, sus PCs y las N ocurrencias van en una sola transacción, y con
+	// ellas el despeje de TODAS las fechas antes de crear nada — así una falla
+	// en la fecha 5 de 10 no deja 4 grupos ya creados ni, ahora, cuatro
+	// docentes desplazados sin que la serie exista.
 	grupos := make([]*domain.ReservaGrupo, 0, len(fechas))
+	var impacto ImpactoDelRobo
+	var pendientes []cancelacionPendiente
 	err = s.repo.EnTransaccion(ctx, func(repo Repo) error {
 		grupos = grupos[:0]
+
+		var err error
+		impacto, pendientes, err = s.despejarConflictos(ctx, repo, materiaID, nombreMateria, &usuarioID,
+			equipoIDs, fechas, horaInicio, horaFin)
+		if err != nil {
+			return err
+		}
 
 		if err := repo.CrearReglaRecurrencia(ctx, regla); err != nil {
 			return fmt.Errorf("creando regla de recurrencia: %w", err)
@@ -750,7 +904,8 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 		return nil, err
 	}
 
-	return &ResultadoRecurrencia{Regla: regla, Grupos: grupos}, nil
+	s.publicarCancelaciones(ctx, pendientes)
+	return &ResultadoRecurrencia{Regla: regla, Grupos: grupos, Impacto: impacto}, nil
 }
 
 // CancelarOcurrenciaRecurrente implementa RF-04.6: cancela un ReservaGrupo
@@ -1067,7 +1222,7 @@ func (s *Service) CancelarReservasFuturasDeEquipo(ctx context.Context, equipoID,
 		if err != nil {
 			return fmt.Errorf("listando reservas futuras del equipo: %w", err)
 		}
-		canceladas, docentes, pendientes, err = s.cancelarEnCascada(ctx, repo, futuras, motivo, ahora)
+		canceladas, docentes, pendientes, err = s.cancelarEnCascada(ctx, repo, futuras, motivo, nil, ahora)
 		return err
 	})
 	if err != nil {
@@ -1106,7 +1261,7 @@ func (s *Service) CancelarReservasFuturasDeMateria(ctx context.Context, materiaI
 		if err != nil {
 			return fmt.Errorf("listando reservas futuras de la materia: %w", err)
 		}
-		canceladas, _, pendientes, err = s.cancelarEnCascada(ctx, repo, futuras, motivo, ahora)
+		canceladas, _, pendientes, err = s.cancelarEnCascada(ctx, repo, futuras, motivo, nil, ahora)
 		return err
 	})
 	if err != nil {
@@ -1163,7 +1318,7 @@ func (s *Service) CancelarReservasPorIDs(ctx context.Context, reservaIDs []strin
 			}
 		}
 
-		canceladas, _, pendientes, err = s.cancelarEnCascada(ctx, repo, reservas, motivo, ahora)
+		canceladas, _, pendientes, err = s.cancelarEnCascada(ctx, repo, reservas, motivo, nil, ahora)
 		return err
 	})
 	if err != nil {
@@ -1175,11 +1330,24 @@ func (s *Service) CancelarReservasPorIDs(ctx context.Context, reservaIDs []strin
 }
 
 // cancelarEnCascada centraliza lo que ya hacían por separado BloquearEquipos
-// y estos dos métodos: cancelar cada reserva CONFIRMADA de la lista (sin
-// "cancelado por" — son cascadas disparadas por el sistema, no por un click
-// puntual de un usuario sobre esa reserva en particular) y recalcular el
-// ReservaGrupo padre de cada una.
-func (s *Service) cancelarEnCascada(ctx context.Context, repo Repo, reservas []*domain.Reserva, motivo string, ahora time.Time) (int, int, []cancelacionPendiente, error) {
+// y estos dos métodos: cancelar cada reserva CONFIRMADA de la lista y
+// recalcular el ReservaGrupo padre de cada una.
+//
+// `canceladoPor` va en nil en las cascadas del sistema —baja de un equipo,
+// baja de un docente, cambio de jornada, cancelación por ids—, que no son el
+// click de nadie sobre esa reserva en particular. El robo de RF-03.21 es la
+// excepción y pasa al docente que se llevó la máquina.
+//
+// Cuesta del orden de 3-4 consultas por reserva cancelada (GuardarReserva más
+// actualizarEstadoGrupo), y desde el robo eso lo dispara un docente con un
+// click y no un Admin dando de baja un equipo. Medido con el peor caso que el
+// sistema permite —una serie de MaxOcurrenciasRecurrencia fechas, todas
+// tomadas por una materia más débil— da 170-210 ms de punta a punta contra
+// Postgres en contenedor local (TestCrearReservaRecurrente_RoboDeLaSerieMasLarga_CuantoTarda).
+// Lejos del par de segundos que haría falta para atacar la deuda de N+1, así
+// que sigue esperando; el servidor de verdad habla con la base por un túnel,
+// que es lo que podría dar vuelta el número.
+func (s *Service) cancelarEnCascada(ctx context.Context, repo Repo, reservas []*domain.Reserva, motivo string, canceladoPor *string, ahora time.Time) (int, int, []cancelacionPendiente, error) {
 	docentesAfectados := map[string]bool{}
 	canceladas := 0
 	var pendientes []cancelacionPendiente
@@ -1188,7 +1356,7 @@ func (s *Service) cancelarEnCascada(ctx context.Context, repo Repo, reservas []*
 		if r.Estado != domain.ReservaConfirmada {
 			continue
 		}
-		if err := r.Cancelar(nil, motivo, ahora); err != nil {
+		if err := r.Cancelar(canceladoPor, motivo, ahora); err != nil {
 			return 0, 0, nil, err
 		}
 		if err := repo.GuardarReserva(ctx, r); err != nil {

@@ -75,7 +75,7 @@ func (h *Handler) CrearReserva(c *fiber.Ctx) error {
 
 	// RF-04.1: un Admin puede reservar para cualquier materia no archivada,
 	// sin estar asignado a ella.
-	grupo, reservas, err := h.svc.CrearReserva(c.UserContext(), req.MateriaID, claims.UserID,
+	grupo, reservas, impacto, err := h.svc.CrearReserva(c.UserContext(), req.MateriaID, claims.UserID,
 		claims.Rol == "ADMIN", fecha, horaInicio, horaFin, req.EquipoIDs)
 	if err != nil {
 		return mapearError(err)
@@ -90,6 +90,7 @@ func (h *Handler) CrearReserva(c *fiber.Ctx) error {
 	// el recurso que la representa entera.
 	return respuesta.Creado(c, "/api/grupos", grupo.ID, crearReservaResponse{
 		Grupo: toReservaGrupoResponse(grupo), Reservas: reservasResp,
+		ReservasCanceladas: impacto.ReservasCanceladas, DocentesAfectados: impacto.DocentesAfectados,
 	})
 }
 
@@ -136,7 +137,10 @@ func (h *Handler) CrearReservaRecurrente(c *fiber.Ctx) error {
 	for i, g := range res.Grupos {
 		grupos[i] = toReservaGrupoResponse(g)
 	}
-	return c.Status(fiber.StatusCreated).JSON(crearReservaRecurrenteResponse{ReglaID: res.Regla.ID, Grupos: grupos})
+	return c.Status(fiber.StatusCreated).JSON(crearReservaRecurrenteResponse{
+		ReglaID: res.Regla.ID, Grupos: grupos,
+		ReservasCanceladas: res.Impacto.ReservasCanceladas, DocentesAfectados: res.Impacto.DocentesAfectados,
+	})
 }
 
 // POST /api/reservas/{id}/cancelar — RF-04.4. Un Admin puede
