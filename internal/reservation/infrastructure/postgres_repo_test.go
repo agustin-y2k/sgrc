@@ -2919,6 +2919,7 @@ func TestReservasRobablesPor(t *testing.T) {
 	suMateria := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
 
 	tercero, divisionB := 3, "B"
+	quinto, divisionA := 5, "A"
 
 	robable := func(t *testing.T, reservaID string) bool {
 		t.Helper()
@@ -3010,6 +3011,25 @@ func TestReservasRobablesPor(t *testing.T) {
 
 		if !robable(t, id) {
 			t.Error("la que vale es la de 3°B (prioridad 1), más fuerte que la prioridad 2 del dueño")
+		}
+	})
+
+	// El mismo filo, pero del OTRO lado. Con el dueño trayendo siempre una sola
+	// marca suelta, dos implementaciones rotas pasan sin despeinarse: la que
+	// resuelve el lado del dueño por prioridad —dejando la especificidad para el
+	// mío— y la que resuelve su marca con MI contexto, que es justo lo que la
+	// regla prohíbe. Acá las dos contestan "no robable", que es lo contrario de
+	// lo correcto: del lado del dueño gana su marca de 5°A (prioridad 3) por ser
+	// la más específica PARA SU CURSO, y 2 < 3.
+	t.Run("del lado del dueño gana la de su curso aunque sea la más débil: robable", func(t *testing.T) {
+		pc := crearEquipoDeCarroDeTest(t, pool)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 2)
+		marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 1)
+		marcarPreferencia(t, pool, pc, "Informática", nil, &quinto, &divisionA, 3)
+		id := reservaDeOtraMateriaDeTest(t, pool, suMateria, pc, fecha)
+
+		if !robable(t, id) {
+			t.Error("el reclamo del dueño es el de 5°A (prioridad 3), más débil que mi prioridad 2")
 		}
 	})
 

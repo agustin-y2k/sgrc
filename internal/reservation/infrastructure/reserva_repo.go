@@ -858,21 +858,47 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 	return resultado, errorDeFilas(rows)
 }
 
-// ── El ordenamiento por preferencia de materia (RF-03.21) ────────────── Los
-// cuatro fragmentos de acá abajo son las piezas de una misma consulta,
-// compartidas por las dos listas de equipos libres —la de una franja y la de
-// una serie— porque el docente tiene que ver el mismo orden en las dos.
-//
-// Los dos DISTINCT ON desempatan al final por `creada_en, id`: la prioridad
-// por defecto es 1, así que dos marcas empatadas es el caso común y no el
-// borde. Sin ese desempate Postgres elige por orden físico, y el motivo que
-// lee el docente cambia entre una carga y la siguiente.
+// ── Qué marca vale para un contexto (RF-03.21) ───────────────────────── Los
+// dos fragmentos de acá abajo son la definición de "esta marca habla de esta
+// materia" y "de las que hablan, vale ésta". Viven acá, sueltos y compartidos,
+// porque los usan DOS consultas que contestan preguntas distintas: el orden en
+// que el docente ve los equipos libres, y la regla que decide si le puede robar
+// una reserva a otra materia. Con una copia por consulta, el día que la
+// especificidad cambie la pantalla ordena por un alcance y el backend autoriza
+// por otro, y nadie puede explicar la diferencia.
 //
 // El año se compara con IS NOT DISTINCT FROM y no con `=`: una materia puede
 // colgar de un espacio y no de un curso (migración 017), y un espacio no tiene
 // año. Con `=`, comparar 3 contra NULL da NULL, y la condición NEGADA de
 // `ajena` convierte ese NULL en "no entra" — la marca se caía de los dos
 // tramos y el equipo salía neutral en vez de ajeno.
+//
+// El contexto se llama `cm` en las dos consultas justamente para que el
+// fragmento entre en las dos sin adaptarlo.
+const sqlAlcanceDeLaMarca = `ep.materia_norm = cm.norm
+			  AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cm.anio)
+			  AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cm.modalidad_norm)
+			  AND (ep.division_norm  = '' OR ep.division_norm  = cm.division_norm)`
+
+// sqlColaDeEspecificidad: entre las marcas que alcanzan a un mismo contexto,
+// gana la que acota MÁS ejes —año, modalidad, división—, y recién a igual
+// especificidad la de prioridad más fuerte. Una marca de 3°B le gana a una de
+// "toda la materia" aunque la de 3°B sea más débil: el Admin fue más preciso
+// ahí a propósito.
+//
+// El desempate final por `creada_en, id` no es decoración: la prioridad por
+// defecto es 1, así que dos marcas empatadas es el caso común y no el borde.
+// Sin él Postgres elige por orden físico, y tanto el motivo que lee el docente
+// como el permiso para robar cambian entre una carga y la siguiente.
+const sqlColaDeEspecificidad = `(ep.anio IS NOT NULL)::int
+			         + (ep.modalidad_norm <> '')::int
+			         + (ep.division_norm  <> '')::int DESC,
+			         ep.prioridad, ep.creada_en, ep.id`
+
+// ── El ordenamiento por preferencia de materia (RF-03.21) ────────────── Los
+// cuatro fragmentos de acá abajo son las piezas de una misma consulta,
+// compartidas por las dos listas de equipos libres —la de una franja y la de
+// una serie— porque el docente tiene que ver el mismo orden en las dos.
 const sqlTramosDePreferencia = `
 		-- La marca que apunta a MI materia. DISTINCT ON deja una sola por
 		-- equipo: gana la más específica (año+división > año > sin curso) y,
@@ -885,19 +911,17 @@ const sqlTramosDePreferencia = `
 			       ep.modalidad, ep.modalidad_norm, ep.division, ep.division_norm
 			FROM equipo_preferencia ep
 			JOIN ctx_materia cm ON true
-			WHERE ep.materia_norm = cm.norm
-			  AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cm.anio)
-			  AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cm.modalidad_norm)
-			  AND (ep.division_norm  = '' OR ep.division_norm  = cm.division_norm)
+			WHERE ` + sqlAlcanceDeLaMarca + `
 			ORDER BY ep.equipo_id,
-			         (ep.anio IS NOT NULL)::int
-			         + (ep.modalidad_norm <> '')::int
-			         + (ep.division_norm  <> '')::int DESC,
-			         ep.prioridad, ep.creada_en, ep.id
+			         ` + sqlColaDeEspecificidad + `
 		),
-		-- La marca de otro. Compartir el nombre de la materia no alcanza: una
-		-- marca de "Matemática de 3°B" es ajena para Matemática de 5°A, que es
+		-- La marca de otro: exactamente las que NO alcanzan a mi contexto.
+		-- Compartir el nombre de la materia no alcanza — una marca de
+		-- "Matemática de 3°B" es ajena para Matemática de 5°A, que es
 		-- exactamente para lo que el Admin acotó el alcance.
+		--
+		-- Acá no hay especificidad que resolver: la marca ajena no habla de mi
+		-- materia, así que entre dos sólo queda la prioridad.
 		ajena AS (
 			SELECT DISTINCT ON (ep.equipo_id)
 			       ep.equipo_id, ep.prioridad, ep.materia_nombre, ep.anio,
@@ -905,10 +929,7 @@ const sqlTramosDePreferencia = `
 			FROM equipo_preferencia ep
 			JOIN ctx_materia cm ON true
 			WHERE NOT EXISTS (SELECT 1 FROM propia pr WHERE pr.equipo_id = ep.equipo_id)
-			  AND NOT (ep.materia_norm = cm.norm
-			           AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cm.anio)
-			           AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cm.modalidad_norm)
-			           AND (ep.division_norm  = '' OR ep.division_norm  = cm.division_norm))
+			  AND NOT (` + sqlAlcanceDeLaMarca + `)
 			ORDER BY ep.equipo_id, ep.prioridad, ep.creada_en, ep.id
 		)`
 
@@ -983,18 +1004,21 @@ func (r *PostgresRepo) ReservasRobablesPor(ctx context.Context, materiaID string
 			FROM reserva res
 			WHERE res.id = ANY($2)
 		),
-		-- Un reclamo por lado: el mío, con el contexto de la materia que
-		-- reserva, y el del dueño, con el de SU materia. Compararlos con un
-		-- único contexto sería preguntar si la marca de "Matemática de 3°B"
-		-- alcanza a la reserva de 5°A, que es justo lo que el Admin acotó.
-		reclamos AS (
+		-- Un contexto por lado: el mío, el de la materia que reserva, y el del
+		-- dueño, el de SU materia. Resolver la marca del dueño con MI contexto
+		-- sería preguntar si una marca de "Matemática de 3°B" alcanza a la
+		-- reserva de 5°A, que es justo lo que el Admin acotó para que no pase.
+		--
+		-- El alias es cm en las dos consultas porque así los dos contextos
+		-- entran, tal cual, en el mismo fragmento de alcance.
+		contextos AS (
 			SELECT p.id AS reserva_id, true AS es_mio, p.equipo_id,
 			       m.nombre_norm AS norm, cu.anio, cu.modalidad_norm, cu.division_norm
 			FROM pedidas p
 			JOIN materia m ON m.id = $1
 			JOIN contenedor_de_materia cu ON cu.materia_id = m.id
 			UNION ALL
-			-- Sin materia no hay reclamo, y un bloqueo no la tiene: el JOIN lo
+			-- Sin materia no hay contexto, y un bloqueo no la tiene: el JOIN lo
 			-- deja fuera de este lado, pero quien lo protege del robo es el
 			-- tipo de más abajo, no su falta de materia.
 			SELECT p.id, false, p.equipo_id,
@@ -1003,24 +1027,19 @@ func (r *PostgresRepo) ReservasRobablesPor(ctx context.Context, materiaID string
 			JOIN materia m ON m.id = p.materia_id
 			JOIN contenedor_de_materia cu ON cu.materia_id = m.id
 		),
-		-- La misma resolución que ordena la lista de equipos libres (ver
-		-- sqlTramosDePreferencia, que además explica por qué el año va con
-		-- IS NOT DISTINCT FROM): de cada lado vale UNA marca, la más específica,
-		-- y a igual especificidad la más fuerte.
+		-- Un solo DISTINCT ON para los dos lados, con los mismos fragmentos que
+		-- ordenan la lista de equipos libres: de cada lado vale UNA marca, la
+		-- más específica para SU contexto. Que el lado del dueño se resuelva
+		-- distinto del mío no es una variante posible, es un bug —y con el
+		-- fragmento compartido no hay dónde escribirlo.
 		marcas AS (
-			SELECT DISTINCT ON (r.reserva_id, r.es_mio)
-			       r.reserva_id, r.es_mio, ep.prioridad
-			FROM reclamos r
-			JOIN equipo_preferencia ep ON ep.equipo_id = r.equipo_id
-			WHERE ep.materia_norm = r.norm
-			  AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM r.anio)
-			  AND (ep.modalidad_norm = '' OR ep.modalidad_norm = r.modalidad_norm)
-			  AND (ep.division_norm  = '' OR ep.division_norm  = r.division_norm)
-			ORDER BY r.reserva_id, r.es_mio,
-			         (ep.anio IS NOT NULL)::int
-			         + (ep.modalidad_norm <> '')::int
-			         + (ep.division_norm  <> '')::int DESC,
-			         ep.prioridad, ep.creada_en, ep.id
+			SELECT DISTINCT ON (cm.reserva_id, cm.es_mio)
+			       cm.reserva_id, cm.es_mio, ep.prioridad
+			FROM contextos cm
+			JOIN equipo_preferencia ep ON ep.equipo_id = cm.equipo_id
+			WHERE `+sqlAlcanceDeLaMarca+`
+			ORDER BY cm.reserva_id, cm.es_mio,
+			         `+sqlColaDeEspecificidad+`
 		)
 		SELECT p.id::text,
 		       -- El empate no roba: manda quien reservó primero.

@@ -132,6 +132,10 @@ type Repo interface {
 	// equipos están libres para un día y franja horaria concretos.
 	ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]EquipoDisponible, error)
 
+	// ListarEquiposOcupadosEn es la otra mitad de la misma pregunta (RF-04.11):
+	// qué equipos de ese universo ya tiene alguien en esa franja, y quién.
+	ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoOcupado, error)
+
 	// ReservasRobablesPor es LA definición de quién le puede robar a quién
 	// (RF-03.21): de cada reserva pedida dice si el reclamo de su dueño sobre
 	// ese equipo es más débil que el de `materiaID`. La usan los dos lados —la
@@ -147,10 +151,6 @@ type Repo interface {
 	// Un id que no existe no aparece en el mapa, y leer un mapa por una clave
 	// ausente da false — que es la respuesta correcta.
 	ReservasRobablesPor(ctx context.Context, materiaID string, reservaIDs []string) (map[string]bool, error)
-
-	// ListarEquiposOcupadosEn es la otra mitad de la misma pregunta (RF-04.11):
-	// qué equipos de ese universo ya tiene alguien en esa franja, y quién.
-	ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoOcupado, error)
 
 	// ListarEquiposLibresEnLaSerie: los equipos libres en TODAS las fechas que
 	// le quedan a la serie de ese grupo, de esa fecha en adelante (RF-08.14).
