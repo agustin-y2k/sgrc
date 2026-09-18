@@ -180,9 +180,10 @@ func verificarCantidadDeEquipos(equipoIDs []string) error {
 // tocó. Queda en cero en la enorme mayoría de las reservas, que no desplazan a
 // nadie.
 //
-// Es "afectados" y no "notificados" a propósito: un docente que se desplaza a
-// sí mismo entre dos de sus cursos cuenta acá y sin embargo no recibe ningún
-// aviso.
+// Quien reserva no se cuenta a sí mismo: un docente que se corre entre dos de
+// sus cursos cancela una reserva y afecta a CERO docentes. Es coherente con
+// que tampoco reciba ningún aviso — si no se le avisó a nadie, no hay nadie
+// afectado.
 type ImpactoDelRobo struct {
 	ReservasCanceladas int
 	DocentesAfectados  int
@@ -464,9 +465,10 @@ func (s *Service) despejarConflictos(ctx context.Context, repo Repo, materiaID, 
 	for _, c := range conflictos {
 		r, tomada := tomadas[c.ReservaID]
 		if !tomada {
-			// No se pudo mirar la fila: no se roba lo que no se puede verificar.
-			// Es el lado seguro del error, y además el que hace que un solapamiento
-			// sin ReservaID no se convierta en permiso.
+			// La fila desapareció entre que la vimos y fuimos a tomarla. No debería
+			// pasar —una reserva sólo se borra al archivar el ciclo—, y por eso
+			// cuenta como bloqueante en vez de saltearse: no se roba lo que no se
+			// pudo verificar.
 			bloqueantes = append(bloqueantes, c)
 			continue
 		}
@@ -1364,7 +1366,11 @@ func (s *Service) cancelarEnCascada(ctx context.Context, repo Repo, reservas []*
 		}
 		pendientes = append(pendientes, cancelacionPendiente{reserva: r, motivo: motivo})
 		canceladas++
-		if r.CreadoPor != nil {
+		// A quien cancela no se le cuenta como afectado, por lo mismo que
+		// publicarCancelaciones no le manda el aviso: nadie necesita que le avisen
+		// de algo que acaba de hacer. Es el docente que se corre a sí mismo entre
+		// dos de sus cursos — si no salió ningún aviso, no hay ningún afectado.
+		if r.CreadoPor != nil && (canceladoPor == nil || *r.CreadoPor != *canceladoPor) {
 			docentesAfectados[*r.CreadoPor] = true
 		}
 		if r.ReservaGrupoID != nil {

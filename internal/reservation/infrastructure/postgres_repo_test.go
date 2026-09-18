@@ -3132,12 +3132,43 @@ func reservaConDuenoDeTest(t *testing.T, pool *pgxpool.Pool, materiaID string, e
 // los fakes de este archivo: el nombre de la materia que va en el motivo de
 // cancelación sale de la base, y ese texto es lo que el docente desplazado lee
 // en el aviso.
-func servicioDeRoboDeTest(t *testing.T, pool *pgxpool.Pool, ahora time.Time) *application.Service {
+//
+// Devuelve también los avisos que el servicio publicó. Van en una lista y no
+// en un bus que nadie mira porque el aviso ES la mitad del rasgo: sin él, al
+// desplazado le cancelan la clase y no se entera.
+func servicioDeRoboDeTest(t *testing.T, pool *pgxpool.Pool, ahora time.Time) (*application.Service, *avisosDeCancelacion) {
 	t.Helper()
-	return application.NewService(NewPostgresRepo(pool),
+	bus := eventbus.NewInMemoryEventBus()
+	avisos := &avisosDeCancelacion{}
+	bus.Subscribe("reserva.cancelada", avisos.anotar)
+
+	svc := application.NewService(NewPostgresRepo(pool),
 		NewValidadorMateriaPostgres(pool), NewValidadorEquipoPostgres(pool), jornadaLibre{},
-		NewObtenedorNombrePostgres(pool), NuevoID, func() time.Time { return ahora },
-		eventbus.NewInMemoryEventBus())
+		NewObtenedorNombrePostgres(pool), NuevoID, func() time.Time { return ahora }, bus)
+	return svc, avisos
+}
+
+// avisosDeCancelacion junta los reserva.cancelada que salieron del bus. El
+// Publish del bus in-process es sincrónico, así que para cuando CrearReserva
+// devuelve ya están todos.
+type avisosDeCancelacion struct {
+	recibidos []eventbus.CancelacionesDeUsuario
+}
+
+func (a *avisosDeCancelacion) anotar(e eventbus.Evento) {
+	if c, ok := e.Payload.(eventbus.CancelacionesDeUsuario); ok {
+		a.recibidos = append(a.recibidos, c)
+	}
+}
+
+// paraUsuario devuelve el aviso que le tocó a esa persona, o nil.
+func (a *avisosDeCancelacion) paraUsuario(usuarioID string) *eventbus.CancelacionesDeUsuario {
+	for i := range a.recibidos {
+		if a.recibidos[i].UsuarioID == usuarioID {
+			return &a.recibidos[i]
+		}
+	}
+	return nil
 }
 
 // El caso central: la máquina es preferente de Dibujo Técnico con un reclamo
@@ -3162,7 +3193,7 @@ func TestCrearReserva_RobaLaReservaConReclamoMasDebil(t *testing.T) {
 		fecha, 10*time.Hour, 12*time.Hour, nil)
 
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
-	svc := servicioDeRoboDeTest(t, pool, ahora)
+	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, reservas, impacto, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
 		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
@@ -3192,6 +3223,117 @@ func TestCrearReserva_RobaLaReservaConReclamoMasDebil(t *testing.T) {
 	if impacto.ReservasCanceladas != 1 || impacto.DocentesAfectados != 1 {
 		t.Errorf("impacto = %+v, esperaba 1 reserva cancelada y 1 docente afectado", impacto)
 	}
+
+	// La otra mitad del rasgo: sin el aviso, al docente le cancelan la clase y
+	// no se entera. Sale DESPUÉS del commit, así que llega igual que las otras
+	// cancelaciones.
+	aviso := avisos.paraUsuario(desplazado)
+	if aviso == nil {
+		t.Fatalf("el desplazado no recibió ningún aviso; salieron %d", len(avisos.recibidos))
+	}
+	if aviso.Motivo != motivo {
+		t.Errorf("el aviso dice %q y no el motivo con el nombre de la materia", aviso.Motivo)
+	}
+	if len(aviso.Reservas) != 1 || aviso.Reservas[0].ReservaID != ajenas[0].ID {
+		t.Errorf("el aviso no nombra la reserva que se canceló: %+v", aviso.Reservas)
+	}
+}
+
+// El mismo docente, en dos de sus cursos: se corre a sí mismo. La reserva se
+// crea y la vieja se cancela, pero no sale ningún aviso —nadie necesita que le
+// avisen de algo que acaba de hacer— y por lo tanto no hay ningún docente
+// afectado que informar.
+func TestCrearReserva_RobandoseASiMismo_NiAvisoNiDocenteAfectado(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
+
+	// Un solo docente, con las dos materias.
+	docente := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	asignarDocenteAMateria(t, pool, docente, dibujo)
+	asignarDocenteAMateria(t, pool, docente, informatica)
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	_, propias := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, docente,
+		fecha, 10*time.Hour, 12*time.Hour, nil)
+
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
+
+	_, _, impacto, err := svc.CrearReserva(ctx, dibujo, docente, false,
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
+
+	if err != nil {
+		t.Fatalf("correrse a uno mismo es legítimo: %v", err)
+	}
+	corrida, err := repo.BuscarReservaPorID(ctx, propias[0].ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if corrida.Estado != domain.ReservaCancelada {
+		t.Errorf("la reserva vieja quedó en %s", corrida.Estado)
+	}
+	if len(avisos.recibidos) != 0 {
+		t.Errorf("no tenía que salir ningún aviso, salieron %d: %+v", len(avisos.recibidos), avisos.recibidos)
+	}
+	if impacto.ReservasCanceladas != 1 || impacto.DocentesAfectados != 0 {
+		t.Errorf("impacto = %+v, esperaba 1 reserva cancelada y 0 docentes afectados", impacto)
+	}
+}
+
+// El caso que la transacción tiene que sostener: la clasificación dijo que sí,
+// las cancelaciones ya se escribieron, y recién DESPUÉS falla la creación.
+//
+// El lote pide la misma PC dos veces —el molde de
+// TestCrearReserva_ConflictoAMitadDelLote_NoDejaGrupoParcial—, así que el
+// segundo insert revienta contra la constraint EXCLUDE cuando la víctima ya
+// estaba cancelada. Sin concurrencia y sin trucos: la reserva de la víctima
+// tiene que volver a estar ahí.
+func TestCrearReserva_RobaYFallaDespues_LeDevuelveLaClaseAlDesplazado(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
+
+	queRoba := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	asignarDocenteAMateria(t, pool, queRoba, dibujo)
+	desplazado := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
+		fecha, 10*time.Hour, 12*time.Hour, nil)
+
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
+
+	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc, pc})
+
+	if err == nil {
+		t.Fatal("pedir dos veces la misma PC tiene que fallar contra la EXCLUDE")
+	}
+	intacta, err := repo.BuscarReservaPorID(ctx, ajenas[0].ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if intacta.Estado != domain.ReservaConfirmada {
+		t.Errorf("la creación falló después de cancelar y no le devolvió la clase al desplazado: quedó en %s", intacta.Estado)
+	}
+	// Y tampoco le llegó un aviso por una cancelación que no ocurrió.
+	if len(avisos.recibidos) != 0 {
+		t.Errorf("salió un aviso de una cancelación que se deshizo: %+v", avisos.recibidos)
+	}
 }
 
 // El contracaso, que es el que protege: con la marca ajena más fuerte no se
@@ -3216,7 +3358,7 @@ func TestCrearReserva_RobaNada_SiElReclamoAjenoEsMasFuerte(t *testing.T) {
 		fecha, 10*time.Hour, 12*time.Hour, nil)
 
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
-	svc := servicioDeRoboDeTest(t, pool, ahora)
+	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
 		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
@@ -3271,7 +3413,7 @@ func TestCrearReserva_RobaNada_SiUnSoloConflictoDelLoteNoEsRobable(t *testing.T)
 		[]string{seLaPuedeRobar, noSeLaPuedeRobar}, desplazado, fecha, 10*time.Hour, 12*time.Hour, nil)
 
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
-	svc := servicioDeRoboDeTest(t, pool, ahora)
+	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
 		fecha, 10*time.Hour, 12*time.Hour, []string{seLaPuedeRobar, noSeLaPuedeRobar})
@@ -3315,7 +3457,7 @@ func TestCrearReserva_RobaNada_SiLaClaseAjenaEstaPorEmpezar(t *testing.T) {
 
 	// Veinte minutos antes de que arranque: la preferencia alcanza y el reloj no.
 	ahora := fecha.Add(9*time.Hour + 40*time.Minute)
-	svc := servicioDeRoboDeTest(t, pool, ahora)
+	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
 		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
@@ -3375,7 +3517,7 @@ func TestCrearReservaRecurrente_RobaSoloLaOcurrenciaQueChoca(t *testing.T) {
 		tercerLunes, 10*time.Hour, 12*time.Hour, &regla.ID)
 
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
-	svc := servicioDeRoboDeTest(t, pool, ahora)
+	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	res, err := svc.CrearReservaRecurrente(ctx, dibujo, queRoba, false, domain.Lunes,
 		10*time.Hour, 12*time.Hour, primerLunes, ultimoLunes, []string{pc})
@@ -3457,7 +3599,7 @@ func TestCrearReservaRecurrente_RoboDeLaSerieMasLarga_CuantoTarda(t *testing.T) 
 	}
 
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
-	svc := servicioDeRoboDeTest(t, pool, ahora)
+	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	arranque := time.Now()
 	res, err := svc.CrearReservaRecurrente(ctx, dibujo, queRoba, false, domain.Lunes,
