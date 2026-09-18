@@ -6,7 +6,7 @@ import * as academicoApi from "@/features/academico/api"
 import * as adminApi from "@/features/admin/api"
 import { PreferenciaDeCarro } from "@/features/admin/PreferenciaDeCarro"
 import * as inventoryApi from "@/features/inventory/api"
-import type { Equipo } from "@/features/inventory/types"
+import type { Equipo, PreferenciaDeEquipo } from "@/features/inventory/types"
 
 vi.mock("@/features/admin/api")
 vi.mock("@/features/academico/api")
@@ -29,16 +29,14 @@ function equipo(id: string, identificador: number, over: Partial<Equipo> = {}): 
   }
 }
 
-function renderPanel(equipos = [equipo("pc1", 1), equipo("pc2", 2)]) {
+function renderPanel(
+  equipos = [equipo("pc1", 1), equipo("pc2", 2)],
+  marcas: PreferenciaDeEquipo[] = [],
+) {
   vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: equipos })
   vi.mocked(adminApi.materiasEnUso).mockResolvedValue({ data: ["Dibujo Técnico"] })
   vi.mocked(academicoApi.listarCursos).mockResolvedValue({ data: [] })
-  // Default en blanco: si el test ya cargó su propia marca (para probar el
-  // aviso de empate) esto no la debe pisar, porque se ejecuta después de esa
-  // configuración y ganaría por orden.
-  if (!vi.mocked(adminApi.listarPreferenciasDeCarro).getMockImplementation()) {
-    vi.mocked(adminApi.listarPreferenciasDeCarro).mockResolvedValue({ data: [] })
-  }
+  vi.mocked(adminApi.listarPreferenciasDeCarro).mockResolvedValue({ data: marcas })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -99,18 +97,15 @@ test("no ofrece los equipos que no se reservan", async () => {
 
 test("avisa si la prioridad elegida ya la usa otra materia en esos equipos", async () => {
   const usuario = userEvent.setup()
-  vi.mocked(adminApi.listarPreferenciasDeCarro).mockResolvedValue({
-    data: [
-      {
-        id: "p1",
-        equipoId: "pc1",
-        materiaNombre: "Matemática",
-        prioridad: 1,
-        alcance: "Matemática",
-      },
-    ],
-  })
-  renderPanel()
+  renderPanel(undefined, [
+    {
+      id: "p1",
+      equipoId: "pc1",
+      materiaNombre: "Matemática",
+      prioridad: 1,
+      alcance: "Matemática",
+    },
+  ])
 
   await screen.findByText("PC 1")
   await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
@@ -122,18 +117,15 @@ test("avisa si la prioridad elegida ya la usa otra materia en esos equipos", asy
 
 test("no avisa por un empate en un equipo que está destildado", async () => {
   const usuario = userEvent.setup()
-  vi.mocked(adminApi.listarPreferenciasDeCarro).mockResolvedValue({
-    data: [
-      {
-        id: "p1",
-        equipoId: "pc1",
-        materiaNombre: "Matemática",
-        prioridad: 1,
-        alcance: "Matemática",
-      },
-    ],
-  })
-  renderPanel()
+  renderPanel(undefined, [
+    {
+      id: "p1",
+      equipoId: "pc1",
+      materiaNombre: "Matemática",
+      prioridad: 1,
+      alcance: "Matemática",
+    },
+  ])
 
   await screen.findByText("PC 1")
   await usuario.click(screen.getByRole("checkbox", { name: /PC 1/ }))
