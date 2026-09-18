@@ -193,7 +193,8 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 		       COALESCE(e.nombre, 'PC ' || e.identificador, ''),
 		       res.fecha, res.hora_inicio, res.hora_fin,
 		       COALESCE(res.nombre_docente_snapshot, ''),
-		       COALESCE(res.motivo_bloqueo, '')
+		       COALESCE(res.motivo_bloqueo, ''),
+		       res.id, COALESCE(res.materia_id::text, '')
 		FROM reserva res
 		JOIN equipo e ON e.id = res.equipo_id
 		LEFT JOIN carro c ON c.id = e.carro_id
@@ -221,7 +222,7 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 	for rows.Next() {
 		var s application.Solapamiento
 		var inicio, fin time.Time
-		if err := rows.Scan(&s.EquipoID, &s.Etiqueta, &s.Fecha, &inicio, &fin, &s.Docente, &s.MotivoBloqueo); err != nil {
+		if err := rows.Scan(&s.EquipoID, &s.Etiqueta, &s.Fecha, &inicio, &fin, &s.Docente, &s.MotivoBloqueo, &s.ReservaID, &s.MateriaID); err != nil {
 			return nil, fmt.Errorf("escaneando solapamiento: %w", err)
 		}
 		s.HoraInicio, s.HoraFin = horaComoDuracion(inicio), horaComoDuracion(fin)

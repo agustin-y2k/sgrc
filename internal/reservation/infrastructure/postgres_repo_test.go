@@ -2064,6 +2064,86 @@ func TestPostgresRepo_BuscarSolapamientos_LoteCompleto(t *testing.T) {
 	}
 }
 
+// Los dos datos que la regla del robo necesita de cada conflicto: a quién
+// cancelar y contra qué materia comparar el reclamo.
+func TestPostgresRepo_BuscarSolapamientos_TraeLoQueElRoboNecesita(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	materiaID := crearMateriaDeTest(t, pool)
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	g := nuevoReservaGrupoDeTest(materiaID, fecha, 10*time.Hour, 12*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatalf("no se pudo crear el grupo: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, pc, materiaID, "Ada Lovelace",
+		nil, fecha, 10*time.Hour, 12*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, res); err != nil {
+		t.Fatalf("no se pudo crear la reserva: %v", err)
+	}
+
+	conflictos, err := repo.BuscarSolapamientos(ctx,
+		[]string{pc}, []time.Time{fecha}, 11*time.Hour, 13*time.Hour)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(conflictos) != 1 {
+		t.Fatalf("esperaba un choque, obtuve %+v", conflictos)
+	}
+
+	c := conflictos[0]
+	if c.ReservaID != res.ID {
+		t.Errorf("sin el id no hay a quién cancelar: %q", c.ReservaID)
+	}
+	if c.MateriaID != materiaID {
+		t.Errorf("sin la materia no hay contra qué comparar el reclamo: %q", c.MateriaID)
+	}
+
+}
+
+// Un bloqueo administrativo no tiene materia, pero sigue teniendo id: es el
+// caso que impide que un docente pueda cancelar una evaluación.
+func TestPostgresRepo_BuscarSolapamientos_BloqueoTraeIDSinMateria(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	bloqueo, err := domain.NuevaReservaBloqueo(NuevoID(), pc, nil, fecha,
+		10*time.Hour, 12*time.Hour, "Jornada docente", ahora)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, bloqueo); err != nil {
+		t.Fatalf("no se pudo crear el bloqueo: %v", err)
+	}
+
+	conflictos, err := repo.BuscarSolapamientos(ctx,
+		[]string{pc}, []time.Time{fecha}, 11*time.Hour, 13*time.Hour)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(conflictos) != 1 {
+		t.Fatalf("esperaba un choque, obtuve %+v", conflictos)
+	}
+
+	c := conflictos[0]
+	if c.ReservaID != bloqueo.ID {
+		t.Errorf("sin el id no hay a quién cancelar: %q", c.ReservaID)
+	}
+	if c.MateriaID != "" {
+		t.Errorf("un bloqueo no tiene materia con qué comparar: %q", c.MateriaID)
+	}
+}
+
 // Los bordes que se tocan no se pisan, igual que la constraint EXCLUDE. Es
 // el caso más común que existe: la clase de 8 a 10 y la de 10 a 12.
 func TestPostgresRepo_BuscarSolapamientos_BordeQueSeToca_NoCuenta(t *testing.T) {

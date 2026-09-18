@@ -492,6 +492,12 @@ type Solapamiento struct {
 	// MotivoBloqueo solo viene en los bloqueos. Es lo que ocupa el lugar que
 	// en una clase tiene la materia, así que es lo que hay que mostrar.
 	MotivoBloqueo string
+	// Los dos que necesita la regla del robo (RF-03.21): a quién cancelar y
+	// contra qué materia comparar el reclamo. Un bloqueo administrativo llega
+	// con MateriaID vacío, pero quien decide que no se roba es el SQL de la
+	// regla, por tipo y no por la ausencia de materia.
+	ReservaID string
+	MateriaID string
 }
 
 // describir arma el fragmento que se lee dentro del mensaje de error.
