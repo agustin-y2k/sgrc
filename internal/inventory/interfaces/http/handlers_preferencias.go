@@ -24,6 +24,22 @@ func (h *Handler) ListarPreferenciasDeEquipo(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
+// GET /api/carros/{carroId}/preferencias (Admin) — las marcas de todo el carro.
+func (h *Handler) ListarPreferenciasDeCarro(c *fiber.Ctx) error {
+	carroID := c.Params("carroId")
+
+	preferencias, err := h.svc.ListarPreferenciasDeCarro(c.UserContext(), carroID)
+	if err != nil {
+		return mapearError(err)
+	}
+
+	data := make([]preferenciaResponse, len(preferencias))
+	for i, p := range preferencias {
+		data[i] = toPreferenciaResponse(p)
+	}
+	return c.JSON(fiber.Map{"data": data})
+}
+
 // GET /api/materias-en-uso (Admin) — el selector del formulario.
 func (h *Handler) ListarMateriasEnUso(c *fiber.Ctx) error {
 	nombres, err := h.svc.NombresDeMateriaEnUso(c.UserContext())

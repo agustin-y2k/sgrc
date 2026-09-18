@@ -102,6 +102,10 @@ func (s *Service) ListarPreferenciasDeEquipo(ctx context.Context, equipoID strin
 	return s.repo.ListarPreferenciasPorEquipo(ctx, equipoID)
 }
 
+func (s *Service) ListarPreferenciasDeCarro(ctx context.Context, carroID string) ([]*domain.PreferenciaDeEquipo, error) {
+	return s.repo.ListarPreferenciasPorCarro(ctx, carroID)
+}
+
 // NombresDeMateriaEnUso son las materias que el Admin puede elegir al
 // marcar. Ver el puerto sobre por qué son nombres y no materias.
 func (s *Service) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {

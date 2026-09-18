@@ -96,6 +96,10 @@ type Repo interface {
 	BuscarPreferenciaPorID(ctx context.Context, id string) (*domain.PreferenciaDeEquipo, error)
 	BorrarPreferencia(ctx context.Context, id string) error
 	ListarPreferenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.PreferenciaDeEquipo, error)
+	// ListarPreferenciasPorCarro: las marcas de todos los equipos de un carro,
+	// para que el alta masiva pueda avisar de un empate de prioridad sin pedir
+	// una consulta por equipo.
+	ListarPreferenciasPorCarro(ctx context.Context, carroID string) ([]*domain.PreferenciaDeEquipo, error)
 
 	// ListarPreferenciasHuerfanas: las marcas que ya no cruzan con ninguna
 	// materia. Aparecen al renombrar o borrar una materia, porque el vínculo es

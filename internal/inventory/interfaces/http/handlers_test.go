@@ -299,6 +299,10 @@ func (r *fakeRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID str
 	return resultado, nil
 }
 
+func (r *fakeRepo) ListarPreferenciasPorCarro(ctx context.Context, carroID string) ([]*domain.PreferenciaDeEquipo, error) {
+	return nil, nil
+}
+
 func (r *fakeRepo) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {
 	return r.nombresDeMateria, nil
 }

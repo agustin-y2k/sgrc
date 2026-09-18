@@ -79,6 +79,9 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 
 	// Preferencia de materia por equipo (RF-03.21).
 	inventory.Get("/equipos/:equipoId/preferencias", autenticado, h.ListarPreferenciasDeEquipo)
+	// Va con soloAdmin y no con `autenticado` como la de un equipo: esta la usa
+	// únicamente el alta masiva del panel de inventario.
+	inventory.Get("/carros/:carroId/preferencias", autenticado, soloAdmin, h.ListarPreferenciasDeCarro)
 	inventory.Get("/materias-en-uso", autenticado, soloAdmin, h.ListarMateriasEnUso)
 	// Las marcas que quedaron apuntando a una materia renombrada o borrada. Va
 	// antes de /preferencias/:id para que el router no lea "huerfanas" como un id.

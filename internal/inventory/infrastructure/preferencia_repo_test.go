@@ -401,3 +401,39 @@ func TestContarPreferenciasQueDejarianDeAplicar_NoCuentaLasQueSiguenSirviendo(t 
 		t.Errorf("esperaba 1, obtuve %d", n)
 	}
 }
+
+// Las marcas se leen por carro para que el alta masiva pueda avisar de un
+// empate sin pedir una consulta por equipo.
+func TestListarPreferenciasPorCarro(t *testing.T) {
+	repo := NewPostgresRepo(levantarPostgresDeTest(t))
+	ctx := context.Background()
+
+	// Dos equipos en EL MISMO carro, y un tercero afuera para que se note que
+	// filtra y no devuelve todo.
+	carro := crearCarroDeTest(t, repo, "Carro-PREF-CARRO")
+	e1 := crearEquipoDeCarroDeTest(t, repo, carro.ID, 1, "SERIE-CARRO-1").ID
+	e2 := crearEquipoDeCarroDeTest(t, repo, carro.ID, 2, "SERIE-CARRO-2").ID
+	afuera := equipoParaPreferencias(t, repo, "SERIE-CARRO-3")
+
+	nuevaPreferenciaDeTest(t, repo, e1, "Matemática", nil, nil, nil, 1)
+	nuevaPreferenciaDeTest(t, repo, e2, "Dibujo Técnico", nil, nil, nil, 2)
+	nuevaPreferenciaDeTest(t, repo, afuera, "Lengua", nil, nil, nil, 1)
+
+	marcas, err := repo.ListarPreferenciasPorCarro(ctx, carro.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(marcas) != 2 {
+		t.Fatalf("esperaba las 2 marcas del carro, obtuve %d", len(marcas))
+	}
+	// Cada marca dice de qué equipo es: el alta masiva las cruza contra los
+	// equipos que tiene tildados.
+	for _, m := range marcas {
+		if m.EquipoID != e1 && m.EquipoID != e2 {
+			t.Errorf("devolvió la marca de un equipo que no es del carro: %+v", m)
+		}
+		if m.MateriaNombre == "Lengua" {
+			t.Error("la marca del equipo de otro carro no tiene que venir")
+		}
+	}
+}

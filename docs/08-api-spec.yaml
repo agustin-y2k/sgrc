@@ -3608,6 +3608,35 @@ paths:
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/PreferenciaDeEquipo' } }
 
+  /api/carros/{carroId}/preferencias:
+    get:
+      tags: [inventory]
+      summary: Las marcas de preferencia de todos los equipos de un carro (Admin)
+      description: |
+        Las mismas marcas que `/equipos/{equipoId}/preferencias`, pero de todos los
+        equipos del carro en una sola consulta.
+
+        La usa el alta masiva del panel de inventario para avisar, ANTES de guardar,
+        que la prioridad elegida ya la usa otra materia en esas mismas máquinas: por
+        equipo ya se podía preguntar, pero pedirlo de a uno para un carro de veinte
+        eran veinte consultas para contestar una sola pregunta. Por eso es solo-Admin,
+        a diferencia de la de un equipo: sólo la usa esa pantalla.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: carroId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Listado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PreferenciaDeEquipo' } }
+
   /api/reservas/{id}:
     get:
       tags: [reservation]

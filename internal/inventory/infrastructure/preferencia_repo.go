@@ -117,6 +117,40 @@ func (r *PostgresRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID
 	return resultado, errorDeFilas(rows)
 }
 
+// ListarPreferenciasPorCarro: las marcas de todos los equipos de un carro.
+//
+// La pide el alta masiva para avisar, ANTES de guardar, que la prioridad
+// elegida ya la usa otra materia en esas mismas máquinas. Por equipo ya se
+// podía preguntar; pedirlo de a uno para un carro de veinte eran veinte
+// consultas para contestar una sola pregunta.
+func (r *PostgresRepo) ListarPreferenciasPorCarro(ctx context.Context, carroID string) ([]*domain.PreferenciaDeEquipo, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT ep.id, ep.equipo_id, ep.materia_nombre, ep.modalidad, ep.anio,
+		       ep.division, ep.prioridad
+		  FROM equipo_preferencia ep
+		  JOIN equipo e ON e.id = ep.equipo_id
+		 WHERE e.carro_id = $1
+		 ORDER BY e.identificador NULLS LAST, ep.prioridad, ep.materia_nombre
+	`, carroID)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("listando preferencias del carro: %w", err)
+	}
+	defer rows.Close()
+
+	resultado := []*domain.PreferenciaDeEquipo{}
+	for rows.Next() {
+		p, err := escanearPreferencia(rows)
+		if err != nil {
+			return nil, fmt.Errorf("escaneando fila de preferencia: %w", err)
+		}
+		resultado = append(resultado, p)
+	}
+	return resultado, errorDeFilas(rows)
+}
+
 // NombresDeMateriaEnUso: los nombres distintos que existen, sin importar el
 // curso ni el ciclo.
 func (r *PostgresRepo) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {
