@@ -390,6 +390,13 @@ export function listarPreferenciasDeEquipo(equipoId: string) {
   )
 }
 
+/** Las marcas de todos los equipos de un carro, para el alta masiva. */
+export function listarPreferenciasDeCarro(carroId: string) {
+  return apiFetch<RespuestaLista<PreferenciaDeEquipo>>(
+    `/api/carros/${carroId}/preferencias`,
+  )
+}
+
 /**
  * Los nombres de materia que ya existen, para que el Admin ELIJA en vez de
  * tipear: la marca se guarda como texto, y este selector es lo único que

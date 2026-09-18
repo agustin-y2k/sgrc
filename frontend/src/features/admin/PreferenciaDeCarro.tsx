@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import * as adminApi from "@/features/admin/api"
 import { CamposDeMarca, MARCA_VACIA } from "@/features/admin/CamposDeMarca"
 import type { ValoresDeMarca } from "@/features/admin/CamposDeMarca"
+import { materiasConLaMismaPrioridad } from "@/features/admin/prioridadEmpatada"
 import * as inventoryApi from "@/features/inventory/api"
 import { getErrorMessage } from "@/lib/api-client"
 
@@ -42,11 +43,32 @@ export function PreferenciaDeCarro({
     queryFn: () => adminApi.materiasEnUso(),
   })
 
+  const { data: marcasData } = useQuery({
+    queryKey: ["preferencias", "carro", carroId],
+    queryFn: () => adminApi.listarPreferenciasDeCarro(carroId),
+  })
+
   // Sólo lo reservable: una marca de preferencia sólo ordena la lista al
   // reservar, así que sobre un cargador no significaría nada (RF-03.16).
   const equipos = (equiposData?.data ?? []).filter((e) => e.reservable && !e.dadoDeBaja)
   const materias = materiasData?.data ?? []
   const elegidos = equipos.filter((e) => !destildados.has(e.id))
+
+  // Sólo las de los equipos que quedan tildados: avisar por una máquina que el
+  // Admin acaba de destildar sería avisar de algo que no va a pasar.
+  //
+  // Y sólo con una materia ya elegida: con el formulario en blanco no hay nada
+  // que comparar, y el string vacío no coincide con ninguna marca existente, así
+  // que TODA marca en prioridad 1 se leería como empate apenas se abre el panel.
+  const idsElegidos = new Set(elegidos.map((e) => e.id))
+  const empatadas =
+    valores.materiaNombre === ""
+      ? []
+      : materiasConLaMismaPrioridad(
+          (marcasData?.data ?? []).filter((m) => idsElegidos.has(m.equipoId)),
+          valores.materiaNombre,
+          Number(valores.prioridad),
+        )
 
   const alternar = (id: string) => {
     const nuevo = new Set(destildados)
@@ -108,56 +130,70 @@ export function PreferenciaDeCarro({
         </Alert>
       )}
 
+      {/* Sin equipos reservables no hay nada que elegir ni marcar: mostrar el
+          formulario igual sería un formulario sin sentido, con el botón
+          Marcar deshabilitado desde que se abre. */}
       {equipos.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           Este carro no tiene equipos reservables.
         </p>
       ) : (
-        <div className="grid gap-2">
-          <Label>Equipos que quedan marcados</Label>
-          <div className="grid max-h-56 gap-1 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
-            {equipos.map((e) => (
-              <label key={e.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={!destildados.has(e.id)}
-                  onChange={() => alternar(e.id)}
-                />
-                {e.etiqueta}
-              </label>
-            ))}
+        <>
+          <div className="grid gap-2">
+            <Label>Equipos que quedan marcados</Label>
+            <div className="grid max-h-56 gap-1 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
+              {equipos.map((e) => (
+                <label key={e.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!destildados.has(e.id)}
+                    onChange={() => alternar(e.id)}
+                  />
+                  {e.etiqueta}
+                </label>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
 
-      <form
-        className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto] sm:items-end"
-        onSubmit={(e) => {
-          e.preventDefault()
-          marcar.mutate()
-        }}
-      >
-        <CamposDeMarca
-          valores={valores}
-          onChange={setValores}
-          materias={materias}
-          idBase={`carro-${carroId}`}
-        />
-        <span className="flex gap-2">
-          <Button
-            type="submit"
-            size="sm"
-            disabled={
-              valores.materiaNombre === "" || elegidos.length === 0 || marcar.isPending
-            }
+          <form
+            className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto] sm:items-end"
+            onSubmit={(e) => {
+              e.preventDefault()
+              marcar.mutate()
+            }}
           >
-            Marcar
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onListo}>
-            Cerrar
-          </Button>
-        </span>
-      </form>
+            {empatadas.length > 0 && (
+              <Alert className="sm:col-span-full">
+                <AlertDescription>
+                  Equipos de este carro ya son preferentes de {empatadas.join(", ")} con
+                  prioridad {valores.prioridad}. Con la misma prioridad ninguna le gana a la
+                  otra: si querés que una mande, ponele un número distinto.
+                </AlertDescription>
+              </Alert>
+            )}
+            <CamposDeMarca
+              valores={valores}
+              onChange={setValores}
+              materias={materias}
+              idBase={`carro-${carroId}`}
+            />
+            <span className="flex gap-2">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={
+                  valores.materiaNombre === "" || elegidos.length === 0 || marcar.isPending
+                }
+              >
+                Marcar
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={onListo}>
+                Cancelar
+              </Button>
+            </span>
+          </form>
+        </>
+      )}
     </div>
   )
 }
