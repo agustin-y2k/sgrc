@@ -10,6 +10,7 @@ import type { ValoresDeMarca } from "@/features/admin/CamposDeMarca"
 import { materiasConLaMismaPrioridad } from "@/features/admin/prioridadEmpatada"
 import * as inventoryApi from "@/features/inventory/api"
 import { getErrorMessage } from "@/lib/api-client"
+import { contar, plural } from "@/lib/plural"
 
 /**
  * RF-03.21 — la misma marca sobre todo un carro.
@@ -31,9 +32,13 @@ export function PreferenciaDeCarro({
   // Arranca sin tocar: el default es "todos", y eso se resuelve al armar la
   // lista. Acá sólo viven los que el Admin destildó a mano.
   const [destildados, setDestildados] = useState<Set<string>>(new Set())
-  const [resultado, setResultado] = useState<{ creadas: number; yaLaTenian: number } | null>(null)
+  const [resumen, setResumen] = useState<string | null>(null)
 
-  const { data: equiposData, isLoading } = useQuery({
+  const {
+    data: equiposData,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["equipos", carroId],
     queryFn: () => inventoryApi.listarEquiposDeCarro(carroId),
   })
@@ -43,6 +48,8 @@ export function PreferenciaDeCarro({
     queryFn: () => adminApi.materiasEnUso(),
   })
 
+  // Si esta falla se sigue sin avisar: lo único que se pierde es el aviso de
+  // empate, y marcar —que es para lo que se abre el panel— no depende de ella.
   const { data: marcasData } = useQuery({
     queryKey: ["preferencias", "carro", carroId],
     queryFn: () => adminApi.listarPreferenciasDeCarro(carroId),
@@ -88,17 +95,33 @@ export function PreferenciaDeCarro({
         prioridad: Number(valores.prioridad),
       }),
     onSuccess: async (r) => {
-      setResultado({
-        creadas: r.creadas.length,
-        yaLaTenian: r.equiposQueYaLaTenian?.length ?? 0,
-      })
+      const creadas = r.creadas.length
+      const yaLaTenian = r.equiposQueYaLaTenian?.length ?? 0
+      setResumen(
+        `Se ${plural(creadas, "marcó", "marcaron")} ${contar(creadas, "equipo")}.` +
+          (yaLaTenian === 0
+            ? ""
+            : ` ${contar(yaLaTenian, "equipo")} ya ${plural(yaLaTenian, "tenía", "tenían")} esa misma marca.`),
+      )
+      // Los campos y la selección se limpian juntos: dejar destildado lo de la
+      // vuelta anterior con el formulario en blanco es un formulario que miente.
       setValores(MARCA_VACIA)
+      setDestildados(new Set())
       await queryClient.invalidateQueries({ queryKey: ["preferencias"] })
     },
   })
 
   if (isLoading) {
     return <p className="text-muted-foreground text-sm">Cargando equipos…</p>
+  }
+  // Sin los equipos no se sabe nada del carro: decir que no tiene ninguno
+  // reservable sería afirmar un dato de inventario que no llegó.
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{getErrorMessage(error)}</AlertDescription>
+      </Alert>
+    )
   }
 
   return (
@@ -120,13 +143,9 @@ export function PreferenciaDeCarro({
       {/* El número se muestra después y no antes: cuántas se marcaron de verdad
           sólo se sabe una vez hecho, porque las que ya tenían la marca se
           saltean sin ser un error. */}
-      {resultado && (
+      {resumen && (
         <Alert>
-          <AlertDescription>
-            Se marcaron {resultado.creadas} equipos.
-            {resultado.yaLaTenian > 0 &&
-              ` Otros ${resultado.yaLaTenian} ya tenían esa misma marca.`}
-          </AlertDescription>
+          <AlertDescription>{resumen}</AlertDescription>
         </Alert>
       )}
 
@@ -155,43 +174,52 @@ export function PreferenciaDeCarro({
             </div>
           </div>
 
-          <form
-            className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto] sm:items-end"
-            onSubmit={(e) => {
-              e.preventDefault()
-              marcar.mutate()
-            }}
-          >
-            {empatadas.length > 0 && (
-              <Alert className="sm:col-span-full">
-                <AlertDescription>
-                  Equipos de este carro ya son preferentes de {empatadas.join(", ")} con
-                  prioridad {valores.prioridad}. Con la misma prioridad ninguna le gana a la
-                  otra: si querés que una mande, ponele un número distinto.
-                </AlertDescription>
-              </Alert>
-            )}
-            <CamposDeMarca
-              valores={valores}
-              onChange={setValores}
-              materias={materias}
-              idBase={`carro-${carroId}`}
-            />
-            <span className="flex gap-2">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={
-                  valores.materiaNombre === "" || elegidos.length === 0 || marcar.isPending
-                }
-              >
-                Marcar
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={onListo}>
-                Cancelar
-              </Button>
-            </span>
-          </form>
+          {/* Sin materias cargadas no hay nada que marcar, y acá tampoco hay
+              marcas viejas que corregir: el formulario entero sobra. */}
+          {materias.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Todavía no hay materias cargadas. Se crean desde Académico.
+            </p>
+          ) : (
+            <form
+              className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto] sm:items-end"
+              onSubmit={(e) => {
+                e.preventDefault()
+                setResumen(null)
+                marcar.mutate()
+              }}
+            >
+              {empatadas.length > 0 && (
+                <Alert className="sm:col-span-full">
+                  <AlertDescription>
+                    Equipos de este carro ya son preferentes de {empatadas.join(", ")} con
+                    prioridad {valores.prioridad}. Con la misma prioridad ninguna le gana a
+                    la otra: si querés que una mande, ponele un número distinto.
+                  </AlertDescription>
+                </Alert>
+              )}
+              <CamposDeMarca
+                valores={valores}
+                onChange={setValores}
+                materias={materias}
+                idBase={`carro-${carroId}`}
+              />
+              <span className="flex gap-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={
+                    valores.materiaNombre === "" || elegidos.length === 0 || marcar.isPending
+                  }
+                >
+                  Marcar
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={onListo}>
+                  Cerrar
+                </Button>
+              </span>
+            </form>
+          )}
         </>
       )}
     </div>
