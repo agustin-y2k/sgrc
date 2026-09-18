@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CamposDeMarca, MARCA_VACIA, type ValoresDeMarca } from "@/features/admin/CamposDeMarca"
 import * as adminApi from "@/features/admin/api"
+import { materiasConLaMismaPrioridad } from "@/features/admin/prioridadEmpatada"
 import type { PreferenciaDeEquipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 
@@ -106,6 +107,18 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
   const nombres = materias?.data ?? []
   const errorDeAccion = marcar.error ?? corregir.error ?? borrar.error
 
+  // Sólo al dar de alta y con una materia elegida: corrigiendo una marca que ya
+  // existe, ella misma está en la lista y se avisaría a sí misma; y sin materia
+  // todavía no hay nada que comparar, sólo el string vacío del formulario en blanco.
+  const empatadas =
+    editando || valores.materiaNombre === ""
+      ? []
+      : materiasConLaMismaPrioridad(
+          preferencias,
+          valores.materiaNombre,
+          Number(valores.prioridad),
+        )
+
   return (
     <div className="grid gap-3 rounded-md border p-3">
       <div>
@@ -171,6 +184,15 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
             else marcar.mutate()
           }}
         >
+          {empatadas.length > 0 && (
+            <Alert className="sm:col-span-full">
+              <AlertDescription>
+                Esta máquina ya es preferente de {empatadas.join(", ")} con prioridad{" "}
+                {valores.prioridad}. Con la misma prioridad ninguna le gana a la otra: si
+                querés que una mande, ponele un número distinto.
+              </AlertDescription>
+            </Alert>
+          )}
           <CamposDeMarca
             valores={valores}
             onChange={setValores}

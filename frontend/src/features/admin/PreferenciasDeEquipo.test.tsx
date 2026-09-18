@@ -203,6 +203,18 @@ describe("PreferenciasDeEquipo", () => {
     })
   })
 
+  test("avisa cuando la prioridad elegida ya la usa otra materia", async () => {
+    const usuario = userEvent.setup()
+    renderPanel([preferencia({ materiaNombre: "Matemática", prioridad: 1 })])
+
+    await screen.findByText(/Matemática/)
+    await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+
+    expect(
+      await screen.findByText(/ya es preferente de Matemática con prioridad 1/),
+    ).toBeInTheDocument()
+  })
+
   it("sin materias cargadas explica dónde se crean", async () => {
     vi.mocked(adminApi.listarPreferenciasDeEquipo).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.materiasEnUso).mockResolvedValue({ data: [] })
