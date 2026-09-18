@@ -41,6 +41,17 @@ type fakeRepo struct {
 	pedidosDeLiberacion map[string]bool
 
 	errBuscarSolapamientos error
+
+	// robablesPor es lo que el fake contesta a ReservasRobablesPor, cableado
+	// por cada test según el id de reserva. La regla de preferencia vive en
+	// SQL (ver ReservasRobablesPor en reserva_repo.go); reproducirla acá sería
+	// la segunda copia que este puerto existe justamente para evitar.
+	robablesPor map[string]bool
+	// materiaRecibidaAlRobar y vecesConsultoRobables: para poder afirmar con
+	// qué materia se preguntó, y que se preguntó UNA vez para todo el lote, no
+	// una por equipo.
+	materiaRecibidaAlRobar string
+	vecesConsultoRobables  int
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -598,10 +609,19 @@ func (r *fakeRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID str
 	return r.pcsDisponibles, nil
 }
 
-// Nada es robable mientras ningún caso de este archivo lo necesite: la regla
-// se prueba contra la base, que es donde vive.
+// ReservasRobablesPor no reproduce la comparación de prioridad/especificidad
+// —esa regla vive en SQL, contra la base—, sólo devuelve lo que cada test
+// cableó en robablesPor por id de reserva. Registra la materia y cuenta las
+// llamadas para poder afirmar que la lista de ocupados hace UNA consulta para
+// todo el lote, y con la materia correcta.
 func (r *fakeRepo) ReservasRobablesPor(ctx context.Context, materiaID string, reservaIDs []string) (map[string]bool, error) {
-	return map[string]bool{}, nil
+	r.materiaRecibidaAlRobar = materiaID
+	r.vecesConsultoRobables++
+	resultado := make(map[string]bool, len(reservaIDs))
+	for _, id := range reservaIDs {
+		resultado[id] = r.robablesPor[id]
+	}
+	return resultado, nil
 }
 
 // ReservasDeLaSerieDesde reproduce la consulta real: la misma máquina, en las
@@ -2983,5 +3003,189 @@ func TestBloquearEquipos_CadaEquipoCancelaLoSuyo(t *testing.T) {
 		if repo.reservas["res-"+pc].Estado != domain.ReservaCancelada {
 			t.Errorf("%s se bloqueó y su reserva quedó %s", pc, repo.reservas["res-"+pc].Estado)
 		}
+	}
+}
+
+// ── ListarEquiposOcupadosEn: PuedeTomarse (RF-03.21) ────────────────────
+//
+// La regla del robo tiene una sola definición (ReservasRobablesPor +
+// domain.SePuedeRobarPorHorario). El fake no la reproduce: cada caso cablea
+// robablesPor como si esa respuesta ya viniera de la base, y lo que se prueba
+// es que el servicio cruza bien esa respuesta con el corte de horario — el
+// mismo espíritu que PuedePedirse, un piso más abajo.
+
+func TestListarEquiposOcupadosEn_PuedeTomarse(t *testing.T) {
+	repo := nuevoFakeRepo()
+	docenteAjeno := "docente-ajeno"
+	// Mismo día que "ahora" (2026-03-02 12:00, ver nuevoServicioDeTest), para
+	// poder ubicar el caso "a menos de una hora" a la par de los otros cuatro.
+	hoy := fecha(2026, 3, 2)
+
+	repo.pcsOcupadas = []EquipoOcupado{
+		{ // Bloqueo: un Admin lo tomó, no una materia.
+			EquipoID: "eq-bloqueo", ReservaID: "res-bloqueo", EsBloqueo: true,
+			HoraInicio: 14 * time.Hour, HoraFin: 16 * time.Hour,
+		},
+		{ // Marca ajena más fuerte: gana el dueño actual.
+			EquipoID: "eq-ajena-fuerte", ReservaID: "res-ajena-fuerte", DocenteID: &docenteAjeno,
+			HoraInicio: 14 * time.Hour, HoraFin: 16 * time.Hour,
+		},
+		{ // Empate: no roba, manda quien reservó primero.
+			EquipoID: "eq-empate", ReservaID: "res-empate", DocenteID: &docenteAjeno,
+			HoraInicio: 14 * time.Hour, HoraFin: 16 * time.Hour,
+		},
+		{ // Robable por prioridad, pero arranca en 30 minutos.
+			EquipoID: "eq-una-hora", ReservaID: "res-una-hora", DocenteID: &docenteAjeno,
+			HoraInicio: 12*time.Hour + 30*time.Minute, HoraFin: 14 * time.Hour,
+		},
+		{ // El único caso que tendría que salir true: marca propia, dueño sin
+			// marca, y falta más de una hora.
+			EquipoID: "eq-robable", ReservaID: "res-robable", DocenteID: &docenteAjeno,
+			HoraInicio: 15 * time.Hour, HoraFin: 17 * time.Hour,
+		},
+	}
+	// Lo que la consulta real ya resuelve (bloqueo y empate incluidos: ver el
+	// comentario de ReservasRobablesPor en reserva_repo.go).
+	repo.robablesPor = map[string]bool{
+		"res-bloqueo":      false,
+		"res-ajena-fuerte": false,
+		"res-empate":       false,
+		"res-una-hora":     true,
+		"res-robable":      true,
+	}
+
+	svc := nuevoServicioDeTest(repo)
+
+	ocupados, err := svc.ListarEquiposOcupadosEn(context.Background(),
+		hoy, 8*time.Hour, 18*time.Hour, "quien-pregunta", "materia-fuerte")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	porEquipo := map[string]EquipoOcupado{}
+	for _, oc := range ocupados {
+		porEquipo[oc.EquipoID] = oc
+	}
+
+	esperado := map[string]bool{
+		"eq-bloqueo":      false,
+		"eq-ajena-fuerte": false,
+		"eq-empate":       false,
+		"eq-una-hora":     false,
+		"eq-robable":      true,
+	}
+	for equipoID, quiere := range esperado {
+		if got := porEquipo[equipoID].PuedeTomarse; got != quiere {
+			t.Errorf("%s: PuedeTomarse = %v, esperaba %v", equipoID, got, quiere)
+		}
+	}
+
+	if repo.materiaRecibidaAlRobar != "materia-fuerte" {
+		t.Errorf("la consulta del robo recibió la materia %q, esperaba materia-fuerte", repo.materiaRecibidaAlRobar)
+	}
+	// Todos los equipos ocupados se resuelven en una sola consulta, no una
+	// por equipo.
+	if repo.vecesConsultoRobables != 1 {
+		t.Errorf("esperaba UNA consulta para todo el lote, se hicieron %d", repo.vecesConsultoRobables)
+	}
+}
+
+// Sin materia no hay marca propia contra la cual comparar — el mismo criterio
+// que ListarEquiposDisponiblesEn, que con materia vacía devuelve la lista
+// neutral. Y como no hay nada que preguntar, tampoco se pregunta.
+func TestListarEquiposOcupadosEn_SinMateria_NingunoSePuedeTomar(t *testing.T) {
+	repo := nuevoFakeRepo()
+	docenteAjeno := "docente-ajeno"
+	repo.pcsOcupadas = []EquipoOcupado{{
+		EquipoID: "eq1", ReservaID: "res1", DocenteID: &docenteAjeno,
+		HoraInicio: 15 * time.Hour, HoraFin: 17 * time.Hour,
+	}}
+	// Si igual se consultara, el robo saldría permitido: lo que prueba el
+	// caso es justamente que, sin materia, ni se llega a preguntar.
+	repo.robablesPor = map[string]bool{"res1": true}
+
+	svc := nuevoServicioDeTest(repo)
+
+	ocupados, err := svc.ListarEquiposOcupadosEn(context.Background(),
+		fecha(2026, 3, 2), 8*time.Hour, 18*time.Hour, "quien-pregunta", "")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if ocupados[0].PuedeTomarse {
+		t.Error("sin materia, PuedeTomarse tiene que ser false")
+	}
+	if repo.vecesConsultoRobables != 0 {
+		t.Errorf("sin materia no hay contra qué comparar, no debería haber consultado el robo (%d veces)",
+			repo.vecesConsultoRobables)
+	}
+}
+
+// El test que más importa de este grupo: lo que PuedeTomarse anticipa tiene
+// que coincidir con lo que CrearReserva efectivamente permite. Si divergen,
+// la pantalla ofrece un robo que el backend después rechaza (o al revés, se
+// queda corta con uno que sí hubiera funcionado). Las dos rutas comparten el
+// mismo repo (y por lo tanto la misma respuesta de ReservasRobablesPor): lo
+// que se prueba es que el servicio no reimplementa la regla en ninguna de las
+// dos puntas.
+func TestListarEquiposOcupadosEn_PuedeTomarseCoincideConLoQueCrearReservaPermite(t *testing.T) {
+	casos := []struct {
+		nombre  string
+		robable bool
+	}{
+		{"robable: la creación desplaza a quien la tenía", true},
+		{"no robable: la creación choca igual que antes", false},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			repo := nuevoFakeRepo()
+			duenoAjeno := "docente-ajeno"
+			ocupante := &domain.Reserva{
+				ID: "res-ocupante", EquipoID: "pc1", Fecha: fecha(2026, 3, 9),
+				HoraInicio: 14 * time.Hour, HoraFin: 16 * time.Hour,
+				Estado: domain.ReservaConfirmada, Tipo: domain.TipoNormal,
+				CreadoPor: &duenoAjeno,
+			}
+			repo.reservas[ocupante.ID] = ocupante
+			repo.pcsOcupadas = []EquipoOcupado{{
+				EquipoID: "pc1", ReservaID: ocupante.ID, DocenteID: &duenoAjeno,
+				HoraInicio: ocupante.HoraInicio, HoraFin: ocupante.HoraFin,
+			}}
+			repo.robablesPor = map[string]bool{ocupante.ID: c.robable}
+
+			svc := nuevoServicioDeTest(repo)
+
+			ocupados, err := svc.ListarEquiposOcupadosEn(context.Background(),
+				fecha(2026, 3, 9), 14*time.Hour, 16*time.Hour, "docente-que-crea", "materia-que-crea")
+			if err != nil {
+				t.Fatalf("listando ocupados: %v", err)
+			}
+			if len(ocupados) != 1 {
+				t.Fatalf("esperaba 1 equipo ocupado, obtuve %d", len(ocupados))
+			}
+			puedeTomarse := ocupados[0].PuedeTomarse
+
+			_, _, _, err = svc.CrearReserva(context.Background(), "materia-que-crea", "docente-que-crea", false,
+				fecha(2026, 3, 9), 14*time.Hour, 16*time.Hour, []string{"pc1"})
+			creacionLoPermitio := err == nil
+
+			if puedeTomarse != creacionLoPermitio {
+				t.Fatalf("PuedeTomarse=%v pero la creación %s (err=%v): la pantalla y el backend quedaron desincronizados",
+					puedeTomarse, map[bool]string{true: "lo permitió", false: "lo rechazó"}[creacionLoPermitio], err)
+			}
+
+			if c.robable {
+				if repo.reservas[ocupante.ID].Estado != domain.ReservaCancelada {
+					t.Errorf("la creación tenía que desplazar (cancelar) la reserva ajena")
+				}
+			} else {
+				if repo.reservas[ocupante.ID].Estado != domain.ReservaConfirmada {
+					t.Errorf("sin poder robar, la reserva ajena no debería haberse tocado")
+				}
+				if !errors.Is(err, ErrSolapamiento) {
+					t.Errorf("esperaba ErrSolapamiento, obtuve %v", err)
+				}
+			}
+		})
 	}
 }

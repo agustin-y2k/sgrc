@@ -332,6 +332,13 @@ type EquipoOcupado struct {
 	// replicar la regla: false en un bloqueo, en una reserva propia y si esa
 	// franja ya empezó.
 	PuedePedirse bool
+	// PuedeTomarse es la otra oferta posible sobre este mismo equipo (RF-03.21):
+	// si la materia para la que se está reservando le puede robar la reserva a
+	// quien lo tiene. También lo decide el servidor, con la MISMA regla que usa
+	// la creación (ReservasRobablesPor + domain.SePuedeRobarPorHorario) — una
+	// copia propia acá es la pantalla ofreciendo un robo que el backend después
+	// rechaza. False sin materia para comparar, igual que ListarEquiposDisponiblesEn.
+	PuedeTomarse bool
 }
 
 // ReservaParaPedido es lo que hace falta para resolver un pedido de

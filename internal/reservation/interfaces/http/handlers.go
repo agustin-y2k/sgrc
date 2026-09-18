@@ -368,6 +368,11 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 		return err
 	}
 
+	// materiaId es opcional: ordena la lista de libres y decide qué ocupados se
+	// pueden robar (RF-03.21). Sin él —un Admin que todavía no eligió una— sale
+	// el orden de siempre, y ningún ocupado se ofrece como robable.
+	materiaID := strings.TrimSpace(c.Query("materiaId"))
+
 	// Con serieDesdeGrupoId, los libres son los que están libres en TODAS las
 	// fechas que le quedan a esa serie (RF-08.14): ofrecer los de hoy y rechazar
 	// el cambio cuando choca en la tercera fecha es hacerle adivinar al docente.
@@ -375,16 +380,13 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 	if grupoID := strings.TrimSpace(c.Query("serieDesdeGrupoId")); grupoID != "" {
 		equipos, err = h.svc.ListarEquiposLibresEnLaSerie(c.UserContext(), grupoID)
 	} else {
-		// materiaId es opcional: ordena la lista para esa materia (RF-03.21).
-		// Sin él —un Admin que todavía no eligió una— sale el orden de siempre.
-		equipos, err = h.svc.ListarEquiposDisponiblesEn(c.UserContext(), fecha, horaInicio, horaFin,
-			strings.TrimSpace(c.Query("materiaId")))
+		equipos, err = h.svc.ListarEquiposDisponiblesEn(c.UserContext(), fecha, horaInicio, horaFin, materiaID)
 	}
 	if err != nil {
 		return mapearError(err)
 	}
 
-	ocupados, err := h.svc.ListarEquiposOcupadosEn(c.UserContext(), fecha, horaInicio, horaFin, claims.UserID)
+	ocupados, err := h.svc.ListarEquiposOcupadosEn(c.UserContext(), fecha, horaInicio, horaFin, claims.UserID, materiaID)
 	if err != nil {
 		return mapearError(err)
 	}

@@ -284,6 +284,11 @@ type equipoOcupadoResponse struct {
 	// PuedePedirse lo decide el servidor: false en un bloqueo, en una reserva
 	// propia y si esa franja ya empezó.
 	PuedePedirse bool `json:"puedePedirse"`
+	// PuedeTomarse también lo decide el servidor, igual que PuedePedirse: si
+	// la materia para la que se está reservando le puede robar este equipo a
+	// quien lo tiene (RF-03.21). Que lo diga acá y no la pantalla es lo que
+	// evita ofrecer un robo que la creación después rechace.
+	PuedeTomarse bool `json:"puedeTomarse"`
 }
 
 func toEquipoOcupadoResponse(o application.EquipoOcupado) equipoOcupadoResponse {
@@ -292,7 +297,7 @@ func toEquipoOcupadoResponse(o application.EquipoOcupado) equipoOcupadoResponse 
 		ReservaID: o.ReservaID, DocenteNombre: o.DocenteNombre,
 		MateriaNombre: o.MateriaNombre, Motivo: o.Motivo,
 		HoraInicio: formatHora(o.HoraInicio), HoraFin: formatHora(o.HoraFin),
-		PuedePedirse: o.PuedePedirse,
+		PuedePedirse: o.PuedePedirse, PuedeTomarse: o.PuedeTomarse,
 	}
 }
 

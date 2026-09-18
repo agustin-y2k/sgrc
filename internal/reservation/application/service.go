@@ -694,7 +694,14 @@ func (s *Service) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Tim
 // ListarEquiposOcupadosEn devuelve la otra mitad de la franja (RF-04.11): lo
 // que ya tiene alguien, con quién lo tiene, para que "no hay nada libre" y
 // "los tiene alguien con quien puedo hablar" dejen de verse igual.
-func (s *Service) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, quien string) ([]EquipoOcupado, error) {
+//
+// materiaID es la materia para la que se está reservando, y suma la segunda
+// oferta posible sobre lo ocupado (RF-03.21): además de pedirlo, ¿se lo puede
+// robar? Se resuelve con la MISMA regla que usa despejarConflictos al crear
+// —ReservasRobablesPor + domain.SePuedeRobarPorHorario—, y a propósito: una
+// segunda comparación de prioridad acá es la copia que se desincroniza, y la
+// pantalla terminaría ofreciendo un robo que el backend después rechaza.
+func (s *Service) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, quien, materiaID string) ([]EquipoOcupado, error) {
 	if horaFin == horaInicio {
 		return nil, domain.ErrRangoHorarioInvalido
 	}
@@ -709,6 +716,27 @@ func (s *Service) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, 
 		oc.PuedePedirse = !oc.EsBloqueo &&
 			oc.DocenteID != nil && *oc.DocenteID != quien &&
 			!domain.YaEmpezo(fecha, oc.HoraInicio, ahora)
+	}
+
+	// Sin materia no hay marca propia contra la cual comparar —mismo criterio
+	// que ListarEquiposDisponiblesEn con materia vacía— y ni vale la pena
+	// preguntarle a la regla del robo, que sin materia no tiene con qué
+	// contestar.
+	if materiaID == "" || len(ocupados) == 0 {
+		return ocupados, nil
+	}
+
+	ids := make([]string, len(ocupados))
+	for i, oc := range ocupados {
+		ids[i] = oc.ReservaID
+	}
+	robables, err := s.repo.ReservasRobablesPor(ctx, materiaID, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range ocupados {
+		oc := &ocupados[i]
+		oc.PuedeTomarse = robables[oc.ReservaID] && domain.SePuedeRobarPorHorario(fecha, oc.HoraInicio, ahora)
 	}
 	return ocupados, nil
 }

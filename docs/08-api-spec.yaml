@@ -492,6 +492,7 @@ components:
         horaFin: { type: string, example: "12:00" }
         motivo: { type: string, nullable: true, description: "Solo en un bloqueo administrativo: el texto que escribió el Admin (RF-04.7)" }
         puedePedirse: { type: boolean, description: "false en un bloqueo administrativo, en una reserva propia, y si la franja de esa reserva ya empezó. Lo decide el servidor para que la pantalla no tenga que replicar la regla" }
+        puedeTomarse: { type: boolean, description: "Si la materia para la que se está reservando (parámetro materiaId) le puede robar este equipo a quien lo tiene (RF-03.21): marca preferente propia más fuerte que la del dueño actual, y falta más de una hora para que empiece. Sin materiaId es siempre false. Lo decide el servidor con la misma regla que usa la creación, para que la pantalla no ofrezca un robo que después se rechace" }
 
     Licencia:
       type: object
@@ -3871,6 +3872,10 @@ paths:
             parámetro —un Admin que reserva sin materia— sale el orden de siempre y todo
             viene con `tramo: NEUTRAL`. Con `serieDesdeGrupoId` no hace falta: la materia
             se saca del propio grupo.
+
+            También decide, equipo por equipo, el `puedeTomarse` de cada `ocupado`: si esa
+            materia le puede robar la reserva a quien lo tiene. Sin este parámetro, ningún
+            ocupado se ofrece como robable.
         - in: query
           name: serieDesdeGrupoId
           schema: { type: string, format: uuid }
