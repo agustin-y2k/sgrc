@@ -586,6 +586,12 @@ func (r *fakeRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID str
 	return r.pcsDisponibles, nil
 }
 
+// Nada es robable mientras ningún caso de este archivo lo necesite: la regla
+// se prueba contra la base, que es donde vive.
+func (r *fakeRepo) ReservasRobablesPor(ctx context.Context, materiaID string, reservaIDs []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
 // ReservasDeLaSerieDesde reproduce la consulta real: la misma máquina, en las
 // ocurrencias que le quedan a la serie.
 func (r *fakeRepo) ReservasDeLaSerieDesde(ctx context.Context, reservaID string) ([]*domain.Reserva, error) {

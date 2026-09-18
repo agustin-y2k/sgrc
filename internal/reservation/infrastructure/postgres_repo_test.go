@@ -2879,3 +2879,173 @@ func TestPostgresRepo_ListarReservasFuturasDeEquipos_AgrupaYOrdena(t *testing.T)
 		t.Errorf("el lote y la individual no coinciden para pc1")
 	}
 }
+
+// ── La regla del robo (RF-03.21) ───────────────────────────────────────
+
+// reservaDeOtraMateriaDeTest deja sobre `equipoID` la reserva de otra materia
+// que el robo tendría que desplazar, y devuelve su id.
+func reservaDeOtraMateriaDeTest(t *testing.T, pool *pgxpool.Pool, materiaID, equipoID string, fecha time.Time) string {
+	t.Helper()
+	ctx := context.Background()
+	repo := NewPostgresRepo(pool)
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+
+	g := nuevoReservaGrupoDeTest(materiaID, fecha, 10*time.Hour, 12*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatalf("no se pudo crear el grupo de la reserva ajena: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace", nil,
+		fecha, 10*time.Hour, 12*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("error de dominio inesperado: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, res); err != nil {
+		t.Fatalf("no se pudo crear la reserva ajena: %v", err)
+	}
+	return res.ID
+}
+
+// Un caso por rama de la regla. Cada uno estrena su propio equipo: las marcas
+// son por equipo, así que dos casos no pueden contaminarse entre sí.
+func TestReservasRobablesPor(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+
+	// Con nombre y curso, y no con crearMateriaDeTest: la marca cruza por
+	// nombre normalizado y por los tres ejes del contenedor, nunca por el id.
+	miMateria := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	suMateria := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+
+	tercero, divisionB := 3, "B"
+
+	robable := func(t *testing.T, reservaID string) bool {
+		t.Helper()
+		porID, err := repo.ReservasRobablesPor(ctx, miMateria, []string{reservaID})
+		if err != nil {
+			t.Fatalf("no debería fallar: %v", err)
+		}
+		return porID[reservaID]
+	}
+
+	t.Run("sin marca propia no hay poder de robo", func(t *testing.T) {
+		pc := crearEquipoDeCarroDeTest(t, pool)
+		id := reservaDeOtraMateriaDeTest(t, pool, suMateria, pc, fecha)
+
+		if robable(t, id) {
+			t.Error("sin marca para mi materia no se le puede robar a nadie")
+		}
+	})
+
+	t.Run("el dueño no tiene marca: robable", func(t *testing.T) {
+		pc := crearEquipoDeCarroDeTest(t, pool)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+		id := reservaDeOtraMateriaDeTest(t, pool, suMateria, pc, fecha)
+
+		if !robable(t, id) {
+			t.Error("con marca propia y ningún reclamo del otro lado, se roba")
+		}
+	})
+
+	t.Run("el dueño tiene marca más débil: robable", func(t *testing.T) {
+		pc := crearEquipoDeCarroDeTest(t, pool)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+		marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
+		id := reservaDeOtraMateriaDeTest(t, pool, suMateria, pc, fecha)
+
+		if !robable(t, id) {
+			t.Error("prioridad 1 contra prioridad 3: el reclamo más fuerte es el mío")
+		}
+	})
+
+	t.Run("el dueño tiene marca más fuerte: no robable", func(t *testing.T) {
+		pc := crearEquipoDeCarroDeTest(t, pool)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 3)
+		marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 1)
+		id := reservaDeOtraMateriaDeTest(t, pool, suMateria, pc, fecha)
+
+		if robable(t, id) {
+			t.Error("prioridad 3 contra prioridad 1: la máquina es más de él que mía")
+		}
+	})
+
+	t.Run("empate de prioridad: no robable", func(t *testing.T) {
+		pc := crearEquipoDeCarroDeTest(t, pool)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+		marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 1)
+		id := reservaDeOtraMateriaDeTest(t, pool, suMateria, pc, fecha)
+
+		if robable(t, id) {
+			t.Error("con reclamos iguales manda quien reservó primero: no se roba")
+		}
+	})
+
+	// El caso que separa una implementación correcta de una que sólo mira el
+	// número: de mi lado gana la marca MÁS ESPECÍFICA (la de mi curso), aunque
+	// sea la más débil de las dos. Resolviendo por prioridad ganaría la suelta
+	// —prioridad 1— y la respuesta se daría vuelta.
+	t.Run("de mi lado gana la de mi curso aunque sea la más débil: no robable", func(t *testing.T) {
+		pc := crearEquipoDeCarroDeTest(t, pool)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, &tercero, &divisionB, 3)
+		marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 2)
+		id := reservaDeOtraMateriaDeTest(t, pool, suMateria, pc, fecha)
+
+		if robable(t, id) {
+			t.Error("la que vale es la de 3°B (prioridad 3), más débil que la prioridad 2 del dueño")
+		}
+	})
+
+	// El mismo escenario con las prioridades al revés, que es como lo escribe
+	// la tabla del spec: ahí la más específica ADEMÁS es la más fuerte, así que
+	// la respuesta sale igual por los dos caminos. Vale como caso, no como
+	// prueba de que la especificidad manda.
+	t.Run("de mi lado gana la de mi curso y es la más fuerte: robable", func(t *testing.T) {
+		pc := crearEquipoDeCarroDeTest(t, pool)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 3)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, &tercero, &divisionB, 1)
+		marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 2)
+		id := reservaDeOtraMateriaDeTest(t, pool, suMateria, pc, fecha)
+
+		if !robable(t, id) {
+			t.Error("la que vale es la de 3°B (prioridad 1), más fuerte que la prioridad 2 del dueño")
+		}
+	})
+
+	t.Run("un bloqueo administrativo no se roba", func(t *testing.T) {
+		pc := crearEquipoDeCarroDeTest(t, pool)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+
+		bloqueo, err := domain.NuevaReservaBloqueo(NuevoID(), pc, nil, fecha,
+			10*time.Hour, 12*time.Hour, "Mantenimiento", time.Now().UTC().Truncate(time.Microsecond))
+		if err != nil {
+			t.Fatalf("error de dominio inesperado: %v", err)
+		}
+		if err := repo.CrearReserva(ctx, bloqueo); err != nil {
+			t.Fatalf("no se pudo crear el bloqueo: %v", err)
+		}
+
+		// Sin materia del otro lado, el reclamo del dueño es inexistente y la
+		// preferencia sola diría que sí: lo que lo salva es el tipo.
+		if robable(t, bloqueo.ID) {
+			t.Error("un bloqueo administrativo no lo desplaza ninguna preferencia")
+		}
+	})
+
+	// La cuarta condición de la regla NO vive en la consulta, y este caso es
+	// dónde se ve: la preferencia alcanza, y sin embargo no se roba.
+	t.Run("falta menos de una hora: la preferencia alcanza y el horario no", func(t *testing.T) {
+		pc := crearEquipoDeCarroDeTest(t, pool)
+		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+		id := reservaDeOtraMateriaDeTest(t, pool, suMateria, pc, fecha)
+
+		if !robable(t, id) {
+			t.Fatal("por preferencia esta reserva sí es robable")
+		}
+		veinteMinutosAntes := fecha.Add(9*time.Hour + 40*time.Minute)
+		if domain.SePuedeRobarPorHorario(fecha, 10*time.Hour, veinteMinutosAntes) {
+			t.Error("a veinte minutos del inicio ya no se roba, aunque la marca gane")
+		}
+	})
+}

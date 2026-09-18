@@ -954,6 +954,103 @@ func tramoDePreferencia(n int) application.TramoPreferencia {
 	}
 }
 
+// ReservasRobablesPor contesta, de la regla del robo (RF-03.21), las tres
+// condiciones que se deciden con la base: que la materia que reserva tenga
+// marca propia sobre el equipo, que el reclamo del dueño sea más débil, y que
+// lo que está ahí no sea un bloqueo administrativo.
+//
+// La cuarta —que falte más de una hora— NO está acá y no es un olvido: es hora
+// de pared, sabe de medianoche y no necesita ninguna fila; vive en
+// domain.SePuedeRobarPorHorario, y quien llama combina las dos mitades. Traerla
+// al SQL obligaría a pasarle "ahora" a una consulta que no lo usa para nada más.
+//
+// Los dos lados se resuelven en el MISMO CTE, con un booleano que dice de quién
+// es cada reclamo. Escribir dos veces el DISTINCT ON —uno para mi marca y otro
+// para la del dueño— es exactamente cómo los dos lados se desincronizan: el día
+// que la especificidad cambie, una de las dos copias se queda vieja y el robo
+// pasa a depender de quién pregunta.
+//
+// Un id que no existe no aparece en el mapa, y leerlo da false: la regla no
+// autoriza nada sobre una reserva que no está.
+func (r *PostgresRepo) ReservasRobablesPor(ctx context.Context, materiaID string, reservaIDs []string) (map[string]bool, error) {
+	if len(reservaIDs) == 0 {
+		return map[string]bool{}, nil
+	}
+
+	rows, err := r.db.Query(ctx, `
+		WITH pedidas AS (
+			SELECT res.id, res.equipo_id, res.tipo, res.materia_id
+			FROM reserva res
+			WHERE res.id = ANY($2)
+		),
+		-- Un reclamo por lado: el mío, con el contexto de la materia que
+		-- reserva, y el del dueño, con el de SU materia. Compararlos con un
+		-- único contexto sería preguntar si la marca de "Matemática de 3°B"
+		-- alcanza a la reserva de 5°A, que es justo lo que el Admin acotó.
+		reclamos AS (
+			SELECT p.id AS reserva_id, true AS es_mio, p.equipo_id,
+			       m.nombre_norm AS norm, cu.anio, cu.modalidad_norm, cu.division_norm
+			FROM pedidas p
+			JOIN materia m ON m.id = $1
+			JOIN contenedor_de_materia cu ON cu.materia_id = m.id
+			UNION ALL
+			-- Sin materia no hay reclamo, y un bloqueo no la tiene: el JOIN lo
+			-- deja fuera de este lado, pero quien lo protege del robo es el
+			-- tipo de más abajo, no su falta de materia.
+			SELECT p.id, false, p.equipo_id,
+			       m.nombre_norm, cu.anio, cu.modalidad_norm, cu.division_norm
+			FROM pedidas p
+			JOIN materia m ON m.id = p.materia_id
+			JOIN contenedor_de_materia cu ON cu.materia_id = m.id
+		),
+		-- La misma resolución que ordena la lista de equipos libres (ver
+		-- sqlTramosDePreferencia, que además explica por qué el año va con
+		-- IS NOT DISTINCT FROM): de cada lado vale UNA marca, la más específica,
+		-- y a igual especificidad la más fuerte.
+		marcas AS (
+			SELECT DISTINCT ON (r.reserva_id, r.es_mio)
+			       r.reserva_id, r.es_mio, ep.prioridad
+			FROM reclamos r
+			JOIN equipo_preferencia ep ON ep.equipo_id = r.equipo_id
+			WHERE ep.materia_norm = r.norm
+			  AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM r.anio)
+			  AND (ep.modalidad_norm = '' OR ep.modalidad_norm = r.modalidad_norm)
+			  AND (ep.division_norm  = '' OR ep.division_norm  = r.division_norm)
+			ORDER BY r.reserva_id, r.es_mio,
+			         (ep.anio IS NOT NULL)::int
+			         + (ep.modalidad_norm <> '')::int
+			         + (ep.division_norm  <> '')::int DESC,
+			         ep.prioridad, ep.creada_en, ep.id
+		)
+		SELECT p.id::text,
+		       -- El empate no roba: manda quien reservó primero.
+		       mia.prioridad IS NOT NULL
+		       AND (suya.prioridad IS NULL OR mia.prioridad < suya.prioridad)
+		       AND p.tipo <> 'BLOQUEO'
+		FROM pedidas p
+		LEFT JOIN marcas mia  ON mia.reserva_id  = p.id AND mia.es_mio
+		LEFT JOIN marcas suya ON suya.reserva_id = p.id AND NOT suya.es_mio
+	`, materiaID, reservaIDs)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("resolviendo qué reservas son robables: %w", err)
+	}
+	defer rows.Close()
+
+	robables := make(map[string]bool, len(reservaIDs))
+	for rows.Next() {
+		var id string
+		var robable bool
+		if err := rows.Scan(&id, &robable); err != nil {
+			return nil, fmt.Errorf("escaneando el veredicto del robo: %w", err)
+		}
+		robables[id] = robable
+	}
+	return robables, errorDeFilas(rows)
+}
+
 // ListarEquiposLibresEnLaSerie: los equipos libres en TODAS las ocurrencias
 // que le quedan a la serie de ese grupo (RF-08.14).
 func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID string) ([]application.EquipoDisponible, error) {

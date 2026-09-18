@@ -132,6 +132,22 @@ type Repo interface {
 	// equipos están libres para un día y franja horaria concretos.
 	ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]EquipoDisponible, error)
 
+	// ReservasRobablesPor es LA definición de quién le puede robar a quién
+	// (RF-03.21): de cada reserva pedida dice si el reclamo de su dueño sobre
+	// ese equipo es más débil que el de `materiaID`. La usan los dos lados —la
+	// escritura, para autorizar el robo, y la pantalla, para decidir si
+	// ofrecerlo—, y por eso no puede duplicarse: una segunda copia que se
+	// desincronice es la pantalla ofreciendo una máquina que el backend después
+	// rechaza, sin nada que explicarle al docente.
+	//
+	// Contesta sólo la parte de preferencia. El corte de una hora antes del
+	// inicio lo agrega quien llama con domain.SePuedeRobarPorHorario: es hora de
+	// pared y no necesita ir a la base.
+	//
+	// Un id que no existe no aparece en el mapa, y leer un mapa por una clave
+	// ausente da false — que es la respuesta correcta.
+	ReservasRobablesPor(ctx context.Context, materiaID string, reservaIDs []string) (map[string]bool, error)
+
 	// ListarEquiposOcupadosEn es la otra mitad de la misma pregunta (RF-04.11):
 	// qué equipos de ese universo ya tiene alguien en esa franja, y quién.
 	ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]EquipoOcupado, error)
