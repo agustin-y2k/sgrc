@@ -300,7 +300,13 @@ func (r *fakeRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID str
 }
 
 func (r *fakeRepo) ListarPreferenciasPorCarro(ctx context.Context, carroID string) ([]*domain.PreferenciaDeEquipo, error) {
-	return nil, nil
+	var resultado []*domain.PreferenciaDeEquipo
+	for _, p := range r.preferencias {
+		if e, ok := r.equipos[p.EquipoID]; ok && e.CarroID == carroID {
+			resultado = append(resultado, p)
+		}
+	}
+	return resultado, nil
 }
 
 func (r *fakeRepo) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {

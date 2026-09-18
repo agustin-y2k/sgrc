@@ -134,6 +134,53 @@ func TestHTTP_ListarPreferenciasDeEquipo_ComoDocente_OK(t *testing.T) {
 	}
 }
 
+// Las marcas de todo un carro son otra cosa que las de un equipo: se piden
+// para armar el alta masiva, que es una pantalla de Admin. Un docente no tiene
+// por qué poder recorrer el inventario carro por carro desde acá.
+func TestHTTP_ListarPreferenciasDeCarro_ComoDocente_403(t *testing.T) {
+	app := nuevaAppDeTest(nuevoFakeRepo())
+
+	req := httptest.NewRequest("GET", "/api/carros/c1/preferencias", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("esperaba 403, obtuve %d", resp.StatusCode)
+	}
+}
+
+func TestHTTP_ListarPreferenciasDeCarro_ComoAdmin_OK(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.equipos["e1"] = &domain.Equipo{ID: "e1", CarroID: "c1", Identificador: 1}
+	p, _ := domain.NuevaPreferencia("p1", "e1", "Matemática", nil, nil, nil, 1)
+	repo.preferencias["p1"] = p
+	app := nuevaAppDeTest(repo)
+
+	req := httptest.NewRequest("GET", "/api/carros/c1/preferencias", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200, obtuve %d", resp.StatusCode)
+	}
+
+	var body struct {
+		Data []preferenciaResponse `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Data) != 1 || body.Data[0].MateriaNombre != "Matemática" {
+		t.Errorf("respuesta inesperada: %+v", body.Data)
+	}
+}
+
 func TestHTTP_EditarPreferencia_CambiaElAlcance(t *testing.T) {
 	repo := nuevoFakeRepo()
 	p, _ := domain.NuevaPreferencia("p1", "e1", "Matemática", nil, nil, nil, 1)

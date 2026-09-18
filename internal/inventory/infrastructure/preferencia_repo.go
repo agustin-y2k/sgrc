@@ -15,6 +15,12 @@ import (
 // base a partir de materia_nombre, modalidad y curso_nombre.
 const columnasPreferencia = `id, equipo_id, materia_nombre, modalidad, anio, division, prioridad`
 
+// Las mismas columnas calificadas, para las consultas que hacen JOIN con
+// equipo y ahí `id` es ambiguo. Existe para que las dos listas no se puedan
+// desincronizar: escanearPreferencia lee en este orden, y un orden distinto
+// falla recién al escanear, en runtime.
+const columnasPreferenciaEP = `ep.id, ep.equipo_id, ep.materia_nombre, ep.modalidad, ep.anio, ep.division, ep.prioridad`
+
 // CrearPreferencia devuelve `false` —sin error— cuando ese equipo ya tenía esa
 // marca. Por el mismo motivo que CrearLicencia: una sentencia fallida aborta la
 // transacción entera, y el marcado de un lote de equipos tiene que poder
@@ -125,8 +131,7 @@ func (r *PostgresRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID
 // consultas para contestar una sola pregunta.
 func (r *PostgresRepo) ListarPreferenciasPorCarro(ctx context.Context, carroID string) ([]*domain.PreferenciaDeEquipo, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT ep.id, ep.equipo_id, ep.materia_nombre, ep.modalidad, ep.anio,
-		       ep.division, ep.prioridad
+		SELECT `+columnasPreferenciaEP+`
 		  FROM equipo_preferencia ep
 		  JOIN equipo e ON e.id = ep.equipo_id
 		 WHERE e.carro_id = $1
