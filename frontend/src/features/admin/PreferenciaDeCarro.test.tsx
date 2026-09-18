@@ -174,6 +174,23 @@ test("sin materias cargadas explica dónde se crean", async () => {
   expect(screen.queryByRole("button", { name: /marcar/i })).not.toBeInTheDocument()
 })
 
+// Los dos estados vacíos son justo donde el Admin no puede hacer nada más acá:
+// quedarse mirando un cartel sin salida a mano es peor que en cualquier otro.
+test("el panel se puede cerrar también cuando no hay nada que marcar", async () => {
+  renderPanel([])
+
+  expect(await screen.findByText("Este carro no tiene equipos reservables."))
+    .toBeInTheDocument()
+  expect(screen.getByRole("button", { name: "Cerrar" })).toBeInTheDocument()
+})
+
+test("el panel se puede cerrar también sin materias cargadas", async () => {
+  renderPanel(undefined, [], [])
+
+  expect(await screen.findByText(/se crean desde Académico/i)).toBeInTheDocument()
+  expect(screen.getByRole("button", { name: "Cerrar" })).toBeInTheDocument()
+})
+
 // El número es lo único que distingue "se marcaron las ocho" de "ya estaban
 // marcadas y no pasó nada".
 test("informa cuántos equipos quedaron marcados y cuántos ya lo estaban", async () => {

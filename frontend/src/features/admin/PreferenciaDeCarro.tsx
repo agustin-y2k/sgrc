@@ -77,6 +77,11 @@ export function PreferenciaDeCarro({
           Number(valores.prioridad),
         )
 
+  // El formulario sólo existe si hay a quién marcar y con qué: cada uno de los
+  // dos estados vacíos lo reemplaza por su explicación.
+  const hayFormulario = equipos.length > 0 && materias.length > 0
+  const idDelFormulario = `preferencia-carro-${carroId}`
+
   const alternar = (id: string) => {
     const nuevo = new Set(destildados)
     if (nuevo.has(id)) nuevo.delete(id)
@@ -182,6 +187,7 @@ export function PreferenciaDeCarro({
             </p>
           ) : (
             <form
+              id={idDelFormulario}
               className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto] sm:items-end"
               onSubmit={(e) => {
                 e.preventDefault()
@@ -204,24 +210,34 @@ export function PreferenciaDeCarro({
                 materias={materias}
                 idBase={`carro-${carroId}`}
               />
-              <span className="flex gap-2">
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={
-                    valores.materiaNombre === "" || elegidos.length === 0 || marcar.isPending
-                  }
-                >
-                  Marcar
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={onListo}>
-                  Cerrar
-                </Button>
-              </span>
             </form>
           )}
         </>
       )}
+
+      {/* El pie vive fuera del formulario para que Cerrar esté siempre, también
+          en los dos estados donde no hay nada que hacer acá —sin equipos
+          reservables y sin materias cargadas—: un panel que en algún estado no
+          se puede cerrar desde adentro es un callejón sin salida.
+          Marcar se queda al lado igual: `form` lo ata al formulario de arriba,
+          que es lo que evita tener que separarlos en dos filas. */}
+      <span className="flex gap-2">
+        {hayFormulario && (
+          <Button
+            type="submit"
+            form={idDelFormulario}
+            size="sm"
+            disabled={
+              valores.materiaNombre === "" || elegidos.length === 0 || marcar.isPending
+            }
+          >
+            Marcar
+          </Button>
+        )}
+        <Button type="button" variant="outline" size="sm" onClick={onListo}>
+          Cerrar
+        </Button>
+      </span>
     </div>
   )
 }
