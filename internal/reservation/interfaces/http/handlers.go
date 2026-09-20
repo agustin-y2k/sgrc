@@ -76,7 +76,7 @@ func (h *Handler) CrearReserva(c *fiber.Ctx) error {
 	// RF-04.1: un Admin puede reservar para cualquier materia no archivada,
 	// sin estar asignado a ella.
 	grupo, reservas, impacto, err := h.svc.CrearReserva(c.UserContext(), req.MateriaID, claims.UserID,
-		claims.Rol == "ADMIN", fecha, horaInicio, horaFin, req.EquipoIDs)
+		claims.Rol == "ADMIN", fecha, horaInicio, horaFin, req.EquipoIDs, req.EquiposATomar)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -128,7 +128,7 @@ func (h *Handler) CrearReservaRecurrente(c *fiber.Ctx) error {
 	}
 
 	res, err := h.svc.CrearReservaRecurrente(c.UserContext(), req.MateriaID, claims.UserID,
-		claims.Rol == "ADMIN", diaSemana, horaInicio, horaFin, fechaInicio, fechaFin, req.EquipoIDs)
+		claims.Rol == "ADMIN", diaSemana, horaInicio, horaFin, fechaInicio, fechaFin, req.EquipoIDs, req.EquiposATomar)
 	if err != nil {
 		return mapearError(err)
 	}

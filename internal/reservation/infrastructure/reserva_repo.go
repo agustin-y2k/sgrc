@@ -817,7 +817,7 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 		SELECT p.id,
 		       COALESCE(p.nombre, 'PC ' || p.identificador),
 		       COALESCE(c.nombre, ''),
-		       res.id, res.tipo, res.hora_inicio, res.hora_fin,
+		       res.id, res.tipo, res.fecha, res.hora_inicio, res.hora_fin,
 		       g.creado_por,
 		       COALESCE(u.nombre || ' ' || u.apellido, res.nombre_docente_snapshot, ''),
 		       COALESCE(m.nombre, ''),
@@ -846,7 +846,7 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 		var tipo string
 		var inicio, fin time.Time
 		if err := rows.Scan(&oc.EquipoID, &oc.Etiqueta, &oc.CarroNombre,
-			&oc.ReservaID, &tipo, &inicio, &fin,
+			&oc.ReservaID, &tipo, &oc.Fecha, &inicio, &fin,
 			&oc.DocenteID, &oc.DocenteNombre, &oc.MateriaNombre, &oc.Motivo); err != nil {
 			return nil, fmt.Errorf("escaneando equipo ocupado: %w", err)
 		}
@@ -861,11 +861,13 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 // ── Qué marca vale para un contexto (RF-03.21) ───────────────────────── Los
 // dos fragmentos de acá abajo son la definición de "esta marca habla de esta
 // materia" y "de las que hablan, vale ésta". Viven acá, sueltos y compartidos,
-// porque los usan DOS consultas que contestan preguntas distintas: el orden en
-// que el docente ve los equipos libres, y la regla que decide si le puede robar
-// una reserva a otra materia. Con una copia por consulta, el día que la
-// especificidad cambie la pantalla ordena por un alcance y el backend autoriza
-// por otro, y nadie puede explicar la diferencia.
+// porque los usan TRES puntos de inserción, en dos consultas que contestan
+// preguntas distintas: el orden en que el docente ve los equipos libres (los
+// CTE `propia` y `ajena`, que son el mismo predicado y su negación), y la regla
+// que decide si le puede robar una reserva a otra materia (el CTE `marcas`).
+// Con una copia por consulta, el día que la especificidad cambie la pantalla
+// ordena por un alcance y el backend autoriza por otro, y nadie puede explicar
+// la diferencia.
 //
 // El año se compara con IS NOT DISTINCT FROM y no con `=`: una materia puede
 // colgar de un espacio y no de un curso (migración 017), y un espacio no tiene

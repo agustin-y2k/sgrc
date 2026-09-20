@@ -297,9 +297,8 @@ func (v *ValidadorMateriaPostgres) MateriaAceptaReservas(ctx context.Context, ma
 // para leerlo, no para comparar marcas.
 //
 // Una materia que no está devuelve error y no el string vacío: el único
-// llamador lo mete en el motivo de una cancelación, y "Un equipo preferente de
-//
-//	lo necesitaba" sería lo que el desplazado lee en el correo.
+// llamador lo mete en el motivo de una cancelación, y al desplazado le
+// llegaría un correo diciéndole que lo corrió un equipo preferente de nadie.
 func (v *ValidadorMateriaPostgres) NombreDeMateria(ctx context.Context, materiaID string) (string, error) {
 	var nombre string
 	err := v.pool.QueryRow(ctx, `SELECT nombre FROM materia WHERE id = $1`, materiaID).Scan(&nombre)

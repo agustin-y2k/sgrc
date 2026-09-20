@@ -323,9 +323,15 @@ type EquipoOcupado struct {
 	DocenteNombre string
 	MateriaNombre string
 	Motivo        string
-	// HoraInicio y HoraFin son las de la reserva que lo ocupa, que pueden no
-	// coincidir con la franja consultada: alguien que necesita el equipo de 10 a
-	// 12 tiene que poder ver que quien lo tiene lo usa de 8 a 11.
+	// Fecha, HoraInicio y HoraFin son las de la reserva que lo ocupa, que
+	// pueden no coincidir con la franja consultada: alguien que necesita el
+	// equipo de 10 a 12 tiene que poder ver que quien lo tiene lo usa de 8 a 11.
+	//
+	// La FECHA tampoco coincide siempre, y ahí está el filo: la consulta trae
+	// también reservas del día anterior y del siguiente, porque una nocturna de
+	// 22:00 a 01:00 fechada ayer pisa la franja de hoy. Todo lo que decida
+	// "cuándo empieza esto" tiene que mirar este campo y no el día consultado.
+	Fecha      time.Time
 	HoraInicio time.Duration
 	HoraFin    time.Duration
 	// PuedePedirse lo decide el servidor para que la pantalla no tenga que

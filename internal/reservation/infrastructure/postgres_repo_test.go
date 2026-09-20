@@ -997,7 +997,7 @@ func TestCrearReserva_ConflictoAMitadDelLote_NoDejaGrupoParcial(t *testing.T) {
 		func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	_, _, _, err := svc.CrearReserva(ctx, materiaID, docenteID, false, fecha,
-		14*time.Hour, 15*time.Hour, []string{equipoID, equipoID})
+		14*time.Hour, 15*time.Hour, []string{equipoID, equipoID}, nil)
 	if err == nil {
 		t.Fatalf("se esperaba un error de solapamiento")
 	}
@@ -1054,7 +1054,7 @@ func TestCrearReservaRecurrente_ConflictoEnUnaFecha_NoDejaReglaNiGrupos(t *testi
 		14*time.Hour, 15*time.Hour,
 		time.Date(2027, 5, 3, 0, 0, 0, 0, time.UTC),
 		time.Date(2027, 5, 17, 0, 0, 0, 0, time.UTC),
-		[]string{equipoID})
+		[]string{equipoID}, nil)
 	if err == nil {
 		t.Fatalf("se esperaba un error de solapamiento en la segunda fecha")
 	}
@@ -3196,7 +3196,7 @@ func TestCrearReserva_RobaLaReservaConReclamoMasDebil(t *testing.T) {
 	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, reservas, impacto, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
-		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc}, []string{pc})
 
 	if err != nil {
 		t.Fatalf("la reserva tendría que crearse desplazando a la otra: %v", err)
@@ -3239,6 +3239,105 @@ func TestCrearReserva_RobaLaReservaConReclamoMasDebil(t *testing.T) {
 	}
 }
 
+// El test que hace integrable la rama: el MISMO escenario del caso central
+// —marca ganadora, reserva ajena robable, horario de sobra— pero sin pedir
+// tomar el equipo. No se desplaza a nadie y la creación falla como siempre.
+//
+// Es lo que sostiene que esta rama no le cambie el comportamiento a nadie
+// mientras ninguna pantalla mande la lista: el robo hay que pedirlo. Importa
+// sobre todo en la serie recurrente, donde los equipos se eligen libres en la
+// fecha de inicio y los conflictos aparecen en las fechas 2..N.
+func TestCrearReserva_RobaNada_SiNoSePidioTomarEseEquipo(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
+
+	queRoba := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	asignarDocenteAMateria(t, pool, queRoba, dibujo)
+	desplazado := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
+		fecha, 10*time.Hour, 12*time.Hour, nil)
+
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
+
+	// Sin equiposATomar: exactamente lo que manda hoy la aplicación entera.
+	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc}, nil)
+
+	if !errors.Is(err, application.ErrSolapamiento) {
+		t.Fatalf("sin pedir el equipo la creación tiene que fallar como siempre, obtuve %v", err)
+	}
+	intacta, err := repo.BuscarReservaPorID(ctx, ajenas[0].ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if intacta.Estado != domain.ReservaConfirmada {
+		t.Errorf("se desplazó una reserva que nadie pidió desplazar: quedó en %s", intacta.Estado)
+	}
+	if len(avisos.recibidos) != 0 {
+		t.Errorf("salió un aviso de cancelación sin que nadie pidiera robar: %+v", avisos.recibidos)
+	}
+}
+
+// Y la misma garantía en la recurrencia, que es donde el accidente era real:
+// los equipos se eligen libres en la fecha de inicio, así que un conflicto en
+// la fecha 2 no puede desplazar a nadie si el docente nunca lo pidió.
+func TestCrearReservaRecurrente_RobaNada_SiNoSePidioTomarEseEquipo(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+
+	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	pc := crearEquipoDeCarroDeTest(t, pool)
+	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
+	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
+
+	queRoba := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+	asignarDocenteAMateria(t, pool, queRoba, dibujo)
+	desplazado := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
+
+	// La máquina está LIBRE el primer lunes —que es el día que el docente mira
+	// al elegir— y ocupada el segundo.
+	primerLunes := time.Date(2027, 5, 3, 0, 0, 0, 0, time.UTC)
+	segundoLunes := primerLunes.AddDate(0, 0, 7)
+	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
+		segundoLunes, 10*time.Hour, 12*time.Hour, nil)
+
+	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
+
+	_, err := svc.CrearReservaRecurrente(ctx, dibujo, queRoba, false, domain.Lunes,
+		10*time.Hour, 12*time.Hour, primerLunes, segundoLunes, []string{pc}, nil)
+
+	if !errors.Is(err, application.ErrSolapamiento) {
+		t.Fatalf("la serie tenía que frenarse en la fecha ocupada, obtuve %v", err)
+	}
+	intacta, err := repo.BuscarReservaPorID(ctx, ajenas[0].ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if intacta.Estado != domain.ReservaConfirmada {
+		t.Errorf("la serie desplazó una clase ajena en una fecha que el docente nunca miró: %s", intacta.Estado)
+	}
+	var grupos int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM reserva_grupo WHERE materia_id=$1`, dibujo).Scan(&grupos); err != nil {
+		t.Fatal(err)
+	}
+	if grupos != 0 {
+		t.Errorf("la serie falló y sin embargo dejó %d grupo(s)", grupos)
+	}
+}
+
 // El mismo docente, en dos de sus cursos: se corre a sí mismo. La reserva se
 // crea y la vieja se cancela, pero no sale ningún aviso —nadie necesita que le
 // avisen de algo que acaba de hacer— y por lo tanto no hay ningún docente
@@ -3267,7 +3366,7 @@ func TestCrearReserva_RobandoseASiMismo_NiAvisoNiDocenteAfectado(t *testing.T) {
 	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, impacto, err := svc.CrearReserva(ctx, dibujo, docente, false,
-		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc}, []string{pc})
 
 	if err != nil {
 		t.Fatalf("correrse a uno mismo es legítimo: %v", err)
@@ -3318,7 +3417,7 @@ func TestCrearReserva_RobaYFallaDespues_LeDevuelveLaClaseAlDesplazado(t *testing
 	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
-		fecha, 10*time.Hour, 12*time.Hour, []string{pc, pc})
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc, pc}, []string{pc})
 
 	if err == nil {
 		t.Fatal("pedir dos veces la misma PC tiene que fallar contra la EXCLUDE")
@@ -3361,7 +3460,7 @@ func TestCrearReserva_RobaNada_SiElReclamoAjenoEsMasFuerte(t *testing.T) {
 	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
-		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc}, []string{pc})
 
 	if !errors.Is(err, application.ErrSolapamiento) {
 		t.Fatalf("esperaba el error de solapamiento de siempre, obtuve %v", err)
@@ -3416,7 +3515,7 @@ func TestCrearReserva_RobaNada_SiUnSoloConflictoDelLoteNoEsRobable(t *testing.T)
 	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
-		fecha, 10*time.Hour, 12*time.Hour, []string{seLaPuedeRobar, noSeLaPuedeRobar})
+		fecha, 10*time.Hour, 12*time.Hour, []string{seLaPuedeRobar, noSeLaPuedeRobar}, []string{seLaPuedeRobar, noSeLaPuedeRobar})
 
 	if !errors.Is(err, application.ErrSolapamiento) {
 		t.Fatalf("esperaba el error de solapamiento de siempre, obtuve %v", err)
@@ -3460,7 +3559,7 @@ func TestCrearReserva_RobaNada_SiLaClaseAjenaEstaPorEmpezar(t *testing.T) {
 	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
-		fecha, 10*time.Hour, 12*time.Hour, []string{pc})
+		fecha, 10*time.Hour, 12*time.Hour, []string{pc}, []string{pc})
 
 	if !errors.Is(err, application.ErrSolapamiento) {
 		t.Fatalf("esperaba el error de solapamiento de siempre, obtuve %v", err)
@@ -3520,7 +3619,7 @@ func TestCrearReservaRecurrente_RobaSoloLaOcurrenciaQueChoca(t *testing.T) {
 	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	res, err := svc.CrearReservaRecurrente(ctx, dibujo, queRoba, false, domain.Lunes,
-		10*time.Hour, 12*time.Hour, primerLunes, ultimoLunes, []string{pc})
+		10*time.Hour, 12*time.Hour, primerLunes, ultimoLunes, []string{pc}, []string{pc})
 
 	if err != nil {
 		t.Fatalf("la serie tendría que crearse entera: %v", err)
@@ -3603,7 +3702,7 @@ func TestCrearReservaRecurrente_RoboDeLaSerieMasLarga_CuantoTarda(t *testing.T) 
 
 	arranque := time.Now()
 	res, err := svc.CrearReservaRecurrente(ctx, dibujo, queRoba, false, domain.Lunes,
-		10*time.Hour, 12*time.Hour, primerLunes, ultimoLunes, []string{pc})
+		10*time.Hour, 12*time.Hour, primerLunes, ultimoLunes, []string{pc}, []string{pc})
 	tardo := time.Since(arranque)
 
 	if err != nil {

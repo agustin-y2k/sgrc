@@ -191,7 +191,13 @@ type ImpactoDelRobo struct {
 
 // CrearReserva implementa RF-04.1: un docente reserva una o más PCs para
 // su materia, en una fecha y horario puntual.
-func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string, esAdmin bool, fecha time.Time, horaInicio, horaFin time.Duration, equipoIDs []string) (*domain.ReservaGrupo, []*domain.Reserva, ImpactoDelRobo, error) {
+//
+// equiposATomar es el subconjunto de equipoIDs que quien reserva eligió
+// SABIENDO que estaba ocupado, y es lo único que autoriza a desplazar a otro
+// (RF-03.21). Vacío —lo que manda hoy toda la aplicación— la creación se
+// comporta exactamente como antes del robo: cualquier solapamiento la frena.
+// No es un flag: es el pedido del docente, y por eso viaja como dato.
+func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string, esAdmin bool, fecha time.Time, horaInicio, horaFin time.Duration, equipoIDs, equiposATomar []string) (*domain.ReservaGrupo, []*domain.Reserva, ImpactoDelRobo, error) {
 	var sinRobo ImpactoDelRobo
 
 	if err := verificarCantidadDeEquipos(equipoIDs); err != nil {
@@ -237,7 +243,7 @@ func (s *Service) CrearReserva(ctx context.Context, materiaID, usuarioID string,
 	err = s.repo.EnTransaccion(ctx, func(repo Repo) error {
 		var err error
 		impacto, pendientes, err = s.despejarConflictos(ctx, repo, materiaID, nombreMateria, &usuarioID,
-			equipoIDs, []time.Time{fecha}, horaInicio, horaFin)
+			equipoIDs, equiposATomar, []time.Time{fecha}, horaInicio, horaFin)
 		if err != nil {
 			return err
 		}
@@ -417,6 +423,30 @@ func (s *Service) verificarSinSolapamiento(ctx context.Context, equipoIDs []stri
 	return &ErrorDeSolapamiento{Conflictos: conflictos}
 }
 
+// sePuedeRobar compone las DOS mitades de la regla del robo (RF-03.21), y es
+// el único lugar del sistema donde se componen: la preferencia, que contesta
+// ReservasRobablesPor contra la base, y el corte de antelación, que es hora de
+// pared y se resuelve en Go.
+//
+// Lo usan las dos puntas —la escritura, para autorizar el robo, y la lista de
+// ocupados, para ofrecerlo— por el mismo motivo por el que el SQL de la regla
+// está en un solo lugar: dos composiciones son dos oportunidades de que
+// diverjan, y el síntoma es la pantalla ofreciendo un robo que el backend
+// después rechaza.
+//
+// La fecha y la hora son SIEMPRE las de la reserva en disputa, nunca las de la
+// franja que se consultó o se pidió, y por eso van nombradas así. No son la
+// misma: sqlSolapaConLaFranja trae a propósito reservas del día anterior y del
+// siguiente, porque una nocturna de 22:00 a 01:00 fechada ayer pisa la franja
+// de hoy. Evaluada con la fecha consultada, esa fila parecería empezar HOY a
+// las 22:00 —veintidós horas por delante, robable de sobra— cuando en realidad
+// arrancó anoche y ya no se toca.
+func sePuedeRobar(robables map[string]bool, reservaID string,
+	fechaDeLaReserva time.Time, horaInicioDeLaReserva time.Duration, ahora time.Time) bool {
+	return robables[reservaID] &&
+		domain.SePuedeRobarPorHorario(fechaDeLaReserva, horaInicioDeLaReserva, ahora)
+}
+
 // despejarConflictos es el enganche de RF-03.21 del lado de la escritura:
 // reemplaza el corte seco ante cualquier solapamiento por "clasificá, y si
 // TODO lo que estorba se puede correr, corrélo".
@@ -433,7 +463,7 @@ func (s *Service) verificarSinSolapamiento(ctx context.Context, equipoIDs []stri
 // cancela vive en la misma transacción que la creación, una falla posterior
 // —la EXCLUDE, por ejemplo— le devuelve la clase al desplazado.
 func (s *Service) despejarConflictos(ctx context.Context, repo Repo, materiaID, nombreMateria string,
-	quienRoba *string, equipoIDs []string, fechas []time.Time, horaInicio, horaFin time.Duration,
+	quienRoba *string, equipoIDs, equiposATomar []string, fechas []time.Time, horaInicio, horaFin time.Duration,
 ) (ImpactoDelRobo, []cancelacionPendiente, error) {
 	conflictos, err := repo.BuscarSolapamientos(ctx, equipoIDs, fechas, horaInicio, horaFin)
 	if err != nil {
@@ -441,6 +471,28 @@ func (s *Service) despejarConflictos(ctx context.Context, repo Repo, materiaID, 
 	}
 	if len(conflictos) == 0 {
 		return ImpactoDelRobo{}, nil, nil
+	}
+
+	// Sin equipos tomados a sabiendas no hay robo posible, y esta rama es
+	// LITERALMENTE el comportamiento anterior a RF-03.21: el mismo error, sin
+	// tomar filas ni preguntar por preferencias. Es lo que mantiene inerte al
+	// sistema mientras ninguna pantalla mande la lista.
+	if len(equiposATomar) == 0 {
+		return ImpactoDelRobo{}, nil, &ErrorDeSolapamiento{Conflictos: conflictos}
+	}
+
+	// Sólo se desplaza lo que quien reserva eligió SABIENDO que estaba ocupado.
+	// Un equipo tildado en la lista de libres no autoriza ningún robo, y en una
+	// serie recurrente esa es toda la diferencia: los equipos se eligen libres
+	// en la fecha de inicio y los conflictos aparecen en las fechas 2..N, así
+	// que sin esto un docente cancela clases ajenas sin haberlo pedido nunca.
+	//
+	// La contracara también es deliberada: tomar un equipo ocupado autoriza a
+	// desplazarlo en TODAS las fechas de la serie. Ahí la cascada es lo que se
+	// está pidiendo, no un efecto colateral.
+	tomar := make(map[string]bool, len(equiposATomar))
+	for _, id := range equiposATomar {
+		tomar[id] = true
 	}
 
 	ids := make([]string, 0, len(conflictos))
@@ -477,10 +529,7 @@ func (s *Service) despejarConflictos(ctx context.Context, repo Repo, materiaID, 
 			// ni es un robo: es una franja que se liberó sola.
 			continue
 		}
-		// Las dos mitades de la regla, juntas por única vez: la preferencia la
-		// contesta la base, y el corte de una hora es hora de pared y se aplica
-		// acá (ver ReservasRobablesPor en el puerto).
-		if robables[c.ReservaID] && domain.SePuedeRobarPorHorario(r.Fecha, r.HoraInicio, ahora) {
+		if tomar[c.EquipoID] && sePuedeRobar(robables, c.ReservaID, r.Fecha, r.HoraInicio, ahora) {
 			aDesplazar = append(aDesplazar, r)
 			continue
 		}
@@ -713,9 +762,14 @@ func (s *Service) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, 
 	ahora := s.ahora()
 	for i := range ocupados {
 		oc := &ocupados[i]
+		// oc.Fecha y no `fecha`: la consulta trae a propósito reservas del día
+		// anterior y del siguiente (una nocturna de ayer pisa la franja de hoy),
+		// así que la fecha consultada no es la de la reserva. Con `fecha`, la
+		// nocturna de anoche parecía empezar hoy y se ofrecía pedirla cuando ya
+		// estaba en curso.
 		oc.PuedePedirse = !oc.EsBloqueo &&
 			oc.DocenteID != nil && *oc.DocenteID != quien &&
-			!domain.YaEmpezo(fecha, oc.HoraInicio, ahora)
+			!domain.YaEmpezo(oc.Fecha, oc.HoraInicio, ahora)
 	}
 
 	// Sin materia no hay marca propia contra la cual comparar —mismo criterio
@@ -734,9 +788,23 @@ func (s *Service) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, 
 	if err != nil {
 		return nil, err
 	}
+	// La regla contesta por RESERVA y la acción es por EQUIPO, así que hay que
+	// juntarlas con un AND: la creación es todo-o-nada sobre TODOS los
+	// conflictos del equipo en la franja pedida. Un equipo con una reserva
+	// débil de 8 a 10 y una fuerte de 10 a 12 no se puede tomar de 8 a 12,
+	// aunque el primer renglón, mirado solo, diga que sí. Sin esto la pantalla
+	// ofrece un robo que la creación después rechaza.
+	tomableElEquipo := make(map[string]bool, len(ocupados))
 	for i := range ocupados {
 		oc := &ocupados[i]
-		oc.PuedeTomarse = robables[oc.ReservaID] && domain.SePuedeRobarPorHorario(fecha, oc.HoraInicio, ahora)
+		robable := sePuedeRobar(robables, oc.ReservaID, oc.Fecha, oc.HoraInicio, ahora)
+		if yaVisto, hay := tomableElEquipo[oc.EquipoID]; hay {
+			robable = robable && yaVisto
+		}
+		tomableElEquipo[oc.EquipoID] = robable
+	}
+	for i := range ocupados {
+		ocupados[i].PuedeTomarse = tomableElEquipo[ocupados[i].EquipoID]
 	}
 	return ocupados, nil
 }
@@ -839,7 +907,12 @@ const MaxOcurrenciasRecurrencia = 45
 // CrearReservaRecurrente implementa RF-04.2: crea la ReglaRecurrencia y
 // materializa un ReservaGrupo (con sus Reserva) por cada fecha que genera
 // domain.ReglaRecurrencia.GenerarFechas().
-func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuarioID string, esAdmin bool, diaSemana domain.DiaSemana, horaInicio, horaFin time.Duration, fechaInicio, fechaFin time.Time, equipoIDs []string) (*ResultadoRecurrencia, error) {
+//
+// equiposATomar es lo mismo que en CrearReserva, y acá importa el doble: los
+// equipos de una serie se eligen mirando la fecha de INICIO, así que sin ese
+// permiso explícito un docente que elige máquinas libres el primer día
+// terminaría desplazando clases ajenas en las fechas 2..N sin haberlo pedido.
+func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuarioID string, esAdmin bool, diaSemana domain.DiaSemana, horaInicio, horaFin time.Duration, fechaInicio, fechaFin time.Time, equipoIDs, equiposATomar []string) (*ResultadoRecurrencia, error) {
 	if err := verificarCantidadDeEquipos(equipoIDs); err != nil {
 		return nil, err
 	}
@@ -868,9 +941,12 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 		}
 	}
 
-	// El tope se aplica ANTES del pre-chequeo de solapamiento: ese chequeo hace
-	// una consulta por PC y por fecha, así que dejarlo correr sobre un rango sin
-	// acotar ya era el grueso del problema, aunque después no se insertara nada.
+	// El tope se aplica antes que nada de lo que cuesta: un rango sin acotar
+	// genera cientos de fechas, y cada una es un ReservaGrupo más sus reservas
+	// dentro de una sola transacción. Antes frenaba además un pre-chequeo de
+	// solapamiento que hacía una consulta por PC y por fecha; ese chequeo hoy
+	// vive adentro de la transacción y resuelve todo el lote de una, pero el
+	// tope sigue yendo primero por el costo de materializar.
 	if len(fechas) == 0 {
 		return nil, ErrSinOcurrencias
 	}
@@ -912,7 +988,7 @@ func (s *Service) CrearReservaRecurrente(ctx context.Context, materiaID, usuario
 
 		var err error
 		impacto, pendientes, err = s.despejarConflictos(ctx, repo, materiaID, nombreMateria, &usuarioID,
-			equipoIDs, fechas, horaInicio, horaFin)
+			equipoIDs, equiposATomar, fechas, horaInicio, horaFin)
 		if err != nil {
 			return err
 		}

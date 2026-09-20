@@ -20,6 +20,11 @@ type crearReservaRequest struct {
 	HoraInicio string   `json:"horaInicio"`
 	HoraFin    string   `json:"horaFin"`
 	EquipoIDs  []string `json:"equipoIds"`
+	// EquiposATomar es el subconjunto de EquipoIDs que se eligió de la lista de
+	// OCUPADOS, sabiendo que había que desplazar a alguien (RF-03.21). Ausente
+	// —que es lo que manda hoy toda la aplicación— la reserva no desplaza nada
+	// y cualquier solapamiento la frena, como siempre.
+	EquiposATomar []string `json:"equiposATomar"`
 }
 
 type crearReservaRecurrenteRequest struct {
@@ -30,6 +35,9 @@ type crearReservaRecurrenteRequest struct {
 	FechaInicio string   `json:"fechaInicio"`
 	FechaFin    string   `json:"fechaFin"`
 	EquipoIDs   []string `json:"equipoIds"`
+	// EquiposATomar: ver crearReservaRequest. En una serie autoriza el
+	// desplazamiento en TODAS sus fechas, no sólo en la primera.
+	EquiposATomar []string `json:"equiposATomar"`
 }
 
 type cancelarReservaRequest struct {
