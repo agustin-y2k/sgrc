@@ -228,9 +228,16 @@ export type EquipoOcupado = {
   horaFin: string
   /**
    * Lo decide el servidor: false en un bloqueo, en una reserva propia y si
-   * esa franja ya empezó.
+   * esa franja ya empezó. También false cuando el equipo se puede tomar:
+   * pedir y tomar son excluyentes y manda tomar (RF-03.21).
    */
   puedePedirse: boolean
+  /**
+   * RF-03.21: la materia es preferente de este equipo con un reclamo más
+   * fuerte que el de quien lo tiene, así que puede tildarlo y quedárselo. La
+   * reserva ajena se cancela sola al confirmar.
+   */
+  puedeTomarse?: boolean
 }
 
 export type CrearReservaRequest = {
@@ -239,6 +246,12 @@ export type CrearReservaRequest = {
   horaInicio: string
   horaFin: string
   equipoIds: string[]
+  /**
+   * El subconjunto de equipoIds que se tildó de la lista de OCUPADOS, sabiendo
+   * que había que desplazar a alguien (RF-03.21). Vacío, cualquier
+   * solapamiento frena la reserva como siempre.
+   */
+  equiposATomar: string[]
 }
 
 export type CrearReservaRecurrenteRequest = {
@@ -249,6 +262,8 @@ export type CrearReservaRecurrenteRequest = {
   fechaInicio: string
   fechaFin: string
   equipoIds: string[]
+  /** Ver CrearReservaRequest. En una serie vale para TODAS sus fechas. */
+  equiposATomar: string[]
 }
 
 /** RF-04.7 — bloqueo administrativo de equipos. */

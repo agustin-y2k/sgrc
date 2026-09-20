@@ -32,9 +32,7 @@ export function misMaterias() {
  * das", no donde se elige para qué materia reservar.
  */
 export function misMateriasAsignadas() {
-  return apiFetch<RespuestaLista<MateriaReservable>>(
-    "/api/mis-materias?asignadas=true"
-  )
+  return apiFetch<RespuestaLista<MateriaReservable>>("/api/mis-materias?asignadas=true")
 }
 
 /**
@@ -100,7 +98,13 @@ export function listarReservas(filtros?: {
 }
 
 export function crearReserva(req: CrearReservaRequest) {
-  return apiFetch<{ grupo: unknown; reservas: Reserva[] }>("/api/reservas", {
+  return apiFetch<{
+    grupo: unknown
+    reservas: Reserva[]
+    /** RF-03.21: a cuántos desplazó el robo, para poder decírselo. */
+    reservasCanceladas?: number
+    docentesAfectados?: number
+  }>("/api/reservas", {
     method: "POST",
     body: req,
   })
@@ -108,10 +112,13 @@ export function crearReserva(req: CrearReservaRequest) {
 
 /** RF-04.5 — si una sola ocurrencia choca, el backend no crea ninguna. */
 export function crearReservaRecurrente(req: CrearReservaRecurrenteRequest) {
-  return apiFetch<{ reglaId: string; grupos: unknown[] }>(
-    "/api/reservas/recurrentes",
-    { method: "POST", body: req }
-  )
+  return apiFetch<{
+    reglaId: string
+    grupos: unknown[]
+    /** El impacto de la serie entera: una recurrente roba en cada ocurrencia. */
+    reservasCanceladas?: number
+    docentesAfectados?: number
+  }>("/api/reservas/recurrentes", { method: "POST", body: req })
 }
 
 /** RF-04.8 — el motivo es obligatorio si la reserva es de otra persona. */
@@ -135,10 +142,10 @@ export function bloquearEquipos(req: BloquearRequest) {
 
 /** RF-04.6 — `soloEsta: false` cancela también las ocurrencias futuras. */
 export function cancelarGrupo(grupoId: string, motivo: string, soloEsta: boolean) {
-  return apiFetch<{ reservasCanceladas: number }>(
-    `/api/grupos/${grupoId}/cancelar`,
-    { method: "POST", body: { motivo, soloEsta } }
-  )
+  return apiFetch<{ reservasCanceladas: number }>(`/api/grupos/${grupoId}/cancelar`, {
+    method: "POST",
+    body: { motivo, soloEsta },
+  })
 }
 
 // ── Entregas y devoluciones (RF-08) ─────────────────────────────────── Todo
@@ -152,9 +159,7 @@ export function listarPrestamosAbiertos() {
 
 /** El historial de entregas de una máquina, de lo más reciente a lo más viejo. */
 export function historialDePrestamosDeEquipo(equipoId: string) {
-  return apiFetch<RespuestaLista<Prestamo>>(
-    `/api/equipos/${equipoId}/prestamos`
-  )
+  return apiFetch<RespuestaLista<Prestamo>>(`/api/equipos/${equipoId}/prestamos`)
 }
 
 /** Entregar las máquinas de una reserva. */

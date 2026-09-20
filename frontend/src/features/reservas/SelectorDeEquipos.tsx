@@ -25,7 +25,13 @@ type Props = {
   horaInicio: string
   horaFin: string
   seleccionadas: string[]
-  onCambio: (equipoIds: string[]) => void
+  /**
+   * `aTomar` es el subconjunto de `equipoIds` que estaba OCUPADO: lo que el
+   * backend necesita para autorizar el desplazamiento (RF-03.21). Va por acá y
+   * no lo deriva el padre porque quién está ocupado lo sabe esta pantalla, que
+   * es la que tiene la lista.
+   */
+  onCambio: (equipoIds: string[], aTomar: string[]) => void
   /** RF-03.21: para qué materia se ordena la lista. */
   materiaId?: string
 }
@@ -74,6 +80,13 @@ export function SelectorDeEquipos({
 
   const todos = data?.data ?? []
   const ocupados = data?.ocupados ?? []
+  // Los dos lados de la lista de ocupados, que son dos acciones distintas:
+  // los que esta materia puede quedarse tildándolos (RF-03.21) y los que sólo
+  // se le pueden pedir al dueño (RF-04.12). El servidor ya garantiza que son
+  // excluyentes.
+  const tomables = ocupados.filter((eq) => eq.puedeTomarse)
+  const idsTomables = new Set(tomables.map((eq) => eq.equipoId))
+  const soloPedibles = ocupados.filter((eq) => !eq.puedeTomarse)
 
   // El texto busca en el nombre, el carro y el software: en el mostrador se
   // busca "PC 12", "EDUTEC" o "AutoCAD" según lo que se tenga en la cabeza.
@@ -94,8 +107,16 @@ export function SelectorDeEquipos({
     )
   }
 
-  function alternar(equipoId: string, tildada: boolean) {
+  /** Un solo lugar que parte la selección en "libres" y "hay que tomarlos". */
+  function avisar(equipoIds: string[]) {
     onCambio(
+      equipoIds,
+      equipoIds.filter((id) => idsTomables.has(id))
+    )
+  }
+
+  function alternar(equipoId: string, tildada: boolean) {
+    avisar(
       tildada
         ? [...seleccionadas, equipoId]
         : seleccionadas.filter((id) => id !== equipoId)
@@ -112,7 +133,7 @@ export function SelectorDeEquipos({
    */
   function alternarCarro(delCarro: EquipoDisponible[], marcar: boolean) {
     const ids = new Set(delCarro.map((eq) => eq.equipoId))
-    onCambio(
+    avisar(
       marcar
         ? [
             ...seleccionadas,
@@ -140,7 +161,7 @@ export function SelectorDeEquipos({
           <button
             type="button"
             className="text-muted-foreground hover:text-foreground text-xs underline"
-            onClick={() => onCambio([])}
+            onClick={() => avisar([])}
           >
             Limpiar la selección ({seleccionadas.length})
           </button>
@@ -202,7 +223,93 @@ export function SelectorDeEquipos({
         ))
       )}
 
-      {ocupados.length > 0 && <EquiposTomados ocupados={ocupados} />}
+      {tomables.length > 0 && (
+        <EquiposQueSePuedenTomar
+          equipos={tomables}
+          seleccionadas={seleccionadas}
+          alternar={alternar}
+        />
+      )}
+      {soloPedibles.length > 0 && <EquiposTomados ocupados={soloPedibles} />}
+    </div>
+  )
+}
+
+/**
+ * RF-03.21: equipos que están reservados por otra materia, pero cuya marca
+ * preferente es de la materia que está reservando. Se tildan como cualquier
+ * otro y al confirmar desplazan al que los tenía.
+ *
+ * Van en su propio bloque y no mezclados con los libres a propósito: tildar
+ * uno le cancela la clase a alguien, y eso tiene que estar a la vista en el
+ * momento de tildarlo. Lo que NO hay es un paso de confirmación —esa decisión
+ * ya está tomada en RF-03.21— así que este encabezado es todo el aviso previo
+ * que existe, y por eso dice lo que dice.
+ */
+function EquiposQueSePuedenTomar({
+  equipos,
+  seleccionadas,
+  alternar,
+}: {
+  equipos: EquipoOcupado[]
+  seleccionadas: string[]
+  alternar: (equipoId: string, tildada: boolean) => void
+}) {
+  return (
+    <div className="grid gap-2 border-t pt-4">
+      <h3 className="text-sm font-medium">Reservados, pero preferentes de tu materia</h3>
+      {/* Dos frases enteras y no una armada con seis plurales: se lee mejor y
+          es lo único que el docente va a leer antes de correr a alguien. */}
+      <p className="text-muted-foreground text-sm">
+        {equipos.length === 1
+          ? "Tu materia tiene prioridad sobre este equipo. Si lo tildás, al confirmar pasa a ser tuyo y se cancela la reserva de quien lo tenía, con aviso."
+          : "Tu materia tiene prioridad sobre estos equipos. Los que tildes pasan a ser tuyos al confirmar, y se cancelan las reservas de quienes los tenían, con aviso."}
+      </p>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        {equipos.map((equipo) => (
+          <label
+            key={equipo.equipoId}
+            className="flex items-start gap-2 rounded-md border border-dashed p-2"
+          >
+            <Checkbox
+              className="mt-0.5"
+              checked={seleccionadas.includes(equipo.equipoId)}
+              onCheckedChange={(v) => alternar(equipo.equipoId, v === true)}
+              // Explícito y corto, como en la lista de libres: sin esto el
+              // nombre accesible se lleva todo el renglón —de quién es la
+              // reserva y en qué horario— y "PC 12" hay uno por carro.
+              aria-label={
+                equipo.carroNombre
+                  ? `${equipo.etiqueta} (${equipo.carroNombre})`
+                  : equipo.etiqueta
+              }
+            />
+            <span className="grid gap-0.5">
+              <span className="text-sm font-medium">
+                {equipo.etiqueta}
+                {equipo.carroNombre && (
+                  <span className="text-muted-foreground font-normal">
+                    {" "}
+                    · {equipo.carroNombre}
+                  </span>
+                )}
+              </span>
+              {/* Quién pierde la clase y cuál: es el dato que hace que la
+                  decisión sea informada, y el único que el desplazado no
+                  puede negociar después. "Es de" y no "la tiene" porque el
+                  equipo puede ser un proyector. */}
+              <span className="text-muted-foreground text-xs">
+                Ahora es de {equipo.docenteNombre}
+                {equipo.materiaNombre ? ` · ${equipo.materiaNombre}` : ""}
+              </span>
+              <span className="text-muted-foreground text-xs">
+                {equipo.horaInicio} a {equipo.horaFin}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
     </div>
   )
 }

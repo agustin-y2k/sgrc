@@ -32,7 +32,7 @@ import {
 import { getErrorMessage } from "@/lib/api-client"
 import { formatearFechaLargaCapitalizada } from "@/lib/fechas"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
-import { contar } from "@/lib/plural"
+import { contar, plural } from "@/lib/plural"
 
 type Modo = "simple" | "recurrente"
 
@@ -40,6 +40,31 @@ type Modo = "simple" | "recurrente"
 function enumerar(partes: string[]): string {
   if (partes.length <= 1) return partes.join("")
   return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`
+}
+
+/**
+ * RF-03.21, con el criterio de RF-03.19: si la reserva desplazó a otros, el
+ * que reservó tiene que enterarse de a cuántos. Sin robo no se dice nada —el
+ * caso de todos los días— en vez de arrastrar un "se cancelaron 0 reservas".
+ *
+ * Los docentes se cuentan aparte de las reservas porque no son el mismo
+ * número: el backend no cuenta a quien reserva aunque se haya corrido su
+ * propia clase entre dos cursos, así que puede haber cancelaciones sin nadie
+ * a quien avisarle.
+ */
+function impactoDelRobo(res: {
+  reservasCanceladas?: number
+  docentesAfectados?: number
+}): string {
+  const canceladas = res.reservasCanceladas ?? 0
+  if (canceladas === 0) return ""
+
+  const avisados = res.docentesAfectados ?? 0
+  const aQuienes = avisados > 0 ? ` y se avisó a ${contar(avisados, "docente")}` : ""
+  // El verbo también concuerda: con una sola reserva, "se cancelaron 1
+  // reserva" es lo que sale de componer el plural a medias.
+  const verbo = plural(canceladas, "canceló", "cancelaron")
+  return ` Se ${verbo} ${contar(canceladas, "reserva")}${aQuienes}.`
 }
 
 // RF-04.2 (reserva puntual) y RF-04.5 (recurrente).
@@ -56,6 +81,10 @@ export function NuevaReservaPage() {
   const [fechaInicio, setFechaInicio] = useState("")
   const [fechaFin, setFechaFin] = useState("")
   const [equipoIds, setPcIds] = useState<string[]>([])
+  // RF-03.21: de los tildados, cuáles estaban ocupados. Es lo único que
+  // autoriza a desplazar al que los tenía, y lo decide el selector, que es
+  // quien tiene la lista de ocupados.
+  const [equiposATomar, setEquiposATomar] = useState<string[]>([])
 
   const { data: materias, isLoading: cargandoMaterias } = useQuery({
     queryKey: ["mis-materias"],
@@ -72,17 +101,21 @@ export function NuevaReservaPage() {
       const cuantosEquipos = `${contar(equipoIds.length, "computadora")}`
 
       if (modo === "simple") {
-        await reservasApi.crearReserva({
+        const res = await reservasApi.crearReserva({
           materiaId,
           fecha,
           horaInicio,
           horaFin,
           equipoIds,
+          equiposATomar,
         })
-        return `Reserva confirmada para el ${formatearFechaLargaCapitalizada(fecha)}, de ${horaInicio} a ${horaFin}, con ${cuantosEquipos}.`
+        return (
+          `Reserva confirmada para el ${formatearFechaLargaCapitalizada(fecha)}, de ${horaInicio} a ${horaFin}, con ${cuantosEquipos}.` +
+          impactoDelRobo(res)
+        )
       }
 
-      await reservasApi.crearReservaRecurrente({
+      const res = await reservasApi.crearReservaRecurrente({
         materiaId,
         diaSemana,
         horaInicio,
@@ -90,9 +123,13 @@ export function NuevaReservaPage() {
         fechaInicio,
         fechaFin,
         equipoIds,
+        equiposATomar,
       })
       const dia = DIAS_SEMANA.find((d) => d.valor === diaSemana)?.etiqueta ?? diaSemana
-      return `Reserva recurrente confirmada: todos los ${dia.toLowerCase()} de ${horaInicio} a ${horaFin}, con ${cuantosEquipos}, hasta el ${formatearFechaLargaCapitalizada(fechaFin)}.`
+      return (
+        `Reserva recurrente confirmada: todos los ${dia.toLowerCase()} de ${horaInicio} a ${horaFin}, con ${cuantosEquipos}, hasta el ${formatearFechaLargaCapitalizada(fechaFin)}.` +
+        impactoDelRobo(res)
+      )
     },
     // El listado es la confirmación: la reserva recién creada aparece ahí.
     onSuccess: async (confirmacion) => {
@@ -326,7 +363,10 @@ export function NuevaReservaPage() {
                 horaInicio={horaInicio}
                 horaFin={horaFin}
                 seleccionadas={equipoIds}
-                onCambio={setPcIds}
+                onCambio={(ids, aTomar) => {
+                  setPcIds(ids)
+                  setEquiposATomar(aTomar)
+                }}
                 materiaId={materiaId}
               />
             </div>

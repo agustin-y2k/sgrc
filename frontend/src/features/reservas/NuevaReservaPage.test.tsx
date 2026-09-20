@@ -5,7 +5,11 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router"
 
 import { NuevaReservaPage } from "@/features/reservas/NuevaReservaPage"
 import * as reservasApi from "@/features/reservas/api"
-import type { MateriaReservable, EquipoDisponible } from "@/features/reservas/types"
+import type {
+  MateriaReservable,
+  EquipoDisponible,
+  EquipoOcupado,
+} from "@/features/reservas/types"
 import { ApiError } from "@/lib/api-client"
 import { fechaFuturaEnDias } from "@/test/fechas"
 
@@ -182,6 +186,8 @@ describe("NuevaReservaPage", () => {
       horaInicio: "08:00",
       horaFin: "09:00",
       equipoIds: ["pc1", "pc2"],
+      // Los dos estaban libres: nadie a quien desplazar (RF-03.21).
+      equiposATomar: [],
     })
   })
 
@@ -266,6 +272,7 @@ describe("NuevaReservaPage", () => {
       fechaInicio: FECHA,
       fechaFin: FECHA_FIN,
       equipoIds: ["pc1"],
+      equiposATomar: [],
     })
   })
 
@@ -353,6 +360,160 @@ describe("NuevaReservaPage", () => {
     expect(
       screen.getByText(/Reserva recurrente confirmada: todos los martes/)
     ).toBeInTheDocument()
+  })
+
+  // ── El robo por preferencia (RF-03.21) ──────────────────────────────
+
+  /**
+   * Un ocupado que la materia puede tomar y otro que no: el primero se tilda
+   * como cualquier equipo libre, el segundo sigue siendo intocable.
+   */
+  const ocupados: EquipoOcupado[] = [
+    {
+      equipoId: "pc9",
+      etiqueta: "PC 9",
+      carroNombre: "Carro 1",
+      reservaId: "res-debil",
+      docenteNombre: "Ana Pérez",
+      materiaNombre: "Historia",
+      horaInicio: "08:00",
+      horaFin: "09:00",
+      puedePedirse: false,
+      puedeTomarse: true,
+    },
+    {
+      equipoId: "pc10",
+      etiqueta: "PC 10",
+      carroNombre: "Carro 1",
+      reservaId: "res-fuerte",
+      docenteNombre: "Luis Gómez",
+      materiaNombre: "Dibujo Técnico",
+      horaInicio: "08:00",
+      horaFin: "09:00",
+      puedePedirse: true,
+      puedeTomarse: false,
+    },
+  ]
+
+  it("deja tildar un equipo ocupado que la materia puede tomar", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
+      data: equipos,
+      ocupados,
+    })
+    renderPagina()
+    await completarFranja(user)
+
+    await user.click(await screen.findByRole("checkbox", { name: /PC 9/ }))
+    await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
+
+    // Va en las DOS listas: en equipoIds porque es un equipo de la reserva, y
+    // en equiposATomar porque es lo único que autoriza a desplazar a Ana.
+    expect(reservasApi.crearReserva).toHaveBeenCalledWith(
+      expect.objectContaining({ equipoIds: ["pc9"], equiposATomar: ["pc9"] })
+    )
+  })
+
+  // Tildar un equipo LIBRE no autoriza ningún robo: si el docente no eligió
+  // nada ocupado, la lista va vacía y la reserva se comporta como siempre.
+  it("no manda equiposATomar cuando sólo se tildaron equipos libres", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
+      data: equipos,
+      ocupados,
+    })
+    renderPagina()
+    await completarFranja(user)
+
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
+
+    expect(reservasApi.crearReserva).toHaveBeenCalledWith(
+      expect.objectContaining({ equipoIds: ["pc1"], equiposATomar: [] })
+    )
+  })
+
+  // La contracara: sin marca que le gane, el equipo no se tilda y lo único
+  // que queda es pedírselo al dueño (RF-04.12).
+  it("sobre lo que no se puede tomar sigue ofreciendo pedirlo, sin casilla", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
+      data: equipos,
+      ocupados,
+    })
+    renderPagina()
+    await completarFranja(user)
+
+    await screen.findByRole("checkbox", { name: /PC 9/ })
+    expect(screen.queryByRole("checkbox", { name: /PC 10/ })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /Pedírselo/ })).toBeInTheDocument()
+  })
+
+  // RF-03.21 lo pide explícitamente, con el criterio de RF-03.19: quien
+  // reserva tiene que enterarse de a cuántos corrió.
+  it("la confirmación dice cuántas reservas se cancelaron y a cuántos se avisó", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
+      data: equipos,
+      ocupados,
+    })
+    vi.mocked(reservasApi.crearReserva).mockResolvedValue({
+      grupo: {},
+      reservas: [],
+      reservasCanceladas: 2,
+      docentesAfectados: 1,
+    })
+    renderPagina()
+    await completarFranja(user)
+
+    await user.click(await screen.findByRole("checkbox", { name: /PC 9/ }))
+    await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
+
+    expect(await screen.findByText("Listado")).toBeInTheDocument()
+    expect(
+      screen.getByText(/Se cancelaron 2 reservas y se avisó a 1 docente\./)
+    ).toBeInTheDocument()
+  })
+
+  // El verbo concuerda con el número, que es el caso más común de los dos:
+  // desplazar UNA clase. "Se cancelaron 1 reserva" es lo que sale de
+  // pluralizar el sustantivo y olvidarse del verbo.
+  it("con una sola reserva desplazada, la frase va en singular", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
+      data: equipos,
+      ocupados,
+    })
+    vi.mocked(reservasApi.crearReserva).mockResolvedValue({
+      grupo: {},
+      reservas: [],
+      reservasCanceladas: 1,
+      docentesAfectados: 1,
+    })
+    renderPagina()
+    await completarFranja(user)
+
+    await user.click(await screen.findByRole("checkbox", { name: /PC 9/ }))
+    await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
+
+    expect(await screen.findByText("Listado")).toBeInTheDocument()
+    expect(
+      screen.getByText(/Se canceló 1 reserva y se avisó a 1 docente\./)
+    ).toBeInTheDocument()
+  })
+
+  // El caso de todos los días: sin robo no se dice nada, para que la frase no
+  // arrastre un "se cancelaron 0 reservas" que no le importa a nadie.
+  it("no habla de cancelaciones cuando no hubo ninguna", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await completarFranja(user)
+
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
+
+    expect(await screen.findByText("Listado")).toBeInTheDocument()
+    expect(screen.queryByText(/Se cancelaron/)).not.toBeInTheDocument()
   })
 
   // RF-04.1: sin materias asignadas no hay nada para reservar.
