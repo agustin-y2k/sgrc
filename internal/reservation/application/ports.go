@@ -336,7 +336,9 @@ type EquipoOcupado struct {
 	HoraFin    time.Duration
 	// PuedePedirse lo decide el servidor para que la pantalla no tenga que
 	// replicar la regla: false en un bloqueo, en una reserva propia y si esa
-	// franja ya empezó.
+	// franja ya empezó. También false cuando PuedeTomarse es true: las dos
+	// ofertas son excluyentes y manda tomar (ver el AND al final de
+	// ListarEquiposOcupadosEn).
 	PuedePedirse bool
 	// PuedeTomarse es la otra oferta posible sobre este mismo equipo (RF-03.21):
 	// si la materia para la que se está reservando le puede robar la reserva a

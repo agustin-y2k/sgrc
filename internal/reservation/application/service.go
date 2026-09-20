@@ -803,8 +803,15 @@ func (s *Service) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, 
 		}
 		tomableElEquipo[oc.EquipoID] = robable
 	}
+	// Tomar y pedir son excluyentes, y el que manda es tomar. No es por no
+	// repetir botones: el aviso del pedido tiene una sola obligación —RF-05.12:
+	// decir en la primera línea que la reserva sigue intacta y que la decisión
+	// es del dueño— y mandado por quien puede sacársela con un clic, eso es
+	// mentira. El que tiene la marca más fuerte toma; el que no la tiene pide.
 	for i := range ocupados {
-		ocupados[i].PuedeTomarse = tomableElEquipo[ocupados[i].EquipoID]
+		oc := &ocupados[i]
+		oc.PuedeTomarse = tomableElEquipo[oc.EquipoID]
+		oc.PuedePedirse = oc.PuedePedirse && !oc.PuedeTomarse
 	}
 	return ocupados, nil
 }

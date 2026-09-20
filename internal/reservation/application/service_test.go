@@ -3099,6 +3099,54 @@ func TestListarEquiposOcupadosEn_PuedeTomarse(t *testing.T) {
 	}
 }
 
+// Pedir y tomar son EXCLUYENTES, y el que manda es tomar: lo que se puede
+// tomar no se puede pedir (RF-04.12 contra RF-03.21).
+//
+// No es una cuestión de no repetir botones. El aviso del pedido tiene una sola
+// obligación —RF-05.12: decir en la primera línea que la reserva sigue intacta
+// y que la decisión es del dueño— y mandado por alguien que puede sacársela con
+// un clic, eso es mentira. Quien tiene la marca más fuerte toma; el que no la
+// tiene pide.
+func TestListarEquiposOcupadosEn_LoQueSePuedeTomar_NoSePide(t *testing.T) {
+	repo := nuevoFakeRepo()
+	docenteAjeno := "docente-ajeno"
+	hoy := fecha(2026, 3, 2) // "ahora" son las 12:00 de este día
+
+	repo.pcsOcupadas = []EquipoOcupado{
+		{ // Marca propia más fuerte y falta más de una hora: se toma.
+			EquipoID: "eq-robable", ReservaID: "res-robable", DocenteID: &docenteAjeno, Fecha: hoy,
+			HoraInicio: 15 * time.Hour, HoraFin: 17 * time.Hour,
+		},
+		{ // Sin reclamo que le gane: acá el pedido es la única vía.
+			EquipoID: "eq-no-robable", ReservaID: "res-no-robable", DocenteID: &docenteAjeno, Fecha: hoy,
+			HoraInicio: 15 * time.Hour, HoraFin: 17 * time.Hour,
+		},
+	}
+	repo.robablesPor = map[string]bool{"res-robable": true, "res-no-robable": false}
+
+	svc := nuevoServicioDeTest(repo)
+
+	ocupados, err := svc.ListarEquiposOcupadosEn(context.Background(),
+		hoy, 8*time.Hour, 18*time.Hour, "quien-pregunta", "materia-fuerte")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+
+	porEquipo := map[string]EquipoOcupado{}
+	for _, oc := range ocupados {
+		porEquipo[oc.EquipoID] = oc
+	}
+
+	if robable := porEquipo["eq-robable"]; !robable.PuedeTomarse || robable.PuedePedirse {
+		t.Errorf("el equipo robable tenía que ofrecerse para tomar y NO para pedir: PuedeTomarse=%v, PuedePedirse=%v",
+			robable.PuedeTomarse, robable.PuedePedirse)
+	}
+	if otro := porEquipo["eq-no-robable"]; otro.PuedeTomarse || !otro.PuedePedirse {
+		t.Errorf("sin marca que le gane, la única vía es pedir: PuedeTomarse=%v, PuedePedirse=%v",
+			otro.PuedeTomarse, otro.PuedePedirse)
+	}
+}
+
 // La consulta trae a propósito reservas del día ANTERIOR: una nocturna de
 // 22:00 a 01:00 fechada ayer pisa la franja de hoy. Evaluada con la fecha
 // consultada, esa fila parece empezar hoy a las 22:00 —doce horas por
