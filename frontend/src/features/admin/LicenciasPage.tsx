@@ -1,6 +1,13 @@
 import { useMemo, useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
+import { fechaDeLicenciaValida, licenciaValida } from "./validacionLicencia"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { EstadoBadge, TONO_LICENCIA } from "@/components/EstadoBadge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -61,26 +68,37 @@ function FilaDeLicencia({
   marcada,
   onMarcar,
   sugerencias,
+  consultaLista,
+  ocupada,
 }: {
   licencia: Licencia
   marcada: boolean
   onMarcar: (marcada: boolean) => void
   sugerencias: string[]
+  consultaLista: boolean
+  ocupada: boolean
 }) {
   const queryClient = useQueryClient()
   const [editando, setEditando] = useState(false)
   const [borrando, setBorrando] = useState(false)
   const [campos, setCampos] = useState<CamposLicencia>(() => desdeLicencia(licencia))
+  const [baseEdicion, setBaseEdicion] = useState(() =>
+    JSON.stringify(desdeLicencia(licencia))
+  )
 
   const invalidar = () => queryClient.invalidateQueries({ queryKey: LICENCIAS_KEY })
 
   const guardar = useMutation({
+    mutationKey: LICENCIAS_KEY,
     mutationFn: () =>
       adminApi.editarLicencia(licencia.id, {
         nombre: campos.nombre.trim(),
         diasDuracion: Number(campos.diasDuracion),
         diasAviso: Number(campos.diasAviso),
-        ...aVencimientoDeclarado(campos.vencimiento),
+        ...(campos.vencimiento.forma === "vence-el" &&
+        campos.vencimiento.venceEl === licencia.fechaVencimiento
+          ? {}
+          : aVencimientoDeclarado(campos.vencimiento)),
       }),
     onSuccess: async () => {
       setEditando(false)
@@ -89,6 +107,7 @@ function FilaDeLicencia({
   })
 
   const borrar = useMutation({
+    mutationKey: LICENCIAS_KEY,
     mutationFn: () => adminApi.borrarLicencia(licencia.id),
     onSuccess: async () => {
       setBorrando(false)
@@ -97,12 +116,16 @@ function FilaDeLicencia({
   })
 
   const renovar = useMutation({
+    mutationKey: LICENCIAS_KEY,
     mutationFn: () => adminApi.renovarLicencias({ licenciaIds: [licencia.id] }),
     onSuccess: invalidar,
   })
 
   const error = guardar.error ?? borrar.error ?? renovar.error
   const sinFecha = licencia.fechaVencimiento == null
+  const pendiente = ocupada || guardar.isPending || borrar.isPending || renovar.isPending
+  const lista = consultaLista && !pendiente
+  const edicionVigente = baseEdicion === JSON.stringify(desdeLicencia(licencia))
 
   return (
     <div className="grid gap-2 rounded-md border p-3">
@@ -114,8 +137,8 @@ function FilaDeLicencia({
             type="checkbox"
             className="mt-1"
             checked={marcada}
-            disabled={sinFecha}
-            aria-label={`Seleccionar ${licencia.nombre} de ${licencia.etiqueta}`}
+            disabled={sinFecha || !lista}
+            aria-label={`Seleccionar ${licencia.nombre} de ${licencia.etiqueta}${licencia.carroNombre ? ` · ${licencia.carroNombre}` : ""}`}
             onChange={(e) => onMarcar(e.target.checked)}
           />
           <div className="min-w-0">
@@ -147,7 +170,7 @@ function FilaDeLicencia({
           <div className="flex shrink-0 flex-wrap gap-2">
             <Button
               size="sm"
-              disabled={sinFecha || renovar.isPending}
+              disabled={sinFecha || !lista}
               onClick={() => renovar.mutate()}
               title={
                 sinFecha
@@ -157,10 +180,32 @@ function FilaDeLicencia({
             >
               Renovar hoy
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setEditando(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!lista}
+              onClick={() => {
+                guardar.reset()
+                borrar.reset()
+                renovar.reset()
+                setCampos(desdeLicencia(licencia))
+                setBaseEdicion(JSON.stringify(desdeLicencia(licencia)))
+                setEditando(true)
+              }}
+            >
               Editar
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setBorrando(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!lista}
+              onClick={() => {
+                guardar.reset()
+                borrar.reset()
+                renovar.reset()
+                setBorrando(true)
+              }}
+            >
               Quitar
             </Button>
           </div>
@@ -183,12 +228,17 @@ function FilaDeLicencia({
             <Button
               variant="destructive"
               size="sm"
-              disabled={borrar.isPending}
+              disabled={!lista}
               onClick={() => borrar.mutate()}
             >
               Quitar
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setBorrando(false)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pendiente}
+              onClick={() => setBorrando(false)}
+            >
               Cancelar
             </Button>
           </div>
@@ -200,45 +250,58 @@ function FilaDeLicencia({
           className="grid gap-3 rounded-md border border-dashed p-3"
           onSubmit={(e) => {
             e.preventDefault()
-            guardar.mutate()
+            if (lista && edicionVigente && licenciaValida(campos)) guardar.mutate()
           }}
         >
-          <CamposComunesDeLicencia
-            idPrefijo={`editar-${licencia.id}`}
-            valor={campos}
-            onChange={setCampos}
-            sugerencias={sugerencias}
-          />
-          <CamposDeVencimiento
-            idPrefijo={`editar-venc-${licencia.id}`}
-            valor={campos.vencimiento}
-            onChange={(vencimiento) => setCampos({ ...campos, vencimiento })}
-          />
-          {/* Cambiar los días de duración no mueve el vencimiento que ya
+          <fieldset disabled={pendiente} className="contents">
+            <CamposComunesDeLicencia
+              idPrefijo={`editar-${licencia.id}`}
+              valor={campos}
+              onChange={setCampos}
+              sugerencias={sugerencias}
+            />
+            <CamposDeVencimiento
+              edicion
+              idPrefijo={`editar-venc-${licencia.id}`}
+              valor={campos.vencimiento}
+              onChange={(vencimiento) => setCampos({ ...campos, vencimiento })}
+            />
+            {/* Cambiar los días de duración no mueve el vencimiento que ya
               está cargado: la licencia instalada hoy se compró con las
               condiciones viejas y sigue venciendo cuando vencía. Lo que
               cambia es cuánto va a durar la próxima renovación. */}
-          <p className="text-muted-foreground text-xs">
-            Cambiar los días de duración no mueve el vencimiento actual: aplica a la
-            próxima renovación. Para recalcularlo ahora, elegí “Se renovó el…” con la
-            fecha de la última renovación.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" size="sm" disabled={guardar.isPending}>
-              Guardar
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setCampos(desdeLicencia(licencia))
-                setEditando(false)
-              }}
-            >
-              Cancelar
-            </Button>
-          </div>
+            <p className="text-muted-foreground text-xs">
+              Cambiar los días de duración no mueve el vencimiento actual: aplica a la
+              próxima renovación. Para recalcularlo ahora, elegí “Se renovó el…” con la
+              fecha de la última renovación.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!lista || !edicionVigente || !licenciaValida(campos)}
+              >
+                Guardar
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setCampos(desdeLicencia(licencia))
+                  setEditando(false)
+                }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </fieldset>
+          {!edicionVigente && (
+            <p role="status">
+              Esta licencia cambió mientras la editabas. Cancelá y volvé a abrir la
+              edición para revisar sus datos actuales.
+            </p>
+          )}
         </form>
       )}
     </div>
@@ -267,18 +330,24 @@ function AltaDeLicencias({
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set())
   const [resumen, setResumen] = useState<string | null>(null)
 
-  const { data: carros } = useQuery({
+  const consultaCarros = useQuery({
     queryKey: ["carros"],
     queryFn: inventoryApi.listarCarros,
   })
 
   // El inventario completo en una sola consulta, y no los equipos de cada
   // carro por separado.
-  const { data: todosLosEquipos } = useQuery({
+  const consultaEquipos = useQuery({
     queryKey: ["equipos"],
     queryFn: () => inventoryApi.listarEquipos(),
   })
 
+  const carros = consultaCarros.data
+  const todosLosEquipos = consultaEquipos.data
+  const consultaLista = [consultaCarros, consultaEquipos].every(
+    (q) => q.isSuccess && !q.error && !q.isFetching
+  )
+  const errorConsulta = consultaCarros.error ?? consultaEquipos.error
   const equipos = useMemo(() => {
     const nombreDeCarro = new Map((carros?.data ?? []).map((c) => [c.id, c.nombre]))
     return (todosLosEquipos?.data ?? [])
@@ -292,7 +361,13 @@ function AltaDeLicencias({
       }))
   }, [carros, todosLosEquipos])
 
+  const seleccionValida =
+    seleccionadas.size > 0 &&
+    [...seleccionadas].every((id) => equipos.some((e) => e.id === id))
+  const listo = consultaLista && seleccionValida && licenciaValida(campos)
+
   const crear = useMutation({
+    mutationKey: LICENCIAS_KEY,
     mutationFn: () =>
       adminApi.crearLicencias({
         equipoIds: [...seleccionadas],
@@ -329,53 +404,85 @@ function AltaDeLicencias({
           className="grid gap-4"
           onSubmit={(e) => {
             e.preventDefault()
-            setResumen(null)
-            crear.mutate()
+            if (listo && !crear.isPending) {
+              setResumen(null)
+              crear.mutate()
+            }
           }}
         >
-          <CamposComunesDeLicencia
-            idPrefijo="alta-licencia"
-            valor={campos}
-            onChange={setCampos}
-            sugerencias={sugerencias}
-          />
-          <SelectorDeEquipos
-            equipos={equipos}
-            seleccionadas={seleccionadas}
-            onChange={setSeleccionadas}
-          />
-          <CamposDeVencimiento
-            idPrefijo="alta-venc"
-            valor={campos.vencimiento}
-            onChange={(vencimiento) => setCampos({ ...campos, vencimiento })}
-          />
+          <fieldset disabled={crear.isPending} className="contents">
+            <CamposComunesDeLicencia
+              idPrefijo="alta-licencia"
+              valor={campos}
+              onChange={setCampos}
+              sugerencias={sugerencias}
+            />
+            {errorConsulta ? (
+              <ErrorDeConsulta
+                mensaje="No pudimos verificar el inventario para cargar licencias."
+                reintentando={consultaCarros.isFetching || consultaEquipos.isFetching}
+                onReintentar={() => {
+                  void consultaCarros.refetch()
+                  void consultaEquipos.refetch()
+                }}
+              />
+            ) : !consultaLista ? (
+              <p role="status">Consultando inventario…</p>
+            ) : (
+              <SelectorDeEquipos
+                equipos={equipos}
+                seleccionadas={seleccionadas}
+                onChange={setSeleccionadas}
+              />
+            )}
+            {seleccionadas.size > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSeleccionadas(new Set())}
+              >
+                Limpiar selección de equipos
+              </Button>
+            )}
+            {consultaLista && seleccionadas.size > 0 && !seleccionValida && (
+              <p role="status">
+                Cambió el inventario. Limpiá la selección y revisá los equipos
+                disponibles.
+              </p>
+            )}
+            <CamposDeVencimiento
+              idPrefijo="alta-venc"
+              valor={campos.vencimiento}
+              onChange={(vencimiento) => setCampos({ ...campos, vencimiento })}
+            />
 
-          {crear.error && (
-            <Alert variant="destructive">
-              <AlertDescription>{getErrorMessage(crear.error)}</AlertDescription>
-            </Alert>
-          )}
-          {resumen && (
-            <Alert>
-              <AlertDescription>{resumen}</AlertDescription>
-            </Alert>
-          )}
+            {crear.error && (
+              <Alert variant="destructive">
+                <AlertDescription>{getErrorMessage(crear.error)}</AlertDescription>
+              </Alert>
+            )}
+            {resumen && (
+              <Alert>
+                <AlertDescription>{resumen}</AlertDescription>
+              </Alert>
+            )}
 
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={crear.isPending || seleccionadas.size === 0}>
-              Cargar en {contar(seleccionadas.size, "equipo")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setResumen(null)
-                onCerrar()
-              }}
-            >
-              Cerrar
-            </Button>
-          </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" disabled={crear.isPending || !listo}>
+                Cargar en {contar(seleccionadas.size, "equipo")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setResumen(null)
+                  onCerrar()
+                }}
+              >
+                Cerrar
+              </Button>
+            </div>
+          </fieldset>
         </form>
       </CardContent>
     </Card>
@@ -383,12 +490,20 @@ function AltaDeLicencias({
 }
 
 /** La barra de renovación masiva: aparece solo cuando hay algo marcado. */
-function RenovacionMasiva({ ids, onListo }: { ids: string[]; onListo: () => void }) {
+function RenovacionMasiva({
+  ids,
+  lista,
+  onListo,
+}: {
+  ids: string[]
+  lista: boolean
+  onListo: (resumen: string) => void
+}) {
   const queryClient = useQueryClient()
   const [renovadaEl, setRenovadaEl] = useState("")
-  const [resumen, setResumen] = useState<string | null>(null)
 
   const renovar = useMutation({
+    mutationKey: LICENCIAS_KEY,
     mutationFn: () =>
       adminApi.renovarLicencias({
         licenciaIds: ids,
@@ -396,13 +511,12 @@ function RenovacionMasiva({ ids, onListo }: { ids: string[]; onListo: () => void
       }),
     onSuccess: async (respuesta) => {
       const sinFecha = respuesta.sinFechaPrevia?.length ?? 0
-      setResumen(
+      const resumen =
         sinFecha === 0
           ? `Se renovaron ${contar(respuesta.renovadas.length, "licencia")}.`
           : `Se renovaron ${respuesta.renovadas.length}. ${sinFecha} no se pudieron: primero hay que cargarles el vencimiento.`
-      )
       await queryClient.invalidateQueries({ queryKey: LICENCIAS_KEY })
-      onListo()
+      onListo(resumen)
     },
   })
 
@@ -418,6 +532,7 @@ function RenovacionMasiva({ ids, onListo }: { ids: string[]; onListo: () => void
             <Input
               id="renovadas-el"
               type="date"
+              disabled={renovar.isPending}
               value={renovadaEl}
               onChange={(e) => setRenovadaEl(e.target.value)}
             />
@@ -434,16 +549,39 @@ function RenovacionMasiva({ ids, onListo }: { ids: string[]; onListo: () => void
             <AlertDescription>{getErrorMessage(renovar.error)}</AlertDescription>
           </Alert>
         )}
-        {resumen && (
-          <Alert>
-            <AlertDescription>{resumen}</AlertDescription>
-          </Alert>
-        )}
-        <div>
-          <Button disabled={renovar.isPending} onClick={() => renovar.mutate()}>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            className="h-auto min-h-9 whitespace-normal"
+            disabled={
+              !lista ||
+              renovar.isPending ||
+              (!!renovadaEl && !fechaDeLicenciaValida(renovadaEl))
+            }
+            onClick={() => {
+              if (
+                lista &&
+                !renovar.isPending &&
+                (!renovadaEl || fechaDeLicenciaValida(renovadaEl))
+              )
+                renovar.mutate()
+            }}
+          >
             Renovar las {ids.length} seleccionadas
           </Button>
+          <Button
+            variant="outline"
+            disabled={renovar.isPending}
+            onClick={() => onListo("")}
+          >
+            Limpiar selección de licencias
+          </Button>
         </div>
+        {!lista && !renovar.isPending && (
+          <p role="status">
+            La selección cambió o no se pudo verificar. Limpiá la selección y revisá las
+            licencias.
+          </p>
+        )}
       </CardContent>
     </Card>
   )
@@ -452,13 +590,21 @@ function RenovacionMasiva({ ids, onListo }: { ids: string[]; onListo: () => void
 export function LicenciasPage() {
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
   const [altaAbierta, setAltaAbierta] = useState(false)
+  const [resumen, setResumen] = useState("")
+  const renovando = useIsMutating({ mutationKey: LICENCIAS_KEY }) > 0
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isSuccess, isFetching, error, refetch } = useQuery({
     queryKey: LICENCIAS_KEY,
     queryFn: adminApi.listarLicencias,
   })
 
   const licencias = data?.data ?? []
+  const consultaLista = isSuccess && !error && !isFetching
+  const seleccionValida =
+    marcadas.size > 0 &&
+    [...marcadas].every((id) =>
+      licencias.some((l) => l.id === id && l.fechaVencimiento != null)
+    )
 
   // Los nombres ya cargados, para que el formulario los ofrezca y no se
   // termine con "AutoCAD 2027" en un equipo y "Autocad 2027" en otra: serían
@@ -484,7 +630,7 @@ export function LicenciasPage() {
     <div>
       <EncabezadoDePagina
         titulo="Licencias de software"
-        descripcion="Qué software con vencimiento hay en cada equipo y cuántos días le quedan. El día antes de que venza —y el día que vence— les llega un mail a todos los administradores."
+        descripcion="Qué software con vencimiento hay en cada equipo y cuántos días le quedan. Configurá la anticipación de los avisos para cada licencia."
         accion={
           !altaAbierta && (
             <Button variant="outline" onClick={() => setAltaAbierta(true)}>
@@ -502,14 +648,31 @@ export function LicenciasPage() {
       )}
 
       {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{getErrorMessage(error)}</AlertDescription>
+        <ErrorDeConsulta
+          mensaje="No pudimos consultar las licencias."
+          reintentando={isFetching}
+          onReintentar={() => void refetch()}
+        />
+      )}
+      {resumen && (
+        <Alert className="mb-4">
+          <AlertDescription>{resumen}</AlertDescription>
         </Alert>
+      )}
+      {marcadas.size > 0 && (
+        <RenovacionMasiva
+          ids={[...marcadas]}
+          lista={consultaLista && seleccionValida && !renovando}
+          onListo={(mensaje) => {
+            setResumen(mensaje)
+            setMarcadas(new Set())
+          }}
+        />
       )}
 
       {isLoading && <p className="text-muted-foreground text-sm">Cargando licencias…</p>}
 
-      {!isLoading && licencias.length === 0 && (
+      {!isLoading && !error && licencias.length === 0 && (
         <Card>
           <CardContent>
             <p className="text-muted-foreground text-sm">
@@ -521,7 +684,7 @@ export function LicenciasPage() {
         </Card>
       )}
 
-      {licencias.length > 0 && (
+      {!error && licencias.length > 0 && (
         <div className="grid gap-4">
           {/* El resumen arriba: lo primero que se quiere saber al entrar es
               si hay algo que resolver hoy, no la lista entera. */}
@@ -539,13 +702,6 @@ export function LicenciasPage() {
             </Alert>
           )}
 
-          {marcadas.size > 0 && (
-            <RenovacionMasiva
-              ids={[...marcadas]}
-              onListo={() => setMarcadas(new Set())}
-            />
-          )}
-
           {/* El orden lo decide el backend: primero las que no tienen fecha
               (hay que ir a mirar la máquina), después de la más vencida a la
               que más le falta. No se reordena acá para que la pantalla y el
@@ -558,6 +714,8 @@ export function LicenciasPage() {
                 marcada={marcadas.has(l.id)}
                 onMarcar={(m) => alternar(l.id, m)}
                 sugerencias={sugerencias}
+                consultaLista={consultaLista}
+                ocupada={renovando}
               />
             ))}
           </div>

@@ -20,6 +20,7 @@ import type {
   TipoExcepcion,
 } from "@/features/disponibilidad/types"
 import { getErrorMessage } from "@/lib/api-client"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 
 /** Una sola raíz: cambiar mi horario también cambia lo que ve el resto. */
@@ -143,7 +144,7 @@ function MiHorario() {
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [edicion, setEdicion] = useState<FormBloque>(BLOQUE_VACIO)
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: MI_HORARIO_KEY,
     queryFn: () => disponibilidadApi.miHorario(),
   })
@@ -202,7 +203,14 @@ function MiHorario() {
         cargarlo semana por semana.
       </p>
 
-      {(error || errorAccion) && (
+      {error && (
+        <ErrorDeConsulta
+          mensaje="No pudimos consultar tu horario."
+          reintentando={isFetching}
+          onReintentar={() => void refetch()}
+        />
+      )}
+      {!error && errorAccion && (
         <Alert variant="destructive">
           <AlertDescription>{getErrorMessage(error ?? errorAccion)}</AlertDescription>
         </Alert>
@@ -210,64 +218,69 @@ function MiHorario() {
 
       {isLoading && <p className="text-muted-foreground">Cargando…</p>}
 
-      {!isLoading && bloques.length === 0 && (
+      {!isLoading && !error && bloques.length === 0 && (
         <p className="text-muted-foreground">
           Todavía no cargaste ningún bloque: figurás como no disponible siempre.
         </p>
       )}
 
       <div className="grid gap-2">
-        {bloques.map((b) =>
-          editandoId === b.id ? (
-            <Card key={b.id}>
-              <CardContent className="grid gap-3 pt-4">
-                <CamposDeBloque
-                  valor={edicion}
-                  onChange={setEdicion}
-                  idPrefijo={`editar-${b.id}`}
-                />
-                {rangoEdicionInvalido && (
-                  <p className="text-destructive text-sm">
-                    La hora de fin tiene que ser posterior a la de inicio.
-                  </p>
-                )}
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={rangoEdicionInvalido || editar.isPending}
-                    onClick={() => editar.mutate({ id: b.id, ...edicion })}
-                  >
-                    Guardar
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setEditandoId(null)}>
-                    Cancelar
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card key={b.id}>
-              <CardContent className="flex flex-wrap items-center justify-between gap-2 pt-4">
-                <span>
-                  {etiquetaDia(b.diaSemana)} · {b.horaInicio}–{b.horaFin}
-                </span>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => empezarAEditar(b)}>
-                    Editar
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={eliminar.isPending}
-                    onClick={() => eliminar.mutate(b.id)}
-                  >
-                    Eliminar
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        )}
+        {!error &&
+          bloques.map((b) =>
+            editandoId === b.id ? (
+              <Card key={b.id}>
+                <CardContent className="grid gap-3 pt-4">
+                  <CamposDeBloque
+                    valor={edicion}
+                    onChange={setEdicion}
+                    idPrefijo={`editar-${b.id}`}
+                  />
+                  {rangoEdicionInvalido && (
+                    <p className="text-destructive text-sm">
+                      La hora de fin tiene que ser posterior a la de inicio.
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={rangoEdicionInvalido || editar.isPending}
+                      onClick={() => editar.mutate({ id: b.id, ...edicion })}
+                    >
+                      Guardar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditandoId(null)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card key={b.id}>
+                <CardContent className="flex flex-wrap items-center justify-between gap-2 pt-4">
+                  <span>
+                    {etiquetaDia(b.diaSemana)} · {b.horaInicio}–{b.horaFin}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => empezarAEditar(b)}>
+                      Editar
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={eliminar.isPending}
+                      onClick={() => eliminar.mutate(b.id)}
+                    >
+                      Eliminar
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          )}
       </div>
 
       <Card>
@@ -468,7 +481,7 @@ function MisExcepciones() {
 export function DisponibilidadPage() {
   const { user } = useAuth()
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ADMINS_KEY,
     queryFn: () => disponibilidadApi.listarDisponibilidadDeAdmins(),
     refetchInterval: REFRESCO_MS,
@@ -486,21 +499,21 @@ export function DisponibilidadPage() {
       />
 
       {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-        </Alert>
+        <ErrorDeConsulta
+          mensaje="No pudimos consultar los horarios de atención."
+          reintentando={isFetching}
+          onReintentar={() => void refetch()}
+        />
       )}
 
       {isLoading && <p className="text-muted-foreground">Cargando…</p>}
 
-      {!isLoading && admins.length === 0 && (
+      {!isLoading && !error && admins.length === 0 && (
         <p className="text-muted-foreground">No hay ningún Admin aprobado.</p>
       )}
 
       <div className="grid gap-3">
-        {admins.map((a) => (
-          <TarjetaDeAdmin key={a.usuarioId} admin={a} />
-        ))}
+        {!error && admins.map((a) => <TarjetaDeAdmin key={a.usuarioId} admin={a} />)}
       </div>
 
       {user?.rol === "ADMIN" && (

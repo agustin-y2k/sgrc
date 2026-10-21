@@ -1,3 +1,4 @@
+import { invalidarInventario } from "./invalidarInventario"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -39,7 +40,7 @@ export function MarcasHuerfanas() {
     mutationFn: (id: string) => adminApi.borrarPreferencia(id),
     // La clave corta alcanza a esta lista y a la de cada equipo: una marca que
     // se saca de acá también desaparece de la ficha de su máquina.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["preferencias"] }),
+    onSuccess: () => invalidarInventario(queryClient),
   })
 
   const huerfanas = data?.data ?? []

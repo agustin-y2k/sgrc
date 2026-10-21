@@ -13,7 +13,6 @@ import { EntregaSuelta } from "@/features/admin/entregas/EntregaSuelta"
 import { LoQueEstaAfuera } from "@/features/admin/entregas/LoQueEstaAfuera"
 import { SalidaAReparacion } from "@/features/admin/entregas/SalidaAReparacion"
 import * as reservasApi from "@/features/reservas/api"
-import { getErrorMessage } from "@/lib/api-client"
 
 /**
  * RF-08 — el mostrador completo: qué computadoras están afuera, quién se las
@@ -27,7 +26,7 @@ export function EntregasPage() {
   // viviera adentro, se iría con él justo cuando hay algo que leer.
   const [resumen, setResumen] = useState<string | null>(null)
 
-  const { data, error } = useQuery({
+  const { data } = useQuery({
     queryKey: PRESTAMOS_KEY,
     queryFn: reservasApi.listarPrestamosAbiertos,
     refetchInterval: REFRESCO_DEL_MOSTRADOR,
@@ -57,16 +56,6 @@ export function EntregasPage() {
           )
         }
       />
-
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>
-            No se pudo consultar qué hay afuera del laboratorio, así que los formularios
-            pueden ofrecer equipos que ya están prestados. Probá recargar. (
-            {getErrorMessage(error)})
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* Arriba de la lista de lo que está afuera, que es donde las máquinas
           que acaban de salir ya figuran. */}

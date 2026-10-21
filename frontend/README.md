@@ -18,7 +18,7 @@ SPA en React + TypeScript que consume la API de `sgrc-app`. El contrato está en
 ## Desarrollo local
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -38,31 +38,71 @@ npm run format         # prettier --write
 npm run format:check   # prettier --check
 npm run test           # vitest en modo watch
 npm run test:coverage  # vitest run --coverage
-npm run e2e            # playwright test (requiere el sistema levantado)
+npm run e2e            # playwright test (entorno y activación según la suite)
 ```
 
 ### E2E
 
-Los specs de `e2e/` corren contra el backend real, no contra mocks, así que
-necesitan datos cargados de antemano. `make seed-datos` desde la raíz del
-repositorio deja exactamente lo que hace falta: un ciclo activo, una materia con
-docente asignado y equipos disponibles.
+Las suites de `e2e/` comprueban distintos niveles del recorrido:
 
-No piden configuración: por defecto apuntan a `http://localhost:8081` —la SPA
-compilada servida por nginx, no Vite— y toman las credenciales del docente
-sembrado y del `.env` del proyecto. Si no las encuentran **se saltean** en vez
-de fallar, para que `npm run e2e` nunca rompa solo por el entorno.
+- Las pruebas básicas de acceso, reserva/cancelación, anchos, controles táctiles
+  y tema usan el sistema levantado. Requieren cuentas y datos adecuados.
+- Las suites `ux-*` combinan consultas reales con respuestas interceptadas para
+  verificar errores recuperables, paginación, formularios y permisos visibles.
+  Sus escrituras simuladas no verifican la persistencia de esas operaciones.
+- Las suites `flujos-*-reales` realizan las operaciones válidas contra la API y
+  PostgreSQL reales; algunas interceptan fallos concretos de lectura o transporte.
+  Exigen una bandera de activación `E2E_*`, origen localhost y sus comprobaciones
+  de base vacía antes de preparar datos. `revision-frontend` exige activación y
+  datos ficticios ya preparados; cambia una contraseña y cierra el ciclo.
+
+Para la regresión completa, desde la raíz del repositorio:
+
+```bash
+make regresion-navegador
+```
+
+Requiere Docker Compose, Node, dependencias instaladas con `npm ci` en
+`frontend` y Chromium instalado con `npx playwright install chromium` desde
+esta carpeta. El script compila una pareja de imágenes, crea cuentas ficticias
+y una base efímera nueva por bloque y retira los contenedores al terminar.
+No usa el inventario de `sgrc-local`. Una prueba omitida hace fallar la corrida.
+La selección de bloques, los artefactos y las condiciones de cada suite están
+en [Testing](../docs/10-testing.md#regresión-conjunta-de-navegador).
+
+Para ejecutar specs individuales, configurar el entorno correspondiente. El
+origen predeterminado es `http://localhost:8081`, servido por nginx. El
+administrador se toma de `E2E_ADMIN_*` o, si esas variables no están definidas,
+de `SEED_ADMIN_*` en el `.env` de la raíz. El docente se toma de `E2E_DOCENTE_*`
+o de los valores de desarrollo de `e2e/helpers.ts`; `.env.local` no se carga
+automáticamente. Algunos casos se omiten si faltan credenciales o activación;
+otros fallan si los datos no cumplen las condiciones. Omitido no significa
+aprobado.
+
+Las pruebas básicas necesitan un ciclo activo, una materia con docente
+asignado y equipos disponibles. `make seed-datos` prepara esos datos en el
+entorno de desarrollo; no prepara por sí solo todas las suites. El escenario
+táctil de acciones de clase necesita una reserva próxima del docente. La
+regresión aislada prepara también esa clase y una segunda cuenta para probar
+que los borradores no se transfieran entre usuarios.
 
 | Variable                                     | Para qué                                                                          |
 | -------------------------------------------- | --------------------------------------------------------------------------------- |
 | `E2E_BASE_URL`                               | Dónde está el frontend (por defecto `http://localhost:8081`)                      |
 | `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD`     | El Admin sembrado por `cmd/main.go`                                               |
 | `E2E_DOCENTE_EMAIL` / `E2E_DOCENTE_PASSWORD` | Un docente **aprobado y asignado a una materia de un ciclo activo**               |
+| `E2E_OTRO_DOCENTE_EMAIL` / `E2E_OTRO_DOCENTE_PASSWORD` | Segunda cuenta para el cambio de usuario de `ux-continuidad`; por defecto usa `dibujo@local.test` y la contraseña del docente de prueba |
 | `E2E_FECHA_RESERVA`                          | Fecha `YYYY-MM-DD` a reservar, si el valor por defecto cae fuera del ciclo activo |
 
-Cada corrida reserva en una **franja distinta**: el test cancela su reserva pero
-no puede borrarla, así que con una franja fija la segunda corrida encontraría
-dos tarjetas iguales y fallaría por ambigüedad en vez de por un problema real.
+El escenario básico de reserva elige fecha y horario variables dentro de la
+jornada declarada; cancela la reserva pero no borra la fila. Las suites reales
+aisladas deben comenzar con su base vacía en cada ejecución: algunas cierran
+ciclos, eliminan cuentas y modifican inventario.
+
+Los recorridos automatizados cubren ambos roles, operaciones reales sobre
+bases efímeras y fallos de consulta o transporte controlados. El procedimiento
+reproducible y las condiciones de aislamiento están en
+[Testing](../docs/10-testing.md).
 
 ## Estructura
 
@@ -159,4 +199,3 @@ bloque `server` está en [`../docs/09-seguridad-rbac.md`](../docs/09-seguridad-r
 No hace falta levantarlo para desarrollar: `npm run dev` ya proxea `/api` al
 backend. Pero antes de desplegar conviene mirar el `:8081`, que es el build de
 producción real.
-</content>

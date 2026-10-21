@@ -2,13 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
-import * as academicoApi from "@/features/academico/api"
 import * as adminApi from "@/features/admin/api"
 import { PreferenciasDeEquipo } from "@/features/admin/PreferenciasDeEquipo"
 import type { PreferenciaDeEquipo } from "@/features/inventory/types"
 
 vi.mock("@/features/admin/api")
-vi.mock("@/features/academico/api")
 
 function preferencia(over: Partial<PreferenciaDeEquipo> = {}): PreferenciaDeEquipo {
   return {
@@ -23,34 +21,28 @@ function preferencia(over: Partial<PreferenciaDeEquipo> = {}): PreferenciaDeEqui
 
 function renderPanel(preferencias: PreferenciaDeEquipo[] = []) {
   vi.mocked(adminApi.listarPreferenciasDeEquipo).mockResolvedValue({ data: preferencias })
-  vi.mocked(adminApi.materiasEnUso).mockResolvedValue({
-    data: ["Dibujo Técnico", "Matemática"],
-  })
-  // Los cursos y las modalidades se sugieren a partir de lo que la escuela
-  // tiene cargado: son los únicos que existen de verdad.
-  vi.mocked(academicoApi.listarCiclos).mockResolvedValue({
-    data: [{ id: "ciclo1", anio: 2026, activo: true, archivado: false }],
-  })
-  vi.mocked(academicoApi.listarCursos).mockResolvedValue({
-    data: [
+  vi.mocked(adminApi.catalogoDePrioridades).mockResolvedValue({
+    data: ["Dibujo Técnico", "Matemática"].flatMap((materiaNombre) => [
       {
-        id: "c1",
-        cicloLectivoId: "ciclo1",
-        nombre: "3°B",
+        materiaId: `${materiaNombre}-1`,
+        materiaNombre,
+        contenedorId: "c1",
+        contenedorNombre: "3°B",
+        tipo: "CURSO" as const,
         anio: 3,
         division: "B",
-        archivado: false,
       },
       {
-        id: "c2",
-        cicloLectivoId: "ciclo1",
-        nombre: "4°2",
+        materiaId: `${materiaNombre}-2`,
+        materiaNombre,
+        contenedorId: "c2",
+        contenedorNombre: "4°2",
+        tipo: "CURSO" as const,
+        modalidad: "Electromecánica",
         anio: 4,
         division: "2",
-        modalidad: "Electromecánica",
-        archivado: false,
       },
-    ],
+    ]),
   })
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -87,7 +79,9 @@ describe("PreferenciasDeEquipo", () => {
 
     // Acotado a la lista de marcas: los mismos nombres son opciones del
     // selector de abajo, así que buscarlos sueltos encuentra dos cosas.
-    const marcas = within(await screen.findByRole("list"))
+    const marcas = within(
+      await screen.findByRole("list", { name: "Marcas de este equipo" })
+    )
     expect(marcas.getByText(/Dibujo Técnico/)).toBeInTheDocument()
     expect(marcas.getByText(/Matemática de 3°B/)).toBeInTheDocument()
     expect(marcas.getByText("Prioridad 2")).toBeInTheDocument()
@@ -98,8 +92,24 @@ describe("PreferenciasDeEquipo", () => {
     renderPanel()
 
     expect(
-      await screen.findByText(/cualquiera lo puede reservar igual/i)
+      await screen.findByText(
+        /Si el equipo está libre, cualquier materia puede reservarlo/i
+      )
     ).toBeInTheDocument()
+  })
+
+  it("explica el orden numérico, el alcance y las protecciones de la reposición", async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    const prioridad = await screen.findByLabelText("Prioridad")
+    expect(prioridad).toHaveAccessibleDescription(
+      "1 = mayor prioridad; 9 = menor prioridad."
+    )
+    await user.click(screen.getByText("Cómo se resuelven las prioridades"))
+    expect(screen.getByText(/En un empate ninguna desplaza/)).toBeVisible()
+    expect(screen.getByText(/se usa la más específica/)).toBeVisible()
+    expect(screen.getByText(/reservas que empiezan en una hora o menos/)).toBeVisible()
+    expect(screen.getByText(/primero busca libres/)).toBeVisible()
   })
 
   it("marca el equipo para la materia elegida", async () => {
@@ -107,9 +117,13 @@ describe("PreferenciasDeEquipo", () => {
     vi.mocked(adminApi.marcarPreferencia).mockResolvedValue({ creadas: [] })
     renderPanel()
 
-    await user.selectOptions(await screen.findByLabelText("Materia"), "Matemática")
-    await user.type(screen.getByLabelText("Año"), "3")
-    await user.type(screen.getByLabelText("División"), "B")
+    await user.selectOptions(
+      await screen.findByLabelText("Modalidad"),
+      "__SIN_ATRIBUTO__"
+    )
+    await user.selectOptions(screen.getByLabelText("Año"), "3")
+    await user.selectOptions(screen.getByLabelText("División"), "B")
+    await user.selectOptions(screen.getByLabelText("Materia"), "Matemática")
     await user.click(screen.getByRole("button", { name: "Marcar" }))
 
     await waitFor(() => {
@@ -120,6 +134,7 @@ describe("PreferenciasDeEquipo", () => {
         anio: 3,
         division: "B",
         prioridad: 1,
+        cursoExacto: true,
       })
     })
   })
@@ -134,8 +149,9 @@ describe("PreferenciasDeEquipo", () => {
     vi.mocked(adminApi.marcarPreferencia).mockResolvedValue({ creadas: [] })
     renderPanel()
 
-    await user.selectOptions(await screen.findByLabelText("Materia"), "Matemática")
-    await user.type(screen.getByLabelText("Modalidad"), "Electromecánica")
+    await user.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+    await user.selectOptions(screen.getByLabelText("Modalidad"), "Electromecánica")
+    await user.selectOptions(screen.getByLabelText("Materia"), "Matemática")
     await user.click(screen.getByRole("button", { name: "Marcar" }))
 
     await waitFor(() => {
@@ -146,28 +162,34 @@ describe("PreferenciasDeEquipo", () => {
         anio: undefined,
         division: undefined,
         prioridad: 1,
+        cursoExacto: false,
       })
     })
   })
 
-  /**
-   * La división y la modalidad de la marca tienen que estar escritas como las
-   * del curso de verdad. Por eso se escriben libres y se sugieren las que ya
-   * existen.
-   */
-  it("sugiere las divisiones y las modalidades que la escuela ya tiene", async () => {
+  it("requiere elegir modalidad, año y división antes de la materia", async () => {
+    const user = userEvent.setup()
     renderPanel()
-
-    // Las dos listas aparecen recién cuando llegan los cursos del ciclo: hasta
-    // entonces el campo es libre y sin sugerencias, que es lo correcto.
-    const opcionesDe = (etiqueta: string) => {
-      const campo = screen.getByLabelText(etiqueta)
-      const lista = document.getElementById(campo.getAttribute("list") ?? "")
-      return lista ? [...lista.querySelectorAll("option")].map((o) => o.value) : null
-    }
-
-    await waitFor(() => expect(opcionesDe("División")).toEqual(["2", "B"]))
-    expect(opcionesDe("Modalidad")).toEqual(["Electromecánica"])
+    expect(await screen.findByLabelText("Año")).toBeDisabled()
+    expect(screen.getByLabelText("División")).toBeDisabled()
+    expect(screen.getByLabelText("Materia")).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Marcar" })).toBeDisabled()
+    await user.selectOptions(screen.getByLabelText("Modalidad"), "Electromecánica")
+    expect(
+      within(screen.getByLabelText("Año"))
+        .getAllByRole("option")
+        .map((o) => o.getAttribute("value"))
+    ).toEqual(["", "4"])
+    await user.selectOptions(screen.getByLabelText("Año"), "4")
+    await user.selectOptions(screen.getByLabelText("División"), "2")
+    await user.selectOptions(screen.getByLabelText("Materia"), "Matemática")
+    expect(screen.getByRole("button", { name: "Marcar" })).toBeEnabled()
+    await user.selectOptions(screen.getByLabelText("Modalidad"), "__SIN_ATRIBUTO__")
+    expect(screen.getByLabelText("Año")).toHaveValue("")
+    expect(screen.getByLabelText("División")).toHaveValue("")
+    expect(screen.getByLabelText("Materia")).toHaveValue("")
+    expect(screen.getByRole("button", { name: "Marcar" })).toBeDisabled()
+    expect(adminApi.marcarPreferencia).not.toHaveBeenCalled()
   })
 
   it("sin año manda el alcance sin acotar", async () => {
@@ -175,7 +197,8 @@ describe("PreferenciasDeEquipo", () => {
     vi.mocked(adminApi.marcarPreferencia).mockResolvedValue({ creadas: [] })
     renderPanel()
 
-    await user.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+    await user.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+    await user.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
     await user.click(screen.getByRole("button", { name: "Marcar" }))
 
     await waitFor(() => {
@@ -186,6 +209,7 @@ describe("PreferenciasDeEquipo", () => {
         anio: undefined,
         division: undefined,
         prioridad: 1,
+        cursoExacto: false,
       })
     })
   })
@@ -207,17 +231,18 @@ describe("PreferenciasDeEquipo", () => {
     const usuario = userEvent.setup()
     renderPanel([preferencia({ materiaNombre: "Matemática", prioridad: 1 })])
 
-    await screen.findByText(/Matemática/)
-    await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+    await screen.findByRole("list", { name: "Marcas de este equipo" })
+    await usuario.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+    await usuario.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
 
     expect(
-      await screen.findByText(/ya es preferente de Matemática con prioridad 1/),
+      await screen.findByText(/ya es preferente de Matemática con prioridad 1/)
     ).toBeInTheDocument()
   })
 
   it("sin materias cargadas explica dónde se crean", async () => {
     vi.mocked(adminApi.listarPreferenciasDeEquipo).mockResolvedValue({ data: [] })
-    vi.mocked(adminApi.materiasEnUso).mockResolvedValue({ data: [] })
+    vi.mocked(adminApi.catalogoDePrioridades).mockResolvedValue({ data: [] })
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={queryClient}>
@@ -244,7 +269,7 @@ describe("PreferenciasDeEquipo", () => {
 
       // Los campos llegan con lo que la marca ya decía: corregir la prioridad
       // no puede obligar a reescribir el alcance.
-      expect(screen.getByLabelText("Año")).toHaveValue(4)
+      expect(screen.getByLabelText("Año")).toHaveValue("4")
       expect(screen.getByLabelText("División")).toHaveValue("2")
 
       await user.selectOptions(screen.getByLabelText("Prioridad"), "3")
@@ -256,6 +281,7 @@ describe("PreferenciasDeEquipo", () => {
           anio: 4,
           division: "2",
           prioridad: 3,
+          cursoExacto: false,
         })
       })
     })
@@ -285,13 +311,15 @@ describe("PreferenciasDeEquipo", () => {
         }),
       ])
 
-      const marcas = within(await screen.findByRole("list"))
+      const marcas = within(
+        await screen.findByRole("list", { name: "Marcas de este equipo" })
+      )
       const deMatematica = marcas.getByText(/Matemática/).closest("li")!
       await user.click(within(deMatematica).getByRole("button", { name: "Editar" }))
       await user.selectOptions(screen.getByLabelText("Prioridad"), "1")
 
       expect(
-        await screen.findByText(/ya es preferente de Dibujo Técnico con prioridad 1/),
+        await screen.findByText(/ya es preferente de Dibujo Técnico con prioridad 1/)
       ).toBeInTheDocument()
     })
 
@@ -303,7 +331,7 @@ describe("PreferenciasDeEquipo", () => {
       await user.click(screen.getByRole("button", { name: "Cancelar" }))
 
       expect(screen.getByRole("button", { name: "Marcar" })).toBeInTheDocument()
-      expect(screen.getByLabelText("Año")).toHaveValue(null)
+      expect(screen.getByLabelText("Año")).toHaveValue("")
       expect(adminApi.editarPreferencia).not.toHaveBeenCalled()
     })
   })

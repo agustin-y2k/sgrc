@@ -52,6 +52,32 @@ describe("CambiarPasswordPage", () => {
     localStorage.clear()
   })
 
+  it("explica la contraseña temporal y quién la entrega antes de continuar", () => {
+    const auth = useAuth()
+    vi.mocked(useAuth).mockReturnValue({
+      ...auth,
+      user: {
+        id: "u1",
+        nombre: "Ada",
+        apellido: "Lovelace",
+        email: "ada@test.com",
+        rol: "DOCENTE",
+        estado: "APROBADA",
+        fechaRegistro: "2026-01-01T00:00:00Z",
+        fechaAprobacion: null,
+        debeCambiarPassword: true,
+      },
+    })
+    renderPage()
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Cambiar contraseña" })
+    ).toBeVisible()
+    expect(screen.getByText(/Tu contraseña es temporal/)).toBeVisible()
+    expect(screen.getByLabelText("Contraseña actual")).toHaveAccessibleDescription(
+      /contraseña temporal que te comunicó administración/
+    )
+  })
+
   // RF-01.6: el token con el que se llega acá lleva debeCambiarPassword=true
   // congelado en los claims, y el backend responde 403 a todo lo demás
   // mientras siga así.

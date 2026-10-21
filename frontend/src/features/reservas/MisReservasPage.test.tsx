@@ -9,10 +9,12 @@ import { MisReservasPage } from "@/features/reservas/MisReservasPage"
 import * as reservasApi from "@/features/reservas/api"
 import type { ReservaDetallada } from "@/features/reservas/types"
 import { ApiError } from "@/lib/api-client"
+import * as adminApi from "@/features/admin/api"
 import { paginada } from "@/test/respuestas"
 
 vi.mock("@/features/reservas/api")
 vi.mock("@/features/auth/AuthContext")
+vi.mock("@/features/admin/api")
 
 const DOCENTE: Usuario = {
   id: "docente1",
@@ -60,11 +62,11 @@ function reserva(over: Partial<ReservaDetallada> = {}): ReservaDetallada {
   }
 }
 
-function renderPagina(estado?: { confirmacion: string }) {
+function renderPagina(estado?: { confirmacion: string }, search = "") {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[{ pathname: "/reservas", state: estado }]}>
+      <MemoryRouter initialEntries={[{ pathname: "/reservas", search, state: estado }]}>
         <Routes>
           <Route path="/reservas" element={<MisReservasPage />} />
           <Route path="/reservas/nueva" element={<div>Nueva</div>} />
@@ -78,6 +80,7 @@ describe("MisReservasPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockUsuario(DOCENTE)
+    vi.mocked(adminApi.listarUsuarios).mockResolvedValue(paginada([DOCENTE]))
     vi.mocked(reservasApi.cancelarReserva).mockResolvedValue(undefined)
     vi.mocked(reservasApi.cancelarGrupo).mockResolvedValue({ reservasCanceladas: 3 })
   })
@@ -105,13 +108,95 @@ describe("MisReservasPage", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument()
   })
 
+  it("conserva fecha, búsqueda y estado al paginar y reinicia la página al cambiar la vista", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.listarReservas).mockImplementation(async (f) =>
+      paginada([reserva()], { total: 41, page: f?.page ?? 1, pageSize: 20 })
+    )
+    renderPagina()
+    await screen.findByText("Matemáticas — 1°A")
+    await user.clear(screen.getByLabelText("Desde"))
+    await user.type(screen.getByLabelText("Desde"), "2026-11-02")
+    await user.type(screen.getByLabelText("Hasta"), "2026-11-16")
+    await user.type(screen.getByLabelText("Buscar materia, curso o modalidad"), "TIC")
+    await user.selectOptions(screen.getByLabelText("Estado de los equipos"), "CONFIRMADA")
+    await user.click(screen.getByRole("button", { name: "Aplicar filtros" }))
+    await waitFor(() =>
+      expect(reservasApi.listarReservas).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          desde: "2026-11-02",
+          hasta: "2026-11-16",
+          estado: "CONFIRMADA",
+          busqueda: "TIC",
+          page: 1,
+        })
+      )
+    )
+    await user.click(screen.getByRole("button", { name: "Siguiente" }))
+    await waitFor(() =>
+      expect(reservasApi.listarReservas).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          desde: "2026-11-02",
+          hasta: "2026-11-16",
+          estado: "CONFIRMADA",
+          busqueda: "TIC",
+          page: 2,
+        })
+      )
+    )
+    await user.click(screen.getByRole("button", { name: "Historial" }))
+    await waitFor(() =>
+      expect(reservasApi.listarReservas).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          desde: undefined,
+          hasta: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+          page: 1,
+        })
+      )
+    )
+  })
+
+  it("bloquea un rango invertido antes de consultar y no muestra una lista vacía", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
+    renderPagina()
+    await screen.findByText("Matemáticas — 1°A")
+    const llamadas = vi.mocked(reservasApi.listarReservas).mock.calls.length
+    await user.clear(screen.getByLabelText("Desde"))
+    await user.type(screen.getByLabelText("Desde"), "2026-11-16")
+    await user.type(screen.getByLabelText("Hasta"), "2026-11-02")
+    await user.click(screen.getByRole("button", { name: "Aplicar filtros" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "La fecha «Hasta» debe ser igual o posterior"
+    )
+    expect(reservasApi.listarReservas).toHaveBeenCalledTimes(llamadas)
+    expect(screen.queryByText("Todavía no hay reservas.")).not.toBeInTheDocument()
+  })
+
+  it("el filtro de canceladas queda explícito y una cuenta docente no envía otro actor", async () => {
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([reserva({ estado: "CANCELADA" })])
+    )
+    renderPagina(undefined, "?vista=todas&estado=CANCELADA&creadoPor=otra-cuenta")
+    await screen.findByText("Matemáticas — 1°A")
+    expect(reservasApi.listarReservas).toHaveBeenCalledWith(
+      expect.objectContaining({
+        creadoPor: undefined,
+        incluirCanceladas: true,
+        estado: "CANCELADA",
+      })
+    )
+    expect(screen.getByLabelText("Mostrar también las canceladas")).toBeChecked()
+    expect(screen.getByLabelText("Mostrar también las canceladas")).toBeDisabled()
+  })
+
   it("lista las reservas con su materia, horario y estado", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
     renderPagina()
 
     expect(await screen.findByText("Matemáticas — 1°A")).toBeInTheDocument()
     expect(screen.getByText("Lunes, 9 de marzo")).toBeInTheDocument()
-    expect(screen.getByText("Confirmada")).toBeInTheDocument()
+    expect(screen.getByText("Confirmada", { selector: "span" })).toBeInTheDocument()
   })
 
   // El glosario define ReservaGrupo como "la reserva tal como la percibe el
@@ -123,6 +208,33 @@ describe("MisReservasPage", () => {
       reserva({ id: "r2", equipoId: "pc2", identificador: 7 }),
       reserva({ id: "r3", equipoId: "pc3", identificador: 12, carroNombre: "Carro 2" }),
     ]
+
+    it("solicita clases completas y confirma todos los equipos de una clase grande", async () => {
+      const equipos = Array.from({ length: 70 }, (_, i) =>
+        reserva({ id: `r${i}`, equipoId: `pc${i}`, identificador: i + 1 })
+      )
+      vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+        paginada(equipos, { total: 1, page: 1, pageSize: 20 })
+      )
+      const user = userEvent.setup()
+      renderPagina()
+      await screen.findByText("PC 70 · Carro 1")
+      expect(reservasApi.listarReservas).toHaveBeenCalledWith(
+        expect.objectContaining({
+          incluirCanceladas: false,
+          page: 1,
+          porClases: true,
+          pageSize: 20,
+        })
+      )
+      expect(screen.getAllByRole("button", { name: "Cancelar" })).toHaveLength(1)
+      await user.click(screen.getByRole("button", { name: "Cancelar" }))
+      expect(
+        screen.getByText("Se cancelan 70 equipos de esta reserva.")
+      ).toBeInTheDocument()
+      await user.click(screen.getByRole("button", { name: "Confirmar cancelación" }))
+      expect(reservasApi.cancelarGrupo).toHaveBeenCalledWith("grupo1", "", true)
+    })
 
     it("muestra una sola tarjeta con todas sus equipos", async () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada(tresEquipos))
@@ -171,7 +283,7 @@ describe("MisReservasPage", () => {
         await screen.findByText("PC 7: el equipo pasó a FUERA_DE_SERVICIO")
       ).toBeInTheDocument()
       // El grupo sigue vivo porque queda un equipo confirmado.
-      expect(screen.getByText("Confirmada")).toBeInTheDocument()
+      expect(screen.getByText("Confirmada", { selector: "span" })).toBeInTheDocument()
       expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument()
     })
   })
@@ -335,17 +447,21 @@ describe("MisReservasPage", () => {
       const user = userEvent.setup()
       renderPagina()
 
-      expect(await screen.findByText(/de 120 reservas/)).toBeInTheDocument()
+      expect(await screen.findByText(/de 120 clases/)).toBeInTheDocument()
       expect(screen.getByText("Página 1 de 3")).toBeInTheDocument()
       expect(screen.getByRole("button", { name: "Anterior" })).toBeDisabled()
 
       await user.click(screen.getByRole("button", { name: "Siguiente" }))
 
       await waitFor(() => {
-        expect(reservasApi.listarReservas).toHaveBeenLastCalledWith({
-          incluirCanceladas: false,
-          page: 2,
-        })
+        expect(reservasApi.listarReservas).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            incluirCanceladas: false,
+            page: 2,
+            porClases: true,
+            pageSize: 20,
+          })
+        )
       })
     })
   })
@@ -440,13 +556,13 @@ describe("MisReservasPage", () => {
     })
   })
 
-  it("muestra el error del backend tal cual", async () => {
+  it("explica un fallo del listado y ofrece reintentar", async () => {
     vi.mocked(reservasApi.listarReservas).mockRejectedValue(
       new ApiError(401, "token inválido o expirado")
     )
     renderPagina()
 
-    expect(await screen.findByText("token inválido o expirado")).toBeInTheDocument()
+    expect(await screen.findByText(/No pudimos cargar las reservas/)).toBeInTheDocument()
   })
 
   /** El proyector se reserva pero no está en ningún carro. */

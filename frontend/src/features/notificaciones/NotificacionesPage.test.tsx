@@ -36,7 +36,7 @@ function usuario(rol: Usuario["rol"]): Usuario {
     id: rol === "ADMIN" ? "admin1" : "docente1",
     nombre: "Ada",
     apellido: "Lovelace",
-    email: "ada@escuela.edu.ar",
+    email: "ada@escuela.test",
     rol,
     estado: "APROBADA",
     fechaRegistro: "2026-01-01T00:00:00Z",
@@ -78,6 +78,7 @@ function renderPagina(rol: Usuario["rol"] = "DOCENTE") {
       </MemoryRouter>
     </QueryClientProvider>
   )
+  return queryClient
 }
 
 describe("NotificacionesPage", () => {
@@ -87,12 +88,12 @@ describe("NotificacionesPage", () => {
       paginada([notificacion()])
     )
     vi.mocked(notificacionesApi.marcarLeida).mockResolvedValue(undefined)
-    vi.mocked(notificacionesApi.marcarTodasLeidas).mockResolvedValue(undefined)
+    vi.mocked(notificacionesApi.marcarTodasLeidas).mockResolvedValue({ marcadas: 1 })
     // El aviso de spam pide la config del despliegue; sin correo configurado
     // no se dibuja, y estos tests no son sobre eso.
     vi.mocked(authApi.configPublica).mockResolvedValue({
       googleClientId: "",
-      remitenteDeCorreo: "avisos@escuela.edu.ar",
+      remitenteDeCorreo: "avisos@escuela.test",
     })
     vi.mocked(notificacionesApi.listarPreferenciasEmail).mockResolvedValue({
       data: [
@@ -274,7 +275,9 @@ describe("NotificacionesPage", () => {
 
     // Las de la cuenta salen igual, así que el texto no puede decir "ninguna".
     expect(
-      await screen.findByText(/Solo te llegan por correo los avisos de tu cuenta/)
+      await screen.findByText(
+        /Solo están seleccionados los correos obligatorios de tu cuenta/
+      )
     ).toBeInTheDocument()
   })
 
@@ -327,7 +330,7 @@ describe("NotificacionesPage", () => {
     // Y el resumen deja de decir que solo llegan los de la cuenta. Cuenta 2
     // elegibles: la fija no entra en el total.
     expect(
-      await screen.findByText(/Te llegan por correo 1 de 2 tipos de aviso/)
+      await screen.findByText(/Tenés seleccionados 1 de 2 tipos de aviso/)
     ).toBeInTheDocument()
   })
 
@@ -349,12 +352,12 @@ describe("NotificacionesPage", () => {
   // obliga a decidir, pero eso solo garantiza que haya una entrada, no que
   // apunte a donde tiene que apuntar.
   //
-  // `null` es una decisión explícita, no un olvido: los dos del buzón ya
-  // están en esta misma pantalla, y un botón que lleva acá mismo no sirve.
+  // Los avisos del buzón permiten abrir el panel sin buscarlo manualmente.
   const destinos: { tipo: TipoNotificacion; texto: string | null; href?: string }[] = [
     { tipo: "GENERAL", texto: null },
     { tipo: "DOCENTE_PENDIENTE", texto: "Ir a aprobar", href: "/admin/aprobacion" },
     { tipo: "RESERVA_CANCELADA", texto: "Ver mis reservas", href: "/reservas" },
+    { tipo: "RESERVA_REUBICADA", texto: "Ver mis reservas", href: "/reservas" },
     { tipo: "LICENCIA_POR_VENCER", texto: "Ver licencias", href: "/admin/licencias" },
     { tipo: "EQUIPO_SIN_DEVOLVER", texto: "Ver entregas", href: "/admin/entregas" },
     { tipo: "PEDIDO_DE_LIBERACION", texto: "Ver mis reservas", href: "/reservas" },
@@ -364,8 +367,16 @@ describe("NotificacionesPage", () => {
       href: "/admin/pedidos-de-materia",
     },
     { tipo: "PEDIDO_DE_MATERIA_RESUELTO", texto: "Ver mi perfil", href: "/perfil" },
-    { tipo: "SUGERENCIA", texto: null },
-    { tipo: "SUGERENCIA_RESPONDIDA", texto: null },
+    {
+      tipo: "SUGERENCIA",
+      texto: "Ver conversación",
+      href: "/notificaciones?soporte=consultas",
+    },
+    {
+      tipo: "SUGERENCIA_RESPONDIDA",
+      texto: "Ver conversación",
+      href: "/notificaciones?soporte=consultas",
+    },
   ]
 
   it.each(destinos)("el aviso $tipo lleva a donde corresponde", async (destino) => {
@@ -397,6 +408,7 @@ describe("NotificacionesPage", () => {
       "GENERAL",
       "DOCENTE_PENDIENTE",
       "RESERVA_CANCELADA",
+      "RESERVA_REUBICADA",
       "LICENCIA_POR_VENCER",
       "EQUIPO_SIN_DEVOLVER",
       "PEDIDO_DE_LIBERACION",
@@ -436,7 +448,9 @@ describe("NotificacionesPage", () => {
     })
     renderPagina()
 
-    expect(await screen.findByRole("button", { name: "Marcar como leída" })).toBeInTheDocument()
+    expect(
+      await screen.findByRole("button", { name: "Marcar como leída" })
+    ).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Borrar" })).toBeNull()
   })
 
@@ -452,8 +466,139 @@ describe("NotificacionesPage", () => {
     vi.mocked(notificacionesApi.borrarLeidas).mockResolvedValue({ borradas: 2 })
     renderPagina()
 
-    await user.click(await screen.findByRole("button", { name: "Borrar las 2 leídas" }))
+    await user.click(
+      await screen.findByRole("button", { name: "Borrar todos los avisos leídos" })
+    )
 
     await waitFor(() => expect(notificacionesApi.borrarLeidas).toHaveBeenCalled())
+  })
+  it("reintenta una lectura fallida sin mostrar vacío ni acciones con datos desactualizados", async () => {
+    const user = userEvent.setup()
+    const qc = renderPagina()
+    await screen.findByText(notificacion().mensaje)
+    vi.mocked(notificacionesApi.listarNotificaciones).mockRejectedValueOnce(
+      new ApiError(503, "Falló la lectura")
+    )
+    await qc.invalidateQueries({ queryKey: ["notificaciones", "NO_LEIDA"] })
+    await screen.findByText("Falló la lectura")
+    expect(screen.queryByText(notificacion().mensaje)).not.toBeInTheDocument()
+    expect(screen.queryByText("No tenés avisos sin leer.")).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Marcar todas como leídas" })
+    ).toBeDisabled()
+    await user.click(screen.getByRole("button", { name: "Reintentar avisos" }))
+    await screen.findByText(notificacion().mensaje)
+  })
+
+  it("el borrado masivo informa la cantidad total aunque exceda la página visible", async () => {
+    vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(
+      paginada([notificacion({ estado: "LEIDA" })])
+    )
+    vi.mocked(notificacionesApi.borrarLeidas).mockResolvedValue({ borradas: 75 })
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(
+      await screen.findByRole("button", { name: "Borrar todos los avisos leídos" })
+    )
+    await screen.findByText("Avisos leídos borrados: 75.")
+  })
+
+  it("las acciones masivas bloquean otras mutaciones hasta terminar", async () => {
+    let completar!: (r: { marcadas: number }) => void
+    vi.mocked(notificacionesApi.marcarTodasLeidas).mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          completar = r
+        })
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(
+      await screen.findByRole("button", { name: "Marcar todas como leídas" })
+    )
+    expect(screen.getByRole("button", { name: "Marcar como leída" })).toBeDisabled()
+    expect(screen.getByLabelText("Mostrar también las leídas")).toBeDisabled()
+    completar({ marcadas: 3 })
+    await screen.findByText("Avisos marcados como leídos: 3.")
+  })
+
+  it("vuelve a la primera página al leer el último aviso de la segunda", async () => {
+    let leida = false
+    vi.mocked(notificacionesApi.listarNotificaciones).mockImplementation(
+      async (_, p = 1) => ({
+        data: p === 2 && leida ? [] : [notificacion()],
+        meta: { total: leida ? 50 : 51, page: p, pageSize: 50 },
+      })
+    )
+    vi.mocked(notificacionesApi.marcarLeida).mockImplementationOnce(async () => {
+      leida = true
+    })
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(await screen.findByRole("button", { name: "Siguiente" }))
+    await screen.findByText("Página 2 de 2")
+    await user.click(screen.getByRole("button", { name: "Marcar como leída" }))
+    await waitFor(() =>
+      expect(notificacionesApi.listarNotificaciones).toHaveBeenLastCalledWith(
+        "NO_LEIDA",
+        1
+      )
+    )
+  })
+
+  it("el aviso de soporte enlaza al hilo concreto con el identificador codificado", async () => {
+    vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(
+      paginada([notificacion({ tipo: "SUGERENCIA_RESPONDIDA", hiloId: "hilo/1" })])
+    )
+    renderPagina()
+    expect(await screen.findByRole("link", { name: "Ver conversación" })).toHaveAttribute(
+      "href",
+      "/notificaciones?soporte=consultas&hilo=hilo%2F1"
+    )
+  })
+
+  it("reintenta preferencias y conserva la selección ante un guardado fallido", async () => {
+    vi.mocked(notificacionesApi.listarPreferenciasEmail).mockRejectedValueOnce(
+      new ApiError(503, "Preferencias inaccesibles")
+    )
+    vi.mocked(notificacionesApi.guardarPreferenciasEmail).mockRejectedValueOnce(
+      new ApiError(503, "Falló el guardado")
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(
+      await screen.findByRole("button", { name: "Reintentar preferencias" })
+    )
+    await user.click(screen.getByRole("button", { name: "Elegir cuáles" }))
+    const campo = await screen.findByRole("checkbox", {
+      name: "Cuentas esperando aprobación",
+    })
+    await user.click(campo)
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+    await screen.findByText("Falló el guardado")
+    expect(campo).toBeChecked()
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+    await screen.findByText("Preferencias guardadas.")
+  })
+
+  it("impide editar preferencias mientras se está guardando", async () => {
+    let completar!: (r: { data: PreferenciaEmail[] }) => void
+    vi.mocked(notificacionesApi.guardarPreferenciasEmail).mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          completar = r
+        })
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(await screen.findByRole("button", { name: "Elegir cuáles" }))
+    const campo = await screen.findByRole("checkbox", {
+      name: "Cuentas esperando aprobación",
+    })
+    await user.click(campo)
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+    expect(campo).toBeDisabled()
+    completar({ data: [preferencia({ activa: true })] })
+    await screen.findByText("Preferencias guardadas.")
   })
 })

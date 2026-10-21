@@ -54,9 +54,9 @@ export function SelectorDeCurso({
   const listaModalidades = useId()
 
   return (
-    <div className="grid gap-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="grid gap-1.5">
+    <div className="grid min-w-0 gap-3">
+      <div className="flex min-w-0 flex-wrap items-end gap-2">
+        <div className="grid min-w-0 gap-1.5">
           {/* "Año del curso" y no "Año" a secas: en esta misma pantalla
               está el año del ciclo lectivo, y dos campos con el mismo rótulo
               no se distinguen ni leyendo ni con un lector de pantalla. */}
@@ -76,11 +76,11 @@ export function SelectorDeCurso({
           </Select>
         </div>
 
-        <div className="grid gap-1.5">
+        <div className="grid min-w-0 gap-1.5">
           <Label htmlFor={`${idPrefijo}-division`}>División (opcional)</Label>
           <Input
             id={`${idPrefijo}-division`}
-            className="w-28"
+            className="w-28 max-w-full"
             value={valor.division}
             disabled={deshabilitado}
             maxLength={MAX_LARGO_DIVISION}
@@ -104,11 +104,11 @@ export function SelectorDeCurso({
         </p>
       </div>
 
-      <div className="grid gap-1.5">
+      <div className="grid min-w-0 gap-1.5">
         <Label htmlFor={`${idPrefijo}-modalidad`}>Modalidad o carrera (opcional)</Label>
         <Input
           id={`${idPrefijo}-modalidad`}
-          className="w-72"
+          className="w-full max-w-72"
           value={valor.modalidad}
           disabled={deshabilitado}
           maxLength={MAX_LARGO_MODALIDAD}

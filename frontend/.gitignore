@@ -19,6 +19,7 @@ test-results
 
 # Entorno
 .env
+.env.*
 !.env.example
 
 # Editor directories and files

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { InventarioAdminPage } from "@/features/admin/InventarioAdminPage"
@@ -54,10 +54,19 @@ function renderPagina() {
       <InventarioAdminPage />
     </QueryClientProvider>
   )
+  return queryClient
 }
 
-async function abrirCarro(user: ReturnType<typeof userEvent.setup>) {
+async function abrirCarro(user: ReturnType<typeof userEvent.setup>, esperar = true) {
   await user.click(await screen.findByRole("button", { name: "Gestionar equipos" }))
+  if (!esperar) return
+  await waitFor(() =>
+    expect(screen.queryByText("Cargando equipos…")).not.toBeInTheDocument()
+  )
+  for (const resumen of screen.queryAllByText("Gestionar equipo"))
+    await user.click(resumen)
+  const alta = screen.queryByRole("button", { name: "Agregar un equipo al carro" })
+  if (alta) await user.click(alta)
 }
 
 describe("InventarioAdminPage", () => {
@@ -67,6 +76,7 @@ describe("InventarioAdminPage", () => {
       data: [{ id: "c1", nombre: "Carro 1", dadoDeBaja: false }],
     })
     vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: [equipo()] })
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.cambiarEstadoEquipo).mockResolvedValue({
       reservasCanceladas: 0,
       docentesNotificados: 0,
@@ -75,7 +85,11 @@ describe("InventarioAdminPage", () => {
       reservasCanceladas: 0,
       docentesNotificados: 0,
     })
-    vi.mocked(adminApi.crearCarro).mockResolvedValue({ id: "c2", nombre: "Carro 2", dadoDeBaja: false })
+    vi.mocked(adminApi.crearCarro).mockResolvedValue({
+      id: "c2",
+      nombre: "Carro 2",
+      dadoDeBaja: false,
+    })
     vi.mocked(adminApi.editarCarro).mockResolvedValue(undefined)
     vi.mocked(adminApi.crearEquipoDeCarro).mockResolvedValue(
       equipo({ id: "pc9", identificador: 9 })
@@ -101,6 +115,7 @@ describe("InventarioAdminPage", () => {
     const user = userEvent.setup()
     renderPagina()
 
+    await user.click(screen.getByRole("button", { name: "Nuevo carro" }))
     await user.type(await screen.findByLabelText("Nombre"), "Carro 2")
     await user.click(screen.getByRole("button", { name: "Crear carro" }))
 
@@ -108,6 +123,202 @@ describe("InventarioAdminPage", () => {
       nombre: "Carro 2",
       descripcion: undefined,
     })
+  })
+
+  it("empieza por la búsqueda y abre la ficha del equipo sin crear nada", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockImplementation(async (opciones) => ({
+      data: opciones?.soloSueltos ? [] : [equipo({ softwareInstalado: "AutoCAD 2026" })],
+    }))
+    renderPagina()
+    await waitFor(() =>
+      expect(screen.getByLabelText("Equipo, carro, serie o software")).toBeEnabled()
+    )
+    expect(screen.queryByRole("button", { name: "Crear carro" })).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText("Equipo, carro, serie o software"), "autocad")
+    await user.click(await screen.findByRole("button", { name: "Abrir ficha de PC 1" }))
+    await waitFor(() =>
+      expect(document.activeElement).toHaveAttribute("id", "equipo-inventario-pc1")
+    )
+    expect(screen.getByText("Gestionar equipo").closest("details")).toHaveAttribute(
+      "open"
+    )
+    expect(adminApi.crearEquipoDeCarro).not.toHaveBeenCalled()
+  })
+
+  it("combina búsqueda y estado en todo el inventario", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockImplementation(async (opciones) => ({
+      data: opciones?.soloSueltos
+        ? []
+        : [
+            equipo(),
+            equipo({
+              id: "pc2",
+              identificador: 2,
+              estado: "FUERA_DE_SERVICIO",
+              numeroSerie: "SERIE2",
+            }),
+          ],
+    }))
+    renderPagina()
+    await waitFor(() =>
+      expect(screen.getByLabelText("Equipo, carro, serie o software")).toBeEnabled()
+    )
+    await user.selectOptions(
+      screen.getByLabelText("Estado del equipo"),
+      "FUERA_DE_SERVICIO"
+    )
+    expect(
+      await screen.findByRole("button", { name: "Abrir ficha de PC 2" })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Abrir ficha de PC 1" })
+    ).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText("Equipo, carro, serie o software"), "serie2")
+    expect(
+      screen.getByRole("button", { name: "Abrir ficha de PC 2" })
+    ).toBeInTheDocument()
+    await user.clear(screen.getByLabelText("Equipo, carro, serie o software"))
+    await user.type(
+      screen.getByLabelText("Equipo, carro, serie o software"),
+      "sin coincidencias"
+    )
+    expect(screen.getByText(/Ningún equipo coincide/)).toBeInTheDocument()
+  })
+
+  it("permite reintentar la búsqueda fallida sin mostrar resultados vacíos", async () => {
+    const user = userEvent.setup()
+    vi.mocked(inventoryApi.listarEquipos).mockImplementation(async (opciones) => {
+      if (opciones?.soloSueltos) return { data: [] }
+      throw new Error("sin conexión")
+    })
+    renderPagina()
+    await waitFor(() =>
+      expect(screen.getByLabelText("Equipo, carro, serie o software")).toBeEnabled()
+    )
+    await user.type(screen.getByLabelText("Equipo, carro, serie o software"), "PC")
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No pudimos consultar el inventario"
+    )
+    expect(screen.queryByText(/Ningún equipo coincide/)).not.toBeInTheDocument()
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [equipo()] })
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    expect(
+      await screen.findByRole("button", { name: "Abrir ficha de PC 1" })
+    ).toBeInTheDocument()
+  })
+
+  it("no presenta un error de equipos como carro vacío y permite reintentar", async () => {
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockRejectedValueOnce(
+      new Error("sin conexión")
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await abrirCarro(user)
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No pudimos cargar los equipos de este carro"
+    )
+    expect(
+      screen.queryByText(/Este carro no tiene equipos activos/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Agregar computadora/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    expect(await screen.findByText("PC 1")).toBeInTheDocument()
+  })
+
+  it("oculta acciones sobre equipos almacenados cuando falla una actualización", async () => {
+    const user = userEvent.setup()
+    const qc = renderPagina()
+    await abrirCarro(user)
+    await screen.findByText("PC 1")
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockRejectedValueOnce(
+      new Error("sin conexión")
+    )
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ["equipos", "c1"] })
+    })
+    await screen.findByRole("alert")
+    expect(screen.queryByRole("button", { name: "Dar de baja" })).not.toBeInTheDocument()
+    expect(screen.queryByText("PC 1")).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/Este carro no tiene equipos activos/)
+    ).not.toBeInTheDocument()
+  })
+
+  it("distingue un carro vacío de uno que todavía está cargando", async () => {
+    let resolver!: (r: { data: Equipo[] }) => void
+    vi.mocked(inventoryApi.listarEquiposDeCarro).mockReturnValueOnce(
+      new Promise((r) => {
+        resolver = r
+      })
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await abrirCarro(user, false)
+    expect(screen.getByRole("status")).toHaveTextContent("Cargando equipos")
+    expect(
+      screen.queryByText(/Este carro no tiene equipos activos/)
+    ).not.toBeInTheDocument()
+    await act(async () => {
+      resolver({ data: [] })
+    })
+    expect(
+      await screen.findByText(/Este carro no tiene equipos activos/)
+    ).toBeInTheDocument()
+  })
+
+  it("bloquea el alta ante un fallo de lectura de carros y conserva los campos al reintentar", async () => {
+    vi.mocked(inventoryApi.listarCarros).mockRejectedValueOnce(new Error("sin conexión"))
+    const user = userEvent.setup()
+    renderPagina()
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No pudimos cargar los carros"
+    )
+    await user.click(screen.getByRole("button", { name: "Nuevo carro" }))
+    await user.type(screen.getByLabelText("Nombre"), "Carro nuevo")
+    expect(screen.getByRole("button", { name: "Crear carro" })).toBeDisabled()
+    expect(screen.queryByText("No hay carros activos cargados.")).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    await screen.findByText("Carro 1")
+    expect(screen.getByLabelText("Nombre")).toHaveValue("Carro nuevo")
+    expect(screen.getByRole("button", { name: "Crear carro" })).toBeEnabled()
+    expect(adminApi.crearCarro).not.toHaveBeenCalled()
+  })
+
+  it("no anuncia ausencia de carros retirados cuando falla su consulta", async () => {
+    vi.mocked(inventoryApi.listarCarrosConRetirados).mockRejectedValueOnce(
+      new Error("sin conexión")
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await screen.findByText("Carro 1")
+    await user.click(screen.getByRole("button", { name: "Ver los carros retirados" }))
+    await screen.findByRole("alert")
+    expect(screen.queryByText("No hay ningún carro retirado.")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Devolver a circulación" })
+    ).not.toBeInTheDocument()
+  })
+
+  it("no muestra los equipos sueltos como vacíos tras un error y permite reintentar", async () => {
+    vi.mocked(inventoryApi.listarEquipos).mockRejectedValueOnce(new Error("sin conexión"))
+    const user = userEvent.setup()
+    renderPagina()
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No pudimos cargar los equipos sueltos"
+    )
+    expect(
+      screen.queryByText("No hay ningún equipo cargado todavía.")
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Agregar equipo" })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    expect(
+      await screen.findByText("No hay ningún equipo cargado todavía.")
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Agregar equipo" })).toBeEnabled()
   })
 
   // RF-03.8: sacar un equipo de DISPONIBLE cancela sus reservas futuras y NO
@@ -457,6 +668,7 @@ describe("InventarioAdminPage", () => {
     const user = userEvent.setup()
     renderPagina()
 
+    await user.click(screen.getByRole("button", { name: "Nuevo carro" }))
     await user.type(await screen.findByLabelText("Nombre"), "Carro 1")
     await user.click(screen.getByRole("button", { name: "Crear carro" }))
 
@@ -565,7 +777,9 @@ describe("InventarioAdminPage", () => {
     await user.click(
       await screen.findByRole("button", { name: /Ver los 1 equipos dados de baja/ })
     )
-    await user.click(await screen.findByRole("button", { name: "Devolver al inventario" }))
+    await user.click(
+      await screen.findByRole("button", { name: "Devolver al inventario" })
+    )
 
     expect(adminApi.reactivarEquipo).toHaveBeenCalledWith("pc2")
   })
@@ -586,7 +800,9 @@ describe("InventarioAdminPage", () => {
     await user.click(
       await screen.findByRole("button", { name: /Ver los 1 equipos dados de baja/ })
     )
-    await user.click(await screen.findByRole("button", { name: "Devolver al inventario" }))
+    await user.click(
+      await screen.findByRole("button", { name: "Devolver al inventario" })
+    )
 
     expect(
       await screen.findByText("ya existe un equipo con ese identificador en el carro")
@@ -609,7 +825,9 @@ describe("InventarioAdminPage", () => {
     )
 
     expect(await screen.findByText("Carro viejo")).toBeInTheDocument()
-    await user.click(await screen.findByRole("button", { name: "Devolver a circulación" }))
+    await user.click(
+      await screen.findByRole("button", { name: "Devolver a circulación" })
+    )
 
     expect(adminApi.reactivarCarro).toHaveBeenCalledWith("c9")
   })
@@ -622,9 +840,7 @@ describe("InventarioAdminPage", () => {
     vi.mocked(adminApi.darDeBajaCarro).mockResolvedValue(undefined)
     renderPagina()
 
-    await user.click(
-      await screen.findByRole("button", { name: "Dar de baja el carro" })
-    )
+    await user.click(await screen.findByRole("button", { name: "Dar de baja el carro" }))
     await user.click(
       await screen.findByRole("button", { name: "Confirmar la baja del carro" })
     )
@@ -637,9 +853,7 @@ describe("InventarioAdminPage", () => {
     const user = userEvent.setup()
     renderPagina()
 
-    await user.click(
-      await screen.findByRole("button", { name: "Dar de baja el carro" })
-    )
+    await user.click(await screen.findByRole("button", { name: "Dar de baja el carro" }))
 
     expect(await screen.findByText(/ningún equipo activo adentro/)).toBeInTheDocument()
     expect(screen.getByText(/nombre queda libre/)).toBeInTheDocument()
@@ -650,13 +864,14 @@ describe("InventarioAdminPage", () => {
   it("muestra el rechazo del servidor si el carro todavía tiene equipos", async () => {
     const user = userEvent.setup()
     vi.mocked(adminApi.darDeBajaCarro).mockRejectedValue(
-      new ApiError(409, "el carro todavía tiene equipos adentro — movelos a otro carro o dalos de baja primero")
+      new ApiError(
+        409,
+        "el carro todavía tiene equipos adentro — movelos a otro carro o dalos de baja primero"
+      )
     )
     renderPagina()
 
-    await user.click(
-      await screen.findByRole("button", { name: "Dar de baja el carro" })
-    )
+    await user.click(await screen.findByRole("button", { name: "Dar de baja el carro" }))
     await user.click(
       await screen.findByRole("button", { name: "Confirmar la baja del carro" })
     )

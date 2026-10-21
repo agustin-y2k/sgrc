@@ -1,11 +1,12 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useNavigate } from "react-router"
+import { Link, useLocation, useNavigate } from "react-router"
 
 import { etiquetaDeMateriaYLugar } from "@/features/academico/types"
 import { SelectorDeHora } from "@/components/SelectorDeHora"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import {
   Card,
   CardContent,
@@ -21,6 +22,15 @@ import { JORNADA_KEY } from "@/features/disponibilidad/api"
 import { dentroDeLaJornada } from "@/features/disponibilidad/types"
 import * as reservasApi from "@/features/reservas/api"
 import { SelectorDeEquipos } from "@/features/reservas/SelectorDeEquipos"
+import { MINIMO_PARA_BUSCAR, sinTildes } from "@/lib/texto"
+import { useAuth } from "@/features/auth/AuthContext"
+import {
+  guardarBorradorReserva,
+  hayDatosDeReserva,
+  leerBorradorReserva,
+} from "@/features/reservas/borrador"
+import { borrarBorradorReserva } from "@/lib/borradores"
+import { calcularRecurrencia, MAX_OCURRENCIAS } from "@/features/reservas/recurrencias"
 import {
   DIAS_SEMANA,
   MAX_HORAS_RESERVA,
@@ -33,6 +43,8 @@ import { getErrorMessage } from "@/lib/api-client"
 import { formatearFechaLargaCapitalizada } from "@/lib/fechas"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { contar, plural } from "@/lib/plural"
+import { useAhora } from "@/lib/useAhora"
+import { intervaloDeReserva } from "@/features/reservas/intervalo"
 
 type Modo = "simple" | "recurrente"
 
@@ -54,39 +66,159 @@ function enumerar(partes: string[]): string {
  */
 function impactoDelRobo(res: {
   reservasCanceladas?: number
+  reservasReubicadas?: number
   docentesAfectados?: number
 }): string {
   const canceladas = res.reservasCanceladas ?? 0
-  if (canceladas === 0) return ""
+  const reubicadas = res.reservasReubicadas ?? 0
+  if (canceladas === 0 && reubicadas === 0) return ""
 
   const avisados = res.docentesAfectados ?? 0
   const aQuienes = avisados > 0 ? ` y se avisó a ${contar(avisados, "docente")}` : ""
-  // El verbo también concuerda: con una sola reserva, "se cancelaron 1
-  // reserva" es lo que sale de componer el plural a medias.
-  const verbo = plural(canceladas, "canceló", "cancelaron")
-  return ` Se ${verbo} ${contar(canceladas, "reserva")}${aQuienes}.`
+  // Los contadores de impacto corresponden a equipos de las reservas, no a
+  // clases completas. Una clase puede conservar los equipos no desplazados.
+  const reposicion =
+    reubicadas > 0
+      ? `Se ${plural(reubicadas, "repuso", "repusieron")} ${contar(reubicadas, "equipo")} en las reservas desplazadas`
+      : ""
+  const faltantes =
+    canceladas > 0
+      ? `${reposicion ? " y " : ""}${contar(canceladas, "equipo")} ${plural(canceladas, "quedó", "quedaron")} sin reemplazo disponible`
+      : ""
+  return ` ${reposicion}${faltantes}${aQuienes}.`
 }
 
 // RF-04.2 (reserva puntual) y RF-04.5 (recurrente).
 export function NuevaReservaPage() {
+  const { user } = useAuth()
+  return <FormularioDeReserva key={user?.id ?? "sin-cuenta"} usuarioId={user?.id} />
+}
+
+function FormularioDeReserva({ usuarioId }: { usuarioId: string | undefined }) {
+  const ahora = useAhora()
+  const [inicial] = useState(() => leerBorradorReserva(usuarioId))
   const navigate = useNavigate()
+  const { state } = useLocation()
+  const destino =
+    state && typeof state === "object" && "volverA" in state
+      ? state.volverA
+      : inicial?.volverA
+  const volverA =
+    typeof destino === "string" && /^\/reservas(?:\?|$)/.test(destino)
+      ? destino
+      : "/reservas"
   const queryClient = useQueryClient()
 
-  const [modo, setModo] = useState<Modo>("simple")
-  const [materiaId, setMateriaId] = useState("")
-  const [fecha, setFecha] = useState("")
-  const [horaInicio, setHoraInicio] = useState("")
-  const [horaFin, setHoraFin] = useState("")
-  const [diaSemana, setDiaSemana] = useState<DiaSemana>("LUNES")
-  const [fechaInicio, setFechaInicio] = useState("")
-  const [fechaFin, setFechaFin] = useState("")
-  const [equipoIds, setPcIds] = useState<string[]>([])
+  const [recuperado, setRecuperado] = useState(!!inicial)
+  const [errorGuardado, setErrorGuardado] = useState(false)
+  const [modo, setModo] = useState<Modo>(inicial?.modo ?? "simple")
+  const [materiaId, setMateriaId] = useState(inicial?.materiaId ?? "")
+  const [busquedaMateria, setBusquedaMateria] = useState(inicial?.busquedaMateria ?? "")
+  const [fecha, setFecha] = useState(inicial?.fecha ?? "")
+  const [horaInicio, setHoraInicio] = useState(inicial?.horaInicio ?? "")
+  const [horaFin, setHoraFin] = useState(inicial?.horaFin ?? "")
+  const [diaSemana, setDiaSemana] = useState<DiaSemana>(inicial?.diaSemana ?? "LUNES")
+  const [fechaInicio, setFechaInicio] = useState(inicial?.fechaInicio ?? "")
+  const [fechaFin, setFechaFin] = useState(inicial?.fechaFin ?? "")
+  const claveDeSeleccion = JSON.stringify([
+    modo,
+    materiaId,
+    fecha,
+    horaInicio,
+    horaFin,
+    diaSemana,
+    fechaInicio,
+    fechaFin,
+  ])
+  const [seleccion, setSeleccion] = useState<{
+    clave: string
+    ids: string[]
+    aTomar: string[]
+  }>(inicial?.seleccion ?? { clave: "", ids: [], aTomar: [] })
+  const borrador = useMemo(
+    () => ({
+      modo,
+      materiaId,
+      busquedaMateria,
+      volverA,
+      fecha,
+      horaInicio,
+      horaFin,
+      diaSemana,
+      fechaInicio,
+      fechaFin,
+      seleccion,
+    }),
+    [
+      modo,
+      materiaId,
+      busquedaMateria,
+      volverA,
+      fecha,
+      horaInicio,
+      horaFin,
+      diaSemana,
+      fechaInicio,
+      fechaFin,
+      seleccion,
+    ]
+  )
+  useEffect(() => {
+    setErrorGuardado(!guardarBorradorReserva(usuarioId, borrador))
+  }, [usuarioId, borrador])
+  const descartar = () => {
+    borrarBorradorReserva()
+    setModo("simple")
+    setMateriaId("")
+    setBusquedaMateria("")
+    setFecha("")
+    setHoraInicio("")
+    setHoraFin("")
+    setDiaSemana("LUNES")
+    setFechaInicio("")
+    setFechaFin("")
+    setSeleccion({ clave: "", ids: [], aTomar: [] })
+    setRecuperado(false)
+  }
+  const equipoIds = seleccion.clave === claveDeSeleccion ? seleccion.ids : []
   // RF-03.21: de los tildados, cuáles estaban ocupados. Es lo único que
   // autoriza a desplazar al que los tenía, y lo decide el selector, que es
   // quien tiene la lista de ocupados.
-  const [equiposATomar, setEquiposATomar] = useState<string[]>([])
+  const equiposATomar = seleccion.clave === claveDeSeleccion ? seleccion.aTomar : []
+  const claveSerie = JSON.stringify([claveDeSeleccion, equipoIds, equiposATomar])
+  const [consentimientoSerie, setConsentimientoSerie] = useState("")
+  const comprobarSerie = useMutation({
+    mutationFn: async () => ({
+      clave: claveSerie,
+      resultado: await reservasApi.previsualizarSerie({
+        materiaId,
+        diaSemana,
+        horaInicio,
+        horaFin,
+        fechaInicio,
+        fechaFin,
+        equipoIds,
+      }),
+    }),
+  })
+  const serieActual =
+    comprobarSerie.data?.clave === claveSerie ? comprobarSerie.data.resultado : undefined
+  const serieAutorizada =
+    !!serieActual?.puedeCrear &&
+    !comprobarSerie.isPending &&
+    !comprobarSerie.error &&
+    (serieActual.equiposATomar.length === 0 || consentimientoSerie === claveSerie)
+  const reiniciarComprobacion = comprobarSerie.reset
+  useEffect(() => {
+    reiniciarComprobacion()
+    setConsentimientoSerie("")
+  }, [claveSerie, reiniciarComprobacion])
 
-  const { data: materias, isLoading: cargandoMaterias } = useQuery({
+  const {
+    data: materias,
+    isLoading: cargandoMaterias,
+    error: errorMaterias,
+  } = useQuery({
     queryKey: ["mis-materias"],
     queryFn: reservasApi.misMaterias,
   })
@@ -123,7 +255,7 @@ export function NuevaReservaPage() {
         fechaInicio,
         fechaFin,
         equipoIds,
-        equiposATomar,
+        equiposATomar: serieActual?.equiposATomar ?? [],
       })
       const dia = DIAS_SEMANA.find((d) => d.valor === diaSemana)?.etiqueta ?? diaSemana
       return (
@@ -131,8 +263,13 @@ export function NuevaReservaPage() {
         impactoDelRobo(res)
       )
     },
+    onError: () => {
+      reiniciarComprobacion()
+      setConsentimientoSerie("")
+    },
     // El listado es la confirmación: la reserva recién creada aparece ahí.
     onSuccess: async (confirmacion) => {
+      borrarBorradorReserva()
       await queryClient.invalidateQueries({ queryKey: ["reservas"] })
       navigate("/reservas", { state: { confirmacion } })
     },
@@ -142,24 +279,96 @@ export function NuevaReservaPage() {
   // usa la primera fecha del rango como muestra, porque el backend valida la
   // disponibilidad de TODAS las ocurrencias al crear (RF-04.5) — acá solo se
   // necesita una lista razonable para tildar.
-  const fechaParaDisponibilidad = modo === "simple" ? fecha : fechaInicio
+  const recurrencia = calcularRecurrencia(fechaInicio, fechaFin, diaSemana)
+  const fechaParaDisponibilidad =
+    modo === "simple" ? fecha : (recurrencia?.primeraFecha ?? "")
+  const errorDeSerie =
+    modo !== "recurrente" || !recurrencia
+      ? null
+      : recurrencia.cantidad === 0
+        ? "El rango no contiene ninguna clase del día elegido."
+        : recurrencia.cantidad > MAX_OCURRENCIAS
+          ? `Una serie admite hasta ${MAX_OCURRENCIAS} clases. El rango elegido contiene ${recurrencia.cantidad}.`
+          : null
 
   const materiasDisponibles = materias?.data ?? []
+  const materiaValida = materiasDisponibles.some((m) => m.materiaId === materiaId)
+  const materiasFiltradas = materiasDisponibles.filter((m) =>
+    sinTildes(`${etiquetaDeMateriaYLugar(m)} ${m.cicloAnio}`).includes(
+      sinTildes(busquedaMateria.trim())
+    )
+  )
+  const elegidaFueraDelFiltro = materiasDisponibles.find(
+    (m) =>
+      m.materiaId === materiaId &&
+      !materiasFiltradas.some((f) => f.materiaId === materiaId)
+  )
   // El `min` de los inputs cubre la fecha; esto cubre el horario, que el
   // navegador no puede limitar solo.
   const duracionExcesiva = excedeDuracionMaxima(horaInicio, horaFin)
 
   // La jornada declarada por la institución.
-  const { data: jornada } = useQuery({
+  const consultaJornada = useQuery({
     queryKey: JORNADA_KEY,
     queryFn: disponibilidadApi.jornadaDeLaInstitucion,
   })
-  const bloquesDeJornada = jornada?.data ?? []
+  const jornadaLista =
+    consultaJornada.isSuccess && !consultaJornada.isFetching && !consultaJornada.error
+  const bloquesDeJornada = consultaJornada.data?.data ?? []
   const fueraDeLaJornada =
+    jornadaLista &&
     fechaParaDisponibilidad !== "" &&
     horaInicio !== "" &&
+    horaFin !== "" &&
     horaFin !== horaInicio &&
     !dentroDeLaJornada(bloquesDeJornada, fechaParaDisponibilidad, horaInicio, horaFin)
+  const fechaPasada = !!fechaParaDisponibilidad && fechaParaDisponibilidad < hoyISO()
+  const horarioTerminado =
+    !!fechaParaDisponibilidad &&
+    !!horaInicio &&
+    !!horaFin &&
+    horaInicio !== horaFin &&
+    intervaloDeReserva({ fecha: fechaParaDisponibilidad, horaInicio, horaFin }).fin <=
+      ahora.getTime()
+  const franjaConsultable =
+    jornadaLista &&
+    materiaValida &&
+    !fechaPasada &&
+    !horarioTerminado &&
+    !!fechaParaDisponibilidad &&
+    !!horaInicio &&
+    !!horaFin &&
+    horaInicio !== horaFin
+  const disponibilidad = useQuery({
+    queryKey: [
+      "equipos-disponibles",
+      fechaParaDisponibilidad,
+      horaInicio,
+      horaFin,
+      materiaId ?? "",
+    ],
+    queryFn: () =>
+      reservasApi.equiposDisponibles({
+        fecha: fechaParaDisponibilidad,
+        horaInicio,
+        horaFin,
+        materiaId,
+      }),
+    enabled: franjaConsultable,
+  })
+  const libresActuales = new Set(disponibilidad.data?.data.map((e) => e.equipoId) ?? [])
+  const tomablesActuales = new Set(
+    disponibilidad.data?.ocupados?.filter((e) => e.puedeTomarse).map((e) => e.equipoId) ??
+      []
+  )
+  const seleccionValida =
+    disponibilidad.isSuccess &&
+    !disponibilidad.isFetching &&
+    !disponibilidad.error &&
+    equipoIds.every(
+      (id) =>
+        libresActuales.has(id) || (tomablesActuales.has(id) && equiposATomar.includes(id))
+    )
 
   /** Lo que todavía falta para poder confirmar, dicho en palabras. */
   const faltantes: string[] = []
@@ -174,11 +383,20 @@ export function NuevaReservaPage() {
   if (horaFin === "") faltantes.push("elegir la hora de fin")
   if (equipoIds.length === 0) faltantes.push("tildar al menos una computadora")
 
-  const listoParaEnviar =
+  const listoParaComprobar =
     faltantes.length === 0 &&
+    materiaValida &&
+    seleccionValida &&
+    jornadaLista &&
+    !horarioTerminado &&
+    !fechaPasada &&
+    (modo === "simple" || !!recurrencia) &&
     horaFin !== horaInicio &&
     !duracionExcesiva &&
-    !fueraDeLaJornada
+    !fueraDeLaJornada &&
+    !errorDeSerie &&
+    !errorMaterias
+  const listoParaEnviar = listoParaComprobar && (modo === "simple" || serieAutorizada)
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -186,22 +404,86 @@ export function NuevaReservaPage() {
         titulo="Nueva reserva"
         descripcion="Elegí el día, desde qué hora hasta qué hora, y qué computadoras necesitás. Los horarios van en formato de 24 horas."
       />
+      {recuperado && (
+        <Alert className="mb-4">
+          <AlertDescription>
+            Borrador recuperado. Revisá la disponibilidad y los datos antes de confirmar.
+          </AlertDescription>
+        </Alert>
+      )}
+      {errorGuardado && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            No pudimos guardar el borrador en este navegador. Mantené el formulario
+            abierto hasta terminar la reserva.
+          </AlertDescription>
+        </Alert>
+      )}
+      {fechaPasada && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            La fecha del borrador ya pasó. Elegí una nueva fecha para consultar
+            disponibilidad.
+          </AlertDescription>
+        </Alert>
+      )}
+      {!fechaPasada && horarioTerminado && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            El horario elegido ya terminó. Elegí una franja vigente para reservar.
+          </AlertDescription>
+        </Alert>
+      )}
+      {consultaJornada.error && (
+        <div className="mb-4">
+          <ErrorDeConsulta
+            mensaje="No pudimos consultar la jornada de la escuela. La reserva se habilitará cuando podamos verificar el horario."
+            reintentando={consultaJornada.isFetching}
+            onReintentar={() => void consultaJornada.refetch()}
+          />
+        </div>
+      )}
+      {materiaId && materias && !errorMaterias && !materiaValida && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            La materia elegida ya no está disponible para tu cuenta. Elegí otra o consultá
+            con administración.
+          </AlertDescription>
+        </Alert>
+      )}
+      {disponibilidad.isSuccess &&
+        equipoIds.length > 0 &&
+        !seleccionValida &&
+        !disponibilidad.isFetching && (
+          <Alert className="mb-4">
+            <AlertDescription>
+              Cambió la disponibilidad de los equipos elegidos. Limpiá la selección y
+              volvé a elegir, revisando cuáles requieren prioridad.
+            </AlertDescription>
+          </Alert>
+        )}
 
-      {!cargandoMaterias && materiasDisponibles.length === 0 && (
+      {!cargandoMaterias && !errorMaterias && materiasDisponibles.length === 0 && (
         <Alert className="mb-4">
           <AlertDescription>
             No estás asignado a ninguna materia de un ciclo activo, así que todavía no
-            podés reservar. Pedile a un Admin que te asigne.
+            podés reservar.{" "}
+            <Link to="/perfil" className="font-medium underline">
+              Solicitá una materia desde Mi perfil
+            </Link>{" "}
+            y volvé cuando administración la asigne.
           </AlertDescription>
         </Alert>
       )}
 
-      {crear.error && (
+      {(crear.error || errorMaterias) && (
         <Alert variant="destructive" className="mb-4">
           {/* RF-04.3: el mensaje del backend nombra qué equipo choca, en qué
               fecha y con quién. Se muestra tal cual: uno genérico obligaría a
               destildar de a uno para encontrar el ocupado. */}
-          <AlertDescription>{getErrorMessage(crear.error)}</AlertDescription>
+          <AlertDescription>
+            {getErrorMessage(crear.error ?? errorMaterias)}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -212,18 +494,19 @@ export function NuevaReservaPage() {
             Podés combinar computadoras de distintos carros en la misma reserva.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0">
           <form
-            className="grid gap-5"
+            className="grid min-w-0 gap-5"
             onSubmit={(e) => {
               e.preventDefault()
-              crear.mutate()
+              if (listoParaEnviar && !crear.isPending) crear.mutate()
             }}
           >
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant={modo === "simple" ? "default" : "outline"}
+                aria-pressed={modo === "simple"}
                 size="sm"
                 onClick={() => setModo("simple")}
               >
@@ -232,6 +515,7 @@ export function NuevaReservaPage() {
               <Button
                 type="button"
                 variant={modo === "recurrente" ? "default" : "outline"}
+                aria-pressed={modo === "recurrente"}
                 size="sm"
                 onClick={() => setModo("recurrente")}
               >
@@ -240,6 +524,24 @@ export function NuevaReservaPage() {
             </div>
 
             <div className="grid gap-2">
+              {materiasDisponibles.length >= MINIMO_PARA_BUSCAR && (
+                <>
+                  <Label htmlFor="buscar-materia-reserva">Buscar materia o curso</Label>
+                  <Input
+                    id="buscar-materia-reserva"
+                    value={busquedaMateria}
+                    maxLength={200}
+                    onChange={(e) => setBusquedaMateria(e.target.value)}
+                    placeholder="Nombre de materia, curso o modalidad"
+                  />
+                  {materiasFiltradas.length === 0 && (
+                    <p className="text-muted-foreground text-sm">
+                      Ninguna materia coincide con la búsqueda. La materia ya elegida se
+                      conserva hasta que selecciones otra.
+                    </p>
+                  )}
+                </>
+              )}
               <Label htmlFor="materia">Materia</Label>
               <Select
                 id="materia"
@@ -247,7 +549,14 @@ export function NuevaReservaPage() {
                 onChange={(e) => setMateriaId(e.target.value)}
               >
                 <option value="">Elegí una materia…</option>
-                {materiasDisponibles.map((m) => (
+                {elegidaFueraDelFiltro && (
+                  <optgroup label="Materia ya elegida">
+                    <option value={elegidaFueraDelFiltro.materiaId}>
+                      {etiquetaDeMateriaYLugar(elegidaFueraDelFiltro)}
+                    </option>
+                  </optgroup>
+                )}
+                {materiasFiltradas.map((m) => (
                   <option key={m.materiaId} value={m.materiaId}>
                     {etiquetaDeMateriaYLugar(m)} ({m.cicloAnio})
                   </option>
@@ -304,6 +613,11 @@ export function NuevaReservaPage() {
                 </div>
               </div>
             )}
+            {errorDeSerie && (
+              <Alert variant="destructive">
+                <AlertDescription>{errorDeSerie}</AlertDescription>
+              </Alert>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <SelectorDeHora
@@ -353,23 +667,152 @@ export function NuevaReservaPage() {
               <Label>Qué computadoras necesitás</Label>
               {modo === "recurrente" && (
                 <p className="text-muted-foreground text-xs">
-                  Se muestran las libres en la fecha de inicio. Al confirmar, el sistema
-                  valida todas las fechas de la serie y no crea ninguna si alguna está
-                  ocupada.
+                  Se muestra la disponibilidad de la primera clase. Al confirmar se
+                  validan todas las fechas solicitadas: los desplazamientos y la
+                  reposición se resuelven para las reservas que se solapan con esas fechas
+                  y horarios. Las demás fechas de las series ajenas se conservan. Si algún
+                  conflicto no se puede resolver, no se crea ninguna clase.
                 </p>
               )}
-              <SelectorDeEquipos
-                fecha={fechaParaDisponibilidad}
-                horaInicio={horaInicio}
-                horaFin={horaFin}
-                seleccionadas={equipoIds}
-                onCambio={(ids, aTomar) => {
-                  setPcIds(ids)
-                  setEquiposATomar(aTomar)
-                }}
-                materiaId={materiaId}
-              />
+              {jornadaLista ? (
+                <SelectorDeEquipos
+                  fecha={franjaConsultable ? fechaParaDisponibilidad : ""}
+                  horaInicio={horaInicio}
+                  horaFin={horaFin}
+                  seleccionadas={equipoIds}
+                  onCambio={(ids, aTomar) => {
+                    setSeleccion({ clave: claveDeSeleccion, ids, aTomar })
+                  }}
+                  materiaId={materiaId}
+                />
+              ) : (
+                !consultaJornada.error && (
+                  <p className="text-muted-foreground text-sm" role="status">
+                    Consultando la jornada de la escuela…
+                  </p>
+                )
+              )}
             </div>
+
+            {modo === "recurrente" && (
+              <section
+                aria-label="Comprobación de la serie"
+                className="space-y-3 rounded-md border p-3"
+              >
+                <p className="text-sm">
+                  Comprobá todas las fechas antes de confirmar. La disponibilidad puede
+                  cambiar y se validará de nuevo al reservar.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    !listoParaComprobar || comprobarSerie.isPending || crear.isPending
+                  }
+                  onClick={() => {
+                    setConsentimientoSerie("")
+                    comprobarSerie.mutate()
+                  }}
+                >
+                  {comprobarSerie.isPending ? "Comprobando fechas…" : "Comprobar serie"}
+                </Button>
+                {comprobarSerie.error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      {getErrorMessage(comprobarSerie.error)}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {comprobarSerie.data && !serieActual && (
+                  <p className="text-sm" role="status">
+                    Los datos cambiaron. Volvé a comprobar la serie.
+                  </p>
+                )}
+                {serieActual && (
+                  <div className="space-y-3" aria-live="polite">
+                    <p className="font-medium">
+                      {contar(serieActual.cantidadClases, "clase")} comprobadas.{" "}
+                      {serieActual.puedeCrear
+                        ? "Todos los equipos pueden reservarse."
+                        : "Hay equipos no disponibles. Cambiá las fechas o la selección y comprobá de nuevo."}
+                    </p>
+                    <ul className="space-y-2">
+                      {serieActual.fechas.map((f) => (
+                        <li key={f.fecha} className="rounded border p-2 text-sm">
+                          <details
+                            open={f.equipos.some((e) => e.estado === "NO_DISPONIBLE")}
+                          >
+                            <summary className="min-h-11 cursor-pointer">
+                              <span className="font-medium">
+                                {formatearFechaLargaCapitalizada(f.fecha)}
+                              </span>
+                              <span className="mt-1 block">
+                                Libres:{" "}
+                                {f.equipos.filter((e) => e.estado === "LIBRE").length} ·
+                                Por prioridad:{" "}
+                                {
+                                  f.equipos.filter((e) => e.estado === "POR_PRIORIDAD")
+                                    .length
+                                }{" "}
+                                · No disponibles:{" "}
+                                {
+                                  f.equipos.filter((e) => e.estado === "NO_DISPONIBLE")
+                                    .length
+                                }
+                              </span>
+                            </summary>
+                            <ul>
+                              {f.equipos.map((e) => (
+                                <li key={e.equipoId}>
+                                  {e.etiqueta}:{" "}
+                                  {e.estado === "LIBRE"
+                                    ? "libre"
+                                    : e.estado === "POR_PRIORIDAD"
+                                      ? "por prioridad"
+                                      : "no disponible"}
+                                  {e.motivo ? `. ${e.motivo}` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        </li>
+                      ))}
+                    </ul>
+                    {serieActual.equiposATomar.length > 0 && (
+                      <label className="flex min-h-11 items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="mt-1 size-4 shrink-0"
+                          checked={consentimientoSerie === claveSerie}
+                          onChange={(e) =>
+                            setConsentimientoSerie(e.target.checked ? claveSerie : "")
+                          }
+                        />
+                        Autorizo tomar los equipos por prioridad en las fechas indicadas.
+                        Se intentará reponer las reservas desplazadas en cascada; pueden
+                        quedar faltantes.
+                      </label>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {equiposATomar.length > 0 && (
+              <Alert>
+                <AlertDescription>
+                  Vas a reservar {contar(equipoIds.length, "equipo")}:{" "}
+                  {equipoIds.length - equiposATomar.length} libres y{" "}
+                  {equiposATomar.length} por prioridad. Se intentará reponer las reservas
+                  desplazadas en cascada; si no hay reemplazos, pueden quedar faltantes.
+                  {modo === "recurrente" &&
+                    " Estos conteos corresponden a la primera fecha; revisá las demás en la comprobación de la serie."}
+                  {modo === "simple"
+                    ? " El alcance es esta fecha y este horario."
+                    : " El alcance son las fechas y horarios solicitados de esta serie; el impacto puede variar en cada clase."}
+                </AlertDescription>
+              </Alert>
+            )}
 
             {/* `aria-live`: la lista cambia sola a medida que se completa el
                 formulario, sin que nada reciba el foco. Sin esto, alguien
@@ -383,17 +826,30 @@ export function NuevaReservaPage() {
               </p>
             )}
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button type="submit" disabled={!listoParaEnviar || crear.isPending}>
                 {crear.isPending ? "Reservando…" : "Confirmar reserva"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate("/reservas")}
+                onClick={() => {
+                  borrarBorradorReserva()
+                  navigate(volverA)
+                }}
               >
                 Cancelar
               </Button>
+              {hayDatosDeReserva(borrador) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11"
+                  onClick={descartar}
+                >
+                  Descartar borrador
+                </Button>
+              )}
             </div>
           </form>
         </CardContent>

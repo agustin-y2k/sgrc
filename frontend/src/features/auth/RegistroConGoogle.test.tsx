@@ -20,7 +20,7 @@ function credencialCon(payload: Record<string, unknown>): string {
 }
 
 const credencialDeAda = credencialCon({
-  email: "ada@escuela.edu.ar",
+  email: "ada@escuela.test",
   given_name: "Ada",
   family_name: "Lovelace",
 })
@@ -76,7 +76,7 @@ describe("RegistroConGoogle", () => {
 
     expect(screen.getByLabelText("Nombre")).toHaveValue("Ada")
     expect(screen.getByLabelText("Apellido")).toHaveValue("Lovelace")
-    expect(screen.getByText("ada@escuela.edu.ar")).toBeInTheDocument()
+    expect(screen.getByText("ada@escuela.test")).toBeInTheDocument()
   })
 
   // El email viene firmado dentro del token: es lo único que el backend va
@@ -161,7 +161,7 @@ describe("RegistroConGoogle", () => {
 
   // given_name y family_name no son obligatorios en un ID token.
   it("exige nombre y apellido si el token no los trajo", async () => {
-    const sinNombre = credencialCon({ email: "ada@escuela.edu.ar" })
+    const sinNombre = credencialCon({ email: "ada@escuela.test" })
     renderRegistro(sinNombre)
     const user = userEvent.setup()
 

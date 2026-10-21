@@ -6,12 +6,21 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import * as academicoApi from "@/features/academico/api"
 import * as perfilApi from "@/features/perfil/api"
 import { getErrorMessage } from "@/lib/api-client"
+import { etiquetaDeCurso } from "@/features/academico/types"
+import { sinTildes } from "@/lib/texto"
 
 /** Pedir dictar una materia más. */
-export function PedirMateria({ onListo }: { onListo?: () => void }) {
+export function PedirMateria({
+  onListo,
+  activo = true,
+}: {
+  onListo?: () => void
+  activo?: boolean
+}) {
   const qc = useQueryClient()
   const [modo, setModo] = useState<"lista" | "nueva">("lista")
   const [materiaId, setMateriaId] = useState("")
@@ -20,19 +29,80 @@ export function PedirMateria({ onListo }: { onListo?: () => void }) {
   const [motivo, setMotivo] = useState("")
   const [error, setError] = useState("")
   const [listo, setListo] = useState(false)
+  const [cursoFiltro, setCursoFiltro] = useState("")
+  const [busqueda, setBusqueda] = useState("")
 
   // Las materias de todo el ciclo activo, no solo las propias: justamente se
   // está pidiendo una que no se dicta.
-  const { data: ciclos } = useQuery({
+  const ciclos = useQuery({
     queryKey: ["ciclos"],
     queryFn: academicoApi.listarCiclos,
+    enabled: activo && modo === "lista",
   })
-  const cicloActivo = ciclos?.data.find((c) => c.activo)
-  const { data: cursos } = useQuery({
+  const ciclosListos = ciclos.isSuccess && !ciclos.isFetching && !ciclos.error
+  const cicloActivo = ciclos.data?.data.find((c) => c.activo)
+  const cursos = useQuery({
     queryKey: ["cursos", cicloActivo?.id],
     queryFn: () => academicoApi.listarCursos(cicloActivo!.id),
-    enabled: !!cicloActivo,
+    enabled: activo && modo === "lista" && ciclosListos && !!cicloActivo,
   })
+  const cursosListos =
+    ciclosListos &&
+    !!cicloActivo &&
+    cursos.isSuccess &&
+    !cursos.isFetching &&
+    !cursos.error
+  const listaCursos = cursos.data?.data ?? []
+  const materias = useQuery({
+    queryKey: ["materias-de-todos-los-cursos", listaCursos.map((c) => c.id)],
+    queryFn: () =>
+      Promise.all(
+        listaCursos.map(async (c) => ({
+          curso: c,
+          materias: (await academicoApi.listarMaterias(c.id)).data,
+        }))
+      ),
+    enabled: activo && modo === "lista" && cursosListos && listaCursos.length > 0,
+  })
+  const catalogoListo =
+    cursosListos &&
+    listaCursos.length > 0 &&
+    materias.isSuccess &&
+    !materias.isFetching &&
+    !materias.error
+  const materiaValida =
+    catalogoListo &&
+    materias.data?.some(({ materias }) =>
+      materias.some((m) => m.id === materiaId && !m.archivado)
+    )
+  const consultaFallida = ciclos.error
+    ? ciclos
+    : ciclosListos && cicloActivo && cursos.error
+      ? cursos
+      : cursosListos && listaCursos.length > 0 && materias.error
+        ? materias
+        : null
+  const mensajeError = ciclos.error
+    ? "No pudimos consultar el ciclo lectivo."
+    : cursos.error
+      ? "No pudimos consultar los cursos."
+      : "No pudimos consultar las materias."
+  const sinMaterias =
+    catalogoListo &&
+    !materias.data?.some(({ materias }) => materias.some((m) => !m.archivado))
+  const filtro = sinTildes(busqueda.trim())
+  const cursoAplicado = listaCursos.some((c) => c.id === cursoFiltro) ? cursoFiltro : ""
+  const porCursoFiltradas = (catalogoListo ? (materias.data ?? []) : [])
+    .filter(({ curso }) => !cursoAplicado || curso.id === cursoAplicado)
+    .map(({ curso, materias }) => ({
+      curso,
+      materias: materias.filter(
+        (m) =>
+          !m.archivado &&
+          sinTildes(`${m.nombre} ${etiquetaDeCurso(curso)}`).includes(filtro)
+      ),
+    }))
+    .filter(({ materias }) => materias.length > 0)
 
   const pedir = useMutation({
     mutationFn: () =>
@@ -54,7 +124,7 @@ export function PedirMateria({ onListo }: { onListo?: () => void }) {
 
   const faltante =
     modo === "lista"
-      ? materiaId === ""
+      ? !materiaValida
         ? "elegir la materia"
         : ""
       : materia.trim() === ""
@@ -62,6 +132,7 @@ export function PedirMateria({ onListo }: { onListo?: () => void }) {
         : ""
   const faltaMotivo = motivo.trim() === "" ? "explicar por qué la pedís" : ""
   const pendientes = [faltante, faltaMotivo].filter(Boolean)
+  const puedePedir = pendientes.length === 0 && !pedir.isPending
 
   return (
     <div className="bg-superficie grid gap-3 rounded-xl border p-4">
@@ -76,8 +147,8 @@ export function PedirMateria({ onListo }: { onListo?: () => void }) {
       {listo && (
         <Alert>
           <AlertDescription>
-            Listo, tu pedido quedó registrado. Te vamos a avisar acá y por correo cuando
-            lo resuelvan.
+            Listo, tu pedido quedó registrado. Revisá la resolución en Avisos y tus
+            materias en Mi cuenta.
           </AlertDescription>
         </Alert>
       )}
@@ -104,11 +175,90 @@ export function PedirMateria({ onListo }: { onListo?: () => void }) {
       </div>
 
       {modo === "lista" ? (
-        <MateriasDelCiclo
-          cursos={cursos?.data ?? []}
-          valor={materiaId}
-          alElegir={setMateriaId}
-        />
+        <div className="grid gap-2">
+          {consultaFallida ? (
+            <ErrorDeConsulta
+              mensaje={mensajeError}
+              reintentando={consultaFallida.isFetching}
+              onReintentar={() => {
+                void consultaFallida.refetch()
+              }}
+            />
+          ) : !ciclosListos ||
+            (cicloActivo && !cursosListos) ||
+            (cursosListos && listaCursos.length > 0 && !catalogoListo) ? (
+            <p role="status" className="text-muted-foreground text-sm">
+              Cargando materias…
+            </p>
+          ) : !cicloActivo ? (
+            <p className="text-muted-foreground text-sm">
+              No hay un ciclo lectivo activo. Consultá con administración.
+            </p>
+          ) : listaCursos.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              El ciclo activo todavía no tiene cursos cargados.
+            </p>
+          ) : sinMaterias ? (
+            <p className="text-muted-foreground text-sm">
+              Todavía no hay materias cargadas en los cursos del ciclo activo.
+            </p>
+          ) : null}
+          <div className="grid gap-1.5">
+            <Label htmlFor="curso-pedido-materia">Filtrar por curso</Label>
+            <Select
+              id="curso-pedido-materia"
+              value={cursoAplicado}
+              disabled={!catalogoListo}
+              onChange={(e) => {
+                setCursoFiltro(e.target.value)
+                setMateriaId("")
+              }}
+            >
+              <option value="">Todos los cursos</option>
+              {listaCursos.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {etiquetaDeCurso(c)}
+                </option>
+              ))}
+            </Select>
+            <Label htmlFor="buscar-materia-pedido">Buscar materia</Label>
+            <Input
+              id="buscar-materia-pedido"
+              value={busqueda}
+              disabled={!catalogoListo}
+              onChange={(e) => {
+                setBusqueda(e.target.value)
+                setMateriaId("")
+              }}
+              placeholder="Nombre de materia, curso o modalidad"
+            />
+            {catalogoListo && !sinMaterias && porCursoFiltradas.length === 0 && (
+              <p className="text-muted-foreground text-sm">
+                Ninguna materia coincide con los filtros. Cambiá el curso o la búsqueda.
+              </p>
+            )}
+            <Label htmlFor="materia-existente">¿Cuál materia?</Label>
+            <Select
+              id="materia-existente"
+              value={materiaValida ? materiaId : ""}
+              disabled={!catalogoListo || sinMaterias}
+              onChange={(e) => setMateriaId(e.target.value)}
+            >
+              <option value="">Elegí una materia…</option>
+              {porCursoFiltradas.map(({ curso, materias }) => (
+                <optgroup key={curso.id} label={etiquetaDeCurso(curso)}>
+                  {materias
+                    .filter((m) => !m.archivado)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nombre}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </Select>
+          </div>
+        </div>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="grid gap-1.5">
@@ -162,59 +312,14 @@ export function PedirMateria({ onListo }: { onListo?: () => void }) {
           type="button"
           size="sm"
           className="h-11 px-4 sm:h-9"
-          disabled={pendientes.length > 0 || pedir.isPending}
-          onClick={() => pedir.mutate()}
+          disabled={!puedePedir}
+          onClick={() => {
+            if (puedePedir) pedir.mutate()
+          }}
         >
           {pedir.isPending ? "Mandando…" : "Mandar el pedido"}
         </Button>
       </div>
-    </div>
-  )
-}
-
-/** El selector de materia, agrupado por curso. */
-function MateriasDelCiclo({
-  cursos,
-  valor,
-  alElegir,
-}: {
-  cursos: { id: string; nombre: string }[]
-  valor: string
-  alElegir: (id: string) => void
-}) {
-  const consultas = useQuery({
-    queryKey: ["materias-de-todos-los-cursos", cursos.map((c) => c.id)],
-    queryFn: async () => {
-      const porCurso = await Promise.all(
-        cursos.map(async (c) => ({
-          curso: c,
-          materias: (await academicoApi.listarMaterias(c.id)).data,
-        }))
-      )
-      return porCurso
-    },
-    enabled: cursos.length > 0,
-  })
-
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor="materia-existente">¿Cuál materia?</Label>
-      <Select
-        id="materia-existente"
-        value={valor}
-        onChange={(e) => alElegir(e.target.value)}
-      >
-        <option value="">Elegí una materia…</option>
-        {(consultas.data ?? []).map(({ curso, materias }) => (
-          <optgroup key={curso.id} label={curso.nombre}>
-            {materias.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.nombre}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </Select>
     </div>
   )
 }

@@ -5,6 +5,8 @@ export type PedidoDeMateria = {
   id: string
   usuarioId: string
   materiaId?: string
+  /** Materia creada al aprobar; conserva los textos de la solicitud original. */
+  materiaCreadaId?: string
   cursoSolicitado?: string
   materiaSolicitada?: string
   /**
@@ -19,7 +21,7 @@ export type PedidoDeMateria = {
    * pidió sobra, y el pedido guarda un UUID que no le dice nada a nadie.
    */
   docenteNombre?: string
-  /** La materia no existe todavía: al aprobar hay que elegir en qué curso crearla. */
+  /** Se pidió una materia nueva: si está pendiente, al aprobar se elige el curso. */
   esMateriaNueva: boolean
   motivo: string
   estado: EstadoPedido

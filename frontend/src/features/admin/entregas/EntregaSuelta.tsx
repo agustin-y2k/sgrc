@@ -24,14 +24,13 @@ import {
   LUGARES_DE_LA_ESCUELA,
   PRESTAMOS_KEY,
 } from "@/features/admin/entregas/compartido"
-import {
-  SelectorDeEquipos,
-  type EquipoParaEntregar,
-} from "@/features/admin/entregas/SelectorDeEquipos"
-import * as inventoryApi from "@/features/inventory/api"
+import { SelectorDeEquipos } from "@/features/admin/entregas/SelectorDeEquipos"
 import * as reservasApi from "@/features/reservas/api"
 import { getErrorMessage } from "@/lib/api-client"
+import { todasLasPaginas } from "@/lib/todas-las-paginas"
 import { contar } from "@/lib/plural"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
+import { useEquiposParaEntregar } from "./useEquiposParaEntregar"
 import { sinTildes } from "@/lib/texto"
 
 /**
@@ -52,6 +51,7 @@ export function EntregaSuelta({
   onCerrar: (resumen?: string) => void
 }) {
   const queryClient = useQueryClient()
+  const [aviso, setAviso] = useState<string | null>(null)
   const [nombre, setNombre] = useState("")
   const [destino, setDestino] = useState("")
   // Si el Admin ya escribió algo en el destino. Mientras no lo haya tocado, el
@@ -75,7 +75,14 @@ export function EntregaSuelta({
   // una entrega sería darle una existencia que no tiene.
   const { data: usuarios } = useQuery({
     queryKey: ["usuarios", "aprobados"],
-    queryFn: () => adminApi.listarUsuarios({ estado: "APROBADA", pageSize: 200 }),
+    queryFn: () =>
+      todasLasPaginas((pagina) =>
+        adminApi.listarUsuarios({
+          estado: "APROBADA",
+          pageSize: 200,
+          ...(pagina > 1 ? { page: pagina } : {}),
+        })
+      ),
   })
 
   const personas = useMemo(
@@ -129,41 +136,16 @@ export function EntregaSuelta({
 
   const destinoSugerido = !destinoTocado && destino !== "" && destino === unicoCurso
 
-  const { data: carros } = useQuery({
-    queryKey: ["carros"],
-    queryFn: inventoryApi.listarCarros,
-  })
-
-  // Todo el inventario en UNA consulta: el endpoint sin filtro ya devuelve
-  // los de carro y los sueltos juntos, así que no hace falta pedir carro por
-  // carro y unir las respuestas.
-  const { data: todos } = useQuery({
-    queryKey: ["equipos"],
-    queryFn: () => inventoryApi.listarEquipos(),
-  })
-
-  const nombreDeCarro = useMemo(
-    () => new Map((carros?.data ?? []).map((c) => [c.id, c.nombre])),
-    [carros]
-  )
-
-  // Se ofrece lo que está en el inventario, en condiciones de prestarse y no
-  // está ya afuera. Un equipo en mantenimiento o fuera de servicio está acá y
-  // no se le da a nadie (RF-08.17): para sacarlo del laboratorio está la
-  // salida a reparación, que es otra pantalla a propósito.
-  const equipos: EquipoParaEntregar[] = useMemo(
-    () =>
-      (todos?.data ?? [])
-        .filter(
-          (eq) => !eq.dadoDeBaja && eq.estado === "DISPONIBLE" && !yaAfuera.has(eq.id)
-        )
-        .map((eq) => ({
-          id: eq.id,
-          etiqueta: eq.etiqueta,
-          donde: eq.carroId ? (nombreDeCarro.get(eq.carroId) ?? "") : eq.tipo,
-        })),
-    [todos, nombreDeCarro, yaAfuera]
-  )
+  const consulta = useEquiposParaEntregar(yaAfuera)
+  const equipos = consulta.equipos
+  const seleccionValida =
+    seleccionadas.size > 0 &&
+    [...seleccionadas].every((id) => equipos.some((e) => e.id === id))
+  const listo =
+    consulta.listo &&
+    seleccionValida &&
+    !!nombre.trim() &&
+    (!devolucion || Number.isFinite(Date.parse(devolucion)))
 
   // Qué se está por entregar, escrito con los nombres que se leen en la
   // etiqueta de la máquina: la grilla puede quedar desplazada y la selección
@@ -205,7 +187,8 @@ export function EntregaSuelta({
       // dejarlo abierto obliga a apretar «Cerrar» con alguien esperando
       // enfrente. El resumen sube a la página, arriba de la lista de lo que
       // está afuera, donde las máquinas que acaban de salir ya figuran.
-      onCerrar(partes.join(" "))
+      if (respuesta.entregadas.length > 0) onCerrar(partes.join(" "))
+      else setAviso(partes.join(" "))
     },
   })
 
@@ -224,7 +207,7 @@ export function EntregaSuelta({
           className="grid gap-6"
           onSubmit={(e) => {
             e.preventDefault()
-            entregar.mutate()
+            if (listo && !entregar.isPending) entregar.mutate()
           }}
         >
           {/* Los datos de la persona a la izquierda y los equipos a la
@@ -333,13 +316,25 @@ export function EntregaSuelta({
               </div>
             </div>
 
-            <SelectorDeEquipos
-              titulo="¿Qué equipos?"
-              equipos={equipos}
-              seleccionados={seleccionadas}
-              onSeleccionar={setSeleccionadas}
-              vacio="No hay equipos disponibles para entregar. Los que están en mantenimiento o fuera de servicio no se prestan, y los que ya salieron figuran en «Afuera del laboratorio»."
-            />
+            {consulta.listo ? (
+              <SelectorDeEquipos
+                titulo="¿Qué equipos?"
+                equipos={equipos}
+                seleccionados={seleccionadas}
+                onSeleccionar={setSeleccionadas}
+                vacio="No hay equipos disponibles para entregar. Los que están en mantenimiento o fuera de servicio no se prestan, y los que ya salieron figuran en «Afuera del laboratorio»."
+              />
+            ) : consulta.error ? (
+              <ErrorDeConsulta
+                mensaje="No pudimos verificar qué equipos se pueden entregar."
+                reintentando={consulta.reintentando}
+                onReintentar={consulta.reintentar}
+              />
+            ) : (
+              <p role="status" className="text-muted-foreground text-sm">
+                Consultando equipos y entregas abiertas…
+              </p>
+            )}
           </div>
 
           {entregar.error && (
@@ -348,12 +343,22 @@ export function EntregaSuelta({
             </Alert>
           )}
 
+          {aviso && (
+            <Alert>
+              <AlertDescription>{aviso}</AlertDescription>
+            </Alert>
+          )}
+          {consulta.listo && seleccionadas.size > 0 && !seleccionValida && (
+            <Alert>
+              <AlertDescription>
+                Cambió la disponibilidad de los equipos elegidos. Limpiá la selección y
+                revisá cuáles siguen disponibles.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-4">
-            <Button
-              type="submit"
-              size="lg"
-              disabled={entregar.isPending || seleccionadas.size === 0}
-            >
+            <Button type="submit" size="lg" disabled={entregar.isPending || !listo}>
               {seleccionadas.size === 0
                 ? "Entregar"
                 : `Entregar ${contar(seleccionadas.size, "equipo")}`}

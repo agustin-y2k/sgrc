@@ -1,3 +1,4 @@
+import { invalidarInventario } from "./invalidarInventario"
 import { useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
@@ -154,7 +155,7 @@ export function AltaDeEquipo({ carroId }: { carroId: string }) {
       }),
     onSuccess: async () => {
       setCampos(VACIO)
-      await queryClient.invalidateQueries({ queryKey: ["equipos", carroId] })
+      await invalidarInventario(queryClient)
     },
   })
 
@@ -274,10 +275,7 @@ export function EdicionDeEquipo({
     onSuccess: async () => {
       // Se invalidan los dos carros: si el equipo se movió, desaparece de uno y
       // aparece en el otro.
-      await queryClient.invalidateQueries({ queryKey: ["equipos", equipo.carroId] })
-      if (carroDestino !== equipo.carroId) {
-        await queryClient.invalidateQueries({ queryKey: ["equipos", carroDestino] })
-      }
+      await invalidarInventario(queryClient)
       onListo()
     },
   })

@@ -54,6 +54,8 @@ export default defineConfig({
     // despliega. Vite (:5173) sirve para desarrollar, pero no usa el
     // nginx.conf ni el build de producción.
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8081",
+    locale: "es-AR",
+    timezoneId: "America/Argentina/Buenos_Aires",
     trace: "on-first-retry",
   },
   projects: [

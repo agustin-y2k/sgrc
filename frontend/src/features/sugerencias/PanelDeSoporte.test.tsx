@@ -8,6 +8,7 @@ import type { Usuario } from "@/features/auth/types"
 import { PanelDeSoporte } from "@/features/sugerencias/PanelDeSoporte"
 import * as sugerenciasApi from "@/features/sugerencias/api"
 import type { Sugerencia } from "@/features/sugerencias/types"
+import { ApiError } from "@/lib/api-client"
 
 vi.mock("@/features/sugerencias/api")
 vi.mock("@/features/auth/AuthContext")
@@ -17,7 +18,7 @@ function usuario(rol: Usuario["rol"]): Usuario {
     id: rol === "ADMIN" ? "admin1" : "docente1",
     nombre: "Ada",
     apellido: "Lovelace",
-    email: "ada@escuela.edu.ar",
+    email: "ada@escuela.test",
     rol,
     estado: "APROBADA",
     fechaRegistro: "2026-01-01T00:00:00Z",
@@ -74,6 +75,20 @@ function pagina(hilos: Sugerencia[], total = hilos.length, page = 1) {
 }
 
 describe("PanelDeSoporte", () => {
+  it("un fallo de lectura no anuncia que no hay conversaciones y permite reintentar", async () => {
+    vi.mocked(sugerenciasApi.listar).mockRejectedValueOnce(
+      new ApiError(503, "No se pudo consultar el buzón")
+    )
+    const user = userEvent.setup()
+    montar("ADMIN")
+    await screen.findByText(/No se pudo consultar el buzón/)
+    await user.click(screen.getByRole("button", { name: "Ver conversaciones" }))
+    expect(
+      screen.queryByText("No hay conversaciones para mostrar.")
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Reintentar consultas" }))
+    await screen.findByText("No arranca la PC 3")
+  })
   beforeEach(() => {
     vi.mocked(sugerenciasApi.misSugerencias).mockResolvedValue(pagina([hilo()]))
     vi.mocked(sugerenciasApi.listar).mockResolvedValue(pagina([hilo()]))
@@ -242,5 +257,158 @@ describe("PanelDeSoporte", () => {
         expect(sugerenciasApi.listar).toHaveBeenCalledWith(false, 1)
       })
     })
+  })
+  it("conserva el borrador al ocultar y volver a mostrar conversaciones", async () => {
+    const user = userEvent.setup()
+    montar()
+    await user.click(await screen.findByRole("button", { name: "Ver conversaciones" }))
+    await user.type(
+      screen.getByRole("textbox", { name: "Escribir en esta conversación" }),
+      "Todavía no enviado"
+    )
+    await user.click(screen.getByRole("button", { name: "Ocultar conversaciones" }))
+    await user.click(screen.getByRole("button", { name: "Ver conversaciones" }))
+    expect(
+      screen.getByRole("textbox", { name: "Escribir en esta conversación" })
+    ).toHaveValue("Todavía no enviado")
+  })
+
+  it("conserva el pedido nuevo al cerrar y reabrir el formulario", async () => {
+    const user = userEvent.setup()
+    montar()
+    await user.click(await screen.findByRole("button", { name: "Pedir ayuda" }))
+    await user.type(screen.getByLabelText("¿De qué se trata?"), "Mi borrador")
+    await user.type(
+      screen.getByLabelText("Contalo con tus palabras"),
+      "No quiero perder este texto"
+    )
+    await user.click(screen.getByRole("button", { name: "Cerrar el formulario" }))
+    await user.click(screen.getByRole("button", { name: "Pedir ayuda" }))
+    expect(screen.getByLabelText("¿De qué se trata?")).toHaveValue("Mi borrador")
+    expect(screen.getByLabelText("Contalo con tus palabras")).toHaveValue(
+      "No quiero perder este texto"
+    )
+    expect(screen.getByLabelText("Contalo con tus palabras")).toHaveAttribute(
+      "maxlength",
+      "4000"
+    )
+  })
+
+  it("conserva la respuesta al cambiar de página", async () => {
+    vi.mocked(sugerenciasApi.misSugerencias).mockImplementation(async (p) =>
+      pagina(
+        [hilo({ id: p === 2 ? "s2" : "s1", asunto: p === 2 ? "Otra" : "Primera" })],
+        51,
+        p
+      )
+    )
+    const user = userEvent.setup()
+    montar()
+    await user.click(await screen.findByRole("button", { name: "Ver conversaciones" }))
+    await user.type(
+      screen.getByRole("textbox", { name: "Escribir en esta conversación" }),
+      "Respuesta pendiente"
+    )
+    await user.click(screen.getByRole("button", { name: "Siguiente" }))
+    await screen.findByText("Otra")
+    await user.click(screen.getByRole("button", { name: "Anterior" }))
+    expect(
+      await screen.findByRole("textbox", { name: "Escribir en esta conversación" })
+    ).toHaveValue("Respuesta pendiente")
+  })
+
+  it("bloquea edición y resolución mientras se envía una respuesta, conservándola si falla", async () => {
+    let rechazar!: (e: Error) => void
+    vi.mocked(sugerenciasApi.responder).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rechazar = reject
+        })
+    )
+    const user = userEvent.setup()
+    montar("ADMIN")
+    await user.click(await screen.findByRole("button", { name: "Ver conversaciones" }))
+    const campo = screen.getByRole("textbox", { name: "Escribir en esta conversación" })
+    await user.type(campo, "Respuesta importante")
+    await user.click(screen.getByRole("button", { name: "Responder" }))
+    expect(campo).toBeDisabled()
+    expect(campo).toHaveAttribute("maxlength", "4000")
+    expect(screen.getByRole("button", { name: "Dar por resuelta" })).toBeDisabled()
+    expect(screen.getByLabelText("Ver solo lo que falta contestar")).toBeDisabled()
+    rechazar(new ApiError(503, "No se pudo enviar"))
+    await screen.findByText("No se pudo enviar")
+    expect(campo).toBeEnabled()
+    expect(campo).toHaveValue("Respuesta importante")
+  })
+
+  it("bloquea el pedido nuevo durante el envío y confirma el éxito fuera del formulario", async () => {
+    let completar!: (h: Sugerencia) => void
+    vi.mocked(sugerenciasApi.escribir).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          completar = resolve
+        })
+    )
+    const user = userEvent.setup()
+    montar()
+    await user.click(await screen.findByRole("button", { name: "Pedir ayuda" }))
+    await user.type(screen.getByLabelText("¿De qué se trata?"), "Consulta")
+    await user.type(screen.getByLabelText("Contalo con tus palabras"), "Ayuda")
+    await user.click(screen.getByRole("button", { name: "Mandar" }))
+    expect(screen.getByLabelText("¿De qué se trata?")).toBeDisabled()
+    expect(screen.getByLabelText("Contalo con tus palabras")).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Una idea" })).toBeDisabled()
+    completar(hilo())
+    await screen.findByText("Consulta enviada. Podés seguir la conversación acá mismo.")
+    expect(
+      screen.queryByRole("button", { name: "Cerrar el formulario" })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Pedir ayuda" }))
+    expect(screen.getByLabelText("¿De qué se trata?")).toHaveValue("")
+    expect(
+      screen.queryByText("Llegó. Te van a contestar acá mismo.")
+    ).not.toBeInTheDocument()
+  })
+
+  it("al admin le indica respuesta enviada y al docente le explica la reapertura", async () => {
+    vi.mocked(sugerenciasApi.listar).mockResolvedValue(
+      pagina([hilo({ esperaRespuesta: false })])
+    )
+    const user = userEvent.setup()
+    const view = montar("ADMIN")
+    await user.click(await screen.findByRole("button", { name: "Ver conversaciones" }))
+    await screen.findByText("Respuesta enviada")
+    expect(screen.queryByText("Te contestaron")).not.toBeInTheDocument()
+    view.unmount()
+    vi.mocked(sugerenciasApi.misSugerencias).mockResolvedValue(
+      pagina([hilo({ estado: "RESUELTA", esperaRespuesta: false })])
+    )
+    montar()
+    await user.click(await screen.findByRole("button", { name: "Ver conversaciones" }))
+    await user.click(screen.getByRole("button", { name: "Ver" }))
+    await screen.findByText("Al enviar un mensaje se vuelve a abrir la conversación.")
+  })
+
+  it("vuelve a una página válida cuando se responde el último pendiente de la segunda", async () => {
+    let respondida = false
+    vi.mocked(sugerenciasApi.listar).mockImplementation(async (_, p = 1) =>
+      pagina(p === 2 && respondida ? [] : [hilo()], respondida ? 50 : 51, p)
+    )
+    vi.mocked(sugerenciasApi.responder).mockImplementationOnce(async () => {
+      respondida = true
+      return hilo()
+    })
+    const user = userEvent.setup()
+    montar("ADMIN")
+    await user.click(await screen.findByRole("button", { name: "Ver conversaciones" }))
+    await user.click(await screen.findByRole("button", { name: "Siguiente" }))
+    await screen.findByText("Página 2 de 2")
+    await user.type(
+      screen.getByRole("textbox", { name: "Escribir en esta conversación" }),
+      "Contestación"
+    )
+    await user.click(screen.getByRole("button", { name: "Responder" }))
+    await waitFor(() => expect(sugerenciasApi.listar).toHaveBeenLastCalledWith(true, 1))
+    await screen.findByText("Respuesta enviada: No arranca la PC 3.")
   })
 })

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes, useLocation } from "react-router"
 
@@ -11,9 +11,19 @@ import type {
   EquipoOcupado,
 } from "@/features/reservas/types"
 import { ApiError } from "@/lib/api-client"
+import * as disponibilidadApi from "@/features/disponibilidad/api"
+import { useAhora } from "@/lib/useAhora"
 import { fechaFuturaEnDias } from "@/test/fechas"
+import { useAuth } from "@/features/auth/AuthContext"
+import { BORRADOR_RESERVA_KEY } from "@/lib/borradores"
 
 vi.mock("@/features/reservas/api")
+vi.mock("@/features/auth/AuthContext")
+vi.mock("@/features/disponibilidad/api", async (original) => ({
+  ...(await original<typeof disponibilidadApi>()),
+  jornadaDeLaInstitucion: vi.fn(),
+}))
+vi.mock("@/lib/useAhora")
 
 // Relativas a hoy y no constantes: los inputs de fecha tienen min=hoy, así
 // que una fecha fija deja de poder enviarse apenas queda atrás (ver
@@ -71,7 +81,7 @@ function ListadoDePrueba() {
 
 function renderPagina() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
+  const contenido = () => (
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/reservas/nueva"]}>
         <Routes>
@@ -81,6 +91,8 @@ function renderPagina() {
       </MemoryRouter>
     </QueryClientProvider>
   )
+  const pagina = render(contenido())
+  return { ...pagina, queryClient, actualizar: () => pagina.rerender(contenido()) }
 }
 
 /** Espera a que el listado de materias haya llegado. */
@@ -100,10 +112,209 @@ async function completarFranja(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("NuevaReservaPage", () => {
+  it("no interpreta un error de jornada como escuela sin restricciones y conserva el formulario al reintentar", async () => {
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockRejectedValue(
+      new ApiError(503, "Jornada inaccesible")
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await completarFranja(user)
+    await screen.findByText(/No pudimos consultar la jornada/)
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+    expect(reservasApi.equiposDisponibles).not.toHaveBeenCalled()
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({ data: [] })
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    expect(screen.getByLabelText("Fecha")).toHaveValue(FECHA)
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeEnabled()
+  })
+  it("un fallo al refrescar la jornada bloquea incluso con disponibilidad previa y permite recuperar la selección", async () => {
+    const user = userEvent.setup()
+    const { queryClient } = renderPagina()
+    await completarFranja(user)
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockRejectedValue(
+      new ApiError(503, "Jornada inaccesible")
+    )
+    await queryClient.invalidateQueries({ queryKey: disponibilidadApi.JORNADA_KEY })
+    await screen.findByText(/No pudimos consultar la jornada/)
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({ data: [] })
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    expect(await screen.findByRole("checkbox", { name: /PC 1/ })).toBeChecked()
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeEnabled()
+    )
+  })
+  it("una franja en curso se admite y deja de confirmarse cuando termina aunque no cambien los campos", async () => {
+    const dia = new Date()
+    dia.setHours(8, 30, 0, 0)
+    vi.mocked(useAhora).mockReturnValue(dia)
+    const user = userEvent.setup()
+    const { actualizar } = renderPagina()
+    await completarFranja(user)
+    const hoy = `${dia.getFullYear()}-${String(dia.getMonth() + 1).padStart(2, "0")}-${String(dia.getDate()).padStart(2, "0")}`
+    await user.clear(screen.getByLabelText("Fecha"))
+    await user.type(screen.getByLabelText("Fecha"), hoy)
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeEnabled()
+    const fin = new Date(dia)
+    fin.setHours(9, 0, 0, 0)
+    vi.mocked(useAhora).mockReturnValue(fin)
+    actualizar()
+    await screen.findByText(/El horario elegido ya terminó/)
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+    expect(reservasApi.crearReserva).not.toHaveBeenCalled()
+  })
+  async function prepararSerie(user: ReturnType<typeof userEvent.setup>) {
+    renderPagina()
+    await elegirMateria(user)
+    await user.click(screen.getByRole("button", { name: "Se repite todas las semanas" }))
+    await user.type(screen.getByLabelText("Desde"), FECHA)
+    await user.type(screen.getByLabelText("Hasta"), FECHA_FIN)
+    await user.selectOptions(screen.getByLabelText("Hora de inicio: hora"), "08")
+    await user.selectOptions(screen.getByLabelText("Hora de inicio: minutos"), "00")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "09")
+    await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+  }
+  it("requiere consentimiento cuando un equipo libre se toma por prioridad en otra fecha", async () => {
+    vi.mocked(reservasApi.previsualizarSerie).mockResolvedValue({
+      cantidadClases: 2,
+      puedeCrear: true,
+      equiposATomar: ["pc1"],
+      fechas: [
+        {
+          fecha: FECHA_FIN,
+          equipos: [{ equipoId: "pc1", etiqueta: "PC 1", estado: "POR_PRIORIDAD" }],
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    await prepararSerie(user)
+    await user.click(screen.getByRole("button", { name: "Comprobar serie" }))
+    const permiso = await screen.findByRole("checkbox", { name: /Autorizo tomar/ })
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+    await user.click(permiso)
+    await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
+    expect(reservasApi.crearReservaRecurrente).toHaveBeenCalledWith(
+      expect.objectContaining({ equiposATomar: ["pc1"] })
+    )
+  })
+  it("un conflicto futuro bloquea la serie completa y no crea reservas", async () => {
+    vi.mocked(reservasApi.previsualizarSerie).mockResolvedValue({
+      cantidadClases: 2,
+      puedeCrear: false,
+      equiposATomar: [],
+      fechas: [
+        {
+          fecha: FECHA_FIN,
+          equipos: [
+            {
+              equipoId: "pc1",
+              etiqueta: "PC 1",
+              estado: "NO_DISPONIBLE",
+              motivo: "Bloqueado por administración.",
+            },
+          ],
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    await prepararSerie(user)
+    await user.click(screen.getByRole("button", { name: "Comprobar serie" }))
+    await screen.findByText(/Hay equipos no disponibles/)
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+    expect(reservasApi.crearReservaRecurrente).not.toHaveBeenCalled()
+  })
+  it("cambiar fechas o equipos invalida la comprobación anterior", async () => {
+    const user = userEvent.setup()
+    await prepararSerie(user)
+    await user.click(screen.getByRole("button", { name: "Comprobar serie" }))
+    await screen.findByText(/Todos los equipos pueden reservarse/)
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeEnabled()
+    await user.click(screen.getByRole("checkbox", { name: /PC 7/ }))
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+    expect(
+      screen.queryByText(/Todos los equipos pueden reservarse/)
+    ).not.toBeInTheDocument()
+  })
+  it("recupera el formulario y la selección al volver para la misma cuenta", async () => {
+    const user = userEvent.setup()
+    const pagina = renderPagina()
+    await completarFranja(user)
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    expect(sessionStorage.getItem(BORRADOR_RESERVA_KEY)).not.toBeNull()
+    pagina.unmount()
+    renderPagina()
+    await screen.findByRole("checkbox", { name: /PC 1/ })
+    expect(screen.getByLabelText("Materia")).toHaveValue("m1")
+    expect(screen.getByLabelText("Fecha")).toHaveValue(FECHA)
+    expect(screen.getByRole("checkbox", { name: /PC 1/ })).toBeChecked()
+    expect(screen.getByText(/Borrador recuperado/)).toBeInTheDocument()
+  })
+  it("un equipo que dejó de estar disponible bloquea la confirmación del borrador", async () => {
+    const user = userEvent.setup()
+    const pagina = renderPagina()
+    await completarFranja(user)
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    pagina.unmount()
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({ data: [] })
+    renderPagina()
+    await screen.findByText("No hay ningún equipo libre en esa franja.")
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+    expect(reservasApi.crearReserva).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "Limpiar la selección" }))
+    expect(screen.getByLabelText("Fecha")).toHaveValue(FECHA)
+  })
+  it("descarta y confirma sin dejar un borrador residual", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await completarFranja(user)
+    await user.click(screen.getByRole("button", { name: "Descartar borrador" }))
+    expect(sessionStorage.getItem(BORRADOR_RESERVA_KEY)).toBeNull()
+    expect(screen.getByLabelText("Fecha")).toHaveValue("")
+    await completarFranja(user)
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
+    await screen.findByText("Listado")
+    expect(sessionStorage.getItem(BORRADOR_RESERVA_KEY)).toBeNull()
+  })
+  it("buscar otra materia mantiene la seleccionada hasta elegir explícitamente otra", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.misMaterias).mockResolvedValue({
+      data: [
+        materias[0],
+        ...Array.from({ length: 12 }, (_, i) => ({
+          ...materias[0],
+          materiaId: `otra${i}`,
+          materiaNombre: `Dibujo Técnico ${i}`,
+        })),
+      ],
+    })
+    renderPagina()
+    await completarFranja(user)
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    await user.type(screen.getByLabelText("Buscar materia o curso"), "dibujo tecnico")
+    expect(screen.getByLabelText("Materia")).toHaveValue("m1")
+    expect(screen.getByRole("checkbox", { name: /PC 1/ })).toBeChecked()
+  })
   beforeEach(() => {
+    sessionStorage.clear()
+    vi.mocked(useAuth).mockReturnValue({ user: { id: "docente1" } } as ReturnType<
+      typeof useAuth
+    >)
     vi.clearAllMocks()
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockResolvedValue({ data: [] })
+    vi.mocked(useAhora).mockReturnValue(new Date())
     vi.mocked(reservasApi.misMaterias).mockResolvedValue({ data: materias })
     vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({ data: equipos })
+    vi.mocked(reservasApi.previsualizarSerie).mockResolvedValue({
+      cantidadClases: 2,
+      puedeCrear: true,
+      equiposATomar: [],
+      fechas: [],
+    })
     vi.mocked(reservasApi.crearReserva).mockResolvedValue({ grupo: {}, reservas: [] })
     vi.mocked(reservasApi.crearReservaRecurrente).mockResolvedValue({
       reglaId: "regla1",
@@ -262,6 +473,9 @@ describe("NuevaReservaPage", () => {
     await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
 
     await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+    await user.click(screen.getByRole("button", { name: "Comprobar serie" }))
+    await screen.findByText(/Todos los equipos pueden reservarse/)
     await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
 
     expect(reservasApi.crearReservaRecurrente).toHaveBeenCalledWith({
@@ -354,6 +568,8 @@ describe("NuevaReservaPage", () => {
     await user.selectOptions(screen.getByLabelText("Hora de fin: minutos"), "00")
 
     await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    await user.click(screen.getByRole("button", { name: "Comprobar serie" }))
+    await screen.findByText(/Todos los equipos pueden reservarse/)
     await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
 
     expect(await screen.findByText("Listado")).toBeInTheDocument()
@@ -467,11 +683,22 @@ describe("NuevaReservaPage", () => {
     await completarFranja(user)
 
     await user.click(await screen.findByRole("checkbox", { name: /PC 9/ }))
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "1 equipo seleccionado: 0 libres y 1 por prioridad"
+    )
+    expect(screen.getByText(/Vas a reservar 1 equipo/)).toHaveTextContent(
+      "El alcance es esta fecha y este horario"
+    )
+    expect(screen.getByText(/Vas a reservar 1 equipo/)).toHaveTextContent(
+      "pueden quedar faltantes"
+    )
     await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
 
     expect(await screen.findByText("Listado")).toBeInTheDocument()
     expect(
-      screen.getByText(/Se cancelaron 2 reservas y se avisó a 1 docente\./)
+      screen.getByText(
+        /2 equipos quedaron sin reemplazo disponible y se avisó a 1 docente\./
+      )
     ).toBeInTheDocument()
   })
 
@@ -498,9 +725,44 @@ describe("NuevaReservaPage", () => {
 
     expect(await screen.findByText("Listado")).toBeInTheDocument()
     expect(
-      screen.getByText(/Se canceló 1 reserva y se avisó a 1 docente\./)
+      screen.getByText(/1 equipo quedó sin reemplazo disponible y se avisó a 1 docente\./)
     ).toBeInTheDocument()
   })
+
+  it.each([
+    [
+      2,
+      0,
+      /Se repusieron 2 equipos en las reservas desplazadas y se avisó a 2 docentes\./,
+    ],
+    [
+      1,
+      1,
+      /Se repuso 1 equipo en las reservas desplazadas y 1 equipo quedó sin reemplazo disponible y se avisó a 2 docentes\./,
+    ],
+  ])(
+    "muestra reposiciones y faltantes de toda la cadena (%i, %i)",
+    async (reubicadas, canceladas, mensaje) => {
+      const user = userEvent.setup()
+      vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({
+        data: equipos,
+        ocupados,
+      })
+      vi.mocked(reservasApi.crearReserva).mockResolvedValue({
+        grupo: {},
+        reservas: [],
+        reservasReubicadas: reubicadas,
+        reservasCanceladas: canceladas,
+        docentesAfectados: 2,
+      })
+      renderPagina()
+      await completarFranja(user)
+      await user.click(await screen.findByRole("checkbox", { name: /PC 9/ }))
+      await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
+      expect(await screen.findByText("Listado")).toBeInTheDocument()
+      expect(screen.getByText(mensaje)).toBeInTheDocument()
+    }
+  )
 
   // El caso de todos los días: sin robo no se dice nada, para que la frase no
   // arrastre un "se cancelaron 0 reservas" que no le importa a nadie.
@@ -513,10 +775,43 @@ describe("NuevaReservaPage", () => {
     await user.click(screen.getByRole("button", { name: "Confirmar reserva" }))
 
     expect(await screen.findByText("Listado")).toBeInTheDocument()
-    expect(screen.queryByText(/Se cancelaron/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/sin reemplazo disponible/)).not.toBeInTheDocument()
+  })
+
+  it("ofrece pedir una materia desde el perfil cuando no hay asignaciones", async () => {
+    vi.mocked(reservasApi.misMaterias).mockResolvedValue({ data: [] })
+    renderPagina()
+    expect(
+      await screen.findByRole("link", { name: "Solicitá una materia desde Mi perfil" })
+    ).toHaveAttribute("href", "/perfil")
   })
 
   // RF-04.1: sin materias asignadas no hay nada para reservar.
+  it("una consulta fallida no dice que el docente no está asignado", async () => {
+    vi.mocked(reservasApi.misMaterias).mockRejectedValue(
+      new ApiError(500, "No se pudieron leer las materias")
+    )
+    renderPagina()
+    expect(
+      await screen.findByText("No se pudieron leer las materias")
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/No estás asignado a ninguna materia/)
+    ).not.toBeInTheDocument()
+  })
+
+  it("cambiar la franja borra la selección y exige volver a elegir equipos", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await completarFranja(user)
+    await user.click(await screen.findByRole("checkbox", { name: /PC 1/ }))
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeEnabled()
+    await user.selectOptions(screen.getByLabelText("Hora de fin: hora"), "10")
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+    expect(await screen.findByRole("checkbox", { name: /PC 1/ })).not.toBeChecked()
+    expect(reservasApi.crearReserva).not.toHaveBeenCalled()
+  })
+
   it("avisa cuando el docente no está asignado a ninguna materia", async () => {
     vi.mocked(reservasApi.misMaterias).mockResolvedValue({ data: [] })
     renderPagina()

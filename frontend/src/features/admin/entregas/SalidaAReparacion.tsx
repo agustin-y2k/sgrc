@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useState } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -13,15 +13,12 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PRESTAMOS_KEY } from "@/features/admin/entregas/compartido"
-import {
-  SelectorDeEquipos,
-  type EquipoParaEntregar,
-} from "@/features/admin/entregas/SelectorDeEquipos"
-import * as inventoryApi from "@/features/inventory/api"
-import { ETIQUETA_ESTADO_EQUIPO } from "@/features/inventory/types"
+import { SelectorDeEquipos } from "@/features/admin/entregas/SelectorDeEquipos"
 import * as reservasApi from "@/features/reservas/api"
 import { getErrorMessage } from "@/lib/api-client"
 import { contar } from "@/lib/plural"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
+import { useEquiposParaEntregar } from "./useEquiposParaEntregar"
 
 /**
  * Sacar del laboratorio un equipo que NO está en condiciones de prestarse:
@@ -42,44 +39,23 @@ export function SalidaAReparacion({
   onCerrar: (resumen?: string) => void
 }) {
   const queryClient = useQueryClient()
+  const [aviso, setAviso] = useState<string | null>(null)
   const [nombre, setNombre] = useState("")
   const [destino, setDestino] = useState("")
   const [devolucion, setDevolucion] = useState("")
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set())
 
-  const { data: carros } = useQuery({
-    queryKey: ["carros"],
-    queryFn: inventoryApi.listarCarros,
-  })
-
-  const { data: todos } = useQuery({
-    queryKey: ["equipos"],
-    queryFn: () => inventoryApi.listarEquipos(),
-  })
-
-  const nombreDeCarro = useMemo(
-    () => new Map((carros?.data ?? []).map((c) => [c.id, c.nombre])),
-    [carros]
-  )
-
-  // Justo lo contrario que la entrega del día a día: acá se ofrece solo lo
-  // que no está disponible. Lo dado de baja no aparece ni acá — ya no es
-  // parte del parque, y lo que sale del laboratorio es lo que después hay que
-  // esperar de vuelta.
-  const equipos: EquipoParaEntregar[] = useMemo(
-    () =>
-      (todos?.data ?? [])
-        .filter(
-          (eq) => !eq.dadoDeBaja && eq.estado !== "DISPONIBLE" && !yaAfuera.has(eq.id)
-        )
-        .map((eq) => ({
-          id: eq.id,
-          etiqueta: eq.etiqueta,
-          donde: eq.carroId ? (nombreDeCarro.get(eq.carroId) ?? "") : eq.tipo,
-          nota: ETIQUETA_ESTADO_EQUIPO[eq.estado],
-        })),
-    [todos, nombreDeCarro, yaAfuera]
-  )
+  const consulta = useEquiposParaEntregar(yaAfuera, true)
+  const equipos = consulta.equipos
+  const seleccionValida =
+    seleccionadas.size > 0 &&
+    [...seleccionadas].every((id) => equipos.some((e) => e.id === id))
+  const listo =
+    consulta.listo &&
+    seleccionValida &&
+    !!nombre.trim() &&
+    !!destino.trim() &&
+    (!devolucion || Number.isFinite(Date.parse(devolucion)))
 
   const enviar = useMutation({
     mutationFn: () =>
@@ -101,7 +77,8 @@ export function SalidaAReparacion({
       await queryClient.invalidateQueries({ queryKey: PRESTAMOS_KEY })
       // Igual que la entrega del mostrador: registrada la salida no queda
       // nada más que hacer en este cuadro, y el resumen se lee arriba.
-      onCerrar(partes.join(" "))
+      if (respuesta.entregadas.length > 0) onCerrar(partes.join(" "))
+      else setAviso(partes.join(" "))
     },
   })
 
@@ -121,7 +98,7 @@ export function SalidaAReparacion({
           className="grid gap-6"
           onSubmit={(e) => {
             e.preventDefault()
-            enviar.mutate()
+            if (listo && !enviar.isPending) enviar.mutate()
           }}
         >
           <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
@@ -169,13 +146,25 @@ export function SalidaAReparacion({
               </div>
             </div>
 
-            <SelectorDeEquipos
-              titulo="¿Qué equipos salen?"
-              equipos={equipos}
-              seleccionados={seleccionadas}
-              onSeleccionar={setSeleccionadas}
-              vacio="No hay ningún equipo en mantenimiento ni fuera de servicio esperando salir. Se marca el estado desde Inventario."
-            />
+            {consulta.listo ? (
+              <SelectorDeEquipos
+                titulo="¿Qué equipos salen?"
+                equipos={equipos}
+                seleccionados={seleccionadas}
+                onSeleccionar={setSeleccionadas}
+                vacio="No hay ningún equipo en mantenimiento ni fuera de servicio esperando salir. Se marca el estado desde Inventario."
+              />
+            ) : consulta.error ? (
+              <ErrorDeConsulta
+                mensaje="No pudimos verificar qué equipos se pueden entregar."
+                reintentando={consulta.reintentando}
+                onReintentar={consulta.reintentar}
+              />
+            ) : (
+              <p role="status" className="text-muted-foreground text-sm">
+                Consultando equipos y entregas abiertas…
+              </p>
+            )}
           </div>
 
           {enviar.error && (
@@ -184,8 +173,22 @@ export function SalidaAReparacion({
             </Alert>
           )}
 
+          {aviso && (
+            <Alert>
+              <AlertDescription>{aviso}</AlertDescription>
+            </Alert>
+          )}
+          {consulta.listo && seleccionadas.size > 0 && !seleccionValida && (
+            <Alert>
+              <AlertDescription>
+                Cambió la disponibilidad de los equipos elegidos. Limpiá la selección y
+                revisá cuáles siguen disponibles.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-4">
-            <Button type="submit" disabled={enviar.isPending || seleccionadas.size === 0}>
+            <Button type="submit" disabled={enviar.isPending || !listo}>
               {seleccionadas.size === 0
                 ? "Registrar la salida"
                 : `Registrar la salida de ${contar(seleccionadas.size, "equipo")}`}

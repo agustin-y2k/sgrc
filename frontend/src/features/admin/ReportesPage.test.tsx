@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { ReportesPage } from "@/features/admin/ReportesPage"
 import * as adminApi from "@/features/admin/api"
+import * as csv from "@/lib/csv"
 import { formatearDuracion } from "@/features/admin/types"
 
 vi.mock("@/features/admin/api")
@@ -15,6 +16,7 @@ function renderPagina() {
       <ReportesPage />
     </QueryClientProvider>
   )
+  return queryClient
 }
 
 describe("formatearDuracion", () => {
@@ -331,7 +333,7 @@ describe("ReportesPage", () => {
     await waitFor(() => {
       // Uso por equipo, uso por docente y las dos del histórico. Las de
       // incidencias no aparecen: en este escenario vienen vacías.
-      expect(screen.getAllByRole("button", { name: "Descargar CSV" })).toHaveLength(4)
+      expect(screen.getAllByRole("button", { name: /Descargar CSV/ })).toHaveLength(4)
     })
   })
 
@@ -344,7 +346,7 @@ describe("ReportesPage", () => {
 
     await screen.findByText(/No hay reservas en ese ciclo/)
     expect(
-      screen.queryByRole("button", { name: "Descargar CSV" })
+      screen.queryByRole("button", { name: /Descargar CSV/ })
     ).not.toBeInTheDocument()
   })
 
@@ -482,5 +484,174 @@ describe("ReportesPage", () => {
       "4",
       expect.stringContaining("%"),
     ])
+  })
+  it("no anuncia ausencia de reservas ni equipos disponibles durante la carga", async () => {
+    vi.mocked(adminApi.reporteUsoEquipos).mockReturnValue(new Promise(() => {}))
+    vi.mocked(adminApi.reporteEquiposFueraDeCirculacion).mockReturnValue(
+      new Promise(() => {})
+    )
+    renderPagina()
+    await screen.findByText("Consultando uso por equipo…")
+    expect(screen.queryByText(/No hay reservas en ese ciclo/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Están todos disponibles/)).not.toBeInTheDocument()
+    expect(
+      screen.getByText("Consultando equipos fuera de circulación…")
+    ).toBeInTheDocument()
+  })
+
+  it("un fallo parcial tiene reintento y no oculta los reportes válidos", async () => {
+    vi.mocked(adminApi.reporteUsoEquipos).mockRejectedValueOnce(new Error("Caída"))
+    const user = userEvent.setup()
+    renderPagina()
+    await screen.findByText(/No pudimos consultar uso por equipo/)
+    expect(
+      screen.getByRole("table", { name: "Horas reservadas por docente" })
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/No hay reservas en ese ciclo/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Descargar CSV: Uso por equipo" })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    await screen.findByRole("table", { name: "Uso por equipo" })
+  })
+
+  it("un refresco fallido no permite exportar los datos anteriores", async () => {
+    const qc = renderPagina()
+    await screen.findByRole("table", { name: "Uso por equipo" })
+    vi.mocked(adminApi.reporteUsoEquipos).mockRejectedValueOnce(
+      new Error("Falló el refresco")
+    )
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ["reporte", "uso-equipos"] })
+    })
+    await screen.findByText(/No pudimos consultar uso por equipo/)
+    expect(
+      screen.queryByRole("table", { name: "Uso por equipo" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Descargar CSV: Uso por equipo" })
+    ).not.toBeInTheDocument()
+  })
+
+  it("bloquea la descarga mientras comprueba una actualización", async () => {
+    const qc = renderPagina()
+    await screen.findByRole("button", { name: "Descargar CSV: Uso por equipo" })
+    let resolver!: (v: Awaited<ReturnType<typeof adminApi.reporteUsoEquipos>>) => void
+    vi.mocked(adminApi.reporteUsoEquipos).mockReturnValueOnce(
+      new Promise((r) => {
+        resolver = r
+      })
+    )
+    let pendiente!: Promise<void>
+    await act(async () => {
+      pendiente = qc.invalidateQueries({ queryKey: ["reporte", "uso-equipos"] })
+    })
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Descargar CSV: Uso por equipo" })
+      ).toBeDisabled()
+    )
+    await act(async () => {
+      resolver({ data: [] })
+      await pendiente
+    })
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Descargar CSV: Uso por equipo" })
+      ).not.toBeInTheDocument()
+    )
+  })
+
+  it("el fallo de ciclos conserva las incidencias y no anuncia un histórico inexistente", async () => {
+    vi.mocked(adminApi.listarCiclos).mockRejectedValueOnce(new Error("Sin ciclos"))
+    const user = userEvent.setup()
+    renderPagina()
+    await screen.findByText(/No pudimos consultar los ciclos lectivos/)
+    expect(screen.getByLabelText("Ciclo lectivo")).toBeDisabled()
+    expect(adminApi.reporteUsoEquipos).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText(/Todavía no se archivó ningún ciclo/)
+    ).not.toBeInTheDocument()
+    expect(adminApi.reporteIncidenciasPorEquipo).toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    await screen.findByRole("table", { name: "Uso por equipo" })
+  })
+
+  it("un rango invertido bloquea los reportes del período y deja visible el estado actual", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await screen.findByRole("table", { name: "Uso por equipo" })
+    await user.type(screen.getByLabelText("Desde"), "2026-08-05")
+    const cantidad = vi.mocked(adminApi.reporteUsoEquipos).mock.calls.length
+    await user.type(screen.getByLabelText("Hasta"), "2026-08-04")
+    await screen.findAllByText("La fecha Desde no puede ser posterior a Hasta.")
+    expect(adminApi.reporteUsoEquipos).toHaveBeenCalledTimes(cantidad)
+    expect(
+      screen.queryByRole("table", { name: "Uso por equipo" })
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/No hay ningún equipo cargado todavía/)).toBeInTheDocument()
+    await user.clear(screen.getByLabelText("Hasta"))
+    await screen.findByRole("table", { name: "Uso por equipo" })
+  })
+
+  it("las exportaciones del estado actual no se etiquetan como un año o período histórico", async () => {
+    const descargar = vi.spyOn(csv, "descargarCSV").mockImplementation(() => {})
+    vi.mocked(adminApi.reporteEstadoDelInventario).mockResolvedValue({
+      data: [
+        {
+          carroId: "carro",
+          carroNombre: "Carro",
+          total: 1,
+          disponibles: 1,
+          enMantenimiento: 0,
+          fueraDeServicio: 0,
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    renderPagina()
+    await user.type(screen.getByLabelText("Desde"), "2025-02-01")
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Descargar CSV: Estado del parque de equipos",
+      })
+    )
+    expect(descargar).toHaveBeenLastCalledWith(
+      "estado-inventario_actual.csv",
+      expect.any(Array)
+    )
+    await screen.findByText(
+      /una clase de 10 equipos durante una hora suma 10 reservas y 10 horas de equipo/
+    )
+  })
+
+  it("sin resolver incluye incidencias en reparación y enviadas a soporte", async () => {
+    vi.mocked(adminApi.reporteIncidenciasPorEquipo).mockResolvedValue({
+      data: [
+        {
+          equipoId: "pc1",
+          etiqueta: "PC 7",
+          identificador: 7,
+          carroNombre: "Carro",
+          total: 6,
+          abiertas: 1,
+          enReparacion: 2,
+          enviadasASoporte: 1,
+          resueltas: 2,
+          graves: 1,
+        },
+      ],
+    })
+    renderPagina()
+    await screen.findByText(/4 sin resolver/)
+  })
+
+  it("los reportes vacíos son válidos sin un ciclo creado, salvo las consultas de uso", async () => {
+    vi.mocked(adminApi.listarCiclos).mockResolvedValue({ data: [] })
+    renderPagina()
+    await screen.findAllByText("Creá un ciclo lectivo para consultar su uso.")
+    expect(adminApi.reporteUsoEquipos).not.toHaveBeenCalled()
+    expect(adminApi.reporteIncidenciasPorEquipo).toHaveBeenCalled()
+    expect(screen.getByLabelText("Ciclo lectivo")).toBeDisabled()
   })
 })

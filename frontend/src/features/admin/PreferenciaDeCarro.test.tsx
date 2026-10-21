@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import * as adminApi from "@/features/admin/api"
@@ -30,20 +30,31 @@ function equipo(id: string, identificador: number, over: Partial<Equipo> = {}): 
 
 function montar() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  const vista = render(
     <QueryClientProvider client={client}>
       <PreferenciaDeCarro carroId="carro1" onListo={() => {}} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   )
+  return { ...vista, client }
 }
 
 function renderPanel(
   equipos = [equipo("pc1", 1), equipo("pc2", 2)],
   marcas: PreferenciaDeEquipo[] = [],
-  materias = ["Dibujo Técnico"],
+  materias = ["Dibujo Técnico"]
 ) {
   vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({ data: equipos })
-  vi.mocked(adminApi.materiasEnUso).mockResolvedValue({ data: materias })
+  vi.mocked(adminApi.catalogoDePrioridades).mockResolvedValue({
+    data: materias.map((materiaNombre) => ({
+      materiaId: materiaNombre,
+      materiaNombre,
+      contenedorId: "c1",
+      contenedorNombre: "3°B",
+      tipo: "CURSO" as const,
+      anio: 3,
+      division: "B",
+    })),
+  })
   vi.mocked(adminApi.listarPreferenciasDeCarro).mockResolvedValue({ data: marcas })
   return montar()
 }
@@ -61,7 +72,8 @@ test("marca la misma preferencia en todos los equipos del carro", async () => {
   renderPanel()
 
   await screen.findByText("PC 1")
-  await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+  await usuario.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+  await usuario.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
   await usuario.click(screen.getByRole("button", { name: /marcar/i }))
 
   await waitFor(() =>
@@ -70,8 +82,8 @@ test("marca la misma preferencia en todos los equipos del carro", async () => {
         equipoIds: ["pc1", "pc2"],
         materiaNombre: "Dibujo Técnico",
         prioridad: 1,
-      }),
-    ),
+      })
+    )
   )
 })
 
@@ -85,13 +97,14 @@ test("se puede destildar un equipo puntual antes de marcar", async () => {
 
   await screen.findByText("PC 1")
   await usuario.click(screen.getByRole("checkbox", { name: /PC 1/ }))
-  await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+  await usuario.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+  await usuario.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
   await usuario.click(screen.getByRole("button", { name: /marcar/i }))
 
   await waitFor(() =>
     expect(adminApi.marcarPreferencia).toHaveBeenCalledWith(
-      expect.objectContaining({ equipoIds: ["pc2"] }),
-    ),
+      expect.objectContaining({ equipoIds: ["pc2"] })
+    )
   )
 })
 
@@ -115,10 +128,11 @@ test("avisa si la prioridad elegida ya la usa otra materia en esos equipos", asy
   ])
 
   await screen.findByText("PC 1")
-  await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+  await usuario.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+  await usuario.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
 
   expect(
-    await screen.findByText(/ya (son|es) preferentes? de Matemática con prioridad 1/),
+    await screen.findByText(/ya (son|es) preferentes? de Matemática con prioridad 1/)
   ).toBeInTheDocument()
 })
 
@@ -136,10 +150,11 @@ test("no avisa por un empate en un equipo que está destildado", async () => {
 
   await screen.findByText("PC 1")
   await usuario.click(screen.getByRole("checkbox", { name: /PC 1/ }))
-  await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+  await usuario.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+  await usuario.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
 
   await waitFor(() =>
-    expect(screen.queryByText(/con prioridad 1/)).not.toBeInTheDocument(),
+    expect(screen.queryByText(/con prioridad 1/)).not.toBeInTheDocument()
   )
 })
 
@@ -147,7 +162,7 @@ test("cuando el carro no tiene equipos reservables, no se muestra el formulario"
   renderPanel([])
 
   expect(
-    await screen.findByText("Este carro no tiene equipos reservables."),
+    await screen.findByText("Este carro no tiene equipos reservables.")
   ).toBeInTheDocument()
   expect(screen.queryByRole("button", { name: /marcar/i })).not.toBeInTheDocument()
   expect(screen.queryByLabelText("Materia")).not.toBeInTheDocument()
@@ -157,13 +172,29 @@ test("cuando el carro no tiene equipos reservables, no se muestra el formulario"
 // ninguno reservable sería inventarle un dato de inventario al Admin.
 test("si no se pudieron traer los equipos lo dice, en vez de darlo por vacío", async () => {
   vi.mocked(inventoryApi.listarEquiposDeCarro).mockRejectedValue(new Error("sin red"))
-  vi.mocked(adminApi.materiasEnUso).mockResolvedValue({ data: ["Dibujo Técnico"] })
+  vi.mocked(adminApi.catalogoDePrioridades).mockResolvedValue({
+    data: [
+      {
+        materiaId: "m1",
+        materiaNombre: "Dibujo Técnico",
+        contenedorId: "c1",
+        contenedorNombre: "3°B",
+        tipo: "CURSO",
+        anio: 3,
+        division: "B",
+      },
+    ],
+  })
   vi.mocked(adminApi.listarPreferenciasDeCarro).mockResolvedValue({ data: [] })
   montar()
 
-  expect(await screen.findByText(/Ocurrió un error inesperado/)).toBeInTheDocument()
   expect(
-    screen.queryByText("Este carro no tiene equipos reservables."),
+    await screen.findByText(
+      /No pudimos verificar los equipos, las materias y sus prioridades/
+    )
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByText("Este carro no tiene equipos reservables.")
   ).not.toBeInTheDocument()
 })
 
@@ -179,8 +210,9 @@ test("sin materias cargadas explica dónde se crean", async () => {
 test("el panel se puede cerrar también cuando no hay nada que marcar", async () => {
   renderPanel([])
 
-  expect(await screen.findByText("Este carro no tiene equipos reservables."))
-    .toBeInTheDocument()
+  expect(
+    await screen.findByText("Este carro no tiene equipos reservables.")
+  ).toBeInTheDocument()
   expect(screen.getByRole("button", { name: "Cerrar" })).toBeInTheDocument()
 })
 
@@ -217,12 +249,13 @@ test("informa cuántos equipos quedaron marcados y cuántos ya lo estaban", asyn
   renderPanel()
 
   await screen.findByText("PC 1")
-  await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+  await usuario.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+  await usuario.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
   await usuario.click(screen.getByRole("button", { name: /marcar/i }))
 
   expect(await screen.findByText(/Se marcaron 2 equipos\./)).toBeInTheDocument()
   expect(
-    await screen.findByText(/3 equipos ya tenían esa misma marca\./),
+    await screen.findByText(/3 equipos ya tenían esa misma marca\./)
   ).toBeInTheDocument()
 })
 
@@ -244,11 +277,12 @@ test("el resultado de un solo equipo se lee en singular", async () => {
   renderPanel()
 
   await screen.findByText("PC 1")
-  await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+  await usuario.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+  await usuario.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
   await usuario.click(screen.getByRole("button", { name: /marcar/i }))
 
   expect(
-    await screen.findByText(/Se marcó 1 equipo\. 1 equipo ya tenía esa misma marca\./),
+    await screen.findByText(/Se marcó 1 equipo\. 1 equipo ya tenía esa misma marca\./)
   ).toBeInTheDocument()
 })
 
@@ -264,11 +298,12 @@ test("al marcar se vuelven a tildar los equipos destildados", async () => {
 
   await screen.findByText("PC 1")
   await usuario.click(screen.getByRole("checkbox", { name: /PC 1/ }))
-  await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+  await usuario.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+  await usuario.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
   await usuario.click(screen.getByRole("button", { name: /marcar/i }))
 
   await waitFor(() =>
-    expect(screen.getByRole("checkbox", { name: /PC 1/ })).toBeChecked(),
+    expect(screen.getByRole("checkbox", { name: /PC 1/ })).toBeChecked()
   )
 })
 
@@ -283,12 +318,14 @@ test("el resultado anterior se borra al volver a marcar", async () => {
   renderPanel()
 
   await screen.findByText("PC 1")
-  await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+  await usuario.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+  await usuario.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
   await usuario.click(screen.getByRole("button", { name: /marcar/i }))
   await screen.findByText(/Se marcaron 0 equipos\./)
 
   vi.mocked(adminApi.marcarPreferencia).mockRejectedValue(new Error("sin red"))
-  await usuario.selectOptions(await screen.findByLabelText("Materia"), "Dibujo Técnico")
+  await usuario.selectOptions(await screen.findByLabelText("Alcance"), "GENERAL")
+  await usuario.selectOptions(screen.getByLabelText("Materia"), "Dibujo Técnico")
   await usuario.click(screen.getByRole("button", { name: /marcar/i }))
 
   expect(await screen.findByText(/Ocurrió un error inesperado/)).toBeInTheDocument()
@@ -299,4 +336,29 @@ test("el botón que cierra el panel dice Cerrar", async () => {
   renderPanel()
 
   expect(await screen.findByRole("button", { name: "Cerrar" })).toBeInTheDocument()
+})
+
+test("fallar la consulta de materias no afirma que no hay ninguna y permite reintentar", async () => {
+  vi.mocked(adminApi.catalogoDePrioridades).mockRejectedValueOnce(new Error("Sin red"))
+  const user = userEvent.setup()
+  renderPanel()
+  await screen.findByText(
+    /No pudimos verificar los equipos, las materias y sus prioridades/
+  )
+  expect(screen.queryByText(/Todavía no hay materias/)).not.toBeInTheDocument()
+  await user.click(screen.getByRole("button", { name: "Reintentar" }))
+  expect(await screen.findByLabelText("Materia")).toBeInTheDocument()
+})
+
+test("un equipo agregado durante la selección no queda marcado automáticamente", async () => {
+  const { client } = renderPanel()
+  await screen.findByRole("checkbox", { name: "PC 1" })
+  vi.mocked(inventoryApi.listarEquiposDeCarro).mockResolvedValue({
+    data: [equipo("pc1", 1), equipo("pc2", 2), equipo("pc3", 3)],
+  })
+  await act(async () => {
+    await client.refetchQueries({ queryKey: ["equipos", "carro1"] })
+  })
+  expect(await screen.findByRole("checkbox", { name: "PC 3" })).not.toBeChecked()
+  expect(screen.getByRole("checkbox", { name: "PC 1" })).toBeChecked()
 })

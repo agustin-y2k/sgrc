@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import * as reservasApi from "@/features/reservas/api"
 import type { GrupoDeReservas } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
@@ -34,7 +35,7 @@ export function CambiarEquipoDeReserva({
   // reservar de cero.
   const materiaId = cambiables.find((r) => r.id === reservaID)?.materiaId
 
-  const { data, isLoading } = useQuery({
+  const { data, isPending, isFetching, isSuccess, error, refetch } = useQuery({
     queryKey: [
       "equipos-disponibles",
       grupo.fecha,
@@ -62,6 +63,12 @@ export function CambiarEquipoDeReserva({
   })
 
   const disponibles = data?.data ?? []
+  const consultaLista = isSuccess && !isFetching && !error
+  const puedeCambiar =
+    consultaLista &&
+    cambiables.some((r) => r.id === reservaID) &&
+    disponibles.some((e) => e.equipoId === equipoID) &&
+    !cambiar.isPending
 
   return (
     <div className="grid gap-3 rounded-md border p-3">
@@ -78,7 +85,10 @@ export function CambiarEquipoDeReserva({
           <Select
             id={`cambiar-de-${grupo.grupoId ?? reservaID}`}
             value={reservaID}
-            onChange={(e) => setReservaID(e.target.value)}
+            onChange={(e) => {
+              setReservaID(e.target.value)
+              setEquipoID("")
+            }}
           >
             {cambiables.map((r) => (
               <option key={r.id} value={r.id}>
@@ -95,10 +105,10 @@ export function CambiarEquipoDeReserva({
             id={`cambiar-a-${grupo.grupoId ?? reservaID}`}
             value={equipoID}
             onChange={(e) => setEquipoID(e.target.value)}
-            disabled={isLoading || disponibles.length === 0}
+            disabled={!consultaLista || disponibles.length === 0}
           >
             <option value="">Elegí una computadora</option>
-            {disponibles.map((equipo) => (
+            {(consultaLista ? disponibles : []).map((equipo) => (
               <option key={equipo.equipoId} value={equipo.equipoId}>
                 {equipo.etiqueta}
                 {equipo.carroNombre && ` · ${equipo.carroNombre}`}
@@ -109,13 +119,30 @@ export function CambiarEquipoDeReserva({
           {/* El software instalado va en la etiqueta porque es el dato por
               el que se elige una máquina (RF-03.7): cambiar a una que no
               tenga el programa de la clase no resuelve nada. */}
-          {!isLoading && disponibles.length === 0 && (
+          {!error && (isPending || isFetching) && (
+            <p role="status" className="text-muted-foreground text-sm">
+              Consultando computadoras disponibles…
+            </p>
+          )}
+          {consultaLista && disponibles.length === 0 && (
             <p className="text-muted-foreground text-xs">
-              No hay ninguna computadora libre en ese horario.
+              {serieDesdeGrupoId
+                ? "No hay ninguna computadora libre en todas las fechas que faltan."
+                : "No hay ninguna computadora libre en ese horario."}
             </p>
           )}
         </div>
       </div>
+
+      {error && (
+        <ErrorDeConsulta
+          mensaje="No pudimos consultar las computadoras disponibles."
+          reintentando={isFetching}
+          onReintentar={() => {
+            void refetch()
+          }}
+        />
+      )}
 
       {grupo.esRecurrente && (
         <fieldset className="grid gap-2">
@@ -127,7 +154,10 @@ export function CambiarEquipoDeReserva({
               name={`alcance-cambio-${grupo.grupoId ?? reservaID}`}
               className="mt-1"
               checked={soloEsta}
-              onChange={() => setSoloEsta(true)}
+              onChange={() => {
+                setSoloEsta(true)
+                setEquipoID("")
+              }}
             />
             <Label
               htmlFor={`alcance-esta-${grupo.grupoId ?? reservaID}`}
@@ -143,7 +173,10 @@ export function CambiarEquipoDeReserva({
               name={`alcance-cambio-${grupo.grupoId ?? reservaID}`}
               className="mt-1"
               checked={!soloEsta}
-              onChange={() => setSoloEsta(false)}
+              onChange={() => {
+                setSoloEsta(false)
+                setEquipoID("")
+              }}
             />
             <Label
               htmlFor={`alcance-siguientes-${grupo.grupoId ?? reservaID}`}
@@ -176,8 +209,10 @@ export function CambiarEquipoDeReserva({
         <Button
           size="sm"
           className="h-11 px-4 sm:h-9"
-          disabled={cambiar.isPending || !reservaID || !equipoID}
-          onClick={() => cambiar.mutate()}
+          disabled={!puedeCambiar}
+          onClick={() => {
+            if (puedeCambiar) cambiar.mutate()
+          }}
         >
           Cambiar
         </Button>

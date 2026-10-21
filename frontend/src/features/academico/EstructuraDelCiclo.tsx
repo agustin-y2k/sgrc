@@ -59,7 +59,11 @@ export function EstructuraDelCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   // contra lo que se compara el archivo para decir qué va a crear. Una sola
   // consulta, no una por curso.
   const estructuraKey = ["estructura", ciclo.id]
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    error: errorConsulta,
+  } = useQuery({
     queryKey: estructuraKey,
     queryFn: () => academicoApi.exportarEstructura(ciclo.id),
   })
@@ -81,11 +85,19 @@ export function EstructuraDelCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   }
 
   const elegirArchivo = async (archivo: File) => {
+    if (isLoading || errorConsulta || !data) return
     setErrorLectura(null)
     setResultado(null)
     setPrevia(null)
 
-    const texto = await archivo.text()
+    let texto: string
+    try {
+      texto = await archivo.text()
+    } catch {
+      setErrorLectura("No se pudo leer la planilla. Volvé a elegir el archivo.")
+      if (inputArchivo.current) inputArchivo.current.value = ""
+      return
+    }
     const { cursos, rechazadas } = leerEstructuraCSV(texto)
 
     if (cursos.length === 0) {
@@ -130,7 +142,7 @@ export function EstructuraDelCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   }
 
   return (
-    <div className="grid gap-3 rounded-md border p-3">
+    <div className="grid min-w-0 gap-3 rounded-md border p-3">
       <div>
         <p className="text-sm font-medium">Cursos y materias en una planilla</p>
         <p className="text-muted-foreground text-sm">
@@ -140,10 +152,10 @@ export function EstructuraDelCiclo({ ciclo }: { ciclo: CicloLectivo }) {
         </p>
       </div>
 
-      {(errorLectura || importar.error) && (
+      {(errorConsulta || errorLectura || importar.error) && (
         <Alert variant="destructive">
           <AlertDescription>
-            {errorLectura ?? getErrorMessage(importar.error)}
+            {errorLectura ?? getErrorMessage(errorConsulta ?? importar.error)}
           </AlertDescription>
         </Alert>
       )}
@@ -163,7 +175,7 @@ export function EstructuraDelCiclo({ ciclo }: { ciclo: CicloLectivo }) {
       )}
 
       {previa && (
-        <div className="grid gap-2 rounded-md border p-3">
+        <div className="grid min-w-0 gap-2 rounded-md border p-3">
           <p className="text-sm font-medium">{previa.nombreArchivo}</p>
           <p className="text-sm">
             Trae {contar(previa.cursos.length, "curso")}.{" "}
@@ -206,10 +218,10 @@ export function EstructuraDelCiclo({ ciclo }: { ciclo: CicloLectivo }) {
             </Alert>
           )}
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             <Button
               size="sm"
-              disabled={importar.isPending}
+              disabled={importar.isPending || isLoading || !!errorConsulta}
               onClick={() => importar.mutate(previa.cursos)}
             >
               {importar.isPending ? "Cargando…" : "Cargar en el ciclo"}
@@ -221,15 +233,16 @@ export function EstructuraDelCiclo({ ciclo }: { ciclo: CicloLectivo }) {
         </div>
       )}
 
-      <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-end">
-        <div className="grid gap-1.5">
+      <div className="grid min-w-0 gap-2 sm:flex sm:flex-wrap sm:items-end">
+        <div className="grid min-w-0 gap-1.5">
           <Label htmlFor={`archivo-${ciclo.id}`}>Cargar desde una planilla</Label>
           <input
             ref={inputArchivo}
             id={`archivo-${ciclo.id}`}
             type="file"
+            disabled={isLoading || !!errorConsulta || importar.isPending}
             accept=".csv,text/csv"
-            className="text-sm file:mr-3 file:rounded-md file:border file:border-input file:bg-background file:px-3 file:py-1.5 file:text-sm"
+            className="w-full min-w-0 max-w-full text-sm file:mr-3 file:rounded-md file:border file:border-input file:bg-background file:px-3 file:py-1.5 file:text-sm"
             onChange={(e) => {
               const archivo = e.target.files?.[0]
               if (archivo) void elegirArchivo(archivo)
@@ -240,7 +253,7 @@ export function EstructuraDelCiclo({ ciclo }: { ciclo: CicloLectivo }) {
           type="button"
           variant="outline"
           size="sm"
-          disabled={isLoading || actual.length === 0}
+          disabled={isLoading || !!errorConsulta || actual.length === 0}
           onClick={descargar}
         >
           Descargar los {contar(actual.length, "curso")}

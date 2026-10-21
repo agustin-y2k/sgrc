@@ -181,7 +181,19 @@ export const TRANSICIONES_DE_ESTADO: Record<EstadoEquipo, EstadoEquipo[]> = {
 /**
  * RF-03.21 — la marca que dice que un equipo es preferente para una materia.
  */
+export type MateriaParaPreferencia = {
+  materiaId: string
+  materiaNombre: string
+  contenedorId: string
+  contenedorNombre: string
+  tipo: "CURSO" | "ESPACIO"
+  modalidad?: string
+  anio?: number
+  division?: string
+}
+
 export type PreferenciaDeEquipo = {
+  cursoExacto?: boolean
   id: string
   equipoId: string
   materiaNombre: string

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react"
+import { useMemo, useRef, useState, type ReactNode } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router"
 
@@ -21,6 +21,9 @@ import {
 } from "@/features/admin/entregas/compartido"
 import * as reservasApi from "@/features/reservas/api"
 import { hoyISO, type ReservaDetallada } from "@/features/reservas/types"
+import { diaAnteriorISO, intervaloDeReserva } from "@/features/reservas/intervalo"
+import { useAhora } from "@/lib/useAhora"
+import { todasLasPaginas } from "@/lib/todas-las-paginas"
 import { getErrorMessage } from "@/lib/api-client"
 import { contar, plural } from "@/lib/plural"
 
@@ -39,22 +42,12 @@ import { contar, plural } from "@/lib/plural"
 /** Cuántas clases por empezar se resumen antes de mandar al listado. */
 const MAX_SIGUIENTES = 4
 
-/** HH:MM a minutos, para comparar contra la hora actual. */
-function enMinutos(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number)
-  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : 0
-}
-
-function minutosDeAhora(): number {
-  const ahora = new Date()
-  return ahora.getHours() * 60 + ahora.getMinutes()
-}
-
 type ReservaDelDia = {
   clave: string
   materia: string
   curso?: string
   docente: string
+  fecha: string
   horaInicio: string
   horaFin: string
   reservas: ReservaDetallada[]
@@ -75,13 +68,16 @@ function agruparPorClase(reservas: ReservaDetallada[]): ReservaDelDia[] {
       materia: r.materiaNombre ?? r.motivoBloqueo ?? "Bloqueado",
       curso: r.cursoNombre,
       docente: r.nombreDocenteSnapshot ?? "",
+      fecha: r.fecha,
       horaInicio: r.horaInicio,
       horaFin: r.horaFin,
       reservas: [r],
     })
   }
 
-  return [...porGrupo.values()].sort((a, b) => a.horaInicio.localeCompare(b.horaInicio))
+  return [...porGrupo.values()].sort(
+    (a, b) => intervaloDeReserva(a).inicio - intervaloDeReserva(b).inicio
+  )
 }
 
 /** Qué está afuera, mirado desde las dos claves que hacen falta. */
@@ -111,6 +107,13 @@ function Clase({
   const queryClient = useQueryClient()
   const [retiradoPor, setRetiradoPor] = useState("")
   const [abriendoNombre, setAbriendoNombre] = useState(false)
+  const botonDelNombre = useRef<HTMLButtonElement>(null)
+
+  function cancelarAnotacion() {
+    setRetiradoPor("")
+    setAbriendoNombre(false)
+    botonDelNombre.current?.focus()
+  }
   // La entrega parcial es un modo aparte y no el caso por defecto: lo normal
   // es que el docente se lleve todo, y eso tiene que ser un clic.
   const [modoParcial, setModoParcial] = useState(false)
@@ -226,14 +229,21 @@ function Clase({
       {sinRetirar.length > 0 && (
         <div className="grid gap-2">
           {abriendoNombre && (
-            <div className="grid gap-1.5">
+            <div id={`anotacion-${clase.clave}`} className="grid gap-1.5">
               <Label htmlFor={`quien-${clase.clave}`}>
                 ¿Quién las retira? (opcional)
               </Label>
               <Input
                 id={`quien-${clase.clave}`}
+                autoFocus
                 value={retiradoPor}
                 onChange={(e) => setRetiradoPor(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault()
+                    cancelarAnotacion()
+                  }
+                }}
                 placeholder="Ej.: Juan (alumno de 5°A)"
               />
               {/* Anotarlo no cambia de quién son: el docente reservó y él
@@ -310,21 +320,31 @@ function Clase({
                 </Button>
                 {/* Con una sola máquina no hay nada que partir. */}
                 {sinRetirar.length > 1 && (
-                  <Button variant="outline" size="sm" onClick={() => setModoParcial(true)}>
-                    Entrega parcial
-                  </Button>
-                )}
-                {!abriendoNombre && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setAbriendoNombre(true)}
+                    onClick={() => setModoParcial(true)}
                   >
-                    Anotar quién las retira
+                    Entrega parcial
                   </Button>
                 )}
               </>
             )}
+            <Button
+              ref={botonDelNombre}
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-expanded={abriendoNombre}
+              aria-controls={`anotacion-${clase.clave}`}
+              disabled={entregar.isPending}
+              onClick={() => {
+                if (abriendoNombre) cancelarAnotacion()
+                else setAbriendoNombre(true)
+              }}
+            >
+              {abriendoNombre ? "Cancelar anotación" : "Anotar quién las retira"}
+            </Button>
           </div>
         </div>
       )}
@@ -333,19 +353,33 @@ function Clase({
 }
 
 export function PanelDelLaboratorio({ accion }: { accion?: ReactNode }) {
+  const ahora = useAhora()
   const hoy = hoyISO()
+  const ayer = diaAnteriorISO(hoy)
 
-  const { data: prestamos } = useQuery({
+  const { data: prestamos, error: errorPrestamos } = useQuery({
     queryKey: PRESTAMOS_KEY,
     queryFn: reservasApi.listarPrestamosAbiertos,
     refetchInterval: REFRESCO_DEL_MOSTRADOR,
   })
 
-  const { data: reservas, isLoading } = useQuery({
-    queryKey: ["reservas", "del-dia", hoy],
+  const {
+    data: reservas,
+    isLoading,
+    error: errorReservas,
+  } = useQuery({
+    queryKey: ["reservas", "del-dia", ayer, hoy],
     // pageSize al máximo: el listado pagina de a 50 por defecto y un día con
     // ocho clases de ocho máquinas son 64 reservas.
-    queryFn: () => reservasApi.listarReservas({ desde: hoy, hasta: hoy, pageSize: 200 }),
+    queryFn: () =>
+      todasLasPaginas((pagina) =>
+        reservasApi.listarReservas({
+          desde: ayer,
+          hasta: hoy,
+          pageSize: 200,
+          ...(pagina > 1 ? { page: pagina } : {}),
+        })
+      ),
     refetchInterval: REFRESCO_DEL_MOSTRADOR,
   })
 
@@ -360,7 +394,6 @@ export function PanelDelLaboratorio({ accion }: { accion?: ReactNode }) {
   }, [prestamos])
 
   const { enCurso, siguientes, terminadas } = useMemo(() => {
-    const ahora = minutosDeAhora()
     // Los bloqueos administrativos no se entregan a nadie: nadie viene a
     // buscarlos, los crea un Admin para sacar máquinas de circulación.
     const delDia = (reservas?.data ?? []).filter((r) => r.tipo !== "BLOQUEO")
@@ -368,14 +401,27 @@ export function PanelDelLaboratorio({ accion }: { accion?: ReactNode }) {
 
     return {
       enCurso: clases.filter(
-        (c) => enMinutos(c.horaInicio) <= ahora && ahora < enMinutos(c.horaFin)
+        (c) =>
+          intervaloDeReserva(c).inicio <= ahora.getTime() &&
+          ahora.getTime() < intervaloDeReserva(c).fin
       ),
-      siguientes: clases.filter((c) => enMinutos(c.horaInicio) > ahora),
-      terminadas: clases.filter((c) => enMinutos(c.horaFin) <= ahora),
+      siguientes: clases.filter((c) => intervaloDeReserva(c).inicio > ahora.getTime()),
+      terminadas: clases.filter(
+        (c) => c.fecha === hoy && intervaloDeReserva(c).fin <= ahora.getTime()
+      ),
     }
-  }, [reservas])
+  }, [reservas, ahora, hoy])
 
   const hayAlgo = enCurso.length > 0 || siguientes.length > 0
+
+  if (errorPrestamos || errorReservas)
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>
+          {getErrorMessage(errorPrestamos ?? errorReservas)}
+        </AlertDescription>
+      </Alert>
+    )
 
   return (
     <Card>

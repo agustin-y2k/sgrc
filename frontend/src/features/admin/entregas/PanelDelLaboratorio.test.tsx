@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { act, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router"
 
@@ -76,6 +76,38 @@ describe("PanelDelLaboratorio", () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.clearAllMocks()
+  })
+
+  it("mantiene en curso una clase que termina después de medianoche", async () => {
+    vi.setSystemTime(new Date(2026, 7, 11, 23, 30))
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([reserva({ horaInicio: "20:00", horaFin: "01:00" })])
+    )
+    renderPanel()
+    expect(await screen.findByText(/1 clase en curso/)).toBeInTheDocument()
+  })
+
+  it("consulta el día anterior para una clase nocturna todavía en curso", async () => {
+    vi.setSystemTime(new Date(2026, 7, 11, 0, 30))
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([reserva({ fecha: "2026-08-10", horaInicio: "20:00", horaFin: "01:00" })])
+    )
+    renderPanel()
+    expect(await screen.findByText(/1 clase en curso/)).toBeInTheDocument()
+    expect(reservasApi.listarReservas).toHaveBeenCalledWith(
+      expect.objectContaining({ desde: "2026-08-10", hasta: HOY })
+    )
+  })
+
+  it("el reloj cambia la clasificación aunque la respuesta de la API no cambie", async () => {
+    vi.setSystemTime(new Date(2026, 7, 11, 8, 59))
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
+    renderPanel()
+    expect(await screen.findByText(/1 clase en curso/)).toBeInTheDocument()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * 60_000)
+    })
+    expect(await screen.findByText(/No queda ninguna/)).toBeInTheDocument()
   })
 
   it("separa la clase en curso de la que todavía no empezó", async () => {
@@ -190,7 +222,9 @@ describe("PanelDelLaboratorio", () => {
 
     await user.click(await screen.findByRole("button", { name: "Entrega parcial" }))
     await user.click(screen.getByLabelText("Se llevó PC 1 · Carro 1"))
-    await user.click(screen.getByRole("button", { name: /Entregar 1 y liberar el resto/ }))
+    await user.click(
+      screen.getByRole("button", { name: /Entregar 1 y liberar el resto/ })
+    )
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
@@ -250,6 +284,51 @@ describe("PanelDelLaboratorio", () => {
     })
   })
 
+  it("permite cancelar la anotación vacía o escrita y entrega sin un nombre oculto", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
+    renderPanel()
+
+    const boton = await screen.findByRole("button", { name: "Anotar quién las retira" })
+    await user.click(boton)
+    expect(screen.getByLabelText(/Quién las retira/)).toHaveFocus()
+    await user.click(screen.getByRole("button", { name: "Cancelar anotación" }))
+    expect(screen.queryByLabelText(/Quién las retira/)).not.toBeInTheDocument()
+    expect(boton).toHaveAttribute("aria-expanded", "false")
+
+    await user.click(boton)
+    await user.type(screen.getByLabelText(/Quién las retira/), "Nombre por error")
+    await user.click(screen.getByRole("button", { name: "Cancelar anotación" }))
+    expect(reservasApi.entregarPorReserva).not.toHaveBeenCalled()
+    await user.click(boton)
+    expect(screen.getByLabelText(/Quién las retira/)).toHaveValue("")
+    await user.click(screen.getByRole("button", { name: "Cancelar anotación" }))
+    await user.click(screen.getByRole("button", { name: /Entregar todas \(1\)/ }))
+    expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
+      reservaIds: ["res1"],
+      retiradoPor: undefined,
+      liberarNoEntregadas: false,
+    })
+  })
+
+  it("Escape cancela la anotación y conserva la selección de la entrega parcial", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([reserva(), reserva({ id: "res2", equipoId: "pc2", identificador: 2 })])
+    )
+    renderPanel()
+    await user.click(await screen.findByRole("button", { name: "Entrega parcial" }))
+    await user.click(screen.getByLabelText("Se llevó PC 1 · Carro 1"))
+    const boton = screen.getByRole("button", { name: "Anotar quién las retira" })
+    await user.click(boton)
+    await user.type(screen.getByLabelText(/Quién las retira/), "Nombre por error")
+    await user.keyboard("{Escape}")
+    expect(screen.queryByLabelText(/Quién las retira/)).not.toBeInTheDocument()
+    expect(boton).toHaveFocus()
+    expect(screen.getByLabelText("Se llevó PC 1 · Carro 1")).toBeChecked()
+    expect(reservasApi.entregarPorReserva).not.toHaveBeenCalled()
+  })
+
   /**
    * Un bloqueo administrativo no lo retira nadie: lo crea un Admin para sacar
    * máquinas de circulación, así que ofrecerlo para entregar no significa
@@ -277,7 +356,7 @@ describe("PanelDelLaboratorio", () => {
 
     await screen.findByText("Hoy no hay ninguna clase con equipos reservados.")
     expect(reservasApi.listarReservas).toHaveBeenCalledWith({
-      desde: HOY,
+      desde: "2026-08-10",
       hasta: HOY,
       pageSize: 200,
     })

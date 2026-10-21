@@ -45,7 +45,10 @@ export function CopiarMateriasACursos({
     onSuccess: async (res) => {
       // Cambian las materias de varios cursos a la vez, y cuál de ellos está
       // desplegado en pantalla no se sabe desde acá: se invalidan todas.
-      await queryClient.invalidateQueries({ queryKey: ["materias"] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["materias"] }),
+        queryClient.invalidateQueries({ queryKey: ["catalogo-prioridades"] }),
+      ])
       setResultado(res)
       setDestinos(new Set())
     },
@@ -70,7 +73,7 @@ export function CopiarMateriasACursos({
   const resto = candidatos.filter((c) => c.anio !== origen.anio)
 
   return (
-    <div className="grid gap-3 rounded-md border p-3">
+    <div className="grid min-w-0 gap-3 rounded-md border p-3">
       <div>
         <p className="text-sm font-medium">
           Copiar las {contar(materias.length, "materia")} de «{etiquetaDeCurso(origen)}»
@@ -106,13 +109,13 @@ export function CopiarMateriasACursos({
         </p>
       ) : (
         <>
-          <div className="grid gap-1.5">
+          <div className="grid min-w-0 gap-1.5">
             <Label>Copiar a</Label>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
               {[...mismoAnio, ...resto].map((curso) => (
                 <label
                   key={curso.id}
-                  className="flex items-center gap-2 text-sm"
+                  className="flex min-w-0 items-center gap-2 text-sm"
                   htmlFor={`destino-${origen.id}-${curso.id}`}
                 >
                   <Checkbox
@@ -152,7 +155,7 @@ export function CopiarMateriasACursos({
         </>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex min-w-0 flex-wrap gap-2">
         <Button
           size="sm"
           disabled={destinos.size === 0 || copiar.isPending}

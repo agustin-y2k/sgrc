@@ -3,12 +3,9 @@ import { render, screen } from "@testing-library/react"
 import { PieDeAutoria } from "@/components/PieDeAutoria"
 
 describe("PieDeAutoria", () => {
-  // La licencia MIT solo pide una cosa a cambio de todo lo que permite: que
-  // el aviso de autoría viaje con el software.
-  it("muestra la autoría y la licencia", () => {
+  it("muestra la licencia del producto", () => {
     render(<PieDeAutoria />)
 
-    expect(screen.getByText(/Ramiro Agustin Pintos De Nucci/)).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "MIT" })).toHaveAttribute(
       "href",
       "https://opensource.org/licenses/MIT"

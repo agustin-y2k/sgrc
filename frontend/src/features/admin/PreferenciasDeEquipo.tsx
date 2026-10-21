@@ -1,14 +1,22 @@
+import { datosDeMarca, marcaValida, SIN_ATRIBUTO } from "./alcanceDeMarca"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
+import { invalidarInventario } from "./invalidarInventario"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CamposDeMarca, MARCA_VACIA, type ValoresDeMarca } from "@/features/admin/CamposDeMarca"
+import {
+  CamposDeMarca,
+  MARCA_VACIA,
+  type ValoresDeMarca,
+} from "@/features/admin/CamposDeMarca"
 import * as adminApi from "@/features/admin/api"
 import { materiasConLaMismaPrioridad } from "@/features/admin/prioridadEmpatada"
 import type { PreferenciaDeEquipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
+import { AyudaDePrioridad } from "@/features/admin/AyudaDePrioridad"
 
 /** RF-03.21 — para qué materias es preferente este equipo. */
 
@@ -21,22 +29,22 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
   const [editando, setEditando] = useState<PreferenciaDeEquipo | null>(null)
 
   const preferenciasKey = ["preferencias", "equipo", equipoId]
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isSuccess, isFetching, error, refetch } = useQuery({
     queryKey: preferenciasKey,
     queryFn: () => adminApi.listarPreferenciasDeEquipo(equipoId),
   })
 
-  // Los nombres se comparten entre todos los equipos, así que la clave no
+  // El catálogo se comparte entre todos los equipos, así que la clave no
   // lleva el id: se pide una vez y sirve para todas las fichas.
-  const { data: materias } = useQuery({
-    queryKey: ["materias-en-uso"],
-    queryFn: () => adminApi.materiasEnUso(),
+  const consultaMaterias = useQuery({
+    queryKey: ["catalogo-prioridades"],
+    queryFn: () => adminApi.catalogoDePrioridades(),
   })
 
   // Invalida el prefijo y no sólo la clave de este equipo: en el inventario el
   // panel del carro puede estar abierto al mismo tiempo, y su aviso de empate
   // se arma con las marcas de todos estos equipos.
-  const invalidar = () => queryClient.invalidateQueries({ queryKey: ["preferencias"] })
+  const invalidar = () => invalidarInventario(queryClient)
 
   const limpiar = () => {
     setEditando(null)
@@ -48,25 +56,23 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
     setEditando(p)
     setValores({
       materiaNombre: p.materiaNombre,
-      modalidad: p.modalidad ?? "",
+      modalidad: p.modalidad ?? (p.cursoExacto ? SIN_ATRIBUTO : ""),
       anio: p.anio === undefined ? "" : String(p.anio),
-      division: p.division ?? "",
+      division: p.division ?? (p.cursoExacto ? SIN_ATRIBUTO : ""),
       prioridad: String(p.prioridad),
+      alcance: p.cursoExacto ? "CURSO" : "GENERAL",
     })
   }
 
   const marcar = useMutation({
-    mutationFn: () =>
-      adminApi.marcarPreferencia({
+    mutationFn: () => {
+      if (!listo || !marcaValida(valores, consultaMaterias.data?.data ?? []))
+        throw new Error("Revisá la materia y el alcance antes de marcar.")
+      return adminApi.marcarPreferencia({
         equipoIds: [equipoId],
-        materiaNombre: valores.materiaNombre,
-        // Vacío se manda como ausente: "toda materia con ese nombre" es un
-        // alcance, no un dato faltante.
-        modalidad: valores.modalidad.trim() || undefined,
-        anio: valores.anio ? Number(valores.anio) : undefined,
-        division: valores.division.trim() || undefined,
-        prioridad: Number(valores.prioridad),
-      }),
+        ...datosDeMarca(valores),
+      })
+    },
     onSuccess: async () => {
       limpiar()
       await invalidar()
@@ -77,13 +83,14 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
   // NO se manda: apuntar a otra es otra marca, no una corrección de ésta, y el
   // backend no la acepta en este PATCH.
   const corregir = useMutation({
-    mutationFn: (p: PreferenciaDeEquipo) =>
-      adminApi.editarPreferencia(p.id, {
-        modalidad: valores.modalidad.trim() || undefined,
-        anio: valores.anio ? Number(valores.anio) : undefined,
-        division: valores.division.trim() || undefined,
-        prioridad: Number(valores.prioridad),
-      }),
+    mutationFn: (p: PreferenciaDeEquipo) => {
+      if (!listo || !marcaValida(valores, consultaMaterias.data?.data ?? []))
+        throw new Error("Revisá la materia y el alcance antes de guardar.")
+      const { materiaNombre: _nombre, ...datos } = datosDeMarca(valores)
+      return adminApi.editarPreferencia(p.id, {
+        ...datos,
+      })
+    },
     onSuccess: async () => {
       limpiar()
       await invalidar()
@@ -98,16 +105,24 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
   if (isLoading) {
     return <p className="text-muted-foreground text-sm">Cargando preferencias…</p>
   }
-  if (error) {
+  if (error || consultaMaterias.error)
     return (
-      <Alert variant="destructive">
-        <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-      </Alert>
+      <ErrorDeConsulta
+        mensaje="No pudimos consultar las materias y las prioridades del equipo."
+        reintentando={isFetching || consultaMaterias.isFetching}
+        onReintentar={() => {
+          void refetch()
+          void consultaMaterias.refetch()
+        }}
+      />
     )
-  }
+  const listo =
+    isSuccess && !isFetching && consultaMaterias.isSuccess && !consultaMaterias.isFetching
+  if (!listo) return <p role="status">Consultando materias y prioridades…</p>
 
   const preferencias = data?.data ?? []
-  const nombres = materias?.data ?? []
+  const catalogo = consultaMaterias.data?.data ?? []
+  const nombres = [...new Set(catalogo.map((f) => f.materiaNombre))]
   const errorDeAccion = marcar.error ?? corregir.error ?? borrar.error
 
   // Sólo con una materia elegida: el string vacío del formulario en blanco no
@@ -124,7 +139,7 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
       : materiasConLaMismaPrioridad(
           preferencias,
           valores.materiaNombre,
-          Number(valores.prioridad),
+          Number(valores.prioridad)
         )
 
   return (
@@ -132,10 +147,11 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
       <div>
         <h3 className="text-sm font-medium">Preferente para</h3>
         <p className="text-muted-foreground text-xs">
-          Al reservar, esa materia ve este equipo primero y las demás lo ven al final.
-          Nadie queda excluido: cualquiera lo puede reservar igual.
+          Esta marca ordena la lista de reserva y define quién tiene prioridad sobre este
+          dispositivo cuando dos materias lo necesitan en el mismo horario.
         </p>
       </div>
+      <AyudaDePrioridad />
 
       {errorDeAccion && (
         <Alert variant="destructive">
@@ -148,7 +164,7 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
           Sin marcas: este equipo aparece en el orden de siempre para todas las materias.
         </p>
       ) : (
-        <ul className="grid gap-1.5">
+        <ul aria-label="Marcas de este equipo" className="grid gap-1.5">
           {preferencias.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm">
@@ -185,9 +201,10 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
         </p>
       ) : (
         <form
-          className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto] sm:items-end"
+          className="grid gap-2 sm:grid-cols-2 sm:items-end lg:grid-cols-3"
           onSubmit={(e) => {
             e.preventDefault()
+            if (!marcaValida(valores, catalogo) || !listo) return
             if (editando) corregir.mutate(editando)
             else marcar.mutate()
           }}
@@ -196,21 +213,26 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
             <Alert className="sm:col-span-full">
               <AlertDescription>
                 Esta máquina ya es preferente de {empatadas.join(", ")} con prioridad{" "}
-                {valores.prioridad}. Con la misma prioridad ninguna le gana a la otra: si
-                querés que una mande, ponele un número distinto.
+                {valores.prioridad}. Cuando ambas marcas aplican, con la misma prioridad
+                ninguna desplaza a la otra. Revisá sus alcances y elegí un número menor
+                para la que deba tener mayor prioridad.
               </AlertDescription>
             </Alert>
           )}
           <CamposDeMarca
             valores={valores}
             onChange={setValores}
-            materias={nombres}
+            catalogo={catalogo}
             materiaBloqueada={editando !== null}
             idBase={equipoId}
           />
           {editando ? (
             <span className="flex gap-2">
-              <Button type="submit" size="sm" disabled={corregir.isPending}>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={corregir.isPending || !marcaValida(valores, catalogo)}
+              >
                 Guardar
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={limpiar}>
@@ -221,7 +243,7 @@ export function PreferenciasDeEquipo({ equipoId }: { equipoId: string }) {
             <Button
               type="submit"
               size="sm"
-              disabled={valores.materiaNombre === "" || marcar.isPending}
+              disabled={!marcaValida(valores, catalogo) || marcar.isPending}
             >
               Marcar
             </Button>

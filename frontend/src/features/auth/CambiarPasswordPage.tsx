@@ -19,6 +19,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormDescription,
   FormMessage,
 } from "@/components/ui/form"
 import { InputPassword } from "@/components/ui/input-password"
@@ -38,7 +39,8 @@ type CambiarPasswordValues = z.infer<typeof cambiarPasswordSchema>
 // acá por <ProtectedRoute>) como el cambio voluntario en cualquier momento
 // (RF-01.7) — mismo formulario, mismo endpoint.
 export function CambiarPasswordPage() {
-  const { refetchUser } = useAuth()
+  const { refetchUser, user } = useAuth()
+  const obligatorio = !!user?.debeCambiarPassword
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
 
@@ -67,9 +69,13 @@ export function CambiarPasswordPage() {
     <div className="flex justify-center p-4 pt-12">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Cambiar contraseña</CardTitle>
+          <CardTitle>
+            <h1>Cambiar contraseña</h1>
+          </CardTitle>
           <CardDescription>
-            Ingresá tu contraseña actual y la nueva contraseña.
+            {obligatorio
+              ? "Tu contraseña es temporal. Para continuar, elegí una contraseña personal; después vas a poder usar el sistema."
+              : "Ingresá tu contraseña actual y la nueva contraseña."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -89,6 +95,11 @@ export function CambiarPasswordPage() {
                     <FormControl>
                       <InputPassword autoComplete="current-password" {...field} />
                     </FormControl>
+                    {obligatorio && (
+                      <FormDescription>
+                        Usá la contraseña temporal que te comunicó administración.
+                      </FormDescription>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

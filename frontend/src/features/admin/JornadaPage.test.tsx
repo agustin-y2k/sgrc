@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import * as disponibilidadApi from "@/features/disponibilidad/api"
@@ -65,6 +65,7 @@ function renderPagina() {
       <JornadaPage />
     </QueryClientProvider>
   )
+  return queryClient
 }
 
 const HABILES: DiaSemana[] = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"]
@@ -87,6 +88,62 @@ describe("JornadaPage", () => {
     vi.mocked(disponibilidadApi.reemplazarJornada).mockResolvedValue({
       data: [],
     })
+  })
+
+  it("no guarda una jornada desconocida y permite reintentar", async () => {
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockRejectedValueOnce(
+      new Error("Sin conexión")
+    )
+    renderPagina()
+    expect(await screen.findByText(/No pudimos consultar la jornada/)).toBeVisible()
+    expect(screen.queryByText(/Todavía no se declaró/)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Agregar tramo" })).toBeDisabled()
+    await userEvent.click(screen.getByRole("button", { name: "Agregar tramo" }))
+    expect(disponibilidadApi.reemplazarJornada).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole("button", { name: /Reintentar/ }))
+    await screen.findByText(/Todavía no se declaró/)
+    await userEvent.click(screen.getByRole("button", { name: "Lunes" }))
+    await userEvent.click(screen.getByRole("button", { name: "Agregar tramo" }))
+    await waitFor(() =>
+      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(1)
+    )
+  })
+  it("no permite guardar mientras la primera consulta sigue pendiente", async () => {
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockImplementation(
+      () => new Promise(() => {})
+    )
+    renderPagina()
+    expect(screen.getByRole("button", { name: "Lunes" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Agregar tramo" })).toBeDisabled()
+    expect(screen.queryByText(/Todavía no se declaró/)).not.toBeInTheDocument()
+  })
+
+  it("conserva los días elegidos si falla una actualización de la consulta", async () => {
+    const user = userEvent.setup()
+    const qc = renderPagina()
+    await screen.findByText(/Todavía no se declaró la jornada/)
+    await user.click(screen.getByRole("button", { name: "Sábado" }))
+    vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockRejectedValueOnce(
+      new Error("Sin conexión")
+    )
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: disponibilidadApi.JORNADA_KEY })
+    })
+    expect(await screen.findByText(/No pudimos consultar la jornada/)).toBeVisible()
+    expect(screen.getByRole("button", { name: "Agregar tramo" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Sábado" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    )
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Agregar tramo" })).toBeEnabled()
+    )
+    await user.click(screen.getByRole("button", { name: "Agregar tramo" }))
+    await waitFor(() =>
+      expect(disponibilidadApi.reemplazarJornada).toHaveBeenCalledTimes(1)
+    )
+    expect(jornadaGuardada()).toEqual([tramo("SABADO", "08:00", "12:00")])
   })
 
   it("sin jornada declarada avisa que no hay restricción", async () => {

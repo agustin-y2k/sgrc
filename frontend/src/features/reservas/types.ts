@@ -331,6 +331,7 @@ export type RazonNoEntregada =
   | "YA_ENTREGADA"
   | "FUERA_DEL_INVENTARIO"
   | "RESERVA_CANCELADA"
+  | "RESERVA_REUBICADA"
   /** La reserva no dice a nombre de quién: es un bloqueo administrativo. */
   | "SIN_DESTINATARIO"
   /**

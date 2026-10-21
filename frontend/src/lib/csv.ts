@@ -5,6 +5,15 @@ const SEPARADOR = ";"
 
 function escapar(valor: string | number): string {
   const texto = String(valor)
+  // Las comillas CSV no impiden que una planilla ejecute una fórmula.
+  // Marcar como texto los valores no confiables y mantenerlos en una celda.
+  // Los números del reporte conservan su tipo, incluidos los negativos.
+  if (
+    typeof valor === "string" &&
+    (/^[\t\r\n]/.test(texto) || /^\s*[=+\-@＝＋－＠]/u.test(texto))
+  ) {
+    return `"'${texto.replace(/"/g, '""')}"`
+  }
   // Comillas dobles alrededor solo si hace falta; las de adentro se duplican.
   return /[";\r\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto
 }

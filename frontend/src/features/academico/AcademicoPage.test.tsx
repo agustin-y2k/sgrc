@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { AcademicoPage } from "@/features/academico/AcademicoPage"
@@ -51,7 +51,7 @@ function usuario(over: Partial<Usuario> = {}): Usuario {
     id: "u1",
     nombre: "Ada",
     apellido: "Lovelace",
-    email: "ada@escuela.edu.ar",
+    email: "ada@escuela.test",
     rol: "DOCENTE",
     estado: "APROBADA",
     fechaRegistro: "2026-01-01T00:00:00Z",
@@ -72,6 +72,7 @@ function renderPagina() {
       <AcademicoPage />
     </QueryClientProvider>
   )
+  return queryClient
 }
 
 describe("AcademicoPage", () => {
@@ -131,7 +132,9 @@ describe("AcademicoPage", () => {
 
   it("permite crear otro ciclo cuando el existente está archivado", async () => {
     vi.mocked(academicoApi.listarCiclos).mockResolvedValue({
-      data: [ciclo({ activo: false, archivado: true })],
+      data: [
+        ciclo({ anio: new Date().getFullYear() - 1, activo: false, archivado: true }),
+      ],
     })
     renderPagina()
 
@@ -446,7 +449,7 @@ describe("AcademicoPage", () => {
       await abrirDocentes(user)
 
       const select = await screen.findByLabelText("Asignar docente")
-      expect(select).not.toHaveTextContent("ada@escuela.edu.ar")
+      expect(select).not.toHaveTextContent("ada@escuela.test")
     })
 
     // RF-02.10: quitar al último cancela las reservas futuras de la materia.
@@ -485,6 +488,114 @@ describe("AcademicoPage", () => {
       )
     }
 
+    it("una consulta fallida no parece una instalación vacía ni permite crear un ciclo", async () => {
+      vi.mocked(academicoApi.listarCiclos).mockRejectedValueOnce(
+        new Error("Sin conexión")
+      )
+      const user = userEvent.setup()
+      renderPagina()
+      await screen.findByText(/No pudimos consultar los ciclos lectivos/)
+      expect(screen.queryByText(/Todavía no hay ningún ciclo/)).not.toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Crear ciclo" })).toBeDisabled()
+      await user.click(screen.getByRole("button", { name: "Reintentar" }))
+      expect(
+        await screen.findByRole("button", { name: "Cerrar el año y abrir el siguiente" })
+      ).toBeEnabled()
+    })
+
+    it("un fallo al actualizar los ciclos conserva el destino y bloquea el cierre hasta reintentar", async () => {
+      const user = userEvent.setup()
+      const cliente = renderPagina()
+      await abrirCierre(user)
+      const campo = screen.getByLabelText(/Año del ciclo siguiente/)
+      await user.clear(campo)
+      await user.type(campo, "2028")
+      vi.mocked(academicoApi.listarCiclos).mockRejectedValueOnce(
+        new Error("Sin conexión")
+      )
+      await act(async () => {
+        await cliente.refetchQueries({ queryKey: ["ciclos"] })
+      })
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Cerrar 2026 y crear 2028" })
+        ).toBeDisabled()
+      )
+      expect(campo).toHaveValue("2028")
+      await user.click(screen.getByRole("button", { name: "Reintentar" }))
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Cerrar 2026 y crear 2028" })
+        ).toBeEnabled()
+      )
+    })
+
+    it.each([{ activo: false, archivado: true }, { anio: 2025 }])(
+      "no cierra un ciclo que cambió mientras se preparaba la confirmación: %j",
+      async (cambio) => {
+        const user = userEvent.setup()
+        const cliente = renderPagina()
+        await abrirCierre(user)
+        vi.mocked(academicoApi.listarCiclos).mockResolvedValue({ data: [ciclo(cambio)] })
+        await act(async () => {
+          await cliente.refetchQueries({ queryKey: ["ciclos"] })
+        })
+        await waitFor(() =>
+          expect(
+            screen.getByRole("button", { name: /^Cerrar \d+ y crear/ })
+          ).toBeDisabled()
+        )
+        expect(
+          screen.getByText(/Este ciclo cambió o ya no está activo/)
+        ).toBeInTheDocument()
+        expect(academicoApi.archivarCiclo).not.toHaveBeenCalled()
+      }
+    )
+
+    it("mantiene la intención enviada mientras el cierre está pendiente y permite reintentar un fallo", async () => {
+      let rechazar!: (err: Error) => void
+      vi.mocked(academicoApi.archivarCiclo).mockImplementationOnce(
+        () =>
+          new Promise((_r, reject) => {
+            rechazar = reject
+          })
+      )
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirCierre(user)
+      await user.click(screen.getByRole("button", { name: "Cerrar 2026 y crear 2027" }))
+      expect(screen.getByLabelText(/Año del ciclo siguiente/)).toBeDisabled()
+      expect(screen.getByLabelText("Cerrar sin crear otro ciclo")).toBeDisabled()
+      expect(screen.getByRole("button", { name: "Volver" })).toBeDisabled()
+      expect(screen.getByRole("button", { name: "Cerrando…" })).toBeDisabled()
+      await act(async () => rechazar(new ApiError(503, "Respuesta no recibida")))
+      expect(await screen.findByText("Respuesta no recibida")).toBeInTheDocument()
+      expect(screen.getByLabelText(/Año del ciclo siguiente/)).toHaveValue("2027")
+      vi.mocked(academicoApi.archivarCiclo).mockResolvedValue({
+        archivado: true,
+        cursosClonados: 0,
+        materiasClonadas: 0,
+      })
+      await user.click(screen.getByRole("button", { name: "Cerrar 2026 y crear 2027" }))
+      await screen.findByText(/Ciclo cerrado/)
+      expect(academicoApi.archivarCiclo).toHaveBeenNthCalledWith(2, "ciclo1", 2027)
+    })
+
+    it("explica que los préstamos siguen abiertos, las prioridades se mantienen y se copian espacios sin docentes", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirCierre(user)
+      expect(
+        screen.getByText(/Cerrar el año no registra su devolución/)
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText(/Se copian los cursos, espacios y sus materias/)
+      ).toHaveTextContent(/no los docentes asignados/)
+      expect(
+        screen.getByText(/Las prioridades de los dispositivos se mantienen/)
+      ).toBeInTheDocument()
+    })
+
     it("advierte que el borrado de reservas es definitivo", async () => {
       const user = userEvent.setup()
       renderPagina()
@@ -507,7 +618,9 @@ describe("AcademicoPage", () => {
       renderPagina()
       await abrirCierre(user)
 
-      await user.click(await screen.findByRole("button", { name: "Cerrar 2026" }))
+      await user.click(
+        await screen.findByRole("button", { name: "Cerrar 2026 y crear 2027" })
+      )
 
       await waitFor(() => {
         expect(academicoApi.archivarCiclo).toHaveBeenCalledWith("ciclo1", 2027)
@@ -515,7 +628,7 @@ describe("AcademicoPage", () => {
       expect(await screen.findByText(/3 cursos y 9 materias/)).toBeInTheDocument()
     })
 
-    it("archiva sin clonar si se vacía el año destino", async () => {
+    it("archiva sin clonar sólo al elegir expresamente no crear otro ciclo", async () => {
       vi.mocked(academicoApi.archivarCiclo).mockResolvedValue({
         archivado: true,
         cursosClonados: 0,
@@ -526,12 +639,59 @@ describe("AcademicoPage", () => {
       await abrirCierre(user)
 
       await user.clear(screen.getByLabelText(/Año del ciclo siguiente/))
-      await user.click(screen.getByRole("button", { name: "Cerrar 2026" }))
+      expect(screen.getByRole("button", { name: /Cerrar 2026 y crear/ })).toBeDisabled()
+      await user.click(screen.getByLabelText("Cerrar sin crear otro ciclo"))
+      expect(screen.queryByLabelText(/Año del ciclo siguiente/)).not.toBeInTheDocument()
+      await user.click(
+        screen.getByRole("button", { name: "Cerrar 2026 sin abrir otro ciclo" })
+      )
 
       await waitFor(() => {
         expect(academicoApi.archivarCiclo).toHaveBeenCalledWith("ciclo1", undefined)
       })
       expect(await screen.findByText(/No se creó un ciclo nuevo/)).toBeInTheDocument()
+      expect(screen.getByLabelText("Año")).toHaveValue("2027")
+    })
+
+    it.each(["", "   ", "2027/2028", "2O27", "Infinity", "2027.5", "1999", "2101"])(
+      "no envía un cierre con el año inválido %j",
+      async (valor) => {
+        const user = userEvent.setup()
+        renderPagina()
+        await abrirCierre(user)
+        const campo = screen.getByLabelText(/Año del ciclo siguiente/)
+        await user.clear(campo)
+        if (valor) await user.type(campo, valor)
+        const boton = screen.getByRole("button", { name: /Cerrar 2026 y crear/ })
+        expect(campo).toHaveAttribute("aria-invalid", "true")
+        expect(
+          screen.getByText(/Ingresá un año entero entre 2000 y 2100/)
+        ).toBeInTheDocument()
+        expect(boton).toBeDisabled()
+        await user.click(boton)
+        expect(academicoApi.archivarCiclo).not.toHaveBeenCalled()
+      }
+    )
+
+    it("detecta un año ya utilizado y permite corregirlo sin cambiar el alcance", async () => {
+      const user = userEvent.setup()
+      renderPagina()
+      await abrirCierre(user)
+      const campo = screen.getByLabelText(/Año del ciclo siguiente/)
+      await user.clear(campo)
+      await user.type(campo, "2026")
+      expect(
+        screen.getByText("Ya existe un ciclo para 2026. Elegí otro año.")
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: "Cerrar 2026 y crear 2026" })
+      ).toBeDisabled()
+      await user.clear(campo)
+      await user.type(campo, "2028")
+      expect(
+        screen.getByRole("button", { name: "Cerrar 2026 y crear 2028" })
+      ).toBeEnabled()
+      expect(screen.getByLabelText("Cerrar y crear el siguiente ciclo")).toBeChecked()
     })
 
     it("no ofrece cerrar un ciclo ya archivado", async () => {
@@ -544,6 +704,20 @@ describe("AcademicoPage", () => {
       expect(
         screen.queryByRole("button", { name: "Cerrar el año y abrir el siguiente" })
       ).not.toBeInTheDocument()
+    })
+
+    it("no abre un año que ya existe aunque esté archivado y permite elegir uno libre", async () => {
+      const anio = new Date().getFullYear()
+      vi.mocked(academicoApi.listarCiclos).mockResolvedValue({
+        data: [ciclo({ anio, activo: false, archivado: true })],
+      })
+      const user = userEvent.setup()
+      renderPagina()
+      await screen.findByText(`Ya existe un ciclo para ${anio}. Elegí otro año.`)
+      expect(screen.getByRole("button", { name: "Crear ciclo" })).toBeDisabled()
+      await user.clear(screen.getByLabelText("Año"))
+      await user.type(screen.getByLabelText("Año"), String(anio + 1))
+      expect(screen.getByRole("button", { name: "Crear ciclo" })).toBeEnabled()
     })
   })
 
@@ -853,7 +1027,9 @@ describe("AcademicoPage", () => {
 
       await user.click(screen.getByRole("button", { name: "Eliminar el ciclo 2026" }))
 
-      expect(await screen.findByText(/archivalo en vez de eliminarlo/)).toBeInTheDocument()
+      expect(
+        await screen.findByText(/archivalo en vez de eliminarlo/)
+      ).toBeInTheDocument()
     })
 
     // Un ciclo archivado es el registro de un año cerrado: no se corrige ni se

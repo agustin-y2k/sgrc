@@ -26,7 +26,7 @@ const GRUPOS: { grupo: GrupoDeCategoria; titulo: string; ayuda: string }[] = [
     grupo: "CUENTA",
     titulo: "Tu cuenta",
     ayuda:
-      "Estos salen siempre: son los únicos que no tienen un aviso equivalente acá adentro.",
+      "Son obligatorios cuando el envío de correos está habilitado. La recuperación de contraseña se realiza desde la pantalla de acceso.",
   },
   {
     grupo: "PERSONAL",
@@ -51,13 +51,14 @@ export function PreferenciasDeCorreo() {
   // seleccion en null = todavía no se tocó nada, vale lo que dice el servidor.
   const [seleccion, setSeleccion] = useState<CategoriaEmail[] | null>(null)
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: PREFERENCIAS_EMAIL_KEY,
     queryFn: notificacionesApi.listarPreferenciasEmail,
   })
 
   const guardar = useMutation({
     mutationFn: notificacionesApi.guardarPreferenciasEmail,
+    onMutate: () => queryClient.cancelQueries({ queryKey: PREFERENCIAS_EMAIL_KEY }),
     onSuccess: (respuesta) => {
       queryClient.setQueryData(PREFERENCIAS_EMAIL_KEY, respuesta)
       setSeleccion(null)
@@ -85,27 +86,44 @@ export function PreferenciasDeCorreo() {
           <div>
             <p className="font-medium">Copias por correo</p>
             <p className="text-muted-foreground text-sm">
-              {resumen(elegibles, isLoading)}
+              {error
+                ? "No pudimos leer tus preferencias de correo."
+                : resumen(elegibles, isLoading)}
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => setAbierto(!abierto)}>
             {abierto ? "Cerrar" : "Elegir cuáles"}
           </Button>
         </div>
+        <p className="text-muted-foreground text-sm">
+          Estas preferencias se aplican si la escuela tiene habilitado el envío de
+          correos. Consultá tus reservas, pedidos y conversaciones dentro del sistema para
+          seguir sus cambios.
+        </p>
 
         {error && (
           <Alert variant="destructive">
-            <AlertDescription>{getErrorMessage(error)}</AlertDescription>
+            <AlertDescription>
+              {getErrorMessage(error)}
+              <Button
+                variant="outline"
+                disabled={isFetching}
+                onClick={() => void refetch()}
+              >
+                Reintentar preferencias
+              </Button>
+            </AlertDescription>
           </Alert>
         )}
 
-        {abierto && (
+        {abierto && !error && !isLoading && (
           <>
             {/* Lo primero que hay que entender antes de tocar una casilla:
                 acá no se apaga ningún aviso, solo el mail. */}
             <p className="text-muted-foreground text-sm">
-              Todos estos avisos te van a seguir apareciendo en esta pantalla. Lo que
-              elegís acá es cuáles te llegan <strong>además</strong> por correo.
+              Los avisos de reservas, pedidos y conversaciones te van a seguir apareciendo
+              en esta pantalla. Elegí para cuáles querés recibir además una copia por
+              correo cuando el envío esté habilitado.
             </p>
 
             {GRUPOS.map(({ grupo, titulo, ayuda }) => {
@@ -125,7 +143,7 @@ export function PreferenciasDeCorreo() {
                         id={`correo-${p.categoria}`}
                         className="mt-1"
                         checked={p.fija || elegidas.includes(p.categoria)}
-                        disabled={p.fija}
+                        disabled={p.fija || guardar.isPending || isFetching}
                         onCheckedChange={(v) => alternar(p.categoria, v === true)}
                       />
                       <div className="grid gap-0.5">
@@ -150,11 +168,16 @@ export function PreferenciasDeCorreo() {
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
-                disabled={!hayCambios || guardar.isPending}
+                disabled={!hayCambios || guardar.isPending || isFetching}
                 onClick={() => guardar.mutate(elegidas)}
               >
                 Guardar
               </Button>
+              {guardar.isSuccess && !hayCambios && (
+                <span role="status" className="text-sm">
+                  Preferencias guardadas.
+                </span>
+              )}
               {hayCambios && (
                 <span className="text-muted-foreground text-sm">
                   Tenés cambios sin guardar.
@@ -187,7 +210,7 @@ function resumen(elegibles: PreferenciaEmail[], cargando: boolean): string {
   if (cargando) return "Cargando…"
   const activas = activasDe(elegibles).length
   if (activas === 0) {
-    return "Solo te llegan por correo los avisos de tu cuenta. Elegí si querés alguno más."
+    return "Solo están seleccionados los correos obligatorios de tu cuenta. Elegí si querés alguna copia más."
   }
-  return `Te llegan por correo ${activas} de ${elegibles.length} tipos de aviso, más los de tu cuenta.`
+  return `Tenés seleccionados ${activas} de ${elegibles.length} tipos de aviso, además de los correos obligatorios de tu cuenta.`
 }

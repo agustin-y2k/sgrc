@@ -7,6 +7,7 @@ import type {
   MateriaReservable,
   EquipoDisponible,
   EquipoOcupado,
+  EstadoReserva,
   Prestamo,
   Reserva,
   ReservaDetallada,
@@ -73,9 +74,15 @@ export function pedirLiberacion(reservaId: string, mensaje: string) {
 
 /** Las reservas del usuario. */
 export function listarReservas(filtros?: {
+  estado?: EstadoReserva
+  busqueda?: string
+  creadoPor?: string
+  materiaId?: string
   desde?: string
   hasta?: string
   incluirCanceladas?: boolean
+  /** Paginación por clases y bloqueos completos; meta.total cuenta esas unidades. */
+  porClases?: boolean
   page?: number
   /**
    * El backend pagina de a 50 si no se pide nada, con un techo de 200. Un día
@@ -88,7 +95,12 @@ export function listarReservas(filtros?: {
   const params = new URLSearchParams()
   if (filtros?.desde) params.set("desde", filtros.desde)
   if (filtros?.hasta) params.set("hasta", filtros.hasta)
+  if (filtros?.estado) params.set("estado", filtros.estado)
+  if (filtros?.busqueda) params.set("busqueda", filtros.busqueda)
+  if (filtros?.creadoPor) params.set("creadoPor", filtros.creadoPor)
+  if (filtros?.materiaId) params.set("materiaId", filtros.materiaId)
   if (filtros?.incluirCanceladas) params.set("incluirCanceladas", "true")
+  if (filtros?.porClases) params.set("porClases", "true")
   if (filtros?.page && filtros.page > 1) params.set("page", String(filtros.page))
   if (filtros?.pageSize) params.set("pageSize", String(filtros.pageSize))
   const query = params.toString()
@@ -103,6 +115,7 @@ export function crearReserva(req: CrearReservaRequest) {
     reservas: Reserva[]
     /** RF-03.21: a cuántos desplazó el robo, para poder decírselo. */
     reservasCanceladas?: number
+    reservasReubicadas?: number
     docentesAfectados?: number
   }>("/api/reservas", {
     method: "POST",
@@ -111,12 +124,37 @@ export function crearReserva(req: CrearReservaRequest) {
 }
 
 /** RF-04.5 — si una sola ocurrencia choca, el backend no crea ninguna. */
+export type PrevisualizacionSerie = {
+  cantidadClases: number
+  puedeCrear: boolean
+  equiposATomar: string[]
+  fechas: {
+    fecha: string
+    equipos: {
+      equipoId: string
+      etiqueta: string
+      estado: "LIBRE" | "POR_PRIORIDAD" | "NO_DISPONIBLE"
+      motivo?: string
+    }[]
+  }[]
+}
+
+export function previsualizarSerie(
+  req: Omit<CrearReservaRecurrenteRequest, "equiposATomar">
+) {
+  return apiFetch<PrevisualizacionSerie>("/api/reservas/recurrentes/previsualizar", {
+    method: "POST",
+    body: req,
+  })
+}
+
 export function crearReservaRecurrente(req: CrearReservaRecurrenteRequest) {
   return apiFetch<{
     reglaId: string
     grupos: unknown[]
     /** El impacto de la serie entera: una recurrente roba en cada ocurrencia. */
     reservasCanceladas?: number
+    reservasReubicadas?: number
     docentesAfectados?: number
   }>("/api/reservas/recurrentes", { method: "POST", body: req })
 }
