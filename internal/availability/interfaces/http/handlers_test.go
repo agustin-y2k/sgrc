@@ -866,10 +866,8 @@ func TestHTTP_ReemplazarJornada_LaListaSeRecortaPeroElConteoNo(t *testing.T) {
 	}
 }
 
-// La cascada a medias deja la jornada nueva puesta. El mensaje tiene que
-// decirlo: con un "error interno" genérico el Admin cree que no pasó nada y
-// el horario de la escuela cambió sin que lo sepa.
-func TestHTTP_ReemplazarJornada_CascadaAMedias_LoDiceYLoAudita(t *testing.T) {
+// Un cambio revertido no se audita como jornada confirmada.
+func TestHTTP_ReemplazarJornada_CascadaFallida_NoAuditaUnCambioRevertido(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservas := &fakeReservas{
 		futuras: []application.ReservaFutura{{
@@ -896,14 +894,12 @@ func TestHTTP_ReemplazarJornada_CascadaAMedias_LoDiceYLoAudita(t *testing.T) {
 		t.Fatalf("esperaba 500, obtuve %d", resp.StatusCode)
 	}
 	cuerpo, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(cuerpo), "la jornada se guardó") {
-		t.Errorf("el mensaje tiene que decir que el cambio sí se aplicó: %q", cuerpo)
+	if !strings.Contains(string(cuerpo), "no se pudo confirmar") {
+		t.Errorf("el mensaje tiene que explicar que no se confirmó: %q", cuerpo)
 	}
-	// Y queda auditado igual: el horario cambió, y eso es lo que el registro
-	// no puede perderse.
 	entradas := auditor.de("JORNADA_CAMBIADA")
-	if len(entradas) != 1 || entradas[0].Detalle["cascadaIncompleta"] != true {
-		t.Errorf("la cascada a medias también se audita: %+v", entradas)
+	if len(entradas) != 0 || len(repo.jornada) != 0 {
+		t.Errorf("cambio revertido auditado o persistido: %+v", entradas)
 	}
 }
 
@@ -974,4 +970,13 @@ func (a *auditorEspia) de(accion string) []audit.Entrada {
 		}
 	}
 	return r
+}
+
+func (r *fakeRepo) Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error {
+	previa := r.jornada
+	if err := fn(ctx); err != nil {
+		r.jornada = previa
+		return err
+	}
+	return nil
 }

@@ -46,7 +46,11 @@ func (s *Service) ExportarEstructura(ctx context.Context, cicloID string) ([]Cur
 // una materia que alguien agregó a mano no puede hacerla desaparecer. La
 // contracara —que una materia mal escrita se corrige a mano y no volviendo a
 // importar— es el precio, y es el barato de los dos.
-func (s *Service) ImportarEstructura(ctx context.Context, cicloID string, cursos []CursoConMaterias) (*ResultadoImportacion, error) {
+func (s *Service) importarEstructura(ctx context.Context, cicloID string, cursos []CursoConMaterias) (*ResultadoImportacion, error) {
+	if err := s.repo.VerificarVigencia(ctx, "ciclo", cicloID); err != nil {
+		return nil, err
+	}
+
 	ciclo, err := s.repo.BuscarCicloPorID(ctx, cicloID)
 	if err != nil {
 		return nil, err
@@ -81,7 +85,11 @@ func (s *Service) ImportarEstructura(ctx context.Context, cicloID string, cursos
 // del archivado (RF-02.5) y la descarga/carga de la estructura entera, que
 // mueven también los cursos. Una copia de materias que cruza ciclos en silencio
 // se parece demasiado a las dos y no hace ninguna de las dos.
-func (s *Service) CopiarMaterias(ctx context.Context, cursoOrigenID string, cursosDestinoIDs []string) (*ResultadoCopia, error) {
+func (s *Service) copiarMaterias(ctx context.Context, cursoOrigenID string, cursosDestinoIDs []string) (*ResultadoCopia, error) {
+	if err := s.repo.VerificarVigencia(ctx, "curso", cursoOrigenID); err != nil {
+		return nil, err
+	}
+
 	origen, err := s.repo.BuscarCursoPorID(ctx, cursoOrigenID)
 	if err != nil {
 		return nil, err
@@ -146,6 +154,9 @@ func (s *Service) validarDestinos(ctx context.Context, origen *domain.Curso, ids
 		return nil, fmt.Errorf("verificando los cursos de destino: %w", err)
 	}
 	for _, id := range destinos {
+		if err := s.repo.VerificarVigencia(ctx, "curso", id); err != nil {
+			return nil, err
+		}
 		ciclo, existe := ciclos[id]
 		if !existe {
 			// Ausente del mapa = no existe. Se devuelve el mismo error que daría

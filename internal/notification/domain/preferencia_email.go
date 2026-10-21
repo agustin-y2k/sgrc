@@ -34,7 +34,7 @@ const (
 	// sistema a mirar no sirve para lo que se pidió.
 	CatSoporteRespondido CategoriaEmail = "SOPORTE_RESPONDIDO"
 	// CatReservaCancelada: le cancelaron una o varias computadoras de una
-	// reserva (RF-05.1/05.2/05.3). Arranca encendida.
+	// reserva, o se reemplazaron por prioridad (RF-05.1/05.2/05.3). Arranca encendida.
 	CatReservaCancelada CategoriaEmail = "RESERVA_CANCELADA"
 	// CatPedidoDeLiberacion: otro docente le pide un equipo que tiene
 	// reservado (RF-04.12).

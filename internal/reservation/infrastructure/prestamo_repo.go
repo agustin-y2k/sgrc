@@ -6,22 +6,10 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/agustin-y2k/sgrc/internal/reservation/application"
 	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
 )
-
-// codigoViolacionUnica: SQLSTATE 23505. Es el único UNIQUE de este paquete —
-// el préstamo abierto por equipo—; la constraint característica de
-// reservation es el EXCLUDE de anti-solapamiento, que usa otro código (23P01,
-// ver esViolacionExclusion).
-const codigoViolacionUnica = "23505"
-
-func esViolacionUnica(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == codigoViolacionUnica
-}
 
 const columnasPrestamo = `id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre, ` +
 	`COALESCE(retirado_por, ''), ` +
@@ -52,23 +40,18 @@ const joinsDelPrestamo = `
 	LEFT JOIN materia m ON m.id = r.materia_id`
 
 func (r *PostgresRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) error {
-	_, err := r.db.Exec(ctx, `
+	tag, err := r.conexion(ctx).Exec(ctx, `
 		INSERT INTO prestamo (
 			id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre,
 			retirado_por, destino, devolucion_estimada, entregado_por, entregado_en,
 			devuelto_en, recibido_por, observaciones
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		ON CONFLICT (equipo_id) WHERE devuelto_en IS NULL DO NOTHING
 	`, p.ID, p.EquipoID, p.ReservaID, p.EntregadoAUsuarioID, p.EntregadoANombre,
 		nullSiVacio(p.RetiradoPor), nullSiVacio(p.Destino), p.DevolucionEstimada,
 		p.EntregadoPor, p.EntregadoEn, p.DevueltoEn, p.RecibidoPor,
 		nullSiVacio(p.Observaciones))
 	if err != nil {
-		// El único índice único de la tabla es ux_prestamo_abierto, así que no hay
-		// ambigüedad sobre cuál se violó: alguien intentó entregar una máquina que
-		// ya estaba afuera.
-		if esViolacionUnica(err) {
-			return application.ErrEquipoYaPrestado
-		}
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
 		}
@@ -77,18 +60,23 @@ func (r *PostgresRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) er
 		}
 		return fmt.Errorf("registrando la entrega: %w", err)
 	}
+	// El rechazo previsto no aborta la transacción: las otras PCs del lote
+	// pueden confirmarse y su resultado sigue siendo visible al llamador.
+	if tag.RowsAffected() == 0 {
+		return application.ErrEquipoYaPrestado
+	}
 	return nil
 }
 
 func (r *PostgresRepo) BuscarPrestamoPorID(ctx context.Context, id string) (*domain.Prestamo, error) {
-	row := r.db.QueryRow(ctx, `SELECT `+columnasPrestamo+` FROM prestamo WHERE id = $1`, id)
+	row := r.conexion(ctx).QueryRow(ctx, `SELECT `+columnasPrestamo+` FROM prestamo WHERE id = $1`, id)
 	return escanearPrestamo(row)
 }
 
 // BuscarPrestamoAbiertoDeEquipo responde "¿dónde está esta máquina?". Devuelve
 // ErrPrestamoNoEncontrado si está en el laboratorio.
 func (r *PostgresRepo) BuscarPrestamoAbiertoDeEquipo(ctx context.Context, equipoID string) (*domain.Prestamo, error) {
-	row := r.db.QueryRow(ctx,
+	row := r.conexion(ctx).QueryRow(ctx,
 		`SELECT `+columnasPrestamo+` FROM prestamo WHERE equipo_id = $1 AND devuelto_en IS NULL`, equipoID)
 	return escanearPrestamo(row)
 }
@@ -123,8 +111,9 @@ func escanearPrestamo(row pgx.Row) (*domain.Prestamo, error) {
 
 // GuardarPrestamo solo actualiza lo que cambia al recibir la máquina.
 func (r *PostgresRepo) GuardarPrestamo(ctx context.Context, p *domain.Prestamo) error {
-	tag, err := r.db.Exec(ctx, `
-		UPDATE prestamo SET devuelto_en=$2, recibido_por=$3, observaciones=$4 WHERE id=$1
+	tag, err := r.conexion(ctx).Exec(ctx, `
+		UPDATE prestamo SET devuelto_en=$2, recibido_por=$3, observaciones=$4
+		WHERE id=$1 AND devuelto_en IS NULL
 	`, p.ID, p.DevueltoEn, p.RecibidoPor, nullSiVacio(p.Observaciones))
 	if err != nil {
 		if esViolacionFK(err) {
@@ -136,14 +125,21 @@ func (r *PostgresRepo) GuardarPrestamo(ctx context.Context, p *domain.Prestamo) 
 		return fmt.Errorf("actualizando el registro de entrega: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return application.ErrPrestamoNoEncontrado
+		var existe bool
+		if err := r.conexion(ctx).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM prestamo WHERE id=$1)`, p.ID).Scan(&existe); err != nil {
+			return fmt.Errorf("comprobando devolución previa: %w", err)
+		}
+		if !existe {
+			return application.ErrPrestamoNoEncontrado
+		}
+		return domain.ErrPrestamoYaDevuelto
 	}
 	return nil
 }
 
 // ListarPrestamosAbiertos: qué hay afuera ahora mismo.
 func (r *PostgresRepo) ListarPrestamosAbiertos(ctx context.Context) ([]*application.PrestamoDetallado, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasPrestamoDetallado+joinsDelPrestamo+`
 		WHERE p.devuelto_en IS NULL
 		ORDER BY p.devolucion_estimada ASC NULLS LAST, p.entregado_en ASC`)
@@ -156,7 +152,7 @@ func (r *PostgresRepo) ListarPrestamosAbiertos(ctx context.Context) ([]*applicat
 // ListarPrestamosDeEquipo es el historial de una máquina, de lo más reciente a
 // lo más viejo. Incluye el préstamo abierto si lo hay.
 func (r *PostgresRepo) ListarPrestamosDeEquipo(ctx context.Context, equipoID string, limite int) ([]*application.PrestamoDetallado, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasPrestamoDetallado+joinsDelPrestamo+`
 		WHERE p.equipo_id = $1
 		ORDER BY p.entregado_en DESC
@@ -213,12 +209,20 @@ func nullSiVacio(s string) *string {
 // BuscarPrestamosPorIDs — ver BuscarReservasPorIDs en reserva_repo.go: la
 // devolución de un lote recibía hasta doscientos ids y pedía de a uno.
 func (r *PostgresRepo) BuscarPrestamosPorIDs(ctx context.Context, ids []string) (map[string]*domain.Prestamo, error) {
+	return r.buscarPrestamosPorIDs(ctx, ids, "")
+}
+
+func (r *PostgresRepo) BuscarPrestamosParaActualizar(ctx context.Context, ids []string) (map[string]*domain.Prestamo, error) {
+	return r.buscarPrestamosPorIDs(ctx, ids, ` ORDER BY id FOR UPDATE`)
+}
+
+func (r *PostgresRepo) buscarPrestamosPorIDs(ctx context.Context, ids []string, cola string) (map[string]*domain.Prestamo, error) {
 	if len(ids) == 0 {
 		return map[string]*domain.Prestamo{}, nil
 	}
 
-	rows, err := r.db.Query(ctx,
-		`SELECT `+columnasPrestamo+` FROM prestamo WHERE id = ANY($1)`, ids)
+	rows, err := r.conexion(ctx).Query(ctx,
+		`SELECT `+columnasPrestamo+` FROM prestamo WHERE id = ANY($1)`+cola, ids)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
@@ -236,4 +240,27 @@ func (r *PostgresRepo) BuscarPrestamosPorIDs(ctx context.Context, ids []string) 
 		porID[p.ID] = p
 	}
 	return porID, errorDeFilas(rows)
+}
+
+func (r *PostgresRepo) ReservasConPrestamos(ctx context.Context, ids []string) (map[string]bool, error) {
+	conEntrega := make(map[string]bool)
+	if len(ids) == 0 {
+		return conEntrega, nil
+	}
+	rows, err := r.conexion(ctx).Query(ctx, `SELECT DISTINCT reserva_id FROM prestamo WHERE reserva_id=ANY($1)`, ids)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("consultando retiros previos: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("leyendo retiro previo: %w", err)
+		}
+		conEntrega[id] = true
+	}
+	return conEntrega, errorDeFilas(rows)
 }

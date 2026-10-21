@@ -33,7 +33,7 @@ func (f *fakeVerificadorGoogle) Verificar(ctx context.Context, idToken string) (
 func identidadDePrueba() *IdentidadGoogle {
 	return &IdentidadGoogle{
 		Sub:             "112233445566",
-		Email:           "ada@escuela.edu.ar",
+		Email:           "ada@escuela.test",
 		EmailVerificado: true,
 		Nombre:          "Ada",
 		Apellido:        "Lovelace",
@@ -147,7 +147,7 @@ func TestLoginConGoogle_EmailNoVerificado_Rechaza(t *testing.T) {
 	identidad.EmailVerificado = false
 
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
+	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.test", "112233445566", domain.EstadoAprobada)
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidad})
 
 	_, err := svc.LoginConGoogle(context.Background(), "un-token", false)
@@ -171,7 +171,7 @@ func TestLoginConGoogle_DominioNoPermitido_LlegaIntacto(t *testing.T) {
 
 func TestLoginConGoogle_CuentaVinculadaYAprobada_DevuelveToken(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
+	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.test", "112233445566", domain.EstadoAprobada)
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
 	res, err := svc.LoginConGoogle(context.Background(), "un-token", false)
@@ -189,9 +189,9 @@ func TestLoginConGoogle_CuentaVinculadaYAprobada_DevuelveToken(t *testing.T) {
 func TestLoginConGoogle_ElSubGanaSobreElEmail(t *testing.T) {
 	repo := nuevoFakeRepo()
 	// La cuenta se registró con la dirección vieja y quedó vinculada al sub.
-	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada.vieja@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
+	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada.vieja@escuela.test", "112233445566", domain.EstadoAprobada)
 	// Otra persona ocupa hoy la dirección nueva.
-	repo.usuarios["u2"] = usuarioDeGoogle("u2", "ada@escuela.edu.ar", "999999", domain.EstadoAprobada)
+	repo.usuarios["u2"] = usuarioDeGoogle("u2", "ada@escuela.test", "999999", domain.EstadoAprobada)
 
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
@@ -224,7 +224,7 @@ func TestLoginConGoogle_VinculaCuentaExistentePorEmail_YConservaLaPassword(t *te
 		ID:           "u1",
 		Nombre:       "Ada",
 		Apellido:     "Lovelace",
-		Email:        "ada@escuela.edu.ar",
+		Email:        "ada@escuela.test",
 		PasswordHash: "hash:password123",
 		Rol:          domain.RolDocente,
 		Estado:       domain.EstadoAprobada,
@@ -253,7 +253,7 @@ func TestLoginConGoogle_EmailNoVerificado_NoVinculaNada(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
 		ID: "u1", Nombre: "Ada", Apellido: "Lovelace",
-		Email: "ada@escuela.edu.ar", PasswordHash: "hash:password123",
+		Email: "ada@escuela.test", PasswordHash: "hash:password123",
 		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidad})
@@ -274,7 +274,7 @@ func TestLoginConGoogle_CuentaPendiente_VinculaPeroNoDejaEntrar(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
 		ID: "u1", Nombre: "Ada", Apellido: "Lovelace",
-		Email: "ada@escuela.edu.ar", PasswordHash: "hash:password123",
+		Email: "ada@escuela.test", PasswordHash: "hash:password123",
 		Rol: domain.RolDocente, Estado: domain.EstadoPendiente,
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
@@ -294,7 +294,7 @@ func TestLoginConGoogle_CuentaEnBaja_NoSeVincula(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
 		ID: "u1", Nombre: "Ada", Apellido: "Lovelace",
-		Email: "ada@escuela.edu.ar", PasswordHash: "hash:password123",
+		Email: "ada@escuela.test", PasswordHash: "hash:password123",
 		Rol: domain.RolDocente, Estado: domain.EstadoBaja,
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
@@ -316,12 +316,12 @@ func TestLoginConGoogle_CuentaEnBaja_NoSeVincula(t *testing.T) {
 
 func TestLoginConGoogle_NormalizaElEmailAntesDeBuscar(t *testing.T) {
 	identidad := identidadDePrueba()
-	identidad.Email = "  Ada.Lovelace@Escuela.Edu.Ar  "
+	identidad.Email = "  Ada.Lovelace@Escuela.test  "
 
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
 		ID: "u1", Nombre: "Ada", Apellido: "Lovelace",
-		Email: "ada.lovelace@escuela.edu.ar", PasswordHash: "hash:password123",
+		Email: "ada.lovelace@escuela.test", PasswordHash: "hash:password123",
 		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidad})
@@ -356,7 +356,7 @@ func TestRegistrarConGoogle_CreaCuentaPendienteSinPassword(t *testing.T) {
 	if u.GoogleSub != "112233445566" {
 		t.Errorf("google_sub inesperado: %q", u.GoogleSub)
 	}
-	if u.Email != "ada@escuela.edu.ar" {
+	if u.Email != "ada@escuela.test" {
 		t.Errorf("email inesperado: %q", u.Email)
 	}
 	if u.CursoSolicitado != "5°A" || u.MateriaSolicitada != "Programación" {
@@ -381,7 +381,7 @@ func TestRegistrarConGoogle_PublicaEventoParaAdmins(t *testing.T) {
 
 	select {
 	case e := <-recibido:
-		if e.Payload.(map[string]string)["email"] != "ada@escuela.edu.ar" {
+		if e.Payload.(map[string]string)["email"] != "ada@escuela.test" {
 			t.Errorf("payload incorrecto: %v", e.Payload)
 		}
 	case <-time.After(time.Second):
@@ -419,7 +419,7 @@ func TestRegistrarConGoogle_SinNombreEnNingunLado_Error(t *testing.T) {
 
 func TestRegistrarConGoogle_YaVinculada_NoCreaOtra(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
+	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.test", "112233445566", domain.EstadoAprobada)
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
 	_, err := svc.RegistrarConGoogle(context.Background(), "un-token", "", "", solicitudDeDocente())
@@ -436,7 +436,7 @@ func TestRegistrarConGoogle_EmailYaUsadoPorCuentaLocal_NoCreaOtra(t *testing.T) 
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
 		ID: "u1", Nombre: "Ada", Apellido: "Lovelace",
-		Email: "ada@escuela.edu.ar", PasswordHash: "hash:password123",
+		Email: "ada@escuela.test", PasswordHash: "hash:password123",
 		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
@@ -457,7 +457,7 @@ func TestRegistrarConGoogle_EmailDeCuentaEnBaja(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
 		ID: "u1", Nombre: "Ada", Apellido: "Lovelace",
-		Email: "ada@escuela.edu.ar", PasswordHash: "hash:password123",
+		Email: "ada@escuela.test", PasswordHash: "hash:password123",
 		Rol: domain.RolDocente, Estado: domain.EstadoBaja,
 	}
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
@@ -474,7 +474,7 @@ func TestRegistrarConGoogle_EmailDeCuentaEnBaja(t *testing.T) {
 // Una cuenta de Google no tiene contraseña.
 func TestLogin_CuentaDeGoogle_NoDistingueDeUnEmailInexistente(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
+	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.test", "112233445566", domain.EstadoAprobada)
 
 	verificaciones := 0
 	svc := servicioConVerify(repo, func(password, hash string) (bool, error) {
@@ -482,7 +482,7 @@ func TestLogin_CuentaDeGoogle_NoDistingueDeUnEmailInexistente(t *testing.T) {
 		return false, nil
 	})
 
-	_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "loquesea", false)
+	_, err := svc.Login(context.Background(), "ada@escuela.test", "loquesea", false)
 
 	if !errors.Is(err, ErrCredencialesInvalidas) {
 		t.Fatalf("esperaba ErrCredencialesInvalidas, hubo: %v", err)
@@ -497,7 +497,7 @@ func TestLogin_CuentaDeGoogle_NoDistingueDeUnEmailInexistente(t *testing.T) {
 
 func TestCambiarPassword_CuentaDeGoogle_NoTieneQueCambiar(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
+	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.test", "112233445566", domain.EstadoAprobada)
 	svc := nuevoServicioDeTest(repo)
 
 	_, err := svc.CambiarPassword(context.Background(), "u1", "loquesea", "password-nueva", false)
@@ -512,7 +512,7 @@ func TestCambiarPassword_CuentaDeGoogle_NoTieneQueCambiar(t *testing.T) {
 // de Google.
 func TestResetearPassword_CuentaDeGoogle_LeDaUnaContrasenia(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
+	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.test", "112233445566", domain.EstadoAprobada)
 	svc := nuevoServicioDeTest(repo)
 
 	temporal, err := svc.ResetearPassword(context.Background(), "u1")

@@ -20,7 +20,7 @@ const formatoFechaSQL = "2006-01-02"
 // ReservasAVigilar: las confirmadas de hoy y mañana, con el contacto del
 // docente y el estado de custodia de cada máquina.
 func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]application.ReservaParaVigilar, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT
 			res.id, res.reserva_grupo_id, res.equipo_id, COALESCE(eq.identificador, 0),
 			res.fecha, res.hora_inicio, res.hora_fin, res.tipo, m.nombre,
@@ -43,7 +43,7 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 		LEFT JOIN usuario u ON u.id = g.creado_por
 		LEFT JOIN prestamo p ON p.equipo_id = res.equipo_id AND p.devuelto_en IS NULL
 		WHERE res.estado = 'CONFIRMADA'
-		  AND res.fecha BETWEEN $1::date AND $1::date + 1
+		  AND res.fecha BETWEEN $1::date - 1 AND $1::date + 1
 		ORDER BY res.fecha, res.hora_inicio, eq.identificador
 	`, hoy.Format(formatoFechaSQL))
 	if err != nil {
@@ -84,7 +84,7 @@ func (r *PostgresRepo) ReservasAVigilar(ctx context.Context, hoy time.Time) ([]a
 
 // PrestamosAVigilar: todos los abiertos.
 func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.PrestamoParaVigilar, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasPrestamoDetallado+`, COALESCE(u.email, '')
 		FROM prestamo p
 		JOIN equipo eq ON eq.id = p.equipo_id
@@ -151,7 +151,7 @@ func (r *PostgresRepo) MarcarRecordatorioEnviado(ctx context.Context, grupoID st
 // nadie avisó de ella, y no tiene por qué mantener abierto el aviso de anoche.
 func (r *PostgresRepo) ContarAvisadosSinDevolver(ctx context.Context) (int, error) {
 	var n int
-	err := r.db.QueryRow(ctx, `
+	err := r.conexion(ctx).QueryRow(ctx, `
 		SELECT count(*) FROM prestamo
 		WHERE avisado_cierre_para IS NOT NULL AND devuelto_en IS NULL
 	`).Scan(&n)
@@ -165,7 +165,7 @@ func (r *PostgresRepo) ContarAvisadosSinDevolver(ctx context.Context) (int, erro
 // fin de día se repite mientras la máquina siga afuera, así que lo que hay
 // que recordar es "de este día ya avisé", no "avisé alguna vez".
 func (r *PostgresRepo) MarcarCierreAvisado(ctx context.Context, prestamoID string, jornada time.Time) error {
-	_, err := r.db.Exec(ctx, `UPDATE prestamo SET avisado_cierre_para=$2::date WHERE id=$1`,
+	_, err := r.conexion(ctx).Exec(ctx, `UPDATE prestamo SET avisado_cierre_para=$2::date WHERE id=$1`,
 		prestamoID, jornada.Format(formatoFechaSQL))
 	if err != nil {
 		if esIDInvalido(err) {
@@ -177,7 +177,7 @@ func (r *PostgresRepo) MarcarCierreAvisado(ctx context.Context, prestamoID strin
 }
 
 func (r *PostgresRepo) marcar(ctx context.Context, sql, id string, ahora time.Time, que string) error {
-	if _, err := r.db.Exec(ctx, sql, id, ahora); err != nil {
+	if _, err := r.conexion(ctx).Exec(ctx, sql, id, ahora); err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
@@ -194,7 +194,7 @@ func (r *PostgresRepo) ProximaReservaDeEquipo(ctx context.Context, equipoID stri
 	// escanearla directo sobre el time.Duration de ProximaReserva corta con
 	// "cannot scan time (OID 1083) in binary format into *time.Duration".
 	var horaInicio time.Time
-	err := r.db.QueryRow(ctx, `
+	err := r.conexion(ctx).QueryRow(ctx, `
 		SELECT COALESCE(g.creado_por::text, ''),
 		       COALESCE(u.email, ''),
 		       COALESCE(u.nombre || ' ' || u.apellido, res.nombre_docente_snapshot, ''),

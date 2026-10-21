@@ -9,6 +9,7 @@ import (
 
 	"github.com/agustin-y2k/sgrc/internal/academic/application"
 	"github.com/agustin-y2k/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 // ── Curso ───────────────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ const columnasCurso = `id, ciclo_lectivo_id, nombre, anio, division, modalidad, 
 // caso raro. Las divisiones sin dígitos ("A", "1ra" ordena por el 1) caen en
 // el NULL y las desempata el texto.
 const ordenDeCurso = `anio,
-	 nullif(regexp_replace(coalesce(division, ''), '\D', '', 'g'), '')::int NULLS FIRST,
+	 nullif(regexp_replace(coalesce(division, ''), '\D', '', 'g'), '')::numeric NULLS FIRST,
 	 division NULLS FIRST,
 	 modalidad NULLS FIRST`
 
@@ -50,13 +51,13 @@ const ordenDeCurso = `anio,
 // agregue una columna.
 func ordenDeCursoDe(a string) string {
 	return a + `.anio,
-	 nullif(regexp_replace(coalesce(` + a + `.division, ''), '\D', '', 'g'), '')::int NULLS FIRST,
+	 nullif(regexp_replace(coalesce(` + a + `.division, ''), '\D', '', 'g'), '')::numeric NULLS FIRST,
 	 ` + a + `.division NULLS FIRST,
 	 ` + a + `.modalidad NULLS FIRST`
 }
 
 func (r *PostgresRepo) CrearCurso(ctx context.Context, c *domain.Curso) error {
-	_, err := r.pool.Exec(ctx,
+	_, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad, archivado)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		c.ID, c.CicloLectivoID, c.Anio, nullSiVacio(c.Division), nullSiVacio(c.Modalidad),
@@ -77,7 +78,7 @@ func (r *PostgresRepo) CrearCurso(ctx context.Context, c *domain.Curso) error {
 }
 
 func (r *PostgresRepo) BuscarCursoPorID(ctx context.Context, id string) (*domain.Curso, error) {
-	row := r.pool.QueryRow(ctx, `SELECT `+columnasCurso+` FROM curso WHERE id = $1`, id)
+	row := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx, `SELECT `+columnasCurso+` FROM curso WHERE id = $1`, id)
 	return escanearCurso(row)
 }
 
@@ -104,7 +105,7 @@ func escanearCurso(row pgx.Row) (*domain.Curso, error) {
 }
 
 func (r *PostgresRepo) GuardarCurso(ctx context.Context, c *domain.Curso) error {
-	tag, err := r.pool.Exec(ctx,
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`UPDATE curso SET anio=$2, division=$3, modalidad=$4, archivado=$5 WHERE id=$1`,
 		c.ID, c.Anio, nullSiVacio(c.Division), nullSiVacio(c.Modalidad), c.Archivado)
 	if err != nil {
@@ -133,7 +134,7 @@ func (r *PostgresRepo) GuardarCurso(ctx context.Context, c *domain.Curso) error 
 // sigue existiendo porque da el mejor mensaje y no depende de qué foránea
 // saltó.
 func (r *PostgresRepo) EliminarCurso(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM curso WHERE id = $1`, id)
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `DELETE FROM curso WHERE id = $1`, id)
 	if err != nil {
 		if esViolacionFK(err) {
 			return application.ErrCursoConReservas
@@ -150,7 +151,7 @@ func (r *PostgresRepo) EliminarCurso(ctx context.Context, id string) error {
 }
 
 func (r *PostgresRepo) ListarCursosPorCiclo(ctx context.Context, cicloID string) ([]*domain.Curso, error) {
-	rows, err := r.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT `+columnasCurso+` FROM curso WHERE ciclo_lectivo_id = $1
 		 ORDER BY `+ordenDeCurso,
 		cicloID)
@@ -180,7 +181,7 @@ func (r *PostgresRepo) CrearMateria(ctx context.Context, m *domain.Materia) erro
 	// escribe el que vino y el otro va en NULL, que es lo que el CHECK de la
 	// base exige (migración 017). NULLIF convierte el vacío de Go en el NULL
 	// de Postgres sin ramificar la consulta en dos.
-	_, err := r.pool.Exec(ctx,
+	_, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`INSERT INTO materia (id, curso_id, espacio_id, nombre, archivado)
 		 VALUES ($1, NULLIF($2, '')::uuid, NULLIF($3, '')::uuid, $4, $5)`,
 		m.ID, m.CursoID, m.EspacioID, m.Nombre, m.Archivado)
@@ -200,7 +201,7 @@ func (r *PostgresRepo) CrearMateria(ctx context.Context, m *domain.Materia) erro
 }
 
 func (r *PostgresRepo) BuscarMateriaPorID(ctx context.Context, id string) (*domain.Materia, error) {
-	row := r.pool.QueryRow(ctx,
+	row := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx,
 		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado
 		   FROM materia WHERE id = $1`, id)
 	return escanearMateria(row)
@@ -221,7 +222,7 @@ func escanearMateria(row pgx.Row) (*domain.Materia, error) {
 }
 
 func (r *PostgresRepo) GuardarMateria(ctx context.Context, m *domain.Materia) error {
-	tag, err := r.pool.Exec(ctx,
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`UPDATE materia SET nombre=$2, archivado=$3 WHERE id=$1`,
 		m.ID, m.Nombre, m.Archivado)
 	if err != nil {
@@ -247,7 +248,7 @@ func (r *PostgresRepo) GuardarMateria(ctx context.Context, m *domain.Materia) er
 // reservas. Ver EliminarCurso para por qué se traduce acá además de
 // comprobarlo antes.
 func (r *PostgresRepo) EliminarMateria(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM materia WHERE id = $1`, id)
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `DELETE FROM materia WHERE id = $1`, id)
 	if err != nil {
 		if esViolacionFK(err) {
 			return application.ErrMateriaConReservas
@@ -264,7 +265,7 @@ func (r *PostgresRepo) EliminarMateria(ctx context.Context, id string) error {
 }
 
 func (r *PostgresRepo) ListarMateriasPorCurso(ctx context.Context, cursoID string) ([]*domain.Materia, error) {
-	rows, err := r.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado
 		   FROM materia WHERE curso_id = $1 ORDER BY nombre`,
 		cursoID)
@@ -290,13 +291,13 @@ func (r *PostgresRepo) ListarMateriasPorCurso(ctx context.Context, cursoID strin
 // ── DocenteMateria ──────────────────────────────────────────────────────
 
 func (r *PostgresRepo) AsignarDocente(ctx context.Context, dm *domain.DocenteMateria) error {
-	_, err := r.pool.Exec(ctx,
+	_, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`INSERT INTO docente_materia (id, usuario_id, materia_id, rol) VALUES ($1, $2, $3, $4)`,
 		dm.ID, dm.UsuarioID, dm.MateriaID, string(dm.Rol))
 	if err != nil {
 		if esViolacionUnica(err) {
 			// UNIQUE(usuario_id, materia_id) — ya está asignado.
-			return fmt.Errorf("el docente ya está asignado a esta materia")
+			return application.ErrYaDictaLaMateria
 		}
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
@@ -310,7 +311,7 @@ func (r *PostgresRepo) AsignarDocente(ctx context.Context, dm *domain.DocenteMat
 }
 
 func (r *PostgresRepo) BuscarDocenteMateria(ctx context.Context, id string) (*domain.DocenteMateria, error) {
-	row := r.pool.QueryRow(ctx,
+	row := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx,
 		`SELECT id, usuario_id, materia_id, rol FROM docente_materia WHERE id = $1`, id)
 	return escanearDocenteMateria(row)
 }
@@ -339,7 +340,7 @@ func escanearDocenteMateria(row pgx.Row) (*domain.DocenteMateria, error) {
 // vínculo no se editan —cambiar cualquiera de los dos es otro vínculo, y el
 // camino para eso es quitar y volver a asignar.
 func (r *PostgresRepo) GuardarDocenteMateria(ctx context.Context, dm *domain.DocenteMateria) error {
-	tag, err := r.pool.Exec(ctx,
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`UPDATE docente_materia SET rol = $2 WHERE id = $1`, dm.ID, string(dm.Rol))
 	if err != nil {
 		if esIDInvalido(err) {
@@ -354,7 +355,7 @@ func (r *PostgresRepo) GuardarDocenteMateria(ctx context.Context, dm *domain.Doc
 }
 
 func (r *PostgresRepo) RemoverDocenteMateria(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM docente_materia WHERE id = $1`, id)
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `DELETE FROM docente_materia WHERE id = $1`, id)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -368,7 +369,7 @@ func (r *PostgresRepo) RemoverDocenteMateria(ctx context.Context, id string) err
 }
 
 func (r *PostgresRepo) ListarDocentesDeMateria(ctx context.Context, materiaID string) ([]*domain.DocenteMateria, error) {
-	rows, err := r.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT id, usuario_id, materia_id, rol FROM docente_materia WHERE materia_id = $1`,
 		materiaID)
 	if err != nil {
@@ -412,7 +413,7 @@ func (r *PostgresRepo) CiclosDeCursos(ctx context.Context, ids []string) (map[st
 		return map[string]string{}, nil
 	}
 
-	rows, err := r.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT id, ciclo_lectivo_id FROM curso WHERE id = ANY($1)`, ids)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -455,7 +456,7 @@ func (r *PostgresRepo) NombresParaRegistro(ctx context.Context) (application.Opc
 
 	// Una sola consulta con las materias agregadas por contenedor: con una por
 	// curso serían 29 idas a la base para llenar un formulario público.
-	filas, err := r.pool.Query(ctx,
+	filas, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT t.nombre, t.modalidad, t.tipo,
 		        COALESCE(
 		            array_agg(m.nombre ORDER BY m.nombre) FILTER (WHERE m.id IS NOT NULL),

@@ -7,13 +7,14 @@ import (
 
 	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 // Recuperación de contraseña por autoservicio (RF-01.10).
 
 // SolicitarRecuperacionDePassword genera un código de un solo uso y lo manda
 // al email de la persona.
-func (s *Service) SolicitarRecuperacionDePassword(ctx context.Context, email string) error {
+func (s *Service) operacionSolicitarRecuperacionDePassword(ctx context.Context, email string) error {
 	if !s.correoHabilitado {
 		return ErrRecuperacionNoDisponible
 	}
@@ -53,7 +54,7 @@ func (s *Service) SolicitarRecuperacionDePassword(ctx context.Context, email str
 
 	if !u.PuedeIngresarConPassword() {
 		// Cuenta creada con Google: no hay contraseña que recuperar.
-		s.bus.Publish(eventbus.Evento{
+		eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 			Tipo:    "password.recuperacion.cuenta-google",
 			Payload: eventbus.CuentaSoloConGoogle{Email: u.Email, Nombre: u.Nombre},
 		})
@@ -74,7 +75,7 @@ func (s *Service) SolicitarRecuperacionDePassword(ctx context.Context, email str
 	// El correo no se manda desde acá: el bus publica de forma sincrónica en
 	// esta goroutine, así que abrir la conexión SMTP adentro dejaría el request
 	// esperando a Gmail.
-	s.bus.Publish(eventbus.Evento{
+	eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 		Tipo: "password.recuperacion.solicitada",
 		Payload: eventbus.DatosDeRecuperacion{
 			Email:             u.Email,
@@ -117,61 +118,71 @@ func (s *Service) RestablecerPasswordConCodigo(ctx context.Context, email, codig
 		return "", ErrCodigoRecuperacionInvalido
 	}
 
-	registro, err := s.repo.BuscarCodigoVigenteDe(ctx, u.ID)
-	if errors.Is(err, ErrCodigoNoEncontrado) {
-		s.consumirTiempoDeVerificacion(codigo)
-		return "", ErrCodigoRecuperacionInvalido
-	}
-	if err != nil {
-		return "", err
-	}
-
-	if err := registro.Utilizable(s.ahora()); err != nil {
-		return "", traducirErrorDeCodigo(err)
-	}
-
-	coincide, err := s.verify(codigo, registro.CodigoHash)
-	if err != nil {
-		return "", fmt.Errorf("verificando código de recuperación: %w", err)
-	}
-	if !coincide {
-		quemado := registro.RegistrarFallo(s.ahora())
-		// El error de guardar tiene prioridad sobre el del código: si el contador
-		// no se puede persistir, el tope de intentos no existe y el código queda
-		// abierto a fuerza bruta.
-		if err := s.repo.GuardarCodigoRecuperacion(ctx, registro); err != nil {
-			return "", fmt.Errorf("registrando intento fallido: %w", err)
+	var negocio error
+	ctx = pgtransaccion.ConActor(ctx, u.ID, "")
+	err = s.repo.EnRecuperacion(ctx, u.ID, func(ctx context.Context, repo Repo) error {
+		negocio = nil
+		actual, err := repo.BuscarPorID(ctx, u.ID)
+		if err != nil {
+			return err
 		}
-		if quemado {
-			return "", ErrCodigoRecuperacionSinIntentos
+		if !actual.EstaAprobado() || !actual.PuedeIngresarConPassword() {
+			negocio = ErrCodigoRecuperacionInvalido
+			return nil
 		}
-		return "", ErrCodigoRecuperacionInvalido
-	}
-
-	passwordHash, err := s.hash(passwordNueva)
-	if err != nil {
-		return "", fmt.Errorf("hasheando la contraseña nueva: %w", err)
-	}
-
-	// Las dos escrituras van juntas o no van: sueltas, cualquiera de los dos
-	// órdenes deja un estado malo.
-	err = s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		// La espera del bloqueo puede coincidir con otro cambio de credenciales.
+		// Conservamos la precondición de la lectura inicial para no sobrescribirlo
+		// ni consumir el código de una recuperación que empezó antes del cambio.
+		if actual.VersionSesion != u.VersionSesion || actual.PasswordHash != u.PasswordHash {
+			return ErrUsuarioModificado
+		}
+		registro, err := repo.BuscarCodigoVigenteDe(ctx, u.ID)
+		if errors.Is(err, ErrCodigoNoEncontrado) {
+			s.consumirTiempoDeVerificacion(codigo)
+			negocio = ErrCodigoRecuperacionInvalido
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := registro.Utilizable(s.ahora()); err != nil {
+			negocio = traducirErrorDeCodigo(err)
+			return nil
+		}
+		coincide, err := s.verify(codigo, registro.CodigoHash)
+		if err != nil {
+			return fmt.Errorf("verificando código de recuperación: %w", err)
+		}
+		if !coincide {
+			quemado := registro.RegistrarFallo(s.ahora())
+			if err := repo.GuardarCodigoRecuperacion(ctx, registro); err != nil {
+				return fmt.Errorf("registrando intento fallido: %w", err)
+			}
+			negocio = ErrCodigoRecuperacionInvalido
+			if quemado {
+				negocio = ErrCodigoRecuperacionSinIntentos
+			}
+			// Se confirma el intento antes de devolver su rechazo de negocio.
+			return nil
+		}
+		hash, err := s.hash(passwordNueva)
+		if err != nil {
+			return fmt.Errorf("hasheando la contraseña nueva: %w", err)
+		}
 		if err := registro.Usar(s.ahora()); err != nil {
 			return traducirErrorDeCodigo(err)
 		}
 		if err := repo.GuardarCodigoRecuperacion(ctx, registro); err != nil {
 			return err
 		}
-
-		u.PasswordHash = passwordHash
-		u.DebeCambiarPassword = false
-		// Las sesiones abiertas se cierran, y acá no hay token nuevo que preservar:
-		// este endpoint no inicia sesión a propósito.
-		u.InvalidarSesiones()
-		return repo.Guardar(ctx, u)
+		_, err = repo.ActualizarPassword(ctx, actual, hash, false)
+		return err
 	})
 	if err != nil {
 		return "", err
+	}
+	if negocio != nil {
+		return "", negocio
 	}
 	return u.ID, nil
 }

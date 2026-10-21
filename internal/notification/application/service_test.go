@@ -61,6 +61,7 @@ func (r *fakeRepo) ListarPorUsuario(ctx context.Context, usuarioID string, filtr
 		if filtroEstado != nil && n.Estado != *filtroEstado {
 			continue
 		}
+
 		resultado = append(resultado, n)
 	}
 
@@ -87,12 +88,21 @@ func (r *fakeRepo) idsOrdenados() []string {
 	return ids
 }
 
-func (r *fakeRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo) ([]*domain.Notificacion, error) {
+func (r *fakeRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo, referencia ...string) ([]*domain.Notificacion, error) {
 	var resultado []*domain.Notificacion
 	for _, id := range r.idsOrdenados() {
 		n := r.notificaciones[id]
 		if n.SobreUsuarioID != nil && *n.SobreUsuarioID == sobreUsuarioID &&
 			n.Tipo == tipo && n.Estado == domain.NoLeida {
+			if len(referencia) > 0 {
+				ref := n.HiloID
+				if tipo == domain.TipoPedidoDeMateria {
+					ref = n.PedidoID
+				}
+				if ref == nil || *ref != referencia[0] {
+					continue
+				}
+			}
 			resultado = append(resultado, n)
 		}
 	}

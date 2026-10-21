@@ -16,15 +16,17 @@ type entradaResponse struct {
 	// identificando a quien hizo la acción si esa cuenta después se elimina, y
 	// es con lo que se filtra «todo lo que hizo esta persona».
 	ActorID string `json:"actorId"`
-	// ActorNombre falta cuando la cuenta ya no existe (RF-01.9). No se rellena
+	// ActorNombre falta cuando la cuenta ya no existe o no hay actor identificado. No se rellena
 	// con un texto de relleno: la pantalla decide cómo decir «una cuenta
 	// eliminada», y un "Desconocido" escrito acá se confundiría con el nombre
 	// de alguien.
-	ActorNombre string          `json:"actorNombre,omitempty"`
-	Accion      string          `json:"accion"`
-	Entidad     string          `json:"entidad"`
-	EntidadID   string          `json:"entidadId,omitempty"`
-	Detalle     json.RawMessage `json:"detalle,omitempty"`
+	ActorNombre   string            `json:"actorNombre,omitempty"`
+	Accion        string            `json:"accion"`
+	Entidad       string            `json:"entidad"`
+	EntidadID     string            `json:"entidadId,omitempty"`
+	EntidadNombre string            `json:"entidadNombre,omitempty"`
+	Referencias   map[string]string `json:"referencias,omitempty"`
+	Detalle       json.RawMessage   `json:"detalle,omitempty"`
 	// IPOrigen sólo lo ve un Admin, que es el único que llega a este endpoint.
 	IPOrigen string    `json:"ipOrigen,omitempty"`
 	CreadoEn time.Time `json:"creadoEn"`
@@ -34,6 +36,7 @@ func toEntradaResponse(e domain.Entrada) entradaResponse {
 	return entradaResponse{
 		ID: e.ID, ActorID: e.UsuarioID, ActorNombre: e.ActorNombre,
 		Accion: e.Accion, Entidad: e.Entidad, EntidadID: e.EntidadID,
+		EntidadNombre: e.EntidadNombre, Referencias: e.Referencias,
 		// El detalle pasa como JSON crudo, sin volver a serializarlo: es lo que
 		// guardó cada acción y este paquete no lo interpreta.
 		Detalle:  json.RawMessage(e.Detalle),

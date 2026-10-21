@@ -27,5 +27,6 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	sugerencias.Post("/:id/mensajes", autenticado, middleware.RateLimit(5, time.Minute), h.Responder)
 
 	sugerencias.Get("/", autenticado, soloAdmin, h.Listar)
+	sugerencias.Get("/:id", autenticado, h.Obtener)
 	sugerencias.Post("/:id/resolver", autenticado, soloAdmin, h.Resolver)
 }

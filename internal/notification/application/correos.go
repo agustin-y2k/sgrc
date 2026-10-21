@@ -110,6 +110,16 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		})
 	})
 
+	bus.Subscribe("reserva.reubicada", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.ReubicacionesDeUsuario)
+		if !ok || len(payload.Reservas) == 0 {
+			return
+		}
+		enviar("por mail la reposición", func(ctx context.Context) error {
+			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatReservaCancelada, "Se reemplazaron equipos de tus reservas", mensajeDeReposicion(payload)+"\n\nVer mis reservas: "+m.urlDelSistema+"/reservas")
+		})
+	})
+
 	// ── El barrido de reservas y entregas (RF-08.10 a RF-08.13) ─────
 
 	bus.Subscribe("reserva.recordatorio", func(e eventbus.Evento) {

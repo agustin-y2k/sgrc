@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agustin-y2k/sgrc/internal/reservation/application"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 // ── ValidadorMateria (puerto hacia academic) ───────────────────────────
@@ -28,8 +29,9 @@ func NewValidadorMateriaPostgres(pool *pgxpool.Pool) *ValidadorMateriaPostgres {
 
 func (v *ValidadorMateriaPostgres) DocenteEstaAsignado(ctx context.Context, materiaID, usuarioID string) (bool, error) {
 	var existe bool
-	err := v.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM docente_materia WHERE materia_id = $1 AND usuario_id = $2)`,
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM docente_materia dm JOIN usuario u ON u.id=dm.usuario_id
+          WHERE dm.materia_id=$1 AND dm.usuario_id=$2 AND u.estado='APROBADA')`,
 		materiaID, usuarioID,
 	).Scan(&existe)
 	if err != nil {
@@ -58,7 +60,7 @@ func NewValidadorEquipoPostgres(pool *pgxpool.Pool) *ValidadorEquipoPostgres {
 func (v *ValidadorEquipoPostgres) EquipoDisponibleParaReservar(ctx context.Context, equipoID string) (bool, error) {
 	var estado string
 	var dadoDeBaja, reservable bool
-	err := v.pool.QueryRow(ctx,
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx,
 		`SELECT estado, dado_de_baja, reservable FROM equipo WHERE id = $1`, equipoID,
 	).Scan(&estado, &dadoDeBaja, &reservable)
 	if err != nil {
@@ -83,7 +85,7 @@ func (v *ValidadorEquipoPostgres) EquiposNoReservables(ctx context.Context, equi
 		return nil, nil
 	}
 
-	rows, err := v.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, v.pool).Query(ctx, `
 		SELECT id FROM equipo
 		WHERE id = ANY($1)
 		  AND estado = 'DISPONIBLE'
@@ -126,7 +128,7 @@ func (v *ValidadorEquipoPostgres) EquiposNoReservables(ctx context.Context, equi
 // Ver el comentario del puerto: entregar no es lo mismo que reservar.
 func (v *ValidadorEquipoPostgres) EquipoEstaEnInventario(ctx context.Context, equipoID string) (bool, error) {
 	var dadoDeBaja bool
-	err := v.pool.QueryRow(ctx,
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx,
 		`SELECT dado_de_baja FROM equipo WHERE id = $1`, equipoID,
 	).Scan(&dadoDeBaja)
 	if err != nil {
@@ -147,7 +149,7 @@ func (v *ValidadorEquipoPostgres) EquipoEstaEnInventario(ctx context.Context, eq
 func (v *ValidadorEquipoPostgres) CondicionParaEntregar(ctx context.Context, equipoID string) (application.CondicionDeEquipo, error) {
 	var dadoDeBaja bool
 	var estado string
-	err := v.pool.QueryRow(ctx,
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx,
 		`SELECT dado_de_baja, estado FROM equipo WHERE id = $1`, equipoID,
 	).Scan(&dadoDeBaja, &estado)
 	if err != nil {
@@ -184,7 +186,7 @@ func (v *ValidadorEquipoPostgres) EtiquetasDeEquipos(ctx context.Context, equipo
 	//
 	// El LEFT JOIN es lo que deja pasar a los equipos sueltos, que no tienen
 	// carro: para ellos el primer COALESCE ya resolvió con el nombre.
-	rows, err := v.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, v.pool).Query(ctx,
 		`SELECT e.id, `+etiquetaConCarroSQL("e", "c")+`
 		   FROM equipo e
 		   LEFT JOIN carro c ON c.id = e.carro_id
@@ -228,7 +230,7 @@ func (o *ObtenedorNombrePostgres) ContactosDe(ctx context.Context, usuarioIDs []
 		return map[string]application.Contacto{}, nil
 	}
 
-	rows, err := o.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, o.pool).Query(ctx,
 		`SELECT id, nombre, apellido, email FROM usuario WHERE id = ANY($1)`, usuarioIDs)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -254,7 +256,7 @@ func (o *ObtenedorNombrePostgres) ContactosDe(ctx context.Context, usuarioIDs []
 
 func (o *ObtenedorNombrePostgres) NombreCompletoDe(ctx context.Context, usuarioID string) (string, error) {
 	var nombre, apellido string
-	err := o.pool.QueryRow(ctx,
+	err := pgtransaccion.Con(ctx, o.pool).QueryRow(ctx,
 		`SELECT nombre, apellido FROM usuario WHERE id = $1`, usuarioID,
 	).Scan(&nombre, &apellido)
 	if err != nil {
@@ -273,7 +275,7 @@ func (o *ObtenedorNombrePostgres) NombreCompletoDe(ctx context.Context, usuarioI
 // reservas nuevas.
 func (v *ValidadorMateriaPostgres) MateriaAceptaReservas(ctx context.Context, materiaID string) (bool, error) {
 	var acepta bool
-	err := v.pool.QueryRow(ctx, `
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM materia m
 			JOIN contenedor_de_materia c ON c.materia_id = m.id
@@ -301,7 +303,7 @@ func (v *ValidadorMateriaPostgres) MateriaAceptaReservas(ctx context.Context, ma
 // llegaría un correo diciéndole que lo corrió un equipo preferente de nadie.
 func (v *ValidadorMateriaPostgres) NombreDeMateria(ctx context.Context, materiaID string) (string, error) {
 	var nombre string
-	err := v.pool.QueryRow(ctx, `SELECT nombre FROM materia WHERE id = $1`, materiaID).Scan(&nombre)
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx, `SELECT nombre FROM materia WHERE id = $1`, materiaID).Scan(&nombre)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", application.ErrReferenciaInexistente

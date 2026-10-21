@@ -294,10 +294,10 @@ func TestNormalizarNombreYApellido_ElLargoSeCuentaEnCaracteres(t *testing.T) {
 
 func TestNormalizarEmail(t *testing.T) {
 	casos := []struct{ entrada, esperado string }{
-		{"juan.perez@escuela.edu.ar", "juan.perez@escuela.edu.ar"},
-		{"Juan.Perez@Escuela.Edu.Ar", "juan.perez@escuela.edu.ar"},
-		{"  juan.perez@escuela.edu.ar  ", "juan.perez@escuela.edu.ar"},
-		{"JUAN.PEREZ@ESCUELA.EDU.AR", "juan.perez@escuela.edu.ar"},
+		{"juan.perez@escuela.test", "juan.perez@escuela.test"},
+		{"Juan.Perez@Escuela.test", "juan.perez@escuela.test"},
+		{"  juan.perez@escuela.test  ", "juan.perez@escuela.test"},
+		{"JUAN.PEREZ@Escuela.test", "juan.perez@escuela.test"},
 	}
 	for _, c := range casos {
 		if obtenido := NormalizarEmail(c.entrada); obtenido != c.esperado {
@@ -311,10 +311,10 @@ func TestNormalizarEmail(t *testing.T) {
 // importar cómo la haya tipeado quien entra.
 func TestNormalizarEmail_VariantesDelMismoBuzon_Colapsan(t *testing.T) {
 	variantes := []string{
-		"Juan.Perez@escuela.edu.ar",
-		"juan.perez@escuela.edu.ar",
-		"JUAN.PEREZ@escuela.edu.ar",
-		" Juan.Perez@Escuela.edu.ar ",
+		"Juan.Perez@escuela.test",
+		"juan.perez@escuela.test",
+		"JUAN.PEREZ@escuela.test",
+		" Juan.Perez@Escuela.test ",
 	}
 	primera := NormalizarEmail(variantes[0])
 	for _, v := range variantes[1:] {
@@ -326,7 +326,7 @@ func TestNormalizarEmail_VariantesDelMismoBuzon_Colapsan(t *testing.T) {
 
 func TestValidarEmail(t *testing.T) {
 	validos := []string{
-		"juan.perez@escuela.edu.ar",
+		"juan.perez@escuela.test",
 		"a@b.co",
 		"nombre+etiqueta@dominio.com",
 	}
@@ -422,7 +422,7 @@ func TestDegradarADocente_AdminAprobado_OK(t *testing.T) {
 // dejan rastro en el resto de la cuenta.
 func TestDegradarADocente_DeshaceLaPromocion(t *testing.T) {
 	u := &Usuario{
-		Nombre: "Ada", Email: "ada@escuela.edu.ar", PasswordHash: "hash",
+		Nombre: "Ada", Email: "ada@escuela.test", PasswordHash: "hash",
 		Rol: RolDocente, Estado: EstadoAprobada,
 		CursoSolicitado: "5°A", MateriaSolicitada: "Programación",
 	}

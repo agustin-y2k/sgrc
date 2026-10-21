@@ -16,6 +16,7 @@ import (
 // ── fakeRepo: repositorio en memoria para tests, sin Postgres ──────────
 
 type fakeRepo struct {
+	bajas    map[string]*ProcesoBaja
 	fotos    map[string]*domain.FotoDePerfil
 	usuarios map[string]*domain.Usuario // por ID
 
@@ -70,7 +71,8 @@ func (r *fakeRepo) BuscarPorEmail(ctx context.Context, email string) (*domain.Us
 	}
 	for _, u := range r.usuarios {
 		if u.Email == email {
-			return u, nil
+			copia := *u
+			return &copia, nil
 		}
 	}
 	return nil, ErrUsuarioNoEncontrado
@@ -84,7 +86,8 @@ func (r *fakeRepo) BuscarPorID(ctx context.Context, id string) (*domain.Usuario,
 	if !ok {
 		return nil, ErrUsuarioNoEncontrado
 	}
-	return u, nil
+	copia := *u
+	return &copia, nil
 }
 
 func (r *fakeRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*domain.Usuario, error) {
@@ -98,7 +101,8 @@ func (r *fakeRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*domain.
 	}
 	for _, u := range r.usuarios {
 		if u.GoogleSub == sub {
-			return u, nil
+			copia := *u
+			return &copia, nil
 		}
 	}
 	return nil, ErrUsuarioNoEncontrado
@@ -127,12 +131,57 @@ func (r *fakeRepo) Crear(ctx context.Context, u *domain.Usuario) error {
 	return nil
 }
 
-func (r *fakeRepo) Guardar(ctx context.Context, u *domain.Usuario) error {
+func (r *fakeRepo) actualizarUsuario(id string, valido func(*domain.Usuario) bool, cambiar func(*domain.Usuario)) (*domain.Usuario, error) {
 	if r.errGuardar != nil {
-		return r.errGuardar
+		return nil, r.errGuardar
 	}
-	r.usuarios[u.ID] = u
-	return nil
+	actual, ok := r.usuarios[id]
+	if !ok {
+		return nil, ErrUsuarioNoEncontrado
+	}
+	if !valido(actual) {
+		return nil, ErrUsuarioModificado
+	}
+	copia := *actual
+	cambiar(&copia)
+	*actual = copia
+	resultado := copia
+	return &resultado, nil
+}
+func (r *fakeRepo) ActualizarPerfil(ctx context.Context, anterior *domain.Usuario, nombre, apellido string) (*domain.Usuario, error) {
+	return r.actualizarUsuario(anterior.ID, func(u *domain.Usuario) bool {
+		return u.Estado == anterior.Estado && u.Rol == anterior.Rol && u.VersionSesion == anterior.VersionSesion
+	}, func(u *domain.Usuario) { u.Nombre = nombre; u.Apellido = apellido })
+}
+func (r *fakeRepo) ActualizarPassword(ctx context.Context, anterior *domain.Usuario, hash string, temporal bool) (*domain.Usuario, error) {
+	return r.actualizarUsuario(anterior.ID, func(u *domain.Usuario) bool {
+		return u.Estado == anterior.Estado && u.VersionSesion == anterior.VersionSesion && u.PasswordHash == anterior.PasswordHash
+	}, func(u *domain.Usuario) {
+		u.PasswordHash = hash
+		u.DebeCambiarPassword = temporal
+		u.InvalidarSesiones()
+	})
+}
+func (r *fakeRepo) CambiarEstado(ctx context.Context, anterior *domain.Usuario, nuevo domain.Estado, ahora time.Time) (*domain.Usuario, error) {
+	return r.actualizarUsuario(anterior.ID, func(u *domain.Usuario) bool {
+		return u.Estado == anterior.Estado && u.Rol == anterior.Rol
+	}, func(u *domain.Usuario) {
+		u.Estado = nuevo
+		if nuevo == domain.EstadoAprobada {
+			u.FechaAprobacion = &ahora
+			u.AprobadoPor = anterior.AprobadoPor
+		}
+	})
+}
+func (r *fakeRepo) CambiarRol(ctx context.Context, anterior *domain.Usuario, nuevo domain.Rol) (*domain.Usuario, error) {
+	return r.actualizarUsuario(anterior.ID, func(u *domain.Usuario) bool {
+		return u.Estado == anterior.Estado && u.Rol == anterior.Rol
+	}, func(u *domain.Usuario) { u.Rol = nuevo })
+}
+func (r *fakeRepo) VincularGoogle(ctx context.Context, anterior *domain.Usuario, sub string) (*domain.Usuario, error) {
+	return r.actualizarUsuario(anterior.ID, func(u *domain.Usuario) bool {
+		return u.Estado == anterior.Estado && u.GoogleSub == anterior.GoogleSub
+	}, func(u *domain.Usuario) { u.GoogleSub = sub })
 }
 
 func (r *fakeRepo) ContarAdminsAprobados(ctx context.Context) (int, error) {
@@ -371,7 +420,7 @@ func TestRegistrar_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", solicitudDeDocente())
+	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123", solicitudDeDocente())
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -396,7 +445,7 @@ func TestRegistrar_PublicaEventoParaAdmins(t *testing.T) {
 		recibido <- e
 	})
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", solicitudDeDocente())
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123", solicitudDeDocente())
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -404,7 +453,7 @@ func TestRegistrar_PublicaEventoParaAdmins(t *testing.T) {
 	select {
 	case e := <-recibido:
 		payload := e.Payload.(map[string]string)
-		if payload["email"] != "ada@escuela.edu.ar" {
+		if payload["email"] != "ada@escuela.test" {
 			t.Errorf("payload incorrecto: %v", payload)
 		}
 	case <-time.After(time.Second):
@@ -415,7 +464,7 @@ func TestRegistrar_PublicaEventoParaAdmins(t *testing.T) {
 func TestRegistrar_PasswordCorta_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "1234567", solicitudDeDocente())
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "1234567", solicitudDeDocente())
 
 	if !errors.Is(err, ErrPasswordCorta) {
 		t.Fatalf("esperaba ErrPasswordCorta, obtuve %v", err)
@@ -424,10 +473,10 @@ func TestRegistrar_PasswordCorta_Error(t *testing.T) {
 
 func TestRegistrar_EmailYaExiste_Activo_Error(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["existente"] = &domain.Usuario{ID: "existente", Email: "ada@escuela.edu.ar", Estado: domain.EstadoAprobada}
+	repo.usuarios["existente"] = &domain.Usuario{ID: "existente", Email: "ada@escuela.test", Estado: domain.EstadoAprobada}
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", solicitudDeDocente())
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123", solicitudDeDocente())
 
 	if !errors.Is(err, ErrEmailYaRegistrado) {
 		t.Fatalf("esperaba ErrEmailYaRegistrado, obtuve %v", err)
@@ -436,10 +485,10 @@ func TestRegistrar_EmailYaExiste_Activo_Error(t *testing.T) {
 
 func TestRegistrar_EmailYaExiste_EnBaja_MensajeEspecifico(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["viejo"] = &domain.Usuario{ID: "viejo", Email: "ada@escuela.edu.ar", Estado: domain.EstadoBaja}
+	repo.usuarios["viejo"] = &domain.Usuario{ID: "viejo", Email: "ada@escuela.test", Estado: domain.EstadoBaja}
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", solicitudDeDocente())
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123", solicitudDeDocente())
 
 	if !errors.Is(err, ErrCuentaEnBaja) {
 		t.Fatalf("esperaba ErrCuentaEnBaja, obtuve %v", err)
@@ -451,7 +500,7 @@ func TestRegistrar_ErrorDelRepoAlCrear_SePropaga(t *testing.T) {
 	repo.errCrear = errors.New("la base está caída")
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123", solicitudDeDocente())
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123", solicitudDeDocente())
 
 	if err == nil {
 		t.Fatal("esperaba que el error del repo se propague")
@@ -620,7 +669,7 @@ func TestAprobar_OK(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Estado: domain.EstadoPendiente}
 	svc := nuevoServicioDeTest(repo)
 
-	err := svc.Aprobar(context.Background(), "u1")
+	err := svc.Aprobar(context.Background(), "u1", "admin-actor")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -635,7 +684,7 @@ func TestAprobar_TransicionInvalida_SePropaga(t *testing.T) {
 	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Estado: domain.EstadoBaja} // terminal
 	svc := nuevoServicioDeTest(repo)
 
-	err := svc.Aprobar(context.Background(), "u1")
+	err := svc.Aprobar(context.Background(), "u1", "admin-actor")
 
 	if !errors.Is(err, domain.ErrTransicionInvalida) {
 		t.Fatalf("esperaba ErrTransicionInvalida, obtuve %v", err)
@@ -839,9 +888,8 @@ func TestDarDeBaja_Docente_ErrorCancelandoReservas_SePropaga(t *testing.T) {
 	if repo.usuarios["d1"].Estado != domain.EstadoBaja {
 		t.Error("la baja del usuario ya debería haberse aplicado antes del error de cascada")
 	}
-	// Los vínculos, en cambio, tienen que sobrevivir: son el único registro de
-	// qué materias quedaron con reservas por cancelar, y la operación no se
-	// puede reintentar (BAJA→BAJA es inválida, RF-02.9).
+	// Los vínculos sobreviven hasta completar todas las materias. El progreso
+	// persistido permite reintentar sin reactivar la cuenta (RF-02.9).
 	if len(gestor.removidoDe) != 0 {
 		t.Error("con la cascada fallada, las asignaciones no deberían haberse borrado")
 	}
@@ -1181,7 +1229,7 @@ func TestCrearAdmin_OK_QuedaAprobadaDeInmediato(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	u, err := svc.CrearAdmin(context.Background(), "admin-actor", "Grace", "Hopper", "grace@escuela.edu.ar", "password123")
+	u, err := svc.CrearAdmin(context.Background(), "admin-actor", "Grace", "Hopper", "grace@escuela.test", "password123")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1211,7 +1259,7 @@ func TestCrearAdmin_NoPublicaEventoDeRegistroPendiente(t *testing.T) {
 		recibido <- e
 	})
 
-	_, err := svc.CrearAdmin(context.Background(), "admin-actor", "Grace", "Hopper", "grace@escuela.edu.ar", "password123")
+	_, err := svc.CrearAdmin(context.Background(), "admin-actor", "Grace", "Hopper", "grace@escuela.test", "password123")
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -1226,10 +1274,10 @@ func TestCrearAdmin_NoPublicaEventoDeRegistroPendiente(t *testing.T) {
 
 func TestCrearAdmin_EmailYaExiste_Error(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["existente"] = &domain.Usuario{ID: "existente", Email: "grace@escuela.edu.ar", Estado: domain.EstadoAprobada}
+	repo.usuarios["existente"] = &domain.Usuario{ID: "existente", Email: "grace@escuela.test", Estado: domain.EstadoAprobada}
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.CrearAdmin(context.Background(), "admin-actor", "Grace", "Hopper", "grace@escuela.edu.ar", "password123")
+	_, err := svc.CrearAdmin(context.Background(), "admin-actor", "Grace", "Hopper", "grace@escuela.test", "password123")
 
 	if !errors.Is(err, ErrEmailYaRegistrado) {
 		t.Fatalf("esperaba ErrEmailYaRegistrado, obtuve %v", err)
@@ -1239,7 +1287,7 @@ func TestCrearAdmin_EmailYaExiste_Error(t *testing.T) {
 func TestCrearAdmin_PasswordCorta_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.CrearAdmin(context.Background(), "admin-actor", "Grace", "Hopper", "grace@escuela.edu.ar", "corta")
+	_, err := svc.CrearAdmin(context.Background(), "admin-actor", "Grace", "Hopper", "grace@escuela.test", "corta")
 
 	if !errors.Is(err, ErrPasswordCorta) {
 		t.Fatalf("esperaba ErrPasswordCorta, obtuve %v", err)
@@ -1281,7 +1329,7 @@ func TestLogin_OtraCapitalizacionDelMismoEmail_Entra(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	if _, err := svc.Registrar(context.Background(), "Juan", "Perez", "Juan.Perez@escuela.edu.ar", "unaClave123", solicitudDeDocente()); err != nil {
+	if _, err := svc.Registrar(context.Background(), "Juan", "Perez", "Juan.Perez@escuela.test", "unaClave123", solicitudDeDocente()); err != nil {
 		t.Fatalf("registro: %v", err)
 	}
 	// Aprobar para poder loguear (RF-01.3 deja la cuenta en PENDIENTE).
@@ -1290,9 +1338,9 @@ func TestLogin_OtraCapitalizacionDelMismoEmail_Entra(t *testing.T) {
 	}
 
 	for _, comoLoEscribe := range []string{
-		"juan.perez@escuela.edu.ar",
-		"JUAN.PEREZ@ESCUELA.EDU.AR",
-		"  Juan.Perez@escuela.edu.ar  ",
+		"juan.perez@escuela.test",
+		"JUAN.PEREZ@Escuela.test",
+		"  Juan.Perez@escuela.test  ",
 	} {
 		if _, err := svc.Login(context.Background(), comoLoEscribe, "unaClave123", false); err != nil {
 			t.Errorf("login con %q debería funcionar: %v", comoLoEscribe, err)
@@ -1305,11 +1353,11 @@ func TestLogin_OtraCapitalizacionDelMismoEmail_Entra(t *testing.T) {
 func TestRegistrar_MismoEmailOtraCapitalizacion_Rechazado(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	if _, err := svc.Registrar(context.Background(), "Juan", "Perez", "Juan.Perez@escuela.edu.ar", "unaClave123", solicitudDeDocente()); err != nil {
+	if _, err := svc.Registrar(context.Background(), "Juan", "Perez", "Juan.Perez@escuela.test", "unaClave123", solicitudDeDocente()); err != nil {
 		t.Fatalf("primer registro: %v", err)
 	}
 
-	_, err := svc.Registrar(context.Background(), "Juan", "Perez", "juan.perez@escuela.edu.ar", "unaClave123", solicitudDeDocente())
+	_, err := svc.Registrar(context.Background(), "Juan", "Perez", "juan.perez@escuela.test", "unaClave123", solicitudDeDocente())
 	if !errors.Is(err, ErrEmailYaRegistrado) {
 		t.Fatalf("esperaba ErrEmailYaRegistrado, obtuve %v", err)
 	}
@@ -1321,11 +1369,11 @@ func TestRegistrar_GuardaElEmailNormalizado(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	u, err := svc.Registrar(context.Background(), " Juan ", " Perez ", "  Juan.Perez@Escuela.Edu.Ar ", "unaClave123", solicitudDeDocente())
+	u, err := svc.Registrar(context.Background(), " Juan ", " Perez ", "  Juan.Perez@Escuela.test ", "unaClave123", solicitudDeDocente())
 	if err != nil {
 		t.Fatalf("registro: %v", err)
 	}
-	if u.Email != "juan.perez@escuela.edu.ar" {
+	if u.Email != "juan.perez@escuela.test" {
 		t.Errorf("email guardado sin normalizar: %q", u.Email)
 	}
 	if u.Nombre != "Juan" || u.Apellido != "Perez" {
@@ -1347,7 +1395,7 @@ func TestRegistrar_EmailSinFormato_Rechazado(t *testing.T) {
 func TestRegistrar_NombreVacio_ErrorDeDatosObligatorios(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.Registrar(context.Background(), "   ", "Perez", "juan@escuela.edu.ar", "unaClave123", solicitudDeDocente())
+	_, err := svc.Registrar(context.Background(), "   ", "Perez", "juan@escuela.test", "unaClave123", solicitudDeDocente())
 	if !errors.Is(err, ErrDatosObligatorios) {
 		t.Fatalf("esperaba ErrDatosObligatorios, obtuve %v", err)
 	}
@@ -1360,7 +1408,7 @@ func TestRegistrar_NombreDemasiadoLargo_Rechazado(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
 	_, err := svc.Registrar(context.Background(),
-		strings.Repeat("a", domain.LargoMaxNombre+1), "Perez", "juan@escuela.edu.ar",
+		strings.Repeat("a", domain.LargoMaxNombre+1), "Perez", "juan@escuela.test",
 		"unaClave123", solicitudDeDocente())
 
 	if !errors.Is(err, domain.ErrNombreDemasiadoLargo) {
@@ -1374,7 +1422,7 @@ func TestRegistrar_GuardaLaMateriaYElCursoSolicitados(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123",
 		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoDocente, Rol: domain.RolSolicitadoTitular,
 			Curso: "  5°A  ", Materia: " Programación "})
 
@@ -1391,7 +1439,7 @@ func TestRegistrar_GuardaElRolSolicitado(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123",
 		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoDocente, Curso: "5°A", Materia: "Programación", Rol: "SUPLENTE"})
 
 	if err != nil {
@@ -1410,7 +1458,7 @@ func TestRegistrar_RolSolicitadoInvalido_Error(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123",
 		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoDocente, Rol: "PROFESOR"})
 
 	if !errors.Is(err, ErrRolSolicitadoObligatorio) {
@@ -1425,7 +1473,7 @@ func TestRegistrar_SinCursoNiMateria_NoFalla(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123",
 		solicitudDeDocente())
 
 	if err != nil {
@@ -1444,7 +1492,7 @@ func TestRegistrar_GuardaElCargoSolicitado(t *testing.T) {
 		t.Run(cargo, func(t *testing.T) {
 			svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-			u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+			u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123",
 				SolicitudDeAsignacion{Cargo: cargo, Rol: domain.RolSolicitadoTitular})
 
 			if err != nil {
@@ -1464,7 +1512,7 @@ func TestRegistrar_GuardaElCargoSolicitado(t *testing.T) {
 func TestRegistrar_ComoAdminDeSistema_LaCuentaNaceDocentePendiente(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123",
 		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoAdminSistema, Rol: domain.RolSolicitadoTitular})
 
 	if err != nil {
@@ -1484,7 +1532,7 @@ func TestRegistrar_ComoAdminDeSistema_LaCuentaNaceDocentePendiente(t *testing.T)
 func TestRegistrar_ComoAdminDeSistema_DescartaCursoYMateria(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+	u, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123",
 		SolicitudDeAsignacion{Cargo: domain.CargoSolicitadoAdminSistema, Rol: domain.RolSolicitadoSuplente,
 			Curso: "5°A", Materia: "Programación"})
 
@@ -1504,7 +1552,7 @@ func TestRegistrar_ComoAdminDeSistema_DescartaCursoYMateria(t *testing.T) {
 func TestRegistrar_SinCargo_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123",
 		SolicitudDeAsignacion{Rol: domain.RolSolicitadoTitular})
 
 	if !errors.Is(err, ErrCargoObligatorio) {
@@ -1515,7 +1563,7 @@ func TestRegistrar_SinCargo_Error(t *testing.T) {
 func TestRegistrar_CargoDesconocido_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+	_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123",
 		SolicitudDeAsignacion{Cargo: "DIRECTOR", Rol: domain.RolSolicitadoTitular})
 
 	if !errors.Is(err, ErrCargoObligatorio) {
@@ -1530,7 +1578,7 @@ func TestRegistrar_SinRolSolicitado_Error(t *testing.T) {
 		t.Run(cargo, func(t *testing.T) {
 			svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-			_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.edu.ar", "password123",
+			_, err := svc.Registrar(context.Background(), "Ada", "Lovelace", "ada@escuela.test", "password123",
 				SolicitudDeAsignacion{Cargo: cargo})
 
 			if !errors.Is(err, ErrRolSolicitadoObligatorio) {
@@ -1548,7 +1596,7 @@ func TestCrearAdmin_NoExigeCargoNiRolSolicitado(t *testing.T) {
 	repo.usuarios["admin1"] = &domain.Usuario{ID: "admin1", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada}
 	svc := nuevoServicioDeTest(repo)
 
-	u, err := svc.CrearAdmin(context.Background(), "admin1", "Grace", "Hopper", "grace@escuela.edu.ar", "password123")
+	u, err := svc.CrearAdmin(context.Background(), "admin1", "Grace", "Hopper", "grace@escuela.test", "password123")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1563,7 +1611,7 @@ func TestCrearAdmin_NoLlevaSolicitud(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := nuevoServicioDeTest(repo)
 
-	u, err := svc.CrearAdmin(context.Background(), "admin-actor", "Grace", "Hopper", "grace@escuela.edu.ar", "password123")
+	u, err := svc.CrearAdmin(context.Background(), "admin-actor", "Grace", "Hopper", "grace@escuela.test", "password123")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1578,7 +1626,7 @@ func TestCrearAdmin_NoLlevaSolicitud(t *testing.T) {
 func TestPromoverAAdmin_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Email: "ada@escuela.edu.ar", Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
+		ID: "u1", Email: "ada@escuela.test", Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
 	}
 	svc := nuevoServicioDeTest(repo)
 
@@ -1595,7 +1643,7 @@ func TestPromoverAAdmin_OK(t *testing.T) {
 func TestPromoverAAdmin_NoTocaNadaMasDeLaCuenta(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Nombre: "Ada", Apellido: "Lovelace", Email: "ada@escuela.edu.ar",
+		ID: "u1", Nombre: "Ada", Apellido: "Lovelace", Email: "ada@escuela.test",
 		PasswordHash: "hash:password123", GoogleSub: "112233",
 		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
 		CursoSolicitado: "5°A", MateriaSolicitada: "Programación",
@@ -1613,7 +1661,7 @@ func TestPromoverAAdmin_NoTocaNadaMasDeLaCuenta(t *testing.T) {
 	if u.PasswordHash != "hash:password123" || u.GoogleSub != "112233" {
 		t.Error("las formas de ingreso tienen que quedar intactas")
 	}
-	if u.Email != "ada@escuela.edu.ar" || u.Nombre != "Ada" {
+	if u.Email != "ada@escuela.test" || u.Nombre != "Ada" {
 		t.Error("los datos personales tienen que quedar intactos")
 	}
 }
@@ -1681,7 +1729,7 @@ func repoConDosAdmins() *fakeRepo {
 		ID: "quien-pide", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
 	}
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Email: "ada@escuela.edu.ar", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
+		ID: "u1", Email: "ada@escuela.test", Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
 	}
 	return repo
 }
@@ -1704,7 +1752,7 @@ func TestDegradarADocente_OK(t *testing.T) {
 func TestDegradarADocente_NoTocaNadaMasDeLaCuenta(t *testing.T) {
 	repo := repoConDosAdmins()
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Nombre: "Ada", Apellido: "Lovelace", Email: "ada@escuela.edu.ar",
+		ID: "u1", Nombre: "Ada", Apellido: "Lovelace", Email: "ada@escuela.test",
 		PasswordHash: "hash:password123", GoogleSub: "112233",
 		Rol: domain.RolAdmin, Estado: domain.EstadoAprobada,
 		CursoSolicitado: "5°A", MateriaSolicitada: "Programación",
@@ -1822,12 +1870,12 @@ func TestLogin_CadaEstadoExplicaSuMotivo(t *testing.T) {
 	for _, c := range casos {
 		repo := nuevoFakeRepo()
 		repo.usuarios["u1"] = &domain.Usuario{
-			ID: "u1", Email: "ada@escuela.edu.ar", PasswordHash: "hash:password123",
+			ID: "u1", Email: "ada@escuela.test", PasswordHash: "hash:password123",
 			Rol: domain.RolDocente, Estado: c.estado,
 		}
 		svc := nuevoServicioDeTest(repo)
 
-		_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "password123", false)
+		_, err := svc.Login(context.Background(), "ada@escuela.test", "password123", false)
 
 		if !errors.Is(err, c.esperado) {
 			t.Errorf("estado %s: esperaba %v, hubo %v", c.estado, c.esperado, err)
@@ -1863,12 +1911,12 @@ func TestLogin_LosTresMotivosDicenCosasDistintas(t *testing.T) {
 func TestLogin_ConPasswordIncorrecta_NoRevelaElEstadoDeLaCuenta(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Email: "ada@escuela.edu.ar", PasswordHash: "hash:password123",
+		ID: "u1", Email: "ada@escuela.test", PasswordHash: "hash:password123",
 		Rol: domain.RolDocente, Estado: domain.EstadoPendiente,
 	}
 	svc := nuevoServicioDeTest(repo)
 
-	_, err := svc.Login(context.Background(), "ada@escuela.edu.ar", "la-equivocada", false)
+	_, err := svc.Login(context.Background(), "ada@escuela.test", "la-equivocada", false)
 
 	if !errors.Is(err, ErrCredencialesInvalidas) {
 		t.Fatalf("esperaba ErrCredencialesInvalidas, hubo: %v", err)
@@ -1911,4 +1959,63 @@ func (r *fakeRepo) UsuariosConFoto(_ context.Context, ids []string) (map[string]
 		}
 	}
 	return out, nil
+}
+
+func (r *fakeRepo) EnBaja(ctx context.Context, id string, fn func(context.Context, Repo) error) error {
+	antes := map[string]*ProcesoBaja{}
+	for id, p := range r.bajas {
+		copia := *p
+		copia.MateriasPendientes = append([]string(nil), p.MateriasPendientes...)
+		antes[id] = &copia
+	}
+	err := r.EnTransaccion(ctx, func(repo Repo) error { return fn(ctx, repo) })
+	if err != nil {
+		r.bajas = antes
+	}
+	return err
+}
+func (r *fakeRepo) BuscarBaja(ctx context.Context, id string) (*ProcesoBaja, error) {
+	p := r.bajas[id]
+	if p == nil {
+		return nil, nil
+	}
+	copia := *p
+	copia.MateriasPendientes = append([]string(nil), p.MateriasPendientes...)
+	return &copia, nil
+}
+func (r *fakeRepo) PrepararBaja(ctx context.Context, id string, materias []string, ahora time.Time) error {
+	if r.bajas == nil {
+		r.bajas = map[string]*ProcesoBaja{}
+	}
+	r.usuarios[id].BajaPendiente = true
+	r.bajas[id] = &ProcesoBaja{MateriasPendientes: append([]string(nil), materias...)}
+	return nil
+}
+func (r *fakeRepo) CompletarMateriaDeBaja(ctx context.Context, u, m string, ahora time.Time) error {
+	ids := []string{}
+	for _, id := range r.bajas[u].MateriasPendientes {
+		if id != m {
+			ids = append(ids, id)
+		}
+	}
+	r.bajas[u].MateriasPendientes = ids
+	return nil
+}
+func (r *fakeRepo) CompletarBaja(ctx context.Context, u string, ahora time.Time) error {
+	r.usuarios[u].BajaPendiente = false
+	r.bajas[u].Completada = true
+	return nil
+}
+
+func (r *fakeRepo) EnRecuperacion(ctx context.Context, id string, fn func(context.Context, Repo) error) error {
+	antes := make(map[string]*domain.CodigoRecuperacion)
+	for id, c := range r.codigos {
+		copia := *c
+		antes[id] = &copia
+	}
+	err := r.EnTransaccion(ctx, func(repo Repo) error { return fn(ctx, repo) })
+	if err != nil {
+		r.codigos = antes
+	}
+	return err
 }

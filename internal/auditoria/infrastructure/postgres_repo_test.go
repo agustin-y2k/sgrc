@@ -4,6 +4,7 @@ package infrastructure
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -70,6 +71,9 @@ func crearUsuario(t *testing.T, pool *pgxpool.Pool, nombre, apellido string) str
 	if err != nil {
 		t.Fatalf("insertando usuario: %v", err)
 	}
+	if _, err := pool.Exec(context.Background(), `DELETE FROM audit_log WHERE accion='CAMBIO_TRANSACCIONAL'`); err != nil {
+		t.Fatal(err)
+	}
 	return id
 }
 
@@ -91,6 +95,78 @@ var (
 	ayer = time.Date(2026, 9, 10, 15, 0, 0, 0, time.UTC)
 	hoy  = time.Date(2026, 9, 11, 9, 0, 0, 0, time.UTC)
 )
+
+func TestListar_ResuelveNombresSinModificarElHistorial(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	ctx, cancelar := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelar()
+	carro, equipo := uuid.NewString(), uuid.NewString()
+	if _, err := pool.Exec(ctx, `INSERT INTO carro (id,nombre) VALUES ($1,'Carro de prueba')`, carro); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO equipo (id,carro_id,identificador) VALUES ($1,$2,7)`, equipo, carro); err != nil {
+		t.Fatal(err)
+	}
+	id := uuid.NewString()
+	detalle := `{"operacion":"UPDATE","campos":["carro_id"],"antes":{"carro_id":null},"despues":{"carro_id":"` + carro + `"}}`
+	if _, err := pool.Exec(ctx, `INSERT INTO audit_log (id,usuario_id,accion,entidad,entidad_id,detalle) VALUES ($1,$2,'CAMBIO_TRANSACCIONAL','pc',$3,$4::jsonb)`, id, uuid.Nil.String(), equipo, detalle); err != nil {
+		t.Fatal(err)
+	}
+	// Una sola conexión alcanza: las filas deben cerrarse antes de buscar nombres.
+	config := pool.Config()
+	config.MaxConns = 1
+	lectura, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lectura.Close()
+	repo := NewPostgresRepo(lectura)
+	entradas, total, err := repo.Listar(ctx, domain.Filtro{Entidad: "pc"}, paginacion.PorDefecto())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 || len(entradas) != 2 {
+		t.Fatalf("esperaba el registro antiguo y el actual, total=%d", total)
+	}
+	var e domain.Entrada
+	for _, candidata := range entradas {
+		if candidata.ID == id {
+			e = candidata
+		}
+	}
+	if e.ID != id {
+		t.Fatal("no se encontró el registro original")
+	}
+	if e.EntidadNombre != "PC 7 del Carro de prueba" || e.Referencias["carro:"+carro] != "Carro de prueba" {
+		t.Fatalf("nombres sin resolver: %+v", e)
+	}
+	var antes, despues map[string]any
+	if err := json.Unmarshal([]byte(detalle), &antes); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(e.Detalle, &despues); err != nil {
+		t.Fatal(err)
+	}
+	if len(despues) != len(antes) || despues["operacion"] != "UPDATE" || despues["despues"].(map[string]any)["carro_id"] != carro {
+		t.Fatal("la lectura alteró los datos históricos")
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM equipo WHERE id=$1`, equipo); err != nil {
+		t.Fatal(err)
+	}
+	entradas, _, err = repo.Listar(ctx, domain.Filtro{Entidad: "pc"}, paginacion.PorDefecto())
+	if err != nil {
+		t.Fatal(err)
+	}
+	e = domain.Entrada{}
+	for _, candidata := range entradas {
+		if candidata.ID == id {
+			e = candidata
+		}
+	}
+	if e.ID != id || e.EntidadNombre != "" || e.Referencias["carro:"+carro] != "Carro de prueba" {
+		t.Fatal("una ficha eliminada debe conservar el registro sin inventar su nombre")
+	}
+}
 
 func TestListar_OrdenaDeLoMasNuevoALoMasViejo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
@@ -137,6 +213,9 @@ func TestListar_LaEntradaSobreviveALaCuentaEliminada(t *testing.T) {
 		t.Fatalf("eliminando la cuenta: %v", err)
 	}
 
+	if _, err := pool.Exec(ctx, `DELETE FROM audit_log WHERE accion='CAMBIO_TRANSACCIONAL'`); err != nil {
+		t.Fatal(err)
+	}
 	entradas, total, err := repo.Listar(ctx, domain.Filtro{}, paginacion.PorDefecto())
 	if err != nil {
 		t.Fatalf("listando: %v", err)
@@ -202,10 +281,9 @@ func TestListar_FiltraPorRangoDeFechas(t *testing.T) {
 	anotar(t, pool, admin, "MATERIA_ELIMINADA", "materia", nil, hoy)
 
 	soloHoyDesde := time.Date(2026, 9, 11, 0, 0, 0, 0, time.UTC)
-	finExclusivo := soloHoyDesde.AddDate(0, 0, 1)
 
 	_, total, err := repo.Listar(ctx,
-		domain.Filtro{Desde: &soloHoyDesde, Hasta: &finExclusivo}, paginacion.PorDefecto())
+		domain.Filtro{Desde: &soloHoyDesde, Hasta: &soloHoyDesde}, paginacion.PorDefecto())
 	if err != nil {
 		t.Fatalf("listando: %v", err)
 	}
@@ -266,5 +344,40 @@ func TestOpciones_RegistroVacio(t *testing.T) {
 	}
 	if acciones == nil {
 		t.Error("tendría que ser una lista vacía, no nil")
+	}
+}
+
+// Los alias describen la misma ficha, pero el historial original es inmutable.
+func TestListar_AliasDeEquipoYLicenciaCompartenFiltroSinReescritura(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	ctx := context.Background()
+	repo := NewPostgresRepo(pool)
+	admin := crearUsuario(t, pool, "Marta", "Alias")
+	ficha := uuid.NewString()
+	for _, entidad := range []string{"pc", "equipo", "licencia", "licencia_software", "curso"} {
+		anotar(t, pool, admin, "PRUEBA_ALIAS", entidad, &ficha, hoy)
+	}
+	for _, entidad := range []string{"pc", "equipo", "licencia", "licencia_software"} {
+		filas, total, err := repo.Listar(ctx, domain.Filtro{Entidad: entidad, EntidadID: ficha}, paginacion.Pagina{Numero: 2, Tamanio: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if total != 2 || len(filas) != 1 {
+			t.Fatalf("alias %s: total=%d, filas=%d", entidad, total, len(filas))
+		}
+	}
+	opciones, err := repo.EntidadesEnUso(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(opciones) != 3 || opciones[0] != "curso" || opciones[1] != "equipo" || opciones[2] != "licencia_software" {
+		t.Fatalf("opciones duplicadas: %v", opciones)
+	}
+	var originales int
+	if err := pool.QueryRow(ctx, `SELECT count(DISTINCT entidad) FROM audit_log WHERE accion='PRUEBA_ALIAS'`).Scan(&originales); err != nil {
+		t.Fatal(err)
+	}
+	if originales != 5 {
+		t.Fatal("la lectura modificó los nombres históricos")
 	}
 }

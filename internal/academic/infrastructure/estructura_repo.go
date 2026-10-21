@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 
 	"github.com/jackc/pgx/v5"
 
@@ -52,7 +53,7 @@ const clave = `clave_texto($%d::text)`
 // curso sin materias viene con el array vacío y no se pierde de la lista, que
 // es justo el curso que hay que ver al mirar lo que falta cargar.
 func (r *PostgresRepo) ListarEstructuraDeCiclo(ctx context.Context, cicloID string) ([]application.CursoConMaterias, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT c.anio,
 		       COALESCE(c.division, ''),
 		       COALESCE(c.modalidad, ''),
@@ -96,14 +97,14 @@ func (r *PostgresRepo) ListarEstructuraDeCiclo(ctx context.Context, cicloID stri
 func (r *PostgresRepo) ImportarEstructura(ctx context.Context, cicloID string, cursos []application.CursoConMaterias) (application.ResultadoImportacion, error) {
 	var res application.ResultadoImportacion
 
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.pool)
 	if err != nil {
 		return res, fmt.Errorf("iniciando transacción: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	for _, curso := range cursos {
-		cursoID, creado, err := buscarOCrearCurso(ctx, tx, cicloID, curso)
+		cursoID, creado, err := buscarOCrearCurso(ctx, tx.Tx, cicloID, curso)
 		if err != nil {
 			return application.ResultadoImportacion{}, err
 		}
@@ -114,7 +115,7 @@ func (r *PostgresRepo) ImportarEstructura(ctx context.Context, cicloID string, c
 		}
 
 		for _, nombre := range curso.Materias {
-			creada, err := crearMateriaSiFalta(ctx, tx, cursoID, nombre)
+			creada, err := crearMateriaSiFalta(ctx, tx.Tx, cursoID, nombre)
 			if err != nil {
 				return application.ResultadoImportacion{}, err
 			}
@@ -206,7 +207,7 @@ func crearMateriaSiFalta(ctx context.Context, tx pgx.Tx, cursoID, nombre string)
 func (r *PostgresRepo) CopiarMateriasA(ctx context.Context, cursoOrigenID string, cursosDestinoIDs []string) (application.ResultadoCopia, error) {
 	res := application.ResultadoCopia{CursosDestino: len(cursosDestinoIDs)}
 
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.pool)
 	if err != nil {
 		return application.ResultadoCopia{}, fmt.Errorf("iniciando transacción: %w", err)
 	}
@@ -235,7 +236,7 @@ func (r *PostgresRepo) CopiarMateriasA(ctx context.Context, cursoOrigenID string
 
 	for _, destinoID := range cursosDestinoIDs {
 		for _, nombre := range nombres {
-			creada, err := crearMateriaSiFalta(ctx, tx, destinoID, nombre)
+			creada, err := crearMateriaSiFalta(ctx, tx.Tx, destinoID, nombre)
 			if err != nil {
 				return application.ResultadoCopia{}, err
 			}

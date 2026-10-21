@@ -75,7 +75,7 @@ func (r *fakeRepo) idsOrdenados() []string {
 	return ids
 }
 
-func (r *fakeRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo) ([]*domain.Notificacion, error) {
+func (r *fakeRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo, referencia ...string) ([]*domain.Notificacion, error) {
 	// Estos tests verifican el contrato HTTP; el cierre de avisos se prueba
 	// en application/.
 	return nil, nil

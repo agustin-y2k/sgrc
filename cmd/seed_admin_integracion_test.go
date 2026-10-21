@@ -86,7 +86,7 @@ func TestSeedAdmin_SobreBaseVacia(t *testing.T) {
 	pool := baseVacia(t)
 
 	err := seedAdminSiHaceFalta(ctx, pool, entorno(map[string]string{
-		"SEED_ADMIN_EMAIL":    "admin@escuela.edu.ar",
+		"SEED_ADMIN_EMAIL":    "admin@escuela.test",
 		"SEED_ADMIN_PASSWORD": "una.password.larga.2026",
 	}))
 	if err != nil {
@@ -95,7 +95,7 @@ func TestSeedAdmin_SobreBaseVacia(t *testing.T) {
 
 	var rol, estado string
 	if err := pool.QueryRow(ctx,
-		`SELECT rol, estado FROM usuario WHERE lower(email) = 'admin@escuela.edu.ar'`,
+		`SELECT rol, estado FROM usuario WHERE lower(email) = 'admin@escuela.test'`,
 	).Scan(&rol, &estado); err != nil {
 		t.Fatalf("el admin inicial no quedó creado: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestSeedAdmin_NoHaceNadaSiYaHayAdmin(t *testing.T) {
 	pool := baseVacia(t)
 
 	env := entorno(map[string]string{
-		"SEED_ADMIN_EMAIL":    "admin@escuela.edu.ar",
+		"SEED_ADMIN_EMAIL":    "admin@escuela.test",
 		"SEED_ADMIN_PASSWORD": "una.password.larga.2026",
 	})
 	if err := seedAdminSiHaceFalta(ctx, pool, env); err != nil {
@@ -121,7 +121,7 @@ func TestSeedAdmin_NoHaceNadaSiYaHayAdmin(t *testing.T) {
 
 	var hashOriginal string
 	if err := pool.QueryRow(ctx,
-		`SELECT password_hash FROM usuario WHERE lower(email) = 'admin@escuela.edu.ar'`,
+		`SELECT password_hash FROM usuario WHERE lower(email) = 'admin@escuela.test'`,
 	).Scan(&hashOriginal); err != nil {
 		t.Fatalf("leyendo el hash del admin: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestSeedAdmin_NoHaceNadaSiYaHayAdmin(t *testing.T) {
 		t.Errorf("quedaron %d admins después de dos arranques; se esperaba 1", cuantos)
 	}
 	if err := pool.QueryRow(ctx,
-		`SELECT password_hash FROM usuario WHERE lower(email) = 'admin@escuela.edu.ar'`,
+		`SELECT password_hash FROM usuario WHERE lower(email) = 'admin@escuela.test'`,
 	).Scan(&hashDespues); err != nil {
 		t.Fatalf("releyendo el hash: %v", err)
 	}
@@ -150,14 +150,14 @@ func TestSeedAdmin_NoHaceNadaSiYaHayAdmin(t *testing.T) {
 	}
 }
 
-// El .env puede traer "Admin@Escuela.edu.ar" y el índice único es sobre
+// El .env puede traer "Admin@Escuela.test" y el índice único es sobre
 // lower(email): la cuenta tiene que ser LA MISMA, no una segunda.
 func TestSeedAdmin_NoDuplicaPorLaCajaDelCorreo(t *testing.T) {
 	ctx := context.Background()
 	pool := baseVacia(t)
 
 	if err := seedAdminSiHaceFalta(ctx, pool, entorno(map[string]string{
-		"SEED_ADMIN_EMAIL":    "admin@escuela.edu.ar",
+		"SEED_ADMIN_EMAIL":    "admin@escuela.test",
 		"SEED_ADMIN_PASSWORD": "una.password.larga.2026",
 	})); err != nil {
 		t.Fatalf("primer sembrado: %v", err)
@@ -166,13 +166,13 @@ func TestSeedAdmin_NoDuplicaPorLaCajaDelCorreo(t *testing.T) {
 	// Se le da de baja para que el sembrado vuelva a intentar crear: así se
 	// ejerce el camino del ON CONFLICT, que es el que estaba roto.
 	if _, err := pool.Exec(ctx,
-		`UPDATE usuario SET estado = 'BAJA' WHERE lower(email) = 'admin@escuela.edu.ar'`,
+		`UPDATE usuario SET estado = 'BAJA' WHERE lower(email) = 'admin@escuela.test'`,
 	); err != nil {
 		t.Fatalf("dando de baja al admin: %v", err)
 	}
 
 	if err := seedAdminSiHaceFalta(ctx, pool, entorno(map[string]string{
-		"SEED_ADMIN_EMAIL":    "Admin@Escuela.edu.ar",
+		"SEED_ADMIN_EMAIL":    "Admin@Escuela.test",
 		"SEED_ADMIN_PASSWORD": "otra.password.larga.2026",
 	})); err != nil {
 		t.Fatalf("segundo sembrado con otra caja: %v", err)
@@ -180,7 +180,7 @@ func TestSeedAdmin_NoDuplicaPorLaCajaDelCorreo(t *testing.T) {
 
 	var cuantos int
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM usuario WHERE lower(email) = 'admin@escuela.edu.ar'`,
+		`SELECT count(*) FROM usuario WHERE lower(email) = 'admin@escuela.test'`,
 	).Scan(&cuantos); err != nil {
 		t.Fatalf("contando: %v", err)
 	}

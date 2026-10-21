@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agustin-y2k/sgrc/internal/reporting/application"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 var _ application.InfoEquipoParaSnapshot = (*InfoEquipoPostgres)(nil)
@@ -28,7 +29,7 @@ func NewInfoEquipoPostgres(pool *pgxpool.Pool) *InfoEquipoPostgres {
 func (i *InfoEquipoPostgres) EtiquetaYCarroDe(ctx context.Context, equipoID string) (string, int, string, error) {
 	var etiqueta, carroNombre string
 	var identificador int
-	err := i.pool.QueryRow(ctx, `
+	err := pgtransaccion.Con(ctx, i.pool).QueryRow(ctx, `
 		SELECT COALESCE(p.nombre, 'PC ' || p.identificador),
 		       COALESCE(p.identificador, 0), COALESCE(c.nombre, '')
 		FROM equipo p
@@ -61,7 +62,7 @@ func NewInfoUsuarioPostgres(pool *pgxpool.Pool) *InfoUsuarioPostgres {
 
 func (i *InfoUsuarioPostgres) NombreCompletoDe(ctx context.Context, usuarioID string) (string, error) {
 	var nombre, apellido string
-	err := i.pool.QueryRow(ctx,
+	err := pgtransaccion.Con(ctx, i.pool).QueryRow(ctx,
 		`SELECT nombre, apellido FROM usuario WHERE id = $1`, usuarioID,
 	).Scan(&nombre, &apellido)
 	if err != nil {

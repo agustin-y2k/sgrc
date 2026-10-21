@@ -12,6 +12,7 @@ import (
 
 // Repo es el único contrato que este paquete necesita de infrastructure/.
 type Repo interface {
+	Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error
 	// EnTransaccion corre fn de forma atómica: o se aplican todas las escrituras
 	// que haga sobre el Repo que recibe, o no queda ninguna.
 	EnTransaccion(ctx context.Context, fn func(Repo) error) error
@@ -19,6 +20,9 @@ type Repo interface {
 	CrearReservaGrupo(ctx context.Context, g *domain.ReservaGrupo) error
 	BuscarReservaGrupoPorID(ctx context.Context, id string) (*domain.ReservaGrupo, error)
 	GuardarReservaGrupo(ctx context.Context, g *domain.ReservaGrupo) error
+	// BuscarGruposParaActualizar bloquea grupos y sus reservas, en ese orden,
+	// por ID. Todas las escrituras del agregado deben usar esta coordinación.
+	BuscarGruposParaActualizar(ctx context.Context, ids []string) (map[string]*domain.ReservaGrupo, error)
 
 	CrearReserva(ctx context.Context, r *domain.Reserva) error
 	BuscarReservaPorID(ctx context.Context, id string) (*domain.Reserva, error)
@@ -37,8 +41,9 @@ type Repo interface {
 	//     lo que encontró preserva las dos; una lista "en el mismo orden" no.
 	BuscarReservasPorIDs(ctx context.Context, ids []string) (map[string]*domain.Reserva, error)
 
-	// BuscarReservasParaActualizar es BuscarReservasPorIDs con la fila tomada
-	// (SELECT … FOR UPDATE), y sólo tiene sentido dentro de una transacción.
+	// BuscarReservasParaActualizar bloquea primero los grupos y después todas
+	// sus reservas en orden estable. Devuelve las reservas pedidas, ya releídas.
+	// Sólo tiene sentido dentro de una transacción.
 	//
 	// La pide el robo (RF-03.21): entre listar los conflictos y cancelarlos,
 	// otro pedido puede haberlos tocado, y clasificar sobre una lectura vieja
@@ -47,8 +52,13 @@ type Repo interface {
 	// reservas pisadas; esto es para que la DECISIÓN de robar no se tome sobre
 	// datos viejos, que es otra cosa.
 	BuscarReservasParaActualizar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error)
+	// Bloquea las reservas pedidas y todas las hermanas de sus grupos en orden
+	// estable, para coordinar entregas simultáneas y la liberación del resto.
+	BuscarReservasParaEntregar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error)
 
 	GuardarReserva(ctx context.Context, r *domain.Reserva) error
+	// Guarda el plan completo y verifica solapamientos al terminar el lote.
+	GuardarReposiciones(ctx context.Context, reservas []*domain.Reserva) error
 	ListarReservasPorGrupo(ctx context.Context, reservaGrupoID string) ([]*domain.Reserva, error)
 
 	// ListarReservasFuturasDeEquipo: usado tanto por la cascada de inventory
@@ -102,6 +112,10 @@ type Repo interface {
 	// BuscarPrestamosPorIDs — ver BuscarReservasPorIDs: mismo criterio y mismos
 	// motivos para devolver un mapa.
 	BuscarPrestamosPorIDs(ctx context.Context, ids []string) (map[string]*domain.Prestamo, error)
+	BuscarPrestamosParaActualizar(ctx context.Context, ids []string) (map[string]*domain.Prestamo, error)
+	// ReservasConPrestamos incluye retiros ya devueltos: una reserva utilizada
+	// no se convierte en NO_RETIRADA al completar otra tanda de la clase.
+	ReservasConPrestamos(ctx context.Context, ids []string) (map[string]bool, error)
 	GuardarPrestamo(ctx context.Context, p *domain.Prestamo) error
 	// BuscarPrestamoAbiertoDeEquipo devuelve el préstamo sin devolver de esa PC,
 	// o ErrPrestamoNoEncontrado si la máquina está en el laboratorio.
@@ -143,6 +157,9 @@ type Repo interface {
 	// ListarEquiposDisponiblesEn implementa el "tildar casillas" de RF-04.2: qué
 	// equipos están libres para un día y franja horaria concretos.
 	ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]EquipoDisponible, error)
+	// OpcionesDeReposicion incluye equipos ocupados: la aplicación decide si
+	// puede desplazarlos, usando ReservasRobablesPor y el horario original.
+	OpcionesDeReposicion(ctx context.Context, equipoID, materiaID string) (OpcionesReposicion, error)
 
 	// ListarEquiposOcupadosEn es la otra mitad de la misma pregunta (RF-04.11):
 	// qué equipos de ese universo ya tiene alguien en esa franja, y quién.
@@ -180,6 +197,7 @@ type Repo interface {
 	// YaPidioLiberacionHoy sostiene la regla de un pedido por reserva, por
 	// solicitante y por día (RF-04.12).
 	YaPidioLiberacionHoy(ctx context.Context, reservaID, solicitanteID string, dia time.Time) (bool, error)
+	ReclamarPedidoLiberacion(ctx context.Context, reservaID, solicitanteID string, dia time.Time) (bool, error)
 
 	CrearReglaRecurrencia(ctx context.Context, regla *domain.ReglaRecurrencia) error
 	// ListarGruposFuturosDeRegla: los ReservaGrupo de una regla recurrente con
@@ -195,13 +213,18 @@ type FiltroReservas struct {
 	CreadoPor *string
 	EquipoID  *string
 	MateriaID *string
+	Estado    *domain.EstadoReserva
+	Busqueda  string
 	// Desde/Hasta acotan por fecha (inclusive ambos extremos).
 	Desde *time.Time
 	Hasta *time.Time
 	// IncluirCanceladas: por defecto las canceladas no se listan, porque
 	// lo que casi siempre se quiere ver es lo que sigue vigente.
 	IncluirCanceladas bool
-	// Pagina acota cuántas filas vuelven.
+	// PorClases pagina grupos completos y bloqueos por actor/fecha/franja.
+	// El total cuenta esas unidades; las filas mantienen el formato individual.
+	PorClases bool
+	// Pagina acota filas, o clases/bloqueos cuando PorClases está activo.
 	Pagina paginacion.Pagina
 }
 
@@ -248,18 +271,26 @@ type EquipoDisponible struct {
 	CarroNombre       string
 	Freezado          bool
 	SoftwareInstalado string
+	PrioridadPropia   int // cero indica ausencia de marca aplicable
 
 	// Tramo es en qué grupo cae este equipo para la materia que se está
 	// reservando (RF-03.21). Es lo que parte la lista en tres bloques.
 	Tramo TramoPreferencia
-	// Los cuatro Preferencia* describen la marca que puso al equipo en su
+	// Los campos Preferencia* describen la marca que puso al equipo en su
 	// tramo — la de la materia propia si es preferente, la ajena más fuerte si
-	// no. Los tres ejes del alcance son los de un curso (RF-02.2): vacío o 0
-	// significa que la marca no acota por ese eje.
-	PreferenciaMateria   string
-	PreferenciaAnio      int
-	PreferenciaModalidad string
-	PreferenciaDivision  string
+	// no. Con PreferenciaCursoExacto, un atributo vacío exige su ausencia;
+	// en reglas generales significa que la marca no acota por ese eje.
+	PreferenciaMateria     string
+	PreferenciaAnio        int
+	PreferenciaModalidad   string
+	PreferenciaDivision    string
+	PreferenciaCursoExacto bool
+}
+
+type OpcionesReposicion struct {
+	EtiquetaOriginal string
+	NombreMateria    string
+	Equipos          []EquipoDisponible
 }
 
 // TramoPreferencia agrupa los equipos libres según qué materia los prefiere
@@ -302,7 +333,17 @@ func (e EquipoDisponible) MotivoDePreferencia() string {
 	if len(partes) == 0 {
 		return motivo
 	}
-	return motivo + " de " + strings.Join(partes, ", ")
+	motivo += " de " + strings.Join(partes, ", ")
+	if e.PreferenciaCursoExacto {
+		if e.PreferenciaModalidad == "" {
+			motivo += ", sin modalidad"
+		}
+		if e.PreferenciaDivision == "" {
+			motivo += ", sin división"
+		}
+		motivo += " (curso concreto)"
+	}
+	return motivo
 }
 
 // EquipoOcupado es un equipo que ya tiene dueño en la franja consultada

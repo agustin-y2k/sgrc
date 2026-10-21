@@ -110,7 +110,7 @@ func origenDelFrontend() string {
 	origen := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
 	if origen == "" {
 		log.Fatal("FRONTEND_ORIGIN está vacío. Es el dominio público desde el que se sirve la SPA " +
-			"(ej. https://sgrc.tuinstitucion.edu.ar) y el CORS del backend lo necesita para no " +
+			"(ej. https://sgrc.example.org) y el CORS del backend lo necesita para no " +
 			"quedar abierto a cualquier origen. Ponelo en el .env (ver .env.example).")
 	}
 	if !strings.HasPrefix(origen, "http://") && !strings.HasPrefix(origen, "https://") {
@@ -410,8 +410,16 @@ func main() {
 		log.Fatalf("no se pudo sembrar el admin inicial: %v", err)
 	}
 
-	// ── Event bus in-process (ver internal/shared/eventbus) ────────
-	bus := eventbus.NewInMemoryEventBus()
+	// ── Eventos durables (ver internal/shared/eventbus) ────────
+	secretoEventos := os.Getenv("OUTBOX_SECRET")
+	if secretoEventos == "" {
+		secretoEventos = "eventos:" + os.Getenv("JWT_SECRET")
+	}
+	cifradorEventos, err := secretos.Nuevo(secretoEventos)
+	if err != nil {
+		log.Fatalf("OUTBOX_SECRET: %v", err)
+	}
+	bus := eventbus.NewDurableBus(pool, cifradorEventos)
 
 	// ── Auditoría (docs/09-seguridad-rbac.md §5) ────────────────────
 	auditor := audit.NewPostgresAuditor(pool)
@@ -563,7 +571,7 @@ func main() {
 	// ANTES que academic a propósito: academic necesita envolver reportingSvc
 	// (junto con reservationSvc, ya armado más arriba) en un adaptador para su
 	// puerto ArchivadorHistorico — ver más abajo.
-	reportingRepo := reportinginfra.NewPostgresRepo(pool)
+	reportingRepo := reportinginfra.NewPostgresRepo(pool, tz)
 	infoEquipo := reportinginfra.NewInfoEquipoPostgres(pool)
 	infoUsuario := reportinginfra.NewInfoUsuarioPostgres(pool)
 
@@ -705,7 +713,7 @@ func main() {
 	// internal/shared/audit, que usa cada módulo: son dos paquetes a propósito
 	// —ver internal/auditoria/domain— y este de acá no sabe escribir.
 	auditoriaHandler := auditoriahttp.NewHandler(
-		auditoriaapp.NewService(auditoriainfra.NewPostgresRepo(pool)),
+		auditoriaapp.NewService(auditoriainfra.NewPostgresRepo(pool, tz)),
 	)
 
 	// ── Job de vencimiento de reservas (RF-04.9) ──────────────────── Corre
@@ -721,6 +729,26 @@ func main() {
 	}
 
 	var jobTerminado sync.WaitGroup
+	jobTerminado.Add(1)
+	go func() {
+		defer jobTerminado.Done()
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				entregaCtx, cancelar := context.WithTimeout(ctx, 20*time.Second)
+				_, err := bus.Despachar(entregaCtx, 50)
+				cancelar()
+				if err != nil && ctx.Err() == nil {
+					log.Printf("outbox: no se pudo entregar el evento: %v", err)
+				}
+			}
+		}
+	}()
+
 	jobTerminado.Add(1)
 	go func() {
 		defer jobTerminado.Done()

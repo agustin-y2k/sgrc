@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agustin-y2k/sgrc/internal/availability/application"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 var _ application.ListadorAdmins = (*ListadorAdminsPostgres)(nil)
@@ -24,7 +25,7 @@ func NewListadorAdminsPostgres(pool *pgxpool.Pool) *ListadorAdminsPostgres {
 }
 
 func (l *ListadorAdminsPostgres) AdminsAprobados(ctx context.Context) ([]application.AdminInfo, error) {
-	rows, err := l.pool.Query(ctx, `SELECT id, nombre, apellido FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA'`)
+	rows, err := pgtransaccion.Con(ctx, l.pool).Query(ctx, `SELECT id, nombre, apellido FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA'`)
 	if err != nil {
 		return nil, fmt.Errorf("listando admins aprobados: %w", err)
 	}

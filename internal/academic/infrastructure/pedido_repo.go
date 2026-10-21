@@ -10,6 +10,7 @@ import (
 
 	"github.com/agustin-y2k/sgrc/internal/academic/application"
 	"github.com/agustin-y2k/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 // Los pedidos para dictar una materia (tabla pedido_de_materia).
@@ -18,7 +19,7 @@ import (
 // escaneo, y separarlos es como se cuela un campo desalineado.
 const columnasPedido = `id, usuario_id, materia_id, coalesce(curso_solicitado, ''),
 	coalesce(materia_solicitada, ''), motivo, estado, coalesce(respuesta, ''),
-	resuelto_por, resuelto_en, creado_en`
+	resuelto_por, resuelto_en, creado_en, materia_creada_id`
 
 // Las mismas columnas del pedido más el nombre de la materia y el del curso,
 // para los DOS listados. LEFT JOIN y no JOIN: un pedido de una materia que
@@ -30,14 +31,14 @@ const columnasPedido = `id, usuario_id, materia_id, coalesce(curso_solicitado, '
 const columnasPedidoDetallado = `p.id, p.usuario_id, p.materia_id,
 	coalesce(p.curso_solicitado, ''), coalesce(p.materia_solicitada, ''),
 	p.motivo, p.estado, coalesce(p.respuesta, ''), p.resuelto_por, p.resuelto_en,
-	p.creado_en, coalesce(m.nombre, ''), coalesce(c.nombre, ''),
+	p.creado_en, p.materia_creada_id, coalesce(m.nombre, ''), coalesce(c.nombre, ''),
 	btrim(coalesce(u.nombre, '') || ' ' || coalesce(u.apellido, ''))`
 
 // El usuario también por LEFT JOIN: la FK de pedido_de_materia es ON DELETE
 // CASCADE, así que en la práctica siempre está, pero un listado no es el lugar
 // donde enterarse de lo contrario.
 const desdePedidoDetallado = `FROM pedido_de_materia p
-	LEFT JOIN materia m ON m.id = p.materia_id
+	LEFT JOIN materia m ON m.id = COALESCE(p.materia_id, p.materia_creada_id)
 	LEFT JOIN contenedor_de_materia c ON c.materia_id = m.id
 	LEFT JOIN usuario u ON u.id = p.usuario_id`
 
@@ -48,7 +49,7 @@ func escanearPedidoDetallado(fila pgx.Row) (*application.PedidoDetallado, error)
 	if err := fila.Scan(
 		&p.ID, &p.UsuarioID, &p.MateriaID, &p.CursoSolicitado,
 		&p.MateriaSolicitada, &p.Motivo, &estado, &p.Respuesta,
-		&p.ResueltoPor, &p.ResueltoEn, &p.CreadoEn,
+		&p.ResueltoPor, &p.ResueltoEn, &p.CreadoEn, &p.MateriaCreadaID,
 		&d.MateriaNombre, &d.CursoNombre, &d.DocenteNombre,
 	); err != nil {
 		return nil, err
@@ -76,7 +77,7 @@ func escanearPedido(fila pgx.Row) (*domain.PedidoDeMateria, error) {
 	if err := fila.Scan(
 		&p.ID, &p.UsuarioID, &p.MateriaID, &p.CursoSolicitado,
 		&p.MateriaSolicitada, &p.Motivo, &estado, &p.Respuesta,
-		&p.ResueltoPor, &p.ResueltoEn, &p.CreadoEn,
+		&p.ResueltoPor, &p.ResueltoEn, &p.CreadoEn, &p.MateriaCreadaID,
 	); err != nil {
 		return nil, err
 	}
@@ -85,7 +86,7 @@ func escanearPedido(fila pgx.Row) (*domain.PedidoDeMateria, error) {
 }
 
 func (r *PostgresRepo) CrearPedido(ctx context.Context, p *domain.PedidoDeMateria) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `
 		INSERT INTO pedido_de_materia
 			(id, usuario_id, materia_id, curso_solicitado, materia_solicitada, motivo, estado, creado_en)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -110,7 +111,15 @@ func (r *PostgresRepo) CrearPedido(ctx context.Context, p *domain.PedidoDeMateri
 }
 
 func (r *PostgresRepo) BuscarPedidoPorID(ctx context.Context, id string) (*domain.PedidoDeMateria, error) {
-	fila := r.pool.QueryRow(ctx, `SELECT `+columnasPedido+` FROM pedido_de_materia WHERE id = $1`, id)
+	return r.buscarPedidoPorID(ctx, id, "")
+}
+
+func (r *PostgresRepo) BuscarPedidoParaResolver(ctx context.Context, id string) (*domain.PedidoDeMateria, error) {
+	return r.buscarPedidoPorID(ctx, id, " FOR UPDATE")
+}
+
+func (r *PostgresRepo) buscarPedidoPorID(ctx context.Context, id, cola string) (*domain.PedidoDeMateria, error) {
+	fila := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx, `SELECT `+columnasPedido+` FROM pedido_de_materia WHERE id = $1`+cola, id)
 	p, err := escanearPedido(fila)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -125,13 +134,29 @@ func (r *PostgresRepo) BuscarPedidoPorID(ctx context.Context, id string) (*domai
 }
 
 func (r *PostgresRepo) GuardarPedido(ctx context.Context, p *domain.PedidoDeMateria) error {
-	_, err := r.pool.Exec(ctx, `
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `
 		UPDATE pedido_de_materia
-		   SET estado = $2, respuesta = $3, resuelto_por = $4, resuelto_en = $5
-		 WHERE id = $1
-	`, p.ID, string(p.Estado), vacioComoNull(p.Respuesta), p.ResueltoPor, p.ResueltoEn)
+		   SET estado = $2, respuesta = $3, resuelto_por = $4, resuelto_en = $5, materia_creada_id = $6
+		 WHERE id = $1 AND estado = 'PENDIENTE'
+	`, p.ID, string(p.Estado), vacioComoNull(p.Respuesta), p.ResueltoPor, p.ResueltoEn, p.MateriaCreadaID)
 	if err != nil {
+		if esIDInvalido(err) {
+			return application.ErrIDInvalido
+		}
+		if esViolacionFK(err) {
+			return application.ErrReferenciaInexistente
+		}
 		return fmt.Errorf("guardando el pedido: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		var existe bool
+		if err := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pedido_de_materia WHERE id=$1)`, p.ID).Scan(&existe); err != nil {
+			return err
+		}
+		if !existe {
+			return domain.ErrPedidoNoExiste
+		}
+		return domain.ErrPedidoResuelto
 	}
 	return nil
 }
@@ -139,7 +164,7 @@ func (r *PostgresRepo) GuardarPedido(ctx context.Context, p *domain.PedidoDeMate
 func (r *PostgresRepo) ListarPedidos(ctx context.Context, soloPendientes bool) ([]*application.PedidoDetallado, error) {
 	// Los pendientes van del más viejo al más nuevo: el que más esperó es el que
 	// más urge.
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT `+columnasPedidoDetallado+`
 		  `+desdePedidoDetallado+`
 		 WHERE ($1 = false OR p.estado = 'PENDIENTE')
@@ -155,7 +180,7 @@ func (r *PostgresRepo) ListarPedidos(ctx context.Context, soloPendientes bool) (
 }
 
 func (r *PostgresRepo) ListarPedidosDeUsuario(ctx context.Context, usuarioID string) ([]*application.PedidoDetallado, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT `+columnasPedidoDetallado+`
 		  `+desdePedidoDetallado+`
 		 WHERE p.usuario_id = $1
@@ -173,7 +198,7 @@ func (r *PostgresRepo) ListarPedidosDeUsuario(ctx context.Context, usuarioID str
 
 func (r *PostgresRepo) TienePedidoAbierto(ctx context.Context, usuarioID, materiaID string) (bool, error) {
 	var existe bool
-	err := r.pool.QueryRow(ctx, `
+	err := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM pedido_de_materia
 			 WHERE usuario_id = $1 AND materia_id = $2 AND estado = 'PENDIENTE'
@@ -215,7 +240,7 @@ func NewDatosDeUsuarioPostgres(pool *pgxpool.Pool) *DatosDeUsuarioPostgres {
 func (d *DatosDeUsuarioPostgres) Contacto(ctx context.Context, usuarioID string) (application.ContactoDeDocente, error) {
 	var c application.ContactoDeDocente
 	var nombre, apellido string
-	err := d.pool.QueryRow(ctx,
+	err := pgtransaccion.Con(ctx, d.pool).QueryRow(ctx,
 		`SELECT nombre, apellido, email FROM usuario WHERE id = $1`, usuarioID).
 		Scan(&nombre, &apellido, &c.Email)
 	if err != nil {
@@ -236,7 +261,7 @@ func (d *DatosDeUsuarioPostgres) Contactos(ctx context.Context, usuarioIDs []str
 	if len(usuarioIDs) == 0 {
 		return nil, nil
 	}
-	rows, err := d.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, d.pool).Query(ctx,
 		`SELECT id, nombre, apellido, email FROM usuario WHERE id = ANY($1)`, usuarioIDs)
 	if err != nil {
 		if esIDInvalido(err) {

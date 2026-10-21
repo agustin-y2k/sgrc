@@ -90,3 +90,24 @@ func (r *ReglaRecurrencia) GenerarFechas() []time.Time {
 	}
 	return fechas
 }
+
+// CantidadOcurrencias cuenta sin generar ni recorrer el rango. Se usan días
+// civiles UTC para que una semana de 167/169 horas por DST siga siendo una
+// semana, y Unix para no saturar time.Duration con rangos de varios siglos.
+func (r *ReglaRecurrencia) CantidadOcurrencias() int {
+	objetivo := diaSemanaAGoWeekday[r.DiaSemana]
+	desplazamiento := (int(objetivo) - int(r.FechaInicio.Weekday()) + 7) % 7
+	primera := r.FechaInicio.AddDate(0, 0, desplazamiento)
+	if primera.After(r.FechaFin) {
+		return 0
+	}
+	diaCivil := func(fecha time.Time) int64 {
+		return time.Date(fecha.Year(), fecha.Month(), fecha.Day(), 0, 0, 0, 0, time.UTC).Unix()
+	}
+	semanas := int((diaCivil(r.FechaFin) - diaCivil(primera)) / (7 * 24 * 60 * 60))
+	cantidad := semanas + 1
+	if primera.AddDate(0, 0, semanas*7).After(r.FechaFin) {
+		cantidad--
+	}
+	return cantidad
+}

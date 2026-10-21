@@ -30,6 +30,7 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 // ── fakeRepo (mismo patrón que application/service_test.go) ───────────
 
 type fakeRepo struct {
+	cierres               map[string]*application.CierreCompletado
 	espacios              []*domain.Espacio
 	pedidos               map[string]*domain.PedidoDeMateria
 	nombresDeUsuario      map[string]string
@@ -874,14 +875,14 @@ type fakeDatosDeUsuario struct{}
 
 func (fakeDatosDeUsuario) Contacto(_ context.Context, usuarioID string) (application.ContactoDeDocente, error) {
 	return application.ContactoDeDocente{UsuarioID: usuarioID, Nombre: "Docente de prueba",
-		Email: usuarioID + "@escuela.edu.ar"}, nil
+		Email: usuarioID + "@escuela.test"}, nil
 }
 
 func (fakeDatosDeUsuario) Contactos(_ context.Context, ids []string) ([]application.ContactoDeDocente, error) {
 	var r []application.ContactoDeDocente
 	for _, id := range ids {
 		r = append(r, application.ContactoDeDocente{UsuarioID: id, Nombre: "Otro docente",
-			Email: id + "@escuela.edu.ar"})
+			Email: id + "@escuela.test"})
 	}
 	return r, nil
 }
@@ -920,10 +921,14 @@ func (r *fakeRepo) GuardarPedido(_ context.Context, p *domain.PedidoDeMateria) e
 func (r *fakeRepo) detallar(p *domain.PedidoDeMateria) *application.PedidoDetallado {
 	d := &application.PedidoDetallado{Pedido: p}
 	d.DocenteNombre = r.nombresDeUsuario[p.UsuarioID]
-	if p.MateriaID == nil {
+	materiaID := p.MateriaID
+	if materiaID == nil {
+		materiaID = p.MateriaCreadaID
+	}
+	if materiaID == nil {
 		return d
 	}
-	m, hay := r.materias[*p.MateriaID]
+	m, hay := r.materias[*materiaID]
 	if !hay {
 		return d
 	}
@@ -1348,4 +1353,118 @@ func TestHTTP_CrearEspacio_SinNombre_400(t *testing.T) {
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("esperaba 400, obtuve %d", resp.StatusCode)
 	}
+}
+
+func (r *fakeRepo) EnCierre(ctx context.Context, cicloID string, fn func(context.Context) error) error {
+	ciclos := map[string]*domain.CicloLectivo{}
+	for id, c := range r.ciclos {
+		copia := *c
+		ciclos[id] = &copia
+	}
+	cursos := map[string]*domain.Curso{}
+	for id, c := range r.cursos {
+		copia := *c
+		cursos[id] = &copia
+	}
+	materias := map[string]*domain.Materia{}
+	for id, m := range r.materias {
+		copia := *m
+		materias[id] = &copia
+	}
+	if err := fn(ctx); err != nil {
+		r.ciclos = ciclos
+		r.cursos = cursos
+		r.materias = materias
+		return err
+	}
+	return nil
+}
+func (r *fakeRepo) BuscarCierre(ctx context.Context, id string) (*application.CierreCompletado, error) {
+	return r.cierres[id], nil
+}
+func (r *fakeRepo) GuardarCierre(ctx context.Context, id string, c *application.CierreCompletado) error {
+	if r.cierres == nil {
+		r.cierres = map[string]*application.CierreCompletado{}
+	}
+	r.cierres[id] = c
+	return nil
+}
+
+func (r *fakeRepo) BuscarPedidoParaResolver(ctx context.Context, id string) (*domain.PedidoDeMateria, error) {
+	p, err := r.BuscarPedidoPorID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	copia := *p
+	return &copia, nil
+}
+
+func (r *fakeRepo) EnTransaccion(ctx context.Context, fn func(context.Context) error) error {
+	materias := map[string]*domain.Materia{}
+	for id, m := range r.materias {
+		copia := *m
+		materias[id] = &copia
+	}
+	asignaciones := map[string]*domain.DocenteMateria{}
+	for id, dm := range r.docentesMateria {
+		copia := *dm
+		asignaciones[id] = &copia
+	}
+	pedidos := map[string]*domain.PedidoDeMateria{}
+	for id, p := range r.pedidos {
+		copia := *p
+		pedidos[id] = &copia
+	}
+	if err := fn(ctx); err != nil {
+		r.materias = materias
+		r.docentesMateria = asignaciones
+		r.pedidos = pedidos
+		return err
+	}
+	return nil
+}
+
+func (r *fakeRepo) CoordinarAsignaciones(ctx context.Context, fn func(context.Context) error) error {
+	return r.EnTransaccion(ctx, fn)
+}
+
+func (r *fakeRepo) VerificarVigencia(ctx context.Context, tipo, id string) error {
+	var ciclo string
+	switch tipo {
+	case "ciclo":
+		ciclo = id
+	case "curso":
+		if c := r.cursos[id]; c != nil {
+			if c.Archivado {
+				return application.ErrCicloArchivado
+			}
+			ciclo = c.CicloLectivoID
+		}
+	case "espacio":
+		for _, e := range r.espacios {
+			if e.ID != id {
+				continue
+			}
+			if e.Archivado {
+				return application.ErrCicloArchivado
+			}
+			ciclo = e.CicloLectivoID
+		}
+	case "materia":
+		if m := r.materias[id]; m != nil {
+			if m.Archivado {
+				return application.ErrCicloArchivado
+			}
+			if m.CursoID != "" {
+				return r.VerificarVigencia(ctx, "curso", m.CursoID)
+			}
+			if m.EspacioID != "" {
+				return r.VerificarVigencia(ctx, "espacio", m.EspacioID)
+			}
+		}
+	}
+	if c := r.ciclos[ciclo]; c != nil && c.Archivado {
+		return application.ErrCicloArchivado
+	}
+	return nil
 }

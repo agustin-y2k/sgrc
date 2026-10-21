@@ -201,7 +201,7 @@ func (h *Handler) ActualizarMisDatos(c *fiber.Ctx) error {
 
 	// claims.Recordarme y no un campo del request: la duración de la sesión se
 	// eligió al entrar, y una pantalla de perfil no es lugar para cambiarla.
-	u, token, err := h.svc.ActualizarMisDatos(c.UserContext(), claims.UserID, req.Nombre, req.Apellido, claims.Recordarme)
+	u, token, err := h.svc.ActualizarMisDatos(c.UserContext(), claims.UserID, req.Nombre, req.Apellido, claims.Recordarme, claims.VersionSesion)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -293,7 +293,7 @@ func (h *Handler) CambiarEstado(c *fiber.Ctx) error {
 	var accion string
 	switch req.Estado {
 	case string(domain.EstadoAprobada):
-		err = h.svc.Aprobar(c.UserContext(), id)
+		err = h.svc.Aprobar(c.UserContext(), id, claims.UserID)
 		accion = audit.CuentaAprobada
 	case string(domain.EstadoRechazada):
 		err = h.svc.Rechazar(c.UserContext(), id)

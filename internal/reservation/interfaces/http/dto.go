@@ -156,6 +156,7 @@ type crearReservaResponse struct {
 	// le dice a quien reservó que corrió a alguien; la pantalla no muestra el
 	// cero, que es el caso de casi todas las reservas.
 	ReservasCanceladas int `json:"reservasCanceladas"`
+	ReservasReubicadas int `json:"reservasReubicadas"`
 	DocentesAfectados  int `json:"docentesAfectados"`
 }
 
@@ -165,6 +166,7 @@ type crearReservaRecurrenteResponse struct {
 	// El impacto de la serie ENTERA: una recurrencia roba ocurrencia por
 	// ocurrencia y un solo click puede correr decenas de clases.
 	ReservasCanceladas int `json:"reservasCanceladas"`
+	ReservasReubicadas int `json:"reservasReubicadas"`
 	DocentesAfectados  int `json:"docentesAfectados"`
 }
 

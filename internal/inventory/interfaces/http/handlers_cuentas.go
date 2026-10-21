@@ -170,11 +170,16 @@ func (h *Handler) RevelarPasswordDeCuenta(c *fiber.Ctx) error {
 	// Se audita SIEMPRE, también cuando la cuenta es pública: el registro sirve
 	// para reconstruir quién sabía qué el día que una máquina apareció con algo
 	// cambiado, y una cuenta pública no es menos interesante para eso.
-	h.auditar(c, claims.UserID, audit.PasswordDeEquipoRevelada, "equipo_cuenta", &id, map[string]any{
-		"equipoId":    cuenta.EquipoID,
-		"usuario":     cuenta.Usuario,
-		"visibilidad": string(cuenta.Visibilidad),
-	})
+	if h.auditor == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "no se pudo registrar el acceso a la contraseña")
+	}
+	if err := h.auditor.Registrar(c.UserContext(), audit.Entrada{
+		UsuarioID: claims.UserID, Accion: audit.PasswordDeEquipoRevelada,
+		Entidad: "equipo_cuenta", EntidadID: &id, IPOrigen: c.IP(),
+		Detalle: map[string]any{"equipoId": cuenta.EquipoID, "usuario": cuenta.Usuario, "visibilidad": string(cuenta.Visibilidad)},
+	}); err != nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "no se pudo registrar el acceso a la contraseña")
+	}
 
 	return c.JSON(fiber.Map{"password": password})
 }

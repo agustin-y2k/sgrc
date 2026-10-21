@@ -15,6 +15,8 @@ func mapearError(err error) error {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	case errors.Is(err, application.ErrIDInvalido):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	case errors.Is(err, application.ErrRangoFechasInvalido):
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	default:
 		return fiber.NewError(fiber.StatusInternalServerError, "error interno")
 	}

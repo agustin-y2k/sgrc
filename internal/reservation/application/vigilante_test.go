@@ -47,7 +47,7 @@ func repoConClase(t *testing.T, equipos ...string) *fakeRepo {
 func repoConClaseDe(t *testing.T, horaInicio, horaFin time.Duration, equipos ...string) *fakeRepo {
 	t.Helper()
 	repo := nuevoFakeRepo()
-	repo.contactoDeUsuario[docenteAda] = [2]string{"Ada Lovelace", "ada@escuela.edu.ar"}
+	repo.contactoDeUsuario[docenteAda] = [2]string{"Ada Lovelace", "ada@escuela.test"}
 
 	creadoPor := docenteAda
 	grupo, err := domain.NuevoReservaGrupo(grupoDeClase, "materia1", &creadoPor, "Ada Lovelace",
@@ -124,7 +124,7 @@ func TestBarrer_RecordatorioUnaHoraAntes(t *testing.T) {
 	if len(aviso.Equipos) != 2 {
 		t.Errorf("el recordatorio tiene que traer las dos PCs: %+v", aviso.Equipos)
 	}
-	if aviso.Email != "ada@escuela.edu.ar" || aviso.UsuarioID != docenteAda {
+	if aviso.Email != "ada@escuela.test" || aviso.UsuarioID != docenteAda {
 		t.Errorf("falta el contacto del docente: %+v", aviso)
 	}
 	// El plazo viaja en el payload para que el texto no tenga que conocer
@@ -352,7 +352,7 @@ func prestamoVencido(t *testing.T, repo *fakeRepo, id, equipoID string, debioVol
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
 	repo.prestamos[p.ID] = p
-	repo.contactoDeUsuario[usuario] = [2]string{"Otro Docente", "otro@escuela.edu.ar"}
+	repo.contactoDeUsuario[usuario] = [2]string{"Otro Docente", "otro@escuela.test"}
 	return p
 }
 
@@ -787,5 +787,30 @@ func TestBarrer_ElDiaDePapel_LaClaseCuentaComoDada(t *testing.T) {
 
 	if estado := correrElDia(mostradorAtendido()).Estado; estado != domain.ReservaNoRetirada {
 		t.Errorf("con el Admin en el mostrador y nadie retirando, la reserva sí se libera; quedó en %q", estado)
+	}
+}
+
+type mostradorSoloLunes struct {
+	fakeValidadorMostrador
+	consultada time.Time
+}
+
+func (m *mostradorSoloLunes) MostradorEseDia(_ context.Context, fecha time.Time) (MostradorAtendido, error) {
+	m.consultada = fecha
+	return MostradorAtendido{Declarado: true, Atendido: fecha.Weekday() == time.Monday}, nil
+}
+func TestBarrer_CierreNocturnoConsultaLaJornadaInicial(t *testing.T) {
+	repo := nuevoFakeRepo()
+	p, err := domain.NuevoPrestamo("pr1", domain.DatosDeEntrega{EquipoID: "pc1", Nombre: "Marta"}, aLas(21, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.prestamos[p.ID] = p
+	bus := &busEspia{}
+	v := vigilanteConJornada(repo, bus, aLas(2, 0).AddDate(0, 0, 1), map[time.Weekday]time.Duration{time.Monday: 25 * time.Hour})
+	mostrador := &mostradorSoloLunes{}
+	v.validadorMostrador = mostrador
+	if res := barrer(t, v); res.AvisosDeCierre != 1 || mostrador.consultada.Weekday() != time.Monday {
+		t.Fatalf("se consultó otra jornada: %+v %s", res, mostrador.consultada)
 	}
 }

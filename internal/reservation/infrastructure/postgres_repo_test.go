@@ -107,7 +107,7 @@ func crearUsuarioDeTest(t *testing.T, pool *pgxpool.Pool, rol, estado string) st
 	_, err := pool.Exec(context.Background(), `
 		INSERT INTO usuario (id, nombre, apellido, email, password_hash, rol, estado)
 		VALUES ($1, 'Ada', 'Lovelace', $2, 'hash-de-prueba', $3, $4)
-	`, id, id+"@escuela.edu.ar", rol, estado)
+	`, id, id+"@escuela.test", rol, estado)
 	if err != nil {
 		t.Fatalf("no se pudo crear usuario de prueba: %v", err)
 	}
@@ -1125,7 +1125,7 @@ func (nombreDocenteFijo) NombreCompletoDe(context.Context, string) (string, erro
 func (nombreDocenteFijo) ContactosDe(_ context.Context, usuarioIDs []string) (map[string]application.Contacto, error) {
 	contactos := make(map[string]application.Contacto, len(usuarioIDs))
 	for _, id := range usuarioIDs {
-		contactos[id] = application.Contacto{Nombre: "Ada Lovelace", Email: id + "@escuela.edu.ar"}
+		contactos[id] = application.Contacto{Nombre: "Ada Lovelace", Email: id + "@escuela.test"}
 	}
 	return contactos, nil
 }
@@ -1391,15 +1391,15 @@ func TestListarEquiposDisponiblesEn_OrdenaPorPreferenciaDeMateria(t *testing.T) 
 		t.Errorf("la de otra materia debería ser DE_OTRA_MATERIA, es %s", tramo[ajenaFuerte])
 	}
 
-	if !(posicion[miPreferida] < posicion[neutral]) {
+	if posicion[miPreferida] >= posicion[neutral] {
 		t.Error("la preferente de mi materia va antes que la neutral")
 	}
-	if !(posicion[neutral] < posicion[ajenaDebil]) {
+	if posicion[neutral] >= posicion[ajenaDebil] {
 		t.Error("la neutral va antes que las de otra materia")
 	}
 	// Dentro del tramo ajeno, cuanto más fuerte el reclamo de la otra
 	// materia, más abajo: prioridad 1 queda por debajo de prioridad 3.
-	if !(posicion[ajenaDebil] < posicion[ajenaFuerte]) {
+	if posicion[ajenaDebil] >= posicion[ajenaFuerte] {
 		t.Error("el reclamo ajeno más fuerte tiene que quedar más abajo")
 	}
 

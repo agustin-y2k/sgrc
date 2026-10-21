@@ -31,16 +31,16 @@ func ParseEstadoReservaGrupo(s string) (EstadoReservaGrupo, error) {
 	}
 }
 
-// PuedeTransicionarA: CONFIRMADA puede pasar a cualquiera de los otros tres
-// (cancelación parcial de alguna PC, cancelación total, o finalización por el
-// paso del tiempo).
+// PuedeTransicionarA permite cancelación parcial, cancelación total,
+// finalización y liberación por falta de retiro. Los estados terminales
+// no pueden volver a abrirse.
 func (e EstadoReservaGrupo) PuedeTransicionarA(nuevo EstadoReservaGrupo) bool {
 	switch e {
 	case GrupoConfirmada:
 		return nuevo == GrupoParcialmenteCancelada || nuevo == GrupoCancelada ||
 			nuevo == GrupoFinalizada || nuevo == GrupoNoRetirado
 	case GrupoParcialmenteCancelada:
-		return nuevo == GrupoCancelada || nuevo == GrupoFinalizada
+		return nuevo == GrupoCancelada || nuevo == GrupoFinalizada || nuevo == GrupoNoRetirado
 	case GrupoCancelada, GrupoFinalizada, GrupoNoRetirado:
 		return false
 	default:
@@ -59,6 +59,7 @@ var ErrRangoHorarioInvalido = errors.New("la hora de fin no puede ser igual a la
 // horario.
 type ReservaGrupo struct {
 	ID                    string
+	Version               int64
 	MateriaID             string
 	CreadoPor             *string
 	NombreDocenteSnapshot string
@@ -94,4 +95,39 @@ func (g *ReservaGrupo) CambiarEstado(nuevo EstadoReservaGrupo) error {
 	}
 	g.Estado = nuevo
 	return nil
+}
+
+// EstadoDeGrupo resume todas las reservas, incluyendo mezclas de estados
+// terminales. FINALIZADA tiene prioridad si alguna llegó al vencimiento;
+// sin finalizadas, las no retiradas distinguen falta de retiro de cancelación.
+func EstadoDeGrupo(reservas []*Reserva, actual EstadoReservaGrupo) EstadoReservaGrupo {
+	if len(reservas) == 0 {
+		return actual
+	}
+	var confirmadas, finalizadas, noRetiradas, canceladas int
+	for _, r := range reservas {
+		switch r.Estado {
+		case ReservaConfirmada:
+			confirmadas++
+		case ReservaFinalizada:
+			finalizadas++
+		case ReservaNoRetirada:
+			noRetiradas++
+		case ReservaCancelada:
+			canceladas++
+		}
+	}
+	if confirmadas > 0 {
+		if canceladas > 0 {
+			return GrupoParcialmenteCancelada
+		}
+		return GrupoConfirmada
+	}
+	if finalizadas > 0 {
+		return GrupoFinalizada
+	}
+	if noRetiradas > 0 {
+		return GrupoNoRetirado
+	}
+	return GrupoCancelada
 }

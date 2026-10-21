@@ -31,6 +31,8 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
+	catalogo              []application.MateriaParaPreferencia
+	validarAlcance        func(*domain.PreferenciaDeEquipo) (bool, error)
 	preferenciasHuerfanas []*application.PreferenciaHuerfana
 	carros                map[string]*domain.Carro
 	equipos               map[string]*domain.Equipo
@@ -385,7 +387,8 @@ func repoConCarro(id string) *fakeRepo {
 	return repo
 }
 
-func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
+func nuevaAppDeTest(repo *fakeRepo) *fiber.App { return nuevaAppConAuditor(repo, fakeAuditor{}) }
+func nuevaAppConAuditor(repo *fakeRepo, auditor audit.Auditor) *fiber.App {
 	contadorID = 0
 	cifrador, err := secretos.Nuevo("clave-de-test-para-las-cuentas-de-equipo")
 	if err != nil {
@@ -394,7 +397,7 @@ func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	svc := application.NewService(repo, &fakeValidadorReservas{}, idSecuencial, func() time.Time {
 		return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	}, cifrador, eventbus.NewInMemoryEventBus())
-	h := NewHandler(svc, fakeAuditor{})
+	h := NewHandler(svc, auditor)
 
 	app := fiber.New()
 	RegisterRoutes(app, h, registroDePrueba.Autenticacion(testSecret))
@@ -1028,4 +1031,18 @@ func TestHTTP_LocationDelCreado_SePuedeSeguir(t *testing.T) {
 	if resp2.StatusCode != fiber.StatusOK {
 		t.Fatalf("el Location %q tenía que devolver el carro, dio %d", ubicacion, resp2.StatusCode)
 	}
+}
+
+func (r *fakeRepo) Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+
+func (r *fakeRepo) CatalogoDePrioridades(context.Context) ([]application.MateriaParaPreferencia, error) {
+	return r.catalogo, nil
+}
+func (r *fakeRepo) ExisteAlcancePreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) (bool, error) {
+	if r.validarAlcance != nil {
+		return r.validarAlcance(p)
+	}
+	return true, nil
 }

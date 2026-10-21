@@ -11,7 +11,7 @@ import (
 
 func TestCambiarPassword_CierraLasSesionesAbiertas(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	svc := nuevoServicioDeTest(repo)
 
 	versionAntes := u.VersionSesion
@@ -29,7 +29,7 @@ func TestCambiarPassword_ElTokenQueDevuelveNoNaceInvalido(t *testing.T) {
 	// cambiar su contraseña recibiría un token con la versión vieja y quedaría
 	// afuera en el request siguiente — echado por su propio cambio exitoso.
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 
 	// firmarConVersion deja registrada la versión que tenía el usuario en el
 	// momento exacto de firmar.
@@ -51,7 +51,7 @@ func TestCambiarPassword_ElTokenQueDevuelveNoNaceInvalido(t *testing.T) {
 
 func TestCambiarPassword_ConLaActualEquivocadaNoTocaLasSesiones(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	svc := nuevoServicioDeTest(repo)
 
 	versionAntes := u.VersionSesion
@@ -70,7 +70,7 @@ func TestResetearPassword_CierraLasSesionesAbiertas(t *testing.T) {
 	// Es lo que se espera del caso que motiva un reset asistido: alguien perdió
 	// el control de su cuenta y pide ayuda.
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	svc := nuevoServicioDeTest(repo)
 
 	versionAntes := u.VersionSesion
@@ -85,12 +85,12 @@ func TestResetearPassword_CierraLasSesionesAbiertas(t *testing.T) {
 
 func TestRestablecerConCodigo_CierraLasSesionesAbiertas(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 
 	versionAntes := u.VersionSesion
 	if _, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "una-contraseña-nueva"); err != nil {
+		"ana@escuela.test", codigoDePrueba, "una-contraseña-nueva"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -101,12 +101,12 @@ func TestRestablecerConCodigo_CierraLasSesionesAbiertas(t *testing.T) {
 
 func TestRestablecerConCodigo_UnCodigoEquivocadoNoCierraSesiones(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 
 	versionAntes := u.VersionSesion
 	if _, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", "999999", "una-contraseña-nueva"); err == nil {
+		"ana@escuela.test", "999999", "una-contraseña-nueva"); err == nil {
 		t.Fatal("esperaba que fallara")
 	}
 
@@ -121,12 +121,12 @@ func TestAprobarYDarDeBaja_NoTocanLaVersionDeSesion(t *testing.T) {
 	// El estado de la cuenta ya lo verifica el middleware por separado: una
 	// cuenta en BAJA no pasa aunque su versión coincida.
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	u.Estado = domain.EstadoPendiente
 	svc := nuevoServicioDeTest(repo)
 
 	versionAntes := u.VersionSesion
-	if err := svc.Aprobar(context.Background(), u.ID); err != nil {
+	if err := svc.Aprobar(context.Background(), u.ID, "admin-actor"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	if u.VersionSesion != versionAntes {

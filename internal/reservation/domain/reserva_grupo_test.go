@@ -12,6 +12,7 @@ func TestParseEstadoReservaGrupo_Validos(t *testing.T) {
 		"PARCIALMENTE_CANCELADA": GrupoParcialmenteCancelada,
 		"CANCELADA":              GrupoCancelada,
 		"FINALIZADA":             GrupoFinalizada,
+		"NO_RETIRADA":            GrupoNoRetirado,
 	}
 	for entrada, esperado := range casos {
 		got, err := ParseEstadoReservaGrupo(entrada)
@@ -31,17 +32,19 @@ func TestParseEstadoReservaGrupo_Invalido(t *testing.T) {
 	}
 }
 
-// TestGrupo_TodasLasCombinaciones prueba las 16 combinaciones (4x4)
+// TestGrupo_TodasLasCombinaciones prueba las 25 combinaciones (5x5)
 // explícitamente.
 func TestGrupo_TodasLasCombinaciones(t *testing.T) {
-	estados := []EstadoReservaGrupo{GrupoConfirmada, GrupoParcialmenteCancelada, GrupoCancelada, GrupoFinalizada}
+	estados := []EstadoReservaGrupo{GrupoConfirmada, GrupoParcialmenteCancelada, GrupoCancelada, GrupoFinalizada, GrupoNoRetirado}
 
 	permitidas := map[[2]EstadoReservaGrupo]bool{
 		{GrupoConfirmada, GrupoParcialmenteCancelada}: true,
 		{GrupoConfirmada, GrupoCancelada}:             true,
 		{GrupoConfirmada, GrupoFinalizada}:            true,
+		{GrupoConfirmada, GrupoNoRetirado}:            true,
 		{GrupoParcialmenteCancelada, GrupoCancelada}:  true,
 		{GrupoParcialmenteCancelada, GrupoFinalizada}: true,
+		{GrupoParcialmenteCancelada, GrupoNoRetirado}: true,
 	}
 
 	for _, desde := range estados {

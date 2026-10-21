@@ -36,6 +36,19 @@ func NewService(repo Repo, validadorReservas ValidadorReservas, nuevoID IDGenera
 // ── Carro ───────────────────────────────────────────────────────────────
 
 func (s *Service) CrearCarro(ctx context.Context, nombre, descripcion string) (*domain.Carro, error) {
+	var carro *domain.Carro
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		carro, err = s.crearCarroCoordinada(ctx, nombre, descripcion)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return carro, nil
+}
+
+func (s *Service) crearCarroCoordinada(ctx context.Context, nombre, descripcion string) (*domain.Carro, error) {
 	c, err := domain.NuevoCarro(s.nuevoID(), nombre, descripcion)
 	if err != nil {
 		return nil, err
@@ -59,6 +72,17 @@ func (s *Service) CrearCarro(ctx context.Context, nombre, descripcion string) (*
 // Moverlas o darlas de baja es una decisión de quien conoce dónde fueron a
 // parar, no algo que se pueda deducir acá.
 func (s *Service) DarDeBajaCarro(ctx context.Context, carroID string) error {
+
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		return s.darDeBajaCarroCoordinada(ctx, carroID)
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Service) darDeBajaCarroCoordinada(ctx context.Context, carroID string) error {
 	c, err := s.repo.BuscarCarroPorID(ctx, carroID)
 	if err != nil {
 		return err
@@ -89,6 +113,17 @@ func (s *Service) DarDeBajaCarro(ctx context.Context, carroID string) error {
 // el Admin necesita leer: no es que no se pueda reactivar, es que el nombre está
 // ocupado y hay que renombrar a uno de los dos.
 func (s *Service) ReactivarCarro(ctx context.Context, carroID string) error {
+
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		return s.reactivarCarroCoordinada(ctx, carroID)
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Service) reactivarCarroCoordinada(ctx context.Context, carroID string) error {
 	c, err := s.repo.BuscarCarroPorID(ctx, carroID)
 	if err != nil {
 		return err
@@ -102,6 +137,17 @@ func (s *Service) ReactivarCarro(ctx context.Context, carroID string) error {
 // EditarCarro actualiza nombre y/o descripción — nil significa "no tocar
 // ese campo" (RF-03.1: edición parcial).
 func (s *Service) EditarCarro(ctx context.Context, carroID string, nombre, descripcion *string) error {
+
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		return s.editarCarroCoordinada(ctx, carroID, nombre, descripcion)
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Service) editarCarroCoordinada(ctx context.Context, carroID string, nombre, descripcion *string) error {
 	c, err := s.repo.BuscarCarroPorID(ctx, carroID)
 	if err != nil {
 		return err
@@ -141,6 +187,19 @@ func (s *Service) verificarCarroDisponible(ctx context.Context, carroID string) 
 }
 
 func (s *Service) CrearEquipoDeCarro(ctx context.Context, carroID string, identificador int, numeroSerie string, freezado bool, cpu, ram, sistemaOperativo, softwareInstalado string) (*domain.Equipo, error) {
+	var equipo *domain.Equipo
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		equipo, err = s.crearEquipoDeCarroCoordinada(ctx, carroID, identificador, numeroSerie, freezado, cpu, ram, sistemaOperativo, softwareInstalado)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return equipo, nil
+}
+
+func (s *Service) crearEquipoDeCarroCoordinada(ctx context.Context, carroID string, identificador int, numeroSerie string, freezado bool, cpu, ram, sistemaOperativo, softwareInstalado string) (*domain.Equipo, error) {
 	if err := s.verificarCarroDisponible(ctx, carroID); err != nil {
 		return nil, err
 	}
@@ -235,6 +294,19 @@ func cambiosDeEquipo(antes, despues domain.Equipo) map[string]CambioDeCampo {
 // vacío significa que el pedido no movió nada — y entonces no se audita: una
 // entrada que dice «editó» sin decir qué es ruido en el registro.
 func (s *Service) EditarEquipo(ctx context.Context, equipoID string, params EditarEquipoParams) (map[string]CambioDeCampo, error) {
+	var cambios map[string]CambioDeCampo
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		cambios, err = s.editarEquipoCoordinada(ctx, equipoID, params)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cambios, nil
+}
+
+func (s *Service) editarEquipoCoordinada(ctx context.Context, equipoID string, params EditarEquipoParams) (map[string]CambioDeCampo, error) {
 	pc, err := s.repo.BuscarEquipoPorID(ctx, equipoID)
 	if err != nil {
 		return nil, err
@@ -325,7 +397,7 @@ func disparaCascada(estado domain.EstadoEquipo) bool {
 }
 
 // cascadaPendiente distingue "esta operación ya se hizo" de "esta operación
-// se hizo a medias y hay que terminarla".
+// se hizo a medias en una versión anterior y hay que terminarla".
 func (s *Service) cascadaPendiente(ctx context.Context, equipoID string) (bool, error) {
 	pendiente, err := s.validadorReservas.TieneReservasFuturas(ctx, equipoID)
 	if err != nil {
@@ -334,17 +406,28 @@ func (s *Service) cascadaPendiente(ctx context.Context, equipoID string) (bool, 
 	return pendiente, nil
 }
 
-// errCascada envuelve el fallo del segundo paso dejando dicho que el primero
-// SÍ se aplicó y que reintentar la misma operación completa lo que falta —
-// mismo criterio que el error de ArchivarYClonar en academic.
+// errCascada conserva el error original; la operación exterior revierte
+// inventario y reservas juntos y permite reintentar.
 func errCascada(err error) error {
-	return fmt.Errorf("el equipo quedó guardado en su nuevo estado pero no se pudieron cancelar sus reservas futuras "+
-		"(reintentar la misma operación completa la cascada): %w", err)
+	return fmt.Errorf("no se pudo confirmar el cambio de equipo y sus cancelaciones (reintentar la operación): %w", err)
 }
 
 // CambiarEstadoEquipo implementa RF-03.8: al pasar a EN_MANTENIMIENTO o
 // FUERA_DE_SERVICIO, cancela en cascada las reservas futuras de esa PC.
 func (s *Service) CambiarEstadoEquipo(ctx context.Context, equipoID string, nuevo domain.EstadoEquipo, motivo *string) (*ResultadoCascada, error) {
+	var resultado *ResultadoCascada
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.cambiarEstadoEquipoCoordinada(ctx, equipoID, nuevo, motivo)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) cambiarEstadoEquipoCoordinada(ctx context.Context, equipoID string, nuevo domain.EstadoEquipo, motivo *string) (*ResultadoCascada, error) {
 	pc, err := s.repo.BuscarEquipoPorID(ctx, equipoID)
 	if err != nil {
 		return nil, err
@@ -385,8 +468,21 @@ func (s *Service) CambiarEstadoEquipo(ctx context.Context, equipoID string, nuev
 // DarDeBajaEquipo implementa RF-03.4/03.9: soft delete + misma cascada de
 // cancelación que CambiarEstadoEquipo (RF-03.9 dice explícitamente que dar de
 // baja dispara la misma cascada que pasar a FUERA_DE_SERVICIO), incluido el
-// mismo reintento cuando la cascada quedó a medias.
+// reintento de cascadas pendientes de versiones anteriores.
 func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*ResultadoCascada, error) {
+	var resultado *ResultadoCascada
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.darDeBajaEquipoCoordinada(ctx, equipoID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) darDeBajaEquipoCoordinada(ctx context.Context, equipoID string) (*ResultadoCascada, error) {
 	pc, err := s.repo.BuscarEquipoPorID(ctx, equipoID)
 	if err != nil {
 		return nil, err
@@ -449,6 +545,17 @@ func (s *Service) DarDeBajaEquipo(ctx context.Context, equipoID string) (*Result
 // caso que verificarCarroDisponible cubre al crear y al mover—, y el equipo
 // quedaría invisible sin estar dado de baja, que es peor que seguir de baja.
 func (s *Service) ReactivarEquipo(ctx context.Context, equipoID string) error {
+
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		return s.reactivarEquipoCoordinada(ctx, equipoID)
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Service) reactivarEquipoCoordinada(ctx context.Context, equipoID string) error {
 	pc, err := s.repo.BuscarEquipoPorID(ctx, equipoID)
 	if err != nil {
 		return err
@@ -519,6 +626,19 @@ type CrearEquipoSueltoParams struct {
 }
 
 func (s *Service) CrearEquipo(ctx context.Context, params CrearEquipoSueltoParams) (*domain.Equipo, error) {
+	var equipo *domain.Equipo
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		equipo, err = s.crearEquipoCoordinada(ctx, params)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return equipo, nil
+}
+
+func (s *Service) crearEquipoCoordinada(ctx context.Context, params CrearEquipoSueltoParams) (*domain.Equipo, error) {
 	equipo, err := domain.NuevoEquipoSuelto(s.nuevoID(), params.Tipo, params.Nombre, params.NumeroSerie,
 		params.Reservable, s.ahora())
 	if err != nil {
@@ -543,7 +663,7 @@ func (s *Service) ListarEquipos(ctx context.Context, soloSueltos bool) ([]*domai
 
 // ── Incidencia ──────────────────────────────────────────────────────────
 
-func (s *Service) CrearIncidencia(ctx context.Context, equipoID, reportadoPor, descripcion, categoria string, gravedad domain.Gravedad) (*domain.Incidencia, error) {
+func (s *Service) operacionCrearIncidencia(ctx context.Context, equipoID, reportadoPor, descripcion, categoria string, gravedad domain.Gravedad) (*domain.Incidencia, error) {
 	i, err := domain.NuevaIncidencia(s.nuevoID(), equipoID, reportadoPor, descripcion, categoria, gravedad, s.ahora())
 	if err != nil {
 		return nil, err
@@ -564,7 +684,7 @@ type EditarIncidenciaParams struct {
 	Categoria *string
 }
 
-func (s *Service) EditarIncidencia(ctx context.Context, incidenciaID string, params EditarIncidenciaParams) error {
+func (s *Service) operacionEditarIncidencia(ctx context.Context, incidenciaID string, params EditarIncidenciaParams) error {
 	i, err := s.repo.BuscarIncidenciaPorID(ctx, incidenciaID)
 	if err != nil {
 		return err

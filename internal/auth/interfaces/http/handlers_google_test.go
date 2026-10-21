@@ -38,7 +38,7 @@ func verificadorQueDevuelve(identidad *application.IdentidadGoogle) *fakeVerific
 func identidadDePrueba() *application.IdentidadGoogle {
 	return &application.IdentidadGoogle{
 		Sub:             "112233445566",
-		Email:           "ada@escuela.edu.ar",
+		Email:           "ada@escuela.test",
 		EmailVerificado: true,
 		Nombre:          "Ada",
 		Apellido:        "Lovelace",
@@ -115,7 +115,7 @@ func TestHTTP_Config_NoRequiereAutenticacion(t *testing.T) {
 func TestHTTP_LoginConGoogle_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Email: "ada@escuela.edu.ar", GoogleSub: "112233445566",
+		ID: "u1", Email: "ada@escuela.test", GoogleSub: "112233445566",
 		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
 	}
 	app := nuevaAppDeTestConGoogle(repo, verificadorQueDevuelve(identidadDePrueba()), clientIDDePrueba)
@@ -198,7 +198,7 @@ func TestHTTP_LoginConGoogle_DominioNoPermitido_403(t *testing.T) {
 func TestHTTP_LoginConGoogle_CuentaPendiente_403(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Email: "ada@escuela.edu.ar", GoogleSub: "112233445566",
+		ID: "u1", Email: "ada@escuela.test", GoogleSub: "112233445566",
 		Rol: domain.RolDocente, Estado: domain.EstadoPendiente,
 	}
 	app := nuevaAppDeTestConGoogle(repo, verificadorQueDevuelve(identidadDePrueba()), clientIDDePrueba)
@@ -271,7 +271,7 @@ func TestHTTP_RegistrarConGoogle_OK(t *testing.T) {
 func TestHTTP_RegistrarConGoogle_YaExiste_409(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Email: "ada@escuela.edu.ar", GoogleSub: "112233445566",
+		ID: "u1", Email: "ada@escuela.test", GoogleSub: "112233445566",
 		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
 	}
 	app := nuevaAppDeTestConGoogle(repo, verificadorQueDevuelve(identidadDePrueba()), clientIDDePrueba)
@@ -301,7 +301,7 @@ func TestHTTP_RegistrarConGoogle_NoConfigurado_503(t *testing.T) {
 func TestHTTP_Me_InformaComoIngresaLaCuenta(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Email: "ada@escuela.edu.ar", GoogleSub: "112233445566",
+		ID: "u1", Email: "ada@escuela.test", GoogleSub: "112233445566",
 		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
 	}
 	app := nuevaAppDeTest(repo)
@@ -328,7 +328,7 @@ func TestHTTP_Me_InformaComoIngresaLaCuenta(t *testing.T) {
 func TestHTTP_CambiarPassword_CuentaDeGoogle_409(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Email: "ada@escuela.edu.ar", GoogleSub: "112233445566",
+		ID: "u1", Email: "ada@escuela.test", GoogleSub: "112233445566",
 		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
 	}
 	app := nuevaAppDeTest(repo)
@@ -354,7 +354,7 @@ func TestHTTP_CambiarPassword_CuentaDeGoogle_409(t *testing.T) {
 func TestHTTP_CambiarPassword_ActualIncorrecta_400_YNoCierraLaSesion(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usuarios["u1"] = &domain.Usuario{
-		ID: "u1", Email: "ada@escuela.edu.ar", PasswordHash: "hash:la-de-verdad",
+		ID: "u1", Email: "ada@escuela.test", PasswordHash: "hash:la-de-verdad",
 		Rol: domain.RolDocente, Estado: domain.EstadoAprobada,
 	}
 	app := nuevaAppDeTest(repo)

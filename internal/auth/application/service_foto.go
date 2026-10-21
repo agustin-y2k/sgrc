@@ -10,7 +10,7 @@ import (
 // La foto de perfil (ver domain.FotoDePerfil).
 
 // GuardarMiFoto reemplaza la foto propia.
-func (s *Service) GuardarMiFoto(ctx context.Context, usuarioID string, contenido []byte) (*domain.FotoDePerfil, error) {
+func (s *Service) operacionGuardarMiFoto(ctx context.Context, usuarioID string, contenido []byte) (*domain.FotoDePerfil, error) {
 	f, err := domain.NuevaFotoDePerfil(usuarioID, contenido, s.ahora())
 	if err != nil {
 		return nil, err
@@ -27,6 +27,6 @@ func (s *Service) BuscarFoto(ctx context.Context, usuarioID string) (*domain.Fot
 }
 
 // EliminarMiFoto vuelve a las iniciales.
-func (s *Service) EliminarMiFoto(ctx context.Context, usuarioID string) error {
+func (s *Service) operacionEliminarMiFoto(ctx context.Context, usuarioID string) error {
 	return s.repo.EliminarFoto(ctx, usuarioID)
 }

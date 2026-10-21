@@ -145,6 +145,7 @@ type usuarioResponse struct {
 	Email               string     `json:"email"`
 	Rol                 string     `json:"rol"`
 	Estado              string     `json:"estado"`
+	BajaPendiente       bool       `json:"bajaPendiente"`
 	FechaRegistro       time.Time  `json:"fechaRegistro"`
 	FechaAprobacion     *time.Time `json:"fechaAprobacion,omitempty"`
 	DebeCambiarPassword bool       `json:"debeCambiarPassword"`
@@ -171,6 +172,7 @@ func toUsuarioResponse(u *domain.Usuario) usuarioResponse {
 		Email:               u.Email,
 		Rol:                 string(u.Rol),
 		Estado:              string(u.Estado),
+		BajaPendiente:       u.BajaPendiente,
 		FechaRegistro:       u.FechaRegistro,
 		FechaAprobacion:     u.FechaAprobacion,
 		DebeCambiarPassword: u.DebeCambiarPassword,

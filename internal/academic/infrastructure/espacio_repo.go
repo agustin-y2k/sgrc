@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 
 	"github.com/jackc/pgx/v5"
 
@@ -42,7 +43,7 @@ func escanearEspacio(fila pgx.Row) (*domain.Espacio, error) {
 // Biblioteca" y listo. Renombrar el espacio renombra las dos (ver
 // GuardarEspacio), así que no pueden desincronizarse.
 func (r *PostgresRepo) CrearEspacio(ctx context.Context, e *domain.Espacio) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.pool)
 	if err != nil {
 		return fmt.Errorf("abriendo transacción para crear el espacio: %w", err)
 	}
@@ -77,7 +78,7 @@ func (r *PostgresRepo) CrearEspacio(ctx context.Context, e *domain.Espacio) erro
 }
 
 func (r *PostgresRepo) BuscarEspacioPorID(ctx context.Context, id string) (*domain.Espacio, error) {
-	e, err := escanearEspacio(r.pool.QueryRow(ctx,
+	e, err := escanearEspacio(pgtransaccion.Con(ctx, r.pool).QueryRow(ctx,
 		`SELECT `+columnasEspacio+` FROM espacio WHERE id = $1`, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -92,7 +93,7 @@ func (r *PostgresRepo) BuscarEspacioPorID(ctx context.Context, id string) (*doma
 }
 
 func (r *PostgresRepo) ListarEspaciosPorCiclo(ctx context.Context, cicloID string) ([]*domain.Espacio, error) {
-	filas, err := r.pool.Query(ctx,
+	filas, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT `+columnasEspacio+` FROM espacio WHERE ciclo_lectivo_id = $1
 		 ORDER BY clave_texto(nombre)`, cicloID)
 	if err != nil {
@@ -122,7 +123,7 @@ func (r *PostgresRepo) ListarEspaciosPorCiclo(ctx context.Context, cicloID strin
 // seguiría diciendo «Biblioteca» en la pantalla de reservar, sin que nada lo
 // explique.
 func (r *PostgresRepo) GuardarEspacio(ctx context.Context, e *domain.Espacio) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.pool)
 	if err != nil {
 		return fmt.Errorf("abriendo transacción para guardar el espacio: %w", err)
 	}
@@ -165,7 +166,7 @@ func (r *PostgresRepo) GuardarEspacio(ctx context.Context, e *domain.Espacio) er
 // vuelve a mirar porque esa pregunta la contesta el módulo de reservas, no
 // éste.
 func (r *PostgresRepo) EliminarEspacio(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM espacio WHERE id = $1`, id)
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `DELETE FROM espacio WHERE id = $1`, id)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -180,7 +181,7 @@ func (r *PostgresRepo) EliminarEspacio(ctx context.Context, id string) error {
 
 // ListarMateriasPorEspacio: las materias que cuelgan de un espacio.
 func (r *PostgresRepo) ListarMateriasPorEspacio(ctx context.Context, espacioID string) ([]*domain.Materia, error) {
-	filas, err := r.pool.Query(ctx,
+	filas, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado
 		   FROM materia WHERE espacio_id = $1
 		  ORDER BY clave_texto(nombre)`, espacioID)

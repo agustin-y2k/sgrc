@@ -9,11 +9,13 @@ import (
 
 // Repo es el único contrato que este paquete necesita de infrastructure/.
 type Repo interface {
+	EnSnapshot(ctx context.Context, cicloID string, fn func(context.Context) error) error
+	SnapshotSellado(ctx context.Context, cicloID string) (bool, error)
+	BorrarHistoricosNoSellados(ctx context.Context, anio int) error
+	SellarSnapshot(ctx context.Context, cicloID string, anio int) error
 	GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.HistoricoUsoEquipo) error
 	GuardarHistoricoUsoDocente(ctx context.Context, h *domain.HistoricoUsoDocente) error
-	// BorrarHistoricoDocentesSinCuenta limpia las filas de un año cuyo
-	// usuario_id es NULL, para poder reescribirlas.
-	BorrarHistoricoDocentesSinCuenta(ctx context.Context, anio int) error
+	TotalesUsoDeCiclo(ctx context.Context, cicloID string) (domain.TotalesUso, error)
 	// Los históricos se listan por año (no por ciclo — ver el comentario
 	// en domain/historico.go sobre por qué esa tabla usa `anio`).
 	ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error)

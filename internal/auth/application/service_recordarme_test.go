@@ -33,7 +33,7 @@ func TestLogin_LaCasillaLlegaHastaLaFirma(t *testing.T) {
 
 func TestLoginConGoogle_LaCasillaLlegaHastaLaFirma(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.edu.ar", "112233445566", domain.EstadoAprobada)
+	repo.usuarios["u1"] = usuarioDeGoogle("u1", "ada@escuela.test", "112233445566", domain.EstadoAprobada)
 	svc := nuevoServicioConGoogle(repo, &fakeVerificadorGoogle{identidad: identidadDePrueba()})
 
 	res, err := svc.LoginConGoogle(context.Background(), "un-token", true)
@@ -53,7 +53,7 @@ func TestLoginConGoogle_LaCasillaLlegaHastaLaFirma(t *testing.T) {
 
 func TestCambiarPassword_ConservaLaSesionLarga(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	svc := nuevoServicioDeTest(repo)
 
 	token, err := svc.CambiarPassword(context.Background(), u.ID, "la-vieja", "una-contraseña-nueva", true)
@@ -68,10 +68,10 @@ func TestCambiarPassword_ConservaLaSesionLarga(t *testing.T) {
 
 func TestActualizarMisDatos_ConservaLaSesionLarga(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	svc := nuevoServicioDeTest(repo)
 
-	_, token, err := svc.ActualizarMisDatos(context.Background(), u.ID, "Ada", "Lovelace", true)
+	_, token, err := svc.ActualizarMisDatos(context.Background(), u.ID, "Ada", "Lovelace", true, 0)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestActualizarMisDatos_ConservaLaSesionLarga(t *testing.T) {
 // re-firmar. Si no, "recordarme" sería el comportamiento por omisión.
 func TestCambiarPassword_SinCasilla_NoAlargaLaSesion(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	svc := nuevoServicioDeTest(repo)
 
 	token, err := svc.CambiarPassword(context.Background(), u.ID, "la-vieja", "una-contraseña-nueva", false)

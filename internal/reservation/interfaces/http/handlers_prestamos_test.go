@@ -401,7 +401,7 @@ func datosDePedido(dueno string) *application.ReservaParaPedido {
 		Estado:        domain.ReservaConfirmada,
 		DuenoID:       &duenoID,
 		DuenoNombre:   "Ada Lovelace",
-		DuenoEmail:    "ada@escuela.edu.ar",
+		DuenoEmail:    "ada@escuela.test",
 		Etiqueta:      "PC 3",
 		MateriaNombre: "Matemáticas",
 		// Pasado mañana respecto del reloj fijo de los tests: la franja

@@ -4,6 +4,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -37,6 +38,9 @@ func (s *Service) NotificarUsuario(ctx context.Context, usuarioID, mensaje strin
 		return nil, err
 	}
 	if err := s.repo.Crear(ctx, n); err != nil {
+		if errors.Is(err, ErrDestinatarioInexistente) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("creando notificación: %w", err)
 	}
 	return n, nil
@@ -53,11 +57,14 @@ func (s *Service) NotificarATodosLosAdmins(ctx context.Context, mensaje string, 
 	creadas := 0
 	var fallidos []string
 	for _, adminID := range adminIDs {
-		if _, err := s.NotificarUsuario(ctx, adminID, mensaje, tipo, ref); err != nil {
+		aviso, err := s.NotificarUsuario(ctx, adminID, mensaje, tipo, ref)
+		if err != nil {
 			fallidos = append(fallidos, fmt.Sprintf("%s (%v)", adminID, err))
 			continue
 		}
-		creadas++
+		if aviso != nil {
+			creadas++
+		}
 	}
 	if len(fallidos) > 0 {
 		return creadas, fmt.Errorf("no se pudo notificar a %d de %d admins: %s",
@@ -79,7 +86,7 @@ func (s *Service) NotificarATodosLosAdmins(ctx context.Context, mensaje string, 
 //
 // La condición es POR ADMIN y no global: que uno haya leído el suyo no
 // significa que los otros tres se hayan enterado.
-func (s *Service) NotificarATodosLosAdminsSinRepetir(ctx context.Context, sobreUsuarioID, mensaje string, tipo domain.Tipo) (int, error) {
+func (s *Service) NotificarATodosLosAdminsSinRepetir(ctx context.Context, sobreUsuarioID, mensaje string, tipo domain.Tipo, referencia ...string) (int, error) {
 	adminIDs, err := s.listadorAdmins.IDsDeAdminsAprobados(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("listando admins aprobados: %w", err)
@@ -87,7 +94,7 @@ func (s *Service) NotificarATodosLosAdminsSinRepetir(ctx context.Context, sobreU
 
 	// Una sola consulta para todos: devuelve los avisos sin leer de ese tipo
 	// sobre esa persona, de quien sea.
-	pendientes, err := s.repo.ListarNoLeidasSobreUsuario(ctx, sobreUsuarioID, tipo)
+	pendientes, err := s.repo.ListarNoLeidasSobreUsuario(ctx, sobreUsuarioID, tipo, referencia...)
 	if err != nil {
 		return 0, fmt.Errorf("buscando avisos pendientes sobre el usuario: %w", err)
 	}
@@ -97,17 +104,27 @@ func (s *Service) NotificarATodosLosAdminsSinRepetir(ctx context.Context, sobreU
 	}
 
 	ref := domain.Referencias{SobreUsuarioID: &sobreUsuarioID}
+	if len(referencia) > 0 {
+		if tipo == domain.TipoPedidoDeMateria {
+			ref.PedidoID = &referencia[0]
+		} else {
+			ref.HiloID = &referencia[0]
+		}
+	}
 	creadas := 0
 	var fallidos []string
 	for _, adminID := range adminIDs {
 		if yaAvisado[adminID] {
 			continue
 		}
-		if _, err := s.NotificarUsuario(ctx, adminID, mensaje, tipo, ref); err != nil {
+		aviso, err := s.NotificarUsuario(ctx, adminID, mensaje, tipo, ref)
+		if err != nil {
 			fallidos = append(fallidos, fmt.Sprintf("%s (%v)", adminID, err))
 			continue
 		}
-		creadas++
+		if aviso != nil {
+			creadas++
+		}
 	}
 	if len(fallidos) > 0 {
 		return creadas, fmt.Errorf("no se pudo notificar a %d de %d admins: %s",
@@ -124,8 +141,8 @@ func (s *Service) NotificarATodosLosAdminsSinRepetir(ctx context.Context, sobreU
 // hilo, decide el pedido de materia—, el pendiente deja de estar pendiente
 // para los demás. Sin esto, el que resuelve tacha el suyo y los otros tres se
 // quedan con un aviso sin leer sobre algo que ya no existe, para siempre.
-func (s *Service) CerrarAvisosSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo) (int, error) {
-	pendientes, err := s.repo.ListarNoLeidasSobreUsuario(ctx, sobreUsuarioID, tipo)
+func (s *Service) CerrarAvisosSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo, referencia ...string) (int, error) {
+	pendientes, err := s.repo.ListarNoLeidasSobreUsuario(ctx, sobreUsuarioID, tipo, referencia...)
 	if err != nil {
 		return 0, fmt.Errorf("buscando avisos sobre el usuario: %w", err)
 	}

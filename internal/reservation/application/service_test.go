@@ -435,6 +435,15 @@ func (r *fakeRepo) BuscarReservaGrupoPorID(ctx context.Context, id string) (*dom
 	}
 	return g, nil
 }
+func (r *fakeRepo) BuscarGruposParaActualizar(ctx context.Context, ids []string) (map[string]*domain.ReservaGrupo, error) {
+	grupos := map[string]*domain.ReservaGrupo{}
+	for _, id := range ids {
+		if g := r.grupos[id]; g != nil {
+			grupos[id] = g
+		}
+	}
+	return grupos, nil
+}
 func (r *fakeRepo) GuardarReservaGrupo(ctx context.Context, g *domain.ReservaGrupo) error {
 	r.grupos[g.ID] = g
 	return nil
@@ -799,7 +808,7 @@ func (f *fakeObtenedorNombre) ContactosDe(ctx context.Context, usuarioIDs []stri
 	}
 	contactos := make(map[string]Contacto, len(usuarioIDs))
 	for _, id := range usuarioIDs {
-		contactos[id] = Contacto{Nombre: f.nombre, Email: id + "@escuela.edu.ar"}
+		contactos[id] = Contacto{Nombre: f.nombre, Email: id + "@escuela.test"}
 	}
 	return contactos, nil
 }
@@ -2710,7 +2719,7 @@ func TestPedirLiberacionDeReserva_PublicaElAviso(t *testing.T) {
 		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{nombre: "Grace Hopper"}, idSecuencial,
 		func() time.Time { return fecha(2026, 3, 2) }, bus)
 
-	repo.contactoDeUsuario["otro-docente"] = [2]string{"Ada Lovelace", "ada@escuela.edu.ar"}
+	repo.contactoDeUsuario["otro-docente"] = [2]string{"Ada Lovelace", "ada@escuela.test"}
 	repo.identificadorDeEquipo["pc1"] = 3
 	r, err := domain.NuevaReservaNormal("res1", "grupo1", "pc1", "materia1", "Ada Lovelace",
 		ptr("otro-docente"), fecha(2026, time.March, 4), 10*time.Hour, 12*time.Hour,
@@ -2732,7 +2741,7 @@ func TestPedirLiberacionDeReserva_PublicaElAviso(t *testing.T) {
 	pedido := eventos[0].Payload.(eventbus.PedidoDeLiberacion)
 	// Va al DUEÑO y habla de quien pide: sin el nombre, el aviso llega
 	// anónimo y no sabe con quién hablar.
-	if pedido.UsuarioID != "otro-docente" || pedido.Email != "ada@escuela.edu.ar" {
+	if pedido.UsuarioID != "otro-docente" || pedido.Email != "ada@escuela.test" {
 		t.Errorf("el aviso tiene que ir al dueño: %+v", pedido)
 	}
 	if pedido.SolicitanteNombre != "Grace Hopper" || pedido.SolicitanteID != "docente1" {
@@ -3283,7 +3292,7 @@ func TestListarEquiposOcupadosEn_PuedeTomarseCoincideConLoQueCrearReservaPermite
 			repo := nuevoFakeRepo()
 			duenoAjeno := "docente-ajeno"
 			ocupante := &domain.Reserva{
-				ID: "res-ocupante", EquipoID: "pc1", Fecha: fecha(2026, 3, 9),
+				ID: "res-ocupante", EquipoID: "pc1", MateriaID: &duenoAjeno, Fecha: fecha(2026, 3, 9),
 				HoraInicio: 14 * time.Hour, HoraFin: 16 * time.Hour,
 				Estado: domain.ReservaConfirmada, Tipo: domain.TipoNormal,
 				CreadoPor: &duenoAjeno,
@@ -3335,4 +3344,88 @@ func TestListarEquiposOcupadosEn_PuedeTomarseCoincideConLoQueCrearReservaPermite
 			}
 		})
 	}
+}
+
+func (r *fakeRepo) BuscarReservasParaEntregar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	seleccion, err := r.BuscarReservasPorIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	grupos := map[string]bool{}
+	for _, res := range seleccion {
+		if res.ReservaGrupoID != nil {
+			grupos[*res.ReservaGrupoID] = true
+		}
+	}
+	for id, res := range r.reservas {
+		if res.ReservaGrupoID != nil && grupos[*res.ReservaGrupoID] {
+			copia := *res
+			seleccion[id] = &copia
+		}
+	}
+	return seleccion, nil
+}
+func (r *fakeRepo) BuscarPrestamosParaActualizar(ctx context.Context, ids []string) (map[string]*domain.Prestamo, error) {
+	return r.BuscarPrestamosPorIDs(ctx, ids)
+}
+func (r *fakeRepo) ReservasConPrestamos(ctx context.Context, ids []string) (map[string]bool, error) {
+	resultado := map[string]bool{}
+	for _, id := range ids {
+		for _, p := range r.prestamos {
+			if p.ReservaID != nil && *p.ReservaID == id {
+				resultado[id] = true
+			}
+		}
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+
+func (r *fakeRepo) ReclamarPedidoLiberacion(ctx context.Context, reservaID, solicitanteID string, dia time.Time) (bool, error) {
+	ya, err := r.YaPidioLiberacionHoy(ctx, reservaID, solicitanteID, dia)
+	if err != nil || ya {
+		return false, err
+	}
+	r.pedidosDeLiberacion[reservaID+"/"+solicitanteID+"/"+diaDe(dia).Format("2006-01-02")] = true
+	return true, nil
+}
+
+func TestListarReservas_ImponeIdentidadEnElServicio(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo)
+	for _, usuario := range []string{"docente1", "otro"} {
+		r, err := domain.NuevaReservaNormal(usuario, "grupo"+usuario, "pc"+usuario, "materia1", usuario, ptr(usuario), fecha(2026, 3, 4), 10*time.Hour, 12*time.Hour, fecha(2026, 3, 1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		repo.reservas[r.ID] = r
+	}
+	for _, f := range []FiltroReservas{{}, {CreadoPor: ptr("otro")}} {
+		filas, total, err := svc.ListarReservas(context.Background(), f, "docente1", false)
+		if err != nil || total != 1 || len(filas) != 1 || *filas[0].Reserva.CreadoPor != "docente1" {
+			t.Fatalf("listó reservas ajenas: %+v %d %v", filas, total, err)
+		}
+	}
+	if _, _, err := svc.ListarReservas(context.Background(), FiltroReservas{}, "", false); !errors.Is(err, ErrNoEsTuReserva) {
+		t.Fatalf("permitió consulta sin identidad: %v", err)
+	}
+	if _, total, err := svc.ListarReservas(context.Background(), FiltroReservas{}, "admin", true); err != nil || total != 2 {
+		t.Fatalf("filtro administrativo: %d %v", total, err)
+	}
+}
+
+func (r *fakeRepo) OpcionesDeReposicion(ctx context.Context, equipoID, materiaID string) (OpcionesReposicion, error) {
+	return OpcionesReposicion{}, nil
+}
+
+func (r *fakeRepo) GuardarReposiciones(ctx context.Context, reservas []*domain.Reserva) error {
+	for _, res := range reservas {
+		if err := r.GuardarReserva(ctx, res); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -18,8 +19,8 @@ import (
 // notificación.
 const timeoutNotificacion = 10 * time.Second
 
-// EntregaAsincrona controla si los handlers escriben en su propia goroutine
-// (producción) o de forma sincrónica (tests, donde se necesita determinismo).
+// EntregaAsincrona controla el adaptador en memoria: entrega en goroutines o
+// sincrónica para pruebas. Los consumidores durables usan la transacción del worker.
 type EntregaAsincrona bool
 
 const (
@@ -29,11 +30,10 @@ const (
 
 // RegisterEventHandlers suscribe al Service a los eventos que auth y
 // reservation ya publican — se llama una sola vez desde cmd/main.go, después
-// de crear el Service, y antes de levantar el servidor HTTP. Los errores de
-// estos handlers solo se loguean, nunca se propagan: la operación que disparó
-// el evento (registrar un docente, cancelar una reserva) ya sucedió y ya se
-// commiteó; notificar es un efecto secundario de mejor esfuerzo, no debe
-// poder deshacer ni bloquear nada de lo que ya pasó.
+// de crear el Service y antes de levantar el servidor HTTP. Con Persistente,
+// los errores revierten los avisos del intento y dejan el evento para reintentar.
+// El adaptador en memoria solo registra errores; el correo conserva su política
+// de cortesía después de confirmar los avisos internos.
 func RegisterEventHandlers(bus eventbus.EventBus, svc *Service) {
 	registrarHandlers(bus, svc, Asincrona, nil)
 }
@@ -82,10 +82,26 @@ func nuevaEntrega(modo EntregaAsincrona, pendientes *sync.WaitGroup, timeout tim
 }
 
 func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincrona, pendientes *sync.WaitGroup) {
-	entregar := nuevaEntrega(modo, pendientes, timeoutNotificacion)
+
+	entregaNormal := nuevaEntrega(modo, pendientes, timeoutNotificacion)
+	registrar := func(tipo string, handler func(eventbus.Evento, entrega)) {
+		if durable, ok := bus.(eventbus.Persistente); ok {
+			durable.SuscribirDurable(tipo, func(ctx context.Context, e eventbus.Evento) error {
+				var fallos []error
+				handler(e, func(descripcion string, trabajo func(context.Context) error) {
+					if err := trabajo(ctx); err != nil {
+						fallos = append(fallos, fmt.Errorf("%s: %w", descripcion, err))
+					}
+				})
+				return errors.Join(fallos...)
+			})
+		} else {
+			bus.Subscribe(tipo, func(e eventbus.Evento) { handler(e, entregaNormal) })
+		}
+	}
 
 	// RF-05.6: docente nuevo pendiente de aprobación.
-	bus.Subscribe("docente.registro.pendiente", func(e eventbus.Evento) {
+	registrar("docente.registro.pendiente", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(map[string]string)
 		if !ok {
 			log.Printf("notification: payload inesperado para docente.registro.pendiente (tipo %T)", e.Payload)
@@ -114,7 +130,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	// el de la materia que se queda con otro docente y no cancela nada. Ver
 	// auth/application/service.go, donde se dejó de publicar.
 	porMateriaHuerfana := func(evento, motivo string) {
-		bus.Subscribe(evento, func(e eventbus.Evento) {
+		registrar(evento, func(e eventbus.Evento, entregar entrega) {
 			payload, ok := e.Payload.(map[string]any)
 			if !ok {
 				log.Printf("notification: payload inesperado para %s (tipo %T)", evento, e.Payload)
@@ -134,7 +150,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 
 	// Una cuenta que estaba pendiente se aprobó o se rechazó: el aviso que pedía
 	// resolverla ya no tiene nada que pedir.
-	bus.Subscribe("cuenta.pendiente.resuelta", func(e eventbus.Evento) {
+	registrar("cuenta.pendiente.resuelta", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(map[string]string)
 		if !ok {
 			log.Printf("notification: payload inesperado para cuenta.pendiente.resuelta (tipo %T)", e.Payload)
@@ -150,7 +166,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	// Alguien escribió en el buzón: sugerencia o algo que no anda. Va a
 	// todos los Admin, salvo a los que ya tienen uno sin leer de esa misma
 	// persona (ver NotificarATodosLosAdminsSinRepetir).
-	bus.Subscribe("sugerencia.nueva", func(e eventbus.Evento) {
+	registrar("sugerencia.nueva", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.SugerenciaNueva)
 		if !ok {
 			log.Printf("notification: payload inesperado para sugerencia.nueva (tipo %T)", e.Payload)
@@ -159,7 +175,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		mensaje := mensajeDeSugerencia(payload)
 		entregar("sugerencia.nueva", func(ctx context.Context) error {
 			_, err := svc.NotificarATodosLosAdminsSinRepetir(ctx, payload.UsuarioID, mensaje,
-				domain.TipoSugerencia)
+				domain.TipoSugerencia, payload.SugerenciaID)
 			return err
 		})
 	})
@@ -167,7 +183,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	// Quien preguntó volvió a escribir en su hilo. Es el caso que más se
 	// beneficia del "sin repetir": una conversación de seis mensajes dejaba
 	// seis avisos idénticos en la campana de cada Admin.
-	bus.Subscribe("sugerencia.seguimiento", func(e eventbus.Evento) {
+	registrar("sugerencia.seguimiento", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.SugerenciaSeguimiento)
 		if !ok {
 			log.Printf("notification: payload inesperado para sugerencia.seguimiento (tipo %T)", e.Payload)
@@ -176,7 +192,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		mensaje := mensajeDeSeguimiento(payload)
 		entregar("sugerencia.seguimiento", func(ctx context.Context) error {
 			_, err := svc.NotificarATodosLosAdminsSinRepetir(ctx, payload.UsuarioID, mensaje,
-				domain.TipoSugerencia)
+				domain.TipoSugerencia, payload.SugerenciaID)
 			return err
 		})
 	})
@@ -184,7 +200,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	// Un Admin contestó: le llega a quien escribió, y el pendiente se cierra
 	// para TODOS los Admin — el que contestó ya no tiene nada que hacer, y los
 	// demás tampoco.
-	bus.Subscribe("sugerencia.respondida", func(e eventbus.Evento) {
+	registrar("sugerencia.respondida", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.SugerenciaRespondida)
 		if !ok {
 			log.Printf("notification: payload inesperado para sugerencia.respondida (tipo %T)", e.Payload)
@@ -192,17 +208,28 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		}
 		mensaje := mensajeDeRespuestaASugerencia(payload)
 		entregar("sugerencia.respondida", func(ctx context.Context) error {
-			if _, err := svc.CerrarAvisosSobreUsuario(ctx, payload.UsuarioID, domain.TipoSugerencia); err != nil {
+			if _, err := svc.CerrarAvisosSobreUsuario(ctx, payload.UsuarioID, domain.TipoSugerencia, payload.SugerenciaID); err != nil {
 				return err
 			}
 			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
-				domain.TipoSugerenciaRespondida, domain.Referencias{})
+				domain.TipoSugerenciaRespondida, domain.Referencias{HiloID: &payload.SugerenciaID})
+			return err
+		})
+	})
+
+	registrar("sugerencia.resuelta", func(e eventbus.Evento, entregar entrega) {
+		payload, ok := e.Payload.(map[string]string)
+		if !ok {
+			return
+		}
+		entregar("sugerencia.resuelta", func(ctx context.Context) error {
+			_, err := svc.CerrarAvisosSobreUsuario(ctx, payload["usuarioId"], domain.TipoSugerencia, payload["hiloId"])
 			return err
 		})
 	})
 
 	// Un docente pidió dictar una materia.
-	bus.Subscribe("materia.pedido.nuevo", func(e eventbus.Evento) {
+	registrar("materia.pedido.nuevo", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.PedidoDeMateriaNuevo)
 		if !ok {
 			log.Printf("notification: payload inesperado para materia.pedido.nuevo (tipo %T)", e.Payload)
@@ -216,13 +243,13 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		usuarioID := payload.UsuarioID
 		entregar("materia.pedido.nuevo", func(ctx context.Context) error {
 			_, err := svc.NotificarATodosLosAdmins(ctx, mensajeDePedidoDeMateria(payload),
-				domain.TipoPedidoDeMateria, domain.Referencias{SobreUsuarioID: &usuarioID})
+				domain.TipoPedidoDeMateria, domain.Referencias{SobreUsuarioID: &usuarioID, PedidoID: &payload.PedidoID})
 			return err
 		})
 	})
 
 	// El Admin resolvió el pedido: le llega a quien lo hizo, aprobado o no.
-	bus.Subscribe("materia.pedido.resuelto", func(e eventbus.Evento) {
+	registrar("materia.pedido.resuelto", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.PedidoDeMateriaResuelto)
 		if !ok {
 			log.Printf("notification: payload inesperado para materia.pedido.resuelto (tipo %T)", e.Payload)
@@ -231,17 +258,17 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		mensaje := mensajeDePedidoResuelto(payload)
 		entregar("materia.pedido.resuelto", func(ctx context.Context) error {
 			// Lo decidió uno: deja de estar pendiente para todos.
-			if _, err := svc.CerrarAvisosSobreUsuario(ctx, payload.UsuarioID, domain.TipoPedidoDeMateria); err != nil {
+			if _, err := svc.CerrarAvisosSobreUsuario(ctx, payload.UsuarioID, domain.TipoPedidoDeMateria, payload.PedidoID); err != nil {
 				return err
 			}
 			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensaje,
-				domain.TipoPedidoDeMateriaResuelto, domain.Referencias{})
+				domain.TipoPedidoDeMateriaResuelto, domain.Referencias{PedidoID: &payload.PedidoID})
 			return err
 		})
 	})
 
 	// RF-05.9: hay licencias de software por vencer o ya vencidas.
-	bus.Subscribe("licencia.por-vencer", func(e eventbus.Evento) {
+	registrar("licencia.por-vencer", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.AvisoDeLicencias)
 		if !ok {
 			log.Printf("notification: payload inesperado para licencia.por-vencer (tipo %T)", e.Payload)
@@ -267,7 +294,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	// es "se renovó una" sino "ya no queda ninguna", y quien sabe eso es el
 	// módulo dueño, que lo manda contado.
 
-	bus.Subscribe("licencia.pendientes", func(e eventbus.Evento) {
+	registrar("licencia.pendientes", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.PendientesDeLicencia)
 		if !ok {
 			log.Printf("notification: payload inesperado para licencia.pendientes (tipo %T)", e.Payload)
@@ -282,7 +309,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 		})
 	})
 
-	bus.Subscribe("prestamo.cierre.pendientes", func(e eventbus.Evento) {
+	registrar("prestamo.cierre.pendientes", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.PendientesDelCierre)
 		if !ok {
 			log.Printf("notification: payload inesperado para prestamo.cierre.pendientes (tipo %T)", e.Payload)
@@ -314,7 +341,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	// RF-04.12. La referencia a la reserva y a quien pide no es decorativa: es
 	// lo que sostiene la regla de un pedido por reserva, por solicitante y por
 	// día, que se verifica preguntando si esta fila ya existe.
-	bus.Subscribe("reserva.pedido-de-liberacion", func(e eventbus.Evento) {
+	registrar("reserva.pedido-de-liberacion", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.PedidoDeLiberacion)
 		if !ok {
 			log.Printf("notification: payload inesperado para reserva.pedido-de-liberacion (tipo %T)", e.Payload)
@@ -339,7 +366,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 
 	// El corte de fin de jornada va a los Admin: son ellos quienes pueden ir a
 	// buscar las máquinas.
-	bus.Subscribe("prestamo.sin-devolver.cierre", func(e eventbus.Evento) {
+	registrar("prestamo.sin-devolver.cierre", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.EquiposSinDevolverAlCierre)
 		if !ok {
 			log.Printf("notification: payload inesperado para prestamo.sin-devolver.cierre (tipo %T)", e.Payload)
@@ -365,7 +392,7 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 	// RF-05.1/05.2/05.3: una reserva puntual se canceló (manual, bloqueo
 	// administrativo, o cambio de estado del equipo) — el mismo evento cubre los
 	// tres casos, el motivo ya viene armado desde reservation.
-	bus.Subscribe("reserva.cancelada", func(e eventbus.Evento) {
+	registrar("reserva.cancelada", func(e eventbus.Evento, entregar entrega) {
 		payload, ok := e.Payload.(eventbus.CancelacionesDeUsuario)
 		if !ok {
 			log.Printf("notification: payload inesperado para reserva.cancelada (tipo %T)", e.Payload)
@@ -385,6 +412,22 @@ func registrarHandlers(bus eventbus.EventBus, svc *Service, modo EntregaAsincron
 			return err
 		})
 	})
+	registrar("reserva.reubicada", func(e eventbus.Evento, entregar entrega) {
+		payload, ok := e.Payload.(eventbus.ReubicacionesDeUsuario)
+		if !ok || len(payload.Reservas) == 0 {
+			return
+		}
+		var reservaID *string
+		if len(payload.Reservas) == 1 {
+			id := payload.Reservas[0].ReservaID
+			reservaID = &id
+		}
+		entregar("reserva.reubicada", func(ctx context.Context) error {
+			_, err := svc.NotificarUsuario(ctx, payload.UsuarioID, mensajeDeReposicion(payload), domain.TipoReservaReubicada, domain.Referencias{ReservaID: reservaID})
+			return err
+		})
+	})
+
 }
 
 // maxEquiposEnElMensaje acota el listado: un bloqueo sobre un carro entero
@@ -499,4 +542,16 @@ func etiquetaODefecto(etiqueta string) string {
 
 func formatearFecha(f time.Time) string {
 	return f.Format("02/01/2006")
+}
+
+func mensajeDeReposicion(p eventbus.ReubicacionesDeUsuario) string {
+	var detalles []string
+	for i, r := range p.Reservas {
+		if i >= maxEquiposEnElMensaje {
+			detalles = append(detalles, fmt.Sprintf("y %d reemplazos más", len(p.Reservas)-i))
+			break
+		}
+		detalles = append(detalles, fmt.Sprintf("%s: %s por %s", formatearFecha(r.Fecha), etiquetaODefecto(r.EtiquetaAnterior), etiquetaODefecto(r.EtiquetaNueva)))
+	}
+	return "Se repusieron equipos de tus reservas (" + strings.Join(detalles, "; ") + "). Se conservaron las fechas y horarios. Motivo: " + p.Motivo
 }

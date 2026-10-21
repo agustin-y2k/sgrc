@@ -76,6 +76,7 @@ func ParseTipoReserva(s string) (TipoReserva, error) {
 // Reserva es la ocupación puntual de una PC concreta en un rango horario.
 type Reserva struct {
 	ID                    string
+	Version               int64 // control de escrituras obsoletas; no es un estado de negocio
 	ReservaGrupoID        *string
 	EquipoID              string
 	MateriaID             *string
@@ -323,4 +324,9 @@ func ValidarVentanaTemporal(fecha time.Time, horaInicio, horaFin time.Duration, 
 		return ErrDuracionExcesiva
 	}
 	return nil
+}
+
+// SolapaEn compara ventanas efectivas, también cuando empiezan en días distintos.
+func (r *Reserva) SolapaEn(fecha time.Time, inicio, fin time.Duration, loc *time.Location) bool {
+	return InicioDePared(r.Fecha, r.HoraInicio, loc).Before(FinDePared(fecha, inicio, fin, loc)) && InicioDePared(fecha, inicio, loc).Before(FinDePared(r.Fecha, r.HoraInicio, r.HoraFin, loc))
 }

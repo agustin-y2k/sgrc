@@ -20,7 +20,9 @@ func mapearError(err error) error {
 		errors.Is(err, application.ErrEquipoNoEncontrado):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 
-	case errors.Is(err, application.ErrMateriaArchivada),
+	case errors.Is(err, application.ErrCicloCerrado),
+		errors.Is(err, application.ErrReservaModificada),
+		errors.Is(err, application.ErrMateriaArchivada),
 		errors.Is(err, application.ErrDocenteNoAsignado),
 		errors.Is(err, application.ErrEquipoNoDisponible),
 		errors.Is(err, application.ErrSolapamiento),

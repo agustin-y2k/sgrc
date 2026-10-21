@@ -62,7 +62,7 @@ func NewService(
 // ── Ciclo lectivo ───────────────────────────────────────────────────────
 
 // CrearCiclo implementa RF-02.1: solo puede existir un ciclo activo a la vez.
-func (s *Service) CrearCiclo(ctx context.Context, anio int) (*domain.CicloLectivo, error) {
+func (s *Service) crearCiclo(ctx context.Context, anio int) (*domain.CicloLectivo, error) {
 	_, err := s.repo.BuscarCicloActivo(ctx)
 	if err == nil {
 		return nil, ErrYaHayCicloActivo
@@ -101,7 +101,7 @@ func (s *Service) CrearCiclo(ctx context.Context, anio int) (*domain.CicloLectiv
 //
 // La tercera —que el año no lo tenga otro ciclo— la decide el índice único de
 // la base, no una comprobación previa.
-func (s *Service) CorregirAnioDeCiclo(ctx context.Context, cicloID string, nuevoAnio int) error {
+func (s *Service) corregirAnioDeCiclo(ctx context.Context, cicloID string, nuevoAnio int) error {
 	c, err := s.repo.BuscarCicloPorID(ctx, cicloID)
 	if err != nil {
 		return err
@@ -154,7 +154,7 @@ func (s *Service) CorregirAnioDeCiclo(ctx context.Context, cicloID string, nuevo
 //
 // Un ciclo sin cursos no tiene reservas —una reserva cuelga de una materia, que
 // cuelga de un curso—, así que no hace falta preguntarlo por separado.
-func (s *Service) EliminarCiclo(ctx context.Context, cicloID string) error {
+func (s *Service) eliminarCiclo(ctx context.Context, cicloID string) error {
 	c, err := s.repo.BuscarCicloPorID(ctx, cicloID)
 	if err != nil {
 		return err
@@ -168,6 +168,13 @@ func (s *Service) EliminarCiclo(ctx context.Context, cicloID string) error {
 		return fmt.Errorf("verificando si el ciclo tiene cursos: %w", err)
 	}
 	if len(cursos) > 0 {
+		return ErrCicloConCursos
+	}
+	espacios, err := s.repo.ListarEspaciosPorCiclo(ctx, cicloID)
+	if err != nil {
+		return err
+	}
+	if len(espacios) > 0 {
 		return ErrCicloConCursos
 	}
 
@@ -192,69 +199,75 @@ type ResultadoArchivado struct {
 	MateriasClonadas int
 }
 
-// ArchivarYClonar implementa RF-02.4/02.5. El orden de los tres pasos es
-// deliberado y NO se puede reacomodar: 1. Snapshot histórico (reporting):
-// tiene que ir antes del borrado, o quedaría vacío.
-func (s *Service) ArchivarYClonar(ctx context.Context, cicloID string, clonarAAnio *int) (*ResultadoArchivado, error) {
-	ciclo, err := s.repo.BuscarCicloPorID(ctx, cicloID)
+// CierreCompletado conserva la intención y la respuesta de un cierre. Una
+// repetición con el mismo destino devuelve el resultado original, incluso si
+// el cliente perdió la respuesta del commit.
+type CierreCompletado struct {
+	AnioDestino *int
+	Resultado   ResultadoArchivado
+}
+
+// ArchivarYClonar confirma snapshot, archivo, limpieza, clonado y resultado
+// juntos. Ante una falla no queda ningún paso confirmado por separado.
+func (s *Service) archivarYClonar(ctx context.Context, cicloID string, clonarAAnio *int) (*ResultadoArchivado, error) {
+	var resultado *ResultadoArchivado
+	err := s.repo.EnCierre(ctx, cicloID, func(ctx context.Context) error {
+		cierre, err := s.repo.BuscarCierre(ctx, cicloID)
+		if err != nil {
+			return err
+		}
+		if cierre != nil {
+			if (cierre.AnioDestino == nil) != (clonarAAnio == nil) ||
+				(clonarAAnio != nil && *cierre.AnioDestino != *clonarAAnio) {
+				return ErrDestinoDeCierreDiferente
+			}
+			copia := cierre.Resultado
+			resultado = &copia
+			return nil
+		}
+		ciclo, err := s.repo.BuscarCicloPorID(ctx, cicloID)
+		if err != nil {
+			return err
+		}
+		// Un archivo legado sin constancia de cierre no se reconstruye a ciegas:
+		// podría tener un snapshot previo y haber perdido parte de sus reservas.
+		copia := *ciclo
+		if err := copia.Archivar(); err != nil {
+			return err
+		}
+		var nuevoCiclo *domain.CicloLectivo
+		if clonarAAnio != nil {
+			nuevoCiclo, err = domain.NuevoCicloLectivo(s.nuevoID(), *clonarAAnio)
+			if err != nil {
+				return err
+			}
+			if err := s.verificarAnioLibre(ctx, *clonarAAnio); err != nil {
+				return err
+			}
+		}
+		if err := s.archivadorHistorico.GuardarSnapshotDeCiclo(ctx, cicloID, ciclo.Anio); err != nil {
+			return fmt.Errorf("guardando snapshot histórico: %w", err)
+		}
+		if err := s.repo.ArchivarCiclo(ctx, cicloID); err != nil {
+			return fmt.Errorf("archivando ciclo: %w", err)
+		}
+		if err := s.archivadorHistorico.EliminarReservasDeCiclo(ctx, cicloID); err != nil {
+			return fmt.Errorf("eliminando reservas (el cierre se revierte; podés reintentarlo): %w", err)
+		}
+		resultado = &ResultadoArchivado{}
+		if nuevoCiclo != nil {
+			cursos, materias, err := s.repo.ClonarCicloA(ctx, cicloID, nuevoCiclo)
+			if err != nil {
+				return fmt.Errorf("clonando ciclo: %w", err)
+			}
+			resultado.NuevoCicloID = &nuevoCiclo.ID
+			resultado.CursosClonados, resultado.MateriasClonadas = cursos, materias
+		}
+		return s.repo.GuardarCierre(ctx, cicloID, &CierreCompletado{AnioDestino: clonarAAnio, Resultado: *resultado})
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	// El ciclo nuevo se construye y se valida acá arriba, antes del primer paso
-	// destructivo, aunque recién se use al final.
-	var nuevoCiclo *domain.CicloLectivo
-	if clonarAAnio != nil {
-		nuevoCiclo, err = domain.NuevoCicloLectivo(s.nuevoID(), *clonarAAnio)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.verificarAnioLibre(ctx, *clonarAAnio); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := ciclo.Archivar(); err != nil {
-		// Archivar dos veces sigue siendo un error (RF-02.4) — salvo que haya
-		// quedado algo a medias de un intento anterior: reservas sin borrar (falla
-		// entre el paso 2 y el 3) o el clonado sin hacer (falla en el 4).
-		if !errors.Is(err, domain.ErrCicloYaArchivado) {
-			return nil, err
-		}
-		limpiezaPendiente, errValidacion := s.validadorReservas.TieneReservasDeCiclo(ctx, cicloID)
-		if errValidacion != nil {
-			return nil, fmt.Errorf("verificando si quedó limpieza pendiente del ciclo: %w", errValidacion)
-		}
-		if !limpiezaPendiente && nuevoCiclo == nil {
-			return nil, err
-		}
-	}
-
-	if err := s.archivadorHistorico.GuardarSnapshotDeCiclo(ctx, cicloID, ciclo.Anio); err != nil {
-		return nil, fmt.Errorf("guardando snapshot histórico: %w", err)
-	}
-
-	if err := s.repo.ArchivarCiclo(ctx, cicloID); err != nil {
-		return nil, fmt.Errorf("archivando ciclo: %w", err)
-	}
-
-	if err := s.archivadorHistorico.EliminarReservasDeCiclo(ctx, cicloID); err != nil {
-		return nil, fmt.Errorf("eliminando reservas del ciclo archivado (el ciclo ya quedó archivado y el snapshot guardado; reintentar el archivado completa la limpieza): %w", err)
-	}
-
-	resultado := &ResultadoArchivado{}
-
-	if nuevoCiclo != nil {
-		cursosClonados, materiasClonadas, err := s.repo.ClonarCicloA(ctx, cicloID, nuevoCiclo)
-		if err != nil {
-			return nil, fmt.Errorf("clonando ciclo: %w", err)
-		}
-
-		resultado.NuevoCicloID = &nuevoCiclo.ID
-		resultado.CursosClonados = cursosClonados
-		resultado.MateriasClonadas = materiasClonadas
-	}
-
 	return resultado, nil
 }
 
@@ -290,7 +303,11 @@ func (s *Service) ListarAsignaciones(ctx context.Context, cicloID string) ([]Asi
 
 // ── Curso ───────────────────────────────────────────────────────────────
 
-func (s *Service) CrearCurso(ctx context.Context, cicloLectivoID string, anio int, division, modalidad string) (*domain.Curso, error) {
+func (s *Service) crearCurso(ctx context.Context, cicloLectivoID string, anio int, division, modalidad string) (*domain.Curso, error) {
+	if err := s.repo.VerificarVigencia(ctx, "ciclo", cicloLectivoID); err != nil {
+		return nil, err
+	}
+
 	c, err := domain.NuevoCurso(s.nuevoID(), cicloLectivoID, anio, division, modalidad)
 	if err != nil {
 		return nil, err
@@ -304,7 +321,11 @@ func (s *Service) CrearCurso(ctx context.Context, cicloLectivoID string, anio in
 // EditarCurso implementa RF-02.11: corregir el curso mientras el ciclo está
 // activo. Los tres datos van juntos porque son un solo curso descrito de tres
 // formas — ver domain.Curso.Editar.
-func (s *Service) EditarCurso(ctx context.Context, cursoID string, anio int, division, modalidad string) error {
+func (s *Service) editarCurso(ctx context.Context, cursoID string, anio int, division, modalidad string) error {
+	if err := s.repo.VerificarVigencia(ctx, "curso", cursoID); err != nil {
+		return err
+	}
+
 	c, err := s.repo.BuscarCursoPorID(ctx, cursoID)
 	if err != nil {
 		return err
@@ -317,7 +338,11 @@ func (s *Service) EditarCurso(ctx context.Context, cursoID string, anio int, div
 
 // EliminarCurso implementa RF-02.11: solo si ninguna de sus materias tiene
 // reservas asociadas.
-func (s *Service) EliminarCurso(ctx context.Context, cursoID string) error {
+func (s *Service) eliminarCurso(ctx context.Context, cursoID string) error {
+	if err := s.repo.VerificarVigencia(ctx, "curso", cursoID); err != nil {
+		return err
+	}
+
 	tieneReservas, err := s.validadorReservas.TieneReservasCurso(ctx, cursoID)
 	if err != nil {
 		return fmt.Errorf("verificando reservas del curso: %w", err)
@@ -340,7 +365,11 @@ func (s *Service) ListarCursos(ctx context.Context, cicloID string) ([]*domain.C
 
 // ── Materia ─────────────────────────────────────────────────────────────
 
-func (s *Service) CrearMateria(ctx context.Context, cursoID, nombre string) (*domain.Materia, error) {
+func (s *Service) crearMateria(ctx context.Context, cursoID, nombre string) (*domain.Materia, error) {
+	if err := s.repo.VerificarVigencia(ctx, "curso", cursoID); err != nil {
+		return nil, err
+	}
+
 	m, err := domain.NuevaMateria(s.nuevoID(), cursoID, nombre)
 	if err != nil {
 		return nil, err
@@ -362,7 +391,11 @@ func (s *Service) CrearMateria(ctx context.Context, cursoID, nombre string) (*do
 //
 // Se cuenta ANTES de guardar, contra el nombre VIEJO: después del UPDATE ya no
 // habría forma de saber cuántas apuntaban a él.
-func (s *Service) EditarMateria(ctx context.Context, materiaID, nuevoNombre string) (int, error) {
+func (s *Service) editarMateria(ctx context.Context, materiaID, nuevoNombre string) (int, error) {
+	if err := s.repo.VerificarVigencia(ctx, "materia", materiaID); err != nil {
+		return 0, err
+	}
+
 	m, err := s.repo.BuscarMateriaPorID(ctx, materiaID)
 	if err != nil {
 		return 0, err
@@ -394,7 +427,11 @@ func (s *Service) EditarMateria(ctx context.Context, materiaID, nuevoNombre stri
 }
 
 // EliminarMateria implementa RF-02.11: solo si no tiene reservas asociadas.
-func (s *Service) EliminarMateria(ctx context.Context, materiaID string) error {
+func (s *Service) eliminarMateria(ctx context.Context, materiaID string) error {
+	if err := s.repo.VerificarVigencia(ctx, "materia", materiaID); err != nil {
+		return err
+	}
+
 	tieneReservas, err := s.validadorReservas.TieneReservasMateria(ctx, materiaID)
 	if err != nil {
 		return fmt.Errorf("verificando reservas de la materia: %w", err)
@@ -420,6 +457,23 @@ func (s *Service) ListarMaterias(ctx context.Context, cursoID string) ([]*domain
 // existe y está en estado APROBADA (validado a través del puerto hacia auth,
 // nunca importando ese paquete directamente).
 func (s *Service) AsignarDocente(ctx context.Context, materiaID, usuarioID string, rol domain.RolDocente) (*domain.DocenteMateria, error) {
+	var resultado *domain.DocenteMateria
+	err := s.repo.CoordinarAsignaciones(ctx, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.asignarDocente(ctx, materiaID, usuarioID, rol)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) asignarDocente(ctx context.Context, materiaID, usuarioID string, rol domain.RolDocente) (*domain.DocenteMateria, error) {
+	if err := s.repo.VerificarVigencia(ctx, "materia", materiaID); err != nil {
+		return nil, err
+	}
+
 	if _, err := s.repo.BuscarMateriaPorID(ctx, materiaID); err != nil {
 		return nil, err
 	}
@@ -451,8 +505,24 @@ func (s *Service) AsignarDocente(ctx context.Context, materiaID, usuarioID strin
 // CambiarRolDocente pasa un vínculo existente de titular a suplente o al
 // revés, sin tocar nada más.
 func (s *Service) CambiarRolDocente(ctx context.Context, docenteMateriaID string, rol domain.RolDocente) (*domain.DocenteMateria, error) {
+	var resultado *domain.DocenteMateria
+	err := s.repo.CoordinarAsignaciones(ctx, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.cambiarRolDocente(ctx, docenteMateriaID, rol)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) cambiarRolDocente(ctx context.Context, docenteMateriaID string, rol domain.RolDocente) (*domain.DocenteMateria, error) {
 	dm, err := s.repo.BuscarDocenteMateria(ctx, docenteMateriaID)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.VerificarVigencia(ctx, "materia", dm.MateriaID); err != nil {
 		return nil, err
 	}
 
@@ -467,8 +537,28 @@ func (s *Service) CambiarRolDocente(ctx context.Context, docenteMateriaID string
 // sin ningún docente activo, cancela sus reservas futuras (RF-02.8) y avisa a
 // los Admin.
 func (s *Service) RemoverDocenteMateria(ctx context.Context, docenteMateriaID string) (int, error) {
+	var resultado int
+	err := s.repo.CoordinarAsignaciones(ctx, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.removerDocenteMateria(ctx, docenteMateriaID)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) removerDocenteMateria(ctx context.Context, docenteMateriaID string) (int, error) {
 	dm, err := s.repo.BuscarDocenteMateria(ctx, docenteMateriaID)
 	if err != nil {
+		return 0, err
+	}
+	if err := s.repo.VerificarVigencia(ctx, "materia", dm.MateriaID); err != nil {
+		return 0, err
+	}
+
+	if err := s.repo.RemoverDocenteMateria(ctx, docenteMateriaID); err != nil {
 		return 0, err
 	}
 
@@ -487,21 +577,19 @@ func (s *Service) RemoverDocenteMateria(ctx context.Context, docenteMateriaID st
 		}
 	}
 
-	if err := s.repo.RemoverDocenteMateria(ctx, docenteMateriaID); err != nil {
-		return 0, err
-	}
-
 	if !quedaOtro {
 		// Mismo aviso que la cascada de auth, con su propio tipo de evento: para el
 		// Admin que lo lee, "se dio de baja al docente" y "se le quitó la materia"
 		// no son la misma noticia.
-		s.bus.Publish(eventbus.Evento{
-			Tipo: "docente.desasignado.materia-huerfana",
-			Payload: map[string]any{
-				"usuarioId":          dm.UsuarioID,
-				"materiaId":          dm.MateriaID,
-				"reservasCanceladas": canceladas,
-			},
+		eventbus.AlConfirmar(ctx, s.bus, func(ctx context.Context) {
+			eventbus.Emitir(ctx, s.bus, eventbus.Evento{
+				Tipo: "docente.desasignado.materia-huerfana",
+				Payload: map[string]any{
+					"usuarioId":          dm.UsuarioID,
+					"materiaId":          dm.MateriaID,
+					"reservasCanceladas": canceladas,
+				},
+			})
 		})
 	}
 
@@ -577,7 +665,11 @@ func (s *Service) OpcionesDeRegistro(ctx context.Context) (OpcionesDeRegistro, e
 // Preceptoría. Tienen materias y se reserva para ellas igual que para las de un
 // curso — ver domain.Espacio para por qué no se modelaron aflojando el curso.
 
-func (s *Service) CrearEspacio(ctx context.Context, cicloLectivoID, nombre string) (*domain.Espacio, error) {
+func (s *Service) crearEspacio(ctx context.Context, cicloLectivoID, nombre string) (*domain.Espacio, error) {
+	if err := s.repo.VerificarVigencia(ctx, "ciclo", cicloLectivoID); err != nil {
+		return nil, err
+	}
+
 	e, err := domain.NuevoEspacio(s.nuevoID(), cicloLectivoID, nombre)
 	if err != nil {
 		return nil, err
@@ -596,7 +688,11 @@ func (s *Service) ObtenerEspacio(ctx context.Context, id string) (*domain.Espaci
 	return s.repo.BuscarEspacioPorID(ctx, id)
 }
 
-func (s *Service) EditarEspacio(ctx context.Context, id, nombre string) error {
+func (s *Service) editarEspacio(ctx context.Context, id, nombre string) error {
+	if err := s.repo.VerificarVigencia(ctx, "espacio", id); err != nil {
+		return err
+	}
+
 	e, err := s.repo.BuscarEspacioPorID(ctx, id)
 	if err != nil {
 		return err
@@ -609,7 +705,11 @@ func (s *Service) EditarEspacio(ctx context.Context, id, nombre string) error {
 
 // EliminarEspacio: mismo criterio que un curso (RF-02.11) — lo que tiene clases
 // dadas no se borra. La pregunta la contesta el módulo de reservas.
-func (s *Service) EliminarEspacio(ctx context.Context, id string) error {
+func (s *Service) eliminarEspacio(ctx context.Context, id string) error {
+	if err := s.repo.VerificarVigencia(ctx, "espacio", id); err != nil {
+		return err
+	}
+
 	tieneReservas, err := s.validadorReservas.TieneReservasEspacio(ctx, id)
 	if err != nil {
 		return fmt.Errorf("verificando reservas del espacio: %w", err)

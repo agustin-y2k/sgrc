@@ -1,7 +1,6 @@
 package http
 
 import (
-	"errors"
 	"log"
 	"time"
 
@@ -304,15 +303,6 @@ func (h *Handler) ReemplazarJornada(c *fiber.Ctx) error {
 
 	resultado, err := h.svc.ReemplazarJornada(c.UserContext(), tramos, req.Confirmado)
 	if err != nil {
-		// La cascada a medias deja la jornada nueva puesta: hay que auditarla
-		// igual, con lo que sí pasó, o el registro diría que el horario de la
-		// escuela cambió solo porque nadie lo anotó.
-		if errors.Is(err, application.ErrCascadaDeJornada) {
-			h.auditar(c, claims.UserID, accionJornadaCambiada, "jornada_institucion", map[string]any{
-				"tramos":            len(tramos),
-				"cascadaIncompleta": true,
-			})
-		}
 		return mapearError(err)
 	}
 

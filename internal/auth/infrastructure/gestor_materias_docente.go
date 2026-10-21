@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agustin-y2k/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 var _ application.GestorMateriasDocente = (*GestorMateriasDocentePostgres)(nil)
@@ -23,7 +24,7 @@ func NewGestorMateriasDocentePostgres(pool *pgxpool.Pool) *GestorMateriasDocente
 }
 
 func (g *GestorMateriasDocentePostgres) MateriasDeDocente(ctx context.Context, usuarioID string) ([]string, error) {
-	rows, err := g.pool.Query(ctx, `SELECT materia_id FROM docente_materia WHERE usuario_id = $1`, usuarioID)
+	rows, err := pgtransaccion.Con(ctx, g.pool).Query(ctx, `SELECT materia_id FROM docente_materia WHERE usuario_id = $1`, usuarioID)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
@@ -45,7 +46,7 @@ func (g *GestorMateriasDocentePostgres) MateriasDeDocente(ctx context.Context, u
 
 func (g *GestorMateriasDocentePostgres) QuedaOtroDocenteActivo(ctx context.Context, materiaID, usuarioIDExcluido string) (bool, error) {
 	var existe bool
-	err := g.pool.QueryRow(ctx, `
+	err := pgtransaccion.Con(ctx, g.pool).QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM docente_materia dm
 			JOIN usuario u ON u.id = dm.usuario_id
@@ -62,7 +63,7 @@ func (g *GestorMateriasDocentePostgres) QuedaOtroDocenteActivo(ctx context.Conte
 }
 
 func (g *GestorMateriasDocentePostgres) RemoverAsignacionesDeDocente(ctx context.Context, usuarioID string) error {
-	_, err := g.pool.Exec(ctx, `DELETE FROM docente_materia WHERE usuario_id = $1`, usuarioID)
+	_, err := pgtransaccion.Con(ctx, g.pool).Exec(ctx, `DELETE FROM docente_materia WHERE usuario_id = $1`, usuarioID)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido

@@ -99,7 +99,7 @@ func (s *Service) cifrarPassword(password string, tienePassword bool) (string, e
 
 // CrearCuentaDeEquipo registra una cuenta en un equipo. `password` viene en
 // claro y no sale de acá sin cifrar.
-func (s *Service) CrearCuentaDeEquipo(ctx context.Context, equipoID string, datos domain.DatosDeCuenta, password string) (*domain.CuentaDeEquipo, error) {
+func (s *Service) operacionCrearCuentaDeEquipo(ctx context.Context, equipoID string, datos domain.DatosDeCuenta, password string) (*domain.CuentaDeEquipo, error) {
 	// Que el equipo exista se comprueba antes de cifrar nada: si no, un
 	// equipoID equivocado igual haría el trabajo de cifrado para después
 	// rebotar contra la clave foránea.
@@ -138,7 +138,7 @@ type EditarCuentaParams struct {
 	Password *string
 }
 
-func (s *Service) EditarCuentaDeEquipo(ctx context.Context, cuentaID string, params EditarCuentaParams) (*domain.CuentaDeEquipo, error) {
+func (s *Service) operacionEditarCuentaDeEquipo(ctx context.Context, cuentaID string, params EditarCuentaParams) (*domain.CuentaDeEquipo, error) {
 	cuenta, err := s.repo.BuscarCuentaDeEquipoPorID(ctx, cuentaID)
 	if err != nil {
 		return nil, err
@@ -207,7 +207,7 @@ func (s *Service) EditarCuentaDeEquipo(ctx context.Context, cuentaID string, par
 	return cuenta, nil
 }
 
-func (s *Service) BorrarCuentaDeEquipo(ctx context.Context, cuentaID string) error {
+func (s *Service) operacionBorrarCuentaDeEquipo(ctx context.Context, cuentaID string) error {
 	return s.repo.BorrarCuentaDeEquipo(ctx, cuentaID)
 }
 

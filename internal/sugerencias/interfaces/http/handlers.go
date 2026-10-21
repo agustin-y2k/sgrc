@@ -85,6 +85,20 @@ func (h *Handler) Listar(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data, "meta": pagina.Meta(total)})
 }
 
+// GET /api/sugerencias/{id} — solo el dueño y administración pueden leer el hilo.
+func (h *Handler) Obtener(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+	esAdmin := claims.Rol == "ADMIN"
+	hilo, err := h.svc.Obtener(c.UserContext(), c.Params("id"), claims.UserID, esAdmin)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toSugerenciaResponse(hilo, esAdmin))
+}
+
 // POST /api/sugerencias/{id}/mensajes — escribe en el hilo. Lo usan los dos
 // lados: un Admin en cualquier conversación, y quien preguntó solo en la
 // suya (lo verifica el servicio).

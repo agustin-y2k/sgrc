@@ -34,7 +34,7 @@ func (s *Service) MiHorario(ctx context.Context, usuarioID string) ([]*domain.Bl
 // AgregarBloque (RF-07.1/07.3) — aplica de inmediato para todas las semanas
 // futuras, sin ninguna acción extra de "propagar" (no hay nada materializado
 // que actualizar, es un patrón evaluado en el momento de cada consulta).
-func (s *Service) AgregarBloque(ctx context.Context, usuarioID string, dia domain.DiaSemana, horaInicio, horaFin time.Duration) (*domain.BloqueHorario, error) {
+func (s *Service) operacionAgregarBloque(ctx context.Context, usuarioID string, dia domain.DiaSemana, horaInicio, horaFin time.Duration) (*domain.BloqueHorario, error) {
 	b, err := domain.NuevoBloqueHorario(s.nuevoID(), usuarioID, dia, horaInicio, horaFin)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func formatearHora(d time.Duration) string {
 
 // EditarBloque acepta campos opcionales (PATCH parcial) y revalida el rango
 // horario resultante contra domain, aunque solo se edite un extremo.
-func (s *Service) EditarBloque(ctx context.Context, id, usuarioID string, dia *domain.DiaSemana, horaInicio, horaFin *time.Duration) (*domain.BloqueHorario, error) {
+func (s *Service) operacionEditarBloque(ctx context.Context, id, usuarioID string, dia *domain.DiaSemana, horaInicio, horaFin *time.Duration) (*domain.BloqueHorario, error) {
 	actual, err := s.repo.BuscarBloqueDeUsuario(ctx, id, usuarioID)
 	if err != nil {
 		return nil, err
@@ -105,13 +105,13 @@ func (s *Service) EditarBloque(ctx context.Context, id, usuarioID string, dia *d
 
 // EliminarBloque (DELETE /mi-horario/{id}) — titularidad acotada en el
 // repo, mismo criterio que EditarBloque.
-func (s *Service) EliminarBloque(ctx context.Context, id, usuarioID string) error {
+func (s *Service) operacionEliminarBloque(ctx context.Context, id, usuarioID string) error {
 	return s.repo.EliminarBloqueDeUsuario(ctx, id, usuarioID)
 }
 
 // CargarExcepcion (RF-07.4) — reemplaza la excepción existente para esa
 // fecha si ya había una (upsert en el repo, UNIQUE(usuario_id, fecha)).
-func (s *Service) CargarExcepcion(ctx context.Context, usuarioID string, fecha time.Time, tipo domain.TipoExcepcion, horaInicio, horaFin *time.Duration, motivo *string) (*domain.Excepcion, error) {
+func (s *Service) operacionCargarExcepcion(ctx context.Context, usuarioID string, fecha time.Time, tipo domain.TipoExcepcion, horaInicio, horaFin *time.Duration, motivo *string) (*domain.Excepcion, error) {
 	e, err := domain.NuevaExcepcion(s.nuevoID(), usuarioID, fecha, tipo, horaInicio, horaFin, motivo)
 	if err != nil {
 		return nil, err
@@ -289,6 +289,19 @@ type ResultadoDeJornada struct {
 // horarios. Se le va a seguir pidiendo que declare una en cada inicio de
 // sesión de un Admin, que es la molestia deliberada de operar sin horario.
 func (s *Service) ReemplazarJornada(ctx context.Context, tramos []TramoDeJornada, confirmado bool) (*ResultadoDeJornada, error) {
+	var resultado *ResultadoDeJornada
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.reemplazarJornadaCoordinada(ctx, tramos, confirmado)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) reemplazarJornadaCoordinada(ctx context.Context, tramos []TramoDeJornada, confirmado bool) (*ResultadoDeJornada, error) {
 	if len(tramos) > MaxTramosDeJornada {
 		return nil, ErrDemasiadosTramos
 	}
@@ -325,12 +338,8 @@ func (s *Service) ReemplazarJornada(ctx context.Context, tramos []TramoDeJornada
 
 	resultado := &ResultadoDeJornada{Bloques: bloques, Guardada: true, Impacto: impacto}
 
-	// Se cancela DESPUÉS de guardar, y son dos transacciones distintas porque
-	// viven en módulos distintos. El orden es el que deja el peor caso más
-	// benigno: si esto falla, la jornada nueva quedó puesta y sobreviven unas
-	// reservas fuera de horario —que es el estado que el sistema ya toleraba
-	// antes de todo esto—. Al revés se cancelarían clases por un cambio que
-	// después no se guarda.
+	// La jornada y la cascada comparten la transacción exterior. Si falla
+	// cualquier paso, el cambio completo se revierte.
 	if len(impacto.Reservas) > 0 {
 		ids := make([]string, len(impacto.Reservas))
 		for i, r := range impacto.Reservas {
@@ -535,7 +544,9 @@ func (s *Service) cobertura(ctx context.Context, momento time.Time, cubre func([
 	var cobertura CoberturaDelMostrador
 	for _, admin := range admins {
 		bloques := bloquesPorAdmin[admin.ID]
-		if domain.DeclaroHorario(bloques) {
+		// Una excepción puntual también declara si se atiende ese día, aunque
+		// todavía no exista un patrón semanal. El fallback sólo rige sin ambos.
+		if domain.DeclaroHorario(bloques) || excepcionesPorAdmin[admin.ID] != nil {
 			cobertura.Declarado = true
 		}
 		if cubre(domain.TramosDelDia(bloques, excepcionesPorAdmin[admin.ID], dia)) {

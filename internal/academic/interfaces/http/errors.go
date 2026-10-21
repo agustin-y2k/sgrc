@@ -13,6 +13,8 @@ import (
 // código HTTP según docs/08-api-spec.yaml.
 func mapearError(err error) error {
 	switch {
+	case errors.Is(err, application.ErrDestinoDeCierreDiferente):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.Is(err, application.ErrCicloNoEncontrado),
 		errors.Is(err, application.ErrCursoNoEncontrado),
 		errors.Is(err, application.ErrMateriaNoEncontrada),

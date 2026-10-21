@@ -31,7 +31,7 @@ func NewService(repo Repo, usuario ObtenedorDeUsuario, nuevoID IDGenerator, ahor
 }
 
 // Escribir abre un hilo nuevo y avisa a los Admin.
-func (s *Service) Escribir(ctx context.Context, usuarioID, tipo, asunto, texto, pantalla, version string) (*domain.Sugerencia, error) {
+func (s *Service) operacionEscribir(ctx context.Context, usuarioID, tipo, asunto, texto, pantalla, version string) (*domain.Sugerencia, error) {
 	t, err := domain.ParseTipo(tipo)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (s *Service) Escribir(ctx context.Context, usuarioID, tipo, asunto, texto, 
 		nombre = ""
 	}
 
-	s.bus.Publish(eventbus.Evento{
+	eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 		Tipo: "sugerencia.nueva",
 		Payload: eventbus.SugerenciaNueva{
 			SugerenciaID: sug.ID,
@@ -73,7 +73,7 @@ func (s *Service) Escribir(ctx context.Context, usuarioID, tipo, asunto, texto, 
 //
 // Contestar ya no cierra el hilo (ver domain.Sugerencia.Responder): lo cierra
 // MarcarResuelta, y un mensaje de quien preguntó lo reabre.
-func (s *Service) Responder(ctx context.Context, sugerenciaID, autorID string, deAdmin bool, texto string) (*domain.Sugerencia, error) {
+func (s *Service) operacionResponder(ctx context.Context, sugerenciaID, autorID string, deAdmin bool, texto string) (*domain.Sugerencia, error) {
 	sug, err := s.repo.BuscarPorID(ctx, sugerenciaID)
 	if err != nil {
 		return nil, err
@@ -94,13 +94,13 @@ func (s *Service) Responder(ctx context.Context, sugerenciaID, autorID string, d
 
 	nombre, email, err := s.usuario.NombreYEmail(ctx, sug.UsuarioID)
 	if err != nil {
-		// La respuesta ya está guardada y se ve en la pantalla del otro. Lo
-		// que se pierde es el aviso.
-		return sug, nil
+		// El destinatario interno se conoce por ID. La falta del contacto sólo
+		// impide el correo; no debe perder el aviso ni el cierre del pendiente.
+		nombre, email = "", ""
 	}
 
 	if deAdmin {
-		s.bus.Publish(eventbus.Evento{
+		eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 			Tipo: "sugerencia.respondida",
 			Payload: eventbus.SugerenciaRespondida{
 				SugerenciaID:  sug.ID,
@@ -118,7 +118,7 @@ func (s *Service) Responder(ctx context.Context, sugerenciaID, autorID string, d
 
 	// Escribió quien preguntó: vuelve a los Admin, con el mismo formato que
 	// un hilo nuevo salvo por que dice que es una respuesta.
-	s.bus.Publish(eventbus.Evento{
+	eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 		Tipo: "sugerencia.seguimiento",
 		Payload: eventbus.SugerenciaSeguimiento{
 			SugerenciaID: sug.ID,
@@ -134,7 +134,7 @@ func (s *Service) Responder(ctx context.Context, sugerenciaID, autorID string, d
 
 // MarcarResuelta cierra el hilo. No manda correo: el aviso útil fue la
 // respuesta, y un segundo mail diciendo "lo dimos por terminado" es ruido.
-func (s *Service) MarcarResuelta(ctx context.Context, sugerenciaID string) (*domain.Sugerencia, error) {
+func (s *Service) operacionMarcarResuelta(ctx context.Context, sugerenciaID string) (*domain.Sugerencia, error) {
 	sug, err := s.repo.BuscarPorID(ctx, sugerenciaID)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,20 @@ func (s *Service) MarcarResuelta(ctx context.Context, sugerenciaID string) (*dom
 	if err := s.repo.GuardarEstado(ctx, sug); err != nil {
 		return nil, fmt.Errorf("cerrando la conversación: %w", err)
 	}
+	eventbus.Emitir(ctx, s.bus, eventbus.Evento{Tipo: "sugerencia.resuelta", Payload: map[string]string{"usuarioId": sug.UsuarioID, "hiloId": sug.ID}})
 	return sug, nil
+}
+
+// Obtener permite abrir un aviso sin depender de la página o del filtro del buzón.
+func (s *Service) Obtener(ctx context.Context, id, usuarioID string, esAdmin bool) (*domain.Sugerencia, error) {
+	hilo, err := s.repo.BuscarPorID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !esAdmin && hilo.UsuarioID != usuarioID {
+		return nil, ErrNoEsTuya
+	}
+	return hilo, nil
 }
 
 // ListarTodas es la pantalla del Admin.

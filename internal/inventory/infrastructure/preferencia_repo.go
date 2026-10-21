@@ -12,29 +12,29 @@ import (
 )
 
 // Las columnas `*_norm` no se escriben nunca desde acá: son generadas por la
-// base a partir de materia_nombre, modalidad y curso_nombre.
-const columnasPreferencia = `id, equipo_id, materia_nombre, modalidad, anio, division, prioridad`
+// base a partir de materia_nombre, modalidad y división.
+const columnasPreferencia = `id, equipo_id, materia_nombre, modalidad, anio, division, prioridad, curso_exacto`
 
 // Las mismas columnas calificadas, para las consultas que hacen JOIN con
 // equipo y ahí `id` es ambiguo. Existe para que las dos listas no se puedan
 // desincronizar: escanearPreferencia lee en este orden, y un orden distinto
 // falla recién al escanear, en runtime.
-const columnasPreferenciaEP = `ep.id, ep.equipo_id, ep.materia_nombre, ep.modalidad, ep.anio, ep.division, ep.prioridad`
+const columnasPreferenciaEP = `ep.id, ep.equipo_id, ep.materia_nombre, ep.modalidad, ep.anio, ep.division, ep.prioridad, ep.curso_exacto`
 
 // CrearPreferencia devuelve `false` —sin error— cuando ese equipo ya tenía esa
 // marca. Por el mismo motivo que CrearLicencia: una sentencia fallida aborta la
 // transacción entera, y el marcado de un lote de equipos tiene que poder
 // saltear los que ya la tienen y seguir.
 //
-// El ON CONFLICT nombra las cinco columnas del índice `ux_equipo_preferencia`,
+// El ON CONFLICT nombra las seis columnas del índice `ux_equipo_preferencia`,
 // que es NULLS NOT DISTINCT: dos marcas sin año y sin división son la misma
 // marca, y así es como se comparan.
 func (r *PostgresRepo) CrearPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) (bool, error) {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.conexion(ctx).Exec(ctx, `
 		INSERT INTO equipo_preferencia (`+columnasPreferencia+`)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (equipo_id, materia_norm, modalidad_norm, anio, division_norm) DO NOTHING
-	`, p.ID, p.EquipoID, p.MateriaNombre, p.Modalidad, p.Anio, p.Division, p.Prioridad)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (equipo_id, materia_norm, modalidad_norm, anio, division_norm, curso_exacto) DO NOTHING
+	`, p.ID, p.EquipoID, p.MateriaNombre, p.Modalidad, p.Anio, p.Division, p.Prioridad, p.CursoExacto)
 	if err != nil {
 		if esViolacionFK(err) {
 			return false, application.ErrReferenciaInexistente
@@ -50,11 +50,11 @@ func (r *PostgresRepo) CrearPreferencia(ctx context.Context, p *domain.Preferenc
 // GuardarPreferencia actualiza el alcance y la prioridad. La materia y el
 // equipo no se editan: cambiar cualquiera de los dos es otra marca.
 func (r *PostgresRepo) GuardarPreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.conexion(ctx).Exec(ctx, `
 		UPDATE equipo_preferencia
-		   SET modalidad = $2, anio = $3, division = $4, prioridad = $5
+		   SET modalidad = $2, anio = $3, division = $4, prioridad = $5, curso_exacto = $6
 		 WHERE id = $1
-	`, p.ID, p.Modalidad, p.Anio, p.Division, p.Prioridad)
+	`, p.ID, p.Modalidad, p.Anio, p.Division, p.Prioridad, p.CursoExacto)
 	if err != nil {
 		if esViolacionUnica(err) {
 			return domain.ErrPreferenciaDuplicada
@@ -71,12 +71,12 @@ func (r *PostgresRepo) GuardarPreferencia(ctx context.Context, p *domain.Prefere
 }
 
 func (r *PostgresRepo) BuscarPreferenciaPorID(ctx context.Context, id string) (*domain.PreferenciaDeEquipo, error) {
-	row := r.db.QueryRow(ctx, `SELECT `+columnasPreferencia+` FROM equipo_preferencia WHERE id = $1`, id)
+	row := r.conexion(ctx).QueryRow(ctx, `SELECT `+columnasPreferencia+` FROM equipo_preferencia WHERE id = $1`, id)
 	return escanearPreferencia(row)
 }
 
 func (r *PostgresRepo) BorrarPreferencia(ctx context.Context, id string) error {
-	tag, err := r.db.Exec(ctx, `DELETE FROM equipo_preferencia WHERE id = $1`, id)
+	tag, err := r.conexion(ctx).Exec(ctx, `DELETE FROM equipo_preferencia WHERE id = $1`, id)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -99,7 +99,7 @@ func (r *PostgresRepo) BorrarPreferencia(ctx context.Context, id string) error {
 // es otro: la ficha del equipo muestra arriba lo que la escuela declaró más
 // importante.
 func (r *PostgresRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.PreferenciaDeEquipo, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasPreferencia+` FROM equipo_preferencia
 		WHERE equipo_id = $1
 		ORDER BY prioridad, materia_nombre, modalidad NULLS LAST, anio NULLS LAST, division NULLS LAST
@@ -130,7 +130,7 @@ func (r *PostgresRepo) ListarPreferenciasPorEquipo(ctx context.Context, equipoID
 // podía preguntar; pedirlo de a uno para un carro de veinte eran veinte
 // consultas para contestar una sola pregunta.
 func (r *PostgresRepo) ListarPreferenciasPorCarro(ctx context.Context, carroID string) ([]*domain.PreferenciaDeEquipo, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasPreferenciaEP+`
 		  FROM equipo_preferencia ep
 		  JOIN equipo e ON e.id = ep.equipo_id
@@ -159,7 +159,7 @@ func (r *PostgresRepo) ListarPreferenciasPorCarro(ctx context.Context, carroID s
 // NombresDeMateriaEnUso: los nombres distintos que existen, sin importar el
 // curso ni el ciclo.
 func (r *PostgresRepo) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT DISTINCT ON (nombre_norm) nombre
 		FROM materia
 		ORDER BY nombre_norm, nombre
@@ -183,7 +183,7 @@ func (r *PostgresRepo) NombresDeMateriaEnUso(ctx context.Context) ([]string, err
 func escanearPreferencia(row pgx.Row) (*domain.PreferenciaDeEquipo, error) {
 	var p domain.PreferenciaDeEquipo
 	if err := row.Scan(&p.ID, &p.EquipoID, &p.MateriaNombre, &p.Modalidad, &p.Anio,
-		&p.Division, &p.Prioridad); err != nil {
+		&p.Division, &p.Prioridad, &p.CursoExacto); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrPreferenciaNoEncontr
 		}
@@ -217,9 +217,7 @@ const sqlLeAplicaAAlgunaMateria = `
 		  FROM materia m
 		  JOIN contenedor_de_materia cu ON cu.materia_id = m.id
 		 WHERE m.nombre_norm = ep.materia_norm
-		   AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cu.anio)
-		   AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cu.modalidad_norm)
-		   AND (ep.division_norm  = '' OR ep.division_norm  = cu.division_norm)`
+		   AND (CASE WHEN ep.curso_exacto THEN (ep.anio IS NOT DISTINCT FROM cu.anio AND ep.modalidad_norm = cu.modalidad_norm AND ep.division_norm = cu.division_norm) ELSE ((ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cu.anio) AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cu.modalidad_norm) AND (ep.division_norm = '' OR ep.division_norm = cu.division_norm)) END)`
 
 // ListarPreferenciasHuerfanas: las marcas que ya no cruzan con ninguna materia
 // cargada.
@@ -233,14 +231,12 @@ const sqlLeAplicaAAlgunaMateria = `
 // la marca deja de aplicar en silencio y sigue viéndose en la ficha del equipo
 // como si valiera. Esta consulta es la única forma de encontrarlas.
 //
-// El cruce usa `clave_texto` —la misma función que sostiene la unicidad del
-// sistema (RF-00.1)— para no marcar como huérfana una que sólo difiere en una
-// tilde.
+// El cruce usa las columnas normalizadas del alcance, igual que al reservar.
 func (r *PostgresRepo) ListarPreferenciasHuerfanas(ctx context.Context) ([]*application.PreferenciaHuerfana, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT ep.id, ep.materia_nombre, ep.modalidad, ep.anio, ep.division, ep.prioridad,
 		       COALESCE(e.nombre, 'PC ' || e.identificador), COALESCE(c.nombre, ''),
-		       e.dado_de_baja
+		       e.dado_de_baja, ep.curso_exacto
 		  FROM equipo_preferencia ep
 		  JOIN equipo e ON e.id = ep.equipo_id
 		  LEFT JOIN carro c ON c.id = e.carro_id
@@ -258,7 +254,7 @@ func (r *PostgresRepo) ListarPreferenciasHuerfanas(ctx context.Context) ([]*appl
 		var modalidad, division *string
 		var anio *int
 		if err := rows.Scan(&h.ID, &h.MateriaNombre, &modalidad, &anio, &division,
-			&h.Prioridad, &h.EquipoEtiqueta, &h.CarroNombre, &h.EquipoDadoDeBaja); err != nil {
+			&h.Prioridad, &h.EquipoEtiqueta, &h.CarroNombre, &h.EquipoDadoDeBaja, &h.CursoExacto); err != nil {
 			return nil, fmt.Errorf("escaneando preferencia huérfana: %w", err)
 		}
 		if modalidad != nil {
@@ -291,14 +287,12 @@ func (r *PostgresRepo) ListarPreferenciasHuerfanas(ctx context.Context) ([]*appl
 // huérfanas, que sí veía que la marca seguía cruzando.
 func (r *PostgresRepo) ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaID, materiaNombre string) (int, error) {
 	var n int
-	err := r.db.QueryRow(ctx, `
+	err := r.conexion(ctx).QueryRow(ctx, `
 		SELECT count(*)
 		  FROM equipo_preferencia ep
 		  JOIN contenedor_de_materia obj ON obj.materia_id = $1
 		 WHERE ep.materia_norm = translate(lower(btrim($2::text)), 'áéíóúüñ', 'aeiouun')
-		   AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM obj.anio)
-		   AND (ep.modalidad_norm = '' OR ep.modalidad_norm = obj.modalidad_norm)
-		   AND (ep.division_norm  = '' OR ep.division_norm  = obj.division_norm)
+		   AND (CASE WHEN ep.curso_exacto THEN (ep.anio IS NOT DISTINCT FROM obj.anio AND ep.modalidad_norm = obj.modalidad_norm AND ep.division_norm = obj.division_norm) ELSE ((ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM obj.anio) AND (ep.modalidad_norm = '' OR ep.modalidad_norm = obj.modalidad_norm) AND (ep.division_norm = '' OR ep.division_norm = obj.division_norm)) END)
 		   AND NOT EXISTS (`+sqlLeAplicaAAlgunaMateria+` AND m.id <> $1)`,
 		materiaID, materiaNombre).Scan(&n)
 	if err != nil {

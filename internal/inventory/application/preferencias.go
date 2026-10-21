@@ -13,11 +13,12 @@ import (
 type NuevaPreferenciaParams struct {
 	EquipoIDs     []string
 	MateriaNombre string
-	// Los tres ejes del alcance, independientes y opcionales.
-	Modalidad *string
-	Anio      *int
-	Division  *string
-	Prioridad int
+	// Ejes del alcance: opcionales en reglas generales; exactos en curso concreto.
+	Modalidad   *string
+	Anio        *int
+	Division    *string
+	Prioridad   int
+	CursoExacto bool
 }
 
 // ResultadoAltaDePreferencias separa lo creado de lo que ya estaba.
@@ -28,21 +29,45 @@ type ResultadoAltaDePreferencias struct {
 
 // MarcarPreferencia crea la marca en cada equipo del lote.
 func (s *Service) MarcarPreferencia(ctx context.Context, params NuevaPreferenciaParams) (*ResultadoAltaDePreferencias, error) {
+	var resultado *ResultadoAltaDePreferencias
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.marcarPreferenciaCoordinada(ctx, params)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) marcarPreferenciaCoordinada(ctx context.Context, params NuevaPreferenciaParams) (*ResultadoAltaDePreferencias, error) {
 	if len(params.EquipoIDs) == 0 {
 		return nil, domain.ErrSinEquiposParaPreferi
 	}
 
+	validada, err := domain.NuevaPreferencia("", "", params.MateriaNombre, params.Modalidad, params.Anio, params.Division, params.Prioridad, params.CursoExacto)
+	if err != nil {
+		return nil, err
+	}
+	existe, err := s.repo.ExisteAlcancePreferencia(ctx, validada)
+	if err != nil {
+		return nil, err
+	}
+	if !existe {
+		return nil, ErrAlcancePreferenciaInexistente
+	}
 	resultado := &ResultadoAltaDePreferencias{}
 
 	// El lote entero en una transacción: marcar veinte máquinas y que se
 	// marquen doce deja el inventario a medio camino, y la pantalla no dice
 	// cuáles quedaron sin marcar.
-	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
+	err = s.repo.EnTransaccion(ctx, func(repo Repo) error {
 		resultado = &ResultadoAltaDePreferencias{}
 
 		for _, equipoID := range params.EquipoIDs {
 			p, err := domain.NuevaPreferencia(s.nuevoID(), equipoID, params.MateriaNombre,
-				params.Modalidad, params.Anio, params.Division, params.Prioridad)
+				params.Modalidad, params.Anio, params.Division, params.Prioridad, params.CursoExacto)
 			if err != nil {
 				// La materia, el alcance y la prioridad son los mismos para todo el
 				// lote: si no validan, no validan para ninguno y seguir intentando
@@ -71,19 +96,45 @@ func (s *Service) MarcarPreferencia(ctx context.Context, params NuevaPreferencia
 
 // EditarPreferencia cambia el alcance y la prioridad de una marca existente.
 func (s *Service) EditarPreferencia(ctx context.Context, id string, modalidad *string, anio *int,
-	division *string, prioridad int) (*domain.PreferenciaDeEquipo, error) {
+	division *string, prioridad int, cursoExacto ...bool) (*domain.PreferenciaDeEquipo, error) {
+	var resultado *domain.PreferenciaDeEquipo
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.editarPreferenciaCoordinada(ctx, id, modalidad, anio, division, prioridad, cursoExacto...)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) editarPreferenciaCoordinada(ctx context.Context, id string, modalidad *string, anio *int,
+	division *string, prioridad int, cursoExacto ...bool) (*domain.PreferenciaDeEquipo, error) {
 	actual, err := s.repo.BuscarPreferenciaPorID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
+	exacto := actual.CursoExacto
+	if len(cursoExacto) > 0 {
+		exacto = cursoExacto[0]
+	}
 	// Se reconstruye por el constructor en vez de asignar campos sueltos: así
 	// el alcance editado pasa por las mismas validaciones y los mismos
 	// recortes que el nuevo.
 	editada, err := domain.NuevaPreferencia(actual.ID, actual.EquipoID, actual.MateriaNombre,
-		modalidad, anio, division, prioridad)
+		modalidad, anio, division, prioridad, exacto)
 	if err != nil {
 		return nil, err
+	}
+
+	existe, err := s.repo.ExisteAlcancePreferencia(ctx, editada)
+	if err != nil {
+		return nil, err
+	}
+	if !existe {
+		return nil, ErrAlcancePreferenciaInexistente
 	}
 
 	if err := s.repo.GuardarPreferencia(ctx, editada); err != nil {
@@ -95,7 +146,9 @@ func (s *Service) EditarPreferencia(ctx context.Context, id string, modalidad *s
 // BorrarPreferencia saca la marca. Le devuelve el equipo al orden neutral y
 // no afecta ninguna reserva existente.
 func (s *Service) BorrarPreferencia(ctx context.Context, id string) error {
-	return s.repo.BorrarPreferencia(ctx, id)
+	return s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		return s.repo.BorrarPreferencia(ctx, id)
+	})
 }
 
 func (s *Service) ListarPreferenciasDeEquipo(ctx context.Context, equipoID string) ([]*domain.PreferenciaDeEquipo, error) {
@@ -106,8 +159,8 @@ func (s *Service) ListarPreferenciasDeCarro(ctx context.Context, carroID string)
 	return s.repo.ListarPreferenciasPorCarro(ctx, carroID)
 }
 
-// NombresDeMateriaEnUso son las materias que el Admin puede elegir al
-// marcar. Ver el puerto sobre por qué son nombres y no materias.
+// NombresDeMateriaEnUso conserva el catálogo histórico por compatibilidad.
+// La interfaz de prioridades utiliza CatalogoDePrioridades y sus relaciones.
 func (s *Service) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {
 	return s.repo.NombresDeMateriaEnUso(ctx)
 }

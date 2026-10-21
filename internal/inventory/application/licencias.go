@@ -89,7 +89,7 @@ type ResultadoAltaMasiva struct {
 }
 
 // CrearLicencias da de alta la misma licencia en varios equipos.
-func (s *Service) CrearLicencias(ctx context.Context, params NuevaLicenciaParams) (*ResultadoAltaMasiva, error) {
+func (s *Service) operacionCrearLicencias(ctx context.Context, params NuevaLicenciaParams) (*ResultadoAltaMasiva, error) {
 	if len(params.EquipoIDs) == 0 {
 		return nil, ErrSinEquipos
 	}
@@ -154,7 +154,7 @@ type ResultadoRenovacion struct {
 }
 
 // RenovarLicencias corre el vencimiento de varias licencias de una vez.
-func (s *Service) RenovarLicencias(ctx context.Context, ids []string, renovadaEl *time.Time, porUsuario string) (*ResultadoRenovacion, error) {
+func (s *Service) operacionRenovarLicencias(ctx context.Context, ids []string, renovadaEl *time.Time, porUsuario string) (*ResultadoRenovacion, error) {
 	if len(ids) == 0 {
 		return nil, ErrSinLicencias
 	}
@@ -232,7 +232,7 @@ func (s *Service) avisarSiNoQuedanPendientes(ctx context.Context) {
 			"(el aviso de la campana puede quedar abierto de más): %v", err)
 		return
 	}
-	s.bus.Publish(eventbus.Evento{
+	eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 		Tipo:    "licencia.pendientes",
 		Payload: eventbus.PendientesDeLicencia{Pendientes: pendientes},
 	})
@@ -254,7 +254,7 @@ type EditarLicenciaParams struct {
 // requerimiento: corregir una fecha que quedó mal, cambiar la duración de 30
 // a 60 días, o cargar por primera vez el vencimiento de una licencia que se
 // dio de alta sin él.
-func (s *Service) EditarLicencia(ctx context.Context, licenciaID string, params EditarLicenciaParams) error {
+func (s *Service) operacionEditarLicencia(ctx context.Context, licenciaID string, params EditarLicenciaParams) error {
 	l, err := s.repo.BuscarLicenciaPorID(ctx, licenciaID)
 	if err != nil {
 		return err
@@ -311,8 +311,12 @@ func (s *Service) ListarLicenciasPorEquipo(ctx context.Context, equipoID string)
 }
 
 // BorrarLicencia elimina la fila.
-func (s *Service) BorrarLicencia(ctx context.Context, licenciaID string) error {
-	return s.repo.BorrarLicencia(ctx, licenciaID)
+func (s *Service) operacionBorrarLicencia(ctx context.Context, licenciaID string) error {
+	if err := s.repo.BorrarLicencia(ctx, licenciaID); err != nil {
+		return err
+	}
+	s.avisarSiNoQuedanPendientes(ctx)
+	return nil
 }
 
 // ObtenerLicencia — ver el bloque «Obtener uno solo» de service.go.

@@ -2,12 +2,14 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
 	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 // El barrido de reservas y entregas (RF-08.10 a RF-08.13).
@@ -83,7 +85,7 @@ func (r ResumenDelBarrido) HizoAlgo() bool {
 // que el barrido ve en ese caso no es la realidad del laboratorio sino su
 // propio silencio. La tercera, el recordatorio, corre siempre porque no
 // deduce nada.
-func (v *Vigilante) Barrer(ctx context.Context) (ResumenDelBarrido, error) {
+func (v *Vigilante) barrer(ctx context.Context) (ResumenDelBarrido, error) {
 	ahora := v.ahora()
 	var resumen ResumenDelBarrido
 
@@ -153,11 +155,11 @@ func (v *Vigilante) recordar(ctx context.Context, reservas []ReservaParaVigilar,
 			aviso.Equipos = append(aviso.Equipos, r.Etiqueta)
 		}
 
-		v.bus.Publish(eventbus.Evento{Tipo: "reserva.recordatorio", Payload: aviso})
+		eventbus.Emitir(ctx, v.bus, eventbus.Evento{Tipo: "reserva.recordatorio", Payload: aviso})
 		if err := v.repo.MarcarRecordatorioEnviado(ctx, *primera.GrupoID, ahora); err != nil {
-			// El recordatorio ya salió: no marcarlo solo significa que puede
-			// repetirse en la próxima pasada, no que se haya perdido.
-			log.Printf("barrido: no se pudo marcar el recordatorio del grupo %s (el aviso ya salió): %v",
+			pgtransaccion.Rechazar(ctx, err)
+			// En producción, el fallo revierte también el evento durable.
+			log.Printf("barrido: no se pudo marcar el recordatorio del grupo %s (no se confirmó el aviso): %v",
 				*primera.GrupoID, err)
 		}
 		enviados++
@@ -189,24 +191,18 @@ func (v *Vigilante) liberarNoRetiradas(ctx context.Context, reservas []ReservaPa
 			continue
 		}
 
-		algunaLiberada := false
 		for _, r := range grupo {
 			if r.EquipoAfuera {
 				continue
 			}
-			if err := v.liberar(ctx, r.ReservaID, ahora); err != nil {
+			liberada, err := v.liberar(ctx, r.ReservaID, ahora)
+			if err != nil {
 				log.Printf("barrido: no se pudo liberar la reserva %s: %v", r.ReservaID, err)
 				continue
 			}
-			algunaLiberada = true
-			liberadas++
-		}
-		if !algunaLiberada {
-			continue
-		}
-
-		if primera.GrupoID != nil {
-			v.marcarGrupoSiQuedoTodoSinRetirar(ctx, *primera.GrupoID)
+			if liberada {
+				liberadas++
+			}
 		}
 	}
 
@@ -225,60 +221,66 @@ func (v *Vigilante) correspondeLiberar(primera ReservaParaVigilar, ahora time.Ti
 		v.cfg.GraciaDeRetiro, ahora)
 }
 
-func (v *Vigilante) liberar(ctx context.Context, reservaID string, ahora time.Time) error {
-	reserva, err := v.repo.BuscarReservaPorID(ctx, reservaID)
+// liberar relee estado y custodia bajo los mismos bloqueos que la entrega.
+// Reserva y grupo se confirman juntos; el conteo incluye sólo cambios reales.
+func (v *Vigilante) liberar(ctx context.Context, reservaID string, ahora time.Time) (bool, error) {
+	var liberada bool
+	err := v.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		liberada, err = v.liberarCoordinada(ctx, reservaID, ahora)
+		return err
+	})
 	if err != nil {
-		return err
+		return false, err
 	}
-	// Releer antes de escribir: entre la consulta del barrido y este momento el
-	// docente pudo haber cancelado, o el Admin haber entregado la máquina.
-	if reserva.Estado != domain.ReservaConfirmada {
-		return nil
-	}
-	if err := reserva.Liberar(); err != nil {
-		return err
-	}
-	return v.repo.GuardarReserva(ctx, reserva)
+	return liberada, nil
 }
-
-// marcarGrupoSiQuedoTodoSinRetirar sigue el mismo criterio que
-// finalizarGrupoSiCorresponde: el grupo solo cambia cuando ya no queda
-// ninguna reserva viva adentro.
-func (v *Vigilante) marcarGrupoSiQuedoTodoSinRetirar(ctx context.Context, grupoID string) {
-	grupo, err := v.repo.BuscarReservaGrupoPorID(ctx, grupoID)
-	if err != nil {
-		log.Printf("barrido: no se pudo leer el grupo %s: %v", grupoID, err)
-		return
-	}
-	if grupo.Estado != domain.GrupoConfirmada {
-		return
-	}
-
-	reservas, err := v.repo.ListarReservasPorGrupo(ctx, grupoID)
-	if err != nil {
-		log.Printf("barrido: no se pudieron leer las reservas del grupo %s: %v", grupoID, err)
-		return
-	}
-	hayNoRetiradas := false
-	for _, r := range reservas {
-		if r.Estado == domain.ReservaConfirmada {
-			return // todavía queda alguna viva
+func (v *Vigilante) liberarCoordinada(ctx context.Context, reservaID string, ahora time.Time) (bool, error) {
+	liberada := false
+	err := v.repo.EnTransaccion(ctx, func(repo Repo) error {
+		liberada = false
+		r, err := reservaParaActualizar(ctx, repo, reservaID)
+		if err != nil {
+			return err
 		}
-		if r.Estado == domain.ReservaNoRetirada {
-			hayNoRetiradas = true
+		if r.Estado != domain.ReservaConfirmada {
+			return nil
 		}
+		if !domain.CorrespondeLiberar(r.Fecha, r.HoraInicio, r.HoraFin, v.cfg.GraciaDeRetiro, ahora) {
+			return nil
+		}
+		conEntrega, err := repo.ReservasConPrestamos(ctx, []string{reservaID})
+		if err != nil {
+			return err
+		}
+		if conEntrega[reservaID] {
+			return nil
+		}
+		_, err = repo.BuscarPrestamoAbiertoDeEquipo(ctx, r.EquipoID)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, ErrPrestamoNoEncontrado) {
+			return err
+		}
+		if err := r.Liberar(); err != nil {
+			return err
+		}
+		if err := repo.GuardarReserva(ctx, r); err != nil {
+			return err
+		}
+		if r.ReservaGrupoID != nil {
+			if err := recalcularGrupo(ctx, repo, *r.ReservaGrupoID); err != nil {
+				return err
+			}
+		}
+		liberada = true
+		return nil
+	})
+	if err != nil {
+		return false, err
 	}
-	if !hayNoRetiradas {
-		return
-	}
-
-	if err := grupo.CambiarEstado(domain.GrupoNoRetirado); err != nil {
-		log.Printf("barrido: no se pudo marcar el grupo %s como no retirado: %v", grupoID, err)
-		return
-	}
-	if err := v.repo.GuardarReservaGrupo(ctx, grupo); err != nil {
-		log.Printf("barrido: no se pudo guardar el grupo %s: %v", grupoID, err)
-	}
+	return liberada, nil
 }
 
 // ── 3. El corte de fin de jornada ───────────────────────────────────────
@@ -316,7 +318,7 @@ func entraEnElCorte(p *domain.Prestamo, cierre time.Time, ahora time.Time) bool 
 	return true
 }
 
-// momentoDelCorte devuelve cuándo cerró la jornada que acaba de terminar, o
+// momentoYFechaDelCorte devuelve cuándo cerró y la fecha inicial de la jornada que acaba de terminar, o
 // false si todavía no corresponde cortar.
 //
 // Se miran hoy y ayer, en ese orden. La jornada de ayer puede terminar hoy de
@@ -332,16 +334,18 @@ func entraEnElCorte(p *domain.Prestamo, cierre time.Time, ahora time.Time) bool 
 // Sin jornada declarada no hay de dónde deducir nada y se cae a la hora
 // configurada, que es el comportamiento que el sistema tenía antes de que la
 // jornada existiera.
-func (v *Vigilante) momentoDelCorte(ctx context.Context, ahora time.Time) (time.Time, bool) {
+func (v *Vigilante) momentoYFechaDelCorte(ctx context.Context, ahora time.Time) (time.Time, time.Time, bool) {
 	for _, deHaceDias := range []int{0, 1} {
 		fecha := ahora.AddDate(0, 0, -deHaceDias)
 		cierre, err := v.validadorJornada.CierreDeLaJornada(ctx, fecha)
 		if err != nil {
 			log.Printf("barrido: no se pudo leer el cierre de la jornada, se usa la hora configurada: %v", err)
-			return v.corteConfigurado(ahora)
+			momento, ok := v.corteConfigurado(ahora)
+			return momento, medianocheDe(ahora), ok
 		}
 		if !cierre.Declarada {
-			return v.corteConfigurado(ahora)
+			momento, ok := v.corteConfigurado(ahora)
+			return momento, medianocheDe(ahora), ok
 		}
 		if !cierre.Abre {
 			continue
@@ -367,9 +371,9 @@ func (v *Vigilante) momentoDelCorte(ctx context.Context, ahora time.Time) (time.
 				momento.Format("2006-01-02 15:04"))
 			continue
 		}
-		return momento, true
+		return momento, medianocheDe(fecha), true
 	}
-	return time.Time{}, false
+	return time.Time{}, time.Time{}, false
 }
 
 // GraciaDespuesDelCierre es cuánto se espera desde que cerró la escuela antes
@@ -393,7 +397,7 @@ func medianocheDe(t time.Time) time.Time {
 
 // cortarLaJornada avisa qué máquinas quedaron afuera al terminar el día.
 func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoParaVigilar, ahora time.Time) int {
-	cierre, hayCorte := v.momentoDelCorte(ctx, ahora)
+	cierre, fechaJornada, hayCorte := v.momentoYFechaDelCorte(ctx, ahora)
 	if !hayCorte {
 		return 0
 	}
@@ -404,7 +408,7 @@ func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoPar
 	// no saldría nunca. Lo que importa es si hubo alguien operando durante la
 	// jornada que se está cerrando, porque de eso depende que la lista de
 	// "qué quedó afuera" tenga algo que ver con la realidad (RF-07.6).
-	mostrador, err := v.validadorMostrador.MostradorEseDia(ctx, cierre)
+	mostrador, err := v.validadorMostrador.MostradorEseDia(ctx, fechaJornada)
 	if err != nil {
 		log.Printf("barrido: no se pudo resolver si hubo alguien en el mostrador el %s, "+
 			"no se corta la jornada: %v", cierre.Format("2006-01-02"), err)
@@ -437,13 +441,14 @@ func (v *Vigilante) cortarLaJornada(ctx context.Context, prestamos []PrestamoPar
 		return 0
 	}
 
-	v.bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{Equipos: afuera}})
+	eventbus.Emitir(ctx, v.bus, eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{Equipos: afuera}})
 	for _, p := range prestamos {
 		if !entraEnElCorte(p.Prestamo, cierre, ahora) {
 			continue
 		}
 		if err := v.repo.MarcarCierreAvisado(ctx, p.Prestamo.ID, ahora); err != nil {
-			log.Printf("barrido: no se pudo marcar el cierre del préstamo %s (ya salió): %v", p.Prestamo.ID, err)
+			pgtransaccion.Rechazar(ctx, err)
+			log.Printf("barrido: no se pudo marcar el cierre del préstamo %s (no se confirmó el aviso): %v", p.Prestamo.ID, err)
 		}
 	}
 	return len(afuera)
@@ -506,4 +511,17 @@ func nombreODefecto(nombre *string) string {
 		return "una clase"
 	}
 	return *nombre
+}
+
+func (v *Vigilante) Barrer(ctx context.Context) (ResumenDelBarrido, error) {
+	var res ResumenDelBarrido
+	err := v.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		res, err = v.barrer(ctx)
+		return err
+	})
+	if err != nil {
+		return ResumenDelBarrido{}, err
+	}
+	return res, nil
 }

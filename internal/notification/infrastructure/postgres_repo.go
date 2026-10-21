@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -45,24 +46,41 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 	return &PostgresRepo{pool: pool}
 }
 
-const columnasNotificacion = `id, usuario_id, reserva_id, sobre_usuario_id, mensaje, tipo, estado, creada_en, leida_en`
+const columnasNotificacion = `id, usuario_id, reserva_id, sobre_usuario_id, mensaje, tipo, estado, creada_en, leida_en,pedido_id,hilo_id`
 
+// Crear conserva el aviso como historia si su tarea ya se resolvió antes de
+// entregar el evento. La campana nunca vuelve a presentar esa tarea pendiente.
 func (r *PostgresRepo) Crear(ctx context.Context, n *domain.Notificacion) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO notificacion (id, usuario_id, reserva_id, sobre_usuario_id, mensaje, tipo, estado, creada_en)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, n.ID, n.UsuarioID, n.ReservaID, n.SobreUsuarioID, n.Mensaje, string(n.Tipo), string(n.Estado), n.CreadaEn)
+	var estado string
+	err := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx, `
+        WITH destinatario AS (SELECT id FROM usuario WHERE id=$2 FOR KEY SHARE), efectivo AS (
+            SELECT CASE WHEN
+                ($6::text='DOCENTE_PENDIENTE' AND $4::uuid IS NOT NULL AND NOT EXISTS(SELECT 1 FROM usuario WHERE id=$4 AND estado='PENDIENTE'))
+                OR ($6='PEDIDO_DE_MATERIA' AND $9::uuid IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pedido_de_materia WHERE id=$9 AND estado='PENDIENTE'))
+                OR ($6='SUGERENCIA' AND $10::uuid IS NOT NULL AND NOT EXISTS(
+                    SELECT 1 FROM sugerencia s WHERE s.id=$10 AND s.estado='ABIERTA'
+                    AND NOT COALESCE((SELECT de_admin FROM sugerencia_mensaje WHERE sugerencia_id=s.id ORDER BY escrito_en DESC,id DESC LIMIT 1),false)))
+            THEN 'LEIDA' ELSE $7::text END AS estado
+        )
+        INSERT INTO notificacion(id,usuario_id,reserva_id,sobre_usuario_id,mensaje,tipo,estado,creada_en,pedido_id,hilo_id,leida_en)
+        SELECT $1,$2,CASE WHEN EXISTS(SELECT 1 FROM reserva WHERE id=$3) THEN $3 ELSE NULL END,CASE WHEN EXISTS(SELECT 1 FROM usuario WHERE id=$4) THEN $4 ELSE NULL END,$5,$6,estado,$8,$9,$10,CASE WHEN estado='LEIDA' THEN $8::timestamptz ELSE NULL END FROM efectivo CROSS JOIN destinatario
+        RETURNING estado,leida_en
+    `, n.ID, n.UsuarioID, n.ReservaID, n.SobreUsuarioID, n.Mensaje, string(n.Tipo), string(n.Estado), n.CreadaEn, n.PedidoID, n.HiloID).Scan(&estado, &n.LeidaEn)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return application.ErrDestinatarioInexistente
+	}
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
 		return fmt.Errorf("creando notificación: %w", err)
 	}
+	n.Estado = domain.Estado(estado)
 	return nil
 }
 
 func (r *PostgresRepo) BuscarPorID(ctx context.Context, id string) (*domain.Notificacion, error) {
-	row := r.pool.QueryRow(ctx, `SELECT `+columnasNotificacion+` FROM notificacion WHERE id = $1`, id)
+	row := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx, `SELECT `+columnasNotificacion+` FROM notificacion WHERE id = $1`, id)
 	return escanearNotificacion(row)
 }
 
@@ -71,7 +89,7 @@ func escanearNotificacion(row pgx.Row) (*domain.Notificacion, error) {
 	var estadoStr string
 
 	var tipoStr string
-	err := row.Scan(&n.ID, &n.UsuarioID, &n.ReservaID, &n.SobreUsuarioID, &n.Mensaje, &tipoStr, &estadoStr, &n.CreadaEn, &n.LeidaEn)
+	err := row.Scan(&n.ID, &n.UsuarioID, &n.ReservaID, &n.SobreUsuarioID, &n.Mensaje, &tipoStr, &estadoStr, &n.CreadaEn, &n.LeidaEn, &n.PedidoID, &n.HiloID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, application.ErrNotificacionNoEncontrada
@@ -104,7 +122,7 @@ func escanearNotificacionConTotal(row pgx.Row, total *int) (*domain.Notificacion
 	var estadoStr string
 
 	var tipoStr string
-	if err := row.Scan(&n.ID, &n.UsuarioID, &n.ReservaID, &n.SobreUsuarioID, &n.Mensaje, &tipoStr, &estadoStr, &n.CreadaEn, &n.LeidaEn, total); err != nil {
+	if err := row.Scan(&n.ID, &n.UsuarioID, &n.ReservaID, &n.SobreUsuarioID, &n.Mensaje, &tipoStr, &estadoStr, &n.CreadaEn, &n.LeidaEn, &n.PedidoID, &n.HiloID, total); err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
 		}
@@ -127,7 +145,7 @@ func escanearNotificacionConTotal(row pgx.Row, total *int) (*domain.Notificacion
 }
 
 func (r *PostgresRepo) Guardar(ctx context.Context, n *domain.Notificacion) error {
-	tag, err := r.pool.Exec(ctx,
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`UPDATE notificacion SET estado = $2, leida_en = $3 WHERE id = $1`,
 		n.ID, string(n.Estado), n.LeidaEn)
 	if err != nil {
@@ -162,7 +180,7 @@ func (r *PostgresRepo) ListarPorUsuario(ctx context.Context, usuarioID string, f
 	argsPagina := append(append([]any{}, args...), pagina.Limit(), pagina.Offset())
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(argsPagina)-1, len(argsPagina))
 
-	rows, err := r.pool.Query(ctx, query, argsPagina...)
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, query, argsPagina...)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, 0, application.ErrIDInvalido
@@ -188,7 +206,7 @@ func (r *PostgresRepo) ListarPorUsuario(ctx context.Context, usuarioID string, f
 	// sin él la campana mostraría "0 notificaciones" con la primera página
 	// llena.
 	if len(resultado) == 0 && pagina.Offset() > 0 {
-		if err := r.pool.QueryRow(ctx, "SELECT COUNT(*)"+desde, args...).Scan(&total); err != nil {
+		if err := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx, "SELECT COUNT(*)"+desde, args...).Scan(&total); err != nil {
 			return nil, 0, fmt.Errorf("contando notificaciones: %w", err)
 		}
 	}
@@ -199,11 +217,19 @@ func (r *PostgresRepo) ListarPorUsuario(ctx context.Context, usuarioID string, f
 // ListarNoLeidasSobreUsuario: los avisos sin leer que hablan de una persona,
 // sin importar a quién le llegaron — un pendiente de aprobación le llega a
 // todos los Admin y se cierra para todos a la vez.
-func (r *PostgresRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo) ([]*domain.Notificacion, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT `+columnasNotificacion+` FROM notificacion
-		 WHERE sobre_usuario_id = $1 AND tipo = $2 AND estado = 'NO_LEIDA'`,
-		sobreUsuarioID, string(tipo))
+func (r *PostgresRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo, referencia ...string) ([]*domain.Notificacion, error) {
+	consulta := `SELECT ` + columnasNotificacion + ` FROM notificacion WHERE sobre_usuario_id=$1 AND tipo=$2 AND estado='NO_LEIDA'`
+	args := []any{sobreUsuarioID, string(tipo)}
+	if len(referencia) > 0 {
+		col := "hilo_id"
+		if tipo == domain.TipoPedidoDeMateria {
+			col = "pedido_id"
+		}
+		consulta += " AND " + col + "=$3"
+		args = append(args, referencia[0])
+	}
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, consulta, args...)
+
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
@@ -229,7 +255,7 @@ func (r *PostgresRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsua
 // y varios días sin mirar la campana son varias decenas de filas y no hay nada
 // que decidir fila por fila.
 func (r *PostgresRepo) MarcarLeidasPorTipo(ctx context.Context, tipo domain.Tipo, ahora time.Time) (int, error) {
-	tag, err := r.pool.Exec(ctx, `
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `
 		UPDATE notificacion SET estado = 'LEIDA', leida_en = $2
 		WHERE tipo = $1 AND estado = 'NO_LEIDA'
 	`, string(tipo), ahora)
@@ -240,7 +266,7 @@ func (r *PostgresRepo) MarcarLeidasPorTipo(ctx context.Context, tipo domain.Tipo
 }
 
 func (r *PostgresRepo) MarcarTodasLeidasDe(ctx context.Context, usuarioID string, ahora time.Time) (int, error) {
-	tag, err := r.pool.Exec(ctx, `
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `
 		UPDATE notificacion SET estado = 'LEIDA', leida_en = $2
 		WHERE usuario_id = $1 AND estado = 'NO_LEIDA'
 	`, usuarioID, ahora)
@@ -260,7 +286,7 @@ func (r *PostgresRepo) MarcarTodasLeidasDe(ctx context.Context, usuarioID string
 // atrás que haya que explicar después. Lo que sí queda es la acción que lo
 // generó, en `audit_log`, que es otra cosa y no se borra.
 func (r *PostgresRepo) Borrar(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM notificacion WHERE id = $1`, id)
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `DELETE FROM notificacion WHERE id = $1`, id)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -277,7 +303,7 @@ func (r *PostgresRepo) Borrar(ctx context.Context, id string) error {
 // `usuario_id` es la regla de pertenencia: no hay forma de invocarla sobre los
 // de otro.
 func (r *PostgresRepo) BorrarLeidasDe(ctx context.Context, usuarioID string) (int, error) {
-	tag, err := r.pool.Exec(ctx,
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`DELETE FROM notificacion WHERE usuario_id = $1 AND estado = 'LEIDA'`, usuarioID)
 	if err != nil {
 		if esIDInvalido(err) {

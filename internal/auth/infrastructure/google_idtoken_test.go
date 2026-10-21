@@ -85,7 +85,7 @@ func claimsValidos() jwt.MapClaims {
 		"iss":            "https://accounts.google.com",
 		"aud":            clientIDDePrueba,
 		"sub":            "112233445566",
-		"email":          "ada@escuela.edu.ar",
+		"email":          "ada@escuela.test",
 		"email_verified": true,
 		"given_name":     "Ada",
 		"family_name":    "Lovelace",
@@ -131,7 +131,7 @@ func TestVerificar_TokenValido(t *testing.T) {
 	if identidad.Sub != "112233445566" {
 		t.Errorf("sub inesperado: %q", identidad.Sub)
 	}
-	if identidad.Email != "ada@escuela.edu.ar" {
+	if identidad.Email != "ada@escuela.test" {
 		t.Errorf("email inesperado: %q", identidad.Email)
 	}
 	if !identidad.EmailVerificado {
@@ -307,7 +307,7 @@ func TestVerificar_EmailVerificadoComoString(t *testing.T) {
 // ── Restricción por dominio ───────────────────────────────────────────
 
 func TestVerificar_DominioPermitido(t *testing.T) {
-	privada, v, _ := entornoDePrueba(t, []string{"escuela.edu.ar"})
+	privada, v, _ := entornoDePrueba(t, []string{"escuela.test"})
 
 	if _, err := v.Verificar(context.Background(), firmar(t, privada, "kid-1", claimsValidos())); err != nil {
 		t.Fatalf("el dominio está en la lista: %v", err)
@@ -315,7 +315,7 @@ func TestVerificar_DominioPermitido(t *testing.T) {
 }
 
 func TestVerificar_DominioNoPermitido(t *testing.T) {
-	privada, v, _ := entornoDePrueba(t, []string{"escuela.edu.ar"})
+	privada, v, _ := entornoDePrueba(t, []string{"escuela.test"})
 
 	claims := claimsValidos()
 	claims["email"] = "cualquiera@gmail.com"
@@ -329,10 +329,10 @@ func TestVerificar_DominioNoPermitido(t *testing.T) {
 
 // Un dominio que TERMINA en el permitido no es el permitido.
 func TestVerificar_DominioParecido_NoAlcanza(t *testing.T) {
-	privada, v, _ := entornoDePrueba(t, []string{"escuela.edu.ar"})
+	privada, v, _ := entornoDePrueba(t, []string{"escuela.test"})
 
 	claims := claimsValidos()
-	claims["email"] = "cualquiera@noesescuela.edu.ar"
+	claims["email"] = "cualquiera@noesescuela.test"
 
 	if _, err := v.Verificar(context.Background(), firmar(t, privada, "kid-1", claims)); !errors.Is(err, application.ErrDominioNoPermitido) {
 		t.Fatalf("esperaba ErrDominioNoPermitido, hubo: %v", err)
@@ -449,9 +449,9 @@ func TestDominiosPermitidos(t *testing.T) {
 	}{
 		{"", nil},
 		{"   ", nil},
-		{"escuela.edu.ar", []string{"escuela.edu.ar"}},
-		{"Escuela.Edu.Ar", []string{"escuela.edu.ar"}},
-		{"@escuela.edu.ar", []string{"escuela.edu.ar"}},
+		{"escuela.test", []string{"escuela.test"}},
+		{"Escuela.test", []string{"escuela.test"}},
+		{"@escuela.test", []string{"escuela.test"}},
 		{"a.edu.ar, b.edu.ar", []string{"a.edu.ar", "b.edu.ar"}},
 		{"a.edu.ar,,b.edu.ar,", []string{"a.edu.ar", "b.edu.ar"}},
 	}

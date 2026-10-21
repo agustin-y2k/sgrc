@@ -7,6 +7,9 @@ import "context"
 
 // Acciones auditadas — mismo catálogo que docs/09-seguridad-rbac.md §5.
 const (
+	// CambioTransaccional se genera desde PostgreSQL junto con cada escritura
+	// sensible. Registra campos y estados permitidos; nunca sus secretos.
+	CambioTransaccional       = "CAMBIO_TRANSACCIONAL"
 	CuentaAprobada            = "CUENTA_APROBADA"
 	CuentaRechazada           = "CUENTA_RECHAZADA"
 	CuentaBaja                = "CUENTA_BAJA"

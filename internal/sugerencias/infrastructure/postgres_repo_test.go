@@ -64,7 +64,7 @@ func crearUsuarioDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	_, err := pool.Exec(context.Background(), `
 		INSERT INTO usuario (id, nombre, apellido, email, password_hash, rol, estado)
 		VALUES ($1, 'Ada', 'Lovelace', $2, 'hash-de-prueba', 'DOCENTE', 'APROBADA')
-	`, id, id+"@escuela.edu.ar")
+	`, id, id+"@escuela.test")
 	if err != nil {
 		t.Fatalf("no se pudo crear usuario de prueba: %v", err)
 	}

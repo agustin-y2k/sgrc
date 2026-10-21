@@ -37,6 +37,7 @@ type fakeRepo struct {
 	// materiaRecibidaAlListar: para qué materia se pidió la lista (RF-03.21).
 	materiaRecibidaAlListar string
 	pcsOcupadas             []application.EquipoOcupado
+	filtroReservas          application.FiltroReservas
 	datosDelPedido          *application.ReservaParaPedido
 	yaPidio                 bool
 	solapamientos           []application.Solapamiento
@@ -162,6 +163,7 @@ func (r *fakeRepo) EnTransaccion(ctx context.Context, fn func(application.Repo) 
 }
 
 func (r *fakeRepo) ListarReservas(ctx context.Context, f application.FiltroReservas) ([]application.ReservaDetallada, int, error) {
+	r.filtroReservas = f
 	var resultado []application.ReservaDetallada
 	for _, res := range r.enOrden() {
 		if f.CreadoPor != nil && (res.CreadoPor == nil || *res.CreadoPor != *f.CreadoPor) {
@@ -238,6 +240,15 @@ func (r *fakeRepo) BuscarReservaGrupoPorID(ctx context.Context, id string) (*dom
 		return nil, application.ErrReservaGrupoNoEncontrado
 	}
 	return g, nil
+}
+func (r *fakeRepo) BuscarGruposParaActualizar(ctx context.Context, ids []string) (map[string]*domain.ReservaGrupo, error) {
+	grupos := map[string]*domain.ReservaGrupo{}
+	for _, id := range ids {
+		if g := r.grupos[id]; g != nil {
+			grupos[id] = g
+		}
+	}
+	return grupos, nil
 }
 func (r *fakeRepo) GuardarReservaGrupo(ctx context.Context, g *domain.ReservaGrupo) error {
 	r.grupos[g.ID] = g
@@ -410,7 +421,7 @@ func (f *fakeObtenedorNombre) NombreCompletoDe(ctx context.Context, usuarioID st
 func (f *fakeObtenedorNombre) ContactosDe(ctx context.Context, usuarioIDs []string) (map[string]application.Contacto, error) {
 	contactos := make(map[string]application.Contacto, len(usuarioIDs))
 	for _, id := range usuarioIDs {
-		contactos[id] = application.Contacto{Nombre: "Ada Lovelace", Email: id + "@escuela.edu.ar"}
+		contactos[id] = application.Contacto{Nombre: "Ada Lovelace", Email: id + "@escuela.test"}
 	}
 	return contactos, nil
 }
@@ -433,11 +444,14 @@ func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 // casos que dependen de qué dice inventory: una PC dada de baja, o una que no
 // está en el inventario.
 func nuevaAppConValidadorDeEquipo(repo *fakeRepo, validador *fakeValidadorEquipo) *fiber.App {
+	return nuevaAppConAuditor(repo, validador, fakeAuditor{})
+}
+func nuevaAppConAuditor(repo *fakeRepo, validador *fakeValidadorEquipo, auditor audit.Auditor) *fiber.App {
 	contadorID = 0
 	svc := application.NewService(repo, &fakeValidadorMateria{asignado: true}, validador,
 		&fakeValidadorJornada{permite: true}, &fakeObtenedorNombre{}, idSecuencial, func() time.Time { return time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC) },
 		eventbus.NewInMemoryEventBus())
-	h := NewHandler(svc, fakeAuditor{})
+	h := NewHandler(svc, auditor)
 
 	app := fiber.New()
 	RegisterRoutes(app, h, registroDePrueba.Autenticacion(testSecret))
@@ -1006,6 +1020,30 @@ func TestHTTP_ListarReservas_SinParametros_UsaLaVentanaPorDefecto(t *testing.T) 
 	}
 }
 
+func TestHTTP_ListarReservas_PorClasesConservaElFiltroDeIdentidad(t *testing.T) {
+	repo := nuevoFakeRepo()
+	reservaDeTest(repo, "r1", "pc1", "docente1")
+	reservaDeTest(repo, "r2", "pc2", "otro")
+	app := nuevaAppDeTest(repo)
+	req := httptest.NewRequest("GET", "/api/reservas?porClases=true&creadoPor=otro&pageSize=20", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 || !repo.filtroReservas.PorClases || repo.filtroReservas.CreadoPor == nil || *repo.filtroReservas.CreadoPor != "docente1" {
+		t.Fatalf("paginación o filtro incorrectos: status=%d filtro=%+v", resp.StatusCode, repo.filtroReservas)
+	}
+	var cuerpo listarReservasResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cuerpo); err != nil {
+		t.Fatal(err)
+	}
+	if len(cuerpo.Data) != 1 || cuerpo.Data[0].ID != "r1" {
+		t.Fatal("se devolvieron reservas ajenas")
+	}
+}
+
 // pageSize sin techo no protege de nada: alcanza con pedir 100000 para
 // volver al listado sin cota.
 func TestHTTP_ListarReservas_ParametrosInvalidos_400(t *testing.T) {
@@ -1013,7 +1051,7 @@ func TestHTTP_ListarReservas_ParametrosInvalidos_400(t *testing.T) {
 	reservaDeTest(repo, "r1", "pc1", "docente1")
 	app := nuevaAppDeTest(repo)
 
-	for _, query := range []string{"?page=0", "?page=abc", "?pageSize=0", "?pageSize=100000"} {
+	for _, query := range []string{"?page=0", "?page=abc", "?pageSize=0", "?pageSize=100000", "?porClases=1", "?porClases=otra"} {
 		req := httptest.NewRequest("GET", "/api/reservas"+query, nil)
 		req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
 
@@ -1185,6 +1223,40 @@ func (f *fakeValidadorJornada) CierreDeLaJornada(_ context.Context, _ time.Time)
 // Completa el par con GET /api/grupos/{id} y comparte su regla de titularidad,
 // que vive en el servicio.
 
+func TestHTTP_ListarReservas_FiltrosDeBusquedaConservanIdentidad(t *testing.T) {
+	repo := nuevoFakeRepo()
+	app := nuevaAppDeTest(repo)
+	req := httptest.NewRequest("GET", "/api/reservas?estado=CANCELADA&busqueda=Matematica&porClases=true&creadoPor=otra-cuenta", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	f := repo.filtroReservas
+	if resp.StatusCode != 200 || f.Estado == nil || *f.Estado != domain.ReservaCancelada || !f.IncluirCanceladas || f.Busqueda != "Matematica" || f.CreadoPor == nil || *f.CreadoPor != "docente1" {
+		t.Fatalf("filtros incorrectos: status=%d filtro=%+v", resp.StatusCode, f)
+	}
+}
+
+func TestHTTP_ListarReservas_RechazaFiltrosInvalidos(t *testing.T) {
+	for _, query := range []string{"estado=INEXISTENTE", "desde=2026-11-02&hasta=2026-11-01", "busqueda=" + strings.Repeat("a", 101)} {
+		t.Run(query, func(t *testing.T) {
+			app := nuevaAppDeTest(nuevoFakeRepo())
+			req := httptest.NewRequest("GET", "/api/reservas?"+query, nil)
+			req.Header.Set("Authorization", "Bearer "+tokenPara("docente1", "DOCENTE"))
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 400 {
+				t.Fatalf("status=%d", resp.StatusCode)
+			}
+		})
+	}
+}
+
 func TestHTTP_ObtenerReserva_Propia_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
 	dueno := "docente-1"
@@ -1261,4 +1333,95 @@ func (r *fakeRepo) ListarReservasFuturasDeEquipos(ctx context.Context, equipoIDs
 		}
 	}
 	return porEquipo, nil
+}
+
+func (r *fakeRepo) BuscarReservasParaEntregar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	seleccion, err := r.BuscarReservasPorIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	grupos := map[string]bool{}
+	for _, res := range seleccion {
+		if res.ReservaGrupoID != nil {
+			grupos[*res.ReservaGrupoID] = true
+		}
+	}
+	for id, res := range r.reservas {
+		if res.ReservaGrupoID != nil && grupos[*res.ReservaGrupoID] {
+			copia := *res
+			seleccion[id] = &copia
+		}
+	}
+	return seleccion, nil
+}
+func (r *fakeRepo) BuscarPrestamosParaActualizar(ctx context.Context, ids []string) (map[string]*domain.Prestamo, error) {
+	return r.BuscarPrestamosPorIDs(ctx, ids)
+}
+func (r *fakeRepo) ReservasConPrestamos(ctx context.Context, ids []string) (map[string]bool, error) {
+	resultado := map[string]bool{}
+	for _, id := range ids {
+		for _, p := range r.prestamos {
+			if p.ReservaID != nil && *p.ReservaID == id {
+				resultado[id] = true
+			}
+		}
+	}
+	return resultado, nil
+}
+
+func (r *fakeRepo) Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+
+func (r *fakeRepo) ReclamarPedidoLiberacion(ctx context.Context, reservaID, solicitanteID string, dia time.Time) (bool, error) {
+	ya, err := r.YaPidioLiberacionHoy(ctx, reservaID, solicitanteID, dia)
+	if err != nil || ya {
+		return false, err
+	}
+	return true, nil
+}
+
+type auditorDeCancelacion struct{ entradas []audit.Entrada }
+
+func (a *auditorDeCancelacion) Registrar(_ context.Context, e audit.Entrada) error {
+	a.entradas = append(a.entradas, e)
+	return nil
+}
+func TestHTTP_CancelarOcurrenciaRegistraAlAdminYSuAlcance(t *testing.T) {
+	for _, soloEsta := range []bool{true, false} {
+		repo := nuevoFakeRepo()
+		dueño := "docente-dueño"
+		regla := "regla1"
+		repo.grupos["g1"] = &domain.ReservaGrupo{ID: "g1", Estado: domain.GrupoConfirmada, CreadoPor: &dueño, ReglaRecurrenciaID: &regla}
+		auditor := &auditorDeCancelacion{}
+		app := nuevaAppConAuditor(repo, &fakeValidadorEquipo{disponible: true}, auditor)
+		req := httptest.NewRequest("POST", "/api/grupos/g1/cancelar", jsonBody(cancelarOcurrenciaRequest{Motivo: "Motivo admin", SoloEsta: soloEsta}))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+tokenPara("admin1", "ADMIN"))
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != fiber.StatusOK || len(auditor.entradas) != 1 {
+			t.Fatalf("sin auditoría: %d %+v", resp.StatusCode, auditor.entradas)
+		}
+		e := auditor.entradas[0]
+		if e.UsuarioID != "admin1" || e.Accion != audit.ReservaCanceladaPorAdmin || e.Entidad != "reserva_grupo" || e.EntidadID == nil || *e.EntidadID != "g1" || e.Detalle["soloEsta"] != soloEsta {
+			t.Fatalf("atribución incorrecta: %+v", e)
+		}
+	}
+}
+
+func (r *fakeRepo) OpcionesDeReposicion(ctx context.Context, equipoID, materiaID string) (application.OpcionesReposicion, error) {
+	return application.OpcionesReposicion{}, nil
+}
+
+func (r *fakeRepo) GuardarReposiciones(ctx context.Context, reservas []*domain.Reserva) error {
+	for _, res := range reservas {
+		if err := r.GuardarReserva(ctx, res); err != nil {
+			return err
+		}
+	}
+	return nil
 }

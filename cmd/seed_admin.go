@@ -61,7 +61,7 @@ func (r *pgxUsuarioRepo) CrearAdmin(ctx context.Context, email, passwordHash str
 func seedAdminSiHaceFalta(ctx context.Context, pool *pgxpool.Pool, getenv func(string) string) error {
 	repo := &pgxUsuarioRepo{pool: pool}
 	// Se normaliza con la misma función que usa el registro: si el .env trae
-	// "Admin@Escuela.edu.ar", la fila tiene que quedar igual que si esa cuenta
+	// "Admin@Escuela.test", la fila tiene que quedar igual que si esa cuenta
 	// se hubiera creado desde la aplicación. El ON CONFLICT de arriba ya compara
 	// por lower(email) y no se dejaría engañar, pero la fila guardada sí queda
 	// con la caja que venga del .env, y esa es la que se ve en pantalla.

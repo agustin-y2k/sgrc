@@ -12,21 +12,23 @@ import (
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
-	estadoInventario   []domain.EstadoDelInventario
-	fueraDeCirculacion []domain.EquipoFueraDeCirculacion
-	porCategoria       []domain.ResumenPorCategoriaDeFalla
-	historicoEquipo    map[string]*domain.HistoricoUsoEquipo
-	historicoDocente   map[string]*domain.HistoricoUsoDocente
-	usoEquipos         []domain.ResumenUsoEquipo
-	usoDocentes        []domain.ResumenUsoDocente
-	errCalcularEquipos error
-	errCalcularDoc     error
-	errGuardarEquipo   error
-	errGuardarDoc      error
-	incidenciasEquipo  []domain.ResumenIncidenciasEquipo
-	incidenciasCarro   []domain.ResumenIncidenciasCarro
-	errIncidencias     error
-	borradosSinCuenta  []int
+	sellos                 map[string]bool
+	totalesUso             *domain.TotalesUso
+	estadoInventario       []domain.EstadoDelInventario
+	fueraDeCirculacion     []domain.EquipoFueraDeCirculacion
+	porCategoria           []domain.ResumenPorCategoriaDeFalla
+	historicoEquipo        map[string]*domain.HistoricoUsoEquipo
+	historicoDocente       map[string]*domain.HistoricoUsoDocente
+	usoEquipos             []domain.ResumenUsoEquipo
+	usoDocentes            []domain.ResumenUsoDocente
+	errCalcularEquipos     error
+	errCalcularDoc         error
+	errGuardarEquipo       error
+	errGuardarDoc          error
+	incidenciasEquipo      []domain.ResumenIncidenciasEquipo
+	incidenciasCarro       []domain.ResumenIncidenciasCarro
+	errIncidencias         error
+	historicosReemplazados []int
 }
 
 func nuevoFakeRepo() *fakeRepo {
@@ -51,15 +53,6 @@ func (r *fakeRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain.His
 	return nil
 }
 
-func (r *fakeRepo) BorrarHistoricoDocentesSinCuenta(ctx context.Context, anio int) error {
-	r.borradosSinCuenta = append(r.borradosSinCuenta, anio)
-	for id, h := range r.historicoDocente {
-		if h.Anio == anio && h.UsuarioID == nil {
-			delete(r.historicoDocente, id)
-		}
-	}
-	return nil
-}
 func (r *fakeRepo) ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error) {
 	var resultado []*domain.HistoricoUsoEquipo
 	for _, h := range r.historicoEquipo {
@@ -338,8 +331,7 @@ func TestArchivarSnapshotDeCiclo_DocenteSinCuenta_SeGuardaConElNombreCongelado(t
 	}
 }
 
-// El archivado se puede reintentar (la cascada cruza tres paquetes sin una
-// transacción común).
+// Un snapshot sellado se conserva en los reintentos.
 func TestArchivarSnapshotDeCiclo_Reintentado_NoDuplicaDocentesSinCuenta(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.usoDocentes = []domain.ResumenUsoDocente{
@@ -356,7 +348,123 @@ func TestArchivarSnapshotDeCiclo_Reintentado_NoDuplicaDocentesSinCuenta(t *testi
 	if len(repo.historicoDocente) != 1 {
 		t.Fatalf("tres intentos tienen que dejar 1 fila, hay %d", len(repo.historicoDocente))
 	}
-	if len(repo.borradosSinCuenta) != 3 {
-		t.Errorf("esperaba una limpieza por intento, hubo %d", len(repo.borradosSinCuenta))
+	if len(repo.historicosReemplazados) != 1 {
+		t.Errorf("un snapshot sellado no se vuelve a limpiar, hubo %d", len(repo.historicosReemplazados))
 	}
+}
+
+func TestArchivarSnapshotDeCiclo_FalloDocenteRevierteEquiposYPermiteReintento(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usoEquipos = []domain.ResumenUsoEquipo{{EquipoID: "pc1", CantidadReservas: 1, MinutosReservados: 60}}
+	repo.usoDocentes = []domain.ResumenUsoDocente{{UsuarioID: ptr("doc1"), DocenteIDHistorico: "doc1", CantidadReservas: 1, MinutosReservados: 60}}
+	repo.errGuardarDoc = errors.New("falló el docente después del equipo")
+	svc := nuevoServicioDeTest(repo)
+	if err := svc.ArchivarSnapshotDeCiclo(context.Background(), "c1", 2026); err == nil {
+		t.Fatal("esperaba fallo")
+	}
+	if len(repo.historicoEquipo) != 0 || len(repo.historicoDocente) != 0 || repo.sellos["c1"] {
+		t.Fatal("quedó un histórico parcial o sellado")
+	}
+	repo.errGuardarDoc = nil
+	if err := svc.ArchivarSnapshotDeCiclo(context.Background(), "c1", 2026); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.historicoEquipo) != 1 || len(repo.historicoDocente) != 1 || !repo.sellos["c1"] {
+		t.Fatal("el reintento no completó el snapshot")
+	}
+	// Aunque se haya perdido la fuente, el segundo intento mantiene IDs y uso.
+	repo.usoEquipos = nil
+	repo.usoDocentes = nil
+	if err := svc.ArchivarSnapshotDeCiclo(context.Background(), "c1", 2026); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.historicoEquipo) != 1 || len(repo.historicoDocente) != 1 {
+		t.Fatal("se borró el snapshot sellado")
+	}
+}
+
+func TestArchivarSnapshotDeCiclo_TotalesInconsistentesNoSellan(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usoEquipos = []domain.ResumenUsoEquipo{{EquipoID: "pc1", CantidadReservas: 1, MinutosReservados: 60}}
+	repo.totalesUso = &domain.TotalesUso{ReservasEquipos: 2, MinutosEquipos: 120}
+	if err := nuevoServicioDeTest(repo).ArchivarSnapshotDeCiclo(context.Background(), "c1", 2026); !errors.Is(err, ErrSnapshotInconsistente) {
+		t.Fatalf("esperaba inconsistencia: %v", err)
+	}
+	if len(repo.historicoEquipo) != 0 || repo.sellos["c1"] {
+		t.Fatal("se persistió un snapshot incompleto")
+	}
+}
+
+type repoQuePierdeEquipo struct{ *fakeRepo }
+
+func (r repoQuePierdeEquipo) GuardarHistoricoUsoEquipo(context.Context, *domain.HistoricoUsoEquipo) error {
+	return nil
+}
+
+func TestArchivarSnapshotDeCiclo_ConflictoSilenciosoNoSella(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.usoEquipos = []domain.ResumenUsoEquipo{{EquipoID: "pc1", CantidadReservas: 1, MinutosReservados: 60}}
+	svc := NewService(repoQuePierdeEquipo{repo}, &fakeInfoEquipo{etiqueta: "PC 1"}, &fakeInfoUsuario{}, func() string { return "hist1" })
+	if err := svc.ArchivarSnapshotDeCiclo(context.Background(), "c1", 2026); !errors.Is(err, ErrSnapshotInconsistente) {
+		t.Fatalf("esperaba discrepancia de persistencia: %v", err)
+	}
+	if repo.sellos["c1"] {
+		t.Fatal("se selló un snapshot que perdió una fila")
+	}
+}
+
+func (r *fakeRepo) EnSnapshot(ctx context.Context, id string, fn func(context.Context) error) error {
+	equipos := map[string]*domain.HistoricoUsoEquipo{}
+	for id, h := range r.historicoEquipo {
+		equipos[id] = h
+	}
+	docentes := map[string]*domain.HistoricoUsoDocente{}
+	for id, h := range r.historicoDocente {
+		docentes[id] = h
+	}
+	if err := fn(ctx); err != nil {
+		r.historicoEquipo = equipos
+		r.historicoDocente = docentes
+		return err
+	}
+	return nil
+}
+func (r *fakeRepo) SnapshotSellado(ctx context.Context, id string) (bool, error) {
+	return r.sellos[id], nil
+}
+func (r *fakeRepo) BorrarHistoricosNoSellados(ctx context.Context, anio int) error {
+	r.historicosReemplazados = append(r.historicosReemplazados, anio)
+	for id, h := range r.historicoEquipo {
+		if h.Anio == anio {
+			delete(r.historicoEquipo, id)
+		}
+	}
+	for id, h := range r.historicoDocente {
+		if h.Anio == anio {
+			delete(r.historicoDocente, id)
+		}
+	}
+	return nil
+}
+func (r *fakeRepo) SellarSnapshot(ctx context.Context, id string, anio int) error {
+	if r.sellos == nil {
+		r.sellos = map[string]bool{}
+	}
+	r.sellos[id] = true
+	return nil
+}
+func (r *fakeRepo) TotalesUsoDeCiclo(ctx context.Context, id string) (domain.TotalesUso, error) {
+	if r.totalesUso != nil {
+		return *r.totalesUso, nil
+	}
+	var t domain.TotalesUso
+	for _, u := range r.usoEquipos {
+		t.ReservasEquipos += u.CantidadReservas
+		t.MinutosEquipos += u.MinutosReservados
+	}
+	for _, u := range r.usoDocentes {
+		t.ReservasDocentes += u.CantidadReservas
+		t.MinutosDocentes += u.MinutosReservados
+	}
+	return t, nil
 }

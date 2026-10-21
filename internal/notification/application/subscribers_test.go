@@ -563,7 +563,7 @@ func TestRegisterEventHandlers_PedidoDeMateria_NoAvisaAlTitular(t *testing.T) {
 	bus.Publish(eventbus.Evento{Tipo: "materia.pedido.nuevo", Payload: eventbus.PedidoDeMateriaNuevo{
 		PedidoID: "p1", UsuarioID: "docente1", Nombre: "Ada", MateriaNombre: "Física",
 		DocentesActuales: []eventbus.DocenteDeMateria{
-			{UsuarioID: "docente-titular", Email: "titular@escuela.edu.ar"},
+			{UsuarioID: "docente-titular", Email: "titular@escuela.test"},
 		},
 	}})
 	esperarNotificaciones(t, repo, 1)
@@ -659,7 +659,7 @@ func TestRegisterEventHandlers_ElCierrePorTipoNoTocaLosOtrosAvisos(t *testing.T)
 		PorVencer: []eventbus.LicenciaPorVencer{{Nombre: "AutoCAD", Etiqueta: "PC 3", DiasRestantes: 1}},
 	}})
 	bus.Publish(eventbus.Evento{Tipo: "docente.registro.pendiente", Payload: map[string]string{
-		"usuarioId": "docente1", "nombre": "Ada", "apellido": "Lovelace", "email": "ada@escuela.edu.ar",
+		"usuarioId": "docente1", "nombre": "Ada", "apellido": "Lovelace", "email": "ada@escuela.test",
 	}})
 	esperarNotificaciones(t, repo, 2)
 
@@ -669,6 +669,20 @@ func TestRegisterEventHandlers_ElCierrePorTipoNoTocaLosOtrosAvisos(t *testing.T)
 	for _, n := range repo.notificaciones {
 		if n.Tipo == domain.TipoDocentePendiente && n.Estado != domain.NoLeida {
 			t.Error("la cuenta sigue esperando aprobación: ese aviso no se toca")
+		}
+	}
+}
+
+func TestReposicion_NotificaCambiosSinDecirQueSeCancelo(t *testing.T) {
+	repo := nuevoFakeRepo()
+	svc := nuevoServicioDeTest(repo, &fakeListadorAdmins{})
+	bus := eventbus.NewInMemoryEventBus()
+	RegisterEventHandlersSincronos(bus, svc)
+	bus.Publish(eventbus.Evento{Tipo: "reserva.reubicada", Payload: eventbus.ReubicacionesDeUsuario{UsuarioID: "tic", Motivo: "Prioridad de Dibujo", Reservas: []eventbus.ReservaReubicada{{ReservaID: "r1", EtiquetaAnterior: "PC nueva", EtiquetaNueva: "PC antigua", Fecha: time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)}}}})
+	esperarNotificaciones(t, repo, 1)
+	for _, n := range repo.notificaciones {
+		if n.Tipo != domain.TipoReservaReubicada || n.UsuarioID != "tic" || n.ReservaID == nil || *n.ReservaID != "r1" || !strings.Contains(n.Mensaje, "PC nueva por PC antigua") || strings.Contains(n.Mensaje, "cancelada") {
+			t.Fatalf("aviso incorrecto: %+v", n)
 		}
 	}
 }

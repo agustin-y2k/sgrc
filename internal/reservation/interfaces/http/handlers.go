@@ -90,7 +90,7 @@ func (h *Handler) CrearReserva(c *fiber.Ctx) error {
 	// el recurso que la representa entera.
 	return respuesta.Creado(c, "/api/grupos", grupo.ID, crearReservaResponse{
 		Grupo: toReservaGrupoResponse(grupo), Reservas: reservasResp,
-		ReservasCanceladas: impacto.ReservasCanceladas, DocentesAfectados: impacto.DocentesAfectados,
+		ReservasCanceladas: impacto.ReservasCanceladas, ReservasReubicadas: impacto.ReservasReubicadas, DocentesAfectados: impacto.DocentesAfectados,
 	})
 }
 
@@ -139,8 +139,45 @@ func (h *Handler) CrearReservaRecurrente(c *fiber.Ctx) error {
 	}
 	return c.Status(fiber.StatusCreated).JSON(crearReservaRecurrenteResponse{
 		ReglaID: res.Regla.ID, Grupos: grupos,
-		ReservasCanceladas: res.Impacto.ReservasCanceladas, DocentesAfectados: res.Impacto.DocentesAfectados,
+		ReservasCanceladas: res.Impacto.ReservasCanceladas, ReservasReubicadas: res.Impacto.ReservasReubicadas, DocentesAfectados: res.Impacto.DocentesAfectados,
 	})
+}
+
+// POST /api/reservas/recurrentes/previsualizar: consulta sin efectos persistentes.
+func (h *Handler) PrevisualizarReservaRecurrente(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+	var req crearReservaRecurrenteRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+	dia, err := domain.ParseDiaSemana(req.DiaSemana)
+	if err != nil {
+		return mapearError(err)
+	}
+	inicio, err := parseHora(req.HoraInicio)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	fin, err := parseHora(req.HoraFin)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	desde, err := parseFecha(req.FechaInicio)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	hasta, err := parseFecha(req.FechaFin)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	res, err := h.svc.PrevisualizarReservaRecurrente(c.UserContext(), req.MateriaID, claims.UserID, claims.Rol == "ADMIN", dia, inicio, fin, desde, hasta, req.EquipoIDs)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(res)
 }
 
 // POST /api/reservas/{id}/cancelar — RF-04.4. Un Admin puede
@@ -189,6 +226,10 @@ func (h *Handler) CancelarOcurrenciaRecurrente(c *fiber.Ctx) error {
 		claims.UserID, claims.Rol == "ADMIN", req.Motivo, req.SoloEsta)
 	if err != nil {
 		return mapearError(err)
+	}
+	if claims.Rol == "ADMIN" {
+		h.auditar(c, claims.UserID, audit.ReservaCanceladaPorAdmin, "reserva_grupo", &id,
+			map[string]any{"motivo": req.Motivo, "soloEsta": req.SoloEsta, "reservasCanceladas": n})
 	}
 	return c.JSON(cancelarOcurrenciaResponse{ReservasCanceladas: n})
 }
@@ -261,6 +302,27 @@ func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 	filtro := application.FiltroReservas{
 		IncluirCanceladas: c.Query("incluirCanceladas") == "true",
 	}
+	if v := c.Query("estado"); v != "" {
+		estado, err := domain.ParseEstadoReserva(v)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "estado de reserva inválido")
+		}
+		filtro.Estado = &estado
+		if estado == domain.ReservaCancelada {
+			filtro.IncluirCanceladas = true
+		}
+	}
+	filtro.Busqueda = strings.TrimSpace(c.Query("busqueda"))
+	if len([]rune(filtro.Busqueda)) > 100 {
+		return fiber.NewError(fiber.StatusBadRequest, "la búsqueda admite hasta 100 caracteres")
+	}
+	switch c.Query("porClases") {
+	case "true":
+		filtro.PorClases = true
+	case "", "false":
+	default:
+		return fiber.NewError(fiber.StatusBadRequest, "porClases debe ser true o false")
+	}
 
 	if claims.Rol == "ADMIN" {
 		if v := c.Query("creadoPor"); v != "" {
@@ -291,6 +353,9 @@ func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 		}
 		filtro.Hasta = &hasta
 	}
+	if filtro.Desde != nil && filtro.Hasta != nil && filtro.Desde.After(*filtro.Hasta) {
+		return fiber.NewError(fiber.StatusBadRequest, "hasta debe ser igual o posterior a desde")
+	}
 
 	pagina, err := paginacion.Parsear(c.Query("page"), c.Query("pageSize"))
 	if err != nil {
@@ -298,7 +363,7 @@ func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 	}
 	filtro.Pagina = pagina
 
-	reservas, total, err := h.svc.ListarReservas(c.UserContext(), filtro)
+	reservas, total, err := h.svc.ListarReservas(c.UserContext(), filtro, claims.UserID, claims.Rol == "ADMIN")
 	if err != nil {
 		return mapearError(err)
 	}

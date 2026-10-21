@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,7 +26,7 @@ func NewPreferenciasEmailPostgres(pool *pgxpool.Pool) *PreferenciasEmailPostgres
 }
 
 func (p *PreferenciasEmailPostgres) ElegidasDe(ctx context.Context, usuarioID string) (map[domain.CategoriaEmail]bool, error) {
-	rows, err := p.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, p.pool).Query(ctx,
 		`SELECT categoria, activa FROM preferencia_email WHERE usuario_id = $1`, usuarioID)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -59,7 +60,7 @@ func (p *PreferenciasEmailPostgres) ElegidasDe(ctx context.Context, usuarioID st
 // destildar una categoría que arranca encendida tiene que poder distinguirse
 // de no haber elegido nunca.
 func (p *PreferenciasEmailPostgres) Reemplazar(ctx context.Context, usuarioID string, decisiones map[domain.CategoriaEmail]bool) error {
-	tx, err := p.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, p.pool)
 	if err != nil {
 		return fmt.Errorf("iniciando transacción: %w", err)
 	}
@@ -101,7 +102,7 @@ func (p *PreferenciasEmailPostgres) Reemplazar(ctx context.Context, usuarioID st
 // en el sistema— no hay nada elegido y vale el valor por defecto.
 func (p *PreferenciasEmailPostgres) RecibePorEmail(ctx context.Context, email string, categoria domain.CategoriaEmail) (bool, error) {
 	var activa bool
-	err := p.pool.QueryRow(ctx, `
+	err := pgtransaccion.Con(ctx, p.pool).QueryRow(ctx, `
 		SELECT COALESCE(pref.activa, $3)
 		FROM usuario u
 		LEFT JOIN preferencia_email pref

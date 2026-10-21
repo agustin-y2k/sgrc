@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agustin-y2k/sgrc/internal/academic/application"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 var _ application.ValidadorUsuario = (*ValidadorUsuarioPostgres)(nil)
@@ -27,7 +28,7 @@ func NewValidadorUsuarioPostgres(pool *pgxpool.Pool) *ValidadorUsuarioPostgres {
 
 func (v *ValidadorUsuarioPostgres) ExisteYAprobado(ctx context.Context, usuarioID string) (bool, error) {
 	var estado string
-	err := v.pool.QueryRow(ctx, `SELECT estado FROM usuario WHERE id = $1`, usuarioID).Scan(&estado)
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx, `SELECT estado FROM usuario WHERE id = $1`, usuarioID).Scan(&estado)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil // no existe → no es válido, pero no es un error
@@ -58,7 +59,7 @@ func (v *ValidadorUsuarioPostgres) AlgunoAprobado(ctx context.Context, usuarioID
 	}
 
 	var alguno bool
-	err := v.pool.QueryRow(ctx,
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM usuario WHERE id = ANY($1) AND estado = 'APROBADA')`,
 		usuarioIDs).Scan(&alguno)
 	if err != nil {

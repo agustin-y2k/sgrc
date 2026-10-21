@@ -67,12 +67,12 @@ func NewVerificadorGoogle(clientID string, dominiosPermitidos []string, ahora fu
 }
 
 // DominiosPermitidos parsea la lista separada por comas de
-// GOOGLE_DOMINIOS_PERMITIDOS ("tuinstitucion.edu.ar, otra.edu.ar").
+// GOOGLE_DOMINIOS_PERMITIDOS ("example.org, otra.edu.ar").
 func DominiosPermitidos(crudo string) []string {
 	var dominios []string
 	for _, d := range strings.Split(crudo, ",") {
 		d = strings.ToLower(strings.TrimSpace(d))
-		d = strings.TrimPrefix(d, "@") // tolera que lo escriban "@escuela.edu.ar"
+		d = strings.TrimPrefix(d, "@") // tolera que lo escriban "@escuela.test"
 		if d != "" {
 			dominios = append(dominios, d)
 		}

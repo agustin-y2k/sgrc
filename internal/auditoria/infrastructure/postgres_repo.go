@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,10 +23,15 @@ var _ application.Repo = (*PostgresRepo)(nil)
 
 type PostgresRepo struct {
 	pool *pgxpool.Pool
+	zona *time.Location
 }
 
-func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
-	return &PostgresRepo{pool: pool}
+func NewPostgresRepo(pool *pgxpool.Pool, zona ...*time.Location) *PostgresRepo {
+	loc := time.UTC
+	if len(zona) > 0 && zona[0] != nil {
+		loc = zona[0]
+	}
+	return &PostgresRepo{pool: pool, zona: loc}
 }
 
 func esIDInvalido(err error) bool {
@@ -42,7 +48,9 @@ func esIDInvalido(err error) bool {
 // concatenar SQL según qué campos vinieron.
 const condiciones = `
 	WHERE ($1::text IS NULL OR a.accion = $1)
-	  AND ($2::text IS NULL OR a.entidad = $2)
+	  AND ($2::text IS NULL OR a.entidad = $2
+	       OR ($2 = 'equipo' AND a.entidad = 'pc')
+	       OR ($2 = 'licencia_software' AND a.entidad = 'licencia'))
 	  AND ($3::uuid IS NULL OR a.entidad_id = $3)
 	  AND ($4::uuid IS NULL OR a.usuario_id = $4)
 	  AND ($5::timestamptz IS NULL OR a.creado_en >= $5)
@@ -56,9 +64,23 @@ const condiciones = `
 // de la vista todo lo que esa cuenta hizo — que es exactamente lo que el
 // registro existe para impedir.
 func (r *PostgresRepo) Listar(ctx context.Context, f domain.Filtro, p paginacion.Pagina) ([]domain.Entrada, int, error) {
+	// El filtro expresa días inclusivos. La conversión a instantes pertenece al
+	// repositorio para que HTTP y los demás callers compartan el mismo contrato.
+	dia := func(t *time.Time) *time.Time {
+		if t == nil {
+			return nil
+		}
+		fecha := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, r.zona)
+		return &fecha
+	}
+	desde, hasta := dia(f.Desde), dia(f.Hasta)
+	if hasta != nil {
+		fin := hasta.AddDate(0, 0, 1)
+		hasta = &fin
+	}
 	args := []any{
-		nullSiVacio(f.Accion), nullSiVacio(f.Entidad), nullSiVacio(f.EntidadID),
-		nullSiVacio(f.UsuarioID), f.Desde, f.Hasta,
+		nullSiVacio(f.Accion), nullSiVacio(tipoDeReferencia(f.Entidad)), nullSiVacio(f.EntidadID),
+		nullSiVacio(f.UsuarioID), desde, hasta,
 	}
 
 	var total int
@@ -103,6 +125,10 @@ func (r *PostgresRepo) Listar(ctx context.Context, f domain.Filtro, p paginacion
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("iterando entradas de auditoría: %w", err)
 	}
+	rows.Close()
+	if err := r.resolverNombres(ctx, resultado); err != nil {
+		return nil, 0, err
+	}
 	return resultado, total, nil
 }
 
@@ -111,7 +137,9 @@ func (r *PostgresRepo) AccionesEnUso(ctx context.Context) ([]string, error) {
 }
 
 func (r *PostgresRepo) EntidadesEnUso(ctx context.Context) ([]string, error) {
-	return r.valoresDistintos(ctx, `SELECT DISTINCT entidad FROM audit_log ORDER BY entidad`)
+	return r.valoresDistintos(ctx, `SELECT DISTINCT CASE entidad
+		WHEN 'pc' THEN 'equipo' WHEN 'licencia' THEN 'licencia_software'
+		ELSE entidad END AS entidad FROM audit_log ORDER BY entidad`)
 }
 
 func (r *PostgresRepo) valoresDistintos(ctx context.Context, consulta string) ([]string, error) {

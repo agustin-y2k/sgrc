@@ -136,7 +136,7 @@ func TestListadorAdminsPostgres_EmailsDeAdminsSuscriptos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if len(emails) != 1 || emails[0] != suscripto+"@escuela.edu.ar" {
+	if len(emails) != 1 || emails[0] != suscripto+"@escuela.test" {
 		t.Fatalf("esperaba solo al Admin aprobado que la tildó, obtuve %v", emails)
 	}
 
@@ -146,7 +146,7 @@ func TestListadorAdminsPostgres_EmailsDeAdminsSuscriptos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if len(cuentas) != 1 || cuentas[0] != sinElegir+"@escuela.edu.ar" {
+	if len(cuentas) != 1 || cuentas[0] != sinElegir+"@escuela.test" {
 		t.Fatalf("esperaba solo al Admin que no abrió el panel, obtuve %v", cuentas)
 	}
 }
@@ -187,13 +187,13 @@ func TestPreferenciasEmail_RecibePorEmail(t *testing.T) {
 		categoria domain.CategoriaEmail
 		esperado  bool
 	}{
-		{"eligió recibir algo que arranca apagado", eligio + "@escuela.edu.ar", domain.CatRecordatorioDeReserva, true},
-		{"eligió NO recibir algo que arranca encendido", apago + "@escuela.edu.ar", domain.CatCuentaPendiente, false},
-		{"no eligió, default apagado", sinElegir + "@escuela.edu.ar", domain.CatRecordatorioDeReserva, false},
-		{"no eligió, default encendido", sinElegir + "@escuela.edu.ar", domain.CatCuentaPendiente, true},
-		{"no eligió esa en particular", eligio + "@escuela.edu.ar", domain.CatReservaCancelada, false},
-		{"sin cuenta, vale el default encendido", "de-afuera@otra-escuela.edu.ar", domain.CatCuentaPendiente, true},
-		{"sin cuenta, vale el default apagado", "de-afuera@otra-escuela.edu.ar", domain.CatRecordatorioDeReserva, false},
+		{"eligió recibir algo que arranca apagado", eligio + "@escuela.test", domain.CatRecordatorioDeReserva, true},
+		{"eligió NO recibir algo que arranca encendido", apago + "@escuela.test", domain.CatCuentaPendiente, false},
+		{"no eligió, default apagado", sinElegir + "@escuela.test", domain.CatRecordatorioDeReserva, false},
+		{"no eligió, default encendido", sinElegir + "@escuela.test", domain.CatCuentaPendiente, true},
+		{"no eligió esa en particular", eligio + "@escuela.test", domain.CatReservaCancelada, false},
+		{"sin cuenta, vale el default encendido", "de-afuera@otra-escuela.test", domain.CatCuentaPendiente, true},
+		{"sin cuenta, vale el default apagado", "de-afuera@otra-escuela.test", domain.CatRecordatorioDeReserva, false},
 	}
 
 	for _, caso := range casos {

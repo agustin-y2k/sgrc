@@ -26,7 +26,7 @@ func (r *PostgresRepo) GuardarFoto(ctx context.Context, f *domain.FotoDePerfil) 
 	// UPSERT: cambiar la foto es lo normal, y con INSERT pelado había que borrar
 	// antes — dos viajes y una ventana en la que la persona se queda sin foto si
 	// el segundo falla.
-	_, err := r.db.Exec(ctx, `
+	_, err := r.conexion(ctx).Exec(ctx, `
 		INSERT INTO foto_de_perfil (usuario_id, contenido, tipo, actualizada_en)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (usuario_id) DO UPDATE
@@ -46,7 +46,7 @@ func (r *PostgresRepo) GuardarFoto(ctx context.Context, f *domain.FotoDePerfil) 
 func (r *PostgresRepo) BuscarFoto(ctx context.Context, usuarioID string) (*domain.FotoDePerfil, error) {
 	var f domain.FotoDePerfil
 	f.UsuarioID = usuarioID
-	err := r.db.QueryRow(ctx,
+	err := r.conexion(ctx).QueryRow(ctx,
 		`SELECT contenido, tipo, actualizada_en FROM foto_de_perfil WHERE usuario_id = $1`,
 		usuarioID).Scan(&f.Contenido, &f.Tipo, &f.ActualizadaEn)
 	if err != nil {
@@ -64,7 +64,7 @@ func (r *PostgresRepo) BuscarFoto(ctx context.Context, usuarioID string) (*domai
 func (r *PostgresRepo) EliminarFoto(ctx context.Context, usuarioID string) error {
 	// Sin fila no es error: quedarse sin foto es el resultado esperado tanto
 	// si había una como si no.
-	if _, err := r.db.Exec(ctx, `DELETE FROM foto_de_perfil WHERE usuario_id = $1`, usuarioID); err != nil {
+	if _, err := r.conexion(ctx).Exec(ctx, `DELETE FROM foto_de_perfil WHERE usuario_id = $1`, usuarioID); err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
@@ -79,7 +79,7 @@ func (r *PostgresRepo) UsuariosConFoto(ctx context.Context, usuarioIDs []string)
 	}
 	// Solo los ids: traerse `contenido` acá sería bajar todas las imágenes
 	// de una lista para decidir qué avatares dibujar.
-	rows, err := r.db.Query(ctx,
+	rows, err := r.conexion(ctx).Query(ctx,
 		`SELECT usuario_id FROM foto_de_perfil WHERE usuario_id = ANY($1)`, usuarioIDs)
 	if err != nil {
 		if esIDInvalido(err) {

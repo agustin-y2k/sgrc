@@ -132,7 +132,7 @@ func soloLoQueDeclaraEseCargo(solicitud SolicitudDeAsignacion) SolicitudDeAsigna
 // solicitud viaja con el registro para que el Admin, al aprobar, sepa a qué
 // materia y curso asignarlo sin tener que preguntárselo por fuera del sistema
 // (y para que sepa si tiene que crearlos antes).
-func (s *Service) Registrar(ctx context.Context, nombre, apellido, email, password string, solicitud SolicitudDeAsignacion) (*domain.Usuario, error) {
+func (s *Service) operacionRegistrar(ctx context.Context, nombre, apellido, email, password string, solicitud SolicitudDeAsignacion) (*domain.Usuario, error) {
 	if err := exigirCargoYRol(solicitud); err != nil {
 		return nil, err
 	}
@@ -143,14 +143,14 @@ func (s *Service) Registrar(ctx context.Context, nombre, apellido, email, passwo
 		return nil, err
 	}
 
-	s.avisarQueHayUnDocentePendiente(u)
+	s.avisarQueHayUnDocentePendiente(ctx, u)
 	return u, nil
 }
 
 // avisarQueHayUnDocentePendiente publica RF-05.6 — el aviso a todos los Admin
 // de que alguien se registró y está esperando aprobación.
-func (s *Service) avisarQueHayUnDocentePendiente(u *domain.Usuario) {
-	s.bus.Publish(eventbus.Evento{
+func (s *Service) avisarQueHayUnDocentePendiente(ctx context.Context, u *domain.Usuario) {
+	eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 		Tipo: "docente.registro.pendiente",
 		Payload: map[string]string{
 			"usuarioId": u.ID,
@@ -164,7 +164,7 @@ func (s *Service) avisarQueHayUnDocentePendiente(u *domain.Usuario) {
 // CrearAdmin implementa RF-01.4: un Admin crea otro Admin directamente, sin
 // pasar por PENDIENTE — queda APROBADA de inmediato, con AprobadoPor
 // apuntando a quien lo creó.
-func (s *Service) CrearAdmin(ctx context.Context, creadoPorID, nombre, apellido, email, password string) (*domain.Usuario, error) {
+func (s *Service) operacionCrearAdmin(ctx context.Context, creadoPorID, nombre, apellido, email, password string) (*domain.Usuario, error) {
 	// Un Admin no declara curso, materia ni rol: no se autorregistra para
 	// dictar, lo crea otro Admin ya aprobado.
 	return s.crearUsuario(ctx, nombre, apellido, email, password, domain.RolAdmin, domain.EstadoAprobada, &creadoPorID, SolicitudDeAsignacion{})
@@ -306,7 +306,7 @@ func (s *Service) Login(ctx context.Context, email, password string, recordarme 
 
 // LoginConGoogle implementa el ingreso con una cuenta de Google ya existente
 // en el sistema.
-func (s *Service) LoginConGoogle(ctx context.Context, idToken string, recordarme bool) (*LoginResultado, error) {
+func (s *Service) operacionLoginConGoogle(ctx context.Context, idToken string, recordarme bool) (*LoginResultado, error) {
 	identidad, err := s.identidadDeGoogle(ctx, idToken)
 	if err != nil {
 		return nil, err
@@ -356,8 +356,8 @@ func (s *Service) cuentaParaIdentidadGoogle(ctx context.Context, identidad *Iden
 		return nil, ErrIngresoCuentaEnBaja
 	}
 
-	u.GoogleSub = identidad.Sub
-	if err := s.repo.Guardar(ctx, u); err != nil {
+	u, err = s.repo.VincularGoogle(ctx, u, identidad.Sub)
+	if err != nil {
 		return nil, fmt.Errorf("vinculando la cuenta de Google: %w", err)
 	}
 	return u, nil
@@ -365,7 +365,7 @@ func (s *Service) cuentaParaIdentidadGoogle(ctx context.Context, identidad *Iden
 
 // RegistrarConGoogle crea una cuenta de docente a partir de un ID token de
 // Google.
-func (s *Service) RegistrarConGoogle(ctx context.Context, idToken, nombre, apellido string, solicitud SolicitudDeAsignacion) (*domain.Usuario, error) {
+func (s *Service) operacionRegistrarConGoogle(ctx context.Context, idToken, nombre, apellido string, solicitud SolicitudDeAsignacion) (*domain.Usuario, error) {
 	// El orden importa: primero el token. Si este despliegue no tiene el
 	// ingreso con Google configurado, la respuesta tiene que ser "el sistema no
 	// hace esto" (503) y no "te faltó elegir un cargo" (400), que mandaría a
@@ -449,7 +449,7 @@ func (s *Service) RegistrarConGoogle(ctx context.Context, idToken, nombre, apell
 		return nil, fmt.Errorf("creando usuario: %w", err)
 	}
 
-	s.avisarQueHayUnDocentePendiente(u)
+	s.avisarQueHayUnDocentePendiente(ctx, u)
 	return u, nil
 }
 
@@ -521,11 +521,14 @@ func (s *Service) consumirTiempoDeVerificacion(password string) {
 }
 
 // Aprobar implementa la mitad "aprobar" de RF-02 (aprobación de cuentas).
-func (s *Service) Aprobar(ctx context.Context, usuarioID string) error {
-	if err := s.transicionar(ctx, usuarioID, domain.EstadoAprobada); err != nil {
+func (s *Service) operacionAprobar(ctx context.Context, usuarioID, actorID string) error {
+	if strings.TrimSpace(actorID) == "" {
+		return ErrIDInvalido
+	}
+	if err := s.transicionar(ctx, usuarioID, domain.EstadoAprobada, actorID); err != nil {
 		return err
 	}
-	s.avisarQueYaNoEstaPendiente(usuarioID)
+	s.avisarQueYaNoEstaPendiente(ctx, usuarioID)
 	s.avisarALaPersonaQueLaAprobaron(ctx, usuarioID)
 	return nil
 }
@@ -538,7 +541,7 @@ func (s *Service) avisarALaPersonaQueLaAprobaron(ctx context.Context, usuarioID 
 		log.Printf("auth: cuenta %s aprobada, pero no se pudo leer para avisarle por mail: %v", usuarioID, err)
 		return
 	}
-	s.bus.Publish(eventbus.Evento{
+	eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 		Tipo: "cuenta.aprobada",
 		Payload: eventbus.CuentaAprobada{
 			UsuarioID: u.ID,
@@ -549,109 +552,26 @@ func (s *Service) avisarALaPersonaQueLaAprobaron(ctx context.Context, usuarioID 
 }
 
 // Rechazar implementa la mitad "rechazar" de RF-02.
-func (s *Service) Rechazar(ctx context.Context, usuarioID string) error {
+func (s *Service) operacionRechazar(ctx context.Context, usuarioID string) error {
 	if err := s.transicionar(ctx, usuarioID, domain.EstadoRechazada); err != nil {
 		return err
 	}
-	s.avisarQueYaNoEstaPendiente(usuarioID)
+	s.avisarQueYaNoEstaPendiente(ctx, usuarioID)
 	return nil
 }
 
 // avisarQueYaNoEstaPendiente publica que una cuenta dejó de estar a la
 // espera, para que notification pueda cerrar el aviso que pedía resolverla.
-func (s *Service) avisarQueYaNoEstaPendiente(usuarioID string) {
-	s.bus.Publish(eventbus.Evento{
+func (s *Service) avisarQueYaNoEstaPendiente(ctx context.Context, usuarioID string) {
+	eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 		Tipo:    "cuenta.pendiente.resuelta",
 		Payload: map[string]string{"usuarioId": usuarioID},
 	})
 }
 
-// DarDeBaja implementa el cambio de estado de RF-02.8/02.9, más la cascada
-// completa: si el usuario es docente, identifica sus materias ANTES de
-// aplicar la transición (mientras las filas docente_materia todavía existen),
-// y para cada una donde no quede ningún otro docente APROBADA asignado,
-// cancela sus reservas futuras vía
-// canceladorReservas.CancelarReservasFuturasDeMateria y publica un evento
-// para que internal/notification (cuando exista) avise a los Admin.
-func (s *Service) DarDeBaja(ctx context.Context, usuarioID string) error {
-	u, err := s.repo.BuscarPorID(ctx, usuarioID)
-	if err != nil {
-		return err
-	}
-
-	var materiasHuerfanas []string
-
-	if u.EsDocente() {
-		materias, err := s.gestorMaterias.MateriasDeDocente(ctx, usuarioID)
-		if err != nil {
-			return fmt.Errorf("listando materias del docente: %w", err)
-		}
-		for _, materiaID := range materias {
-			quedaOtro, err := s.gestorMaterias.QuedaOtroDocenteActivo(ctx, materiaID, usuarioID)
-			if err != nil {
-				return fmt.Errorf("verificando otros docentes de la materia %s: %w", materiaID, err)
-			}
-			// Solo interesan las que quedan SIN docente: son las que van a
-			// cancelar reservas en cascada y las únicas que avisan algo. Las que
-			// conservan otro docente no generan ninguna notificación (ver abajo).
-			if !quedaOtro {
-				materiasHuerfanas = append(materiasHuerfanas, materiaID)
-			}
-		}
-	}
-
-	if err := s.transicionar(ctx, usuarioID, domain.EstadoBaja); err != nil {
-		return err
-	}
-
-	if !u.EsDocente() {
-		return nil
-	}
-
-	// Las cancelaciones van ANTES de borrar los vínculos, y una materia que
-	// falla no aborta las demás.
-	var fallidas []error
-	for _, materiaID := range materiasHuerfanas {
-		motivo := "El docente asignado a esta materia fue dado de baja"
-		canceladas, err := s.canceladorReservas.CancelarReservasFuturasDeMateria(ctx, materiaID, motivo)
-		if err != nil {
-			fallidas = append(fallidas, fmt.Errorf("materia %s: %w", materiaID, err))
-			continue
-		}
-		// RF-02.8: aviso a Admin de que se canceló algo en cascada.
-		s.bus.Publish(eventbus.Evento{
-			Tipo: "docente.baja.materia-huerfana",
-			Payload: map[string]any{
-				"usuarioId":          usuarioID,
-				"materiaId":          materiaID,
-				"reservasCanceladas": canceladas,
-			},
-		})
-	}
-
-	if len(fallidas) > 0 {
-		return fmt.Errorf("la cuenta quedó en BAJA pero no se pudieron cancelar las reservas de %d materia(s) sin docente; "+
-			"sus asignaciones se conservaron para poder resolverlo: %w", len(fallidas), errors.Join(fallidas...))
-	}
-
-	if err := s.gestorMaterias.RemoverAsignacionesDeDocente(ctx, usuarioID); err != nil {
-		return fmt.Errorf("removiendo asignaciones del docente: %w", err)
-	}
-
-	// Las materias que conservan otro docente no avisan nada. Era RF-05.4, y se
-	// retiró en la 1.18.0: el aviso decía "se dio de baja a un docente de una
-	// materia que sigue teniendo otro docente asignado" sin nombrar a quién ni
-	// qué materia, no llevaba a ninguna pantalla y no pedía ninguna acción
-	// —justamente porque no se canceló nada—, y le llegaba a TODOS los Admin
-	// por algo que uno de ellos acababa de hacer y ya había visto confirmado en
-	// su propia pantalla.
-
-	return nil
-}
-
 // transicionar centraliza la protección del último Admin — cualquier
 // transición que saque a un Admin de APROBADA pasa por acá.
-func (s *Service) transicionar(ctx context.Context, usuarioID string, nuevo domain.Estado) error {
+func (s *Service) transicionar(ctx context.Context, usuarioID string, nuevo domain.Estado, actorID ...string) error {
 	return s.repo.EnTransaccion(ctx, func(repo Repo) error {
 		u, err := repo.BuscarPorID(ctx, usuarioID)
 		if err != nil {
@@ -664,11 +584,17 @@ func (s *Service) transicionar(ctx context.Context, usuarioID string, nuevo doma
 			}
 		}
 
-		if err := u.CambiarEstado(nuevo, s.ahora()); err != nil {
+		cambio := *u
+		ahora := s.ahora()
+		if err := cambio.CambiarEstado(nuevo, ahora); err != nil {
 			return err
 		}
 
-		return repo.Guardar(ctx, u)
+		if nuevo == domain.EstadoAprobada && len(actorID) > 0 {
+			u.AprobadoPor = &actorID[0]
+		}
+		_, err = repo.CambiarEstado(ctx, u, nuevo, ahora)
+		return err
 	})
 }
 
@@ -685,7 +611,7 @@ func (s *Service) verificarNoEsUltimoAdmin(ctx context.Context, repo Repo) error
 
 // ResetearPassword implementa RF-01.6: un Admin resetea la contraseña de
 // cualquier usuario a una temporal, y marca DebeCambiarPassword=true.
-func (s *Service) ResetearPassword(ctx context.Context, usuarioID string) (string, error) {
+func (s *Service) operacionResetearPassword(ctx context.Context, usuarioID string) (string, error) {
 	u, err := s.repo.BuscarPorID(ctx, usuarioID)
 	if err != nil {
 		return "", err
@@ -701,13 +627,9 @@ func (s *Service) ResetearPassword(ctx context.Context, usuarioID string) (strin
 		return "", fmt.Errorf("hasheando contraseña temporal: %w", err)
 	}
 
-	u.PasswordHash = hash
-	u.DebeCambiarPassword = true
-	// RF-01.11: el caso que motiva un reset asistido es alguien que perdió el
-	// control de su cuenta, así que dejar viva la sesión de quien entró con la
-	// contraseña vieja haría que el reset no sirva de nada.
-	u.InvalidarSesiones()
-	if err := s.repo.Guardar(ctx, u); err != nil {
+	// El repositorio incrementa la revocación en la misma escritura que
+	// cambia la contraseña y rechaza una lectura anterior a otro cambio.
+	if _, err := s.repo.ActualizarPassword(ctx, u, hash, true); err != nil {
 		return "", err
 	}
 
@@ -719,7 +641,7 @@ func (s *Service) ResetearPassword(ctx context.Context, usuarioID string) (strin
 // `recordarme` es el del token que trae quien llama: la sesión que sigue
 // después del cambio conserva la duración que tenía la anterior, en vez de
 // caerse a la corta por haber cambiado la contraseña.
-func (s *Service) CambiarPassword(ctx context.Context, usuarioID, passwordActual, passwordNueva string, recordarme bool) (string, error) {
+func (s *Service) operacionCambiarPassword(ctx context.Context, usuarioID, passwordActual, passwordNueva string, recordarme bool) (string, error) {
 	u, err := s.repo.BuscarPorID(ctx, usuarioID)
 	if err != nil {
 		return "", err
@@ -747,11 +669,8 @@ func (s *Service) CambiarPassword(ctx context.Context, usuarioID, passwordActual
 		return "", fmt.Errorf("hasheando password nueva: %w", err)
 	}
 
-	u.PasswordHash = hash
-	u.DebeCambiarPassword = false
-	// El orden importa: invalidar ANTES de firmar.
-	u.InvalidarSesiones()
-	if err := s.repo.Guardar(ctx, u); err != nil {
+	u, err = s.repo.ActualizarPassword(ctx, u, hash, false)
+	if err != nil {
 		return "", err
 	}
 
@@ -763,22 +682,24 @@ func (s *Service) CambiarPassword(ctx context.Context, usuarioID, passwordActual
 }
 
 // PromoverAAdmin le da rol ADMIN a un docente ya aprobado.
-func (s *Service) PromoverAAdmin(ctx context.Context, usuarioID string) error {
+func (s *Service) operacionPromoverAAdmin(ctx context.Context, usuarioID string) error {
 	u, err := s.repo.BuscarPorID(ctx, usuarioID)
 	if err != nil {
 		return err
 	}
 
-	if err := u.PromoverAAdmin(); err != nil {
+	cambio := *u
+	if err := cambio.PromoverAAdmin(); err != nil {
 		return err
 	}
 
-	return s.repo.Guardar(ctx, u)
+	_, err = s.repo.CambiarRol(ctx, u, domain.RolAdmin)
+	return err
 }
 
 // DegradarADocente es la inversa de PromoverAAdmin: le saca los permisos de
 // Admin a alguien que sigue siendo docente, sin cerrarle la cuenta.
-func (s *Service) DegradarADocente(ctx context.Context, usuarioID, solicitanteID string) error {
+func (s *Service) operacionDegradarADocente(ctx context.Context, usuarioID, solicitanteID string) error {
 	if usuarioID == solicitanteID {
 		return ErrAutoDegradacion
 	}
@@ -797,11 +718,13 @@ func (s *Service) DegradarADocente(ctx context.Context, usuarioID, solicitanteID
 			}
 		}
 
-		if err := u.DegradarADocente(); err != nil {
+		cambio := *u
+		if err := cambio.DegradarADocente(); err != nil {
 			return err
 		}
 
-		return repo.Guardar(ctx, u)
+		_, err = repo.CambiarRol(ctx, u, domain.RolDocente)
+		return err
 	})
 }
 
@@ -821,7 +744,7 @@ func (s *Service) DegradarADocente(ctx context.Context, usuarioID, solicitanteID
 // Que se vayan está bien: sin la cuenta, un aviso no tiene destinatario y un
 // horario de guardia no tiene a quién. Lo que no está bien es que se vayan sin
 // decirlo.
-func (s *Service) EliminarDefinitivamente(ctx context.Context, usuarioID string) (*ResultadoEliminacion, error) {
+func (s *Service) operacionEliminarDefinitivamente(ctx context.Context, usuarioID string) (*ResultadoEliminacion, error) {
 	u, err := s.repo.BuscarPorID(ctx, usuarioID)
 	if err != nil {
 		return nil, err
@@ -830,6 +753,13 @@ func (s *Service) EliminarDefinitivamente(ctx context.Context, usuarioID string)
 		return nil, ErrSoloDesdeBajaORechazada
 	}
 
+	proceso, err := s.repo.BuscarBaja(ctx, usuarioID)
+	if err != nil {
+		return nil, err
+	}
+	if proceso != nil && !proceso.Completada {
+		return nil, ErrBajaPendiente
+	}
 	res, err := s.repo.Eliminar(ctx, usuarioID)
 	if err != nil {
 		return nil, err
