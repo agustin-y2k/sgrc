@@ -45,11 +45,11 @@ func TestBuildDSN_CasoSimple(t *testing.T) {
 // solo puede cubrir los válidos sin matar el proceso de test.
 func TestOrigenDelFrontend_ValoresValidos(t *testing.T) {
 	casos := []struct{ env, esperado string }{
-		{"https://sgrc.tuinstitucion.edu.ar", "https://sgrc.tuinstitucion.edu.ar"},
+		{"https://sgrc.example.org", "https://sgrc.example.org"},
 		{"http://localhost:5173", "http://localhost:5173"},
 		// Los espacios alrededor son el error de tipeo más común al pegar el
 		// valor en el .env, y no cambian el origen: se recortan.
-		{"  https://sgrc.tuinstitucion.edu.ar  ", "https://sgrc.tuinstitucion.edu.ar"},
+		{"  https://sgrc.example.org  ", "https://sgrc.example.org"},
 	}
 
 	for _, c := range casos {

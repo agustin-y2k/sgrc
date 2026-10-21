@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { act, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { CambiarEquipoDeReserva } from "@/features/reservas/CambiarEquipoDeReserva"
@@ -49,7 +49,7 @@ function renderComponente(g: GrupoDeReservas = grupo([reserva()])) {
       <CambiarEquipoDeReserva grupo={g} onListo={onListo} />
     </QueryClientProvider>
   )
-  return { onListo }
+  return { onListo, queryClient }
 }
 
 describe("CambiarEquipoDeReserva", () => {
@@ -148,6 +148,72 @@ describe("CambiarEquipoDeReserva", () => {
     expect(
       await screen.findByText(/No hay ninguna computadora libre en ese horario/)
     ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Cambiar" })).toBeDisabled()
+  })
+
+  it("ofrece reintentar una consulta fallida sin afirmar que no hay computadoras", async () => {
+    vi.mocked(reservasApi.equiposDisponibles).mockRejectedValueOnce(
+      new Error("sin conexión")
+    )
+    const user = userEvent.setup()
+    renderComponente()
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No pudimos consultar las computadoras disponibles"
+    )
+    expect(screen.queryByText(/No hay ninguna computadora libre/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText("¿Por cuál?")).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Cambiar" })).toBeDisabled()
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    await screen.findByRole("option", { name: /PC 9/ })
+    await user.selectOptions(screen.getByLabelText("¿Por cuál?"), "pc9")
+    expect(screen.getByRole("button", { name: "Cambiar" })).toBeEnabled()
+  })
+
+  it("bloquea una selección almacenada si falla la actualización de disponibilidad", async () => {
+    const user = userEvent.setup()
+    const { queryClient } = renderComponente()
+    await screen.findByRole("option", { name: /PC 9/ })
+    await user.selectOptions(screen.getByLabelText("¿Por cuál?"), "pc9")
+    vi.mocked(reservasApi.equiposDisponibles).mockRejectedValueOnce(
+      new Error("sin conexión")
+    )
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["equipos-disponibles"] })
+    })
+    await screen.findByRole("alert")
+    expect(screen.getByRole("button", { name: "Cambiar" })).toBeDisabled()
+    expect(screen.queryByRole("option", { name: /PC 9/ })).not.toBeInTheDocument()
+    vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue({ data: [] })
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    await screen.findByText(/No hay ninguna computadora libre/)
+    expect(screen.getByRole("button", { name: "Cambiar" })).toBeDisabled()
+    expect(reservasApi.cambiarEquipoDeReserva).not.toHaveBeenCalled()
+  })
+
+  it("requiere volver a elegir al ampliar el cambio a la serie, incluso con disponibilidad en caché", async () => {
+    const user = userEvent.setup()
+    const { queryClient } = renderComponente({
+      ...grupo([reserva()]),
+      esRecurrente: true,
+    })
+    await screen.findByRole("option", { name: /PC 9/ })
+    queryClient.setQueryData(
+      ["equipos-disponibles", "2026-08-11", "08:00", "09:00", "grupo1", ""],
+      { data: [{ equipoId: "pc9", etiqueta: "PC 9" }] }
+    )
+    await user.selectOptions(screen.getByLabelText("¿Por cuál?"), "pc9")
+    expect(screen.getByRole("button", { name: "Cambiar" })).toBeEnabled()
+    await user.click(screen.getByLabelText("Esta fecha y todas las siguientes"))
+    expect(screen.getByRole("button", { name: "Cambiar" })).toBeDisabled()
+    expect(screen.getByLabelText("¿Por cuál?")).toHaveValue("")
+    expect(reservasApi.cambiarEquipoDeReserva).not.toHaveBeenCalled()
+  })
+
+  it("muestra carga sin anunciar ausencia de equipos", () => {
+    vi.mocked(reservasApi.equiposDisponibles).mockReturnValueOnce(new Promise(() => {}))
+    renderComponente()
+    expect(screen.getByRole("status")).toHaveTextContent("Consultando computadoras")
+    expect(screen.queryByText(/No hay ninguna computadora libre/)).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Cambiar" })).toBeDisabled()
   })
 })

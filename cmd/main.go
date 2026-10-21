@@ -25,41 +25,41 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	academicapp "github.com/ramiro/sgrc/internal/academic/application"
-	academicinfra "github.com/ramiro/sgrc/internal/academic/infrastructure"
-	academichttp "github.com/ramiro/sgrc/internal/academic/interfaces/http"
-	auditoriaapp "github.com/ramiro/sgrc/internal/auditoria/application"
-	auditoriainfra "github.com/ramiro/sgrc/internal/auditoria/infrastructure"
-	auditoriahttp "github.com/ramiro/sgrc/internal/auditoria/interfaces/http"
-	authapp "github.com/ramiro/sgrc/internal/auth/application"
-	authinfra "github.com/ramiro/sgrc/internal/auth/infrastructure"
-	authhttp "github.com/ramiro/sgrc/internal/auth/interfaces/http"
-	availabilityapp "github.com/ramiro/sgrc/internal/availability/application"
-	availabilityinfra "github.com/ramiro/sgrc/internal/availability/infrastructure"
-	availabilityhttp "github.com/ramiro/sgrc/internal/availability/interfaces/http"
-	inventoryapp "github.com/ramiro/sgrc/internal/inventory/application"
-	inventoryinfra "github.com/ramiro/sgrc/internal/inventory/infrastructure"
-	inventoryhttp "github.com/ramiro/sgrc/internal/inventory/interfaces/http"
-	notificationapp "github.com/ramiro/sgrc/internal/notification/application"
-	notificationinfra "github.com/ramiro/sgrc/internal/notification/infrastructure"
-	notificationhttp "github.com/ramiro/sgrc/internal/notification/interfaces/http"
-	reportingapp "github.com/ramiro/sgrc/internal/reporting/application"
-	reportinginfra "github.com/ramiro/sgrc/internal/reporting/infrastructure"
-	reportinghttp "github.com/ramiro/sgrc/internal/reporting/interfaces/http"
-	reservationapp "github.com/ramiro/sgrc/internal/reservation/application"
-	reservationinfra "github.com/ramiro/sgrc/internal/reservation/infrastructure"
-	reservationhttp "github.com/ramiro/sgrc/internal/reservation/interfaces/http"
-	"github.com/ramiro/sgrc/internal/shared/audit"
-	"github.com/ramiro/sgrc/internal/shared/email"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
-	"github.com/ramiro/sgrc/internal/shared/metricas"
-	"github.com/ramiro/sgrc/internal/shared/middleware"
-	"github.com/ramiro/sgrc/internal/shared/monitoreo"
-	"github.com/ramiro/sgrc/internal/shared/secretos"
-	"github.com/ramiro/sgrc/internal/shared/security"
-	sugerenciasapp "github.com/ramiro/sgrc/internal/sugerencias/application"
-	sugerenciasinfra "github.com/ramiro/sgrc/internal/sugerencias/infrastructure"
-	sugerenciashttp "github.com/ramiro/sgrc/internal/sugerencias/interfaces/http"
+	academicapp "github.com/agustin-y2k/sgrc/internal/academic/application"
+	academicinfra "github.com/agustin-y2k/sgrc/internal/academic/infrastructure"
+	academichttp "github.com/agustin-y2k/sgrc/internal/academic/interfaces/http"
+	auditoriaapp "github.com/agustin-y2k/sgrc/internal/auditoria/application"
+	auditoriainfra "github.com/agustin-y2k/sgrc/internal/auditoria/infrastructure"
+	auditoriahttp "github.com/agustin-y2k/sgrc/internal/auditoria/interfaces/http"
+	authapp "github.com/agustin-y2k/sgrc/internal/auth/application"
+	authinfra "github.com/agustin-y2k/sgrc/internal/auth/infrastructure"
+	authhttp "github.com/agustin-y2k/sgrc/internal/auth/interfaces/http"
+	availabilityapp "github.com/agustin-y2k/sgrc/internal/availability/application"
+	availabilityinfra "github.com/agustin-y2k/sgrc/internal/availability/infrastructure"
+	availabilityhttp "github.com/agustin-y2k/sgrc/internal/availability/interfaces/http"
+	inventoryapp "github.com/agustin-y2k/sgrc/internal/inventory/application"
+	inventoryinfra "github.com/agustin-y2k/sgrc/internal/inventory/infrastructure"
+	inventoryhttp "github.com/agustin-y2k/sgrc/internal/inventory/interfaces/http"
+	notificationapp "github.com/agustin-y2k/sgrc/internal/notification/application"
+	notificationinfra "github.com/agustin-y2k/sgrc/internal/notification/infrastructure"
+	notificationhttp "github.com/agustin-y2k/sgrc/internal/notification/interfaces/http"
+	reportingapp "github.com/agustin-y2k/sgrc/internal/reporting/application"
+	reportinginfra "github.com/agustin-y2k/sgrc/internal/reporting/infrastructure"
+	reportinghttp "github.com/agustin-y2k/sgrc/internal/reporting/interfaces/http"
+	reservationapp "github.com/agustin-y2k/sgrc/internal/reservation/application"
+	reservationinfra "github.com/agustin-y2k/sgrc/internal/reservation/infrastructure"
+	reservationhttp "github.com/agustin-y2k/sgrc/internal/reservation/interfaces/http"
+	"github.com/agustin-y2k/sgrc/internal/shared/audit"
+	"github.com/agustin-y2k/sgrc/internal/shared/email"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/metricas"
+	"github.com/agustin-y2k/sgrc/internal/shared/middleware"
+	"github.com/agustin-y2k/sgrc/internal/shared/monitoreo"
+	"github.com/agustin-y2k/sgrc/internal/shared/secretos"
+	"github.com/agustin-y2k/sgrc/internal/shared/security"
+	sugerenciasapp "github.com/agustin-y2k/sgrc/internal/sugerencias/application"
+	sugerenciasinfra "github.com/agustin-y2k/sgrc/internal/sugerencias/infrastructure"
+	sugerenciashttp "github.com/agustin-y2k/sgrc/internal/sugerencias/interfaces/http"
 )
 
 // zonaHorariaDeLaEscuela resuelve la zona en la que el sistema interpreta
@@ -110,7 +110,7 @@ func origenDelFrontend() string {
 	origen := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
 	if origen == "" {
 		log.Fatal("FRONTEND_ORIGIN está vacío. Es el dominio público desde el que se sirve la SPA " +
-			"(ej. https://sgrc.tuinstitucion.edu.ar) y el CORS del backend lo necesita para no " +
+			"(ej. https://sgrc.example.org) y el CORS del backend lo necesita para no " +
 			"quedar abierto a cualquier origen. Ponelo en el .env (ver .env.example).")
 	}
 	if !strings.HasPrefix(origen, "http://") && !strings.HasPrefix(origen, "https://") {
@@ -410,8 +410,16 @@ func main() {
 		log.Fatalf("no se pudo sembrar el admin inicial: %v", err)
 	}
 
-	// ── Event bus in-process (ver internal/shared/eventbus) ────────
-	bus := eventbus.NewInMemoryEventBus()
+	// ── Eventos durables (ver internal/shared/eventbus) ────────
+	secretoEventos := os.Getenv("OUTBOX_SECRET")
+	if secretoEventos == "" {
+		secretoEventos = "eventos:" + os.Getenv("JWT_SECRET")
+	}
+	cifradorEventos, err := secretos.Nuevo(secretoEventos)
+	if err != nil {
+		log.Fatalf("OUTBOX_SECRET: %v", err)
+	}
+	bus := eventbus.NewDurableBus(pool, cifradorEventos)
 
 	// ── Auditoría (docs/09-seguridad-rbac.md §5) ────────────────────
 	auditor := audit.NewPostgresAuditor(pool)
@@ -563,7 +571,7 @@ func main() {
 	// ANTES que academic a propósito: academic necesita envolver reportingSvc
 	// (junto con reservationSvc, ya armado más arriba) en un adaptador para su
 	// puerto ArchivadorHistorico — ver más abajo.
-	reportingRepo := reportinginfra.NewPostgresRepo(pool)
+	reportingRepo := reportinginfra.NewPostgresRepo(pool, tz)
 	infoEquipo := reportinginfra.NewInfoEquipoPostgres(pool)
 	infoUsuario := reportinginfra.NewInfoUsuarioPostgres(pool)
 
@@ -705,7 +713,7 @@ func main() {
 	// internal/shared/audit, que usa cada módulo: son dos paquetes a propósito
 	// —ver internal/auditoria/domain— y este de acá no sabe escribir.
 	auditoriaHandler := auditoriahttp.NewHandler(
-		auditoriaapp.NewService(auditoriainfra.NewPostgresRepo(pool)),
+		auditoriaapp.NewService(auditoriainfra.NewPostgresRepo(pool, tz)),
 	)
 
 	// ── Job de vencimiento de reservas (RF-04.9) ──────────────────── Corre
@@ -721,6 +729,26 @@ func main() {
 	}
 
 	var jobTerminado sync.WaitGroup
+	jobTerminado.Add(1)
+	go func() {
+		defer jobTerminado.Done()
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				entregaCtx, cancelar := context.WithTimeout(ctx, 20*time.Second)
+				_, err := bus.Despachar(entregaCtx, 50)
+				cancelar()
+				if err != nil && ctx.Err() == nil {
+					log.Printf("outbox: no se pudo entregar el evento: %v", err)
+				}
+			}
+		}
+	}()
+
 	jobTerminado.Add(1)
 	go func() {
 		defer jobTerminado.Done()

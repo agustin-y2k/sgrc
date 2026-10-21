@@ -5,9 +5,9 @@ package middleware
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -159,14 +159,9 @@ func (a Autenticacion) validador() func(*fiber.Ctx) error {
 		}
 
 		claims := &Claims{}
-		token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
-			// Defensa adicional: rechazar cualquier algoritmo que no sea HS256
-			// explícitamente.
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("algoritmo de firma inesperado: %v", t.Header["alg"])
-			}
+		token, err := jwt.ParseWithClaims(tokenStr, claims, func(*jwt.Token) (any, error) {
 			return a.Secret, nil
-		})
+		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
 		if err != nil || !token.Valid {
 			// Vencido y falsificado son el mismo 401, pero no la misma
 			// situación: lo primero le pasa a todo el mundo todos los días y lo
@@ -202,6 +197,7 @@ func (a Autenticacion) validador() func(*fiber.Ctx) error {
 		claims.Rol = cuenta.Rol
 
 		c.Locals("claims", claims)
+		c.SetUserContext(pgtransaccion.ConActor(c.UserContext(), claims.UserID, c.IP()))
 		return nil
 	}
 }

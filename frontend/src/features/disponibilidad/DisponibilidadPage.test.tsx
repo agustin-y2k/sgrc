@@ -188,13 +188,21 @@ describe("DisponibilidadPage", () => {
     expect(await screen.findByText("Sin horario cargado.")).toBeInTheDocument()
   })
 
-  it("muestra el error del backend", async () => {
+  it("permite reintentar una consulta fallida sin anunciar una lista vacía", async () => {
     vi.mocked(disponibilidadApi.listarDisponibilidadDeAdmins).mockRejectedValue(
       new ApiError(500, "error interno")
     )
     renderPagina()
 
-    expect(await screen.findByText("error interno")).toBeInTheDocument()
+    expect(
+      await screen.findByText(/No pudimos consultar los horarios de atención/)
+    ).toBeInTheDocument()
+    expect(screen.queryByText("No hay ningún Admin aprobado.")).not.toBeInTheDocument()
+    vi.mocked(disponibilidadApi.listarDisponibilidadDeAdmins).mockResolvedValue({
+      data: [admin()],
+    })
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar" }))
+    expect(await screen.findByText("Grace Hopper")).toBeInTheDocument()
   })
 
   // ── Quién ve qué ────────────────────────────────────────────────────

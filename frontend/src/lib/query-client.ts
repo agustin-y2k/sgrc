@@ -35,11 +35,10 @@ export const queryClient = new QueryClient({
         !esDelCliente(error) && intentosFallidos < REINTENTOS,
     },
     mutations: {
-      // Una mutación es una acción que la persona apretó: repetirla sola tras
-      // un error del cliente no la va a hacer funcionar, y el cartel al lado
-      // del botón tiene que aparecer cuando lo aprieta, no siete segundos
-      // después.
-      retry: (intentosFallidos, error) => !esDelCliente(error) && intentosFallidos < 1,
+      // Si el servidor confirmó una escritura pero se perdió su respuesta,
+      // repetirla puede crear otra reserva, préstamo o mensaje. El usuario
+      // debe poder revisar el estado antes de decidir otro intento.
+      retry: false,
     },
   },
 })

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router"
 
@@ -26,17 +26,19 @@ function pedido(over: Partial<PedidoDeMateria> = {}): PedidoDeMateria {
 
 function montar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
         <PedidosDeMateriaPage />
       </MemoryRouter>
     </QueryClientProvider>
   )
+  return qc
 }
 
 describe("PedidosDeMateriaPage", () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     vi.mocked(academicoApi.listarCiclos).mockResolvedValue({
       data: [{ id: "c1", anio: 2026, activo: true, archivado: false }],
     })
@@ -61,6 +63,98 @@ describe("PedidosDeMateriaPage", () => {
    * materias distintas se veían idénticos. Con una sola materia cargada no se
    * notaba; en una escuela con varias, sí.
    */
+  it("no presenta pedidos vacíos durante la carga ni ante un fallo", async () => {
+    let fallar!: (e: Error) => void
+    vi.mocked(perfilApi.listarPedidos).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fallar = reject
+        })
+    )
+    montar()
+    expect(screen.getByRole("status")).toHaveTextContent("Cargando pedidos")
+    expect(screen.queryByText("No hay pedidos sin resolver.")).not.toBeInTheDocument()
+    fallar(new Error("Sin conexión"))
+    expect(
+      await screen.findByText(/No pudimos consultar los pedidos de materia\./)
+    ).toBeVisible()
+    expect(screen.queryByText("No hay pedidos sin resolver.")).not.toBeInTheDocument()
+    vi.mocked(perfilApi.listarPedidos).mockResolvedValue({ data: [] })
+    await userEvent.click(screen.getByRole("button", { name: /Reintentar/ }))
+    expect(await screen.findByText("No hay pedidos sin resolver.")).toBeVisible()
+  })
+  it("reintenta cursos sin perder la respuesta y exige un curso válido", async () => {
+    vi.mocked(perfilApi.listarPedidos).mockResolvedValue({
+      data: [
+        pedido({ esMateriaNueva: true, materiaId: undefined, materiaNombre: "Robótica" }),
+      ],
+    })
+    vi.mocked(academicoApi.listarCursos).mockRejectedValueOnce(new Error("Sin conexión"))
+    const user = userEvent.setup()
+    montar()
+    await user.click(await screen.findByRole("button", { name: "Aprobar" }))
+    await user.type(
+      screen.getByLabelText("Algo para decirle (opcional)"),
+      "Se abre el taller"
+    )
+    expect(await screen.findByText(/No pudimos consultar los cursos\./)).toBeVisible()
+    expect(screen.getByRole("button", { name: "Confirmar y habilitar" })).toBeDisabled()
+    await user.click(screen.getByRole("button", { name: /Reintentar/ }))
+    await screen.findByRole("option", { name: "3°C" })
+    expect(screen.getByLabelText("Algo para decirle (opcional)")).toHaveValue(
+      "Se abre el taller"
+    )
+    await user.selectOptions(screen.getByLabelText("¿En qué curso se crea?"), "cur1")
+    expect(screen.getByRole("button", { name: "Confirmar y habilitar" })).toBeEnabled()
+  })
+
+  it("una selección vieja no habilita crear la materia si el curso desapareció", async () => {
+    vi.mocked(perfilApi.listarPedidos).mockResolvedValue({
+      data: [pedido({ esMateriaNueva: true, materiaId: undefined })],
+    })
+    const user = userEvent.setup()
+    const qc = montar()
+    await user.click(await screen.findByRole("button", { name: "Aprobar" }))
+    await screen.findByRole("option", { name: "3°C" })
+    await user.selectOptions(screen.getByLabelText("¿En qué curso se crea?"), "cur1")
+    expect(screen.getByRole("button", { name: "Confirmar y habilitar" })).toBeEnabled()
+    vi.mocked(academicoApi.listarCursos).mockResolvedValue({ data: [] })
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ["cursos", "c1"] })
+    })
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Confirmar y habilitar" })).toBeDisabled()
+    )
+    expect(screen.getByText(/todavía no tiene cursos/)).toBeVisible()
+  })
+
+  it("recupera el ciclo activo antes de consultar sus cursos", async () => {
+    vi.mocked(perfilApi.listarPedidos).mockResolvedValue({
+      data: [pedido({ esMateriaNueva: true, materiaId: undefined })],
+    })
+    vi.mocked(academicoApi.listarCiclos).mockRejectedValueOnce(new Error("Sin conexión"))
+    const user = userEvent.setup()
+    montar()
+    await user.click(await screen.findByRole("button", { name: "Aprobar" }))
+    expect(await screen.findByText(/No pudimos consultar el ciclo activo/)).toBeVisible()
+    expect(academicoApi.listarCursos).not.toHaveBeenCalled()
+    expect(screen.getByRole("button", { name: "Confirmar y habilitar" })).toBeDisabled()
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    expect(await screen.findByRole("option", { name: "3°C" })).toBeInTheDocument()
+  })
+
+  it("explica la falta de ciclo activo sin ofrecer aprobar a ciegas", async () => {
+    vi.mocked(perfilApi.listarPedidos).mockResolvedValue({
+      data: [pedido({ esMateriaNueva: true, materiaId: undefined })],
+    })
+    vi.mocked(academicoApi.listarCiclos).mockResolvedValue({ data: [] })
+    const user = userEvent.setup()
+    montar()
+    await user.click(await screen.findByRole("button", { name: "Aprobar" }))
+    expect(await screen.findByText(/No hay un ciclo activo/)).toBeVisible()
+    expect(screen.getByRole("button", { name: "Confirmar y habilitar" })).toBeDisabled()
+  })
+
   it("nombra la materia y el curso de un pedido de una materia que ya existe", async () => {
     vi.mocked(perfilApi.listarPedidos).mockResolvedValue({
       data: [pedido({ materiaNombre: "Programación", cursoNombre: "5°A" })],

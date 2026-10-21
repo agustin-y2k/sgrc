@@ -76,20 +76,24 @@ flowchart LR
 - **Precondición:** Usuario autenticado con JWT, cuenta en estado `APROBADA`.
 - **Flujo:**
   1. Usuario selecciona materia, fecha, hora de inicio y de fin. **Hasta acá no se le ofrece ningún equipo**: cuáles hay para elegir depende de la franja, así que antes no hay lista que mostrar.
-  2. Sistema muestra la franja completa: los equipos **libres** para tildar —solo los `DISPONIBLE`, no dados de baja y reservables— y, aparte, los que están **tomados**, con quién los tiene, para qué materia y en qué horario. Los tomados no se tildan.
+  2. Sistema muestra la franja completa: los equipos **libres** para tildar —solo los `DISPONIBLE`, no dados de baja y reservables— y, aparte, los que están **tomados**, con quién los tiene, para qué materia y en qué horario. Los tomados con prioridad propia superior y suficiente anticipación se muestran en un bloque que permite tildarlos; los demás ofrecen pedir liberación.
   3. El usuario tilda los que necesita. Si le falta alguno de los tomados, puede pedírselo a quien lo tiene (UC siguiente) y seguir con otra franja o con menos equipos mientras tanto.
   4. Sistema verifica que el usuario tiene permiso para reservar en esa materia.
   5. Sistema valida la disponibilidad **de todo el lote en una sola consulta** y deja que la constraint `EXCLUDE` resuelva el solapamiento por equipo.
-  6. Crea un `ReservaGrupo` `CONFIRMADA` con snapshot del nombre del docente, y una `Reserva` por cada equipo elegido.
+  6. Si se eligieron equipos ocupados mediante `equiposATomar`, valida su prioridad y ejecuta el autorrelleno en cascada de RF-03.21: libres admitidos primero, desplazamientos de menor prioridad después y cancelación puntual cuando falta sustituto. Conserva los horarios completos de cada reserva desplazada.
+  7. Crea un `ReservaGrupo` `CONFIRMADA` con snapshot del nombre del docente, y una `Reserva` por cada equipo elegido.
+- **Confirmación:** informa reservas reubicadas, cancelaciones por faltantes y docentes afectados. La operación completa y sus avisos se confirman juntos; cualquier error los revierte.
 - **Error de solapamiento:** HTTP 409 nombrando qué equipo choca, en qué fecha y franja, y con quién. No se crea ninguna fila. La pantalla muestra ese texto y vuelve a pedir la franja, donde el equipo que chocó ya aparece del lado de los tomados.
 - **Por qué se muestran los tomados:** sin ellos, "no hay equipos libres" y "los tiene alguien con quien puedo hablar" se ven igual, y la segunda tiene salida. El dato ya era público —está en el calendario de cada equipo—, pero ahí no es donde se decide.
 
 ### UC: Reservar equipos en serie (recurrente)
 - **Flujo:**
   1. Usuario indica materia, conjunto de equipos, día de semana, horario y rango de fechas.
-  2. Sistema calcula todas las ocurrencias (cada fecha × cada equipo elegido) para el día de semana elegido, que puede ser cualquiera de los siete.
-  3. Valida **todas** contra solapamientos. Si alguna falla → devuelve la lista de conflictos (fecha + equipo) y no crea ninguna.
-  4. Si todas pasan → crea la `ReglaRecurrencia` y N `ReservaGrupo` materializados (uno por fecha), cada uno con sus `Reserva`.
+  2. Sistema cuenta las ocurrencias sin recorrer el rango y exige entre 1 y 45; sólo entonces genera las fechas para el día elegido, que puede ser cualquiera de los siete. Cada pedido admite hasta 200 equipos.
+  3. El usuario pulsa «Comprobar serie». La pantalla consulta `POST /api/reservas/recurrentes/previsualizar`, que devuelve disponibilidad y conflictos de todas las fechas sin guardar reservas ni avisos. Un equipo libre el primer día puede requerir prioridad en otra fecha.
+  4. Si hay equipos que requieren toma por prioridad, el usuario debe marcar «Autorizo tomar los equipos por prioridad en las fechas indicadas». La pantalla explica la reposición en cascada y los posibles faltantes. Cambiar materia, fechas, horario o selección invalida la comprobación y el consentimiento; hay que comprobar de nuevo.
+  5. Al confirmar, envía la unión de equipos autorizados en `equiposATomar`. El backend revalida permisos, jornada y **todas** las fechas dentro de la operación de creación: la previsualización no garantiza disponibilidad posterior. Si hay un conflicto no autorizado o que no cumple las reglas de prioridad, devuelve los conflictos y no crea ninguna ocurrencia.
+  6. Si todas pasan, ejecuta las reposiciones y cancelaciones puntuales por faltantes de RF-03.21 y crea la `ReglaRecurrencia` y N `ReservaGrupo` materializados, uno por fecha, con sus `Reserva`. Todo se confirma junto con la auditoría y los eventos pendientes; un fallo revierte el conjunto.
 
 ### UC: Pedirle equipos a quien los tiene reservados
 - **Actores:** Docente, Admin
@@ -158,13 +162,13 @@ flowchart LR
 ### UC: Archivar y clonar ciclo lectivo
 - **Actor:** Admin
 - **Flujo:**
-  1. Admin archiva ciclo actual: `curso` y `materia` de ese ciclo pasan a `archivado=true` (se preservan, para no recrearlos).
-  2. Antes de tocar las reservas, el sistema calcula un snapshot agregado (uso por equipo, uso por docente de ese año) y lo guarda en `historico_uso_equipo` / `historico_uso_docente` (permanentes).
-  3. El sistema **elimina físicamente** todos los `ReservaGrupo`, `Reserva` y `ReglaRecurrencia` de las materias de ese ciclo, más los bloqueos administrativos de ese año. `Incidencia` y `Prestamo` no se tocan: no dependen del ciclo lectivo.
-  4. Sistema ofrece clonar estructura al nuevo ciclo (año+1): crea `curso` + `materia` nuevos (sin `archivado`). No clona: `DocenteMateria`.
-  5. Admin puede ajustar la estructura clonada antes de activar el nuevo ciclo.
+  1. Admin solicita archivar y, opcionalmente, clonar a un año libre. El sistema bloquea el ciclo y valida el destino antes de cambiar datos.
+  2. Guarda el snapshot de uso en `historico_uso_equipo` / `historico_uso_docente` y lo sella en `snapshot_ciclo` antes de borrar las reservas.
+  3. Archiva ciclo, cursos, espacios y materias; las asignaciones se conservan. **Elimina físicamente** las reservas, grupos y recurrencias del ciclo y los bloqueos de ese año. Incidencias y préstamos se conservan; estos últimos pueden perder su referencia a la reserva eliminada.
+  4. Si se pidió clonar, crea un ciclo activo nuevo con cursos, espacios y materias nuevos. No clona asignaciones docentes.
+  5. Guarda el resultado en `cierre_ciclo` y confirma todos los pasos juntos. El Admin puede ajustar la estructura del nuevo ciclo después del cierre.
 - **Por qué se conserva la estructura académica pero no las reservas:** recrear "1°A" + "Matemáticas" + "el titular es Fulano" cada año es el trabajo tedioso que la clonación evita. Las reservas puntuales de un año que ya terminó no tienen valor operativo — solo estadístico, y ese valor queda cubierto por el snapshot histórico.
-- **El clonado se valida antes de empezar**: si el año destino ya existe o no es un año válido, la operación rebota sin archivar ni borrar nada. El archivado es irreversible y el clonado es el único paso que puede fallar por algo que el Admin tipeó, así que se comprueba primero. Si igual queda a medias, reintentar el archivado completa el clonado.
+- **El cierre es atómico e idempotente:** un fallo revierte snapshot, archivo, limpieza y clonado. Repetir una solicitud confirmada con el mismo destino devuelve el resultado persistido; cambiar ese destino devuelve 409. Un ciclo archivado por una versión antigua sin constancia de cierre se rechaza para no reconstruir un histórico a partir de fuentes incompletas.
 
 ### UC: Corregir o eliminar un ciclo lectivo mal creado
 - **Actor:** Admin
@@ -175,7 +179,7 @@ flowchart LR
 - **Reglas que no son obvias:**
   - **Corregir el año exige que el ciclo no tenga reservas.** Una reserva lleva su propia fecha y no se muda con el ciclo: correrlo de 2026 a 2027 lo dejaría diciendo que sus clases fueron en un año en el que no pasó nada.
   - **Y que el año de destino no tenga bloqueos administrativos.** Un bloqueo no referencia al ciclo: se le atribuye a uno por el año de su fecha, así que mudarse a un año que ya tiene alguno es adoptarlo en silencio. Crear un bloqueo en un año sin ciclo está permitido, así que el caso no es hipotético.
-  - **Eliminar exige que no tenga ningún curso cargado.** Uno con cursos es cómo se organizó ese año: eso se archiva, no se borra. Un ciclo sin cursos tampoco tiene reservas, porque una reserva cuelga de una materia que cuelga de un curso.
+  - **Eliminar exige que no tenga cursos ni espacios cargados.** Ambos pueden contener materias y reservas; el sistema rechaza con 409 un ciclo con estructura académica.
   - **Un ciclo archivado no admite ninguna de las dos.** Archivar es cómo se cierra un año, y el histórico de uso que el archivado guardó está indexado por **ese** año: cambiarlo dejaría las dos mitades hablando de años distintos, y borrarlo dejaría ese histórico hablando de un año que para el sistema no existió.
   - Eliminar el ciclo activo **libera el lugar de "activo"**, que es justamente para lo que existe: crear el correcto a continuación.
   - Las dos quedan auditadas, y la del año guarda el valor anterior y el nuevo: el año **es** el nombre del ciclo en pantalla, así que sin el valor viejo una entrada anterior sobre «el ciclo 2026» se leería después como si hablara de otro.
@@ -201,12 +205,13 @@ flowchart LR
      - **No queda ningún docente** → se cancelan automáticamente todos los `ReservaGrupo` futuros de esa materia (con sus `Reserva`), y se notifica a todos los `ADMIN` (no hay un docente al cual avisar).
   4. **Recién después** de resolver el destino de las reservas de todas sus materias, el sistema elimina los vínculos `DocenteMateria` del docente dado de baja — el orden importa: si se borraran antes, el paso 3 no podría distinguir "quedan otros docentes" de "este era el único".
   5. El docente pierde acceso al login (estado `BAJA` no puede autenticarse).
+- **La cuenta pierde acceso desde el primer commit.** Ese commit prepara las materias pendientes en `baja_usuario` / `baja_usuario_materia` y fija `BAJA`. Cada materia confirma cancelaciones, evento y avance juntos; si falla, repetir `estado=BAJA` retoma las pendientes sin duplicar las completadas. La limpieza final y su marca se confirman juntas. Una baja incompleta responde 409 y bloquea la eliminación definitiva.
 - **La baja es permanente:** no existe "reactivar cuenta" — la API lo rechaza explícitamente. Si la persona vuelve, se autorregistra de nuevo como cuenta nueva.
   - Es la asimetría deliberada con el inventario, donde la baja de un equipo o de un carro **sí** se deshace. Un equipo retirado por error sigue siendo el mismo equipo; una cuenta dada de baja ya corrió su cascada —se cancelaron sus reservas, se removieron sus asignaciones— y revivirla no las devuelve. Volver a registrarse deja además el rastro de que hubo dos incorporaciones, que es lo que pasó.
 
 ### UC: Eliminar definitivamente una cuenta en BAJA
 - **Actor:** Admin
-- **Precondición:** La cuenta está en estado `BAJA` (no se puede hacer directamente sobre `PENDIENTE`/`APROBADA`/`RECHAZADA`).
+- **Precondición:** La cuenta está en estado `BAJA` con limpieza completada, o `RECHAZADA`. No se permite directamente sobre `PENDIENTE` ni `APROBADA`.
 - **Motivación típica:** el docente quiere volver y reusar el mismo email, que quedó ocupado por la cuenta anterior.
 - **Flujo:**
   1. Admin confirma la eliminación definitiva de la cuenta.
@@ -217,10 +222,19 @@ flowchart LR
 - **Actor:** Admin
 - **Precondición:** El docente sigue con cuenta `APROBADA`, pero se lo desvincula de una materia específica (conserva sus demás materias y su cuenta).
 - **Flujo:**
-  1. Admin remueve el vínculo `DocenteMateria` de esa materia puntual.
+  1. Admin pulsa Quitar. Revisa la confirmación con docente, rol, materia y curso
+     (año, división y modalidad cuando corresponda). Volver no modifica nada;
+     Confirmar quitar docente envía la baja de ese vínculo puntual.
   2. Sistema verifica si queda al menos otro docente `APROBADA` asignado a esa materia:
      - **Sí queda otro docente** → no se toca ninguna reserva y no se avisa nada (ver RF-05.4).
      - **No queda ningún docente** → se cancelan los `ReservaGrupo` futuros de esa materia y se notifica al `ADMIN`.
+  3. La pantalla informa el resultado y actualiza asignaciones y reservas. Si
+     falla la respuesta, relee el estado antes de admitir otro intento; no
+     repite automáticamente la baja.
+- **Varios docentes:** pueden coexistir varios titulares y suplentes. Quitar
+  ambos titulares conserva las reservas si queda un suplente aprobado, y
+  viceversa. Las asignaciones de la materia del mismo nombre en otro curso no
+  sustituyen las de este curso ni se modifican por esta operación.
 - **Diferencia con la baja completa:** misma política de cascada (RF-02.10), pero acá el docente conserva su cuenta y el resto de sus materias — solo se ve afectado el vínculo puntual que se removió.
 
 ### UC: Gestionar el inventario de carros

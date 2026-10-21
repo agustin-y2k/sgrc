@@ -20,6 +20,8 @@ import {
   sumarDias,
 } from "@/features/calendario/semana"
 import { getErrorMessage } from "@/lib/api-client"
+import { useEsAngosto } from "@/lib/useEsAngosto"
+import { DetalleDeBloque } from "@/features/calendario/DetalleDeBloque"
 
 // La grilla arranca a las 7 y termina a las 22 mientras no haya nada fuera de
 // esa franja: cubre el horario escolar típico sin desperdiciar alto en horas
@@ -62,9 +64,11 @@ function rangoHorarioVisible(bloques: BloqueCalendario[]): {
 function BloqueOcupado({
   bloque,
   horaDesde,
+  abrir,
 }: {
   bloque: BloqueCalendario
   horaDesde: number
+  abrir: () => void
 }) {
   const inicio = aMinutos(bloque.horaInicio)
   const fin = aMinutos(bloque.horaFin)
@@ -80,15 +84,17 @@ function BloqueOcupado({
   const desplazamiento = ((inicio - minutosBase) / 60) * ALTO_POR_HORA_REM
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={abrir}
       className={
-        "absolute inset-x-0.5 overflow-hidden rounded-md border px-1.5 py-1 text-xs leading-tight " +
+        "absolute inset-x-0.5 overflow-hidden rounded-md border px-1.5 py-1 text-left text-xs leading-tight focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring " +
         (esBloqueo
-          ? "border-destructive/40 bg-destructive/10 text-destructive"
+          ? "border-destructive/40 bg-destructive/10 text-foreground"
           : "border-primary/30 bg-primary/10")
       }
       style={{ top: `${desplazamiento}rem`, height: `${alto}rem` }}
-      title={
+      aria-label={
         esBloqueo
           ? `${motivo} · ${bloque.horaInicio}–${bloque.horaFin}`
           : `${bloque.materiaNombre} (${bloque.cursoNombre}) · ${bloque.docente} · ${bloque.horaInicio}–${bloque.horaFin}`
@@ -100,14 +106,14 @@ function BloqueOcupado({
       <p className="truncate font-medium">{esBloqueo ? motivo : bloque.materiaNombre}</p>
       {!esBloqueo && (
         <>
-          <p className="truncate opacity-80">{bloque.cursoNombre}</p>
-          <p className="truncate opacity-80">{bloque.docente}</p>
+          <p className="truncate">{bloque.cursoNombre}</p>
+          <p className="truncate">{bloque.docente}</p>
         </>
       )}
-      <p className="opacity-70">
+      <p>
         {bloque.horaInicio}–{bloque.horaFin}
       </p>
-    </div>
+    </button>
   )
 }
 
@@ -116,6 +122,10 @@ function BloqueOcupado({
 export function CalendarioEquipoPage() {
   const { equipoId = "" } = useParams()
   const [referencia, setReferencia] = useState(() => new Date())
+  const angosto = useEsAngosto()
+  const [vista, setVista] = useState<"lista" | "grilla" | null>(null)
+  const esLista = (vista ?? (angosto ? "lista" : "grilla")) === "lista"
+  const [detalle, setDetalle] = useState<BloqueCalendario | null>(null)
 
   const semana = useMemo(() => fechasDeLaSemana(referencia), [referencia])
   // El rango que se le pide al backend es la semana COMPLETA, aunque después
@@ -140,7 +150,7 @@ export function CalendarioEquipoPage() {
     )
   }, [semana, jornada])
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["calendario", equipoId, desde, hasta],
     queryFn: () => calendarioApi.calendarioDeEquipo(equipoId, desde, hasta),
   })
@@ -241,7 +251,17 @@ export function CalendarioEquipoPage() {
 
       {error && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{getErrorMessage(error)}</AlertDescription>
+          <AlertDescription>
+            {getErrorMessage(error)}
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2 h-11"
+              onClick={() => void refetch()}
+            >
+              Reintentar
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
       {isLoading && <p className="text-muted-foreground">Cargando calendario…</p>}
@@ -249,92 +269,166 @@ export function CalendarioEquipoPage() {
       {/* Con un error no se dibuja la grilla. Antes se dibujaba igual, así que
           un equipo que no existe mostraba el cartel Y una semana entera vacía
           debajo: la pantalla se contradecía a sí misma. */}
-      {!error && (
+      {!error && !isLoading && data && (
         <>
-          {/* La grilla scrollea horizontalmente en pantallas angostas en vez de
-          desbordar la página (RNF-07). */}
-          <div className="overflow-x-auto">
-            <div className="min-w-[44rem]">
-              <div
-                className="grid border-b"
-                style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}
-              >
-                <div />
-                {dias.map((fecha) => (
-                  <div
-                    key={fecha}
-                    className={
-                      "border-l px-2 py-1 text-center text-sm font-medium " +
-                      (fecha === hoy ? "text-primary" : "")
-                    }
+          <div className="mb-3 flex flex-wrap gap-2" aria-label="Vista del calendario">
+            <Button
+              type="button"
+              variant={esLista ? "default" : "outline"}
+              aria-pressed={esLista}
+              className="h-11"
+              onClick={() => setVista("lista")}
+            >
+              Lista de reservas
+            </Button>
+            <Button
+              type="button"
+              variant={!esLista ? "default" : "outline"}
+              aria-pressed={!esLista}
+              className="h-11"
+              onClick={() => setVista("grilla")}
+            >
+              Grilla semanal
+            </Button>
+          </div>
+          {esLista ? (
+            <div className="space-y-3">
+              {data.bloques.length === 0 && (
+                <p className="text-muted-foreground">
+                  No hay reservas ni bloqueos en esta semana.
+                </p>
+              )}
+              {[...data.bloques]
+                .sort((a, b) =>
+                  `${a.fecha} ${a.horaInicio}`.localeCompare(`${b.fecha} ${b.horaInicio}`)
+                )
+                .map((b) => (
+                  <button
+                    key={b.reservaId}
+                    type="button"
+                    onClick={() => setDetalle(b)}
+                    className="bg-card text-card-foreground flex min-h-11 w-full flex-col gap-1 rounded-md border p-3 text-left focus-visible:outline-2 focus-visible:outline-ring"
                   >
-                    <div>{etiquetaDeDia(fecha)}</div>
-                    <div className="text-muted-foreground text-xs">
-                      {desdeFechaISO(fecha).getDate()}
-                    </div>
-                    {/* Sin este rótulo la columna miente: un día que la
+                    <span className="font-medium">
+                      {b.tipo === "BLOQUEO"
+                        ? b.motivoBloqueo || "Bloqueo"
+                        : b.materiaNombre}
+                    </span>
+                    <span className="text-sm">
+                      {etiquetaDeDia(b.fecha)} {b.fecha} · {b.horaInicio}–{b.horaFin}
+                      {b.horaFin <= b.horaInicio ? " (día siguiente)" : ""}
+                    </span>
+                    {b.tipo !== "BLOQUEO" && (
+                      <span className="text-sm">
+                        {b.cursoNombre} · {b.docente}
+                      </span>
+                    )}
+                    <span className="text-sm underline">Ver detalles</span>
+                  </button>
+                ))}
+            </div>
+          ) : (
+            <>
+              {/* La grilla scrollea horizontalmente en pantallas angostas en vez de
+          desbordar la página (RNF-07). */}
+              <div className="overflow-x-auto">
+                <div className="min-w-[44rem]">
+                  <div
+                    className="grid border-b"
+                    style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}
+                  >
+                    <div />
+                    {dias.map((fecha) => (
+                      <div
+                        key={fecha}
+                        className={
+                          "border-l px-2 py-1 text-center text-sm font-medium " +
+                          (fecha === hoy ? "text-primary" : "")
+                        }
+                      >
+                        <div>{etiquetaDeDia(fecha)}</div>
+                        <div className="text-muted-foreground text-xs">
+                          {desdeFechaISO(fecha).getDate()}
+                        </div>
+                        {/* Sin este rótulo la columna miente: un día que la
                         escuela declaró cerrado se vería igual que uno abierto,
                         y lo que quedó adentro parecería normal. */}
-                    {diasCerrados.has(fecha) && (
-                      <div className="text-muted-foreground text-[0.65rem] leading-tight font-normal">
-                        fuera de la jornada
+                        {diasCerrados.has(fecha) && (
+                          <div className="text-muted-foreground text-[0.65rem] leading-tight font-normal">
+                            fuera de la jornada
+                          </div>
+                        )}
                       </div>
-                    )}
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              <div
-                className="grid"
-                style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}
-              >
-                {/* Columna de horas */}
-                <div>
-                  {horas.map((h) => (
-                    <div
-                      key={h}
-                      className="text-muted-foreground border-b pr-2 text-right text-xs"
-                      style={{ height: `${ALTO_POR_HORA_REM}rem` }}
-                    >
-                      {String(h).padStart(2, "0")}:00
+                  <div
+                    className="grid"
+                    style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}
+                  >
+                    {/* Columna de horas */}
+                    <div>
+                      {horas.map((h) => (
+                        <div
+                          key={h}
+                          className="text-muted-foreground border-b pr-2 text-right text-xs"
+                          style={{ height: `${ALTO_POR_HORA_REM}rem` }}
+                        >
+                          {String(h).padStart(2, "0")}:00
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
 
-                {dias.map((fecha) => (
-                  <div key={fecha} className="relative border-l">
-                    {horas.map((h) => (
-                      <div
-                        key={h}
-                        className="border-b"
-                        style={{ height: `${ALTO_POR_HORA_REM}rem` }}
-                      />
-                    ))}
-                    {(bloquesPorDia.get(fecha) ?? []).map((b) => (
-                      <BloqueOcupado
-                        key={`${b.reservaId}-${b.horaInicio}`}
-                        bloque={b}
-                        horaDesde={rango.desde}
-                      />
+                    {dias.map((fecha) => (
+                      <div key={fecha} className="relative border-l">
+                        {horas.map((h) => (
+                          <div
+                            key={h}
+                            className="border-b"
+                            style={{ height: `${ALTO_POR_HORA_REM}rem` }}
+                          />
+                        ))}
+                        {(bloquesPorDia.get(fecha) ?? []).map((b) => (
+                          <BloqueOcupado
+                            key={`${b.reservaId}-${b.horaInicio}`}
+                            bloque={b}
+                            horaDesde={rango.desde}
+                            abrir={() =>
+                              setDetalle(
+                                data.bloques.find(
+                                  (original) => original.reservaId === b.reservaId
+                                ) ?? b
+                              )
+                            }
+                          />
+                        ))}
+                      </div>
                     ))}
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
-            <span className="flex items-center gap-1.5">
-              <span className="border-primary/30 bg-primary/10 inline-block size-3 rounded border" />
-              Reserva de clase
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="border-destructive/40 bg-destructive/10 inline-block size-3 rounded border" />
-              Bloqueado por un Admin
-            </span>
-            <Badge variant="outline">Los huecos en blanco están libres</Badge>
-          </div>
+              <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
+                <span className="flex items-center gap-1.5">
+                  <span className="border-primary/30 bg-primary/10 inline-block size-3 rounded border" />
+                  Reserva de clase
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="border-destructive/40 bg-destructive/10 inline-block size-3 rounded border" />
+                  Bloqueado por un Admin
+                </span>
+                <Badge variant="outline">Los huecos en blanco están libres</Badge>
+              </div>
+            </>
+          )}
         </>
+      )}
+      {detalle && (
+        <DetalleDeBloque
+          bloque={detalle}
+          etiqueta={data?.etiqueta || "Equipo del calendario"}
+          cerrar={() => setDetalle(null)}
+        />
       )}
     </div>
   )

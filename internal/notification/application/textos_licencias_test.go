@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 func licenciaDelAviso(nombre string, equipo int, carro string, diasRestantes int) eventbus.LicenciaPorVencer {
@@ -159,7 +159,7 @@ func TestMensajeDeLicencias_EquipoSueltoSeNombraPorSuNombre(t *testing.T) {
 // ── El correo ───────────────────────────────────────────────────────────
 
 func TestCorreo_Licencias_LlegaATodosLosAdminsConElDetalle(t *testing.T) {
-	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar", "admin2@escuela.edu.ar")
+	bus, enviador := mensajeroDePrueba("admin1@escuela.test", "admin2@escuela.test")
 
 	bus.Publish(eventbus.Evento{
 		Tipo: "licencia.por-vencer",
@@ -210,7 +210,7 @@ func TestCorreo_Licencias_AsuntoSegunElContenido(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
-			bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
+			bus, enviador := mensajeroDePrueba("admin1@escuela.test")
 			bus.Publish(eventbus.Evento{Tipo: "licencia.por-vencer", Payload: c.aviso})
 
 			if len(enviador.enviados) != 1 {
@@ -236,7 +236,7 @@ func TestCorreo_Licencias_AsuntoSegunElContenido(t *testing.T) {
 // nada, pero el handler no puede confiar en eso — un aviso vacío mandaría un
 // mail que dice que hay licencias por vencer y no lista ninguna.
 func TestCorreo_Licencias_AvisoVacioNoMandaNada(t *testing.T) {
-	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
+	bus, enviador := mensajeroDePrueba("admin1@escuela.test")
 
 	bus.Publish(eventbus.Evento{Tipo: "licencia.por-vencer", Payload: eventbus.AvisoDeLicencias{}})
 

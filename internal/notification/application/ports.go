@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/notification/domain"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/.
@@ -19,7 +19,7 @@ type Repo interface {
 
 	// ListarNoLeidasSobreUsuario: los avisos sin leer de un tipo que hablan de
 	// una persona puntual, sin importar a quién le llegaron.
-	ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo) ([]*domain.Notificacion, error)
+	ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo, referencia ...string) ([]*domain.Notificacion, error)
 	// MarcarTodasLeidasDe marca de una todas las NO_LEIDA de un usuario y
 	// devuelve cuántas cambió.
 	MarcarTodasLeidasDe(ctx context.Context, usuarioID string, ahora time.Time) (int, error)

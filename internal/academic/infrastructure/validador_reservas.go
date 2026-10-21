@@ -3,10 +3,11 @@ package infrastructure
 import (
 	"context"
 	"fmt"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/academic/application"
+	"github.com/agustin-y2k/sgrc/internal/academic/application"
 )
 
 var _ application.ValidadorReservas = (*ValidadorReservasPostgres)(nil)
@@ -27,7 +28,7 @@ func (v *ValidadorReservasPostgres) TieneReservasCurso(ctx context.Context, curs
 	// una materia bloquea el del curso entero. Mirar sólo `reserva_grupo`
 	// dejaría que el DELETE reviente contra `regla_recurrencia` con un 500.
 	var existe bool
-	err := v.pool.QueryRow(ctx, `
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM reserva_grupo rg
 			JOIN materia m ON m.id = rg.materia_id
@@ -55,7 +56,7 @@ func (v *ValidadorReservasPostgres) TieneReservasCurso(ctx context.Context, curs
 // reservation/infrastructure).
 func (v *ValidadorReservasPostgres) TieneReservasDeCiclo(ctx context.Context, cicloID string) (bool, error) {
 	var existe bool
-	err := v.pool.QueryRow(ctx, `
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM reserva_grupo rg
 			JOIN materia m ON m.id = rg.materia_id
@@ -86,7 +87,7 @@ func (v *ValidadorReservasPostgres) TieneReservasDeCiclo(ctx context.Context, ci
 // el año que se quiere estrenar todavía no es de ningún ciclo.
 func (v *ValidadorReservasPostgres) HayBloqueosEnElAnio(ctx context.Context, anio int) (bool, error) {
 	var existe bool
-	err := v.pool.QueryRow(ctx, `
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM reserva
 			WHERE tipo = 'BLOQUEO' AND EXTRACT(YEAR FROM fecha) = $1
@@ -109,7 +110,7 @@ func (v *ValidadorReservasPostgres) TieneReservasMateria(ctx context.Context, ma
 	// chequeo previo existe justamente para que la respuesta no dependa de que
 	// eso siga siendo cierto.
 	var existe bool
-	err := v.pool.QueryRow(ctx, `
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx, `
 		SELECT EXISTS(SELECT 1 FROM reserva_grupo     WHERE materia_id = $1)
 		    OR EXISTS(SELECT 1 FROM regla_recurrencia WHERE materia_id = $1)`, materiaID,
 	).Scan(&existe)
@@ -128,7 +129,7 @@ func (v *ValidadorReservasPostgres) TieneReservasMateria(ctx context.Context, ma
 // `regla_recurrencia` con un 500.
 func (v *ValidadorReservasPostgres) TieneReservasEspacio(ctx context.Context, espacioID string) (bool, error) {
 	var existe bool
-	err := v.pool.QueryRow(ctx, `
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM reserva_grupo rg
 			JOIN materia m ON m.id = rg.materia_id

@@ -3,11 +3,12 @@ package infrastructure
 import (
 	"context"
 	"fmt"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/notification/application"
-	"github.com/ramiro/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/notification/application"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
 )
 
 var _ application.ListadorAdmins = (*ListadorAdminsPostgres)(nil)
@@ -32,7 +33,7 @@ func (l *ListadorAdminsPostgres) IDsDeAdminsAprobados(ctx context.Context) ([]st
 // resuelve a quien nunca abrió el panel: sin fila vale el valor por defecto de
 // la categoría, que lo dice el dominio y no esta consulta.
 func (l *ListadorAdminsPostgres) EmailsDeAdminsSuscriptos(ctx context.Context, categoria domain.CategoriaEmail) ([]string, error) {
-	rows, err := l.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, l.pool).Query(ctx, `
 		SELECT u.email
 		FROM usuario u
 		LEFT JOIN preferencia_email p ON p.usuario_id = u.id AND p.categoria = $1
@@ -58,8 +59,8 @@ func (l *ListadorAdminsPostgres) EmailsDeAdminsSuscriptos(ctx context.Context, c
 // el de arriba lo repite con un JOIN encima, así que si mañana cambia qué
 // cuenta como Admin activo, hay que tocar los dos.
 func (l *ListadorAdminsPostgres) columnaDeAdminsAprobados(ctx context.Context, columna string) ([]string, error) {
-	rows, err := l.pool.Query(ctx,
-		`SELECT `+columna+` FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA'`)
+	rows, err := pgtransaccion.Con(ctx, l.pool).Query(ctx,
+		`SELECT `+columna+` FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA' ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("listando admins aprobados: %w", err)
 	}

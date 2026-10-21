@@ -15,7 +15,7 @@ const DOCENTE: Usuario = {
   id: "docente1",
   nombre: "Ada",
   apellido: "Byron",
-  email: "ada@escuela.edu.ar",
+  email: "ada@escuela.test",
   rol: "DOCENTE",
   estado: "APROBADA",
   fechaRegistro: "2026-01-01T00:00:00Z",
@@ -48,7 +48,7 @@ describe("MisDatos", () => {
   it("muestra el nombre y el email sin abrir nada", () => {
     montar()
     expect(screen.getByText("Ada Byron")).toBeInTheDocument()
-    expect(screen.getByText("ada@escuela.edu.ar")).toBeInTheDocument()
+    expect(screen.getByText("ada@escuela.test")).toBeInTheDocument()
   })
 
   it("guarda el nombre nuevo y actualiza la sesión", async () => {

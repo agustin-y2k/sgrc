@@ -13,7 +13,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/ramiro/sgrc/internal/shared/testdb"
+	"github.com/agustin-y2k/sgrc/internal/shared/testdb"
 )
 
 func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
@@ -67,7 +67,7 @@ func crearUsuarioDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	_, err := pool.Exec(context.Background(), `
 		INSERT INTO usuario (id, nombre, apellido, email, password_hash, rol, estado)
 		VALUES ($1, 'Ada', 'Lovelace', $2, 'hash-de-prueba', 'ADMIN', 'APROBADA')
-	`, id, id+"@escuela.edu.ar")
+	`, id, id+"@escuela.test")
 	if err != nil {
 		t.Fatalf("no se pudo crear usuario de prueba: %v", err)
 	}

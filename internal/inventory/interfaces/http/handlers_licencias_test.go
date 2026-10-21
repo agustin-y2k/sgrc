@@ -10,7 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 // El reloj de nuevaAppDeTest está fijado en el 1 de enero de 2026.

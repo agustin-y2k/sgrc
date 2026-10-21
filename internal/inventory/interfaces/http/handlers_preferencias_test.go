@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 // ── Marcas de preferencia de materia (RF-03.21) ────────────────────────

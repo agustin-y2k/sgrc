@@ -53,7 +53,7 @@ export const ETIQUETA_TIPO: Record<TipoDeMensaje, string> = {
 /** Qué promete cada tipo, que es lo que ayuda a elegir bien. */
 export const AYUDA_DEL_TIPO: Record<TipoDeMensaje, string> = {
   AYUDA:
-    "Necesitás una mano ahora: el correo le llega sí o sí al equipo de administración.",
+    "Necesitás una mano para seguir con tu tarea. El equipo de administración recibe tu pedido en el sistema.",
   PROBLEMA: "Algo del sistema no funciona y hay que arreglarlo.",
   SUGERENCIA: "Se te ocurre algo que el sistema podría hacer mejor.",
 }

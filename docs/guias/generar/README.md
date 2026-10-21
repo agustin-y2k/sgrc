@@ -1,139 +1,90 @@
-# Cómo se generan las guías
+# Generación de las guías
 
-Las dos guías en PDF (`../SGRC-guia-docentes.pdf` y
-`../SGRC-guia-administradores.pdf`) no se escriben a mano: el texto vive en los
-dos `.html` de la carpeta de arriba y **todas las capturas salen del sistema
-corriendo de verdad**. El mismo pipeline actualiza las capturas del README
-(`../../capturas/`).
+Las guías de docente y administrador se mantienen en `../guia-docentes.html`
+y `../guia-admins.html`. Sus imágenes se capturan con **Playwright y Chromium**
+sobre el frontend compilado, nginx, la API y PostgreSQL reales. Los PDF se
+imprimen en A4 con Chromium. Las capturas no se dibujan ni simulan respuestas.
 
-```bash
-cp .env.capturas.example .env.capturas   # una sola vez
+Desde la raíz del repositorio:
+
+```sh
 make capturas
 ```
 
-Eso es todo. `capturar-todo.sh` levanta su propia pila en el proyecto de
-Compose `sgrc-capturas` —base recién creada, datos neutros—, siembra, saca las
-capturas en el orden que hace falta, las numera, las recorta, arma los dos PDF
-y baja la pila, pase lo que pase. La base de desarrollo no se toca: es otro
-proyecto y por lo tanto otro volumen.
+Requiere Docker con Compose, Node, `npm ci` en `frontend`, Chromium de
+Playwright (`npx playwright install chromium` desde `frontend`) y `pdftotext`.
+El punto de entrada es `scripts/generar-guias.mjs`; el shell
+`capturar-todo.sh` conserva la entrada del Makefile.
 
-Después, `git status` dice qué cambió. Las pantallas que no se tocaron salen
-casi idénticas, **salvo las que muestran una fecha o una hora**: esas cambian en
-cada corrida porque los datos se siembran con `now()`, y la de inicio saluda
-según la hora. La diferencia es siempre la franja del reloj.
+## Entorno y datos
 
-**Regenerar es parte de commitear, no de CI.** Hubo un workflow que las
-regeneraba en cada push y fallaba si alguna dejaba de coincidir con la
-commiteada. La idea era buena y el resultado no: la comparación por píxeles
-marcaba como cambiadas pantallas que no habían cambiado —la barra es
-`sticky top-0` y en una captura de página completa se dibuja donde esté el
-scroll, un 10% de diferencia por nada—, y bastaba con que el `.env.capturas`
-de quien regeneró no fuera igual al de CI para que el portón no pudiera estar
-verde nunca. Dos corridas seguidas del mismo commit señalaban pantallas
-distintas. Una alarma que suena sola deja de mirarse, y además frenaba pushes
-que estaban bien.
+La ejecución compila ambos servicios y levanta un proyecto único `sgrc-guias-*`.
+PostgreSQL usa memoria temporal, sin volumen persistente ni puerto publicado.
+La interfaz se publica en un puerto libre de `127.0.0.1`; la red usa
+`172.31.45.0/24`, por lo que se ejecuta una generación por vez. El entorno
+habitual `sgrc-local` puede seguir funcionando.
 
-Así que el control es de acá: **antes de commitear un cambio de interfaz, se
-corre `make capturas` y se commitea lo que cambió.** Lo que sí sigue frenando
-—y corre en esa misma corrida, en tu máquina— es `preparar-imagenes.py
---estricto`: si un script de captura falló y alguna imagen no se generó, el
-pipeline corta. Eso es lo que atrapa un selector podrido, que es como esto se
-rompía de verdad, y no necesita a GitHub para funcionar.
+No se leen configuraciones activas ni respaldos de inventario.
+Las claves y contraseñas de las cuentas del sistema se generan para la corrida;
+los nombres y correos de demostración usan el dominio reservado `escuela.test`.
+El correo externo y el ingreso externo quedan deshabilitados. Las pantallas
+opcionales se explican en el texto; las capturas muestran lo que ofrece esta
+instalación, sin agregar botones artificialmente.
 
-## Cuando sólo cambia el texto o la versión
+`datos-actuales.mjs` crea, mediante la API, cursos, materias, docentes, equipos,
+prioridades, reservas puntuales y recurrentes, licencias, cuentas ficticias de
+notebook, incidencias, un préstamo, horarios y una conversación respondida.
+El asistente de primera jornada se captura antes de cargar esos datos.
+Las contraseñas visibles de las cuentas de notebook son ejemplos ficticios.
 
-```bash
+## Captura y publicación
+
+`capturar-actual.mjs` navega con las sesiones de cada rol, abre formularios y
+confirmaciones y espera sus consultas. Incluye la previsualización y el
+consentimiento de una serie con prioridad y el detalle legible de auditoría.
+También captura la confirmación al quitar docentes con y sin otras cuentas
+asignadas, y el menú de administración en un teléfono. Esas confirmaciones se
+cierran con **Volver** para conservar las asignaciones y sus reservas.
+No confirma cierres, bajas ni entregas para obtener una imagen de sus formularios.
+
+La imagen de recuperación se obtiene interrumpiendo deliberadamente la descarga
+de un módulo del frontend. Se muestra el mensaje real del sistema, sin sustituir
+respuestas de la API, y se comprueba que **Recargar la página** vuelva a abrir la
+vista. Este escenario queda identificado en `generacion.json`.
+
+Las imágenes se capturan directamente del navegador, con encuadre de pantalla
+o de panel. No se recortan después ni se numeran con coordenadas antiguas.
+Cada imagen que usa el HTML debe haberse capturado en esta ejecución; un fallo
+corta la generación en vez de conservar una imagen anterior como si fuera nueva.
+También se rechazan errores de JavaScript.
+
+Los archivos se preparan primero en una carpeta privada `/tmp/sgrc-guias-*`.
+Allí quedan `capturas.json`, las imágenes y los diagnósticos si falla una captura.
+Antes de sustituir imágenes y PDF publicados se generan ambos documentos, se
+comprueba que todas sus imágenes carguen y se extrae el texto para verificar
+que contengan el final y al menos treinta páginas. Al terminar se retiran los
+contenedores y la base temporal, también ante fallos. El archivo publicado
+`../generacion.json` registra la versión, la fecha y la huella SHA-256 de cada
+imagen para comprobar su correspondencia con esa ejecución. Los PDF incluyen
+índice con enlaces, marcadores y etiquetas de estructura.
+La fecha de capturas de las portadas se actualiza a partir de esa ejecución,
+en la zona horaria de la institución, sólo después de validar ambos PDF.
+Regenerar únicamente los PDF conserva esa fecha.
+
+Revisar visualmente las imágenes y páginas representativas de ambos PDF antes
+de dar por terminada una actualización: que una imagen exista no garantiza que
+el encuadre ni el texto de la guía expliquen bien la tarea.
+
+## Cambios de texto
+
+```sh
 make capturas-pdf
 ```
 
-Rehace únicamente los dos documentos, sin levantar nada y sin Docker: dos
-minutos. Es lo que hace falta cuando sube la versión —la portada es parte del
-documento— o cuando se corrige el texto de un capítulo. Las capturas muestran a
-propósito el pie de la versión anterior: se sacan antes del bump, y regenerar
-cincuenta imágenes por un dígito no se justifica.
+Regenera ambos PDF con las imágenes publicadas, sin levantar Docker. Si cambió
+la interfaz, usar `make capturas` para renovar también las imágenes. La
+renovación se decide por cambios en el sistema; no es un requisito automático
+de cada commit y no la ejecuta CI.
 
-## Lo que hace falta tener instalado
-
-- **Docker**, para la pila de capturas.
-- **Node**, para Playwright. Si no hay en la máquina, `capturar-todo.sh` usa
-  la imagen oficial `mcr.microsoft.com/playwright:v<versión>-noble` —que ya
-  trae el navegador— y resuelve sola la versión leyendo
-  `frontend/package.json`. No hay nada que configurar.
-- **Python con Pillow**, para recortar y numerar.
-- **`jq` y `curl`**, para los scripts de datos.
-- **`pdftotext`** (opcional): si está, el script verifica que los PDF no
-  salieran truncados.
-
-## Correr una sola parte
-
-Cada script de captura es independiente y se puede correr suelto contra una
-pila ya levantada, que es lo cómodo cuando se está peleando con UNA pantalla:
-
-```bash
-export SALIDA=/tmp/capturas-sgrc
-node docs/guias/generar/capturar-formularios.mjs
-python3 docs/guias/generar/preparar-imagenes.py "$SALIDA" docs/guias/imagenes
-```
-
-Sin `--estricto`, `preparar-imagenes.py` saltea con `✗ falta` lo que no
-encuentra, que es lo correcto en una corrida parcial. **`capturar-todo.sh` sí lo
-pasa**, y ahí faltar es un error que corta: ese mensaje era idéntico cuando se
-salteaba un script a propósito y cuando uno fallaba, y así estuvieron rotas
-cuatro capturas durante semanas sin que nada lo señalara.
-
-Dos cosas al correr suelto:
-
-- **`capturar-jornada.mjs` deja la jornada declarada, y los demás la
-  necesitan.** Sobre una base nueva, cualquier otro script corrido primero deja
-  al Admin atrapado en el asistente de la primera jornada, y todas sus capturas
-  salen mostrando eso.
-- **El login falla de a ratos con `waitForURL: Timeout`** cuando se encadenan
-  varias corridas. No es la contraseña —el mismo login por curl da 200—:
-  repetir el script alcanza. `capturar-todo.sh` ya reintenta una vez por eso.
-
-## `capturar-jornada.mjs` va primero, y no es un detalle de orden
-
-Los dos motivos están escritos arriba del script, pero conviene tenerlos acá:
-
-1. **La primera captura necesita que la escuela NO tenga jornada declarada.**
-   Es lo que ve un Admin al entrar a un sistema recién instalado, y cualquier
-   script que corra antes y declare una la deja imposible de tomar.
-2. **Al terminar, deja la jornada declarada, y los demás la necesitan.** Sin
-   ningún tramo cargado el sistema le pide a cada Admin que la declare y no lo
-   deja navegar: todas las capturas de Admin que vengan después mostrarían el
-   asistente en vez de su pantalla.
-
-La confirmación del impacto se toma **sin aplicarla**: se propone un horario
-que deja clases afuera, se fotografía la pregunta y se sale con «Volver sin
-cambiar nada», así los datos de demostración quedan intactos.
-
-## Decisiones que conviene no deshacer
-
-- **Las credenciales van por entorno.** Este repositorio es público y la
-  instalación de cada escuela tiene las suyas. Ningún script las trae adentro.
-- **Los datos de demostración son neutros a propósito** —Ana Gómez, Carro 1,
-  1°A— y ninguna captura muestra correos ni nombres reales. La pila de capturas
-  arranca siempre de una base vacía, así que no hay forma de que se cuele un
-  dato real de la instalación: no es una precaución que haya que recordar.
-- **El Admin y el docente salen de `.env.capturas`, y terminan en los PDF.**
-  `SEED_ADMIN_EMAIL` es la cuenta que se ve en Usuarios, en Mi perfil y en el
-  pie de los avisos; `DOCENTE_EMAIL` es la que siembra el overlay de
-  desarrollo. Con el `.env` de desarrollo copiado sin mirar, las capturas
-  publican el correo personal en un repositorio público — pasó dos veces. Por
-  eso hay un `.env.capturas` aparte, por eso `capturar-todo.sh` **se niega a
-  arrancar** si detecta un dominio personal, y por eso el ejemplo trae
-  `SMTP_HOST` vacío: el pipeline aprueba cuentas y cancela reservas, y con un
-  servidor configurado esos correos se mandan de verdad.
-- **Las capturas son imágenes, así que buscar texto en el PDF no alcanza para
-  auditarlas.** Un `pdftotext` no ve lo que dice una pantalla fotografiada: si
-  hace falta confirmar que no quedó nada personal, hay que mirar las imágenes
-  o revisar la base con `make psql` antes de capturar.
-- **`preparar-imagenes.py` corta el vacío de abajo salteando el pie de la
-  página web.** Sin eso, el hueco entre lo último que importa y el
-  «SGRC v1.12.0 — software libre…» viaja al PDF como media hoja en blanco.
-- **Las capturas numeradas se arman solas.** `capturar-marcas.mjs` guarda las
-  coordenadas de cada elemento en `marcas.json` y `marcar.py` dibuja los globos
-  rojos encima. Si movés un rótulo en la interfaz, el número lo sigue: no hay
-  ninguna coordenada escrita a mano.
-- **El texto de las guías está en los `.html`.** El PDF se arma con el Chromium
-  de Playwright, que es lo que permite tener numeración de páginas al pie.
+Las capturas documentales se destinan únicamente a las dos guías de uso y se
+guardan en `docs/guias/imagenes`. El README enlaza las guías y sus PDF.

@@ -5,9 +5,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/auditoria/application"
-	"github.com/ramiro/sgrc/internal/auditoria/domain"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/auditoria/application"
+	"github.com/agustin-y2k/sgrc/internal/auditoria/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
 )
 
 type Handler struct {
@@ -48,11 +48,7 @@ func (h *Handler) Listar(c *fiber.Ctx) error {
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, "«hasta» tiene que ser una fecha con formato AAAA-MM-DD")
 		}
-		// El día entero: quien escribe «hasta el 5» espera que entre lo que pasó
-		// el 5 a las 23:00. Se convierte a un límite exclusivo del día siguiente
-		// porque comparar contra las 00:00 del 5 dejaría afuera todo ese día.
-		finDelDia := hasta.AddDate(0, 0, 1)
-		filtro.Hasta = &finDelDia
+		filtro.Hasta = &hasta
 	}
 
 	entradas, total, err := h.svc.Listar(c.UserContext(), filtro, pagina)

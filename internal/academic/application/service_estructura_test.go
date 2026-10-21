@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ramiro/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
 )
 
 // cicloDePrueba deja un ciclo activo y devuelve su ID.

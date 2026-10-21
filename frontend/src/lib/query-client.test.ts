@@ -15,6 +15,7 @@ function reintentaConsulta(error: Error, intentosFallidos = 0): boolean {
 
 function reintentaMutacion(error: Error, intentosFallidos = 0): boolean {
   const retry = queryClient.getDefaultOptions().mutations?.retry
+  if (retry === false) return false
   if (typeof retry !== "function") throw new Error("se esperaba una función de reintento")
   return retry(intentosFallidos, error) as boolean
 }
@@ -41,9 +42,10 @@ describe("reintentos del queryClient", () => {
 
   // Una mutación es una acción que alguien apretó: el cartel al lado del botón
   // tiene que aparecer cuando lo aprieta.
-  it("una mutación no reintenta un error del cliente y reintenta una sola vez lo demás", () => {
+  it("una mutación no se repite automáticamente ante un 4xx ni un fallo de red/servidor", () => {
     expect(reintentaMutacion(new ApiError(409, "ya existe"))).toBe(false)
-    expect(reintentaMutacion(new ApiError(503, "no disponible"))).toBe(true)
+    expect(reintentaMutacion(new ApiError(503, "no disponible"))).toBe(false)
+    expect(reintentaMutacion(new TypeError("Failed to fetch"))).toBe(false)
     expect(reintentaMutacion(new ApiError(503, "no disponible"), 1)).toBe(false)
   })
 })

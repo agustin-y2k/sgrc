@@ -3,7 +3,7 @@ package http
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/reservation/application"
+	"github.com/agustin-y2k/sgrc/internal/reservation/application"
 )
 
 // Entregas y devoluciones de PCs (RF-08) — el mostrador.

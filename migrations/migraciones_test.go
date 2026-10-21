@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ramiro/sgrc/migrations"
+	"github.com/agustin-y2k/sgrc/migrations"
 )
 
 // nombreDeMigracion es la convención: tres dígitos, guión bajo, un nombre en

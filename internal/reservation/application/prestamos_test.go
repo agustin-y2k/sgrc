@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/reservation/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // El reloj de nuevoServicioDeTest está fijado el lunes 2 de marzo de 2026 a
@@ -35,6 +35,12 @@ func reservaDeTest(t *testing.T, repo *fakeRepo, id, equipoID string) *domain.Re
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
 	repo.reservas[id] = r
+	if r.ReservaGrupoID != nil {
+		grupoID := *r.ReservaGrupoID
+		if repo.grupos[grupoID] == nil {
+			repo.grupos[grupoID] = &domain.ReservaGrupo{ID: grupoID, Estado: domain.GrupoConfirmada}
+		}
+	}
 	return r
 }
 
@@ -51,6 +57,12 @@ func reservaDeOtraFecha(t *testing.T, repo *fakeRepo, id, grupoID, equipoID stri
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
 	repo.reservas[id] = r
+	if r.ReservaGrupoID != nil {
+		grupoID := *r.ReservaGrupoID
+		if repo.grupos[grupoID] == nil {
+			repo.grupos[grupoID] = &domain.ReservaGrupo{ID: grupoID, Estado: domain.GrupoConfirmada}
+		}
+	}
 	return r
 }
 

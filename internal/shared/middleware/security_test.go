@@ -37,23 +37,53 @@ func TestSecurityHeaders_SetHeadersEsperados(t *testing.T) {
 	}
 }
 
+func TestSecurityHeaders_NoAlmacenarDatosPrivados(t *testing.T) {
+	app := fiber.New()
+	app.Use(SecurityHeaders())
+	app.Get("/api/mi-perfil", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"email": "privado@example.test"})
+	})
+	app.Post("/api/cuentas/1/password", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"password": "secreto-de-prueba"})
+	})
+	app.Get("/api/rechazada", func(c *fiber.Ctx) error {
+		return fiber.ErrUnauthorized
+	})
+	for _, caso := range []struct{ metodo, ruta string }{
+		{"GET", "/api/mi-perfil"},
+		{"POST", "/api/cuentas/1/password"},
+		{"GET", "/api/rechazada"},
+	} {
+		t.Run(caso.ruta, func(t *testing.T) {
+			resp, err := app.Test(httptest.NewRequest(caso.metodo, caso.ruta, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if got := resp.Header.Get("Cache-Control"); got != "no-store" {
+				t.Fatalf("la respuesta privada permite almacenamiento: %q", got)
+			}
+		})
+	}
+}
+
 func TestCORS_OrigenPermitido_AgregaHeader(t *testing.T) {
-	app := appConHandler(CORS("https://sgrc.tuinstitucion.edu.ar"))
+	app := appConHandler(CORS("https://sgrc.example.org"))
 
 	req := httptest.NewRequest("GET", "/x", nil)
-	req.Header.Set("Origin", "https://sgrc.tuinstitucion.edu.ar")
+	req.Header.Set("Origin", "https://sgrc.example.org")
 
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
-	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "https://sgrc.tuinstitucion.edu.ar" {
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "https://sgrc.example.org" {
 		t.Fatalf("esperaba el origen permitido reflejado, obtuve %q", got)
 	}
 }
 
 func TestCORS_OrigenNoPermitido_SinHeader(t *testing.T) {
-	app := appConHandler(CORS("https://sgrc.tuinstitucion.edu.ar"))
+	app := appConHandler(CORS("https://sgrc.example.org"))
 
 	req := httptest.NewRequest("GET", "/x", nil)
 	req.Header.Set("Origin", "https://sitio-malicioso.com")
@@ -118,18 +148,18 @@ func TestRateLimitPorEmail_LimitaPorCuentaNoPorIP(t *testing.T) {
 		return resp.StatusCode
 	}
 
-	if got := postear("victima@escuela.edu.ar"); got != fiber.StatusOK {
+	if got := postear("victima@escuela.test"); got != fiber.StatusOK {
 		t.Fatalf("primer intento: esperaba 200, obtuve %d", got)
 	}
-	if got := postear("victima@escuela.edu.ar"); got != fiber.StatusOK {
+	if got := postear("victima@escuela.test"); got != fiber.StatusOK {
 		t.Fatalf("segundo intento: esperaba 200, obtuve %d", got)
 	}
-	if got := postear("victima@escuela.edu.ar"); got != fiber.StatusTooManyRequests {
+	if got := postear("victima@escuela.test"); got != fiber.StatusTooManyRequests {
 		t.Fatalf("tercer intento contra la misma cuenta: esperaba 429, obtuve %d", got)
 	}
 
 	// Otro docente desde la misma IP no debería verse afectado.
-	if got := postear("otro@escuela.edu.ar"); got != fiber.StatusOK {
+	if got := postear("otro@escuela.test"); got != fiber.StatusOK {
 		t.Fatalf("otra cuenta desde la misma IP: esperaba 200, obtuve %d", got)
 	}
 }
@@ -154,10 +184,10 @@ func TestRateLimitPorEmail_NormalizaMayusculasYEspacios(t *testing.T) {
 		return resp.StatusCode
 	}
 
-	if got := postear("victima@escuela.edu.ar"); got != fiber.StatusOK {
+	if got := postear("victima@escuela.test"); got != fiber.StatusOK {
 		t.Fatalf("primer intento: esperaba 200, obtuve %d", got)
 	}
-	if got := postear("  Victima@Escuela.Edu.Ar "); got != fiber.StatusTooManyRequests {
+	if got := postear("  Victima@Escuela.test "); got != fiber.StatusTooManyRequests {
 		t.Fatalf("misma cuenta con otro casing: esperaba 429, obtuve %d", got)
 	}
 }

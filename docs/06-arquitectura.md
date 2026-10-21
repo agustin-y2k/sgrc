@@ -16,10 +16,10 @@
 | `internal/reporting` | Estadísticas y reportes: queries agregadas directas para el ciclo activo + snapshot histórico permanente calculado al archivar |
 | `internal/availability` | Horario de guardia de los Admin y jornada de la institución — cálculo de "disponible ahora" y de si el mostrador está atendido (RF-07.6) |
 | `internal/shared/middleware` | JWT + verificación de cuenta, RBAC, rate limiting, headers de seguridad |
-| `internal/shared/eventbus` | Pub/sub in-process (ver §4) |
+| `internal/shared/eventbus` | Outbox PostgreSQL y bus de pruebas (ver §4) |
 | `internal/shared/security` | Hash y verificación de contraseñas (`argon2id`), en un solo lugar |
 | `internal/shared/email` | Envío por SMTP (`net/smtp`, texto plano). Está en `shared/` porque lo usan dos: `notification` para los avisos y `auth` —indirectamente, vía evento— para el código de recuperación. Arma el mensaje a mano, y esa lista de cabeceras es deliberada: `From` igual a la cuenta que autentica (lo exige Gmail y es lo que alinea DMARC), `Auto-Submitted` para que ningún autorespondedor conteste, `Message-ID` propio —Gmail lo agrega si falta, pero cualquier otro SMTP deja salir el mensaje sin él y para varios filtros eso solo ya es señal de correo automático mal armado— y texto plano, sin HTML ni imágenes, que no tiene ratio que penalizar |
-| `internal/shared/secretos` | Cifra y descifra lo que el sistema tiene que poder **leer de vuelta** (AES-256-GCM). Hoy lo usa una sola cosa: las contraseñas de las cuentas de cada equipo (RF-03.22), que no se pueden hashear como la de un usuario porque a un hash no se le pregunta cuál era. Sin `CUENTAS_SECRET` queda en `nil` y responde "esta función no está disponible" en vez de romper |
+| `internal/shared/secretos` | AES-256-GCM para contraseñas de cuentas de equipo y payloads de eventos pendientes, con claves separadas. `CUENTAS_SECRET` es opcional; sin ella no se guardan secretos de equipos. La outbox usa `OUTBOX_SECRET` o una derivación separada de `JWT_SECRET`, cuya clave debe conservarse mientras haya eventos pendientes |
 | `internal/shared/audit` | Escritura del `audit_log` (ver `09-seguridad-rbac.md` §5) |
 | `internal/shared/paginacion` | Ventana de resultados y `meta` de los listados paginados |
 | `internal/shared/texto` | La única regla que decide si dos textos nombran la misma cosa. Espeja `clave_texto()` de la base, con un test de paridad contra Postgres (RF-00.1) |
@@ -85,7 +85,7 @@ alguien se acuerde.
 
 Este es el mismo contrato que tendría una llamada REST entre servicios separados — solo que resuelto en compile-time y sin latencia de red. Si algún paquete necesitara convertirse en un servicio aparte más adelante, se reemplaza la implementación en memoria por un cliente HTTP que cumpla la misma interfaz, sin tocar el resto del código.
 
-## 4. Event bus in-process
+## 4. Eventos durables y consumidores
 
 ```go
 // internal/shared/eventbus/eventbus.go
@@ -100,7 +100,7 @@ type EventBus interface {
 }
 ```
 
-`reservation` publica eventos como `reserva.cancelada`; `notification` y `reporting` se suscriben en el arranque (`cmd/main.go`). La entrega es en memoria — sin persistencia de mensajes ni garantías at-least-once, que no hacen falta con un solo proceso: si muere, publicadores y suscriptores se reinician juntos.
+`reservation` emite eventos como `reserva.cancelada` y `reserva.reubicada`; `notification` registra los consumidores de avisos internos y correo en el arranque (`cmd/main.go`). `DurableBus` conserva los eventos pendientes en PostgreSQL. Los publicadores usan `Emitir` con contexto transaccional; `Publish` queda para el adaptador en memoria y los observadores de cortesía.
 
 **Los filtros van en la query, no en el path.** Fiber resuelve las rutas por orden de registro, así que un segmento literal (`/equipos/sueltos`) tendría que registrarse **antes** que el parámetro que lo puede tragar (`/equipos/:id`). Invertido, la ruta literal deja de existir y el handler del `:id` responde 404 buscando un equipo con ese ID: compila, arranca y falla recién en tiempo de ejecución. Un comentario pidiendo que nadie reordene las líneas no es una garantía.
 
@@ -114,17 +114,21 @@ La diferencia con los otros tres es lo que decidió el arreglo: **las dos rutas 
 
 La moraleja para la próxima vez que se muevan prefijos: **aplanar rutas puede crear colisiones que antes no existían**, y el compilador no las ve. Dos rutas que nunca se cruzaron pueden pasar a competir porque se les sacó un segmento a las dos.
 
-**El prefijo de cada ruta es el recurso, no el módulo.** Todas cuelgan de `/api` y el segmento siguiente nombra la cosa: `/api/equipos`, `/api/ciclos`, `/api/reservas`. Hasta la 1.21.0 el prefijo era el paquete de Go que servía la ruta —`/api/inventory/equipos`, `/api/academic/ciclos`— y eso obligaba a saber cómo está partido el servidor por dentro: el calendario de una máquina lo sirve `reservation` aunque la máquina sea de `inventory`, así que estaba en `/api/reservation/equipos/{id}/calendario`. Cuatro recursos vivían bajo dos módulos a la vez.
+**El prefijo de cada ruta es el recurso, no el módulo.** Todas cuelgan de `/api` y el segmento siguiente nombra la cosa: `/api/equipos`, `/api/ciclos`, `/api/reservas`. Antes de unificar las rutas, el prefijo era el paquete de Go que servía la ruta —`/api/inventory/equipos`, `/api/academic/ciclos`— y eso obligaba a saber cómo está partido el servidor por dentro: el calendario de una máquina lo sirve `reservation` aunque la máquina sea de `inventory`, así que estaba en `/api/reservation/equipos/{id}/calendario`. Cuatro recursos vivían bajo dos módulos a la vez.
 
 Las cuatro excepciones son recursos que **ya** se llamaban por su nombre y se quedaron: `/api/auditoria`, `/api/notifications`, `/api/sugerencias` y `/api/jornada`. Y `/api/auth`, donde el segmento sí es el recurso: autenticarse. Lo propio de cada persona cuelga de `/api/mi-…` o `/api/mis-…` en la raíz, porque no es parte de autenticarse sino el usuario mirando lo suyo.
 
-**`Publish` corre en la goroutine de quien publica.** Eso no es un detalle: significa que un suscriptor lento se traduce directamente en un request HTTP lento. Por eso los handlers de `notification` no hacen su trabajo adentro del handler, sino que lo lanzan en su propia goroutine con un contexto y un timeout propios (el del request se cancela apenas se responde). Es lo que hace que registrar un docente no espere a que se abra una conexión SMTP, y lo que permite que cancelar una recurrencia de 40 fechas × 5 PCs no haga 200 `INSERT` en serie dentro del request. Un `sync.WaitGroup` en `main.go` registra las entregas en curso para que el apagado ordenado no se las lleve puestas.
+**Los eventos de producción se persisten con su operación.** `eventbus.Emitir(ctx, bus, evento)` escribe en `evento_pendiente` dentro de la transacción compartida. Si falla esa escritura, se revierte el cambio de negocio. Un worker de `main.go` procesa la cola cada segundo, hasta 50 eventos por pasada; el bus en memoria se conserva como adaptador de pruebas.
 
-**Un mismo evento puede tener varios suscriptores, y se usa.** `docente.registro.pendiente` tiene dos: el que escribe el aviso interno y el que manda el mail (RF-05.8). `reserva.pedido-de-liberacion` (RF-04.12) sigue el mismo patrón, y es el caso donde más importa: el pedido de un docente a otro no puede quedarse sin llegar porque el SMTP esté caído, y al revés, la campana sola no alcanza cuando la clase es mañana. Están registrados por separado a propósito — el aviso interno es la fuente de verdad y el correo una copia, así que un fallo de SMTP no puede impedir que el aviso se escriba. `Publish` además recupera el panic de cada handler por separado, así que uno roto no se lleva a los demás.
+**El aviso interno y la entrega del evento se confirman juntos.** Los consumidores de `notification` usan la misma conexión que el worker. Un fallo o panic revierte todos los destinatarios de ese evento y deja la fila pendiente, con reintentos de hasta 60 segundos de espera. Un advisory lock de entrega serializa instancias y conserva el orden de la cola: un fallo bloquea los eventos posteriores hasta poder reintentarlo. La marca de procesado evita duplicados entre workers y reinicios. Los escritores de un mismo pedido/hilo se serializan antes de emitir sus eventos; además, un aviso entregado después de resolver su tarea se guarda como leído.
+
+**El correo es una copia de cortesía con un intento.** Se inicia después de confirmar los avisos internos y fuera de la transacción. Un fallo SMTP o una caída en esa ventana puede perder el correo; no revierte el aviso ni lo reenvía. `sync.WaitGroup` espera los envíos iniciados durante el apagado ordenado. La recuperación por email conserva esta política: solicitar un código persiste el código y el evento juntos; si no llega su correo, se puede solicitar otro.
+
+**El payload pendiente está cifrado.** Incluye datos privados y, en recuperación, el código para el correo. AES-GCM usa `OUTBOX_SECRET`, o una derivación separada de `JWT_SECRET` cuando aquella está vacía. Al confirmar la entrega se vacía el payload; se conserva la metadata del evento. Ver las condiciones de rotación en `11-operacion.md`.
 
 **`prestamo` vive en `reservation` y no en `inventory`, aunque hable de un equipo.** El criterio no es de qué entidad cuelga sino de qué reglas depende: contra qué reserva salió la máquina, si volvió antes de que empiece la siguiente, quién es el próximo que la tiene reservada. Ponerlo en `inventory` obligaría a ese paquete a leer reservas, que es exactamente el límite que §3 no deja cruzar. Lo único que necesita de `inventory` —que el equipo exista y no esté dado de baja— entra por el puerto `ValidadorEquipo` que ya existía.
 
-**Hay eventos que no los dispara ningún request.** Además de `licencia.por-vencer`, los dos del barrido de reservas y entregas (`reserva.recordatorio` y `prestamo.sin-devolver.cierre`). Liberar una reserva (RF-08.10) **no publica ninguno**, y desde la 1.18.0 tampoco lo hace antes: `reserva.sin-retirar`, `prestamo.demorado` y `reserva.equipo-no-disponible` se retiraron con sus avisos (RF-08.20, RF-08.12 y RF-08.22). `licencia.por-vencer` lo publica un barrido periódico de `inventory` (RF-03.14), no una acción de una persona. Eso cambia una cosa importante: como nadie está esperando el resultado, nadie se da cuenta si sale dos veces — así que la idempotencia no puede depender de que el job corra "una vez por día". La garantiza el estado de cada licencia (dos columnas que apuntan a la fecha de vencimiento para la que ya se avisó), lo que permite correr el barrido cada hora, reiniciar el contenedor y seguir mandando un solo mail. El barrido **publica primero y marca después**: si el proceso se cae en el medio, un aviso repetido molesta, pero un vencimiento que pasa en silencio es exactamente lo que la funcionalidad existe para evitar.
+**Los barridos también producen eventos durables.** El barrido de licencias, los recordatorios y el corte de entregas toman la coordinación institucional exclusiva. La marca de aviso y su evento se confirman juntos: un fallo revierte ambos y una segunda instancia vuelve a leer la marca después de esperar. Liberar una reserva no genera los avisos retirados `reserva.sin-retirar`, `prestamo.demorado` o `reserva.equipo-no-disponible`.
 
 **El payload lleva el dato, no solo el ID.** Los eventos de correo (`cuenta.aprobada`, `password.recuperacion.solicitada`) viajan con nombre y email adentro y no con un `usuarioId` a resolver: el suscriptor vive en `notification`, que no puede importar el `domain` de `auth` (§3), así que resolverlo del otro lado significaría o violar el límite o agregar otro puerto de lectura para algo que quien publica ya tenía en la mano.
 
@@ -152,6 +156,43 @@ el fake corre `fn` derecho— es problema de quien implementa el puerto.
 `EnTransaccion` reusa la misma en vez de anidar, para que el alcance del commit
 siga siendo el de afuera.
 
+**Coordinación entre inventario, reservas, jornada y docentes.** Los tres primeros puertos exponen
+`Coordinar(ctx, exclusivo, fn)`. El adaptador abre o reutiliza una transacción
+READ COMMITTED y transporta su conexión en el contexto mediante
+`internal/shared/pgtransaccion`. Los adaptadores de composición propagan ese
+contexto; validadores y repositorios lo usan en lugar de pedir otra conexión.
+
+La coordinación usa un advisory lock transaccional por base. Reservas simples
+y recurrentes, bloqueos, cambios de equipo y entregas toman el modo compartido;
+los cambios de inventario (incluidas las preferencias), las devoluciones, el
+reemplazo de jornada y cada liberación automática toman el exclusivo. Las
+devoluciones se serializan también entre equipos distintos: el último retorno
+debe observar los anteriores al contar pendientes y cerrar el aviso del cierre.
+Este bloqueo reduce el paralelismo de esas operaciones a cambio de mantener
+coherente el contador institucional. Se adquiere antes de leer o bloquear
+filas; después se mantiene el orden de H-12: grupos por ID y reservas por ID.
+No se permite convertir una operación compartida a exclusiva.
+
+Academic usa `CoordinarAsignaciones(ctx, fn)` en modo exclusivo para asignar,
+cambiar rol, remover y resolver pedidos de materia. Auth toma el mismo modo
+en cada fase de `EnBaja`, antes del bloqueo por usuario y de las filas de cuentas.
+La remoción elimina el vínculo, comprueba los docentes `APROBADA` restantes y
+cancela reservas en una sola transacción. Un fallo revierte todos esos cambios;
+los avisos se publican después del commit. Las bajas conservan los commits y el
+progreso por materia de H-07: no se convierten en una única transacción global.
+Los validadores de reservas leen cuenta y asignación bajo el modo compartido;
+un vínculo pendiente de limpieza no autoriza a una cuenta `BAJA` a reservar
+como docente. La aprobación de un pedido adquiere la coordinación antes de
+bloquear el pedido y reutiliza la misma transacción al asignar.
+
+Así, disponibilidad, comprobación de custodia y escritura se resuelven sobre
+un estado estable. El equipo o la jornada y sus cancelaciones se confirman
+juntos; el rollback descarta también los callbacks de avisos. Las operaciones
+de reserva/entrega conservan concurrencia entre sí. La elección de un lock
+institucional serializa cambios administrativos aunque afecten equipos
+distintos; cualquier nuevo escritor que afecte estas invariantes debe usar
+el mismo protocolo. Los eventos y marcas de aviso se incluyen en la transacción mediante la outbox durable.
+
 **Lo que obliga a que el duplicado no sea un error.** En Postgres una sentencia
 que falla **aborta la transacción entera**: de ahí en adelante todo responde
 «current transaction is aborted». Eso choca de frente con las altas masivas, que
@@ -162,12 +203,7 @@ estaba»— en lugar de dejar reventar el INSERT y atrapar el 23505.
 Es la diferencia entre dos cosas que parecen la misma: *un duplicado* no es un
 error del lote y no lo voltea; *un fallo real* sí, y deshace todo.
 
-**Qué NO se envuelve.** El barrido que marca las licencias ya avisadas
-(`avisador_licencias.go`) escribe fila por fila a propósito: el correo ya salió,
-así que marcar la mitad es estrictamente mejor que marcar ninguna. Una
-transacción ahí garantizaría que un fallo repita el aviso para todas en vez de
-para algunas. La regla no es «todo va en una transacción» sino «lo que tiene que
-ser todo o nada, va».
+**Los barridos también se envuelven.** El barrido de licencias y el de recordatorios/cierre confirman marcas y eventos juntos. El correo queda fuera: empieza después de confirmar los avisos internos y conserva su política de cortesía. Así un fallo al guardar una marca no produce un aviso duplicado en la siguiente pasada.
 
 ## 6. Topes: pool, consultas y transacciones
 
@@ -192,8 +228,8 @@ tope de 30 segundos no lo limita.
 
 **Las operaciones de lote leen de a una consulta, no de a un elemento.** Un
 pedido puede traer hasta `MaxEquiposPorOperacion` = 200 máquinas —entregar contra
-reserva, recibir un lote, cancelar por ids, bloquear equipos— y hasta la 1.21.0
-cada uno de esos bucles pedía su fila por separado. Ahora hay tres lecturas por
+reserva, recibir un lote, cancelar por ids, bloquear equipos—. Antes de agrupar
+las lecturas, cada uno de esos bucles pedía su fila por separado. Ahora hay tres lecturas por
 lote (`BuscarReservasPorIDs`, `BuscarPrestamosPorIDs`,
 `ListarReservasFuturasDeEquipos`) y el bucle sólo consulta el mapa que ya tiene.
 
@@ -252,7 +288,7 @@ flowchart TB
             NOTIF[notification]
             REP[reporting]
             AVAIL[availability]
-            EB[[eventbus in-process]]
+            EB[[eventos durables]]
         end
         NGINX[frontend — nginx sirve la SPA y proxea /api]
         PG[(PostgreSQL 16 — sgrc_db)]
@@ -303,9 +339,28 @@ institución permitiría falsificar el header con la IP real del cliente
 | Decisión | Justificación |
 |---|---|
 | **Monolito modular, no monolito plano** | Los límites de paquete vía interfaces se mantienen aunque corran en el mismo proceso — permite extraer a servicios separados sin reescribir lógica el día que haga falta, y documenta criterio de diseño real. |
-| **Event bus in-process en vez de un message broker** | Mismo patrón pub/sub, sin contenedor ni complejidad operativa adicional para un servidor sin equipo de DevOps dedicado. |
+| **Outbox PostgreSQL sin un message broker externo** | Eventos y avisos durables usando la base existente; consumers y workers coordinados por transacciones. |
 | **JWT HS256** | Un solo proceso firma y verifica el token — un secreto simétrico cumple esa función sin la gestión de un par de claves asimétricas. Si en el futuro varios procesos necesitaran verificar sin llamar a `auth` por red, se puede pasar a RS256 sin tocar el resto del sistema. |
 | **Reporting con queries agregadas directas para el ciclo activo, sin CQRS continuo** | A esta escala (una institución, decenas de usuarios) no hay volumen que justifique un read-model sincronizado por eventos. La única excepción es un snapshot agregado (`historico_uso_equipo`/`historico_uso_docente`) calculado **una sola vez, al archivar un ciclo lectivo** — porque el detalle de reservas de ese ciclo se borra físicamente en el mismo paso (ver `01-requisitos.md` RF-02.4 y `07-modelo-datos.md` §3). |
 | **PostgreSQL único, FKs reales** | Toda referencia entre tablas es una foreign key real — integridad referencial completa, sin el costo de mantener bases de datos separadas. |
 | **Imágenes Docker desde `scratch`** | Binario Go estático + imagen `scratch` = ~10–15 MB, sin shell, sin librerías extra, superficie de ataque mínima. El proceso corre como `USER 65532` (no root) y el `HEALTHCHECK` lo hace el propio binario contra su `/health`, porque en `scratch` no hay `curl` con el que armarlo desde afuera. El costo de `scratch` es que **el binario no puede dar por sentado nada del sistema de archivos**: la zona horaria se embebe importando `time/tzdata` en `cmd/main.go`, y los certificados raíz se copian a `/etc/ssl/certs/ca-certificates.crt` desde la etapa de build. Sin esos dos, el proceso arranca igual y falla más tarde y lejos — sin CAs, el ingreso con Google devuelve 500 y los correos no salen (ver `Dockerfile`). |
 | **Preparado para escalar a más de una institución** | Docker Compose hoy → Kubernetes si hiciera falta escalar. Los límites de paquete de §3 y la interfaz de `EventBus` de §4 permiten esa extracción sin reescribir el dominio. |
+
+### Vigencia académica y auditoría transaccional
+
+Toda escritura estructural de ciclos, cursos, espacios y materias, incluidas importación y copia, toma la coordinación institucional exclusiva y verifica que la entidad y sus ancestros no estén archivados. El cierre anual usa el mismo protocolo. Una escritura que espere al cierre vuelve a comprobar la vigencia; no puede agregar hijos al histórico.
+
+La migración 025 agrega triggers de auditoría a las tablas sensibles. Cada fila cambiada produce `CAMBIO_TRANSACCIONAL` en su misma transacción, con operación, campos y valores anteriores/nuevos de una lista explícita de estados, roles, referencias y fechas. No se copian contraseñas, hashes, ciphertext ni texto libre. El middleware transporta actor verificado e IP al contexto; `pgtransaccion` los instala con `set_config(..., true)`, sin contaminar conexiones del pool. Los callers internos deben usar `pgtransaccion.ConActor`; el UUID cero identifica trabajos del sistema o llamadas sin actor. Las entradas descriptivas de los handlers complementan este registro y siguen siendo best effort. Revelar una contraseña exige su entrada descriptiva exitosa antes de responder.
+
+La migración 026 incorpora `equipo_preferencia` a esos triggers. Alta, edición y
+borrado comparten la coordinación con reservas y la atribución de actor/IP;
+un fallo al registrar la auditoría revierte la preferencia.
+
+Una excepción de atención también cuenta como horario declarado para ese día,
+aunque el administrador no tenga patrón semanal. El fallback de mostrador
+operativo sólo corresponde cuando ningún administrador declaró patrón ni
+excepción aplicable. Una ausencia explícita no habilita los trabajos automáticos.
+
+### Reposición por prioridad
+
+La creación con `equiposATomar` adquiere coordinación institucional exclusiva antes de leer o bloquear reservas, ya que el alcance de la cadena depende de los conflictos encontrados. La creación sin desplazamientos conserva la coordinación compartida. `reservation` planifica los sustitutos por dispositivo y por el intervalo original completo, compara también la prioridad de las asignaciones provisionales y guarda solamente el resultado final. Cada pareja reserva/dispositivo se intenta una vez, evitando ciclos. La migración 028 mantiene la exclusión de solapamientos inicialmente inmediata y permite diferirla dentro del lote de reasignación; el repositorio vuelve a verificarla antes de crear la reserva ganadora. Las reposiciones conservan el ID de reserva y no modifican el estado del grupo; sólo los faltantes cancelados obligan a recalcularlo. La migración 027 agrega el aviso `RESERVA_REUBICADA` y permite registrar `equipo_id` antes y después en la auditoría transaccional.

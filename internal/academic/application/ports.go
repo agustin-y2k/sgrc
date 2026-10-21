@@ -3,12 +3,25 @@ package application
 import (
 	"context"
 
-	"github.com/ramiro/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/ (ver
 // docs/06-arquitectura.md §3).
 type Repo interface {
+	// VerificarVigencia exige entidad, contenedor y ciclo sin archivar.
+	VerificarVigencia(ctx context.Context, entidad, id string) error
+	// CoordinarAsignaciones serializa cambios de docentes y bajas de cuentas
+	// con la autorización de reservas. Comparte la transacción entre módulos.
+	CoordinarAsignaciones(ctx context.Context, fn func(context.Context) error) error
+	// EnTransaccion confirma juntas las escrituras del callback; sus consultas
+	// y escrituras deben usar el contexto recibido.
+	EnTransaccion(ctx context.Context, fn func(context.Context) error) error
+	// EnCierre comparte una transacción con reporting y reservation.
+	EnCierre(ctx context.Context, cicloID string, fn func(context.Context) error) error
+	BuscarCierre(ctx context.Context, cicloID string) (*CierreCompletado, error)
+	GuardarCierre(ctx context.Context, cicloID string, cierre *CierreCompletado) error
+
 	// Ciclo lectivo
 	CrearCiclo(ctx context.Context, c *domain.CicloLectivo) error
 	BuscarCicloActivo(ctx context.Context) (*domain.CicloLectivo, error)
@@ -74,6 +87,8 @@ type Repo interface {
 	// Pedidos para dictar una materia
 	CrearPedido(ctx context.Context, p *domain.PedidoDeMateria) error
 	BuscarPedidoPorID(ctx context.Context, id string) (*domain.PedidoDeMateria, error)
+	// Bloquea el pedido hasta terminar la transacción de resolución.
+	BuscarPedidoParaResolver(ctx context.Context, id string) (*domain.PedidoDeMateria, error)
 	GuardarPedido(ctx context.Context, p *domain.PedidoDeMateria) error
 	// ListarPedidos: `soloPendientes` es como se mira casi siempre — lo que
 	// falta resolver, no el archivo.

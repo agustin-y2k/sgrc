@@ -19,18 +19,18 @@ describe("AvisoDeSpam", () => {
   it("nombra la dirección desde la que salen los correos", async () => {
     vi.mocked(authApi.configPublica).mockResolvedValue({
       googleClientId: "",
-      remitenteDeCorreo: "avisos@escuela.edu.ar",
+      remitenteDeCorreo: "avisos@escuela.test",
     })
 
     render(<AvisoDeSpam />)
 
-    expect(await screen.findByText("avisos@escuela.edu.ar")).toBeInTheDocument()
+    expect(await screen.findByText("avisos@escuela.test")).toBeInTheDocument()
   })
 
   it("deja poner el texto de cada pantalla", async () => {
     vi.mocked(authApi.configPublica).mockResolvedValue({
       googleClientId: "",
-      remitenteDeCorreo: "avisos@escuela.edu.ar",
+      remitenteDeCorreo: "avisos@escuela.test",
     })
 
     render(<AvisoDeSpam>El aviso puede caer en spam.</AvisoDeSpam>)

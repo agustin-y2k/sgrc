@@ -5,8 +5,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/inventory/application"
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/application"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 func mapearError(err error) error {
@@ -71,7 +71,9 @@ func mapearError(err error) error {
 		errors.Is(err, application.ErrEquipoPrestado):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, domain.ErrNombreCarroVacio),
+	case errors.Is(err, application.ErrAlcancePreferenciaInexistente),
+		errors.Is(err, domain.ErrCursoExactoSinAnio),
+		errors.Is(err, domain.ErrNombreCarroVacio),
 		errors.Is(err, domain.ErrIdentificadorInvalido),
 		errors.Is(err, domain.ErrNumeroSerieInvalido),
 		errors.Is(err, domain.ErrNumeroSerieLargo),

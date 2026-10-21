@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // usuarioConCodigo deja un usuario creado y devuelve su ID.
@@ -40,7 +40,7 @@ func TestCodigoRecuperacion_CrearYBuscar(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.edu.ar")
+	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.test")
 	c := nuevoCodigo(t, usuarioID, "hash-del-codigo")
 
 	if err := repo.CrearCodigoRecuperacion(ctx, c); err != nil {
@@ -67,7 +67,7 @@ func TestCodigoRecuperacion_SinCodigoDevuelveElErrorDeNegocio(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.edu.ar")
+	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.test")
 
 	// Nunca pgx.ErrNoRows crudo hacia arriba: application espera su sentinel.
 	_, err := repo.BuscarCodigoVigenteDe(ctx, usuarioID)
@@ -81,7 +81,7 @@ func TestCodigoRecuperacion_CrearInvalidaElAnterior(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.edu.ar")
+	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.test")
 	primero := nuevoCodigo(t, usuarioID, "hash-viejo")
 	if err := repo.CrearCodigoRecuperacion(ctx, primero); err != nil {
 		t.Fatalf("creando el primero: %v", err)
@@ -136,8 +136,8 @@ func TestCodigoRecuperacion_CrearNoTocaLosDeOtraPersona(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	unaID := usuarioConCodigo(t, repo, "ada@escuela.edu.ar")
-	otraID := usuarioConCodigo(t, repo, "grace@escuela.edu.ar")
+	unaID := usuarioConCodigo(t, repo, "ada@escuela.test")
+	otraID := usuarioConCodigo(t, repo, "grace@escuela.test")
 
 	if err := repo.CrearCodigoRecuperacion(ctx, nuevoCodigo(t, unaID, "hash-de-ada")); err != nil {
 		t.Fatalf("creando el de ada: %v", err)
@@ -156,7 +156,7 @@ func TestCodigoRecuperacion_GuardarRegistraIntentosYConsumo(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.edu.ar")
+	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.test")
 	c := nuevoCodigo(t, usuarioID, "hash-del-codigo")
 	if err := repo.CrearCodigoRecuperacion(ctx, c); err != nil {
 		t.Fatalf("creando: %v", err)
@@ -192,7 +192,7 @@ func TestCodigoRecuperacion_NoSePuedeConsumirDosVeces(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.edu.ar")
+	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.test")
 	c := nuevoCodigo(t, usuarioID, "hash-del-codigo")
 	if err := repo.CrearCodigoRecuperacion(ctx, c); err != nil {
 		t.Fatalf("creando: %v", err)
@@ -215,7 +215,7 @@ func TestCodigoRecuperacion_DosPedidosConcurrentesConsumenUnaSolaVez(t *testing.
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.edu.ar")
+	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.test")
 	c := nuevoCodigo(t, usuarioID, "hash-del-codigo")
 	if err := repo.CrearCodigoRecuperacion(ctx, c); err != nil {
 		t.Fatalf("creando: %v", err)
@@ -258,7 +258,7 @@ func TestCodigoRecuperacion_SeVanConLaCuenta(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.edu.ar")
+	usuarioID := usuarioConCodigo(t, repo, "ada@escuela.test")
 	if err := repo.CrearCodigoRecuperacion(ctx, nuevoCodigo(t, usuarioID, "hash")); err != nil {
 		t.Fatalf("creando: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestVersionSesion_ArrancaEnCeroYSePersiste(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeTest("ada@escuela.edu.ar", domain.RolDocente, domain.EstadoAprobada)
+	u := usuarioDeTest("ada@escuela.test", domain.RolDocente, domain.EstadoAprobada)
 	if err := repo.Crear(ctx, u); err != nil {
 		t.Fatalf("creando: %v", err)
 	}
@@ -304,8 +304,7 @@ func TestVersionSesion_ArrancaEnCeroYSePersiste(t *testing.T) {
 		t.Fatalf("esperaba versión 0 al crear, obtuve %d", leido.VersionSesion)
 	}
 
-	leido.InvalidarSesiones()
-	if err := repo.Guardar(ctx, leido); err != nil {
+	if _, err := repo.ActualizarPassword(ctx, leido, "nuevo-hash", false); err != nil {
 		t.Fatalf("guardando: %v", err)
 	}
 
@@ -323,13 +322,16 @@ func TestVerificadorCuentaVigente_DevuelveLaVersionDeSesion(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeTest("ada@escuela.edu.ar", domain.RolDocente, domain.EstadoAprobada)
+	u := usuarioDeTest("ada@escuela.test", domain.RolDocente, domain.EstadoAprobada)
 	if err := repo.Crear(ctx, u); err != nil {
 		t.Fatalf("creando: %v", err)
 	}
-	u.InvalidarSesiones()
-	u.InvalidarSesiones()
-	if err := repo.Guardar(ctx, u); err != nil {
+	var err error
+	u, err = repo.ActualizarPassword(ctx, u, "hash-1", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ActualizarPassword(ctx, u, "hash-2", false); err != nil {
 		t.Fatalf("guardando: %v", err)
 	}
 

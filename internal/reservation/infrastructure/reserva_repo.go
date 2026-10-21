@@ -9,11 +9,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ramiro/sgrc/internal/reservation/application"
-	"github.com/ramiro/sgrc/internal/reservation/domain"
+	"github.com/agustin-y2k/sgrc/internal/reservation/application"
+	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
 )
 
-const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en, cancelado_por, motivo_cancelacion, cancelada_en`
+const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en, cancelado_por, motivo_cancelacion, cancelada_en, version`
 
 // condicionNoTerminada arma "esta reserva todavía no terminó respecto del
 // instante dado", comparando la hora de pared de la reserva contra la hora de
@@ -42,7 +42,7 @@ func condicionNoEmpezada(alias, placeholderFecha, placeholderHora string) string
 }
 
 func (r *PostgresRepo) CrearReserva(ctx context.Context, res *domain.Reserva) error {
-	_, err := r.db.Exec(ctx, `
+	_, err := r.conexion(ctx).Exec(ctx, `
 		INSERT INTO reserva (id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`, res.ID, res.ReservaGrupoID, res.EquipoID, res.MateriaID, res.NombreDocenteSnapshot, res.Fecha,
@@ -62,13 +62,16 @@ func (r *PostgresRepo) CrearReserva(ctx context.Context, res *domain.Reserva) er
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
+		if esCicloCerrado(err) {
+			return application.ErrCicloCerrado
+		}
 		return fmt.Errorf("creando reserva: %w", err)
 	}
 	return nil
 }
 
 func (r *PostgresRepo) BuscarReservaPorID(ctx context.Context, id string) (*domain.Reserva, error) {
-	row := r.db.QueryRow(ctx, `SELECT `+columnasReserva+` FROM reserva WHERE id = $1`, id)
+	row := r.conexion(ctx).QueryRow(ctx, `SELECT `+columnasReserva+` FROM reserva WHERE id = $1`, id)
 	return escanearReserva(row)
 }
 
@@ -81,7 +84,7 @@ func escanearReserva(row pgx.Row) (*domain.Reserva, error) {
 	err := row.Scan(
 		&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 		&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
-		&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
+		&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -115,24 +118,37 @@ func escanearReserva(row pgx.Row) (*domain.Reserva, error) {
 
 // GuardarReserva persiste los campos mutables de una reserva ya creada.
 func (r *PostgresRepo) GuardarReserva(ctx context.Context, res *domain.Reserva) error {
-	tag, err := r.db.Exec(ctx, `
-		UPDATE reserva SET equipo_id=$2, estado=$3, cancelado_por=$4, motivo_cancelacion=$5, cancelada_en=$6
-		WHERE id=$1
-	`, res.ID, res.EquipoID, string(res.Estado), res.CanceladoPor, res.MotivoCancelacion, res.CanceladaEn)
+	err := r.conexion(ctx).QueryRow(ctx, `
+		UPDATE reserva SET equipo_id=$2, estado=$3, cancelado_por=$4, motivo_cancelacion=$5, cancelada_en=$6, version=version+1
+		WHERE id=$1 AND version=$7 RETURNING version
+	`, res.ID, res.EquipoID, string(res.Estado), res.CanceladoPor, res.MotivoCancelacion, res.CanceladaEn, res.Version).Scan(&res.Version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var existe bool
+		if err := r.conexion(ctx).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM reserva WHERE id=$1)`, res.ID).Scan(&existe); err != nil {
+			return err
+		}
+		if existe {
+			return application.ErrReservaModificada
+		}
+		return application.ErrReservaNoEncontrada
+	}
 	if err != nil {
+		if esViolacionExclusion(err) {
+			return application.ErrSolapamiento
+		}
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
+		if esCicloCerrado(err) {
+			return application.ErrCicloCerrado
+		}
 		return fmt.Errorf("actualizando reserva: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return application.ErrReservaNoEncontrada
 	}
 	return nil
 }
 
 func (r *PostgresRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoID string) ([]*domain.Reserva, error) {
-	rows, err := r.db.Query(ctx, `SELECT `+columnasReserva+` FROM reserva WHERE reserva_grupo_id = $1`, reservaGrupoID)
+	rows, err := r.conexion(ctx).Query(ctx, `SELECT `+columnasReserva+` FROM reserva WHERE reserva_grupo_id = $1`, reservaGrupoID)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
@@ -156,7 +172,7 @@ func (r *PostgresRepo) ListarReservasPorGrupo(ctx context.Context, reservaGrupoI
 // todavía no terminaron en el instante `desde`.
 func (r *PostgresRepo) ListarReservasFuturasDeEquipo(ctx context.Context, equipoID string, desde time.Time) ([]*domain.Reserva, error) {
 	// ORDER BY: quien llama puede necesitar LA PRÓXIMA, no una cualquiera.
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
 		WHERE equipo_id = $1 AND `+condicionNoTerminada("reserva", "$2", "$3")+` AND estado = 'CONFIRMADA'
 		ORDER BY fecha, hora_inicio
@@ -188,12 +204,13 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 		return nil, nil
 	}
 
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT res.equipo_id,
 		       COALESCE(e.nombre, 'PC ' || e.identificador, ''),
 		       res.fecha, res.hora_inicio, res.hora_fin,
 		       COALESCE(res.nombre_docente_snapshot, ''),
-		       COALESCE(res.motivo_bloqueo, '')
+		       COALESCE(res.motivo_bloqueo, ''),
+		       res.id, COALESCE(res.materia_id::text, '')
 		FROM reserva res
 		JOIN equipo e ON e.id = res.equipo_id
 		LEFT JOIN carro c ON c.id = e.carro_id
@@ -221,7 +238,7 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 	for rows.Next() {
 		var s application.Solapamiento
 		var inicio, fin time.Time
-		if err := rows.Scan(&s.EquipoID, &s.Etiqueta, &s.Fecha, &inicio, &fin, &s.Docente, &s.MotivoBloqueo); err != nil {
+		if err := rows.Scan(&s.EquipoID, &s.Etiqueta, &s.Fecha, &inicio, &fin, &s.Docente, &s.MotivoBloqueo, &s.ReservaID, &s.MateriaID); err != nil {
 			return nil, fmt.Errorf("escaneando solapamiento: %w", err)
 		}
 		s.HoraInicio, s.HoraFin = horaComoDuracion(inicio), horaComoDuracion(fin)
@@ -249,7 +266,7 @@ func (r *PostgresRepo) BuscarSolapamientos(ctx context.Context, equipoIDs []stri
 // Los bloqueos administrativos quedan fuera de la consulta: nunca estuvieron
 // sujetos a la jornada (RF-04.7), así que cambiarla no puede afectarlos.
 func (r *PostgresRepo) ListarReservasFuturas(ctx context.Context, desde time.Time) ([]application.ReservaDetallada, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasReservaConPrefijo("res")+`,
 		       COALESCE(p.identificador, 0),
 		       COALESCE(p.nombre, 'PC ' || p.identificador),
@@ -285,7 +302,7 @@ func (r *PostgresRepo) ListarReservasFuturas(ctx context.Context, desde time.Tim
 		if err := rows.Scan(
 			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
-			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
+			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version,
 			&detalle.Identificador, &detalle.Etiqueta, &detalle.CarroNombre,
 			&detalle.MateriaNombre, &detalle.CursoNombre,
 			&detalle.ReglaRecurrenciaID,
@@ -316,7 +333,7 @@ func (r *PostgresRepo) ListarReservasFuturas(ctx context.Context, desde time.Tim
 }
 
 func (r *PostgresRepo) ListarReservasFuturasDeMateria(ctx context.Context, materiaID string, desde time.Time) ([]*domain.Reserva, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
 		WHERE materia_id = $1 AND `+condicionNoTerminada("reserva", "$2", "$3")+` AND estado = 'CONFIRMADA'
 	`, materiaID, desde, desde)
@@ -344,7 +361,7 @@ func (r *PostgresRepo) ListarReservasFuturasDeMateria(ctx context.Context, mater
 func (r *PostgresRepo) ListarReservasConfirmadasVencidas(ctx context.Context, ahora time.Time, limite int) ([]*domain.Reserva, error) {
 	// De la más vieja a la más nueva: el job procesa por lotes, y así el
 	// primero se lleva el atraso más antiguo en vez de una franja al azar.
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
 		WHERE estado = 'CONFIRMADA' AND fin_de_pared(fecha, hora_inicio, hora_fin) < ($1::date + $2::time)
 		ORDER BY fecha, hora_fin, id
@@ -369,7 +386,7 @@ func (r *PostgresRepo) ListarReservasConfirmadasVencidas(ctx context.Context, ah
 // ── ReglaRecurrencia ────────────────────────────────────────────────────
 
 func (r *PostgresRepo) CrearReglaRecurrencia(ctx context.Context, regla *domain.ReglaRecurrencia) error {
-	_, err := r.db.Exec(ctx, `
+	_, err := r.conexion(ctx).Exec(ctx, `
 		INSERT INTO regla_recurrencia (id, materia_id, creado_por, dia_semana, hora_inicio, hora_fin, fecha_inicio, fecha_fin)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`, regla.ID, regla.MateriaID, regla.CreadoPor, string(regla.DiaSemana),
@@ -387,8 +404,8 @@ func (r *PostgresRepo) CrearReglaRecurrencia(ctx context.Context, regla *domain.
 }
 
 func (r *PostgresRepo) ListarGruposFuturosDeRegla(ctx context.Context, reglaID string, desde time.Time) ([]*domain.ReservaGrupo, error) {
-	rows, err := r.db.Query(ctx, `
-		SELECT id, materia_id, creado_por, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, regla_recurrencia_id, creada_en
+	rows, err := r.conexion(ctx).Query(ctx, `
+		SELECT `+columnasGrupo+`
 		FROM reserva_grupo
 		WHERE regla_recurrencia_id = $1 AND fecha > $2
 		ORDER BY fecha
@@ -417,6 +434,31 @@ func (r *PostgresRepo) ListarGruposFuturosDeRegla(ctx context.Context, reglaID s
 // de archivado de RF-02.4. Se llama siempre DESPUÉS de calcular el snapshot
 // histórico, que es lo único que sobrevive del año.
 func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, cicloID string) (int, int, error) {
+	var grupos, reservas int
+	err := r.EnTransaccion(ctx, func(repo application.Repo) error {
+		var err error
+		grupos, reservas, err = repo.(*PostgresRepo).eliminarReservasYGruposDeCiclo(ctx, cicloID)
+		return err
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return grupos, reservas, nil
+}
+
+func (r *PostgresRepo) eliminarReservasYGruposDeCiclo(ctx context.Context, cicloID string) (int, int, error) {
+	// También cuando se invoca fuera del cierre: el conteo y los DELETE deben
+	// ver una fuente estable, sin nuevos grupos o bloqueos entre pasos.
+	var id string
+	if err := r.conexion(ctx).QueryRow(ctx, `SELECT id FROM ciclo_lectivo WHERE id=$1 FOR UPDATE`, cicloID).Scan(&id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, 0, nil
+		}
+		if esIDInvalido(err) {
+			return 0, 0, application.ErrIDInvalido
+		}
+		return 0, 0, fmt.Errorf("bloqueando ciclo para limpiar reservas: %w", err)
+	}
 	gruposDelCiclo := `
 		SELECT rg.id FROM reserva_grupo rg
 		JOIN materia m ON m.id = rg.materia_id
@@ -434,7 +476,7 @@ func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, ciclo
 	`
 
 	var reservasEliminadas int
-	err := r.db.QueryRow(ctx,
+	err := r.conexion(ctx).QueryRow(ctx,
 		`SELECT
 			(SELECT COUNT(*) FROM reserva WHERE reserva_grupo_id IN (`+gruposDelCiclo+`))
 			+ (SELECT COUNT(*) FROM reserva WHERE `+bloqueosDelCiclo+`)`,
@@ -447,7 +489,7 @@ func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, ciclo
 		return 0, 0, fmt.Errorf("contando reservas a eliminar: %w", err)
 	}
 
-	tag, err := r.db.Exec(ctx, `DELETE FROM reserva_grupo WHERE id IN (`+gruposDelCiclo+`)`, cicloID)
+	tag, err := r.conexion(ctx).Exec(ctx, `DELETE FROM reserva_grupo WHERE id IN (`+gruposDelCiclo+`)`, cicloID)
 	if err != nil {
 		if esIDInvalido(err) {
 			return 0, 0, application.ErrIDInvalido
@@ -455,13 +497,13 @@ func (r *PostgresRepo) EliminarReservasYGruposDeCiclo(ctx context.Context, ciclo
 		return 0, 0, fmt.Errorf("eliminando reserva_grupo del ciclo: %w", err)
 	}
 
-	if _, err := r.db.Exec(ctx,
+	if _, err := r.conexion(ctx).Exec(ctx,
 		`DELETE FROM regla_recurrencia WHERE materia_id IN (`+materiasDelCiclo+`)`, cicloID,
 	); err != nil {
 		return 0, 0, fmt.Errorf("eliminando reglas de recurrencia del ciclo: %w", err)
 	}
 
-	if _, err := r.db.Exec(ctx,
+	if _, err := r.conexion(ctx).Exec(ctx,
 		`DELETE FROM reserva WHERE `+bloqueosDelCiclo, cicloID,
 	); err != nil {
 		return 0, 0, fmt.Errorf("eliminando bloqueos administrativos del ciclo: %w", err)
@@ -500,6 +542,16 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 	if f.CreadoPor != nil {
 		agregar("creado_por = $%d", *f.CreadoPor)
 	}
+	// La página agrupada recupera los miembros completos de las clases elegidas,
+	// conservando el filtro de identidad también en esa segunda lectura.
+	desdeVisibles := desde
+	if f.Estado != nil {
+		agregar("estado = $%d", *f.Estado)
+	}
+	if f.Busqueda != "" {
+		args = append(args, f.Busqueda)
+		desde += fmt.Sprintf(" AND strpos(clave_texto(COALESCE(m.nombre,'') || ' ' || COALESCE(cu.nombre,'') || ' ' || COALESCE(cu.modalidad,'')), clave_texto($%d)) > 0", len(args))
+	}
 	if f.EquipoID != nil {
 		agregar("equipo_id = $%d", *f.EquipoID)
 	}
@@ -512,7 +564,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 	if f.Hasta != nil {
 		agregar("fecha <= $%d", *f.Hasta)
 	}
-	if !f.IncluirCanceladas {
+	if !f.IncluirCanceladas && !f.PorClases && f.Estado == nil {
 		desde += " AND res.estado <> 'CANCELADA'"
 	}
 
@@ -533,8 +585,12 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 
 	argsPagina := append(append([]any{}, args...), f.Pagina.Limit(), f.Pagina.Offset())
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(argsPagina)-1, len(argsPagina))
+	conteo := "SELECT COUNT(*)" + desde
+	if f.PorClases {
+		query, conteo = consultasPorClases(desde, desdeVisibles, f.IncluirCanceladas || (f.Estado != nil && *f.Estado == domain.ReservaCancelada), len(argsPagina)-1, len(argsPagina))
+	}
 
-	rows, err := r.db.Query(ctx, query, argsPagina...)
+	rows, err := r.conexion(ctx).Query(ctx, query, argsPagina...)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, 0, application.ErrIDInvalido
@@ -552,13 +608,12 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		var motivoBloqueo *string
 		var detalle application.ReservaDetallada
 
-		// COUNT(*) OVER() cuenta las filas que matchean el WHERE, antes del LIMIT:
-		// da el total en la misma pasada, sin una segunda consulta que podría
-		// además ver un estado distinto de la tabla.
+		// El total cuenta filas individuales o unidades completas según PorClases,
+		// antes del LIMIT, en la misma consulta que recupera la página.
 		if err := rows.Scan(
 			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
-			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
+			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version,
 			&detalle.Identificador, &detalle.Etiqueta, &detalle.CarroNombre,
 			&detalle.MateriaNombre, &detalle.CursoNombre,
 			&detalle.ReglaRecurrenciaID,
@@ -595,7 +650,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 
 	// Sin filas no hay ventana de la que leer COUNT(*) OVER().
 	if len(resultado) == 0 && f.Pagina.Offset() > 0 {
-		if err := r.db.QueryRow(ctx, "SELECT COUNT(*)"+desde, args...).Scan(&total); err != nil {
+		if err := r.conexion(ctx).QueryRow(ctx, conteo, args...).Scan(&total); err != nil {
 			return nil, 0, fmt.Errorf("contando reservas: %w", err)
 		}
 	}
@@ -609,7 +664,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 // no tienen materia asociada y también ocupan la PC, así que también deben
 // verse en el calendario.
 func (r *PostgresRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, desde, hasta time.Time) ([]application.BloqueCalendario, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasReservaConPrefijo("res")+`,
 		       COALESCE(m.nombre, ''), COALESCE(c.nombre, '')
 		FROM reserva res
@@ -639,7 +694,7 @@ func (r *PostgresRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, 
 		if err := rows.Scan(
 			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
-			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn,
+			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version,
 			&materiaNombre, &cursoNombre,
 		); err != nil {
 			return nil, fmt.Errorf("escaneando bloque del calendario: %w", err)
@@ -682,7 +737,7 @@ func columnasReservaConPrefijo(alias string) string {
 // ReservasDeLaSerieDesde: la misma máquina en las ocurrencias que le quedan a
 // la serie, de esta fecha en adelante (RF-08.14).
 func (r *PostgresRepo) ReservasDeLaSerieDesde(ctx context.Context, reservaID string) ([]*domain.Reserva, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		WITH origen AS (
 			SELECT res.equipo_id, g.regla_recurrencia_id, g.fecha
 			FROM reserva res
@@ -733,7 +788,7 @@ func prefijar(columnas, alias string) string {
 // DatosParaPedirLiberacion resuelve en una consulta las cuatro condiciones del
 // pedido (RF-04.12) y los datos del aviso.
 func (r *PostgresRepo) DatosParaPedirLiberacion(ctx context.Context, reservaID string) (*application.ReservaParaPedido, error) {
-	row := r.db.QueryRow(ctx, `
+	row := r.conexion(ctx).QueryRow(ctx, `
 		SELECT res.estado, res.tipo, res.fecha, res.hora_inicio, res.hora_fin,
 		       COALESCE(eq.nombre, 'PC ' || eq.identificador),
 		       COALESCE(m.nombre, ''),
@@ -773,21 +828,20 @@ func (r *PostgresRepo) DatosParaPedirLiberacion(ctx context.Context, reservaID s
 	return &p, nil
 }
 
-// YaPidioLiberacionHoy mira las notificaciones ya emitidas en vez de una
-// tabla propia: el pedido no es una entidad, y la fila que igual se escribe
-// alcanza para saber que salió.
+// YaPidioLiberacionHoy conserva la deduplicación de avisos anteriores a 023.
+// Los pedidos nuevos se reclaman en pedido_liberacion antes de encolar el aviso.
 func (r *PostgresRepo) YaPidioLiberacionHoy(ctx context.Context, reservaID, solicitanteID string, dia time.Time) (bool, error) {
 	var existe bool
-	err := r.db.QueryRow(ctx, `
+	err := r.conexion(ctx).QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM notificacion
 			WHERE tipo = 'PEDIDO_DE_LIBERACION'
 			  AND reserva_id = $1
 			  AND sobre_usuario_id = $2
-			  AND creada_en >= $3::date
-			  AND creada_en < $3::date + 1
+			  AND creada_en >= $3
+			  AND creada_en < $4
 		)
-	`, reservaID, solicitanteID, dia.Format(formatoFechaSQL)).Scan(&existe)
+	`, reservaID, solicitanteID, time.Date(dia.Year(), dia.Month(), dia.Day(), 0, 0, 0, 0, dia.Location()), time.Date(dia.Year(), dia.Month(), dia.Day(), 0, 0, 0, 0, dia.Location()).AddDate(0, 0, 1)).Scan(&existe)
 	if err != nil {
 		if esIDInvalido(err) {
 			return false, application.ErrIDInvalido
@@ -812,11 +866,11 @@ const sqlSolapaConLaFranja = `
 // universo que la consulta de abajo —DISPONIBLE, reservable, no dado de baja—
 // los que YA tiene alguien, con quién los tiene.
 func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration) ([]application.EquipoOcupado, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT p.id,
 		       COALESCE(p.nombre, 'PC ' || p.identificador),
 		       COALESCE(c.nombre, ''),
-		       res.id, res.tipo, res.hora_inicio, res.hora_fin,
+		       res.id, res.tipo, res.fecha, res.hora_inicio, res.hora_fin,
 		       g.creado_por,
 		       COALESCE(u.nombre || ' ' || u.apellido, res.nombre_docente_snapshot, ''),
 		       COALESCE(m.nombre, ''),
@@ -845,7 +899,7 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 		var tipo string
 		var inicio, fin time.Time
 		if err := rows.Scan(&oc.EquipoID, &oc.Etiqueta, &oc.CarroNombre,
-			&oc.ReservaID, &tipo, &inicio, &fin,
+			&oc.ReservaID, &tipo, &oc.Fecha, &inicio, &fin,
 			&oc.DocenteID, &oc.DocenteNombre, &oc.MateriaNombre, &oc.Motivo); err != nil {
 			return nil, fmt.Errorf("escaneando equipo ocupado: %w", err)
 		}
@@ -857,21 +911,47 @@ func (r *PostgresRepo) ListarEquiposOcupadosEn(ctx context.Context, fecha time.T
 	return resultado, errorDeFilas(rows)
 }
 
-// ── El ordenamiento por preferencia de materia (RF-03.21) ────────────── Los
-// cuatro fragmentos de acá abajo son las piezas de una misma consulta,
-// compartidas por las dos listas de equipos libres —la de una franja y la de
-// una serie— porque el docente tiene que ver el mismo orden en las dos.
-//
-// Los dos DISTINCT ON desempatan al final por `creada_en, id`: la prioridad
-// por defecto es 1, así que dos marcas empatadas es el caso común y no el
-// borde. Sin ese desempate Postgres elige por orden físico, y el motivo que
-// lee el docente cambia entre una carga y la siguiente.
+// ── Qué marca vale para un contexto (RF-03.21) ───────────────────────── Los
+// dos fragmentos de acá abajo son la definición de "esta marca habla de esta
+// materia" y "de las que hablan, vale ésta". Viven acá, sueltos y compartidos,
+// porque los usan TRES puntos de inserción, en dos consultas que contestan
+// preguntas distintas: el orden en que el docente ve los equipos libres (los
+// CTE `propia` y `ajena`, que son el mismo predicado y su negación), y la regla
+// que decide si le puede robar una reserva a otra materia (el CTE `marcas`).
+// Con una copia por consulta, el día que la especificidad cambie la pantalla
+// ordena por un alcance y el backend autoriza por otro, y nadie puede explicar
+// la diferencia.
 //
 // El año se compara con IS NOT DISTINCT FROM y no con `=`: una materia puede
 // colgar de un espacio y no de un curso (migración 017), y un espacio no tiene
 // año. Con `=`, comparar 3 contra NULL da NULL, y la condición NEGADA de
 // `ajena` convierte ese NULL en "no entra" — la marca se caía de los dos
 // tramos y el equipo salía neutral en vez de ajeno.
+//
+// El contexto se llama `cm` en las dos consultas justamente para que el
+// fragmento entre en las dos sin adaptarlo.
+const sqlAlcanceDeLaMarca = `ep.materia_norm = cm.norm
+			  AND (CASE WHEN ep.curso_exacto THEN (ep.anio IS NOT DISTINCT FROM cm.anio AND ep.modalidad_norm = cm.modalidad_norm AND ep.division_norm = cm.division_norm) ELSE ((ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cm.anio) AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cm.modalidad_norm) AND (ep.division_norm = '' OR ep.division_norm = cm.division_norm)) END)`
+
+// sqlColaDeEspecificidad: entre las marcas que alcanzan a un mismo contexto,
+// gana la que acota MÁS ejes —año, modalidad, división—, y recién a igual
+// especificidad la de prioridad más fuerte. Una marca de 3°B le gana a una de
+// "toda la materia" aunque la de 3°B sea más débil: el Admin fue más preciso
+// ahí a propósito.
+//
+// El desempate final por `creada_en, id` no es decoración: la prioridad por
+// defecto es 1, así que dos marcas empatadas es el caso común y no el borde.
+// Sin él Postgres elige por orden físico, y tanto el motivo que lee el docente
+// como el permiso para robar cambian entre una carga y la siguiente.
+const sqlColaDeEspecificidad = `CASE WHEN ep.curso_exacto THEN 3 ELSE (ep.anio IS NOT NULL)::int
+			         + (ep.modalidad_norm <> '')::int
+			         + (ep.division_norm  <> '')::int END DESC,
+			         ep.prioridad, ep.creada_en, ep.id`
+
+// ── El ordenamiento por preferencia de materia (RF-03.21) ────────────── Los
+// cuatro fragmentos de acá abajo son las piezas de una misma consulta,
+// compartidas por las dos listas de equipos libres —la de una franja y la de
+// una serie— porque el docente tiene que ver el mismo orden en las dos.
 const sqlTramosDePreferencia = `
 		-- La marca que apunta a MI materia. DISTINCT ON deja una sola por
 		-- equipo: gana la más específica (año+división > año > sin curso) y,
@@ -881,33 +961,28 @@ const sqlTramosDePreferencia = `
 		propia AS (
 			SELECT DISTINCT ON (ep.equipo_id)
 			       ep.equipo_id, ep.prioridad, ep.materia_nombre, ep.anio,
-			       ep.modalidad, ep.modalidad_norm, ep.division, ep.division_norm
+			       ep.modalidad, ep.modalidad_norm, ep.division, ep.division_norm, ep.curso_exacto
 			FROM equipo_preferencia ep
 			JOIN ctx_materia cm ON true
-			WHERE ep.materia_norm = cm.norm
-			  AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cm.anio)
-			  AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cm.modalidad_norm)
-			  AND (ep.division_norm  = '' OR ep.division_norm  = cm.division_norm)
+			WHERE ` + sqlAlcanceDeLaMarca + `
 			ORDER BY ep.equipo_id,
-			         (ep.anio IS NOT NULL)::int
-			         + (ep.modalidad_norm <> '')::int
-			         + (ep.division_norm  <> '')::int DESC,
-			         ep.prioridad, ep.creada_en, ep.id
+			         ` + sqlColaDeEspecificidad + `
 		),
-		-- La marca de otro. Compartir el nombre de la materia no alcanza: una
-		-- marca de "Matemática de 3°B" es ajena para Matemática de 5°A, que es
+		-- La marca de otro: exactamente las que NO alcanzan a mi contexto.
+		-- Compartir el nombre de la materia no alcanza — una marca de
+		-- "Matemática de 3°B" es ajena para Matemática de 5°A, que es
 		-- exactamente para lo que el Admin acotó el alcance.
+		--
+		-- Acá no hay especificidad que resolver: la marca ajena no habla de mi
+		-- materia, así que entre dos sólo queda la prioridad.
 		ajena AS (
 			SELECT DISTINCT ON (ep.equipo_id)
 			       ep.equipo_id, ep.prioridad, ep.materia_nombre, ep.anio,
-			       ep.modalidad, ep.modalidad_norm, ep.division, ep.division_norm
+			       ep.modalidad, ep.modalidad_norm, ep.division, ep.division_norm, ep.curso_exacto
 			FROM equipo_preferencia ep
 			JOIN ctx_materia cm ON true
 			WHERE NOT EXISTS (SELECT 1 FROM propia pr WHERE pr.equipo_id = ep.equipo_id)
-			  AND NOT (ep.materia_norm = cm.norm
-			           AND (ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cm.anio)
-			           AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cm.modalidad_norm)
-			           AND (ep.division_norm  = '' OR ep.division_norm  = cm.division_norm))
+			  AND NOT (` + sqlAlcanceDeLaMarca + `)
 			ORDER BY ep.equipo_id, ep.prioridad, ep.creada_en, ep.id
 		)`
 
@@ -920,7 +995,9 @@ const sqlColumnasDePreferencia = `
 		       COALESCE(pr.materia_nombre, aj.materia_nombre, ''),
 		       COALESCE(pr.anio, aj.anio, 0),
 		       COALESCE(pr.modalidad, aj.modalidad, ''),
-		       COALESCE(pr.division, aj.division, '')`
+		       COALESCE(pr.division, aj.division, ''),
+		       COALESCE(pr.prioridad, 0),
+		       COALESCE(pr.curso_exacto, aj.curso_exacto, false)`
 
 const sqlJoinsDePreferencia = `
 		LEFT JOIN propia pr ON pr.equipo_id = p.id
@@ -953,10 +1030,105 @@ func tramoDePreferencia(n int) application.TramoPreferencia {
 	}
 }
 
+// ReservasRobablesPor contesta, de la regla del robo (RF-03.21), las tres
+// condiciones que se deciden con la base: que la materia que reserva tenga
+// marca propia sobre el equipo, que el reclamo del dueño sea más débil, y que
+// lo que está ahí no sea un bloqueo administrativo.
+//
+// La cuarta —que falte más de una hora— NO está acá y no es un olvido: es hora
+// de pared, sabe de medianoche y no necesita ninguna fila; vive en
+// domain.SePuedeRobarPorHorario, y quien llama combina las dos mitades. Traerla
+// al SQL obligaría a pasarle "ahora" a una consulta que no lo usa para nada más.
+//
+// Los dos lados se resuelven en el MISMO CTE, con un booleano que dice de quién
+// es cada reclamo. Escribir dos veces el DISTINCT ON —uno para mi marca y otro
+// para la del dueño— es exactamente cómo los dos lados se desincronizan: el día
+// que la especificidad cambie, una de las dos copias se queda vieja y el robo
+// pasa a depender de quién pregunta.
+//
+// Un id que no existe no aparece en el mapa, y leerlo da false: la regla no
+// autoriza nada sobre una reserva que no está.
+func (r *PostgresRepo) ReservasRobablesPor(ctx context.Context, materiaID string, reservaIDs []string) (map[string]bool, error) {
+	if len(reservaIDs) == 0 {
+		return map[string]bool{}, nil
+	}
+
+	rows, err := r.conexion(ctx).Query(ctx, `
+		WITH pedidas AS (
+			SELECT res.id, res.equipo_id, res.tipo, res.materia_id
+			FROM reserva res
+			WHERE res.id = ANY($2)
+		),
+		-- Un contexto por lado: el mío, el de la materia que reserva, y el del
+		-- dueño, el de SU materia. Resolver la marca del dueño con MI contexto
+		-- sería preguntar si una marca de "Matemática de 3°B" alcanza a la
+		-- reserva de 5°A, que es justo lo que el Admin acotó para que no pase.
+		--
+		-- El alias es cm en las dos consultas porque así los dos contextos
+		-- entran, tal cual, en el mismo fragmento de alcance.
+		contextos AS (
+			SELECT p.id AS reserva_id, true AS es_mio, p.equipo_id,
+			       m.nombre_norm AS norm, cu.anio, cu.modalidad_norm, cu.division_norm
+			FROM pedidas p
+			JOIN materia m ON m.id = $1
+			JOIN contenedor_de_materia cu ON cu.materia_id = m.id
+			UNION ALL
+			-- Sin materia no hay contexto, y un bloqueo no la tiene: el JOIN lo
+			-- deja fuera de este lado, pero quien lo protege del robo es el
+			-- tipo de más abajo, no su falta de materia.
+			SELECT p.id, false, p.equipo_id,
+			       m.nombre_norm, cu.anio, cu.modalidad_norm, cu.division_norm
+			FROM pedidas p
+			JOIN materia m ON m.id = p.materia_id
+			JOIN contenedor_de_materia cu ON cu.materia_id = m.id
+		),
+		-- Un solo DISTINCT ON para los dos lados, con los mismos fragmentos que
+		-- ordenan la lista de equipos libres: de cada lado vale UNA marca, la
+		-- más específica para SU contexto. Que el lado del dueño se resuelva
+		-- distinto del mío no es una variante posible, es un bug —y con el
+		-- fragmento compartido no hay dónde escribirlo.
+		marcas AS (
+			SELECT DISTINCT ON (cm.reserva_id, cm.es_mio)
+			       cm.reserva_id, cm.es_mio, ep.prioridad
+			FROM contextos cm
+			JOIN equipo_preferencia ep ON ep.equipo_id = cm.equipo_id
+			WHERE `+sqlAlcanceDeLaMarca+`
+			ORDER BY cm.reserva_id, cm.es_mio,
+			         `+sqlColaDeEspecificidad+`
+		)
+		SELECT p.id::text,
+		       -- El empate no roba: manda quien reservó primero.
+		       mia.prioridad IS NOT NULL
+		       AND (suya.prioridad IS NULL OR mia.prioridad < suya.prioridad)
+		       AND p.tipo <> 'BLOQUEO'
+		FROM pedidas p
+		LEFT JOIN marcas mia  ON mia.reserva_id  = p.id AND mia.es_mio
+		LEFT JOIN marcas suya ON suya.reserva_id = p.id AND NOT suya.es_mio
+	`, materiaID, reservaIDs)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, fmt.Errorf("resolviendo qué reservas son robables: %w", err)
+	}
+	defer rows.Close()
+
+	robables := make(map[string]bool, len(reservaIDs))
+	for rows.Next() {
+		var id string
+		var robable bool
+		if err := rows.Scan(&id, &robable); err != nil {
+			return nil, fmt.Errorf("escaneando el veredicto del robo: %w", err)
+		}
+		robables[id] = robable
+	}
+	return robables, errorDeFilas(rows)
+}
+
 // ListarEquiposLibresEnLaSerie: los equipos libres en TODAS las ocurrencias
 // que le quedan a la serie de ese grupo (RF-08.14).
 func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID string) ([]application.EquipoDisponible, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		WITH origen AS (
 			SELECT fecha, hora_inicio, hora_fin, regla_recurrencia_id
 			FROM reserva_grupo WHERE id = $1
@@ -1028,7 +1200,7 @@ func (r *PostgresRepo) ListarEquiposLibresEnLaSerie(ctx context.Context, grupoID
 // ListarEquiposDisponiblesEn implementa RF-04.2: las PCs que se pueden
 // reservar en una franja concreta.
 func (r *PostgresRepo) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, materiaID string) ([]application.EquipoDisponible, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		WITH ctx_materia AS (
 			SELECT m.nombre_norm AS norm, cu.anio,
 			       cu.modalidad_norm, cu.division_norm
@@ -1077,7 +1249,7 @@ func escanearEquiposDisponibles(rows pgx.Rows) ([]application.EquipoDisponible, 
 			&pc.CarroID, &pc.CarroNombre,
 			&pc.Freezado, &pc.SoftwareInstalado,
 			&tramo, &pc.PreferenciaMateria, &pc.PreferenciaAnio,
-			&pc.PreferenciaModalidad, &pc.PreferenciaDivision); err != nil {
+			&pc.PreferenciaModalidad, &pc.PreferenciaDivision, &pc.PrioridadPropia, &pc.PreferenciaCursoExacto); err != nil {
 			return nil, fmt.Errorf("escaneando equipo disponible: %w", err)
 		}
 		pc.Tramo = tramoDePreferencia(tramo)
@@ -1096,12 +1268,72 @@ func escanearEquiposDisponibles(rows pgx.Rows) ([]application.EquipoDisponible, 
 // Los ids que no existen simplemente no están en el mapa. Qué significa eso lo
 // decide quien llama (ver el comentario del puerto).
 func (r *PostgresRepo) BuscarReservasPorIDs(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	return r.buscarReservasPorIDs(ctx, ids, "")
+}
+
+// BuscarReservasParaActualizar es la misma consulta con la fila tomada.
+//
+// El ORDER BY no es cosmético y por eso va acá y no en la versión de lectura:
+// dos pedidos simultáneos que tomen las mismas dos reservas en orden distinto
+// se abrazan y Postgres mata a uno por deadlock. Con un orden fijo, el segundo
+// espera al primero y sigue.
+func (r *PostgresRepo) BuscarReservasParaActualizar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	reservas, err := r.BuscarReservasParaEntregar(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	pedidas := make(map[string]*domain.Reserva, len(ids))
+	for _, id := range ids {
+		if res := reservas[id]; res != nil {
+			pedidas[id] = res
+		}
+	}
+	return pedidas, nil
+}
+
+func (r *PostgresRepo) BuscarReservasParaEntregar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error) {
+	if err := r.exigirTransaccion(ctx); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return map[string]*domain.Reserva{}, nil
+	}
+	rows, err := r.conexion(ctx).Query(ctx, `SELECT DISTINCT reserva_grupo_id FROM reserva WHERE id=ANY($1) AND reserva_grupo_id IS NOT NULL`, ids)
+	if err != nil {
+		if esIDInvalido(err) {
+			return nil, application.ErrIDInvalido
+		}
+		return nil, err
+	}
+	var grupos []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		grupos = append(grupos, id)
+	}
+	err = errorDeFilas(rows)
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := r.BuscarGruposParaActualizar(ctx, grupos); err != nil {
+		return nil, err
+	}
+	return r.buscarReservasPorIDs(ctx, ids, ` OR reserva_grupo_id IN (
+		SELECT reserva_grupo_id FROM reserva WHERE id=ANY($1)
+	) ORDER BY id FOR UPDATE`)
+}
+
+func (r *PostgresRepo) buscarReservasPorIDs(ctx context.Context, ids []string, cola string) (map[string]*domain.Reserva, error) {
 	if len(ids) == 0 {
 		return map[string]*domain.Reserva{}, nil
 	}
 
-	rows, err := r.db.Query(ctx,
-		`SELECT `+columnasReserva+` FROM reserva WHERE id = ANY($1)`, ids)
+	rows, err := r.conexion(ctx).Query(ctx,
+		`SELECT `+columnasReserva+` FROM reserva WHERE id = ANY($1)`+cola, ids)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido
@@ -1132,7 +1364,7 @@ func (r *PostgresRepo) ListarReservasFuturasDeEquipos(ctx context.Context, equip
 		return map[string][]*domain.Reserva{}, nil
 	}
 
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasReserva+` FROM reserva
 		WHERE equipo_id = ANY($1) AND `+condicionNoTerminada("reserva", "$2", "$3")+` AND estado = 'CONFIRMADA'
 		ORDER BY equipo_id, fecha, hora_inicio
@@ -1154,4 +1386,12 @@ func (r *PostgresRepo) ListarReservasFuturasDeEquipos(ctx context.Context, equip
 		porEquipo[res.EquipoID] = append(porEquipo[res.EquipoID], res)
 	}
 	return porEquipo, errorDeFilas(rows)
+}
+
+func (r *PostgresRepo) ReclamarPedidoLiberacion(ctx context.Context, reservaID, solicitanteID string, dia time.Time) (bool, error) {
+	tag, err := r.conexion(ctx).Exec(ctx, `INSERT INTO pedido_liberacion(reserva_id,solicitante_id,fecha) VALUES($1,$2,$3::date) ON CONFLICT DO NOTHING`, reservaID, solicitanteID, dia.Format("2006-01-02"))
+	if esIDInvalido(err) {
+		return false, application.ErrIDInvalido
+	}
+	return tag.RowsAffected() == 1, err
 }

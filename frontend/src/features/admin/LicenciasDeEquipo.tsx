@@ -1,11 +1,10 @@
 import { Link } from "react-router"
 
 import { EstadoBadge, TONO_LICENCIA } from "@/components/EstadoBadge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import { Button } from "@/components/ui/button"
 import * as adminApi from "@/features/admin/api"
 import type { Licencia } from "@/features/inventory/types"
-import { getErrorMessage } from "@/lib/api-client"
 import { formatearFechaLarga } from "@/lib/fechas"
 import { useQuery } from "@tanstack/react-query"
 
@@ -31,7 +30,7 @@ function contador(l: Licencia): string {
 }
 
 export function LicenciasDeEquipo({ equipoId }: { equipoId: string }) {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["licencias", "equipo", equipoId],
     queryFn: () => adminApi.listarLicenciasDeEquipo(equipoId),
   })
@@ -41,9 +40,11 @@ export function LicenciasDeEquipo({ equipoId }: { equipoId: string }) {
   }
   if (error) {
     return (
-      <Alert variant="destructive">
-        <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-      </Alert>
+      <ErrorDeConsulta
+        mensaje="No pudimos consultar las licencias de este equipo."
+        reintentando={isFetching}
+        onReintentar={() => void refetch()}
+      />
     )
   }
 

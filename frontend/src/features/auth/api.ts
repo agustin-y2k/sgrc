@@ -93,10 +93,17 @@ export function restablecerPassword(req: RestablecerPasswordRequest) {
 
 // Solo ADMIN — usado por feature/frontend-admin más adelante para el panel
 // completo; acá lo usa AprobacionPage filtrando estado=PENDIENTE.
-export function listarUsuarios(filtros?: { estado?: Estado; rol?: Rol }) {
+export function listarUsuarios(filtros?: {
+  estado?: Estado
+  rol?: Rol
+  page?: number
+  pageSize?: number
+}) {
   const params = new URLSearchParams()
   if (filtros?.estado) params.set("estado", filtros.estado)
   if (filtros?.rol) params.set("rol", filtros.rol)
+  if (filtros?.page && filtros.page > 1) params.set("page", String(filtros.page))
+  if (filtros?.pageSize) params.set("pageSize", String(filtros.pageSize))
   const query = params.toString()
   return apiFetch<ListarUsuariosResponse>(`/api/auth/usuarios${query ? `?${query}` : ""}`)
 }

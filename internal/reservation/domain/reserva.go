@@ -76,6 +76,7 @@ func ParseTipoReserva(s string) (TipoReserva, error) {
 // Reserva es la ocupación puntual de una PC concreta en un rango horario.
 type Reserva struct {
 	ID                    string
+	Version               int64 // control de escrituras obsoletas; no es un estado de negocio
 	ReservaGrupoID        *string
 	EquipoID              string
 	MateriaID             *string
@@ -214,6 +215,24 @@ func YaEmpezo(fecha time.Time, horaInicio time.Duration, ahora time.Time) bool {
 	return !horaDePared(fecha, horaInicio).After(horaDePared(ahora, horaDelDia(ahora)))
 }
 
+// AntelacionMinimaParaRobar: cuánto tiene que faltar para que empiece una
+// reserva para que otra materia todavía pueda desplazarla (RF-03.21).
+//
+// Es el límite entre "todavía hay tiempo de buscar otra máquina" y "el docente
+// ya está yendo al aula". Fijo y no configurable: una escuela no tiene por qué
+// elegir este número, y el día que haga falta, cambiarlo es esta línea.
+const AntelacionMinimaParaRobar = time.Hour
+
+// SePuedeRobarPorHorario: todavía falta más que la antelación mínima.
+//
+// Se compara CON SIGNO y no por diferencia absoluta, que es lo que hace que una
+// reserva ya empezada quede protegida en vez de volver a ser robable: una vez
+// pasado el inicio, la resta es negativa y nunca supera el corte.
+func SePuedeRobarPorHorario(fecha time.Time, horaInicio time.Duration, ahora time.Time) bool {
+	inicio := horaDePared(fecha, horaInicio)
+	return inicio.Sub(horaDePared(ahora, horaDelDia(ahora))) > AntelacionMinimaParaRobar
+}
+
 func horaDePared(fecha time.Time, hora time.Duration) time.Time {
 	y, m, d := fecha.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Add(hora)
@@ -305,4 +324,9 @@ func ValidarVentanaTemporal(fecha time.Time, horaInicio, horaFin time.Duration, 
 		return ErrDuracionExcesiva
 	}
 	return nil
+}
+
+// SolapaEn compara ventanas efectivas, también cuando empiezan en días distintos.
+func (r *Reserva) SolapaEn(fecha time.Time, inicio, fin time.Duration, loc *time.Location) bool {
+	return InicioDePared(r.Fecha, r.HoraInicio, loc).Before(FinDePared(fecha, inicio, fin, loc)) && InicioDePared(fecha, inicio, loc).Before(FinDePared(r.Fecha, r.HoraInicio, r.HoraFin, loc))
 }

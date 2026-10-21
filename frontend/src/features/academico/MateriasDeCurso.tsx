@@ -48,7 +48,11 @@ export function MateriasDeCurso({
   const [copiando, setCopiando] = useState(false)
 
   const materiasKey = ["materias", curso.id]
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    error: errorConsulta,
+  } = useQuery({
     queryKey: materiasKey,
     queryFn: () => academicoApi.listarMaterias(curso.id),
   })
@@ -58,7 +62,11 @@ export function MateriasDeCurso({
   // frecuente —"¿esta materia tiene docente?"— costaba un clic por materia.
   const asignaciones = useAsignacionesDelCiclo(curso.cicloLectivoId)
 
-  const invalidar = () => queryClient.invalidateQueries({ queryKey: materiasKey })
+  const invalidar = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: materiasKey }),
+      queryClient.invalidateQueries({ queryKey: ["catalogo-prioridades"] }),
+    ])
 
   const crear = useMutation({
     mutationFn: () => academicoApi.crearMateria(curso.id, nombreNueva.trim()),
@@ -91,9 +99,17 @@ export function MateriasDeCurso({
   })
 
   if (isLoading)
-    return <p className="text-muted-foreground text-sm">Cargando materias…</p>
+    return (
+      <p className="text-muted-foreground text-sm wrap-anywhere">Cargando materias…</p>
+    )
 
   const materias = data?.data ?? []
+  if (errorConsulta)
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{getErrorMessage(errorConsulta)}</AlertDescription>
+      </Alert>
+    )
   const error = crear.error ?? editar.error ?? eliminar.error
 
   // La misma materia no entra dos veces en el mismo curso, y la comparación
@@ -106,7 +122,7 @@ export function MateriasDeCurso({
   )
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{getErrorMessage(error)}</AlertDescription>
@@ -133,13 +149,13 @@ export function MateriasDeCurso({
 
       {!soloLectura && (
         <form
-          className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end"
+          className="grid min-w-0 gap-2 sm:grid-cols-[1fr_auto] sm:items-end"
           onSubmit={(e) => {
             e.preventDefault()
             crear.mutate()
           }}
         >
-          <div className="grid gap-1.5">
+          <div className="grid min-w-0 gap-1.5">
             <Label htmlFor={`materia-${curso.id}`}>Nueva materia</Label>
             <Input
               id={`materia-${curso.id}`}
@@ -168,7 +184,7 @@ export function MateriasDeCurso({
       )}
 
       {materias.length === 0 && (
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground text-sm wrap-anywhere">
           Este curso todavía no tiene materias.
         </p>
       )}
@@ -199,16 +215,16 @@ export function MateriasDeCurso({
         const eliminandoEsta = eliminando?.id === materia.id
 
         return (
-          <div key={materia.id} className="grid gap-2 rounded-md border p-3">
+          <div key={materia.id} className="grid min-w-0 gap-2 rounded-md border p-3">
             {editandoEsta && editando ? (
               <form
-                className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end"
+                className="grid min-w-0 gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end"
                 onSubmit={(e) => {
                   e.preventDefault()
                   editar.mutate(editando)
                 }}
               >
-                <div className="grid gap-1.5">
+                <div className="grid min-w-0 gap-1.5">
                   <Label htmlFor={`editar-materia-${materia.id}`}>Nombre</Label>
                   <Input
                     id={`editar-materia-${materia.id}`}
@@ -233,18 +249,18 @@ export function MateriasDeCurso({
                 </Button>
               </form>
             ) : (
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <span className="font-medium">{materia.nombre}</span>
                   {/* Los titulares primero: es quien responde por la materia.
                       «Sin docentes» se dice con todas las letras, porque una
                       materia sin nadie asignado es algo para resolver y no un
                       dato que falta. */}
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-muted-foreground text-sm wrap-anywhere">
                     {docentesDe(asignaciones, materia.id) || "Sin docentes asignados"}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex min-w-0 flex-wrap gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -281,12 +297,16 @@ export function MateriasDeCurso({
 
             {docentesAbiertos === materia.id && (
               <div className="border-t pt-2">
-                <DocentesDeMateria materia={materia} soloLectura={soloLectura} />
+                <DocentesDeMateria
+                  materia={materia}
+                  curso={curso}
+                  soloLectura={soloLectura}
+                />
               </div>
             )}
 
             {eliminandoEsta && (
-              <div className="grid gap-2 rounded-md border p-3">
+              <div className="grid min-w-0 gap-2 rounded-md border p-3">
                 {/* RF-02.11: solo se puede borrar si no tiene reservas; si
                     las tiene, el backend responde 409 y se muestra su
                     mensaje tal cual. */}
@@ -294,7 +314,7 @@ export function MateriasDeCurso({
                   Eliminar «{materia.nombre}» es definitivo. Solo se puede si todavía no
                   tiene ninguna reserva.
                 </p>
-                <div className="flex gap-2">
+                <div className="flex min-w-0 gap-2">
                   <Button
                     variant="destructive"
                     size="sm"

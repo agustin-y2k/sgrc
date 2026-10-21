@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/reservation/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // Entregas y devoluciones de PCs (RF-08).
@@ -95,8 +96,8 @@ type EntregaPorReservaParams struct {
 	RetiradoPor  string
 	EntregadoPor string
 	// LiberarNoEntregadas es la ENTREGA PARCIAL declarada: el Admin dice que
-	// esto es todo lo que se llevó, así que lo que no marcó deja de estar
-	// guardado y vuelve al resto de la escuela en el acto.
+	// esto completa el retiro. Se liberan las reservas confirmadas que nunca
+	// tuvieron una entrega; lo retirado en tandas anteriores se conserva.
 	//
 	// Antes esto lo decidía un reloj —quince minutos desde la última entrega,
 	// RETIRO_PARCIAL_GRACIA_MINUTOS— porque el sistema no tenía cómo saber si
@@ -109,6 +110,19 @@ type EntregaPorReservaParams struct {
 
 // EntregarPorReserva registra que las máquinas de una reserva salieron.
 func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReservaParams) (*ResultadoEntrega, error) {
+	var resultado *ResultadoEntrega
+	err := s.repo.Coordinar(ctx, false, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.entregarPorReservaCoordinada(ctx, params)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) entregarPorReservaCoordinada(ctx context.Context, params EntregaPorReservaParams) (*ResultadoEntrega, error) {
 	if err := verificarCantidadDeEquipos(params.ReservaIDs); err != nil {
 		return nil, err
 	}
@@ -116,99 +130,111 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 	ahora := s.ahora()
 	resultado := &ResultadoEntrega{}
 
-	// Las reservas del lote en UNA consulta. Se recorre `params.ReservaIDs` y no
-	// el mapa: el resultado se arma en el orden en que la pantalla mandó las
-	// máquinas, y el recorrido de un mapa en Go es aleatorio entre corridas.
-	reservas, err := s.repo.BuscarReservasPorIDs(ctx, params.ReservaIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, reservaID := range params.ReservaIDs {
-		reserva, hay := reservas[reservaID]
-		if !hay {
-			// Un ID que no existe es un error del cliente, no una PC que no
-			// se pudo entregar: la pantalla mandó algo que no corresponde.
-			return nil, ErrReservaNoEncontrada
-		}
-
-		if reserva.Estado == domain.ReservaCancelada {
-			resultado.NoEntregadas = append(resultado.NoEntregadas, EquipoNoEntregado{
-				EquipoID: reserva.EquipoID,
-				Razon:    NoEntregadaReservaCancelada,
-				Detalle:  "esa reserva está cancelada",
-			})
-			continue
-		}
-
-		vence := domain.InstanteDePared(reserva.Fecha, reserva.HoraFin, ahora.Location())
-
-		// Quien responde es SIEMPRE el docente de la reserva: él la hizo y a él se
-		// le reclama.
-		nombre := ""
-		if reserva.NombreDocenteSnapshot != nil {
-			nombre = *reserva.NombreDocenteSnapshot
-		}
-		retiradoPor := params.RetiradoPor
-		// Un bloqueo administrativo no tiene docente, así que no hay a quién hacer
-		// responsable: ahí el nombre que se escribe a mano SÍ es el responsable, y
-		// no queda nadie "al lado" a quien anotar.
-		if nombre == "" {
-			nombre, retiradoPor = retiradoPor, ""
-		}
-		// Un bloqueo administrativo no tiene docente: lo crea un Admin sobre PCs
-		// sueltas y NombreDocenteSnapshot queda en nil.
-		if nombre == "" {
-			resultado.NoEntregadas = append(resultado.NoEntregadas, EquipoNoEntregado{
-				EquipoID: reserva.EquipoID,
-				Razon:    NoEntregadaSinDestinatario,
-				Detalle:  "esa reserva no tiene docente (es un bloqueo administrativo): escribí a nombre de quién se entrega",
-			})
-			continue
-		}
-
-		// UsuarioID se queda apuntando al docente aunque las haya retirado otro:
-		// los avisos de "no volvieron" tienen que llegarle a quien responde, y
-		// quien retira muchas veces ni cuenta tiene.
-		datos := domain.DatosDeEntrega{
-			EquipoID:           reserva.EquipoID,
-			ReservaID:          &reserva.ID,
-			UsuarioID:          reserva.CreadoPor,
-			Nombre:             nombre,
-			RetiradoPor:        retiradoPor,
-			DevolucionEstimada: &vence,
-			EntregadoPor:       params.EntregadoPor,
-		}
-
-		// Una reserva nunca autoriza sacar un equipo roto: si la máquina dejó
-		// de estar disponible, sus reservas se cancelaron en cascada (RF-03.8)
-		// y esta entrega llega tarde.
-		prestamo, noEntregada, err := s.registrarEntrega(ctx, datos, ahora, false)
+	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		resultado = &ResultadoEntrega{}
+		// Las reservas del lote y sus hermanas se bloquean juntas en orden estable.
+		// Así otra entrega del grupo no puede entrar entre consulta de custodia y liberación.
+		ids := idsDeLoteSinRepetir(params.ReservaIDs)
+		// Las reservas del lote en UNA consulta. Se recorre la lista de IDs y no
+		// el mapa: el resultado se arma en el orden en que la pantalla mandó las
+		// máquinas, y el recorrido de un mapa en Go es aleatorio entre corridas.
+		reservas, err := repo.BuscarReservasParaEntregar(ctx, ids)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if noEntregada != nil {
-			resultado.NoEntregadas = append(resultado.NoEntregadas, *noEntregada)
-			continue
-		}
-		resultado.Entregadas = append(resultado.Entregadas, prestamo)
 
-		// Entregar contra una reserva LIBERADA es legítimo —el docente llegó tarde
-		// y la máquina seguía ahí—, pero en el rato que estuvo libre otro pudo
-		// haberla reservado.
-		if reserva.Estado == domain.ReservaNoRetirada {
-			if aviso := s.reservaProximaDe(ctx, reserva.EquipoID, ahora); aviso != nil {
-				resultado.Avisos = append(resultado.Avisos, *aviso)
+		// Validar todos los IDs antes de registrar la primera entrega.
+		for _, id := range ids {
+			if reservas[id] == nil {
+				return ErrReservaNoEncontrada
 			}
 		}
-	}
+		for _, reservaID := range ids {
+			reserva := reservas[reservaID]
 
-	if params.LiberarNoEntregadas {
-		liberadas, err := s.liberarElResto(ctx, reservas, params.ReservaIDs)
-		if err != nil {
-			return nil, err
+			if reserva.Estado == domain.ReservaCancelada {
+				resultado.NoEntregadas = append(resultado.NoEntregadas, EquipoNoEntregado{
+					EquipoID: reserva.EquipoID,
+					Razon:    NoEntregadaReservaCancelada,
+					Detalle:  "esa reserva está cancelada",
+				})
+				continue
+			}
+
+			vence := domain.FinDePared(reserva.Fecha, reserva.HoraInicio, reserva.HoraFin, ahora.Location())
+
+			// Quien responde es SIEMPRE el docente de la reserva: él la hizo y a él se
+			// le reclama.
+			nombre := ""
+			if reserva.NombreDocenteSnapshot != nil {
+				nombre = *reserva.NombreDocenteSnapshot
+			}
+			retiradoPor := params.RetiradoPor
+			// Un bloqueo administrativo no tiene docente, así que no hay a quién hacer
+			// responsable: ahí el nombre que se escribe a mano SÍ es el responsable, y
+			// no queda nadie "al lado" a quien anotar.
+			if nombre == "" {
+				nombre, retiradoPor = retiradoPor, ""
+			}
+			// Un bloqueo administrativo no tiene docente: lo crea un Admin sobre PCs
+			// sueltas y NombreDocenteSnapshot queda en nil.
+			if nombre == "" {
+				resultado.NoEntregadas = append(resultado.NoEntregadas, EquipoNoEntregado{
+					EquipoID: reserva.EquipoID,
+					Razon:    NoEntregadaSinDestinatario,
+					Detalle:  "esa reserva no tiene docente (es un bloqueo administrativo): escribí a nombre de quién se entrega",
+				})
+				continue
+			}
+
+			// UsuarioID se queda apuntando al docente aunque las haya retirado otro:
+			// los avisos de "no volvieron" tienen que llegarle a quien responde, y
+			// quien retira muchas veces ni cuenta tiene.
+			datos := domain.DatosDeEntrega{
+				EquipoID:           reserva.EquipoID,
+				ReservaID:          &reserva.ID,
+				UsuarioID:          reserva.CreadoPor,
+				Nombre:             nombre,
+				RetiradoPor:        retiradoPor,
+				DevolucionEstimada: &vence,
+				EntregadoPor:       params.EntregadoPor,
+			}
+
+			// Una reserva nunca autoriza sacar un equipo roto: si la máquina dejó
+			// de estar disponible, sus reservas se cancelaron en cascada (RF-03.8)
+			// y esta entrega llega tarde.
+			prestamo, noEntregada, err := s.registrarEntrega(ctx, repo, datos, ahora, false)
+			if err != nil {
+				return err
+			}
+			if noEntregada != nil {
+				resultado.NoEntregadas = append(resultado.NoEntregadas, *noEntregada)
+				continue
+			}
+			resultado.Entregadas = append(resultado.Entregadas, prestamo)
+
+			// Entregar contra una reserva LIBERADA es legítimo —el docente llegó tarde
+			// y la máquina seguía ahí—, pero en el rato que estuvo libre otro pudo
+			// haberla reservado.
+			if reserva.Estado == domain.ReservaNoRetirada {
+				if aviso := s.reservaProximaDe(ctx, repo, reserva.EquipoID, ahora); aviso != nil {
+					resultado.Avisos = append(resultado.Avisos, *aviso)
+				}
+			}
 		}
-		resultado.Liberadas = liberadas
+
+		if params.LiberarNoEntregadas {
+			liberadas, err := s.liberarElResto(ctx, repo, reservas, resultado.Entregadas)
+			if err != nil {
+				return err
+			}
+			resultado.Liberadas = liberadas
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return resultado, nil
@@ -222,37 +248,51 @@ func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReser
 // las del martes que viene ni por descuido, porque el martes que viene es otro
 // grupo y esta función nunca lo lee. Es la garantía por construcción, no por
 // cuidado al escribir la consulta.
-func (s *Service) liberarElResto(ctx context.Context, entregadas map[string]*domain.Reserva, ids []string) ([]string, error) {
+func (s *Service) liberarElResto(ctx context.Context, repo Repo, reservas map[string]*domain.Reserva, entregadas []*domain.Prestamo) ([]string, error) {
 	grupos := map[string]bool{}
-	for _, id := range ids {
-		if r := entregadas[id]; r != nil && r.ReservaGrupoID != nil {
-			grupos[*r.ReservaGrupoID] = true
+	for _, p := range entregadas {
+		if p.ReservaID != nil {
+			if r := reservas[*p.ReservaID]; r != nil && r.ReservaGrupoID != nil {
+				grupos[*r.ReservaGrupoID] = true
+			}
 		}
 	}
-	entregada := map[string]bool{}
-	for _, id := range ids {
-		entregada[id] = true
+	if len(grupos) == 0 {
+		return nil, nil
 	}
-
+	ids := make([]string, 0, len(reservas))
+	for id := range reservas {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	// Incluye préstamos ya devueltos: NO_RETIRADA no describe una máquina que
+	// efectivamente se retiró, aunque haya vuelto antes de completar la tanda.
+	conEntrega, err := repo.ReservasConPrestamos(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 	var liberadas []string
-	for grupoID := range grupos {
-		hermanas, err := s.repo.ListarReservasPorGrupo(ctx, grupoID)
-		if err != nil {
+	for _, id := range ids {
+		r := reservas[id]
+		if r.ReservaGrupoID == nil || !grupos[*r.ReservaGrupoID] || conEntrega[id] || r.Estado != domain.ReservaConfirmada {
+			continue
+		}
+		if err := r.Liberar(); err != nil {
 			return nil, err
 		}
-		for _, h := range hermanas {
-			// Sólo lo que quedó esperando. Una reserva ya cancelada, ya
-			// liberada antes, o entregada en esta misma tanda, no se toca.
-			if entregada[h.ID] || h.Estado != domain.ReservaConfirmada {
-				continue
-			}
-			if err := h.Liberar(); err != nil {
-				return nil, err
-			}
-			if err := s.repo.GuardarReserva(ctx, h); err != nil {
-				return nil, err
-			}
-			liberadas = append(liberadas, h.ID)
+		if err := repo.GuardarReserva(ctx, r); err != nil {
+			return nil, err
+		}
+		liberadas = append(liberadas, id)
+	}
+	grupoIDs := make([]string, 0, len(grupos))
+	for id := range grupos {
+		grupoIDs = append(grupoIDs, id)
+	}
+	sort.Strings(grupoIDs)
+	for _, id := range grupoIDs {
+		if err := recalcularGrupo(ctx, repo, id); err != nil {
+			return nil, err
 		}
 	}
 	return liberadas, nil
@@ -285,6 +325,19 @@ type EntregaSueltaParams struct {
 }
 
 func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams) (*ResultadoEntrega, error) {
+	var resultado *ResultadoEntrega
+	err := s.repo.Coordinar(ctx, false, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.entregarSueltaCoordinada(ctx, params)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) entregarSueltaCoordinada(ctx context.Context, params EntregaSueltaParams) (*ResultadoEntrega, error) {
 	if err := verificarCantidadDeEquipos(params.EquipoIDs); err != nil {
 		return nil, err
 	}
@@ -295,30 +348,38 @@ func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams
 	ahora := s.ahora()
 	resultado := &ResultadoEntrega{}
 
-	for _, equipoID := range params.EquipoIDs {
-		datos := domain.DatosDeEntrega{
-			EquipoID:           equipoID,
-			UsuarioID:          params.UsuarioID,
-			Nombre:             params.Nombre,
-			RetiradoPor:        params.RetiradoPor,
-			Destino:            params.Destino,
-			DevolucionEstimada: params.DevolucionEstimada,
-			EntregadoPor:       params.EntregadoPor,
+	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		resultado = &ResultadoEntrega{}
+		for _, equipoID := range idsDeLoteSinRepetir(params.EquipoIDs) {
+			datos := domain.DatosDeEntrega{
+				EquipoID:           equipoID,
+				UsuarioID:          params.UsuarioID,
+				Nombre:             params.Nombre,
+				RetiradoPor:        params.RetiradoPor,
+				Destino:            params.Destino,
+				DevolucionEstimada: params.DevolucionEstimada,
+				EntregadoPor:       params.EntregadoPor,
+			}
+
+			prestamo, noEntregada, err := s.registrarEntrega(ctx, repo, datos, ahora, params.SalidaAReparacion)
+			if err != nil {
+				return err
+			}
+			if noEntregada != nil {
+				resultado.NoEntregadas = append(resultado.NoEntregadas, *noEntregada)
+				continue
+			}
+			resultado.Entregadas = append(resultado.Entregadas, prestamo)
+
+			if aviso := s.reservaProximaDe(ctx, repo, equipoID, ahora); aviso != nil {
+				resultado.Avisos = append(resultado.Avisos, *aviso)
+			}
 		}
 
-		prestamo, noEntregada, err := s.registrarEntrega(ctx, datos, ahora, params.SalidaAReparacion)
-		if err != nil {
-			return nil, err
-		}
-		if noEntregada != nil {
-			resultado.NoEntregadas = append(resultado.NoEntregadas, *noEntregada)
-			continue
-		}
-		resultado.Entregadas = append(resultado.Entregadas, prestamo)
-
-		if aviso := s.reservaProximaDe(ctx, equipoID, ahora); aviso != nil {
-			resultado.Avisos = append(resultado.Avisos, *aviso)
-		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return resultado, nil
@@ -332,7 +393,7 @@ func (s *Service) EntregarSuelta(ctx context.Context, params EntregaSueltaParams
 // que el equipo esté DISPONIBLE. Lo dado de baja no sale ni así — ya no es
 // parte del parque, y lo que se saca del laboratorio es lo que después hay
 // que esperar de vuelta.
-func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntrega, ahora time.Time, salidaAReparacion bool) (*domain.Prestamo, *EquipoNoEntregado, error) {
+func (s *Service) registrarEntrega(ctx context.Context, repo Repo, datos domain.DatosDeEntrega, ahora time.Time, salidaAReparacion bool) (*domain.Prestamo, *EquipoNoEntregado, error) {
 	condicion, err := s.validadorEquipo.CondicionParaEntregar(ctx, datos.EquipoID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("verificando el equipo %s: %w", datos.EquipoID, err)
@@ -366,7 +427,7 @@ func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntr
 		return nil, nil, err
 	}
 
-	if err := s.repo.CrearPrestamo(ctx, prestamo); err != nil {
+	if err := repo.CrearPrestamo(ctx, prestamo); err != nil {
 		if errors.Is(err, ErrEquipoYaPrestado) {
 			return nil, &EquipoNoEntregado{
 				EquipoID: datos.EquipoID,
@@ -381,8 +442,8 @@ func (s *Service) registrarEntrega(ctx context.Context, datos domain.DatosDeEntr
 
 // reservaProximaDe busca la primera reserva vigente de esa PC de acá en
 // adelante.
-func (s *Service) reservaProximaDe(ctx context.Context, equipoID string, ahora time.Time) *ReservaProxima {
-	futuras, err := s.repo.ListarReservasFuturasDeEquipo(ctx, equipoID, ahora)
+func (s *Service) reservaProximaDe(ctx context.Context, repo Repo, equipoID string, ahora time.Time) *ReservaProxima {
+	futuras, err := repo.ListarReservasFuturasDeEquipo(ctx, equipoID, ahora)
 	if err != nil || len(futuras) == 0 {
 		return nil
 	}
@@ -427,6 +488,21 @@ type ResultadoDevolucion struct {
 
 // RecibirEquipos marca la vuelta de una o varias máquinas.
 func (s *Service) RecibirEquipos(ctx context.Context, prestamoIDs []string, recibidoPor, observaciones string) (*ResultadoDevolucion, error) {
+	var resultado *ResultadoDevolucion
+	// El contador de cierre cruza préstamos distintos: las devoluciones deben
+	// observar los commits anteriores para que la última emita pendientes=0.
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
+		var err error
+		resultado, err = s.recibirEquiposCoordinada(ctx, prestamoIDs, recibidoPor, observaciones)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) recibirEquiposCoordinada(ctx context.Context, prestamoIDs []string, recibidoPor, observaciones string) (*ResultadoDevolucion, error) {
 	if err := verificarCantidadDeEquipos(prestamoIDs); err != nil {
 		return nil, err
 	}
@@ -436,35 +512,46 @@ func (s *Service) RecibirEquipos(ctx context.Context, prestamoIDs []string, reci
 
 	// Ídem EntregarPorReserva: una consulta para el lote, y el orden lo pone la
 	// lista de entrada.
-	prestamos, err := s.repo.BuscarPrestamosPorIDs(ctx, prestamoIDs)
+	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
+		resultado = &ResultadoDevolucion{}
+		ids := idsDeLoteSinRepetir(prestamoIDs)
+		prestamos, err := repo.BuscarPrestamosParaActualizar(ctx, ids)
+		if err != nil {
+			return err
+		}
+
+		for _, id := range ids {
+			if prestamos[id] == nil {
+				return ErrPrestamoNoEncontrado
+			}
+		}
+		for _, id := range ids {
+			prestamo := prestamos[id]
+
+			if err := prestamo.Devolver(recibidoPor, observaciones, ahora); err != nil {
+				if errors.Is(err, domain.ErrPrestamoYaDevuelto) {
+					resultado.NoRecibidos = append(resultado.NoRecibidos, EquipoNoRecibido{
+						PrestamoID: id,
+						Detalle:    err.Error(),
+					})
+					continue
+				}
+				return err
+			}
+			if err := repo.GuardarPrestamo(ctx, prestamo); err != nil {
+				return fmt.Errorf("registrando la devolución %s: %w", id, err)
+			}
+			resultado.Recibidos = append(resultado.Recibidos, prestamo)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	for _, id := range prestamoIDs {
-		prestamo, hay := prestamos[id]
-		if !hay {
-			return nil, ErrPrestamoNoEncontrado
-		}
-
-		if err := prestamo.Devolver(recibidoPor, observaciones, ahora); err != nil {
-			if errors.Is(err, domain.ErrPrestamoYaDevuelto) {
-				resultado.NoRecibidos = append(resultado.NoRecibidos, EquipoNoRecibido{
-					PrestamoID: id,
-					Detalle:    err.Error(),
-				})
-				continue
-			}
-			return nil, err
-		}
-		if err := s.repo.GuardarPrestamo(ctx, prestamo); err != nil {
-			return nil, fmt.Errorf("registrando la devolución %s: %w", id, err)
-		}
-		resultado.Recibidos = append(resultado.Recibidos, prestamo)
-	}
-
 	if len(resultado.Recibidos) > 0 {
-		s.avisarSiVolvioTodoLoDelCierre(ctx)
+		eventbus.AlConfirmar(ctx, s.bus, func(ctx context.Context) { s.avisarSiVolvioTodoLoDelCierre(ctx) })
 	}
 	return resultado, nil
 }
@@ -483,7 +570,7 @@ func (s *Service) avisarSiVolvioTodoLoDelCierre(ctx context.Context) {
 			"(el aviso puede quedar abierto de más): %v", err)
 		return
 	}
-	s.bus.Publish(eventbus.Evento{
+	eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 		Tipo:    "prestamo.cierre.pendientes",
 		Payload: eventbus.PendientesDelCierre{Pendientes: afuera},
 	})
@@ -507,4 +594,18 @@ func (s *Service) HistorialDeEquipo(ctx context.Context, equipoID string) ([]*Pr
 // el mismo instante que usa el resto del sistema.
 func (s *Service) Ahora() time.Time {
 	return s.ahora()
+}
+
+// Conservar la primera aparición evita respuestas contradictorias para un ID
+// repetido sin cambiar el orden pedido por la pantalla.
+func idsDeLoteSinRepetir(ids []string) []string {
+	vistos := make(map[string]bool, len(ids))
+	resultado := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !vistos[id] {
+			vistos[id] = true
+			resultado = append(resultado, id)
+		}
+	}
+	return resultado
 }

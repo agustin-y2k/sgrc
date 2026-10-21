@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
+import userEvent from "@testing-library/user-event"
+import * as academicoApi from "@/features/academico/api"
 
 import { useAuth } from "@/features/auth/AuthContext"
 import type { Usuario } from "@/features/auth/types"
@@ -17,7 +19,7 @@ const DOCENTE: Usuario = {
   id: "docente1",
   nombre: "Ada",
   apellido: "Lovelace",
-  email: "ada@escuela.edu.ar",
+  email: "ada@escuela.test",
   rol: "DOCENTE",
   estado: "APROBADA",
   fechaRegistro: "2026-01-01T00:00:00Z",
@@ -47,6 +49,19 @@ function montar(usuario = DOCENTE) {
 }
 
 describe("PerfilPage", () => {
+  it("abre el pedido sin cargar el catálogo al entrar y conserva lo escrito al ocultarlo", async () => {
+    const user = userEvent.setup()
+    vi.mocked(academicoApi.listarCiclos).mockResolvedValue({ data: [] })
+    montar()
+    expect(academicoApi.listarCiclos).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "Pedir otra materia" }))
+    await screen.findByText(/No hay un ciclo lectivo activo/)
+    await user.type(screen.getByLabelText("¿Por qué la pedís?"), "Nuevo curso")
+    await user.click(screen.getByRole("button", { name: "Ocultar formulario" }))
+    expect(screen.getByLabelText("¿Por qué la pedís?")).not.toBeVisible()
+    await user.click(screen.getByRole("button", { name: "Pedir otra materia" }))
+    expect(screen.getByLabelText("¿Por qué la pedís?")).toHaveValue("Nuevo curso")
+  })
   beforeEach(() => {
     vi.mocked(reservasApi.misMateriasAsignadas).mockResolvedValue({ data: [] })
     vi.mocked(perfilApi.misPedidos).mockResolvedValue({ data: [] })

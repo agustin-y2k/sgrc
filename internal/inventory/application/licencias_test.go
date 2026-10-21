@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // hoyDeTest es el día que devuelve el reloj de nuevoServicioDeTest.

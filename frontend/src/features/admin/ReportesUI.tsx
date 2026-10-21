@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatearPorcentaje, proporcion } from "@/features/admin/types"
 
@@ -7,6 +8,9 @@ export function Seccion({
   resumen,
   alDescargar,
   children,
+  consulta,
+  pausa,
+  alcance,
 }: {
   titulo: string
   /** Una línea con los totales: el contexto que le falta a cada fila. */
@@ -14,22 +18,54 @@ export function Seccion({
   /** Si viene, la sección ofrece bajarse a CSV. */
   alDescargar?: () => void
   children: React.ReactNode
+  consulta?: {
+    isSuccess: boolean
+    isFetching: boolean
+    error: unknown
+    refetch: () => unknown
+  }
+  pausa?: string
+  alcance?: string
 }) {
+  const listo = !pausa && (!consulta || (consulta.isSuccess && !consulta.error))
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
         <div className="grid gap-1">
           <CardTitle>{titulo}</CardTitle>
-          {resumen && <p className="text-muted-foreground text-sm">{resumen}</p>}
+          {alcance && <p className="text-muted-foreground text-sm">{alcance}</p>}
+          {listo && resumen && <p className="text-muted-foreground text-sm">{resumen}</p>}
         </div>
-        {alDescargar && (
-          <Button variant="outline" size="sm" onClick={alDescargar}>
+        {listo && alDescargar && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={consulta?.isFetching}
+            onClick={alDescargar}
+            aria-label={`Descargar CSV: ${titulo}`}
+          >
             Descargar CSV
           </Button>
         )}
       </CardHeader>
       {/* Cada tabla scrollea sola en pantallas angostas (RNF-07). */}
-      <CardContent className="overflow-x-auto">{children}</CardContent>
+      <CardContent className="min-w-0 overflow-x-auto">
+        {pausa ? (
+          <p className="text-muted-foreground text-sm">{pausa}</p>
+        ) : consulta?.error ? (
+          <ErrorDeConsulta
+            mensaje={`No pudimos consultar ${titulo.toLowerCase()}.`}
+            reintentando={consulta.isFetching}
+            onReintentar={() => void consulta.refetch()}
+          />
+        ) : !listo ? (
+          <p role="status" className="text-muted-foreground text-sm">
+            Consultando {titulo.toLowerCase()}…
+          </p>
+        ) : (
+          children
+        )}
+      </CardContent>
     </Card>
   )
 }

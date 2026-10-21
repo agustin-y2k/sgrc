@@ -11,10 +11,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/notification/application"
-	"github.com/ramiro/sgrc/internal/notification/domain"
-	"github.com/ramiro/sgrc/internal/shared/authtest"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/notification/application"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/authtest"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
 )
 
 type fakeRepo struct {
@@ -75,7 +75,7 @@ func (r *fakeRepo) idsOrdenados() []string {
 	return ids
 }
 
-func (r *fakeRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo) ([]*domain.Notificacion, error) {
+func (r *fakeRepo) ListarNoLeidasSobreUsuario(ctx context.Context, sobreUsuarioID string, tipo domain.Tipo, referencia ...string) ([]*domain.Notificacion, error) {
 	// Estos tests verifican el contrato HTTP; el cierre de avisos se prueba
 	// en application/.
 	return nil, nil

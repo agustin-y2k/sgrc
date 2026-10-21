@@ -55,6 +55,12 @@ func Parsear(page, pageSize string) (Pagina, error) {
 		}
 		p.Tamanio = n
 	}
+	// El número puede caber en int aunque su desplazamiento no. Comparar
+	// antes de multiplicar evita mandar a PostgreSQL un OFFSET desbordado.
+	maxInt := int(^uint(0) >> 1)
+	if p.Numero-1 > maxInt/p.Tamanio {
+		return Pagina{}, fmt.Errorf("%w: la página supera el rango permitido para ese tamaño", ErrPaginaInvalida)
+	}
 
 	return p, nil
 }

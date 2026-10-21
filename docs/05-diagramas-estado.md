@@ -34,7 +34,7 @@ stateDiagram-v2
 
 > Los tránsitos hacia `EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` son de duración **indefinida** y disparan cancelación en cascada de las reservas futuras de ese equipo puntual (RF-03.8). El regreso a `DISPONIBLE` no restaura nada automáticamente.
 
-> **`FUERA_DE_SERVICIO` no es terminal**, y este diagrama siempre lo dijo. El código lo trataba como si lo fuera —citando a este archivo para justificarlo— y por eso un equipo que se arreglaba no tenía forma de volver: la pantalla ofrecía el botón y el servidor respondía 409. Corregido el 2026-08-27. Lo terminal es `dado_de_baja`, que es otra columna.
+> **`FUERA_DE_SERVICIO` no es terminal.** Un equipo reparado puede volver a circulación. La baja lógica es otra columna y también puede deshacerse; ninguna de las dos operaciones restaura reservas canceladas.
 
 ## Estado de una Reserva (un equipo puntual)
 
@@ -43,7 +43,7 @@ stateDiagram-v2
     [*] --> CONFIRMADA: Creada sin solapamiento
     CONFIRMADA --> CANCELADA: Docente/Admin cancela, o cascada (bloqueo administrativo / equipo fuera de servicio)
     CONFIRMADA --> FINALIZADA: Job automático (hora_fin pasó)
-    CONFIRMADA --> NO_RETIRADA: Barrido — el equipo no se retiró (40 min desde el inicio si no salió ninguno; 15 desde la entrega si el docente se llevó otros)
+    CONFIRMADA --> NO_RETIRADA: Barrido a los 40 min sin retiro, o entrega parcial explícita libera el resto
     CANCELADA --> [*]
     FINALIZADA --> [*]
     NO_RETIRADA --> [*]
@@ -57,15 +57,20 @@ stateDiagram-v2
     CONFIRMADA --> PARCIALMENTE_CANCELADA: Se cancela alguna (no todas) de sus Reserva
     CONFIRMADA --> CANCELADA: Se cancelan todas sus Reserva de una vez
     PARCIALMENTE_CANCELADA --> CANCELADA: Se cancela la última Reserva que quedaba confirmada
-    CONFIRMADA --> FINALIZADA: Job automático — ninguna Reserva quedó cancelada
+    CONFIRMADA --> FINALIZADA: Sin confirmadas, alguna Reserva finalizada
     PARCIALMENTE_CANCELADA --> FINALIZADA: Job automático — el resto de las Reserva llegó a su hora_fin
-    CONFIRMADA --> NO_RETIRADA: Barrido — NINGUNO de sus equipos se retiró
+    CONFIRMADA --> NO_RETIRADA: Sin confirmadas ni finalizadas, alguna no retirada
+    PARCIALMENTE_CANCELADA --> NO_RETIRADA: El resto no se retiró
     CANCELADA --> [*]
     FINALIZADA --> [*]
     NO_RETIRADA --> [*]
 ```
 
-> `PARCIALMENTE_CANCELADA` es clave: un grupo con varios equipos no pasa a `CANCELADA` solo porque uno de ellos se vio afectado por un bloqueo administrativo o una avería — pasa a `CANCELADA` únicamente cuando **todos** sus equipos quedaron sin confirmar.
+> `PARCIALMENTE_CANCELADA` requiere alguna reserva cancelada y alguna confirmada.
+> El grupo pasa a `CANCELADA` cuando todas están canceladas. Sin confirmadas,
+> `FINALIZADA` tiene prioridad si alguna finalizó; en caso contrario,
+> `NO_RETIRADA` tiene prioridad si alguna no se retiró. El recálculo se confirma
+> junto con los cambios de las reservas bajo los mismos bloqueos.
 
 ## Estado de cuenta de Usuario
 
@@ -88,14 +93,17 @@ stateDiagram-v2
     [*] --> ACTIVO: Admin crea el ciclo
     ACTIVO --> ARCHIVADO: Admin archiva (fin de año)
     ARCHIVADO --> [*]
-    ARCHIVADO --> ACTIVO: nace el ciclo del año siguiente, con los cursos y materias clonados
 ```
 
 > **Solo puede haber un ciclo `ACTIVO` a la vez**, y lo garantiza un índice
-> único parcial en la base (RF-02.1). Archivar y clonar son un solo paso: el
-> ciclo que se cierra deja de ser activo y el del año siguiente nace en la
-> misma operación, con sus cursos y materias copiados y sin asignaciones de
-> docentes.
+> único parcial en la base (RF-02.1). El administrador elige cerrar sin abrir
+> otro ciclo o crear uno nuevo copiando la estructura. Si elige copiar, archivo
+> y clonado ocurren en la misma transacción: el ciclo que se cierra deja de ser
+> activo y el nuevo nace con cursos, espacios y materias copiados, sin asignaciones
+> docentes. Si cierra sin copiar, no queda ningún ciclo activo; puede crear uno
+> después. El nuevo tiene otro ID: el archivado no vuelve a `ACTIVO`.
+> Repetir el cierre conserva el resultado original; un fallo anterior al commit
+> revierte todos los pasos.
 
 ## Préstamo de un Equipo
 
@@ -137,7 +145,7 @@ son cosas distintas, ver RF-08 y `07-modelo-datos.md`.
 
 - Equipo en `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` o `dado_de_baja=true` rechaza nuevas reservas, **y también rechaza entregas**: está físicamente en el laboratorio y no se le da a nadie (RF-08.17). Llevarle una máquina rota al técnico sigue registrándose, pero como *salida a reparación* (RF-08.21), que exige decir a dónde va y vive en un panel aparte del mostrador. Lo dado de baja no sale por ningún camino.
 - `Reserva` `CANCELADA` o `FINALIZADA` es inmutable; lo mismo aplica a `ReservaGrupo`. Ambas se eliminan físicamente al archivar el ciclo lectivo de su materia (no antes).
-- Cursos y materias con `archivado=true` no aparecen en vistas activas; a diferencia de las reservas, ellos **sí** se preservan (nunca se eliminan) para no recrearlos el año siguiente.
+- Cursos, espacios y materias archivados no aparecen en vistas activas y se preservan al cerrar el ciclo. El CRUD sólo permite eliminar estructura sin archivar y sin reservas.
 - Un usuario con `estado=PENDIENTE`, `RECHAZADA` o `BAJA` no puede operar en el sistema aunque intente autenticarse. `BAJA` es terminal — no hay reactivación.
 - Dar de baja a un docente (`APROBADA → BAJA`) solo cancela reservas si la materia queda sin ningún otro docente activo (ver RF-02.8).
 - Dar de baja un equipo (`dado_de_baja=true`) es un soft delete: la fila se conserva para no perder el historial de incidencias y reservas ya asociadas.

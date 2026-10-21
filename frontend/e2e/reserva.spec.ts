@@ -217,13 +217,26 @@ test("un docente reserva una PC y después cancela la reserva", async ({
 
   // --- Cancelar (RF-04.8: reserva propia, motivo opcional) ---
   await tarjeta.getByRole("button", { name: /^cancelar$/i }).click()
+  const cancelacion = page.waitForResponse(
+    (r) =>
+      new URL(r.url()).pathname.startsWith("/api/grupos/") &&
+      new URL(r.url()).pathname.endsWith("/cancelar") &&
+      r.request().method() === "POST"
+  )
   await tarjeta.getByRole("button", { name: /confirmar cancelación/i }).click()
+  expect((await cancelacion).ok()).toBe(true)
 
   // El listado por defecto oculta las canceladas, así que desaparece.
   await expect(tarjeta).toHaveCount(0)
 
   // Y reaparece como CANCELADA al pedir que se muestren.
-  await page.getByLabel(/mostrar también las canceladas/i).check()
+  const incluirCanceladas = page.getByRole("checkbox", {
+    name: "Mostrar también las canceladas",
+    exact: true,
+  })
+  // El valor viene de la URL: esperar la navegación antes de afirmar su estado.
+  await incluirCanceladas.click()
+  await expect(incluirCanceladas).toBeChecked()
   await expect(tarjeta).toBeVisible()
   await expect(tarjeta.getByText("Cancelada")).toBeVisible()
 })

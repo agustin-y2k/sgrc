@@ -20,6 +20,9 @@ import { InicioDocente } from "@/features/inicio/InicioDocente"
 import { useNoLeidas } from "@/features/notificaciones/useNoLeidas"
 import * as reservasApi from "@/features/reservas/api"
 import { agruparReservas, hoyISO } from "@/features/reservas/types"
+import { diaAnteriorISO, intervaloDeReserva } from "@/features/reservas/intervalo"
+import { useAhora } from "@/lib/useAhora"
+import { todasLasPaginas } from "@/lib/todas-las-paginas"
 import { etiquetaDeDia } from "@/lib/fechas"
 import { getErrorMessage } from "@/lib/api-client"
 import type { GrupoDeReservas } from "@/features/reservas/types"
@@ -29,12 +32,6 @@ import { contar } from "@/lib/plural"
 
 /** Cuántas clases resume el panel del Admin antes de mandar al listado. */
 const MAX_PROXIMAS = 5
-
-/** HH:MM a minutos, para saber si una clase de hoy ya terminó. */
-function enMinutos(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number)
-  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : 0
-}
 
 function saludo(ahora: Date): string {
   const hora = ahora.getHours()
@@ -74,6 +71,7 @@ function ProximaReserva({ grupo, hoy }: { grupo: GrupoDeReservas; hoy: string })
 }
 
 export function InicioPage() {
+  const ahora = useAhora()
   const { user } = useAuth()
   const esAdmin = user?.rol === "ADMIN"
   const [entregandoSuelta, setEntregandoSuelta] = useState(false)
@@ -81,6 +79,7 @@ export function InicioPage() {
   // cierra solo al terminar (RF-08.24): adentro se iría con él.
   const [resumenDeEntrega, setResumenDeEntrega] = useState<string | null>(null)
   const hoy = hoyISO()
+  const ayer = diaAnteriorISO(hoy)
   const noLeidas = useNoLeidas()
 
   // Desde hoy en adelante: lo que ya pasó no ayuda a nadie a organizarse.
@@ -92,7 +91,14 @@ export function InicioPage() {
   // porque las cinco que faltaban estaban en la página dos.
   const { data: reservas, error: errorReservas } = useQuery({
     queryKey: ["reservas", "proximas", hoy],
-    queryFn: () => reservasApi.listarReservas({ desde: hoy, pageSize: 200 }),
+    queryFn: () =>
+      todasLasPaginas((pagina) =>
+        reservasApi.listarReservas({
+          desde: ayer,
+          pageSize: 200,
+          ...(pagina > 1 ? { page: pagina } : {}),
+        })
+      ),
   })
 
   // Lo que está afuera del laboratorio: alimenta el indicador y el formulario
@@ -111,8 +117,16 @@ export function InicioPage() {
   // y un día a full son 95 reservas, así que el contador veía la mitad del día
   // y decía "6 clases hoy" cuando había once.
   const { data: delDia, error: errorDelDia } = useQuery({
-    queryKey: ["reservas", "del-dia", hoy],
-    queryFn: () => reservasApi.listarReservas({ desde: hoy, hasta: hoy, pageSize: 200 }),
+    queryKey: ["reservas", "del-dia", ayer, hoy],
+    queryFn: () =>
+      todasLasPaginas((pagina) =>
+        reservasApi.listarReservas({
+          desde: ayer,
+          hasta: hoy,
+          pageSize: 200,
+          ...(pagina > 1 ? { page: pagina } : {}),
+        })
+      ),
     enabled: esAdmin,
   })
 
@@ -131,11 +145,10 @@ export function InicioPage() {
   // pantalla—, pero una clase que terminó a las nueve no es "lo que viene" a
   // las once. Se veía en la portada del Admin: los tres primeros renglones de
   // «Lo que viene» eran del turno mañana, ya pasado.
-  const ahoraEnMinutos = new Date().getHours() * 60 + new Date().getMinutes()
   const grupos = agruparReservas(
     (reservas?.data ?? []).filter((r) => r.estado === "CONFIRMADA")
   )
-    .filter((g) => g.fecha > hoy || enMinutos(g.horaFin) > ahoraEnMinutos)
+    .filter((g) => intervaloDeReserva(g).fin > ahora.getTime())
     .sort((a, b) =>
       a.fecha === b.fecha
         ? a.horaInicio.localeCompare(b.horaInicio)
@@ -147,7 +160,12 @@ export function InicioPage() {
   const deHoy = errorDelDia
     ? null
     : agruparReservas(
-        (delDia?.data ?? []).filter((r) => r.estado === "CONFIRMADA" && r.tipo !== "BLOQUEO")
+        (delDia?.data ?? []).filter(
+          (r) =>
+            r.estado === "CONFIRMADA" &&
+            r.tipo !== "BLOQUEO" &&
+            (r.fecha === hoy || intervaloDeReserva(r).fin > ahora.getTime())
+        )
       ).length
   const cuentasPendientes = errorPendientes ? null : (pendientes?.meta.total ?? 0)
 
@@ -155,7 +173,10 @@ export function InicioPage() {
   const sinDevolverAHorario = errorPrestamos
     ? null
     : afuera.filter((p) => p.demorado).length
-  const yaAfuera = useMemo(() => new Set(afuera.map((p) => p.equipoId)), [afuera])
+  const yaAfuera = useMemo(
+    () => new Set((prestamos?.data ?? []).map((p) => p.equipoId)),
+    [prestamos?.data]
+  )
 
   // Un solo aviso para las tres: al que está en el mostrador le importa que
   // lo que ve puede estar incompleto, no cuál de las consultas falló.

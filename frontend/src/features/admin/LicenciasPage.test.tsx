@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, within } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router"
 
@@ -38,6 +38,7 @@ function renderPagina() {
       </MemoryRouter>
     </QueryClientProvider>
   )
+  return queryClient
 }
 
 describe("LicenciasPage", () => {
@@ -289,7 +290,7 @@ describe("LicenciasPage", () => {
     renderPagina()
 
     const resumen = await screen.findByText(/1 vencida/)
-    expect(within(resumen).getByText(/por vencer/)).toBeTruthy
+    expect(within(resumen).getByText(/por vencer/)).toBeTruthy()
     expect(resumen.textContent).toContain("1 por vencer")
     expect(resumen.textContent).toContain("1 sin fecha cargada")
   })
@@ -308,6 +309,131 @@ describe("LicenciasPage", () => {
       "lic1",
       expect.objectContaining({ venceEl: "2026-10-01" })
     )
+  })
+
+  it("un inventario inaccesible no parece vacío y reintentar conserva el software", async () => {
+    vi.mocked(inventoryApi.listarEquipos).mockRejectedValueOnce(new Error("Sin red"))
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
+    await user.type(screen.getByLabelText("Software"), "Programa de prueba")
+    await screen.findByText(/No pudimos verificar el inventario/)
+    expect(screen.queryByText(/No hay equipos cargados/)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Cargar en 0 equipos" })).toBeDisabled()
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
+    expect(screen.getByLabelText("Software")).toHaveValue("Programa de prueba")
+    expect(screen.getByRole("button", { name: "Cargar en 1 equipo" })).toBeEnabled()
+  })
+
+  it.each(["quedan-dias", "renovada-el", "vence-el"])(
+    "exige completar el vencimiento elegido: %s",
+    async (forma) => {
+      const user = userEvent.setup()
+      renderPagina()
+      await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
+      await user.type(screen.getByLabelText("Software"), "Programa")
+      await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
+      await user.selectOptions(screen.getByLabelText("¿Cuándo vence?"), forma)
+      expect(screen.getByRole("button", { name: "Cargar en 1 equipo" })).toBeDisabled()
+      expect(adminApi.crearLicencias).not.toHaveBeenCalled()
+      await user.selectOptions(screen.getByLabelText("¿Cuándo vence?"), "sin-fecha")
+      expect(screen.getByRole("button", { name: "Cargar en 1 equipo" })).toBeEnabled()
+    }
+  )
+
+  it("bloquea un equipo seleccionado que luego se retira y permite limpiar la selección", async () => {
+    const user = userEvent.setup(),
+      cliente = renderPagina()
+    await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
+    await user.type(screen.getByLabelText("Software"), "Programa")
+    await user.click(await screen.findByRole("checkbox", { name: /^PC 3/ }))
+    vi.mocked(inventoryApi.listarEquipos).mockResolvedValue({ data: [] })
+    await act(async () => {
+      await cliente.refetchQueries({ queryKey: ["equipos"] })
+    })
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Cargar en 1 equipo" })).toBeDisabled()
+    )
+    await user.click(screen.getByRole("button", { name: "Limpiar selección de equipos" }))
+    expect(screen.getByLabelText("Software")).toHaveValue("Programa")
+    expect(screen.getByRole("button", { name: "Cargar en 0 equipos" })).toBeDisabled()
+  })
+
+  it("el resultado de la renovación masiva sigue visible al limpiar las casillas", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(await screen.findByRole("checkbox", { name: /Seleccionar AutoCAD/ }))
+    await user.click(screen.getByRole("button", { name: "Renovar las 1 seleccionadas" }))
+    expect(await screen.findByText("Se renovaron 1 licencia.")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Renovar las 1 seleccionadas" })
+    ).not.toBeInTheDocument()
+  })
+
+  it("al editar después de renovar usa el vencimiento nuevo", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await screen.findByRole("button", { name: "Editar" })
+    vi.mocked(adminApi.listarLicencias).mockResolvedValue({
+      data: [licencia({ fechaVencimiento: "2026-12-01" })],
+    })
+    await user.click(screen.getByRole("button", { name: "Renovar hoy" }))
+    await waitFor(() => expect(screen.getByText(/1 de diciembre/)).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: "Editar" }))
+    expect(screen.getByLabelText("Fecha de vencimiento")).toHaveValue("2026-12-01")
+  })
+
+  it("cambiar sólo la duración no reescribe el vencimiento ni la última renovación", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(await screen.findByRole("button", { name: "Editar" }))
+    const duracion = screen.getByLabelText("Días que dura cada renovación")
+    await user.clear(duracion)
+    await user.type(duracion, "60")
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+    expect(adminApi.editarLicencia).toHaveBeenCalledWith("lic1", {
+      nombre: "AutoCAD 2027",
+      diasDuracion: 60,
+      diasAviso: 1,
+    })
+  })
+
+  it("bloquea guardar si otra operación actualiza la licencia mientras se edita", async () => {
+    const user = userEvent.setup(),
+      cliente = renderPagina()
+    await user.click(await screen.findByRole("button", { name: "Editar" }))
+    vi.mocked(adminApi.listarLicencias).mockResolvedValue({
+      data: [licencia({ fechaVencimiento: "2026-12-01" })],
+    })
+    await act(async () => {
+      await cliente.refetchQueries({ queryKey: ["licencias"] })
+    })
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Guardar" })).toBeDisabled()
+    )
+    await user.click(screen.getByRole("button", { name: "Cancelar" }))
+    await user.click(screen.getByRole("button", { name: "Editar" }))
+    expect(screen.getByLabelText("Fecha de vencimiento")).toHaveValue("2026-12-01")
+  })
+
+  it("una licencia seleccionada que desaparece bloquea la renovación y permite recuperarse", async () => {
+    const user = userEvent.setup(),
+      cliente = renderPagina()
+    await user.click(await screen.findByRole("checkbox", { name: /Seleccionar AutoCAD/ }))
+    vi.mocked(adminApi.listarLicencias).mockResolvedValue({ data: [] })
+    await act(async () => {
+      await cliente.refetchQueries({ queryKey: ["licencias"] })
+    })
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Renovar las 1 seleccionadas" })
+      ).toBeDisabled()
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Limpiar selección de licencias" })
+    )
+    expect(adminApi.renovarLicencias).not.toHaveBeenCalled()
   })
 
   it("pide confirmación antes de quitar una licencia", async () => {
@@ -368,9 +494,7 @@ describe("LicenciasPage", () => {
     await user.click(await screen.findByRole("button", { name: "Cargar una licencia" }))
 
     expect(screen.getByRole("heading", { name: "Licencias de software" })).toBeVisible()
-    expect(
-      screen.getByText(/les llega un mail a todos los administradores/)
-    ).toBeVisible()
+    expect(screen.getByText(/Configurá la anticipación de los avisos/)).toBeVisible()
     // El botón se fue del encabezado: lo reemplazó el panel de abajo.
     expect(
       screen.queryByRole("button", { name: "Cargar una licencia" })

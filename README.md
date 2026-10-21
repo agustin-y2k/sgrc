@@ -4,12 +4,9 @@
 
 Plataforma web para inventario de equipos informáticos y reserva vinculada a cursos y materias, pensada para una única institución. Los docentes reservan las máquinas que necesitan para su clase; el equipo de administración carga el inventario, entrega y recibe los equipos, aprueba las cuentas y mira los reportes de uso.
 
-![Pantalla de inicio del administrador: qué entregar ahora, qué está afuera del laboratorio y con cuántos equipos se cuenta](docs/capturas/01-mostrador.png)
-
 <p align="center">
   <a href="#el-problema-que-resuelve">El problema</a> ·
   <a href="#qué-hace">Qué hace</a> ·
-  <a href="#cómo-se-ve">Cómo se ve</a> ·
   <a href="#decisiones-técnicas-que-vale-la-pena-mirar">Decisiones técnicas</a> ·
   <a href="#cómo-levantarlo">Levantarlo</a> ·
   <a href="#documentación">Documentación</a>
@@ -39,7 +36,8 @@ SGRC resuelve los cuatro: **impide el solapamiento a nivel de base de datos** (n
 | **Reservar equipos para una clase** | Elige la materia, el día y la franja, y recién ahí el sistema arma la lista: qué hay para elegir depende de cuándo. Puede combinar equipos de distintos carros en la misma reserva. |
 | **Ver quién tiene lo que falta** | Los equipos ya tomados en esa franja aparecen con el nombre de quien los reservó. "No hay nada libre" y "los tiene alguien con quien puedo hablar" son situaciones distintas, y solo la segunda tiene salida. |
 | **Pedirle equipos a otro docente** | Un botón le manda al que los tiene un aviso y un correo: quién los necesita, para qué materia y a qué hora. No le saca nada ni espera respuesta del sistema — el acuerdo lo cierran ellos. Lo que el sistema garantiza es que el pedido llegue aunque no se crucen. |
-| **Reservas que se repiten** | "Todos los martes de 15 a 17, hasta fin de año." El sistema valida la serie completa antes de crear nada: si alguna fecha choca, dice cuáles y no crea ninguna. |
+| **Reservas que se repiten** | "Todos los martes de 15 a 17, hasta fin de año." La pantalla comprueba todas las fechas antes de confirmar. Si hay un conflicto que no puede resolverse con una toma autorizada por prioridad, informa cuáles chocan y no crea ninguna clase de la serie. |
+| **Prioridad por dispositivo** | Una materia puede tomar equipos reservados por otra si su marca tiene mayor prioridad y se cumplen las protecciones de horario y bloqueo. El sistema intenta reponer las reservas desplazadas en cascada; si faltan sustitutos, cancela sólo las reservas puntuales afectadas y avisa. En una serie se revisan todas las fechas y se exige consentimiento si alguna toma equipos por prioridad. |
 | **Ver qué tiene por delante** | La pantalla de inicio responde "¿qué tengo hoy?" y "¿hay algo esperándome?" apenas se entra. Muestra sus próximas clases con el día en palabras, y sobre cada una puede cambiar de máquina o cancelar sin ir a ninguna otra pantalla. |
 | **Llegar a todo sin conocer el sistema** | Debajo, un atajo por cada cosa que puede hacer, nombrado por la tarea y no por la sección —"Ver las computadoras", no "Inventario"— con una línea que dice para qué sirve. Está pensado para quien no usa una computadora todos los días. |
 | **Saber con qué cuenta se entra a una máquina** | Una notebook no se abre sola. Cada equipo puede llevar anotadas sus cuentas: con qué usuario se entra, cuál es de administrador, si pide contraseña y —si le corresponde verla— cuál es. Se consulta desde el teléfono, parado frente a la máquina. |
@@ -49,7 +47,7 @@ SGRC resuelve los cuatro: **impide el solapamiento a nivel de base de datos** (n
 | **Su perfil** | Su foto —opcional; si no pone ninguna se ven sus iniciales—, las materias que da, y la contraseña. Todo detrás del redondel con la cara, donde se lo busca en cualquier aplicación. |
 | **Pedir otra materia** | Le asignaron una materia a mitad de año y necesita reservar para ella. La elige de la lista, o la escribe si todavía no está cargada. Lo resuelve una persona, no el sistema. |
 | **Pedir ayuda** | Un botón en la barra de arriba, en todas las pantallas: escribe un asunto y qué le pasa, y elige si necesita una mano ahora, si algo no anda o si se le ocurre una mejora. El sistema agrega solo desde qué pantalla escribió. La conversación sigue **dentro del sistema** —le contestan, puede volver a preguntar— sin abrir el correo. |
-| **Elegir qué le llega por correo** | Cuáles de los avisos que ya ve en el sistema quiere además por mail. Se apagan y se prenden cuando quiera; lo que se elige es el canal, no el aviso. Los de su cuenta y los de un pedido de ayuda salen siempre. |
+| **Elegir qué le llega por correo** | Cuáles de los avisos que ya ve en el sistema quiere además por mail. Se apagan y se prenden cuando quiera; lo que se elige es el canal, no el aviso. Los correos de cuenta y de conversaciones de tipo «Pedido de ayuda» no admiten desactivación por preferencia; el envío depende de que el correo esté habilitado. |
 
 ### Para el equipo de administración
 
@@ -57,102 +55,19 @@ SGRC resuelve los cuatro: **impide el solapamiento a nivel de base de datos** (n
 |---|---|
 | **El mostrador** | La pantalla de inicio muestra sin buscar a quién hay que entregarle ahora, qué clase sigue, qué hay afuera del laboratorio con el botón para marcar que volvió, y con cuántos equipos se cuenta en este momento. Se refresca sola cada minuto, porque el mostrador lo atienden varias personas a la vez. |
 | **Entregas y devoluciones** | Qué equipos están afuera, quién se los llevó y cuándo tienen que volver. Reemplaza el registro en papel, y a diferencia de él no deja que la misma máquina figure entregada dos veces. También sirve para prestar en el momento a alguien que ni siquiera tiene cuenta en el sistema. |
-| **La reserva que nadie retiró** | Una hora antes de la clase le llega un recordatorio al docente, y a los quince minutos de empezada —si todavía no fue a buscarlas— el aviso de que a los cuarenta quedan libres: llega cuando todavía puede ir, cambiar de máquina o cancelar. Pasado ese plazo se liberan para otro, aunque si el docente aparece más tarde y siguen ahí se le entregan igual. Si vino y se llevó solo una parte, lo que dejó se libera enseguida: ya lo decidió él. Y si un equipo no vuelve a horario, el sistema lo reclama y le avisa a quien lo tenía reservado después. |
+| **Reservas sin retiro y equipos sin devolver** | El barrido genera un recordatorio desde una hora antes de la clase. Con el mostrador atendido, libera en silencio los equipos sin entrega al cumplirse el plazo configurado desde el inicio (40 minutos por defecto). En una entrega parcial, el administrador puede liberar el resto con «Es todo lo que se llevó». No hay reclamo al pasar la hora de devolución: después del cierre de jornada se genera un resumen de equipos pendientes, una sola vez por préstamo, y siguen visibles hasta que se reciben. |
 | **Inventario** | Carros, equipos, número de serie, procesador, memoria, software instalado y estado (disponible, en mantenimiento, fuera de servicio). |
 | **Otros equipos** | Lo que se presta y no está en ningún carro: un proyector, cargadores, notebooks sueltas. Se entregan y se reciben en la misma pantalla que las computadoras, y cada uno decide si además se puede reservar con anticipación —un proyector sí, un cargador se pide en el momento—. Lo que es una **computadora** se administra igual que una de carro: ficha técnica, licencias y cuentas de acceso. |
 | **Cuentas de cada equipo** | Con qué usuario se entra a cada máquina, si es local o de un directorio remoto, si tiene privilegios de administrador y cuál es la contraseña. Cada cuenta se marca por separado como visible para cualquier docente o solo para administración, y esa marca **no** se deduce del privilegio: hay cuentas de administrador que usa todo el mundo y cuentas comunes que no. Las contraseñas se guardan cifradas —el volcado de la copia de seguridad no es la lista de contraseñas de la institución—, no viajan en ningún listado, se piden de a una y cada consulta queda auditada. |
-| **Licencias de software** | Qué programas con vencimiento hay en cada equipo y cuántos días le quedan a cada uno. El día antes de que venza —y el día que vence— llega un correo a todos los administradores. Si la licencia se renovó otro día, o hay que corregir la fecha, se edita en cualquier momento. |
-| **Ciclo lectivo** | Años, cursos, materias y qué docente dicta cada una. Al cerrar el año, el sistema guarda un resumen histórico permanente y clona la estructura al año siguiente. |
+| **Licencias de software** | Qué programas con vencimiento hay en cada equipo y cuántos días le quedan a cada uno. Permite configurar los días de aviso previo; el barrido diario genera el aviso al entrar en ese plazo y al vencer, según los canales habilitados. Si la licencia se renovó otro día, o hay que corregir la fecha, se edita en cualquier momento. |
+| **Ciclo lectivo** | Años, cursos, espacios, materias y qué docente dicta cada una. Al cerrar el año, el sistema guarda un resumen histórico permanente. El administrador elige cerrar sin abrir otro ciclo o crear uno nuevo copiando la estructura, sin asignaciones docentes. |
 | **Cargar el año de una vez** | La estructura académica se repite entre las divisiones de un año y entre un año y el siguiente, así que no se carga formulario por formulario: las materias de un curso se copian a los que uno elija, y los cursos con sus materias se descargan y se cargan como una planilla —una fila por curso, las materias separadas por comas—. La carga **agrega lo que falta y no borra nada**, así que subir dos veces el mismo archivo es inofensivo; antes de aplicarla se ve qué va a crear y qué filas no pudo leer. |
 | **Aprobación de cuentas** | Un docente se registra solo —con email y contraseña, o con su cuenta de Google— pero no entra hasta que alguien lo aprueba. Un docente aprobado también puede recibir permisos de Admin, y perderlos sin que se le cierre la cuenta. |
 | **Pedidos para dictar una materia** | Un docente pide sumarse a una materia y explica por qué. Al equipo de administración le llega el pedido con ese texto y con quiénes la dictan hoy, para saber con quién hablar; a esos docentes también les llega el aviso, para que no se enteren tarde. **Lo decide una persona**: aprobar habilita a reservar los mismos equipos que usa quien ya la da. Rechazar exige explicar por qué, y quién resolvió qué queda auditado. |
-| **Pedidos de ayuda y mensajes** | Lo que escribe la gente —un pedido de ayuda, algo que no anda, una idea— con la pantalla desde la que lo escribió. Se lee y se contesta **desde el sistema**, sin abrir Gmail, en la misma pantalla donde están los avisos. La conversación admite ida y vuelta: contestar no la cierra, y cerrarla es un acto aparte. Un pedido de ayuda avisa por correo sí o sí. |
+| **Pedidos de ayuda y mensajes** | Lo que escribe la gente —un pedido de ayuda, algo que no anda, una idea— con la pantalla desde la que lo escribió. Se lee y se contesta **desde el sistema**, en la misma pantalla donde están los avisos. La conversación admite ida y vuelta: contestar no la cierra, y cerrarla es un acto aparte. Los avisos internos funcionan aunque el correo esté deshabilitado. Si está habilitado, las conversaciones «Pedido de ayuda» generan correos obligatorios; los de problemas e ideas respetan las preferencias. |
 | **Bloquear equipos** | Toma las máquinas para otra cosa —una evaluación, una jornada docente, una obra en el aula— escribiendo por qué, y cancela automáticamente lo que se pisa notificando a cada docente afectado con ese mismo texto. |
 | **Reportes** | Uso por equipo y por docente, incidencias por equipo y por carro, con porcentajes y descarga a CSV. Y para el parque de máquinas: cuántas andan y cuántas no, la lista de las que están fuera de circulación con qué le pasa a cada una, y qué se rompe más seguido. |
 | **Auditoría** | Toda acción sensible queda registrada con quién, cuándo y desde qué dirección, y se consulta desde el sistema: filtrable por acción, por qué cosa se tocó, por quién y por fechas. No se puede editar ni borrar, y lo que hizo una cuenta sobrevive a su eliminación — la pregunta «¿quién borró esto?» aparece justo cuando ya no se puede reconstruir de memoria. |
-
----
-
-## Cómo se ve
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-### Reservar una clase
-
-Primero el día y la franja; recién entonces la lista. Arriba, los equipos libres para tildar, agrupados por carro y con el software que tiene cada uno; abajo, los que ya tiene alguien, con su nombre y el botón para pedírselos. Lo que no está en ningún carro va aparte, y solo si es reservable.
-
-</td>
-<td width="50%" valign="top">
-
-### El mostrador
-
-Qué hay que entregar ahora, qué está afuera y cuántos equipos quedan. Cada máquina de una clase se marca *entregada*, *sin retirar* o *liberada*.
-
-</td>
-</tr>
-<tr>
-<td><img src="docs/capturas/02-nueva-reserva.png" alt="Formulario de nueva reserva con el selector de equipos por carro"></td>
-<td><img src="docs/capturas/06-entregas.png" alt="Pantalla de entregas y devoluciones"></td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-
-### Reportes
-
-Uso por equipo y por docente, estado del parque, equipos fuera de circulación y qué se rompe más seguido. Todo con su descarga a CSV.
-
-</td>
-<td width="50%" valign="top">
-
-### Licencias de software
-
-Ordenadas por urgencia: primero las que todavía no se verificaron contra la máquina, después de la más vencida a la que más le falta.
-
-</td>
-</tr>
-<tr>
-<td><img src="docs/capturas/05-reportes.png" alt="Pantalla de reportes con barras de participación"></td>
-<td><img src="docs/capturas/07-licencias.png" alt="Listado de licencias de software con su semáforo de vencimiento"></td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-
-### Inventario
-
-Cada carro con sus máquinas, el estado de cada una y su ficha técnica. Lo ve cualquier usuario autenticado: un docente necesita saber qué tiene instalado cada equipo antes de elegir.
-
-</td>
-<td width="50%" valign="top">
-
-### Tema oscuro
-
-Todo el sistema acompaña la preferencia del sistema operativo, y se puede forzar desde la barra.
-
-</td>
-</tr>
-<tr>
-<td><img src="docs/capturas/10-inventario-docente.png" alt="Listado de carros y equipos con su estado"></td>
-<td><img src="docs/capturas/09-reportes-oscuro.png" alt="Reportes en tema oscuro"></td>
-</tr>
-</table>
-
-<table>
-<tr>
-<td width="34%" valign="top">
-
-### Funciona en el teléfono
-
-Un docente reserva desde el celular, camino al aula. Las doce pantallas se miden automáticamente a seis anchos distintos, de 320 a 1440px.
-
-</td>
-<td width="33%"><img src="docs/capturas/11-movil.png" alt="El sistema en un teléfono"></td>
-<td width="33%"><img src="docs/capturas/00-acceso.png" alt="Pantalla de acceso"></td>
-</tr>
-</table>
-
-> Las capturas salen del sistema real corriendo con datos de prueba. Están todas en [`docs/capturas/`](docs/capturas).
 
 ---
 
@@ -184,7 +99,7 @@ Un docente reserva desde el celular, camino al aula. Las doce pantallas se miden
 
 | Capa | Tecnología |
 |---|---|
-| **Backend** | Go 1.25 con [Fiber](https://gofiber.io/) v2 |
+| **Backend** | Go 1.26.10 con [Fiber](https://gofiber.io/) v2 |
 | **Base de datos** | PostgreSQL 16 (extensiones `pgcrypto` y `btree_gist`) |
 | **Autenticación** | JWT HS256, contraseñas con `argon2id`, ingreso opcional con cuenta de Google |
 | **Frontend** | React 19 + TypeScript + Vite, Tailwind CSS v4, shadcn/ui, TanStack Query |
@@ -195,22 +110,43 @@ Un docente reserva desde el celular, camino al aula. Las doce pantallas se miden
 
 ## Cómo levantarlo
 
+Para probar una copia local nueva, sin respaldos ni credenciales previas:
+
 ```bash
-cp .env.example .env   # completar los valores reales
+make local-init        # crea configuración privada con claves aleatorias
+make local             # aplicación en http://localhost:8081
+```
+
+Requiere Docker con Compose 2.24.4 o posterior, Make y Python 3. El administrador
+inicial y su contraseña están en `.env.local`. La base empieza vacía para cargar
+los datos desde la interfaz. Ver [Entorno local](docs/15-entorno-local.md).
+
+Para producción, en una instalación nueva:
+
+```bash
+install -m 600 .env.example .env   # sólo en una instalación nueva; completar valores
 make run-prod          # docker compose up --build
 ```
 
-Todo corre en contenedores: `sgrc-app` (el binario Go), `postgres` (con el esquema aplicado automáticamente la primera vez que el volumen está vacío), `frontend` (nginx sirviendo la interfaz compilada) y `cloudflared`.
+Todo corre en contenedores: `sgrc-app` (el binario Go), `postgres`, `frontend` (nginx sirviendo la interfaz compilada) y `cloudflared`. Al arrancar, la API aplica con Goose las migraciones pendientes embebidas en el binario, antes de sembrar el primer administrador y atender solicitudes. Lo hace tanto en una base nueva como en una existente, conservando el registro de versiones ya aplicadas.
 
 El contenedor de la API se autochequea contra su propio `/health`, que a su vez consulta la base: `docker compose ps` muestra `healthy` solo si la API puede llegar a Postgres.
 
 En **producción la base arranca vacía a propósito**: el esquema crea las tablas, la aplicación siembra el primer administrador y ahí termina. Ni carros, ni equipos, ni ciclo lectivo — eso lo carga el administrador desde la interfaz.
 
-En **desarrollo**, `make run` levanta además un servicio que siembra datos de prueba (un ciclo, una materia, un docente y un carro con equipos) apenas la API queda sana, así que `docker compose down -v && make run` deja el sistema usable sin pasos extra.
+En **desarrollo**, `make run` levanta además un servicio que siembra datos de prueba (un ciclo, una materia, un docente y un carro con equipos) apenas la API queda sana. Una base de desarrollo nueva queda preparada para probar los recorridos básicos.
+
+`make local` usa el proyecto separado `sgrc-local` y conserva los archivos
+privados existentes. El repositorio publica las plantillas; cada institución
+mantiene su configuración y sus datos según la
+[política de publicación](docs/16-publicacion-repositorio.md).
 
 > **[`docs/11-operacion.md`](docs/11-operacion.md) es el manual completo**: qué completar en el `.env`, cómo parar y reiniciar, cómo leer los registros cuando algo falla, cómo aplicar el esquema sobre una base que ya existe y cómo sacar una copia de seguridad.
 
-El compose base **no publica ningún puerto al host**: en producción el único camino de entrada es el túnel. Para desarrollo, `docker-compose.dev.yml` expone la API (`8080`), Postgres (`5432`) y la interfaz compilada (`8081`), y se aplica explícitamente:
+La [documentación de seguridad](docs/09-seguridad-rbac.md) describe los
+permisos, la gestión de sesiones y las medidas de protección del despliegue.
+
+El compose base **no publica ningún puerto al host**: en producción el único camino de entrada es el túnel. Para desarrollo, `docker-compose.dev.yml` expone en `127.0.0.1` la API (`8080`), Postgres (`5432`) y la interfaz compilada (`8081`), y se aplica explícitamente:
 
 ```bash
 make run        # con puertos expuestos, para desarrollar
@@ -246,10 +182,12 @@ sgrc/
 │   ├── notification/     ← avisos internos y sus copias por correo
 │   ├── reporting/        ← reportes y estadísticas históricas
 │   ├── availability/     ← disponibilidad de los administradores
+│   ├── sugerencias/      ← conversaciones de ayuda, problemas e ideas
+│   ├── auditoria/        ← consulta del registro de acciones
 │   └── shared/           ← bus de eventos, middleware, seguridad, correo, auditoría, paginación
-├── migrations/           ← el esquema de la base, se aplica al crear el volumen de Postgres
+├── migrations/           ← migraciones embebidas; la API aplica las pendientes al arrancar
 ├── frontend/             ← interfaz web (ver frontend/README.md)
-├── docs/                 ← documentación y capturas
+├── docs/                 ← documentación y guías de uso
 ├── docker-compose.yml
 ├── Dockerfile
 └── Makefile
@@ -264,14 +202,22 @@ Cada módulo de `internal/` tiene la misma forma: `domain/` (reglas puras, sin d
 ## Testing
 
 ```bash
-make test                          # pruebas rápidas, sin Docker, con cobertura
-make lint                          # golangci-lint
-go test -tags integration ./...    # + PostgreSQL real en contenedores (lento)
-cd frontend && npx vitest run      # pruebas de la interfaz
-cd frontend && npx playwright test # recorrido completo contra el sistema real
+make test                                           # pruebas rápidas, sin Docker, con cobertura
+make lint                                           # golangci-lint
+go test -tags integration -p 2 ./... -timeout=25m    # PostgreSQL efímero (lento)
+npm --prefix frontend run test -- --run             # pruebas de la interfaz
+make regresion-navegador                            # navegador, once bloques aislados
 ```
 
-La lógica de negocio —máquinas de estado, cálculo de solapamiento, generación de series recurrentes— está cubierta entre el **89 % y el 100 %** en el `domain/` de cada módulo, y entre el **62 % y el 90 %** en la capa de casos de uso. La interfaz tiene **418 pruebas** en 40 archivos, que ejercitan las pantallas como lo haría una persona.
+La cobertura incluye reglas de dominio, contratos HTTP, concurrencia con
+PostgreSQL y recorridos de administrador y docente. Se comprueban reservas y
+prioridades, entregas y devoluciones, cierre anual, inventario, licencias,
+soporte, reportes, auditoría, accesibilidad y recuperación ante errores.
+
+`make regresion-navegador` compila ambos servicios y crea una base efímera nueva
+por bloque, con cuentas ficticias. Incluye escenarios con operaciones reales y
+otros que interceptan respuestas para provocar errores o estados concretos.
+Falla si quedan casos omitidos. No utiliza el inventario de `sgrc-local`.
 
 Las pruebas de integración van detrás de una etiqueta de compilación porque necesitan Docker: en una máquina sin Docker ni se compilan, y `make test` sigue funcionando. El detalle de qué se prueba en cada capa —y de qué queda deliberadamente afuera— está en [`docs/10-testing.md`](docs/10-testing.md).
 
@@ -280,6 +226,13 @@ Las pruebas de integración van detrás de una etiqueta de compilación porque n
 ## Documentación
 
 Toda la documentación funcional y técnica vive en [`docs/`](docs).
+
+Las guías de uso están disponibles para
+[administradores](docs/guias/guia-admins.html) ([PDF](docs/guias/SGRC-guia-administradores.pdf))
+y [docentes](docs/guias/guia-docentes.html) ([PDF](docs/guias/SGRC-guia-docentes.pdf)).
+Las capturas documentales se destinan exclusivamente a estas guías; su
+[procedimiento de generación](docs/guias/generar/README.md) explica cómo
+actualizar las imágenes y los PDF con datos ficticios.
 
 | Documento | De qué trata | Para quién |
 |---|---|---|
@@ -295,6 +248,10 @@ Toda la documentación funcional y técnica vive en [`docs/`](docs).
 | [`08-api-spec.yaml`](docs/08-api-spec.yaml) | Contrato OpenAPI de la API | Técnico |
 | [`09-seguridad-rbac.md`](docs/09-seguridad-rbac.md) | Autenticación, matriz de permisos, auditoría | Técnico |
 | [`10-testing.md`](docs/10-testing.md) | Qué se prueba, con qué, y qué queda deliberadamente afuera | Técnico |
+| [`13-pruebas-servicios-locales.md`](docs/13-pruebas-servicios-locales.md) | Configuración y pruebas optativas del backend con Google y SMTP reales en local | Técnico |
+| [`14-prioridades-dispositivos.md`](docs/14-prioridades-dispositivos.md) | Prioridades por equipo, relación académica, reposición y compatibilidad | Funcional y técnico |
+| [`15-entorno-local.md`](docs/15-entorno-local.md) | Instalación local desde plantillas, configuración privada y comandos `make local-*` | Quien prueba el sistema |
+| [`16-publicacion-repositorio.md`](docs/16-publicacion-repositorio.md) | Archivos públicos, plantillas y datos privados de cada instalación | Técnico |
 | [`adr/`](docs/adr) | El porqué de las decisiones estructurales, con las alternativas descartadas | Técnico |
 
 Si es tu primera vez en el repositorio y venís del lado técnico, leé `01` y `06` primero: dan el contexto para todo lo demás. El esquema de la base, `migrations/001_esquema_inicial.sql`, está comentado para leerse de corrido y es la mejor puerta de entrada al dominio.
@@ -307,7 +264,7 @@ Si es tu primera vez en el repositorio y venís del lado técnico, leé `01` y `
 
 Publicado bajo la **[Licencia MIT](LICENSE)**.
 
-Copyright © 2026 Ramiro Agustin Pintos De Nucci.
+La atribución de autoría se conserva en [LICENSE](LICENSE).
 
 En castellano llano: podés usar este sistema, modificarlo, desplegarlo en tu institución y hasta cobrar por hacerlo, sin pedir permiso. La única condición es conservar el aviso de copyright y el texto de la licencia. Se entrega sin garantía: si algo falla, la responsabilidad no es del autor.
 
@@ -318,4 +275,3 @@ Si lo adaptás para tu institución, no hace falta que me avises — pero si el 
 Todas las dependencias del proyecto son permisivas y compatibles con MIT: la mayoría MIT, más Apache-2.0 (`class-variance-authority`, TypeScript, Playwright), ISC (`lucide-react`) y BSD-3-Clause (`golang.org/x/crypto`, `google/uuid`). No hay ninguna dependencia con copyleft.
 
 La tipografía **Geist** se distribuye bajo la [SIL Open Font License 1.1](https://openfontlicense.org/) y viaja dentro de los archivos compilados de la interfaz. Su licencia es independiente de la de este software y se mantiene con la obra.
-</content>

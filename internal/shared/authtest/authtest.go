@@ -9,7 +9,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/ramiro/sgrc/internal/shared/middleware"
+	"github.com/agustin-y2k/sgrc/internal/shared/middleware"
 )
 
 // Registro hace de "tabla usuario" para los tests: recuerda el rol de cada ID

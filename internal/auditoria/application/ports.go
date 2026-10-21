@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ramiro/sgrc/internal/auditoria/domain"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/auditoria/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
 )
 
 // ErrIDInvalido: el ID recibido no tiene formato UUID válido.

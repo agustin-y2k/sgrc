@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/notification/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // ── fakeEnviador ────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ func (f *fakeEnviador) Enviar(_ context.Context, para, asunto, cuerpo string) er
 	return nil
 }
 
-const urlDePrueba = "https://sgrc.escuela.edu.ar"
+const urlDePrueba = "https://sgrc.escuela.test"
 
 // mensajeroDePrueba arma el Mensajero ya suscrito al bus, en modo
 // sincrónico para poder afirmar sin esperas.
@@ -43,7 +43,7 @@ func mensajeroDePrueba(admins ...string) (*eventbus.InMemoryEventBus, *fakeEnvia
 // ── Docente pendiente → Admins ──────────────────────────────────────────
 
 func TestCorreo_DocentePendiente_LlegaATodosLosAdmins(t *testing.T) {
-	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar", "admin2@escuela.edu.ar")
+	bus, enviador := mensajeroDePrueba("admin1@escuela.test", "admin2@escuela.test")
 
 	bus.Publish(eventbus.Evento{
 		Tipo: "docente.registro.pendiente",
@@ -51,7 +51,7 @@ func TestCorreo_DocentePendiente_LlegaATodosLosAdmins(t *testing.T) {
 			"usuarioId": "usr-1",
 			"nombre":    "Ana",
 			"apellido":  "Pérez",
-			"email":     "ana@escuela.edu.ar",
+			"email":     "ana@escuela.test",
 		},
 	})
 
@@ -64,7 +64,7 @@ func TestCorreo_DocentePendiente_LlegaATodosLosAdmins(t *testing.T) {
 	if !strings.Contains(cuerpo, "Ana Pérez") {
 		t.Errorf("el cuerpo no dice quién se registró:\n%s", cuerpo)
 	}
-	if !strings.Contains(cuerpo, "ana@escuela.edu.ar") {
+	if !strings.Contains(cuerpo, "ana@escuela.test") {
 		t.Errorf("el cuerpo no trae el email declarado:\n%s", cuerpo)
 	}
 	if !strings.Contains(cuerpo, urlDePrueba) {
@@ -77,7 +77,7 @@ func TestCorreo_DocentePendiente_SinAdminsNoMandaNada(t *testing.T) {
 
 	bus.Publish(eventbus.Evento{
 		Tipo:    "docente.registro.pendiente",
-		Payload: map[string]string{"nombre": "Ana", "apellido": "Pérez", "email": "ana@escuela.edu.ar"},
+		Payload: map[string]string{"nombre": "Ana", "apellido": "Pérez", "email": "ana@escuela.test"},
 	})
 
 	if len(enviador.enviados) != 0 {
@@ -87,16 +87,16 @@ func TestCorreo_DocentePendiente_SinAdminsNoMandaNada(t *testing.T) {
 
 func TestCorreo_DocentePendiente_UnEnvioQueFallaNoFrenaLosOtros(t *testing.T) {
 	// El enviador falla con una dirección puntual y anda con las demás.
-	enviador := &enviadorQueFallaCon{malo: "admin2@escuela.edu.ar"}
+	enviador := &enviadorQueFallaCon{malo: "admin2@escuela.test"}
 	bus := eventbus.NewInMemoryEventBus()
 	m := NewMensajero(enviador, &fakeListadorAdmins{
-		adminEmails: []string{"admin1@escuela.edu.ar", "admin2@escuela.edu.ar", "admin3@escuela.edu.ar"},
+		adminEmails: []string{"admin1@escuela.test", "admin2@escuela.test", "admin3@escuela.test"},
 	}, &fakePreferencias{}, urlDePrueba)
 	RegisterEmailHandlersSincronos(bus, m)
 
 	bus.Publish(eventbus.Evento{
 		Tipo:    "docente.registro.pendiente",
-		Payload: map[string]string{"nombre": "Ana", "apellido": "Pérez", "email": "ana@escuela.edu.ar"},
+		Payload: map[string]string{"nombre": "Ana", "apellido": "Pérez", "email": "ana@escuela.test"},
 	})
 
 	// Que rebote la casilla de uno no es razón para que los otros dos se
@@ -122,12 +122,12 @@ func (e *enviadorQueFallaCon) Enviar(_ context.Context, para, _, _ string) error
 // ── Cuenta aprobada → la persona ────────────────────────────────────────
 
 func TestCorreo_CuentaAprobada_LeLlegaALaPersona(t *testing.T) {
-	bus, enviador := mensajeroDePrueba("admin@escuela.edu.ar")
+	bus, enviador := mensajeroDePrueba("admin@escuela.test")
 
 	bus.Publish(eventbus.Evento{
 		Tipo: "cuenta.aprobada",
 		Payload: eventbus.CuentaAprobada{
-			UsuarioID: "usr-1", Email: "ana@escuela.edu.ar", Nombre: "Ana",
+			UsuarioID: "usr-1", Email: "ana@escuela.test", Nombre: "Ana",
 		},
 	})
 
@@ -135,7 +135,7 @@ func TestCorreo_CuentaAprobada_LeLlegaALaPersona(t *testing.T) {
 		t.Fatalf("esperaba 1 mail, hubo %d", len(enviador.enviados))
 	}
 	mail := enviador.enviados[0]
-	if mail.para != "ana@escuela.edu.ar" {
+	if mail.para != "ana@escuela.test" {
 		t.Errorf("le llegó a %q", mail.para)
 	}
 	if !strings.Contains(mail.cuerpo, "Hola Ana:") {
@@ -159,7 +159,7 @@ func TestCorreo_CodigoDeRecuperacion_LlevaElCodigoYLaVigencia(t *testing.T) {
 	bus.Publish(eventbus.Evento{
 		Tipo: "password.recuperacion.solicitada",
 		Payload: eventbus.DatosDeRecuperacion{
-			Email: "ana@escuela.edu.ar", Nombre: "Ana", Codigo: "482913", MinutosDeVigencia: 15,
+			Email: "ana@escuela.test", Nombre: "Ana", Codigo: "482913", MinutosDeVigencia: 15,
 		},
 	})
 
@@ -192,7 +192,7 @@ func TestCorreo_CodigoDeRecuperacion_SinNombreNoQuedaElSaludoColgado(t *testing.
 	bus.Publish(eventbus.Evento{
 		Tipo: "password.recuperacion.solicitada",
 		Payload: eventbus.DatosDeRecuperacion{
-			Email: "ana@escuela.edu.ar", Codigo: "482913", MinutosDeVigencia: 15,
+			Email: "ana@escuela.test", Codigo: "482913", MinutosDeVigencia: 15,
 		},
 	})
 
@@ -207,7 +207,7 @@ func TestCorreo_CuentaSoloConGoogle_ExplicaPorQueNoHayCodigo(t *testing.T) {
 
 	bus.Publish(eventbus.Evento{
 		Tipo:    "password.recuperacion.cuenta-google",
-		Payload: eventbus.CuentaSoloConGoogle{Email: "ana@escuela.edu.ar", Nombre: "Ana"},
+		Payload: eventbus.CuentaSoloConGoogle{Email: "ana@escuela.test", Nombre: "Ana"},
 	})
 
 	if len(enviador.enviados) != 1 {
@@ -222,7 +222,7 @@ func TestCorreo_CuentaSoloConGoogle_ExplicaPorQueNoHayCodigo(t *testing.T) {
 // ── Robustez ────────────────────────────────────────────────────────────
 
 func TestCorreo_PayloadInesperado_NoMandaNadaNiPanikea(t *testing.T) {
-	bus, enviador := mensajeroDePrueba("admin@escuela.edu.ar")
+	bus, enviador := mensajeroDePrueba("admin@escuela.test")
 
 	for _, tipo := range []string{
 		"docente.registro.pendiente",
@@ -245,7 +245,7 @@ func TestCorreo_SinURLConfiguradaElMailSaleIgual(t *testing.T) {
 
 	bus.Publish(eventbus.Evento{
 		Tipo:    "cuenta.aprobada",
-		Payload: eventbus.CuentaAprobada{Email: "ana@escuela.edu.ar", Nombre: "Ana"},
+		Payload: eventbus.CuentaAprobada{Email: "ana@escuela.test", Nombre: "Ana"},
 	})
 
 	if len(enviador.enviados) != 1 {
@@ -263,7 +263,7 @@ func TestCorreo_LaBarraFinalDeLaURLNoSeDuplica(t *testing.T) {
 
 	bus.Publish(eventbus.Evento{
 		Tipo:    "cuenta.aprobada",
-		Payload: eventbus.CuentaAprobada{Email: "ana@escuela.edu.ar", Nombre: "Ana"},
+		Payload: eventbus.CuentaAprobada{Email: "ana@escuela.test", Nombre: "Ana"},
 	})
 
 	if strings.Contains(enviador.enviados[0].cuerpo, urlDePrueba+"/") {
@@ -275,7 +275,7 @@ func TestCorreo_ElAvisoInternoYElMailSonIndependientes(t *testing.T) {
 	// Los dos suscriptores escuchan docente.registro.pendiente.
 	bus := eventbus.NewInMemoryEventBus()
 	repo := nuevoFakeRepo()
-	listador := &fakeListadorAdmins{adminIDs: []string{"admin-1"}, adminEmails: []string{"admin@escuela.edu.ar"}}
+	listador := &fakeListadorAdmins{adminIDs: []string{"admin-1"}, adminEmails: []string{"admin@escuela.test"}}
 	svc := nuevoServicioDeTest(repo, listador)
 	RegisterEventHandlersSincronos(bus, svc)
 	RegisterEmailHandlersSincronos(bus, NewMensajero(
@@ -283,7 +283,7 @@ func TestCorreo_ElAvisoInternoYElMailSonIndependientes(t *testing.T) {
 
 	bus.Publish(eventbus.Evento{
 		Tipo:    "docente.registro.pendiente",
-		Payload: map[string]string{"usuarioId": "usr-1", "nombre": "Ana", "apellido": "Pérez", "email": "ana@escuela.edu.ar"},
+		Payload: map[string]string{"usuarioId": "usr-1", "nombre": "Ana", "apellido": "Pérez", "email": "ana@escuela.test"},
 	})
 
 	if len(repo.notificaciones) != 1 {
@@ -308,7 +308,7 @@ func eventosQueVanATodosLosAdmins() []struct {
 		{
 			"cuenta pendiente", domain.CatCuentaPendiente,
 			eventbus.Evento{Tipo: "docente.registro.pendiente", Payload: map[string]string{
-				"usuarioId": "usr-1", "nombre": "Ana", "apellido": "Pérez", "email": "ana@escuela.edu.ar",
+				"usuarioId": "usr-1", "nombre": "Ana", "apellido": "Pérez", "email": "ana@escuela.test",
 			}},
 		},
 		{
@@ -347,7 +347,7 @@ func TestCorreo_SinNadieSuscripto_NoSaleNingunCorreoALosAdmins(t *testing.T) {
 			bus := eventbus.NewInMemoryEventBus()
 			enviador := &fakeEnviador{}
 			m := NewMensajero(enviador, &fakeListadorAdmins{
-				adminEmails: []string{"admin1@escuela.edu.ar", "admin2@escuela.edu.ar"},
+				adminEmails: []string{"admin1@escuela.test", "admin2@escuela.test"},
 				suscriptos:  map[domain.CategoriaEmail][]string{}, // nadie tildó nada
 			}, &fakePreferencias{}, urlDePrueba)
 			RegisterEmailHandlersSincronos(bus, m)
@@ -369,9 +369,9 @@ func TestCorreo_CadaCategoriaLlegaSoloAQuienLaTildo(t *testing.T) {
 			bus := eventbus.NewInMemoryEventBus()
 			enviador := &fakeEnviador{}
 			m := NewMensajero(enviador, &fakeListadorAdmins{
-				adminEmails: []string{"suscripto@escuela.edu.ar", "elotro@escuela.edu.ar"},
+				adminEmails: []string{"suscripto@escuela.test", "elotro@escuela.test"},
 				suscriptos: map[domain.CategoriaEmail][]string{
-					caso.categoria: {"suscripto@escuela.edu.ar"},
+					caso.categoria: {"suscripto@escuela.test"},
 				},
 			}, &fakePreferencias{}, urlDePrueba)
 			RegisterEmailHandlersSincronos(bus, m)
@@ -381,7 +381,7 @@ func TestCorreo_CadaCategoriaLlegaSoloAQuienLaTildo(t *testing.T) {
 			if len(enviador.enviados) != 1 {
 				t.Fatalf("esperaba 1 correo, hubo %d: %+v", len(enviador.enviados), enviador.enviados)
 			}
-			if enviador.enviados[0].para != "suscripto@escuela.edu.ar" {
+			if enviador.enviados[0].para != "suscripto@escuela.test" {
 				t.Errorf("le llegó a quien no lo pidió: %s", enviador.enviados[0].para)
 			}
 		})
@@ -394,22 +394,22 @@ func TestCorreo_RecordatorioDelDocente_NoDependeDeLaSuscripcionDeLosAdmins(t *te
 	bus := eventbus.NewInMemoryEventBus()
 	enviador := &fakeEnviador{}
 	m := NewMensajero(enviador, &fakeListadorAdmins{
-		adminEmails: []string{"admin1@escuela.edu.ar"},
+		adminEmails: []string{"admin1@escuela.test"},
 		suscriptos:  map[domain.CategoriaEmail][]string{},
 	}, &fakePreferencias{porEmail: map[string]map[domain.CategoriaEmail]bool{
-		"ana@escuela.edu.ar": {domain.CatRecordatorioDeReserva: true},
+		"ana@escuela.test": {domain.CatRecordatorioDeReserva: true},
 	}}, urlDePrueba)
 	RegisterEmailHandlersSincronos(bus, m)
 
 	bus.Publish(eventbus.Evento{Tipo: "reserva.recordatorio", Payload: eventbus.RecordatorioDeReserva{
-		Email: "ana@escuela.edu.ar", Nombre: "Ana", MateriaNombre: "Física",
+		Email: "ana@escuela.test", Nombre: "Ana", MateriaNombre: "Física",
 		HoraInicio: 8 * time.Hour, Equipos: []string{"PC 7"}, MinutosDeGracia: 40,
 	}})
 
 	if len(enviador.enviados) != 1 {
 		t.Fatalf("esperaba el correo de Ana y nada más, hubo %d: %+v", len(enviador.enviados), enviador.enviados)
 	}
-	if enviador.enviados[0].para != "ana@escuela.edu.ar" {
+	if enviador.enviados[0].para != "ana@escuela.test" {
 		t.Errorf("esperaba el recordatorio a Ana, salió para %s", enviador.enviados[0].para)
 	}
 }
@@ -432,7 +432,7 @@ func TestCorreo_Recordatorio_ApagadoPorDefecto(t *testing.T) {
 	bus, enviador := mensajeroConPreferencias(nil)
 
 	bus.Publish(eventbus.Evento{Tipo: "reserva.recordatorio", Payload: eventbus.RecordatorioDeReserva{
-		UsuarioID: "usr-1", Email: "ana@escuela.edu.ar", Nombre: "Ana",
+		UsuarioID: "usr-1", Email: "ana@escuela.test", Nombre: "Ana",
 		MateriaNombre: "Física", Equipos: []string{"PC 3"},
 	}})
 
@@ -443,11 +443,11 @@ func TestCorreo_Recordatorio_ApagadoPorDefecto(t *testing.T) {
 
 func TestCorreo_Recordatorio_LlegaSiLoPidio(t *testing.T) {
 	bus, enviador := mensajeroConPreferencias(map[string]map[domain.CategoriaEmail]bool{
-		"ana@escuela.edu.ar": {domain.CatRecordatorioDeReserva: true},
+		"ana@escuela.test": {domain.CatRecordatorioDeReserva: true},
 	})
 
 	bus.Publish(eventbus.Evento{Tipo: "reserva.recordatorio", Payload: eventbus.RecordatorioDeReserva{
-		UsuarioID: "usr-1", Email: "ana@escuela.edu.ar", Nombre: "Ana",
+		UsuarioID: "usr-1", Email: "ana@escuela.test", Nombre: "Ana",
 		MateriaNombre: "Física", Equipos: []string{"PC 3"},
 	}})
 
@@ -464,7 +464,7 @@ func TestCorreo_LosDeLaCuenta_NoLosApagaNadie(t *testing.T) {
 	for _, c := range domain.CategoriasDeEmail() {
 		todoApagado[c] = false
 	}
-	elegido := map[string]map[domain.CategoriaEmail]bool{"ana@escuela.edu.ar": todoApagado}
+	elegido := map[string]map[domain.CategoriaEmail]bool{"ana@escuela.test": todoApagado}
 
 	casos := []struct {
 		nombre string
@@ -473,16 +473,16 @@ func TestCorreo_LosDeLaCuenta_NoLosApagaNadie(t *testing.T) {
 		{"código de recuperación", eventbus.Evento{
 			Tipo: "password.recuperacion.solicitada",
 			Payload: eventbus.DatosDeRecuperacion{
-				Email: "ana@escuela.edu.ar", Nombre: "Ana", Codigo: "123456", MinutosDeVigencia: 15,
+				Email: "ana@escuela.test", Nombre: "Ana", Codigo: "123456", MinutosDeVigencia: 15,
 			},
 		}},
 		{"cuenta aprobada", eventbus.Evento{
 			Tipo:    "cuenta.aprobada",
-			Payload: eventbus.CuentaAprobada{Email: "ana@escuela.edu.ar", Nombre: "Ana"},
+			Payload: eventbus.CuentaAprobada{Email: "ana@escuela.test", Nombre: "Ana"},
 		}},
 		{"cuenta con Google", eventbus.Evento{
 			Tipo:    "password.recuperacion.cuenta-google",
-			Payload: eventbus.CuentaSoloConGoogle{Email: "ana@escuela.edu.ar", Nombre: "Ana"},
+			Payload: eventbus.CuentaSoloConGoogle{Email: "ana@escuela.test", Nombre: "Ana"},
 		}},
 	}
 
@@ -509,7 +509,7 @@ func TestCorreo_Cancelacion_ApagadaPorDefecto(t *testing.T) {
 	bus, enviador := mensajeroConPreferencias(nil)
 
 	bus.Publish(eventbus.Evento{Tipo: "reserva.cancelada", Payload: eventbus.CancelacionesDeUsuario{
-		UsuarioID: "usr-1", Nombre: "Ana", Email: "ana@escuela.edu.ar",
+		UsuarioID: "usr-1", Nombre: "Ana", Email: "ana@escuela.test",
 		Motivo: "la computadora pasó a mantenimiento",
 		Reservas: []eventbus.ReservaCancelada{
 			{ReservaID: "r-1", Etiqueta: "PC 3", Fecha: time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)},
@@ -525,11 +525,11 @@ func TestCorreo_Cancelacion_ApagadaPorDefecto(t *testing.T) {
 // necesita leer para no dar por perdida una clase que todavía tiene.
 func TestCorreo_Cancelacion_DiceQueSeCancelaYQueSigueEnPie(t *testing.T) {
 	bus, enviador := mensajeroConPreferencias(map[string]map[domain.CategoriaEmail]bool{
-		"ana@escuela.edu.ar": {domain.CatReservaCancelada: true},
+		"ana@escuela.test": {domain.CatReservaCancelada: true},
 	})
 
 	bus.Publish(eventbus.Evento{Tipo: "reserva.cancelada", Payload: eventbus.CancelacionesDeUsuario{
-		UsuarioID: "usr-1", Nombre: "Ana", Email: "ana@escuela.edu.ar",
+		UsuarioID: "usr-1", Nombre: "Ana", Email: "ana@escuela.test",
 		Motivo: "la computadora pasó a mantenimiento",
 		Reservas: []eventbus.ReservaCancelada{
 			{ReservaID: "r-1", Etiqueta: "PC 3", Fecha: time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)},
@@ -556,12 +556,12 @@ func TestCorreo_Cancelacion_DiceQueSeCancelaYQueSigueEnPie(t *testing.T) {
 // no uno por máquina.
 func TestCorreo_Cancelacion_VariasDelMismoDia_UnSoloCorreo(t *testing.T) {
 	bus, enviador := mensajeroConPreferencias(map[string]map[domain.CategoriaEmail]bool{
-		"ana@escuela.edu.ar": {domain.CatReservaCancelada: true},
+		"ana@escuela.test": {domain.CatReservaCancelada: true},
 	})
 	elDia := time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)
 
 	bus.Publish(eventbus.Evento{Tipo: "reserva.cancelada", Payload: eventbus.CancelacionesDeUsuario{
-		UsuarioID: "usr-1", Nombre: "Ana", Email: "ana@escuela.edu.ar",
+		UsuarioID: "usr-1", Nombre: "Ana", Email: "ana@escuela.test",
 		Motivo: "acto escolar",
 		Reservas: []eventbus.ReservaCancelada{
 			{ReservaID: "r-1", Etiqueta: "PC 3", Fecha: elDia},
@@ -581,11 +581,11 @@ func TestCorreo_Cancelacion_VariasDelMismoDia_UnSoloCorreo(t *testing.T) {
 
 func TestCorreo_Cancelacion_SePuedeApagar(t *testing.T) {
 	bus, enviador := mensajeroConPreferencias(map[string]map[domain.CategoriaEmail]bool{
-		"ana@escuela.edu.ar": {domain.CatReservaCancelada: false},
+		"ana@escuela.test": {domain.CatReservaCancelada: false},
 	})
 
 	bus.Publish(eventbus.Evento{Tipo: "reserva.cancelada", Payload: eventbus.CancelacionesDeUsuario{
-		UsuarioID: "usr-1", Nombre: "Ana", Email: "ana@escuela.edu.ar", Motivo: "acto escolar",
+		UsuarioID: "usr-1", Nombre: "Ana", Email: "ana@escuela.test", Motivo: "acto escolar",
 		Reservas: []eventbus.ReservaCancelada{{ReservaID: "r-1", Etiqueta: "PC 3"}},
 	}})
 
@@ -607,5 +607,21 @@ func TestCorreo_Cancelacion_SinEmail_NoRompe(t *testing.T) {
 
 	if len(enviador.enviados) != 0 {
 		t.Fatalf("no había a quién escribirle: %+v", enviador.enviados)
+	}
+}
+
+func TestCorreo_ReposicionRespetaPreferenciaDeCambios(t *testing.T) {
+	for _, activo := range []bool{true, false} {
+		bus := eventbus.NewInMemoryEventBus()
+		enviador := &fakeEnviador{}
+		prefs := &fakePreferencias{porEmail: map[string]map[domain.CategoriaEmail]bool{"tic@prueba.test": {domain.CatReservaCancelada: activo}}}
+		RegisterEmailHandlersSincronos(bus, NewMensajero(enviador, &fakeListadorAdmins{}, prefs, urlDePrueba))
+		bus.Publish(eventbus.Evento{Tipo: "reserva.reubicada", Payload: eventbus.ReubicacionesDeUsuario{UsuarioID: "tic", Email: "tic@prueba.test", Motivo: "Prioridad de Dibujo", Reservas: []eventbus.ReservaReubicada{{ReservaID: "r1", EtiquetaAnterior: "PC nueva", EtiquetaNueva: "PC antigua", Fecha: time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)}}}})
+		if activo && (len(enviador.enviados) != 1 || !strings.Contains(enviador.enviados[0].cuerpo, "PC nueva por PC antigua") || !strings.Contains(enviador.enviados[0].cuerpo, "/reservas")) {
+			t.Fatalf("correo incorrecto: %+v", enviador.enviados)
+		}
+		if !activo && len(enviador.enviados) != 0 {
+			t.Fatal("envió correo con preferencia desactivada")
+		}
 	}
 }

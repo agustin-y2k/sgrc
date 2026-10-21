@@ -11,8 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/inventory/application"
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/application"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 const (
@@ -53,19 +54,22 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 // error: el Admin no tenía forma de saber qué había entrado, y el único camino
 // era revisar equipo por equipo.
 func (r *PostgresRepo) EnTransaccion(ctx context.Context, fn func(application.Repo) error) error {
+	if tx := pgtransaccion.DeContexto(ctx); tx != nil {
+		return fn(&PostgresRepo{db: tx})
+	}
 	if r.pool == nil {
 		// Ya venimos dentro de una transacción: se reusa la misma en vez de
 		// anidar, para que el alcance del commit siga siendo el de afuera.
 		return fn(r)
 	}
 
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.pool)
 	if err != nil {
 		return fmt.Errorf("iniciando transacción: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op si ya se hizo Commit
 
-	if err := fn(&PostgresRepo{db: tx}); err != nil {
+	if err := fn(&PostgresRepo{db: tx.Tx}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -116,7 +120,7 @@ func errorDeFilas(rows pgx.Rows) error {
 // ── Carro ───────────────────────────────────────────────────────────────
 
 func (r *PostgresRepo) CrearCarro(ctx context.Context, c *domain.Carro) error {
-	_, err := r.db.Exec(ctx,
+	_, err := r.conexion(ctx).Exec(ctx,
 		`INSERT INTO carro (id, nombre, descripcion) VALUES ($1, $2, $3)`,
 		c.ID, c.Nombre, c.Descripcion)
 	if err != nil {
@@ -129,7 +133,7 @@ func (r *PostgresRepo) CrearCarro(ctx context.Context, c *domain.Carro) error {
 }
 
 func (r *PostgresRepo) BuscarCarroPorID(ctx context.Context, id string) (*domain.Carro, error) {
-	row := r.db.QueryRow(ctx, `SELECT `+columnasCarro+` FROM carro WHERE id = $1`, id)
+	row := r.conexion(ctx).QueryRow(ctx, `SELECT `+columnasCarro+` FROM carro WHERE id = $1`, id)
 	return escanearCarro(row)
 }
 
@@ -156,7 +160,7 @@ func escanearCarro(row pgx.Row) (*domain.Carro, error) {
 }
 
 func (r *PostgresRepo) GuardarCarro(ctx context.Context, c *domain.Carro) error {
-	tag, err := r.db.Exec(ctx,
+	tag, err := r.conexion(ctx).Exec(ctx,
 		`UPDATE carro SET nombre=$2, descripcion=$3, dado_de_baja=$4, fecha_baja=$5 WHERE id=$1`,
 		c.ID, c.Nombre, c.Descripcion, c.DadoDeBaja, c.FechaBaja)
 	if err != nil {
@@ -187,7 +191,7 @@ func (r *PostgresRepo) ListarCarros(ctx context.Context, incluirRetirados bool) 
 	if incluirRetirados {
 		filtro = ""
 	}
-	rows, err := r.db.Query(ctx,
+	rows, err := r.conexion(ctx).Query(ctx,
 		`SELECT `+columnasCarro+` FROM carro `+filtro+` ORDER BY dado_de_baja, nombre`)
 	if err != nil {
 		return nil, fmt.Errorf("listando carros: %w", err)
@@ -203,4 +207,14 @@ func (r *PostgresRepo) ListarCarros(ctx context.Context, incluirRetirados bool) 
 		resultado = append(resultado, c)
 	}
 	return resultado, errorDeFilas(rows)
+}
+
+func (r *PostgresRepo) conexion(ctx context.Context) consultor {
+	if tx := pgtransaccion.DeContexto(ctx); tx != nil {
+		return tx
+	}
+	return r.db
+}
+func (r *PostgresRepo) Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error {
+	return pgtransaccion.Coordinar(ctx, r.pool, exclusivo, fn)
 }

@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { Link } from "react-router"
+import { useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { EstadoBadge, TONO_CUENTA } from "@/components/EstadoBadge"
@@ -17,6 +18,7 @@ import type { Estado, Usuario } from "@/features/auth/types"
 import { AltaDeAdmin } from "@/features/admin/AltaDeAdmin"
 import * as adminApi from "@/features/admin/api"
 import { getErrorMessage } from "@/lib/api-client"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 
 const USUARIOS_KEY = ["admin", "usuarios"]
@@ -32,17 +34,22 @@ function EstadoDeCuenta({ estado }: { estado: Estado }) {
   return <EstadoBadge tono={TONO_CUENTA[estado]}>{ETIQUETA_ESTADO[estado]}</EstadoBadge>
 }
 
-// PROMOVER y DEGRADAR piden confirmación como las otras dos aunque no
-// destruyan nada: cambian quién puede tocar el inventario, el ciclo lectivo y
-// las cuentas de los demás.
+// Los cambios de rol también piden confirmación: deciden quién puede
+// administrar el inventario, el ciclo lectivo y las cuentas de los demás.
 type Confirmacion = {
   usuario: Usuario
-  accion: "BAJA" | "ELIMINAR" | "PROMOVER" | "DEGRADAR"
+  accion: "BAJA" | "ELIMINAR" | "PROMOVER" | "DEGRADAR" | "RECHAZAR" | "RESTABLECER"
 }
 
 const TEXTO_CONFIRMACION: Record<Confirmacion["accion"], (u: Usuario) => string> = {
+  RECHAZAR: (u) =>
+    `Rechazar a ${u.nombre} ${u.apellido} no se puede deshacer. No podrá ingresar ni volver a registrarse con ${u.email}. Si fue un error, habrá que eliminar la cuenta para liberar el email.`,
+  RESTABLECER: (u) =>
+    `Restablecer la contraseña de ${u.nombre} ${u.apellido} (${u.email}) cierra sus sesiones actuales. Se genera una contraseña temporal que se muestra una sola vez: anotala y comunicala a la persona; tendrá que cambiarla al ingresar.`,
   BAJA: (u) =>
-    `Dar de baja a ${u.nombre} ${u.apellido} es permanente: no se puede reactivar la cuenta. Si sus materias quedan sin ningún otro docente, sus reservas futuras se cancelan.`,
+    u.bajaPendiente
+      ? `Completar la baja de ${u.nombre} ${u.apellido}: se procesarán las tareas pendientes. La cuenta seguirá deshabilitada.`
+      : `Dar de baja a ${u.nombre} ${u.apellido} es permanente: no se puede reactivar la cuenta. Si sus materias quedan sin ningún otro docente, sus reservas futuras se cancelan.`,
   ELIMINAR: (u) =>
     `Eliminar la cuenta de ${u.nombre} ${u.apellido} la borra definitivamente y libera el email ${u.email} para un registro nuevo. Sus reservas e incidencias se conservan, pero pierden la referencia a la persona. Lo que sí se borra: su hilo de soporte con las respuestas que se le dieron, sus avisos, sus pedidos de materia y —si es Admin— su horario de guardia.`,
   PROMOVER: (u) =>
@@ -57,7 +64,10 @@ const TEXTO_CONFIRMACION: Record<Confirmacion["accion"], (u: Usuario) => string>
 function describirArrastre(d: adminApi.ArrastreDeEliminacion): string {
   const partes: string[] = []
   if (d.hilosDeSoporte > 0) {
-    const hilos = d.hilosDeSoporte === 1 ? "su hilo de soporte" : `sus ${d.hilosDeSoporte} hilos de soporte`
+    const hilos =
+      d.hilosDeSoporte === 1
+        ? "su hilo de soporte"
+        : `sus ${d.hilosDeSoporte} hilos de soporte`
     partes.push(
       d.mensajesDeSoporte > 0 ? `${hilos} (${d.mensajesDeSoporte} mensajes)` : hilos
     )
@@ -71,13 +81,13 @@ function describirArrastre(d: adminApi.ArrastreDeEliminacion): string {
   }
   if (d.pedidosDeMateria > 0) {
     partes.push(
-      d.pedidosDeMateria === 1 ? "1 pedido de materia" : `${d.pedidosDeMateria} pedidos de materia`
+      d.pedidosDeMateria === 1
+        ? "1 pedido de materia"
+        : `${d.pedidosDeMateria} pedidos de materia`
     )
   }
   if (d.notificaciones > 0) {
-    partes.push(
-      d.notificaciones === 1 ? "1 aviso" : `${d.notificaciones} avisos`
-    )
+    partes.push(d.notificaciones === 1 ? "1 aviso" : `${d.notificaciones} avisos`)
   }
   if (partes.length === 1) return partes[0]
   return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`
@@ -147,6 +157,9 @@ export function UsuariosPage() {
   // no una por usuario.
   const asignaciones = useAsignacionesDelCicloActivo()
   const [confirmando, setConfirmando] = useState<Confirmacion | null>(null)
+  // La confirmación se consume antes de enviar. Una respuesta rápida puede
+  // llegar antes de que React retire el botón de un doble clic.
+  const estadoDelReset = useRef<"libre" | "enviado" | "terminado">("libre")
   const [passwordTemporal, setPasswordTemporal] = useState<{
     usuario: string
     password: string
@@ -159,7 +172,7 @@ export function UsuariosPage() {
     detalle: adminApi.ArrastreDeEliminacion
   } | null>(null)
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: [...USUARIOS_KEY, filtroEstado, pagina],
     queryFn: () =>
       adminApi.listarUsuarios({
@@ -174,6 +187,11 @@ export function UsuariosPage() {
     mutationFn: ({ id, estado }: { id: string; estado: Estado }) =>
       adminApi.cambiarEstadoUsuario(id, estado),
     onSuccess: async () => {
+      setConfirmando(null)
+      await invalidar()
+    },
+    // Una baja puede deshabilitar la cuenta aunque quede limpieza pendiente.
+    onError: async () => {
       setConfirmando(null)
       await invalidar()
     },
@@ -214,7 +232,12 @@ export function UsuariosPage() {
 
   const resetear = useMutation({
     mutationFn: (u: Usuario) => adminApi.resetearPassword(u.id),
+    onError: () => setConfirmando(null),
+    onSettled: () => {
+      estadoDelReset.current = "terminado"
+    },
     onSuccess: (res, u) => {
+      setConfirmando(null)
       // RF-01.6: no hay envío de mails, el Admin se la pasa a mano — así
       // que la temporal se muestra en pantalla una sola vez.
       setPasswordTemporal({
@@ -275,7 +298,14 @@ export function UsuariosPage() {
         </Select>
       </div>
 
-      {errorActivo && (
+      {error && (
+        <ErrorDeConsulta
+          mensaje="No pudimos consultar los usuarios."
+          reintentando={isFetching}
+          onReintentar={() => void refetch()}
+        />
+      )}
+      {!error && errorActivo && (
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>{getErrorMessage(errorActivo)}</AlertDescription>
         </Alert>
@@ -308,211 +338,246 @@ export function UsuariosPage() {
       )}
 
       {isLoading && <p className="text-muted-foreground">Cargando…</p>}
-      {!isLoading && usuarios.length === 0 && (
+      {!isLoading && !error && usuarios.length === 0 && (
         <p className="text-muted-foreground">No hay usuarios con ese filtro.</p>
       )}
 
       <div className="grid gap-3">
-        {usuarios.map((u) => {
-          const esUnoMismo = u.id === user?.id
-          const confirmandoEste = confirmando?.usuario.id === u.id
-          const trabajando =
-            (cambiarEstado.isPending && cambiarEstado.variables?.id === u.id) ||
-            (eliminar.isPending && eliminar.variables?.id === u.id) ||
-            (promover.isPending && promover.variables === u.id) ||
-            (degradar.isPending && degradar.variables === u.id)
+        {!error &&
+          usuarios.map((u) => {
+            const esUnoMismo = u.id === user?.id
+            const confirmandoEste = confirmando?.usuario.id === u.id
+            const trabajando =
+              isFetching ||
+              resetear.isPending ||
+              (cambiarEstado.isPending && cambiarEstado.variables?.id === u.id) ||
+              (eliminar.isPending && eliminar.variables?.id === u.id) ||
+              (promover.isPending && promover.variables === u.id) ||
+              (degradar.isPending && degradar.variables === u.id)
 
-          return (
-            <Card key={u.id}>
-              <CardContent className="grid gap-3 pt-4">
-                {/* El estado va pegado al nombre y no contra el borde
+            return (
+              <Card key={u.id}>
+                <CardContent className="grid gap-3 pt-4">
+                  {/* El estado va pegado al nombre y no contra el borde
                     derecho: en una pantalla ancha quedaban separados por
                     medio metro de blanco y había que ir y volver con la
                     vista para saber de quién era cada "Aprobada". */}
-                <div>
-                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
-                    <span>
-                      {u.nombre} {u.apellido}
-                    </span>
-                    <Badge variant="outline">{u.rol}</Badge>
-                    <EstadoDeCuenta estado={u.estado} />
-                    {esUnoMismo && (
-                      <span className="text-muted-foreground text-sm font-normal">
-                        (vos)
+                  <div>
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+                      <span>
+                        {u.nombre} {u.apellido}
                       </span>
-                    )}
-                  </p>
-                  <p className="text-muted-foreground text-sm break-all">{u.email}</p>
-                  {/* Qué dicta, del ciclo activo. Sin esto, la única forma de
+                      <Badge variant="outline">{u.rol}</Badge>
+                      <EstadoDeCuenta estado={u.estado} />
+                      {esUnoMismo && (
+                        <span className="text-muted-foreground text-sm font-normal">
+                          (vos)
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-muted-foreground text-sm break-all">{u.email}</p>
+                    {/* Qué dicta, del ciclo activo. Sin esto, la única forma de
                       saber si una persona tiene materias era ir a Académico y
                       abrirlas una por una desde el otro lado. */}
-                  <QueDicta usuario={u} asignaciones={asignaciones} />
-                </div>
+                    <QueDicta usuario={u} asignaciones={asignaciones} />
+                  </div>
 
-                {/* Lo que declaró al registrarse, con el mismo detalle que
+                  {/* Lo que declaró al registrarse, con el mismo detalle que
                     en Aprobación. Este atajo dejaba aprobar sin verlo: el
                     botón decide sobre una persona de la que no se mostraba
                     nada más que el nombre, y el curso y la materia que pidió
                     son justamente lo que hay que mirar antes. */}
-                {u.estado === "PENDIENTE" && <LoQueDeclaro usuario={u} />}
+                  {u.estado === "PENDIENTE" && <LoQueDeclaro usuario={u} />}
 
-                {!confirmandoEste && (
-                  <div className="flex flex-wrap gap-2">
-                    {u.estado === "PENDIENTE" && (
-                      <>
-                        <Button
-                          size="sm"
-                          disabled={trabajando}
-                          onClick={() =>
-                            cambiarEstado.mutate({ id: u.id, estado: "APROBADA" })
-                          }
-                        >
-                          Aprobar
-                        </Button>
-                        {/* Rechazar estaba solo en Aprobación. Que un estado
+                  {!confirmandoEste && (
+                    <div className="flex flex-wrap gap-2">
+                      {u.estado === "PENDIENTE" && (
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={trabajando}
+                            onClick={() =>
+                              cambiarEstado.mutate({ id: u.id, estado: "APROBADA" })
+                            }
+                          >
+                            Aprobar
+                          </Button>
+                          {/* Rechazar estaba solo en Aprobación. Que un estado
                             ofrezca la mitad de sus salidas obliga a irse a
                             otra pantalla para terminar lo que se empezó acá. */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={trabajando}
-                          onClick={() =>
-                            cambiarEstado.mutate({ id: u.id, estado: "RECHAZADA" })
-                          }
-                        >
-                          Rechazar
-                        </Button>
-                      </>
-                    )}
-                    {u.estado === "APROBADA" && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={trabajando}
-                          onClick={() => resetear.mutate(u)}
-                        >
-                          Resetear contraseña
-                        </Button>
-                        {/* Solo sobre docentes: el backend rechaza promover
-                            a alguien que ya es Admin, y ofrecer un botón que
-                            siempre falla es peor que no ofrecerlo. */}
-                        {u.rol === "DOCENTE" && (
                           <Button
                             variant="outline"
                             size="sm"
                             disabled={trabajando}
                             onClick={() =>
-                              setConfirmando({ usuario: u, accion: "PROMOVER" })
+                              setConfirmando({ usuario: u, accion: "RECHAZAR" })
                             }
                           >
-                            Promover a admin
+                            Rechazar
                           </Button>
-                        )}
-                        {/* La inversa, y con la misma restricción de la
+                        </>
+                      )}
+                      {u.estado === "APROBADA" && (
+                        <>
+                          {esUnoMismo ? (
+                            <Button asChild variant="outline" size="sm">
+                              <Link to="/cambiar-password">Cambiar mi contraseña</Link>
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={trabajando}
+                              onClick={() => {
+                                if (estadoDelReset.current === "enviado") return
+                                estadoDelReset.current = "libre"
+                                resetear.reset()
+                                setConfirmando({ usuario: u, accion: "RESTABLECER" })
+                              }}
+                            >
+                              Restablecer contraseña
+                            </Button>
+                          )}
+                          {/* Solo sobre docentes: el backend rechaza promover
+                            a alguien que ya es Admin, y ofrecer un botón que
+                            siempre falla es peor que no ofrecerlo. */}
+                          {u.rol === "DOCENTE" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={trabajando}
+                              onClick={() =>
+                                setConfirmando({ usuario: u, accion: "PROMOVER" })
+                              }
+                            >
+                              Promover a admin
+                            </Button>
+                          )}
+                          {/* La inversa, y con la misma restricción de la
                             baja: sobre uno mismo no se ofrece. Quien se
                             quitara los permisos perdería en el acto esta
                             pantalla y dependería de otro Admin para volver
                             atrás (el backend lo rechaza igual). */}
-                        {u.rol === "ADMIN" && !esUnoMismo && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={trabajando}
-                            onClick={() =>
-                              setConfirmando({ usuario: u, accion: "DEGRADAR" })
-                            }
-                          >
-                            Quitar permisos de admin
-                          </Button>
-                        )}
-                        {/* Darse de baja a uno mismo dejaría al Admin fuera
+                          {u.rol === "ADMIN" && !esUnoMismo && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={trabajando}
+                              onClick={() =>
+                                setConfirmando({ usuario: u, accion: "DEGRADAR" })
+                              }
+                            >
+                              Quitar permisos de admin
+                            </Button>
+                          )}
+                          {/* Darse de baja a uno mismo dejaría al Admin fuera
                             del sistema en el acto; el backend además lo
                             rechaza si es el último (RF-01.8). */}
-                        {!esUnoMismo && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={trabajando}
-                            onClick={() => setConfirmando({ usuario: u, accion: "BAJA" })}
-                          >
-                            Dar de baja
-                          </Button>
-                        )}
-                      </>
-                    )}
-                    {/* Los dos estados terminales (RF-01.9). RECHAZADA está
+                          {!esUnoMismo && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              disabled={trabajando}
+                              onClick={() =>
+                                setConfirmando({ usuario: u, accion: "BAJA" })
+                              }
+                            >
+                              Dar de baja
+                            </Button>
+                          )}
+                        </>
+                      )}
+                      {/* Los dos estados terminales (RF-01.9). RECHAZADA está
                         acá porque es el único modo de deshacer un rechazo
                         equivocado: esa cuenta no transiciona a ningún lado,
                         así que sin eliminar, el email quedaría tomado para
                         siempre. */}
-                    {(u.estado === "BAJA" || u.estado === "RECHAZADA") && (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={trabajando}
-                        onClick={() => setConfirmando({ usuario: u, accion: "ELIMINAR" })}
-                      >
-                        Eliminar definitivamente
-                      </Button>
-                    )}
-                  </div>
-                )}
+                      {u.estado === "BAJA" && u.bajaPendiente && (
+                        <Button
+                          size="sm"
+                          disabled={trabajando}
+                          onClick={() => setConfirmando({ usuario: u, accion: "BAJA" })}
+                        >
+                          Completar baja
+                        </Button>
+                      )}
+                      {(u.estado === "BAJA" || u.estado === "RECHAZADA") &&
+                        !u.bajaPendiente && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={trabajando}
+                            onClick={() =>
+                              setConfirmando({ usuario: u, accion: "ELIMINAR" })
+                            }
+                          >
+                            Eliminar definitivamente
+                          </Button>
+                        )}
+                    </div>
+                  )}
 
-                {confirmandoEste && confirmando && (
-                  <div className="grid gap-3 rounded-md border p-3">
-                    {/* Los dos cambios de rol no destruyen nada, así que no
+                  {confirmandoEste && confirmando && (
+                    <div className="grid gap-3 rounded-md border p-3">
+                      {/* Los dos cambios de rol no destruyen nada, así que no
                         van en rojo: el rojo es para lo que borra. Pero sí
                         piden confirmación, porque cambian quién puede tocar
                         el sistema y quien los sufre no puede deshacerlos. */}
-                    <p
-                      className={
-                        esCambioDeRol(confirmando.accion)
-                          ? "text-sm"
-                          : "text-destructive text-sm"
-                      }
-                    >
-                      {TEXTO_CONFIRMACION[confirmando.accion](u)}
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant={
-                          esCambioDeRol(confirmando.accion) ? "default" : "destructive"
+                      <p
+                        className={
+                          esCambioDeRol(confirmando.accion)
+                            ? "text-sm"
+                            : "text-destructive text-sm"
                         }
-                        size="sm"
-                        disabled={trabajando}
-                        onClick={() => {
-                          if (confirmando.accion === "BAJA") {
-                            cambiarEstado.mutate({ id: u.id, estado: "BAJA" })
-                          } else if (confirmando.accion === "PROMOVER") {
-                            promover.mutate(u.id)
-                          } else if (confirmando.accion === "DEGRADAR") {
-                            degradar.mutate(u.id)
-                          } else {
-                            eliminar.mutate(u)
+                      >
+                        {TEXTO_CONFIRMACION[confirmando.accion](u)}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant={
+                            esCambioDeRol(confirmando.accion) ? "default" : "destructive"
                           }
-                        }}
-                      >
-                        Confirmar
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={trabajando}
-                        onClick={() => setConfirmando(null)}
-                      >
-                        Volver
-                      </Button>
+                          size="sm"
+                          disabled={trabajando}
+                          onClick={() => {
+                            if (confirmando.accion === "BAJA") {
+                              cambiarEstado.mutate({ id: u.id, estado: "BAJA" })
+                            } else if (confirmando.accion === "RECHAZAR") {
+                              cambiarEstado.mutate({ id: u.id, estado: "RECHAZADA" })
+                            } else if (confirmando.accion === "RESTABLECER") {
+                              if (estadoDelReset.current === "libre" && !esUnoMismo) {
+                                estadoDelReset.current = "enviado"
+                                resetear.mutate(u)
+                              }
+                            } else if (confirmando.accion === "PROMOVER") {
+                              promover.mutate(u.id)
+                            } else if (confirmando.accion === "DEGRADAR") {
+                              degradar.mutate(u.id)
+                            } else {
+                              eliminar.mutate(u)
+                            }
+                          }}
+                        >
+                          Confirmar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={trabajando}
+                          onClick={() => setConfirmando(null)}
+                        >
+                          Volver
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )
-        })}
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })}
       </div>
 
-      {data && (
+      {!error && data && (
         <Paginador meta={data.meta} onCambiarPagina={setPagina} etiqueta="usuarios" />
       )}
     </div>

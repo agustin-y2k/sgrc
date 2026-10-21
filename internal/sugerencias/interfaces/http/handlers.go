@@ -3,9 +3,9 @@ package http
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/shared/middleware"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
-	"github.com/ramiro/sgrc/internal/sugerencias/application"
+	"github.com/agustin-y2k/sgrc/internal/shared/middleware"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/sugerencias/application"
 )
 
 type Handler struct {
@@ -83,6 +83,20 @@ func (h *Handler) Listar(c *fiber.Ctx) error {
 		data[i] = toSugerenciaResponse(s, true)
 	}
 	return c.JSON(fiber.Map{"data": data, "meta": pagina.Meta(total)})
+}
+
+// GET /api/sugerencias/{id} — solo el dueño y administración pueden leer el hilo.
+func (h *Handler) Obtener(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+	esAdmin := claims.Rol == "ADMIN"
+	hilo, err := h.svc.Obtener(c.UserContext(), c.Params("id"), claims.UserID, esAdmin)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(toSugerenciaResponse(hilo, esAdmin))
 }
 
 // POST /api/sugerencias/{id}/mensajes — escribe en el hilo. Lo usan los dos

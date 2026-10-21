@@ -12,7 +12,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/ramiro/sgrc/migrations"
+	"github.com/agustin-y2k/sgrc/migrations"
 )
 
 // El esquema lo aplica el propio binario al arrancar, con goose.

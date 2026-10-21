@@ -3,7 +3,7 @@ package http
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/shared/middleware"
+	"github.com/agustin-y2k/sgrc/internal/shared/middleware"
 )
 
 // RegisterRoutes monta todas las rutas de inventory bajo /api.
@@ -82,6 +82,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	// Va con soloAdmin y no con `autenticado` como la de un equipo: esta la usa
 	// únicamente el alta masiva del panel de inventario.
 	inventory.Get("/carros/:carroId/preferencias", autenticado, soloAdmin, h.ListarPreferenciasDeCarro)
+	inventory.Get("/catalogo-prioridades", autenticado, soloAdmin, h.CatalogoDePrioridades)
 	inventory.Get("/materias-en-uso", autenticado, soloAdmin, h.ListarMateriasEnUso)
 	// Las marcas que quedaron apuntando a una materia renombrada o borrada. Va
 	// antes de /preferencias/:id para que el router no lea "huerfanas" como un id.

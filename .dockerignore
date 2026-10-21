@@ -12,14 +12,63 @@
 # El frontend se construye con su propio Dockerfile y su propio contexto.
 frontend/
 
-.git/
-.github/
-.vscode/
-.claude/
+# Configuración personal y metadatos locales, también en subdirectorios.
+.*/
+**/.*/
+**/AGENTS*.md
+**/CLAUDE*.md
+**/CODEX.md
+**/GEMINI.md
+**/copilot-instructions.md
+**/mcp*.json
 
 # Secretos y datos.
 .env
+.env.local
+**/__pycache__/
+**/*.pyc
+.env.*
+**/.env
+**/.env.*
 backup-sgrc-*.sql
+**/backup-sgrc-*.sql
+**/*.sql.gz
+**/*.sql.bz2
+**/*.sql.xz
+**/*.sql.zst
+**/*.dump
+**/*.bak
+**/*.backup
+**/*.old
+**/*.orig
+**/*.rej
+**/*.tmp
+**/*.local
+**/backup*.sql
+**/dump*.sql
+**/backups/
+**/datos-locales/
+**/sgrc-datos/
+**/credentials*.json
+**/client_secret*.json
+**/service-account*.json
+**/service_account*.json
+**/token.json
+**/tokens.json
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.crt
+**/*.jks
+**/id_rsa*
+**/id_ed25519*
+**/*.log
 
 # Salidas de compilación y de tests, que se regeneran adentro.
 bin/
@@ -30,3 +79,32 @@ coverage.html
 docs/
 README.md
 LICENSE
+**/*-backup*.sql
+**/*_backup*.sql
+
+# Configuración activa y artefactos privados de cada instalación.
+**/[Aa][Nn][Aa][Ll][Ii][Ss][Ii][Ss]_*.md
+**/[Aa][Nn]Á[Ll][Ii][Ss][Ii][Ss]_*.md
+**/[Aa][Nn]á[Ll][Ii][Ss][Ii][Ss]_*.md
+**/*compose*.local.yml
+**/*compose*.local.yaml
+**/*compose*.override.yml
+**/*compose*.override.yaml
+**/accesos-locales*.txt
+**/usuarios-locales*.json
+**/inventario-para-local*.sql*
+**/backup*.zip
+**/backup*.7z
+**/backup*.tar
+**/backup*.tar.*
+**/dump*.zip
+**/dump*.7z
+**/dump*.tar
+**/dump*.tar.*
+**/.envrc
+**/.npmrc
+**/.pypirc
+**/.netrc
+**/.git-credentials
+**/materias_por_division.csv
+**/*-materias*.csv

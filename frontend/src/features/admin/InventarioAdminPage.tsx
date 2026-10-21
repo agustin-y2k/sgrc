@@ -1,8 +1,8 @@
+import { invalidarInventario } from "./invalidarInventario"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -33,6 +33,10 @@ import {
 import type { Carro, EstadoEquipo, Equipo } from "@/features/inventory/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
+import { BusquedaDeInventario } from "@/features/admin/BusquedaDeInventario"
+import { useEnfocarEquipo } from "@/features/admin/useEnfocarEquipo"
+import { EstadoBadge, TONO_PC } from "@/components/EstadoBadge"
 
 const CARROS_KEY = ["carros"]
 
@@ -42,7 +46,15 @@ type CambioEstado = {
   motivo: string
 }
 
-function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] }) {
+function EquiposAdmin({
+  carroId,
+  carros,
+  equipoDestacado,
+}: {
+  carroId: string
+  carros: Carro[]
+  equipoDestacado?: string | null
+}) {
   const queryClient = useQueryClient()
   const [cambiando, setCambiando] = useState<CambioEstado | null>(null)
   const [dandoDeBaja, setDandoDeBaja] = useState<Equipo | null>(null)
@@ -53,14 +65,18 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
   const [viendoEntregas, setViendoEntregas] = useState<string | null>(null)
   const [viendoCuentas, setViendoCuentas] = useState<string | null>(null)
   const [verRetirados, setVerRetirados] = useState(false)
+  const [agregando, setAgregando] = useState(false)
 
-  const { data, isLoading } = useQuery({
+  const { data, isPending, error, isFetching, refetch } = useQuery({
     queryKey: ["equipos", carroId],
     queryFn: () => inventoryApi.listarEquiposDeCarro(carroId),
   })
+  useEnfocarEquipo(
+    equipoDestacado,
+    !error && !!data?.data.some((e) => e.id === equipoDestacado)
+  )
 
-  const invalidar = () =>
-    queryClient.invalidateQueries({ queryKey: ["equipos", carroId] })
+  const invalidar = () => invalidarInventario(queryClient)
 
   // Las dos operaciones cancelan reservas de otros docentes, así que las dos
   // tienen que decir cuántas.
@@ -90,7 +106,22 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
     onSuccess: invalidar,
   })
 
-  if (isLoading) return <p className="text-muted-foreground text-sm">Cargando equipos…</p>
+  if (error)
+    return (
+      <ErrorDeConsulta
+        mensaje="No pudimos cargar los equipos de este carro."
+        reintentando={isFetching}
+        onReintentar={() => {
+          void refetch()
+        }}
+      />
+    )
+  if (isPending)
+    return (
+      <p role="status" className="text-muted-foreground text-sm">
+        Cargando equipos…
+      </p>
+    )
 
   const todos = data?.data ?? []
   const equipos = todos.filter((equipo) => !equipo.dadoDeBaja)
@@ -122,7 +153,12 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
         const cuentasAbiertas = viendoCuentas === equipo.id
 
         return (
-          <div key={equipo.id} className="grid gap-2 rounded-md border p-3">
+          <div
+            key={equipo.id}
+            id={`equipo-inventario-${equipo.id}`}
+            tabIndex={-1}
+            className="grid gap-2 rounded-md border p-3 focus:outline-2 focus:outline-primary"
+          >
             {/* Identificador y número de serie arriba, la fila de botones
                 abajo, SIEMPRE — no lado a lado a partir de `sm`.
 
@@ -136,11 +172,9 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
               <div className="min-w-0">
                 <p className="font-medium">
                   {equipo.etiqueta}{" "}
-                  <Badge
-                    variant={equipo.estado === "DISPONIBLE" ? "secondary" : "destructive"}
-                  >
+                  <EstadoBadge tono={TONO_PC[equipo.estado]}>
                     {ETIQUETA_ESTADO_EQUIPO[equipo.estado]}
-                  </Badge>
+                  </EstadoBadge>
                 </p>
                 <p className="text-muted-foreground text-sm break-words">
                   N° serie {equipo.numeroSerie}
@@ -148,94 +182,104 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
                 </p>
               </div>
               {!cambiandoEsta && !bajandoEsta && !editandoEsta && (
-                <div className="flex flex-wrap gap-2">
-                  {/* Solo las transiciones que el backend acepta: desde fuera
+                <details open={equipoDestacado === equipo.id}>
+                  <summary
+                    aria-label={`Gestionar ${equipo.etiqueta} · ${carros.find((c) => c.id === carroId)?.nombre ?? "Carro"}`}
+                    className="cursor-pointer py-3 text-sm font-medium"
+                  >
+                    Gestionar equipo
+                  </summary>
+                  <div className="flex flex-wrap gap-2">
+                    {/* Solo las transiciones que el backend acepta: desde fuera
                       de servicio no hay ninguna, y el botón "→ Disponible"
                       que había ahí devolvía siempre un error. */}
-                  {TRANSICIONES_DE_ESTADO[equipo.estado].map((e) => (
+                    {TRANSICIONES_DE_ESTADO[equipo.estado].map((e) => (
+                      <Button
+                        key={e}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // Sin esto, el error de un intento anterior sobre OTRA
+                          // máquina aparece en este recuadro recién abierto.
+                          cambiarEstado.reset()
+                          setCambiando({ equipo, nuevoEstado: e, motivo: "" })
+                        }}
+                      >
+                        → {ETIQUETA_ESTADO_EQUIPO[e]}
+                      </Button>
+                    ))}
                     <Button
-                      key={e}
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        // Sin esto, el error de un intento anterior sobre OTRA
-                        // máquina aparece en este recuadro recién abierto.
-                        cambiarEstado.reset()
-                        setCambiando({ equipo, nuevoEstado: e, motivo: "" })
-                      }}
+                      onClick={() => setEditando(equipo.id)}
                     >
-                      → {ETIQUETA_ESTADO_EQUIPO[e]}
+                      Editar
                     </Button>
-                  ))}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditando(equipo.id)}
-                  >
-                    Editar
-                  </Button>
-                  {/* Con qué cuenta se entra a esta máquina (RF-03.22). El
+                    {/* Con qué cuenta se entra a esta máquina (RF-03.22). El
                       panel también está en Computadoras, que es donde lo
                       consulta un docente; acá está porque es donde un Admin
                       viene a CARGAR lo que se sabe de un equipo, y buscarlo
                       en la otra pantalla obliga a irse a mitad del alta. */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-expanded={cuentasAbiertas}
-                    onClick={() => setViendoCuentas(cuentasAbiertas ? null : equipo.id)}
-                  >
-                    Cómo entrar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-expanded={incidenciasAbiertas}
-                    onClick={() =>
-                      setViendoIncidencias(incidenciasAbiertas ? null : equipo.id)
-                    }
-                  >
-                    Incidencias
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-expanded={licenciasAbiertas}
-                    onClick={() =>
-                      setViendoLicencias(licenciasAbiertas ? null : equipo.id)
-                    }
-                  >
-                    Licencias
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-expanded={entregasAbiertas}
-                    onClick={() => setViendoEntregas(entregasAbiertas ? null : equipo.id)}
-                  >
-                    Entregas
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-expanded={preferenciasAbiertas}
-                    onClick={() =>
-                      setViendoPreferencias(preferenciasAbiertas ? null : equipo.id)
-                    }
-                  >
-                    Preferencias
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => {
-                      darDeBaja.reset()
-                      setDandoDeBaja(equipo)
-                    }}
-                  >
-                    Dar de baja
-                  </Button>
-                </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={cuentasAbiertas}
+                      onClick={() => setViendoCuentas(cuentasAbiertas ? null : equipo.id)}
+                    >
+                      Cómo entrar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={incidenciasAbiertas}
+                      onClick={() =>
+                        setViendoIncidencias(incidenciasAbiertas ? null : equipo.id)
+                      }
+                    >
+                      Incidencias
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={licenciasAbiertas}
+                      onClick={() =>
+                        setViendoLicencias(licenciasAbiertas ? null : equipo.id)
+                      }
+                    >
+                      Licencias
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={entregasAbiertas}
+                      onClick={() =>
+                        setViendoEntregas(entregasAbiertas ? null : equipo.id)
+                      }
+                    >
+                      Entregas
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={preferenciasAbiertas}
+                      onClick={() =>
+                        setViendoPreferencias(preferenciasAbiertas ? null : equipo.id)
+                      }
+                    >
+                      Preferencias
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        darDeBaja.reset()
+                        setDandoDeBaja(equipo)
+                      }}
+                    >
+                      Dar de baja
+                    </Button>
+                  </div>
+                </details>
               )}
             </div>
 
@@ -406,7 +450,22 @@ function EquiposAdmin({ carroId, carros }: { carroId: string; carros: Carro[] })
       {/* Mientras se edita un equipo no se muestra: los dos formularios tienen
           los mismos campos, y verlos juntos no deja saber cuál se está
           completando. */}
-      {editando === null && <AltaDeEquipo carroId={carroId} />}
+      {editando === null && (
+        <div className="grid gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 justify-self-start"
+            aria-expanded={agregando}
+            onClick={() => setAgregando(!agregando)}
+          >
+            {agregando ? "Ocultar alta de equipo" : "Agregar un equipo al carro"}
+          </Button>
+          <div hidden={!agregando}>
+            <AltaDeEquipo carroId={carroId} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -424,7 +483,7 @@ function EdicionDeCarro({ carro, onListo }: { carro: Carro; onListo: () => void 
         descripcion: descripcion.trim(),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: CARROS_KEY })
+      await invalidarInventario(queryClient)
       onListo()
     },
   })
@@ -485,11 +544,13 @@ export function InventarioAdminPage() {
   const [nombreCarro, setNombreCarro] = useState("")
   const [descripcionCarro, setDescripcionCarro] = useState("")
   const [verRetirados, setVerRetirados] = useState(false)
+  const [nuevoCarroAbierto, setNuevoCarroAbierto] = useState(false)
+  const [equipoDestacado, setEquipoDestacado] = useState<string | null>(null)
 
   // Los retirados se piden sólo cuando se los quiere ver, y la clave de la
   // consulta los incluye: si no, al encender el interruptor react-query
   // devolvería la lista vieja de la caché y no pasaría nada.
-  const { data, isLoading, error } = useQuery({
+  const { data, isPending, isSuccess, error, isFetching, refetch } = useQuery({
     queryKey: [...CARROS_KEY, { retirados: verRetirados }],
     queryFn: () =>
       verRetirados
@@ -503,7 +564,7 @@ export function InventarioAdminPage() {
     mutationFn: (carro: Carro) => adminApi.darDeBajaCarro(carro.id),
     onSuccess: async () => {
       setCarroEnBaja(null)
-      await queryClient.invalidateQueries({ queryKey: CARROS_KEY })
+      await invalidarInventario(queryClient)
     },
   })
 
@@ -516,11 +577,12 @@ export function InventarioAdminPage() {
     onSuccess: async () => {
       setNombreCarro("")
       setDescripcionCarro("")
-      await queryClient.invalidateQueries({ queryKey: CARROS_KEY })
+      await invalidarInventario(queryClient)
     },
   })
 
-  const todos = data?.data ?? []
+  const consultaLista = isSuccess && !error
+  const todos = consultaLista ? data.data : []
   const carros = todos.filter((carro) => !carro.dadoDeBaja)
   const retirados = todos.filter((carro) => carro.dadoDeBaja)
 
@@ -530,25 +592,54 @@ export function InventarioAdminPage() {
         titulo="Gestión del inventario"
         descripcion="Alta y edición de carros y equipos, y seguimiento de las incidencias reportadas."
       />
+      <BusquedaDeInventario
+        carros={carros}
+        carrosListos={consultaLista}
+        onAbrir={(equipo) => {
+          setEquipoDestacado(equipo.id)
+          if (equipo.carroId) setCarroAbierto(equipo.carroId)
+          const elemento = document.getElementById(`equipo-inventario-${equipo.id}`)
+          elemento?.scrollIntoView?.({ block: "center", behavior: "smooth" })
+          elemento?.focus({ preventScroll: true })
+        }}
+      />
 
-      {(error || crearCarro.error) && (
+      {error && (
+        <div className="mb-4">
+          <ErrorDeConsulta
+            mensaje="No pudimos cargar los carros del inventario."
+            reintentando={isFetching}
+            onReintentar={() => {
+              void refetch()
+            }}
+          />
+        </div>
+      )}
+      {crearCarro.error && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription>
-            {getErrorMessage(error ?? crearCarro.error)}
-          </AlertDescription>
+          <AlertDescription>{getErrorMessage(crearCarro.error)}</AlertDescription>
         </Alert>
       )}
 
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle>Nuevo carro</CardTitle>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 justify-self-start"
+            aria-expanded={nuevoCarroAbierto}
+            onClick={() => setNuevoCarroAbierto(!nuevoCarroAbierto)}
+          >
+            {nuevoCarroAbierto ? "Ocultar alta de carro" : "Nuevo carro"}
+          </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent hidden={!nuevoCarroAbierto}>
           <form
             className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
             onSubmit={(e) => {
               e.preventDefault()
-              crearCarro.mutate()
+              if (consultaLista && nombreCarro.trim() && !crearCarro.isPending)
+                crearCarro.mutate()
             }}
           >
             <div className="grid gap-1.5">
@@ -569,7 +660,9 @@ export function InventarioAdminPage() {
             </div>
             <Button
               type="submit"
-              disabled={nombreCarro.trim() === "" || crearCarro.isPending}
+              disabled={
+                !consultaLista || nombreCarro.trim() === "" || crearCarro.isPending
+              }
             >
               Crear carro
             </Button>
@@ -588,10 +681,17 @@ export function InventarioAdminPage() {
           un carro llamado "Sueltos" sería volver a la mentira que el modelo
           viene sacándose de encima. */}
       <div className="mb-4">
-        <OtrosEquipos />
+        <OtrosEquipos equipoDestacado={equipoDestacado} />
       </div>
 
-      {isLoading && <p className="text-muted-foreground">Cargando…</p>}
+      {isPending && (
+        <p role="status" className="text-muted-foreground">
+          Cargando carros…
+        </p>
+      )}
+      {consultaLista && carros.length === 0 && (
+        <p className="text-muted-foreground text-sm">No hay carros activos cargados.</p>
+      )}
 
       <div className="grid gap-3">
         {carros.map((carro) => {
@@ -625,7 +725,9 @@ export function InventarioAdminPage() {
                         variant="outline"
                         size="sm"
                         onClick={() =>
-                          setCarroEnPreferencia(carroEnPreferencia === carro.id ? null : carro.id)
+                          setCarroEnPreferencia(
+                            carroEnPreferencia === carro.id ? null : carro.id
+                          )
                         }
                       >
                         Preferencia del carro
@@ -634,7 +736,10 @@ export function InventarioAdminPage() {
                         variant="outline"
                         size="sm"
                         aria-expanded={abierto}
-                        onClick={() => setCarroAbierto(abierto ? null : carro.id)}
+                        onClick={() => {
+                          setEquipoDestacado(null)
+                          setCarroAbierto(abierto ? null : carro.id)
+                        }}
                       >
                         {abierto ? "Ocultar equipos" : "Gestionar equipos"}
                       </Button>
@@ -710,7 +815,11 @@ export function InventarioAdminPage() {
               </CardHeader>
               {abierto && (
                 <CardContent>
-                  <EquiposAdmin carroId={carro.id} carros={carros} />
+                  <EquiposAdmin
+                    carroId={carro.id}
+                    carros={carros}
+                    equipoDestacado={equipoDestacado}
+                  />
                 </CardContent>
               )}
             </Card>
@@ -721,6 +830,7 @@ export function InventarioAdminPage() {
       <CarrosRetirados
         retirados={retirados}
         mostrando={verRetirados}
+        consultaLista={consultaLista}
         onAlternar={() => setVerRetirados(!verRetirados)}
       />
     </div>
@@ -739,17 +849,19 @@ export function InventarioAdminPage() {
 function CarrosRetirados({
   retirados,
   mostrando,
+  consultaLista,
   onAlternar,
 }: {
   retirados: Carro[]
   mostrando: boolean
+  consultaLista: boolean
   onAlternar: () => void
 }) {
   const queryClient = useQueryClient()
 
   const reactivar = useMutation({
     mutationFn: (carro: Carro) => adminApi.reactivarCarro(carro.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: CARROS_KEY }),
+    onSuccess: () => invalidarInventario(queryClient),
   })
 
   return (
@@ -764,11 +876,12 @@ function CarrosRetirados({
         {mostrando ? "Ocultar los carros retirados" : "Ver los carros retirados"}
       </Button>
 
-      {mostrando && retirados.length === 0 && (
+      {mostrando && consultaLista && retirados.length === 0 && (
         <p className="text-muted-foreground text-sm">No hay ningún carro retirado.</p>
       )}
 
       {mostrando &&
+        consultaLista &&
         retirados.map((carro) => (
           <div
             key={carro.id}

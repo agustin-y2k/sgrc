@@ -6,17 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // ── ActualizarMisDatos ──────────────────────────────────────────────────
 
 func TestActualizarMisDatos_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron"}
+	repo.usuarios["u1"] = &domain.Usuario{Estado: domain.EstadoAprobada, ID: "u1", Nombre: "Ada", Apellido: "Byron"}
 	svc := nuevoServicioDeTest(repo)
 
-	u, token, err := svc.ActualizarMisDatos(context.Background(), "u1", "Ada", "Lovelace", false)
+	u, token, err := svc.ActualizarMisDatos(context.Background(), "u1", "Ada", "Lovelace", false, 0)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -36,10 +36,10 @@ func TestActualizarMisDatos_OK(t *testing.T) {
 
 func TestActualizarMisDatos_RecortaEspacios(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = &domain.Usuario{ID: "u1"}
+	repo.usuarios["u1"] = &domain.Usuario{Estado: domain.EstadoAprobada, ID: "u1"}
 	svc := nuevoServicioDeTest(repo)
 
-	u, _, err := svc.ActualizarMisDatos(context.Background(), "u1", "  Ada  ", "  Lovelace ", false)
+	u, _, err := svc.ActualizarMisDatos(context.Background(), "u1", "  Ada  ", "  Lovelace ", false, 0)
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -64,10 +64,10 @@ func TestActualizarMisDatos_Vacio_Error(t *testing.T) {
 	for _, c := range casos {
 		t.Run(c.caso, func(t *testing.T) {
 			repo := nuevoFakeRepo()
-			repo.usuarios["u1"] = &domain.Usuario{ID: "u1", Nombre: "Ada", Apellido: "Byron"}
+			repo.usuarios["u1"] = &domain.Usuario{Estado: domain.EstadoAprobada, ID: "u1", Nombre: "Ada", Apellido: "Byron"}
 			svc := nuevoServicioDeTest(repo)
 
-			_, _, err := svc.ActualizarMisDatos(context.Background(), "u1", c.nombre, c.apellido, false)
+			_, _, err := svc.ActualizarMisDatos(context.Background(), "u1", c.nombre, c.apellido, false, 0)
 
 			if !errors.Is(err, domain.ErrNombreVacio) {
 				t.Fatalf("esperaba ErrNombreVacio, obtuve %v", err)
@@ -84,11 +84,11 @@ func TestActualizarMisDatos_Vacio_Error(t *testing.T) {
 // fallar el INSERT con un 500.
 func TestActualizarMisDatos_DemasiadoLargo_Error(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = &domain.Usuario{ID: "u1"}
+	repo.usuarios["u1"] = &domain.Usuario{Estado: domain.EstadoAprobada, ID: "u1"}
 	svc := nuevoServicioDeTest(repo)
 
 	_, _, err := svc.ActualizarMisDatos(context.Background(), "u1",
-		strings.Repeat("a", domain.LargoMaxNombre+1), "Lovelace", false)
+		strings.Repeat("a", domain.LargoMaxNombre+1), "Lovelace", false, 0)
 
 	if !errors.Is(err, domain.ErrNombreDemasiadoLargo) {
 		t.Fatalf("esperaba ErrNombreDemasiadoLargo, obtuve %v", err)
@@ -98,11 +98,11 @@ func TestActualizarMisDatos_DemasiadoLargo_Error(t *testing.T) {
 // Justo en el límite entra — y con eñes, que ocupan más bytes que letras.
 func TestActualizarMisDatos_EnElLimite_OK(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.usuarios["u1"] = &domain.Usuario{ID: "u1"}
+	repo.usuarios["u1"] = &domain.Usuario{Estado: domain.EstadoAprobada, ID: "u1"}
 	svc := nuevoServicioDeTest(repo)
 
 	nombre := strings.Repeat("ñ", domain.LargoMaxNombre)
-	if _, _, err := svc.ActualizarMisDatos(context.Background(), "u1", nombre, "Lovelace", false); err != nil {
+	if _, _, err := svc.ActualizarMisDatos(context.Background(), "u1", nombre, "Lovelace", false, 0); err != nil {
 		t.Fatalf("%d caracteres tienen que entrar: %v", domain.LargoMaxNombre, err)
 	}
 }
@@ -110,7 +110,7 @@ func TestActualizarMisDatos_EnElLimite_OK(t *testing.T) {
 func TestActualizarMisDatos_UsuarioInexistente_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(nuevoFakeRepo())
 
-	_, _, err := svc.ActualizarMisDatos(context.Background(), "fantasma", "Ada", "Lovelace", false)
+	_, _, err := svc.ActualizarMisDatos(context.Background(), "fantasma", "Ada", "Lovelace", false, 0)
 
 	if !errors.Is(err, ErrUsuarioNoEncontrado) {
 		t.Fatalf("esperaba ErrUsuarioNoEncontrado, obtuve %v", err)

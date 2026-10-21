@@ -16,6 +16,7 @@ export type TipoNotificacion =
   | "GENERAL"
   | "DOCENTE_PENDIENTE"
   | "RESERVA_CANCELADA"
+  | "RESERVA_REUBICADA"
   | "LICENCIA_POR_VENCER"
   | "EQUIPO_SIN_DEVOLVER"
   | "PEDIDO_DE_LIBERACION"
@@ -28,6 +29,9 @@ export type Notificacion = {
   id: string
   /** Presente cuando la notificación es sobre una Reserva puntual. */
   reservaId?: string
+  /** Identifica la tarea independiente del aviso. */
+  pedidoId?: string
+  hiloId?: string
   mensaje: string
   tipo: TipoNotificacion
   estado: EstadoNotificacion

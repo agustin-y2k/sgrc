@@ -4,17 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/academic/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
+	cierres          map[string]*CierreCompletado
 	espacios         []*domain.Espacio
 	ciclos           map[string]*domain.CicloLectivo
 	cursos           map[string]*domain.Curso
@@ -567,7 +569,7 @@ func (f *fakeDatosDeUsuario) Contacto(_ context.Context, usuarioID string) (Cont
 		return c, nil
 	}
 	return ContactoDeDocente{UsuarioID: usuarioID, Nombre: "Docente " + usuarioID,
-		Email: usuarioID + "@escuela.edu.ar"}, nil
+		Email: usuarioID + "@escuela.test"}, nil
 }
 
 func (f *fakeDatosDeUsuario) Contactos(ctx context.Context, ids []string) ([]ContactoDeDocente, error) {
@@ -762,30 +764,32 @@ func TestArchivarYClonar_AnioInvalido_FallaSinTocarNada(t *testing.T) {
 	}
 }
 
-// Si el clonado falla por algo transitorio, el archivado ya se consumó.
-func TestArchivarYClonar_ReintentoCompletaElClonadoPendiente(t *testing.T) {
+// Ante un fallo transitorio también se revierte el archivo del ciclo.
+func TestArchivarYClonar_ReintentoTrasFalloDeClonado(t *testing.T) {
 	repo := nuevoFakeRepo()
-	// Como quedó tras un primer intento que archivó y borró, pero no clonó.
-	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: false, Archivado: true}
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: true}
 	repo.cursos["curso1"] = &domain.Curso{ID: "curso1", CicloLectivoID: "c1", Nombre: "1°A"}
 	repo.materias["m1"] = &domain.Materia{ID: "m1", CursoID: "curso1", Nombre: "Matemáticas"}
-	// Sin limpieza pendiente: el borrado del intento anterior sí terminó.
-	svc := nuevoServicioConArchivador(repo, &fakeValidadorUsuario{valido: true},
-		&fakeValidadorReservas{}, &fakeArchivadorHistorico{})
-
-	anio2026 := 2026
-	res, err := svc.ArchivarYClonar(context.Background(), "c1", &anio2026)
-
+	repo.errClonar = errors.New("fallo transitorio")
+	svc := nuevoServicioConArchivador(repo, &fakeValidadorUsuario{valido: true}, &fakeValidadorReservas{}, &fakeArchivadorHistorico{})
+	anio := 2026
+	if res, err := svc.ArchivarYClonar(context.Background(), "c1", &anio); err == nil || res != nil {
+		t.Fatalf("esperaba fallo sin resultado: %+v, %v", res, err)
+	}
+	if repo.ciclos["c1"].Archivado || !repo.ciclos["c1"].Activo {
+		t.Fatal("el fallo dejó el ciclo archivado")
+	}
+	repo.errClonar = nil
+	res, err := svc.ArchivarYClonar(context.Background(), "c1", &anio)
 	if err != nil {
-		t.Fatalf("el reintento tiene que completar el clonado: %v", err)
+		t.Fatal(err)
 	}
 	if res.NuevoCicloID == nil || res.CursosClonados != 1 || res.MateriasClonadas != 1 {
-		t.Errorf("esperaba el clonado completo, obtuve %+v", res)
+		t.Fatalf("clonado incompleto: %+v", res)
 	}
 }
 
-// Y sin clonado pendiente, archivar dos veces sigue siendo un error: el
-// reintento habilita terminar lo que faltó, no repetir la operación.
+// Un archivo previo a la constancia de cierre no se reconstruye a ciegas.
 func TestArchivarYClonar_YaArchivadoSinNadaPendiente_SigueSiendoError(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: false, Archivado: true}
@@ -1169,11 +1173,8 @@ func TestRemoverDocenteMateria_SiFallaLaCascada_ConservaLaAsignacion(t *testing.
 
 // ── Orden de la cascada de archivado (RF-02.4) ─────────────────────────
 
-// El borrado físico de reservas es el único paso irreversible de la cascada,
-// así que tiene que ser el ÚLTIMO. Si se ejecutara antes de archivar el ciclo
-// (como estaba originalmente), un fallo al archivar dejaría el año entero de
-// reservas borrado y el ciclo sin archivar, sin forma de recuperarlo.
-func TestArchivarYClonar_ElBorradoIrreversibleVaUltimo(t *testing.T) {
+// El histórico se calcula antes de borrar su fuente, dentro de la transacción.
+func TestArchivarYClonar_SnapshotAntesDeLimpiar(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.ciclos["ciclo1"] = &domain.CicloLectivo{ID: "ciclo1", Anio: 2026, Activo: true}
 	archivador := &fakeArchivadorHistorico{}
@@ -1206,9 +1207,8 @@ func TestArchivarYClonar_SiFallaElArchivado_NoBorraNingunaReserva(t *testing.T) 
 	}
 }
 
-// Si lo único que falla es el borrado, el ciclo ya quedó archivado y el
-// snapshot guardado: no se perdió nada y reintentar completa la limpieza.
-func TestArchivarYClonar_SiFallaElBorrado_ElCicloYaQuedoArchivadoConSuSnapshot(t *testing.T) {
+// Un error de limpieza revierte el archivo y permite repetir el cierre.
+func TestArchivarYClonar_SiFallaElBorrado_SeRevierteElCierre(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.ciclos["ciclo1"] = &domain.CicloLectivo{ID: "ciclo1", Anio: 2026, Activo: true}
 	archivador := &fakeArchivadorHistorico{errAlEliminar: errors.New("timeout")}
@@ -1221,8 +1221,12 @@ func TestArchivarYClonar_SiFallaElBorrado_ElCicloYaQuedoArchivadoConSuSnapshot(t
 	if archivador.vecesLlamado != 1 {
 		t.Errorf("el snapshot debería haberse guardado antes del borrado")
 	}
-	if !repo.ciclos["ciclo1"].Archivado {
-		t.Errorf("el ciclo debería haber quedado archivado — el borrado es el único paso que falta y es reintentable")
+	if repo.ciclos["ciclo1"].Archivado || !repo.ciclos["ciclo1"].Activo {
+		t.Fatal("el fallo debe devolver el ciclo a su estado original")
+	}
+	archivador.errAlEliminar = nil
+	if _, err := svc.ArchivarYClonar(context.Background(), "ciclo1", nil); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1256,25 +1260,17 @@ func TestListarMateriasReservables_UnAdminLasVeTodas(t *testing.T) {
 
 // ── Reintento del archivado (RF-02.4) ──────────────────────────────────
 
-// El archivado cruza tres paquetes sin una transacción que los abarque, así
-// que puede quedar a mitad de camino: ciclo marcado, snapshot guardado y
-// reservas todavía sin borrar.
-
-func TestArchivarYClonar_YaArchivadoConReservasPendientes_CompletaLaLimpieza(t *testing.T) {
+// Los cierres legados pueden tener fuentes incompletas; no se recalculan.
+func TestArchivarYClonar_YaArchivadoConReservas_NoRegeneraHistoricoLegado(t *testing.T) {
 	repo := nuevoFakeRepo()
-	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: false, Archivado: true}
+	repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Archivado: true}
 	archivador := &fakeArchivadorHistorico{}
-	svc := nuevoServicioConArchivador(repo,
-		&fakeValidadorUsuario{valido: true},
-		&fakeValidadorReservas{tieneReservasCiclo: true}, // el intento anterior murió antes de borrarlas
-		archivador)
-
-	if _, err := svc.ArchivarYClonar(context.Background(), "c1", nil); err != nil {
-		t.Fatalf("un archivado interrumpido tiene que poder completarse, obtuve: %v", err)
+	svc := nuevoServicioConArchivador(repo, &fakeValidadorUsuario{valido: true}, &fakeValidadorReservas{tieneReservasCiclo: true}, archivador)
+	if _, err := svc.ArchivarYClonar(context.Background(), "c1", nil); !errors.Is(err, domain.ErrCicloYaArchivado) {
+		t.Fatalf("esperaba archivo legado, obtuve %v", err)
 	}
-
-	if archivador.pasos[len(archivador.pasos)-1] != "eliminar-reservas" {
-		t.Errorf("el borrado de reservas debería haberse ejecutado último, pasos: %v", archivador.pasos)
+	if len(archivador.pasos) != 0 {
+		t.Fatalf("se tocó la fuente del histórico legado: %v", archivador.pasos)
 	}
 }
 
@@ -1331,10 +1327,14 @@ func (r *fakeRepo) GuardarPedido(_ context.Context, p *domain.PedidoDeMateria) e
 func (r *fakeRepo) detallar(p *domain.PedidoDeMateria) *PedidoDetallado {
 	d := &PedidoDetallado{Pedido: p}
 	d.DocenteNombre = r.nombresDeUsuario[p.UsuarioID]
-	if p.MateriaID == nil {
+	materiaID := p.MateriaID
+	if materiaID == nil {
+		materiaID = p.MateriaCreadaID
+	}
+	if materiaID == nil {
 		return d
 	}
-	m, hay := r.materias[*p.MateriaID]
+	m, hay := r.materias[*materiaID]
 	if !hay {
 		return d
 	}
@@ -1663,4 +1663,149 @@ func TestEliminarCiclo_LiberaElLugarDeCicloActivo(t *testing.T) {
 	if nuevo.Anio != 2026 || !nuevo.Activo {
 		t.Errorf("ciclo nuevo incorrecto: %+v", nuevo)
 	}
+}
+
+func (r *fakeRepo) EnCierre(ctx context.Context, cicloID string, fn func(context.Context) error) error {
+	ciclos := map[string]*domain.CicloLectivo{}
+	for id, c := range r.ciclos {
+		copia := *c
+		ciclos[id] = &copia
+	}
+	cursos := map[string]*domain.Curso{}
+	for id, c := range r.cursos {
+		copia := *c
+		cursos[id] = &copia
+	}
+	materias := map[string]*domain.Materia{}
+	for id, m := range r.materias {
+		copia := *m
+		materias[id] = &copia
+	}
+	if err := fn(ctx); err != nil {
+		r.ciclos = ciclos
+		r.cursos = cursos
+		r.materias = materias
+		return err
+	}
+	return nil
+}
+func (r *fakeRepo) BuscarCierre(ctx context.Context, id string) (*CierreCompletado, error) {
+	return r.cierres[id], nil
+}
+func (r *fakeRepo) GuardarCierre(ctx context.Context, id string, c *CierreCompletado) error {
+	if r.cierres == nil {
+		r.cierres = map[string]*CierreCompletado{}
+	}
+	r.cierres[id] = c
+	return nil
+}
+
+func TestArchivarYClonar_RepetirDevuelveResultadoOriginal(t *testing.T) {
+	for _, clonar := range []bool{false, true} {
+		t.Run(fmt.Sprint(clonar), func(t *testing.T) {
+			repo := nuevoFakeRepo()
+			repo.ciclos["c1"] = &domain.CicloLectivo{ID: "c1", Anio: 2025, Activo: true}
+			archivador := &fakeArchivadorHistorico{}
+			svc := nuevoServicioConArchivador(repo, &fakeValidadorUsuario{valido: true}, &fakeValidadorReservas{}, archivador)
+			var destino *int
+			anio := 2026
+			if clonar {
+				destino = &anio
+			}
+			original, err := svc.ArchivarYClonar(context.Background(), "c1", destino)
+			if err != nil {
+				t.Fatal(err)
+			}
+			repetido, err := svc.ArchivarYClonar(context.Background(), "c1", destino)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(original, repetido) || archivador.vecesLlamado != 1 {
+				t.Fatalf("el reintento repitió pasos o cambió resultado: %+v %+v", original, repetido)
+			}
+			otro := 2027
+			if _, err := svc.ArchivarYClonar(context.Background(), "c1", &otro); !errors.Is(err, ErrDestinoDeCierreDiferente) {
+				t.Fatalf("esperaba conflicto de intención: %v", err)
+			}
+		})
+	}
+}
+
+func (r *fakeRepo) BuscarPedidoParaResolver(ctx context.Context, id string) (*domain.PedidoDeMateria, error) {
+	p, err := r.BuscarPedidoPorID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	copia := *p
+	return &copia, nil
+}
+
+func (r *fakeRepo) EnTransaccion(ctx context.Context, fn func(context.Context) error) error {
+	materias := map[string]*domain.Materia{}
+	for id, m := range r.materias {
+		copia := *m
+		materias[id] = &copia
+	}
+	asignaciones := map[string]*domain.DocenteMateria{}
+	for id, dm := range r.docentesMateria {
+		copia := *dm
+		asignaciones[id] = &copia
+	}
+	pedidos := map[string]*domain.PedidoDeMateria{}
+	for id, p := range r.pedidos {
+		copia := *p
+		pedidos[id] = &copia
+	}
+	if err := fn(ctx); err != nil {
+		r.materias = materias
+		r.docentesMateria = asignaciones
+		r.pedidos = pedidos
+		return err
+	}
+	return nil
+}
+
+func (r *fakeRepo) CoordinarAsignaciones(ctx context.Context, fn func(context.Context) error) error {
+	return r.EnTransaccion(ctx, fn)
+}
+
+func (r *fakeRepo) VerificarVigencia(ctx context.Context, tipo, id string) error {
+	var ciclo string
+	switch tipo {
+	case "ciclo":
+		ciclo = id
+	case "curso":
+		if c := r.cursos[id]; c != nil {
+			if c.Archivado {
+				return ErrCicloArchivado
+			}
+			ciclo = c.CicloLectivoID
+		}
+	case "espacio":
+		for _, e := range r.espacios {
+			if e.ID != id {
+				continue
+			}
+			if e.Archivado {
+				return ErrCicloArchivado
+			}
+			ciclo = e.CicloLectivoID
+		}
+	case "materia":
+		if m := r.materias[id]; m != nil {
+			if m.Archivado {
+				return ErrCicloArchivado
+			}
+			if m.CursoID != "" {
+				return r.VerificarVigencia(ctx, "curso", m.CursoID)
+			}
+			if m.EspacioID != "" {
+				return r.VerificarVigencia(ctx, "espacio", m.EspacioID)
+			}
+		}
+	}
+	if c := r.ciclos[ciclo]; c != nil && c.Archivado {
+		return ErrCicloArchivado
+	}
+	return nil
 }

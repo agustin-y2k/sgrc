@@ -85,3 +85,5 @@ var (
 	// usuario).
 	ErrReferenciaInexistente = errors.New("alguno de los datos referenciados no existe")
 )
+
+var ErrAlcancePreferenciaInexistente = errors.New("la materia no existe con esa modalidad, año y división en el ciclo activo; revisá el alcance")

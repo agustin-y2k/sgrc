@@ -3,7 +3,7 @@ import type {
   ActualizarMisDatosResponse,
 } from "@/features/auth/types"
 import type { PedidoDeMateria, RespuestaLista } from "@/features/perfil/types"
-import { apiFetch } from "@/lib/api-client"
+import { apiFetch, exigirRespuestaExitosa } from "@/lib/api-client"
 import { getToken } from "@/lib/token-store"
 
 // ── Mis datos ─────────────────────────────────────────────────────────
@@ -50,11 +50,11 @@ export async function descargarFoto(usuarioId: string): Promise<Blob | null> {
   // consulta que falló y la reintenta en cada montaje, así que mientras esto
   // lanzaba había un 404 por cada navegación, para siempre.
   if (respuesta.status === 404) {
+    // Consumir el cuerpo cierra la descarga también cuando se muestran iniciales.
+    await respuesta.arrayBuffer()
     return null
   }
-  if (!respuesta.ok) {
-    throw new Error(`no se pudo leer la foto (${respuesta.status})`)
-  }
+  await exigirRespuestaExitosa(respuesta, token)
   return await respuesta.blob()
 }
 
@@ -64,17 +64,12 @@ export async function subirMiFoto(archivo: Blob) {
   cuerpo.append("foto", archivo, "perfil.webp")
 
   const token = getToken()
-  const respuesta = await fetch(
-    `${import.meta.env.VITE_API_URL ?? ""}/api/mi-foto`,
-    {
-      method: "PUT",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      body: cuerpo,
-    }
-  )
-  if (!respuesta.ok) {
-    throw new Error((await respuesta.text()).trim() || "no se pudo guardar la foto")
-  }
+  const respuesta = await fetch(`${import.meta.env.VITE_API_URL ?? ""}/api/mi-foto`, {
+    method: "PUT",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: cuerpo,
+  })
+  await exigirRespuestaExitosa(respuesta, token)
   return (await respuesta.json()) as { tipo: string; actualizadaEn: string }
 }
 
@@ -105,18 +100,14 @@ export function pedirMateriaNueva(
 }
 
 export function misPedidos() {
-  return apiFetch<RespuestaLista<PedidoDeMateria>>(
-    "/api/mis-pedidos-de-materia"
-  )
+  return apiFetch<RespuestaLista<PedidoDeMateria>>("/api/mis-pedidos-de-materia")
 }
 
 // ── Del lado del Admin ────────────────────────────────────────────────
 
 export function listarPedidos(soloPendientes: boolean) {
   const query = soloPendientes ? "?pendientes=true" : ""
-  return apiFetch<RespuestaLista<PedidoDeMateria>>(
-    `/api/pedidos-de-materia${query}`
-  )
+  return apiFetch<RespuestaLista<PedidoDeMateria>>(`/api/pedidos-de-materia${query}`)
 }
 
 export function resolverPedido(

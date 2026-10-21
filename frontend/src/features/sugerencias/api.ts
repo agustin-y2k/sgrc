@@ -26,6 +26,11 @@ export function misSugerencias(pagina = 1) {
   return apiFetch<RespuestaLista<Sugerencia>>(`/api/mis-sugerencias${query}`)
 }
 
+/** Abre un aviso concreto; el servidor comprueba quién puede leerlo. */
+export function obtener(id: string) {
+  return apiFetch<Sugerencia>(`/api/sugerencias/${encodeURIComponent(id)}`)
+}
+
 /**
  * Escribe en un hilo. Lo usan los dos lados: el servidor sabe por el token si
  * el mensaje es de administración o de quien preguntó.

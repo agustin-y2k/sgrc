@@ -7,15 +7,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
-	"github.com/ramiro/sgrc/internal/sugerencias/application"
-	"github.com/ramiro/sgrc/internal/sugerencias/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/sugerencias/application"
+	"github.com/agustin-y2k/sgrc/internal/sugerencias/domain"
 )
 
 const codigoTextoInvalido = "22P02"
@@ -58,7 +59,7 @@ func escanear(fila interface{ Scan(...any) error }) (*domain.Sugerencia, error) 
 // Crear escribe el hilo y su primer mensaje en una transacción: un hilo sin
 // mensajes no es nada que alguien pueda leer ni contestar.
 func (r *PostgresRepo) Crear(ctx context.Context, s *domain.Sugerencia) error {
-	tx, err := r.db.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.db)
 	if err != nil {
 		return fmt.Errorf("iniciando transacción: %w", err)
 	}
@@ -77,7 +78,7 @@ func (r *PostgresRepo) Crear(ctx context.Context, s *domain.Sugerencia) error {
 	}
 
 	for _, m := range s.Mensajes {
-		if err := insertarMensaje(ctx, tx, s.ID, m); err != nil {
+		if err := insertarMensaje(ctx, tx.Tx, s.ID, m); err != nil {
 			return err
 		}
 	}
@@ -92,13 +93,13 @@ func (r *PostgresRepo) Crear(ctx context.Context, s *domain.Sugerencia) error {
 // también en una transacción: un mensaje que no actualiza la actividad queda
 // enterrado abajo y nadie lo contesta.
 func (r *PostgresRepo) AgregarMensaje(ctx context.Context, s *domain.Sugerencia, m domain.Mensaje) error {
-	tx, err := r.db.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.db)
 	if err != nil {
 		return fmt.Errorf("iniciando transacción: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op si ya hizo Commit
 
-	if err := insertarMensaje(ctx, tx, s.ID, m); err != nil {
+	if err := insertarMensaje(ctx, tx.Tx, s.ID, m); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx,
@@ -127,7 +128,11 @@ func insertarMensaje(ctx context.Context, tx pgx.Tx, sugerenciaID string, m doma
 }
 
 func (r *PostgresRepo) BuscarPorID(ctx context.Context, id string) (*domain.Sugerencia, error) {
-	fila := r.db.QueryRow(ctx, `SELECT `+columnas+` FROM sugerencia WHERE id = $1`, id)
+	consulta := `SELECT ` + columnas + ` FROM sugerencia WHERE id = $1`
+	if pgtransaccion.DeContexto(ctx) != nil {
+		consulta += ` FOR UPDATE`
+	}
+	fila := pgtransaccion.Con(ctx, r.db).QueryRow(ctx, consulta, id)
 	s, err := escanear(fila)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -150,7 +155,7 @@ func (r *PostgresRepo) BuscarPorID(ctx context.Context, id string) (*domain.Suge
 // GuardarEstado escribe solo lo que cambia al resolver o reabrir: los
 // mensajes no se editan nunca.
 func (r *PostgresRepo) GuardarEstado(ctx context.Context, s *domain.Sugerencia) error {
-	_, err := r.db.Exec(ctx,
+	_, err := pgtransaccion.Con(ctx, r.db).Exec(ctx,
 		`UPDATE sugerencia SET estado = $2, ultima_actividad_en = $3 WHERE id = $1`,
 		s.ID, string(s.Estado), s.UltimaActividadEn)
 	if err != nil {
@@ -163,16 +168,16 @@ func (r *PostgresRepo) ListarTodas(ctx context.Context, soloAbiertas bool, p pag
 	// El filtro va como parámetro y no concatenando SQL: una sola consulta
 	// preparada sirve para los dos casos.
 	var total int
-	if err := r.db.QueryRow(ctx,
+	if err := pgtransaccion.Con(ctx, r.db).QueryRow(ctx,
 		`SELECT count(*) FROM sugerencia WHERE ($1 = false OR estado = 'ABIERTA')`,
 		soloAbiertas).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("contando sugerencias: %w", err)
 	}
 
-	rows, err := r.db.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.db).Query(ctx, `
 		SELECT `+columnas+` FROM sugerencia
 		 WHERE ($1 = false OR estado = 'ABIERTA')
-		 ORDER BY ultima_actividad_en DESC
+		 ORDER BY ultima_actividad_en DESC, id
 		 LIMIT $2 OFFSET $3
 	`, soloAbiertas, p.Limit(), p.Offset())
 	if err != nil {
@@ -186,7 +191,7 @@ func (r *PostgresRepo) ListarTodas(ctx context.Context, soloAbiertas bool, p pag
 
 func (r *PostgresRepo) ListarDeUsuario(ctx context.Context, usuarioID string, p paginacion.Pagina) ([]*domain.Sugerencia, int, error) {
 	var total int
-	if err := r.db.QueryRow(ctx,
+	if err := pgtransaccion.Con(ctx, r.db).QueryRow(ctx,
 		`SELECT count(*) FROM sugerencia WHERE usuario_id = $1`, usuarioID).Scan(&total); err != nil {
 		if esIDInvalido(err) {
 			return nil, 0, application.ErrIDInvalido
@@ -194,10 +199,10 @@ func (r *PostgresRepo) ListarDeUsuario(ctx context.Context, usuarioID string, p 
 		return nil, 0, fmt.Errorf("contando sugerencias del usuario: %w", err)
 	}
 
-	rows, err := r.db.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.db).Query(ctx, `
 		SELECT `+columnas+` FROM sugerencia
 		 WHERE usuario_id = $1
-		 ORDER BY ultima_actividad_en DESC
+		 ORDER BY ultima_actividad_en DESC, id
 		 LIMIT $2 OFFSET $3
 	`, usuarioID, p.Limit(), p.Offset())
 	if err != nil {
@@ -243,7 +248,7 @@ func (r *PostgresRepo) escanearConMensajes(ctx context.Context, rows pgx.Rows) (
 }
 
 func (r *PostgresRepo) mensajesDe(ctx context.Context, sugerenciaIDs []string) (map[string][]domain.Mensaje, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.db).Query(ctx, `
 		SELECT sugerencia_id, id, autor_id, de_admin, texto, escrito_en
 		  FROM sugerencia_mensaje
 		 WHERE sugerencia_id = ANY($1)
@@ -292,7 +297,7 @@ func NewUsuarioPostgres(db *pgxpool.Pool) *UsuarioPostgres { return &UsuarioPost
 
 func (u *UsuarioPostgres) NombreYEmail(ctx context.Context, usuarioID string) (string, string, error) {
 	var nombre, apellido, email string
-	err := u.db.QueryRow(ctx,
+	err := pgtransaccion.Con(ctx, u.db).QueryRow(ctx,
 		`SELECT nombre, apellido, email FROM usuario WHERE id = $1`, usuarioID).
 		Scan(&nombre, &apellido, &email)
 	if err != nil {

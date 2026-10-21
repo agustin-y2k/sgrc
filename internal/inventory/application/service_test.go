@@ -10,15 +10,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
-	"github.com/ramiro/sgrc/internal/shared/secretos"
-	"github.com/ramiro/sgrc/internal/shared/texto"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/secretos"
+	"github.com/agustin-y2k/sgrc/internal/shared/texto"
 )
 
 // ── fakeRepo ────────────────────────────────────────────────────────────
 
 type fakeRepo struct {
+	catalogo              []MateriaParaPreferencia
+	validarAlcance        func(*domain.PreferenciaDeEquipo) (bool, error)
 	preferenciasHuerfanas []*PreferenciaHuerfana
 	carros                map[string]*domain.Carro
 	equipos               map[string]*domain.Equipo
@@ -230,7 +232,7 @@ func mismaMarca(a, b *domain.PreferenciaDeEquipo) bool {
 		}
 		return *x == *y
 	}
-	return a.EquipoID == b.EquipoID &&
+	return a.CursoExacto == b.CursoExacto && a.EquipoID == b.EquipoID &&
 		strings.EqualFold(a.MateriaNombre, b.MateriaNombre) &&
 		igualPtr(a.Anio, b.Anio) &&
 		igualStr(a.Modalidad, b.Modalidad) &&
@@ -1135,9 +1137,7 @@ func TestCambiarEstadoEquipo_ErrorAlVerificarPendiente_SePropaga(t *testing.T) {
 	}
 }
 
-// El error del segundo paso tiene que decir que el primero sí se aplicó y que
-// reintentar completa lo que falta — si no, quien lo lee no sabe en qué
-// estado quedó el sistema.
+// Un fallo de cascada revierte el cambio de inventario y permite reintentar.
 func TestCambiarEstadoEquipo_ErrorEnCascada_ElMensajeExplicaComoSeguir(t *testing.T) {
 	repo := nuevoFakeRepo()
 	repo.equipos["pc1"] = &domain.Equipo{ID: "pc1", Estado: domain.EstadoDisponible}
@@ -1152,10 +1152,9 @@ func TestCambiarEstadoEquipo_ErrorEnCascada_ElMensajeExplicaComoSeguir(t *testin
 	if !strings.Contains(err.Error(), "reintentar") {
 		t.Errorf("el error debería explicar que reintentar completa la cascada: %q", err)
 	}
-	// Y la PC quedó guardada en su nuevo estado: es justamente el estado que
-	// el reintento va a encontrar.
-	if repo.equipos["pc1"].Estado != domain.EstadoFueraDeServicio {
-		t.Errorf("la PC debería haber quedado guardada, está en %s", repo.equipos["pc1"].Estado)
+	// El cambio y la cascada se revirtieron juntos.
+	if repo.equipos["pc1"].Estado != domain.EstadoDisponible {
+		t.Errorf("la PC debería conservar su estado, está en %s", repo.equipos["pc1"].Estado)
 	}
 }
 
@@ -1489,4 +1488,33 @@ func TestListarIncidenciasPorEquipo_TieneTope(t *testing.T) {
 	if len(incidencias) != maxIncidenciasDeEquipo {
 		t.Errorf("esperaba el tope de %d, obtuve %d", maxIncidenciasDeEquipo, len(incidencias))
 	}
+}
+
+func (r *fakeRepo) Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error {
+	equipos := make(map[string]*domain.Equipo, len(r.equipos))
+	for id, e := range r.equipos {
+		copia := *e
+		equipos[id] = &copia
+	}
+	carros := make(map[string]*domain.Carro, len(r.carros))
+	for id, c := range r.carros {
+		copia := *c
+		carros[id] = &copia
+	}
+	if err := fn(ctx); err != nil {
+		r.equipos = equipos
+		r.carros = carros
+		return err
+	}
+	return nil
+}
+
+func (r *fakeRepo) CatalogoDePrioridades(context.Context) ([]MateriaParaPreferencia, error) {
+	return r.catalogo, nil
+}
+func (r *fakeRepo) ExisteAlcancePreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) (bool, error) {
+	if r.validarAlcance != nil {
+		return r.validarAlcance(p)
+	}
+	return true, nil
 }

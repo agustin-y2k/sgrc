@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Link, useLocation, useNavigate } from "react-router"
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router"
 
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { EstadoBadge, TONO_RESERVA } from "@/components/EstadoBadge"
@@ -16,14 +16,19 @@ import { agruparReservas } from "@/features/reservas/types"
 import { CambiarEquipoDeReserva } from "@/features/reservas/CambiarEquipoDeReserva"
 import { CancelarReserva } from "@/features/reservas/CancelarReserva"
 import type { EstadoReserva, GrupoDeReservas } from "@/features/reservas/types"
-import { getErrorMessage } from "@/lib/api-client"
 import { etiquetaDeMateriaYLugar } from "@/features/academico/types"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
+import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import * as adminApi from "@/features/admin/api"
+import { todasLasPaginas } from "@/lib/todas-las-paginas"
 
 const RESERVAS_KEY = ["reservas"]
 
 /** El aviso de "listo, se creó" que deja NuevaReservaPage al navegar acá. */
 function useConfirmacionDeLlegada(): string | null {
-  const { pathname, state } = useLocation()
+  const { pathname, search, state } = useLocation()
   const navigate = useNavigate()
   const recibida =
     state && typeof state === "object" && "confirmacion" in state
@@ -32,8 +37,8 @@ function useConfirmacionDeLlegada(): string | null {
   const [confirmacion] = useState(recibida)
 
   useEffect(() => {
-    if (recibida !== null) navigate(pathname, { replace: true, state: null })
-  }, [recibida, pathname, navigate])
+    if (recibida !== null) navigate(pathname + search, { replace: true, state: null })
+  }, [recibida, pathname, search, navigate])
 
   return confirmacion
 }
@@ -72,18 +77,73 @@ function estadoDelGrupo(grupo: GrupoDeReservas): EstadoReserva {
 
 export function MisReservasPage() {
   const { user } = useAuth()
-  const [incluirCanceladas, setIncluirCanceladas] = useState(false)
-  const [pagina, setPagina] = useState(1)
+  const [params, setParams] = useSearchParams()
+  const incluirCanceladas =
+    params.get("canceladas") === "true" || params.get("estado") === "CANCELADA"
+  const numeroPagina = Number(params.get("pagina"))
+  const pagina =
+    Number.isSafeInteger(numeroPagina) && numeroPagina >= 1 ? numeroPagina : 1
+  const fechasPersonalizadas = params.has("desde") || params.has("hasta")
+  const vista =
+    params.get("vista") === "historial"
+      ? "historial"
+      : params.get("vista") === "todas"
+        ? "todas"
+        : "proximas"
+  const hoy = new Date()
+  const fechaLocal = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  const ayer = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 1)
+  const desde =
+    params.get("desde") || (vista === "proximas" ? fechaLocal(hoy) : undefined)
+  const hasta =
+    params.get("hasta") || (vista === "historial" ? fechaLocal(ayer) : undefined)
+  const busqueda = params.get("busqueda") || undefined
+  const estado = (params.get("estado") || undefined) as EstadoReserva | undefined
+  const creadoPor =
+    user?.rol === "ADMIN" ? params.get("creadoPor") || undefined : undefined
+  const rangoValido = !desde || !hasta || desde <= hasta
+  const cambiarParams = (valores: Record<string, string>) => {
+    const nuevos = new URLSearchParams(params)
+    nuevos.delete("pagina")
+    for (const [campo, valor] of Object.entries(valores)) {
+      if (valor) nuevos.set(campo, valor)
+      else nuevos.delete(campo)
+    }
+    setParams(nuevos)
+  }
+  const docentes = useQuery({
+    queryKey: ["usuarios", "filtro-reservas"],
+    queryFn: () =>
+      todasLasPaginas((page) => adminApi.listarUsuarios({ page, pageSize: 200 })),
+    enabled: user?.rol === "ADMIN",
+  })
   /** La tarjeta con el panel de cancelación abierto, si hay alguna. */
   const [cancelando, setCancelando] = useState<string | null>(null)
   const [cambiandoEquipo, setCambiandoEquipo] = useState<string | null>(null)
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: [...RESERVAS_KEY, { incluirCanceladas, pagina }],
-    queryFn: () => reservasApi.listarReservas({ incluirCanceladas, page: pagina }),
+  const { data, isPending, isSuccess, isFetching, error, refetch } = useQuery({
+    queryKey: [
+      ...RESERVAS_KEY,
+      "por-clases",
+      { incluirCanceladas, pagina, desde, hasta, busqueda, estado, creadoPor },
+    ],
+    enabled: rangoValido,
+    queryFn: () =>
+      reservasApi.listarReservas({
+        incluirCanceladas,
+        page: pagina,
+        porClases: true,
+        pageSize: 20,
+        desde,
+        hasta,
+        busqueda,
+        estado,
+        creadoPor,
+      }),
   })
 
-  const grupos = agruparReservas(data?.data ?? [])
+  const grupos = agruparReservas(!error && rangoValido ? (data?.data ?? []) : [])
   const confirmacion = useConfirmacionDeLlegada()
 
   return (
@@ -97,20 +157,158 @@ export function MisReservasPage() {
         }
         accion={
           <Button asChild>
-            <Link to="/reservas/nueva">Nueva reserva</Link>
+            <Link
+              to="/reservas/nueva"
+              state={{
+                volverA: `/reservas${params.size ? `?${params.toString()}` : ""}`,
+              }}
+            >
+              Nueva reserva
+            </Link>
           </Button>
         }
       />
 
+      <div className="mb-4 flex flex-wrap gap-2" aria-label="Vista de reservas">
+        {(
+          [
+            ["proximas", "Próximas"],
+            ["historial", "Historial"],
+            ["todas", "Todas"],
+          ] as const
+        ).map(([valor, texto]) => (
+          <Button
+            key={valor}
+            type="button"
+            variant={!fechasPersonalizadas && vista === valor ? "default" : "outline"}
+            className="h-11"
+            aria-pressed={!fechasPersonalizadas && vista === valor}
+            onClick={() => cambiarParams({ vista: valor, desde: "", hasta: "" })}
+          >
+            {texto}
+          </Button>
+        ))}
+      </div>
+      <p className="text-muted-foreground mb-4 text-sm">
+        {fechasPersonalizadas
+          ? "Consultando el rango de fechas indicado en los filtros."
+          : vista === "proximas"
+            ? "Clases de hoy y de las fechas posteriores."
+            : vista === "historial"
+              ? "Clases de las fechas anteriores a hoy."
+              : "Todas las fechas."}
+      </p>
+      <form
+        key={params.toString()}
+        className="mb-4 grid gap-3 rounded-xl border p-3 sm:grid-cols-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          const valores = new FormData(e.currentTarget)
+          cambiarParams({
+            desde: String(valores.get("desde") || ""),
+            hasta: String(valores.get("hasta") || ""),
+            busqueda: String(valores.get("busqueda") || "").trim(),
+            estado: String(valores.get("estado") || ""),
+            creadoPor:
+              user?.rol === "ADMIN"
+                ? String(valores.get("creadoPor") ?? creadoPor ?? "")
+                : "",
+          })
+        }}
+      >
+        <div className="grid gap-1.5">
+          <Label htmlFor="desde-reservas">Desde</Label>
+          <Input id="desde-reservas" name="desde" type="date" defaultValue={desde} />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="hasta-reservas">Hasta</Label>
+          <Input id="hasta-reservas" name="hasta" type="date" defaultValue={hasta} />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="buscar-reservas">Buscar materia, curso o modalidad</Label>
+          <Input
+            id="buscar-reservas"
+            name="busqueda"
+            maxLength={100}
+            defaultValue={busqueda}
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="estado-reservas">Estado de los equipos</Label>
+          <Select id="estado-reservas" name="estado" defaultValue={estado ?? ""}>
+            <option value="">Todos los estados</option>
+            {Object.entries(ETIQUETA_RESERVA).map(([valor, etiqueta]) => (
+              <option key={valor} value={valor}>
+                {etiqueta}
+              </option>
+            ))}
+          </Select>
+          <p className="text-muted-foreground text-xs">
+            Muestra clases que contienen equipos en ese estado, con todos sus equipos para
+            conservar el contexto.
+          </p>
+        </div>
+        {user?.rol === "ADMIN" && (
+          <div className="grid gap-1.5">
+            <Label htmlFor="docente-reservas">Docente o responsable</Label>
+            <Select
+              key={docentes.data?.data.map((d) => d.id).join(",") ?? "cargando"}
+              id="docente-reservas"
+              name="creadoPor"
+              defaultValue={creadoPor ?? ""}
+              disabled={docentes.isPending || !!docentes.error}
+            >
+              <option value="">Todos los responsables</option>
+              {creadoPor && !docentes.data?.data.some((d) => d.id === creadoPor) && (
+                <option value={creadoPor}>Cuenta seleccionada</option>
+              )}
+              {docentes.data?.data.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nombre} {d.apellido} · {d.email}
+                </option>
+              ))}
+            </Select>
+            {docentes.error && (
+              <ErrorDeConsulta
+                mensaje="No pudimos consultar los responsables."
+                reintentando={docentes.isFetching}
+                onReintentar={() => {
+                  void docentes.refetch()
+                }}
+              />
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap items-end gap-2">
+          <Button type="submit" className="h-11">
+            Aplicar filtros
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11"
+            onClick={() => setParams(new URLSearchParams())}
+          >
+            Limpiar filtros
+          </Button>
+        </div>
+      </form>
+      {!rangoValido && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            La fecha «Hasta» debe ser igual o posterior a «Desde».
+          </AlertDescription>
+        </Alert>
+      )}
       <label className="mb-4 flex items-center gap-2 text-sm">
         <input
           type="checkbox"
           checked={incluirCanceladas}
+          disabled={estado === "CANCELADA"}
           onChange={(e) => {
-            setIncluirCanceladas(e.target.checked)
+            cambiarParams({ canceladas: e.target.checked ? "true" : "" })
             // Cambiar el filtro cambia la colección: quedarse en la página 5
             // de la anterior puede caer más allá del final y mostrar vacío.
-            setPagina(1)
           }}
         />
         Mostrar también las canceladas
@@ -123,14 +321,26 @@ export function MisReservasPage() {
       )}
 
       {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-        </Alert>
+        <div className="mb-4">
+          <ErrorDeConsulta
+            mensaje="No pudimos cargar las reservas."
+            reintentando={isFetching}
+            onReintentar={() => {
+              void refetch()
+            }}
+          />
+        </div>
       )}
 
-      {isLoading && <p className="text-muted-foreground">Cargando…</p>}
-      {!isLoading && grupos.length === 0 && (
-        <p className="text-muted-foreground">Todavía no hay reservas.</p>
+      {rangoValido && isPending && (
+        <p role="status" className="text-muted-foreground">
+          Cargando…
+        </p>
+      )}
+      {rangoValido && isSuccess && !error && grupos.length === 0 && (
+        <p className="text-muted-foreground">
+          No hay clases que coincidan con estos filtros.
+        </p>
       )}
 
       <div className="grid gap-3">
@@ -144,9 +354,9 @@ export function MisReservasPage() {
 
           return (
             <Card key={clave}>
-              <CardContent className="grid gap-3 pt-4">
+              <CardContent className="grid min-w-0 gap-3 pt-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
+                  <div className="min-w-0 break-words">
                     <p className="font-medium">
                       {grupo.materiaNombre
                         ? etiquetaDeMateriaYLugar({
@@ -190,7 +400,7 @@ export function MisReservasPage() {
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <EstadoDeReserva estado={estado} />
                     {estado === "CONFIRMADA" && !enCurso && (
                       <>
@@ -273,12 +483,13 @@ export function MisReservasPage() {
         })}
       </div>
 
-      {/* El paginador cuenta reservas (una fila por equipo), no las tarjetas
-          agrupadas que se ven arriba: es lo que pagina el backend, y
-          contarlo de otra forma daría un total que no cierra con las
-          páginas. */}
-      {data && (
-        <Paginador meta={data.meta} onCambiarPagina={setPagina} etiqueta="reservas" />
+      {/* Cada página contiene las clases y los bloqueos completos que resume. */}
+      {data && !error && rangoValido && (
+        <Paginador
+          meta={data.meta}
+          onCambiarPagina={(valor) => cambiarParams({ pagina: String(valor) })}
+          etiqueta={user?.rol === "ADMIN" ? "clases y bloqueos" : "clases"}
+        />
       )}
     </div>
   )

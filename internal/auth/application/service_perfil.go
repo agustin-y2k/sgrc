@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // Los datos propios: cómo se llama quien entró.
@@ -13,8 +13,10 @@ import (
 // autoservicio y no pasa por ninguna aprobación: corregir cómo figura tu
 // nombre es del mismo orden que cambiar tu foto de perfil.
 //
+// versionSesion viene de la sesión autenticada, para no renovar un token
+// revocado entre la verificación HTTP y la lectura del usuario.
 // Devuelve el usuario ya actualizado y un token nuevo (ver abajo por qué).
-func (s *Service) ActualizarMisDatos(ctx context.Context, usuarioID, nombre, apellido string, recordarme bool) (*domain.Usuario, string, error) {
+func (s *Service) operacionActualizarMisDatos(ctx context.Context, usuarioID, nombre, apellido string, recordarme bool, versionSesion int) (*domain.Usuario, string, error) {
 	nombre, apellido, err := domain.NormalizarNombreYApellido(nombre, apellido)
 	if err != nil {
 		return nil, "", err
@@ -25,9 +27,14 @@ func (s *Service) ActualizarMisDatos(ctx context.Context, usuarioID, nombre, ape
 		return nil, "", err
 	}
 
-	u.Nombre = nombre
-	u.Apellido = apellido
-	if err := s.repo.Guardar(ctx, u); err != nil {
+	if !u.EstaAprobado() {
+		return nil, "", motivoPorElQueNoEntra(u.Estado)
+	}
+	if u.VersionSesion != versionSesion {
+		return nil, "", ErrUsuarioModificado
+	}
+	u, err = s.repo.ActualizarPerfil(ctx, u, nombre, apellido)
+	if err != nil {
 		return nil, "", fmt.Errorf("guardando los datos del perfil: %w", err)
 	}
 

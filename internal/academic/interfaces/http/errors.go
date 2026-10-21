@@ -5,14 +5,16 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/academic/application"
-	"github.com/ramiro/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/academic/application"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
 )
 
 // mapearError traduce cada error de negocio de application/ y domain/ a su
 // código HTTP según docs/08-api-spec.yaml.
 func mapearError(err error) error {
 	switch {
+	case errors.Is(err, application.ErrDestinoDeCierreDiferente):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.Is(err, application.ErrCicloNoEncontrado),
 		errors.Is(err, application.ErrCursoNoEncontrado),
 		errors.Is(err, application.ErrMateriaNoEncontrada),

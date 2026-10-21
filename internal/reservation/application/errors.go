@@ -7,12 +7,16 @@ import (
 )
 
 var (
+	ErrReservaModificada        = errors.New("la reserva cambió mientras se procesaba la operación; actualizá y reintentá")
 	ErrReservaGrupoNoEncontrado = errors.New("reserva no encontrada")
 	ErrReservaNoEncontrada      = errors.New("reserva de equipo no encontrado")
 
 	// ErrDocenteNoAsignado: RF-04.1 — solo un docente asignado a la
 	// materia puede reservar para ella.
 	ErrDocenteNoAsignado = errors.New("el docente no está asignado a esta materia")
+
+	// ErrCicloCerrado incluye conflictos con un cierre concurrente.
+	ErrCicloCerrado = errors.New("el ciclo lectivo está cerrado y no admite cambios en sus reservas")
 
 	// ErrMateriaArchivada: RF-04.1 — una materia de un ciclo cerrado
 	// conserva su registro pero no admite reservas nuevas.

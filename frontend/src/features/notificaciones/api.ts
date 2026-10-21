@@ -24,7 +24,9 @@ export function marcarLeida(id: string) {
 }
 
 export function marcarTodasLeidas() {
-  return apiFetch<void>("/api/notifications/leer-todas", { method: "POST" })
+  return apiFetch<{ marcadas: number }>("/api/notifications/leer-todas", {
+    method: "POST",
+  })
 }
 
 /**

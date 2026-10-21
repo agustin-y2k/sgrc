@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
-	"github.com/ramiro/sgrc/internal/sugerencias/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/sugerencias/domain"
 )
 
 // ── Dobles ──────────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ func servicioDePrueba() (*Service, *fakeRepo, *busDePrueba) {
 		n++
 		return "id-" + strconv.Itoa(n)
 	}
-	svc := NewService(repo, &fakeUsuario{nombre: "Ada Lovelace", email: "ada@escuela.edu.ar"},
+	svc := NewService(repo, &fakeUsuario{nombre: "Ada Lovelace", email: "ada@escuela.test"},
 		nuevoID, func() time.Time { return ahoraDePrueba }, bus)
 	return svc, repo, bus
 }
@@ -184,7 +184,7 @@ func TestResponder_DelAdmin_AvisaAQuienEscribio(t *testing.T) {
 		t.Fatalf("esperaba sugerencia.respondida, obtuve %q", e.Tipo)
 	}
 	payload := e.Payload.(eventbus.SugerenciaRespondida)
-	if payload.Email != "ada@escuela.edu.ar" || payload.Respuesta != "vamos para allá" {
+	if payload.Email != "ada@escuela.test" || payload.Respuesta != "vamos para allá" {
 		t.Errorf("el aviso no lleva a quién ni qué: %+v", payload)
 	}
 	if payload.Tipo != "AYUDA" || payload.Asunto != "No arranca" {
@@ -243,7 +243,7 @@ func TestResponder_HiloQueNoExiste(t *testing.T) {
 
 // Cerrar no manda correo: el aviso útil fue la respuesta, y un segundo mail
 // diciendo "lo dimos por terminado" es ruido.
-func TestMarcarResuelta_CierraSinAvisar(t *testing.T) {
+func TestMarcarResuelta_CierraPendienteSinCorreo(t *testing.T) {
 	svc, _, bus := servicioDePrueba()
 	sug, _ := svc.Escribir(context.Background(), "u1", "SUGERENCIA", "Una idea", "estaría bueno", "", "")
 	eventosAntes := len(bus.eventos)
@@ -256,8 +256,8 @@ func TestMarcarResuelta_CierraSinAvisar(t *testing.T) {
 	if cerrada.Estado != domain.Resuelta {
 		t.Errorf("esperaba resuelta, quedó %q", cerrada.Estado)
 	}
-	if len(bus.eventos) != eventosAntes {
-		t.Errorf("cerrar no manda avisos: %+v", bus.eventos[eventosAntes:])
+	if len(bus.eventos) != eventosAntes+1 || bus.eventos[eventosAntes].Tipo != "sugerencia.resuelta" {
+		t.Errorf("debe cerrar el pendiente sin enviar otro correo: %+v", bus.eventos[eventosAntes:])
 	}
 }
 

@@ -2,14 +2,24 @@ package application
 
 import (
 	"context"
+	"time"
 
-	"github.com/ramiro/sgrc/internal/auth/domain"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/ —
 // nunca importar pgx directamente desde acá (ver docs/06-arquitectura.md §3).
 type Repo interface {
+	// EnRecuperacion serializa reemplazo, intentos y consumo por cuenta.
+	EnRecuperacion(ctx context.Context, usuarioID string, fn func(context.Context, Repo) error) error
+	// EnBaja coordina cada fase con otras bajas, cambios de asignaciones y
+	// reservas; comparte la transacción mediante el contexto del callback.
+	EnBaja(ctx context.Context, usuarioID string, fn func(context.Context, Repo) error) error
+	BuscarBaja(ctx context.Context, usuarioID string) (*ProcesoBaja, error)
+	PrepararBaja(ctx context.Context, usuarioID string, materias []string, ahora time.Time) error
+	CompletarMateriaDeBaja(ctx context.Context, usuarioID, materiaID string, ahora time.Time) error
+	CompletarBaja(ctx context.Context, usuarioID string, ahora time.Time) error
 	// EnTransaccion corre fn de forma atómica.
 	EnTransaccion(ctx context.Context, fn func(Repo) error) error
 
@@ -30,7 +40,14 @@ type Repo interface {
 	// ese filtro) y el total que matchean.
 	Listar(ctx context.Context, filtroEstado *domain.Estado, filtroRol *domain.Rol, pagina paginacion.Pagina) ([]*domain.Usuario, int, error)
 	Crear(ctx context.Context, u *domain.Usuario) error
-	Guardar(ctx context.Context, u *domain.Usuario) error
+	// Cada escritura modifica solo sus campos. La lectura anterior permite
+	// rechazar decisiones de seguridad obsoletas; VersionSesion sigue siendo
+	// exclusivamente el contador de revocación, no una versión de la entidad.
+	ActualizarPerfil(ctx context.Context, anterior *domain.Usuario, nombre, apellido string) (*domain.Usuario, error)
+	ActualizarPassword(ctx context.Context, anterior *domain.Usuario, hash string, temporal bool) (*domain.Usuario, error)
+	CambiarEstado(ctx context.Context, anterior *domain.Usuario, nuevo domain.Estado, ahora time.Time) (*domain.Usuario, error)
+	CambiarRol(ctx context.Context, anterior *domain.Usuario, nuevo domain.Rol) (*domain.Usuario, error)
+	VincularGoogle(ctx context.Context, anterior *domain.Usuario, sub string) (*domain.Usuario, error)
 	ContarAdminsAprobados(ctx context.Context) (int, error)
 	// Eliminar borra la cuenta y devuelve qué se llevó con ella en cascada
 	// (RF-01.9). El conteo va con el borrado y no aparte: después del DELETE ya
@@ -45,6 +62,12 @@ type Repo interface {
 	// ErrCodigoNoEncontrado si no tiene ninguno.
 	BuscarCodigoVigenteDe(ctx context.Context, usuarioID string) (*domain.CodigoRecuperacion, error)
 	GuardarCodigoRecuperacion(ctx context.Context, c *domain.CodigoRecuperacion) error
+}
+
+// ProcesoBaja conserva el avance aunque falle una fase o se reinicie el backend.
+type ProcesoBaja struct {
+	Completada         bool
+	MateriasPendientes []string
 }
 
 // Estas funciones se inyectan (no se llaman directamente a paquetes externos)

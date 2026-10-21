@@ -1,7 +1,10 @@
+import { invalidarInventario } from "./invalidarInventario"
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { EstadoBadge, TONO_PC } from "@/components/EstadoBadge"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
+import { useEnfocarEquipo } from "@/features/admin/useEnfocarEquipo"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -132,7 +135,7 @@ function Alta({ tiposUsados, onListo }: { tiposUsados: string[]; onListo: () => 
       setReservable(false)
       setEsComputadora(false)
       setFicha(FICHA_VACIA)
-      await queryClient.invalidateQueries({ queryKey: EQUIPOS_KEY })
+      await Promise.all([invalidarInventario(queryClient)])
       onListo()
     },
   })
@@ -293,7 +296,7 @@ function Edicion({
         ...(esComputadora ? ficha : {}),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: EQUIPOS_KEY })
+      await Promise.all([invalidarInventario(queryClient)])
       onListo()
     },
   })
@@ -411,7 +414,9 @@ function Edicion({
   )
 }
 
-export function OtrosEquipos() {
+export function OtrosEquipos({
+  equipoDestacado,
+}: { equipoDestacado?: string | null } = {}) {
   const queryClient = useQueryClient()
   const [agregando, setAgregando] = useState(false)
   const [editando, setEditando] = useState<string | null>(null)
@@ -433,7 +438,7 @@ export function OtrosEquipos() {
     onSuccess: async (resultado) => {
       setCambiando(null)
       setCascada(resultado)
-      await queryClient.invalidateQueries({ queryKey: EQUIPOS_KEY })
+      await Promise.all([invalidarInventario(queryClient)])
     },
   })
 
@@ -442,16 +447,21 @@ export function OtrosEquipos() {
     onSuccess: async (resultado) => {
       setDandoDeBaja(null)
       setCascada(resultado)
-      await queryClient.invalidateQueries({ queryKey: EQUIPOS_KEY })
+      await Promise.all([invalidarInventario(queryClient)])
     },
   })
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isPending, isSuccess, error, isFetching, refetch } = useQuery({
     queryKey: EQUIPOS_KEY,
     queryFn: () => inventoryApi.listarEquipos({ soloSueltos: true }),
   })
 
-  const equipos = (data?.data ?? []).filter((e) => !e.dadoDeBaja)
+  const consultaLista = isSuccess && !error
+  useEnfocarEquipo(
+    equipoDestacado,
+    consultaLista && !!data?.data.some((e) => e.id === equipoDestacado)
+  )
+  const equipos = (consultaLista ? data.data : []).filter((e) => !e.dadoDeBaja)
   const tiposUsados = useMemo(
     () => [...new Set(equipos.map((e) => e.tipo))].sort(),
     [equipos]
@@ -483,14 +493,22 @@ export function OtrosEquipos() {
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
-        {isLoading && <p className="text-muted-foreground text-sm">Cargando…</p>}
+        {isPending && (
+          <p role="status" className="text-muted-foreground text-sm">
+            Cargando equipos sueltos…
+          </p>
+        )}
         {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-          </Alert>
+          <ErrorDeConsulta
+            mensaje="No pudimos cargar los equipos sueltos."
+            reintentando={isFetching}
+            onReintentar={() => {
+              void refetch()
+            }}
+          />
         )}
 
-        {!isLoading && equipos.length === 0 && (
+        {consultaLista && equipos.length === 0 && (
           <p className="text-muted-foreground text-sm">
             No hay ningún equipo cargado todavía.
           </p>
@@ -519,7 +537,12 @@ export function OtrosEquipos() {
               const cambiandoEste = cambiando?.equipo.id === e.id
 
               return (
-                <div key={e.id} className="grid gap-2 rounded-md border p-3">
+                <div
+                  key={e.id}
+                  id={`equipo-inventario-${e.id}`}
+                  tabIndex={-1}
+                  className="grid gap-2 rounded-md border p-3 focus:outline-2 focus:outline-primary"
+                >
                   {/* Nombre arriba y botones abajo SIEMPRE, no lado a lado a
                   partir de `sm`. Es el mismo problema que ya tenía el
                   inventario de un carro: la fila de botones es `shrink-0` y
@@ -782,7 +805,7 @@ export function OtrosEquipos() {
         {/* Mientras se edita uno no se ofrece el alta: los dos formularios
             tienen los mismos campos, y verlos juntos no deja saber cuál se
             está completando. Mismo criterio que el inventario de un carro. */}
-        {editando !== null ? null : agregando ? (
+        {!consultaLista || editando !== null ? null : agregando ? (
           <Alta tiposUsados={tiposUsados} onListo={() => setAgregando(false)} />
         ) : (
           <div>

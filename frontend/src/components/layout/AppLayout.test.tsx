@@ -32,18 +32,18 @@ function notificacion(id: string): Notificacion {
   }
 }
 
-function renderLayout(rol: "ADMIN" | "DOCENTE" = "DOCENTE") {
+function renderLayout(rol: "ADMIN" | "DOCENTE" = "DOCENTE", debeCambiarPassword = false) {
   vi.mocked(useAuth).mockReturnValue({
     user: {
       id: "u1",
       nombre: "Ada",
       apellido: "Lovelace",
-      email: "ada@escuela.edu.ar",
+      email: "ada@escuela.test",
       rol,
       estado: "APROBADA",
       fechaRegistro: "2026-01-01T00:00:00Z",
       fechaAprobacion: null,
-      debeCambiarPassword: false,
+      debeCambiarPassword,
     },
     isLoading: false,
     login: vi.fn(),
@@ -65,6 +65,64 @@ function renderLayout(rol: "ADMIN" | "DOCENTE" = "DOCENTE") {
 }
 
 describe("AppLayout", () => {
+  it("Escape devuelve el foco al disparador si estaba dentro de Administración", async () => {
+    const user = userEvent.setup()
+    renderLayout("ADMIN")
+    const boton = screen.getByRole("button", { name: "Administración" })
+    await user.click(boton)
+    screen.getByRole("link", { name: "Académico" }).focus()
+    await user.keyboard("{Escape}")
+    expect(boton).toHaveFocus()
+    expect(boton).toHaveAttribute("aria-expanded", "false")
+  })
+
+  it("Escape no mueve el foco cuando está fuera del desplegable", async () => {
+    const user = userEvent.setup()
+    renderLayout("ADMIN")
+    await user.click(screen.getByRole("button", { name: "Administración" }))
+    const inicio = screen.getByRole("link", { name: "Inicio" })
+    inicio.focus()
+    await user.keyboard("{Escape}")
+    expect(inicio).toHaveFocus()
+  })
+
+  it.each(["ADMIN", "DOCENTE"] as const)(
+    "la contraseña temporal limita la navegación de %s sin consultas prohibidas",
+    (rol) => {
+      renderLayout(rol, true)
+      expect(screen.queryByRole("navigation")).not.toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeVisible()
+      expect(notificacionesApi.listarNotificaciones).not.toHaveBeenCalled()
+      expect(reservasApi.listarPrestamosAbiertos).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(["ADMIN", "DOCENTE"] as const)(
+    "la entrada de soporte explica la acción de %s",
+    async (rol) => {
+      const user = userEvent.setup()
+      renderLayout(rol)
+      const nombre = rol === "ADMIN" ? "Responder consultas" : "Pedir ayuda"
+      expect(screen.getByRole("button", { name: nombre })).toBeInTheDocument()
+      await user.click(screen.getByRole("button", { name: /^Menú/ }))
+      expect(screen.getByRole("link", { name: nombre })).toHaveAttribute(
+        "href",
+        rol === "ADMIN"
+          ? "/notificaciones?soporte=consultas"
+          : "/notificaciones?soporte=nuevo"
+      )
+    }
+  )
+  it.each(["ADMIN", "DOCENTE"] as const)(
+    "Mi cuenta lleva al perfil también en el menú de %s",
+    async (rol) => {
+      const user = userEvent.setup()
+      renderLayout(rol)
+      await user.click(screen.getByRole("button", { name: /^Menú/ }))
+      for (const enlace of screen.getAllByRole("link", { name: "Mi cuenta" }))
+        expect(enlace).toHaveAttribute("href", "/perfil")
+    }
+  )
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(paginada([]))

@@ -1,79 +1,142 @@
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
-import {
-  MAX_ANIO_CURSO,
-  MAX_LARGO_DIVISION,
-  MAX_LARGO_MODALIDAD,
-  MIN_ANIO_CURSO,
-  divisionesEnUso,
-  modalidadesEnUso,
-} from "@/features/academico/types"
-import { useCursosDelCicloActivo } from "@/features/academico/useCursosDelCicloActivo"
+import type { MateriaParaPreferencia } from "@/features/inventory/types"
+import { coincidenEjes, marcaValida, mismoTexto, SIN_ATRIBUTO } from "./alcanceDeMarca"
+import type { ValoresDeMarca } from "./alcanceDeMarca"
+export { MARCA_VACIA, type ValoresDeMarca } from "./alcanceDeMarca"
 
-/** Nueve escalones son muchos más de los que una escuela va a usar. */
-const PRIORIDADES = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-
-/**
- * Los cinco campos de una marca de preferencia (RF-03.21), como texto: son
- * valores de inputs y los convierte quien guarda.
- */
-export type ValoresDeMarca = {
-  materiaNombre: string
-  modalidad: string
-  anio: string
-  division: string
-  prioridad: string
+function unicos(valores: string[]) {
+  return [...new Set(valores)].sort((a, b) => a.localeCompare(b, "es", { numeric: true }))
 }
 
-export const MARCA_VACIA: ValoresDeMarca = {
-  materiaNombre: "",
-  modalidad: "",
-  anio: "",
-  division: "",
-  prioridad: "1",
-}
-
-/**
- * Los campos de la marca, sin lógica de guardado: los comparten el panel de un
- * equipo y el alta masiva de un carro. Viven juntos para que no se puedan
- * desincronizar — el día que el alcance gane un eje, lo gana en los dos lados.
- *
- * `materiaBloqueada` es para corregir una marca que ya existe: apuntar a otra
- * materia es otra marca, no una corrección de ésta. El selector se deshabilita
- * en vez de esconderse para que el formulario siga diciendo de qué marca habla.
- */
+/** El catálogo conserva cada materia junto a su curso; no se cruzan listas independientes. */
 export function CamposDeMarca({
   valores,
   onChange,
-  materias,
+  catalogo,
   materiaBloqueada = false,
   idBase,
 }: {
   valores: ValoresDeMarca
   onChange: (v: ValoresDeMarca) => void
-  materias: string[]
+  catalogo: MateriaParaPreferencia[]
   materiaBloqueada?: boolean
   idBase: string
 }) {
-  const cursos = useCursosDelCicloActivo()
-  const divisiones = divisionesEnUso(cursos)
-  const modalidades = modalidadesEnUso(cursos)
-
-  const cambiar = (campo: keyof ValoresDeMarca, valor: string) =>
-    onChange({ ...valores, [campo]: valor })
-
+  const concreto = valores.alcance === "CURSO"
+  const filas = catalogo.filter(
+    (f) =>
+      (!concreto || f.tipo === "CURSO") &&
+      (!materiaBloqueada || mismoTexto(f.materiaNombre, valores.materiaNombre))
+  )
+  const modalidades = unicos(filas.map((f) => f.modalidad || SIN_ATRIBUTO)).filter(
+    (m) => concreto || m !== SIN_ATRIBUTO
+  )
+  const conModalidad = filas.filter((f) =>
+    coincidenEjes(f, { ...valores, anio: "", division: "" })
+  )
+  const anios = unicos(
+    conModalidad.flatMap((f) => (f.anio === undefined ? [] : [String(f.anio)]))
+  )
+  const conAnio = conModalidad.filter(
+    (f) => !valores.anio || f.anio === Number(valores.anio)
+  )
+  const divisiones = unicos(conAnio.map((f) => f.division || SIN_ATRIBUTO)).filter(
+    (d) => concreto || d !== SIN_ATRIBUTO
+  )
+  const coincidentes = filas.filter((f) => coincidenEjes(f, valores))
+  const materias = unicos(coincidentes.map((f) => f.materiaNombre))
+  const cursoListo =
+    !concreto || (!!valores.modalidad && !!valores.anio && !!valores.division)
+  function cambiar(campo: "alcance" | "modalidad" | "anio" | "division", valor: string) {
+    const siguiente = { ...valores, [campo]: valor }
+    if (campo === "alcance") siguiente.modalidad = ""
+    if (campo === "alcance" || campo === "modalidad") siguiente.anio = ""
+    if (campo !== "division") siguiente.division = ""
+    if (!materiaBloqueada) siguiente.materiaNombre = ""
+    onChange(siguiente as ValoresDeMarca)
+  }
+  const elegida = coincidentes.find((f) =>
+    mismoTexto(f.materiaNombre, valores.materiaNombre)
+  )
   return (
     <>
-      <div className="grid gap-1.5">
+      <div className="grid min-w-0 gap-1.5">
+        <Label htmlFor={`alcance-pref-${idBase}`}>Alcance</Label>
+        <Select
+          id={`alcance-pref-${idBase}`}
+          value={valores.alcance}
+          onChange={(e) => cambiar("alcance", e.target.value)}
+        >
+          <option value="CURSO">Una materia de un curso concreto</option>
+          <option value="GENERAL">Regla general para varios cursos o espacios</option>
+        </Select>
+      </div>
+      <div className="grid min-w-0 gap-1.5">
+        <Label htmlFor={`modalidad-pref-${idBase}`}>Modalidad</Label>
+        <Select
+          id={`modalidad-pref-${idBase}`}
+          value={valores.modalidad}
+          onChange={(e) => cambiar("modalidad", e.target.value)}
+        >
+          <option value="">
+            {concreto ? "Elegí la modalidad…" : "Todas las modalidades"}
+          </option>
+          {modalidades.map((m) => (
+            <option key={m} value={m}>
+              {m === SIN_ATRIBUTO ? "Sin modalidad" : m}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="grid min-w-0 gap-1.5">
+        <Label htmlFor={`anio-pref-${idBase}`}>Año</Label>
+        <Select
+          id={`anio-pref-${idBase}`}
+          value={valores.anio}
+          disabled={concreto && !valores.modalidad}
+          onChange={(e) => cambiar("anio", e.target.value)}
+        >
+          <option value="">{concreto ? "Elegí el año…" : "Todos los años"}</option>
+          {anios.map((a) => (
+            <option key={a} value={a}>
+              {a}°
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="grid min-w-0 gap-1.5">
+        <Label htmlFor={`division-pref-${idBase}`}>División</Label>
+        <Select
+          id={`division-pref-${idBase}`}
+          value={valores.division}
+          disabled={concreto && (!valores.modalidad || !valores.anio)}
+          onChange={(e) => cambiar("division", e.target.value)}
+        >
+          <option value="">
+            {concreto ? "Elegí la división…" : "Todas las divisiones"}
+          </option>
+          {divisiones.map((d) => (
+            <option key={d} value={d}>
+              {d === SIN_ATRIBUTO ? "Sin división" : d}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="grid min-w-0 gap-1.5">
         <Label htmlFor={`materia-pref-${idBase}`}>Materia</Label>
         <Select
           id={`materia-pref-${idBase}`}
           value={valores.materiaNombre}
-          disabled={materiaBloqueada}
-          onChange={(e) => cambiar("materiaNombre", e.target.value)}
+          disabled={materiaBloqueada || !cursoListo}
+          onChange={(e) => onChange({ ...valores, materiaNombre: e.target.value })}
         >
-          <option value="">Elegí una materia…</option>
+          <option value="">
+            {cursoListo ? "Elegí una materia…" : "Primero elegí el curso…"}
+          </option>
+          {materiaBloqueada && !materias.includes(valores.materiaNombre) && (
+            <option value={valores.materiaNombre}>{valores.materiaNombre}</option>
+          )}
           {materias.map((n) => (
             <option key={n} value={n}>
               {n}
@@ -81,77 +144,37 @@ export function CamposDeMarca({
           ))}
         </Select>
       </div>
-      {/* Los tres ejes son independientes y todos opcionales: cada uno vacío
-          significa "no acota por esto". Se combinan —"Matemática de 4°2,
-          Electromecánica"— y a más ejes puestos, más específica es la marca y
-          antes gana. */}
-      <div className="grid gap-1.5">
-        <Label htmlFor={`modalidad-pref-${idBase}`}>Modalidad</Label>
-        <Input
-          id={`modalidad-pref-${idBase}`}
-          className="w-44"
-          value={valores.modalidad}
-          maxLength={MAX_LARGO_MODALIDAD}
-          list={modalidades.length > 0 ? `modalidades-pref-${idBase}` : undefined}
-          placeholder="Todas"
-          onChange={(e) => cambiar("modalidad", e.target.value)}
-        />
-        {modalidades.length > 0 && (
-          <datalist id={`modalidades-pref-${idBase}`}>
-            {modalidades.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        )}
-      </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor={`anio-pref-${idBase}`}>Año</Label>
-        <Input
-          id={`anio-pref-${idBase}`}
-          className="w-24"
-          type="number"
-          inputMode="numeric"
-          min={MIN_ANIO_CURSO}
-          max={MAX_ANIO_CURSO}
-          value={valores.anio}
-          placeholder="Todos"
-          onChange={(e) => cambiar("anio", e.target.value)}
-        />
-      </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor={`division-pref-${idBase}`}>División</Label>
-        <Input
-          id={`division-pref-${idBase}`}
-          className="w-28"
-          value={valores.division}
-          maxLength={MAX_LARGO_DIVISION}
-          list={divisiones.length > 0 ? `divisiones-pref-${idBase}` : undefined}
-          placeholder="Todas"
-          onChange={(e) => cambiar("division", e.target.value)}
-        />
-        {divisiones.length > 0 && (
-          <datalist id={`divisiones-pref-${idBase}`}>
-            {divisiones.map((d) => (
-              <option key={d} value={d} />
-            ))}
-          </datalist>
-        )}
-      </div>
-      <div className="grid gap-1.5">
+      <div className="grid min-w-0 gap-1.5">
         <Label htmlFor={`prioridad-pref-${idBase}`}>Prioridad</Label>
         <Select
           id={`prioridad-pref-${idBase}`}
-          className="w-auto"
           value={valores.prioridad}
-          onChange={(e) => cambiar("prioridad", e.target.value)}
+          aria-describedby={`ayuda-prioridad-${idBase}`}
+          onChange={(e) => onChange({ ...valores, prioridad: e.target.value })}
         >
-          {PRIORIDADES.map((p) => (
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
         </Select>
+        <p id={`ayuda-prioridad-${idBase}`} className="text-muted-foreground text-xs">
+          1 = mayor prioridad; 9 = menor prioridad.
+        </p>
       </div>
+      <p className="text-muted-foreground text-xs sm:col-span-full" role="status">
+        {marcaValida(valores, catalogo)
+          ? concreto
+            ? `Sólo ${valores.materiaNombre} de ${elegida!.contenedorNombre}${elegida!.modalidad ? `, ${elegida!.modalidad}` : ", sin modalidad"}.`
+            : `Regla general: todas las materias con este nombre que cumplan los filtros. Coincide con ${coincidentes.filter((f) => mismoTexto(f.materiaNombre, valores.materiaNombre)).length} materias del ciclo activo y también podrá aplicar en ciclos siguientes.`
+          : valores.materiaNombre
+            ? "Esta combinación no existe en el ciclo activo. Revisá el alcance antes de guardar."
+            : concreto && filas.length === 0
+              ? "No hay materias de cursos disponibles. Para una materia de un espacio, elegí la regla general; los cursos y materias se cargan desde Académico."
+              : concreto
+                ? "Elegí modalidad, año y división para consultar las materias reales de ese curso."
+                : "Cada opción «Todas» amplía el alcance de esta regla. Elegí la materia para ver a qué coincide."}
+      </p>
     </>
   )
 }

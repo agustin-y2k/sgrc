@@ -1,7 +1,4 @@
-/** Quién hizo esto y bajo qué licencia se puede usar. */
-
-const AUTOR = "Ramiro Agustin Pintos De Nucci"
-const ANIO = 2026
+/** Versión del producto y licencia. La atribución legal se conserva en LICENSE. */
 
 /** La inyecta Vite desde package.json (ver vite.config.ts). */
 declare const __VERSION__: string
@@ -25,9 +22,6 @@ export function PieDeAutoria({ className = "" }: { className?: string }) {
         >
           MIT
         </a>
-      </p>
-      <p>
-        © {ANIO} {AUTOR}
       </p>
     </footer>
   )

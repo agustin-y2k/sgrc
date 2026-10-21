@@ -49,10 +49,12 @@ export function CamposDeVencimiento({
   idPrefijo,
   valor,
   onChange,
+  edicion = false,
 }: {
   idPrefijo: string
   valor: CamposVencimiento
   onChange: (v: CamposVencimiento) => void
+  edicion?: boolean
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -65,7 +67,11 @@ export function CamposDeVencimiento({
             onChange({ ...valor, forma: e.target.value as FormaDeVencimiento })
           }
         >
-          <option value="sin-fecha">Todavía no sé (la cargo después)</option>
+          <option value="sin-fecha">
+            {edicion
+              ? "Mantener el vencimiento actual"
+              : "Todavía no sé (la cargo después)"}
+          </option>
           <option value="quedan-dias">Le quedan N días</option>
           <option value="renovada-el">Se renovó el…</option>
           <option value="vence-el">Vence el…</option>
@@ -79,6 +85,8 @@ export function CamposDeVencimiento({
             id={`${idPrefijo}-quedan`}
             type="number"
             min={0}
+            max={3650}
+            required
             inputMode="numeric"
             value={valor.quedanDias}
             onChange={(e) => onChange({ ...valor, quedanDias: e.target.value })}
@@ -97,6 +105,7 @@ export function CamposDeVencimiento({
           <Input
             id={`${idPrefijo}-renovada`}
             type="date"
+            required
             value={valor.renovadaEl}
             onChange={(e) => onChange({ ...valor, renovadaEl: e.target.value })}
           />
@@ -113,6 +122,7 @@ export function CamposDeVencimiento({
           <Input
             id={`${idPrefijo}-vence`}
             type="date"
+            required
             value={valor.venceEl}
             onChange={(e) => onChange({ ...valor, venceEl: e.target.value })}
           />
@@ -121,8 +131,9 @@ export function CamposDeVencimiento({
 
       {valor.forma === "sin-fecha" && (
         <p className="text-muted-foreground self-end text-xs">
-          Queda “a verificar”: aparece primera en la lista y no dispara avisos hasta que
-          cargues la fecha. Es mejor que ponerle una inventada.
+          {edicion
+            ? "Conserva la fecha que ya tenía. Si todavía no tenía fecha, sigue pendiente de verificar."
+            : "Queda “a verificar”: aparece primera en la lista y no dispara avisos hasta que cargues la fecha. Es mejor que ponerle una inventada."}
         </p>
       )}
     </div>
@@ -179,6 +190,7 @@ export function CamposComunesDeLicencia({
           placeholder="Ej.: AutoCAD 2027"
           list={sugerencias && sugerencias.length > 0 ? listaId : undefined}
           required
+          maxLength={100}
         />
         {/* El datalist ofrece los nombres que ya existen. La unicidad por equipo
             ignora mayúsculas, pero nada impide cargar "AutoCAD 2027" en una
@@ -200,6 +212,7 @@ export function CamposComunesDeLicencia({
             id={`${idPrefijo}-duracion`}
             type="number"
             min={1}
+            max={3650}
             inputMode="numeric"
             value={valor.diasDuracion}
             onChange={(e) => onChange({ ...valor, diasDuracion: e.target.value })}
@@ -214,6 +227,7 @@ export function CamposComunesDeLicencia({
             id={`${idPrefijo}-aviso`}
             type="number"
             min={0}
+            max={365}
             inputMode="numeric"
             value={valor.diasAviso}
             onChange={(e) => onChange({ ...valor, diasAviso: e.target.value })}

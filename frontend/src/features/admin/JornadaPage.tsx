@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { ChevronDown, ChevronRight } from "lucide-react"
 
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { SelectorDeHora } from "@/components/SelectorDeHora"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -150,7 +151,7 @@ export function JornadaPage() {
   // clases" sería cambiar de vara entre la pregunta y la respuesta.
   const [canceladas, setCanceladas] = useState({ clases: 0, equipos: 0 })
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, isFetching, error, refetch } = useQuery({
     queryKey: JORNADA_KEY,
     queryFn: disponibilidadApi.jornadaDeLaInstitucion,
   })
@@ -172,7 +173,11 @@ export function JornadaPage() {
     }: {
       tramos: TramoDeJornada[]
       confirmado: boolean
-    }) => disponibilidadApi.reemplazarJornada(tramos, confirmado),
+    }) => {
+      if (!consultaLista)
+        throw new Error("Volvé a consultar la jornada antes de guardar.")
+      return disponibilidadApi.reemplazarJornada(tramos, confirmado)
+    },
     onSuccess: async (respuesta) => {
       setFalloAlGuardar(null)
       setPorConfirmar(null)
@@ -206,6 +211,7 @@ export function JornadaPage() {
 
   /** Manda la jornada sin confirmar: si algo queda afuera, vuelve la pregunta. */
   function proponer(tramos: TramoDeJornada[]) {
+    if (!consultaLista || guardar.isPending) return
     setCanceladas({ clases: 0, equipos: 0 })
     guardar.mutate({ tramos, confirmado: false })
   }
@@ -214,7 +220,8 @@ export function JornadaPage() {
   const tramos = agruparTramos(bloques)
   const motivoNuevo = motivoParaNoGuardar(nuevo)
   const motivoEdicion = motivoParaNoGuardar(edicion)
-  const trabajando = guardar.isPending
+  const consultaLista = data !== undefined && !error && !isPending && !isFetching
+  const trabajando = guardar.isPending || !consultaLista
 
   function empezarAEditar(grupo: TramoAgrupado) {
     setFalloAlGuardar(null)
@@ -242,9 +249,11 @@ export function JornadaPage() {
       />
 
       {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-        </Alert>
+        <ErrorDeConsulta
+          mensaje="No pudimos consultar la jornada. Tus cambios se conservan; reintentá antes de guardar."
+          reintentando={isFetching}
+          onReintentar={() => void refetch()}
+        />
       )}
 
       {/* Un solo mensaje y no una lista por día: el guardado ya no es
@@ -272,7 +281,7 @@ export function JornadaPage() {
       {porConfirmar !== null && (
         <ImpactoDeLaJornada
           impacto={porConfirmar.impacto}
-          guardando={guardar.isPending}
+          guardando={trabajando}
           onConfirmar={() =>
             guardar.mutate({ tramos: porConfirmar.tramos, confirmado: true })
           }
@@ -283,7 +292,9 @@ export function JornadaPage() {
       <Card className="mb-6">
         <CardContent className="grid gap-4 pt-6">
           <p className="font-medium">Agregar un tramo</p>
-          <CamposDeTramo valor={nuevo} onCambio={setNuevo} idPrefijo="nuevo" />
+          <fieldset disabled={trabajando} className="min-w-0">
+            <CamposDeTramo valor={nuevo} onCambio={setNuevo} idPrefijo="nuevo" />
+          </fieldset>
           <div className="flex flex-wrap items-center gap-3">
             <Button
               disabled={motivoNuevo !== "" || trabajando}
@@ -305,7 +316,7 @@ export function JornadaPage() {
 
       {isPending ? (
         <p className="text-muted-foreground text-sm">Cargando…</p>
-      ) : tramos.length === 0 ? (
+      ) : !consultaLista ? null : tramos.length === 0 ? (
         // El texto importa: sin jornada cargada el sistema NO bloquea nada, y
         // quien mira esta pantalla vacía tiene que entender que eso es una
         // decisión y no una configuración a medias.

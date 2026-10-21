@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
@@ -21,7 +21,6 @@ import {
   proporcion,
 } from "@/features/admin/types"
 import type { Ciclo } from "@/features/admin/types"
-import { getErrorMessage } from "@/lib/api-client"
 import { descargarCSV } from "@/lib/csv"
 
 /** RF-06.4 — las estadísticas de los años ya cerrados. */
@@ -36,7 +35,8 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
     .filter((c) => c.archivado)
     .map((c) => c.anio)
     .sort((a, b) => b - a)
-  const anioElegido = Number(anio) || aniosArchivados[0] || 0
+  const anioElegido =
+    (aniosArchivados.includes(Number(anio)) ? Number(anio) : 0) || aniosArchivados[0] || 0
 
   const historicoEquipos = useQuery({
     queryKey: ["reporte", "historico-equipos", anioElegido],
@@ -50,7 +50,8 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
     enabled: anioElegido !== 0,
   })
 
-  const errorHistorico = historicoEquipos.error ?? historicoDocentes.error
+  const equiposListos = historicoEquipos.isSuccess && !historicoEquipos.error
+  const docentesListos = historicoDocentes.isSuccess && !historicoDocentes.error
 
   // Mismo criterio que las tablas del ciclo activo: de mayor a menor y con el
   // total a mano.
@@ -102,24 +103,22 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
       ) : (
         <>
           <p className="text-muted-foreground text-sm">
-            Los nombres son los que tenían al cerrar el año: un equipo pudo haberse mudado
-            de carro o darse de baja desde entonces, y el histórico igual tiene que seguir
-            diciendo dónde estaba.
+            El año se elige acá y no usa los filtros de fechas de arriba. Los nombres son
+            los que tenían al cerrar el año: un equipo pudo haberse mudado de carro o
+            darse de baja desde entonces, y el histórico igual tiene que seguir diciendo
+            dónde estaba.
           </p>
-
-          {errorHistorico && (
-            <Alert variant="destructive">
-              <AlertDescription>{getErrorMessage(errorHistorico)}</AlertDescription>
-            </Alert>
-          )}
 
           <Seccion
             titulo={`Uso por equipo en ${anioElegido}`}
             resumen={
+              equiposListos &&
               filasHistoricoEquipos.length > 0 &&
               `${filasHistoricoEquipos.length} equipos · ${sumar(filasHistoricoEquipos, (h) => h.cantidadReservas)} reservas · ${formatearDuracion(totalMinutosHistoricoEquipos)} en total`
             }
             alDescargar={
+              equiposListos &&
+              !historicoEquipos.isFetching &&
               filasHistoricoEquipos.length > 0
                 ? () =>
                     descargarCSV(`historico-uso-por-equipo_${anioElegido}`, [
@@ -143,12 +142,22 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
                 : undefined
             }
           >
-            {filasHistoricoEquipos.length === 0 ? (
+            {historicoEquipos.error ? (
+              <ErrorDeConsulta
+                mensaje="No pudimos consultar el histórico de equipos de este año."
+                reintentando={historicoEquipos.isFetching}
+                onReintentar={() => void historicoEquipos.refetch()}
+              />
+            ) : !equiposListos ? (
+              <p role="status" className="text-muted-foreground text-sm">
+                Consultando histórico de equipos…
+              </p>
+            ) : filasHistoricoEquipos.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 Ese año se archivó sin ninguna reserva registrada.
               </p>
             ) : (
-              <Table>
+              <Table aria-label={`Histórico de uso por equipo en ${anioElegido}`}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Equipo</TableHead>
@@ -183,10 +192,13 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
           <Seccion
             titulo={`Uso por docente en ${anioElegido}`}
             resumen={
+              docentesListos &&
               filasHistoricoDocentes.length > 0 &&
               `${filasHistoricoDocentes.length} docentes · ${sumar(filasHistoricoDocentes, (h) => h.cantidadReservas)} reservas · ${formatearDuracion(totalMinutosHistoricoDocentes)} en total`
             }
             alDescargar={
+              docentesListos &&
+              !historicoDocentes.isFetching &&
               filasHistoricoDocentes.length > 0
                 ? () =>
                     descargarCSV(`historico-uso-por-docente_${anioElegido}`, [
@@ -203,12 +215,22 @@ export function HistoricoPorAnio({ ciclos }: { ciclos: Ciclo[] }) {
                 : undefined
             }
           >
-            {filasHistoricoDocentes.length === 0 ? (
+            {historicoDocentes.error ? (
+              <ErrorDeConsulta
+                mensaje="No pudimos consultar el histórico de docentes de este año."
+                reintentando={historicoDocentes.isFetching}
+                onReintentar={() => void historicoDocentes.refetch()}
+              />
+            ) : !docentesListos ? (
+              <p role="status" className="text-muted-foreground text-sm">
+                Consultando histórico de docentes…
+              </p>
+            ) : filasHistoricoDocentes.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 Ese año se archivó sin ninguna reserva registrada.
               </p>
             ) : (
-              <Table>
+              <Table aria-label={`Histórico de uso por docente en ${anioElegido}`}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Docente</TableHead>

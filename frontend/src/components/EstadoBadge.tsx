@@ -7,7 +7,7 @@ type Tono = "exito" | "alerta" | "peligro" | "info" | "neutro"
 const CLASES: Record<Tono, string> = {
   exito: "bg-exito text-exito-foreground border-transparent",
   alerta: "bg-alerta text-alerta-foreground border-transparent",
-  peligro: "bg-destructive text-white border-transparent",
+  peligro: "bg-destructive text-destructive-foreground border-transparent",
   info: "bg-info text-info-foreground border-transparent",
   neutro: "bg-muted text-muted-foreground border-transparent",
 }

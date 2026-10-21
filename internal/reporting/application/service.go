@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/reporting/domain"
+	"github.com/agustin-y2k/sgrc/internal/reporting/domain"
 )
 
 type Service struct {
@@ -74,53 +74,97 @@ func (s *Service) HistoricoUsoDocentes(ctx context.Context, anio int) ([]*domain
 // snapshot permanente bajo el año del ciclo (anio, no cicloID: ver
 // domain/historico.go).
 func (s *Service) ArchivarSnapshotDeCiclo(ctx context.Context, cicloID string, anio int) error {
-	// Sin rango de fechas a propósito: el snapshot cubre el ciclo entero.
-	usosEquipo, err := s.repo.CalcularUsoEquiposDeCiclo(ctx, cicloID, nil, nil)
-	if err != nil {
-		return fmt.Errorf("calculando uso de equipos: %w", err)
-	}
-	for _, u := range usosEquipo {
-		etiqueta, identificador, carroNombre, err := s.infoEquipo.EtiquetaYCarroDe(ctx, u.EquipoID)
-		if err != nil {
-			return fmt.Errorf("obteniendo datos del equipo %s: %w", u.EquipoID, err)
-		}
-		h, err := domain.NuevoHistoricoUsoEquipo(s.nuevoID(), anio, u.EquipoID, etiqueta, identificador, carroNombre, u.MinutosReservados, u.CantidadReservas)
+	return s.repo.EnSnapshot(ctx, cicloID, func(ctx context.Context) error {
+		sellado, err := s.repo.SnapshotSellado(ctx, cicloID)
 		if err != nil {
 			return err
 		}
-		if err := s.repo.GuardarHistoricoUsoEquipo(ctx, h); err != nil {
-			return fmt.Errorf("guardando histórico de PC %s: %w", u.EquipoID, err)
+		if sellado {
+			return nil
 		}
-	}
-
-	usosDocente, err := s.repo.CalcularUsoDocentesDeCiclo(ctx, cicloID, nil, nil)
-	if err != nil {
-		return fmt.Errorf("calculando uso de docentes: %w", err)
-	}
-	// Las filas de cuentas ya eliminadas se rehacen enteras en cada intento.
-	if err := s.repo.BorrarHistoricoDocentesSinCuenta(ctx, anio); err != nil {
-		return fmt.Errorf("limpiando el histórico de docentes sin cuenta: %w", err)
-	}
-	for _, u := range usosDocente {
-		nombre := u.NombreDocente
-		if u.UsuarioID != nil {
-			// Con la cuenta viva, el nombre canónico es el de auth: si la
-			// persona corrigió su apellido, el histórico guarda el bueno.
-			nombre, err = s.infoUsuario.NombreCompletoDe(ctx, *u.UsuarioID)
+		equipos, err := s.repo.CalcularUsoEquiposDeCiclo(ctx, cicloID, nil, nil)
+		if err != nil {
+			return fmt.Errorf("calculando uso de equipos: %w", err)
+		}
+		docentes, err := s.repo.CalcularUsoDocentesDeCiclo(ctx, cicloID, nil, nil)
+		if err != nil {
+			return fmt.Errorf("calculando uso de docentes: %w", err)
+		}
+		var reservas, minutos, reservasDoc, minutosDoc int
+		for _, u := range equipos {
+			reservas += u.CantidadReservas
+			minutos += u.MinutosReservados
+		}
+		for _, u := range docentes {
+			reservasDoc += u.CantidadReservas
+			minutosDoc += u.MinutosReservados
+		}
+		fuente, err := s.repo.TotalesUsoDeCiclo(ctx, cicloID)
+		if err != nil {
+			return err
+		}
+		if reservas != fuente.ReservasEquipos || minutos != fuente.MinutosEquipos || reservasDoc != fuente.ReservasDocentes || minutosDoc != fuente.MinutosDocentes {
+			return ErrSnapshotInconsistente
+		}
+		// Solo se reemplaza un snapshot todavía no sellado, con su fuente intacta.
+		// Todo el reemplazo y el sello se confirman juntos.
+		if err := s.repo.BorrarHistoricosNoSellados(ctx, anio); err != nil {
+			return err
+		}
+		for _, u := range equipos {
+			etiqueta, identificador, carro, err := s.infoEquipo.EtiquetaYCarroDe(ctx, u.EquipoID)
 			if err != nil {
-				return fmt.Errorf("obteniendo nombre del docente %s: %w", *u.UsuarioID, err)
+				return fmt.Errorf("obteniendo datos del equipo %s: %w", u.EquipoID, err)
+			}
+			h, err := domain.NuevoHistoricoUsoEquipo(s.nuevoID(), anio, u.EquipoID, etiqueta, identificador, carro, u.MinutosReservados, u.CantidadReservas)
+			if err != nil {
+				return err
+			}
+			if err := s.repo.GuardarHistoricoUsoEquipo(ctx, h); err != nil {
+				return err
 			}
 		}
-		h, err := domain.NuevoHistoricoUsoDocente(s.nuevoID(), anio, u.UsuarioID, nombre, u.CantidadReservas, u.MinutosReservados)
+		for _, u := range docentes {
+			nombre := u.NombreDocente
+			if u.UsuarioID != nil {
+				nombre, err = s.infoUsuario.NombreCompletoDe(ctx, *u.UsuarioID)
+				if err != nil {
+					return fmt.Errorf("obteniendo nombre del docente: %w", err)
+				}
+			}
+			h, err := domain.NuevoHistoricoUsoDocente(s.nuevoID(), anio, u.UsuarioID, nombre, u.CantidadReservas, u.MinutosReservados)
+			if err != nil {
+				return err
+			}
+			h.DocenteIDHistorico = u.DocenteIDHistorico
+			if err := s.repo.GuardarHistoricoUsoDocente(ctx, h); err != nil {
+				return err
+			}
+		}
+		// Comparar también lo efectivamente persistido: un conflicto de unicidad
+		// no puede descartar silenciosamente una parte del uso antes de borrarlo.
+		histEquipos, err := s.repo.ListarHistoricoUsoEquipoPorAnio(ctx, anio)
 		if err != nil {
 			return err
 		}
-		if err := s.repo.GuardarHistoricoUsoDocente(ctx, h); err != nil {
-			return fmt.Errorf("guardando histórico del docente %q: %w", nombre, err)
+		histDocentes, err := s.repo.ListarHistoricoUsoDocentePorAnio(ctx, anio)
+		if err != nil {
+			return err
 		}
-	}
-
-	return nil
+		var guardadas, minutosGuardados, docGuardadas, docMinutosGuardados int
+		for _, h := range histEquipos {
+			guardadas += h.CantidadReservas
+			minutosGuardados += h.MinutosReservados
+		}
+		for _, h := range histDocentes {
+			docGuardadas += h.CantidadReservas
+			docMinutosGuardados += h.MinutosTotales
+		}
+		if len(histEquipos) != len(equipos) || len(histDocentes) != len(docentes) || guardadas != reservas || docGuardadas != reservasDoc || minutosGuardados != minutos || docMinutosGuardados != minutosDoc {
+			return ErrSnapshotInconsistente
+		}
+		return s.repo.SellarSnapshot(ctx, cicloID, anio)
+	})
 }
 
 // ── Estado del parque de equipos (RF-06.5) ──────────────────────────────
@@ -138,5 +182,8 @@ func (s *Service) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.Equip
 // ReporteIncidenciasPorCategoria SÍ acepta fechas: acá la pregunta es qué se
 // rompió en un período, y eso permite comparar un año contra otro.
 func (s *Service) ReporteIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error) {
+	if err := validarRango(desde, hasta); err != nil {
+		return nil, err
+	}
 	return s.repo.CalcularIncidenciasPorCategoria(ctx, desde, hasta)
 }

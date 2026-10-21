@@ -41,6 +41,9 @@ type Entrada struct {
 	Accion      string
 	Entidad     string
 	EntidadID   string
+	// Nombres actuales para consultar las fichas; no alteran el registro histórico.
+	EntidadNombre string
+	Referencias   map[string]string
 	// Detalle es el JSON tal como se guardó. No se interpreta acá: cada acción
 	// guarda lo suyo, y darle forma a eso en el dominio obligaría a conocer las
 	// treinta acciones del catálogo y a tocarlo con cada una nueva.
@@ -52,8 +55,10 @@ type Entrada struct {
 // Filtro es lo que se le puede preguntar al registro. Todos los campos son
 // opcionales y se combinan con Y: sin ninguno, devuelve lo último que pasó.
 type Filtro struct {
-	// Accion y Entidad son coincidencia exacta: son valores de un catálogo
-	// cerrado que el propio sistema escribe, no texto que alguien tipea.
+	// Accion y Entidad son valores de un catálogo cerrado que el propio
+	// sistema escribe, no texto que alguien tipea.
+	// Al consultar, pc/equipo y licencia/licencia_software comparten filtro,
+	// conservando el valor original en cada entrada.
 	Accion  string
 	Entidad string
 	// EntidadID contesta «¿quién tocó esta cosa?», que es la pregunta que se
@@ -63,7 +68,7 @@ type Filtro struct {
 	UsuarioID string
 	// Desde y Hasta acotan por fecha. Hasta es INCLUSIVO del día entero: quien
 	// escribe "hasta el 5" espera que entre lo que pasó el 5 a las 23:00, y la
-	// conversión a un límite exclusivo la hace quien arma el filtro.
+	// conversión a instantes locales y un límite exclusivo la hace el repositorio.
 	Desde *time.Time
 	Hasta *time.Time
 }

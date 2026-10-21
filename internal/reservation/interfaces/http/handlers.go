@@ -7,12 +7,12 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/reservation/application"
-	"github.com/ramiro/sgrc/internal/reservation/domain"
-	"github.com/ramiro/sgrc/internal/shared/audit"
-	"github.com/ramiro/sgrc/internal/shared/middleware"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
-	"github.com/ramiro/sgrc/internal/shared/respuesta"
+	"github.com/agustin-y2k/sgrc/internal/reservation/application"
+	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/audit"
+	"github.com/agustin-y2k/sgrc/internal/shared/middleware"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/shared/respuesta"
 )
 
 type Handler struct {
@@ -75,8 +75,8 @@ func (h *Handler) CrearReserva(c *fiber.Ctx) error {
 
 	// RF-04.1: un Admin puede reservar para cualquier materia no archivada,
 	// sin estar asignado a ella.
-	grupo, reservas, err := h.svc.CrearReserva(c.UserContext(), req.MateriaID, claims.UserID,
-		claims.Rol == "ADMIN", fecha, horaInicio, horaFin, req.EquipoIDs)
+	grupo, reservas, impacto, err := h.svc.CrearReserva(c.UserContext(), req.MateriaID, claims.UserID,
+		claims.Rol == "ADMIN", fecha, horaInicio, horaFin, req.EquipoIDs, req.EquiposATomar)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -90,6 +90,7 @@ func (h *Handler) CrearReserva(c *fiber.Ctx) error {
 	// el recurso que la representa entera.
 	return respuesta.Creado(c, "/api/grupos", grupo.ID, crearReservaResponse{
 		Grupo: toReservaGrupoResponse(grupo), Reservas: reservasResp,
+		ReservasCanceladas: impacto.ReservasCanceladas, ReservasReubicadas: impacto.ReservasReubicadas, DocentesAfectados: impacto.DocentesAfectados,
 	})
 }
 
@@ -127,7 +128,7 @@ func (h *Handler) CrearReservaRecurrente(c *fiber.Ctx) error {
 	}
 
 	res, err := h.svc.CrearReservaRecurrente(c.UserContext(), req.MateriaID, claims.UserID,
-		claims.Rol == "ADMIN", diaSemana, horaInicio, horaFin, fechaInicio, fechaFin, req.EquipoIDs)
+		claims.Rol == "ADMIN", diaSemana, horaInicio, horaFin, fechaInicio, fechaFin, req.EquipoIDs, req.EquiposATomar)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -136,7 +137,47 @@ func (h *Handler) CrearReservaRecurrente(c *fiber.Ctx) error {
 	for i, g := range res.Grupos {
 		grupos[i] = toReservaGrupoResponse(g)
 	}
-	return c.Status(fiber.StatusCreated).JSON(crearReservaRecurrenteResponse{ReglaID: res.Regla.ID, Grupos: grupos})
+	return c.Status(fiber.StatusCreated).JSON(crearReservaRecurrenteResponse{
+		ReglaID: res.Regla.ID, Grupos: grupos,
+		ReservasCanceladas: res.Impacto.ReservasCanceladas, ReservasReubicadas: res.Impacto.ReservasReubicadas, DocentesAfectados: res.Impacto.DocentesAfectados,
+	})
+}
+
+// POST /api/reservas/recurrentes/previsualizar: consulta sin efectos persistentes.
+func (h *Handler) PrevisualizarReservaRecurrente(c *fiber.Ctx) error {
+	claims, err := claimsDelContexto(c)
+	if err != nil {
+		return err
+	}
+	var req crearReservaRecurrenteRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+	dia, err := domain.ParseDiaSemana(req.DiaSemana)
+	if err != nil {
+		return mapearError(err)
+	}
+	inicio, err := parseHora(req.HoraInicio)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	fin, err := parseHora(req.HoraFin)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	desde, err := parseFecha(req.FechaInicio)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	hasta, err := parseFecha(req.FechaFin)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	res, err := h.svc.PrevisualizarReservaRecurrente(c.UserContext(), req.MateriaID, claims.UserID, claims.Rol == "ADMIN", dia, inicio, fin, desde, hasta, req.EquipoIDs)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(res)
 }
 
 // POST /api/reservas/{id}/cancelar — RF-04.4. Un Admin puede
@@ -185,6 +226,10 @@ func (h *Handler) CancelarOcurrenciaRecurrente(c *fiber.Ctx) error {
 		claims.UserID, claims.Rol == "ADMIN", req.Motivo, req.SoloEsta)
 	if err != nil {
 		return mapearError(err)
+	}
+	if claims.Rol == "ADMIN" {
+		h.auditar(c, claims.UserID, audit.ReservaCanceladaPorAdmin, "reserva_grupo", &id,
+			map[string]any{"motivo": req.Motivo, "soloEsta": req.SoloEsta, "reservasCanceladas": n})
 	}
 	return c.JSON(cancelarOcurrenciaResponse{ReservasCanceladas: n})
 }
@@ -257,6 +302,27 @@ func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 	filtro := application.FiltroReservas{
 		IncluirCanceladas: c.Query("incluirCanceladas") == "true",
 	}
+	if v := c.Query("estado"); v != "" {
+		estado, err := domain.ParseEstadoReserva(v)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "estado de reserva inválido")
+		}
+		filtro.Estado = &estado
+		if estado == domain.ReservaCancelada {
+			filtro.IncluirCanceladas = true
+		}
+	}
+	filtro.Busqueda = strings.TrimSpace(c.Query("busqueda"))
+	if len([]rune(filtro.Busqueda)) > 100 {
+		return fiber.NewError(fiber.StatusBadRequest, "la búsqueda admite hasta 100 caracteres")
+	}
+	switch c.Query("porClases") {
+	case "true":
+		filtro.PorClases = true
+	case "", "false":
+	default:
+		return fiber.NewError(fiber.StatusBadRequest, "porClases debe ser true o false")
+	}
 
 	if claims.Rol == "ADMIN" {
 		if v := c.Query("creadoPor"); v != "" {
@@ -287,6 +353,9 @@ func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 		}
 		filtro.Hasta = &hasta
 	}
+	if filtro.Desde != nil && filtro.Hasta != nil && filtro.Desde.After(*filtro.Hasta) {
+		return fiber.NewError(fiber.StatusBadRequest, "hasta debe ser igual o posterior a desde")
+	}
 
 	pagina, err := paginacion.Parsear(c.Query("page"), c.Query("pageSize"))
 	if err != nil {
@@ -294,7 +363,7 @@ func (h *Handler) ListarReservas(c *fiber.Ctx) error {
 	}
 	filtro.Pagina = pagina
 
-	reservas, total, err := h.svc.ListarReservas(c.UserContext(), filtro)
+	reservas, total, err := h.svc.ListarReservas(c.UserContext(), filtro, claims.UserID, claims.Rol == "ADMIN")
 	if err != nil {
 		return mapearError(err)
 	}
@@ -364,6 +433,11 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 		return err
 	}
 
+	// materiaId es opcional: ordena la lista de libres y decide qué ocupados se
+	// pueden robar (RF-03.21). Sin él —un Admin que todavía no eligió una— sale
+	// el orden de siempre, y ningún ocupado se ofrece como robable.
+	materiaID := strings.TrimSpace(c.Query("materiaId"))
+
 	// Con serieDesdeGrupoId, los libres son los que están libres en TODAS las
 	// fechas que le quedan a esa serie (RF-08.14): ofrecer los de hoy y rechazar
 	// el cambio cuando choca en la tercera fecha es hacerle adivinar al docente.
@@ -371,16 +445,13 @@ func (h *Handler) ListarEquiposDisponibles(c *fiber.Ctx) error {
 	if grupoID := strings.TrimSpace(c.Query("serieDesdeGrupoId")); grupoID != "" {
 		equipos, err = h.svc.ListarEquiposLibresEnLaSerie(c.UserContext(), grupoID)
 	} else {
-		// materiaId es opcional: ordena la lista para esa materia (RF-03.21).
-		// Sin él —un Admin que todavía no eligió una— sale el orden de siempre.
-		equipos, err = h.svc.ListarEquiposDisponiblesEn(c.UserContext(), fecha, horaInicio, horaFin,
-			strings.TrimSpace(c.Query("materiaId")))
+		equipos, err = h.svc.ListarEquiposDisponiblesEn(c.UserContext(), fecha, horaInicio, horaFin, materiaID)
 	}
 	if err != nil {
 		return mapearError(err)
 	}
 
-	ocupados, err := h.svc.ListarEquiposOcupadosEn(c.UserContext(), fecha, horaInicio, horaFin, claims.UserID)
+	ocupados, err := h.svc.ListarEquiposOcupadosEn(c.UserContext(), fecha, horaInicio, horaFin, claims.UserID, materiaID)
 	if err != nil {
 		return mapearError(err)
 	}

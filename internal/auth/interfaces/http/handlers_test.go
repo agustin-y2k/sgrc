@@ -13,12 +13,12 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
-	"github.com/ramiro/sgrc/internal/auth/domain"
-	"github.com/ramiro/sgrc/internal/shared/audit"
-	"github.com/ramiro/sgrc/internal/shared/authtest"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/audit"
+	"github.com/agustin-y2k/sgrc/internal/shared/authtest"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
 )
 
 // fakeAuditor descarta toda entrada de auditoría — los tests de handlers
@@ -31,6 +31,7 @@ func (fakeAuditor) Registrar(ctx context.Context, e audit.Entrada) error { retur
 // ── fakeRepo — el mismo patrón que internal/auth/application/service_test.go ──
 
 type fakeRepo struct {
+	bajas    map[string]*application.ProcesoBaja
 	fotos    map[string]*domain.FotoDePerfil
 	usuarios map[string]*domain.Usuario
 	codigos  map[string]*domain.CodigoRecuperacion
@@ -66,7 +67,8 @@ func (r *fakeRepo) GuardarCodigoRecuperacion(ctx context.Context, c *domain.Codi
 func (r *fakeRepo) BuscarPorEmail(ctx context.Context, email string) (*domain.Usuario, error) {
 	for _, u := range r.usuarios {
 		if u.Email == email {
-			return u, nil
+			copia := *u
+			return &copia, nil
 		}
 	}
 	return nil, application.ErrUsuarioNoEncontrado
@@ -77,7 +79,8 @@ func (r *fakeRepo) BuscarPorID(ctx context.Context, id string) (*domain.Usuario,
 	if !ok {
 		return nil, application.ErrUsuarioNoEncontrado
 	}
-	return u, nil
+	copia := *u
+	return &copia, nil
 }
 
 func (r *fakeRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*domain.Usuario, error) {
@@ -86,7 +89,8 @@ func (r *fakeRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*domain.
 	}
 	for _, u := range r.usuarios {
 		if u.GoogleSub == sub {
-			return u, nil
+			copia := *u
+			return &copia, nil
 		}
 	}
 	return nil, application.ErrUsuarioNoEncontrado
@@ -139,10 +143,57 @@ func (r *fakeRepo) Crear(ctx context.Context, u *domain.Usuario) error {
 	r.usuarios[u.ID] = u
 	return nil
 }
-func (r *fakeRepo) Guardar(ctx context.Context, u *domain.Usuario) error {
-	r.usuarios[u.ID] = u
-	return nil
+func (r *fakeRepo) actualizarUsuario(id string, valido func(*domain.Usuario) bool, cambiar func(*domain.Usuario)) (*domain.Usuario, error) {
+
+	actual, ok := r.usuarios[id]
+	if !ok {
+		return nil, application.ErrUsuarioNoEncontrado
+	}
+	if !valido(actual) {
+		return nil, application.ErrUsuarioModificado
+	}
+	copia := *actual
+	cambiar(&copia)
+	*actual = copia
+	resultado := copia
+	return &resultado, nil
 }
+func (r *fakeRepo) ActualizarPerfil(ctx context.Context, anterior *domain.Usuario, nombre, apellido string) (*domain.Usuario, error) {
+	return r.actualizarUsuario(anterior.ID, func(u *domain.Usuario) bool {
+		return u.Estado == anterior.Estado && u.Rol == anterior.Rol && u.VersionSesion == anterior.VersionSesion
+	}, func(u *domain.Usuario) { u.Nombre = nombre; u.Apellido = apellido })
+}
+func (r *fakeRepo) ActualizarPassword(ctx context.Context, anterior *domain.Usuario, hash string, temporal bool) (*domain.Usuario, error) {
+	return r.actualizarUsuario(anterior.ID, func(u *domain.Usuario) bool {
+		return u.Estado == anterior.Estado && u.VersionSesion == anterior.VersionSesion && u.PasswordHash == anterior.PasswordHash
+	}, func(u *domain.Usuario) {
+		u.PasswordHash = hash
+		u.DebeCambiarPassword = temporal
+		u.InvalidarSesiones()
+	})
+}
+func (r *fakeRepo) CambiarEstado(ctx context.Context, anterior *domain.Usuario, nuevo domain.Estado, ahora time.Time) (*domain.Usuario, error) {
+	return r.actualizarUsuario(anterior.ID, func(u *domain.Usuario) bool {
+		return u.Estado == anterior.Estado && u.Rol == anterior.Rol
+	}, func(u *domain.Usuario) {
+		u.Estado = nuevo
+		if nuevo == domain.EstadoAprobada {
+			u.FechaAprobacion = &ahora
+			u.AprobadoPor = anterior.AprobadoPor
+		}
+	})
+}
+func (r *fakeRepo) CambiarRol(ctx context.Context, anterior *domain.Usuario, nuevo domain.Rol) (*domain.Usuario, error) {
+	return r.actualizarUsuario(anterior.ID, func(u *domain.Usuario) bool {
+		return u.Estado == anterior.Estado && u.Rol == anterior.Rol
+	}, func(u *domain.Usuario) { u.Rol = nuevo })
+}
+func (r *fakeRepo) VincularGoogle(ctx context.Context, anterior *domain.Usuario, sub string) (*domain.Usuario, error) {
+	return r.actualizarUsuario(anterior.ID, func(u *domain.Usuario) bool {
+		return u.Estado == anterior.Estado && u.GoogleSub == anterior.GoogleSub
+	}, func(u *domain.Usuario) { u.GoogleSub = sub })
+}
+
 func (r *fakeRepo) ContarAdminsAprobados(ctx context.Context) (int, error) {
 	n := 0
 	for _, u := range r.usuarios {
@@ -227,7 +278,7 @@ func nuevaAppDeTestConGoogle(repo *fakeRepo, verificador application.Verificador
 		verificador,
 		true, // con correo: habilita la recuperación por autoservicio
 	)
-	h := NewHandler(svc, fakeAuditor{}, clientID, "avisos@escuela.edu.ar")
+	h := NewHandler(svc, fakeAuditor{}, clientID, "avisos@escuela.test")
 
 	app := fiber.New()
 	RegisterRoutes(app, h, registroDePrueba.Autenticacion(testSecret))
@@ -1221,4 +1272,63 @@ func (r *fakeRepo) UsuariosConFoto(_ context.Context, ids []string) (map[string]
 		}
 	}
 	return out, nil
+}
+
+func (r *fakeRepo) EnBaja(ctx context.Context, id string, fn func(context.Context, application.Repo) error) error {
+	antes := map[string]*application.ProcesoBaja{}
+	for id, p := range r.bajas {
+		copia := *p
+		copia.MateriasPendientes = append([]string(nil), p.MateriasPendientes...)
+		antes[id] = &copia
+	}
+	err := r.EnTransaccion(ctx, func(repo application.Repo) error { return fn(ctx, repo) })
+	if err != nil {
+		r.bajas = antes
+	}
+	return err
+}
+func (r *fakeRepo) BuscarBaja(ctx context.Context, id string) (*application.ProcesoBaja, error) {
+	p := r.bajas[id]
+	if p == nil {
+		return nil, nil
+	}
+	copia := *p
+	copia.MateriasPendientes = append([]string(nil), p.MateriasPendientes...)
+	return &copia, nil
+}
+func (r *fakeRepo) PrepararBaja(ctx context.Context, id string, materias []string, ahora time.Time) error {
+	if r.bajas == nil {
+		r.bajas = map[string]*application.ProcesoBaja{}
+	}
+	r.usuarios[id].BajaPendiente = true
+	r.bajas[id] = &application.ProcesoBaja{MateriasPendientes: append([]string(nil), materias...)}
+	return nil
+}
+func (r *fakeRepo) CompletarMateriaDeBaja(ctx context.Context, u, m string, ahora time.Time) error {
+	ids := []string{}
+	for _, id := range r.bajas[u].MateriasPendientes {
+		if id != m {
+			ids = append(ids, id)
+		}
+	}
+	r.bajas[u].MateriasPendientes = ids
+	return nil
+}
+func (r *fakeRepo) CompletarBaja(ctx context.Context, u string, ahora time.Time) error {
+	r.usuarios[u].BajaPendiente = false
+	r.bajas[u].Completada = true
+	return nil
+}
+
+func (r *fakeRepo) EnRecuperacion(ctx context.Context, id string, fn func(context.Context, application.Repo) error) error {
+	antes := make(map[string]*domain.CodigoRecuperacion)
+	for id, c := range r.codigos {
+		copia := *c
+		antes[id] = &copia
+	}
+	err := r.EnTransaccion(ctx, func(repo application.Repo) error { return fn(ctx, repo) })
+	if err != nil {
+		r.codigos = antes
+	}
+	return err
 }

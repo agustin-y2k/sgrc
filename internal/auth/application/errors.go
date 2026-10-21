@@ -4,6 +4,7 @@ import "errors"
 
 // Errores de negocio de auth.
 var (
+	ErrUsuarioModificado     = errors.New("la cuenta cambió durante la operación; volvé a intentarlo")
 	ErrUsuarioNoEncontrado   = errors.New("usuario no encontrado")
 	ErrCredencialesInvalidas = errors.New("credenciales inválidas")
 	ErrEmailYaRegistrado     = errors.New("email ya registrado")

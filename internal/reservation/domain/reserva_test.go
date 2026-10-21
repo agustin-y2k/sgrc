@@ -289,3 +289,34 @@ func TestNuevaReservaNormal_NoLlevaMotivoDeBloqueo(t *testing.T) {
 		t.Errorf("motivo = %q, esperaba vacío", r.MotivoBloqueo)
 	}
 }
+
+// ── SePuedeRobarPorHorario ───────────────────────────────────────────
+
+// El corte protege la clase que está por empezar y la que ya empezó: falta
+// poco o no falta nada, y en los dos casos la reserva es intocable.
+func TestSePuedeRobarPorHorario(t *testing.T) {
+	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
+	alasDiez := 10 * time.Hour
+
+	casos := []struct {
+		nombre   string
+		ahora    time.Time
+		esperado bool
+	}{
+		{"faltan tres horas", time.Date(2027, 4, 12, 7, 0, 0, 0, time.UTC), true},
+		{"falta un minuto más que el corte", time.Date(2027, 4, 12, 8, 59, 0, 0, time.UTC), true},
+		{"falta exactamente el corte", time.Date(2027, 4, 12, 9, 0, 0, 0, time.UTC), false},
+		{"falta menos que el corte", time.Date(2027, 4, 12, 9, 30, 0, 0, time.UTC), false},
+		{"ya empezó", time.Date(2027, 4, 12, 10, 30, 0, 0, time.UTC), false},
+		{"ya terminó hace rato", time.Date(2027, 4, 12, 18, 0, 0, 0, time.UTC), false},
+		{"es al día siguiente", time.Date(2027, 4, 11, 10, 0, 0, 0, time.UTC), true},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			if got := SePuedeRobarPorHorario(fecha, alasDiez, c.ahora); got != c.esperado {
+				t.Errorf("SePuedeRobarPorHorario = %v, esperaba %v", got, c.esperado)
+			}
+		})
+	}
+}

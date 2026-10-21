@@ -5,8 +5,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/notification/application"
-	"github.com/ramiro/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/notification/application"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
 )
 
 func mapearError(err error) error {

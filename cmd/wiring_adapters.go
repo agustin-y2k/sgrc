@@ -7,10 +7,10 @@ import (
 	"errors"
 	"time"
 
-	availabilityapp "github.com/ramiro/sgrc/internal/availability/application"
-	inventoryapp "github.com/ramiro/sgrc/internal/inventory/application"
-	reportingapp "github.com/ramiro/sgrc/internal/reporting/application"
-	reservationapp "github.com/ramiro/sgrc/internal/reservation/application"
+	availabilityapp "github.com/agustin-y2k/sgrc/internal/availability/application"
+	inventoryapp "github.com/agustin-y2k/sgrc/internal/inventory/application"
+	reportingapp "github.com/agustin-y2k/sgrc/internal/reporting/application"
+	reservationapp "github.com/agustin-y2k/sgrc/internal/reservation/application"
 )
 
 // inventoryValidadorReservasAdapter satisface

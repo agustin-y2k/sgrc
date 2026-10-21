@@ -14,8 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/reporting/application"
-	"github.com/ramiro/sgrc/internal/reporting/domain"
+	"github.com/agustin-y2k/sgrc/internal/reporting/application"
+	"github.com/agustin-y2k/sgrc/internal/reporting/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 const codigoTextoInvalido = "22P02"
@@ -40,10 +41,15 @@ var _ application.Repo = (*PostgresRepo)(nil)
 
 type PostgresRepo struct {
 	pool *pgxpool.Pool
+	zona *time.Location
 }
 
-func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
-	return &PostgresRepo{pool: pool}
+func NewPostgresRepo(pool *pgxpool.Pool, zona ...*time.Location) *PostgresRepo {
+	loc := time.UTC
+	if len(zona) > 0 && zona[0] != nil {
+		loc = zona[0]
+	}
+	return &PostgresRepo{pool: pool, zona: loc}
 }
 
 // ── Snapshot histórico (persistencia propia de reporting) ──────────────
@@ -51,9 +57,9 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 // Los dos Guardar* van con ON CONFLICT DO NOTHING sobre UNIQUE(anio, …) para
 // que el archivado de un ciclo (RF-02.4) se pueda reintentar.
 func (r *PostgresRepo) GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.HistoricoUsoEquipo) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `
 		INSERT INTO historico_uso_equipo (id, anio, equipo_id, etiqueta_snapshot, identificador_snapshot, carro_nombre_snapshot, minutos_reservados, cantidad_reservas)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		SELECT $1, $2, $3, $4, $5, $6, $7, $8 WHERE NOT EXISTS (SELECT 1 FROM snapshot_ciclo WHERE anio=$2)
 		ON CONFLICT (anio, equipo_id) DO NOTHING
 	`, h.ID, h.Anio, h.EquipoID, h.EtiquetaSnapshot, h.IdentificadorSnapshot, h.CarroNombreSnapshot, h.MinutosReservados, h.CantidadReservas)
 	if err != nil {
@@ -66,11 +72,11 @@ func (r *PostgresRepo) GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.
 }
 
 func (r *PostgresRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain.HistoricoUsoDocente) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO historico_uso_docente (id, anio, usuario_id, nombre_docente_snapshot, cantidad_reservas, minutos_totales)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (anio, usuario_id) DO NOTHING
-	`, h.ID, h.Anio, h.UsuarioID, h.NombreDocenteSnapshot, h.CantidadReservas, h.MinutosTotales)
+	_, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `
+		INSERT INTO historico_uso_docente (id, anio, usuario_id, nombre_docente_snapshot, cantidad_reservas, minutos_totales, docente_id_historico)
+		SELECT $1, $2, $3, $4, $5, $6, $7 WHERE NOT EXISTS (SELECT 1 FROM snapshot_ciclo WHERE anio=$2)
+		ON CONFLICT (anio, docente_id_historico) DO NOTHING
+	`, h.ID, h.Anio, h.UsuarioID, h.NombreDocenteSnapshot, h.CantidadReservas, h.MinutosTotales, identidadHistoricaDe(h))
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -80,20 +86,8 @@ func (r *PostgresRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain
 	return nil
 }
 
-// BorrarHistoricoDocentesSinCuenta corre antes de escribir el snapshot del
-// año (ver application.CalcularSnapshotAnual): esas filas no las cubre el ON
-// CONFLICT, así que se rehacen enteras en cada intento en vez de acumularse.
-func (r *PostgresRepo) BorrarHistoricoDocentesSinCuenta(ctx context.Context, anio int) error {
-	_, err := r.pool.Exec(ctx,
-		`DELETE FROM historico_uso_docente WHERE anio = $1 AND usuario_id IS NULL`, anio)
-	if err != nil {
-		return fmt.Errorf("borrando histórico de docentes sin cuenta: %w", err)
-	}
-	return nil
-}
-
 func (r *PostgresRepo) ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT id, anio, equipo_id, etiqueta_snapshot,
 		       COALESCE(identificador_snapshot, 0), COALESCE(carro_nombre_snapshot, ''),
 		       minutos_reservados, cantidad_reservas
@@ -120,8 +114,8 @@ func (r *PostgresRepo) ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio
 }
 
 func (r *PostgresRepo) ListarHistoricoUsoDocentePorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoDocente, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, anio, usuario_id, nombre_docente_snapshot, cantidad_reservas, minutos_totales
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
+		SELECT id, anio, usuario_id, nombre_docente_snapshot, cantidad_reservas, minutos_totales, docente_id_historico
 		FROM historico_uso_docente WHERE anio = $1 ORDER BY nombre_docente_snapshot
 	`, anio)
 	if err != nil {
@@ -132,7 +126,7 @@ func (r *PostgresRepo) ListarHistoricoUsoDocentePorAnio(ctx context.Context, ani
 	var resultado []*domain.HistoricoUsoDocente
 	for rows.Next() {
 		var h domain.HistoricoUsoDocente
-		if err := rows.Scan(&h.ID, &h.Anio, &h.UsuarioID, &h.NombreDocenteSnapshot, &h.CantidadReservas, &h.MinutosTotales); err != nil {
+		if err := rows.Scan(&h.ID, &h.Anio, &h.UsuarioID, &h.NombreDocenteSnapshot, &h.CantidadReservas, &h.MinutosTotales, &h.DocenteIDHistorico); err != nil {
 			return nil, fmt.Errorf("escaneando fila de histórico de docente: %w", err)
 		}
 		resultado = append(resultado, &h)
@@ -175,7 +169,7 @@ func (r *PostgresRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID st
 	args := []any{cicloID}
 	condFechas, args := filtroFechas("fecha", desde, hasta, args)
 
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT r.equipo_id, COALESCE(p.nombre, 'PC ' || p.identificador),
 		       COALESCE(p.identificador, 0), COALESCE(ca.nombre, ''),
 		       COUNT(*), COALESCE(SUM(`+expresionMinutosDe("r")+`), 0) AS minutos
@@ -245,10 +239,10 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 	// eliminar definitivamente una cuenta (RF-01.9) esa columna queda en NULL, y
 	// con INNER las reservas de esa persona desaparecían del reporte y de los
 	// totales del año.
-	rows, err := r.pool.Query(ctx, `
-		SELECT r.creado_por,
-		       COALESCE(MAX(u.nombre || ' ' || u.apellido), r.nombre_docente_snapshot, '') AS docente,
-		       COUNT(*), COALESCE(SUM(`+expresionMinutosDe("r")+`), 0) AS minutos
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
+		SELECT MAX(r.creado_por::text)::uuid,
+		       COALESCE(MAX(u.nombre || ' ' || u.apellido), MAX(r.nombre_docente_snapshot), '') AS docente,
+		       COUNT(*), COALESCE(SUM(`+expresionMinutosDe("r")+`), 0) AS minutos, r.docente_id_historico
 		FROM reserva r
 		LEFT JOIN usuario u ON u.id = r.creado_por
 		WHERE r.materia_id IN (
@@ -256,7 +250,7 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 		)
 		-- Ver CalcularUsoEquiposDeCiclo: una clase que nadie retiró no cuenta.
 		AND r.estado NOT IN ('CANCELADA','NO_RETIRADA')`+condFechasPrefijo("r", condFechas)+`
-		GROUP BY r.creado_por, r.nombre_docente_snapshot
+		GROUP BY r.docente_id_historico
 		-- Mismo criterio que CalcularUsoEquiposDeCiclo; el nombre desempata.
 		ORDER BY minutos DESC, docente
 	`, args...)
@@ -271,7 +265,7 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 	var resultado []domain.ResumenUsoDocente
 	for rows.Next() {
 		var u domain.ResumenUsoDocente
-		if err := rows.Scan(&u.UsuarioID, &u.NombreDocente, &u.CantidadReservas, &u.MinutosReservados); err != nil {
+		if err := rows.Scan(&u.UsuarioID, &u.NombreDocente, &u.CantidadReservas, &u.MinutosReservados, &u.DocenteIDHistorico); err != nil {
 			return nil, fmt.Errorf("escaneando fila de uso de docente: %w", err)
 		}
 		resultado = append(resultado, u)
@@ -286,9 +280,9 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 
 func (r *PostgresRepo) CalcularIncidenciasPorEquipo(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasEquipo, error) {
 	args := []any{}
-	condFechas, args := filtroFechas("i.fecha", desde, hasta, args)
+	condFechas, args := r.filtroInstantes("i.fecha", desde, hasta, args)
 
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT p.id, COALESCE(p.nombre, 'PC ' || p.identificador),
 		       COALESCE(p.identificador, 0), COALESCE(ca.nombre, ''),
 		       COUNT(i.id),
@@ -325,9 +319,9 @@ func (r *PostgresRepo) CalcularIncidenciasPorEquipo(ctx context.Context, desde, 
 
 func (r *PostgresRepo) CalcularIncidenciasPorCarro(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenIncidenciasCarro, error) {
 	args := []any{}
-	condFechas, args := filtroFechas("i.fecha", desde, hasta, args)
+	condFechas, args := r.filtroInstantes("i.fecha", desde, hasta, args)
 
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT ca.id, ca.nombre,
 		       COUNT(i.id),
 		       COUNT(*) FILTER (WHERE i.estado = 'ABIERTA'),
@@ -363,7 +357,7 @@ func (r *PostgresRepo) CalcularIncidenciasPorCarro(ctx context.Context, desde, h
 
 // EstadoDelInventario cuenta equipos por estado, agrupados por carro.
 func (r *PostgresRepo) EstadoDelInventario(ctx context.Context) ([]domain.EstadoDelInventario, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT COALESCE(c.id::text, ''), COALESCE(c.nombre, ''),
 		       COUNT(*) FILTER (WHERE e.estado = 'DISPONIBLE'),
 		       COUNT(*) FILTER (WHERE e.estado = 'EN_MANTENIMIENTO'),
@@ -397,7 +391,7 @@ func (r *PostgresRepo) EstadoDelInventario(ctx context.Context) ([]domain.Estado
 // EquiposFueraDeCirculacion lista lo que hoy no se puede reservar, con la
 // última incidencia de cada máquina.
 func (r *PostgresRepo) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.EquipoFueraDeCirculacion, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT e.id,
 		       COALESCE(e.nombre, 'PC ' || e.identificador),
 		       COALESCE(c.nombre, ''),
@@ -438,9 +432,9 @@ func (r *PostgresRepo) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.
 // CalcularIncidenciasPorCategoria responde "qué se rompe acá".
 func (r *PostgresRepo) CalcularIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error) {
 	args := []any{}
-	condFechas, args := filtroFechas("i.fecha", desde, hasta, args)
+	condFechas, args := r.filtroInstantes("i.fecha", desde, hasta, args)
 
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT COALESCE(MIN(i.categoria), ''),
 		       COUNT(*),
 		       COUNT(*) FILTER (WHERE i.estado = 'ABIERTA'),
@@ -467,4 +461,24 @@ func (r *PostgresRepo) CalcularIncidenciasPorCategoria(ctx context.Context, desd
 		resultado = append(resultado, x)
 	}
 	return resultado, errorDeFilas(rows)
+}
+
+// Las fechas de consulta nombran días del calendario de la escuela. Los
+// timestamps usan límite superior abierto; las columnas DATE siguen inclusivas.
+func (r *PostgresRepo) filtroInstantes(columna string, desde, hasta *time.Time, args []any) (string, []any) {
+	loc := r.zona
+	if loc == nil {
+		loc = time.UTC
+	}
+	dia := func(t *time.Time) time.Time { return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc) }
+	sql := ""
+	if desde != nil {
+		args = append(args, dia(desde))
+		sql += fmt.Sprintf(" AND %s >= $%d", columna, len(args))
+	}
+	if hasta != nil {
+		args = append(args, dia(hasta).AddDate(0, 0, 1))
+		sql += fmt.Sprintf(" AND %s < $%d", columna, len(args))
+	}
+	return sql, args
 }

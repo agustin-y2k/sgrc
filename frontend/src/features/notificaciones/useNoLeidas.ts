@@ -8,10 +8,11 @@ export const NOTIFICACIONES_KEY = ["notificaciones"]
  * Cantidad de notificaciones sin leer, para el indicador de la barra de
  * navegación (RF-05.7: "visibles al ingresar al sistema").
  */
-export function useNoLeidas() {
+export function useNoLeidas(habilitado = true) {
   const { data } = useQuery({
     queryKey: [...NOTIFICACIONES_KEY, "NO_LEIDA"],
     queryFn: () => notificacionesApi.listarNotificaciones("NO_LEIDA"),
+    enabled: habilitado,
     refetchInterval: 2 * 60 * 1000,
   })
 

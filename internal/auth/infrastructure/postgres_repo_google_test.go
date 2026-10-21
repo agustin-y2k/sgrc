@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // Lo que agregó migrations/001_esquema_inicial.sql solo se puede probar
@@ -35,7 +35,7 @@ func TestPostgresRepo_CuentaDeGoogle_SeGuardaSinPasswordYSeBuscaPorSub(t *testin
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeGoogleDeTest("ada@escuela.edu.ar", "112233445566")
+	u := usuarioDeGoogleDeTest("ada@escuela.test", "112233445566")
 	if err := repo.Crear(ctx, u); err != nil {
 		t.Fatalf("una cuenta sin contraseña tiene que poder guardarse: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestPostgresRepo_CuentaDeGoogle_SeGuardaSinPasswordYSeBuscaPorSub(t *testin
 
 	// La misma cuenta leída por email tiene que decir lo mismo: el mapeo es
 	// el mismo, pero pasa por otra consulta.
-	porEmail, err := repo.BuscarPorEmail(ctx, "ada@escuela.edu.ar")
+	porEmail, err := repo.BuscarPorEmail(ctx, "ada@escuela.test")
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestPostgresRepo_BuscarPorGoogleSubVacio_NoEmpataConLasCuentasSinVincular(t
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	if err := repo.Crear(ctx, usuarioDeTest("con-password@escuela.edu.ar", domain.RolDocente, domain.EstadoAprobada)); err != nil {
+	if err := repo.Crear(ctx, usuarioDeTest("con-password@escuela.test", domain.RolDocente, domain.EstadoAprobada)); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -96,13 +96,12 @@ func TestPostgresRepo_VincularGoogleAUnaCuentaConPassword(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeTest("ada@escuela.edu.ar", domain.RolDocente, domain.EstadoAprobada)
+	u := usuarioDeTest("ada@escuela.test", domain.RolDocente, domain.EstadoAprobada)
 	if err := repo.Crear(ctx, u); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	u.GoogleSub = "112233445566"
-	if err := repo.Guardar(ctx, u); err != nil {
+	if _, err := repo.VincularGoogle(ctx, u, "112233445566"); err != nil {
 		t.Fatalf("no debería fallar vinculando: %v", err)
 	}
 
@@ -125,11 +124,11 @@ func TestPostgresRepo_DosCuentasConElMismoGoogleSub_LasRechazaLaBase(t *testing.
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	if err := repo.Crear(ctx, usuarioDeGoogleDeTest("ada@escuela.edu.ar", "112233445566")); err != nil {
+	if err := repo.Crear(ctx, usuarioDeGoogleDeTest("ada@escuela.test", "112233445566")); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
-	err := repo.Crear(ctx, usuarioDeGoogleDeTest("otra@escuela.edu.ar", "112233445566"))
+	err := repo.Crear(ctx, usuarioDeGoogleDeTest("otra@escuela.test", "112233445566"))
 
 	if err == nil {
 		t.Fatal("dos cuentas no pueden compartir la misma cuenta de Google")
@@ -146,7 +145,7 @@ func TestPostgresRepo_VariasCuentasSinGoogle_Conviven(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	for _, email := range []string{"a@escuela.edu.ar", "b@escuela.edu.ar", "c@escuela.edu.ar"} {
+	for _, email := range []string{"a@escuela.test", "b@escuela.test", "c@escuela.test"} {
 		if err := repo.Crear(ctx, usuarioDeTest(email, domain.RolDocente, domain.EstadoAprobada)); err != nil {
 			t.Fatalf("las cuentas sin google_sub tienen que convivir: %v", err)
 		}
@@ -160,7 +159,7 @@ func TestPostgresRepo_CuentaSinNingunaCredencial_LaRechazaLaBase(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeTest("fantasma@escuela.edu.ar", domain.RolDocente, domain.EstadoAprobada)
+	u := usuarioDeTest("fantasma@escuela.test", domain.RolDocente, domain.EstadoAprobada)
 	u.PasswordHash = ""
 
 	if err := repo.Crear(ctx, u); err == nil {

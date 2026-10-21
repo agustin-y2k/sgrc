@@ -2,6 +2,7 @@ package paginacion
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 )
 
@@ -70,5 +71,29 @@ func TestOffset(t *testing.T) {
 		if got := c.p.Offset(); got != c.esperado {
 			t.Errorf("%+v: offset %d, esperaba %d", c.p, got, c.esperado)
 		}
+	}
+}
+
+func TestParsear_NoDesbordaElOffset(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	for _, tamanio := range []int{TamanioPorDefecto, TamanioMaximo} {
+		t.Run(strconv.Itoa(tamanio), func(t *testing.T) {
+			ultimaValida := maxInt/tamanio + 1
+			p, err := Parsear(strconv.Itoa(ultimaValida), strconv.Itoa(tamanio))
+			if err != nil || p.Offset() != (ultimaValida-1)*tamanio {
+				t.Fatalf("se rechazó el último offset representable: %+v, %v", p, err)
+			}
+			for _, numero := range []int{ultimaValida + 1, maxInt} {
+				_, err := Parsear(strconv.Itoa(numero), strconv.Itoa(tamanio))
+				if !errors.Is(err, ErrPaginaInvalida) {
+					t.Errorf("página %d tamaño %d desborda el offset y debe rechazarse: %v", numero, tamanio, err)
+				}
+			}
+		})
+	}
+	// Un número alto sigue siendo válido si su tamaño no desborda el cálculo.
+	p, err := Parsear(strconv.Itoa(maxInt), "1")
+	if err != nil || p.Offset() != maxInt-1 {
+		t.Fatalf("se impuso un límite arbitrario a una página representable: %+v, %v", p, err)
 	}
 }

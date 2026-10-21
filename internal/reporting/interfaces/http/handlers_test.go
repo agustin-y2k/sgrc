@@ -8,9 +8,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/reporting/application"
-	"github.com/ramiro/sgrc/internal/reporting/domain"
-	"github.com/ramiro/sgrc/internal/shared/authtest"
+	"github.com/agustin-y2k/sgrc/internal/reporting/application"
+	"github.com/agustin-y2k/sgrc/internal/reporting/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/authtest"
 )
 
 type fakeRepo struct {
@@ -30,9 +30,7 @@ func (r *fakeRepo) GuardarHistoricoUsoEquipo(ctx context.Context, h *domain.Hist
 func (r *fakeRepo) GuardarHistoricoUsoDocente(ctx context.Context, h *domain.HistoricoUsoDocente) error {
 	return nil
 }
-func (r *fakeRepo) BorrarHistoricoDocentesSinCuenta(ctx context.Context, anio int) error {
-	return nil
-}
+
 func (r *fakeRepo) ListarHistoricoUsoEquipoPorAnio(ctx context.Context, anio int) ([]*domain.HistoricoUsoEquipo, error) {
 	return r.historicoEquipo, nil
 }
@@ -70,6 +68,27 @@ func idSecuencial() string {
 }
 
 var testSecret = []byte("un-secreto-de-test-bastante-largo")
+
+func TestHTTP_Reportes_RangoInvertidoDevuelve400(t *testing.T) {
+	for _, ruta := range []string{
+		"/api/ciclos/ciclo1/uso-equipos", "/api/ciclos/ciclo1/uso-docentes",
+		"/api/incidencias/resumen/por-equipo", "/api/incidencias/resumen/por-carro", "/api/incidencias/resumen/por-categoria",
+	} {
+		t.Run(ruta, func(t *testing.T) {
+			app := nuevaAppDeTest(&fakeRepo{})
+			req := httptest.NewRequest("GET", ruta+"?desde=2026-08-05&hasta=2026-08-04", nil)
+			req.Header.Set("Authorization", "Bearer "+tokenPara("admin", "ADMIN"))
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 400 {
+				t.Fatalf("rango inválido: estado=%d, esperado=400", resp.StatusCode)
+			}
+		})
+	}
+}
 
 func nuevaAppDeTest(repo *fakeRepo) *fiber.App {
 	return montarEn(fiber.New(), repo)
@@ -250,4 +269,14 @@ func (r *fakeRepo) EquiposFueraDeCirculacion(ctx context.Context) ([]domain.Equi
 
 func (r *fakeRepo) CalcularIncidenciasPorCategoria(ctx context.Context, desde, hasta *time.Time) ([]domain.ResumenPorCategoriaDeFalla, error) {
 	return r.porCategoria, nil
+}
+
+func (r *fakeRepo) EnSnapshot(ctx context.Context, id string, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+func (r *fakeRepo) SnapshotSellado(ctx context.Context, id string) (bool, error)   { return false, nil }
+func (r *fakeRepo) BorrarHistoricosNoSellados(ctx context.Context, anio int) error { return nil }
+func (r *fakeRepo) SellarSnapshot(ctx context.Context, id string, anio int) error  { return nil }
+func (r *fakeRepo) TotalesUsoDeCiclo(ctx context.Context, id string) (domain.TotalesUso, error) {
+	return domain.TotalesUso{}, nil
 }

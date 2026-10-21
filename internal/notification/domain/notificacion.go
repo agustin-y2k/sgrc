@@ -39,6 +39,7 @@ const (
 	TipoDocentePendiente Tipo = "DOCENTE_PENDIENTE"
 	// TipoReservaCancelada: RF-05.1/05.2/05.3.
 	TipoReservaCancelada Tipo = "RESERVA_CANCELADA"
+	TipoReservaReubicada Tipo = "RESERVA_REUBICADA"
 	// TipoLicenciaPorVencer: hay licencias de software que hay que renovar
 	// (RF-05.9).
 	TipoLicenciaPorVencer Tipo = "LICENCIA_POR_VENCER"
@@ -64,7 +65,7 @@ var ErrTipoInvalido = errors.New("tipo de notificación inválido")
 
 func ParseTipo(s string) (Tipo, error) {
 	switch Tipo(s) {
-	case TipoGeneral, TipoDocentePendiente, TipoReservaCancelada, TipoLicenciaPorVencer,
+	case TipoGeneral, TipoDocentePendiente, TipoReservaCancelada, TipoReservaReubicada, TipoLicenciaPorVencer,
 		TipoEquipoSinDevolver, TipoPedidoDeLiberacion, TipoPedidoDeMateria,
 		TipoPedidoDeMateriaResuelto, TipoSugerencia, TipoSugerenciaRespondida:
 		return Tipo(s), nil
@@ -82,6 +83,8 @@ type Notificacion struct {
 	ReservaID *string
 	// SobreUsuarioID: de quién habla el aviso, cuando habla de alguien.
 	SobreUsuarioID *string
+	PedidoID       *string
+	HiloID         *string
 	Mensaje        string
 	Tipo           Tipo
 	Estado         Estado
@@ -94,6 +97,8 @@ type Notificacion struct {
 type Referencias struct {
 	ReservaID      *string
 	SobreUsuarioID *string
+	PedidoID       *string
+	HiloID         *string
 }
 
 func NuevaNotificacion(id, usuarioID, mensaje string, tipo Tipo, ref Referencias, ahora time.Time) (*Notificacion, error) {
@@ -108,10 +113,11 @@ func NuevaNotificacion(id, usuarioID, mensaje string, tipo Tipo, ref Referencias
 		UsuarioID:      usuarioID,
 		ReservaID:      ref.ReservaID,
 		SobreUsuarioID: ref.SobreUsuarioID,
-		Mensaje:        mensaje,
-		Tipo:           tipo,
-		Estado:         NoLeida,
-		CreadaEn:       ahora,
+		PedidoID:       ref.PedidoID, HiloID: ref.HiloID,
+		Mensaje:  mensaje,
+		Tipo:     tipo,
+		Estado:   NoLeida,
+		CreadaEn: ahora,
 	}, nil
 }
 

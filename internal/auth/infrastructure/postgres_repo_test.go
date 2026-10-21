@@ -18,11 +18,11 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
-	"github.com/ramiro/sgrc/internal/auth/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
-	"github.com/ramiro/sgrc/internal/shared/testdb"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/shared/testdb"
 )
 
 // levantarPostgresDeTest arranca un contenedor Postgres efímero, le aplica la
@@ -88,13 +88,13 @@ func TestPostgresRepo_CrearYBuscarPorEmail_OK(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeTest("ada@escuela.edu.ar", domain.RolDocente, domain.EstadoPendiente)
+	u := usuarioDeTest("ada@escuela.test", domain.RolDocente, domain.EstadoPendiente)
 
 	if err := repo.Crear(ctx, u); err != nil {
 		t.Fatalf("no debería fallar creando: %v", err)
 	}
 
-	encontrado, err := repo.BuscarPorEmail(ctx, "ada@escuela.edu.ar")
+	encontrado, err := repo.BuscarPorEmail(ctx, "ada@escuela.test")
 	if err != nil {
 		t.Fatalf("no debería fallar buscando: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestPostgresRepo_LoDeclaradoAlRegistrarse_VaYVuelve(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeTest("ada@escuela.edu.ar", domain.RolDocente, domain.EstadoPendiente)
+	u := usuarioDeTest("ada@escuela.test", domain.RolDocente, domain.EstadoPendiente)
 	u.CursoSolicitado = "5°A"
 	u.MateriaSolicitada = "Programación"
 	u.RolSolicitado = domain.RolSolicitadoSuplente
@@ -145,7 +145,7 @@ func TestPostgresRepo_SinCargoDeclarado_SeLeeVacio(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeTest("grace@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
+	u := usuarioDeTest("grace@escuela.test", domain.RolAdmin, domain.EstadoAprobada)
 
 	if err := repo.Crear(ctx, u); err != nil {
 		t.Fatalf("no debería fallar creando: %v", err)
@@ -164,7 +164,7 @@ func TestPostgresRepo_BuscarPorEmail_NoExiste_ErrUsuarioNoEncontrado(t *testing.
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 
-	_, err := repo.BuscarPorEmail(context.Background(), "nadie@escuela.edu.ar")
+	_, err := repo.BuscarPorEmail(context.Background(), "nadie@escuela.test")
 
 	if err != application.ErrUsuarioNoEncontrado {
 		t.Fatalf("esperaba ErrUsuarioNoEncontrado, obtuve %v", err)
@@ -187,12 +187,12 @@ func TestPostgresRepo_Crear_EmailDuplicado_ErrEmailYaRegistrado(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u1 := usuarioDeTest("duplicado@escuela.edu.ar", domain.RolDocente, domain.EstadoPendiente)
+	u1 := usuarioDeTest("duplicado@escuela.test", domain.RolDocente, domain.EstadoPendiente)
 	if err := repo.Crear(ctx, u1); err != nil {
 		t.Fatalf("la primera creación no debería fallar: %v", err)
 	}
 
-	u2 := usuarioDeTest("duplicado@escuela.edu.ar", domain.RolDocente, domain.EstadoPendiente)
+	u2 := usuarioDeTest("duplicado@escuela.test", domain.RolDocente, domain.EstadoPendiente)
 	err := repo.Crear(ctx, u2)
 
 	if err != application.ErrEmailYaRegistrado {
@@ -200,22 +200,18 @@ func TestPostgresRepo_Crear_EmailDuplicado_ErrEmailYaRegistrado(t *testing.T) {
 	}
 }
 
-func TestPostgresRepo_Guardar_ActualizaEstadoYFechaAprobacion(t *testing.T) {
+func TestPostgresRepo_CambiarEstado_ActualizaEstadoYFechaAprobacion(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeTest("aprobar@escuela.edu.ar", domain.RolDocente, domain.EstadoPendiente)
+	u := usuarioDeTest("aprobar@escuela.test", domain.RolDocente, domain.EstadoPendiente)
 	if err := repo.Crear(ctx, u); err != nil {
 		t.Fatalf("no debería fallar creando: %v", err)
 	}
 
 	ahora := time.Now().UTC().Truncate(time.Microsecond)
-	if err := u.CambiarEstado(domain.EstadoAprobada, ahora); err != nil {
-		t.Fatalf("transición de dominio inválida: %v", err)
-	}
-
-	if err := repo.Guardar(ctx, u); err != nil {
+	if _, err := repo.CambiarEstado(ctx, u, domain.EstadoAprobada, ahora); err != nil {
 		t.Fatalf("no debería fallar guardando: %v", err)
 	}
 
@@ -231,14 +227,14 @@ func TestPostgresRepo_Guardar_ActualizaEstadoYFechaAprobacion(t *testing.T) {
 	}
 }
 
-func TestPostgresRepo_Guardar_UsuarioInexistente_ErrUsuarioNoEncontrado(t *testing.T) {
+func TestPostgresRepo_CambiarEstado_UsuarioInexistente_ErrUsuarioNoEncontrado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 
-	u := usuarioDeTest("fantasma@escuela.edu.ar", domain.RolDocente, domain.EstadoPendiente)
-	// Nunca se creó — Guardar sobre un id que no existe no debería
+	u := usuarioDeTest("fantasma@escuela.test", domain.RolDocente, domain.EstadoPendiente)
+	// Nunca se creó — actualizar un id que no existe no debería
 	// insertar silenciosamente ni quedarse callado.
-	err := repo.Guardar(context.Background(), u)
+	_, err := repo.CambiarEstado(context.Background(), u, domain.EstadoAprobada, time.Now())
 
 	if err != application.ErrUsuarioNoEncontrado {
 		t.Fatalf("esperaba ErrUsuarioNoEncontrado, obtuve %v", err)
@@ -258,10 +254,10 @@ func TestPostgresRepo_ContarAdminsAprobados(t *testing.T) {
 		t.Fatalf("esperaba 0 admins en una base vacía, obtuve %d", n0)
 	}
 
-	admin1 := usuarioDeTest("admin1@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
-	admin2 := usuarioDeTest("admin2@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
-	adminPendiente := usuarioDeTest("admin3@escuela.edu.ar", domain.RolAdmin, domain.EstadoPendiente) // no cuenta
-	docente := usuarioDeTest("docente@escuela.edu.ar", domain.RolDocente, domain.EstadoAprobada)      // no cuenta
+	admin1 := usuarioDeTest("admin1@escuela.test", domain.RolAdmin, domain.EstadoAprobada)
+	admin2 := usuarioDeTest("admin2@escuela.test", domain.RolAdmin, domain.EstadoAprobada)
+	adminPendiente := usuarioDeTest("admin3@escuela.test", domain.RolAdmin, domain.EstadoPendiente) // no cuenta
+	docente := usuarioDeTest("docente@escuela.test", domain.RolDocente, domain.EstadoAprobada)      // no cuenta
 
 	for _, u := range []*domain.Usuario{admin1, admin2, adminPendiente, docente} {
 		if err := repo.Crear(ctx, u); err != nil {
@@ -283,7 +279,7 @@ func TestPostgresRepo_Eliminar_OK(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeTest("baja@escuela.edu.ar", domain.RolDocente, domain.EstadoBaja)
+	u := usuarioDeTest("baja@escuela.test", domain.RolDocente, domain.EstadoBaja)
 	if err := repo.Crear(ctx, u); err != nil {
 		t.Fatalf("no debería fallar creando: %v", err)
 	}
@@ -306,7 +302,7 @@ func TestPostgresRepo_Eliminar_ConReglaRecurrenteEHistorico_OK(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	u := usuarioDeTest("conhistoria@escuela.edu.ar", domain.RolDocente, domain.EstadoBaja)
+	u := usuarioDeTest("conhistoria@escuela.test", domain.RolDocente, domain.EstadoBaja)
 	if err := repo.Crear(ctx, u); err != nil {
 		t.Fatalf("no debería fallar creando: %v", err)
 	}
@@ -323,8 +319,8 @@ func TestPostgresRepo_Eliminar_ConReglaRecurrenteEHistorico_OK(t *testing.T) {
 		{`INSERT INTO equipo (id, carro_id, identificador, numero_serie) VALUES ($1, $2, 1, 'SERIE-12345')`, []any{equipoID, carroID}},
 		{`INSERT INTO regla_recurrencia (id, materia_id, creado_por, dia_semana, hora_inicio, hora_fin, fecha_inicio, fecha_fin)
 		  VALUES ($1, $2, $3, 'LUNES', '08:00', '09:00', '2026-03-02', '2026-11-30')`, []any{NuevoID(), materiaID, u.ID}},
-		{`INSERT INTO historico_uso_docente (id, anio, usuario_id, nombre_docente_snapshot, cantidad_reservas, minutos_totales)
-		  VALUES ($1, 2025, $2, 'Ada Lovelace', 10, 600)`, []any{NuevoID(), u.ID}},
+		{`INSERT INTO historico_uso_docente (id, anio, usuario_id, nombre_docente_snapshot, cantidad_reservas, minutos_totales, docente_id_historico)
+		  VALUES ($1, 2025, $2, 'Ada Lovelace', 10, 600, $2)`, []any{NuevoID(), u.ID}},
 	}
 	for _, s := range sembrar {
 		if _, err := pool.Exec(ctx, s.sql, s.args...); err != nil {
@@ -379,7 +375,7 @@ func TestPostgresRepo_EmailUnico_ConstraintDeLaBase(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	ctx := context.Background()
 
-	email := fmt.Sprintf("race-%d@escuela.edu.ar", time.Now().UnixNano())
+	email := fmt.Sprintf("race-%d@escuela.test", time.Now().UnixNano())
 	u1 := usuarioDeTest(email, domain.RolDocente, domain.EstadoPendiente)
 	u2 := usuarioDeTest(email, domain.RolDocente, domain.EstadoPendiente)
 
@@ -403,8 +399,8 @@ func TestPostgresRepo_Listar_SinFiltros(t *testing.T) {
 	ctx := context.Background()
 
 	for _, u := range []*domain.Usuario{
-		usuarioDeTest("l1@escuela.edu.ar", domain.RolDocente, domain.EstadoPendiente),
-		usuarioDeTest("l2@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada),
+		usuarioDeTest("l1@escuela.test", domain.RolDocente, domain.EstadoPendiente),
+		usuarioDeTest("l2@escuela.test", domain.RolAdmin, domain.EstadoAprobada),
 	} {
 		if err := repo.Crear(ctx, u); err != nil {
 			t.Fatalf("no debería fallar creando %s: %v", u.Email, err)
@@ -429,14 +425,14 @@ func TestPostgresRepo_Listar_PaginaYTotal(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		u := usuarioDeTest(fmt.Sprintf("p%d@escuela.edu.ar", i), domain.RolDocente, domain.EstadoAprobada)
+		u := usuarioDeTest(fmt.Sprintf("p%d@escuela.test", i), domain.RolDocente, domain.EstadoAprobada)
 		if err := repo.Crear(ctx, u); err != nil {
 			t.Fatalf("no debería fallar creando %s: %v", u.Email, err)
 		}
 	}
 	// Uno más que NO matchea el filtro de abajo: si el total contara la tabla
 	// entera en vez de las filas filtradas, este lo delataría.
-	otro := usuarioDeTest("otro@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
+	otro := usuarioDeTest("otro@escuela.test", domain.RolAdmin, domain.EstadoAprobada)
 	if err := repo.Crear(ctx, otro); err != nil {
 		t.Fatalf("no debería fallar creando %s: %v", otro.Email, err)
 	}
@@ -493,9 +489,9 @@ func TestPostgresRepo_Listar_ConAmbosFiltrosCombinados(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	admin1 := usuarioDeTest("f1@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
-	admin2Pendiente := usuarioDeTest("f2@escuela.edu.ar", domain.RolAdmin, domain.EstadoPendiente)
-	docenteAprobado := usuarioDeTest("f3@escuela.edu.ar", domain.RolDocente, domain.EstadoAprobada)
+	admin1 := usuarioDeTest("f1@escuela.test", domain.RolAdmin, domain.EstadoAprobada)
+	admin2Pendiente := usuarioDeTest("f2@escuela.test", domain.RolAdmin, domain.EstadoPendiente)
+	docenteAprobado := usuarioDeTest("f3@escuela.test", domain.RolDocente, domain.EstadoAprobada)
 
 	for _, u := range []*domain.Usuario{admin1, admin2Pendiente, docenteAprobado} {
 		if err := repo.Crear(ctx, u); err != nil {
@@ -549,7 +545,7 @@ func TestContarAdminsAprobados_BloqueaALecturasConcurrentes(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	for _, email := range []string{"admin1@escuela.edu.ar", "admin2@escuela.edu.ar"} {
+	for _, email := range []string{"admin1@escuela.test", "admin2@escuela.test"} {
 		if err := repo.Crear(ctx, usuarioDeTest(email, domain.RolAdmin, domain.EstadoAprobada)); err != nil {
 			t.Fatal(err)
 		}
@@ -600,8 +596,8 @@ func TestUltimoAdmin_DosBajasConcurrentes_NuncaQuedanCeroAdmins(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	admin1 := usuarioDeTest("admin1@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
-	admin2 := usuarioDeTest("admin2@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
+	admin1 := usuarioDeTest("admin1@escuela.test", domain.RolAdmin, domain.EstadoAprobada)
+	admin2 := usuarioDeTest("admin2@escuela.test", domain.RolAdmin, domain.EstadoAprobada)
 	if err := repo.Crear(ctx, admin1); err != nil {
 		t.Fatal(err)
 	}
@@ -665,8 +661,8 @@ func TestUltimoAdmin_BajaYDegradacionConcurrentes_NuncaQuedanCeroAdmins(t *testi
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	admin1 := usuarioDeTest("admin1@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
-	admin2 := usuarioDeTest("admin2@escuela.edu.ar", domain.RolAdmin, domain.EstadoAprobada)
+	admin1 := usuarioDeTest("admin1@escuela.test", domain.RolAdmin, domain.EstadoAprobada)
+	admin2 := usuarioDeTest("admin2@escuela.test", domain.RolAdmin, domain.EstadoAprobada)
 	if err := repo.Crear(ctx, admin1); err != nil {
 		t.Fatal(err)
 	}

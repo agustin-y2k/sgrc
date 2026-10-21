@@ -5,9 +5,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/academic/application"
-	"github.com/ramiro/sgrc/internal/academic/domain"
-	"github.com/ramiro/sgrc/internal/shared/audit"
+	"github.com/agustin-y2k/sgrc/internal/academic/application"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/audit"
 )
 
 // Los pedidos para dictar una materia (ver domain.PedidoDeMateria).

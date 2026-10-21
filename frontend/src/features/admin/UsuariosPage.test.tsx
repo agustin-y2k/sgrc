@@ -98,6 +98,80 @@ describe("UsuariosPage", () => {
    * forma de saberlo era ir a Académico y abrir las materias una por una
    * desde el otro lado de la relación.
    */
+  it("confirma el rechazo y permite volver sin cambiar la cuenta", async () => {
+    conUsuarios(usuario({ estado: "PENDIENTE" }))
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(await screen.findByRole("button", { name: "Rechazar" }))
+    expect(adminApi.cambiarEstadoUsuario).not.toHaveBeenCalled()
+    expect(screen.getByText(/no se puede deshacer/)).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "Volver" }))
+    expect(adminApi.cambiarEstadoUsuario).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "Rechazar" }))
+    await user.click(screen.getByRole("button", { name: "Confirmar" }))
+    await waitFor(() =>
+      expect(adminApi.cambiarEstadoUsuario).toHaveBeenCalledWith("u1", "RECHAZADA")
+    )
+  })
+  it("bloquea confirmaciones repetidas mientras se restablece una contraseña", async () => {
+    conUsuarios(
+      usuario({ estado: "APROBADA" }),
+      usuario({ id: "u2", nombre: "Alan", email: "alan@test.com", estado: "APROBADA" })
+    )
+    let terminar!: (v: { passwordTemporal: string }) => void
+    vi.mocked(adminApi.resetearPassword).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          terminar = resolve
+        })
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Restablecer contraseña" }))[0]
+    )
+    await user.dblClick(screen.getByRole("button", { name: "Confirmar" }))
+    expect(adminApi.resetearPassword).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole("button", { name: "Confirmar" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Restablecer contraseña" })).toBeDisabled()
+    terminar({ passwordTemporal: "Temporal-de-prueba" })
+    expect(await screen.findByText("Temporal-de-prueba")).toBeVisible()
+  })
+  it("consume la confirmación una sola vez aunque el servidor responda al instante", async () => {
+    conUsuarios(usuario({ estado: "APROBADA" }))
+    vi.mocked(adminApi.resetearPassword).mockResolvedValue({
+      passwordTemporal: "Temporal-de-prueba",
+    })
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(
+      await screen.findByRole("button", { name: "Restablecer contraseña" })
+    )
+    await user.dblClick(screen.getByRole("button", { name: "Confirmar" }))
+    expect(await screen.findByText("Temporal-de-prueba")).toBeVisible()
+    expect(adminApi.resetearPassword).toHaveBeenCalledTimes(1)
+  })
+
+  it("la propia contraseña se cambia desde el formulario personal", async () => {
+    conUsuarios(ADMIN)
+    renderPagina()
+    expect(
+      await screen.findByRole("link", { name: "Cambiar mi contraseña" })
+    ).toHaveAttribute("href", "/cambiar-password")
+    expect(
+      screen.queryByRole("button", { name: "Restablecer contraseña" })
+    ).not.toBeInTheDocument()
+  })
+  it("un error de usuarios no anuncia una lista vacía y puede reintentarse", async () => {
+    vi.mocked(adminApi.listarUsuarios).mockRejectedValueOnce(new Error("Sin conexión"))
+    conUsuarios(usuario({ estado: "APROBADA" }))
+    renderPagina()
+    expect(await screen.findByText(/No pudimos consultar los usuarios\./)).toBeVisible()
+    expect(screen.queryByText("No hay usuarios con ese filtro.")).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: /Reintentar/ }))
+    expect(await screen.findByText("Ada Lovelace")).toBeVisible()
+  })
+
   it("dice qué materias dicta cada usuario, con su curso", async () => {
     conUsuarios(usuario({ estado: "APROBADA" }))
     vi.mocked(academicoApi.listarAsignaciones).mockResolvedValue({
@@ -196,6 +270,39 @@ describe("UsuariosPage", () => {
     }
   )
 
+  it("permite completar una baja pendiente y bloquea la eliminación", async () => {
+    conUsuarios(usuario({ estado: "BAJA", bajaPendiente: true }))
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(await screen.findByRole("button", { name: "Completar baja" }))
+    expect(
+      screen.queryByRole("button", { name: "Eliminar definitivamente" })
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/La cuenta seguirá deshabilitada/)).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Confirmar" }))
+    await waitFor(() =>
+      expect(adminApi.cambiarEstadoUsuario).toHaveBeenCalledWith("u1", "BAJA")
+    )
+  })
+
+  it("actualiza la cuenta cuando una baja falla después de deshabilitarla", async () => {
+    conUsuarios(usuario({ estado: "APROBADA" }))
+    vi.mocked(adminApi.cambiarEstadoUsuario).mockRejectedValueOnce(
+      new ApiError(409, "La baja quedó pendiente")
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(await screen.findByRole("button", { name: "Dar de baja" }))
+    conUsuarios(usuario({ estado: "BAJA", bajaPendiente: true }))
+    await user.click(screen.getByRole("button", { name: "Confirmar" }))
+    expect(
+      await screen.findByRole("button", { name: "Completar baja" })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Eliminar definitivamente" })
+    ).not.toBeInTheDocument()
+  })
+
   it("eliminar pide confirmación y explica que libera el email", async () => {
     conUsuarios(usuario({ estado: "BAJA" }))
     const user = userEvent.setup()
@@ -275,8 +382,12 @@ describe("UsuariosPage", () => {
     const user = userEvent.setup()
     renderPagina()
 
-    await user.click(await screen.findByRole("button", { name: "Resetear contraseña" }))
+    await user.click(
+      await screen.findByRole("button", { name: "Restablecer contraseña" })
+    )
 
+    expect(adminApi.resetearPassword).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "Confirmar" }))
     expect(await screen.findByText("Xy7-temporal")).toBeInTheDocument()
     expect(screen.getByText(/no se vuelve a mostrar/)).toBeInTheDocument()
   })
@@ -311,14 +422,14 @@ describe("UsuariosPage", () => {
     await user.click(await screen.findByRole("button", { name: "Crear otro Admin" }))
     await user.type(screen.getByLabelText("Nombre"), "Grace")
     await user.type(screen.getByLabelText("Apellido"), "Hopper")
-    await user.type(screen.getByLabelText("Email"), "grace@escuela.edu.ar")
+    await user.type(screen.getByLabelText("Email"), "grace@escuela.test")
     await user.type(screen.getByLabelText("Contraseña inicial"), "password123")
     await user.click(screen.getByRole("button", { name: "Crear Admin" }))
 
     expect(adminApi.crearAdmin).toHaveBeenCalledWith({
       nombre: "Grace",
       apellido: "Hopper",
-      email: "grace@escuela.edu.ar",
+      email: "grace@escuela.test",
       password: "password123",
     })
     // No hay envío de mails: quien la crea le tiene que pasar la contraseña.
@@ -333,7 +444,7 @@ describe("UsuariosPage", () => {
     await user.click(await screen.findByRole("button", { name: "Crear otro Admin" }))
     await user.type(screen.getByLabelText("Nombre"), "Grace")
     await user.type(screen.getByLabelText("Apellido"), "Hopper")
-    await user.type(screen.getByLabelText("Email"), "grace@escuela.edu.ar")
+    await user.type(screen.getByLabelText("Email"), "grace@escuela.test")
     await user.type(screen.getByLabelText("Contraseña inicial"), "corta")
 
     expect(screen.getByText(/al menos 8 caracteres/)).toBeInTheDocument()
