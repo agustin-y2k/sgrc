@@ -67,4 +67,3 @@ notas de cada versión describen los cambios respecto de la versión anterior.
   respaldo y restauración antes del despliegue.
 - Para construir desde el código se utiliza Go 1.26.10 y Node 24; los Dockerfile
   incluyen las versiones correspondientes.
-
