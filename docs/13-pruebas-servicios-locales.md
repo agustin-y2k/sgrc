@@ -5,7 +5,7 @@ La suite normal y la integración habitual no envían correos ni usan tokens
 Google reales. No requieren cambios en el frontend.
 
 Los comandos siguientes se ejecutan desde `sgrc-monolotico`. Usan Docker y
-Go 1.26.9; los volúmenes conservan la caché de módulos y compilación.
+Go 1.26.10; los volúmenes conservan la caché de módulos y compilación.
 La configuración queda en `.env`, que está excluido de Git. No hace falta
 copiar contraseñas ni tokens en registros de ejecución o documentación.
 
@@ -39,7 +39,7 @@ docker run --rm --env-file .env \
   -v "$PWD:/src:ro" -w /src \
   -v sgrc-h01-gomod:/go/pkg/mod \
   -v sgrc-h01-gobuild:/root/.cache/go-build \
-  golang:1.26.9-bookworm \
+  golang:1.26.10-bookworm \
   go test -tags integration ./internal/shared/email \
   -run '^TestSMTPReal_EnvioAutorizado$' -count=1 -v
 ```
@@ -79,7 +79,7 @@ docker run --rm --env-file .env \
   -v "$PWD:/src:ro" -w /src \
   -v sgrc-h01-gomod:/go/pkg/mod \
   -v sgrc-h01-gobuild:/root/.cache/go-build \
-  golang:1.26.9-bookworm \
+  golang:1.26.10-bookworm \
   go test -tags integration ./internal/auth/infrastructure \
   -run '^TestGoogleReal_IDToken$' -count=1 -v
 ```

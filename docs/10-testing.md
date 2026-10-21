@@ -462,15 +462,15 @@ Decisiones que conviene conocer antes de tocar el archivo:
 
   La herramienta se construye con `GOTOOLCHAIN: auto` sólo en ese paso,
   para admitir sus futuras necesidades de compilación. El análisis usa el
-  Go del proyecto, actualmente 1.26.9, que coincide con la imagen de despliegue.
+  Go del proyecto, actualmente 1.26.10, que coincide con la imagen de despliegue.
 
   Un resultado verde no acredita que todos los módulos estén libres de avisos.
   El análisis de llamadas puede tener límites ante ejecución dinámica o rutas
   indirectas de un framework. Revisar también los avisos de módulos y paquetes
   con `govulncheck -show verbose ./...`, y evaluar cada actualización según su
   exposición real.
-- **La línea `go` de `go.mod` lleva el parche**, `1.26.9`, y la imagen
-  usa `golang:1.26.9-alpine`. CI y despliegue deben analizar/compilar con esa
+- **La línea `go` de `go.mod` lleva el parche**, `1.26.10`, y la imagen
+  usa `golang:1.26.10-alpine`. CI y despliegue deben analizar/compilar con esa
   misma versión. Al actualizar Go, modificar ambos archivos conjuntamente.
 - **Las imágenes se construyen y se descartan.** Lo que se despliega son
   ellas, no el binario que compila el job de build: un Dockerfile roto, o un

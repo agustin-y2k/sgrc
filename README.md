@@ -99,7 +99,7 @@ SGRC resuelve los cuatro: **impide el solapamiento a nivel de base de datos** (n
 
 | Capa | Tecnología |
 |---|---|
-| **Backend** | Go 1.26.9 con [Fiber](https://gofiber.io/) v2 |
+| **Backend** | Go 1.26.10 con [Fiber](https://gofiber.io/) v2 |
 | **Base de datos** | PostgreSQL 16 (extensiones `pgcrypto` y `btree_gist`) |
 | **Autenticación** | JWT HS256, contraseñas con `argon2id`, ingreso opcional con cuenta de Google |
 | **Frontend** | React 19 + TypeScript + Vite, Tailwind CSS v4, shadcn/ui, TanStack Query |

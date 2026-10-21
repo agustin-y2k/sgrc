@@ -1,5 +1,5 @@
 # Build estático — sin CGO para poder correr sobre scratch (ver docs/06-arquitectura.md §7)
-FROM golang:1.26.9-alpine AS build
+FROM golang:1.26.10-alpine AS build
 RUN apk add --no-cache ca-certificates
 WORKDIR /src
 COPY go.mod go.sum* ./
