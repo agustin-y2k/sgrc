@@ -3,6 +3,9 @@
 ## 1. Autenticación
 - Passwords con hash `argon2id` (resistente a ataques GPU).
 - JWT firmados **`HS256`** (secreto simétrico) — un solo proceso firma y verifica, así que un secreto simétrico cumple la función sin la gestión de un par de claves asimétricas (ver `06-arquitectura.md` §10).
+- La verificación exige **HS256 y `exp`**: rechaza otros algoritmos HMAC y
+  tokens sin expiración antes de consultar la cuenta. Se aplica también a las
+  rutas que permiten cambiar una contraseña temporal.
 - Access token: 24h (`JWT_ACCESS_TTL`). **No hay refresh token**: cuando el access expira se vuelve a iniciar sesión. Para una jornada escolar, renovar la sesión una vez al día es aceptable, y evita el segundo token con su propio almacenamiento, su rotación y su revocación.
 - **"Mantener la sesión iniciada": 30 días** (`JWT_REMEMBER_TTL`), pedido con las casillas de la pantalla de ingreso —una por camino, contraseña y Google (RF-01.13)—. Es la misma sesión de siempre con otra vigencia: mismo token, mismos claims de identidad, mismo RBAC. Lo único que cambia es el `exp`.
 
@@ -15,7 +18,12 @@
   **Lo que esto NO agrega es revocación por dispositivo.** Un teléfono perdido con la casilla tildada mantiene el acceso hasta que venza el token; la única forma de cortarlo a distancia sigue siendo cambiar la contraseña de la cuenta, que invalida **todas** las sesiones abiertas por el contador `version_sesion`. Bajar `JWT_REMEMBER_TTL` acorta esa ventana; el resto de las defensas de esta sección (estado de cuenta por request, rol de la base, fallo cerrado) valen igual para una sesión larga que para una corta.
 - Login en un solo paso, con email y contraseña.
 - **Ingreso con cuenta de Google (opcional).** Habilitado solo si el despliegue configura `GOOGLE_CLIENT_ID`; sin eso, los endpoints responden 503 y el frontend no dibuja el botón. Ver §1.1.
-- **Una baja tiene efecto inmediato.** El token sigue siendo la prueba de identidad, pero no alcanza por sí solo: cada request autenticado consulta el estado de la cuenta antes de dejar pasar. Si el usuario ya no existe, no está `APROBADA`, o cambió de rol, el request se rechaza aunque el token siga sin expirar.
+- **Una baja tiene efecto inmediato.** El token sigue siendo la prueba de identidad, pero no alcanza por sí solo: cada request autenticado consulta el estado, el rol y la versión de sesión de la cuenta. Si el usuario ya no existe, no está `APROBADA` o la versión de sesión no coincide, se rechaza aunque el token siga sin expirar. Si cambió de rol, los permisos se evalúan con el rol actual de la base; las acciones que ya no le corresponden reciben 403.
+
+  El cambio a BAJA y el registro de tareas se confirman juntos. Si falla la
+  limpieza académica, la cuenta sigue deshabilitada. Un ADMIN puede completar
+  lo pendiente repitiendo la baja; esto conserva BAJA y no reactiva sesiones.
+  El borrado definitivo se bloquea hasta completar el proceso.
 
   Un JWT estrictamente stateless sería más barato, pero le dejaría a una cuenta dada de baja hasta un día —o un mes, con la casilla tildada— de acceso **de escritura**, y RF-02.8/02.9 tratan la baja como efectiva de inmediato. La ventana no es teórica: un token emitido antes de la baja escribe en la base después, mientras no expire.
 
@@ -76,8 +84,9 @@ Las claves públicas se cachean respetando el `max-age` que declara Google, acot
 { "sub": "userId", "rol": "ADMIN|DOCENTE", "nombre": "...", "apellido": "...", "dcp": true, "vs": 3, "exp": ... }
 ```
 
-`dcp` (`debe_cambiar_password`) viaja en el token para poder exigir el cambio
-sin consultar la base en cada request. Solo aparece cuando es `true`.
+`dcp` (`debe_cambiar_password`) viaja en el token para exigir el cambio de
+contraseña temporal. Solo aparece cuando es `true`. El estado, el rol y la
+versión de sesión se consultan en la base en cada request autenticado.
 
 `vs` (versión de sesión) es lo que permite **cerrar las sesiones abiertas**
 al cambiar una contraseña — ver §1. Solo aparece cuando no es 0.
@@ -253,7 +262,7 @@ Un millón de combinaciones no es mucho por sí solo. Lo que hace seguro al cód
 
 - **15 minutos de vigencia.** Acota la ventana de cualquier ataque y la de un código olvidado en una casilla abierta en la sala de profesores.
 - **5 intentos por código.** Al quinto fallo el código se quema y hay que pedir otro. La probabilidad de acertar a ciegas queda en 5 en 1.000.000.
-- **Un solo código vigente por persona.** Pedir uno nuevo invalida el anterior, en el mismo statement que inserta el nuevo (un CTE, ver `postgres_repo_recuperacion.go`). Sin esto el tope de intentos sería esquivable pidiendo veinte códigos y probando cinco veces con cada uno.
+- **Un solo código vigente por persona.** Pedir uno nuevo invalida el anterior e inserta el nuevo en una transacción con bloqueo por usuario e índice único parcial (ver `postgres_repo_recuperacion.go`). Sin esto el tope de intentos sería esquivable pidiendo veinte códigos y probando cinco veces con cada uno.
 - **Rate limit por email, no solo por IP.** El límite por IP no frena a quien cambia de red, y acá hay algo más que adivinar códigos: pedir el código manda un mail a una casilla ajena, así que sin tope por cuenta el formulario es un botón para inundar de correo a un docente — y para quemarle la reputación a la casilla saliente, que tiene su propio límite diario.
 
 Además el código se guarda **hasheado con argon2**, igual que una contraseña. Si la base se filtrara (un backup, un dump de soporte), un código en claro sería una cuenta abierta hasta que expire.
@@ -268,9 +277,9 @@ Se usa `CF-Connecting-IP` y no `X-Forwarded-For` porque Cloudflare la **sobrescr
 
 ### Por qué el cambio de contraseña devuelve un token nuevo
 
-`debe_cambiar_password` viaja dentro del JWT para poder exigirlo sin consultar la base en cada request, pero eso lo deja congelado en el token. `POST /api/auth/cambiar-password` responde con un token nuevo y el cliente tiene que reemplazar el anterior; si no, quien acaba de cambiar la contraseña quedaría bloqueado por su propio cambio exitoso hasta que el token expirara.
+`debe_cambiar_password` queda fijado al emitir el JWT. El cambio de contraseña incrementa la versión de sesión y `POST /api/auth/cambiar-password` devuelve un token nuevo sin la obligación de cambio. El cliente debe reemplazar el anterior: el token viejo queda invalidado por su versión de sesión, aunque todavía no haya expirado.
 
-Las únicas dos rutas que aceptan un token con la contraseña temporal sin cambiar son `GET /api/mi-perfil` y `POST /api/auth/cambiar-password` — justamente las que hacen falta para salir de esa situación. Se marcan explícitamente con `JWTAuthPermitiendoPasswordVencida`; todo lo demás usa `JWTAuth`, que ya incluye la restricción, de modo que una ruta nueva queda protegida por omisión.
+Las únicas dos rutas que aceptan un token con la contraseña temporal sin cambiar son `GET /api/mi-perfil` y `POST /api/auth/cambiar-password`. Se montan con `Autenticacion.RequeridaPermitiendoPasswordVencida`; las demás usan `Autenticacion.Requerida`, que incluye esa restricción además de validar algoritmo, expiración y cuenta.
 
 ### Cada 401 dice por qué, en el header `X-Sesion-Motivo`
 
@@ -300,6 +309,17 @@ Por eso `POST /api/auth/cambiar-password` **no** puede responder 401 cuando lo q
 La distinción vive en el error de dominio (`ErrPasswordActualIncorrecta`, separado de `ErrCredencialesInvalidas`) y no en el handler, para que ningún camino nuevo hacia el mismo chequeo se lleve puesto el código equivocado.
 
 ## 5. Tabla de auditoría
+
+
+Desde la migración **025**, los cambios sensibles tienen auditoría transaccional: usuario y recuperación, estructura académica y asignaciones, inventario y cuentas de equipo, incidencias y licencias, reservas y préstamos, jornada, guardias y pedidos de materia. El trigger registra `CAMBIO_TRANSACCIONAL` junto con el cambio; un error al insertar la auditoría revierte también la escritura. Las entradas descriptivas del catálogo HTTP son complementarias y mantienen su política best effort.
+
+La migración **026** agrega las preferencias de equipos, que determinan quién
+puede desplazar una reserva. También registran actor/IP y revierten su escritura
+si falla la constancia transaccional.
+
+La constancia lleva operación (`INSERT`, `UPDATE`, `DELETE`), campos modificados y valores anteriores/nuevos permitidos de estados, roles, referencias y fechas. No copia secretos ni textos libres. Las peticiones autenticadas aportan actor verificado e IP mediante el contexto de transacción. Un caller ajeno a HTTP debe usar `pgtransaccion.ConActor`; sin identidad, el actor es `00000000-0000-0000-0000-000000000000` (sistema/sin atribución explícita). Los logs históricos sin actor de aprobación no se completan por suposición.
+
+La cancelación administrativa individual, de ocurrencia o de esa ocurrencia y siguientes registra el mismo catálogo `RESERVA_CANCELADA_POR_ADMIN`; para un grupo, el detalle incluye alcance, motivo y cantidad. Cada reserva modificada conserva además su constancia transaccional.
 
 ```sql
 CREATE TABLE audit_log (
@@ -334,6 +354,34 @@ un filtro en una lista de callejones sin salida.
 
 Del lado del Admin es la pantalla **Auditoría**.
 
+La pantalla permite reconstruir quién hizo una acción, cuándo ocurrió y qué
+ficha afectó: por ejemplo, un cambio de estado de un equipo, una cancelación de
+reserva o la consulta de una contraseña. Es de sólo lectura. Los filtros por
+persona, ficha y fecha ayudan a investigar una consulta o un error operativo.
+
+El detalle se presenta con etiquetas comprensibles y, cuando el registro
+conserva ambos valores, una tabla **Dato / Antes / Después**. Una constancia
+`CAMBIO_TRANSACCIONAL` se muestra como «Se creó», «Se actualizó» o «Se eliminó»
+la ficha correspondiente. Si sólo se guardó el nombre del campo, la pantalla
+lo aclara; no reconstruye valores por suposición. Las contraseñas, códigos,
+hashes e identificadores técnicos no se muestran como detalle.
+
+La respuesta añade `entidadNombre` y `referencias`, resueltos con los nombres
+**actuales** de las fichas que todavía existen. No son una copia del nombre
+histórico ni modifican `audit_log.detalle`. Las fichas eliminadas mantienen su
+entrada; una referencia sin nombre disponible se indica como tal.
+
+El actor sin atribución (`00000000-0000-0000-0000-000000000000`) se muestra
+como **Sin usuario identificado**: puede ser una tarea automática o un cambio
+fuera de la aplicación, y se distingue de una cuenta que luego fue eliminada.
+La IP identifica la conexión de origen; varias personas pueden compartirla.
+Una operación puede generar una entrada descriptiva y varias constancias de
+cambios, por lo que varias filas no implican que la persona repitió la acción.
+
+`desde` y `hasta` son días inclusivos en `APP_TIMEZONE`. El repositorio convierte
+el intervalo a medianoche local de `desde` y medianoche siguiente de `hasta`
+(exclusiva). El servicio rechaza un rango invertido antes de esa conversión.
+
 > **Hasta la migración 013 no había forma de leerlo.** Se escribía desde
 > siempre, y la única manera de consultarlo era entrar a la base con `psql`. Un
 > registro que sólo puede mirar quien tiene acceso de administrador de base de
@@ -363,11 +411,11 @@ nombre que tenía una operación **en su momento**. Si el sistema renombra algo,
 las filas viejas conservan el nombre viejo — reescribir un registro de
 auditoría es precisamente lo que un registro de auditoría no debe permitir.
 
-Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `ROL_DEGRADADO_A_DOCENTE`, `PASSWORD_RESETEADA`, `NOMBRE_CAMBIADO`, `PASSWORD_RECUPERADA_POR_EMAIL`, `DOCENTE_REMOVIDO_DE_MATERIA`, `DOCENTE_ROL_CAMBIADO`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_CREADO`, `EQUIPO_ESTADO_CAMBIADO`, `EQUIPO_DADO_DE_BAJA`, `EQUIPO_MOVIDO_DE_CARRO`, `EQUIPO_EDITADO`, `CARRO_DADO_DE_BAJA`, `EQUIPO_REACTIVADO`, `CARRO_REACTIVADO`, `CUENTA_DE_EQUIPO_CREADA`, `CUENTA_DE_EQUIPO_EDITADA`, `CUENTA_DE_EQUIPO_BORRADA`, `PASSWORD_DE_EQUIPO_REVELADA`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`, `CICLO_ANIO_CORREGIDO`, `CICLO_ELIMINADO`, `ESTRUCTURA_IMPORTADA`, `MATERIAS_COPIADAS_ENTRE_CURSOS`, `PEDIDO_DE_MATERIA_APROBADO`, `PEDIDO_DE_MATERIA_RECHAZADO`, `JORNADA_CAMBIADA`.
+Acciones auditadas: `CAMBIO_TRANSACCIONAL`, `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `ROL_DEGRADADO_A_DOCENTE`, `PASSWORD_RESETEADA`, `NOMBRE_CAMBIADO`, `PASSWORD_RECUPERADA_POR_EMAIL`, `DOCENTE_REMOVIDO_DE_MATERIA`, `DOCENTE_ROL_CAMBIADO`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_CREADO`, `EQUIPO_ESTADO_CAMBIADO`, `EQUIPO_DADO_DE_BAJA`, `EQUIPO_MOVIDO_DE_CARRO`, `EQUIPO_EDITADO`, `CARRO_DADO_DE_BAJA`, `EQUIPO_REACTIVADO`, `CARRO_REACTIVADO`, `CUENTA_DE_EQUIPO_CREADA`, `CUENTA_DE_EQUIPO_EDITADA`, `CUENTA_DE_EQUIPO_BORRADA`, `PASSWORD_DE_EQUIPO_REVELADA`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`, `CICLO_ANIO_CORREGIDO`, `CICLO_ELIMINADO`, `ESTRUCTURA_IMPORTADA`, `MATERIAS_COPIADAS_ENTRE_CURSOS`, `PEDIDO_DE_MATERIA_APROBADO`, `PEDIDO_DE_MATERIA_RECHAZADO`, `JORNADA_CAMBIADA`.
 
 > `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS` tiene su propio nombre (en vez de un `CICLO_ARCHIVADO` genérico) porque implica un borrado físico de datos — vale la pena que quede explícito en el log qué admin lo disparó y cuántas filas se eliminaron (`detalle` puede guardar el conteo).
 
-> `JORNADA_CAMBIADA` está por el mismo motivo, y es la acción de mayor alcance del sistema: cambiar el horario de la escuela puede cancelar las clases de todos los docentes en una sola llamada. El `detalle` guarda cuántos tramos quedaron y cuánto se canceló, en clases y en equipos. Si la cancelación falla después de haber guardado la jornada, la entrada sale igual con `cascadaIncompleta`: el horario cambió, y eso es justamente lo que el registro no puede perderse.
+> `JORNADA_CAMBIADA` está por el mismo motivo, y es la acción de mayor alcance del sistema: cambiar el horario de la escuela puede cancelar las clases de todos los docentes en una sola llamada. El `detalle` guarda cuántos tramos quedaron y cuánto se canceló, en clases y en equipos. Jornada y cascada se confirman juntas: si falla la cancelación, se revierte el cambio y no se registra esta acción. La marca histórica `cascadaIncompleta` corresponde a versiones anteriores.
 >
 > **Una previsualización no se audita.** El pedido sin confirmar no cambia nada, y un registro lleno de intentos esconde los cambios de verdad.
 
@@ -375,7 +423,7 @@ Acciones auditadas: `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENT
 
 > `NOMBRE_CAMBIADO` es la única acción del catálogo que alguien hace **sobre su propia cuenta y sin ser `ADMIN`** (RF-01.12). Se audita igual porque el nombre es con lo que el resto de la escuela identifica a esa persona en las reservas y en las entregas: sin esta fila, "la reserva la había pedido otro" no tendría cómo verificarse. `usuario_id` es la propia cuenta, y `detalle` guarda el nombre con el que quedó.
 
-> `PASSWORD_RECUPERADA_POR_EMAIL` es la **única acción del catálogo cuyo actor no está autenticado**: en RF-01.10 la persona prueba ser dueña de la cuenta con el código que le llegó al mail, no con un token. En esa fila `usuario_id` es la propia cuenta (no un Admin que actuó sobre ella), y lo que la hace útil es `ip_origen` — es lo que permite reconstruir qué pasó si alguien reporta que él no cambió su contraseña. Los intentos fallidos no se auditan: viven en `codigo_recuperacion.intentos`, que es donde tienen efecto.
+> `PASSWORD_RECUPERADA_POR_EMAIL` es la **única acción del catálogo cuyo actor no está autenticado**: en RF-01.10 la persona prueba ser dueña de la cuenta con el código que le llegó al mail, no con un token. En esa fila `usuario_id` es la propia cuenta (no un Admin que actuó sobre ella), y lo que la hace útil es `ip_origen` — es lo que permite reconstruir qué pasó si alguien reporta que él no cambió su contraseña. Los intentos fallidos se contabilizan en `codigo_recuperacion.intentos`; desde 025 su escritura también genera una constancia `CAMBIO_TRANSACCIONAL`, sin guardar el código ni su hash.
 
 ## 6. Las contraseñas de las cuentas de cada equipo (RF-03.22)
 
@@ -396,8 +444,36 @@ Eso obliga a separar dos cosas que suelen confundirse:
 
 **La contraseña no viaja en el listado, ni para un `ADMIN`.** Se pide de a una, con `POST /api/cuentas/{id}/password`, y **cada llamada queda auditada** (`PASSWORD_DE_EQUIPO_REVELADA`) — también cuando la cuenta es pública. Si viajara en el listado, abrir la ficha de un equipo sería revelar todas sus contraseñas de una vez y la auditoría no distinguiría "miró la lista" de "necesitaba entrar a esta máquina". Es POST y no GET por lo mismo: un GET termina en el historial del navegador y en los logs de acceso, y esto no es una lectura inocua.
 
+**La revelación falla cerrada si no puede auditarse.** `POST /api/cuentas/{id}/password` responde 503 sin devolver el secreto cuando falta el auditor o falla su escritura. No basta con loguear el error después de entregar la contraseña.
+
 Ninguna entrada de auditoría guarda la contraseña en su detalle: el registro de quién tocó qué no puede ser, él mismo, otra copia de las contraseñas.
 
 **`CUENTAS_SECRET` es opcional.** Sin ella el sistema arranca igual y las cuentas se registran; lo único que no se puede es guardar contraseñas, y se responde 503 con la explicación en vez de un 500. Es el mismo criterio que SMTP y el ingreso con Google. Si se cambia, lo guardado deja de poder leerse y hay que volver a cargarlo mirando las máquinas.
 
 **Lo que esto NO protege**: quien entra al servidor tiene la clave y la base, porque `CUENTAS_SECRET` vive en el mismo `.env` que `POSTGRES_PASSWORD`. El cifrado defiende la copia que sale del servidor, que es el escenario probable —un `.sql` en un pendrive o en una carpeta compartida—, no al servidor mismo.
+
+### Recuperación y atribución de aprobación (022)
+
+La creación/reemplazo de códigos, los intentos fallidos y el consumo toman un bloqueo de la fila de usuario. Un índice parcial permite un solo código sin usar por cuenta. La migración 022 invalida códigos anteriores simultáneos, conservando el más reciente y todas las constancias. Un rechazo por código incorrecto confirma su intento; un fallo de infraestructura revierte consumo y cambio de contraseña. La contraseña y la revocación de sesiones se confirman juntas.
+
+Si las credenciales cambiaron entre la lectura inicial y la adquisición del bloqueo, la recuperación devuelve `ErrUsuarioModificado` sin consumir el código ni sobrescribir el cambio concurrente.
+
+Crear un admin y aprobar una cuenta pendiente persisten `fecha_aprobacion` y `aprobado_por`. Aprobar exige el ID del actor en el servicio; el handler lo toma de la sesión verificada. Las ausencias históricas de esos campos se conservan.
+
+## Revisión de seguridad del 12/10/2026
+
+Las respuestas del backend envían `Cache-Control: no-store` para impedir
+que perfiles, JWT, fotos y contraseñas reveladas se almacenen en cachés HTTP.
+Las exportaciones CSV neutralizan texto que una planilla puede interpretar
+como fórmula; los números conservan su tipo. La reimportación conserva el
+apóstrofo protector de las celdas peligrosas.
+
+El despliegue del backend usa UID 65532, sistema de archivos de sólo lectura,
+sin capacidades y con `no-new-privileges`. Los contextos de Docker excluyen
+variantes de `.env`, claves, logs y backups. Grafana exige contraseña propia
+al arrancar, incluso usando Compose directamente. Dozzle conserva un
+pendiente de aislamiento de su socket Docker antes de habilitarlo.
+
+Las comprobaciones reproducibles de estas medidas se describen en
+[Testing](10-testing.md). Cada instalación debe aplicar la configuración de
+seguridad correspondiente a su exposición y sus servicios opcionales.

@@ -177,7 +177,8 @@ CREATE INDEX        idx_usuario_estado       ON usuario (estado);
 > registro que nunca se aprobó; `BAJA` es una cuenta que **estuvo** `APROBADA`
 > y se dio de baja — la distinción evita mezclar "nunca llegó a entrar" con
 > "entró y se fue" en reportes y auditoría. **`BAJA` es terminal**: la API
-> rechaza con 409 cualquier intento de cambiarle el estado. Si la persona
+> rechaza con 409 cualquier intento de reactivarla. Repetir `BAJA` completa
+> las tareas pendientes y conserva el estado terminal. Si la persona
 > vuelve, se registra de nuevo; y como el email es único, para reusar el suyo
 > un Admin debe eliminar (hard delete) la fila vieja. `aprobado_por` usa
 > `SET NULL`: si quien aprobó a otro se elimina, se pierde ese dato, no la
@@ -198,6 +199,35 @@ CREATE INDEX        idx_usuario_estado       ON usuario (estado);
 > sigue entrando a su misma cuenta aunque Google le haya cambiado la
 > dirección. El email sigue siendo la identidad dentro del sistema; el vínculo
 > con Google cuelga del `sub`.
+
+### `baja_usuario` y `baja_usuario_materia`
+
+La migración 020 conserva el progreso de una baja (RF-02.8/02.9).
+
+| Tabla | Campo | Tipo | Restricciones |
+|---|---|---|---|
+| baja_usuario | usuario_id | UUID | PK, FK → usuario.id ON DELETE CASCADE |
+| baja_usuario | preparada_en | TIMESTAMPTZ | NOT NULL |
+| baja_usuario | completada_en | TIMESTAMPTZ | NULL mientras falte terminar la limpieza |
+| baja_usuario_materia | usuario_id | UUID | FK → baja_usuario.usuario_id ON DELETE CASCADE |
+| baja_usuario_materia | materia_id | UUID | FK → materia.id ON DELETE CASCADE |
+| baja_usuario_materia | completada_en | TIMESTAMPTZ | NULL mientras falte procesar la materia |
+
+La clave primaria de los pasos es `(usuario_id, materia_id)`. Un índice adicional
+sobre `materia_id` cubre la FK; la clave primaria cubre `usuario_id`.
+
+El registro inicial y el cambio a BAJA se confirman juntos. Cada materia confirma
+la cancelación y su avance en una transacción compartida. Finalmente, remover
+las asignaciones y completar el proceso es otra transacción. Un bloqueo
+transaccional por usuario serializa solicitudes simultáneas. Los reintentos
+procesan solamente lo pendiente, incluso después de reiniciar el servicio.
+La API deriva `bajaPendiente` de este registro; no agrega una columna a `usuario`.
+El borrado definitivo queda bloqueado mientras el proceso esté pendiente.
+
+La migración prepara las bajas legadas que conservan asignaciones, sin cambiar
+cuentas ni vínculos; su fecha de preparación corresponde al registro de la
+recuperación. No reconstruye asignaciones perdidas ni da por terminadas las bajas
+anteriores. La bajada de 020 se rechaza si hay procesos pendientes.
 
 ### `codigo_recuperacion`
 Códigos de un solo uso para recuperar una contraseña olvidada (RF-01.10).
@@ -697,8 +727,10 @@ CREATE INDEX idx_licencia_vencimiento ON licencia_software (fecha_vencimiento)
 > FK.
 
 ### `equipo_preferencia`
-Qué materia prefiere cada equipo (RF-03.21). **Sólo ordena la lista al
-reservar**: no es un permiso, no oculta nada y no afecta ninguna reserva.
+Qué materia prefiere cada equipo (RF-03.21). Ordena la lista y permite comparar
+prioridades al solicitar un desplazamiento explícito con `equiposATomar`.
+La marca por sí sola no modifica reservas ni oculta equipos. El servicio
+revalida alcance, prioridades, anticipación y conflictos al crear la reserva.
 
 | Campo | Tipo | Restricciones |
 |---|---|---|
@@ -706,14 +738,15 @@ reservar**: no es un permiso, no oculta nada y no afecta ninguna reserva.
 | equipo_id | UUID | FK → equipo.id **ON DELETE CASCADE**, NOT NULL |
 | materia_nombre | VARCHAR(100) | NOT NULL, CHECK no vacío y sin espacios en los bordes |
 | materia_norm | VARCHAR(100) | GENERATED ALWAYS AS `translate(lower(materia_nombre), …)` STORED |
-| anio | SMALLINT | NULL, CHECK entre 1 y 6 |
+| anio | SMALLINT | NULL, CHECK entre 1 y 15 |
 | modalidad | VARCHAR(80) | NULL, CHECK no vacía y sin espacios al borde |
 | division | VARCHAR(12) | NULL, CHECK no vacía y sin espacios al borde |
 | modalidad_norm | VARCHAR(80) | GENERATED, con COALESCE del NULL a cadena vacía |
 | division_norm | VARCHAR(12) | GENERATED, igual |
 | prioridad | SMALLINT | NOT NULL DEFAULT 1, CHECK entre 1 y 9 |
+| curso_exacto | BOOLEAN | NOT NULL DEFAULT false; CHECK: si es true, anio no puede ser NULL |
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
-| | | UNIQUE **NULLS NOT DISTINCT** (equipo_id, materia_norm, modalidad_norm, anio, division_norm) |
+| | | UNIQUE **NULLS NOT DISTINCT** (equipo_id, materia_norm, modalidad_norm, anio, division_norm, curso_exacto) |
 
 ```sql
 CREATE INDEX idx_equipo_preferencia_materia ON equipo_preferencia (materia_norm);
@@ -737,12 +770,12 @@ CREATE INDEX idx_equipo_preferencia_equipo  ON equipo_preferencia (equipo_id);
 > sí, así que la misma marca sin curso se podría cargar infinitas veces.
 > Disponible desde Postgres 15; este proyecto corre 16.
 
-> **Los tres alcances y cuál gana.** `(NULL, NULL)` vale para toda materia con
+> **Reglas generales y cuál gana.** Con `curso_exacto=false`, `(NULL, NULL)` vale para toda materia con
 > ese nombre; `(3, NULL)` para todo tercer año; `(3, 'B')` sólo para 3°B. Un
 > mismo equipo puede tener varias, y al reservar **gana la más específica** —la
 > que tiene más ejes puestos—; a igual especificidad, la prioridad más fuerte.
 >
-> **Los tres ejes son independientes y opcionales** (migración 009): son los
+> **En reglas generales los ejes son independientes y opcionales** (migración 009): son los
 > tres datos que tiene un curso, y la consulta que ordena los equipos los lee
 > de sus COLUMNAS, no partiendo su nombre. El cruce de los dos textos va por
 > las columnas generadas, así que **ignora tildes y mayúsculas** igual que el
@@ -755,6 +788,20 @@ CREATE INDEX idx_equipo_preferencia_equipo  ON equipo_preferencia (equipo_id);
 
 > **`ON DELETE CASCADE`** porque una marca no significa nada sin su equipo: dar
 > de baja la máquina se lleva sus marcas y no hay nada que preservar.
+
+> **Curso concreto (migración 029).** Con `curso_exacto=true`, los tres ejes se
+> comparan exactamente: año obligatorio, y modalidad/división NULL exige que
+> el curso tampoco tenga ese atributo. Su especificidad es tres, incluso si
+> carece de modalidad o división. La misma comparación se usa en equipos
+> disponibles, desplazamientos, reposición y detección de marcas huérfanas.
+> La validación de altas/ediciones exige una coincidencia no archivada en el
+> ciclo activo; la marca se sigue guardando por nombre y atributos para
+> sobrevivir a la clonación anual.
+>
+> Las filas anteriores reciben false y conservan todos sus datos y alcance.
+> La reversión de 029 se rechaza mientras haya marcas concretas: quitar ese
+> indicador podría ampliar sus prioridades sin querer. Requiere revisar y
+> resolver esos alcances antes de bajar la migración.
 
 ### `regla_recurrencia`
 El **patrón** temporal de una reserva que se repite: materia + día de semana +
@@ -844,6 +891,7 @@ que todos pertenezcan al mismo carro**.
 | hora_inicio | TIME | NOT NULL |
 | hora_fin | TIME | NOT NULL, CHECK (hora_fin <> hora_inicio) |
 | estado | VARCHAR(25) | NOT NULL DEFAULT 'CONFIRMADA', CHECK IN ('CONFIRMADA','PARCIALMENTE_CANCELADA','CANCELADA','FINALIZADA','NO_RETIRADA') |
+| version | BIGINT | NOT NULL DEFAULT 0, CHECK (version >= 0); revisión interna de escritura |
 | regla_recurrencia_id | UUID | FK → regla_recurrencia.id **ON DELETE SET NULL**, NULL |
 | creada_en | TIMESTAMPTZ | NOT NULL DEFAULT now() |
 | recordatorio_enviado_en | TIMESTAMPTZ | NULL |
@@ -879,12 +927,25 @@ CREATE INDEX idx_grupo_sin_recordar ON reserva_grupo (fecha, hora_inicio)
 **Regla de recálculo de `estado`** (se ejecuta cada vez que cambia el estado de
 una `reserva` hija):
 
-- Todas sus `reserva` en `CANCELADA` → grupo `CANCELADA`.
-- Al menos una `CANCELADA` pero no todas → grupo `PARCIALMENTE_CANCELADA`.
-- Todas en `FINALIZADA` (ninguna cancelada) → grupo `FINALIZADA`.
-- **Ninguna** retirada dentro del plazo de gracia → grupo `NO_RETIRADA`; si se
-  retiró alguna, el grupo no se marca (el docente vino).
-- Ninguna cancelada ni finalizada aún → grupo `CONFIRMADA`.
+- Si quedan reservas `CONFIRMADA`, el grupo queda `PARCIALMENTE_CANCELADA`
+  cuando también hay canceladas; en otro caso queda `CONFIRMADA`.
+- Sin confirmadas, alguna `FINALIZADA` → grupo `FINALIZADA`, incluso si las
+  otras se cancelaron o no se retiraron.
+- Sin confirmadas ni finalizadas, alguna `NO_RETIRADA` → grupo `NO_RETIRADA`,
+  incluso si las otras se cancelaron.
+- Todas `CANCELADA` → grupo `CANCELADA`.
+- Los grupos terminales no se reabren. Un grupo sin hijos conserva su estado.
+
+La cancelación, el cambio de equipo, la entrega con reserva, la liberación y
+la finalización coordinan el agregado en una transacción: bloquean primero
+todos los grupos involucrados por ID y después sus reservas por ID, y releen
+las filas antes de decidir. La escritura del hijo y el recálculo del grupo
+se confirman juntos. `UPDATE` comprueba e incrementa `version`: una escritura
+obsoleta se rechaza como conflicto (HTTP 409), conservando la cancelación y
+sus datos. La versión es interna; no cambia el contrato de la API.
+
+La migración **021** añade las versiones con valor inicial cero. Conserva los
+datos existentes; no recalcula automáticamente grupos históricos.
 
 ### `reserva`
 La ocupación de **un** equipo en **una** franja: es la unidad que protege la
@@ -903,6 +964,7 @@ grupo ni materia.
 | hora_inicio | TIME | NOT NULL |
 | hora_fin | TIME | NOT NULL, CHECK (hora_fin <> hora_inicio) |
 | estado | VARCHAR(15) | NOT NULL DEFAULT 'CONFIRMADA', CHECK IN ('CONFIRMADA','CANCELADA','FINALIZADA','NO_RETIRADA') |
+| version | BIGINT | NOT NULL DEFAULT 0, CHECK (version >= 0); revisión interna de escritura |
 | tipo | VARCHAR(20) | NOT NULL DEFAULT 'NORMAL', CHECK IN ('NORMAL','BLOQUEO') |
 | motivo_bloqueo | TEXT | NULL en las NORMAL; NOT NULL y no vacío en las BLOQUEO |
 | creado_por | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
@@ -1103,17 +1165,11 @@ CREATE INDEX idx_notif_sobre_usuario  ON notificacion (sobre_usuario_id, tipo) W
 > `reserva`** (RF-08.10), y no tiene nada que ver. Aquello era un tipo de
 > notificación; esto es lo que le pasa a la reserva que nadie retiró.
 
-> **El pedido de liberación (RF-04.12) no tiene tabla propia, y esta es.** Un
-> pedido es un mensaje: no cambia ninguna reserva, no espera respuesta dentro
-> del sistema y no le da prioridad a nadie sobre ningún equipo. Modelarlo como
-> entidad obligaría a inventarle estados y caducidad para representar un acuerdo
-> que se cierra hablando. La fila que ya se escribe —la notificación del dueño—
-> alcanza para las dos cosas que sí hacen falta: dejar constancia de que se pidió
-> y sostener la regla de **un pedido por reserva, por solicitante y por día**, que
-> se verifica preguntando si existe una notificación `PEDIDO_DE_LIBERACION` con
-> este `reserva_id`, este `sobre_usuario_id` y `creada_en` de hoy. La consulta cae
-> sobre `idx_notif_sobre_usuario`, que ya existe: no hace falta ningún índice
-> nuevo.
+> **El pedido de liberación es un mensaje, sin negociación dentro del sistema.**
+> No modifica la reserva ni concede prioridad. Desde 023, `pedido_liberacion`
+> reclama una clave única `(reserva_id, solicitante_id, fecha)` en la misma
+> transacción que el evento. La notificación no sostiene esa unicidad: leerla,
+> borrarla o demorar su entrega no permite repetir el reclamo del día.
 >
 > `sobre_usuario_id` es de quién **habla** el aviso, y acá eso es **quien pide**,
 > no el destinatario: el aviso le llega al dueño y trata sobre el otro docente.
@@ -1285,17 +1341,22 @@ CREATE INDEX idx_audit_usuario ON audit_log (usuario_id, creado_en DESC);
 > sube** (ver `internal/auth/domain/foto_de_perfil.go`). La lista es cerrada y
 > sin SVG: un SVG puede traer JavaScript adentro y se serviría desde el mismo
 > origen que la aplicación, o sea con acceso a la sesión de quien lo mire.
+> El backend comprueba el tope de 200 KiB y dimensiones de hasta 2048 × 2048
+> antes de decodificar. También valida las dimensiones del frame WebP interno;
+> sólo guarda una imagen decodificable y conserva la anterior si falla el reemplazo.
 >
 > El `ON DELETE CASCADE` es lo que hace que borrar una cuenta se lleve su
 > foto. Guardarlas en disco dejaría archivos huérfanos, fuera de la copia de
 > seguridad —que hoy es solo de Postgres— y sin forma de saber de quién eran.
 
 ### `pedido_de_materia`
+
 | Campo | Tipo | Restricciones |
 |---|---|---|
 | id | UUID | PK |
 | usuario_id | UUID | NOT NULL, FK → usuario ON DELETE CASCADE |
 | materia_id | UUID | NULL, FK → materia ON DELETE CASCADE |
+| materia_creada_id | UUID | NULL, FK → materia ON DELETE SET NULL; sólo para un pedido de materia nueva APROBADO (019) |
 | curso_solicitado | VARCHAR(100) | NULL |
 | materia_solicitada | VARCHAR(100) | NULL |
 | motivo | TEXT | NOT NULL, no vacío |
@@ -1309,7 +1370,22 @@ CREATE INDEX idx_audit_usuario ON audit_log (usuario_id, creado_en DESC);
 CREATE UNIQUE INDEX idx_pedido_materia_abierto
     ON pedido_de_materia (usuario_id, materia_id)
     WHERE estado = 'PENDIENTE' AND materia_id IS NOT NULL;
+CREATE INDEX idx_pedido_materia_creada
+    ON pedido_de_materia (materia_creada_id)
+    WHERE materia_creada_id IS NOT NULL;
 ```
+
+La migración 019 vincula la materia creada al aprobar sin cambiar la forma ni
+los textos originales de la solicitud. Conserva `materia_id` para las materias
+que ya existían al pedir. Los pedidos legados quedan con `materia_creada_id`
+vacío: no se infiere el vínculo por nombre. Eliminar una materia creada
+conserva el pedido y su resolución, con el vínculo en NULL.
+
+La resolución bloquea el pedido con `FOR UPDATE` y confirma creación,
+asignación y resolución en una sola transacción. El UPDATE exige PENDIENTE.
+Repetir la misma decisión devuelve la constancia existente sin repetir sus
+efectos ni cambiar respuesta, curso, rol, administrador o fecha; la decisión
+opuesta se rechaza. El aviso se publica después del commit.
 
 Un docente pide poder dictar —y por lo tanto reservar computadoras para— una
 materia más. Al registrarse ya se podía decir qué materia se dicta
@@ -1397,8 +1473,8 @@ borrado real. El propósito de archivar es evitar recrear cursos, materias y
 asignaciones docente↔materia el año siguiente; **no** es preservar el detalle
 de cada reserva.
 
-1. Se preservan (`archivado = true`, sin borrar): `curso`, `materia`,
-   `docente_materia`. **`archivado` es el único estado de un curso y de una
+1. Se conservan `curso`, `espacio`, `materia` y `docente_materia`. Cursos,
+   espacios y materias quedan con `archivado = true`; las asignaciones no se borran. **`archivado` es el único estado de un curso y de una
    materia**: hasta la migración 016 lo acompañaba una bandera `activo` que
    ninguna línea del código ponía en `false` y que ninguna regla consultaba, pero
    que viajaba en la respuesta de la API. Se quitó — el significado que aparentaba
@@ -1410,12 +1486,48 @@ de cada reserva.
    agregado** (`historico_uso_equipo` / `historico_uso_docente`) con las
    estadísticas del año que termina.
 3. Se **eliminan físicamente**: todos los `reserva_grupo`, `reserva` y
-   `regla_recurrencia` cuya `materia_id` pertenece a un curso de ese ciclo, más
+   `regla_recurrencia` cuya `materia_id` pertenece a un curso o espacio de ese ciclo, más
    los bloqueos administrativos (`reserva` con `tipo = BLOQUEO`) del año de ese
    ciclo — no tienen materia, así que se ubican por año.
 4. `incidencia` **no se toca**: pertenece al equipo, no al ciclo lectivo.
    `prestamo` tampoco — su `reserva_id` queda en `NULL` y el registro de que
    alguien se llevó la máquina sobrevive.
+
+Desde la migración 018, el snapshot, el archivo, la limpieza, el clonado
+opcional y la constancia del resultado se confirman juntos. Un fallo revierte
+la operación completa. El cierre bloquea el ciclo con `FOR UPDATE`; los
+triggers de reserva y grupo toman `FOR SHARE`, impiden escribir sobre un ciclo
+archivado o sellado y permiten terminar primero las escrituras ya iniciadas.
+Las consultas posteriores al bloqueo usan `READ COMMITTED` para incluirlas.
+
+### `snapshot_ciclo` (sello del histórico, migración 018)
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| ciclo_id | UUID | PK, FK → ciclo_lectivo.id |
+| anio | INTEGER | NOT NULL, UNIQUE |
+| sellado_en | TIMESTAMPTZ | NOT NULL, default now() |
+| legado | BOOLEAN | NOT NULL, default false |
+
+El sello se escribe después de validar cantidades y minutos contra la fuente
+y las filas persistidas. Un snapshot sellado no se recalcula ni se reemplaza.
+Los ciclos archivados antes de 018 se sellan como legados, conservando sus
+históricos; una fuente ya borrada no permite reconstruir estadísticas faltantes.
+
+### `cierre_ciclo` (resultado durable, migración 018)
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| ciclo_id | UUID | PK, FK → ciclo_lectivo.id |
+| anio_destino | INTEGER | NULL si no se pidió clonado |
+| nuevo_ciclo_id | UUID | NULL sin clonado; sin FK para conservar la respuesta |
+| cursos_clonados | INTEGER | NOT NULL, >= 0 |
+| materias_clonadas | INTEGER | NOT NULL, >= 0 |
+| completado_en | TIMESTAMPTZ | NOT NULL, default now() |
+
+El destino y el UUID nuevo son ambos nulos o ambos no nulos. Repetir el mismo
+pedido devuelve la respuesta original; un destino distinto genera conflicto.
+Un archivo legado sin esta constancia requiere revisión si quedó incompleto.
 
 ### `historico_uso_equipo` (permanente, uno por equipo por año)
 | Campo | Tipo | Restricciones |
@@ -1444,7 +1556,8 @@ de cada reserva.
 | nombre_docente_snapshot | VARCHAR(200) | NOT NULL |
 | cantidad_reservas | INTEGER | NOT NULL |
 | minutos_totales | INTEGER | NOT NULL |
-| | | UNIQUE (anio, usuario_id) |
+| docente_id_historico | UUID | NOT NULL, sin FK; sobrevive a la eliminación de cuenta |
+| | | UNIQUE (anio, docente_id_historico) — migración 018 |
 
 ```sql
 CREATE INDEX idx_historico_equipo_anio  ON historico_uso_equipo (anio);
@@ -1455,6 +1568,13 @@ CREATE INDEX idx_historico_docente_anio ON historico_uso_docente (anio);
 > la fila sobrevive y sigue siendo legible por `nombre_docente_snapshot`. Sin
 > esa política, el hard delete de un docente que figurara en cualquier snapshot
 > fallaría con violación de FK.
+>
+> La agrupación usa `docente_id_historico`, que también se guarda de forma
+> inmutable en cada reserva normal desde 018. Cambiar el nombre o eliminar la
+> cuenta no divide los totales; los homónimos siguen separados. En reservas
+> anteriores sin cuenta se usa el grupo como identidad de respaldo: el UUID
+> original ya eliminado no puede recuperarse.
+
 
 > Estas dos tablas **sí** son un read-model permanente (a diferencia de la
 > decisión de "sin CQRS" para reportes del ciclo activo, §4), pero se calculan
@@ -1646,7 +1766,7 @@ archivado por un dato viejo que ya no se puede corregir.
 
 ## 6. Eliminar una cuenta: qué sobrevive y qué no
 
-Diez foráneas apuntan a `usuario`, y el borrado definitivo (RF-01.9) las ejerce
+Las foráneas que apuntan a `usuario` se ejercen con el borrado definitivo (RF-01.9)
 todas a la vez. La pregunta no es qué hace cada `ON DELETE` —eso está en la
 tabla de cada entidad— sino **cuál de las dos mitades toca cada una**, porque
 quien aprieta el botón lo hace para liberar un email y se lleva más que eso.
@@ -1671,8 +1791,9 @@ y sin su nombre.
 | `pedido_de_materia` | Un pedido para dictar algo, de alguien que ya no está. |
 | `docente_materia` | Ya no hay quién dicte: la materia queda sin ese docente (y si era el único, RF-02.8 ya canceló sus reservas al darlo de baja). |
 | `horario_admin` y `horario_admin_excepcion` | Un horario de guardia sin persona no significa nada. |
-| `foto_perfil` | Es de la cuenta. |
+| `foto_de_perfil` | Es de la cuenta. |
 | `codigo_recuperacion` | Vence solo; sin cuenta no sirve para nada. |
+| `baja_usuario` + `baja_usuario_materia` | Progreso de una baja completa. El borrado se rechaza mientras quede pendiente. |
 
 ### Por qué la operación lo informa
 
@@ -1746,10 +1867,11 @@ como llegaron a ser quince.
 
 ## 8. Cuánto crecen las tablas que nada limpia
 
-Cuatro tablas no se borran nunca: `audit_log`, `notificacion`, `prestamo` e
-`incidencia`. La pregunta obvia es si hace falta una política de retención. **La
-respuesta, medida, es que no**, y conviene dejar el número escrito para que
-nadie la vuelva a abrir por las dudas.
+`audit_log`, `notificacion`, `prestamo` e `incidencia` no tienen purga automática.
+Las notificaciones sí pueden borrarse por su destinatario y se eliminan en
+cascada al borrar su cuenta. Auditoría, préstamos e incidencias conservan sus
+constancias. Los números siguientes son una estimación de retención para una
+institución, no una medición del volumen actual de una instalación.
 
 Costo marginal real por fila, medido insertando veinte mil filas y comparando el
 tamaño (no dividiendo el total, que a pocos cientos de filas es casi todo piso
@@ -1791,5 +1913,19 @@ dos cosas está cerca.
 - Lo que la institución escribe es texto libre (`equipo.tipo`,
   `incidencia.categoria`, `reserva.motivo_bloqueo`); lo que el sistema
   interpreta es un enum con `CHECK` (estados, roles, `notificacion.tipo`).
-</content>
 </invoke>
+
+## Migraciones 022–026: recuperación, tareas, eventos y auditoría
+
+`codigo_recuperacion_unico_sin_usar` exige una sola fila con `usado_en IS NULL` por usuario. La sustitución y los intentos se serializan con bloqueo de usuario.
+
+`notificacion.pedido_id` y `notificacion.hilo_id` identifican tareas independientes. No tienen FK para conservar la referencia histórica tras borrar la tarea. `pedido_liberacion` reclama `(reserva_id, solicitante_id, fecha)` con clave primaria y referencias que se borran en cascada; se inserta en la misma transacción que el evento del aviso.
+
+`evento_pendiente` guarda ID ordenado, tipo y clase de payload, payload cifrado, creación, procesamiento, intentos, próxima fecha de reintento y último error. El índice parcial selecciona pendientes. Evento procesado y avisos se confirman juntos; el payload se vacía en ese commit.
+
+`auditar_cambio_sensible()` agrega una entrada `CAMBIO_TRANSACCIONAL` por fila sensible modificada. La constancia participa en la escritura original y permanece tras borrar la entidad. Registra actor/IP de la transacción y campos/estados permitidos; no guarda hashes, contraseñas, ciphertext ni texto libre.
+
+La migración 026 instala ese mismo trigger en `equipo_preferencia`: sus altas,
+ediciones y borrados deciden futuras autorizaciones de desplazamiento y quedan
+registrados en la misma transacción. La bajada elimina el trigger y conserva
+las entradas de `audit_log`.
