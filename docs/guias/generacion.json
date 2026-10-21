@@ -1,0 +1,345 @@
+{
+  "version": "1.20.0",
+  "generado": "2026-10-21T01:31:00.737Z",
+  "herramienta": "Playwright / Chromium",
+  "entorno": "Efímero, con datos ficticios y sin configuraciones de la instalación local",
+  "imagenes": [
+    {
+      "archivo": "admin-12c-primera-jornada.png",
+      "ruta": "/primera-jornada",
+      "fecha": "2026-10-21T01:30:17.764Z",
+      "sha256": "4119181c6f36523166862e4789af3a61d481b31f777d9d8c3b0253fa713268f7"
+    },
+    {
+      "archivo": "docente-01-entrar.png",
+      "ruta": "/login",
+      "fecha": "2026-10-21T01:30:19.730Z",
+      "sha256": "b98ac2f21ef2d615456d413d32f7ddc8e4078fe5db74a6bb54fb0759c5cf2d56"
+    },
+    {
+      "archivo": "docente-02-crear-cuenta.png",
+      "ruta": "/registro",
+      "fecha": "2026-10-21T01:30:20.409Z",
+      "sha256": "24ffa5d70d7139514e635d5dddacbd2a2853cd7a427ae85acdd66899dcf07091"
+    },
+    {
+      "archivo": "docente-02b-donde-vas-a-estar.png",
+      "ruta": "/registro",
+      "fecha": "2026-10-21T01:30:20.486Z",
+      "sha256": "2b0e796d7388c3e02fa0751e89049b97b31b564dda56233a9f4f596033119359"
+    },
+    {
+      "archivo": "docente-03-olvide-contrasena.png",
+      "ruta": "/recuperar-password",
+      "fecha": "2026-10-21T01:30:21.094Z",
+      "sha256": "9a32926b238cfcf35d7f0419cc1ec3fe816205f9ab9f28d6ba0bd6a436fea0c5"
+    },
+    {
+      "archivo": "docente-04-pantalla-de-inicio.png",
+      "ruta": "/",
+      "fecha": "2026-10-21T01:30:21.849Z",
+      "sha256": "34248f13af7c4760d993ba647df9df7bc7869f640e67d3f5734e7c815c71cb3a"
+    },
+    {
+      "archivo": "docente-05-nueva-reserva.png",
+      "ruta": "/reservas/nueva",
+      "fecha": "2026-10-21T01:30:22.785Z",
+      "sha256": "e215a389e669a6c1b42cd9561eaecd2613622b00a092771ae14b2de210beef32"
+    },
+    {
+      "archivo": "docente-23-seleccion-equipos.png",
+      "ruta": "/reservas/nueva",
+      "fecha": "2026-10-21T01:30:22.882Z",
+      "sha256": "74c51f0d68be824340c1f05eb914cb5e978536090ec10a9e12bf1664ea76b0fc"
+    },
+    {
+      "archivo": "docente-06-reserva-semanal.png",
+      "ruta": "/reservas/nueva",
+      "fecha": "2026-10-21T01:30:23.415Z",
+      "sha256": "dc453a6c67a2c73d12a3e7a66d0a7dcb9fbcf4b282494d41e127f0c0f61f0386"
+    },
+    {
+      "archivo": "docente-22-consentimiento-serie.png",
+      "ruta": "/reservas/nueva",
+      "fecha": "2026-10-21T01:30:23.523Z",
+      "sha256": "5d8a931a8b201e5fb54b7bd4b607a52868f20ee22fe4c00a613d5f447346ffd3"
+    },
+    {
+      "archivo": "docente-07-mis-reservas.png",
+      "ruta": "/reservas",
+      "fecha": "2026-10-21T01:30:24.282Z",
+      "sha256": "2e67b98a3c4fd3a0522449fbd0638aa96f7a5ebc69f586519510cc284ae60a93"
+    },
+    {
+      "archivo": "docente-08-cancelar.png",
+      "ruta": "/reservas",
+      "fecha": "2026-10-21T01:30:24.406Z",
+      "sha256": "c1d03e9f74bb44ea3fe71b9ce9747972f9086d749083f80658905cfbd7156eec"
+    },
+    {
+      "archivo": "docente-09-cambiar-computadora.png",
+      "ruta": "/reservas",
+      "fecha": "2026-10-21T01:30:25.132Z",
+      "sha256": "8d44fe7559d66ee4b3749368f06236c45f81920df5d288e98cd5dd348c6ed5d5"
+    },
+    {
+      "archivo": "docente-10-computadoras.png",
+      "ruta": "/inventario",
+      "fecha": "2026-10-21T01:30:25.961Z",
+      "sha256": "215ec3757cf3f327b7b08610c8fc5f2d72911ddcbc2dd2006a3b1ea46a355eb9"
+    },
+    {
+      "archivo": "docente-11-avisar-falla.png",
+      "ruta": "/inventario",
+      "fecha": "2026-10-21T01:30:26.097Z",
+      "sha256": "f27f68927a7ce1c420566d1a5f6ceefff3fefa2a559c1c2c606578d7fc6da109"
+    },
+    {
+      "archivo": "docente-12-avisos.png",
+      "ruta": "/notificaciones",
+      "fecha": "2026-10-21T01:30:26.794Z",
+      "sha256": "825ae99d2607b1ace3c3f5253e3dcaaadae77d775a16131faa194f74ba5170dd"
+    },
+    {
+      "archivo": "docente-13-conversacion.png",
+      "ruta": "/notificaciones",
+      "fecha": "2026-10-21T01:30:26.948Z",
+      "sha256": "3b9039eb5e2f11a93026b874b401694240a834749028f4bd238d406c7304ed46"
+    },
+    {
+      "archivo": "docente-14-copias-por-correo.png",
+      "ruta": "/notificaciones",
+      "fecha": "2026-10-21T01:30:27.763Z",
+      "sha256": "57c9fb601951ad1f806e5e2cde61238d2f03df4e5dddaaef0cc9f9306ecc3f6d"
+    },
+    {
+      "archivo": "docente-15-perfil.png",
+      "ruta": "/perfil",
+      "fecha": "2026-10-21T01:30:28.474Z",
+      "sha256": "7e9c7acef75a2d6920ca8b211c000ffbcdac5b98a6cf2e19773f348cbfa3cf11"
+    },
+    {
+      "archivo": "docente-16-cambiar-contrasena.png",
+      "ruta": "/cambiar-password",
+      "fecha": "2026-10-21T01:30:29.111Z",
+      "sha256": "58e5e4ad90b1001b28e52dbe44f488a4e54306f253cf6eb6512becceece78eeb"
+    },
+    {
+      "archivo": "docente-17-horario-admins.png",
+      "ruta": "/disponibilidad",
+      "fecha": "2026-10-21T01:30:29.737Z",
+      "sha256": "6f6e5ecc0680fff140dae881161fda0f4cb9a43b21eb503ec0fd4d4ed55440bb"
+    },
+    {
+      "archivo": "docente-18-telefono.png",
+      "ruta": "/",
+      "fecha": "2026-10-21T01:30:30.609Z",
+      "sha256": "3b8d87547eb1ec61c0a758efe00c21ecf894a2aacf7e8c62c869620e85e8a9c9"
+    },
+    {
+      "archivo": "docente-19-calendario-equipo.png",
+      "ruta": "/inventario/equipos/f223b4d3-60fe-4abb-96e0-719ab4693123/calendario",
+      "fecha": "2026-10-21T01:30:31.408Z",
+      "sha256": "a0d07aa7aec528c20c27f6a5998f9de655dcf21565d3b4b3a4be0e9181520ff6"
+    },
+    {
+      "archivo": "admin-20-calendario-equipo.png",
+      "ruta": "/inventario/equipos/f223b4d3-60fe-4abb-96e0-719ab4693123/calendario",
+      "fecha": "2026-10-21T01:30:32.186Z",
+      "sha256": "6482462738e4d8e0410e6faa768b4c598910c5772cd55dbac82b1ae3f1a23c83"
+    },
+    {
+      "archivo": "docente-20-como-entrar.png",
+      "ruta": "/inventario",
+      "fecha": "2026-10-21T01:30:33.110Z",
+      "sha256": "9718fec285ffdb83f11fd723cb175fc8985335f74cf45f921d4b86f3dbd16a28"
+    },
+    {
+      "archivo": "docente-21-como-entrar-telefono.png",
+      "ruta": "/inventario",
+      "fecha": "2026-10-21T01:30:33.985Z",
+      "sha256": "ca91752890f6da3401027e65831a4ea63c30d27f247811315e431133bf33ced5"
+    },
+    {
+      "archivo": "admin-01-mostrador.png",
+      "ruta": "/",
+      "fecha": "2026-10-21T01:30:34.739Z",
+      "sha256": "b1417244040b3f0c216183dfa9c27fff4dc30ed9d500a0a9bbb94ec45d8905ec"
+    },
+    {
+      "archivo": "admin-02-menu.png",
+      "ruta": "/",
+      "fecha": "2026-10-21T01:30:34.969Z",
+      "sha256": "42f4c6738ced615c01679c85fd623794d657c9f97ba34d3fffc6aa51a47d4159"
+    },
+    {
+      "archivo": "admin-03-aprobacion.png",
+      "ruta": "/admin/aprobacion",
+      "fecha": "2026-10-21T01:30:35.619Z",
+      "sha256": "71f92ca95eb09555b9d41987dcaebeb409fc7a120efc549702a874f13369fde7"
+    },
+    {
+      "archivo": "admin-05-usuarios.png",
+      "ruta": "/admin/usuarios",
+      "fecha": "2026-10-21T01:30:36.376Z",
+      "sha256": "f4b69dae12433a061db577cb95113546389c3d2828216732b4f150bf155d5214"
+    },
+    {
+      "archivo": "admin-07-entregas.png",
+      "ruta": "/admin/entregas",
+      "fecha": "2026-10-21T01:30:37.071Z",
+      "sha256": "8624877feb134b6acd43d91fddb7ed963e01c92cb902a49d9710b41b83fc7b33"
+    },
+    {
+      "archivo": "admin-09-licencias.png",
+      "ruta": "/admin/licencias",
+      "fecha": "2026-10-21T01:30:37.783Z",
+      "sha256": "1ffd89f3442fe6eda238da752703e8c4c7c84b72bdb7da47a3358cec0dc94ea0"
+    },
+    {
+      "archivo": "admin-13-pedidos-de-materia.png",
+      "ruta": "/admin/pedidos-de-materia",
+      "fecha": "2026-10-21T01:30:38.446Z",
+      "sha256": "b27604661d97601edb0b68ce93f53054a639482078c68447a403875919a703fc"
+    },
+    {
+      "archivo": "admin-16-reportes.png",
+      "ruta": "/admin/reportes",
+      "fecha": "2026-10-21T01:30:39.269Z",
+      "sha256": "d89953099cc7d40c9747e46e8ba787b91890ec1f4e4f34bfbe75f2c29d607c0c"
+    },
+    {
+      "archivo": "admin-17-horarios-admin.png",
+      "ruta": "/disponibilidad",
+      "fecha": "2026-10-21T01:30:40.028Z",
+      "sha256": "11d12157f7d32d2eb9f7a12d7b573374767380e4422df5c689b861730caab929"
+    },
+    {
+      "archivo": "admin-18-avisos.png",
+      "ruta": "/notificaciones",
+      "fecha": "2026-10-21T01:30:40.720Z",
+      "sha256": "18918752103cca751104a2daed76f26ecd6591d4e59662edbacdf60943121778"
+    },
+    {
+      "archivo": "admin-21-perfil.png",
+      "ruta": "/perfil",
+      "fecha": "2026-10-21T01:30:41.418Z",
+      "sha256": "bce6870b9759206b71d66d7cc5f4a2f3ad459c9422f0de2c67a068b9aeaa188f"
+    },
+    {
+      "archivo": "admin-04-academico.png",
+      "ruta": "/admin/academico",
+      "fecha": "2026-10-21T01:30:42.206Z",
+      "sha256": "3c8af0eee0d3f63c9307344ff62a474a5fd76cca06f67b345d67c1460e314df8"
+    },
+    {
+      "archivo": "admin-27-quitar-docente-compartida.png",
+      "ruta": "/admin/academico",
+      "fecha": "2026-10-21T01:30:42.432Z",
+      "sha256": "5354091166a6297308d5597715af6c983d8c0721820c75e1390f557c8f48aec6"
+    },
+    {
+      "archivo": "admin-28-quitar-ultimo-docente.png",
+      "ruta": "/admin/academico",
+      "fecha": "2026-10-21T01:30:42.716Z",
+      "sha256": "105f555fc06e2356fd36fbeac398bd55ebee48ba08ff09c53df25c36627e445d"
+    },
+    {
+      "archivo": "admin-19-cerrar-anio.png",
+      "ruta": "/admin/academico",
+      "fecha": "2026-10-21T01:30:43.548Z",
+      "sha256": "e1fadb1bd68bd1e63b93bd26ad023f798268dee4b7044f64840e6645dded6cc5"
+    },
+    {
+      "archivo": "admin-06-inventario.png",
+      "ruta": "/admin/inventario",
+      "fecha": "2026-10-21T01:30:44.331Z",
+      "sha256": "528d8b9f8412297dd70c4ba863f36232af91e0b52dc3627afda432b53ba7eeff"
+    },
+    {
+      "archivo": "admin-24-preferencias.png",
+      "ruta": "/admin/inventario",
+      "fecha": "2026-10-21T01:30:44.525Z",
+      "sha256": "c1d5637aa330ffd3ae76d7eb138cb89067112662f3cca04e543de7fbaed211b5"
+    },
+    {
+      "archivo": "admin-22-cuentas-de-equipo.png",
+      "ruta": "/admin/inventario",
+      "fecha": "2026-10-21T01:30:44.703Z",
+      "sha256": "fad259d9fb2ba3a041d90d289610407d3aae9c902b9af38ab9dec288e0ddbd4e"
+    },
+    {
+      "archivo": "admin-23-cuenta-nueva.png",
+      "ruta": "/admin/inventario",
+      "fecha": "2026-10-21T01:30:44.859Z",
+      "sha256": "55c2abf5bab8cc76ad95850845c19c34c53455694799ae81e5eed876917538c1"
+    },
+    {
+      "archivo": "admin-08-entregar-sin-reserva.png",
+      "ruta": "/admin/entregas",
+      "fecha": "2026-10-21T01:30:45.674Z",
+      "sha256": "862e974b1ff213076f39b56925cb0edaeacf19ef04e9846d733c590378b033e7"
+    },
+    {
+      "archivo": "admin-10-cargar-licencia.png",
+      "ruta": "/admin/licencias",
+      "fecha": "2026-10-21T01:30:46.494Z",
+      "sha256": "557bb8ef4bc68d678491797d0c1d06f03a3f8f9df07f901a89abab371a4863ea"
+    },
+    {
+      "archivo": "admin-11-bloquear.png",
+      "ruta": "/admin/bloquear-equipos",
+      "fecha": "2026-10-21T01:30:47.238Z",
+      "sha256": "9d847b22838cad058302d68ba54ce992ad0659783fa42c717b734dae65ea8eac"
+    },
+    {
+      "archivo": "admin-12-jornada.png",
+      "ruta": "/admin/jornada",
+      "fecha": "2026-10-21T01:30:47.929Z",
+      "sha256": "cab9a079ddcf3fcf338a183e18923f21b333c1b52f81e71fe67c5ddf55b1e292"
+    },
+    {
+      "archivo": "admin-12b-jornada-impacto.png",
+      "ruta": "/admin/jornada",
+      "fecha": "2026-10-21T01:30:48.291Z",
+      "sha256": "6ec376ff24b5662b701c9378a8377ebb41bb8182c774a7c8bad426ac9196eb01"
+    },
+    {
+      "archivo": "admin-14-soporte.png",
+      "ruta": "/notificaciones",
+      "fecha": "2026-10-21T01:30:49.064Z",
+      "sha256": "7af5fda43ea58f3428a55d2502102380945b7b67ae52f7f2165847b0f295f101"
+    },
+    {
+      "archivo": "admin-15-soporte-conversacion.png",
+      "ruta": "/notificaciones",
+      "fecha": "2026-10-21T01:30:49.192Z",
+      "sha256": "a12d055ba48cc6f0098df51ec66feca66cf3b037b9331b93aabc49a165fd9b07"
+    },
+    {
+      "archivo": "admin-25-auditoria.png",
+      "ruta": "/admin/auditoria",
+      "fecha": "2026-10-21T01:30:49.938Z",
+      "sha256": "6e943f3117a52f2f9648b33b16947aad30d80242dd171f00dfa525c9d9f28f89"
+    },
+    {
+      "archivo": "admin-26-detalle-auditoria.png",
+      "ruta": "/admin/auditoria",
+      "fecha": "2026-10-21T01:30:50.160Z",
+      "sha256": "8a0798c91aec964ba42d07ee35a66f16a8d499c766681f058bee90908f0a6e5d"
+    },
+    {
+      "archivo": "admin-29-menu-movil.png",
+      "ruta": "/",
+      "fecha": "2026-10-21T01:30:51.136Z",
+      "sha256": "f7cac297b686c8ec2a7baab48caf7cd876daac1c1ead749ba61dc536e40752d9"
+    },
+    {
+      "archivo": "general-01-recuperar-pantalla.png",
+      "ruta": "/reservas",
+      "fecha": "2026-10-21T01:30:52.591Z",
+      "escenario": "Descarga de un módulo interrumpida deliberadamente; API y sesión reales. Se verifica la recuperación al recargar.",
+      "sha256": "67a3a5a83774ce3601595d6d2d723096b933e686c9793609bff9d4374b264ca8"
+    }
+  ]
+}

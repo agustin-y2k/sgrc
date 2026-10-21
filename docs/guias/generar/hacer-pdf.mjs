@@ -45,11 +45,21 @@ const nav = await chromium.launch()
 for (const g of GUIAS) {
   const page = await (await nav.newContext()).newPage()
   await page.goto(pathToFileURL(g.html).href, { waitUntil: "networkidle" })
+  await page.evaluate(() => document.fonts.ready)
+  const faltantes = await page.evaluate(() =>
+    [...document.images]
+      .filter((img) => !img.complete || img.naturalWidth === 0)
+      .map((img) => img.getAttribute("src"))
+  )
+  if (faltantes.length)
+    throw new Error(`Imágenes ausentes en ${g.html}: ${faltantes.join(", ")}`)
   await page.emulateMedia({ media: "print" })
   await page.pdf({
     path: g.pdf,
     format: "A4",
     printBackground: true,
+    tagged: true,
+    outline: true,
     displayHeaderFooter: true,
     headerTemplate: "<div></div>",
     footerTemplate: `<div style="width:100%;font-size:8pt;color:#7a828d;
