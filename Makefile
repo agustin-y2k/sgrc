@@ -7,6 +7,10 @@ test:
 lint:
 	golangci-lint run ./...
 
+.PHONY: regresion-navegador
+regresion-navegador:
+	node scripts/regresion-navegador.mjs
+
 build:
 	CGO_ENABLED=0 GOOS=linux go build -o bin/sgrc-app ./cmd
 
@@ -18,6 +22,31 @@ docker-build:
 # El overlay de desarrollo va explícito: publica 8080 y 5432 al host, que en
 # producción no se exponen (ver docker-compose.dev.yml).
 DEV := docker compose -f docker-compose.yml -f docker-compose.dev.yml
+
+# Copia local independiente. Se publica la plantilla, no la configuración activa.
+LOCAL := docker compose -p sgrc-local --env-file .env.local -f docker-compose.yml -f docker-compose.local.yml
+.PHONY: local-init local local-stop local-ps local-logs local-usuarios local-observabilidad
+
+local-init:
+	python3 scripts/preparar-local.py
+
+local: local-init
+	$(LOCAL) up -d --build --wait --wait-timeout 120 postgres sgrc-app frontend
+
+local-stop:
+	$(LOCAL) --profile observabilidad stop
+
+local-ps:
+	$(LOCAL) --profile observabilidad ps
+
+local-logs:
+	$(LOCAL) logs -f sgrc-app frontend
+
+local-usuarios:
+	python3 scripts/sembrar-usuarios-locales.py
+
+local-observabilidad:
+	$(LOCAL) --profile observabilidad up -d --wait --wait-timeout 120 prometheus grafana dozzle
 
 run:
 	$(DEV) up --build
@@ -133,9 +162,10 @@ observabilidad:
 # un despliegue que nunca use este perfil— y ese valor está escrito en el
 # repositorio, así que si nadie lo cambia el panel queda con una contraseña
 # pública. Este chequeo es la puerta: el perfil se levanta desde acá, y desde
-# acá se puede mirar el .env y negarse.
+# acá se puede mirar el .env y negarse. El contenedor valida de nuevo para
+# cubrir también el arranque directo por docker compose.
 	@clave=$$(grep -E '^GRAFANA_PASSWORD=' .env 2>/dev/null | cut -d= -f2-); \
-	if [ -z "$$clave" ] || [ "$$clave" = "cambiar_por_una_contrasena_larga" ]; then \
+	if [ "$${#clave}" -lt 16 ] || [ "$$clave" = "cambiar_por_una_contrasena_larga" ] || [ "$$clave" = "sin-configurar-ver-make-observabilidad" ]; then \
 		echo "GRAFANA_PASSWORD no está definida en el .env (o quedó con el valor de ejemplo)."; \
 		echo "Grafana queda con una contraseña que está publicada en el repositorio."; \
 		echo "Generá una con \`openssl rand -base64 24\` y ponela en el .env."; \
@@ -219,11 +249,17 @@ backup:
 # CUENTAS_SECRET, ver internal/shared/secretos—. Con 0600 lo lee solo quien lo
 # generó. Y la carpeta va en 0700 por lo mismo: de nada sirve el archivo cerrado
 # adentro de un directorio que cualquiera puede listar.
-	@umask 077; mkdir -p "$(DIR_BACKUPS)"; chmod 700 "$(DIR_BACKUPS)"; \
+# El temporal vive en el mismo directorio para publicar con un rename atómico.
+# Un pg_dump fallido o vacío nunca reemplaza el respaldo anterior del día.
+	@set -eu; umask 077; mkdir -p "$(DIR_BACKUPS)"; chmod 700 "$(DIR_BACKUPS)"; \
+		destino="$(DIR_BACKUPS)/backup-sgrc-$$(date +%F).sql"; \
+		temporal=$$(mktemp "$(DIR_BACKUPS)/.backup-sgrc-XXXXXX"); \
+		trap 'rm -f "$$temporal"' 0; trap 'exit 1' 1 2 15; \
 		docker compose exec -T postgres sh -c \
-		'pg_dump -U "$$POSTGRES_USER" "$$POSTGRES_DB"' \
-		> "$(DIR_BACKUPS)/backup-sgrc-$$(date +%F).sql"
-	@echo "Backup en $(DIR_BACKUPS)/backup-sgrc-$$(date +%F).sql (solo lo podés leer vos: 0600)"
+		'pg_dump -U "$$POSTGRES_USER" "$$POSTGRES_DB"' > "$$temporal"; \
+		if [ ! -s "$$temporal" ]; then echo "El volcado quedó vacío; no se reemplazó el backup anterior." >&2; exit 1; fi; \
+		mv -f "$$temporal" "$$destino"; \
+		printf 'Backup en %s (solo lo podés leer vos: 0600)\n' "$$destino"
 
 # ── Datos iniciales ───────────────────────────────────────────────────
 
@@ -249,18 +285,14 @@ coverage-report:
 
 # Regenera TODAS las capturas y los dos PDF, de punta a punta.
 #
-# Levanta su propia pila en el proyecto `sgrc-capturas` y la baja al terminar:
-# la base de desarrollo no se toca. Tarda varios minutos y necesita los puertos
-# 8080/8081/5432 libres, así que si tenés la pila de desarrollo arriba hay que
-# pararla antes (`make stop`) — las dos usan los mismos puertos y no conviven.
+# Levanta un proyecto `sgrc-guias-*` con base efímera y puerto localhost libre.
+# Convive con sgrc-local; no lee configuraciones privadas ni inventario real.
 capturas:
 	./docs/guias/generar/capturar-todo.sh
 
 # Solo los dos PDF, sin capturas, sin base y sin Docker Compose.
 #
-# Es lo único que hace falta cuando cambia la VERSIÓN o el texto de una guía:
-# la portada es parte del documento, pero las capturas muestran a propósito el
-# pie de la versión anterior —se sacan antes del bump— y regenerar cincuenta
-# imágenes por un dígito no se justifica. Son dos minutos.
+# Usarlo cuando sólo cambie el texto. Si cambia la interfaz, renovar también
+# las imágenes con `make capturas` para que correspondan a la versión publicada.
 capturas-pdf:
 	./docs/guias/generar/capturar-todo.sh --solo-pdf

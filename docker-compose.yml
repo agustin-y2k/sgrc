@@ -8,6 +8,9 @@ x-etiquetas-sgrc: &etiquetas-sgrc
 services:
   sgrc-app:
     build: .
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     # 1g, contra los 256m que había: cada verificación de contraseña con
     # argon2id reserva 64 MB mientras dura
     # (internal/shared/security/argon2.go), así que unos pocos logins
@@ -168,7 +171,7 @@ services:
       - sgrc-net
 
   grafana:
-    image: grafana/grafana:11.5.1
+    image: grafana/grafana:11.6.15
     profiles: [observabilidad]
     mem_limit: 256m
     depends_on:
@@ -178,22 +181,20 @@ services:
       # muestran cómo se comporta el sistema por dentro, y esto va a estar
       # escuchando en un servidor compartido.
       #
-      # El valor por defecto de acá NO es una contraseña aceptable —está escrito
-      # en el repositorio—; está para que este archivo se pueda interpretar en un
-      # despliegue que nunca levante este perfil. Con `${GRAFANA_PASSWORD:?...}`
-      # el compose se niega a interpretar el archivo ENTERO aunque el perfil esté
-      # apagado, y entonces nadie podría levantar el sistema sin configurar un
-      # panel que no va a usar. La puerta está en `make observabilidad`, que es
-      # como se levanta este perfil: ahí se verifica el .env antes de arrancar.
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-sin-configurar-ver-make-observabilidad}
+      # Vacío permite interpretar el compose sin habilitar este perfil. Cuando
+      # sí se habilita, arrancar-seguro.sh exige una clave propia aunque se use
+      # docker compose directamente en lugar de make observabilidad.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-}
       # Nadie se registra solo ni entra sin usuario.
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
+      - ./observabilidad/grafana/arrancar-seguro.sh:/etc/grafana/arrancar-seguro.sh:ro
       - ./observabilidad/grafana/datasources.yml:/etc/grafana/provisioning/datasources/sgrc.yml:ro
       - ./observabilidad/grafana/tableros.yml:/etc/grafana/provisioning/dashboards/sgrc.yml:ro
       - ./observabilidad/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-datos:/var/lib/grafana
+    entrypoint: ["/bin/sh", "/etc/grafana/arrancar-seguro.sh", "/run.sh"]
     ports:
       # SOLO a 127.0.0.1: se llega desde el propio servidor, o por un túnel
       # de SSH desde otra máquina. Publicarlo en todas las interfaces dejaría

@@ -14,7 +14,7 @@ services:
   # (frontend/vite.config.ts apunta a localhost:8080).
   sgrc-app:
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
   # La SPA compilada, servida por el mismo nginx que corre en el servidor.
   #
@@ -29,12 +29,12 @@ services:
   # docente detrás del túnel.
   frontend:
     ports:
-      - "8081:80"
+      - "127.0.0.1:8081:80"
 
   # Postgres al host para inspeccionar la base con psql o un cliente gráfico.
   postgres:
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
   # Datos con los que probar: un ciclo, un curso, una materia, un docente
   # aprobado y un carro con PCs. Sin esto, un `docker compose down -v`
