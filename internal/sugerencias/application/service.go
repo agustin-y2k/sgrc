@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
-	"github.com/ramiro/sgrc/internal/sugerencias/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/sugerencias/domain"
 )
 
 // ObtenedorDeUsuario resuelve el nombre y el mail de quien escribió, que

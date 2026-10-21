@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ramiro/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
 )
 
 // RF-02.12 — las tres operaciones que cargan cursos y materias de a muchos en

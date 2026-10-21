@@ -3,7 +3,7 @@ package http
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/inventory/application"
+	"github.com/agustin-y2k/sgrc/internal/inventory/application"
 )
 
 // Licencias de software (RF-03.11 a RF-03.14).

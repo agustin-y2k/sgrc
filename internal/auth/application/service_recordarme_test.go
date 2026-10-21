@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // La casilla "mantener la sesión iniciada" (RF-01.13) no decide nada en el

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/inventory/application"
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/application"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 // Migración 011 — la misma regla de unicidad para todos los nombres del

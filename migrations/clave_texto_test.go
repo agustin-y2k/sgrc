@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ramiro/sgrc/internal/shared/testdb"
-	"github.com/ramiro/sgrc/internal/shared/texto"
+	"github.com/agustin-y2k/sgrc/internal/shared/testdb"
+	"github.com/agustin-y2k/sgrc/internal/shared/texto"
 )
 
 // Este test existe por una sola razón: `clave_texto()` en la base y

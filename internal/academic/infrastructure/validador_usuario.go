@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/academic/application"
+	"github.com/agustin-y2k/sgrc/internal/academic/application"
 )
 
 var _ application.ValidadorUsuario = (*ValidadorUsuarioPostgres)(nil)

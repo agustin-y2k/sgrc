@@ -3,8 +3,8 @@ package application
 import (
 	"context"
 
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
-	"github.com/ramiro/sgrc/internal/sugerencias/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/sugerencias/domain"
 )
 
 // Repo es todo lo que este paquete necesita de infrastructure/.

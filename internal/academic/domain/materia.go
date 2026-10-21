@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ramiro/sgrc/internal/shared/texto"
+	"github.com/agustin-y2k/sgrc/internal/shared/texto"
 )
 
 // MaxLargoMateria es el ancho de `materia.nombre` en la base. El tope es de

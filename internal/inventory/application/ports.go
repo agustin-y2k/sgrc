@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/.

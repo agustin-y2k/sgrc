@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // Lo que agregó migrations/001_esquema_inicial.sql solo se puede probar

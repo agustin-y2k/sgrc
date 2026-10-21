@@ -13,13 +13,13 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/inventory/application"
-	"github.com/ramiro/sgrc/internal/inventory/domain"
-	"github.com/ramiro/sgrc/internal/shared/audit"
-	"github.com/ramiro/sgrc/internal/shared/authtest"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
-	"github.com/ramiro/sgrc/internal/shared/secretos"
-	"github.com/ramiro/sgrc/internal/shared/texto"
+	"github.com/agustin-y2k/sgrc/internal/inventory/application"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/audit"
+	"github.com/agustin-y2k/sgrc/internal/shared/authtest"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/secretos"
+	"github.com/agustin-y2k/sgrc/internal/shared/texto"
 )
 
 // fakeAuditor descarta toda entrada de auditoría (ver el mismo tipo en

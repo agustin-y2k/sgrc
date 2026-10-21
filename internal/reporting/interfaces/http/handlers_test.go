@@ -8,9 +8,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/reporting/application"
-	"github.com/ramiro/sgrc/internal/reporting/domain"
-	"github.com/ramiro/sgrc/internal/shared/authtest"
+	"github.com/agustin-y2k/sgrc/internal/reporting/application"
+	"github.com/agustin-y2k/sgrc/internal/reporting/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/authtest"
 )
 
 type fakeRepo struct {

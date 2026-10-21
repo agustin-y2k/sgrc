@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ramiro/sgrc/internal/reservation/application"
-	"github.com/ramiro/sgrc/internal/reservation/domain"
+	"github.com/agustin-y2k/sgrc/internal/reservation/application"
+	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
 )
 
 const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en, cancelado_por, motivo_cancelacion, cancelada_en`

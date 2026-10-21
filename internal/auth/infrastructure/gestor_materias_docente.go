@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
 )
 
 var _ application.GestorMateriasDocente = (*GestorMateriasDocentePostgres)(nil)

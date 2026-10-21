@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/notification/application"
-	"github.com/ramiro/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/notification/application"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
 )
 
 var _ application.PreferenciasEmail = (*PreferenciasEmailPostgres)(nil)

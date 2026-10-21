@@ -6,9 +6,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	authdomain "github.com/ramiro/sgrc/internal/auth/domain"
-	"github.com/ramiro/sgrc/internal/shared/adminseed"
-	"github.com/ramiro/sgrc/internal/shared/security"
+	authdomain "github.com/agustin-y2k/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/adminseed"
+	"github.com/agustin-y2k/sgrc/internal/shared/security"
 )
 
 // pgxUsuarioRepo implementa adminseed.Repo contra Postgres real.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // Los textos del barrido de reservas y entregas (RF-08.10 a RF-08.13).

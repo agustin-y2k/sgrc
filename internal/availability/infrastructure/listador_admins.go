@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/availability/application"
+	"github.com/agustin-y2k/sgrc/internal/availability/application"
 )
 
 var _ application.ListadorAdmins = (*ListadorAdminsPostgres)(nil)

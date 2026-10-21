@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // Revocación de sesiones.

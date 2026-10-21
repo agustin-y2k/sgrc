@@ -19,7 +19,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
 )
 
 // Estos tests firman tokens de verdad con una clave RSA generada al vuelo y

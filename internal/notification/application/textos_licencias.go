@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // Los textos de los avisos de licencias — el de la campana y el del correo.

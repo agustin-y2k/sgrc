@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // usuarioConCodigo deja un usuario creado y devuelve su ID.

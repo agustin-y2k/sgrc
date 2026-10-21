@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/notification/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 func TestRegisterEventHandlers_DocenteRegistroPendiente_NotificaATodosLosAdmins(t *testing.T) {

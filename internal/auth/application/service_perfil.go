@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // Los datos propios: cómo se llama quien entró.

@@ -2,7 +2,7 @@
 // docs/08-api-spec.yaml para el contrato completo de cada endpoint.
 package http
 
-import "github.com/ramiro/sgrc/internal/reporting/domain"
+import "github.com/agustin-y2k/sgrc/internal/reporting/domain"
 
 type resumenUsoEquipoResponse struct {
 	EquipoID string `json:"equipoId"`

@@ -15,10 +15,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/availability/application"
-	"github.com/ramiro/sgrc/internal/availability/domain"
-	"github.com/ramiro/sgrc/internal/shared/audit"
-	"github.com/ramiro/sgrc/internal/shared/authtest"
+	"github.com/agustin-y2k/sgrc/internal/availability/application"
+	"github.com/agustin-y2k/sgrc/internal/availability/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/audit"
+	"github.com/agustin-y2k/sgrc/internal/shared/authtest"
 )
 
 // ── fakeRepo — misma semántica de titularidad-acotada-por-usuario_id que

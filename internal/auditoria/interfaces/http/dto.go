@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/auditoria/domain"
+	"github.com/agustin-y2k/sgrc/internal/auditoria/domain"
 )
 
 // entradaResponse es una fila del registro tal como se muestra.

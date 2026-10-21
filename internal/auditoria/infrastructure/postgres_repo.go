@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/auditoria/application"
-	"github.com/ramiro/sgrc/internal/auditoria/domain"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/auditoria/application"
+	"github.com/agustin-y2k/sgrc/internal/auditoria/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
 )
 
 // codigoTextoInvalido: SQLSTATE 22P02 — "invalid input syntax for type X".

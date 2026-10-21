@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/notification/domain"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/.

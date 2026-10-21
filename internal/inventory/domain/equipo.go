@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/shared/texto"
+	"github.com/agustin-y2k/sgrc/internal/shared/texto"
 )
 
 // Estado de una PC (RF-03.3).

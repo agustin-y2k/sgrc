@@ -11,7 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/shared/testdb"
+	"github.com/agustin-y2k/sgrc/internal/shared/testdb"
 )
 
 // sinIndicePermitidas son las claves foráneas que a propósito NO llevan índice.

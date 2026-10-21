@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // AvisadorDeLicencias es el barrido diario que avisa qué licencias hay que

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/notification/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // Copias por correo de los avisos del sistema (RF-05.8).

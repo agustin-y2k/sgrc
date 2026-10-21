@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/availability/domain"
+	"github.com/agustin-y2k/sgrc/internal/availability/domain"
 )
 
 type Service struct {

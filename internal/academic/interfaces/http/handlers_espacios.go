@@ -3,7 +3,7 @@ package http
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/shared/respuesta"
+	"github.com/agustin-y2k/sgrc/internal/shared/respuesta"
 )
 
 // Espacios (RF-02.13): los lugares de la institución que no son cursos.

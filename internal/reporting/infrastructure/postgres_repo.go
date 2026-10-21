@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/reporting/application"
-	"github.com/ramiro/sgrc/internal/reporting/domain"
+	"github.com/agustin-y2k/sgrc/internal/reporting/application"
+	"github.com/agustin-y2k/sgrc/internal/reporting/domain"
 )
 
 const codigoTextoInvalido = "22P02"

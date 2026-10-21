@@ -1,4 +1,4 @@
-module github.com/ramiro/sgrc
+module github.com/agustin-y2k/sgrc
 
 go 1.25.13
 

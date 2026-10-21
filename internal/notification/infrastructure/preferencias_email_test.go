@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ramiro/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
 )
 
 func TestPreferenciasEmail_GuardarYLeer(t *testing.T) {

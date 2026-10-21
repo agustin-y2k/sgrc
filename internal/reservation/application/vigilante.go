@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/reservation/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // El barrido de reservas y entregas (RF-08.10 a RF-08.13).

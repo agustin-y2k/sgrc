@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/reporting/domain"
+	"github.com/agustin-y2k/sgrc/internal/reporting/domain"
 )
 
 // ── fakeRepo ────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ramiro/sgrc/internal/academic/application"
+	"github.com/agustin-y2k/sgrc/internal/academic/application"
 )
 
 // RF-02.12 — leer y escribir la estructura de un ciclo entero (cursos con sus

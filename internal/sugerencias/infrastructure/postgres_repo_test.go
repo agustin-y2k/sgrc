@@ -12,9 +12,9 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
-	"github.com/ramiro/sgrc/internal/shared/testdb"
-	"github.com/ramiro/sgrc/internal/sugerencias/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/shared/testdb"
+	"github.com/agustin-y2k/sgrc/internal/sugerencias/domain"
 )
 
 func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {

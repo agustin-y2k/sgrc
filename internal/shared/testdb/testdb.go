@@ -13,7 +13,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/ramiro/sgrc/migrations"
+	"github.com/agustin-y2k/sgrc/migrations"
 )
 
 // loggerSilencioso descarta el "OK 001_esquema_inicial.sql" que goose imprime

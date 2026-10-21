@@ -16,7 +16,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
 )
 
 // VerificadorGoogle valida los ID token que emite Google cuando alguien

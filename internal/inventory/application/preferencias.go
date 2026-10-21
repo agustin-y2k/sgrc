@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 // Marcas de preferencia de materia por equipo (RF-03.21).

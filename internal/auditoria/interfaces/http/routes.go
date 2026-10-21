@@ -3,7 +3,7 @@ package http
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/shared/middleware"
+	"github.com/agustin-y2k/sgrc/internal/shared/middleware"
 )
 
 // RegisterRoutes monta la consulta del registro bajo /api/auditoria.

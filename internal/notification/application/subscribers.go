@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/notification/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // timeoutNotificacion acota cuánto puede tardar el INSERT de una

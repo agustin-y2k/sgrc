@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // ── ActualizarMisDatos ──────────────────────────────────────────────────

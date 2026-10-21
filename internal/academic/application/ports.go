@@ -3,7 +3,7 @@ package application
 import (
 	"context"
 
-	"github.com/ramiro/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/ (ver
