@@ -1,4 +1,10 @@
 // Datos ficticios creados exclusivamente mediante la API en la base efímera.
+import { readFile } from "node:fs/promises"
+
+const { version } = JSON.parse(
+  await readFile(new URL("../../../frontend/package.json", import.meta.url), "utf8")
+)
+
 export async function prepararDatos(api, admin) {
   const hoy = new Date()
   const fecha = (d) =>
@@ -296,7 +302,7 @@ export async function prepararDatos(api, admin) {
       texto:
         "Necesito cambiar una notebook sin perder las demás reservas. ¿Cómo lo hago?",
       pantalla: "/reservas",
-      version: "1.20.0",
+      version,
     },
     tokenAna
   )

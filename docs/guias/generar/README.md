@@ -86,5 +86,11 @@ la interfaz, usar `make capturas` para renovar también las imágenes. La
 renovación se decide por cambios en el sistema; no es un requisito automático
 de cada commit y no la ejecuta CI.
 
+Al preparar una versión, actualizar la portada de los dos HTML y regenerar
+los PDF. Si las pantallas no cambiaron, conservar las imágenes, su fecha y
+`generacion.json`: ese manifiesto identifica la versión capturada y sus
+huellas, aunque la guía se revise para una versión posterior. No cambiar su
+versión como si se hubieran tomado capturas nuevas.
+
 Las capturas documentales se destinan únicamente a las dos guías de uso y se
 guardan en `docs/guias/imagenes`. El README enlaza las guías y sus PDF.
