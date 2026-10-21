@@ -3,7 +3,7 @@ package http
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/inventory/application"
+	"github.com/agustin-y2k/sgrc/internal/inventory/application"
 )
 
 // Marcas de preferencia de materia (RF-03.21).
@@ -13,6 +13,22 @@ func (h *Handler) ListarPreferenciasDeEquipo(c *fiber.Ctx) error {
 	equipoID := c.Params("equipoId")
 
 	preferencias, err := h.svc.ListarPreferenciasDeEquipo(c.UserContext(), equipoID)
+	if err != nil {
+		return mapearError(err)
+	}
+
+	data := make([]preferenciaResponse, len(preferencias))
+	for i, p := range preferencias {
+		data[i] = toPreferenciaResponse(p)
+	}
+	return c.JSON(fiber.Map{"data": data})
+}
+
+// GET /api/carros/{carroId}/preferencias (Admin) — las marcas de todo el carro.
+func (h *Handler) ListarPreferenciasDeCarro(c *fiber.Ctx) error {
+	carroID := c.Params("carroId")
+
+	preferencias, err := h.svc.ListarPreferenciasDeCarro(c.UserContext(), carroID)
 	if err != nil {
 		return mapearError(err)
 	}
@@ -51,6 +67,7 @@ func (h *Handler) MarcarPreferencia(c *fiber.Ctx) error {
 		Anio:          req.Anio,
 		Division:      req.Division,
 		Prioridad:     req.prioridadOPorDefecto(),
+		CursoExacto:   req.CursoExacto,
 	})
 	if err != nil {
 		return mapearError(err)
@@ -76,8 +93,12 @@ func (h *Handler) EditarPreferencia(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
+	var exacto []bool
+	if req.CursoExacto != nil {
+		exacto = []bool{*req.CursoExacto}
+	}
 	p, err := h.svc.EditarPreferencia(c.UserContext(), id,
-		req.Modalidad, req.Anio, req.Division, req.prioridadOPorDefecto())
+		req.Modalidad, req.Anio, req.Division, req.prioridadOPorDefecto(), exacto...)
 	if err != nil {
 		return mapearError(err)
 	}

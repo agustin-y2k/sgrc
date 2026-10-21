@@ -23,7 +23,8 @@ import {
 import { HistoricoPorAnio } from "@/features/admin/HistoricoPorAnio"
 import { Proporcion, Seccion, sumar } from "@/features/admin/ReportesUI"
 import { ETIQUETA_ESTADO_EQUIPO } from "@/features/inventory/types"
-import { getErrorMessage } from "@/lib/api-client"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
+import { errorRangoFechas } from "@/lib/rango-fechas"
 import { descargarCSV } from "@/lib/csv"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 
@@ -33,41 +34,48 @@ export function ReportesPage() {
   const [desde, setDesde] = useState("")
   const [hasta, setHasta] = useState("")
 
-  const { data: ciclos } = useQuery({
+  const consultaCiclos = useQuery({
     queryKey: ["ciclos"],
     queryFn: adminApi.listarCiclos,
   })
 
   // El ciclo activo es el default razonable: es sobre el que se reporta
   // habitualmente (RF-06.1 habla del "ciclo lectivo activo").
-  const listaCiclos = ciclos?.data ?? []
+  const listaCiclos = consultaCiclos.data?.data ?? []
+  const ciclosListos = consultaCiclos.isSuccess && !consultaCiclos.error
+  const errorFechas = errorRangoFechas(desde, hasta)
   const cicloElegido =
-    cicloId || listaCiclos.find((c) => c.activo)?.id || listaCiclos[0]?.id || ""
+    (listaCiclos.some((c) => c.id === cicloId) ? cicloId : "") ||
+    listaCiclos.find((c) => c.activo)?.id ||
+    listaCiclos[0]?.id ||
+    ""
 
   const usoEquipos = useQuery({
     queryKey: ["reporte", "uso-equipos", cicloElegido, desde, hasta],
     queryFn: () =>
       adminApi.reporteUsoEquipos(cicloElegido, desde || undefined, hasta || undefined),
-    enabled: cicloElegido !== "",
+    enabled: ciclosListos && cicloElegido !== "" && !errorFechas,
   })
 
   const usoDocentes = useQuery({
     queryKey: ["reporte", "uso-docentes", cicloElegido, desde, hasta],
     queryFn: () =>
       adminApi.reporteUsoDocentes(cicloElegido, desde || undefined, hasta || undefined),
-    enabled: cicloElegido !== "",
+    enabled: ciclosListos && cicloElegido !== "" && !errorFechas,
   })
 
   const incidenciasEquipo = useQuery({
     queryKey: ["reporte", "incidencias-equipos", desde, hasta],
     queryFn: () =>
       adminApi.reporteIncidenciasPorEquipo(desde || undefined, hasta || undefined),
+    enabled: !errorFechas,
   })
 
   const incidenciasCarro = useQuery({
     queryKey: ["reporte", "incidencias-carros", desde, hasta],
     queryFn: () =>
       adminApi.reporteIncidenciasPorCarro(desde || undefined, hasta || undefined),
+    enabled: !errorFechas,
   })
 
   // Los dos del parque NO llevan rango de fechas: describen la situación de
@@ -86,16 +94,16 @@ export function ReportesPage() {
     queryKey: ["reporte", "incidencias-categorias", desde, hasta],
     queryFn: () =>
       adminApi.reporteIncidenciasPorCategoria(desde || undefined, hasta || undefined),
+    enabled: !errorFechas,
   })
 
-  const errorActivo =
-    usoEquipos.error ??
-    usoDocentes.error ??
-    incidenciasEquipo.error ??
-    incidenciasCarro.error ??
-    estadoInventario.error ??
-    fueraDeCirculacion.error ??
-    porCategoria.error
+  const pausaUso =
+    errorFechas ||
+    (!ciclosListos
+      ? "Esperando la consulta de ciclos lectivos."
+      : !cicloElegido
+        ? "Creá un ciclo lectivo para consultar su uso."
+        : undefined)
 
   /** Las cuatro tablas, ordenadas de mayor a menor y con sus totales. */
   const filasUsoEquipos = [...(usoEquipos.data?.data ?? [])].sort(
@@ -114,7 +122,10 @@ export function ReportesPage() {
     (a, b) => b.total - a.total
   )
   const totalIncidenciasEquipo = sumar(filasIncidenciasEquipo, (f) => f.total)
-  const totalAbiertasEquipo = sumar(filasIncidenciasEquipo, (f) => f.abiertas)
+  const totalAbiertasEquipo = sumar(
+    filasIncidenciasEquipo,
+    (f) => f.abiertas + f.enReparacion + f.enviadasASoporte
+  )
   const totalGravesEquipo = sumar(filasIncidenciasEquipo, (f) => f.graves)
 
   const filasIncidenciasCarro = [...(incidenciasCarro.data?.data ?? [])].sort(
@@ -154,8 +165,18 @@ export function ReportesPage() {
           <Select
             id="ciclo"
             value={cicloElegido}
+            disabled={!ciclosListos || listaCiclos.length === 0}
             onChange={(e) => setCicloId(e.target.value)}
           >
+            {!ciclosListos || listaCiclos.length === 0 ? (
+              <option value="">
+                {consultaCiclos.error
+                  ? "No se pudieron consultar los ciclos"
+                  : consultaCiclos.isPending
+                    ? "Cargando ciclos…"
+                    : "Sin ciclos lectivos"}
+              </option>
+            ) : null}
             {listaCiclos.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.anio}
@@ -170,6 +191,9 @@ export function ReportesPage() {
           <Input
             id="desde"
             type="date"
+            max="9999-12-31"
+            aria-invalid={!!errorFechas}
+            aria-describedby={errorFechas ? "error-fechas-reportes" : undefined}
             value={desde}
             onChange={(e) => setDesde(e.target.value)}
           />
@@ -179,22 +203,48 @@ export function ReportesPage() {
           <Input
             id="hasta"
             type="date"
+            max="9999-12-31"
+            aria-invalid={!!errorFechas}
+            aria-describedby={errorFechas ? "error-fechas-reportes" : undefined}
             value={hasta}
             onChange={(e) => setHasta(e.target.value)}
           />
         </div>
       </div>
 
-      {errorActivo && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{getErrorMessage(errorActivo)}</AlertDescription>
+      {consultaCiclos.error && (
+        <div className="mb-4">
+          <ErrorDeConsulta
+            mensaje="No pudimos consultar los ciclos lectivos."
+            reintentando={consultaCiclos.isFetching}
+            onReintentar={() => void consultaCiclos.refetch()}
+          />
+        </div>
+      )}
+      {errorFechas && (
+        <Alert variant="destructive" className="mb-4" id="error-fechas-reportes">
+          <AlertDescription>{errorFechas}</AlertDescription>
         </Alert>
       )}
+      <p className="text-muted-foreground mb-4 text-sm">
+        El ciclo filtra el uso por equipo y docente. Las fechas también filtran las
+        incidencias, de todos los ciclos. El estado del inventario muestra la situación
+        actual. El histórico tiene su propio selector de año y no usa estas fechas.
+      </p>
+      <p className="text-muted-foreground mb-4 text-sm">
+        Se cuenta cada equipo reservado: una clase de 10 equipos durante una hora suma 10
+        reservas y 10 horas de equipo, no 10 horas de clase. Se incluyen reservas vigentes
+        y finalizadas; se excluyen canceladas y no retiradas. El uso por equipo incluye
+        bloqueos institucionales.
+      </p>
 
       <div className="grid gap-4">
         {/* RF-06.1 */}
         <Seccion
           titulo="Uso por equipo"
+          consulta={usoEquipos}
+          alcance="Ciclo y rango seleccionados. Tiempo reservado, no medición de uso efectivo."
+          pausa={pausaUso}
           resumen={
             filasUsoEquipos.length > 0 &&
             `${filasUsoEquipos.length} ${filasUsoEquipos.length === 1 ? "equipo usado" : "equipos usados"} · ${totalReservasEquipos} reservas · ${formatearDuracion(totalMinutosEquipos)} en total`
@@ -223,7 +273,7 @@ export function ReportesPage() {
               reservas se borraron: el dato está más abajo, en el histórico por año.
             </p>
           ) : (
-            <Table>
+            <Table aria-label="Uso por equipo">
               <TableHeader>
                 <TableRow>
                   <TableHead>Equipo</TableHead>
@@ -258,6 +308,9 @@ export function ReportesPage() {
         {/* RF-06.2 */}
         <Seccion
           titulo="Horas reservadas por docente"
+          consulta={usoDocentes}
+          alcance="Tiempo total de equipos reservados por cada docente."
+          pausa={pausaUso}
           resumen={
             filasUsoDocentes.length > 0 &&
             `${filasUsoDocentes.length} ${filasUsoDocentes.length === 1 ? "docente" : "docentes"} · ${totalReservasDocentes} reservas · ${formatearDuracion(totalMinutosDocentes)} en total`
@@ -284,7 +337,7 @@ export function ReportesPage() {
               Sin datos en ese ciclo y rango.
             </p>
           ) : (
-            <Table>
+            <Table aria-label="Horas reservadas por docente">
               <TableHeader>
                 <TableRow>
                   <TableHead>Docente</TableHead>
@@ -294,10 +347,8 @@ export function ReportesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filasUsoDocentes.map((u) => (
-                  // El nombre completa la key: una cuenta eliminada no trae
-                  // usuarioId, y dos docentes borrados compartirían key.
-                  <TableRow key={`${u.usuarioId ?? ""}·${u.nombreDocente}`}>
+                {filasUsoDocentes.map((u, index) => (
+                  <TableRow key={u.usuarioId ?? `eliminado-${index}`}>
                     <TableCell className="font-medium">{u.nombreDocente}</TableCell>
                     <TableCell className="text-right">{u.cantidadReservas}</TableCell>
                     <TableCell className="text-right">
@@ -319,6 +370,9 @@ export function ReportesPage() {
         {/* RF-06.3 */}
         <Seccion
           titulo="Incidencias por equipo"
+          consulta={incidenciasEquipo}
+          alcance="Todos los ciclos. Fecha de apertura de la incidencia."
+          pausa={errorFechas}
           resumen={
             filasIncidenciasEquipo.length > 0 && (
               <>
@@ -364,7 +418,7 @@ export function ReportesPage() {
               No se registraron incidencias en ese rango.
             </p>
           ) : (
-            <Table>
+            <Table aria-label="Incidencias por equipo">
               <TableHeader>
                 <TableRow>
                   <TableHead>Equipo</TableHead>
@@ -413,6 +467,9 @@ export function ReportesPage() {
         {/* RF-06.3 */}
         <Seccion
           titulo="Incidencias por carro"
+          consulta={incidenciasCarro}
+          alcance="Todos los ciclos. Fecha de apertura de la incidencia; carro actual del equipo."
+          pausa={errorFechas}
           resumen={
             filasIncidenciasCarro.length > 0 &&
             `${totalIncidenciasCarro} incidencias repartidas en ${filasIncidenciasCarro.length} ${filasIncidenciasCarro.length === 1 ? "carro" : "carros"}`
@@ -438,7 +495,7 @@ export function ReportesPage() {
               No se registraron incidencias en ese rango.
             </p>
           ) : (
-            <Table>
+            <Table aria-label="Incidencias por carro">
               <TableHeader>
                 <TableRow>
                   <TableHead>Carro</TableHead>
@@ -470,6 +527,8 @@ export function ReportesPage() {
             tres miran cómo está el inventario ahora. */}
         <Seccion
           titulo="Estado del parque de equipos"
+          consulta={estadoInventario}
+          alcance="Situación actual; no cambia con los filtros de ciclo o fechas. Disponible indica el estado del inventario: un equipo puede estar reservado o prestado."
           resumen={
             parqueTotal > 0 &&
             `${parqueDisponible} de ${parqueTotal} disponibles · ${parqueAfuera} fuera de circulación`
@@ -477,7 +536,7 @@ export function ReportesPage() {
           alDescargar={
             filasInventario.length > 0
               ? () =>
-                  descargarCSV(`estado-inventario_${sufijo}.csv`, [
+                  descargarCSV(`estado-inventario_actual.csv`, [
                     [
                       "Carro",
                       "Disponibles",
@@ -501,7 +560,7 @@ export function ReportesPage() {
               No hay ningún equipo cargado todavía.
             </p>
           ) : (
-            <Table>
+            <Table aria-label="Estado del parque de equipos">
               <TableHeader>
                 <TableRow>
                   <TableHead>Carro</TableHead>
@@ -534,6 +593,8 @@ export function ReportesPage() {
 
         <Seccion
           titulo="Equipos fuera de circulación"
+          consulta={fueraDeCirculacion}
+          alcance="Situación actual; no cambia con los filtros de ciclo o fechas."
           resumen={
             filasFuera.length > 0 &&
             `${filasFuera.length} ${filasFuera.length === 1 ? "equipo" : "equipos"}${
@@ -543,7 +604,7 @@ export function ReportesPage() {
           alDescargar={
             filasFuera.length > 0
               ? () =>
-                  descargarCSV(`equipos-fuera-de-circulacion_${sufijo}.csv`, [
+                  descargarCSV(`equipos-fuera-de-circulacion_actual.csv`, [
                     ["Equipo", "Carro", "Estado", "Falla", "Detalle"],
                     ...filasFuera.map((f) => [
                       f.etiqueta,
@@ -562,7 +623,7 @@ export function ReportesPage() {
               servicio.
             </p>
           ) : (
-            <Table>
+            <Table aria-label="Equipos fuera de circulación">
               <TableHeader>
                 <TableRow>
                   <TableHead>Equipo</TableHead>
@@ -595,6 +656,9 @@ export function ReportesPage() {
 
         <Seccion
           titulo="Qué se rompe"
+          consulta={porCategoria}
+          alcance="Todos los ciclos. Fecha de apertura de la incidencia."
+          pausa={errorFechas}
           resumen={
             filasCategoria.length > 0 &&
             `${totalPorCategoria} incidencias en ${filasCategoria.length} ${filasCategoria.length === 1 ? "tipo de falla" : "tipos de falla"}`
@@ -602,7 +666,7 @@ export function ReportesPage() {
           alDescargar={
             filasCategoria.length > 0
               ? () =>
-                  descargarCSV(`incidencias-por-categoria_${sufijo}.csv`, [
+                  descargarCSV(`incidencias-por-categoria${rango}.csv`, [
                     ["Falla", "Total", "Abiertas", "Equipos alcanzados"],
                     ...filasCategoria.map((f) => [
                       f.categoria || "Sin diagnosticar",
@@ -619,7 +683,7 @@ export function ReportesPage() {
               No hay incidencias reportadas en ese período.
             </p>
           ) : (
-            <Table>
+            <Table aria-label="Qué se rompe">
               <TableHeader>
                 <TableRow>
                   <TableHead>Falla</TableHead>
@@ -653,7 +717,7 @@ export function ReportesPage() {
           )}
         </Seccion>
       </div>
-      <HistoricoPorAnio ciclos={listaCiclos} />
+      {ciclosListos && <HistoricoPorAnio ciclos={listaCiclos} />}
     </div>
   )
 }

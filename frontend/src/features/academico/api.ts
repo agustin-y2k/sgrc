@@ -15,6 +15,7 @@ import type {
 } from "@/features/academico/types"
 import type { MateriaReservable } from "@/features/reservas/types"
 import { apiFetch } from "@/lib/api-client"
+import { esAnioDeCicloValido } from "./anioCiclo"
 
 // ── Ciclo lectivo (RF-02.1) ───────────────────────────────────────────
 
@@ -140,9 +141,7 @@ export function eliminarMateria(id: string) {
 // ── DocenteMateria (RF-02.6, RF-02.10) ────────────────────────────────
 
 export function listarDocentesDeMateria(materiaId: string) {
-  return apiFetch<RespuestaLista<DocenteMateria>>(
-    `/api/materias/${materiaId}/docentes`
-  )
+  return apiFetch<RespuestaLista<DocenteMateria>>(`/api/materias/${materiaId}/docentes`)
 }
 
 /** Solo se puede asignar a una cuenta APROBADA; el backend lo valida. */
@@ -182,7 +181,10 @@ export function removerDocenteMateria(materiaId: string, docenteMateriaId: strin
  * Archiva el ciclo y, si se pasa `clonarA`, crea el del año siguiente
  * copiando cursos y materias sin las asignaciones de docentes.
  */
-export function archivarCiclo(cicloId: string, clonarA?: number) {
+export async function archivarCiclo(cicloId: string, clonarA?: number) {
+  if (clonarA !== undefined && !esAnioDeCicloValido(clonarA)) {
+    throw new Error("El año del ciclo siguiente debe ser un entero entre 2000 y 2100.")
+  }
   return apiFetch<ResultadoArchivado>(`/api/ciclos/${cicloId}/archivar`, {
     method: "POST",
     body: clonarA !== undefined ? { clonarA } : {},
@@ -197,9 +199,7 @@ export function archivarCiclo(cicloId: string, clonarA?: number) {
  * traducción.
  */
 export function exportarEstructura(cicloId: string) {
-  return apiFetch<{ cursos: CursoConMaterias[] }>(
-    `/api/ciclos/${cicloId}/estructura`
-  )
+  return apiFetch<{ cursos: CursoConMaterias[] }>(`/api/ciclos/${cicloId}/estructura`)
 }
 
 /**
@@ -216,10 +216,10 @@ export function importarEstructura(cicloId: string, cursos: CursoConMaterias[]) 
 
 /** Copia los nombres de materia de un curso a otros del mismo ciclo. */
 export function copiarMaterias(cursoOrigenId: string, cursosDestinoIds: string[]) {
-  return apiFetch<ResultadoCopia>(
-    `/api/cursos/${cursoOrigenId}/copiar-materias`,
-    { method: "POST", body: { cursosDestinoIds } }
-  )
+  return apiFetch<ResultadoCopia>(`/api/cursos/${cursoOrigenId}/copiar-materias`, {
+    method: "POST",
+    body: { cursosDestinoIds },
+  })
 }
 
 // ── Espacios (RF-02.13) ───────────────────────────────────────────────
@@ -245,15 +245,4 @@ export function editarEspacio(id: string, nombre: string) {
 /** Falla con 409 si alguna de sus materias tiene reservas (RF-02.11). */
 export function eliminarEspacio(id: string) {
   return apiFetch<void>(`/api/espacios/${id}`, { method: "DELETE" })
-}
-
-export function listarMateriasDeEspacio(espacioId: string) {
-  return apiFetch<RespuestaLista<Materia>>(`/api/espacios/${espacioId}/materias`)
-}
-
-export function crearMateriaDeEspacio(espacioId: string, nombre: string) {
-  return apiFetch<Materia>(`/api/espacios/${espacioId}/materias`, {
-    method: "POST",
-    body: { nombre },
-  })
 }

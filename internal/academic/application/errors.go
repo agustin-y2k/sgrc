@@ -5,9 +5,10 @@ import "errors"
 // Errores de negocio de academic. Todos exportados para que
 // interfaces/http los mapee a códigos HTTP específicos sin parsear texto.
 var (
-	ErrCicloNoEncontrado = errors.New("ciclo lectivo no encontrado")
-	ErrYaHayCicloActivo  = errors.New("ya existe un ciclo lectivo activo — archivalo antes de crear uno nuevo")
-	ErrCicloYaTieneAnio  = errors.New("ya existe un ciclo lectivo para ese año")
+	ErrDestinoDeCierreDiferente = errors.New("el ciclo ya se cerró con otro destino de clonado")
+	ErrCicloNoEncontrado        = errors.New("ciclo lectivo no encontrado")
+	ErrYaHayCicloActivo         = errors.New("ya existe un ciclo lectivo activo — archivalo antes de crear uno nuevo")
+	ErrCicloYaTieneAnio         = errors.New("ya existe un ciclo lectivo para ese año")
 	// ErrCicloConReservas: corregir el año de un ciclo que ya tiene reservas lo
 	// dejaría diciendo que las clases de un año pasaron en otro — las reservas
 	// llevan su propia fecha y no se mueven con él.
@@ -19,7 +20,7 @@ var (
 	// ErrCicloConCursos: eliminar existe para deshacer un ciclo recién creado
 	// con el año equivocado. Uno que ya tiene cursos cargados se archiva, no se
 	// borra: sus cursos y materias son el registro de cómo se organizó ese año.
-	ErrCicloConCursos = errors.New("el ciclo lectivo tiene cursos cargados: archivalo en vez de eliminarlo")
+	ErrCicloConCursos = errors.New("el ciclo lectivo tiene cursos o espacios cargados: archivalo en vez de eliminarlo")
 
 	ErrCursoNoEncontrado    = errors.New("curso no encontrado")
 	ErrCursoNombreDuplicado = errors.New("ya existe otro curso con ese nombre en el mismo ciclo lectivo")

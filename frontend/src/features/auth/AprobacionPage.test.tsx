@@ -30,7 +30,7 @@ const pendientesMock: ListarUsuariosResponse = {
       id: "1",
       nombre: "Alan",
       apellido: "Turing",
-      email: "alan@escuela.edu.ar",
+      email: "alan@escuela.test",
       rol: "DOCENTE",
       estado: "PENDIENTE",
       fechaRegistro: "2026-01-01T00:00:00Z",
@@ -53,12 +53,27 @@ describe("AprobacionPage", () => {
     vi.restoreAllMocks()
   })
 
+  it("no confunde un fallo con ausencia de pendientes y permite reintentar", async () => {
+    vi.mocked(authApi.listarUsuarios).mockRejectedValueOnce(new Error("Sin conexión"))
+    renderAprobacionPage()
+    expect(
+      await screen.findByText(/No pudimos consultar las cuentas pendientes/)
+    ).toBeVisible()
+    expect(screen.queryByText("No hay cuentas pendientes.")).not.toBeInTheDocument()
+    vi.mocked(authApi.listarUsuarios).mockResolvedValue(pendientesMock)
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar" }))
+    expect(await screen.findByText("Alan Turing")).toBeVisible()
+  })
+
   it("lista las cuentas PENDIENTE", async () => {
     vi.mocked(authApi.listarUsuarios).mockResolvedValue(pendientesMock)
     renderAprobacionPage()
 
     expect(await screen.findByText("Alan Turing")).toBeInTheDocument()
-    expect(authApi.listarUsuarios).toHaveBeenCalledWith({ estado: "PENDIENTE" })
+    expect(authApi.listarUsuarios).toHaveBeenCalledWith({
+      estado: "PENDIENTE",
+      pageSize: 200,
+    })
   })
 
   // El cargo declarado no otorga permisos: quien dijo ser administrador de

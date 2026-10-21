@@ -16,6 +16,7 @@ import type {
 import { getErrorMessage } from "@/lib/api-client"
 import { contar, plural } from "@/lib/plural"
 import { MINIMO_PARA_BUSCAR, sinTildes } from "@/lib/texto"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 
 /** Título del grupo de lo que no cuelga de ningún carro. */
 const SIN_CARRO = "Otros equipos"
@@ -25,7 +26,13 @@ type Props = {
   horaInicio: string
   horaFin: string
   seleccionadas: string[]
-  onCambio: (equipoIds: string[]) => void
+  /**
+   * `aTomar` es el subconjunto de `equipoIds` que estaba OCUPADO: lo que el
+   * backend necesita para autorizar el desplazamiento (RF-03.21). Va por acá y
+   * no lo deriva el padre porque quién está ocupado lo sabe esta pantalla, que
+   * es la que tiene la lista.
+   */
+  onCambio: (equipoIds: string[], aTomar: string[]) => void
   /** RF-03.21: para qué materia se ordena la lista. */
   materiaId?: string
 }
@@ -46,7 +53,7 @@ export function SelectorDeEquipos({
   const [busqueda, setBusqueda] = useState("")
   const franjaCompleta = Boolean(fecha && horaInicio && horaFin && horaFin !== horaInicio)
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     // La materia entra en la clave: cambiarla reordena la lista entera
     // (RF-03.21), así que la respuesta cacheada de otra materia no sirve.
     queryKey: ["equipos-disponibles", fecha, horaInicio, horaFin, materiaId ?? ""],
@@ -66,14 +73,25 @@ export function SelectorDeEquipos({
     return <p className="text-muted-foreground text-sm">Buscando equipos libres…</p>
   if (error) {
     return (
-      <Alert variant="destructive">
-        <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-      </Alert>
+      <ErrorDeConsulta
+        mensaje="No pudimos consultar la disponibilidad de los equipos."
+        reintentando={isFetching}
+        onReintentar={() => {
+          void refetch()
+        }}
+      />
     )
   }
 
   const todos = data?.data ?? []
   const ocupados = data?.ocupados ?? []
+  // Los dos lados de la lista de ocupados, que son dos acciones distintas:
+  // los que esta materia puede quedarse tildándolos (RF-03.21) y los que sólo
+  // se le pueden pedir al dueño (RF-04.12). El servidor ya garantiza que son
+  // excluyentes.
+  const tomables = ocupados.filter((eq) => eq.puedeTomarse)
+  const idsTomables = new Set(tomables.map((eq) => eq.equipoId))
+  const soloPedibles = ocupados.filter((eq) => !eq.puedeTomarse)
 
   // El texto busca en el nombre, el carro y el software: en el mostrador se
   // busca "PC 12", "EDUTEC" o "AutoCAD" según lo que se tenga en la cabeza.
@@ -88,14 +106,35 @@ export function SelectorDeEquipos({
 
   if (todos.length === 0 && ocupados.length === 0) {
     return (
-      <p className="text-muted-foreground text-sm">
-        No hay ningún equipo libre en esa franja.
-      </p>
+      <div className="grid gap-2">
+        <p className="text-muted-foreground text-sm">
+          No hay ningún equipo libre en esa franja.
+        </p>
+        {seleccionadas.length > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 justify-self-start"
+            onClick={() => onCambio([], [])}
+          >
+            Limpiar la selección
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  /** Un solo lugar que parte la selección en "libres" y "hay que tomarlos". */
+  function avisar(equipoIds: string[]) {
+    const unicos = [...new Set(equipoIds)]
+    onCambio(
+      unicos,
+      unicos.filter((id) => idsTomables.has(id))
     )
   }
 
   function alternar(equipoId: string, tildada: boolean) {
-    onCambio(
+    avisar(
       tildada
         ? [...seleccionadas, equipoId]
         : seleccionadas.filter((id) => id !== equipoId)
@@ -112,7 +151,7 @@ export function SelectorDeEquipos({
    */
   function alternarCarro(delCarro: EquipoDisponible[], marcar: boolean) {
     const ids = new Set(delCarro.map((eq) => eq.equipoId))
-    onCambio(
+    avisar(
       marcar
         ? [
             ...seleccionadas,
@@ -127,20 +166,26 @@ export function SelectorDeEquipos({
   // La lista ya viene ordenada por tramo del servidor; acá sólo se corta en
   // bloques respetando ese orden.
   const tramos = agruparPorTramo(equipos)
+  const seleccionUnica = new Set(seleccionadas)
+  const libresSeleccionados = todos.filter((e) => seleccionUnica.has(e.equipoId)).length
+  const porPrioridad = [...idsTomables].filter((id) => seleccionUnica.has(id)).length
+  const fueraDeLista = [...seleccionUnica].filter(
+    (id) => !todos.some((e) => e.equipoId === id) && !idsTomables.has(id)
+  ).length
 
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="text-muted-foreground text-sm">
+        <p role="status" className="text-muted-foreground text-sm">
           {seleccionadas.length === 0
             ? `${contar(todos.length, "equipo")} ${plural(todos.length, "libre")} en esa franja.`
-            : `${seleccionadas.length} de ${todos.length} ${plural(seleccionadas.length, "seleccionado")}.`}
+            : `${contar(seleccionUnica.size, "equipo")} ${plural(seleccionUnica.size, "seleccionado")}: ${libresSeleccionados} ${plural(libresSeleccionados, "libre")} y ${porPrioridad} por prioridad.${fueraDeLista ? ` ${contar(fueraDeLista, "equipo")} ya no ${plural(fueraDeLista, "está", "están")} disponible para esta selección. Limpiá la selección y volvé a elegir.` : ""}`}
         </p>
         {seleccionadas.length > 0 && (
           <button
             type="button"
             className="text-muted-foreground hover:text-foreground text-xs underline"
-            onClick={() => onCambio([])}
+            onClick={() => avisar([])}
           >
             Limpiar la selección ({seleccionadas.length})
           </button>
@@ -202,7 +247,106 @@ export function SelectorDeEquipos({
         ))
       )}
 
-      {ocupados.length > 0 && <EquiposTomados ocupados={ocupados} />}
+      {tomables.length > 0 && (
+        <EquiposQueSePuedenTomar
+          equipos={tomables}
+          seleccionadas={seleccionadas}
+          alternar={alternar}
+        />
+      )}
+      {soloPedibles.length > 0 && <EquiposTomados ocupados={soloPedibles} />}
+    </div>
+  )
+}
+
+/**
+ * RF-03.21: equipos que están reservados por otra materia, pero cuya marca
+ * preferente es de la materia que está reservando. Se tildan como cualquier
+ * otro y al confirmar desplazan al que los tenía.
+ *
+ * Se muestran separados de los libres para explicar el desplazamiento y la
+ * reposición antes de seleccionarlos.
+ */
+function EquiposQueSePuedenTomar({
+  equipos,
+  seleccionadas,
+  alternar,
+}: {
+  equipos: EquipoOcupado[]
+  seleccionadas: string[]
+  alternar: (equipoId: string, tildada: boolean) => void
+}) {
+  const porEquipo = new Map<string, EquipoOcupado[]>()
+  for (const equipo of equipos) {
+    const reservas = porEquipo.get(equipo.equipoId) ?? []
+    reservas.push(equipo)
+    porEquipo.set(equipo.equipoId, reservas)
+  }
+  return (
+    <div className="grid gap-2 border-t pt-4">
+      <h3 className="text-sm font-medium">Reservados, pero preferentes de tu materia</h3>
+      <p className="text-muted-foreground text-sm">
+        Tu materia tiene mayor prioridad sobre estos dispositivos. Los que tildes pasan a
+        tu reserva al confirmar. El sistema intentará reponerlos en las reservas
+        desplazadas: primero con equipos libres y después, si corresponde, desplazando
+        otras reservas con menor prioridad sobre cada sustituto. Si no alcanza, pueden
+        quedar faltantes. Se avisa a los docentes afectados.
+      </p>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        {[...porEquipo.values()].map((reservas) => {
+          const equipo = reservas[0]
+          return (
+            <label
+              key={equipo.equipoId}
+              className="flex items-start gap-2 rounded-md border border-dashed p-2"
+            >
+              <Checkbox
+                className="mt-0.5"
+                checked={seleccionadas.includes(equipo.equipoId)}
+                onCheckedChange={(v) => alternar(equipo.equipoId, v === true)}
+                // Explícito y corto, como en la lista de libres: sin esto el
+                // nombre accesible se lleva todo el renglón —de quién es la
+                // reserva y en qué horario— y "PC 12" hay uno por carro.
+                aria-label={
+                  equipo.carroNombre
+                    ? `${equipo.etiqueta} (${equipo.carroNombre})`
+                    : equipo.etiqueta
+                }
+              />
+              <span className="grid gap-0.5">
+                <span className="text-sm font-medium">
+                  {equipo.etiqueta}
+                  {equipo.carroNombre && (
+                    <span className="text-muted-foreground font-normal">
+                      {" "}
+                      · {equipo.carroNombre}
+                    </span>
+                  )}
+                </span>
+                {/* Quién pierde la clase y cuál: es el dato que hace que la
+                  decisión sea informada, y el único que el desplazado no
+                  puede negociar después. "Es de" y no "la tiene" porque el
+                  equipo puede ser un proyector. */}
+                {reservas.map((reserva) => (
+                  <span
+                    key={reserva.reservaId}
+                    className="text-muted-foreground grid gap-0.5 text-xs"
+                  >
+                    <span>
+                      Ahora es de {reserva.docenteNombre}
+                      {reserva.materiaNombre ? ` · ${reserva.materiaNombre}` : ""}
+                    </span>
+                    <span>
+                      {reserva.horaInicio} a {reserva.horaFin}
+                    </span>
+                  </span>
+                ))}
+              </span>
+            </label>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -221,7 +365,7 @@ const AYUDA_TRAMO: Record<TramoPreferencia, string> = {
   PREFERENTE: "",
   NEUTRAL: "",
   DE_OTRA_MATERIA:
-    "Se pueden reservar igual. Van al final porque otra materia los prefiere.",
+    "Se pueden reservar igual mientras estén libres. Otra materia con mayor prioridad sobre ese dispositivo podría desplazarte; el sistema intentará reponerlo.",
 }
 
 /** El orden en que se muestran los bloques. */
@@ -342,12 +486,12 @@ function EquiposTomados({ ocupados }: { ocupados: EquipoOcupado[] }) {
       <h3 className="text-sm font-medium">Ya reservados en esa franja</h3>
       <p className="text-muted-foreground text-sm">
         No se pueden tildar. Si necesitás alguno, podés pedírselo a quien lo tiene: le
-        llega un aviso y un correo, y decide él.
+        llega un aviso en el sistema y decide él. El pedido no cambia su reserva.
       </p>
 
       <div className="grid gap-2 sm:grid-cols-2">
         {ocupados.map((equipo) => (
-          <EquipoTomado key={equipo.equipoId} equipo={equipo} />
+          <EquipoTomado key={`${equipo.equipoId}:${equipo.reservaId}`} equipo={equipo} />
         ))}
       </div>
     </div>

@@ -14,8 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/availability/application"
-	"github.com/ramiro/sgrc/internal/availability/domain"
+	"github.com/agustin-y2k/sgrc/internal/availability/application"
+	"github.com/agustin-y2k/sgrc/internal/availability/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 const codigoTextoInvalido = "22P02"
@@ -65,7 +66,7 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 const columnasBloque = `id, usuario_id, dia_semana, hora_inicio, hora_fin`
 
 func (r *PostgresRepo) ListarBloquesDeUsuario(ctx context.Context, usuarioID string) ([]*domain.BloqueHorario, error) {
-	rows, err := r.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT `+columnasBloque+` FROM horario_admin WHERE usuario_id = $1 ORDER BY dia_semana, hora_inicio`,
 		usuarioID)
 	if err != nil {
@@ -95,7 +96,7 @@ func (r *PostgresRepo) ListarBloquesDeUsuarios(ctx context.Context, usuarioIDs [
 		return resultado, nil
 	}
 
-	rows, err := r.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT `+columnasBloque+` FROM horario_admin WHERE usuario_id = ANY($1) ORDER BY usuario_id, dia_semana, hora_inicio`,
 		usuarioIDs)
 	if err != nil {
@@ -144,7 +145,7 @@ func escanearBloque(row pgx.Row) (*domain.BloqueHorario, error) {
 }
 
 func (r *PostgresRepo) CrearBloque(ctx context.Context, b *domain.BloqueHorario) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `
 		INSERT INTO horario_admin (id, usuario_id, dia_semana, hora_inicio, hora_fin)
 		VALUES ($1, $2, $3, $4, $5)
 	`, b.ID, b.UsuarioID, string(b.DiaSemana), duracionComoHora(b.HoraInicio), duracionComoHora(b.HoraFin))
@@ -161,7 +162,7 @@ func (r *PostgresRepo) CrearBloque(ctx context.Context, b *domain.BloqueHorario)
 // bloque de otro usuario da el mismo ErrBloqueNoEncontrado que un ID
 // inexistente (ver application/ports.go sobre el criterio de titularidad).
 func (r *PostgresRepo) BuscarBloqueDeUsuario(ctx context.Context, id, usuarioID string) (*domain.BloqueHorario, error) {
-	row := r.pool.QueryRow(ctx,
+	row := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx,
 		`SELECT `+columnasBloque+` FROM horario_admin WHERE id = $1 AND usuario_id = $2`,
 		id, usuarioID)
 	return escanearBloque(row)
@@ -171,7 +172,7 @@ func (r *PostgresRepo) BuscarBloqueDeUsuario(ctx context.Context, id, usuarioID 
 // coincide con el dueño real de esa fila, RowsAffected queda en 0 y se
 // devuelve ErrBloqueNoEncontrado, igual que un ID inexistente.
 func (r *PostgresRepo) GuardarBloque(ctx context.Context, b *domain.BloqueHorario) error {
-	tag, err := r.pool.Exec(ctx,
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`UPDATE horario_admin SET dia_semana = $3, hora_inicio = $4, hora_fin = $5 WHERE id = $1 AND usuario_id = $2`,
 		b.ID, b.UsuarioID, string(b.DiaSemana), duracionComoHora(b.HoraInicio), duracionComoHora(b.HoraFin))
 	if err != nil {
@@ -187,7 +188,7 @@ func (r *PostgresRepo) GuardarBloque(ctx context.Context, b *domain.BloqueHorari
 }
 
 func (r *PostgresRepo) EliminarBloqueDeUsuario(ctx context.Context, id, usuarioID string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM horario_admin WHERE id = $1 AND usuario_id = $2`, id, usuarioID)
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `DELETE FROM horario_admin WHERE id = $1 AND usuario_id = $2`, id, usuarioID)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -205,7 +206,7 @@ func (r *PostgresRepo) EliminarBloqueDeUsuario(ctx context.Context, id, usuarioI
 const columnasExcepcion = `id, usuario_id, fecha, tipo, hora_inicio, hora_fin, motivo`
 
 func (r *PostgresRepo) BuscarExcepcionDeFecha(ctx context.Context, usuarioID string, fecha time.Time) (*domain.Excepcion, error) {
-	row := r.pool.QueryRow(ctx,
+	row := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx,
 		`SELECT `+columnasExcepcion+` FROM horario_admin_excepcion WHERE usuario_id = $1 AND fecha = $2`,
 		usuarioID, fecha)
 	e, err := escanearExcepcion(row)
@@ -224,7 +225,7 @@ func (r *PostgresRepo) BuscarExcepcionesDeFecha(ctx context.Context, usuarioIDs 
 		return resultado, nil
 	}
 
-	rows, err := r.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT `+columnasExcepcion+` FROM horario_admin_excepcion WHERE usuario_id = ANY($1) AND fecha = $2`,
 		usuarioIDs, fecha)
 	if err != nil {
@@ -295,7 +296,7 @@ func (r *PostgresRepo) GuardarExcepcion(ctx context.Context, e *domain.Excepcion
 		horaFin = &t
 	}
 
-	_, err := r.pool.Exec(ctx, `
+	_, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `
 		INSERT INTO horario_admin_excepcion (id, usuario_id, fecha, tipo, hora_inicio, hora_fin, motivo)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (usuario_id, fecha) DO UPDATE SET
@@ -318,7 +319,7 @@ const columnasJornada = `id, dia_semana, hora_inicio, hora_fin`
 
 // ListarJornada trae la jornada completa.
 func (r *PostgresRepo) ListarJornada(ctx context.Context) ([]*domain.BloqueJornada, error) {
-	rows, err := r.pool.Query(ctx,
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
 		`SELECT `+columnasJornada+` FROM jornada_institucion ORDER BY dia_semana, hora_inicio`)
 	if err != nil {
 		return nil, fmt.Errorf("listando la jornada de la institución: %w", err)
@@ -349,7 +350,7 @@ func (r *PostgresRepo) ListarJornada(ctx context.Context) ([]*domain.BloqueJorna
 // docente que guarda justo en ese momento recibiría un rechazo por un horario
 // que la escuela sí abre.
 func (r *PostgresRepo) ReemplazarJornada(ctx context.Context, bloques []*domain.BloqueJornada) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.pool)
 	if err != nil {
 		return fmt.Errorf("iniciando la transacción de la jornada: %w", err)
 	}
@@ -393,4 +394,8 @@ func escanearBloqueJornada(row pgx.Row) (*domain.BloqueJornada, error) {
 	b.HoraInicio = horaComoDuracion(horaInicio)
 	b.HoraFin = horaComoDuracion(horaFin)
 	return &b, nil
+}
+
+func (r *PostgresRepo) Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error {
+	return pgtransaccion.Coordinar(ctx, r.pool, exclusivo, fn)
 }

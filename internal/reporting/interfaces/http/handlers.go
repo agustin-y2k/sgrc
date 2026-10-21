@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/reporting/application"
+	"github.com/agustin-y2k/sgrc/internal/reporting/application"
 )
 
 // rangoDeQuery lee los parámetros opcionales ?desde=&hasta= (RF-06.1).

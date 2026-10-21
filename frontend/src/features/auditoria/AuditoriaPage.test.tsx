@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import * as adminApi from "@/features/admin/api"
@@ -47,6 +47,7 @@ function renderPagina() {
       <AuditoriaPage />
     </QueryClientProvider>
   )
+  return queryClient
 }
 
 describe("AuditoriaPage", () => {
@@ -166,9 +167,7 @@ describe("AuditoriaPage", () => {
     ).toBeInTheDocument()
   })
 
-  // El detalle se muestra crudo a propósito: cada acción guarda lo suyo, con su
-  // propia forma, y darle formato obligaría a conocer las treinta del catálogo.
-  it("despliega el detalle de la acción", async () => {
+  it("despliega el detalle de la acción con etiquetas comprensibles", async () => {
     vi.mocked(auditoriaApi.listarAuditoria).mockResolvedValue({
       data: [entrada({ detalle: { cursosCreados: 26, materiasCreadas: 270 } })],
       meta: { total: 1, page: 1, pageSize: 50 },
@@ -178,8 +177,67 @@ describe("AuditoriaPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Ver el detalle" }))
 
-    expect(screen.getByText(/cursosCreados/)).toBeInTheDocument()
-    expect(screen.getByText(/270/)).toBeInTheDocument()
+    expect(screen.getByText("Cursos creados")).toBeInTheDocument()
+    expect(screen.getByText("Materias creadas")).toBeInTheDocument()
+    expect(screen.getByText("270")).toBeInTheDocument()
+    expect(screen.queryByText(/cursosCreados/)).not.toBeInTheDocument()
+    expect(document.querySelector("pre")).toBeNull()
+  })
+
+  it("explica un cambio transaccional con su ficha y valores anteriores y nuevos", async () => {
+    vi.mocked(auditoriaApi.listarAuditoria).mockResolvedValue({
+      data: [
+        entrada({
+          accion: "CAMBIO_TRANSACCIONAL",
+          entidad: "equipo",
+          entidadNombre: "PC 7 del Carro 1",
+          detalle: {
+            operacion: "UPDATE",
+            campos: ["estado", "password_hash"],
+            antes: { estado: "DISPONIBLE", password_hash: "secreto-anterior" },
+            despues: { estado: "EN_MANTENIMIENTO", password_hash: "secreto-nuevo" },
+          },
+        }),
+      ],
+      meta: { total: 1, page: 1, pageSize: 50 },
+    })
+    const user = userEvent.setup()
+    renderPagina()
+    expect(await screen.findByText("Se actualizó el equipo")).toBeInTheDocument()
+    expect(screen.getByText("PC 7 del Carro 1")).toBeInTheDocument()
+    const boton = screen.getByRole("button", { name: "Ver el detalle" })
+    expect(boton).toHaveAttribute("aria-expanded", "false")
+    await user.click(boton)
+    const tabla = screen.getByRole("table", { name: "Cambios registrados" })
+    expect(within(tabla).getByRole("columnheader", { name: "Antes" })).toBeInTheDocument()
+    expect(
+      within(tabla).getByRole("columnheader", { name: "Después" })
+    ).toBeInTheDocument()
+    expect(within(tabla).getByText("Disponible")).toBeInTheDocument()
+    expect(within(tabla).getByText("En mantenimiento")).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(
+      /secreto-|password_hash|CAMBIO_TRANSACCIONAL/
+    )
+    expect(document.querySelector("pre")).toBeNull()
+    await user.click(screen.getByRole("button", { name: "Ocultar el detalle" }))
+    expect(screen.queryByRole("table")).not.toBeInTheDocument()
+  })
+
+  it("distingue los cambios sin usuario identificado de una cuenta eliminada", async () => {
+    vi.mocked(auditoriaApi.listarAuditoria).mockResolvedValue({
+      data: [
+        entrada({
+          actorId: "00000000-0000-0000-0000-000000000000",
+          actorNombre: undefined,
+        }),
+      ],
+      meta: { total: 1, page: 1, pageSize: 50 },
+    })
+    renderPagina()
+    expect(await screen.findByText(/Sin usuario identificado/)).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Una cuenta que después se eliminó/)
+    ).not.toBeInTheDocument()
   })
 
   it("no ofrece desplegar un detalle que no existe", async () => {
@@ -216,7 +274,9 @@ describe("AuditoriaPage", () => {
       const user = userEvent.setup()
       renderPagina()
 
-      await user.click(await screen.findByRole("button", { name: /Ver todo lo de este curso/ }))
+      await user.click(
+        await screen.findByRole("button", { name: /Ver todo lo de este curso/ })
+      )
 
       await waitFor(() => {
         expect(auditoriaApi.listarAuditoria).toHaveBeenCalledWith(
@@ -231,7 +291,9 @@ describe("AuditoriaPage", () => {
       const user = userEvent.setup()
       renderPagina()
 
-      await user.click(await screen.findByRole("button", { name: /Ver todo lo de este curso/ }))
+      await user.click(
+        await screen.findByRole("button", { name: /Ver todo lo de este curso/ })
+      )
 
       expect(
         await screen.findByText(/Mostrando solo lo que le pasó a/)
@@ -250,5 +312,155 @@ describe("AuditoriaPage", () => {
         )
       })
     })
+  })
+  it("un fallo del registro no anuncia vacío y permite reintentar", async () => {
+    vi.mocked(auditoriaApi.listarAuditoria).mockRejectedValueOnce(
+      new Error("Sin conexión")
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await screen.findByText(/No pudimos consultar el registro de auditoría/)
+    expect(screen.queryByText(/Todavía no hay ninguna acción/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    await screen.findByText(/desde 10.0.0.7/)
+  })
+
+  it("un error al actualizar oculta entradas anteriores y sus filtros por ficha", async () => {
+    const qc = renderPagina()
+    await screen.findByText(/desde 10.0.0.7/)
+    vi.mocked(auditoriaApi.listarAuditoria).mockRejectedValueOnce(new Error("Caída"))
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ["auditoria"] })
+    })
+    await screen.findByText(/No pudimos consultar el registro de auditoría/)
+    expect(screen.queryByText(/desde 10.0.0.7/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /Ver todo lo de/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it("los catálogos fallidos no se presentan como opciones vacías", async () => {
+    vi.mocked(auditoriaApi.opcionesDeAuditoria).mockRejectedValueOnce(new Error("Caída"))
+    vi.mocked(adminApi.listarUsuarios).mockRejectedValueOnce(new Error("Caída"))
+    const user = userEvent.setup()
+    renderPagina()
+    await screen.findByText(/No pudimos consultar las acciones/)
+    await screen.findByText(/No pudimos consultar las personas/)
+    expect(screen.getByLabelText("Acción")).toBeDisabled()
+    expect(screen.getByLabelText("Sobre qué")).toBeDisabled()
+    expect(screen.getByLabelText("Quién")).toBeDisabled()
+    await screen.findByText(/desde 10.0.0.7/)
+    await user.click(screen.getAllByRole("button", { name: "Reintentar" })[0])
+    await screen.findByRole("option", { name: "Curso eliminado" })
+    await user.click(screen.getByRole("button", { name: "Reintentar" }))
+    await screen.findByRole("option", { name: "Pérez, Juan" })
+    expect(screen.getByLabelText("Quién")).toBeEnabled()
+  })
+
+  it("cambiar el tipo de ficha elimina la restricción del identificador anterior", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(
+      await screen.findByRole("button", { name: "Ver todo lo de este curso" })
+    )
+    await waitFor(() =>
+      expect(auditoriaApi.listarAuditoria).toHaveBeenLastCalledWith(
+        expect.objectContaining({ entidadId: "c1" }),
+        1
+      )
+    )
+    await user.selectOptions(screen.getByLabelText("Sobre qué"), "equipo")
+    await waitFor(() =>
+      expect(auditoriaApi.listarAuditoria).toHaveBeenLastCalledWith(
+        expect.objectContaining({ entidad: "equipo", entidadId: undefined }),
+        1
+      )
+    )
+    expect(screen.queryByRole("button", { name: "Ver todas" })).not.toBeInTheDocument()
+  })
+
+  it("filtra una cuenta eliminada desde la entrada y mantiene una opción legible seleccionada", async () => {
+    vi.mocked(auditoriaApi.listarAuditoria).mockResolvedValue({
+      data: [entrada({ actorId: "borrada", actorNombre: undefined })],
+      meta: { total: 1, page: 1, pageSize: 50 },
+    })
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(
+      await screen.findByRole("button", { name: "Ver acciones de esta cuenta" })
+    )
+    await waitFor(() =>
+      expect(auditoriaApi.listarAuditoria).toHaveBeenLastCalledWith(
+        { usuarioId: "borrada" },
+        1
+      )
+    )
+    expect(screen.getByLabelText("Quién")).toHaveValue("borrada")
+    expect(
+      screen.getByRole("option", { name: "Una cuenta que después se eliminó" })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Ver acciones de esta cuenta" })
+    ).not.toBeInTheDocument()
+  })
+
+  it("bloquea rangos invertidos y mayores que el límite del backend", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await screen.findByText(/desde 10.0.0.7/)
+    await user.type(screen.getByLabelText("Desde"), "2026-08-05")
+    const cantidad = vi.mocked(auditoriaApi.listarAuditoria).mock.calls.length
+    await user.type(screen.getByLabelText("Hasta"), "2026-08-04")
+    await screen.findByText("La fecha Desde no puede ser posterior a Hasta.")
+    expect(auditoriaApi.listarAuditoria).toHaveBeenCalledTimes(cantidad)
+    expect(screen.queryByText(/desde 10.0.0.7/)).not.toBeInTheDocument()
+    await user.clear(screen.getByLabelText("Hasta"))
+    await user.type(screen.getByLabelText("Hasta"), "2028-08-05")
+    await screen.findByText("El intervalo entre las fechas no puede superar 366 días.")
+  })
+
+  it("el detalle de cambios permite entrar con teclado al área de la tabla", async () => {
+    vi.mocked(auditoriaApi.listarAuditoria).mockResolvedValue({
+      data: [
+        entrada({
+          accion: "CAMBIO_TRANSACCIONAL",
+          detalle: {
+            operacion: "UPDATE",
+            antes: { estado: "DISPONIBLE" },
+            despues: { estado: "EN_MANTENIMIENTO" },
+          },
+        }),
+      ],
+      meta: { total: 1, page: 1, pageSize: 50 },
+    })
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(await screen.findByRole("button", { name: "Ver el detalle" }))
+    expect(screen.getByRole("region", { name: "Cambios registrados" })).toHaveAttribute(
+      "tabindex",
+      "0"
+    )
+  })
+  it("la ficha de un evento antiguo selecciona el filtro actual de equipos", async () => {
+    vi.mocked(auditoriaApi.opcionesDeAuditoria).mockResolvedValue({
+      acciones: ["CAMBIO_TRANSACCIONAL"],
+      entidades: ["equipo"],
+    })
+    vi.mocked(auditoriaApi.listarAuditoria).mockResolvedValue({
+      data: [entrada({ entidad: "pc" })],
+      meta: { total: 1, page: 1, pageSize: 50 },
+    })
+    const user = userEvent.setup()
+    renderPagina()
+    await user.click(
+      await screen.findByRole("button", { name: "Ver todo lo de este equipo" })
+    )
+    await waitFor(() =>
+      expect(auditoriaApi.listarAuditoria).toHaveBeenLastCalledWith(
+        expect.objectContaining({ entidad: "equipo", entidadId: "c1" }),
+        1
+      )
+    )
+    expect(screen.getByLabelText("Sobre qué")).toHaveValue("equipo")
   })
 })

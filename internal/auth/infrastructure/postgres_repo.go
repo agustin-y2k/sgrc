@@ -6,14 +6,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
-	"github.com/ramiro/sgrc/internal/auth/domain"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 // textoOpcional convierte "" a NULL: la columna es nullable y guardar la
@@ -64,17 +66,20 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 
 // EnTransaccion corre fn dentro de una única transacción.
 func (r *PostgresRepo) EnTransaccion(ctx context.Context, fn func(application.Repo) error) error {
+	if tx := pgtransaccion.DeContexto(ctx); tx != nil {
+		return fn(&PostgresRepo{db: tx})
+	}
 	if r.pool == nil {
 		return fn(r)
 	}
 
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.pool)
 	if err != nil {
 		return fmt.Errorf("iniciando transacción: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op si ya se hizo Commit
 
-	if err := fn(&PostgresRepo{db: tx}); err != nil {
+	if err := fn(&PostgresRepo{db: tx.Tx}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -112,16 +117,17 @@ func errorDeFilas(rows pgx.Rows) error {
 	return fmt.Errorf("iterando filas: %w", err)
 }
 
-const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por, curso_solicitado, materia_solicitada, rol_solicitado, cargo_solicitado, google_sub, version_sesion`
+const columnasUsuario = `id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por, curso_solicitado, materia_solicitada, rol_solicitado, cargo_solicitado, google_sub, version_sesion,
+ EXISTS(SELECT 1 FROM baja_usuario b WHERE b.usuario_id=usuario.id AND b.completada_en IS NULL)`
 
 // BuscarPorEmail compara contra lower(email) y no contra la columna pelada.
 func (r *PostgresRepo) BuscarPorEmail(ctx context.Context, email string) (*domain.Usuario, error) {
-	row := r.db.QueryRow(ctx, `SELECT `+columnasUsuario+` FROM usuario WHERE lower(email) = lower($1)`, email)
+	row := r.conexion(ctx).QueryRow(ctx, `SELECT `+columnasUsuario+` FROM usuario WHERE lower(email) = lower($1)`, email)
 	return escanearUsuario(row)
 }
 
 func (r *PostgresRepo) BuscarPorID(ctx context.Context, id string) (*domain.Usuario, error) {
-	row := r.db.QueryRow(ctx, `SELECT `+columnasUsuario+` FROM usuario WHERE id = $1`, id)
+	row := r.conexion(ctx).QueryRow(ctx, `SELECT `+columnasUsuario+` FROM usuario WHERE id = $1`, id)
 	return escanearUsuario(row)
 }
 
@@ -130,7 +136,7 @@ func (r *PostgresRepo) BuscarPorGoogleSub(ctx context.Context, sub string) (*dom
 	if sub == "" {
 		return nil, application.ErrUsuarioNoEncontrado
 	}
-	row := r.db.QueryRow(ctx,
+	row := r.conexion(ctx).QueryRow(ctx,
 		`SELECT `+columnasUsuario+` FROM usuario WHERE google_sub IS NOT NULL AND google_sub = $1`, sub)
 	return escanearUsuario(row)
 }
@@ -152,6 +158,7 @@ func (f *filaUsuario) destinos() []any {
 		&f.u.FechaAprobacion, &f.u.AprobadoPor, &f.curso, &f.materia, &f.rolSolicitado,
 		&f.cargoSolicitado, &f.googleSub,
 		&f.u.VersionSesion,
+		&f.u.BajaPendiente,
 	}
 }
 
@@ -206,14 +213,14 @@ func escanearUsuario(row pgx.Row) (*domain.Usuario, error) {
 }
 
 func (r *PostgresRepo) Crear(ctx context.Context, u *domain.Usuario) error {
-	_, err := r.db.Exec(ctx, `
-		INSERT INTO usuario (id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, curso_solicitado, materia_solicitada, rol_solicitado, cargo_solicitado, google_sub)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+	_, err := r.conexion(ctx).Exec(ctx, `
+		INSERT INTO usuario (id, nombre, apellido, email, password_hash, debe_cambiar_password, rol, estado, fecha_registro, curso_solicitado, materia_solicitada, rol_solicitado, cargo_solicitado, google_sub,fecha_aprobacion,aprobado_por)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,$15,$16)
 	`, u.ID, u.Nombre, u.Apellido, u.Email, textoOpcional(u.PasswordHash), u.DebeCambiarPassword,
 		string(u.Rol), string(u.Estado), u.FechaRegistro,
 		textoOpcional(u.CursoSolicitado), textoOpcional(u.MateriaSolicitada),
 		textoOpcional(u.RolSolicitado), textoOpcional(u.CargoSolicitado),
-		textoOpcional(u.GoogleSub))
+		textoOpcional(u.GoogleSub), u.FechaAprobacion, u.AprobadoPor)
 
 	if err != nil {
 		if esViolacionUnica(err) {
@@ -230,31 +237,54 @@ func (r *PostgresRepo) Crear(ctx context.Context, u *domain.Usuario) error {
 	return nil
 }
 
-func (r *PostgresRepo) Guardar(ctx context.Context, u *domain.Usuario) error {
-	tag, err := r.db.Exec(ctx, `
-		UPDATE usuario SET
-			nombre = $2, apellido = $3, email = $4, password_hash = $5,
-			debe_cambiar_password = $6, rol = $7, estado = $8,
-			fecha_aprobacion = $9, aprobado_por = $10, google_sub = $11,
-			version_sesion = $12
-		WHERE id = $1
-	`, u.ID, u.Nombre, u.Apellido, u.Email, textoOpcional(u.PasswordHash), u.DebeCambiarPassword,
-		string(u.Rol), string(u.Estado), u.FechaAprobacion, u.AprobadoPor,
-		textoOpcional(u.GoogleSub), u.VersionSesion)
+// actualizarUsuario devuelve la fila realmente persistida, para que los tokens
+// no se firmen con una copia anterior a un cambio de permisos o contraseña.
+func (r *PostgresRepo) actualizarUsuario(ctx context.Context, id, sql string, args ...any) (*domain.Usuario, error) {
+	u, err := escanearUsuario(r.conexion(ctx).QueryRow(ctx, sql+" RETURNING "+columnasUsuario, args...))
+	if errors.Is(err, application.ErrUsuarioNoEncontrado) {
+		if _, buscarErr := r.BuscarPorID(ctx, id); buscarErr != nil {
+			return nil, buscarErr
+		}
+		return nil, application.ErrUsuarioModificado
+	}
+	if esViolacionUnica(err) {
+		return nil, application.ErrEmailYaRegistrado
+	}
+	return u, err
+}
 
-	if err != nil {
-		if esViolacionUnica(err) {
-			return application.ErrEmailYaRegistrado
-		}
-		if esIDInvalido(err) {
-			return application.ErrIDInvalido
-		}
-		return fmt.Errorf("actualizando usuario: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return application.ErrUsuarioNoEncontrado
-	}
-	return nil
+func (r *PostgresRepo) ActualizarPerfil(ctx context.Context, anterior *domain.Usuario, nombre, apellido string) (*domain.Usuario, error) {
+	return r.actualizarUsuario(ctx, anterior.ID, `UPDATE usuario SET nombre=$2, apellido=$3
+  WHERE id=$1 AND estado=$4 AND rol=$5 AND version_sesion=$6`,
+		anterior.ID, nombre, apellido, string(anterior.Estado), string(anterior.Rol), anterior.VersionSesion)
+}
+
+func (r *PostgresRepo) ActualizarPassword(ctx context.Context, anterior *domain.Usuario, hash string, temporal bool) (*domain.Usuario, error) {
+	return r.actualizarUsuario(ctx, anterior.ID, `UPDATE usuario SET password_hash=$2,
+  debe_cambiar_password=$3, version_sesion=version_sesion+1
+  WHERE id=$1 AND estado=$4 AND version_sesion=$5
+  AND password_hash IS NOT DISTINCT FROM $6`,
+		anterior.ID, textoOpcional(hash), temporal, string(anterior.Estado), anterior.VersionSesion, textoOpcional(anterior.PasswordHash))
+}
+
+func (r *PostgresRepo) CambiarEstado(ctx context.Context, anterior *domain.Usuario, nuevo domain.Estado, ahora time.Time) (*domain.Usuario, error) {
+	return r.actualizarUsuario(ctx, anterior.ID, `UPDATE usuario SET estado=$2::varchar,
+  fecha_aprobacion=CASE WHEN $2::varchar='APROBADA' THEN $3 ELSE fecha_aprobacion END,
+ aprobado_por=CASE WHEN $2::varchar='APROBADA' THEN $6 ELSE aprobado_por END
+  WHERE id=$1 AND estado=$4 AND rol=$5`,
+		anterior.ID, string(nuevo), ahora, string(anterior.Estado), string(anterior.Rol), anterior.AprobadoPor)
+}
+
+func (r *PostgresRepo) CambiarRol(ctx context.Context, anterior *domain.Usuario, nuevo domain.Rol) (*domain.Usuario, error) {
+	return r.actualizarUsuario(ctx, anterior.ID, `UPDATE usuario SET rol=$2
+  WHERE id=$1 AND estado=$3 AND rol=$4`,
+		anterior.ID, string(nuevo), string(anterior.Estado), string(anterior.Rol))
+}
+
+func (r *PostgresRepo) VincularGoogle(ctx context.Context, anterior *domain.Usuario, sub string) (*domain.Usuario, error) {
+	return r.actualizarUsuario(ctx, anterior.ID, `UPDATE usuario SET google_sub=$2
+  WHERE id=$1 AND estado=$3 AND google_sub IS NOT DISTINCT FROM $4`,
+		anterior.ID, textoOpcional(sub), string(anterior.Estado), textoOpcional(anterior.GoogleSub))
 }
 
 // Listar devuelve usuarios filtrados por estado/rol (nil = sin ese filtro).
@@ -280,7 +310,7 @@ func (r *PostgresRepo) Listar(ctx context.Context, filtroEstado *domain.Estado, 
 	argsPagina := append(append([]any{}, args...), pagina.Limit(), pagina.Offset())
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(argsPagina)-1, len(argsPagina))
 
-	rows, err := r.db.Query(ctx, query, argsPagina...)
+	rows, err := r.conexion(ctx).Query(ctx, query, argsPagina...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("listando usuarios: %w", err)
 	}
@@ -303,7 +333,7 @@ func (r *PostgresRepo) Listar(ctx context.Context, filtroEstado *domain.Estado, 
 	// OVER(), y el total en 0 haría que la pantalla dijera que no hay usuarios
 	// teniendo la primera página llena.
 	if len(resultado) == 0 && pagina.Offset() > 0 {
-		if err := r.db.QueryRow(ctx, "SELECT COUNT(*)"+desde, args...).Scan(&total); err != nil {
+		if err := r.conexion(ctx).QueryRow(ctx, "SELECT COUNT(*)"+desde, args...).Scan(&total); err != nil {
 			return nil, 0, fmt.Errorf("contando usuarios: %w", err)
 		}
 	}
@@ -314,9 +344,9 @@ func (r *PostgresRepo) Listar(ctx context.Context, filtroEstado *domain.Estado, 
 // ContarAdminsAprobados bloquea las filas que cuenta (FOR UPDATE).
 func (r *PostgresRepo) ContarAdminsAprobados(ctx context.Context) (int, error) {
 	var n int
-	err := r.db.QueryRow(ctx, `
+	err := r.conexion(ctx).QueryRow(ctx, `
 		SELECT COUNT(*) FROM (
-			SELECT 1 FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA' FOR UPDATE
+			SELECT 1 FROM usuario WHERE rol = 'ADMIN' AND estado = 'APROBADA' ORDER BY id FOR UPDATE
 		) AS admins_bloqueados
 	`).Scan(&n)
 	if err != nil {
@@ -343,13 +373,13 @@ func (r *PostgresRepo) Eliminar(ctx context.Context, id string) (application.Res
 		return r.eliminarEn(ctx, r.db, id)
 	}
 
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.pool)
 	if err != nil {
 		return res, fmt.Errorf("iniciando transacción: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	res, err = r.eliminarEn(ctx, tx, id)
+	res, err = r.eliminarEn(ctx, tx.Tx, id)
 	if err != nil {
 		return application.ResultadoEliminacion{}, err
 	}
@@ -381,7 +411,7 @@ func (r *PostgresRepo) eliminarEn(ctx context.Context, db consultor, id string) 
 		return res, fmt.Errorf("contando lo que se va con la cuenta: %w", err)
 	}
 
-	tag, err := db.Exec(ctx, `DELETE FROM usuario WHERE id = $1`, id)
+	tag, err := db.Exec(ctx, `DELETE FROM usuario WHERE id = $1 AND NOT EXISTS(SELECT 1 FROM baja_usuario WHERE usuario_id=$1 AND completada_en IS NULL)`, id)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ResultadoEliminacion{}, application.ErrIDInvalido
@@ -389,7 +419,21 @@ func (r *PostgresRepo) eliminarEn(ctx context.Context, db consultor, id string) 
 		return application.ResultadoEliminacion{}, fmt.Errorf("eliminando usuario: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
+		var pendiente bool
+		if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM baja_usuario WHERE usuario_id=$1 AND completada_en IS NULL)`, id).Scan(&pendiente); err != nil {
+			return application.ResultadoEliminacion{}, err
+		}
+		if pendiente {
+			return application.ResultadoEliminacion{}, application.ErrBajaPendiente
+		}
 		return application.ResultadoEliminacion{}, application.ErrUsuarioNoEncontrado
 	}
 	return res, nil
+}
+
+func (r *PostgresRepo) conexion(ctx context.Context) consultor {
+	if tx := pgtransaccion.DeContexto(ctx); tx != nil {
+		return tx
+	}
+	return r.db
 }

@@ -121,24 +121,37 @@ export async function apiFetch<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
 
-  if (!response.ok) {
-    const { mensaje, cuerpo } = await parseErrorBody(response)
-    const error = new ApiError(response.status, mensaje, cuerpo)
-    // Solo si HABÍA token: el 401 del login son credenciales equivocadas,
-    // no una sesión rechazada, y cerrar sesión ahí no tendría sentido.
-    if (response.status === 401 && token) {
-      alRechazarLaSesion?.(error.message, motivoDeRechazo(response))
-    }
-    throw error
-  }
+  await exigirRespuestaExitosa(response, token)
 
-  // Varios endpoints responden con c.SendStatus() y sin body JSON (ej.
+  // Varios endpoints responden con c.SendStatus() y sin body JSON.
   const contentType = response.headers.get("content-type") ?? ""
   if (response.status === 204 || !contentType.includes("application/json")) {
     return undefined as T
   }
 
   return (await response.json()) as T
+}
+
+/** Comparte el manejo de errores/sesión con los fetch de Blob y multipart. */
+export async function exigirRespuestaExitosa(
+  response: Response,
+  tokenUsado: string | null
+): Promise<void> {
+  if (!response.ok) {
+    const { mensaje, cuerpo } = await parseErrorBody(response)
+    const error = new ApiError(response.status, mensaje, cuerpo)
+    // Solo si HABÍA token: el 401 del login son credenciales equivocadas,
+    // no una sesión rechazada, y cerrar sesión ahí no tendría sentido.
+    // Un request de una sesión anterior puede responder después del nuevo
+    // login o del cambio de contraseña. Sólo invalida el token que envió.
+    if (response.status === 401 && tokenUsado && getToken() === tokenUsado) {
+      alRechazarLaSesion?.(error.message, motivoDeRechazo(response))
+    }
+    throw error
+  }
+  if (tokenUsado && getToken() !== tokenUsado) {
+    throw new ApiError(409, "La sesión cambió. Volvé a consultar los datos.")
+  }
 }
 
 // El backend ya manda el mensaje correcto para cada caso de negocio (ej.

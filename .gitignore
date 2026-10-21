@@ -8,22 +8,81 @@
 .env
 .env.*
 !.env.example
-# La pila de capturas se crea y se destruye en la misma corrida y nunca sale de
-# la máquina, así que su ejemplo lleva claves fijas de juguete y no hay nada que
-# reemplazar. Se versiona para que `make capturas` corra en una máquina limpia
-# —y en CI— sin que nadie tenga que reconstruir el archivo a mano.
-!.env.capturas.example
+!.env.local.example
+
+# Configuración de cada instalación. Los ejemplos *.local.example.yml sí
+# se publican; las copias activas y los overlays automáticos son privados.
+*compose*.local.yml
+*compose*.local.yaml
+*compose*.override.yml
+*compose*.override.yaml
 
 # Volcados de la base: tienen los datos de la institución y los hashes de
 # contraseña de todas las cuentas. No salen del servidor.
 backup-sgrc-*.sql
 *.sql.gz
+*.sql.bz2
+*.sql.xz
+*.sql.zst
 *.dump
+backup*.sql
+dump*.sql
+*-backup*.sql
+*_backup*.sql
+backups/
+datos-locales/
+sgrc-datos/
+# También proteger estos archivos si se copian fuera de la carpeta privada.
+accesos-locales*.txt
+usuarios-locales*.json
+inventario-para-local*.sql*
+backup*.zip
+backup*.7z
+backup*.tar
+backup*.tar.*
+dump*.zip
+dump*.7z
+dump*.tar
+dump*.tar.*
+
+# Copias locales que pueden conservar configuración o credenciales.
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+*.tmp
+*.local
+.envrc
+.npmrc
+.pypirc
+.netrc
+.git-credentials
+credentials*.json
+client_secret*.json
+service-account*.json
+service_account*.json
+token.json
+tokens.json
+
+# Bases locales; los scripts SQL de migrations/ sí se versionan.
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
 
 # Certificados y llaves, por si alguna vez se generan dentro del repo.
 *.pem
 *.key
 *.crt
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
 
 # ─────────────────────────────────────────────────────────────────────
 # Artefactos de compilación
@@ -48,6 +107,10 @@ frontend/playwright-report/
 frontend/blob-report/
 frontend/.vite/
 
+# Herramientas locales de preparación de datos.
+__pycache__/
+*.pyc
+
 # ─────────────────────────────────────────────────────────────────────
 # Herramientas locales de cada quien
 # ─────────────────────────────────────────────────────────────────────
@@ -62,6 +125,20 @@ frontend/.vite/
 # workflows de integración continua).
 .*/
 !.github/
+
+# Instrucciones y conexiones personales de herramientas de desarrollo.
+AGENTS.md
+AGENTS.local.md
+AGENTS.override.md
+CLAUDE.md
+CLAUDE.local.md
+CODEX.md
+GEMINI.md
+copilot-instructions.md
+.mcp*.json
+mcp.json
+mcp-config*.json
+mcp_servers.json
 
 # Lo que los editores dejan FUERA de una carpeta oculta, que la regla de
 # arriba no alcanza. Los IDE de JetBrains (GoLand, IntelliJ) son el caso:
@@ -88,3 +165,16 @@ desktop.ini
 # un producto público: la planilla se carga desde la pantalla y no vive acá.
 /materias_por_division.csv
 /*-materias*.csv
+
+# Documentos de diseño intermedios: material de trabajo mientras se decide algo.
+# Lo que la funcionalidad termina siendo vive en docs/01-requisitos.md.
+/docs/superpowers/
+
+# Informes de trabajo y diagnósticos de una instalación. La documentación
+# compartida describe el producto y sus procedimientos reproducibles.
+[Aa][Nn][Aa][Ll][Ii][Ss][Ii][Ss]_*.md
+[Aa][Nn]Á[Ll][Ii][Ss][Ii][Ss]_*.md
+[Aa][Nn]á[Ll][Ii][Ss][Ii][Ss]_*.md
+/docs/revisiones/
+/docs/*-revision*.md
+/docs/*-estructura-frontend-y-guia.md

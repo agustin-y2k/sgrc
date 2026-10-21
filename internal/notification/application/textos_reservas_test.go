@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 func recordatorioDePrueba() eventbus.RecordatorioDeReserva {
 	return eventbus.RecordatorioDeReserva{
-		UsuarioID: "docente1", Email: "ada@escuela.edu.ar", Nombre: "Ada",
+		UsuarioID: "docente1", Email: "ada@escuela.test", Nombre: "Ada",
 		MateriaNombre:   "Matemáticas",
 		Fecha:           time.Date(2026, time.August, 10, 0, 0, 0, 0, time.UTC),
 		HoraInicio:      8 * time.Hour,
@@ -71,13 +71,13 @@ func TestCorreo_Recordatorio_SinEmailNoMandaNada(t *testing.T) {
 // ── Corte de fin de jornada ─────────────────────────────────────────────
 
 func TestCorreo_Cierre_DiceAQuienLeVaAFaltar(t *testing.T) {
-	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
+	bus, enviador := mensajeroDePrueba("admin1@escuela.test")
 
 	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{
 		Equipos: []eventbus.EquipoSinDevolverAlCierre{{
 			Etiqueta: "PC 3", CarroNombre: "Carro 1", Quien: "Marta",
 			DesdeCuando:      time.Date(2026, time.August, 10, 9, 0, 0, 0, time.UTC),
-			ProximoUsuarioID: "docente2", ProximoEmail: "ada@escuela.edu.ar", ProximoNombre: "Ada",
+			ProximoUsuarioID: "docente2", ProximoEmail: "ada@escuela.test", ProximoNombre: "Ada",
 			ProximaFecha: time.Date(2026, time.August, 11, 0, 0, 0, 0, time.UTC),
 			ProximaHora:  8 * time.Hour,
 		}},
@@ -90,7 +90,7 @@ func TestCorreo_Cierre_DiceAQuienLeVaAFaltar(t *testing.T) {
 		t.Fatalf("esperaba 1 mail (solo al Admin), hubo %d: %+v", len(enviador.enviados), enviador.enviados)
 	}
 	m := enviador.enviados[0]
-	if m.para != "admin1@escuela.edu.ar" {
+	if m.para != "admin1@escuela.test" {
 		t.Errorf("el único destinatario tiene que ser el Admin, fue %q", m.para)
 	}
 	// El dato accionable para el Admin es a quién le va a faltar: sin él la
@@ -101,7 +101,7 @@ func TestCorreo_Cierre_DiceAQuienLeVaAFaltar(t *testing.T) {
 }
 
 func TestCorreo_BarridoConListasVaciasNoMandaNada(t *testing.T) {
-	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
+	bus, enviador := mensajeroDePrueba("admin1@escuela.test")
 
 	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{}})
 
@@ -116,7 +116,7 @@ func TestBarrido_LasHorasDeUnPrestamoViajanEnLaZonaDeLaEscuela(t *testing.T) {
 	escuela := time.FixedZone("prueba", -3*60*60)
 	salio := time.Date(2026, time.August, 10, 21, 12, 0, 0, time.UTC).In(escuela)
 
-	bus, enviador := mensajeroDePrueba("admin1@escuela.edu.ar")
+	bus, enviador := mensajeroDePrueba("admin1@escuela.test")
 	bus.Publish(eventbus.Evento{Tipo: "prestamo.sin-devolver.cierre", Payload: eventbus.EquiposSinDevolverAlCierre{
 		Equipos: []eventbus.EquipoSinDevolverAlCierre{{
 			Etiqueta: "PC 7", Quien: "Marta", DesdeCuando: salio,

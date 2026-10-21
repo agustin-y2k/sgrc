@@ -82,6 +82,61 @@ const calendarioMock: CalendarioEquipo = {
 }
 
 describe("CalendarioEquipoPage", () => {
+  it("abre los detalles con teclado y muestra el horario original al cruzar medianoche", async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+      configurable: true,
+      value: function (this: HTMLDialogElement) {
+        this.setAttribute("open", "")
+      },
+    })
+    Object.defineProperty(HTMLDialogElement.prototype, "close", {
+      configurable: true,
+      value: function (this: HTMLDialogElement) {
+        this.removeAttribute("open")
+      },
+    })
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue({
+      ...calendarioMock,
+      bloques: [{ ...calendarioMock.bloques[0], horaInicio: "23:00", horaFin: "01:00" }],
+    })
+    const user = userEvent.setup()
+    renderCalendario()
+    const fragmentos = await screen.findAllByRole("button", {
+      name: /Matemáticas.*Ada Lovelace/,
+    })
+    fragmentos[1].focus()
+    await user.keyboard("{Enter}")
+    expect(
+      screen.getByRole("dialog", { name: "Detalle de la reserva" })
+    ).toBeInTheDocument()
+    expect(screen.getByText("23:00–01:00 (termina al día siguiente)")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Cerrar detalles" }))
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(fragmentos[1]).toHaveFocus()
+  })
+  it("la vista de lista permite abrir el motivo de un bloqueo", async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+      configurable: true,
+      value: function (this: HTMLDialogElement) {
+        this.setAttribute("open", "")
+      },
+    })
+    Object.defineProperty(HTMLDialogElement.prototype, "close", {
+      configurable: true,
+      value: function (this: HTMLDialogElement) {
+        this.removeAttribute("open")
+      },
+    })
+    vi.mocked(calendarioApi.calendarioDeEquipo).mockResolvedValue(calendarioMock)
+    const user = userEvent.setup()
+    renderCalendario()
+    await user.click(await screen.findByRole("button", { name: "Lista de reservas" }))
+    await user.click(
+      screen.getByRole("button", { name: /Jornada docente.*Ver detalles/ })
+    )
+    expect(screen.getByRole("dialog", { name: "Bloqueo del equipo" })).toBeInTheDocument()
+    expect(screen.getByText("Motivo")).toBeInTheDocument()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers({ shouldAdvanceTime: true })

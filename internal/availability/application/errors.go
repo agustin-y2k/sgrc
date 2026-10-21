@@ -19,10 +19,8 @@ var (
 	ErrIDInvalido = errors.New("el ID indicado no tiene un formato válido")
 )
 
-// ErrCascadaDeJornada: la jornada nueva se guardó pero no se pudieron
-// cancelar las reservas que quedaron afuera. Es un estado incompleto y hay
-// que decirlo: la jornada ya rige y esas clases siguen en pie.
-var ErrCascadaDeJornada = errors.New("la jornada se guardó, pero no se pudieron cancelar las reservas que quedaron afuera")
+// ErrCascadaDeJornada: falló la cancelación; jornada y reservas se revierten juntas.
+var ErrCascadaDeJornada = errors.New("no se pudo confirmar la jornada y la cancelación de las reservas afectadas")
 
 // ErrDemasiadosTramos: la jornada pedida tiene más tramos de los que puede
 // tener el horario de una escuela.

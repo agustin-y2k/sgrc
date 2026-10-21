@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ramiro/sgrc/internal/academic/application"
-	"github.com/ramiro/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/academic/application"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
 )
 
 // Los espacios (RF-02.13) contra una base real.

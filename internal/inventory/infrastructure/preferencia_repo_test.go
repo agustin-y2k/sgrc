@@ -5,11 +5,12 @@ package infrastructure
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 func ptrInt(n int) *int       { return &n }
@@ -211,6 +212,33 @@ func sembrarMaterias(t *testing.T, pool *pgxpool.Pool, nombres ...string) {
 	}
 }
 
+// sembrarMateriaEnCurso deja UNA materia en un curso con el año y la división
+// pedidos, y devuelve su id — que es lo que necesita el conteo para saber a
+// qué contenedor apunta el renombre.
+func sembrarMateriaEnCurso(t *testing.T, pool *pgxpool.Pool, nombre string, anio int, division string) string {
+	t.Helper()
+	ctx := context.Background()
+	cicloID, cursoID, materiaID := NuevoID(), NuevoID(), NuevoID()
+	anioDelCiclo := 3100 + int(atomic.AddInt32(&contadorCicloDePreferencias, 1))
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anioDelCiclo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO curso (id, ciclo_lectivo_id, anio, division) VALUES ($1, $2, $3, $4)`,
+		cursoID, cicloID, anio, division); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, $3)`, materiaID, cursoID, nombre); err != nil {
+		t.Fatal(err)
+	}
+	return materiaID
+}
+
+var contadorCicloDePreferencias int32
+
 // ── Marcas huérfanas (RF-03.21) ─────────────────────────────────────────
 //
 // Una marca se vincula a la materia POR NOMBRE y no por referencia: es
@@ -285,6 +313,30 @@ func TestListarPreferenciasHuerfanas_NoConfundeUnaTildeConUnRenombre(t *testing.
 	}
 }
 
+// Una marca acotada a un curso que no existe no le aplica a NADIE, aunque
+// exista otra materia con el mismo nombre en otro curso. Sin mirar el alcance,
+// esa marca muerta queda invisible para siempre.
+func TestListarPreferenciasHuerfanas_MiraElAlcance(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	equipoID := equipoParaPreferencias(t, repo, "SERIE-HUERF-3")
+
+	// La única Matemática de la escuela es la de 5°B.
+	sembrarMateriaEnCurso(t, pool, "Matemática", 5, "B")
+
+	// Y la marca habla de una Matemática de 3°, que no existe.
+	tres := 3
+	nuevaPreferenciaDeTest(t, repo, equipoID, "Matemática", nil, &tres, nil, 1)
+
+	huerfanas, err := repo.ListarPreferenciasHuerfanas(context.Background())
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(huerfanas) != 1 {
+		t.Fatalf("la marca de 3° no le aplica a ninguna materia: esperaba 1 huérfana, obtuve %d", len(huerfanas))
+	}
+}
+
 // Y la cuenta previa, que es lo que permite AVISAR antes de renombrar en vez de
 // romper en silencio.
 func TestContarPreferenciasQueDejarianDeAplicar(t *testing.T) {
@@ -294,11 +346,12 @@ func TestContarPreferenciasQueDejarianDeAplicar(t *testing.T) {
 	e1 := equipoParaPreferencias(t, repo, "SERIE-CUENTA-1")
 	e2 := equipoParaPreferencias(t, repo, "SERIE-CUENTA-2")
 
-	sembrarMaterias(t, pool, "Matemática")
+	materiaID := sembrarMateriaEnCurso(t, pool, "Matemática", 3, "A")
+	lenguaID := sembrarMateriaEnCurso(t, pool, "Lengua", 3, "B")
 	nuevaPreferenciaDeTest(t, repo, e1, "Matemática", nil, nil, nil, 1)
 	nuevaPreferenciaDeTest(t, repo, e2, "Matemática", nil, nil, nil, 1)
 
-	n, err := repo.ContarPreferenciasQueDejarianDeAplicar(ctx, "Matemática")
+	n, err := repo.ContarPreferenciasQueDejarianDeAplicar(ctx, materiaID, "Matemática")
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -307,7 +360,7 @@ func TestContarPreferenciasQueDejarianDeAplicar(t *testing.T) {
 	}
 
 	// Sin distinguir tildes ni mayúsculas, igual que el cruce.
-	n, err = repo.ContarPreferenciasQueDejarianDeAplicar(ctx, "  MATEMATICA  ")
+	n, err = repo.ContarPreferenciasQueDejarianDeAplicar(ctx, materiaID, "  MATEMATICA  ")
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -315,7 +368,72 @@ func TestContarPreferenciasQueDejarianDeAplicar(t *testing.T) {
 		t.Errorf("la cuenta tiene que ignorar tildes y mayúsculas; obtuve %d", n)
 	}
 
-	if n, _ := repo.ContarPreferenciasQueDejarianDeAplicar(ctx, "Lengua"); n != 0 {
+	if n, _ := repo.ContarPreferenciasQueDejarianDeAplicar(ctx, lenguaID, "Lengua"); n != 0 {
 		t.Errorf("una materia sin marcas tiene que dar 0; obtuve %d", n)
+	}
+}
+
+// El número tiene que decir cuántas marcas quedan sin aplicarle a NADIE, no
+// cuántas mencionan ese nombre. Lo cambian dos cosas: que sobreviva otra
+// materia homónima en otro curso, y el alcance de cada marca.
+func TestContarPreferenciasQueDejarianDeAplicar_NoCuentaLasQueSiguenSirviendo(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	sinAlcance := equipoParaPreferencias(t, repo, "SERIE-CUENTA-3")
+	acotada := equipoParaPreferencias(t, repo, "SERIE-CUENTA-4")
+
+	// La misma materia en dos cursos: se renombra sólo la de 3°A.
+	deTercero := sembrarMateriaEnCurso(t, pool, "Matemática", 3, "A")
+	sembrarMateriaEnCurso(t, pool, "Matemática", 5, "B")
+
+	tres := 3
+	nuevaPreferenciaDeTest(t, repo, sinAlcance, "Matemática", nil, nil, nil, 1)
+	nuevaPreferenciaDeTest(t, repo, acotada, "Matemática", nil, &tres, nil, 1)
+
+	n, err := repo.ContarPreferenciasQueDejarianDeAplicar(ctx, deTercero, "Matemática")
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	// La marca sin alcance le sigue sirviendo a la Matemática de 5°B; la única
+	// que se queda sin materia es la acotada a 3°.
+	if n != 1 {
+		t.Errorf("esperaba 1, obtuve %d", n)
+	}
+}
+
+// Las marcas se leen por carro para que el alta masiva pueda avisar de un
+// empate sin pedir una consulta por equipo.
+func TestListarPreferenciasPorCarro(t *testing.T) {
+	repo := NewPostgresRepo(levantarPostgresDeTest(t))
+	ctx := context.Background()
+
+	// Dos equipos en EL MISMO carro, y un tercero afuera para que se note que
+	// filtra y no devuelve todo.
+	carro := crearCarroDeTest(t, repo, "Carro-PREF-CARRO")
+	e1 := crearEquipoDeCarroDeTest(t, repo, carro.ID, 1, "SERIE-CARRO-1").ID
+	e2 := crearEquipoDeCarroDeTest(t, repo, carro.ID, 2, "SERIE-CARRO-2").ID
+	afuera := equipoParaPreferencias(t, repo, "SERIE-CARRO-3")
+
+	nuevaPreferenciaDeTest(t, repo, e1, "Matemática", nil, nil, nil, 1)
+	nuevaPreferenciaDeTest(t, repo, e2, "Dibujo Técnico", nil, nil, nil, 2)
+	nuevaPreferenciaDeTest(t, repo, afuera, "Lengua", nil, nil, nil, 1)
+
+	marcas, err := repo.ListarPreferenciasPorCarro(ctx, carro.ID)
+	if err != nil {
+		t.Fatalf("no debería fallar: %v", err)
+	}
+	if len(marcas) != 2 {
+		t.Fatalf("esperaba las 2 marcas del carro, obtuve %d", len(marcas))
+	}
+	// Cada marca dice de qué equipo es: el alta masiva las cruza contra los
+	// equipos que tiene tildados.
+	for _, m := range marcas {
+		if m.EquipoID != e1 && m.EquipoID != e2 {
+			t.Errorf("devolvió la marca de un equipo que no es del carro: %+v", m)
+		}
+		if m.MateriaNombre == "Lengua" {
+			t.Error("la marca del equipo de otro carro no tiene que venir")
+		}
 	}
 }

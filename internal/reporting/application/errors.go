@@ -9,3 +9,5 @@ var ErrIDInvalido = errors.New("el ID indicado no tiene un formato válido")
 // ErrRangoFechasInvalido: RF-06.1 permite filtrar por rango de fechas; un
 // "hasta" anterior al "desde" es un error del cliente, no del servidor.
 var ErrRangoFechasInvalido = errors.New("la fecha hasta no puede ser anterior a la fecha desde")
+
+var ErrSnapshotInconsistente = errors.New("el histórico no coincide con los totales del ciclo")

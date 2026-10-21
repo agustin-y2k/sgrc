@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ramiro/sgrc/internal/academic/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // Los pedidos para dictar una materia (ver domain.PedidoDeMateria).
@@ -22,7 +22,7 @@ var (
 
 // PedirMateria: un docente pide poder dictar una materia. `materiaID` en nil
 // significa que todavía no existe y va escrita a mano.
-func (s *Service) PedirMateria(ctx context.Context, usuarioID string, materiaID *string, curso, materia, motivo string) (*domain.PedidoDeMateria, error) {
+func (s *Service) operacionPedirMateria(ctx context.Context, usuarioID string, materiaID *string, curso, materia, motivo string) (*domain.PedidoDeMateria, error) {
 	// El pedido se arma PRIMERO, antes de tocar la base: así una entrada mal
 	// formada —sin motivo, sin materia, con las dos formas a la vez— se rechaza
 	// por lo que es (400) y no por lo primero que encuentre una consulta.
@@ -37,6 +37,9 @@ func (s *Service) PedirMateria(ctx context.Context, usuarioID string, materiaID 
 	var docentes []ContactoDeDocente
 
 	if materiaID != nil {
+		if err := s.repo.VerificarVigencia(ctx, "materia", *materiaID); err != nil {
+			return nil, err
+		}
 		m, err := s.repo.BuscarMateriaPorID(ctx, *materiaID)
 		if err != nil {
 			return nil, err
@@ -85,7 +88,7 @@ func (s *Service) PedirMateria(ctx context.Context, usuarioID string, materiaID 
 		quien = ContactoDeDocente{UsuarioID: usuarioID}
 	}
 
-	s.bus.Publish(eventbus.Evento{
+	eventbus.Emitir(ctx, s.bus, eventbus.Evento{
 		Tipo: "materia.pedido.nuevo",
 		Payload: eventbus.PedidoDeMateriaNuevo{
 			PedidoID:         p.ID,
@@ -101,85 +104,117 @@ func (s *Service) PedirMateria(ctx context.Context, usuarioID string, materiaID 
 	return p, nil
 }
 
-// ResolverPedido aprueba o rechaza.
-func (s *Service) rolPorDefecto(ctx context.Context, materiaID string) domain.RolDocente {
+// rolPorDefecto elige titular si todavía no hay docentes. Un fallo de lectura
+// debe abortar la resolución, en lugar de asignar una titularidad por error.
+func (s *Service) rolPorDefecto(ctx context.Context, materiaID string) (domain.RolDocente, error) {
 	asignados, err := s.repo.ListarDocentesDeMateria(ctx, materiaID)
-	if err != nil || len(asignados) == 0 {
-		return domain.RolTitular
+	if err != nil {
+		return "", err
 	}
-	return domain.RolSuplente
+	if len(asignados) == 0 {
+		return domain.RolTitular, nil
+	}
+	return domain.RolSuplente, nil
 }
 
+// ResolverPedido aplica una única decisión. Repetirla devuelve la constancia
+// original, sin cambiar respuesta, curso, rol, administrador ni fecha.
 func (s *Service) ResolverPedido(ctx context.Context, pedidoID, adminID string, aprobar bool, respuesta string, cursoIDParaMateriaNueva *string, rol *domain.RolDocente) (*domain.PedidoDeMateria, error) {
-	p, err := s.repo.BuscarPedidoPorID(ctx, pedidoID)
-	if err != nil {
-		return nil, err
-	}
-	if p.Estado != domain.PedidoPendiente {
-		return nil, domain.ErrPedidoResuelto
-	}
-
-	materiaNombre := p.MateriaSolicitada
-
-	if aprobar {
-		materiaID := p.MateriaID
-
-		if p.EsMateriaNueva() {
-			if cursoIDParaMateriaNueva == nil || strings.TrimSpace(*cursoIDParaMateriaNueva) == "" {
-				return nil, ErrFaltaCursoParaMateriaNueva
+	var resultado *domain.PedidoDeMateria
+	var materiaNombre string
+	err := s.repo.CoordinarAsignaciones(ctx, func(ctx context.Context) error {
+		// El callback puede repetirse ante un deadlock. Ningún evento se
+		// publica hasta que la transacción termine correctamente.
+		resultado = nil
+		p, err := s.repo.BuscarPedidoParaResolver(ctx, pedidoID)
+		if err != nil {
+			return err
+		}
+		if p.Estado != domain.PedidoPendiente {
+			esperado := domain.PedidoRechazado
+			if aprobar {
+				esperado = domain.PedidoAprobado
 			}
-			m, err := s.CrearMateria(ctx, *cursoIDParaMateriaNueva, p.MateriaSolicitada)
-			if err != nil {
-				return nil, fmt.Errorf("creando la materia del pedido: %w", err)
+			if p.Estado != esperado {
+				return domain.ErrPedidoResuelto
 			}
-			materiaID = &m.ID
-			materiaNombre = m.Nombre
+			resultado = p
+			return nil
+		}
+
+		// Validar la resolución antes de crear o asignar nada.
+		if aprobar {
+			err = p.Aprobar(adminID, respuesta, s.ahora())
 		} else {
-			m, err := s.repo.BuscarMateriaPorID(ctx, *materiaID)
-			if err != nil {
-				return nil, err
+			err = p.Rechazar(adminID, respuesta, s.ahora())
+		}
+		if err != nil {
+			return err
+		}
+		materiaNombre = p.MateriaSolicitada
+		if aprobar {
+			materiaID := p.MateriaID
+			if p.EsMateriaNueva() {
+				if cursoIDParaMateriaNueva == nil || strings.TrimSpace(*cursoIDParaMateriaNueva) == "" {
+					return ErrFaltaCursoParaMateriaNueva
+				}
+				m, err := s.CrearMateria(ctx, *cursoIDParaMateriaNueva, p.MateriaSolicitada)
+				if err != nil {
+					return fmt.Errorf("creando la materia del pedido: %w", err)
+				}
+				p.MateriaCreadaID = &m.ID
+				materiaID, materiaNombre = &m.ID, m.Nombre
+			} else {
+				m, err := s.repo.BuscarMateriaPorID(ctx, *materiaID)
+				if err != nil {
+					return err
+				}
+				materiaNombre = m.Nombre
 			}
-			materiaNombre = m.Nombre
+			var elegido domain.RolDocente
+			if rol != nil {
+				elegido, err = domain.ParseRolDocente(string(*rol))
+			} else {
+				elegido, err = s.rolPorDefecto(ctx, *materiaID)
+			}
+			if err != nil {
+				return err
+			}
+			if _, err := s.AsignarDocente(ctx, *materiaID, p.UsuarioID, elegido); err != nil {
+				return fmt.Errorf("asignando el docente a la materia: %w", err)
+			}
 		}
-
-		elegido := s.rolPorDefecto(ctx, *materiaID)
-		if rol != nil {
-			elegido = *rol
+		if err := s.repo.GuardarPedido(ctx, p); err != nil {
+			return err
 		}
-		if _, err := s.AsignarDocente(ctx, *materiaID, p.UsuarioID, elegido); err != nil {
-			return nil, fmt.Errorf("asignando el docente a la materia: %w", err)
+		// La respuesta usa la constancia almacenada, incluida la precisión de
+		// sus fechas. Un reintento debe devolver exactamente ese mismo resultado.
+		p, err = s.repo.BuscarPedidoPorID(ctx, pedidoID)
+		if err != nil {
+			return err
 		}
-		if err := p.Aprobar(adminID, respuesta, s.ahora()); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := p.Rechazar(adminID, respuesta, s.ahora()); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := s.repo.GuardarPedido(ctx, p); err != nil {
+		resultado = p
+		constancia, nombre := *p, materiaNombre
+		eventbus.AlConfirmar(ctx, s.bus, func(ctx context.Context) {
+			quien, err := s.datosDeUsuario.Contacto(ctx, constancia.UsuarioID)
+			if err != nil {
+				quien = ContactoDeDocente{UsuarioID: constancia.UsuarioID}
+			}
+			eventbus.Emitir(ctx, s.bus, eventbus.Evento{
+				Tipo: "materia.pedido.resuelto",
+				Payload: eventbus.PedidoDeMateriaResuelto{
+					PedidoID: constancia.ID, UsuarioID: constancia.UsuarioID,
+					Email: quien.Email, Nombre: quien.Nombre, MateriaNombre: nombre,
+					Aprobado: aprobar, Respuesta: constancia.Respuesta,
+				},
+			})
+		})
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-
-	quien, err := s.datosDeUsuario.Contacto(ctx, p.UsuarioID)
-	if err != nil {
-		quien = ContactoDeDocente{UsuarioID: p.UsuarioID}
-	}
-
-	s.bus.Publish(eventbus.Evento{
-		Tipo: "materia.pedido.resuelto",
-		Payload: eventbus.PedidoDeMateriaResuelto{
-			PedidoID:      p.ID,
-			UsuarioID:     p.UsuarioID,
-			Email:         quien.Email,
-			Nombre:        quien.Nombre,
-			MateriaNombre: materiaNombre,
-			Aprobado:      aprobar,
-			Respuesta:     p.Respuesta,
-		},
-	})
-	return p, nil
+	return resultado, nil
 }
 
 // ListarPedidos y ListarMisPedidos devuelven PedidoDetallado y no el pedido

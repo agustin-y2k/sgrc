@@ -43,6 +43,7 @@ func NuevoHistoricoUsoEquipo(id string, anio int, equipoID, etiquetaSnapshot str
 // HistoricoUsoDocente es el equivalente de HistoricoUsoEquipo agregado por
 // docente.
 type HistoricoUsoDocente struct {
+	DocenteIDHistorico    string
 	ID                    string
 	Anio                  int
 	UsuarioID             *string
@@ -77,6 +78,8 @@ type ResumenUsoEquipo struct {
 }
 
 type ResumenUsoDocente struct {
+	// Identidad sin FK, que sobrevive a la eliminación de la cuenta.
+	DocenteIDHistorico string
 	// UsuarioID es nil cuando la cuenta se eliminó definitivamente (RF-01.9): la
 	// FK quedó en SET NULL y lo único que sobrevive es el nombre congelado en la
 	// reserva.
@@ -154,4 +157,13 @@ type ResumenPorCategoriaDeFalla struct {
 	Total             int
 	Abiertas          int
 	EquiposAlcanzados int
+}
+
+// TotalesUso compara los resúmenes con sus filas de origen. Los bloqueos
+// cuentan para equipos y no se atribuyen a un docente.
+type TotalesUso struct {
+	ReservasEquipos  int
+	MinutosEquipos   int
+	ReservasDocentes int
+	MinutosDocentes  int
 }

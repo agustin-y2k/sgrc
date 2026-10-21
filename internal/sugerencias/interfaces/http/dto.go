@@ -3,7 +3,7 @@ package http
 import (
 	"time"
 
-	"github.com/ramiro/sgrc/internal/sugerencias/domain"
+	"github.com/agustin-y2k/sgrc/internal/sugerencias/domain"
 )
 
 // ── Requests ────────────────────────────────────────────────────────────

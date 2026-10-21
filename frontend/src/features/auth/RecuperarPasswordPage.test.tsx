@@ -30,7 +30,7 @@ function renderPagina() {
 /** Completa el paso 1 y deja la pantalla en el formulario del código. */
 async function pedirCodigo(
   user: ReturnType<typeof userEvent.setup>,
-  email = "ana@escuela.edu.ar"
+  email = "ana@escuela.test"
 ) {
   await user.type(screen.getByLabelText("Email"), email)
   await user.click(screen.getByRole("button", { name: "Enviarme el código" }))
@@ -66,8 +66,8 @@ describe("RecuperarPasswordPage", () => {
 
     await pedirCodigo(user)
 
-    expect(authApi.olvidePassword).toHaveBeenCalledWith({ email: "ana@escuela.edu.ar" })
-    expect(screen.getByText(/ana@escuela\.edu\.ar/)).toBeInTheDocument()
+    expect(authApi.olvidePassword).toHaveBeenCalledWith({ email: "ana@escuela.test" })
+    expect(screen.getByText(/ana@escuela\.test/)).toBeInTheDocument()
   })
 
   it("avanza igual con un email que no existe", async () => {
@@ -77,7 +77,7 @@ describe("RecuperarPasswordPage", () => {
     const user = userEvent.setup()
     renderPagina()
 
-    await pedirCodigo(user, "nadie@escuela.edu.ar")
+    await pedirCodigo(user, "nadie@escuela.test")
 
     expect(screen.getByLabelText("Código")).toBeInTheDocument()
     expect(screen.queryByText(/no está registrado/i)).not.toBeInTheDocument()
@@ -139,7 +139,7 @@ describe("RecuperarPasswordPage", () => {
 
     await waitFor(() =>
       expect(authApi.restablecerPassword).toHaveBeenCalledWith({
-        email: "ana@escuela.edu.ar",
+        email: "ana@escuela.test",
         codigo: "482913",
         passwordNueva: "contraseña-larga",
       })
@@ -191,7 +191,7 @@ describe("RecuperarPasswordPage", () => {
     const user = userEvent.setup()
     renderPagina()
 
-    await user.type(screen.getByLabelText("Email"), "ana@escuela.edu.ar")
+    await user.type(screen.getByLabelText("Email"), "ana@escuela.test")
     await user.click(screen.getByRole("button", { name: "Enviarme el código" }))
 
     expect(await screen.findByText(/no está configurada/)).toBeInTheDocument()

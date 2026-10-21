@@ -1,5 +1,10 @@
-import { useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect, useRef, useState } from "react"
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 
 import { EstadoBadge } from "@/components/EstadoBadge"
 import { Paginador } from "@/components/Paginador"
@@ -25,17 +30,31 @@ import { formatearFechaYHora } from "@/lib/fechas"
  */
 export function PanelDeSoporte({
   abiertoDeEntrada = false,
+  solicitudDeApertura,
+  hiloId,
+  abrirFormulario = abiertoDeEntrada,
 }: {
   abiertoDeEntrada?: boolean
+  solicitudDeApertura?: string
+  hiloId?: string
+  abrirFormulario?: boolean
 }) {
   const { user } = useAuth()
   const esAdmin = user?.rol === "ADMIN"
   const [abierto, setAbierto] = useState(abiertoDeEntrada)
-  const [escribiendo, setEscribiendo] = useState(abiertoDeEntrada && !esAdmin)
+  const [escribiendo, setEscribiendo] = useState(abrirFormulario && !esAdmin)
   const [soloPendientes, setSoloPendientes] = useState(true)
   const [pagina, setPagina] = useState(1)
+  const [borradores, setBorradores] = useState<Record<string, string>>({})
+  const [resultado, setResultado] = useState("")
+  const ocupado = useIsMutating({ mutationKey: ["sugerencias", "editar"] }) > 0
+  useEffect(() => {
+    if (!solicitudDeApertura) return
+    setAbierto(true)
+    if (abrirFormulario && !esAdmin) setEscribiendo(true)
+  }, [solicitudDeApertura, abrirFormulario, esAdmin])
 
-  const { data, error, isLoading } = useQuery({
+  const { data, error, isLoading, isFetching, refetch } = useQuery({
     // La página va en la clave: sin ella, react-query devolvería la página
     // anterior de la caché y "Siguiente" no haría nada visible.
     queryKey: esAdmin
@@ -47,18 +66,42 @@ export function PanelDeSoporte({
         : sugerenciasApi.misSugerencias(pagina),
   })
 
+  useEffect(() => {
+    if (!data || error || isFetching) return
+    const ultima = Math.max(1, Math.ceil(data.meta.total / data.meta.pageSize))
+    if (pagina > ultima) setPagina(ultima)
+  }, [data, error, isFetching, pagina])
+  const detalle = useQuery({
+    queryKey: ["sugerencias", "detalle", hiloId],
+    queryFn: () => sugerenciasApi.obtener(hiloId!),
+    enabled: !!hiloId,
+    retry: false,
+  })
   const hilos = data?.data ?? []
+  const mostrarHilo = (h: Sugerencia, destacado = false) => (
+    <Hilo
+      key={h.id}
+      hilo={h}
+      esAdmin={esAdmin}
+      destacado={destacado && abierto}
+      texto={borradores[h.id] ?? ""}
+      setTexto={(texto) => setBorradores((prev) => ({ ...prev, [h.id]: texto }))}
+      onResultado={setResultado}
+    />
+  )
 
   return (
-    <Card className="mb-4">
-      <CardContent className="grid gap-3 pt-6">
+    <Card className="mb-4 min-w-0">
+      <CardContent className="grid min-w-0 gap-3 pt-6">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
+          <div className="min-w-0 flex-1 basis-48">
             <p className="font-medium">
-              {esAdmin ? "Pedidos de ayuda" : "Ayuda y mensajes"}
+              {esAdmin ? "Consultas de docentes" : "Ayuda y mensajes"}
             </p>
             <p className="text-muted-foreground text-sm">
-              {resumen(hilos, esAdmin, isLoading, soloPendientes, data?.meta.total)}
+              {error
+                ? "No pudimos consultar las conversaciones. Reintentá para verlas."
+                : resumen(hilos, esAdmin, isLoading, soloPendientes, data?.meta.total)}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -84,23 +127,47 @@ export function PanelDeSoporte({
 
         {error && (
           <Alert variant="destructive">
-            <AlertDescription>{getErrorMessage(error)}</AlertDescription>
+            <AlertDescription>
+              {getErrorMessage(error)}
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-2 h-11"
+                disabled={isFetching || ocupado}
+                onClick={() => void refetch()}
+              >
+                Reintentar consultas
+              </Button>
+            </AlertDescription>
           </Alert>
         )}
 
-        {escribiendo && !esAdmin && (
-          <div className="border-t pt-3">
-            <EscribirSugerencia onEnviada={() => setEscribiendo(false)} />
+        {resultado && (
+          <p role="status" className="text-sm">
+            {resultado}
+          </p>
+        )}
+        {!esAdmin && (
+          <div hidden={!escribiendo} className="border-t pt-3">
+            <EscribirSugerencia
+              onEnviada={() => {
+                setEscribiendo(false)
+                setAbierto(true)
+                setPagina(1)
+                setResultado("Consulta enviada. Podés seguir la conversación acá mismo.")
+              }}
+            />
           </div>
         )}
 
-        {abierto && (
+        <div hidden={!abierto}>
           <div className="grid gap-3 border-t pt-3">
             {esAdmin && (
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="solo-pendientes"
                   checked={soloPendientes}
+                  disabled={ocupado}
                   onCheckedChange={(v) => {
                     setSoloPendientes(v === true)
                     // Cambiar el filtro cambia cuántas páginas hay: quedarse en
@@ -112,7 +179,12 @@ export function PanelDeSoporte({
               </div>
             )}
 
-            {hilos.length === 0 && (
+            {isLoading && (
+              <p className="text-muted-foreground text-sm" role="status">
+                Cargando conversaciones…
+              </p>
+            )}
+            {!isLoading && !error && !hiloId && hilos.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 {esAdmin
                   ? "No hay conversaciones para mostrar."
@@ -120,53 +192,114 @@ export function PanelDeSoporte({
               </p>
             )}
 
-            {hilos.map((h) => (
-              <Hilo key={h.id} hilo={h} esAdmin={esAdmin} />
-            ))}
+            {hiloId && detalle.isLoading && (
+              <p role="status">Cargando la conversación del aviso…</p>
+            )}
+            {hiloId && detalle.error && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {getErrorMessage(detalle.error)}
+                  <Button
+                    variant="outline"
+                    disabled={detalle.isFetching}
+                    onClick={() => void detalle.refetch()}
+                  >
+                    Reintentar conversación
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+            {hiloId && detalle.data && !detalle.error && mostrarHilo(detalle.data, true)}
+            {!error && hilos.filter((h) => h.id !== hiloId).map((h) => mostrarHilo(h))}
 
             {/* El buzón viene de a 50. Sin esto, el hilo 51 no existía para la
                 pantalla: no había ni paginador ni aviso de que faltaba algo. */}
-            {data && (
+            {data && !error && (
               <Paginador
+                disabled={ocupado}
                 meta={data.meta}
-                onCambiarPagina={setPagina}
+                onCambiarPagina={(p) => {
+                  if (!ocupado) setPagina(p)
+                }}
                 etiqueta="conversaciones"
               />
             )}
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   )
 }
 
 /** Una conversación con sus mensajes y la caja para seguir contestando. */
-function Hilo({ hilo, esAdmin }: { hilo: Sugerencia; esAdmin: boolean }) {
+function Hilo({
+  hilo,
+  esAdmin,
+  texto,
+  setTexto,
+  onResultado,
+  destacado,
+}: {
+  hilo: Sugerencia
+  esAdmin: boolean
+  texto: string
+  destacado: boolean
+  setTexto: (texto: string) => void
+  onResultado: (mensaje: string) => void
+}) {
   const qc = useQueryClient()
-  const [texto, setTexto] = useState("")
   // Se abre solo lo que espera respuesta: en una bandeja de quince, tener
   // todos los hilos desplegados es lo mismo que no tener ninguno.
-  const [desplegado, setDesplegado] = useState(hilo.esperaRespuesta)
+  const [desplegado, setDesplegado] = useState(destacado || hilo.esperaRespuesta)
 
-  const invalidar = () => qc.invalidateQueries({ queryKey: ["sugerencias"] })
+  const elemento = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (destacado) elemento.current?.focus()
+  }, [destacado])
+  const invalidar = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ["sugerencias"] }),
+      qc.invalidateQueries({ queryKey: ["notificaciones"] }),
+    ])
 
   const responder = useMutation({
+    mutationKey: ["sugerencias", "editar"],
+    onMutate: () => {
+      resolver.reset()
+      onResultado("")
+    },
     mutationFn: () => sugerenciasApi.responder(hilo.id, texto),
-    onSuccess: () => {
+    onSuccess: async () => {
       setTexto("")
-      invalidar()
+      onResultado(`Respuesta enviada: ${hilo.asunto}.`)
+      await invalidar()
     },
   })
 
   const resolver = useMutation({
+    mutationKey: ["sugerencias", "editar"],
+    onMutate: () => {
+      responder.reset()
+      onResultado("")
+    },
     mutationFn: () => sugerenciasApi.resolver(hilo.id),
-    onSuccess: invalidar,
+    onSuccess: async () => {
+      onResultado(`Conversación resuelta: ${hilo.asunto}.`)
+      await invalidar()
+    },
   })
+  const ocupado = useIsMutating({ mutationKey: ["sugerencias", "editar"] }) > 0
 
   return (
-    <div className="grid gap-2 rounded-lg border px-3 py-2">
+    <div
+      ref={elemento}
+      tabIndex={-1}
+      role="group"
+      aria-label={`Conversación: ${hilo.asunto}`}
+      className="grid min-w-0 gap-2 rounded-lg border px-3 py-2 [overflow-wrap:anywhere]"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="grid gap-0.5">
+        <div className="grid min-w-0 flex-1 gap-0.5">
           <span className="font-medium">{hilo.asunto}</span>
           <span className="text-muted-foreground text-xs">
             {ETIQUETA_TIPO[hilo.tipo]} · {formatearFechaYHora(hilo.ultimaActividadEn)}
@@ -180,7 +313,9 @@ function Hilo({ hilo, esAdmin }: { hilo: Sugerencia; esAdmin: boolean }) {
               {esAdmin ? "Falta contestar" : "Esperando respuesta"}
             </EstadoBadge>
           ) : (
-            <EstadoBadge tono="neutro">Te contestaron</EstadoBadge>
+            <EstadoBadge tono="neutro">
+              {esAdmin ? "Respuesta enviada" : "Te contestaron"}
+            </EstadoBadge>
           )}
           <Button variant="outline" size="sm" onClick={() => setDesplegado(!desplegado)}>
             {desplegado ? "Ocultar" : "Ver"}
@@ -226,10 +361,17 @@ function Hilo({ hilo, esAdmin }: { hilo: Sugerencia; esAdmin: boolean }) {
               id={`respuesta-${hilo.id}`}
               rows={3}
               value={texto}
+              disabled={ocupado}
+              maxLength={4000}
               onChange={(e) => setTexto(e.target.value)}
               placeholder={esAdmin ? "Contestale…" : "Seguí la conversación acá mismo…"}
               className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-2.5 py-2 text-base transition-colors outline-none focus-visible:ring-3 md:text-sm"
             />
+            {hilo.estado === "RESUELTA" && !esAdmin && (
+              <p className="text-muted-foreground text-sm">
+                Al enviar un mensaje se vuelve a abrir la conversación.
+              </p>
+            )}
             {(responder.error || resolver.error) && (
               <Alert variant="destructive">
                 <AlertDescription>
@@ -240,7 +382,7 @@ function Hilo({ hilo, esAdmin }: { hilo: Sugerencia; esAdmin: boolean }) {
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
-                disabled={texto.trim() === "" || responder.isPending}
+                disabled={texto.trim() === "" || ocupado}
                 onClick={() => responder.mutate()}
               >
                 {responder.isPending ? "Mandando…" : "Responder"}
@@ -251,7 +393,7 @@ function Hilo({ hilo, esAdmin }: { hilo: Sugerencia; esAdmin: boolean }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={resolver.isPending}
+                  disabled={ocupado}
                   onClick={() => resolver.mutate()}
                 >
                   Dar por resuelta

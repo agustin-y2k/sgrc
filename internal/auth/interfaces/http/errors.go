@@ -5,14 +5,18 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/auth/application"
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/application"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // mapearError traduce cada error de negocio de application/ y domain/ a su
 // código HTTP según docs/08-api-spec.yaml.
 func mapearError(err error) error {
 	switch {
+	case errors.Is(err, application.ErrBajaPendiente):
+		return fiber.NewError(fiber.StatusConflict, application.ErrBajaPendiente.Error())
+	case errors.Is(err, application.ErrUsuarioModificado):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.Is(err, application.ErrUsuarioNoEncontrado):
 		return fiber.NewError(fiber.StatusNotFound, "usuario no encontrado")
 
@@ -86,6 +90,7 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrFotoVacia),
 		errors.Is(err, domain.ErrFotoTipo),
 		errors.Is(err, domain.ErrFotoCorrupta),
+		errors.Is(err, domain.ErrFotoDimensiones),
 		errors.Is(err, domain.ErrEmailInvalido),
 		// Los del nombre propio, tanto en el registro como en Mi perfil.
 		errors.Is(err, domain.ErrNombreVacio),

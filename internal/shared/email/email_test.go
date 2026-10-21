@@ -22,7 +22,7 @@ func enviadorDePrueba() *EnviadorSMTP {
 }
 
 func TestArmarMensaje_CodificaElAsuntoConAcentos(t *testing.T) {
-	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.edu.ar", "Restablecé tu contraseña", "hola"))
+	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.test", "Restablecé tu contraseña", "hola"))
 
 	// El asunto crudo no puede aparecer: las cabeceras son ASCII, y sin
 	// codificar los acentos llegan rotos.
@@ -35,7 +35,7 @@ func TestArmarMensaje_CodificaElAsuntoConAcentos(t *testing.T) {
 }
 
 func TestArmarMensaje_NombreDelRemitenteCodificadoYConLaDireccion(t *testing.T) {
-	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.edu.ar", "Hola", "hola"))
+	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.test", "Hola", "hola"))
 
 	if !strings.Contains(msg, "<escuela@gmail.com>") {
 		t.Errorf("falta la dirección del remitente:\n%s", msg)
@@ -46,7 +46,7 @@ func TestArmarMensaje_NombreDelRemitenteCodificadoYConLaDireccion(t *testing.T) 
 }
 
 func TestArmarMensaje_LlevaMessageIDConElDominioDelRemitente(t *testing.T) {
-	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.edu.ar", "Hola", "hola"))
+	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.test", "Hola", "hola"))
 
 	if !strings.Contains(msg, "Message-ID: <") || !strings.Contains(msg, "@gmail.com>") {
 		t.Errorf("esperaba un Message-ID con el dominio del remitente, obtuve:\n%s", msg)
@@ -58,8 +58,8 @@ func TestArmarMensaje_DosMensajesNoCompartenMessageID(t *testing.T) {
 	// avisos de la misma barrida saldrían con el mismo, y hay clientes que en
 	// ese caso muestran uno solo.
 	e := enviadorDePrueba()
-	uno := extraerCabecera(t, string(e.armarMensaje("ana@escuela.edu.ar", "Hola", "hola")), "Message-ID")
-	otro := extraerCabecera(t, string(e.armarMensaje("beto@escuela.edu.ar", "Hola", "hola")), "Message-ID")
+	uno := extraerCabecera(t, string(e.armarMensaje("ana@escuela.test", "Hola", "hola")), "Message-ID")
+	otro := extraerCabecera(t, string(e.armarMensaje("beto@escuela.test", "Hola", "hola")), "Message-ID")
 
 	if uno == otro {
 		t.Errorf("dos correos salieron con el mismo Message-ID: %s", uno)
@@ -68,7 +68,7 @@ func TestArmarMensaje_DosMensajesNoCompartenMessageID(t *testing.T) {
 
 func TestArmarMensaje_SinArrobaEnElRemitenteCaeAlHost(t *testing.T) {
 	e := NewEnviadorSMTP(Config{Host: "smtp.gmail.com", Desde: "escuela"}, nil)
-	msg := string(e.armarMensaje("ana@escuela.edu.ar", "Hola", "hola"))
+	msg := string(e.armarMensaje("ana@escuela.test", "Hola", "hola"))
 
 	if !strings.Contains(msg, "@smtp.gmail.com>") {
 		t.Errorf("esperaba el host como dominio del Message-ID, obtuve:\n%s", msg)
@@ -88,7 +88,7 @@ func extraerCabecera(t *testing.T, mensaje, clave string) string {
 
 func TestArmarMensaje_SinNombreDeRemitenteVaSoloLaDireccion(t *testing.T) {
 	e := NewEnviadorSMTP(Config{Host: "smtp.gmail.com", Desde: "escuela@gmail.com"}, nil)
-	msg := string(e.armarMensaje("ana@escuela.edu.ar", "Hola", "hola"))
+	msg := string(e.armarMensaje("ana@escuela.test", "Hola", "hola"))
 
 	if !strings.Contains(msg, "From: escuela@gmail.com\r\n") {
 		t.Errorf("esperaba el From pelado, obtuve:\n%s", msg)
@@ -99,7 +99,7 @@ func TestArmarMensaje_TodasLasLineasTerminanEnCRLF(t *testing.T) {
 	// El cuerpo se escribe con \n comunes en el código; el RFC 5321 pide
 	// CRLF y hay servidores que cortan la sesión sin explicar por qué.
 	cuerpo := "Hola Ana:\n\nTu código es 123456.\n"
-	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.edu.ar", "Hola", cuerpo))
+	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.test", "Hola", cuerpo))
 
 	for i, linea := range strings.Split(msg, "\r\n") {
 		if strings.Contains(linea, "\n") {
@@ -109,7 +109,7 @@ func TestArmarMensaje_TodasLasLineasTerminanEnCRLF(t *testing.T) {
 }
 
 func TestArmarMensaje_SeparaCabecerasDelCuerpoConUnaLineaVacia(t *testing.T) {
-	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.edu.ar", "Hola", "el cuerpo"))
+	msg := string(enviadorDePrueba().armarMensaje("ana@escuela.test", "Hola", "el cuerpo"))
 
 	corte := strings.Index(msg, "\r\n\r\n")
 	if corte < 0 {
@@ -134,7 +134,7 @@ func TestEnviar_SinDestinatarioNoAbreConexion(t *testing.T) {
 }
 
 func TestDeshabilitado_NoFallaNiEnvia(t *testing.T) {
-	if err := (Deshabilitado{}).Enviar(context.Background(), "ana@escuela.edu.ar", "Hola", "cuerpo"); err != nil {
+	if err := (Deshabilitado{}).Enviar(context.Background(), "ana@escuela.test", "Hola", "cuerpo"); err != nil {
 		t.Fatalf("el enviador deshabilitado no debería fallar: %v", err)
 	}
 }

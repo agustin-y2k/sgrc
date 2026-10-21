@@ -38,7 +38,7 @@ func fakeHashFalla(password string) (string, error) {
 func TestSembrarSiHaceFalta_YaExisteAdminActivo_NoHaceNada(t *testing.T) {
 	repo := &fakeRepo{existeAdminActivo: true}
 
-	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.edu.ar", "password123")
+	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.test", "password123")
 
 	if err != nil {
 		t.Fatalf("esperaba nil, obtuve: %v", err)
@@ -51,7 +51,7 @@ func TestSembrarSiHaceFalta_YaExisteAdminActivo_NoHaceNada(t *testing.T) {
 func TestSembrarSiHaceFalta_NoExisteAdminActivo_LoCrea(t *testing.T) {
 	repo := &fakeRepo{existeAdminActivo: false}
 
-	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.edu.ar", "password123")
+	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.test", "password123")
 
 	if err != nil {
 		t.Fatalf("esperaba nil, obtuve: %v", err)
@@ -59,7 +59,7 @@ func TestSembrarSiHaceFalta_NoExisteAdminActivo_LoCrea(t *testing.T) {
 	if !repo.crearLlamado {
 		t.Fatal("esperaba que CrearAdmin se llamara")
 	}
-	if repo.emailRecibido != "admin@escuela.edu.ar" {
+	if repo.emailRecibido != "admin@escuela.test" {
 		t.Errorf("email incorrecto: %q", repo.emailRecibido)
 	}
 	if repo.hashRecibido != "hash-de-password123" {
@@ -83,7 +83,7 @@ func TestSembrarSiHaceFalta_EmailVacio_Error(t *testing.T) {
 func TestSembrarSiHaceFalta_PasswordVacio_Error(t *testing.T) {
 	repo := &fakeRepo{existeAdminActivo: false}
 
-	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.edu.ar", "")
+	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.test", "")
 
 	if !errors.Is(err, ErrEnvFaltante) {
 		t.Fatalf("esperaba ErrEnvFaltante, obtuve: %v", err)
@@ -93,7 +93,7 @@ func TestSembrarSiHaceFalta_PasswordVacio_Error(t *testing.T) {
 func TestSembrarSiHaceFalta_PasswordCorta_Error(t *testing.T) {
 	repo := &fakeRepo{existeAdminActivo: false}
 
-	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.edu.ar", "1234567") // 7 chars
+	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.test", "1234567") // 7 chars
 
 	if !errors.Is(err, ErrPasswordCorta) {
 		t.Fatalf("esperaba ErrPasswordCorta, obtuve: %v", err)
@@ -108,7 +108,7 @@ func TestSembrarSiHaceFalta_PasswordLimiteExacto_NoFalla(t *testing.T) {
 	// (bug clásico de off-by-one en validaciones de longitud).
 	repo := &fakeRepo{existeAdminActivo: false}
 
-	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.edu.ar", "12345678")
+	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.test", "12345678")
 
 	if err != nil {
 		t.Fatalf("una password de exactamente 8 caracteres no debería fallar: %v", err)
@@ -121,7 +121,7 @@ func TestSembrarSiHaceFalta_PasswordLimiteExacto_NoFalla(t *testing.T) {
 func TestSembrarSiHaceFalta_ErrorAlVerificarExistencia_SePropaga(t *testing.T) {
 	repo := &fakeRepo{errExiste: errors.New("la base está caída")}
 
-	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.edu.ar", "password123")
+	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.test", "password123")
 
 	if err == nil {
 		t.Fatal("esperaba un error, obtuve nil")
@@ -134,7 +134,7 @@ func TestSembrarSiHaceFalta_ErrorAlVerificarExistencia_SePropaga(t *testing.T) {
 func TestSembrarSiHaceFalta_ErrorAlHashear_SePropagaSinCrear(t *testing.T) {
 	repo := &fakeRepo{existeAdminActivo: false}
 
-	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashFalla, "admin@escuela.edu.ar", "password123")
+	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashFalla, "admin@escuela.test", "password123")
 
 	if err == nil {
 		t.Fatal("esperaba un error de hasheo, obtuve nil")
@@ -147,7 +147,7 @@ func TestSembrarSiHaceFalta_ErrorAlHashear_SePropagaSinCrear(t *testing.T) {
 func TestSembrarSiHaceFalta_ErrorAlCrear_SePropaga(t *testing.T) {
 	repo := &fakeRepo{existeAdminActivo: false, errCrear: errors.New("email duplicado")}
 
-	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.edu.ar", "password123")
+	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK, "admin@escuela.test", "password123")
 
 	if err == nil {
 		t.Fatal("esperaba que el error de CrearAdmin se propague")
@@ -162,7 +162,7 @@ func TestSembrarSiHaceFalta_ElUnicoAdminNoEstaActivo_LoVuelveASembrar(t *testing
 	repo := &fakeRepo{existeAdminActivo: false}
 
 	err := SembrarSiHaceFalta(context.Background(), repo, fakeHashOK,
-		"admin@escuela.edu.ar", "una-password-larga")
+		"admin@escuela.test", "una-password-larga")
 
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)

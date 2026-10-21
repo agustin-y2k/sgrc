@@ -18,6 +18,9 @@ type PedidoDeMateria struct {
 	MateriaID         *string
 	CursoSolicitado   string
 	MateriaSolicitada string
+	// MateriaCreadaID vincula el resultado de una aprobación de materia nueva.
+	// La forma original del pedido y sus textos se conservan.
+	MateriaCreadaID *string
 
 	Motivo string
 

@@ -327,9 +327,7 @@ export function listarLicencias() {
 }
 
 export function listarLicenciasDeEquipo(equipoId: string) {
-  return apiFetch<RespuestaLista<Licencia>>(
-    `/api/equipos/${equipoId}/licencias`
-  )
+  return apiFetch<RespuestaLista<Licencia>>(`/api/equipos/${equipoId}/licencias`)
 }
 
 /**
@@ -390,11 +388,21 @@ export function listarPreferenciasDeEquipo(equipoId: string) {
   )
 }
 
-/**
- * Los nombres de materia que ya existen, para que el Admin ELIJA en vez de
- * tipear: la marca se guarda como texto, y este selector es lo único que
- * impide que "Matemática" y "Matematica" nazcan como dos marcas distintas.
- */
+/** Las marcas de todos los equipos de un carro, para el alta masiva. */
+export function listarPreferenciasDeCarro(carroId: string) {
+  return apiFetch<RespuestaLista<PreferenciaDeEquipo>>(
+    `/api/carros/${carroId}/preferencias`
+  )
+}
+
+/** Materias y su relación académica real, sin archivar, del ciclo activo. */
+export function catalogoDePrioridades() {
+  return apiFetch<
+    RespuestaLista<import("@/features/inventory/types").MateriaParaPreferencia>
+  >("/api/catalogo-prioridades")
+}
+
+/** Catálogo histórico de nombres, conservado para clientes anteriores. */
 export function materiasEnUso() {
   return apiFetch<RespuestaLista<string>>("/api/materias-en-uso")
 }
@@ -404,6 +412,7 @@ export function materiasEnUso() {
  * PCs son las de Dibujo Técnico".
  */
 export function marcarPreferencia(req: {
+  cursoExacto?: boolean
   equipoIds: string[]
   materiaNombre: string
   modalidad?: string
@@ -420,7 +429,13 @@ export function marcarPreferencia(req: {
 /** La materia no se edita: apuntar a otra es otra marca. */
 export function editarPreferencia(
   id: string,
-  req: { modalidad?: string; anio?: number; division?: string; prioridad?: number }
+  req: {
+    modalidad?: string
+    anio?: number
+    division?: string
+    prioridad?: number
+    cursoExacto?: boolean
+  }
 ) {
   return apiFetch<PreferenciaDeEquipo>(`/api/preferencias/${id}`, {
     method: "PATCH",

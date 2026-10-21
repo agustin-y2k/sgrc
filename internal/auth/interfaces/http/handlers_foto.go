@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // La foto de perfil.

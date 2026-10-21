@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -32,7 +33,7 @@ func (a *PostgresAuditor) Registrar(ctx context.Context, e Entrada) error {
 		ip = &e.IPOrigen
 	}
 
-	_, err := a.pool.Exec(ctx, `
+	_, err := pgtransaccion.Con(ctx, a.pool).Exec(ctx, `
 		INSERT INTO audit_log (usuario_id, accion, entidad, entidad_id, detalle, ip_origen)
 		VALUES ($1, $2, $3, $4, $5, $6::inet)
 	`, e.UsuarioID, e.Accion, e.Entidad, e.EntidadID, detalle, ip)

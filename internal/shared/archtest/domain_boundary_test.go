@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-const modulePrefix = "github.com/ramiro/sgrc/internal/"
+const modulePrefix = "github.com/agustin-y2k/sgrc/internal/"
 
 // paqueteDeDominio matchea imports del tipo ".../internal/<paquete>/domain"
 // (o subpaquetes de domain, si alguna vez hubiera).

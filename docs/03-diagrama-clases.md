@@ -124,6 +124,18 @@ classDiagram
         +renovar(fecha, por, ahora)
     }
 
+    class PreferenciaDeEquipo {
+        +UUID id
+        +UUID equipoId
+        +string materiaNombre
+        +string modalidad
+        +int anio
+        +string division
+        +boolean cursoExacto
+        +int prioridad
+        +alcance() string
+    }
+
     class Prestamo {
         +UUID id
         +UUID equipoId
@@ -178,8 +190,32 @@ classDiagram
     class Materia {
         +UUID id
         +UUID cursoId
+        +UUID espacioId
         +string nombre
         +boolean archivado
+    }
+
+    class Espacio {
+        +UUID id
+        +UUID cicloLectivoId
+        +string nombre
+        +boolean archivado
+        +renombrar(nombre)
+    }
+
+    class PedidoDeMateria {
+        +UUID id
+        +UUID usuarioId
+        +UUID materiaId
+        +string cursoSolicitado
+        +string materiaSolicitada
+        +UUID materiaCreadaId
+        +string motivo
+        +EstadoPedido estado
+        +string respuesta
+        +UUID resueltoPor
+        +DateTime resueltoEn
+        +DateTime creadoEn
     }
 
     class DocenteMateria {
@@ -203,6 +239,7 @@ classDiagram
 
     class ReservaGrupo {
         +UUID id
+        +int64 version
         +UUID materiaId
         +UUID creadoPor
         +string nombreDocenteSnapshot
@@ -217,6 +254,7 @@ classDiagram
 
     class Reserva {
         +UUID id
+        +int64 version
         +UUID reservaGrupoId
         +UUID equipoId
         +UUID materiaId
@@ -246,6 +284,28 @@ classDiagram
         +EstadoNotif estado
         +DateTime creadaEn
         +DateTime leidaEn
+    }
+
+    class Sugerencia {
+        +UUID id
+        +UUID usuarioId
+        +TipoSoporte tipo
+        +string asunto
+        +string pantalla
+        +string version
+        +EstadoSoporte estado
+        +DateTime creadaEn
+        +DateTime ultimaActividadEn
+        +responder(mensajeId, autorId, deAdmin, texto, ahora)
+        +marcarResuelta(ahora)
+    }
+
+    class Mensaje {
+        +UUID id
+        +UUID autorId
+        +boolean deAdmin
+        +string texto
+        +DateTime escritoEn
     }
 
     class BloqueHorario {
@@ -293,28 +353,37 @@ classDiagram
         +int minutosTotales
     }
 
-    Carro "1" --> "N" Equipo
+    Carro "0..1" --> "N" Equipo
     Equipo "1" --> "N" Incidencia
     Equipo "1" --> "N" LicenciaSoftware
     Equipo "1" --> "N" CuentaDeEquipo
+    Equipo "1" --> "N" PreferenciaDeEquipo
     Equipo "1" --> "N" Prestamo
     Equipo "1" --> "N" Reserva
     Equipo "1" --> "N" HistoricoUsoEquipo
-    Reserva "1" --> "N" Prestamo
+    Reserva "0..1" --> "N" Prestamo
     CicloLectivo "1" --> "N" Curso
-    Curso "1" --> "N" Materia
+    CicloLectivo "1" --> "N" Espacio
+    Curso "0..1" --> "N" Materia : cursoId
+    Espacio "0..1" --> "N" Materia : espacioId
     Materia "1" --> "N" DocenteMateria
     Materia "1" --> "N" ReservaGrupo
     Materia "1" --> "N" ReglaRecurrencia
     Usuario "1" --> "N" DocenteMateria
+    Usuario "1" --> "N" PedidoDeMateria : solicita
+    Materia "0..1" --> "N" PedidoDeMateria : materiaId
+    Materia "0..1" --> "N" PedidoDeMateria : materiaCreadaId
+    Usuario "1" --> "N" Sugerencia : abre
+    Sugerencia "1" *-- "1..N" Mensaje : contiene
+    Usuario "0..1" --> "N" Mensaje : autorId
     Usuario "1" --> "N" ReservaGrupo : creadoPor
     Usuario "1" --> "N" Notificacion
     Usuario "1" --> "N" CodigoRecuperacion
     Usuario "1" --> "N" BloqueHorario
     Usuario "1" --> "N" Excepcion
     Usuario "1" --> "N" HistoricoUsoDocente
-    ReglaRecurrencia "1" --> "N" ReservaGrupo : materializa
-    ReservaGrupo "1" --> "N" Reserva : contiene (una por equipo)
+    ReglaRecurrencia "0..1" --> "N" ReservaGrupo : materializa
+    ReservaGrupo "0..1" --> "N" Reserva : contiene (una por equipo)
 ```
 
 ## Enumeraciones
@@ -324,6 +393,9 @@ classDiagram
 | `RolUsuario` | `ADMIN`, `DOCENTE` |
 | `EstadoCuenta` | `PENDIENTE`, `APROBADA`, `RECHAZADA`, `BAJA` |
 | `RolDocente` | `TITULAR`, `SUPLENTE` |
+| `EstadoPedido` | `PENDIENTE`, `APROBADO`, `RECHAZADO` |
+| `TipoSoporte` (tipo `Tipo` en `sugerencias/domain`) | `AYUDA`, `PROBLEMA`, `SUGERENCIA` |
+| `EstadoSoporte` (tipo `Estado` en `sugerencias/domain`) | `ABIERTA`, `RESUELTA` |
 | `EstadoEquipo` | `DISPONIBLE`, `EN_MANTENIMIENTO`, `FUERA_DE_SERVICIO` |
 | `EstadoReservaGrupo` | `CONFIRMADA`, `PARCIALMENTE_CANCELADA`, `CANCELADA`, `FINALIZADA`, `NO_RETIRADA` |
 | `EstadoReserva` (por equipo) | `CONFIRMADA`, `CANCELADA`, `FINALIZADA`, `NO_RETIRADA` |
@@ -331,7 +403,7 @@ classDiagram
 | `Gravedad` | `LEVE`, `MODERADA`, `GRAVE` |
 | `EstadoIncidencia` | `ABIERTA`, `EN_REPARACION`, `ENVIADA_A_SOPORTE`, `RESUELTA` |
 | `EstadoNotif` | `NO_LEIDA`, `LEIDA` |
-| `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `LICENCIA_POR_VENCER`, `EQUIPO_SIN_DEVOLVER`, `PEDIDO_DE_LIBERACION`, `PEDIDO_DE_MATERIA`, `PEDIDO_DE_MATERIA_RESUELTO`, `SUGERENCIA`, `SUGERENCIA_RESPONDIDA` |
+| `TipoNotif` | `GENERAL`, `DOCENTE_PENDIENTE`, `RESERVA_CANCELADA`, `RESERVA_REUBICADA`, `LICENCIA_POR_VENCER`, `EQUIPO_SIN_DEVOLVER`, `PEDIDO_DE_LIBERACION`, `PEDIDO_DE_MATERIA`, `PEDIDO_DE_MATERIA_RESUELTO`, `SUGERENCIA`, `SUGERENCIA_RESPONDIDA` |
 | `PrivilegioDeCuenta` | `COMUN`, `ADMINISTRADOR` — qué puede hacer esa cuenta en la máquina |
 | `VisibilidadDeCuenta` | `PUBLICA`, `SOLO_ADMIN` — quién puede ver su **contraseña**; la cuenta y su privilegio se listan siempre |
 | `EstadoLicencia` | `SIN_FECHA`, `VENCIDA`, `POR_VENCER`, `VIGENTE` — **derivado**, nunca una columna: se calcula contra la fecha de hoy |
@@ -346,6 +418,25 @@ local es texto libre.
 
 ## Notas de diseño
 
+- **Una materia pertenece a un curso o a un espacio**, de forma excluyente.
+  Los espacios pertenecen al ciclo lectivo y no llevan modalidad, año ni división.
+- **Las asignaciones no tienen un cupo de titulares o suplentes.** Las reservas
+  se mantienen mientras quede cualquier cuenta aprobada asignada a esa materia
+  concreta; una materia del mismo nombre en otro curso no conserva esas reservas.
+- **`PreferenciaDeEquipo` marca un dispositivo**, por nombre de materia y alcance
+  académico, sin una clave foránea a `Materia`. El nivel 1 es el más alto y el 9
+  el más bajo. En un curso exacto el año es obligatorio y la modalidad o división
+  ausentes exigen esa misma ausencia; en una regla general son comodines. La
+  reposición en cascada compara estas prioridades por dispositivo, sin deducirlas
+  de su hardware ni del software instalado.
+- **`PedidoDeMateria` conserva la solicitud original y su resolución.** Si se
+  pidió una materia existente usa `materiaId`; si se aprobó una nueva,
+  `materiaCreadaId` vincula el resultado sin sobrescribir lo que se solicitó.
+- **`Sugerencia` es una conversación de soporte.** Responder no la cierra;
+  un mensaje de quien pidió ayuda la reabre. `Mensaje.deAdmin` conserva el rol
+  con el que se escribió aunque la cuenta cambie de rol posteriormente.
+- **`Reserva.version` y `ReservaGrupo.version`** permiten rechazar escrituras
+  que se basan en una lectura anterior a la última modificación.
 - **`ReservaGrupo` vs `Reserva`**: un docente tilda varios equipos de una lista
   hasta juntar los que necesita, en una sola operación. `ReservaGrupo` es esa
   operación (una materia, fecha, horario); `Reserva` es cada equipo dentro de
@@ -372,14 +463,18 @@ local es texto libre.
   asignado (RF-02.8).
 - **`nombreDocenteSnapshot`** vive en `ReservaGrupo` y se copia a cada
   `Reserva`: preserva el nombre aunque la cuenta se dé de baja o se elimine.
-- **Archivado de cursos/materias**: `archivado = true` los oculta del sistema
+- **Archivado de cursos, espacios y materias**: `archivado = true` los oculta del sistema
   activo, pero a diferencia de `ReservaGrupo`/`Reserva`/`ReglaRecurrencia` —que
-  se **eliminan físicamente** al archivar el ciclo— `Curso`/`Materia`/
+  se **eliminan físicamente** al archivar el ciclo— `Curso`/`Espacio`/`Materia`/
   `DocenteMateria` se preservan. Es lo que evita recrearlos el año siguiente.
 - **`HistoricoUsoEquipo` / `HistoricoUsoDocente`**: snapshot agregado
   permanente, calculado una sola vez al archivar un ciclo (no sincronizado
   continuamente). Es la única fuente de estadísticas para años cerrados, porque
   el detalle de sus reservas ya no existe.
+- **El cierre es una operación entre módulos**, no un método de una sola
+  entidad: `snapshot_ciclo` sella los históricos y `cierre_ciclo` conserva el
+  resultado idempotente. Archivo, limpieza y clonado se confirman juntos; ver
+  `07-modelo-datos.md` y la secuencia de cierre.
 - **`Equipo.dadoDeBaja` / `Equipo.fechaBaja`**: el "eliminar" de la interfaz es
   un soft delete — el equipo se oculta de los listados activos y no puede
   reservarse, pero conserva su historial de incidencias, préstamos y reservas.
@@ -426,4 +521,3 @@ local es texto libre.
   `UPDATE` puntual. Y `curso.activo` / `materia.activo`, que este diagrama
   listaba, ya no existen: los eliminó la migración 016 porque nadie los leía.
   `ciclo_lectivo.activo` sí sigue, y no tiene nada que ver con esos dos.
-</content>

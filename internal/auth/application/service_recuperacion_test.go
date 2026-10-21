@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/auth/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // El código que devuelve codigoFalso, para no repetirlo en cada test.
@@ -58,10 +58,10 @@ func docenteAprobado(repo *fakeRepo, email string) *domain.Usuario {
 
 func TestSolicitarRecuperacion_GuardaElCodigoHasheadoYLoPublica(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	svc, eventos := servicioDeRecuperacion(t, repo, true)
 
-	if err := svc.SolicitarRecuperacionDePassword(context.Background(), "ana@escuela.edu.ar"); err != nil {
+	if err := svc.SolicitarRecuperacionDePassword(context.Background(), "ana@escuela.test"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -88,7 +88,7 @@ func TestSolicitarRecuperacion_GuardaElCodigoHasheadoYLoPublica(t *testing.T) {
 	if datos.Codigo != codigoDePrueba {
 		t.Errorf("el mail tiene que llevar el código en claro, lleva %q", datos.Codigo)
 	}
-	if datos.Email != "ana@escuela.edu.ar" || datos.Nombre != "Ana" {
+	if datos.Email != "ana@escuela.test" || datos.Nombre != "Ana" {
 		t.Errorf("destinatario mal armado: %+v", datos)
 	}
 	if datos.MinutosDeVigencia != 15 {
@@ -98,12 +98,12 @@ func TestSolicitarRecuperacion_GuardaElCodigoHasheadoYLoPublica(t *testing.T) {
 
 func TestSolicitarRecuperacion_EmailInexistenteNoDiceNada(t *testing.T) {
 	repo := nuevoFakeRepo()
-	docenteAprobado(repo, "ana@escuela.edu.ar")
+	docenteAprobado(repo, "ana@escuela.test")
 	svc, eventos := servicioDeRecuperacion(t, repo, true)
 
 	// Sin error y sin evento: la respuesta tiene que ser indistinguible de
 	// la de un email que sí existe, o el formulario delata qué cuentas hay.
-	if err := svc.SolicitarRecuperacionDePassword(context.Background(), "nadie@escuela.edu.ar"); err != nil {
+	if err := svc.SolicitarRecuperacionDePassword(context.Background(), "nadie@escuela.test"); err != nil {
 		t.Fatalf("no puede devolver error: delataría que el email no existe (%v)", err)
 	}
 	if len(*eventos) != 0 {
@@ -114,11 +114,11 @@ func TestSolicitarRecuperacion_EmailInexistenteNoDiceNada(t *testing.T) {
 func TestSolicitarRecuperacion_CuentaNoAprobadaNoRecibeCodigo(t *testing.T) {
 	for _, estado := range []domain.Estado{domain.EstadoPendiente, domain.EstadoRechazada, domain.EstadoBaja} {
 		repo := nuevoFakeRepo()
-		u := docenteAprobado(repo, "ana@escuela.edu.ar")
+		u := docenteAprobado(repo, "ana@escuela.test")
 		u.Estado = estado
 		svc, eventos := servicioDeRecuperacion(t, repo, true)
 
-		if err := svc.SolicitarRecuperacionDePassword(context.Background(), "ana@escuela.edu.ar"); err != nil {
+		if err := svc.SolicitarRecuperacionDePassword(context.Background(), "ana@escuela.test"); err != nil {
 			t.Fatalf("%s: no debería devolver error: %v", estado, err)
 		}
 		if len(*eventos) != 0 {
@@ -132,12 +132,12 @@ func TestSolicitarRecuperacion_CuentaNoAprobadaNoRecibeCodigo(t *testing.T) {
 
 func TestSolicitarRecuperacion_CuentaDeGoogleRecibeElOtroMail(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	u.PasswordHash = "" // creada con Google: no tiene contraseña propia
 	u.GoogleSub = "sub-123"
 	svc, eventos := servicioDeRecuperacion(t, repo, true)
 
-	if err := svc.SolicitarRecuperacionDePassword(context.Background(), "ana@escuela.edu.ar"); err != nil {
+	if err := svc.SolicitarRecuperacionDePassword(context.Background(), "ana@escuela.test"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -154,10 +154,10 @@ func TestSolicitarRecuperacion_CuentaDeGoogleRecibeElOtroMail(t *testing.T) {
 
 func TestSolicitarRecuperacion_NormalizaElEmail(t *testing.T) {
 	repo := nuevoFakeRepo()
-	docenteAprobado(repo, "ana@escuela.edu.ar")
+	docenteAprobado(repo, "ana@escuela.test")
 	svc, eventos := servicioDeRecuperacion(t, repo, true)
 
-	if err := svc.SolicitarRecuperacionDePassword(context.Background(), "  ANA@Escuela.Edu.Ar  "); err != nil {
+	if err := svc.SolicitarRecuperacionDePassword(context.Background(), "  ANA@Escuela.test  "); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 	if len(*eventos) != 1 {
@@ -178,10 +178,10 @@ func TestSolicitarRecuperacion_EmailMalEscritoEsError(t *testing.T) {
 
 func TestSolicitarRecuperacion_SinCorreoConfiguradoAvisa(t *testing.T) {
 	repo := nuevoFakeRepo()
-	docenteAprobado(repo, "ana@escuela.edu.ar")
+	docenteAprobado(repo, "ana@escuela.test")
 	svc, _ := servicioDeRecuperacion(t, repo, false)
 
-	err := svc.SolicitarRecuperacionDePassword(context.Background(), "ana@escuela.edu.ar")
+	err := svc.SolicitarRecuperacionDePassword(context.Background(), "ana@escuela.test")
 	if !errors.Is(err, ErrRecuperacionNoDisponible) {
 		t.Fatalf("esperaba ErrRecuperacionNoDisponible, obtuve %v", err)
 	}
@@ -207,11 +207,11 @@ func pedirCodigo(t *testing.T, repo *fakeRepo, email string) *Service {
 
 func TestRestablecer_CambiaLaPasswordYConsumeElCodigo(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 
 	id, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "una-contraseña-nueva")
+		"ana@escuela.test", codigoDePrueba, "una-contraseña-nueva")
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -233,16 +233,16 @@ func TestRestablecer_CambiaLaPasswordYConsumeElCodigo(t *testing.T) {
 
 func TestRestablecer_ElMismoCodigoNoSirveDosVeces(t *testing.T) {
 	repo := nuevoFakeRepo()
-	docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 
 	if _, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "una-contraseña-nueva"); err != nil {
+		"ana@escuela.test", codigoDePrueba, "una-contraseña-nueva"); err != nil {
 		t.Fatalf("el primer uso tiene que funcionar: %v", err)
 	}
 
 	_, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "otra-contraseña-mas")
+		"ana@escuela.test", codigoDePrueba, "otra-contraseña-mas")
 	if !errors.Is(err, ErrCodigoRecuperacionInvalido) {
 		t.Fatalf("esperaba ErrCodigoRecuperacionInvalido en el segundo uso, obtuve %v", err)
 	}
@@ -250,11 +250,11 @@ func TestRestablecer_ElMismoCodigoNoSirveDosVeces(t *testing.T) {
 
 func TestRestablecer_CodigoEquivocadoSumaIntentoYNoCambiaNada(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 
 	_, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", "999999", "una-contraseña-nueva")
+		"ana@escuela.test", "999999", "una-contraseña-nueva")
 	if !errors.Is(err, ErrCodigoRecuperacionInvalido) {
 		t.Fatalf("esperaba ErrCodigoRecuperacionInvalido, obtuve %v", err)
 	}
@@ -268,13 +268,13 @@ func TestRestablecer_CodigoEquivocadoSumaIntentoYNoCambiaNada(t *testing.T) {
 
 func TestRestablecer_SeQuemaAlAgotarLosIntentos(t *testing.T) {
 	repo := nuevoFakeRepo()
-	docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 
 	var ultimo error
 	for i := 0; i < domain.MaxIntentosCodigoRecuperacion; i++ {
 		_, ultimo = svc.RestablecerPasswordConCodigo(context.Background(),
-			"ana@escuela.edu.ar", "999999", "una-contraseña-nueva")
+			"ana@escuela.test", "999999", "una-contraseña-nueva")
 	}
 	if !errors.Is(ultimo, ErrCodigoRecuperacionSinIntentos) {
 		t.Fatalf("el último intento tendría que quemar el código, obtuve %v", ultimo)
@@ -283,7 +283,7 @@ func TestRestablecer_SeQuemaAlAgotarLosIntentos(t *testing.T) {
 	// Y a partir de ahí ni siquiera el código correcto sirve: hay que pedir
 	// uno nuevo. Es lo que hace que seis dígitos alcancen.
 	_, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "una-contraseña-nueva")
+		"ana@escuela.test", codigoDePrueba, "una-contraseña-nueva")
 	if err == nil {
 		t.Fatal("un código quemado no puede aceptar el código correcto después")
 	}
@@ -291,12 +291,12 @@ func TestRestablecer_SeQuemaAlAgotarLosIntentos(t *testing.T) {
 
 func TestRestablecer_SiNoSePuedeRegistrarElIntentoFallidoDevuelveErrorDeVerdad(t *testing.T) {
 	repo := nuevoFakeRepo()
-	docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 	repo.errGuardarCodigo = errors.New("postgres no responde")
 
 	_, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", "999999", "una-contraseña-nueva")
+		"ana@escuela.test", "999999", "una-contraseña-nueva")
 
 	// NO puede devolver "código inválido": ese es el error normal, y quien esté
 	// probando códigos seguiría probando sin que nada cuente sus intentos.
@@ -310,14 +310,14 @@ func TestRestablecer_SiNoSePuedeRegistrarElIntentoFallidoDevuelveErrorDeVerdad(t
 
 func TestRestablecer_CodigoVencidoSeDistingue(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 
 	// Se envejece el código a mano: el reloj del servicio está fijo.
 	repo.codigos[u.ID].ExpiraEn = ahoraDeLosTests.Add(-time.Minute)
 
 	_, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "una-contraseña-nueva")
+		"ana@escuela.test", codigoDePrueba, "una-contraseña-nueva")
 	// Vencido SÍ se distingue de inválido: le pasa a la persona legítima,
 	// que necesita saber que tiene que pedir otro y no que tipeó mal.
 	if !errors.Is(err, ErrCodigoRecuperacionVencido) {
@@ -327,11 +327,11 @@ func TestRestablecer_CodigoVencidoSeDistingue(t *testing.T) {
 
 func TestRestablecer_SinHaberPedidoCodigo(t *testing.T) {
 	repo := nuevoFakeRepo()
-	docenteAprobado(repo, "ana@escuela.edu.ar")
+	docenteAprobado(repo, "ana@escuela.test")
 	svc, _ := servicioDeRecuperacion(t, repo, true)
 
 	_, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "una-contraseña-nueva")
+		"ana@escuela.test", codigoDePrueba, "una-contraseña-nueva")
 	if !errors.Is(err, ErrCodigoRecuperacionInvalido) {
 		t.Fatalf("esperaba ErrCodigoRecuperacionInvalido, obtuve %v", err)
 	}
@@ -339,13 +339,13 @@ func TestRestablecer_SinHaberPedidoCodigo(t *testing.T) {
 
 func TestRestablecer_EmailInexistenteDaElMismoErrorQueUnCodigoMalo(t *testing.T) {
 	repo := nuevoFakeRepo()
-	docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 
 	_, errInexistente := svc.RestablecerPasswordConCodigo(context.Background(),
-		"nadie@escuela.edu.ar", codigoDePrueba, "una-contraseña-nueva")
+		"nadie@escuela.test", codigoDePrueba, "una-contraseña-nueva")
 	_, errCodigoMalo := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", "999999", "una-contraseña-nueva")
+		"ana@escuela.test", "999999", "una-contraseña-nueva")
 
 	// Los dos mensajes tienen que ser el MISMO string: si difirieran,
 	// este endpoint diría qué direcciones están registradas.
@@ -360,11 +360,11 @@ func TestRestablecer_EmailInexistenteDaElMismoErrorQueUnCodigoMalo(t *testing.T)
 
 func TestRestablecer_PasswordCortaSeRechazaAntesDeQuemarElCodigo(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 
 	_, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "corta")
+		"ana@escuela.test", codigoDePrueba, "corta")
 	if !errors.Is(err, ErrPasswordCorta) {
 		t.Fatalf("esperaba ErrPasswordCorta, obtuve %v", err)
 	}
@@ -374,22 +374,22 @@ func TestRestablecer_PasswordCortaSeRechazaAntesDeQuemarElCodigo(t *testing.T) {
 
 	// Y el código sigue sirviendo con una contraseña válida.
 	if _, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "ahora-sí-es-larga"); err != nil {
+		"ana@escuela.test", codigoDePrueba, "ahora-sí-es-larga"); err != nil {
 		t.Fatalf("el código tendría que seguir sirviendo: %v", err)
 	}
 }
 
 func TestRestablecer_CuentaDeGoogleNoSePuedeRestablecer(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 	// La cuenta pasa a no tener contraseña propia después de haber pedido
 	// el código: el segundo paso lo tiene que volver a chequear.
 	u.PasswordHash = ""
 	u.GoogleSub = "sub-123"
 
 	_, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "una-contraseña-nueva")
+		"ana@escuela.test", codigoDePrueba, "una-contraseña-nueva")
 	if !errors.Is(err, ErrCodigoRecuperacionInvalido) {
 		t.Fatalf("esperaba ErrCodigoRecuperacionInvalido, obtuve %v", err)
 	}
@@ -397,11 +397,11 @@ func TestRestablecer_CuentaDeGoogleNoSePuedeRestablecer(t *testing.T) {
 
 func TestRestablecer_SinCorreoConfiguradoAvisa(t *testing.T) {
 	repo := nuevoFakeRepo()
-	docenteAprobado(repo, "ana@escuela.edu.ar")
+	docenteAprobado(repo, "ana@escuela.test")
 	svc, _ := servicioDeRecuperacion(t, repo, false)
 
 	_, err := svc.RestablecerPasswordConCodigo(context.Background(),
-		"ana@escuela.edu.ar", codigoDePrueba, "una-contraseña-nueva")
+		"ana@escuela.test", codigoDePrueba, "una-contraseña-nueva")
 	if !errors.Is(err, ErrRecuperacionNoDisponible) {
 		t.Fatalf("esperaba ErrRecuperacionNoDisponible, obtuve %v", err)
 	}
@@ -409,11 +409,11 @@ func TestRestablecer_SinCorreoConfiguradoAvisa(t *testing.T) {
 
 func TestSolicitarRecuperacion_PedirDeNuevoInvalidaElAnterior(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
-	svc := pedirCodigo(t, repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
+	svc := pedirCodigo(t, repo, "ana@escuela.test")
 
 	primero := repo.codigos[u.ID]
-	if err := svc.SolicitarRecuperacionDePassword(context.Background(), "ana@escuela.edu.ar"); err != nil {
+	if err := svc.SolicitarRecuperacionDePassword(context.Background(), "ana@escuela.test"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -429,7 +429,7 @@ func TestSolicitarRecuperacion_PedirDeNuevoInvalidaElAnterior(t *testing.T) {
 
 func TestAprobar_PublicaCuentaAprobadaConNombreYEmail(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	u.Estado = domain.EstadoPendiente
 
 	contadorID = 0
@@ -444,7 +444,7 @@ func TestAprobar_PublicaCuentaAprobadaConNombreYEmail(t *testing.T) {
 		temporalFalso, codigoFalso, relojFijo(ahoraDeLosTests),
 		nuevoFakeGestorMaterias(), nuevoFakeCanceladorReservas(), nil, true)
 
-	if err := svc.Aprobar(context.Background(), u.ID); err != nil {
+	if err := svc.Aprobar(context.Background(), u.ID, "admin-actor"); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
@@ -453,14 +453,14 @@ func TestAprobar_PublicaCuentaAprobadaConNombreYEmail(t *testing.T) {
 	}
 	// El mail necesita las dos cosas: sin el email no hay a dónde mandarlo,
 	// sin el nombre el saludo queda impersonal.
-	if aprobadas[0].Email != "ana@escuela.edu.ar" || aprobadas[0].Nombre != "Ana" {
+	if aprobadas[0].Email != "ana@escuela.test" || aprobadas[0].Nombre != "Ana" {
 		t.Errorf("payload incompleto: %+v", aprobadas[0])
 	}
 }
 
 func TestRechazar_NoPublicaCuentaAprobada(t *testing.T) {
 	repo := nuevoFakeRepo()
-	u := docenteAprobado(repo, "ana@escuela.edu.ar")
+	u := docenteAprobado(repo, "ana@escuela.test")
 	u.Estado = domain.EstadoPendiente
 
 	contadorID = 0

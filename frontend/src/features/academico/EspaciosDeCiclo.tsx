@@ -30,12 +30,20 @@ export function EspaciosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   const soloLectura = ciclo.archivado
   const espaciosKey = ["espacios", ciclo.id]
 
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    error: errorConsulta,
+  } = useQuery({
     queryKey: espaciosKey,
     queryFn: () => academicoApi.listarEspacios(ciclo.id),
   })
 
-  const invalidar = () => queryClient.invalidateQueries({ queryKey: espaciosKey })
+  const invalidar = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: espaciosKey }),
+      queryClient.invalidateQueries({ queryKey: ["catalogo-prioridades"] }),
+    ])
 
   const crear = useMutation({
     mutationFn: () => academicoApi.crearEspacio(ciclo.id, nombre.trim()),
@@ -67,6 +75,12 @@ export function EspaciosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   }
 
   const espacios = data?.data ?? []
+  if (errorConsulta)
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{getErrorMessage(errorConsulta)}</AlertDescription>
+      </Alert>
+    )
   const error = crear.error ?? editar.error ?? eliminar.error
 
   // La misma regla que el índice único de la base —sin tildes, sin mayúsculas,
@@ -74,19 +88,17 @@ export function EspaciosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   // dos pestañas cargan a la vez, pero enterarse al escribir convierte un error
   // evitable en algo que parece una falla del sistema. Mismo criterio que las
   // materias de un curso.
-  const yaExiste = espacios.some(
-    (e) => claveDeNombre(e.nombre) === claveDeNombre(nombre)
-  )
+  const yaExiste = espacios.some((e) => claveDeNombre(e.nombre) === claveDeNombre(nombre))
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       <div>
         <h3 className="text-sm font-medium">Otros lugares de la escuela</h3>
         <p className="text-muted-foreground text-xs">
-          Dirección, Biblioteca, Preceptoría, un laboratorio. No llevan año ni
-          división, y <b>no tienen materias</b>: se reserva directamente para el
-          lugar. Sirven para que quien trabaja ahí pueda pedir equipos, y para que al
-          registrarse pueda decir dónde está.
+          Dirección, Biblioteca, Preceptoría, un laboratorio. No llevan año ni división, y{" "}
+          <b>no tienen materias</b>: se reserva directamente para el lugar. Sirven para
+          que quien trabaja ahí pueda pedir equipos, y para que al registrarse pueda decir
+          dónde está.
         </p>
       </div>
 
@@ -98,13 +110,13 @@ export function EspaciosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
 
       {!soloLectura && (
         <form
-          className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end"
+          className="grid min-w-0 gap-2 sm:grid-cols-[1fr_auto] sm:items-end"
           onSubmit={(e) => {
             e.preventDefault()
             crear.mutate()
           }}
         >
-          <div className="grid gap-1.5">
+          <div className="grid min-w-0 gap-1.5">
             <Label htmlFor={`espacio-${ciclo.id}`}>Nuevo lugar</Label>
             <Input
               id={`espacio-${ciclo.id}`}
@@ -146,16 +158,16 @@ export function EspaciosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
         const eliminandoEste = eliminando?.id === espacio.id
 
         return (
-          <div key={espacio.id} className="grid gap-2 rounded-md border p-3">
+          <div key={espacio.id} className="grid min-w-0 gap-2 rounded-md border p-3">
             {editandoEste && editando ? (
               <form
-                className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end"
+                className="grid min-w-0 gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end"
                 onSubmit={(e) => {
                   e.preventDefault()
                   editar.mutate(editando)
                 }}
               >
-                <div className="grid gap-1.5">
+                <div className="grid min-w-0 gap-1.5">
                   <Label htmlFor={`editar-espacio-${espacio.id}`}>Nombre</Label>
                   <Input
                     id={`editar-espacio-${espacio.id}`}
@@ -181,9 +193,9 @@ export function EspaciosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
                 </Button>
               </form>
             ) : (
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <span className="min-w-0 font-medium break-words">{espacio.nombre}</span>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex min-w-0 flex-wrap gap-2">
                   {!soloLectura && !eliminandoEste && (
                     <>
                       <Button
@@ -207,15 +219,15 @@ export function EspaciosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
             )}
 
             {eliminandoEste && (
-              <div className="grid gap-2 rounded-md border p-3">
+              <div className="grid min-w-0 gap-2 rounded-md border p-3">
                 {/* Mismo criterio que un curso (RF-02.11): lo que tiene clases
                     dadas no se borra. El backend responde 409 y su mensaje se
                     muestra tal cual. */}
                 <p className="text-destructive text-sm">
-                  Eliminar «{espacio.nombre}» solo se puede si no tiene ninguna
-                  reserva hecha.
+                  Eliminar «{espacio.nombre}» solo se puede si no tiene ninguna reserva
+                  hecha.
                 </p>
-                <div className="flex gap-2">
+                <div className="flex min-w-0 gap-2">
                   <Button
                     variant="destructive"
                     size="sm"

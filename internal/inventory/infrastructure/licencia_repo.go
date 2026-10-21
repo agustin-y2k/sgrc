@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ramiro/sgrc/internal/inventory/application"
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/application"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 const columnasLicencia = `id, equipo_id, nombre, dias_duracion, dias_aviso, fecha_vencimiento, ` +
@@ -38,7 +38,7 @@ const columnasLicenciaConUbicacion = `l.id, l.equipo_id, l.nombre, l.dias_duraci
 // migración 011 la unicidad va sobre `clave_texto(nombre)`, y Postgres necesita
 // la expresión exacta para reconocer de qué índice se habla.
 func (r *PostgresRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoftware) (bool, error) {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.conexion(ctx).Exec(ctx, `
 		INSERT INTO licencia_software (
 			id, equipo_id, nombre, dias_duracion, dias_aviso, fecha_vencimiento,
 			ultima_renovacion, vencimiento_fijado_por, vencimiento_fijado_en,
@@ -61,7 +61,7 @@ func (r *PostgresRepo) CrearLicencia(ctx context.Context, l *domain.LicenciaSoft
 }
 
 func (r *PostgresRepo) BuscarLicenciaPorID(ctx context.Context, id string) (*domain.LicenciaSoftware, error) {
-	row := r.db.QueryRow(ctx, `SELECT `+columnasLicencia+` FROM licencia_software WHERE id = $1`, id)
+	row := r.conexion(ctx).QueryRow(ctx, `SELECT `+columnasLicencia+` FROM licencia_software WHERE id = $1`, id)
 	return escanearLicencia(row)
 }
 
@@ -76,7 +76,7 @@ func (r *PostgresRepo) BuscarLicenciasPorIDs(ctx context.Context, ids []string) 
 		return map[string]*domain.LicenciaSoftware{}, nil
 	}
 
-	rows, err := r.db.Query(ctx,
+	rows, err := r.conexion(ctx).Query(ctx,
 		`SELECT `+columnasLicencia+` FROM licencia_software WHERE id = ANY($1)`, ids)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -143,7 +143,7 @@ func escanearLicenciaConUbicacion(row pgx.Row) (*application.LicenciaConUbicacio
 }
 
 func (r *PostgresRepo) GuardarLicencia(ctx context.Context, l *domain.LicenciaSoftware) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.conexion(ctx).Exec(ctx, `
 		UPDATE licencia_software SET
 			nombre=$2, dias_duracion=$3, dias_aviso=$4, fecha_vencimiento=$5,
 			ultima_renovacion=$6, vencimiento_fijado_por=$7, vencimiento_fijado_en=$8,
@@ -172,7 +172,7 @@ func (r *PostgresRepo) GuardarLicencia(ctx context.Context, l *domain.LicenciaSo
 
 // MarcarAvisosEnviados toca SOLO las dos marcas.
 func (r *PostgresRepo) MarcarAvisosEnviados(ctx context.Context, l *domain.LicenciaSoftware) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.conexion(ctx).Exec(ctx, `
 		UPDATE licencia_software SET
 			avisado_previo_para=$2, avisado_vencimiento_para=$3
 		WHERE id=$1
@@ -190,7 +190,7 @@ func (r *PostgresRepo) MarcarAvisosEnviados(ctx context.Context, l *domain.Licen
 }
 
 func (r *PostgresRepo) BorrarLicencia(ctx context.Context, id string) error {
-	tag, err := r.db.Exec(ctx, `DELETE FROM licencia_software WHERE id = $1`, id)
+	tag, err := r.conexion(ctx).Exec(ctx, `DELETE FROM licencia_software WHERE id = $1`, id)
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
@@ -204,7 +204,7 @@ func (r *PostgresRepo) BorrarLicencia(ctx context.Context, id string) error {
 }
 
 func (r *PostgresRepo) ListarLicenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.LicenciaSoftware, error) {
-	rows, err := r.db.Query(ctx,
+	rows, err := r.conexion(ctx).Query(ctx,
 		`SELECT `+columnasLicencia+` FROM licencia_software WHERE equipo_id = $1 ORDER BY nombre`, equipoID)
 	if err != nil {
 		if esIDInvalido(err) {
@@ -230,7 +230,7 @@ const ordenDeLaPantalla = `ORDER BY l.fecha_vencimiento IS NOT NULL, l.fecha_ven
 	`COALESCE(c.nombre, ''), COALESCE(p.identificador, 0), COALESCE(p.nombre, ''), l.nombre`
 
 func (r *PostgresRepo) ListarLicencias(ctx context.Context) ([]*application.LicenciaConUbicacion, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasLicenciaConUbicacion+`
 		FROM licencia_software l
 		JOIN equipo p ON p.id = l.equipo_id
@@ -255,7 +255,7 @@ func (r *PostgresRepo) ListarLicencias(ctx context.Context) ([]*application.Lice
 // de la campana todavía tiene a qué apuntar.
 func (r *PostgresRepo) ContarPendientesDeRenovar(ctx context.Context, hoy time.Time) (int, error) {
 	var n int
-	err := r.db.QueryRow(ctx, `
+	err := r.conexion(ctx).QueryRow(ctx, `
 		SELECT count(*)
 		FROM licencia_software l
 		JOIN equipo p ON p.id = l.equipo_id
@@ -271,7 +271,7 @@ func (r *PostgresRepo) ContarPendientesDeRenovar(ctx context.Context, hoy time.T
 
 // ListarCandidatasAAviso es el filtro grueso del job.
 func (r *PostgresRepo) ListarCandidatasAAviso(ctx context.Context, hoy time.Time) ([]*application.LicenciaConUbicacion, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT `+columnasLicenciaConUbicacion+`
 		FROM licencia_software l
 		JOIN equipo p ON p.id = l.equipo_id

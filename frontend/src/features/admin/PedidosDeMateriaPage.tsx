@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { EstadoBadge } from "@/components/EstadoBadge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -24,7 +25,7 @@ import { formatearFechaLargaDeInstante } from "@/lib/fechas"
 export function PedidosDeMateriaPage() {
   const [soloPendientes, setSoloPendientes] = useState(true)
 
-  const { data, error } = useQuery({
+  const { data, error, isPending, isFetching, refetch } = useQuery({
     queryKey: ["pedidos-de-materia", soloPendientes],
     queryFn: () => perfilApi.listarPedidos(soloPendientes),
   })
@@ -48,29 +49,37 @@ export function PedidosDeMateriaPage() {
       </div>
 
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-        </Alert>
+        <ErrorDeConsulta
+          mensaje="No pudimos consultar los pedidos de materia."
+          reintentando={isFetching}
+          onReintentar={() => void refetch()}
+        />
       )}
 
-      {pedidos.length === 0 ? (
+      {isPending && <p role="status">Cargando pedidos…</p>}
+      {!isPending && !error && pedidos.length === 0 && (
         <Card>
           <CardContent className="text-muted-foreground pt-6 text-sm">
             {soloPendientes ? "No hay pedidos sin resolver." : "Todavía no pidió nadie."}
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid gap-3">
-          {pedidos.map((p) => (
-            <Pedido key={p.id} pedido={p} />
-          ))}
-        </div>
       )}
+      <fieldset disabled={!!error || isFetching} className="grid min-w-0 gap-3">
+        {pedidos.map((p) => (
+          <Pedido key={p.id} pedido={p} habilitado={!error && !isFetching} />
+        ))}
+      </fieldset>
     </div>
   )
 }
 
-function Pedido({ pedido }: { pedido: PedidoDeMateria }) {
+function Pedido({
+  pedido,
+  habilitado,
+}: {
+  pedido: PedidoDeMateria
+  habilitado: boolean
+}) {
   const qc = useQueryClient()
   const [panel, setPanel] = useState<"aprobar" | "rechazar" | null>(null)
   const [respuesta, setRespuesta] = useState("")
@@ -79,33 +88,36 @@ function Pedido({ pedido }: { pedido: PedidoDeMateria }) {
   const [error, setError] = useState("")
 
   // Los cursos hacen falta solo para crear una materia que no existe.
-  const { data: ciclos } = useQuery({
+  const consultaCiclos = useQuery({
     queryKey: ["ciclos"],
     queryFn: academicoApi.listarCiclos,
     enabled: pedido.esMateriaNueva && panel === "aprobar",
   })
-  const cicloActivo = ciclos?.data.find((c) => c.activo)
-  const { data: cursos } = useQuery({
+  const cicloActivo = consultaCiclos.data?.data.find((c) => c.activo)
+  const consultaCursos = useQuery({
     queryKey: ["cursos", cicloActivo?.id],
     queryFn: () => academicoApi.listarCursos(cicloActivo!.id),
-    enabled: !!cicloActivo,
+    enabled: !!cicloActivo && panel === "aprobar" && pedido.esMateriaNueva,
   })
 
   // Quiénes la dan hoy: es con quien hay que hablar antes de decidir.
-  const { data: docentes } = useQuery({
+  const consultaDocentes = useQuery({
     queryKey: ["docentes-de-materia", pedido.materiaId],
     queryFn: () => academicoApi.listarDocentesDeMateria(pedido.materiaId!),
     enabled: !!pedido.materiaId,
   })
 
   const resolver = useMutation({
-    mutationFn: (aprobar: boolean) =>
-      perfilApi.resolverPedido(pedido.id, {
+    mutationFn: (aprobar: boolean) => {
+      if (!habilitado || (aprobar && pedido.esMateriaNueva && !cursoValido))
+        throw new Error("Volvé a consultar los datos antes de confirmar.")
+      return perfilApi.resolverPedido(pedido.id, {
         aprobar,
         respuesta,
         cursoId: cursoId || undefined,
         rol: rol || undefined,
-      }),
+      })
+    },
     onSuccess: () => {
       setError("")
       setPanel(null)
@@ -115,7 +127,17 @@ function Pedido({ pedido }: { pedido: PedidoDeMateria }) {
     onError: (e) => setError(getErrorMessage(e)),
   })
 
-  const faltaCurso = pedido.esMateriaNueva && cursoId === ""
+  const catalogosListos =
+    !!cicloActivo &&
+    !consultaCiclos.error &&
+    !consultaCiclos.isFetching &&
+    !!consultaCursos.data &&
+    !consultaCursos.error &&
+    !consultaCursos.isFetching
+  const cursoValido =
+    catalogosListos && !!consultaCursos.data?.data.some((c) => c.id === cursoId)
+  const faltaCurso = pedido.esMateriaNueva && !cursoValido
+  const docentes = consultaDocentes.data
 
   return (
     <Card>
@@ -153,7 +175,14 @@ function Pedido({ pedido }: { pedido: PedidoDeMateria }) {
           </p>
         )}
 
-        {(docentes?.data.length ?? 0) > 0 && (
+        {consultaDocentes.error && (
+          <ErrorDeConsulta
+            mensaje="No pudimos consultar quiénes dictan esta materia."
+            reintentando={consultaDocentes.isFetching}
+            onReintentar={() => void consultaDocentes.refetch()}
+          />
+        )}
+        {!consultaDocentes.error && (docentes?.data.length ?? 0) > 0 && (
           <p className="text-muted-foreground text-sm">
             Hoy esa materia la dan{" "}
             {docentes!.data.length === 1
@@ -193,13 +222,43 @@ function Pedido({ pedido }: { pedido: PedidoDeMateria }) {
               {panel === "aprobar" && pedido.esMateriaNueva && (
                 <div className="grid gap-1.5">
                   <Label htmlFor={`curso-${pedido.id}`}>¿En qué curso se crea?</Label>
+                  {consultaCiclos.isPending && <p role="status">Cargando ciclos…</p>}
+                  {consultaCiclos.error && (
+                    <ErrorDeConsulta
+                      mensaje="No pudimos consultar el ciclo activo."
+                      reintentando={consultaCiclos.isFetching}
+                      onReintentar={() => void consultaCiclos.refetch()}
+                    />
+                  )}
+                  {!consultaCiclos.isPending && !consultaCiclos.error && !cicloActivo && (
+                    <p>
+                      No hay un ciclo activo. Crealo en Ciclos, cursos y materias antes de
+                      aprobar.
+                    </p>
+                  )}
+                  {cicloActivo && consultaCursos.isPending && (
+                    <p role="status">Cargando cursos…</p>
+                  )}
+                  {consultaCursos.error && (
+                    <ErrorDeConsulta
+                      mensaje="No pudimos consultar los cursos."
+                      reintentando={consultaCursos.isFetching}
+                      onReintentar={() => void consultaCursos.refetch()}
+                    />
+                  )}
+                  {catalogosListos && consultaCursos.data?.data.length === 0 && (
+                    <p>
+                      El ciclo activo todavía no tiene cursos. Cargá uno antes de aprobar.
+                    </p>
+                  )}
                   <Select
+                    disabled={!catalogosListos || resolver.isPending}
                     id={`curso-${pedido.id}`}
                     value={cursoId}
                     onChange={(e) => setCursoId(e.target.value)}
                   >
                     <option value="">Elegí el curso…</option>
-                    {(cursos?.data ?? []).map((c) => (
+                    {(consultaCursos.data?.data ?? []).map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.nombre}
                       </option>

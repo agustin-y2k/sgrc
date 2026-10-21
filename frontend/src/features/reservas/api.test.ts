@@ -36,6 +36,36 @@ describe("api de reservas, lo que se manda", () => {
     vi.restoreAllMocks()
   })
 
+  it("pide paginación por clases sólo cuando se solicita", async () => {
+    const fetchMock = fetchFalso()
+    await reservasApi.listarReservas({ porClases: true, pageSize: 20, page: 2 })
+    const params = new URLSearchParams(llamada(fetchMock).url.split("?")[1])
+    expect(params.get("porClases")).toBe("true")
+    expect(params.get("pageSize")).toBe("20")
+    expect(params.get("page")).toBe("2")
+    const normal = fetchFalso()
+    await reservasApi.listarReservas()
+    expect(llamada(normal).url).not.toContain("porClases")
+  })
+
+  it("serializa los filtros del listado sin alterar el texto de búsqueda", async () => {
+    const fetchMock = fetchFalso()
+    await reservasApi.listarReservas({
+      desde: "2026-11-02",
+      hasta: "2026-11-16",
+      estado: "CANCELADA",
+      creadoPor: "docente",
+      busqueda: "Dibujo Técnico",
+      porClases: true,
+    })
+    const params = new URLSearchParams(llamada(fetchMock).url.split("?")[1])
+    expect(params.get("busqueda")).toBe("Dibujo Técnico")
+    expect(params.get("estado")).toBe("CANCELADA")
+    expect(params.get("creadoPor")).toBe("docente")
+    expect(params.get("desde")).toBe("2026-11-02")
+    expect(params.get("hasta")).toBe("2026-11-16")
+  })
+
   describe("pedirLiberacion", () => {
     /** `apiFetch` ya serializa el body. */
     it("manda el mensaje como objeto, no como cadena ya serializada", async () => {

@@ -2,6 +2,21 @@ package eventbus
 
 import "time"
 
+type ReservaReubicada struct {
+	ReservaID        string
+	EtiquetaAnterior string
+	EtiquetaNueva    string
+	Fecha            time.Time
+}
+
+type ReubicacionesDeUsuario struct {
+	UsuarioID string
+	Nombre    string
+	Email     string
+	Motivo    string
+	Reservas  []ReservaReubicada
+}
+
 // Payload tipado del evento `reserva.cancelada`.
 
 // ReservaCancelada es una Reserva puntual que se canceló.

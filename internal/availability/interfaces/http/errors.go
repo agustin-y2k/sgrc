@@ -5,8 +5,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/availability/application"
-	"github.com/ramiro/sgrc/internal/availability/domain"
+	"github.com/agustin-y2k/sgrc/internal/availability/application"
+	"github.com/agustin-y2k/sgrc/internal/availability/domain"
 )
 
 func mapearError(err error) error {
@@ -28,11 +28,7 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrExcepcionIncoherente):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 
-	// 500, pero con el mensaje de verdad: acá el cambio SÍ se aplicó y lo que
-	// falló fue cancelar lo que quedó afuera. Un "error interno" genérico haría
-	// creer que no pasó nada, y el horario de la escuela habría cambiado sin
-	// que nadie lo sepa. El texto dice qué quedó a medias, y volver a guardar
-	// la misma jornada reintenta solo la cancelación: es idempotente.
+	// Se conserva la causa del fallo de cascada; el cambio completo se revirtió.
 	case errors.Is(err, application.ErrCascadaDeJornada):
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 

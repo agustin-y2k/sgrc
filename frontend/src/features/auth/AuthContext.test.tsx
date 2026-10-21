@@ -6,6 +6,7 @@ import * as authApi from "@/features/auth/api"
 import type { Usuario } from "@/features/auth/types"
 import { ApiError } from "@/lib/api-client"
 import * as tokenStore from "@/lib/token-store"
+import { BORRADOR_RESERVA_KEY } from "@/lib/borradores"
 
 vi.mock("@/features/auth/api")
 vi.mock("@/lib/token-store")
@@ -160,7 +161,12 @@ describe("AuthProvider", () => {
       expect(screen.getByTestId("user")).toHaveTextContent("ana@test.com")
     )
 
+    sessionStorage.setItem(
+      BORRADOR_RESERVA_KEY,
+      JSON.stringify({ usuarioId: usuarioMock.id, version: 1, datos: {} })
+    )
     await user.click(screen.getByText("logout"))
+    expect(sessionStorage.getItem(BORRADOR_RESERVA_KEY)).toBeNull()
 
     expect(tokenStore.clearToken).toHaveBeenCalled()
     expect(screen.getByTestId("user")).toHaveTextContent("sin sesión")

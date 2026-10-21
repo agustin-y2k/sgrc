@@ -4,11 +4,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/.
 type Repo interface {
+	// Coordinar comparte la transacción y estabiliza inventario/jornada frente
+	// a reservas y entregas. El callback debe propagar su contexto a otros módulos.
+	Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error
 	// EnTransaccion corre fn de forma atómica: o se aplican todas las escrituras
 	// que haga adentro, o no queda ninguna.
 	//
@@ -96,6 +99,10 @@ type Repo interface {
 	BuscarPreferenciaPorID(ctx context.Context, id string) (*domain.PreferenciaDeEquipo, error)
 	BorrarPreferencia(ctx context.Context, id string) error
 	ListarPreferenciasPorEquipo(ctx context.Context, equipoID string) ([]*domain.PreferenciaDeEquipo, error)
+	// ListarPreferenciasPorCarro: las marcas de todos los equipos de un carro,
+	// para que el alta masiva pueda avisar de un empate de prioridad sin pedir
+	// una consulta por equipo.
+	ListarPreferenciasPorCarro(ctx context.Context, carroID string) ([]*domain.PreferenciaDeEquipo, error)
 
 	// ListarPreferenciasHuerfanas: las marcas que ya no cruzan con ninguna
 	// materia. Aparecen al renombrar o borrar una materia, porque el vínculo es
@@ -103,7 +110,10 @@ type Repo interface {
 	ListarPreferenciasHuerfanas(ctx context.Context) ([]*PreferenciaHuerfana, error)
 	// ContarPreferenciasQueDejarianDeAplicar contesta, antes de renombrar una
 	// materia, cuántas marcas dejarían de cruzar.
-	ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error)
+	ContarPreferenciasQueDejarianDeAplicar(ctx context.Context, materiaID, materiaNombre string) (int, error)
+
+	CatalogoDePrioridades(ctx context.Context) ([]MateriaParaPreferencia, error)
+	ExisteAlcancePreferencia(ctx context.Context, p *domain.PreferenciaDeEquipo) (bool, error)
 
 	// NombresDeMateriaEnUso alimenta el selector del inventario: los nombres
 	// distintos de materia que existen en el sistema.
@@ -122,17 +132,13 @@ type LicenciaConUbicacion struct {
 	CarroNombre      string
 }
 
-// ValidadorReservas es el puerto hacia reservation — todavía no existe ese
-// paquete, así que se usa un stub que no cancela nada (ver
-// infrastructure/validador_reservas_stub.go).
+// ValidadorReservas comunica con reservation a través del adaptador de
+// composición. Propaga el contexto para compartir la transacción exterior.
 type ValidadorReservas interface {
 	CancelarReservasFuturasDeEquipo(ctx context.Context, equipoID string, motivo string) (canceladas int, docentesNotificados int, err error)
 
-	// TieneReservasFuturas es la única lectura de este puerto, y existe por la
-	// misma razón que TieneReservasDeCiclo en academic: la cascada de
-	// RF-03.8/03.9 no puede ser atómica con el guardado de la PC (cruza a
-	// reservation, que abre su propia transacción), así que lo que se puede
-	// garantizar no es que nunca falle a la mitad, sino que se pueda terminar.
+	// TieneReservasFuturas permite completar cascadas pendientes de versiones
+	// anteriores. Los nuevos cambios de inventario y cascadas son atómicos.
 	TieneReservasFuturas(ctx context.Context, equipoID string) (bool, error)
 
 	// EstaPrestado dice si el equipo está afuera del laboratorio ahora mismo.
@@ -148,6 +154,7 @@ type IDGenerator func() string
 // el Admin necesita saber es QUÉ máquina quedó marcada para una materia que ya
 // no existe.
 type PreferenciaHuerfana struct {
+	CursoExacto   bool
 	ID            string
 	MateriaNombre string
 	Modalidad     string

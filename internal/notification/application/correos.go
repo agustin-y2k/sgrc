@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/notification/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // Copias por correo de los avisos del sistema (RF-05.8).
@@ -107,6 +107,16 @@ func registrarHandlersDeCorreo(bus eventbus.EventBus, m *Mensajero, modo Entrega
 		asunto, cuerpo := m.textoDeCancelacion(payload)
 		enviar("por mail la cancelación", func(ctx context.Context) error {
 			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatReservaCancelada, asunto, cuerpo)
+		})
+	})
+
+	bus.Subscribe("reserva.reubicada", func(e eventbus.Evento) {
+		payload, ok := e.Payload.(eventbus.ReubicacionesDeUsuario)
+		if !ok || len(payload.Reservas) == 0 {
+			return
+		}
+		enviar("por mail la reposición", func(ctx context.Context) error {
+			return m.enviarSiLoQuiere(ctx, payload.Email, domain.CatReservaCancelada, "Se reemplazaron equipos de tus reservas", mensajeDeReposicion(payload)+"\n\nVer mis reservas: "+m.urlDelSistema+"/reservas")
 		})
 	})
 

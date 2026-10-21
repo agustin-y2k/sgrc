@@ -9,8 +9,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/reservation/application"
-	"github.com/ramiro/sgrc/internal/reservation/domain"
+	"github.com/agustin-y2k/sgrc/internal/reservation/application"
+	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
 )
 
 func pedirPrestamos(t *testing.T, app *fiber.App, metodo, ruta string, cuerpo any, rol string) (int, []byte) {
@@ -401,7 +401,7 @@ func datosDePedido(dueno string) *application.ReservaParaPedido {
 		Estado:        domain.ReservaConfirmada,
 		DuenoID:       &duenoID,
 		DuenoNombre:   "Ada Lovelace",
-		DuenoEmail:    "ada@escuela.edu.ar",
+		DuenoEmail:    "ada@escuela.test",
 		Etiqueta:      "PC 3",
 		MateriaNombre: "Matemáticas",
 		// Pasado mañana respecto del reloj fijo de los tests: la franja

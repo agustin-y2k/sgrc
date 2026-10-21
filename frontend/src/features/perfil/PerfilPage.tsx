@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query"
+import { useState } from "react"
 import { KeyRound } from "lucide-react"
 import { Link } from "react-router"
 
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { EstadoBadge } from "@/components/EstadoBadge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cursoDe, etiquetaDeCurso } from "@/features/academico/types"
 import { useAuth } from "@/features/auth/AuthContext"
@@ -20,8 +22,15 @@ import { formatearFechaLargaDeInstante } from "@/lib/fechas"
 /** El perfil: la pantalla que se abre desde el redondel con las iniciales. */
 export function PerfilPage() {
   const { user } = useAuth()
+  const [formularioPedido, setFormularioPedido] = useState<
+    "sinAbrir" | "abierto" | "oculto"
+  >("sinAbrir")
 
-  const { data: materias, error: errorMaterias } = useQuery({
+  const {
+    data: materias,
+    error: errorMaterias,
+    isPending: cargandoMaterias,
+  } = useQuery({
     queryKey: ["mis-materias", "asignadas"],
     queryFn: reservasApi.misMateriasAsignadas,
   })
@@ -65,7 +74,11 @@ export function PerfilPage() {
             </Alert>
           )}
 
-          {misMaterias.length === 0 ? (
+          {errorMaterias ? null : cargandoMaterias ? (
+            <p role="status" className="text-muted-foreground text-sm">
+              Cargando materias asignadas…
+            </p>
+          ) : misMaterias.length === 0 ? (
             /* Dos vacíos y no uno: "no vas a poder reservar" es cierto para un
                docente y falso para un Admin, que puede reservar en cualquier
                materia aunque no dicte ninguna. */
@@ -90,7 +103,23 @@ export function PerfilPage() {
             </ul>
           )}
 
-          <PedirMateria />
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 justify-self-start"
+            aria-expanded={formularioPedido === "abierto"}
+            aria-controls="formulario-pedido-materia"
+            onClick={() =>
+              setFormularioPedido(formularioPedido === "abierto" ? "oculto" : "abierto")
+            }
+          >
+            {formularioPedido === "abierto" ? "Ocultar formulario" : "Pedir otra materia"}
+          </Button>
+          {formularioPedido !== "sinAbrir" && (
+            <div id="formulario-pedido-materia" hidden={formularioPedido !== "abierto"}>
+              <PedirMateria activo={formularioPedido === "abierto"} />
+            </div>
+          )}
 
           {misPedidos.length > 0 && (
             <div className="grid gap-2">

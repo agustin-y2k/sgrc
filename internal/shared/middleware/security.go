@@ -22,6 +22,9 @@ func SecurityHeaders() fiber.Handler {
 	})
 
 	return func(c *fiber.Ctx) error {
+		// Incluye tokens, fotos y contraseñas reveladas: ninguna respuesta del
+		// backend debe quedar en la caché del navegador ni de un intermediario.
+		c.Set("Cache-Control", "no-store")
 		c.Set("Strict-Transport-Security", "max-age=31536000; preload")
 		return h(c)
 	}

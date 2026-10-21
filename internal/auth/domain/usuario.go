@@ -200,9 +200,11 @@ type Usuario struct {
 	DebeCambiarPassword bool
 	Rol                 Rol
 	Estado              Estado
-	FechaRegistro       time.Time
-	FechaAprobacion     *time.Time
-	AprobadoPor         *string
+	// BajaPendiente es una proyección del proceso de limpieza, no un permiso.
+	BajaPendiente   bool
+	FechaRegistro   time.Time
+	FechaAprobacion *time.Time
+	AprobadoPor     *string
 
 	// Lo que la persona declaró al registrarse: qué curso y qué materia va a
 	// dictar.

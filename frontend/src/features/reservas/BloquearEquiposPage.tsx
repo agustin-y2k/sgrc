@@ -17,6 +17,7 @@ import { getErrorMessage } from "@/lib/api-client"
 import { MINIMO_PARA_BUSCAR, sinTildes } from "@/lib/texto"
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { contar } from "@/lib/plural"
+import { EstadoBadge, TONO_PC } from "@/components/EstadoBadge"
 
 const ETIQUETA_ESTADO: Record<string, string> = {
   EN_MANTENIMIENTO: "En mantenimiento",
@@ -330,9 +331,9 @@ export function BloquearEquiposPage() {
                           {equipo.etiqueta}
                         </Label>
                         {!bloqueable && (
-                          <Badge variant="destructive" className="w-fit">
+                          <EstadoBadge tono={TONO_PC[equipo.estado]}>
                             {ETIQUETA_ESTADO[equipo.estado] ?? equipo.estado}
-                          </Badge>
+                          </EstadoBadge>
                         )}
                         {ocupada && (
                           <Badge variant="outline" className="w-fit">

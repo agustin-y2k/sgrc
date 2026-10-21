@@ -39,8 +39,8 @@ Los crea `make run` / `make dev` mediante el servicio `seed-datos` (§7).
 
 | Rol | Email | Contraseña |
 |---|---|---|
-| Admin | el `SEED_ADMIN_EMAIL` del `.env` (por defecto `admin@tuinstitucion.edu.ar`) | el `SEED_ADMIN_PASSWORD` del `.env` |
-| Docente | `docente@escuela.edu.ar` | `docente_password_123` |
+| Admin | el `SEED_ADMIN_EMAIL` del `.env` (por defecto `admin@example.org`) | el `SEED_ADMIN_PASSWORD` del `.env` |
+| Docente | `docente@escuela.test` | `docente_password_123` |
 
 Esa contraseña de docente es el valor por omisión de
 `scripts/sembrar-datos-de-prueba.sh` y es pública; se puede cambiar poniendo
@@ -71,8 +71,23 @@ necesitás: **§10** para los puertos (ojo con la trampa de `APP_PORT`) y
 ### 1.1 Configurar el `.env`
 
 ```bash
-cp .env.example .env
+install -m 600 .env.example .env   # sólo si todavía no existe
 ```
+
+En una instalación existente, conservar los valores y ejecutar `chmod 600 .env`.
+El directorio del proyecto no debe permitir escritura a otros usuarios. Los
+backups se guardan en un directorio `700`, con archivos `600`.
+
+Los `.gitignore` excluyen configuraciones privadas, credenciales, instrucciones
+locales, bases y copias de respaldo, también en subdirectorios. Los
+`.dockerignore` las excluyen además del contexto de construcción.
+Se versionan `.env.example`, `.env.local.example`, `frontend/.env.example` y
+`docker-compose.local.example.yml`, junto con el Compose base, el de desarrollo,
+nginx y la configuración compartida de pruebas y compilación. Los archivos
+activos `.env`, `.env.local` y `docker-compose.local.yml` son privados. El
+generador de guías crea su propia configuración efímera. No colocar valores
+reales en las plantillas. Ver la
+[política de publicación](16-publicacion-repositorio.md).
 
 Después hay que **completar los valores reales**. Los cinco que no se pueden
 dejar como vienen:
@@ -102,7 +117,7 @@ El resto tiene valores razonables por defecto, salvo dos que dependen del
 dominio:
 
 - **`FRONTEND_ORIGIN`**: el dominio público desde el que se sirve el sistema,
-  con `https://` y **sin barra final** (ej. `https://sgrc.tuescuela.edu.ar`).
+  con `https://` y **sin barra final** (ej. `https://sgrc.example.org`).
   Si está mal, el proceso no arranca y lo dice en el log — es a propósito:
   con este valor mal puesto el navegador rechazaría todos los requests sin
   ninguna explicación visible.
@@ -132,7 +147,7 @@ de la raíz no tiene ningún efecto.
 > `JWT_REMEMBER_TTL` es la ventana en la que un dispositivo perdido sigue
 > entrando. No hay forma de cerrar una sesión concreta a distancia: lo que
 > corta **todas** las de una cuenta es cambiarle la contraseña (desde
-> `/admin/usuarios`, "Resetear contraseña"). Bajar el valor achica la ventana;
+> `/admin/usuarios`, "Restablecer contraseña", con confirmación). Bajar el valor achica la ventana;
 > un valor menor que `JWT_ACCESS_TTL` se ignora y se avisa en el log.
 
 ### 1.1.b Configurar el correo (opcional, pero conviene)
@@ -184,6 +199,11 @@ siendo gratuito.
 Para probarlo de punta a punta sin tocar ninguna cuenta real: entrá a
 `/recuperar-password`, poné tu propio email y fijate si llega el código
 (revisá spam la primera vez).
+
+Para probar SMTP y Google directamente desde el backend con configuración
+local, seguí [Pruebas locales de Google y SMTP](13-pruebas-servicios-locales.md).
+Las pruebas externas requieren activación explícita y se omiten en la suite
+habitual.
 
 > **Que los correos no caigan en spam depende de tres cosas, y dos son de
 > despliegue.** La primera ya está resuelta por salir a través de una casilla
@@ -698,14 +718,14 @@ perder, es más barato `docker compose down -v` y arrancar limpio.
 ### El barrido de entregas y devoluciones
 
 El barrido corre dentro del mismo proceso, cada cinco minutos, sin cron ni
-nada que instalar. Tres variables opcionales lo ajustan:
+nada que instalar. Dos variables opcionales lo ajustan:
 `RETIRO_GRACIA_MINUTOS` (40) y `CIERRE_JORNADA` (23). Un valor mal escrito **impide levantar**, a propósito:
 descubrirlo tres horas después porque un aviso no salió es peor.
 
 > `RETIRO_AVISO_MINUTOS` y `DEVOLUCION_DEMORA_MINUTOS` **ya no se usan** desde
 > la 1.18.0: el aviso de no retiro (RF-08.20) y el reclamo de devolución
-> (RF-08.12) se retiraron. **`RETIRO_PARCIAL_GRACIA_MINUTOS` tampoco, desde la
-> 1.21** — ver abajo. Si siguen en el `.env` el sistema levanta igual y lo dice
+> (RF-08.12) se retiraron. **`RETIRO_PARCIAL_GRACIA_MINUTOS` tampoco se usa**
+> — ver abajo. Si siguen en el `.env` el sistema levanta igual y lo dice
 > en el log, para que quien lo mantenga sepa que puede sacarlas.
 
 | Variable | Desde cuándo cuenta | Qué hace |
@@ -856,12 +876,28 @@ make backup                        # deja ../sgrc-datos/backup-sgrc-AAAA-MM-DD.s
 make backup DIR_BACKUPS=/mnt/usb   # o donde quieras
 ```
 
+El volcado se escribe primero en un archivo temporal privado. Sólo si
+`pg_dump` termina correctamente y el archivo tiene contenido se publica con
+un renombrado atómico. Un fallo o un resultado vacío conserva el respaldo
+anterior del mismo día y devuelve error; no anuncia éxito.
+
 o el comando completo:
 
 ```bash
-umask 077; mkdir -p ../sgrc-datos; chmod 700 ../sgrc-datos
+(
+set -eu
+umask 077
+mkdir -p ../sgrc-datos
+chmod 700 ../sgrc-datos
+backup_destino="../sgrc-datos/backup-sgrc-$(date +%F).sql"
+backup_temporal=$(mktemp ../sgrc-datos/.backup-sgrc-XXXXXX)
+trap 'rm -f "$backup_temporal"' 0
+trap 'exit 1' 1 2 15
 docker compose exec -T postgres sh -c \
-  'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > ../sgrc-datos/backup-sgrc-$(date +%F).sql
+  'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$backup_temporal"
+test -s "$backup_temporal"
+mv -f "$backup_temporal" "$backup_destino"
+)
 ```
 
 > **El `umask 077` es parte del comando, no un adorno.** El archivo lo crea la
@@ -872,8 +908,8 @@ docker compose exec -T postgres sh -c \
 > queda `0600`, y la carpeta en `0700` porque de poco sirve un archivo cerrado
 > adentro de un directorio que cualquiera puede listar. `make backup` hace las dos.
 
-> **Y va FUERA del árbol de trabajo, no en la raíz del repo.** Ahí estuvo hasta la
-> 1.21, a salvo únicamente porque `.gitignore` lo tapaba — una red que protege del
+> **Y va FUERA del árbol de trabajo, no en la raíz del repo.** Antes se guardaba
+> en la raíz, a salvo únicamente porque `.gitignore` lo tapaba — una red que protege del
 > `git add` y de nada más: ni del `git add -f`, ni de comprimir la carpeta para
 > pasársela a alguien, ni de una sincronización a la nube, ni de una herramienta
 > que no lea `.gitignore`. Las reglas de `.gitignore` siguen ahí por si alguien
@@ -882,12 +918,29 @@ docker compose exec -T postgres sh -c \
 > ciclo: es la lista real de una institución y se carga desde la pantalla, no vive
 > en el repositorio.
 
-**Restaurar** (sobre una base vacía; borra lo que haya):
+**Restaurar** sobre una base vacía, con el backend detenido:
+
+El volcado SQL de `pg_dump` no vacía ni reemplaza una base existente.
+Prepará un destino vacío y verificá el nombre de la base antes de cargarlo.
+Si contiene tablas, la restauración debe fallar; no continuar mezclando datos.
 
 ```bash
 docker compose exec -T postgres sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../sgrc-datos/backup-sgrc-2026-08-03.sql
+  'psql -X -v ON_ERROR_STOP=1 --single-transaction -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../sgrc-datos/backup-sgrc-2026-08-03.sql
 ```
+
+`ON_ERROR_STOP=1` hace que un error SQL termine con código de salida no cero;
+`--single-transaction` revierte la carga completa si falla. Reiniciá el
+backend sólo si el comando terminó correctamente. Conservá las claves
+`CUENTAS_SECRET` y `OUTBOX_SECRET` correspondientes al backup (o el
+`JWT_SECRET` anterior si el outbox usaba su derivación), en una copia protegida
+de la configuración: el SQL no las contiene.
+
+El ensayo automatizado `TestOperacionBackend_UpgradeBackupRestoreYReinicio`
+usa dos PostgreSQL temporales: migra 021→026 con datos, restaura el volcado en
+una base vacía y verifica históricos, fotos, cuentas cifradas, auditoría,
+reinicio y entrega de un evento pendiente sin duplicarlo. Se ejecuta con
+`go test -tags integration ./cmd -run '^TestOperacionBackend_' -count=1 -v`.
 
 Conviene sacar un backup **antes de actualizar** y **antes de aplicar una
 migración**. Un archivo por semana guardado fuera del servidor cubre el caso
@@ -913,9 +966,11 @@ significar que se perdió lo que había.
 
 ### Tres tablas que crecen y nunca se limpian
 
-`notificacion`, `audit_log` y `codigo_recuperacion` **no se borran nunca**, a
-propósito. Cada aviso, cada acción sensible y cada pedido de
-recuperación de contraseña queda para siempre, y el backup los arrastra.
+No hay purga automática de `notificacion`, `audit_log` ni
+`codigo_recuperacion`. Esto no impide borrados explícitos: el destinatario puede
+eliminar sus avisos y borrar una cuenta elimina sus notificaciones y códigos
+en cascada. La auditoría se conserva después de eliminar la cuenta. Los backups
+incluyen las filas que existan al hacer el volcado.
 
 No hay ninguna purga automática, y es deliberado: la auditoría existe
 justamente para poder reconstruir qué pasó cuando alguien reclama algo de
@@ -945,7 +1000,7 @@ que cambia es qué datos hay adentro:
 
 |  | Producción | Desarrollo (`make run`) |
 |---|---|---|
-| Tablas | Las crea Postgres al arrancar con el volumen vacío, aplicando el esquema de `migrations/` | Igual |
+| Esquema | La API aplica con Goose las migraciones pendientes al arrancar, tanto en una base nueva como en una existente, antes del primer Admin | Igual |
 | Primer Admin | Lo siembra la app (`SEED_ADMIN_*` del `.env`) | Igual |
 | Datos | **Ninguno**: ni ciclo, ni carros, ni equipos. El Admin arma todo desde la interfaz | Un ciclo, un curso, una materia, un docente aprobado y un carro con equipos |
 
@@ -980,7 +1035,7 @@ El script se puede correr a mano igual, con el sistema levantado:
 make seed-datos
 ```
 
-Crea un docente con una contraseña conocida (`docente@escuela.edu.ar`), así
+Crea un docente con una contraseña conocida (`docente@escuela.test`), así
 que **se niega a correr contra algo que no sea local**. Para forzarlo hay que
 exportar `SEMBRAR_IGUAL=1`, que es lo bastante incómodo como para que no
 pase por accidente.
@@ -1078,7 +1133,7 @@ ningún otro lado del proyecto:
 
 ```bash
 # .env  (en el servidor — el .env.example es solo la plantilla)
-FRONTEND_ORIGIN=https://sgrc.tuescuela.edu.ar
+FRONTEND_ORIGIN=https://sgrc.example.org
 ```
 
 Con esquema (`https://`) y **sin barra final**. El backend valida las dos
@@ -1250,10 +1305,51 @@ host, mismo puerto si no es el estándar.
 
 | Cómo entra la gente | Qué va en `FRONTEND_ORIGIN` |
 |---|---|
-| `https://sgrc.tuescuela.edu.ar` | `https://sgrc.tuescuela.edu.ar` |
+| `https://sgrc.example.org` | `https://sgrc.example.org` |
 | `http://192.168.1.50:8081` (red interna, sin certificado) | `http://192.168.1.50:8081` |
 
 Si dice `https://` y la gente entra por `http://`, el navegador rechaza todos
 los pedidos por CORS y el sistema no anda, sin ningún error visible en el
 servidor. El backend valida el formato al arrancar (§9.3) pero no puede
 adivinar por dónde entra la gente: esa coherencia la ponés vos.
+
+## Actualización de los hallazgos y revisión de flujos (022–026)
+
+Recompilar el backend y reiniciar todas sus instancias con la misma versión. El arranque aplica las migraciones embebidas antes de servir la API. Las verificaciones se realizaron con bases temporales; no actualizan una instalación en uso.
+
+- **022:** invalida códigos sin usar anteriores cuando hay varios por cuenta y agrega unicidad. No borra sus constancias.
+- **023:** agrega referencias a pedido/hilo y el reclamo diario de liberación. Los avisos pendientes legados de pedidos y conversaciones, que no permiten distinguir tareas, se conservan como leídos y se recrean los pendientes actuales por tarea para los administradores aprobados. Esta reconstrucción no envía correos.
+- **024:** agrega `evento_pendiente` para avisos durables y reintentos.
+- **025:** instala auditoría transaccional de cambios sensibles. Deshacerla quita los triggers y conserva `audit_log`.
+- **026:** incorpora las preferencias de equipos a la auditoría transaccional;
+  deshacerla conserva las constancias previas.
+
+Configurar **`OUTBOX_SECRET`** con al menos 32 bytes y una clave estable independiente de JWT. Si queda vacía, se usa una derivación separada de `JWT_SECRET`. Conservar la clave que cifró los pendientes: cambiarla mientras hay filas sin procesar impide entregarlas y bloquea la cola hasta restaurar la clave correcta. Para pasar del fallback a una clave explícita conservando compatibilidad, su valor inicial debe ser `eventos:` seguido del JWT anterior. Los payloads se vacían al confirmar la entrega; no pueden reproducirse después desde la metadata procesada.
+
+El worker consulta cada segundo y confirma evento/avisos en una transacción. Un error deja el evento pendiente, aumenta `intentos` y guarda `ultimo_error`; el reintento espera hasta 60 segundos. El primer pendiente fallido detiene los posteriores para preservar orden. Revisar el log `outbox` y esta consulta ante una demora:
+
+```sql
+SELECT id,tipo,creado_en,intentos,reintentar_en,ultimo_error
+FROM evento_pendiente WHERE procesado_en IS NULL ORDER BY id;
+```
+
+Restaurar la causa del fallo permite que el worker continúe; no marcar eventos como procesados para ocultarlo. Antes de deshacer 024 o rotar una clave usada por pendientes, drenar la cola con la versión y clave que la escribieron. El correo sigue siendo una copia con un intento después del commit: puede perderse ante fallos SMTP o una caída; los avisos internos conservan sus reintentos.
+
+Los filtros de fecha de incidencias y auditoría incluyen ambos días completos en `APP_TIMEZONE`, hasta la medianoche siguiente de `hasta` (exclusiva). Los vencimientos, bloqueos, vigilancia y cierre de jornadas nocturnas conservan la fecha inicial y el fin efectivo del día siguiente.
+
+
+## Prioridades vinculadas a cursos (029)
+
+Actualizar backend y frontend juntos. La migración 029 agrega `curso_exacto`
+con valor false en las marcas anteriores, conservando sus datos y alcance.
+Las nuevas marcas se cargan desde el catálogo relacionado del ciclo activo:
+modalidad → año → división → materia. La API rechaza combinaciones inexistentes
+antes de modificar el lote. Las marcas siguen vinculadas por nombre y atributos,
+por lo que pueden continuar aplicando tras la clonación anual.
+
+Guardar un respaldo antes de actualizar una instalación con datos. Para volver
+atrás, revisar las marcas con `curso_exacto=true`: la bajada de 029 se bloquea
+mientras existan, porque eliminar ese indicador podría ampliar su alcance.
+No sustituir la bajada por una eliminación manual de la columna. La [documentación
+de prioridades](14-prioridades-dispositivos.md) describe las reglas y
+las condiciones de compatibilidad.

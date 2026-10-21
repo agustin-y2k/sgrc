@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/availability/domain"
+	"github.com/agustin-y2k/sgrc/internal/availability/domain"
 )
 
 // ── fakeRepo ────────────────────────────────────────────────────────────
@@ -997,9 +997,8 @@ func TestReemplazarJornada_LaReservaNocturnaEntraEnElTramoQueCruza(t *testing.T)
 	}
 }
 
-// Si la cancelación falla, la jornada ya quedó guardada y hay que decirlo: es
-// un estado incompleto, no un error que deshaga el cambio.
-func TestReemplazarJornada_SiFallaLaCancelacionLaJornadaYaRige(t *testing.T) {
+// Si la cancelación falla, la jornada anterior sigue rigiendo.
+func TestReemplazarJornada_SiFallaLaCancelacionRevierteLaJornada(t *testing.T) {
 	reservas := &fakeReservas{
 		futuras:     []ReservaFutura{reservaDelLunes("r1", 13*time.Hour, 15*time.Hour)},
 		errCancelar: errors.New("la base se cayó"),
@@ -1014,8 +1013,8 @@ func TestReemplazarJornada_SiFallaLaCancelacionLaJornadaYaRige(t *testing.T) {
 	if !errors.Is(err, ErrCascadaDeJornada) {
 		t.Fatalf("esperaba ErrCascadaDeJornada, obtuve %v", err)
 	}
-	if len(repo.jornada) != 1 {
-		t.Error("la jornada se guardó antes de cancelar, y eso no se deshace")
+	if len(repo.jornada) != 0 {
+		t.Error("el fallo de cascada debe revertir la jornada")
 	}
 }
 
@@ -1282,4 +1281,13 @@ func TestMostradorEseDia_ElDiaQueNadieAtendio(t *testing.T) {
 	if c.Atendido || c.Opera() {
 		t.Errorf("el lunes no atendió nadie: %+v", c)
 	}
+}
+
+func (r *fakeRepo) Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error {
+	previa := r.jornada
+	if err := fn(ctx); err != nil {
+		r.jornada = previa
+		return err
+	}
+	return nil
 }

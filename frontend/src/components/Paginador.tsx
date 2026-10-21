@@ -11,18 +11,19 @@ export type PaginacionMeta = {
 }
 
 /**
- * Controles de página para los tres listados que el backend pagina —reservas,
- * notificaciones y usuarios—.
+ * Controles compartidos por los listados paginados de la API.
  */
 export function Paginador({
   meta,
   onCambiarPagina,
   etiqueta,
+  disabled = false,
 }: {
   meta: PaginacionMeta
   onCambiarPagina: (pagina: number) => void
   /** Cómo se llama lo que se está listando, en plural ("reservas"). */
   etiqueta: string
+  disabled?: boolean
 }) {
   const totalPaginas = Math.max(1, Math.ceil(meta.total / meta.pageSize))
   if (totalPaginas <= 1) return null
@@ -31,28 +32,30 @@ export function Paginador({
   const hasta = Math.min(meta.page * meta.pageSize, meta.total)
 
   return (
-    <div className="flex items-center justify-between gap-4 pt-2">
-      <p className="text-muted-foreground text-sm">
+    <div className="flex min-w-0 flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-muted-foreground min-w-0 text-sm wrap-anywhere">
         {desde}–{hasta} de {meta.total} {etiqueta}
       </p>
-      <div className="flex items-center gap-2">
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          disabled={meta.page <= 1}
+          className="h-11 px-3 sm:h-8"
+          disabled={disabled || meta.page <= 1}
           onClick={() => onCambiarPagina(meta.page - 1)}
         >
           Anterior
         </Button>
-        <span className="text-muted-foreground text-sm">
+        <span className="text-muted-foreground min-w-0 text-center text-sm wrap-anywhere">
           Página {meta.page} de {totalPaginas}
         </span>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          disabled={meta.page >= totalPaginas}
+          className="h-11 px-3 sm:h-8"
+          disabled={disabled || meta.page >= totalPaginas}
           onClick={() => onCambiarPagina(meta.page + 1)}
         >
           Siguiente

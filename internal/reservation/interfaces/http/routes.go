@@ -3,7 +3,7 @@ package http
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/shared/middleware"
+	"github.com/agustin-y2k/sgrc/internal/shared/middleware"
 )
 
 // RegisterRoutes monta todas las rutas de reservation bajo /api.
@@ -23,6 +23,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	reservation.Get("/reservas/:id", autenticado, h.ObtenerReserva)
 	reservation.Post("/reservas", autenticado, h.CrearReserva)
 	reservation.Post("/reservas/recurrentes", autenticado, h.CrearReservaRecurrente)
+	reservation.Post("/reservas/recurrentes/previsualizar", autenticado, h.PrevisualizarReservaRecurrente)
 	reservation.Post("/reservas/:id/cancelar", autenticado, h.CancelarReserva)
 	// RF-08.14: cambiar una reserva de máquina sin partir la clase en dos
 	// grupos.

@@ -1,6 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link, useSearchParams } from "react-router"
+import { Link, useLocation, useSearchParams } from "react-router"
 
 import { EncabezadoDePagina } from "@/components/EncabezadoDePagina"
 import { Paginador } from "@/components/Paginador"
@@ -31,14 +31,13 @@ function formatearFecha(iso: string): string {
  * la campana sin ninguna forma de actuar sobre ellos. Ahora TypeScript exige
  * que cada tipo diga a dónde va, aunque sea `null`.
  *
- * `null` no es un olvido: es "este aviso ya está en la pantalla que le
- * corresponde". Los dos del buzón son eso — el panel de conversaciones vive
- * en esta misma página, y un botón que lleva acá mismo no ayuda a nadie.
+ * `null` indica que no hay una acción asociada.
  */
 const ACCION_POR_TIPO: Record<TipoNotificacion, { a: string; texto: string } | null> = {
   GENERAL: null,
   DOCENTE_PENDIENTE: { a: "/admin/aprobacion", texto: "Ir a aprobar" },
   RESERVA_CANCELADA: { a: "/reservas", texto: "Ver mis reservas" },
+  RESERVA_REUBICADA: { a: "/reservas", texto: "Ver mis reservas" },
   LICENCIA_POR_VENCER: { a: "/admin/licencias", texto: "Ver licencias" },
   EQUIPO_SIN_DEVOLVER: { a: "/admin/entregas", texto: "Ver entregas" },
   // Le llega al dueño de la reserva: la decisión de liberar o no es suya y se
@@ -48,8 +47,11 @@ const ACCION_POR_TIPO: Record<TipoNotificacion, { a: string; texto: string } | n
   // La resolución le llega al docente, y sus materias se ven en su perfil,
   // que es desde donde pidió.
   PEDIDO_DE_MATERIA_RESUELTO: { a: "/perfil", texto: "Ver mi perfil" },
-  SUGERENCIA: null,
-  SUGERENCIA_RESPONDIDA: null,
+  SUGERENCIA: { a: "/notificaciones?soporte=consultas", texto: "Ver conversación" },
+  SUGERENCIA_RESPONDIDA: {
+    a: "/notificaciones?soporte=consultas",
+    texto: "Ver conversación",
+  },
 }
 
 /** RF-05: notificaciones internas. */
@@ -59,11 +61,14 @@ export function NotificacionesPage() {
   // pantalla con el formulario desplegado, en vez de dejar a alguien que
   // necesita algo buscando dónde escribir.
   const [parametros] = useSearchParams()
-  const abrirSoporte = parametros.get("soporte") === "nuevo"
+  const ubicacion = useLocation()
+  const abrirSoporte = ["nuevo", "consultas"].includes(parametros.get("soporte") ?? "")
   const [mostrarLeidas, setMostrarLeidas] = useState(false)
   const [pagina, setPagina] = useState(1)
+  const [resultado, setResultado] = useState("")
+  const [errorAccion, setErrorAccion] = useState("")
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: [...NOTIFICACIONES_KEY, mostrarLeidas ? "TODAS" : "NO_LEIDA", pagina],
     queryFn: () =>
       notificacionesApi.listarNotificaciones(
@@ -71,41 +76,68 @@ export function NotificacionesPage() {
         pagina
       ),
   })
+  useEffect(() => {
+    if (!data || error || isFetching) return
+    const ultima = Math.max(1, Math.ceil(data.meta.total / data.meta.pageSize))
+    if (pagina > ultima) setPagina(ultima)
+  }, [data, error, isFetching, pagina])
 
   // Invalida toda la familia: el contador de la barra de navegación usa
   // otra clave y también tiene que bajar al marcar algo como leído.
   const invalidar = () => queryClient.invalidateQueries({ queryKey: NOTIFICACIONES_KEY })
 
   const marcarLeida = useMutation({
+    onMutate: iniciarAccion,
+    onError: (e) => setErrorAccion(getErrorMessage(e)),
     mutationFn: (n: Notificacion) => notificacionesApi.marcarLeida(n.id),
     onSuccess: invalidar,
   })
 
   const marcarTodas = useMutation({
+    onMutate: iniciarAccion,
+    onError: (e) => setErrorAccion(getErrorMessage(e)),
     mutationFn: notificacionesApi.marcarTodasLeidas,
-    onSuccess: invalidar,
+    onSuccess: async (r) => {
+      setResultado(`Avisos marcados como leídos: ${r.marcadas}.`)
+      await invalidar()
+    },
   })
 
   const borrar = useMutation({
+    onMutate: iniciarAccion,
+    onError: (e) => setErrorAccion(getErrorMessage(e)),
     mutationFn: (n: Notificacion) => notificacionesApi.borrar(n.id),
     onSuccess: invalidar,
   })
 
   const borrarLeidas = useMutation({
+    onMutate: iniciarAccion,
+    onError: (e) => setErrorAccion(getErrorMessage(e)),
     mutationFn: notificacionesApi.borrarLeidas,
-    onSuccess: invalidar,
+    onSuccess: async (r) => {
+      setResultado(`Avisos leídos borrados: ${r.borradas}.`)
+      await invalidar()
+    },
   })
+  function iniciarAccion() {
+    setResultado("")
+    setErrorAccion("")
+  }
+  const ocupado =
+    marcarLeida.isPending ||
+    marcarTodas.isPending ||
+    borrar.isPending ||
+    borrarLeidas.isPending
+  const bloquear = ocupado || isFetching || !!error || !data
 
   const notificaciones = data?.data ?? []
   const noLeidas = notificaciones.filter((n) => n.estado === "NO_LEIDA")
   const leidas = notificaciones.filter((n) => n.estado === "LEIDA")
-  const errorAccion =
-    marcarLeida.error ?? marcarTodas.error ?? borrar.error ?? borrarLeidas.error
 
   return (
     <div className="mx-auto max-w-3xl">
       <EncabezadoDePagina
-        titulo="Notificaciones"
+        titulo="Avisos"
         descripcion="Avisos del sistema: cancelaciones, cuentas pendientes y cambios que te afectan."
         accion={
           /* Los dos gestos del mismo movimiento: cerrar lo pendiente y, un paso
@@ -117,7 +149,7 @@ export function NotificacionesPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={marcarTodas.isPending}
+                  disabled={bloquear}
                   onClick={() => marcarTodas.mutate()}
                 >
                   Marcar todas como leídas
@@ -127,10 +159,10 @@ export function NotificacionesPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  disabled={borrarLeidas.isPending}
+                  disabled={bloquear}
                   onClick={() => borrarLeidas.mutate()}
                 >
-                  Borrar las {leidas.length} leídas
+                  Borrar todos los avisos leídos
                 </Button>
               )}
             </span>
@@ -141,7 +173,12 @@ export function NotificacionesPage() {
       {/* Las conversaciones van ARRIBA de los avisos y de las preferencias:
           es lo único de esta pantalla donde hay una persona esperando del
           otro lado. */}
-      <PanelDeSoporte abiertoDeEntrada={abrirSoporte} />
+      <PanelDeSoporte
+        abiertoDeEntrada={abrirSoporte}
+        solicitudDeApertura={abrirSoporte ? ubicacion.key : undefined}
+        abrirFormulario={parametros.get("soporte") === "nuevo"}
+        hiloId={parametros.get("hilo") ?? undefined}
+      />
 
       {/* Reemplaza a la línea de "algunos también te llegan por correo": el
           panel dice cuáles, y deja cambiarlo. Es para todos, no solo para el
@@ -152,6 +189,7 @@ export function NotificacionesPage() {
         <input
           type="checkbox"
           checked={mostrarLeidas}
+          disabled={ocupado}
           onChange={(e) => {
             setMostrarLeidas(e.target.checked)
             // Cambiar el filtro cambia la colección: la página actual puede
@@ -164,82 +202,113 @@ export function NotificacionesPage() {
 
       {(error || errorAccion) && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{getErrorMessage(error ?? errorAccion)}</AlertDescription>
+          <AlertDescription>
+            {error ? getErrorMessage(error) : errorAccion}
+            {error && (
+              <Button
+                variant="outline"
+                disabled={isFetching}
+                onClick={() => void refetch()}
+              >
+                Reintentar avisos
+              </Button>
+            )}
+          </AlertDescription>
         </Alert>
+      )}
+      {resultado && (
+        <p role="status" className="mb-4 text-sm">
+          {resultado}
+        </p>
       )}
 
       {isLoading && <p className="text-muted-foreground">Cargando…</p>}
 
-      {!isLoading && notificaciones.length === 0 && (
+      {!isLoading && !error && notificaciones.length === 0 && (
         <p className="text-muted-foreground">
           {mostrarLeidas ? "No tenés ninguna notificación." : "No tenés avisos sin leer."}
         </p>
       )}
 
       <div className="grid gap-3">
-        {notificaciones.map((n) => (
-          <Card key={n.id}>
-            <CardContent className="grid gap-2 pt-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <p className={n.estado === "NO_LEIDA" ? "font-medium" : undefined}>
-                  {n.mensaje}
-                </p>
-                {n.estado === "NO_LEIDA" ? (
-                  <Badge>Sin leer</Badge>
-                ) : (
-                  <Badge variant="secondary">Leída</Badge>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-muted-foreground text-sm">
-                  {formatearFecha(n.creadaEn)}
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {/* La acción sale del `tipo`, no de leer el mensaje: la
-                      redacción de un aviso puede cambiar y el botón tiene que
-                      seguir funcionando. */}
-                  {ACCION_POR_TIPO[n.tipo] && (
-                    <Button asChild variant="outline" size="sm">
-                      <Link to={ACCION_POR_TIPO[n.tipo]!.a}>
-                        {ACCION_POR_TIPO[n.tipo]!.texto}
-                      </Link>
-                    </Button>
-                  )}
-                  {n.estado === "NO_LEIDA" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={marcarLeida.isPending}
-                      onClick={() => marcarLeida.mutate(n)}
-                    >
-                      Marcar como leída
-                    </Button>
-                  )}
-                  {/* Borrar aparece sólo en los leídos, que es la misma regla
-                      que aplica el servidor: un aviso sin leer todavía es una
-                      tarea, y hacerla desaparecer de un clic la pierde. */}
-                  {n.estado === "LEIDA" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={borrar.isPending}
-                      onClick={() => borrar.mutate(n)}
-                    >
-                      Borrar
-                    </Button>
+        {!error &&
+          notificaciones.map((n) => (
+            <Card key={n.id}>
+              <CardContent className="grid gap-2 pt-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <p
+                    className={`min-w-0 flex-1 whitespace-pre-line [overflow-wrap:anywhere] ${n.estado === "NO_LEIDA" ? "font-medium" : ""}`}
+                  >
+                    {n.mensaje}
+                  </p>
+                  {n.estado === "NO_LEIDA" ? (
+                    <Badge>Sin leer</Badge>
+                  ) : (
+                    <Badge variant="secondary">Leída</Badge>
                   )}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-muted-foreground text-sm">
+                    {formatearFecha(n.creadaEn)}
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {/* La acción sale del `tipo`, no de leer el mensaje: la
+                      redacción de un aviso puede cambiar y el botón tiene que
+                      seguir funcionando. */}
+                    {ACCION_POR_TIPO[n.tipo] && (
+                      <Button asChild variant="outline" size="sm">
+                        <Link
+                          to={
+                            ACCION_POR_TIPO[n.tipo]!.a +
+                            ((n.tipo === "SUGERENCIA" ||
+                              n.tipo === "SUGERENCIA_RESPONDIDA") &&
+                            n.hiloId
+                              ? `&hilo=${encodeURIComponent(n.hiloId)}`
+                              : "")
+                          }
+                        >
+                          {ACCION_POR_TIPO[n.tipo]!.texto}
+                        </Link>
+                      </Button>
+                    )}
+                    {n.estado === "NO_LEIDA" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={bloquear}
+                        onClick={() => marcarLeida.mutate(n)}
+                      >
+                        Marcar como leída
+                      </Button>
+                    )}
+                    {/* Borrar aparece sólo en los leídos, que es la misma regla
+                      que aplica el servidor: un aviso sin leer todavía es una
+                      tarea, y hacerla desaparecer de un clic la pierde. */}
+                    {n.estado === "LEIDA" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={bloquear}
+                        onClick={() => borrar.mutate(n)}
+                      >
+                        Borrar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
       </div>
 
-      {data && (
+      {data && !error && (
         <Paginador
+          disabled={ocupado}
           meta={data.meta}
-          onCambiarPagina={setPagina}
+          onCambiarPagina={(p) => {
+            if (!ocupado) setPagina(p)
+          }}
           etiqueta="notificaciones"
         />
       )}

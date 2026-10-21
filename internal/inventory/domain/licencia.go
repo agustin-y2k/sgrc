@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/shared/texto"
+	"github.com/agustin-y2k/sgrc/internal/shared/texto"
 )
 
 // Topes de LicenciaSoftware.

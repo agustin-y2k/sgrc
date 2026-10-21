@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
 )
 
 // busEspia guarda lo publicado para poder afirmar cuántos eventos salieron,

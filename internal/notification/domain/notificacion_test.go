@@ -95,7 +95,7 @@ func TestNuevaNotificacion_SinTipo_QuedaGeneral(t *testing.T) {
 }
 
 func TestParseTipo(t *testing.T) {
-	for _, valido := range []string{"GENERAL", "DOCENTE_PENDIENTE", "RESERVA_CANCELADA"} {
+	for _, valido := range []string{"GENERAL", "DOCENTE_PENDIENTE", "RESERVA_CANCELADA", "RESERVA_REUBICADA"} {
 		if _, err := ParseTipo(valido); err != nil {
 			t.Errorf("ParseTipo(%q) falló: %v", valido, err)
 		}

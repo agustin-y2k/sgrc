@@ -6,8 +6,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 // AvisadorDeLicencias es el barrido diario que avisa qué licencias hay que
@@ -24,7 +25,7 @@ func NewAvisadorDeLicencias(repo Repo, bus eventbus.EventBus, ahora func() time.
 
 // Barrer revisa las licencias y, si hay algo que avisar, publica UN evento
 // con todo junto.
-func (a *AvisadorDeLicencias) Barrer(ctx context.Context) (int, error) {
+func (a *AvisadorDeLicencias) barrer(ctx context.Context) (int, error) {
 	hoy := domain.Dia(a.ahora())
 
 	candidatas, err := a.repo.ListarCandidatasAAviso(ctx, hoy)
@@ -57,14 +58,15 @@ func (a *AvisadorDeLicencias) Barrer(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 
-	a.bus.Publish(eventbus.Evento{Tipo: "licencia.por-vencer", Payload: aviso})
+	eventbus.Emitir(ctx, a.bus, eventbus.Evento{Tipo: "licencia.por-vencer", Payload: aviso})
 
-	// Un fallo al marcar no invalida el aviso, que ya salió: se loguea y se
-	// sigue con las demás.
+	// La marca y el evento comparten transacción. Cualquier fallo impide
+	// confirmar el barrido durable.
 	for _, l := range avisadas {
 		if err := a.repo.MarcarAvisosEnviados(ctx, l); err != nil {
+			pgtransaccion.Rechazar(ctx, err)
 			log.Printf("aviso de licencias: no se pudo marcar como avisada la licencia %s "+
-				"(el aviso ya salió; puede repetirse en la próxima barrida): %v", l.ID, err)
+				"(el barrido durable se revierte): %v", l.ID, err)
 		}
 	}
 
@@ -82,4 +84,13 @@ func aLicenciaDelAviso(c *LicenciaConUbicacion, hoy time.Time) eventbus.Licencia
 		FechaVencimiento: *c.Licencia.FechaVencimiento,
 		DiasRestantes:    dias,
 	}
+}
+
+func (a *AvisadorDeLicencias) Barrer(ctx context.Context) (int, error) {
+	var res int
+	err := a.repo.Coordinar(ctx, true, func(ctx context.Context) error { var err error; res, err = a.barrer(ctx); return err })
+	if err != nil {
+		return 0, err
+	}
+	return res, nil
 }

@@ -103,6 +103,18 @@ function equipo(over: Partial<Equipo> = {}): Equipo {
 
 describe("InicioPage", () => {
   beforeEach(() => {
+    // El reloj va congelado a una mañana: `reserva()` arma una clase de HOY de
+    // 14 a 15, y la pantalla esconde las clases que ya terminaron. Sin esto los
+    // tests pasan a la mañana y fallan a la tarde — que es exactamente lo que
+    // pasó desde que se agregó ese filtro: el job de frontend de CI quedó rojo
+    // sólo en las corridas posteriores a las 15:00 de Argentina, la zona que
+    // `vite.config.ts` fija para toda la suite.
+    //
+    // `toFake: ["Date"]` y nada más: falsear también los timers deja colgados a
+    // `userEvent` y a los `findBy*`, que esperan con temporizadores reales.
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date(2026, 8, 17, 9, 0, 0))
+
     vi.clearAllMocks()
     vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(paginada([]))
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([]))
@@ -119,6 +131,7 @@ describe("InicioPage", () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 

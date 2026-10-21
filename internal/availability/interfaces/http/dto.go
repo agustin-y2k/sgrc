@@ -3,8 +3,8 @@
 package http
 
 import (
-	"github.com/ramiro/sgrc/internal/availability/application"
-	"github.com/ramiro/sgrc/internal/availability/domain"
+	"github.com/agustin-y2k/sgrc/internal/availability/application"
+	"github.com/agustin-y2k/sgrc/internal/availability/domain"
 )
 
 // ── Requests ────────────────────────────────────────────────────────────

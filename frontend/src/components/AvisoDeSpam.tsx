@@ -10,8 +10,8 @@ export function AvisoDeSpam({ children }: { children?: React.ReactNode }) {
   return (
     <p className="text-muted-foreground text-xs">
       {children ?? "Si no te llega, fijate en la carpeta de spam."} Los correos salen de{" "}
-      <span className="font-medium">{remitente}</span>: agregalo a tus contactos y no te
-      va a volver a pasar.
+      <span className="font-medium">{remitente}</span>. Agregalo a tus contactos para
+      reconocer los avisos de la escuela.
     </p>
   )
 }

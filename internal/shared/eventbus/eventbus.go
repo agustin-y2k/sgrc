@@ -1,4 +1,4 @@
-// Package eventbus implementa un pub/sub in-process (ver
+// Package eventbus implementa eventos durables y un bus en memoria para pruebas (ver
 // docs/06-arquitectura.md §4).
 package eventbus
 
@@ -20,8 +20,8 @@ type EventBus interface {
 	Subscribe(tipo string, handler func(Evento))
 }
 
-// InMemoryEventBus es la única implementación mientras el sistema sea un
-// monolito.
+// InMemoryEventBus es el adaptador liviano para pruebas sin PostgreSQL.
+// Producción usa DurableBus y Emitir con el contexto de la operación.
 type InMemoryEventBus struct {
 	mu       sync.RWMutex
 	handlers map[string][]func(Evento)

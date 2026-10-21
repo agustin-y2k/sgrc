@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router"
 
 import { ChevronDown, LifeBuoy } from "lucide-react"
@@ -123,6 +123,7 @@ function claseDeEnlaceMovil(estado: { isActive: boolean }): string {
 function MenuAdministracion({ afuera }: { afuera: number }) {
   const [abierto, setAbierto] = useState(false)
   const contenedor = useRef<HTMLDivElement>(null)
+  const disparador = useRef<HTMLButtonElement>(null)
   const { pathname } = useLocation()
 
   // Con el menú cerrado, estar parado en una de sus pantallas tiene que verse
@@ -141,7 +142,11 @@ function MenuAdministracion({ afuera }: { afuera: number }) {
       if (!contenedor.current?.contains(evento.target as Node)) setAbierto(false)
     }
     function alTeclear(evento: KeyboardEvent) {
-      if (evento.key === "Escape") setAbierto(false)
+      if (evento.key === "Escape") {
+        const dentro = contenedor.current?.contains(document.activeElement)
+        setAbierto(false)
+        if (dentro) disparador.current?.focus()
+      }
     }
 
     document.addEventListener("mousedown", alApuntarAfuera)
@@ -155,6 +160,7 @@ function MenuAdministracion({ afuera }: { afuera: number }) {
   return (
     <div className="relative shrink-0" ref={contenedor}>
       <button
+        ref={disparador}
         type="button"
         aria-expanded={abierto}
         aria-controls="menu-administracion"
@@ -194,11 +200,11 @@ function MenuAdministracion({ afuera }: { afuera: number }) {
 export function AppLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const noLeidas = useNoLeidas()
+  const noLeidas = useNoLeidas(!user?.debeCambiarPassword)
   const [menuAbierto, setMenuAbierto] = useState(false)
 
   const esAdmin = user?.rol === "ADMIN"
-  const afuera = useAfuera(esAdmin)
+  const afuera = useAfuera(esAdmin && !user?.debeCambiarPassword)
   const enlaces = esAdmin ? [...ENLACES, ENLACE_APROBACION] : ENLACES
 
   function handleLogout() {
@@ -230,6 +236,34 @@ export function AppLayout() {
       </span>
     </NavLink>
   )
+
+  if (user?.debeCambiarPassword) {
+    return (
+      <div className="flex min-h-svh flex-col">
+        <header className="flex items-center justify-between border-b p-4">
+          <p className="font-semibold">SGRC</p>
+          <div className="flex items-center gap-2">
+            <BotonDeTema />
+            <Button variant="outline" onClick={handleLogout}>
+              Cerrar sesión
+            </Button>
+          </div>
+        </header>
+        <main className="min-w-0 flex-1">
+          <Suspense
+            fallback={
+              <p role="status" className="p-4 text-sm">
+                Cargando…
+              </p>
+            }
+          >
+            <Outlet />
+          </Suspense>
+        </main>
+        <PieDeAutoria />
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -362,11 +396,15 @@ export function AppLayout() {
               className="hidden min-[1140px]:inline-flex"
               onClick={() => {
                 cerrarMenu()
-                navigate("/notificaciones?soporte=nuevo")
+                navigate(
+                  esAdmin
+                    ? "/notificaciones?soporte=consultas"
+                    : "/notificaciones?soporte=nuevo"
+                )
               }}
             >
               <LifeBuoy aria-hidden="true" className="size-4" />
-              Pedir ayuda
+              {esAdmin ? "Responder consultas" : "Pedir ayuda"}
             </Button>
 
             <BotonDeTema />
@@ -415,7 +453,7 @@ export function AppLayout() {
         {menuAbierto && (
           <nav
             id="menu-principal"
-            className="border-border grid gap-0.5 border-t px-4 py-2 min-[1140px]:hidden"
+            className="border-border grid max-h-[calc(100dvh-5rem)] gap-0.5 overflow-y-auto overscroll-contain border-t px-4 py-2 min-[1140px]:hidden"
           >
             {enlaces.map((e) => (
               <NavLink
@@ -430,23 +468,20 @@ export function AppLayout() {
             ))}
             {avisos(claseDeEnlaceMovil)}
 
-            {/* En el teléfono el grupo va desplegado bajo un título en vez
-                de detrás de otro clic: el menú ya es una lista vertical que
-                se recorre con el pulgar, y meter un desplegable adentro de
-                un desplegable agrega un paso sin ahorrar nada de espacio.
-
-                El título necesita la línea y el aire de arriba: en una
-                columna de renglones todos iguales, versalitas grises a la
-                misma altura y con la misma sangría que los enlaces se leen
-                como un ítem más que no responde al toque. La regla dice
-                "acá empieza otra cosa" antes de que nadie intente
-                tocarlo. */}
+            {/* Las tareas diarias quedan visibles; las opciones ocasionales
+                se agrupan para acortar el recorrido dentro del menú. */}
             {esAdmin && (
               <>
                 <p className="text-muted-foreground border-border mt-3 border-t px-2.5 pt-3 pb-1 text-xs font-semibold tracking-wide uppercase">
-                  Administración
+                  Trabajo diario
                 </p>
-                {ENLACES_ADMIN.map((e) => (
+                {ENLACES_ADMIN.filter((e) =>
+                  [
+                    "/admin/entregas",
+                    "/admin/inventario",
+                    "/admin/pedidos-de-materia",
+                  ].includes(e.a)
+                ).map((e) => (
                   <NavLink
                     key={e.a}
                     to={e.a}
@@ -456,6 +491,47 @@ export function AppLayout() {
                     <TextoDeEnlaceAdmin enlace={e} afuera={afuera} />
                   </NavLink>
                 ))}
+                <details className="mt-2 border-t">
+                  <summary className="cursor-pointer px-2.5 py-3 text-sm font-medium">
+                    Administración y configuración
+                  </summary>
+                  {ENLACES_ADMIN.filter(
+                    (e) =>
+                      ![
+                        "/admin/entregas",
+                        "/admin/inventario",
+                        "/admin/pedidos-de-materia",
+                        "/admin/reportes",
+                        "/admin/auditoria",
+                      ].includes(e.a)
+                  ).map((e) => (
+                    <NavLink
+                      key={e.a}
+                      to={e.a}
+                      className={claseDeEnlaceMovil}
+                      onClick={cerrarMenu}
+                    >
+                      <TextoDeEnlaceAdmin enlace={e} afuera={afuera} />
+                    </NavLink>
+                  ))}
+                </details>
+                <details className="border-t">
+                  <summary className="cursor-pointer px-2.5 py-3 text-sm font-medium">
+                    Reportes y auditoría
+                  </summary>
+                  {ENLACES_ADMIN.filter((e) =>
+                    ["/admin/reportes", "/admin/auditoria"].includes(e.a)
+                  ).map((e) => (
+                    <NavLink
+                      key={e.a}
+                      to={e.a}
+                      className={claseDeEnlaceMovil}
+                      onClick={cerrarMenu}
+                    >
+                      <TextoDeEnlaceAdmin enlace={e} afuera={afuera} />
+                    </NavLink>
+                  ))}
+                </details>
               </>
             )}
 
@@ -463,17 +539,17 @@ export function AppLayout() {
                 quedar enterrado: va arriba de "Mi cuenta", que es lo último
                 de la lista. */}
             <NavLink
-              to="/notificaciones?soporte=nuevo"
+              to={
+                esAdmin
+                  ? "/notificaciones?soporte=consultas"
+                  : "/notificaciones?soporte=nuevo"
+              }
               className={claseDeEnlaceMovil}
               onClick={cerrarMenu}
             >
-              Pedir ayuda
+              {esAdmin ? "Responder consultas" : "Pedir ayuda"}
             </NavLink>
-            <NavLink
-              to="/cambiar-password"
-              className={claseDeEnlaceMovil}
-              onClick={cerrarMenu}
-            >
+            <NavLink to="/perfil" className={claseDeEnlaceMovil} onClick={cerrarMenu}>
               Mi cuenta
             </NavLink>
             <Button
@@ -489,7 +565,15 @@ export function AppLayout() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        <Outlet />
+        <Suspense
+          fallback={
+            <p role="status" className="text-muted-foreground">
+              Cargando pantalla…
+            </p>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </main>
 
       {/* Al fondo de todo, no fijo: la columna es `min-h-svh flex-col` con el

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { EstadoBadge } from "@/components/EstadoBadge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import {
   Card,
   CardContent,
@@ -64,14 +65,23 @@ export function agruparPrestamos(prestamos: Prestamo[]): Grupo[] {
 
   for (const p of prestamos) {
     const detalle = [p.materiaNombre, p.destino].filter(Boolean).join(" · ")
-    const clave = `${p.entregadoANombre}|${detalle}`
+    const responsable = p.entregadoAUsuarioId
+      ? `usuario:${p.entregadoAUsuarioId}`
+      : `nombre:${p.entregadoANombre}`
+    const clave = JSON.stringify([responsable, detalle])
     const existente = grupos.get(clave)
 
     if (existente) {
       existente.prestamos.push(p)
-      existente.minutosDeDemora = Math.max(existente.minutosDeDemora, p.minutosDeDemora ?? 0)
+      existente.minutosDeDemora = Math.max(
+        existente.minutosDeDemora,
+        p.minutosDeDemora ?? 0
+      )
       if (p.entregadoEn < existente.salio) existente.salio = p.entregadoEn
-      if (p.devolucionEstimada && (!existente.vence || p.devolucionEstimada < existente.vence)) {
+      if (
+        p.devolucionEstimada &&
+        (!existente.vence || p.devolucionEstimada < existente.vence)
+      ) {
         existente.vence = p.devolucionEstimada
       }
       continue
@@ -100,7 +110,7 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
   const [observaciones, setObservaciones] = useState("")
   const [resumen, setResumen] = useState<string | null>(null)
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, isSuccess, error, refetch } = useQuery({
     queryKey: PRESTAMOS_KEY,
     queryFn: reservasApi.listarPrestamosAbiertos,
     // El mostrador lo atienden varios: si un colega recibe una máquina, esta
@@ -109,20 +119,20 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
   })
 
   const recibir = useMutation({
-    mutationFn: (ids: string[]) =>
+    mutationFn: ({ ids, nota }: { ids: string[]; nota?: string }) =>
       reservasApi.recibirEquipos({
         prestamoIds: ids,
-        observaciones: observaciones || undefined,
+        observaciones: nota,
       }),
-    onSuccess: async (respuesta) => {
+    onSuccess: async (respuesta, { ids }) => {
       const yaEstaban = respuesta.noRecibidos?.length ?? 0
       setResumen(
         yaEstaban === 0
           ? `Volvieron ${contar(respuesta.recibidos.length, "equipo")}.`
-          : `Volvieron ${respuesta.recibidos.length}. ${yaEstaban} ya figuraba(n) adentro.`
+          : `Volvieron ${contar(respuesta.recibidos.length, "equipo")}. ${contar(yaEstaban, "equipo")} ya ${plural(yaEstaban, "figuraba", "figuraban")} adentro.`
       )
-      setMarcados(new Set())
-      setObservaciones("")
+      setMarcados((actuales) => new Set([...actuales].filter((id) => !ids.includes(id))))
+      if ([...marcados].every((id) => ids.includes(id))) setObservaciones("")
       await queryClient.invalidateQueries({ queryKey: PRESTAMOS_KEY })
     },
   })
@@ -130,6 +140,9 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
   const prestamos = useMemo(() => data?.data ?? [], [data])
   const grupos = useMemo(() => agruparPrestamos(prestamos), [prestamos])
   const demorados = prestamos.filter((p) => p.demorado).length
+  const consultaLista = isSuccess && !isFetching && !error
+  const seleccionValida =
+    marcados.size > 0 && [...marcados].every((id) => prestamos.some((p) => p.id === id))
 
   const alternar = (id: string) => {
     const nueva = new Set(marcados)
@@ -143,17 +156,23 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
       <CardHeader>
         <CardTitle>Afuera del laboratorio</CardTitle>
         <CardDescription>
-          {prestamos.length === 0
-            ? "No hay ningún equipo entregado."
-            : `${contar(prestamos.length, "equipo")} ${plural(prestamos.length, "entregado")}${demorados > 0 ? `, ${demorados} sin devolver a horario` : ""}. Marcá acá cuando vuelvan.`}
+          {error
+            ? "No pudimos actualizar qué equipos están afuera."
+            : isLoading
+              ? "Consultando entregas abiertas…"
+              : prestamos.length === 0
+                ? "No hay ningún equipo entregado."
+                : `${contar(prestamos.length, "equipo")} ${plural(prestamos.length, "entregado")}${demorados > 0 ? `, ${demorados} sin devolver a horario` : ""}. Marcá acá cuando vuelvan.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         {isLoading && <p className="text-muted-foreground text-sm">Cargando…</p>}
         {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-          </Alert>
+          <ErrorDeConsulta
+            mensaje="No pudimos consultar las entregas abiertas."
+            reintentando={isFetching}
+            onReintentar={() => void refetch()}
+          />
         )}
         {recibir.error && (
           <Alert variant="destructive">
@@ -166,70 +185,77 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
           </Alert>
         )}
 
-        {grupos.map((g) => (
-          <div key={g.clave} className="grid gap-2 rounded-md border p-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                {/* El nombre que va primero es el de quien RESPONDE por la
+        {!error &&
+          grupos.map((g) => (
+            <div key={g.clave} className="grid gap-2 rounded-md border p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  {/* El nombre que va primero es el de quien RESPONDE por la
                     máquina, que contra una reserva es siempre el docente. */}
-                <p className="font-medium break-words">
-                  {g.nombre}{" "}
-                  {g.minutosDeDemora > 0 && (
-                    <EstadoBadge tono="peligro">
-                      {textoDeDemora(g.minutosDeDemora)}
-                    </EstadoBadge>
-                  )}
-                </p>
-                <p className="text-muted-foreground text-sm break-words">
-                  {[g.detalle, contar(g.prestamos.length, "equipo")]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-                {!compacto && (
-                  <p className="text-muted-foreground text-xs">
-                    Salió {hora(g.salio)}
-                    {g.vence
-                      ? ` · tiene que volver ${hora(g.vence)}`
-                      : " · sin hora de devolución"}
+                  <p className="font-medium break-words">
+                    {g.nombre}{" "}
+                    {g.minutosDeDemora > 0 && (
+                      <EstadoBadge tono="peligro">
+                        {textoDeDemora(g.minutosDeDemora)}
+                      </EstadoBadge>
+                    )}
                   </p>
-                )}
+                  <p className="text-muted-foreground text-sm break-words">
+                    {[g.detalle, contar(g.prestamos.length, "equipo")]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                  {!compacto && (
+                    <p className="text-muted-foreground text-xs">
+                      Salió {hora(g.salio)}
+                      {g.vence
+                        ? ` · tiene que volver ${hora(g.vence)}`
+                        : " · sin hora de devolución"}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  className="shrink-0"
+                  disabled={recibir.isPending || !consultaLista}
+                  // El rótulo visible se repite entre grupos; el que se lee en
+                  // voz alta, no: dos botones "Recibir las 10" no dicen de quién.
+                  aria-label={`Recibir ${contar(g.prestamos.length, "equipo")} de ${g.nombre}`}
+                  onClick={() => recibir.mutate({ ids: g.prestamos.map((p) => p.id) })}
+                >
+                  {g.prestamos.length === 1
+                    ? "Recibir"
+                    : `Recibir las ${g.prestamos.length}`}
+                </Button>
               </div>
-              <Button
-                size="sm"
-                className="shrink-0"
-                disabled={recibir.isPending}
-                // El rótulo visible se repite entre grupos; el que se lee en
-                // voz alta, no: dos botones "Recibir las 10" no dicen de quién.
-                aria-label={`Recibir ${contar(g.prestamos.length, "equipo")} de ${g.nombre}`}
-                onClick={() => recibir.mutate(g.prestamos.map((p) => p.id))}
-              >
-                {g.prestamos.length === 1 ? "Recibir" : `Recibir las ${g.prestamos.length}`}
-              </Button>
-            </div>
 
-            {/* Cada máquina, una casilla. Que no volvieron todas juntas es lo
+              {/* Cada máquina, una casilla. Que no volvieron todas juntas es lo
                 normal —falta una, alguien se la olvidó—, así que recibir de a
                 una tiene que seguir siendo un clic y no un menú. */}
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-              {g.prestamos.map((p) => (
-                <label key={p.id} className="flex items-center gap-1.5 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={marcados.has(p.id)}
-                    aria-label={`Seleccionar ${nombreDeEquipo(p)}`}
-                    onChange={() => alternar(p.id)}
-                  />
-                  <span className="min-w-0 break-words">
-                    {nombreDeEquipo(p)}
-                    {p.retiradoPor && (
-                      <span className="text-muted-foreground"> · retiró {p.retiradoPor}</span>
-                    )}
-                  </span>
-                </label>
-              ))}
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                {g.prestamos.map((p) => (
+                  <label key={p.id} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      disabled={!consultaLista || recibir.isPending}
+                      checked={marcados.has(p.id)}
+                      aria-label={`Seleccionar ${nombreDeEquipo(p)}`}
+                      onChange={() => alternar(p.id)}
+                    />
+                    <span className="min-w-0 break-words">
+                      {nombreDeEquipo(p)}
+                      {p.retiradoPor && (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · retiró {p.retiradoPor}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
 
         {marcados.size > 0 && (
           <div className="grid gap-2 rounded-md border border-dashed p-3">
@@ -245,18 +271,39 @@ export function LoQueEstaAfuera({ compacto = false }: { compacto?: boolean }) {
                   vez, así que si es de una sola máquina conviene recibirla
                   aparte con su botón. */}
               <p className="text-muted-foreground text-xs">
-                Se guarda en las {marcados.size} que recibas juntas. Si es sobre una sola,
-                recibila con su propio botón.
+                Se guarda únicamente al recibir las {marcados.size} seleccionadas. Los
+                botones para recibir un grupo completo no aplican esta observación.
               </p>
             </div>
             <div>
               <Button
-                disabled={recibir.isPending}
-                onClick={() => recibir.mutate([...marcados])}
+                disabled={recibir.isPending || !consultaLista || !seleccionValida}
+                onClick={() => {
+                  if (consultaLista && seleccionValida && !recibir.isPending)
+                    recibir.mutate({
+                      ids: [...marcados],
+                      nota: observaciones.trim() || undefined,
+                    })
+                }}
               >
-                Recibir las {marcados.size} seleccionadas
+                Recibir {contar(marcados.size, "equipo")}{" "}
+                {plural(marcados.size, "seleccionado", "seleccionados")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="ml-2"
+                onClick={() => setMarcados(new Set())}
+              >
+                Limpiar la selección
               </Button>
             </div>
+            {!seleccionValida && (
+              <p className="text-sm">
+                Cambió la lista de entregas abiertas. Limpiá la selección y revisá cuáles
+                siguen afuera.
+              </p>
+            )}
           </div>
         )}
       </CardContent>

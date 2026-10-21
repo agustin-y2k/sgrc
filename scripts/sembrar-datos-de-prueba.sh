@@ -28,9 +28,9 @@
 set -eu
 
 API="${API:-http://localhost:8080}"
-ADMIN_EMAIL="${ADMIN_EMAIL:-admin@tuinstitucion.edu.ar}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@example.org}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-cambiar_inmediatamente}"
-DOCENTE_EMAIL="${DOCENTE_EMAIL:-docente@escuela.edu.ar}"
+DOCENTE_EMAIL="${DOCENTE_EMAIL:-docente@escuela.test}"
 DOCENTE_PASSWORD="${DOCENTE_PASSWORD:-docente_password_123}"
 ANIO="${ANIO:-$(date +%Y)}"
 CANTIDAD_EQUIPOS="${CANTIDAD_EQUIPOS:-8}"

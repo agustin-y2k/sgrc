@@ -7,41 +7,33 @@
 ```mermaid
 sequenceDiagram
     actor U as Docente nuevo
-    participant FE as Frontend
-    participant AUTH as auth (paquete)
-    participant EB as eventbus (in-process)
-    participant NOTIF as notification (paquete)
-    participant DB as sgrc_db
-
-    U->>FE: nombre, apellido, email, password<br/>+ cargo y titular/suplente (obligatorios)<br/>+ qué curso y materia va a dictar (opcional, solo docentes)
-    FE->>AUTH: POST /api/auth/registro
-    AUTH->>DB: SELECT usuario WHERE lower(email) = lower($1)
-    alt Email libre
-        AUTH->>DB: INSERT usuario (rol=DOCENTE, estado=PENDIENTE,<br/>cargo_solicitado, rol_solicitado,<br/>curso_solicitado, materia_solicitada)
-        AUTH->>EB: Publish("docente.registro.pendiente", { usuarioId, nombre, apellido })
-        EB->>NOTIF: Publish es sincrónico; el handler se va a su propia goroutine
-        NOTIF->>DB: SELECT usuario WHERE rol=ADMIN AND estado=APROBADA
-        NOTIF->>DB: INSERT notificación tipo=DOCENTE_PENDIENTE para cada Admin (RF-05.6)
-        AUTH-->>FE: 201 Cuenta creada, pendiente de aprobación
-    else Email pertenece a una cuenta en BAJA
-        AUTH-->>FE: 409 "Este email pertenece a una cuenta dada de baja — pedile a un Admin que la elimine"
-    else Email ya registrado (cuenta activa)
-        AUTH-->>FE: 409 Email ya registrado
+    participant API as auth
+    participant DB as PostgreSQL
+    participant W as Worker outbox
+    participant NOT as notification
+    U->>API: POST /api/auth/registro
+    API->>API: Validar datos, declaración y contraseña
+    API->>DB: BEGIN e INSERT usuario DOCENTE/PENDIENTE
+    API->>DB: Emitir evento docente.registro.pendiente en evento_pendiente
+    alt Cuenta y evento guardados
+        API->>DB: COMMIT
+        API-->>U: 201 Cuenta pendiente de aprobación
+        W->>DB: Leer evento pendiente y BEGIN de entrega
+        W->>NOT: Crear avisos para admins aprobados
+        NOT->>DB: INSERT notificaciones
+        W->>DB: Marcar evento procesado y COMMIT
+    else Email duplicado o fallo de persistencia
+        API->>DB: ROLLBACK
+        API-->>U: 409 por duplicado, o error de infraestructura
     end
-    FE-->>U: Mensaje según corresponda
 ```
 
-> **Lo que declara al registrarse no es una referencia.** `curso_solicitado`
-> y `materia_solicitada` son texto libre: la persona todavía no está
-> autenticada, así que no puede elegir de una lista, y lo que escribe puede
-> no existir en el sistema — de hecho el Admin quizás lo tenga que crear al
-> aprobarla. Es lo que la pantalla de aprobación muestra para que sepa a qué
-> asignarla (RF-02.6).
-
-> **La notificación lleva `tipo`**, no solo texto: es lo que le permite a la
-> pantalla del Admin ofrecer "ir a aprobar" sin interpretar el mensaje. Si la
-> acción dependiera de la redacción, cambiarle una palabra al aviso rompería
-> el botón.
+La declaración de curso/materia se conserva como texto, no como asignación.
+La ruta pública `GET /api/registro/opciones` ofrece nombres del ciclo activo,
+pero registrarse no concede permisos para reservar ni administrar. Los avisos
+internos tienen entrega durable; el correo es una copia de cortesía posterior
+al commit, con un intento. Un fallo del consumidor conserva el evento para
+reintentar sin confirmar avisos parciales.
 
 ## 1. Login
 
@@ -67,7 +59,7 @@ sequenceDiagram
             FE-->>U: Pantalla forzada de cambio de contraseña (no deja operar el resto del sistema)
             U->>FE: passwordActual + passwordNueva
             FE->>APP: POST /api/auth/cambiar-password
-            APP->>DB: UPDATE usuario SET password_hash=..., debe_cambiar_password=false
+            APP->>DB: UPDATE condicionado: password_hash, debe_cambiar_password=false, version_sesion=version_sesion+1
             APP-->>FE: 200 + JWT nuevo (el anterior lleva dcp=true congelado)
             FE-->>U: Dashboard
         else debeCambiarPassword == false
@@ -85,7 +77,7 @@ sequenceDiagram
 > cuando expira su token (ver `09-seguridad-rbac.md` §1). El rol que vale es
 > el de la base, no el del token.
 
-> El JWT se emite igual con la contraseña temporal — `debeCambiarPassword` es una bandera que el frontend usa para bloquear la navegación hasta que se cambie, no una restricción a nivel de token.
+> El middleware exige HS256, expiración y cuenta vigente, con su rol y versión de sesión actuales. Un token con contraseña temporal sólo puede leer `/api/mi-perfil` y cambiar la contraseña; el resto responde 403. La restricción se aplica en el backend.
 
 ## 2. Reservar equipos (uno o varios, en un solo grupo)
 
@@ -99,31 +91,34 @@ sequenceDiagram
 
     U->>FE: Selecciona materia, fecha, horario
     Note over FE: Antes de la franja no hay lista que mostrar
-    FE->>RES: GET /api/equipos-disponibles?fecha&horaInicio&horaFin
+    FE->>RES: GET /api/equipos-disponibles?materiaId&fecha&horaInicio&horaFin
     RES->>INV: Listar equipos DISPONIBLE y reservables
     RES->>DB: SELECT reservas y bloqueos que pisan esa franja
-    RES-->>FE: { data: libres para tildar, ocupados: con docente/materia/franja o motivo }
-    U->>FE: Tilda los equipos que necesita (uno o varios)
-    FE->>RES: POST /api/reservas { materiaId, fecha, horaInicio, horaFin, equipoIds: [...] }
+    RES-->>FE: Libres y ocupados, con puedeTomarse y puedePedirse
+    U->>FE: Tilda equipos libres o tomables por prioridad
+    FE-->>U: Explica alcance, reposición y posibles faltantes
+    U->>FE: Confirma la reserva
+    FE->>RES: POST /api/reservas con equipoIds y equiposATomar
     RES->>RES: Verifica permiso sobre la materia (rol + docente_materia)
-    RES->>DB: INSERT reserva_grupo (CONFIRMADA)
-    loop por cada equipoId
-        RES->>DB: INSERT reserva (EXCLUDE constraint valida solapamiento por equipo)
-    end
-    alt Todos los equipos sin solapamiento
-        DB-->>RES: OK
-        RES-->>FE: 201 { reservaGrupoId, equiposConfirmados: N }
-        FE-->>U: ✅ Reserva confirmada (N equipos)
-    else Algún equipo con solapamiento
-        DB-->>RES: Constraint violation en ese equipo puntual
-        RES->>DB: SELECT reserva en conflicto para ese equipo
-        RES->>DB: ROLLBACK — no se confirma ningún equipo del grupo
+    RES->>DB: BEGIN y coordinación del lote
+    RES->>RES: Valida jornada, fechas y conflictos actuales
+    alt Sin conflictos no autorizados
+        opt Hay tomas autorizadas por prioridad
+            RES->>RES: Planifica reposiciones en cascada para el horario completo
+            RES->>DB: Reasigna sustitutos y cancela faltantes puntuales
+        end
+        RES->>DB: Crea grupo y reservas, valida exclusión de solapamientos
+        RES->>DB: Guarda auditoría y eventos pendientes, COMMIT
+        RES-->>FE: 201 con grupo, reservas e impacto de desplazamientos
+        FE-->>U: Reserva confirmada y resumen de repuestos y faltantes
+    else Conflicto no autorizado o que no cumple las reglas
+        RES->>DB: ROLLBACK de la operación completa
         RES-->>FE: 409 "no se pudo reservar: PC 7 ya está reservado el 13/03 de 10:00 a 12:00 (Ada Lovelace)"
-        FE-->>U: ❌ El mensaje dice cuál destildar; se recarga la lista de libres
+        FE-->>U: El mensaje identifica el conflicto; se actualiza la disponibilidad
     end
 ```
 
-> La creación es transaccional: si un solo equipo del grupo tiene solapamiento, no se confirma ninguno. El cuerpo del 409 es texto plano —el backend usa el `ErrorHandler` por defecto de Fiber— pero ese texto **nombra el choque**: qué equipo, qué día, qué franja y con quién. El dato lo trae la misma consulta que lo detectó, así que no cuesta nada más.
+> La creación es transaccional: un conflicto no autorizado o que no cumple las reglas de prioridad impide confirmar el lote. Una toma autorizada puede reponer otras reservas en cascada o cancelar faltantes puntuales; el conjunto se confirma o revierte junto. El cuerpo del 409 es texto plano y nombra el choque: equipo, día, franja y responsable.
 
 > **La misma consulta responde las dos mitades.** Saber qué está libre en una franja exige leer las reservas y bloqueos que la pisan; devolver también quién tiene cada equipo tomado no agrega ninguna ida a la base, solo deja de descartar lo que ya se leyó (RF-04.11).
 
@@ -131,33 +126,30 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor U as Docente que necesita el equipo
-    participant FE as Frontend
-    participant RES as reservation (paquete)
-    participant EB as eventbus
-    participant NOT as notification (paquete)
-    actor D as Docente dueño de la reserva
-
-    U->>FE: En la lista de la franja, "pedir" sobre un equipo tomado
-    FE->>RES: POST /api/reservas/{id}/pedido-de-liberacion { mensaje? }
-    RES->>RES: ¿La reserva está CONFIRMADA y su franja todavía no empezó?
-    RES->>NOT: ¿Ya hay un pedido de este solicitante por esta reserva hoy?
-    alt Ya pidió hoy, o la reserva no admite pedido
-        RES-->>FE: 409 "ya le pediste esos equipos hoy" / "esa reserva ya empezó"
-        FE-->>U: ❌ No se manda nada
-    else Pedido válido
-        RES->>EB: reserva.pedido-de-liberacion
-        EB->>NOT: notificación interna al dueño (PEDIDO_DE_LIBERACION)
-        EB->>NOT: copia por correo (fuera del request)
-        NOT-->>D: 🔔 + ✉️ "Fulano necesita PC 3 y PC 4 el jueves de 10 a 12"
-        RES-->>FE: 202 Pedido enviado
-        FE-->>U: ✅ "Le avisamos. La reserva sigue siendo de él hasta que decida"
+    actor U as Solicitante autenticado
+    participant RES as reservation
+    participant DB as PostgreSQL
+    participant W as Worker outbox
+    participant NOT as notification
+    U->>RES: POST /api/reservas/{id}/pedido-de-liberacion
+    RES->>DB: BEGIN y bloquear reserva/grupo
+    RES->>RES: Verificar reserva ajena, confirmada y todavía no iniciada
+    RES->>DB: INSERT pedido_liberacion (reserva, solicitante, día)
+    alt Reclamo válido y único
+        RES->>DB: Persistir evento reserva.pedido-de-liberacion
+        RES->>DB: COMMIT
+        RES-->>U: 202 Pedido enviado
+        W->>NOT: Entregar evento pendiente al dueño de la reserva
+        NOT->>DB: Confirmar aviso y evento procesado juntos
+    else Repetido o reserva no habilitada
+        RES->>DB: ROLLBACK
+        RES-->>U: Error de negocio, sin aviso nuevo
     end
 ```
 
-> **El pedido no escribe nada sobre las reservas.** No hay tabla propia, no hay estado que resolver y quien pidió no queda con prioridad sobre el equipo: si el dueño lo libera, vuelve a la lista de libres para todos. La única fila que se crea es la notificación, y de paso es la que sostiene la regla de "un pedido por reserva, por solicitante y por día".
-
-> **El acuerdo ocurre afuera.** Lo que el sistema aporta es que el pedido llegue a alguien que quizá no se cruce con quien pide; lo que sigue —negociar, ceder, decir que no— no tiene por qué pasar por acá, y modelarlo costaría un flujo de aceptación con caducidad, carrera contra terceros y una pantalla de pendientes.
+El pedido no modifica la reserva ni concede prioridad. La tabla
+`pedido_liberacion` sostiene la unicidad diaria; borrar o leer un aviso no
+permite repetir el reclamo. La decisión de liberar sigue siendo del dueño.
 
 ## 3. Reserva recurrente (uno o varios equipos)
 
@@ -169,24 +161,38 @@ sequenceDiagram
     participant DB as sgrc_db
 
     U->>FE: Materia, equipos elegidos, día de semana, horario, rango de fechas
-    FE->>RES: POST /api/reservas/recurrentes { materiaId, equipoIds: [...], diaSemana, ... }
-    RES->>RES: Calcula todas las ocurrencias (cada fecha × cada equipo elegido)
-    RES->>DB: UNA consulta: todos los equipos × todas las fechas, un rango horario
-    alt Sin conflictos
-        DB-->>RES: []
-        RES->>DB: INSERT regla_recurrencia
-        loop por cada fecha calculada
-            RES->>DB: INSERT reserva_grupo (CONFIRMADA)
-            loop por cada equipo elegido
-                RES->>DB: INSERT reserva (CONFIRMADA)
-            end
+    U->>FE: Comprobar serie
+    FE->>RES: POST /api/reservas/recurrentes/previsualizar
+    RES->>RES: Contar ocurrencias sin recorrer el rango y exigir 1 a 45
+    RES->>DB: Consultar disponibilidad de todos los equipos y fechas
+    RES-->>FE: Fechas, puedeCrear y unión de equiposATomar, sin escrituras
+    alt La previsualización permite crear
+        opt Alguna fecha requiere tomar por prioridad
+            FE-->>U: Mostrar desplazamientos, reposición y posibles faltantes
+            U->>FE: Dar consentimiento explícito para las fechas indicadas
         end
-        RES-->>FE: 201 { reglaRecurrenciaId, fechasCreadas: [...] }
-        FE-->>U: ✅ N fechas × M equipos creados
-    else Con conflictos
-        DB-->>RES: [{ equipo, fecha, horario, docente }, ...]
-        RES-->>FE: 409 nombrando qué equipo choca y en qué fecha
-        FE-->>U: ❌ No se creó ninguna ocurrencia
+        Note over FE: Cambiar los datos invalida la comprobación y el consentimiento
+        U->>FE: Confirmar serie
+        FE->>RES: POST /api/reservas/recurrentes con equiposATomar autorizados
+        RES->>DB: BEGIN y coordinación de la operación
+        RES->>RES: Revalidar permisos, jornada y todas las fechas
+        alt Sin conflictos no autorizados en la creación
+            RES->>RES: Planificar reposiciones en cascada si corresponde
+            RES->>DB: Guardar reasignaciones y cancelaciones por faltantes
+            RES->>DB: INSERT regla_recurrencia
+            loop por cada fecha calculada
+                RES->>DB: INSERT reserva_grupo y sus reservas CONFIRMADA
+            end
+            RES->>DB: Guardar auditoría y eventos pendientes, COMMIT
+            RES-->>FE: 201 con reglaId, grupos e impacto de desplazamientos
+            FE-->>U: Serie creada, equipos repuestos y faltantes
+        else Disponibilidad cambió o toma no permitida
+            RES->>DB: ROLLBACK de la serie y la cadena
+            RES-->>FE: 409 con los conflictos
+            FE-->>U: No se creó ninguna ocurrencia
+        end
+    else Hay conflictos que impiden la serie
+        FE-->>U: Mostrar fechas y equipos bloqueados, sin crear reservas
     end
 ```
 
@@ -224,7 +230,7 @@ sequenceDiagram
     actor ADM as Admin
     participant FE as Frontend
     participant RES as reservation (paquete)
-    participant EB as eventbus (in-process)
+    participant EB as eventbus durable
     participant NOTIF as notification (paquete)
     participant DB as sgrc_db
 
@@ -237,8 +243,8 @@ sequenceDiagram
         RES->>DB: Recalcular estado de reserva_grupo (PARCIALMENTE_CANCELADA o CANCELADA)
     end
     RES->>DB: INSERT reserva tipo BLOQUEO con motivo_bloqueo (sin materia_id ni reserva_grupo_id) por cada equipo
-    RES->>EB: Publish("reserva.cancelada", { usuarioId, reservaId, motivo }) por reserva
-    EB->>NOTIF: Publish es sincrónico; el handler se va a su propia goroutine
+    RES->>EB: Emitir reserva.cancelada en la outbox de la misma transacción
+    EB->>NOTIF: Worker entrega después del commit; aviso y procesado atómicos
     NOTIF->>DB: INSERT notificación por docente, detallando qué equipos puntuales se cancelaron
     RES-->>FE: 201 { bloqueos: [...], reservasCanceladas: N, docentesNotificados: N }
     FE-->>ADM: ✅ Equipos bloqueados. N reservas puntuales canceladas.
@@ -250,9 +256,9 @@ sequenceDiagram
 > de punta a punta, la misma notificación con distinto motivo: cancelación
 > manual de un Admin, bloqueo administrativo, o equipo fuera de servicio. El
 > motivo ya viene armado desde `reservation`, así que `notification` no
-> necesita saber de dónde vino. Los eventos se publican **después del
-> commit**: si la transacción se deshace, nadie recibe el aviso de una
-> cancelación que no ocurrió.
+> necesita saber de dónde vino. El evento se persiste **en la misma
+> transacción** y el worker lo entrega después del commit. Un rollback elimina
+> también el evento; un fallo de entrega conserva su reintento.
 
 ## 6. Cambio de estado de un equipo individual → cascada de cancelación
 
@@ -261,7 +267,7 @@ sequenceDiagram
     actor ADM as Admin
     participant FE as Frontend
     participant INV as inventory (paquete)
-    participant EB as eventbus (in-process)
+    participant EB as eventbus durable
     participant NOTIF as notification (paquete)
     participant DB as sgrc_db
 
@@ -274,8 +280,8 @@ sequenceDiagram
         INV->>DB: UPDATE reserva SET estado=CANCELADA, cancelado_por=admin, motivo_cancelacion=(ingresado o por defecto)
         INV->>DB: Recalcular estado de reserva_grupo (PARCIALMENTE_CANCELADA o CANCELADA)
     end
-    INV->>EB: Publish("reserva.cancelada", { usuarioId, reservaId, motivo }) por reserva
-    EB->>NOTIF: Publish es sincrónico; el handler se va a su propia goroutine
+    INV->>EB: Emitir reserva.cancelada en la outbox de la misma transacción
+    EB->>NOTIF: Worker entrega después del commit; aviso y procesado atómicos
     NOTIF->>DB: INSERT notificación por docente, detallando que fue ese equipo puntual
     INV-->>FE: 200 { estado, reservasCanceladas: N, docentesNotificados: N }
     FE-->>ADM: ✅ Equipo actualizado. N reservas canceladas y docentes notificados.
@@ -333,92 +339,81 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor ADM as Admin
-    participant FE as Frontend
-    participant ACAD as academic (paquete)
-    participant RES as reservation (paquete)
-    participant REP as reporting (paquete)
-    participant DB as sgrc_db
-
-    ADM->>FE: Archivar ciclo {año} y clonar a {año+1}
-    FE->>ACAD: POST /api/ciclos/{id}/archivar { clonarA: año+1 }
-    ACAD->>REP: CalcularSnapshotAnual(cicloId) — antes de borrar nada
-    REP->>DB: SELECT agregados de reserva/reserva_grupo de las materias del ciclo
-    REP->>DB: INSERT historico_uso_equipo, historico_uso_docente (permanentes)
-    ACAD->>RES: EliminarReservasDeCiclo(cicloId)
-    RES->>DB: DELETE reserva WHERE reserva_grupo_id IN (SELECT id FROM reserva_grupo WHERE materia_id IN [...])
-    RES->>DB: DELETE reserva_grupo WHERE materia_id IN [...]
-    RES->>DB: DELETE regla_recurrencia WHERE materia_id IN [...]
-    RES->>DB: DELETE reserva WHERE tipo='BLOQUEO' AND año(fecha) = año del ciclo
-    Note over RES,DB: incidencia y prestamo NO se tocan — no dependen del ciclo
-    ACAD->>DB: UPDATE curso SET archivado=true WHERE ciclo_lectivo_id
-    ACAD->>DB: UPDATE materia SET archivado=true WHERE curso_id IN [...]
-    ACAD->>DB: UPDATE ciclo_lectivo SET archivado=true, activo=false
-    ACAD->>DB: INSERT ciclo_lectivo { anio: año+1, activo: true }
-    ACAD->>DB: INSERT cursos clonados (sin archivado, nuevos ids)
-    ACAD->>DB: INSERT materias clonadas (sin archivado, nuevos ids)
-    Note over ACAD,DB: DocenteMateria NO se clona
-    ACAD-->>FE: 200 { nuevoCicloId, cursosClonados, materiasClonadas, reservasEliminadas }
-    FE-->>ADM: ✅ Nuevo ciclo listo. Estadísticas del año anterior guardadas. Asignar docentes a materias.
+    actor A as Admin
+    participant AC as academic
+    participant RP as reporting
+    participant RS as reservation
+    participant DB as PostgreSQL
+    A->>AC: POST /api/ciclos/{id}/archivar con clonarA opcional
+    AC->>DB: BEGIN, coordinación exclusiva y ciclo FOR UPDATE
+    AC->>DB: Buscar cierre_ciclo
+    alt Cierre ya confirmado con el mismo destino
+        DB-->>AC: Resultado persistido
+        AC-->>A: 200 Mismo resultado
+    else Primera ejecución
+        AC->>AC: Validar ciclo y año de destino libre
+        AC->>RP: GuardarSnapshotDeCiclo con contexto transaccional
+        RP->>DB: Guardar históricos y sello snapshot_ciclo
+        AC->>DB: Archivar ciclo, cursos, espacios y materias
+        AC->>RS: EliminarReservasDeCiclo con el mismo contexto
+        RS->>DB: Borrar reservas, grupos, reglas y bloqueos del año
+        opt Se pidió clonar
+            AC->>DB: Crear ciclo activo y clonar cursos, espacios y materias
+        end
+        AC->>DB: Guardar resultado en cierre_ciclo y COMMIT
+        AC-->>A: 200 archivado, nuevoCicloId y conteos de clonado
+    end
 ```
 
-> Las reservas de las materias del ciclo archivado **se eliminan físicamente**, no quedan como historial en detalle. El snapshot histórico se calcula primero para no perder las estadísticas — `curso`/`materia`/`docente_materia` sí se preservan (`archivado=true`), porque eso es lo que evita recrearlos.
+Snapshot, archivo, limpieza y clonado comparten una transacción. Un fallo
+revierte todos los pasos. Repetir con otro destino responde 409; un archivo
+legado sin constancia también se rechaza. Los históricos quedan sellados
+antes de borrar su fuente. Se conservan estructura, asignaciones, incidencias
+y préstamos; al borrar reservas, sus referencias en préstamos pueden quedar
+nulas. Las asignaciones docentes no se clonan.
 
-## 8. Dar de baja a un docente (permanente)
+## 8. Dar de baja a un docente (permanente y recuperable)
 
 ```mermaid
 sequenceDiagram
-    actor ADM as Admin
-    participant FE as Frontend
-    participant AUTH as auth (paquete)
-    participant ACAD as academic (paquete)
-    participant RES as reservation (paquete)
-    participant EB as eventbus (in-process)
-    participant NOTIF as notification (paquete)
-    participant DB as sgrc_db
-
-    ADM->>FE: Da de baja a un docente
-    FE->>AUTH: PATCH /api/auth/usuarios/{id}/estado { estado: BAJA }
-    AUTH->>DB: UPDATE usuario SET estado=BAJA WHERE id={id}
-    AUTH->>ACAD: ObtenerMateriasDeDocente(usuarioId) — llamada directa vía interfaz
-    ACAD-->>AUTH: [materiaId, ...]
-    loop por cada materia
-        AUTH->>ACAD: ¿Queda otro DocenteMateria con usuario APROBADA en esta materia?
-        alt Queda otro docente activo
-            ACAD-->>AUTH: Sí
-            AUTH->>EB: Publish("docente.baja.notificar_admin", { usuarioId, materiaId })
-        else No queda ningún docente
-            ACAD-->>AUTH: No
-            AUTH->>RES: CancelarReservasFuturasDeMateria(materiaId)
-            RES->>DB: UPDATE reserva SET estado=CANCELADA<br/>WHERE materia_id={materiaId} AND (fecha + hora_fin) > ahora
-            AUTH->>EB: Publish("docente.baja.materia-huerfana", { usuarioId, materiaId, reservasCanceladas })
+    actor A as Admin
+    participant AU as auth
+    participant AC as academic
+    participant RS as reservation
+    participant DB as PostgreSQL
+    A->>AU: PATCH estado=BAJA
+    AU->>DB: Transacción de preparación: BAJA y materias pendientes
+    Note over AU,DB: La cuenta pierde acceso desde este commit
+    loop Cada materia todavía pendiente
+        AU->>DB: BEGIN con coordinación exclusiva y bloqueo por usuario
+        AU->>AC: Verificar otros docentes aprobados
+        opt La materia quedó sin docente activo
+            AU->>RS: Cancelar reservas futuras con el mismo contexto
+            RS->>DB: Actualizar reservas y grupos
+            AU->>DB: Persistir evento docente.baja.materia-huerfana
         end
+        AU->>DB: Marcar materia completada y COMMIT
     end
-    AUTH->>ACAD: EliminarDocenteMateria(usuarioId) — recién ahora, después de resolver el destino de las reservas
-    ACAD->>DB: DELETE FROM docente_materia WHERE usuario_id={usuarioId}
-    EB->>NOTIF: Publish es sincrónico; los handlers se van a su propia goroutine
-    NOTIF->>DB: INSERT notificación(es) a todos los ADMIN (aviso informativo o cancelación aplicada)
-    AUTH-->>FE: 200
-    FE-->>ADM: ✅ Docente dado de baja. Revisar notificaciones si hay materias afectadas.
+    alt Todas las materias completadas
+        AU->>DB: Transacción final: remover vínculos y completar baja
+        AU-->>A: 200
+    else Una materia o la limpieza falló
+        AU-->>A: 409 Baja pendiente; repetir estado=BAJA
+    end
 ```
 
-> El orden importa por dos razones. `EliminarDocenteMateria` corre **después**
-> del loop que revisa cada materia: si se borrara primero, la pregunta "¿queda
-> otro docente activo?" ya no tendría con qué compararse. Y las cancelaciones
-> van antes de borrar los vínculos, porque la cascada cruza a `reservation`
-> con su propia transacción y el conjunto no puede ser atómico: si algo falla,
-> los vínculos se conservan y el error dice qué materias quedaron pendientes,
-> en vez de dejar reservas vivas en materias que ya nadie sabe cuáles eran.
+`baja_usuario` y `baja_usuario_materia` conservan el avance después de un
+reinicio. Cada materia confirma cancelaciones, evento y avance juntos; el
+reintento omite las completadas. Si queda otro docente activo no se cancela
+ni avisa. La eliminación definitiva queda bloqueada hasta terminar la baja.
+Los eventos confirmados se entregan por el worker durable.
 
-> **RF-02.10 hace lo mismo por el otro camino.** Quitar a un docente de **una
-> sola** materia (`DELETE /materias/{id}/docentes/{dmId}`) llega al mismo
-> estado —materia sin nadie a cargo, con reservas futuras vivas— así que
-> dispara la misma cascada, con el mismo orden (cancelar y después borrar el
-> vínculo) y su propio evento, `docente.desasignado.materia-huerfana`. La
-> respuesta devuelve `reservasCanceladas` para que el Admin sepa qué se llevó
-> puesto.
+Remover una asignación puntual usa otra operación exclusiva: elimina el
+vínculo, comprueba docentes activos restantes y, si corresponde, cancela y
+emite `docente.desasignado.materia-huerfana` en una sola transacción. Un fallo
+restaura también el vínculo. El resto de materias y la cuenta se conservan.
 
-## 8b. Eliminar definitivamente una cuenta en BAJA
+## 8b. Eliminar definitivamente una cuenta cerrada
 
 ```mermaid
 sequenceDiagram
@@ -430,9 +425,9 @@ sequenceDiagram
     ADM->>FE: Elimina definitivamente una cuenta en BAJA
     FE->>AUTH: DELETE /api/auth/usuarios/{id}
     AUTH->>DB: SELECT estado FROM usuario WHERE id={id}
-    alt estado != BAJA
+    alt Cuenta no terminal o baja todavía pendiente
         AUTH-->>FE: 409 Solo se puede eliminar una cuenta en BAJA
-    else estado == BAJA
+    else BAJA completada o RECHAZADA
         AUTH->>DB: DELETE FROM usuario WHERE id={id}
         Note over AUTH,DB: docente_materia y notificaciones propias caen en CASCADE.<br/>reserva_grupo.creado_por, reserva.creado_por/cancelado_por,<br/>incidencia.reportado_por, usuario.aprobado_por quedan en NULL (SET NULL).
         AUTH-->>FE: 200 sin cuerpo
@@ -454,7 +449,7 @@ sequenceDiagram
     participant RES as reservation
     participant AV as availability
     participant INV as inventory
-    participant EB as eventbus
+    participant EB as eventbus durable
     participant DB as sgrc_db
 
     loop cada 5 minutos
@@ -538,3 +533,12 @@ sequenceDiagram
 > desde la 1.18.0 **sí decide si el barrido automático puede sacar
 > conclusiones** — es la misma consulta que responde `MostradorEn`. Un horario
 > mal cargado ya no es solo una pantalla que miente.
+
+## Contrato transaccional común
+
+Las secuencias resumen los casos de uso; los locks y triggers transversales
+se detallan en `06-arquitectura.md`. En producción, cambios sensibles y
+auditoría se confirman juntos. Los eventos internos se persisten con su
+operación y el worker confirma aviso/procesado juntos. El correo mantiene un
+intento posterior al commit. Esto también aplica a los barridos: sus marcas
+y eventos comparten transacción, sin publicar avisos de marcas revertidas.

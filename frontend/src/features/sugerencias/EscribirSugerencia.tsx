@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { useLocation } from "react-router"
 
@@ -34,16 +34,18 @@ export function EscribirSugerencia({
   const [texto, setTexto] = useState("")
   const [error, setError] = useState("")
   const [enviada, setEnviada] = useState(false)
+  const ocupado = useIsMutating({ mutationKey: ["sugerencias", "editar"] }) > 0
 
   const escribir = useMutation({
+    mutationKey: ["sugerencias", "editar"],
     mutationFn: () =>
       sugerenciasApi.escribir(tipo, asunto, texto, pantallaPrevia ?? location.pathname),
-    onSuccess: () => {
+    onSuccess: async () => {
       setError("")
       setAsunto("")
       setTexto("")
       setEnviada(true)
-      qc.invalidateQueries({ queryKey: ["sugerencias"] })
+      await qc.invalidateQueries({ queryKey: ["sugerencias"] })
       onEnviada?.()
     },
     onError: (e) => setError(getErrorMessage(e)),
@@ -51,24 +53,24 @@ export function EscribirSugerencia({
 
   return (
     <div className="grid gap-3">
-      {enviada && (
+      {enviada && !onEnviada && (
         <Alert>
-          <AlertDescription>
-            Llegó. Te van a contestar acá mismo, y también te avisamos por correo.
-          </AlertDescription>
+          <AlertDescription>Llegó. Te van a contestar acá mismo.</AlertDescription>
         </Alert>
       )}
 
       <div className="grid gap-1.5">
-        <Label>¿Qué necesitás?</Label>
+        <p className="text-sm font-medium">¿Qué necesitás?</p>
         <div className="flex flex-wrap gap-2">
           {TIPOS.map((t) => (
             <Button
               key={t}
               type="button"
               variant={tipo === t ? "default" : "outline"}
+              aria-pressed={tipo === t}
               size="sm"
               className="h-11 px-4 sm:h-9"
+              disabled={ocupado}
               onClick={() => setTipo(t)}
             >
               {ETIQUETA_TIPO[t]}
@@ -85,6 +87,7 @@ export function EscribirSugerencia({
         <Input
           id="asunto-sugerencia"
           value={asunto}
+          disabled={ocupado}
           maxLength={150}
           onChange={(e) => setAsunto(e.target.value)}
           placeholder="Ej.: No me aparecen computadoras para el jueves"
@@ -100,6 +103,8 @@ export function EscribirSugerencia({
           id="texto-sugerencia"
           rows={5}
           value={texto}
+          maxLength={4000}
+          disabled={ocupado}
           onChange={(e) => setTexto(e.target.value)}
           placeholder="Ej.: Cuando quiero reservar para el jueves no me aparece ninguna computadora, y sé que hay libres."
           className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-2.5 py-2 text-base transition-colors outline-none focus-visible:ring-3 md:text-sm"
@@ -121,7 +126,7 @@ export function EscribirSugerencia({
           type="button"
           size="sm"
           className="h-11 px-4 sm:h-9"
-          disabled={asunto.trim() === "" || texto.trim() === "" || escribir.isPending}
+          disabled={asunto.trim() === "" || texto.trim() === "" || ocupado}
           onClick={() => escribir.mutate()}
         >
           {escribir.isPending ? "Mandando…" : "Mandar"}

@@ -3,6 +3,7 @@ package application
 import "errors"
 
 var (
+	ErrDestinatarioInexistente  = errors.New("el destinatario fue eliminado")
 	ErrNotificacionNoEncontrada = errors.New("notificación no encontrada")
 	// ErrNoEsTuAviso: alguien quiso cerrar un aviso ajeno. No es un 404 a
 	// propósito —la notificación existe— y es una regla del dominio: quién puede

@@ -30,6 +30,7 @@ var (
 		MaxLargoModalidadPreferencia)
 	ErrDivisionPreferenciaInvalida = fmt.Errorf("la división no puede estar vacía ni tener más de %d caracteres",
 		MaxLargoDivisionPreferencia)
+	ErrCursoExactoSinAnio    = errors.New("un curso concreto requiere su año")
 	ErrPrioridadInvalida     = fmt.Errorf("la prioridad tiene que estar entre 1 y %d", MaxPrioridadPreferencia)
 	ErrPreferenciaDuplicada  = errors.New("este equipo ya tiene una marca para esa materia y ese alcance")
 	ErrPreferenciaNoEncontr  = errors.New("la marca de preferencia no existe")
@@ -45,16 +46,15 @@ type PreferenciaDeEquipo struct {
 	// es lo que se muestra ("Preferente para Dibujo Técnico").
 	MateriaNombre string
 
-	// Modalidad, Anio y Division acotan el alcance. Son los tres datos que
-	// tiene un curso (RF-02.2) y son INDEPENDIENTES entre sí: cada uno se
-	// sostiene solo y se pueden combinar. "Matemática de Electromecánica" es
-	// un alcance válido sin decir de qué año, y para acotar a 4°2 se ponen el
-	// año y la división.
-	//
-	// Los tres en nil = toda materia con ese nombre, en cualquier curso.
+	// Modalidad, Anio y Division delimitan el curso al que pertenece la materia.
+	// En reglas generales (CursoExacto=false), cada eje nil significa todos.
+	// En cursos concretos (CursoExacto=true), año es obligatorio y un eje nil
+	// exige que el curso tampoco tenga ese atributo: no es un comodín.
 	Modalidad *string
 	Anio      *int
 	Division  *string
+	// CursoExacto distingue un atributo ausente de un comodín.
+	CursoExacto bool
 
 	// Prioridad ordena entre varias marcas del mismo equipo: 1 es la más fuerte.
 	Prioridad int
@@ -77,7 +77,11 @@ func textoAcotado(valor *string, maxLargo int, invalido error) (*string, error) 
 
 // NuevaPreferencia valida y arma la marca.
 func NuevaPreferencia(id, equipoID, materiaNombre string, modalidad *string, anio *int,
-	division *string, prioridad int) (*PreferenciaDeEquipo, error) {
+	division *string, prioridad int, cursoExacto ...bool) (*PreferenciaDeEquipo, error) {
+	exacto := len(cursoExacto) > 0 && cursoExacto[0]
+	if exacto && anio == nil {
+		return nil, ErrCursoExactoSinAnio
+	}
 	// Normalizar antes de validar: un nombre de puros espacios pasaría el
 	// "no vacío" y chocaría contra el CHECK de la base como un 500.
 	materiaNombre = strings.TrimSpace(materiaNombre)
@@ -112,6 +116,7 @@ func NuevaPreferencia(id, equipoID, materiaNombre string, modalidad *string, ani
 		Anio:          anio,
 		Division:      division,
 		Prioridad:     prioridad,
+		CursoExacto:   exacto,
 	}, nil
 }
 
@@ -140,5 +145,15 @@ func (p *PreferenciaDeEquipo) Alcance() string {
 	if len(partes) == 0 {
 		return p.MateriaNombre
 	}
-	return p.MateriaNombre + " de " + strings.Join(partes, ", ")
+	alcance := p.MateriaNombre + " de " + strings.Join(partes, ", ")
+	if p.CursoExacto {
+		if p.Modalidad == nil {
+			alcance += ", sin modalidad"
+		}
+		if p.Division == nil {
+			alcance += ", sin división"
+		}
+		alcance += " (curso concreto)"
+	}
+	return alcance
 }

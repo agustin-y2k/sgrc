@@ -87,7 +87,12 @@ export function ImpactoDeLaJornada({
       )}
 
       {equipos > 0 && (
-        <div className="max-h-60 overflow-y-auto rounded-md border">
+        <div
+          className="max-h-60 overflow-y-auto rounded-md border"
+          tabIndex={0}
+          role="region"
+          aria-label="Clases afectadas por el cambio de jornada"
+        >
           <ul className="divide-y text-sm">
             {impacto.reservas.map((r) => (
               <li key={r.id} className="px-3 py-1.5">

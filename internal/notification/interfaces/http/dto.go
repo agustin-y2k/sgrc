@@ -5,12 +5,14 @@ package http
 import (
 	"time"
 
-	"github.com/ramiro/sgrc/internal/notification/domain"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/notification/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
 )
 
 type notificacionResponse struct {
 	ID        string  `json:"id"`
+	PedidoID  *string `json:"pedidoId,omitempty"`
+	HiloID    *string `json:"hiloId,omitempty"`
 	ReservaID *string `json:"reservaId,omitempty"`
 	Mensaje   string  `json:"mensaje"`
 	// Tipo le permite a la interfaz ofrecer la acción que corresponde
@@ -23,7 +25,7 @@ type notificacionResponse struct {
 
 func toNotificacionResponse(n *domain.Notificacion) notificacionResponse {
 	return notificacionResponse{
-		ID: n.ID, ReservaID: n.ReservaID, Mensaje: n.Mensaje, Tipo: string(n.Tipo),
+		ID: n.ID, PedidoID: n.PedidoID, HiloID: n.HiloID, ReservaID: n.ReservaID, Mensaje: n.Mensaje, Tipo: string(n.Tipo),
 		Estado: string(n.Estado), CreadaEn: n.CreadaEn, LeidaEn: n.LeidaEn,
 	}
 }
@@ -86,8 +88,8 @@ var textoDeCategoria = map[domain.CategoriaEmail]struct{ etiqueta, descripcion s
 		"Cuando el equipo de administración responde algo que preguntaste desde \"Pedir ayuda\". No se puede desactivar: pediste ayuda y estás esperando; un aviso que espera a que entres a mirar no sirve para eso.",
 	},
 	domain.CatReservaCancelada: {
-		"Te cancelaron una computadora",
-		"Cuando una computadora que tenías reservada se cancela: pasó a mantenimiento, se rompió, o se bloqueó la franja para un acto o una evaluación. Cancela solo las máquinas que nombra, no toda la clase.",
+		"Cambios en los equipos de tus reservas",
+		"Cuando se reemplazan o cancelan equipos de tus reservas, por prioridad de otra materia, mantenimiento o un bloqueo administrativo. El aviso identifica los equipos afectados.",
 	},
 	domain.CatPedidoDeLiberacion: {
 		"Alguien te pide una computadora que reservaste",

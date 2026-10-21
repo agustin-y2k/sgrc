@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page } from "@playwright/test"
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test"
 
 /**
  * Credenciales de un docente ya aprobado y asignado a al menos una materia
@@ -9,15 +9,36 @@ import { expect, type APIRequestContext, type Page } from "@playwright/test"
  * que los E2E andan sin configurar nada contra un `make run`. Contra otra
  * base se pasan por entorno.
  */
-export const DOCENTE_EMAIL = process.env.E2E_DOCENTE_EMAIL ?? "docente@escuela.edu.ar"
+export const DOCENTE_EMAIL = process.env.E2E_DOCENTE_EMAIL ?? "docente@escuela.test"
 export const DOCENTE_PASSWORD = process.env.E2E_DOCENTE_PASSWORD ?? "docente_password_123"
 
 /** Loguea y espera a salir de /login. */
 export async function login(page: Page, email: string, password: string) {
   await page.goto("/login")
   await page.getByLabel(/email/i).fill(email)
-  await page.getByLabel(/contraseña/i).fill(password)
-  await page.getByRole("button", { name: /iniciar sesión/i }).click()
+  const campoPassword = page.getByLabel(/contraseña/i)
+  const ingresar = async () => {
+    await campoPassword.fill(password)
+    const respuesta = page.waitForResponse(
+      (r) =>
+        new URL(r.url()).pathname === "/api/auth/login" && r.request().method() === "POST"
+    )
+    await page.getByRole("button", { name: /iniciar sesión/i }).click()
+    const resultado = await respuesta
+    if (!resultado.ok()) await campoPassword.fill("")
+    return resultado
+  }
+  let respuesta = await ingresar()
+  if (respuesta.status() === 429) {
+    const indicado = Number(respuesta.headers()["retry-after"] ?? 60)
+    const espera = Number.isFinite(indicado) ? Math.max(1, Math.min(60, indicado)) : 60
+    test.setTimeout(test.info().timeout + espera * 1000 + 5000)
+    await page.waitForTimeout(espera * 1000)
+    respuesta = await ingresar()
+  }
+  expect(respuesta.status(), "El ingreso de la cuenta de prueba debe ser exitoso").toBe(
+    200
+  )
   await expect(page).not.toHaveURL(/\/login$/)
 }
 

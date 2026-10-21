@@ -3,8 +3,8 @@ package http
 import (
 	"time"
 
-	"github.com/ramiro/sgrc/internal/academic/application"
-	"github.com/ramiro/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/academic/application"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
 )
 
 // ── Requests ────────────────────────────────────────────────────────────
@@ -25,7 +25,8 @@ type resolverPedidoRequest struct {
 	// CursoID solo hace falta al aprobar un pedido de una materia que no
 	// existe: es dónde se la crea. El sistema no lo deduce del texto.
 	CursoID string `json:"cursoId,omitempty"`
-	// Rol con el que queda asignado. Vacío = TITULAR.
+	// Rol con el que queda asignado. Vacío = TITULAR si no hay docentes,
+	// SUPLENTE si ya hay alguien asignado.
 	Rol string `json:"rol,omitempty"`
 }
 
@@ -36,6 +37,7 @@ type pedidoResponse struct {
 	UsuarioID string `json:"usuarioId"`
 
 	MateriaID         *string `json:"materiaId,omitempty"`
+	MateriaCreadaID   *string `json:"materiaCreadaId,omitempty"`
 	CursoSolicitado   string  `json:"cursoSolicitado,omitempty"`
 	MateriaSolicitada string  `json:"materiaSolicitada,omitempty"`
 	// Cómo se llama la materia que ya existe, con su curso, para poder
@@ -48,7 +50,8 @@ type pedidoResponse struct {
 	// persona: en el perfil de quien pidió no se dibuja, ahí ya se sabe.
 	DocenteNombre string `json:"docenteNombre,omitempty"`
 	// EsMateriaNueva le dice a la pantalla que, para aprobar, hay que elegir
-	// en qué curso crear la materia.
+	// en qué curso crear la materia. Conserva la forma original del pedido,
+	// incluso después de aprobarlo; MateriaCreadaID vincula su resultado.
 	EsMateriaNueva bool `json:"esMateriaNueva"`
 
 	Motivo      string     `json:"motivo"`
@@ -73,6 +76,7 @@ func toPedidoResponse(p *domain.PedidoDeMateria) pedidoResponse {
 	return pedidoResponse{
 		ID: p.ID, UsuarioID: p.UsuarioID,
 		MateriaID: p.MateriaID, CursoSolicitado: p.CursoSolicitado,
+		MateriaCreadaID:   p.MateriaCreadaID,
 		MateriaSolicitada: p.MateriaSolicitada, EsMateriaNueva: p.EsMateriaNueva(),
 		Motivo: p.Motivo, Estado: string(p.Estado), Respuesta: p.Respuesta,
 		ResueltoPor: p.ResueltoPor, ResueltoEn: p.ResueltoEn, CreadoEn: p.CreadoEn,

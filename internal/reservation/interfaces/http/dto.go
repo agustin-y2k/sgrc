@@ -5,9 +5,9 @@ package http
 import (
 	"time"
 
-	"github.com/ramiro/sgrc/internal/reservation/application"
-	"github.com/ramiro/sgrc/internal/reservation/domain"
-	"github.com/ramiro/sgrc/internal/shared/paginacion"
+	"github.com/agustin-y2k/sgrc/internal/reservation/application"
+	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/paginacion"
 )
 
 // ── Requests ────────────────────────────────────────────────────────────
@@ -20,6 +20,11 @@ type crearReservaRequest struct {
 	HoraInicio string   `json:"horaInicio"`
 	HoraFin    string   `json:"horaFin"`
 	EquipoIDs  []string `json:"equipoIds"`
+	// EquiposATomar es el subconjunto de EquipoIDs que se eligió de la lista de
+	// OCUPADOS, sabiendo que había que desplazar a alguien (RF-03.21). Ausente
+	// —que es lo que manda hoy toda la aplicación— la reserva no desplaza nada
+	// y cualquier solapamiento la frena, como siempre.
+	EquiposATomar []string `json:"equiposATomar"`
 }
 
 type crearReservaRecurrenteRequest struct {
@@ -30,6 +35,9 @@ type crearReservaRecurrenteRequest struct {
 	FechaInicio string   `json:"fechaInicio"`
 	FechaFin    string   `json:"fechaFin"`
 	EquipoIDs   []string `json:"equipoIds"`
+	// EquiposATomar: ver crearReservaRequest. En una serie autoriza el
+	// desplazamiento en TODAS sus fechas, no sólo en la primera.
+	EquiposATomar []string `json:"equiposATomar"`
 }
 
 type cancelarReservaRequest struct {
@@ -143,11 +151,23 @@ func toReservaDetalladaResponse(d application.ReservaDetallada) reservaDetallada
 type crearReservaResponse struct {
 	Grupo    reservaGrupoResponse `json:"grupo"`
 	Reservas []reservaResponse    `json:"reservas"`
+	// Los dos del robo (RF-03.21): a cuántos desplazó esta reserva. Van en la
+	// respuesta de la creación y no en un aviso aparte porque es lo único que
+	// le dice a quien reservó que corrió a alguien; la pantalla no muestra el
+	// cero, que es el caso de casi todas las reservas.
+	ReservasCanceladas int `json:"reservasCanceladas"`
+	ReservasReubicadas int `json:"reservasReubicadas"`
+	DocentesAfectados  int `json:"docentesAfectados"`
 }
 
 type crearReservaRecurrenteResponse struct {
 	ReglaID string                 `json:"reglaId"`
 	Grupos  []reservaGrupoResponse `json:"grupos"`
+	// El impacto de la serie ENTERA: una recurrencia roba ocurrencia por
+	// ocurrencia y un solo click puede correr decenas de clases.
+	ReservasCanceladas int `json:"reservasCanceladas"`
+	ReservasReubicadas int `json:"reservasReubicadas"`
+	DocentesAfectados  int `json:"docentesAfectados"`
 }
 
 type cancelarOcurrenciaResponse struct {
@@ -274,6 +294,11 @@ type equipoOcupadoResponse struct {
 	// PuedePedirse lo decide el servidor: false en un bloqueo, en una reserva
 	// propia y si esa franja ya empezó.
 	PuedePedirse bool `json:"puedePedirse"`
+	// PuedeTomarse también lo decide el servidor, igual que PuedePedirse: si
+	// la materia para la que se está reservando le puede robar este equipo a
+	// quien lo tiene (RF-03.21). Que lo diga acá y no la pantalla es lo que
+	// evita ofrecer un robo que la creación después rechace.
+	PuedeTomarse bool `json:"puedeTomarse"`
 }
 
 func toEquipoOcupadoResponse(o application.EquipoOcupado) equipoOcupadoResponse {
@@ -282,7 +307,7 @@ func toEquipoOcupadoResponse(o application.EquipoOcupado) equipoOcupadoResponse 
 		ReservaID: o.ReservaID, DocenteNombre: o.DocenteNombre,
 		MateriaNombre: o.MateriaNombre, Motivo: o.Motivo,
 		HoraInicio: formatHora(o.HoraInicio), HoraFin: formatHora(o.HoraFin),
-		PuedePedirse: o.PuedePedirse,
+		PuedePedirse: o.PuedePedirse, PuedeTomarse: o.PuedeTomarse,
 	}
 }
 

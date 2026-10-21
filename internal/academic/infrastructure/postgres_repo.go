@@ -12,8 +12,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/academic/application"
-	"github.com/ramiro/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/academic/application"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 const codigoViolacionUnica = "23505"
@@ -63,7 +64,7 @@ func esViolacionFK(err error) bool {
 // ── Ciclo lectivo ───────────────────────────────────────────────────────
 
 func (r *PostgresRepo) CrearCiclo(ctx context.Context, c *domain.CicloLectivo) error {
-	_, err := r.pool.Exec(ctx,
+	_, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`INSERT INTO ciclo_lectivo (id, anio, activo, archivado) VALUES ($1, $2, $3, $4)`,
 		c.ID, c.Anio, c.Activo, c.Archivado)
 	if err != nil {
@@ -78,12 +79,12 @@ func (r *PostgresRepo) CrearCiclo(ctx context.Context, c *domain.CicloLectivo) e
 }
 
 func (r *PostgresRepo) BuscarCicloActivo(ctx context.Context) (*domain.CicloLectivo, error) {
-	row := r.pool.QueryRow(ctx, `SELECT id, anio, activo, archivado FROM ciclo_lectivo WHERE activo = true`)
+	row := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx, `SELECT id, anio, activo, archivado FROM ciclo_lectivo WHERE activo = true`)
 	return escanearCiclo(row)
 }
 
 func (r *PostgresRepo) BuscarCicloPorID(ctx context.Context, id string) (*domain.CicloLectivo, error) {
-	row := r.pool.QueryRow(ctx, `SELECT id, anio, activo, archivado FROM ciclo_lectivo WHERE id = $1`, id)
+	row := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx, `SELECT id, anio, activo, archivado FROM ciclo_lectivo WHERE id = $1`, id)
 	return escanearCiclo(row)
 }
 
@@ -102,7 +103,7 @@ func escanearCiclo(row pgx.Row) (*domain.CicloLectivo, error) {
 }
 
 func (r *PostgresRepo) GuardarCiclo(ctx context.Context, c *domain.CicloLectivo) error {
-	tag, err := r.pool.Exec(ctx,
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`UPDATE ciclo_lectivo SET anio=$2, activo=$3, archivado=$4 WHERE id=$1`,
 		c.ID, c.Anio, c.Activo, c.Archivado)
 	if err != nil {
@@ -127,7 +128,7 @@ func (r *PostgresRepo) GuardarCiclo(ctx context.Context, c *domain.CicloLectivo)
 // vacío; la violación de foránea se traduce igual, porque entre esa
 // verificación y este DELETE alguien pudo haber cargado un curso.
 func (r *PostgresRepo) EliminarCiclo(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM ciclo_lectivo WHERE id = $1`, id)
+	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `DELETE FROM ciclo_lectivo WHERE id = $1`, id)
 	if err != nil {
 		if esViolacionFK(err) {
 			return application.ErrCicloConCursos
@@ -152,7 +153,7 @@ func (r *PostgresRepo) ListarCiclos(ctx context.Context, filtroArchivado *bool) 
 	}
 	query += " ORDER BY anio DESC"
 
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listando ciclos: %w", err)
 	}
@@ -169,10 +170,10 @@ func (r *PostgresRepo) ListarCiclos(ctx context.Context, filtroArchivado *bool) 
 	return resultado, errorDeFilas(rows)
 }
 
-// ArchivarCiclo marca el ciclo y todos sus cursos/materias como archivados,
+// ArchivarCiclo marca el ciclo y todos sus cursos, espacios y materias como archivados,
 // en una sola transacción.
 func (r *PostgresRepo) ArchivarCiclo(ctx context.Context, cicloID string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.pool)
 	if err != nil {
 		return fmt.Errorf("iniciando transacción: %w", err)
 	}
@@ -200,8 +201,13 @@ func (r *PostgresRepo) ArchivarCiclo(ctx context.Context, cicloID string) error 
 	if _, err := tx.Exec(ctx, `
 		UPDATE materia SET archivado=true
 		WHERE curso_id IN (SELECT id FROM curso WHERE ciclo_lectivo_id=$1)
+		   OR espacio_id IN (SELECT id FROM espacio WHERE ciclo_lectivo_id=$1)
 	`, cicloID); err != nil {
 		return fmt.Errorf("archivando materias: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `UPDATE espacio SET archivado=true WHERE ciclo_lectivo_id=$1`, cicloID); err != nil {
+		return fmt.Errorf("archivando espacios: %w", err)
 	}
 
 	return tx.Commit(ctx)
@@ -210,7 +216,7 @@ func (r *PostgresRepo) ArchivarCiclo(ctx context.Context, cicloID string) error 
 // ClonarCicloA crea el nuevo ciclo lectivo y clona cursos+materias del
 // ciclo origen (sin docente_materia, RF-02.5), todo en una transacción.
 func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, nuevoCiclo *domain.CicloLectivo) (int, int, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pgtransaccion.Abrir(ctx, r.pool)
 	if err != nil {
 		return 0, 0, fmt.Errorf("iniciando transacción: %w", err)
 	}
@@ -384,7 +390,7 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 // asignaciones de años archivados con las de ahora, y las dos pantallas que la
 // usan hablan siempre de un ciclo concreto.
 func (r *PostgresRepo) ListarAsignaciones(ctx context.Context, cicloID string) ([]application.AsignacionDocente, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, `
 		SELECT dm.id, dm.usuario_id, u.nombre || ' ' || u.apellido, dm.rol,
 		       m.id, m.nombre, c.id, c.nombre, COALESCE(c.modalidad, '')
 		FROM docente_materia dm
@@ -433,7 +439,7 @@ func (r *PostgresRepo) ListarMateriasReservables(ctx context.Context, soloDelDoc
 	}
 	query += ` ORDER BY cl.anio DESC, c.modalidad NULLS FIRST, c.anio NULLS LAST, c.nombre, m.nombre`
 
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx, query, args...)
 	if err != nil {
 		if esIDInvalido(err) {
 			return nil, application.ErrIDInvalido

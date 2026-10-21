@@ -4,11 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/availability/domain"
+	"github.com/agustin-y2k/sgrc/internal/availability/domain"
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/.
 type Repo interface {
+	Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error
 	ListarBloquesDeUsuario(ctx context.Context, usuarioID string) ([]*domain.BloqueHorario, error)
 
 	// ListarBloquesDeUsuarios es la versión en lote para RF-07.2, indexada por

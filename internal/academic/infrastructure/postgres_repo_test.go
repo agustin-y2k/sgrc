@@ -13,9 +13,9 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/ramiro/sgrc/internal/academic/application"
-	"github.com/ramiro/sgrc/internal/academic/domain"
-	"github.com/ramiro/sgrc/internal/shared/testdb"
+	"github.com/agustin-y2k/sgrc/internal/academic/application"
+	"github.com/agustin-y2k/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/testdb"
 )
 
 func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
@@ -68,7 +68,7 @@ func insertarUsuarioDeTest(t *testing.T, pool *pgxpool.Pool, estado string) stri
 	_, err := pool.Exec(context.Background(), `
 		INSERT INTO usuario (id, nombre, apellido, email, password_hash, rol, estado)
 		VALUES ($1, 'Test', 'Docente', $2, 'hash-de-prueba', 'DOCENTE', $3)
-	`, id, id+"@escuela.edu.ar", estado)
+	`, id, id+"@escuela.test", estado)
 	if err != nil {
 		t.Fatalf("no se pudo insertar usuario de prueba: %v", err)
 	}
@@ -423,6 +423,10 @@ func TestPostgresRepo_AsignarYRemoverDocenteMateria_OK(t *testing.T) {
 	dm := domain.NuevoDocenteMateria(uuidNuevo(), usuarioID, materia.ID, domain.RolTitular)
 	if err := repo.AsignarDocente(ctx, dm); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
+	}
+	duplicada := domain.NuevoDocenteMateria(uuidNuevo(), usuarioID, materia.ID, domain.RolTitular)
+	if err := repo.AsignarDocente(ctx, duplicada); !errors.Is(err, application.ErrYaDictaLaMateria) {
+		t.Fatalf("la asignación duplicada debe ser un conflicto de negocio: %v", err)
 	}
 
 	docentes, err := repo.ListarDocentesDeMateria(ctx, materia.ID)

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
@@ -11,7 +12,9 @@ import * as authApi from "@/features/auth/api"
 import type { LoginResponse, Usuario } from "@/features/auth/types"
 import { ApiError, registrarManejadorDeSesionRechazada } from "@/lib/api-client"
 import { olvidarPedidoDescartado } from "@/features/admin/pedidoDeJornada"
-import { clearToken, getToken, setToken } from "@/lib/token-store"
+import { clearToken, getToken, setToken, TOKEN_KEY } from "@/lib/token-store"
+import { queryClient } from "@/lib/query-client"
+import { borrarBorradorReserva, descartarBorradorDeOtraCuenta } from "@/lib/borradores"
 
 type AuthContextValue = {
   user: Usuario | null
@@ -50,14 +53,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [errorDeSesion, setErrorDeSesion] = useState<string | null>(null)
   const [motivoDeCierre, setMotivoDeCierre] = useState<string | null>(null)
+  const solicitudActual = useRef(0)
+  const invalidarSolicitudes = useCallback(() => {
+    solicitudActual.current++
+  }, [])
+
+  const cerrarSesion = useCallback(() => {
+    solicitudActual.current++
+    if (getToken()) clearToken()
+    borrarBorradorReserva()
+    queryClient.clear()
+    olvidarPedidoDescartado()
+    setUser(null)
+    setIsLoading(false)
+    setErrorDeSesion(null)
+    setMotivoDeCierre(null)
+  }, [])
 
   // El backend puede rechazar el token en cualquier request, no solo en el
   // GET /me del arranque: la cuenta se dio de baja (RF-02.8), o alguien
   // cambió su contraseña y eso cerró las sesiones abiertas (RF-01.11).
   useEffect(() => {
     return registrarManejadorDeSesionRechazada((mensaje, motivo) => {
-      clearToken()
-      setUser(null)
+      cerrarSesion()
       // errorDeSesion se limpia a propósito: eso es "no pude verificar la
       // sesión, reintentá", y acá el backend sí contestó.
       setErrorDeSesion(null)
@@ -83,29 +101,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // por eso una pestaña abierta toda la noche amanecía con "token inválido
       // o expirado" en la pantalla.
     })
-  }, [])
+  }, [cerrarSesion])
 
   // Al bootear, si hay un token guardado, valida que siga siendo válido
   // contra el backend (no hay lista de revocación local — GET /me es la única
   // forma de confirmarlo) e hidrata el usuario completo.
   const loadUser = useCallback(async () => {
-    if (!getToken()) {
-      setUser(null)
-      setErrorDeSesion(null)
-      setIsLoading(false)
+    const token = getToken()
+    const solicitud = ++solicitudActual.current
+    if (!token) {
+      cerrarSesion()
       return
     }
+    setIsLoading(true)
     try {
       const usuario = await authApi.me()
+      if (solicitud !== solicitudActual.current || token !== getToken()) return
+      descartarBorradorDeOtraCuenta(usuario.id)
       setUser(usuario)
       setErrorDeSesion(null)
     } catch (err) {
+      if (solicitud !== solicitudActual.current || token !== getToken()) return
       const tokenRechazado =
         err instanceof ApiError && (err.status === 401 || err.status === 403)
       if (tokenRechazado) {
-        clearToken()
-        setUser(null)
-        setErrorDeSesion(null)
+        cerrarSesion()
       } else {
         // Se conserva el token a propósito: la sesión probablemente sigue
         // siendo válida, lo que falló es la conexión.
@@ -114,15 +134,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       throw err
     } finally {
-      setIsLoading(false)
+      if (solicitud === solicitudActual.current) setIsLoading(false)
     }
-  }, [])
+  }, [cerrarSesion])
 
   useEffect(() => {
     // El error ya quedó reflejado en el estado; acá se traga para no
     // generar una promesa rechazada sin manejar en el arranque.
     loadUser().catch(() => {})
-  }, [loadUser])
+    const alCambiarToken = (evento: StorageEvent) => {
+      if (
+        evento.storageArea !== localStorage ||
+        (evento.key !== TOKEN_KEY && evento.key !== null)
+      )
+        return
+      solicitudActual.current++
+      queryClient.clear()
+      olvidarPedidoDescartado()
+      setUser(null)
+      setMotivoDeCierre(null)
+      void loadUser().catch(() => {})
+    }
+    window.addEventListener("storage", alCambiarToken)
+    return () => {
+      invalidarSolicitudes()
+      window.removeEventListener("storage", alCambiarToken)
+    }
+  }, [loadUser, invalidarSolicitudes])
 
   // abrirSesion es lo que los dos caminos de ingreso (contraseña y Google)
   // tienen en común: el backend devuelve el mismo LoginResponse en ambos, así
@@ -136,7 +174,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // del lado del backend sin avisar acá.
         throw new Error("login sin token en la respuesta")
       }
+      queryClient.clear()
+      olvidarPedidoDescartado()
+      setUser(null)
       setToken(res.token)
+      borrarBorradorReserva()
       // El motivo del cierre anterior deja de tener sentido apenas se entra
       // de nuevo: si no, el cartel "tu sesión se cerró porque…" quedaría
       // colgado en el login después de un ingreso exitoso.
@@ -145,6 +187,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // muestra al usuario: tragarlo haría que el login pareciera exitoso y
       // dejara a la persona de vuelta en /login sin decir por qué.
       await loadUser()
+      if (getToken() !== res.token)
+        throw new ApiError(409, "La sesión cambió. Volvé a ingresar.")
       return { debeCambiarPassword: res.debeCambiarPassword }
     },
     [loadUser]
@@ -155,19 +199,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // computadora compartida de la escuela una sesión de un mes es exactamente
   // lo que no queremos dejar abierto sin que nadie lo haya pedido.
   const login = useCallback(
-    async (email: string, password: string, recordarme = false) =>
-      abrirSesion(await authApi.login({ email, password, recordarme })),
+    async (email: string, password: string, recordarme = false) => {
+      const solicitud = ++solicitudActual.current
+      const token = getToken()
+      const respuesta = await authApi.login({ email, password, recordarme })
+      if (solicitud !== solicitudActual.current || token !== getToken()) {
+        throw new ApiError(409, "La sesión cambió. Volvé a ingresar.")
+      }
+      return abrirSesion(respuesta)
+    },
     [abrirSesion]
   )
 
   const loginConGoogle = useCallback(
-    async (credential: string, recordarme = false) =>
-      abrirSesion(await authApi.loginConGoogle(credential, recordarme)),
+    async (credential: string, recordarme = false) => {
+      const solicitud = ++solicitudActual.current
+      const token = getToken()
+      const respuesta = await authApi.loginConGoogle(credential, recordarme)
+      if (solicitud !== solicitudActual.current || token !== getToken()) {
+        throw new ApiError(409, "La sesión cambió. Volvé a ingresar.")
+      }
+      return abrirSesion(respuesta)
+    },
     [abrirSesion]
   )
 
   const logout = useCallback(() => {
-    clearToken()
+    cerrarSesion()
     // El pedido de declarar la jornada vuelve en el próximo inicio: haberlo
     // postergado vale para esta sesión, no para la cuenta.
     olvidarPedidoDescartado()
@@ -175,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setErrorDeSesion(null)
     // Salir por decisión propia no necesita explicación en el login.
     setMotivoDeCierre(null)
-  }, [])
+  }, [cerrarSesion])
 
   const value = useMemo(
     () => ({

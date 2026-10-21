@@ -28,12 +28,20 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   const soloLectura = ciclo.archivado
   const cursosKey = ["cursos", ciclo.id]
 
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    error: errorConsulta,
+  } = useQuery({
     queryKey: cursosKey,
     queryFn: () => academicoApi.listarCursos(ciclo.id),
   })
 
-  const invalidar = () => queryClient.invalidateQueries({ queryKey: cursosKey })
+  const invalidar = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: cursosKey }),
+      queryClient.invalidateQueries({ queryKey: ["catalogo-prioridades"] }),
+    ])
 
   const crear = useMutation({
     mutationFn: () => academicoApi.crearCurso(ciclo.id, aDatosDeAPI(nuevo)),
@@ -64,6 +72,12 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   })
 
   if (isLoading) return <p className="text-muted-foreground text-sm">Cargando cursos…</p>
+  if (errorConsulta)
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{getErrorMessage(errorConsulta)}</AlertDescription>
+      </Alert>
+    )
 
   const cursos = data?.data ?? []
   const divisiones = divisionesEnUso(cursos)
@@ -71,7 +85,7 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
   const error = crear.error ?? editar.error ?? eliminar.error
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{getErrorMessage(error)}</AlertDescription>
@@ -92,13 +106,13 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
 
       {!soloLectura && (
         <form
-          className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end"
+          className="grid min-w-0 gap-2 sm:grid-cols-[1fr_auto] sm:items-end"
           onSubmit={(e) => {
             e.preventDefault()
             crear.mutate()
           }}
         >
-          <div className="grid gap-1.5">
+          <div className="grid min-w-0 gap-1.5">
             <p className="text-sm font-medium">Nuevo curso</p>
             <SelectorDeCurso
               idPrefijo={`curso-${ciclo.id}`}
@@ -126,10 +140,10 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
         const abierto = cursoAbierto === curso.id
 
         return (
-          <div key={curso.id} className="grid gap-2 rounded-md border p-3">
+          <div key={curso.id} className="grid min-w-0 gap-2 rounded-md border p-3">
             {editandoEste && editando ? (
               <form
-                className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end"
+                className="grid min-w-0 gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end"
                 onSubmit={(e) => {
                   e.preventDefault()
                   editar.mutate(editando)
@@ -155,12 +169,12 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
                 </Button>
               </form>
             ) : (
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                 {/* La modalidad al lado del nombre: dos carreras pueden tener
                     cada una su "1°A" y en la lista serían dos renglones
                     idénticos. */}
                 <span className="font-medium">{etiquetaDeCurso(curso)}</span>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex min-w-0 flex-wrap gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -194,14 +208,14 @@ export function CursosDeCiclo({ ciclo }: { ciclo: CicloLectivo }) {
             )}
 
             {eliminandoEste && (
-              <div className="grid gap-2 rounded-md border p-3">
+              <div className="grid min-w-0 gap-2 rounded-md border p-3">
                 {/* RF-02.11: eliminar un curso arrastra sus materias. El
                     backend lo rechaza si alguna tiene reservas. */}
                 <p className="text-destructive text-sm">
                   Eliminar «{etiquetaDeCurso(curso)}» borra también todas sus materias.
                   Solo se puede si ninguna tiene reservas.
                 </p>
-                <div className="flex gap-2">
+                <div className="flex min-w-0 gap-2">
                   <Button
                     variant="destructive"
                     size="sm"

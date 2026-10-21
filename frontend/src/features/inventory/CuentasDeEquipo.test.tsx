@@ -67,6 +67,22 @@ describe("CuentasDeEquipo", () => {
 
   // Cargar cuentas es opcional: no tener ninguna es un estado normal, no un
   // equipo mal cargado.
+  it("quitar una cuenta requiere confirmar y cancelar no escribe", async () => {
+    vi.mocked(inventoryApi.borrarCuentaDeEquipo).mockClear()
+    montar([cuenta()], "ADMIN")
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: "Quitar" }))
+    expect(inventoryApi.borrarCuentaDeEquipo).not.toHaveBeenCalled()
+    expect(
+      screen.getByText(/No se elimina la cuenta del sistema operativo/)
+    ).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "Cancelar" }))
+    expect(inventoryApi.borrarCuentaDeEquipo).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "Quitar" }))
+    await user.click(screen.getByRole("button", { name: "Confirmar eliminación" }))
+    expect(inventoryApi.borrarCuentaDeEquipo).toHaveBeenCalledTimes(1)
+  })
+
   it("sin cuentas cargadas, lo dice sin alarmar", async () => {
     montar([])
 

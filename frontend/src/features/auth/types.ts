@@ -13,6 +13,8 @@ export type Usuario = {
   email: string
   rol: Rol
   estado: Estado
+  /** La cuenta está deshabilitada y aún falta completar su limpieza. */
+  bajaPendiente?: boolean
   fechaRegistro: string
   fechaAprobacion: string | null
   debeCambiarPassword: boolean

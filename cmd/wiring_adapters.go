@@ -7,10 +7,10 @@ import (
 	"errors"
 	"time"
 
-	availabilityapp "github.com/ramiro/sgrc/internal/availability/application"
-	inventoryapp "github.com/ramiro/sgrc/internal/inventory/application"
-	reportingapp "github.com/ramiro/sgrc/internal/reporting/application"
-	reservationapp "github.com/ramiro/sgrc/internal/reservation/application"
+	availabilityapp "github.com/agustin-y2k/sgrc/internal/availability/application"
+	inventoryapp "github.com/agustin-y2k/sgrc/internal/inventory/application"
+	reportingapp "github.com/agustin-y2k/sgrc/internal/reporting/application"
+	reservationapp "github.com/agustin-y2k/sgrc/internal/reservation/application"
 )
 
 // inventoryValidadorReservasAdapter satisface
@@ -75,8 +75,8 @@ type academicMarcasAdapter struct {
 	inventorySvc *inventoryapp.Service
 }
 
-func (a *academicMarcasAdapter) CuantasDejarianDeAplicar(ctx context.Context, materiaNombre string) (int, error) {
-	return a.inventorySvc.ContarMarcasDeMateria(ctx, materiaNombre)
+func (a *academicMarcasAdapter) CuantasDejarianDeAplicar(ctx context.Context, materiaID, materiaNombre string) (int, error) {
+	return a.inventorySvc.ContarMarcasDeMateria(ctx, materiaID, materiaNombre)
 }
 
 // reservationValidadorJornadaAdapter satisface

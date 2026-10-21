@@ -1,16 +1,19 @@
 openapi: 3.0.3
 info:
   title: SGRC — Sistema de Gestión y Reserva de Computadoras Educativas
-  version: "1.0.0"
+  version: "1.21.0"
   description: |
     API mono-institucional para gestión de inventario y reservas de equipos
     informáticos. Monolito modular — un solo servicio, un solo dominio de datos.
+    `x-roles: [ADMIN]` identifica las operaciones restringidas por el middleware
+    de rol. Las demás operaciones con bearerAuth admiten usuarios autenticados,
+    sujetos a las reglas de pertenencia, estado y permisos del caso de uso.
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: https://sgrc.tuinstitucion.edu.ar
+  - url: https://sgrc.example.org
     description: Producción
 
 tags:
@@ -30,6 +33,8 @@ tags:
     description: Horario de disponibilidad de Admins (informativo)
   - name: sugerencias
     description: Buzón para reportar problemas del sistema o proponer mejoras
+  - name: auditoria
+    description: Consulta del registro de cambios y acciones sensibles
 
 # ─────────────────────────────────────────
 # COMPONENTES REUTILIZABLES
@@ -42,6 +47,8 @@ components:
       bearerFormat: JWT
       description: |
         JWT propio del sistema, emitido por `/api/auth/login` o `/api/auth/google`.
+        Se exige HS256 y un `exp` vigente; otros algoritmos HMAC o la ausencia
+        de expiración se rechazan antes de consultar el estado de la cuenta.
 
         **Todo 401 por sesión trae el header `X-Sesion-Motivo`** diciendo por
         qué no valió el token: `expirada` (venció por su `exp`), `invalida`
@@ -61,7 +68,10 @@ components:
     page:
       in: query
       name: page
-      description: Número de página, 1-based. Un valor inválido devuelve 400.
+      description: |
+        Número de página desde 1. Un valor inválido devuelve 400. También se
+        rechaza si (page-1)*pageSize excede el rango de desplazamiento admitido;
+        no se permite que el cálculo desborde y consulte otra página.
       schema: { type: integer, minimum: 1, default: 1 }
     pageSize:
       in: query
@@ -84,10 +94,11 @@ components:
       properties:
         id: { type: string, format: uuid }
         usuarioId: { type: string, format: uuid }
-        materiaId: { type: string, format: uuid, description: Vacío si la materia todavía no existe }
+        materiaId: { type: string, format: uuid, description: Materia elegida al solicitar; vacío si se pidió una materia nueva }
+        materiaCreadaId: { type: string, format: uuid, description: Materia creada al aprobar una solicitud nueva; puede estar ausente en pedidos legados o si la materia fue eliminada }
         cursoSolicitado: { type: string }
         materiaSolicitada: { type: string }
-        esMateriaNueva: { type: boolean, description: Al aprobar hay que indicar en qué curso crearla }
+        esMateriaNueva: { type: boolean, description: La solicitud original fue de una materia nueva; si está pendiente se debe indicar el curso al aprobar }
         motivo: { type: string }
         estado: { type: string, enum: [PENDIENTE, APROBADO, RECHAZADO] }
         respuesta: { type: string }
@@ -300,6 +311,7 @@ components:
         email: { type: string }
         rol: { type: string, enum: [ADMIN, DOCENTE] }
         estado: { type: string, enum: [PENDIENTE, APROBADA, RECHAZADA, BAJA] }
+        bajaPendiente: { type: boolean, description: "Hay tareas de baja pendientes. Repetir PATCH estado=BAJA las completa sin reactivar la cuenta." }
         fechaRegistro: { type: string, format: date-time }
         fechaAprobacion: { type: string, format: date-time, nullable: true }
         debeCambiarPassword: { type: boolean }
@@ -343,6 +355,36 @@ components:
         activo: { type: boolean }
         archivado: { type: boolean }
 
+    Espacio:
+      type: object
+      required: [id, cicloLectivoId, nombre, archivado]
+      properties:
+        id: { type: string, format: uuid }
+        cicloLectivoId: { type: string, format: uuid }
+        nombre: { type: string, maxLength: 80 }
+        archivado: { type: boolean }
+
+    EspacioRequest:
+      type: object
+      required: [nombre]
+      properties:
+        nombre: { type: string, minLength: 1, maxLength: 80 }
+
+    OpcionesDeRegistro:
+      type: object
+      required: [lugares]
+      properties:
+        lugares:
+          type: array
+          items:
+            type: object
+            required: [nombre, tipo, materias]
+            properties:
+              nombre: { type: string }
+              modalidad: { type: string, description: Sólo si corresponde al curso }
+              tipo: { type: string, enum: [CURSO, ESPACIO] }
+              materias: { type: array, items: { type: string } }
+
     Curso:
       type: object
       properties:
@@ -353,7 +395,6 @@ components:
         division: { type: string, maxLength: 12, nullable: true, example: "2", description: "Opcional. Ausente = la institución no divide sus cursos, que es lo habitual en una universidad" }
         modalidad: { type: string, maxLength: 80, nullable: true, example: "Electromecánica", description: "Opcional. Modalidad, orientación o carrera. Ausente = la institución no tiene ninguna, o este curso no pertenece a una (el ciclo básico de una técnica)" }
         archivado: { type: boolean, description: "Único estado de un curso: se enciende al archivar su ciclo (RF-02.4). Hasta la migración 016 lo acompañaba un `activo` que el servidor mandaba siempre en true y que no decidía nada" }
-        materias: { type: array, items: { $ref: '#/components/schemas/Materia' } }
 
     EntradaDeAuditoria:
       type: object
@@ -366,23 +407,34 @@ components:
           description: |
             Viaja SIEMPRE, también cuando hay nombre: es lo único que sigue
             identificando a quien hizo la acción si esa cuenta se elimina.
+            El UUID cero indica un cambio sin usuario identificado; no prueba
+            que una cuenta se haya eliminado ni que sea una tarea automática.
         actorNombre:
           type: string
           example: "Marta Fernández"
           description: |
-            AUSENTE si la cuenta ya no existe. No se rellena con un texto de
+            AUSENTE si la cuenta ya no existe o no hay actor identificado. No se rellena con un texto de
             relleno: cómo se dice «una cuenta eliminada» lo decide la pantalla, y
             un "Desconocido" puesto acá se confundiría con el nombre de alguien.
         accion: { type: string, example: "CURSO_ELIMINADO" }
         entidad: { type: string, example: "curso" }
         entidadId: { type: string, format: uuid }
+        entidadNombre:
+          type: string
+          example: "PC 7 del Carro 1"
+          description: Nombre actual de la ficha, ausente si ya no existe o no se puede resolver. No es una copia histórica.
+        referencias:
+          type: object
+          additionalProperties: { type: string }
+          description: Nombres actuales de las referencias del registro, con claves tipo:UUID (por ejemplo carro:UUID). Las referencias eliminadas se omiten.
         detalle:
           type: object
           additionalProperties: true
           description: |
-            Lo que guardó esa acción, con su propia forma. No se interpreta: cada
-            una guarda lo suyo, y darle una forma común obligaría a conocer las
-            treinta del catálogo.
+            Datos originales de la acción, conservados sin reescribirlos.
+            CAMBIO_TRANSACCIONAL incluye operacion, campos y los valores
+            permitidos en antes/despues. La pantalla traduce estos datos a
+            descripciones y tablas legibles; no muestra JSON ni secretos.
         ipOrigen: { type: string, example: "10.0.0.7" }
         creadoEn: { type: string, format: date-time }
 
@@ -418,8 +470,10 @@ components:
       type: object
       description: |
         Una marca del inventario que dice que un equipo es preferente para una materia
-        (RF-03.21). SÓLO ORDENA la lista al reservar: no restringe a nadie, no oculta el
-        equipo y no afecta ninguna reserva.
+        (RF-03.21). Ordena la lista al reservar y permite comparar prioridades para
+        un desplazamiento solicitado explícitamente mediante `equiposATomar`.
+        Crear, editar o borrar la marca no modifica reservas existentes ni oculta
+        equipos; una reserva nueva revalida los conflictos y las reglas de toma.
 
         El vínculo con la materia es por NOMBRE y no por id porque `materia` se recrea
         con id nuevo en cada ciclo lectivo: una referencia se perdería el 31/12, y la
@@ -428,19 +482,31 @@ components:
         id: { type: string, format: uuid }
         equipoId: { type: string, format: uuid }
         materiaNombre: { type: string, example: "Dibujo Técnico" }
-        anio: { type: integer, example: 3, description: "Ausente = toda materia con ese nombre, en cualquier curso" }
-        modalidad: { type: string, maxLength: 80, example: "Electromecánica", description: "Ausente = la marca no acota por modalidad" }
-        division: { type: string, maxLength: 12, example: "2", description: "Ausente = la marca no acota por división" }
+        anio: { type: integer, example: 3, description: "Obligatorio si cursoExacto=true; ausente no acota sólo en reglas generales" }
+        modalidad: { type: string, maxLength: 80, example: "Electromecánica", description: "Ausente significa sin modalidad si cursoExacto=true; todas si false" }
+        division: { type: string, maxLength: 12, example: "2", description: "Ausente significa sin división si cursoExacto=true; todas si false" }
+        cursoExacto: { type: boolean, default: false, description: "Curso concreto: compara exactamente año, modalidad y división, incluyendo atributos ausentes" }
         prioridad: { type: integer, example: 1, description: "1 es la más fuerte" }
         alcance: { type: string, example: "Dibujo Técnico de 3°B", description: "La frase ya armada. La resuelve el servidor para que no se reconstruya distinta en cada pantalla" }
+
+    PreferenciaHuerfana:
+      type: object
+      description: Marca sin materia coincidente, con datos legibles del equipo afectado.
+      properties:
+        id: { type: string, format: uuid }
+        materiaNombre: { type: string }
+        alcance: { type: string }
+        prioridad: { type: integer, minimum: 1, maximum: 9 }
+        cursoExacto: { type: boolean }
+        equipoEtiqueta: { type: string }
+        carroNombre: { type: string }
+        equipoDadoDeBaja: { type: boolean }
 
     DocenteMateria:
       type: object
       properties:
         id: { type: string, format: uuid }
         usuarioId: { type: string, format: uuid }
-        nombre: { type: string }
-        apellido: { type: string }
         rol: { type: string, enum: [TITULAR, SUPLENTE] }
 
     # ── Inventory ──
@@ -448,7 +514,6 @@ components:
       type: object
       properties:
         dadoDeBaja: { type: boolean, description: "Baja lógica: el carro se retiró. No aparece en el listado." }
-        fechaBaja: { type: string, format: date-time, nullable: true }
         id: { type: string, format: uuid }
         nombre: { type: string }
         descripcion: { type: string, nullable: true }
@@ -456,6 +521,8 @@ components:
     Equipo:
       type: object
       properties:
+        esComputadora: { type: boolean }
+        fechaAlta: { type: string, format: date-time }
         id: { type: string, format: uuid }
         etiqueta: { type: string, example: "PC 27", description: "Cómo se lo nombra en pantallas y correos: 'PC {identificador}' si está en un carro, el nombre si no. La resuelve el servidor para que la misma cosa no se vea distinta según dónde se la mire (RF-03.17)" }
         tipo: { type: string, maxLength: 50, example: "PROYECTOR", description: "Texto libre. 'PC' en las computadoras de un carro" }
@@ -477,8 +544,10 @@ components:
     EquipoOcupado:
       type: object
       description: |
-        Un equipo que ya tiene dueño en la franja consultada (RF-04.11). Se muestra
-        para que el docente pueda ir a hablarle o mandarle un pedido, no para tildarlo.
+        Un equipo que ya tiene dueño en la franja consultada (RF-04.11).
+        Si puedeTomarse es true, la pantalla permite seleccionarlo expresamente
+        por prioridad mediante equiposATomar (RF-03.21). En los demás casos,
+        puede ofrecer pedir liberación si puedePedirse es true.
         Lo que se publica de la otra persona es su nombre — el mismo dato que ya trae el
         calendario de cualquier equipo (RF-04.4)—, nunca su dirección de correo.
       properties:
@@ -492,6 +561,7 @@ components:
         horaFin: { type: string, example: "12:00" }
         motivo: { type: string, nullable: true, description: "Solo en un bloqueo administrativo: el texto que escribió el Admin (RF-04.7)" }
         puedePedirse: { type: boolean, description: "false en un bloqueo administrativo, en una reserva propia, y si la franja de esa reserva ya empezó. Lo decide el servidor para que la pantalla no tenga que replicar la regla" }
+        puedeTomarse: { type: boolean, description: "Si la materia para la que se está reservando (parámetro materiaId) le puede robar este equipo a quien lo tiene (RF-03.21): marca preferente propia más fuerte que la del dueño actual, y falta más de una hora para que empiece. Sin materiaId es siempre false. Lo decide el servidor con la misma regla que usa la creación, para que la pantalla no ofrezca un robo que después se rechace" }
 
     Licencia:
       type: object
@@ -596,6 +666,7 @@ components:
         corresponde ("ver quién la tiene" no es lo mismo que "revisá el
         inventario").
       properties:
+        liberadas: { type: array, items: { type: string, format: uuid }, description: "IDs de reservas liberadas por entrega parcial explícita; ausente si no hubo" }
         entregadas:
           type: array
           items: { $ref: '#/components/schemas/Prestamo' }
@@ -635,8 +706,8 @@ components:
           example: batería
         gravedad: { type: string, enum: [LEVE, MODERADA, GRAVE] }
         fecha: { type: string, format: date-time }
-        enviadoDGE: { type: boolean }
-        fechaEnvioDGE: { type: string, format: date-time, nullable: true }
+        enviadoASoporte: { type: boolean }
+        fechaEnvioASoporte: { type: string, format: date-time, nullable: true }
         estado: { type: string, enum: [ABIERTA, EN_REPARACION, ENVIADA_A_SOPORTE, RESUELTA] }
 
     # ── Reservations ──
@@ -644,6 +715,7 @@ components:
       type: object
       required: [equipoIds, materiaId, fecha, horaInicio, horaFin]
       properties:
+        equiposATomar: { type: array, maxItems: 200, items: { type: string, format: uuid }, description: "Subconjunto de equipoIds cuya toma por preferencia se solicita explícitamente; omitirlo impide desplazar reservas" }
         equipoIds: { type: array, items: { type: string, format: uuid }, minItems: 1, description: "Uno o varios equipos elegidos de la lista de disponibles" }
         materiaId: { type: string, format: uuid }
         fecha: { type: string, format: date }
@@ -654,6 +726,7 @@ components:
       type: object
       required: [equipoIds, materiaId, diaSemana, horaInicio, horaFin, fechaInicio, fechaFin]
       properties:
+        equiposATomar: { type: array, maxItems: 200, items: { type: string, format: uuid }, description: "Subconjunto de equipoIds cuya toma por preferencia se solicita explícitamente; omitirlo impide desplazar reservas" }
         equipoIds: { type: array, items: { type: string, format: uuid }, minItems: 1 }
         materiaId: { type: string, format: uuid }
         diaSemana: { type: string, enum: [LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO] }
@@ -662,34 +735,44 @@ components:
         fechaInicio: { type: string, format: date }
         fechaFin: { type: string, format: date }
 
+    CrearReservaResponse:
+      type: object
+      required: [grupo, reservas, reservasCanceladas, reservasReubicadas, docentesAfectados]
+      properties:
+        grupo: { $ref: '#/components/schemas/ReservaGrupo' }
+        reservas: { type: array, items: { $ref: '#/components/schemas/Reserva' } }
+        reservasCanceladas: { type: integer, description: "Faltantes cancelados en toda la cadena" }
+        reservasReubicadas: { type: integer, description: "Reservas conservadas con otro dispositivo en toda la cadena" }
+        docentesAfectados: { type: integer }
+
     ReservaGrupo:
       type: object
       description: "La reserva tal como la ve el docente — una materia, fecha y horario, con uno o varios equipos."
       properties:
         id: { type: string, format: uuid }
         materiaId: { type: string, format: uuid }
-        materiaNombre: { type: string }
-        cursoNombre: { type: string }
         creadoPor: { type: string, format: uuid }
         nombreDocenteSnapshot: { type: string }
         fecha: { type: string, format: date }
         horaInicio: { type: string }
         horaFin: { type: string }
         estado: { type: string, enum: [CONFIRMADA, PARCIALMENTE_CANCELADA, CANCELADA, FINALIZADA, NO_RETIRADA] }
-        esRecurrente: { type: boolean }
         reglaRecurrenciaId: { type: string, format: uuid, nullable: true }
-        creadaEn: { type: string, format: date-time }
-        reservas: { type: array, items: { $ref: '#/components/schemas/Reserva' }, description: "Detalle por equipo" }
 
     Reserva:
       type: object
       description: "La ocupación de UN equipo en UNA franja, dentro de un ReservaGrupo (o una fila BLOQUEO suelta, sin grupo)."
       properties:
+        materiaId: { type: string, format: uuid, description: "Ausente en bloqueos" }
+        nombreDocenteSnapshot: { type: string, description: "Ausente si no tiene docente" }
+        fecha: { type: string, format: date }
+        horaInicio: { type: string, example: "08:00" }
+        horaFin: { type: string, example: "09:00" }
+        creadoPor: { type: string, format: uuid }
+        canceladoPor: { type: string, format: uuid }
         id: { type: string, format: uuid }
-        reservaGrupoId: { type: string, format: uuid, nullable: true, description: "NULL solo para tipo BLOQUEO" }
+        reservaGrupoId: { type: string, format: uuid, nullable: true, description: "Ausente en bloqueos" }
         equipoId: { type: string, format: uuid }
-        etiqueta: { type: string, example: "PC 3", description: "Cómo se nombra el equipo (RF-03.17). Solo en los listados detallados. Es lo que se muestra: identificador va en 0 y carroNombre vacío si el equipo no está en ningún carro" }
-        identificador: { type: integer }
         estado: { type: string, enum: [CONFIRMADA, CANCELADA, FINALIZADA, NO_RETIRADA] }
         tipo: { type: string, enum: [NORMAL, BLOQUEO] }
         motivoBloqueo:
@@ -702,13 +785,24 @@ components:
             donde una clase muestra su materia.
         motivoCancelacion: { type: string, nullable: true }
         canceladaEn: { type: string, format: date-time, nullable: true }
-        creadaEn: { type: string, format: date-time }
+
+    ReservaDetallada:
+      allOf:
+        - $ref: '#/components/schemas/Reserva'
+        - type: object
+          properties:
+            etiqueta: { type: string, example: "PC 3" }
+            identificador: { type: integer, description: "0 para un equipo suelto" }
+            carroNombre: { type: string, description: "Vacío para un equipo suelto" }
+            materiaNombre: { type: string }
+            cursoNombre: { type: string }
+            reglaRecurrenciaId: { type: string, format: uuid }
 
     BloqueoRequest:
       type: object
       required: [equipoIds, fecha, horaInicio, horaFin, motivo]
       properties:
-        equipoIds: { type: array, minItems: 1, items: { type: string, format: uuid }, description: "Los equipos a bloquear. Pueden ser de carros distintos." }
+        equipoIds: { type: array, minItems: 1, maxItems: 200, items: { type: string, format: uuid }, description: "Los equipos a bloquear. Pueden ser de carros distintos." }
         fecha: { type: string, format: date }
         horaInicio: { type: string, example: "08:00" }
         horaFin: { type: string, example: "18:00" }
@@ -730,14 +824,17 @@ components:
     Notificacion:
       type: object
       properties:
+        leidaEn: { type: string, format: date-time, description: "Ausente mientras no se haya leído" }
         id: { type: string, format: uuid }
         mensaje: { type: string }
         estado: { type: string, enum: [NO_LEIDA, LEIDA] }
         reservaId: { type: string, format: uuid, nullable: true, description: "Apunta a la Reserva puntual, no al grupo" }
+        pedidoId: { type: string, format: uuid, nullable: true, description: "Pedido independiente al que corresponde el aviso" }
+        hiloId: { type: string, format: uuid, nullable: true, description: "Conversación independiente a la que corresponde el aviso" }
         creadaEn: { type: string, format: date-time }
         tipo:
           type: string
-          enum: [GENERAL, DOCENTE_PENDIENTE, RESERVA_CANCELADA, LICENCIA_POR_VENCER, EQUIPO_SIN_DEVOLVER, PEDIDO_DE_LIBERACION, PEDIDO_DE_MATERIA, PEDIDO_DE_MATERIA_RESUELTO, SUGERENCIA, SUGERENCIA_RESPONDIDA]
+          enum: [GENERAL, DOCENTE_PENDIENTE, RESERVA_CANCELADA, RESERVA_REUBICADA, LICENCIA_POR_VENCER, EQUIPO_SIN_DEVOLVER, PEDIDO_DE_LIBERACION, PEDIDO_DE_MATERIA, PEDIDO_DE_MATERIA_RESUELTO, SUGERENCIA, SUGERENCIA_RESPONDIDA]
           description: |
             De qué se trata el aviso, para que la interfaz pueda ofrecer la
             acción que corresponde sin interpretar el texto del mensaje. Un
@@ -842,6 +939,122 @@ components:
 # PATHS
 # ─────────────────────────────────────────
 paths:
+  /api/registro/opciones:
+    get:
+      tags: [academic]
+      summary: Nombres de cursos, espacios y materias para autorregistro
+      description: >
+        Pública, sin JWT. Devuelve nombres del ciclo activo, sin IDs de entidades
+        ni datos de docentes. Sin ciclo activo devuelve lugares vacío.
+        Limitada a 30 peticiones por minuto.
+      security: []
+      responses:
+        "200":
+          description: Opciones del ciclo activo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OpcionesDeRegistro' }
+        "429": { description: "Se excedió el límite de peticiones" }
+
+  /api/ciclos/{cicloId}/espacios:
+    parameters:
+      - in: path
+        name: cicloId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [academic]
+      summary: Listar espacios de un ciclo (usuario autenticado)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Espacios del ciclo; lista vacía si no hay coincidencias
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Espacio' } }
+        "400": { description: "UUID inválido" }
+        "401": { description: "Sesión ausente, inválida o revocada" }
+    post:
+      tags: [academic]
+      summary: Crear espacio en un ciclo sin archivar (Admin)
+      description: >
+        Crea también su materia de reserva. Nombre normalizado, único dentro
+        del ciclo. Ambas filas y su auditoría se confirman en la misma transacción.
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EspacioRequest' }
+      responses:
+        "201":
+          description: Espacio creado
+          headers:
+            Location: { schema: { type: string }, description: "URL de /api/espacios/{id}" }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Espacio' }
+        "400": { description: "UUID o nombre inválido" }
+        "401": { description: "Sesión ausente, inválida o revocada" }
+        "403": { description: "Requiere rol ADMIN" }
+        "404": { description: "Ciclo inexistente" }
+        "409": { description: "Ciclo archivado o nombre duplicado" }
+
+  /api/espacios/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [academic]
+      summary: Obtener espacio (usuario autenticado)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Espacio solicitado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Espacio' }
+        "400": { description: "UUID inválido" }
+        "401": { description: "Sesión ausente, inválida o revocada" }
+        "404": { description: "Espacio inexistente" }
+    patch:
+      tags: [academic]
+      summary: Renombrar espacio y su materia de reserva (Admin)
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EspacioRequest' }
+      responses:
+        "204": { description: "Nombre actualizado, sin cuerpo" }
+        "400": { description: "UUID o nombre inválido" }
+        "401": { description: "Sesión ausente, inválida o revocada" }
+        "403": { description: "Requiere rol ADMIN" }
+        "404": { description: "Espacio inexistente" }
+        "409": { description: "Estructura archivada o nombre duplicado" }
+    delete:
+      tags: [academic]
+      summary: Eliminar espacio sin reservas (Admin)
+      description: Elimina también su materia de reserva; exige estructura sin archivar.
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      responses:
+        "204": { description: "Espacio eliminado, sin cuerpo" }
+        "400": { description: "UUID inválido" }
+        "401": { description: "Sesión ausente, inválida o revocada" }
+        "403": { description: "Requiere rol ADMIN" }
+        "404": { description: "Espacio inexistente" }
+        "409": { description: "Estructura archivada o espacio con reservas" }
+
 
   # ══════════════════════════════
   # AUTH
@@ -864,7 +1077,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/RegistroRequest' }
       responses:
-        "201": { description: Cuenta creada, pendiente de aprobación. Todos los Admin son notificados. }
+        "201": { description: "Cuenta creada, pendiente de aprobación. Todos los Admin son notificados." }
         "400": { description: "Cuerpo malformado, contraseña corta, o falta declarar el cargo o el rol" }
         "409":
           description: |
@@ -884,10 +1097,11 @@ paths:
             schema: { $ref: '#/components/schemas/LoginRequest' }
       responses:
         "200":
+          description: "Respuesta correcta: Login"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResponse' }
-        "401": { description: Credenciales inválidas }
+        "401": { description: "Credenciales inválidas" }
         "403":
           description: |
             Cuenta no aprobada. El cuerpo distingue el motivo —pendiente de aprobación,
@@ -915,6 +1129,7 @@ paths:
         manda a Google en cada pedido.
       responses:
         "200":
+          description: "Respuesta correcta: Configuración pública (sin autenticar)"
           content:
             application/json:
               schema:
@@ -968,9 +1183,9 @@ paths:
                 type: object
                 properties:
                   mensaje: { type: string }
-        "400": { description: El email no tiene formato válido }
-        "429": { description: Demasiados pedidos }
-        "503": { description: No hay SMTP configurado en este despliegue }
+        "400": { description: "El email no tiene formato válido" }
+        "429": { description: "Demasiados pedidos" }
+        "503": { description: "No hay SMTP configurado en este despliegue" }
 
   /api/auth/password/restablecer:
     post:
@@ -1007,10 +1222,10 @@ paths:
                 codigo: { type: string, pattern: '^\d{6}$', example: "482913" }
                 passwordNueva: { type: string, minLength: 8 }
       responses:
-        "204": { description: Contraseña cambiada }
-        "400": { description: Código inválido, vencido, sin intentos, o contraseña corta }
-        "429": { description: Demasiados intentos }
-        "503": { description: No hay SMTP configurado en este despliegue }
+        "204": { description: "Contraseña cambiada" }
+        "400": { description: "Código inválido, vencido, sin intentos, o contraseña corta" }
+        "429": { description: "Demasiados intentos" }
+        "503": { description: "No hay SMTP configurado en este despliegue" }
 
   /api/auth/google:
     post:
@@ -1046,18 +1261,19 @@ paths:
                   description: Igual que en LoginRequest — es la misma casilla de la pantalla.
       responses:
         "200":
+          description: "Respuesta correcta: Ingreso con una cuenta de Google ya registrada"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResponse' }
-        "400": { description: Cuerpo malformado }
-        "401": { description: El token de Google no es válido (firma, aud, exp o emisor) }
+        "400": { description: "Cuerpo malformado" }
+        "401": { description: "El token de Google no es válido (firma, aud, exp o emisor)" }
         "403":
           description: |
             Google no confirmó el email (`email_verified` en false), el dominio no está
             en GOOGLE_DOMINIOS_PERMITIDOS, o la cuenta existe pero no está APROBADA.
-        "404": { description: Token válido pero todavía no hay cuenta con ese email — seguir al registro }
-        "409": { description: El email pertenece a una cuenta en BAJA (RF-01.3) }
-        "503": { description: Este despliegue no tiene GOOGLE_CLIENT_ID configurado }
+        "404": { description: "Token válido pero todavía no hay cuenta con ese email — seguir al registro" }
+        "409": { description: "El email pertenece a una cuenta en BAJA (RF-01.3)" }
+        "503": { description: "Este despliegue no tiene GOOGLE_CLIENT_ID configurado" }
 
   /api/auth/google/registro:
     post:
@@ -1089,15 +1305,15 @@ paths:
                 cursoSolicitado: { type: string, maxLength: 100 }
                 materiaSolicitada: { type: string, maxLength: 100 }
       responses:
-        "201": { description: Cuenta creada, pendiente de aprobación }
+        "201": { description: "Cuenta creada, pendiente de aprobación" }
         "400": { description: "Cuerpo malformado, falta declarar el cargo o el rol, o falta el nombre tanto en el request como en el token" }
-        "401": { description: El token de Google no es válido }
-        "403": { description: Email sin confirmar por Google, o dominio no habilitado }
+        "401": { description: "El token de Google no es válido" }
+        "403": { description: "Email sin confirmar por Google, o dominio no habilitado" }
         "409":
           description: |
             Ya existe una cuenta para ese email o esa cuenta de Google. Si pertenece a
             una cuenta en BAJA, el mensaje lo indica explícitamente (RF-01.3).
-        "503": { description: Este despliegue no tiene GOOGLE_CLIENT_ID configurado }
+        "503": { description: "Este despliegue no tiene GOOGLE_CLIENT_ID configurado" }
 
   /api/auth/usuarios/{id}/promover-a-admin:
     post:
@@ -1127,15 +1343,16 @@ paths:
         No hace falta el guard del último Admin (RF-01.8): esto solo agrega Admins,
         nunca los saca.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - name: id
           in: path
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "200": { description: Promovido. Queda registrado en auditoría quién lo hizo y a quién }
-        "403": { description: Quien lo pide no es ADMIN }
-        "404": { description: Usuario no encontrado }
+        "200": { description: "Promovido. Queda registrado en auditoría quién lo hizo y a quién" }
+        "403": { description: "Quien lo pide no es ADMIN" }
+        "404": { description: "Usuario no encontrado" }
         "409":
           description: |
             La cuenta ya tiene rol ADMIN, o no está APROBADA. El mensaje distingue los
@@ -1172,15 +1389,16 @@ paths:
         **Tiene efecto en el request siguiente**, sin volver a iniciar sesión, igual
         que promover.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - name: id
           in: path
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "200": { description: Degradado. Queda registrado en auditoría quién lo hizo y a quién }
-        "403": { description: Quien lo pide no es ADMIN }
-        "404": { description: Usuario no encontrado }
+        "200": { description: "Degradado. Queda registrado en auditoría quién lo hizo y a quién" }
+        "403": { description: "Quien lo pide no es ADMIN" }
+        "404": { description: "Usuario no encontrado" }
         "409":
           description: |
             La cuenta ya es DOCENTE, no está APROBADA, es el último Admin activo
@@ -1221,14 +1439,15 @@ paths:
                 properties:
                   usuario: { $ref: "#/components/schemas/Usuario" }
                   token: { type: string }
-        "400": { description: Nombre o apellido vacío, o de más de 100 caracteres }
-        "401": { description: Sin token }
+        "400": { description: "Nombre o apellido vacío, o de más de 100 caracteres" }
+        "401": { description: "Sin token" }
     get:
       tags: [auth]
       summary: Datos del usuario autenticado
       security: [{ bearerAuth: [] }]
       responses:
         "200":
+          description: "Respuesta correcta: Datos del usuario autenticado"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Usuario' }
@@ -1264,9 +1483,9 @@ paths:
                 passwordActual: { type: string }
                 passwordNueva: { type: string, minLength: 8 }
       responses:
-        "200": { description: Contraseña actualizada }
-        "400": { description: passwordActual incorrecta, o passwordNueva más corta que 8 caracteres }
-        "409": { description: La cuenta ingresa con Google y no tiene contraseña }
+        "200": { description: "Contraseña actualizada" }
+        "400": { description: "passwordActual incorrecta, o passwordNueva más corta que 8 caracteres" }
+        "409": { description: "La cuenta ingresa con Google y no tiene contraseña" }
 
   /metrics:
     get:
@@ -1299,6 +1518,7 @@ paths:
         binario, con `sgrc-app healthcheck` — ver cmd/healthcheck.go).
       responses:
         "200":
+          description: "Respuesta correcta: Estado del servicio"
           content:
             application/json:
               schema:
@@ -1322,6 +1542,7 @@ paths:
       tags: [auth]
       summary: Listar usuarios (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: query
           name: estado
@@ -1333,6 +1554,7 @@ paths:
         - $ref: '#/components/parameters/pageSize'
       responses:
         "200":
+          description: "Respuesta correcta: Listar usuarios (Admin)"
           content:
             application/json:
               schema:
@@ -1340,24 +1562,29 @@ paths:
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/Usuario' } }
                   meta: { $ref: '#/components/schemas/PaginationMeta' }
-        "400": { description: page o pageSize inválidos }
+        "400": { description: "page o pageSize inválidos" }
 
   /api/auth/usuarios/{id}/estado:
     patch:
       tags: [auth]
       summary: Aprobar, rechazar o dar de baja una cuenta (Admin)
       description: |
-        Al pasar a BAJA, revisa las materias del docente: si alguna queda sin ningún
-        otro docente activo, cancela sus ReservaGrupo futuros; si conserva otro docente,
-        solo genera un aviso informativo a todos los Admin (RF-02.8). Nunca cancela
-        reservas de una materia que sigue teniendo otro docente asignado. Después de
-        esa revisión, elimina todos los vínculos DocenteMateria del docente dado de baja.
+        Al pasar a BAJA, registra las materias asignadas y deshabilita la cuenta
+        en una transacción. Incluye ADMIN con asignaciones académicas. Si una materia
+        queda sin otro docente aprobado, cancela sus reservas futuras y avisa a los
+        Admin (RF-02.8). Cada materia confirma cancelaciones y avance juntos; los avisos
+        se publican después del commit. Si conserva otro docente aprobado, no cancela.
+        Al completar todas las materias, elimina las asignaciones y marca la baja completa.
+        Si falla la limpieza, la cuenta permanece BAJA, devuelve 409 y aparece
+        bajaPendiente=true en Usuarios. Repetir estado=BAJA procesa lo pendiente;
+        una baja ya completa devuelve 200 sin repetir cancelaciones ni avisos.
         Rechaza con 409 si el usuario es el único ADMIN en estado APROBADA y el nuevo
         estado no es APROBADA (RF-01.8) — el sistema nunca puede quedar sin ningún Admin.
-        Rechaza con 409 si el estado actual del usuario ya es BAJA — es terminal, no
+        Rechaza con 409 intentar cambiar BAJA a otro estado: es terminal y no
         se puede revertir (RF-02.9). Para volver a operar, la persona debe registrarse
         de nuevo (RF-01.3).
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -1374,18 +1601,9 @@ paths:
                 estado: { type: string, enum: [APROBADA, RECHAZADA, BAJA] }
       responses:
         "200":
-          description: Estado actualizado (con detalle de impacto si fue BAJA)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  estado: { type: string, enum: [PENDIENTE, APROBADA, RECHAZADA, BAJA] }
-                  materiasRevisadas: { type: integer }
-                  materiasHuerfanas: { type: integer }
-                  reservasCanceladas: { type: integer }
-        "403": { description: Solo un Admin puede cambiar este estado }
-        "409": { description: No se puede dejar al sistema sin ningún Admin activo, o la cuenta ya está en BAJA (transición terminal) }
+          description: Estado actualizado o baja completada. Respuesta de texto OK.
+        "403": { description: "Solo un Admin puede cambiar este estado" }
+        "409": { description: "Último Admin activo, transición inválida o baja con limpieza pendiente: en este último caso repetir estado=BAJA." }
 
   /api/auth/usuarios/{id}/reset-password:
     post:
@@ -1402,6 +1620,7 @@ paths:
         de baja, acceso perdido— y es el único disponible en un despliegue sin SMTP
         configurado. Sin él, esa persona no tendría forma de volver a entrar.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -1427,6 +1646,7 @@ paths:
 
         La ficha PROPIA se pide por /api/mi-perfil, que no necesita ser Admin.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -1434,10 +1654,11 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener la ficha de una persona (Admin)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Usuario' }
-        "404": { description: No existe }
+        "404": { description: "No existe" }
     delete:
       tags: [auth]
       summary: Eliminar definitivamente una cuenta cerrada (Admin)
@@ -1447,6 +1668,8 @@ paths:
         RECHAZADA cuenta porque no transiciona a ningún otro estado: sin esta salida,
         un rechazo equivocado dejaba el email tomado de forma permanente. Una cuenta
         APROBADA hay que darla de baja primero, y una PENDIENTE hay que resolverla.
+        Si hay una baja pendiente devuelve 409; primero hay que completarla
+        repitiendo PATCH estado=BAJA. La pantalla Usuarios ofrece Completar baja.
         Sus reservas, incidencias, entregas e histórico de uso no se eliminan: las FKs
         que las referencian usan ON DELETE SET NULL y conservan nombre_docente_snapshot
         u otro texto ya guardado (ver 07-modelo-datos.md).
@@ -1458,6 +1681,7 @@ paths:
         consecuencias tiene: desde RF-07.6 decide si el barrido actúa en esos tramos.
         El mismo detalle queda en la auditoría.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -1488,21 +1712,22 @@ paths:
                   bloquesDeGuardia: { type: integer }
                   notificaciones: { type: integer }
                   pedidosDeMateria: { type: integer }
-        "409": { description: Solo se puede eliminar una cuenta en estado BAJA }
+        "409": { description: "La cuenta no está BAJA/RECHAZADA o conserva tareas de baja pendientes." }
 
   /api/auth/admins:
     post:
       tags: [auth]
       summary: Crear otro Admin (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RegistroRequest' }
       responses:
-        "201": { description: Admin creado (aprobado automáticamente) }
-        "403": { description: Solo un Admin puede crear otro Admin }
+        "201": { description: "Admin creado (aprobado automáticamente)" }
+        "403": { description: "Solo un Admin puede crear otro Admin" }
 
   # ══════════════════════════════
   # ACADEMIC
@@ -1518,6 +1743,7 @@ paths:
           schema: { type: boolean }
       responses:
         "200":
+          description: "Respuesta correcta: Listar ciclos lectivos"
           content:
             application/json:
               schema:
@@ -1529,6 +1755,7 @@ paths:
       summary: Crear ciclo lectivo (Admin)
       description: Solo puede existir un ciclo lectivo activo a la vez (RF-02.1).
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -1539,8 +1766,8 @@ paths:
               properties:
                 anio: { type: integer, example: 2025 }
       responses:
-        "201": { description: Ciclo creado }
-        "409": { description: Ya existe ciclo para ese año, o ya hay un ciclo activo sin archivar }
+        "201": { description: "Ciclo creado" }
+        "409": { description: "Ya existe ciclo para ese año, o ya hay un ciclo activo sin archivar" }
 
   /api/ciclos/{id}:
     get:
@@ -1557,10 +1784,11 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener un ciclo lectivo (cualquier usuario autenticado)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CicloLectivo' }
-        "404": { description: No existe }
+        "404": { description: "No existe" }
     patch:
       tags: [academic]
       summary: Corregir el año de un ciclo lectivo (Admin)
@@ -1591,6 +1819,7 @@ paths:
         anterior una entrada previa sobre «el ciclo 2026» se leería después como
         si hablara de otro.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -1606,9 +1835,9 @@ paths:
               properties:
                 anio: { type: integer, minimum: 2000, maximum: 2100, example: 2026 }
       responses:
-        "200": { description: Año corregido }
-        "400": { description: El año está fuera del rango 2000-2100 }
-        "404": { description: No existe ese ciclo }
+        "200": { description: "Año corregido" }
+        "400": { description: "El año está fuera del rango 2000-2100" }
+        "404": { description: "No existe ese ciclo" }
         "409":
           description: El ciclo tiene reservas, el año de destino tiene bloqueos, ese año ya lo tiene otro ciclo, o el ciclo está archivado
           content:
@@ -1637,14 +1866,15 @@ paths:
         borrado el id no se puede resolver contra nada, así que sin el año la
         entrada diría que alguien eliminó un ciclo sin decir cuál.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "204": { description: Ciclo eliminado }
-        "404": { description: No existe ese ciclo }
+        "204": { description: "Ciclo eliminado" }
+        "404": { description: "No existe ese ciclo" }
         "409":
           description: El ciclo tiene cursos cargados, o está archivado
           content:
@@ -1656,21 +1886,27 @@ paths:
       tags: [academic]
       summary: Archivar ciclo y opcionalmente clonar al siguiente año (Admin)
       description: |
-        Preserva curso/materia/docente_materia (archivado=true) para no recrearlos.
-        Antes de nada, calcula y guarda un snapshot histórico agregado (historico_uso_equipo,
-        historico_uso_docente). Luego ELIMINA FÍSICAMENTE todos los ReservaGrupo, Reserva
-        y ReglaRecurrencia de las materias de ese ciclo, más los bloqueos por evaluación
-        estatal de ese año. Incidencia no se ve afectada (pertenece al equipo, no al ciclo).
+        Conserva cursos, espacios, materias y asignaciones de docentes. Archiva ambos
+        contenedores y sus materias; el clonado copia la estructura sin asignaciones.
+        Calcula y sella los históricos de equipos y docentes antes de eliminar físicamente
+        reservas, grupos, recurrencias y bloqueos administrativos de ese año.
+        Las incidencias y los préstamos se conservan.
 
-        **Si se pide `clonarA`, el año destino se verifica ANTES de archivar**: que sea un
-        año válido y que no exista ya un ciclo con ese año. El borrado es irreversible, así
-        que un año repetido devuelve 409 con el ciclo viejo intacto — no después de haberlo
-        destruido.
+        Snapshot, archivo, limpieza, clonado opcional y constancia de cierre se confirman
+        en una única transacción. Un fallo revierte todos los pasos y permite reintentar.
+        El bloqueo del ciclo coordina el cierre con las escrituras de reservas.
 
-        La operación es reintentable: si un intento anterior quedó a medias (reservas sin
-        borrar, o el clonado sin hacer), volver a llamar completa lo que faltó en vez de
-        rechazar por "ya archivado".
+        Si se pide `clonarA`, el destino debe ser válido y estar libre antes de modificar
+        datos. Repetir un cierre completado con el mismo destino (o sin destino en ambos
+        pedidos) devuelve HTTP 200 y la respuesta original, incluso si el primer cliente
+        perdió la respuesta. Cambiar el destino de un cierre completado devuelve 409.
+        El histórico sellado nunca se recalcula desde reservas ya eliminadas.
+
+        Los ciclos archivados antes de la migración 018 conservan sus históricos y
+        responden 409 al intentar cerrar de nuevo: un cierre legado incompleto requiere
+        revisión de sus datos originales, porque no se puede reconstruir su fuente.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -1682,9 +1918,10 @@ paths:
             schema:
               type: object
               properties:
-                clonarA: { type: integer, description: "Año destino del clon. Omitir si no se desea clonar.", example: 2026 }
+                clonarA: { type: integer, minimum: 2000, maximum: 2100, description: "Año destino del clon. Omitir sólo cuando se elige cerrar sin abrir otro ciclo.", example: 2027 }
       responses:
         "200":
+          description: "Respuesta correcta: Archivar ciclo y opcionalmente clonar al siguiente año (Admin)"
           content:
             application/json:
               schema:
@@ -1720,6 +1957,7 @@ paths:
         Un curso sin materias viene con la lista vacía y no se pierde del listado: es
         justamente el que hay que ver al mirar lo que falta cargar.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: cicloId
@@ -1727,6 +1965,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Descargar los cursos del ciclo con sus materias (Admin)"
           content:
             application/json:
               schema:
@@ -1735,7 +1974,7 @@ paths:
                   cursos:
                     type: array
                     items: { $ref: '#/components/schemas/CursoConMaterias' }
-        "404": { description: El ciclo lectivo no existe }
+        "404": { description: "El ciclo lectivo no existe" }
     post:
       tags: [academic]
       summary: Cargar cursos y materias de a muchos (Admin)
@@ -1764,6 +2003,7 @@ paths:
         un problema de presentación, y quien tiene el archivo es el único que puede
         mostrar una vista previa antes de mandar nada.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: cicloId
@@ -1801,8 +2041,8 @@ paths:
             El cuerpo no trae ningún curso, trae más de 500, o alguna fila tiene un año
             fuera del rango 1-15, una división o modalidad demasiado larga, o un nombre de
             materia vacío o de más de 100 caracteres. El mensaje nombra la fila.
-        "404": { description: El ciclo lectivo no existe }
-        "409": { description: El ciclo está archivado — sus cursos y materias ya no se modifican }
+        "404": { description: "El ciclo lectivo no existe" }
+        "409": { description: "El ciclo está archivado — sus cursos y materias ya no se modifican" }
 
   /api/cursos/{id}/copiar-materias:
     post:
@@ -1822,6 +2062,7 @@ paths:
         hacia otro año es armar el ciclo siguiente, y para eso están el clonado del
         archivado y la carga de la estructura entera, que mueven también los cursos.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -1843,6 +2084,7 @@ paths:
                   items: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Copiar las materias de un curso a otros del mismo ciclo (Admin)"
           content:
             application/json:
               schema:
@@ -1856,8 +2098,8 @@ paths:
             No se eligió ningún destino, se eligieron más de 200, el origen figura entre
             los destinos, el origen no tiene materias, o algún destino pertenece a otro
             ciclo lectivo.
-        "404": { description: El curso de origen o alguno de los destinos no existe }
-        "409": { description: El ciclo está archivado — sus cursos y materias ya no se modifican }
+        "404": { description: "El curso de origen o alguno de los destinos no existe" }
+        "409": { description: "El ciclo está archivado — sus cursos y materias ya no se modifican" }
 
   /api/ciclos/{cicloId}/cursos:
     get:
@@ -1875,6 +2117,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Listar cursos del ciclo"
           content:
             application/json:
               schema:
@@ -1885,6 +2128,7 @@ paths:
       tags: [academic]
       summary: Crear curso en el ciclo (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: cicloId
@@ -1902,7 +2146,7 @@ paths:
                 division: { type: string, maxLength: 12, example: "2", description: "Opcional. Ausente = la institución no divide sus cursos" }
                 modalidad: { type: string, maxLength: 80, example: "Electromecánica", description: "Opcional. Modalidad, orientación o carrera" }
       responses:
-        "201": { description: Curso creado }
+        "201": { description: "Curso creado" }
         "400": { description: "Falta el año o está fuera del rango 1-15, o la división o la modalidad son demasiado largas" }
 
   /api/cursos/{id}:
@@ -1920,14 +2164,16 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener un curso (cualquier usuario autenticado)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Curso' }
-        "404": { description: No existe }
+        "404": { description: "No existe" }
     patch:
       tags: [academic]
       summary: Editar nombre de un curso (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -1943,9 +2189,9 @@ paths:
                 division: { type: string, maxLength: 12, example: "2", description: "Opcional. Ausente = la institución no divide sus cursos" }
                 modalidad: { type: string, maxLength: 80, example: "Electromecánica", description: "Opcional. Modalidad, orientación o carrera" }
       responses:
-        "200": { description: Curso actualizado }
+        "200": { description: "Curso actualizado" }
         "400": { description: "Falta el año o está fuera del rango 1-15, o la división o la modalidad son demasiado largas" }
-        "409": { description: Ya existe otro curso con ese año, esa división y esa modalidad en el mismo ciclo (sin distinguir tildes ni mayúsculas). Dos modalidades distintas SÍ pueden tener cada una su "1°A" }
+        "409": { description: "Ya existe otro curso con ese año, esa división y esa modalidad en el mismo ciclo (sin distinguir tildes ni mayúsculas). Dos modalidades distintas SÍ pueden tener cada una su \"1°A\"" }
     delete:
       tags: [academic]
       summary: Eliminar un curso (Admin)
@@ -1953,14 +2199,15 @@ paths:
         Solo permitido si ninguna de sus materias tiene reservas asociadas (RF-02.11).
         Para un curso con historial, la única opción es archivar el ciclo completo.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "200": { description: Curso eliminado }
-        "409": { description: El curso tiene materias con reservas asociadas — no se puede eliminar }
+        "200": { description: "Curso eliminado" }
+        "409": { description: "El curso tiene materias con reservas asociadas — no se puede eliminar" }
 
   /api/cursos/{cursoId}/materias:
     get:
@@ -1974,6 +2221,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Listar materias del curso"
           content:
             application/json:
               schema:
@@ -1984,6 +2232,7 @@ paths:
       tags: [academic]
       summary: Crear materia en el curso (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: cursoId
@@ -2013,9 +2262,9 @@ paths:
               properties:
                 nombre: { type: string, maxLength: 100, example: "Matemáticas" }
       responses:
-        "201": { description: Materia creada }
+        "201": { description: "Materia creada" }
         "400": { description: "El nombre está vacío o pasa los 100 caracteres" }
-        "409": { description: El curso ya tiene una materia con ese nombre, sin distinguir tildes ni mayúsculas }
+        "409": { description: "El curso ya tiene una materia con ese nombre, sin distinguir tildes ni mayúsculas" }
 
   /api/materias/{id}:
     get:
@@ -2032,14 +2281,16 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener una materia (cualquier usuario autenticado)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Materia' }
-        "404": { description: No existe }
+        "404": { description: "No existe" }
     patch:
       tags: [academic]
       summary: Editar nombre de una materia (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -2053,9 +2304,9 @@ paths:
               properties:
                 nombre: { type: string, maxLength: 100, example: "Matemáticas" }
       responses:
-        "200": { description: Materia actualizada }
+        "200": { description: "Materia actualizada" }
         "400": { description: "El nombre está vacío o pasa los 100 caracteres" }
-        "409": { description: Ya existe otra materia con ese nombre en el mismo curso, sin distinguir tildes ni mayúsculas }
+        "409": { description: "Ya existe otra materia con ese nombre en el mismo curso, sin distinguir tildes ni mayúsculas" }
     delete:
       tags: [academic]
       summary: Eliminar una materia (Admin)
@@ -2063,14 +2314,15 @@ paths:
         Solo permitido si no tiene reservas asociadas (RF-02.11). Con historial,
         la única opción es archivar el ciclo completo.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "200": { description: Materia eliminada }
-        "409": { description: La materia tiene reservas asociadas — no se puede eliminar }
+        "200": { description: "Materia eliminada" }
+        "409": { description: "La materia tiene reservas asociadas — no se puede eliminar" }
 
   /api/materias/{materiaId}/docentes:
     get:
@@ -2084,6 +2336,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Listar docentes asignados a la materia"
           content:
             application/json:
               schema:
@@ -2093,8 +2346,13 @@ paths:
     post:
       tags: [academic]
       summary: Asignar docente a materia (Admin)
-      description: Solo se puede asignar a un usuario en estado APROBADA (RF-02.6).
+      description: |
+        Solo se puede asignar a un usuario en estado APROBADA (RF-02.6).
+        La validación y el alta se coordinan con las bajas de cuentas y las
+        remociones de asignaciones; una baja concurrente incluye el vínculo
+        confirmado antes de prepararse o impide asignar la cuenta deshabilitada.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: materiaId
@@ -2111,10 +2369,10 @@ paths:
                 usuarioId: { type: string, format: uuid }
                 rol: { type: string, enum: [TITULAR, SUPLENTE] }
       responses:
-        "201": { description: Docente asignado }
-        "400": { description: usuarioId vacío o sin formato de UUID }
-        "404": { description: Usuario no encontrado }
-        "409": { description: El usuario no está en estado APROBADA }
+        "201": { description: "Docente asignado" }
+        "400": { description: "usuarioId vacío o sin formato de UUID" }
+        "404": { description: "Usuario no encontrado" }
+        "409": { description: "El usuario no está en estado APROBADA" }
 
   /api/materias/{materiaId}/docentes/{docenteMateriaId}:
     patch:
@@ -2129,6 +2387,7 @@ paths:
         No toca nada más que el rol. El usuario y la materia de un vínculo no se
         editan: cambiar cualquiera de los dos es otro vínculo.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: materiaId
@@ -2153,9 +2412,9 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DocenteMateria" }
-        "400": { description: Rol inválido o cuerpo malformado }
-        "403": { description: Solo ADMIN }
-        "404": { description: La asignación no existe }
+        "400": { description: "Rol inválido o cuerpo malformado" }
+        "403": { description: "Solo ADMIN" }
+        "404": { description: "La asignación no existe" }
     delete:
       tags: [academic]
       summary: Remover docente de materia (Admin)
@@ -2165,9 +2424,13 @@ paths:
         reservas futuras y se notifica a todos los Admin; si conserva otro docente,
         no se cancela nada.
 
-        La cancelación ocurre ANTES de quitar la asignación: si falla, la asignación
-        se conserva y la operación se puede reintentar.
+        La remoción, la comprobación de docentes APROBADA restantes y las
+        cancelaciones se confirman juntas. Se coordinan con otras remociones,
+        asignaciones, bajas de cuentas y creación de reservas. Si falla cualquier
+        paso o el commit, se conserva la asignación y las reservas; se puede
+        reintentar. Los avisos se publican después de confirmar.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: materiaId
@@ -2211,6 +2474,10 @@ paths:
         eliminó (RF-01.9). No es un error ni un dato que falta: `audit_log` no
         tiene clave foránea a propósito, justamente para que lo que hizo una
         cuenta sobreviva a su eliminación. `actorId` viaja siempre.
+
+        Los filtros de entidad unifican `pc` con `equipo` y `licencia` con
+        `licencia_software`. El catálogo ofrece sólo el nombre actual. Cada
+        entrada conserva su entidad original; el historial no se reescribe.
       security: [{ bearerAuth: [] }]
       parameters:
         - { in: query, name: accion, schema: { type: string }, example: "CURSO_ELIMINADO", description: "Coincidencia exacta. Los valores en uso salen de /opciones." }
@@ -2223,6 +2490,7 @@ paths:
         - $ref: '#/components/parameters/pageSize'
       responses:
         "200":
+          description: "Respuesta correcta: Consultar el registro de auditoría (Admin)"
           content:
             application/json:
               schema:
@@ -2237,7 +2505,7 @@ paths:
             Una fecha con formato distinto de AAAA-MM-DD, un rango invertido, un
             rango de más de 366 días, un UUID mal formado, o un tamaño de página
             fuera de 1-200.
-        "403": { description: No es Admin }
+        "403": { description: "No es Admin" }
 
   /api/auditoria/opciones:
     get:
@@ -2251,8 +2519,10 @@ paths:
 
         Con el registro vacío devuelve dos listas vacías, nunca nulas.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       responses:
         "200":
+          description: "Respuesta correcta: Valores en uso para los filtros del registro (Admin)"
           content:
             application/json:
               schema:
@@ -2260,7 +2530,7 @@ paths:
                 properties:
                   acciones: { type: array, items: { type: string } }
                   entidades: { type: array, items: { type: string } }
-        "403": { description: No es Admin }
+        "403": { description: "No es Admin" }
 
   /api/carros:
     get:
@@ -2287,6 +2557,7 @@ paths:
             el parámetro se ignora.
       responses:
         "200":
+          description: "Respuesta correcta: Listar carros (cualquier usuario autenticado)"
           content:
             application/json:
               schema:
@@ -2308,6 +2579,7 @@ paths:
         La descripción NO se canoniza —no identifica nada y puede tener varios
         renglones a propósito—, sólo se le recortan los bordes.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -2319,9 +2591,9 @@ paths:
                 nombre: { type: string, maxLength: 100, example: "Carro EDUTEC" }
                 descripcion: { type: string, example: "Notebooks del laboratorio" }
       responses:
-        "201": { description: Carro creado }
+        "201": { description: "Carro creado" }
         "400": { description: "El nombre está vacío o pasa los 100 caracteres" }
-        "409": { description: Ya existe un carro con ese nombre, sin distinguir tildes, mayúsculas ni espacios de más }
+        "409": { description: "Ya existe un carro con ese nombre, sin distinguir tildes, mayúsculas ni espacios de más" }
 
   /api/carros/{id}:
     get:
@@ -2338,14 +2610,16 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener un carro (cualquier usuario autenticado)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Carro' }
-        "404": { description: No existe }
+        "404": { description: "No existe" }
     patch:
       tags: [inventory]
       summary: Editar carro (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -2360,9 +2634,9 @@ paths:
                 nombre: { type: string, maxLength: 100, example: "Carro EDUTEC" }
                 descripcion: { type: string, example: "Notebooks del laboratorio" }
       responses:
-        "200": { description: Carro actualizado }
+        "200": { description: "Carro actualizado" }
         "400": { description: "El nombre está vacío o pasa los 100 caracteres" }
-        "409": { description: Ya existe otro carro con ese nombre, sin distinguir tildes, mayúsculas ni espacios de más }
+        "409": { description: "Ya existe otro carro con ese nombre, sin distinguir tildes, mayúsculas ni espacios de más" }
     delete:
       tags: [inventory]
       summary: Dar de baja un carro (Admin)
@@ -2375,6 +2649,9 @@ paths:
         Sólo con el carro **vacío**. Darlo de baja con máquinas adentro las
         dejaría en un contenedor que para el sistema ya no existe: no
         aparecerían en ningún selector de carro.
+        Esta comprobación y la baja se coordinan con las altas, movimientos y
+        reactivaciones; un ingreso concurrente no deja equipos activos dentro
+        de un carro retirado.
 
         **La baja libera el nombre** para el carro que lo reemplace, igual que
         la baja de un equipo libera su número de serie y su zócalo. Queda
@@ -2382,14 +2659,15 @@ paths:
 
         Un carro dado de baja no aparece en `GET /api/carros`.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "200": { description: Carro dado de baja }
-        "404": { description: El carro no existe }
+        "200": { description: "Carro dado de baja" }
+        "404": { description: "El carro no existe" }
         "409":
           description: |
             El carro todavía tiene equipos adentro, o ya estaba dado de baja.
@@ -2406,6 +2684,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Listar los equipos de un carro (RF-03.7, todos los usuarios autenticados)"
           content:
             application/json:
               schema:
@@ -2418,6 +2697,7 @@ paths:
       tags: [inventory]
       summary: Registrar un equipo en un carro (RF-03.2, Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: carroId
@@ -2439,8 +2719,8 @@ paths:
                 sistemaOperativo: { type: string }
                 softwareInstalado: { type: string }
       responses:
-        "201": { description: PC registrada }
-        "409": { description: Ya existe una PC con ese identificador en el carro, o el número de serie ya está registrado en otra PC }
+        "201": { description: "PC registrada" }
+        "409": { description: "Ya existe una PC con ese identificador en el carro, o el número de serie ya está registrado en otra PC" }
 
   /api/equipos:
     get:
@@ -2477,6 +2757,7 @@ paths:
           description: "`false` deja solo los equipos que no pertenecen a ningún carro."
       responses:
         "200":
+          description: "Respuesta correcta: Listar el inventario, entero o solo lo que no está en ningún carro (RF-03.15, todos los usuarios autenticados)"
           content:
             application/json:
               schema:
@@ -2501,6 +2782,7 @@ paths:
         esa división es falsa: un proyector tiene serie —y es de lo que más se
         extravía— y un cargador no trae ninguna.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -2528,8 +2810,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Equipo' }
-        "400": { description: Falta el tipo o el nombre, o exceden el largo }
-        "409": { description: Ya hay otro equipo suelto con ese nombre }
+        "400": { description: "Falta el tipo o el nombre, o exceden el largo" }
+        "409": { description: "Ya hay otro equipo suelto con ese nombre" }
 
   /api/carros/{id}/reactivar:
     post:
@@ -2546,14 +2828,15 @@ paths:
 
         Queda auditado (`CARRO_REACTIVADO`).
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "200": { description: El carro volvió a circulación }
-        "404": { description: No existe ese carro }
+        "200": { description: "El carro volvió a circulación" }
+        "404": { description: "No existe ese carro" }
         "409":
           description: El carro no estaba dado de baja, o su nombre ya lo tiene otro
           content:
@@ -2575,10 +2858,11 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener un equipo (cualquier usuario autenticado)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Equipo' }
-        "404": { description: No existe }
+        "404": { description: "No existe" }
     patch:
       tags: [inventory]
       summary: Editar datos de un equipo, incluyendo moverlo de carro (Admin)
@@ -2590,6 +2874,7 @@ paths:
         Quitar `reservable` NO cancela nada: el equipo deja de ofrecerse al
         armar una reserva, pero las que ya existen siguen en pie.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -2621,9 +2906,9 @@ paths:
                     carro**: adentro el alta lo exige, y una edición no puede
                     abrir por la puerta de atrás un estado que el alta prohíbe.
       responses:
-        "200": { description: PC actualizada }
-        "400": { description: Tipo o nombre vacíos o demasiado largos, o número de serie vacío en una computadora de carro }
-        "409": { description: Ya existe una PC con ese identificador en el carro destino, o el número de serie ya está registrado en otra PC }
+        "200": { description: "PC actualizada" }
+        "400": { description: "Tipo o nombre vacíos o demasiado largos, o número de serie vacío en una computadora de carro" }
+        "409": { description: "Ya existe una PC con ese identificador en el carro destino, o el número de serie ya está registrado en otra PC" }
     delete:
       tags: [inventory]
       summary: Dar de baja un equipo del inventario (Admin)
@@ -2640,6 +2925,7 @@ paths:
         marcar primero que volvió. Cambiar el ESTADO sí se permite estando
         prestado — llevarle una máquina al técnico es justamente un préstamo.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -2683,14 +2969,15 @@ paths:
 
         Queda auditado (`EQUIPO_REACTIVADO`).
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "200": { description: El equipo volvió al inventario }
-        "404": { description: No existe ese equipo }
+        "200": { description: "El equipo volvió al inventario" }
+        "404": { description: "No existe ese equipo" }
         "409":
           description: El equipo no estaba dado de baja, o su identificador, nombre o número de serie ya está ocupado, o su carro fue retirado
           content:
@@ -2704,7 +2991,11 @@ paths:
       description: |
         Al pasar a EN_MANTENIMIENTO o FUERA_DE_SERVICIO, cancela en cascada todas las
         reservas CONFIRMADA futuras de esa PC y notifica a cada docente afectado (RF-03.6).
+        El cambio y la cascada comparten una transacción. Si falla cualquier
+        paso se revierte toda la operación. Las reservas y entregas se
+        coordinan con la validación del estado; los avisos salen al confirmar.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -2750,6 +3041,7 @@ paths:
           schema: { type: string, format: date }
       responses:
         "200":
+          description: "Respuesta correcta: Calendario de disponibilidad de un equipo (todos los usuarios autenticados)"
           content:
             application/json:
               schema:
@@ -2791,8 +3083,8 @@ paths:
                   example: batería
                 gravedad: { type: string, enum: [LEVE, MODERADA, GRAVE] }
       responses:
-        "201": { description: Incidencia registrada }
-        "400": { description: La categoría supera los 50 caracteres }
+        "201": { description: "Incidencia registrada" }
+        "400": { description: "La categoría supera los 50 caracteres" }
 
   /api/incidencias/{id}:
     get:
@@ -2811,14 +3103,16 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener una incidencia (cualquier usuario autenticado)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Incidencia' }
-        "404": { description: No existe }
+        "404": { description: "No existe" }
     patch:
       tags: [inventory]
       summary: Actualizar estado de incidencia (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -2838,10 +3132,9 @@ paths:
                     Clasificar después una falla que se reportó sin
                     diagnosticar. Mandarla vacía la devuelve a "sin
                     clasificar"; omitir el campo la deja como está.
-                enviadoDGE: { type: boolean }
-                fechaEnvioDGE: { type: string, format: date-time }
+                marcarEnviadaASoporte: { type: boolean, description: "Marca envío y fecha actual del servidor" }
       responses:
-        "200": { description: Incidencia actualizada }
+        "200": { description: "Incidencia actualizada" }
 
   /api/reservas/{id}/equipo:
     patch:
@@ -2866,6 +3159,10 @@ paths:
         fecha no se cambia nada y el 409 dice en cuál. Cambiar catorce martes y
         fallar en el decimoquinto dejaría la serie repartida entre dos máquinas
         sin que nadie lo pidiera.
+        Las reservas se releen bajo bloqueos de sus grupos y filas antes de
+        moverlas. Una cancelación concurrente se conserva; las escrituras
+        obsoletas se rechazan con 409. Las consultas de solapamiento y las
+        escrituras usan la misma conexión transaccional.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -2898,10 +3195,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Reserva' }
-        "400": { description: Falta la PC nueva, o el alcance no es uno de los dos valores }
-        "403": { description: La reserva es de otra persona y quien pide no es Admin }
-        "404": { description: La reserva no existe }
-        "409": { description: "La reserva ya no está vigente, o la PC nueva no está disponible o ya tiene reserva en esa franja. Con ESTA_Y_SIGUIENTES el mensaje nombra la fecha del choque y no se cambia ninguna ocurrencia" }
+        "400": { description: "Falta la PC nueva, o el alcance no es uno de los dos valores" }
+        "403": { description: "La reserva es de otra persona y quien pide no es Admin" }
+        "404": { description: "La reserva no existe" }
+        "409": { description: "La reserva ya no está vigente o cambió concurrentemente, o la PC nueva no está disponible o ya tiene reserva en esa franja. Con ESTA_Y_SIGUIENTES el mensaje nombra la fecha del choque y no se cambia ninguna ocurrencia" }
 
   /api/prestamos:
     get:
@@ -2916,6 +3213,7 @@ paths:
         marcarse entregas convertiría el registro en una declaración en vez
         de en una constancia.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       responses:
         "200":
           description: Listado
@@ -2940,9 +3238,14 @@ paths:
         sale igual: el Admin tiene las otras máquinas en la mano, y hacerlo
         empezar de nuevo por una sola sería peor.
 
+        Las entregas aceptadas se confirman juntas. Un error inesperado
+        revierte todo el lote. Los IDs repetidos se procesan una sola vez,
+        conservando el orden de su primera aparición.
+
         `avisos` trae las reservas próximas de las máquinas entregadas. No
         impidió nada: el sistema no sabe cuánto va a durar un trámite.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -3002,14 +3305,21 @@ paths:
       description: |
         Se mandan las Reserva puntuales (una por PC), no el grupo: el retiro
         es máquina por máquina, porque el docente puede llevarse tres de las
-        cinco que reservó — y las otras dos siguen disponibles para otro.
+        cinco que reservó. Las otras siguen reservadas salvo que se declare
+        la entrega parcial con `liberarNoEntregadas`.
 
         La hora en que deben volver sale del fin de la reserva; no se manda.
 
         Responde 200 aunque alguna PC no haya salido; qué pasó con cada una
         está en `noEntregadas`. Un 409 obligaría a la pantalla a deshacer las
         que sí se entregaron, que ya están en manos del docente.
+
+        Se comprueba la existencia de todas las reservas antes de entregar.
+        Las entregas y las liberaciones se confirman juntas; un error
+        inesperado revierte todo el lote. Los IDs repetidos se procesan una
+        sola vez, conservando el orden de su primera aparición.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -3026,10 +3336,16 @@ paths:
                   type: boolean
                   default: false
                   description: |
-                    Entrega parcial declarada (RF-08.10.1): esto es TODO lo que
-                    el docente se llevó, así que las reservas del mismo grupo
-                    que no vengan en `reservaIds` pasan a `NO_RETIRADA` en el
-                    acto y sus equipos quedan libres.
+                    Entrega parcial declarada (RF-08.10.1): se completa el
+                    retiro. Las reservas confirmadas del mismo grupo que
+                    nunca tuvieron una entrega pasan a `NO_RETIRADA` en el
+                    acto y sus equipos quedan libres. Lo retirado en tandas
+                    anteriores se conserva, incluso si ya fue devuelto.
+
+                    Sólo alcanza a los grupos con alguna entrega efectiva
+                    en este lote. Si no sale ninguna PC, no se libera nada.
+                    Una reserva solicitada cuya entrega fue rechazada puede
+                    liberarse si nunca tuvo un préstamo.
 
                     El alcance es el grupo de lo entregado —una materia, un día,
                     un horario—. Una reserva que se repite tiene un grupo por
@@ -3058,8 +3374,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ResultadoEntrega' }
-        "400": { description: Sin reservas indicadas }
-        "404": { description: Alguna de las reservas no existe }
+        "400": { description: "Sin reservas indicadas" }
+        "404": { description: "Alguna de las reservas no existe; no se confirma ningún cambio del lote" }
 
   /api/prestamos/recibir:
     post:
@@ -3072,7 +3388,14 @@ paths:
         Recibir dos veces la misma máquina no corta nada —pasa con dos Admin
         en el mostrador o un doble clic— y se informa en `noRecibidos`: lo
         que el Admin quería, que la máquina figure adentro, ya pasó.
+
+        Se conservan la fecha, el receptor y las observaciones de la primera
+        devolución, también ante solicitudes simultáneas. Se comprueba la
+        existencia de todos los préstamos antes de recibir; un ID inexistente
+        o un error inesperado revierte todo el lote. Los IDs repetidos se
+        procesan una sola vez, en el orden de su primera aparición.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -3110,8 +3433,8 @@ paths:
                       properties:
                         prestamoId: { type: string, format: uuid }
                         detalle: { type: string }
-        "400": { description: Sin préstamos indicados }
-        "404": { description: Alguno de los préstamos no existe }
+        "400": { description: "Sin préstamos indicados" }
+        "404": { description: "Alguno de los préstamos no existe; no se confirma ninguna devolución del lote" }
 
   /api/equipos/{equipoId}/prestamos:
     get:
@@ -3123,6 +3446,7 @@ paths:
         reserva asociada, pero el registro de quién se llevó la máquina vale
         por sí mismo.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: equipoId
@@ -3155,6 +3479,7 @@ paths:
         —hay que ir a mirar la máquina—, después de la más vencida a la que
         más le falta.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       responses:
         "200":
           description: Listado
@@ -3179,6 +3504,7 @@ paths:
         que ya entró. Por eso responde 201 aunque haya salteado algunas — un
         409 obligaría a la pantalla a deshacer lo que sí se creó.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -3211,7 +3537,7 @@ paths:
                     type: array
                     items: { type: string, format: uuid }
                     description: "No es un error: marcar todo un carro cuando algunas ya estaban cargadas tiene que funcionar."
-        "400": { description: Sin equipos, nombre o días inválidos, o vencimiento declarado de más de una forma }
+        "400": { description: "Sin equipos, nombre o días inválidos, o vencimiento declarado de más de una forma" }
 
   /api/licencias/renovar:
     post:
@@ -3229,6 +3555,7 @@ paths:
         sacarse de encima una licencia sin verificar poniéndole días que nadie
         confirmó.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -3262,8 +3589,8 @@ paths:
                   sinFechaPrevia:
                     type: array
                     items: { type: string, format: uuid }
-        "400": { description: Sin licencias indicadas }
-        "404": { description: Alguna de las licencias no existe }
+        "400": { description: "Sin licencias indicadas" }
+        "404": { description: "Alguna de las licencias no existe" }
 
   /api/licencias/{id}:
     get:
@@ -3273,6 +3600,7 @@ paths:
         pedirlo: había PATCH y DELETE de esta misma dirección y ningún GET. El
         permiso es el del listado — si ya se veía en la lista, se ve solo.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -3280,10 +3608,11 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener una licencia (Admin, igual que el listado)"
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/LicenciaSoftware' }
-        "404": { description: No existe }
+              schema: { $ref: '#/components/schemas/Licencia' }
+        "404": { description: "No existe" }
     patch:
       tags: [inventory]
       summary: Editar una licencia, incluido su vencimiento (Admin)
@@ -3298,6 +3627,7 @@ paths:
         Para recalcularlo ahora hay que mandar además `renovadaEl` con la
         última renovación conocida — explícito, no como efecto colateral.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -3315,10 +3645,10 @@ paths:
                     diasAviso: { type: integer, minimum: 0, maximum: 365 }
                 - $ref: '#/components/schemas/VencimientoDeclarado'
       responses:
-        "200": { description: Licencia actualizada }
-        "400": { description: Datos inválidos, o vencimiento declarado de más de una forma }
-        "404": { description: La licencia no existe }
-        "409": { description: Esa PC ya tiene otra licencia con ese nombre }
+        "200": { description: "Licencia actualizada" }
+        "400": { description: "Datos inválidos, o vencimiento declarado de más de una forma" }
+        "404": { description: "La licencia no existe" }
+        "409": { description: "Esa PC ya tiene otra licencia con ese nombre" }
     delete:
       tags: [inventory]
       summary: Quitar una licencia (Admin)
@@ -3327,14 +3657,15 @@ paths:
         reservas, ni incidencias, ni historial— así que conservarla solo
         dejaría ruido en la pantalla.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "204": { description: Licencia eliminada }
-        "404": { description: La licencia no existe }
+        "204": { description: "Licencia eliminada" }
+        "404": { description: "La licencia no existe" }
 
   /api/equipos/{equipoId}/cuentas:
     get:
@@ -3362,6 +3693,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Con qué cuentas se entra a un equipo (RF-03.22)"
           content:
             application/json:
               schema:
@@ -3383,6 +3715,7 @@ paths:
         real —la notebook que alguien configuró y nadie anotó— y sin él se
         confunde con la primera.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: equipoId
@@ -3395,13 +3728,14 @@ paths:
             schema: { $ref: '#/components/schemas/CuentaRequest' }
       responses:
         "201":
+          description: "Respuesta correcta: Anotar una cuenta de un equipo (RF-03.22, Admin)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CuentaDeEquipo' }
-        "400": { description: Datos inválidos, o una contraseña en una cuenta marcada como libre }
-        "403": { description: No es Admin }
-        "404": { description: Ese equipo no existe }
-        "409": { description: Ese equipo ya tiene una cuenta con ese nombre }
+        "400": { description: "Datos inválidos, o una contraseña en una cuenta marcada como libre" }
+        "403": { description: "No es Admin" }
+        "404": { description: "Ese equipo no existe" }
+        "409": { description: "Ese equipo ya tiene una cuenta con ese nombre" }
         "503": { description: "Falta CUENTAS_SECRET: este despliegue no puede guardar contraseñas" }
 
   /api/clases-de-cuenta:
@@ -3415,8 +3749,10 @@ paths:
         lista cerrada eso pediría una migración. Esto evita que convivan
         "Microsoft" y "MICROSOFT" sin cerrar la lista.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       responses:
         "200":
+          description: "Respuesta correcta: Las clases de cuenta ya usadas (Admin)"
           content:
             application/json:
               schema:
@@ -3440,10 +3776,11 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener una cuenta de equipo (cualquier usuario autenticado)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CuentaDeEquipo' }
-        "404": { description: No existe esa cuenta }
+        "404": { description: "No existe esa cuenta" }
     patch:
       tags: [inventory]
       summary: Corregir una cuenta de equipo (RF-03.22, Admin)
@@ -3457,6 +3794,7 @@ paths:
         cuando alguien la cambió en la máquina y todavía no sabemos la nueva.
         Y pasar `tienePassword: false` suelta la guardada.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -3468,12 +3806,13 @@ paths:
             schema: { $ref: '#/components/schemas/CuentaRequest' }
       responses:
         "200":
+          description: "Respuesta correcta: Corregir una cuenta de equipo (RF-03.22, Admin)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CuentaDeEquipo' }
-        "403": { description: No es Admin }
-        "404": { description: Esa cuenta no existe }
-        "409": { description: Ese equipo ya tiene otra cuenta con ese nombre }
+        "403": { description: "No es Admin" }
+        "404": { description: "Esa cuenta no existe" }
+        "409": { description: "Ese equipo ya tiene otra cuenta con ese nombre" }
     delete:
       tags: [inventory]
       summary: Quitar una cuenta de equipo (RF-03.22, Admin)
@@ -3483,15 +3822,16 @@ paths:
         la máquina pero sigue listada es peor que no tenerla: alguien la va a
         intentar usar.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "204": { description: Quitada }
-        "403": { description: No es Admin }
-        "404": { description: Esa cuenta no existe }
+        "204": { description: "Quitada" }
+        "403": { description: "No es Admin" }
+        "404": { description: "Esa cuenta no existe" }
 
   /api/cuentas/{id}/password:
     post:
@@ -3518,21 +3858,23 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Ver la contraseña de una cuenta (RF-03.22)"
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   password: { type: string }
-        "403": { description: Esa contraseña solo la puede ver un administrador }
-        "404": { description: Esa cuenta no existe, o no tiene una contraseña anotada }
-        "503": { description: "Falta CUENTAS_SECRET, o lo guardado no se pudo descifrar porque cambió" }
+        "403": { description: "Esa contraseña solo la puede ver un administrador" }
+        "404": { description: "Esa cuenta no existe, o no tiene una contraseña anotada" }
+        "503": { description: "Falta CUENTAS_SECRET, el dato no se pudo descifrar, o no se pudo persistir la auditoría de revelación" }
 
   /api/equipos/{equipoId}/licencias:
     get:
       tags: [inventory]
       summary: Licencias de un equipo puntual (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: equipoId
@@ -3553,24 +3895,54 @@ paths:
   # ══════════════════════════════
   # RESERVATIONS
   # ══════════════════════════════
+  /api/catalogo-prioridades:
+    get:
+      tags: [inventory]
+      summary: Materias con su curso o espacio real del ciclo activo (Admin)
+      description: |
+        Alimenta los filtros modalidad → año → división → materia. Cada fila conserva
+        su relación académica; no se pueden cruzar listas independientes. Excluye
+        ciclos, cursos, espacios y materias archivados. Un catálogo vacío responde data=[].
+        Para un curso concreto, la ausencia de modalidad/división es un dato explícito,
+        diferente de los filtros generales para todas las modalidades/divisiones.
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      responses:
+        "200":
+          description: Catálogo relacionado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [materiaId, materiaNombre, contenedorId, contenedorNombre, tipo]
+                      properties:
+                        materiaId: { type: string, format: uuid }
+                        materiaNombre: { type: string }
+                        contenedorId: { type: string, format: uuid }
+                        contenedorNombre: { type: string }
+                        tipo: { type: string, enum: [CURSO, ESPACIO] }
+                        modalidad: { type: string }
+                        anio: { type: integer, minimum: 1, maximum: 15 }
+                        division: { type: string }
+        "403": { description: Solo ADMIN }
+
   /api/materias-en-uso:
     get:
       tags: [inventory]
-      summary: Nombres de materia que ya existen (Admin)
+      summary: Nombres de materia existentes, conservado por compatibilidad (Admin)
       description: |
-        Alimenta el selector con el que se marca una preferencia (RF-03.21). Son los
-        nombres **distintos** que existen en el sistema, sin importar el curso ni el
-        ciclo — "Matemáticas" aparece una vez, no una por cada 1°A, 2°B…
-
-        Existe para que el Admin ELIJA en vez de tipear: la marca se guarda como texto,
-        y este selector es lo único que impide que "Matemática" y "Matematica" nazcan
-        como dos marcas distintas. Las variantes que sólo difieren en acentos o
-        mayúsculas se colapsan en una sola opción.
-
-        Incluye las materias de ciclos archivados: una marca del inventario sobrevive al
-        cierre del ciclo, así que la lista para editarla tiene que seguir mostrando ese
-        nombre.
+        Catálogo histórico de nombres distintos, incluidos ciclos archivados.
+        No acredita relaciones entre materia y curso. La interfaz de prioridades
+        utiliza /api/catalogo-prioridades; altas y ediciones validan combinaciones
+        del ciclo activo aunque el nombre aparezca en esta lista histórica.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       responses:
         "200":
           description: Listado
@@ -3608,6 +3980,36 @@ paths:
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/PreferenciaDeEquipo' } }
 
+  /api/carros/{carroId}/preferencias:
+    get:
+      tags: [inventory]
+      summary: Las marcas de preferencia de todos los equipos de un carro (Admin)
+      description: |
+        Las mismas marcas que `/equipos/{equipoId}/preferencias`, pero de todos los
+        equipos del carro en una sola consulta.
+
+        La usa el alta masiva del panel de inventario para avisar, ANTES de guardar,
+        que la prioridad elegida ya la usa otra materia en esas mismas máquinas: por
+        equipo ya se podía preguntar, pero pedirlo de a uno para un carro de veinte
+        eran veinte consultas para contestar una sola pregunta. Por eso es solo-Admin,
+        a diferencia de la de un equipo: sólo la usa esa pantalla.
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      parameters:
+        - in: path
+          name: carroId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Listado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PreferenciaDeEquipo' } }
+
   /api/reservas/{id}:
     get:
       tags: [reservation]
@@ -3627,11 +4029,12 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener una reserva (propia; un Admin ve cualquiera)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Reserva' }
-        "403": { description: Esa reserva es de otra persona }
-        "404": { description: No existe }
+        "403": { description: "Esa reserva es de otra persona" }
+        "404": { description: "No existe" }
 
   /api/preferencias/huerfanas:
     get:
@@ -3646,14 +4049,16 @@ paths:
         La ruta literal va registrada ANTES que `/api/preferencias/{id}`: si no,
         «huerfanas» se resolvería como un id.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       responses:
         "200":
+          description: "Respuesta correcta: Marcas de preferencia que ya no apuntan a ninguna materia (Admin)"
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/PreferenciaDeEquipo' } }
+                  data: { type: array, items: { $ref: '#/components/schemas/PreferenciaHuerfana' } }
 
   /api/preferencias:
     post:
@@ -3670,10 +4075,18 @@ paths:
         abortar el lote obligaría al Admin a averiguar cuál y destildarla. Eso hace que
         reintentar el mismo request sea seguro.
 
-        **No toca ninguna reserva ni consulta si las hay.** La marca sólo ordena la
-        lista al reservar, así que marcar un equipo con reservas ya hechas no tiene
+        El alcance debe coincidir con una materia y su contenedor no archivados
+        del ciclo activo. No basta con que existan los valores por separado.
+        Si no coincide, responde 400 sin modificar ningún equipo del lote.
+        `cursoExacto=true` identifica un curso concreto: exige año y compara
+        modalidad/división exactamente, incluso su ausencia. Con false (valor
+        anterior y predeterminado), los ejes omitidos son comodines de una regla general.
+
+        **No cambia reservas existentes.** Ordena la lista y participa en la
+        validación de futuras tomas por preferencia, así que marcar un equipo ya reservado no tiene
         conflicto posible.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -3686,22 +4099,23 @@ paths:
                 materiaNombre:
                   type: string
                   maxLength: 100
-                  description: "Elegido de /api/materias-en-uso. El cruce ignora acentos y mayúsculas"
+                  description: "Elegido de /api/catalogo-prioridades y validado con su curso. El cruce ignora acentos y mayúsculas"
                 anio:
                   type: integer
                   minimum: 1
                   maximum: 15
-                  description: "Opcional — ausente vale para toda materia con ese nombre, en cualquier año. Los tres ejes (modalidad, año, curso) son independientes: cada uno se sostiene solo"
+                  description: "Obligatorio con cursoExacto=true. En reglas generales, ausente abarca todos los años"
                 modalidad:
                   type: string
                   maxLength: 80
                   example: "Electromecánica"
-                  description: "Opcional — ausente vale para todas las modalidades. Se escribe como la del curso (RF-02.2), y el cruce ignora tildes y mayúsculas"
+                  description: "Ausente: sin modalidad con cursoExacto=true; todas con false. El cruce ignora tildes y mayúsculas"
                 division:
                   type: string
                   maxLength: 12
                   example: "2"
-                  description: "Opcional — ausente vale para todas las divisiones. Se escribe como la del curso (RF-02.2), y el cruce ignora tildes y mayúsculas"
+                  description: "Ausente: sin división con cursoExacto=true; todas con false. El cruce ignora tildes y mayúsculas"
+                cursoExacto: { type: boolean, default: false }
                 prioridad:
                   type: integer
                   minimum: 1
@@ -3718,8 +4132,8 @@ paths:
                 properties:
                   creadas: { type: array, items: { $ref: '#/components/schemas/PreferenciaDeEquipo' } }
                   equiposQueYaLaTenian: { type: array, items: { type: string, format: uuid }, description: "Los que ya tenían esa misma marca con ese mismo alcance" }
-        "400": { description: Materia vacía, año o división fuera de rango, división sin año, prioridad fuera de rango, o lista de equipos vacía }
-        "403": { description: Solo ADMIN }
+        "400": { description: "Alcance inexistente en el ciclo activo, curso concreto sin año, campos inválidos o lista de equipos vacía" }
+        "403": { description: "Solo ADMIN" }
 
   /api/preferencias/{id}:
     get:
@@ -3736,10 +4150,11 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener una marca de preferencia (cualquier usuario autenticado)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PreferenciaDeEquipo' }
-        "404": { description: No existe }
+        "404": { description: "No existe" }
     patch:
       tags: [inventory]
       summary: Corregir el alcance y la prioridad de una marca (Admin)
@@ -3748,9 +4163,14 @@ paths:
         esta. Dejarla editable haría que "corregir el año" y "cambiar de materia" fueran
         la misma operación, y sólo la primera es una corrección.
 
-        Los campos ausentes se interpretan como "sin acotar": mandar el cuerpo sin
-        `anio` deja la marca valiendo para toda materia con ese nombre.
+        Se envían los ejes completos del alcance deseado. Omitir `cursoExacto`
+        conserva el indicador de la marca actual. En reglas generales, los ejes
+        ausentes no acotan; en cursos concretos, año es obligatorio y modalidad/
+        división ausente exige que el curso tampoco tenga ese atributo. El alcance
+        resultante debe existir sin archivar en el ciclo activo; si no, responde 400
+        y conserva la marca anterior.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -3763,6 +4183,7 @@ paths:
             schema:
               type: object
               properties:
+                cursoExacto: { type: boolean, description: "Ausente conserva el valor actual" }
                 anio: { type: integer, minimum: 1, maximum: 15 }
                 modalidad: { type: string, maxLength: 80, example: "Electromecánica" }
                 division: { type: string, maxLength: 12, example: "2" }
@@ -3773,27 +4194,28 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PreferenciaDeEquipo' }
-        "400": { description: Alcance o prioridad inválidos }
-        "403": { description: Solo ADMIN }
-        "404": { description: La marca no existe }
-        "409": { description: El equipo ya tiene otra marca igual con ese mismo alcance }
+        "400": { description: "Alcance o prioridad inválidos" }
+        "403": { description: "Solo ADMIN" }
+        "404": { description: "La marca no existe" }
+        "409": { description: "El equipo ya tiene otra marca igual con ese mismo alcance" }
     delete:
       tags: [inventory]
       summary: Quitar una marca de preferencia (Admin)
       description: |
         Devuelve el equipo al orden neutral. **No hay ninguna cascada que avisar ni nada
-        que confirmar**: la marca sólo ordenaba la lista, así que sacarla no afecta
-        ninguna reserva.
+        que confirmar**: quitarla no modifica reservas existentes; cambia el orden
+        y las prioridades evaluadas en futuras reservas.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "204": { description: Marca quitada }
-        "403": { description: Solo ADMIN }
-        "404": { description: La marca no existe }
+        "204": { description: "Marca quitada" }
+        "403": { description: "Solo ADMIN" }
+        "404": { description: "La marca no existe" }
 
   /api/equipos-disponibles:
     get:
@@ -3807,7 +4229,9 @@ paths:
         los dados de baja, los que no están DISPONIBLE y los no reservables.
 
         Responde las dos mitades de la franja (RF-04.11): `data` son los libres, para
-        tildar, y `ocupados` los que ya tiene alguien, con quién los tiene. Los ocupados
+        tildar, y `ocupados` los que ya tiene alguien, con quién los tiene.
+        Si un ocupado tiene puedeTomarse=true, puede seleccionarse por prioridad;
+        si no, puede ofrecer pedir liberación según puedePedirse. Los ocupados
         no son un extra: sin ellos, "no hay nada libre" y "los tiene alguien con quien
         puedo hablar" se ven igual en pantalla, y solo la segunda tiene salida. No
         cuestan una consulta más — saber qué está libre ya exige leer las reservas y
@@ -3842,6 +4266,10 @@ paths:
             parámetro —un Admin que reserva sin materia— sale el orden de siempre y todo
             viene con `tramo: NEUTRAL`. Con `serieDesdeGrupoId` no hace falta: la materia
             se saca del propio grupo.
+
+            También decide, equipo por equipo, el `puedeTomarse` de cada `ocupado`: si esa
+            materia le puede robar la reserva a quien lo tiene. Sin este parámetro, ningún
+            ocupado se ofrece como robable.
         - in: query
           name: serieDesdeGrupoId
           schema: { type: string, format: uuid }
@@ -3853,6 +4281,7 @@ paths:
             adivinar al docente. Los `ocupados` siguen siendo los de la franja consultada.
       responses:
         "200":
+          description: "Respuesta correcta: Qué se puede tildar y qué está tomado en un horario dado"
           content:
             application/json:
               schema:
@@ -3878,7 +4307,7 @@ paths:
                               type: string
                               example: "Preferente para Matemática de 3°B"
                               description: "Por qué está en ese bloque, ya redactado. Ausente en un equipo neutral"
-                  ocupados: { type: array, items: { $ref: '#/components/schemas/EquipoOcupado' }, description: "Tomados en esa franja, con quién los tiene. No se tildan" }
+                  ocupados: { type: array, items: { $ref: '#/components/schemas/EquipoOcupado' }, description: "Tomados en esa franja, con quién los tiene; puedeTomarse habilita seleccionarlos por prioridad. Si no pueden tomarse, puedePedirse habilita pedir liberación" }
 
   /api/reservas/{id}/pedido-de-liberacion:
     post:
@@ -3921,15 +4350,25 @@ paths:
             Pedido enviado. Es 202 y no 201 porque no se crea ningún recurso que el
             cliente pueda después consultar o borrar: lo único que queda es la
             notificación del otro lado.
-        "400": { description: El mensaje excede el máximo }
-        "403": { description: La reserva es propia — no hay a quién pedirle }
-        "404": { description: La reserva no existe }
+        "400": { description: "El mensaje excede el máximo" }
+        "403": { description: "La reserva es propia — no hay a quién pedirle" }
+        "404": { description: "La reserva no existe" }
         "409": { description: "Ya se pidió por esa reserva hoy; o la reserva no está CONFIRMADA; o su franja ya empezó; o es un bloqueo administrativo, que no tiene docente a quien pedirle" }
 
   /api/reservas:
     get:
       tags: [reservations]
-      summary: Listar reservas agrupadas (propias si Docente, todas si Admin)
+      summary: Listar reservas por equipo (propias si Docente, todas si Admin)
+      description: |
+        Por defecto pagina filas individuales de equipos. Con porClases=true,
+        page/pageSize y meta.total cuentan clases completas y bloqueos del mismo
+        actor/fecha/franja. data mantiene filas por equipo y puede tener más elementos
+        que pageSize. Los filtros seleccionan las clases; se devuelven todos sus
+        miembros visibles para el solicitante, incluidos los equipos cancelados
+        de una clase vigente. Sin incluirCanceladas se ocultan las clases y los
+        bloqueos completamente cancelados. El filtro estado selecciona clases que
+        contienen equipos en ese estado y mantiene sus otros miembros. CANCELADA
+        incluye también las clases completamente canceladas. Se conservan los permisos por actor.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: query
@@ -3945,26 +4384,51 @@ paths:
           name: materiaId
           schema: { type: string, format: uuid }
         - in: query
+          name: incluirCanceladas
+          schema: { type: boolean, default: false }
+        - in: query
+          name: porClases
+          description: Pagina clases y bloqueos completos, con sus equipos dentro de la misma página.
+          schema: { type: boolean, default: false }
+        - in: query
           name: estado
-          schema: { type: string, enum: [CONFIRMADA, PARCIALMENTE_CANCELADA, CANCELADA, FINALIZADA, NO_RETIRADA] }
+          schema: { type: string, enum: [CONFIRMADA, FINALIZADA, NO_RETIRADA, CANCELADA] }
+        - in: query
+          name: busqueda
+          description: Texto literal de materia, curso o modalidad, sin distinguir tildes o mayúsculas.
+          schema: { type: string, maxLength: 100 }
+        - in: query
+          name: creadoPor
+          description: Sólo Admin puede filtrar otra cuenta; el docente siempre consulta sus propias reservas.
+          schema: { type: string, format: uuid }
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize'
       responses:
         "200":
+          description: "Respuesta correcta: Listar reservas por equipo (propias si Docente, todas si Admin)"
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/ReservaGrupo' } }
+                  data: { type: array, items: { $ref: '#/components/schemas/ReservaDetallada' } }
                   meta: { $ref: '#/components/schemas/PaginationMeta' }
-        "400": { description: page o pageSize inválidos }
+        "400": { description: "Filtros, porClases, page o pageSize inválidos" }
     post:
       tags: [reservations]
       summary: Crear reserva (uno o varios equipos en un solo grupo)
       description: |
         Operación transaccional: si alguna PC del arreglo tiene solapamiento, no se
-        confirma ninguna — la respuesta 409 detalla qué PC(s) puntual(es) fallaron
+        confirma ninguna, salvo desplazamientos autorizados mediante equiposATomar.
+        Éstos reponen las reservas desplazadas en cascada: primero dispositivos
+        libres admitidos para la materia, después reservas con prioridad inferior.
+        Las marcas admiten dispositivos por identidad, sin comparar hardware o
+        software. Si hay marcas propias aplicables sólo se usan equipos marcados;
+        si no hay ninguna se usan libres de la misma clase, sin desplazar terceros.
+        Se conservan los intervalos originales, se protegen empates, bloqueos y
+        reservas que empiezan en una hora o menos. Los faltantes se cancelan
+        puntualmente. Toda la cadena, auditoría y eventos comparte la transacción.
+        La respuesta 409 detalla qué PC(s) puntual(es) fallaron
         para que el usuario las destilde y reintente con el resto.
       security: [{ bearerAuth: [] }]
       requestBody:
@@ -3974,9 +4438,10 @@ paths:
             schema: { $ref: '#/components/schemas/ReservaRequest' }
       responses:
         "201":
+          description: "Grupo y reservas creadas, con el impacto de desplazamientos"
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ReservaGrupo' }
+              schema: { $ref: '#/components/schemas/CrearReservaResponse' }
         "400":
           description: |
             Fecha o rango horario rechazados: un bloque que ya terminó, una duración
@@ -3987,7 +4452,7 @@ paths:
             Una horaFin MENOR que horaInicio no es un error: significa que la
             reserva termina al día siguiente (22:00–01:00 es una clase nocturna de
             tres horas). Lo que se rechaza es que sean iguales.
-        "403": { description: Sin permiso para reservar en esa materia }
+        "403": { description: "Sin permiso para reservar en esa materia" }
         "409":
           description: |
             Una o más PCs elegidas tienen solapamiento — no se crea ninguna.
@@ -4000,10 +4465,69 @@ paths:
             text/plain:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
 
+  /api/reservas/recurrentes/previsualizar:
+    post:
+      tags: [reservations]
+      summary: Comprobar equipos en todas las fechas de una serie sin crear reservas
+      description: |
+        Aplica los permisos, jornada, límites y reglas de prioridad de la creación.
+        Máximo 45 clases. No guarda reglas, reservas ni avisos. La disponibilidad
+        puede cambiar; al confirmar se valida nuevamente en una transacción.
+        equiposATomar informa la unión de equipos que requieren consentimiento
+        por prioridad en alguna fecha, incluso si están libres el primer día.
+        La interfaz exige consentimiento explícito cuando esa unión no está vacía
+        y lo invalida si cambian los datos o la selección. Al crear, envía los
+        equipos autorizados en equiposATomar; ese campo es la autorización que
+        revalida el backend, no un estado persistido por la previsualización.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReservaRecurrenteRequest' }
+      responses:
+        "200":
+          description: Disponibilidad por fecha de todos los equipos seleccionados
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cantidadClases, puedeCrear, equiposATomar, fechas]
+                properties:
+                  cantidadClases: { type: integer, minimum: 1, maximum: 45 }
+                  puedeCrear: { type: boolean }
+                  equiposATomar:
+                    type: array
+                    items: { type: string, format: uuid }
+                  fechas:
+                    type: array
+                    items:
+                      type: object
+                      required: [fecha, equipos]
+                      properties:
+                        fecha: { type: string, format: date }
+                        equipos:
+                          type: array
+                          items:
+                            type: object
+                            required: [equipoId, etiqueta, estado]
+                            properties:
+                              equipoId: { type: string, format: uuid }
+                              etiqueta: { type: string }
+                              estado: { type: string, enum: [LIBRE, POR_PRIORIDAD, NO_DISPONIBLE] }
+                              motivo: { type: string }
+        "400": { description: Fechas, horario, día, cantidad de equipos o tamaño de serie inválidos }
+        "401": { description: Sesión requerida }
+        "403": { description: La materia no está asignada al docente }
+        "409": { description: Materia o equipos no reservables }
+
   /api/reservas/recurrentes:
     post:
       tags: [reservations]
       summary: Crear reserva recurrente (uno o varios equipos, valida todas las ocurrencias antes de crear)
+      description: >
+        Máximo 45 clases. El backend cuenta las ocurrencias sin recorrer el
+        rango y rechaza el exceso antes de generar fechas o materializar la serie.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -4012,11 +4536,15 @@ paths:
             schema: { $ref: '#/components/schemas/ReservaRecurrenteRequest' }
       responses:
         "201":
+          description: "Respuesta correcta: Crear reserva recurrente (uno o varios equipos, valida todas las ocurrencias antes de crear)"
           content:
             application/json:
               schema:
                 type: object
                 properties:
+                  reservasCanceladas: { type: integer }
+                  reservasReubicadas: { type: integer }
+                  docentesAfectados: { type: integer }
                   reglaId: { type: string, format: uuid }
                   grupos:
                     type: array
@@ -4042,6 +4570,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Ver el detalle de un grupo de reserva (con el estado de cada equipo)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReservaGrupo' }
@@ -4070,13 +4599,14 @@ paths:
                 soloEsta: { type: boolean, default: true }
       responses:
         "200":
+          description: "Respuesta correcta: Cancelar un ReservaGrupo (RF-04.6)"
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   reservasCanceladas: { type: integer }
-        "403": { description: No es tu reserva y no sos Admin }
+        "403": { description: "No es tu reserva y no sos Admin" }
 
   /api/reservas/{id}/cancelar:
     post:
@@ -4090,6 +4620,9 @@ paths:
 
         No es un DELETE a propósito: dentro de un ciclo lectivo activo las
         reservas nunca se eliminan, se marcan CANCELADA (RF-04.9).
+        La reserva y el recálculo de su grupo se confirman juntos. Las
+        operaciones concurrentes releen el estado bajo los mismos bloqueos
+        y no sobrescriben una cancelación ya confirmada.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
@@ -4104,10 +4637,11 @@ paths:
               properties:
                 motivo: { type: string }
       responses:
-        "200": { description: Cancelada. Si la canceló otra persona, el docente recibe la notificación con el motivo (RF-05.1) }
-        "400": { description: Falta el motivo al cancelar una reserva ajena }
-        "403": { description: No es tu reserva y no sos Admin }
-        "404": { description: No encontrada }
+        "200": { description: "Cancelada. Si la canceló otra persona, el docente recibe la notificación con el motivo (RF-05.1)" }
+        "400": { description: "Falta el motivo al cancelar una reserva ajena" }
+        "403": { description: "No es tu reserva y no sos Admin" }
+        "404": { description: "No encontrada" }
+        "409": { description: "La reserva ya está en un estado terminal o cambió concurrentemente" }
 
   /api/bloqueos:
     post:
@@ -4124,6 +4658,7 @@ paths:
         una institución se toma el laboratorio, y ese texto es el que lee el docente
         al que le cancelaron la clase.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -4131,6 +4666,7 @@ paths:
             schema: { $ref: '#/components/schemas/BloqueoRequest' }
       responses:
         "201":
+          description: "Respuesta correcta: Bloquear equipos en un rango horario definido, indicando por qué (Admin)"
           content:
             application/json:
               schema:
@@ -4162,6 +4698,7 @@ paths:
         - $ref: '#/components/parameters/pageSize'
       responses:
         "200":
+          description: "Respuesta correcta: Listar notificaciones del usuario autenticado"
           content:
             application/json:
               schema:
@@ -4169,7 +4706,7 @@ paths:
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/Notificacion' } }
                   meta: { $ref: '#/components/schemas/PaginationMeta' }
-        "400": { description: page o pageSize inválidos }
+        "400": { description: "page o pageSize inválidos" }
 
   /api/notifications/{id}:
     get:
@@ -4190,11 +4727,12 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Obtener un aviso propio"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Notificacion' }
-        "403": { description: Ese aviso no es tuyo }
-        "404": { description: No existe }
+        "403": { description: "Ese aviso no es tuyo" }
+        "404": { description: "No existe" }
     delete:
       tags: [notifications]
       summary: Borrar un aviso propio
@@ -4218,10 +4756,10 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "204": { description: Aviso borrado }
-        "403": { description: Ese aviso no es tuyo }
-        "404": { description: No existe }
-        "409": { description: El aviso todavía no está leído }
+        "204": { description: "Aviso borrado" }
+        "403": { description: "Ese aviso no es tuyo" }
+        "404": { description: "No existe" }
+        "409": { description: "El aviso todavía no está leído" }
 
   /api/notifications/leidas:
     delete:
@@ -4263,6 +4801,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         "200":
+          description: "Respuesta correcta: Qué copias por correo recibe quien pregunta (RF-05.13)"
           content:
             application/json:
               schema:
@@ -4305,8 +4844,8 @@ paths:
                 type: object
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/PreferenciaEmail' } }
-        "400": { description: Alguna categoría no existe, o es de las que salen siempre }
-        "403": { description: Un docente pidió una categoría de administración }
+        "400": { description: "Alguna categoría no existe, o es de las que salen siempre" }
+        "403": { description: "Un docente pidió una categoría de administración" }
 
   /api/notifications/{id}/leida:
     patch:
@@ -4319,7 +4858,7 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "200": { description: Notificación marcada como leída }
+        "200": { description: "Notificación marcada como leída" }
 
   # ══════════════════════════════
   # REPORTS
@@ -4335,7 +4874,12 @@ paths:
         porque no tienen materia. Lo que NO cuenta es `NO_RETIRADA`: una clase
         que nadie fue a buscar no es una clase dada (RF-08.10).
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
+        - in: path
+          name: cicloId
+          required: true
+          schema: { type: string, format: uuid }
         - in: query
           name: desde
           schema: { type: string, format: date }
@@ -4343,7 +4887,11 @@ paths:
           name: hasta
           schema: { type: string, format: date }
       responses:
+        "400": { description: "Fechas inválidas, rango invertido o identificador inválido" }
+        "401": { description: "Sesión ausente o inválida" }
+        "403": { description: "Sólo administradores" }
         "200":
+          description: "Respuesta correcta: Reporte de uso por equipo (Admin)"
           content:
             application/json:
               schema:
@@ -4368,10 +4916,18 @@ paths:
       description: |
         Mismo rango opcional que uso-equipos, y mismo criterio de estados.
 
-        `cantidadReservas` cuenta filas `reserva`, o sea equipos-hora: un
-        docente que reservó ocho equipos para una clase suma ocho, no una.
+        `cantidadReservas` cuenta equipos reservados, no clases: un docente
+        que reservó ocho equipos para una clase suma ocho, no una.
+        `minutosReservados` suma la duración de cada reserva de equipo;
+        ocho equipos durante una hora suman 480 minutos. Incluye reservas
+        futuras; no mide horas de clase ni uso efectivo.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
+        - in: path
+          name: cicloId
+          required: true
+          schema: { type: string, format: uuid }
         - in: query
           name: desde
           schema: { type: string, format: date }
@@ -4379,7 +4935,11 @@ paths:
           name: hasta
           schema: { type: string, format: date }
       responses:
+        "400": { description: "Fechas inválidas, rango invertido o identificador inválido" }
+        "401": { description: "Sesión ausente o inválida" }
+        "403": { description: "Sólo administradores" }
         "200":
+          description: "Respuesta correcta: Reporte de uso por docente (Admin)"
           content:
             application/json:
               schema:
@@ -4411,13 +4971,17 @@ paths:
         disponible para años archivados, ya que sus ReservaGrupo/Reserva se
         eliminaron físicamente al archivar (ver RF-02.4).
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: anio
           required: true
           schema: { type: integer, example: 2025 }
       responses:
+        "401": { description: "Sesión ausente o inválida" }
+        "403": { description: "Sólo administradores" }
         "200":
+          description: "Respuesta correcta: Estadísticas de un ciclo lectivo ya archivado (Admin)"
           content:
             application/json:
               schema:
@@ -4443,7 +5007,7 @@ paths:
                         nombreDocenteSnapshot: { type: string }
                         cantidadReservas: { type: integer }
                         minutosTotales: { type: integer }
-        "404": { description: No hay estadísticas archivadas para ese año }
+        "404": { description: "No hay estadísticas archivadas para ese año" }
 
   /api/incidencias/resumen/por-equipo:
     get:
@@ -4454,6 +5018,7 @@ paths:
         que no está en ningún carro (015): al proyector también se le rompe la
         lámpara.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: query
           name: desde
@@ -4462,7 +5027,11 @@ paths:
           name: hasta
           schema: { type: string, format: date }
       responses:
+        "400": { description: "Fechas inválidas, rango invertido o identificador inválido" }
+        "401": { description: "Sesión ausente o inválida" }
+        "403": { description: "Sólo administradores" }
         "200":
+          description: "Respuesta correcta: Incidencias agregadas por equipo (RF-06.3, Admin)"
           content:
             application/json:
               schema:
@@ -4509,6 +5078,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         "200":
+          description: "Respuesta correcta: Ver la jornada de la institución"
           content:
             application/json:
               schema:
@@ -4545,6 +5115,9 @@ paths:
           distinta de la que después se aplica.
         - Con `confirmado: true`, recalcula el impacto desde cero, guarda y
           cancela lo que quedó afuera, avisando por correo a cada docente.
+          El recálculo se coordina con las nuevas reservas. Jornada y
+          cancelaciones se confirman juntas; si falla un paso se revierte todo
+          y los avisos de cancelación no se publican.
 
         Nunca se toca la clase que está **en curso**: no terminó, pero cancelarla
         sería sacarle las máquinas a alguien que está frente al curso.
@@ -4558,6 +5131,7 @@ paths:
         Queda registrado en `audit_log` como `JORNADA_CAMBIADA`, con quién lo
         hizo y cuánto se canceló.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -4661,15 +5235,15 @@ paths:
                             equipo: { type: string, example: "PC 3" }
                             quien: { type: string, example: "Ada Lovelace" }
                       clasesAfectadas: { type: integer }
-                      totalAfectadas: { type: integer, description: Equipos, no clases. }
-                      totalDeClases: { type: integer, description: Cuántas hay en total, para leer el tamaño del cambio. }
+                      totalAfectadas: { type: integer, description: "Equipos, no clases." }
+                      totalDeClases: { type: integer, description: "Cuántas hay en total, para leer el tamaño del cambio." }
                       totalDeReservas: { type: integer }
         "500":
           description: |
-            Si el mensaje dice que **la jornada se guardó pero no se pudieron
-            cancelar** las reservas que quedaron afuera, el cambio SÍ se aplicó y
-            el horario nuevo ya rige. Volver a guardar la misma jornada reintenta
-            solo la cancelación: es idempotente.
+            No se pudo confirmar la jornada o sus cancelaciones. Toda la
+            operación se revierte; sigue vigente la jornada anterior y el
+            cambio no se registra como JORNADA_CAMBIADA. Se puede reintentar
+            la misma intención.
           content:
             text/plain:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -4685,6 +5259,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         "200":
+          description: "Respuesta correcta: Ver disponibilidad de todos los Admins (cualquier usuario autenticado)"
           content:
             application/json:
               schema:
@@ -4697,8 +5272,10 @@ paths:
       tags: [availability]
       summary: Ver mi propio horario semanal (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       responses:
         "200":
+          description: "Respuesta correcta: Ver mi propio horario semanal (Admin)"
           content:
             application/json:
               schema:
@@ -4710,6 +5287,7 @@ paths:
       summary: Agregar un bloque a mi horario semanal (Admin)
       description: Aplica de inmediato para todas las semanas futuras (RF-07.3) — no requiere ninguna acción de "propagar".
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -4722,7 +5300,7 @@ paths:
                 horaInicio: { type: string, example: "08:00" }
                 horaFin: { type: string, example: "12:00" }
       responses:
-        "201": { description: Bloque agregado }
+        "201": { description: "Bloque agregado" }
         "409":
           description: |
             Ese horario se pisa con otro bloque del mismo día (RF-07.7). El
@@ -4738,6 +5316,7 @@ paths:
       summary: Editar un bloque de mi horario semanal (Admin)
       description: El cambio aplica desde ahora para todas las semanas futuras — no versiona el pasado, porque no hay nada materializado que preservar.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
@@ -4753,7 +5332,7 @@ paths:
                 horaInicio: { type: string }
                 horaFin: { type: string }
       responses:
-        "200": { description: Bloque actualizado }
+        "200": { description: "Bloque actualizado" }
         "409":
           description: |
             Ese horario se pisa con otro bloque del mismo día (RF-07.7). El
@@ -4766,13 +5345,14 @@ paths:
       tags: [availability]
       summary: Eliminar un bloque de mi horario semanal (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        "200": { description: Bloque eliminado }
+        "200": { description: "Bloque eliminado" }
 
   /api/mi-excepcion:
     post:
@@ -4783,6 +5363,7 @@ paths:
         Un usuario solo puede tener una excepción por fecha (UNIQUE usuario_id+fecha);
         volver a postear para la misma fecha reemplaza la excepción anterior.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       requestBody:
         required: true
         content:
@@ -4797,7 +5378,7 @@ paths:
                 horaFin: { type: string, description: "Requerido si tipo=HORARIO_MODIFICADO" }
                 motivo: { type: string }
       responses:
-        "201": { description: Excepción cargada (o reemplazada si ya existía una para esa fecha) }
+        "201": { description: "Excepción cargada (o reemplazada si ya existía una para esa fecha)" }
         "400": { description: "horaInicio/horaFin faltantes para tipo=HORARIO_MODIFICADO, o presentes para tipo=NO_DISPONIBLE" }
 
   /api/no-disponible-ahora:
@@ -4808,8 +5389,9 @@ paths:
         Atajo de un solo paso equivalente a cargar una excepción NO_DISPONIBLE para
         la fecha de hoy (RF-07.5) — útil para "llegué tarde" o "hoy no puedo estar".
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       responses:
-        "201": { description: Marcado como no disponible por hoy }
+        "201": { description: "Marcado como no disponible por hoy" }
 
   # ── Endpoints agregados tras la revisión completa ────────────────────
   # (RF que el spec declaraba pero que no tenían implementación)
@@ -4826,6 +5408,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
+          description: "Respuesta correcta: Incidencias de un equipo"
           content:
             application/json:
               schema:
@@ -4840,13 +5423,16 @@ paths:
       tags: [reports]
       summary: Histórico de uso por docente de un año archivado (RF-06.4, Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: anio
           required: true
           schema: { type: integer }
       responses:
-        "200": { description: OK }
+        "401": { description: "Sesión ausente o inválida" }
+        "403": { description: "Sólo administradores" }
+        "200": { description: "OK" }
 
   /api/incidencias/resumen/por-carro:
     get:
@@ -4860,6 +5446,7 @@ paths:
         aparecen: no pertenecen a ninguno. Sus incidencias se ven en
         `/api/incidencias/resumen/por-equipo`.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: query
           name: desde
@@ -4868,7 +5455,11 @@ paths:
           name: hasta
           schema: { type: string, format: date }
       responses:
+        "400": { description: "Fechas inválidas, rango invertido o identificador inválido" }
+        "401": { description: "Sesión ausente o inválida" }
+        "403": { description: "Sólo administradores" }
         "200":
+          description: "Respuesta correcta: Incidencias agregadas por carro (RF-06.3, Admin)"
           content:
             application/json:
               schema:
@@ -4909,6 +5500,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         "200":
+          description: "Respuesta correcta: Categorías de falla ya usadas (RF-03.5)"
           content:
             application/json:
               schema:
@@ -4934,8 +5526,12 @@ paths:
         y contarlos haría crecer el número para siempre. Los equipos sueltos
         (RF-03.16) van en una fila final sin `carroId` ni `carroNombre`.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       responses:
+        "401": { description: "Sesión ausente o inválida" }
+        "403": { description: "Sólo administradores" }
         "200":
+          description: "Respuesta correcta: Estado del parque de equipos, por carro (RF-06.5, Admin)"
           content:
             application/json:
               schema:
@@ -4970,8 +5566,12 @@ paths:
         Los dados de baja no se listan. Describe el estado de HOY: no acepta
         rango de fechas.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       responses:
+        "401": { description: "Sesión ausente o inválida" }
+        "403": { description: "Sólo administradores" }
         "200":
+          description: "Respuesta correcta: Equipos que hoy no se pueden reservar, con su falla (RF-06.6, Admin)"
           content:
             application/json:
               schema:
@@ -5009,6 +5609,7 @@ paths:
         No depende del ciclo lectivo (RF-06.3), pero sí acepta rango: cuenta
         hechos fechados.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: query
           name: desde
@@ -5017,7 +5618,11 @@ paths:
           name: hasta
           schema: { type: string, format: date }
       responses:
+        "400": { description: "Fechas inválidas, rango invertido o identificador inválido" }
+        "401": { description: "Sesión ausente o inválida" }
+        "403": { description: "Sólo administradores" }
         "200":
+          description: "Respuesta correcta: Incidencias agrupadas por tipo de falla (RF-06.7, Admin)"
           content:
             application/json:
               schema:
@@ -5041,6 +5646,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         "200":
+          description: "Respuesta correcta: Marcar como leídas todas las notificaciones propias (RF-05.7)"
           content:
             application/json:
               schema:
@@ -5067,6 +5673,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         "200":
+          description: "Respuesta correcta: Materias en las que el usuario autenticado puede reservar (RF-04.1)"
           content:
             application/json:
               schema:
@@ -5111,6 +5718,7 @@ paths:
         los endpoints de `/materias/{materiaId}/docentes`, que devuelven la
         fila cruda. Éste es para mostrarla.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: cicloId
@@ -5138,7 +5746,7 @@ paths:
                         cursoId: { type: string, format: uuid }
                         cursoNombre: { type: string, example: "4°2" }
                         cursoModalidad: { type: string, example: "Electromecánica", description: "Ausente = el curso no pertenece a ninguna agrupación. Acompaña al nombre porque el nombre solo dejó de ser único (RF-02.2)" }
-        "403": { description: No es Admin }
+        "403": { description: "No es Admin" }
 
   /api/docentes/{usuarioId}/materias:
     get:
@@ -5154,6 +5762,7 @@ paths:
         Solo Admin: es el único rol que opera el mostrador, y saber qué dicta
         otro no le hace falta a nadie más.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - in: path
           name: usuarioId
@@ -5179,7 +5788,7 @@ paths:
                         cursoModalidad: { type: string, example: "Electromecánica", description: "Ausente = el curso no pertenece a ninguna agrupación. Acompaña al nombre porque el nombre solo dejó de ser único (RF-02.2)" }
                         cicloId: { type: string, format: uuid }
                         cicloAnio: { type: integer }
-        "403": { description: No es Admin }
+        "403": { description: "No es Admin" }
 
   # ─────────────────────────────────────────
   # PERFIL: FOTO
@@ -5191,8 +5800,11 @@ paths:
       description: >
         Multipart con el campo `foto`. El tipo se deduce de los primeros bytes
         del archivo, no de lo que declare el cliente: se aceptan PNG, JPEG y
-        WEBP. Máximo 200 KB — la interfaz recorta y achica a 256×256 antes de
-        subir.
+        WEBP estático. Máximo 200 KB y 2048×2048 píxeles. El backend comprueba
+        las dimensiones antes de decodificar, valida también el frame interno
+        de WEBP y decodifica la imagen antes de guardarla. Un reemplazo inválido
+        conserva la foto anterior. La interfaz recorta y achica a 256×256 antes
+        de subir.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -5204,6 +5816,7 @@ paths:
                 foto: { type: string, format: binary }
       responses:
         "200":
+          description: "Respuesta correcta: Subir o reemplazar la foto de perfil propia"
           content:
             application/json:
               schema:
@@ -5211,14 +5824,14 @@ paths:
                 properties:
                   tipo: { type: string, example: image/webp }
                   actualizadaEn: { type: string, format: date-time }
-        "400": { description: No es una imagen de un formato aceptado }
-        "413": { description: Pasa el tamaño máximo }
+        "400": { description: "Formato no aceptado, imagen corrupta o dimensiones superiores a 2048×2048" }
+        "413": { description: "Pasa el tamaño máximo" }
     delete:
       tags: [auth]
       summary: Quitar la foto propia (vuelve a las iniciales)
       security: [{ bearerAuth: [] }]
       responses:
-        "204": { description: Sin contenido }
+        "204": { description: "Sin contenido" }
 
   /api/auth/usuarios/{id}/foto:
     get:
@@ -5233,10 +5846,11 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
         "200":
+          description: "Respuesta correcta: Ver la foto de una persona"
           content:
             image/*:
               schema: { type: string, format: binary }
-        "404": { description: Esa persona no tiene foto }
+        "404": { description: "Esa persona no tiene foto" }
 
   # ─────────────────────────────────────────
   # PEDIDOS PARA DICTAR UNA MATERIA
@@ -5265,19 +5879,22 @@ paths:
                 motivo: { type: string, maxLength: 1000 }
       responses:
         "201":
+          description: "Respuesta correcta: Pedir poder dictar una materia"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PedidoDeMateria' }
-        "400": { description: Falta el motivo, o la materia se indicó de las dos formas }
-        "409": { description: Ya dicta esa materia, o ya tiene un pedido sin resolver }
+        "400": { description: "Falta el motivo, o la materia se indicó de las dos formas" }
+        "409": { description: "Ya dicta esa materia, o ya tiene un pedido sin resolver" }
     get:
       tags: [academic]
       summary: Listar pedidos (Admin)
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - { name: pendientes, in: query, schema: { type: boolean }, description: Solo los que faltan resolver }
       responses:
         "200":
+          description: "Respuesta correcta: Listar pedidos (Admin)"
           content:
             application/json:
               schema:
@@ -5292,6 +5909,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         "200":
+          description: "Respuesta correcta: Mis pedidos, con su estado y la respuesta"
           content:
             application/json:
               schema:
@@ -5303,12 +5921,23 @@ paths:
     post:
       tags: [academic]
       summary: Aprobar o rechazar un pedido (Admin)
-      description: >
+      description: |
         Aprobar asigna al docente y, si la materia no existía, la crea en el
         curso indicado (`cursoId`, obligatorio en ese caso). Sin `rol`, lo
         decide el sistema: titular si nadie dicta la materia, suplente si ya
         la dicta alguien. Rechazar exige respuesta.
+
+        Crear la materia, asignar al docente y resolver se confirman juntos.
+        Un error revierte todos los cambios. `materiaCreadaId` vincula la
+        materia creada sin reemplazar el texto de la solicitud original.
+
+        Dos resoluciones simultáneas del mismo pedido se procesan en orden.
+        Repetir la misma decisión devuelve 200 con la constancia guardada:
+        no modifica respuesta, curso, rol, administrador ni fecha, aunque se
+        envíen otros valores, y no repite la creación, asignación ni el aviso.
+        Intentar la decisión opuesta devuelve 409.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -5325,11 +5954,13 @@ paths:
                 rol: { type: string, enum: [TITULAR, SUPLENTE] }
       responses:
         "200":
+          description: Pedido resuelto o constancia original de la misma decisión
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PedidoDeMateria' }
-        "400": { description: Falta el curso para crear la materia, o el rechazo no trae motivo }
-        "409": { description: El pedido ya estaba resuelto }
+        "400": { description: "Falta el curso para crear la materia, o el rechazo no trae motivo" }
+        "404": { description: "El pedido no existe" }
+        "409": { description: "El pedido ya se resolvió con la decisión opuesta" }
 
   # ─────────────────────────────────────────
   # SOPORTE (RF-09)
@@ -5361,6 +5992,7 @@ paths:
                 version: { type: string }
       responses:
         "201":
+          description: "Respuesta correcta: Abrir una conversación con el equipo de administración"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Sugerencia' }
@@ -5374,6 +6006,7 @@ paths:
         - { $ref: '#/components/parameters/pageSize' }
       responses:
         "200":
+          description: "Respuesta correcta: Ver todas las conversaciones (Admin)"
           content:
             application/json:
               schema:
@@ -5389,12 +6022,35 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         "200":
+          description: "Respuesta correcta: Mis conversaciones, con todos sus mensajes"
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/Sugerencia' } }
+
+  /api/sugerencias/{id}:
+    get:
+      tags: [sugerencias]
+      summary: Abrir una conversación concreta
+      description: >
+        Devuelve el hilo completo, incluso resuelto, independientemente de los
+        filtros y páginas del buzón. Solo puede leerlo su autor o un Admin.
+        La lectura no marca notificaciones ni modifica la conversación.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Conversación completa
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sugerencia' }
+        "400": { description: Identificador inválido }
+        "401": { description: Sesión ausente o inválida }
+        "403": { description: La conversación es de otra persona }
+        "404": { description: No existe esa conversación }
 
   /api/sugerencias/{id}/mensajes:
     post:
@@ -5423,11 +6079,12 @@ paths:
                 texto: { type: string, maxLength: 4000 }
       responses:
         "200":
+          description: "Respuesta correcta: Escribir en una conversación"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Sugerencia' }
-        "403": { description: La conversación es de otra persona }
-        "404": { description: No existe esa conversación }
+        "403": { description: "La conversación es de otra persona" }
+        "404": { description: "No existe esa conversación" }
 
   /api/sugerencias/{id}/resolver:
     post:
@@ -5438,11 +6095,13 @@ paths:
         diciendo "lo dimos por terminado" es ruido. Quien preguntó puede
         reabrirla escribiendo de nuevo.
       security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
         "200":
+          description: "Respuesta correcta: Dar la conversación por resuelta (Admin)"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Sugerencia' }
-        "409": { description: Ya estaba resuelta }
+        "409": { description: "Ya estaba resuelta" }

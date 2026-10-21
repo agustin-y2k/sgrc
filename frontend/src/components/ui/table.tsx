@@ -4,7 +4,13 @@ import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <div
+      data-slot="table-container"
+      tabIndex={0}
+      role={props["aria-label"] ? "region" : undefined}
+      aria-label={props["aria-label"]}
+      className="focus-visible:ring-ring relative w-full overflow-x-auto rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
+    >
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}

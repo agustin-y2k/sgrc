@@ -6,7 +6,6 @@ import { z } from "zod"
 
 import { PantallaDeAcceso } from "@/components/layout/PantallaDeAcceso"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AvisoDeSpam } from "@/components/AvisoDeSpam"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -39,13 +38,15 @@ import { getErrorMessage } from "@/lib/api-client"
 // Espeja RegistroRequest de internal/auth/interfaces/http/dto.go / docs/08-api-spec.yaml.
 // Lo que se declara (cargo, rol, curso y materia) vive en camposDeclarados,
 // compartido con el registro por Google.
-const registroSchema = z.object({
-  nombre: z.string().min(1, "Requerido").max(100),
-  apellido: z.string().min(1, "Requerido").max(100),
-  email: z.string().email("Ingresá un email válido"),
-  password: z.string().min(8, "Mínimo 8 caracteres"),
-  ...camposDeclarados,
-}).superRefine(exigeCursoYMateria)
+const registroSchema = z
+  .object({
+    nombre: z.string().min(1, "Requerido").max(100),
+    apellido: z.string().min(1, "Requerido").max(100),
+    email: z.string().email("Ingresá un email válido"),
+    password: z.string().min(8, "Mínimo 8 caracteres"),
+    ...camposDeclarados,
+  })
+  .superRefine(exigeCursoYMateria)
 
 type RegistroValues = z.infer<typeof registroSchema>
 
@@ -98,18 +99,14 @@ export function RegistroPage() {
             <CardTitle>Cuenta creada</CardTitle>
             <CardDescription>
               Tu cuenta quedó pendiente de aprobación de un Admin. Vas a poder iniciar
-              sesión una vez que te aprueben, y te avisamos por correo cuando pase.
+              sesión una vez que te aprueben. Consultá al equipo de administración de tu
+              escuela para conocer el estado de la solicitud.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <Button asChild className="w-full">
               <Link to="/login">Volver al login</Link>
             </Button>
-            {/* Este es el primer correo que esta persona recibe del sistema,
-                o sea el de mayor riesgo de terminar en spam. Y es el mejor
-                momento para pedirle que marque el remitente: le sirve para
-                todos los que vengan después. */}
-            <AvisoDeSpam>El aviso puede caer en spam.</AvisoDeSpam>
           </CardContent>
         </Card>
       </PantallaDeAcceso>

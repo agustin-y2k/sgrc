@@ -1,28 +1,19 @@
-# Integración continua: corre en cada push a `develop` y en cada Pull Request
-# contra ella lo mismo que `docs/10-testing.md` §5 pide correr a mano.
-#
-# Los jobs son cuatro y deliberadamente independientes: si el lint del backend
-# falla, igual querés ver si los tests del frontend pasan. Un solo job en
-# cadena corta la corrida en el primer error y esconde el resto.
-#
-# **Sólo en `develop`, y no en `main`.** Todo lo que llega a `main` llega por un
-# merge de `develop`, así que lo que se validaría ahí ya se validó — el mismo
-# árbol, los mismos jobs, media hora antes. Correrlo dos veces no agrega una
-# señal: agrega una corrida que nadie mira y el doble de minutos. El lugar donde
-# un rojo sirve para algo es antes del merge, no después.
+# Verifica integración, releases y hotfixes antes de incorporarlos.
+# Los nombres de los jobs coinciden con los controles de protección de main.
 name: CI
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, main, 'release/**', 'hotfix/**']
   pull_request:
-    branches: [develop]
+    branches: [develop, main, 'release/**']
+  workflow_dispatch:
 
 # Un push nuevo sobre la misma rama cancela la corrida anterior: lo que
 # importa es si la punta está verde, no cada commit intermedio de un push
 # múltiple.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -51,13 +42,9 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      # Un go.mod con dependencias que ya nadie importa, o un go.sum al que
-      # le falta una entrada, no rompe la compilación pero sí sorprende a
-      # quien clona el repo. `git diff --exit-code` falla si tidy cambió algo.
+      # Comprueba los módulos sin modificar los archivos del checkout.
       - name: go.mod ordenado
-        run: |
-          go mod tidy
-          git diff --exit-code go.mod go.sum
+        run: go mod tidy -diff
 
       # Los de integración NO entran acá: están detrás del build tag
       # `integration` y corren en su propio job.
@@ -97,13 +84,8 @@ jobs:
       # que importan son las de la versión con la que se compila el binario
       # que se despliega. Analizar con una más nueva las escondería.
       #
-      # Por eso la línea `go` de go.mod lleva el PARCHE (1.25.13) y no solo
-      # 1.25.0: es lo que hace esto un chequeo real. La primera corrida de
-      # este workflow falló con 26 vulnerabilidades de la biblioteca estándar
-      # —una de ellas alcanzable desde ValidarEmail, que llama a
-      # mail.ParseAddress— simplemente porque el piso escrito era 1.25.0 y
-      # setup-go instala exactamente eso. Al subir el piso hay que mirar que
-      # el `golang:1.25-alpine` del Dockerfile lo siga cumpliendo.
+      # La línea `go` de go.mod incluye el parche y debe coincidir con
+      # la versión de compilación del Dockerfile.
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -114,16 +96,8 @@ jobs:
       # datos de vulnerabilidades se consulta en vivo, así que la misma versión
       # del binario da resultados distintos según el día—.
       #
-      # `GOTOOLCHAIN: auto` va explícito y es lo único que hace que eso funcione.
-      # govulncheck v1.8.0 pide Go >= 1.26 para COMPILARSE, el proyecto está en
-      # 1.25.13, y setup-go@v7 fija GOTOOLCHAIN=local — así que el `go install`
-      # moría con «requires go >= 1.26.0» y el job venía en rojo sin analizar una
-      # sola línea. Un chequeo de seguridad que falla por no poder arrancar es
-      # peor que no tenerlo: se ve igual que uno que encontró algo.
-      #
-      # Sólo en ESTE paso: se baja el toolchain nuevo para construir la
-      # herramienta y nada más. El análisis de abajo sigue corriendo con el Go
-      # del proyecto, que es el punto de todo el job.
+      # GOTOOLCHAIN auto permite construir futuras versiones de la herramienta.
+      # El análisis sigue usando exactamente el Go que declara el proyecto.
       - name: Instalar govulncheck
         env:
           GOTOOLCHAIN: auto
@@ -138,10 +112,9 @@ jobs:
   integracion:
     name: Backend — integración (Postgres real)
     runs-on: ubuntu-latest
-    # Cada paquete levanta su propio contenedor de Postgres y le aplica las
-    # migraciones: son varios minutos, no un ciclo corto. Sumados dan ~16
-    # minutos de trabajo; Go corre los paquetes en paralelo según los núcleos
-    # disponibles, así que en un runner chico se acerca a esa suma.
+    # Usa contenedores efímeros y limita a dos paquetes simultáneos para
+    # evitar saturar el runner. El timeout de Go se aplica a cada paquete;
+    # el límite de este job cubre la ejecución completa.
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -155,13 +128,12 @@ jobs:
       # que configurar ni variables de entorno que pasarle (los tests crean
       # su base, su usuario y su contraseña).
       - name: Tests de integración
-        run: go test -tags integration ./... -timeout 25m
+        run: go test -tags integration -p 2 ./... -timeout 25m
 
   frontend:
     name: Frontend — lint, build y tests
     runs-on: ubuntu-latest
-    # Los tests de pantalla son ~450 y renderizan contra jsdom: tardan varios
-    # minutos, más de lo que sugiere el número.
+    # Los tests renderizan contra jsdom; el conjunto puede tardar varios minutos.
     timeout-minutes: 25
     defaults:
       run:

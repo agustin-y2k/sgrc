@@ -5,8 +5,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/inventory/application"
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/application"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 // formatoFecha es el mismo de reservation y availability: ISO sin hora. Las

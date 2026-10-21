@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
-	"github.com/ramiro/sgrc/internal/shared/eventbus"
-	"github.com/ramiro/sgrc/internal/shared/secretos"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/secretos"
 )
 
 // Las cuentas de usuario de cada equipo (RF-03.22).

@@ -40,7 +40,8 @@ function ocupado(over: Partial<EquipoOcupado> = {}): EquipoOcupado {
 function renderSelector(
   respuesta: { data: EquipoDisponible[]; ocupados?: EquipoOcupado[] } = {
     data: [libre()],
-  }
+  },
+  seleccionadas: string[] = []
 ) {
   vi.mocked(reservasApi.equiposDisponibles).mockResolvedValue(respuesta)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -51,7 +52,7 @@ function renderSelector(
         fecha="2026-08-11"
         horaInicio="08:00"
         horaFin="09:00"
-        seleccionadas={[]}
+        seleccionadas={seleccionadas}
         onCambio={onCambio}
       />
     </QueryClientProvider>
@@ -315,7 +316,9 @@ describe("SelectorDeEquipos, tramos de preferencia", () => {
 
     await user.click(await screen.findByRole("checkbox", { name: /PC 3/ }))
 
-    expect(onCambio).toHaveBeenCalledWith(["pc3"])
+    // El segundo argumento es lo que hay que TOMAR (RF-03.21): vacío mientras
+    // sólo se tilden equipos libres.
+    expect(onCambio).toHaveBeenCalledWith(["pc3"], [])
   })
 
   /**
@@ -372,7 +375,7 @@ describe("cuando la lista es larga", () => {
     await user.click(await screen.findByRole("button", { name: "Marcar 5 equipos" }))
 
     // Los cinco del Carro 1, ninguno del otro.
-    expect(onCambio).toHaveBeenCalledWith(["pc1", "pc2", "pc3", "pc4", "pc5"])
+    expect(onCambio).toHaveBeenCalledWith(["pc1", "pc2", "pc3", "pc4", "pc5"], [])
   })
 
   /**
@@ -386,15 +389,10 @@ describe("cuando la lista es larga", () => {
     await user.type(await screen.findByLabelText("Buscar una computadora"), "edutec")
     await user.click(screen.getByRole("button", { name: "Marcar 7 equipos" }))
 
-    expect(onCambio).toHaveBeenCalledWith([
-      "pc6",
-      "pc7",
-      "pc8",
-      "pc9",
-      "pc10",
-      "pc11",
-      "pc12",
-    ])
+    expect(onCambio).toHaveBeenCalledWith(
+      ["pc6", "pc7", "pc8", "pc9", "pc10", "pc11", "pc12"],
+      []
+    )
   })
 
   it("no muestra buscador cuando hay pocos equipos", async () => {
@@ -402,5 +400,141 @@ describe("cuando la lista es larga", () => {
 
     expect(await screen.findByLabelText("PC 1 (Carro 1)")).toBeInTheDocument()
     expect(screen.queryByLabelText("Buscar una computadora")).not.toBeInTheDocument()
+  })
+
+  it("la búsqueda no oculta del contador los equipos seleccionados en otro carro", async () => {
+    const user = userEvent.setup()
+    renderSelector({ data: muchos() }, ["pc1", "pc6"])
+    await user.type(await screen.findByLabelText("Buscar una computadora"), "edutec")
+    expect(screen.queryByLabelText("PC 1 (Carro 1)")).not.toBeInTheDocument()
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "2 equipos seleccionados: 2 libres y 0 por prioridad"
+    )
+  })
+})
+
+// RF-03.21: un equipo reservado por otra materia, pero cuya marca preferente
+// es de la que está reservando. Se tilda como cualquier otro y al confirmar
+// desplaza al que lo tenía.
+describe("SelectorDeEquipos, contador y prioridades", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it.each([
+    [[], ["pc2"], "1 equipo seleccionado: 0 libres y 1 por prioridad."],
+    [[libre()], ["pc1", "pc2"], "2 equipos seleccionados: 1 libre y 1 por prioridad."],
+    [[libre()], ["pc1"], "1 equipo seleccionado: 1 libre y 0 por prioridad."],
+    [[libre()], ["pc1", "pc1"], "1 equipo seleccionado: 1 libre y 0 por prioridad."],
+  ])(
+    "cuenta libres y tomables con una sola selección por equipo",
+    async (data, seleccionadas, texto) => {
+      renderSelector(
+        { data, ocupados: [ocupado({ puedeTomarse: true, puedePedirse: false })] },
+        seleccionadas
+      )
+      expect(await screen.findByRole("status")).toHaveTextContent(texto)
+      expect(screen.queryByText(/de 0 seleccionado/)).not.toBeInTheDocument()
+    }
+  )
+
+  it("advierte sobre una selección que dejó de estar disponible", async () => {
+    renderSelector({ data: [libre()] }, ["pc1", "retirado"])
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "1 equipo ya no está disponible"
+    )
+    expect(
+      screen.getByRole("button", { name: /Limpiar la selección/ })
+    ).toBeInTheDocument()
+  })
+
+  it("explica la reposición en cascada sin prometer que toda reserva queda completa", async () => {
+    renderSelector({ data: [], ocupados: [ocupado({ puedeTomarse: true })] })
+    const ayuda = await screen.findByText(/El sistema intentará reponerlos/)
+    expect(ayuda).toHaveTextContent("primero con equipos libres")
+    expect(ayuda).toHaveTextContent("menor prioridad sobre cada sustituto")
+    expect(ayuda).toHaveTextContent("pueden quedar faltantes")
+  })
+
+  it("un equipo ocupado por dos reservas tiene una sola casilla y conserva todos sus ocupantes", async () => {
+    const user = userEvent.setup()
+    const { onCambio } = renderSelector(
+      {
+        data: [],
+        ocupados: [
+          ocupado({ puedeTomarse: true, puedePedirse: false, horaFin: "08:30" }),
+          ocupado({
+            puedeTomarse: true,
+            puedePedirse: false,
+            reservaId: "segunda-reserva",
+            docenteNombre: "Alan Turing",
+            horaInicio: "08:30",
+            horaFin: "09:00",
+          }),
+        ],
+      },
+      ["pc2"]
+    )
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "1 equipo seleccionado: 0 libres y 1 por prioridad"
+    )
+    const casillas = screen.getAllByRole("checkbox", { name: /PC 2/ })
+    expect(casillas).toHaveLength(1)
+    expect(screen.getByText(/Grace Hopper/)).toBeInTheDocument()
+    expect(screen.getByText(/Alan Turing/)).toBeInTheDocument()
+    expect(screen.getByText("08:30 a 09:00")).toBeInTheDocument()
+    await user.click(casillas[0])
+    expect(onCambio).toHaveBeenLastCalledWith([], [])
+  })
+
+  it("separa lo que hay que tomar de lo que estaba libre", async () => {
+    const user = userEvent.setup()
+    const { onCambio } = renderSelector({
+      data: [libre()],
+      ocupados: [ocupado({ puedePedirse: false, puedeTomarse: true })],
+    })
+
+    await user.click(await screen.findByRole("checkbox", { name: /PC 2/ }))
+
+    // El ocupado va en las DOS listas: es un equipo de la reserva, y además
+    // es lo que autoriza a desplazar a Grace.
+    expect(onCambio).toHaveBeenCalledWith(["pc2"], ["pc2"])
+  })
+
+  it("dice de quién es la reserva que se va a cancelar", async () => {
+    renderSelector({
+      data: [],
+      ocupados: [ocupado({ puedePedirse: false, puedeTomarse: true })],
+    })
+
+    expect(
+      await screen.findByText("Reservados, pero preferentes de tu materia")
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Ahora es de Grace Hopper/)).toBeInTheDocument()
+    // Sin paso de confirmación aparte, el encabezado es todo el aviso previo
+    // que existe: tiene que decir que se cancela una reserva ajena.
+    expect(screen.getByText(/El sistema intentará reponerlos/)).toBeInTheDocument()
+  })
+
+  // Las dos acciones son excluyentes y manda tomar: el servidor ya manda
+  // puedePedirse=false, y la pantalla no puede ofrecer las dos cosas.
+  it("sobre lo que se puede tomar no ofrece pedirlo", async () => {
+    renderSelector({
+      data: [],
+      ocupados: [ocupado({ puedePedirse: false, puedeTomarse: true })],
+    })
+
+    expect(await screen.findByRole("checkbox", { name: /PC 2/ })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Pedírselo" })).toBeNull()
+  })
+
+  it("lo que no se puede tomar sigue sin casilla, sólo se pide", async () => {
+    renderSelector({
+      data: [],
+      ocupados: [ocupado({ puedePedirse: true, puedeTomarse: false })],
+    })
+
+    expect(await screen.findByRole("button", { name: "Pedírselo" })).toBeInTheDocument()
+    expect(screen.queryByRole("checkbox", { name: /PC 2/ })).toBeNull()
   })
 })

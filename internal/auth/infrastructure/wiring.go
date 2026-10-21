@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ramiro/sgrc/internal/auth/domain"
+	"github.com/agustin-y2k/sgrc/internal/auth/domain"
 )
 
 // NuevoID genera un UUID nuevo para una fila de usuario — se llama antes del

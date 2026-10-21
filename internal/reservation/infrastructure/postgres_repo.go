@@ -13,8 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ramiro/sgrc/internal/reservation/application"
-	"github.com/ramiro/sgrc/internal/reservation/domain"
+	"github.com/agustin-y2k/sgrc/internal/reservation/application"
+	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/pgtransaccion"
 )
 
 const (
@@ -47,22 +48,18 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 // EnTransaccion corre fn con un repo atado a una única transacción: o se
 // aplica todo, o no queda nada.
 func (r *PostgresRepo) EnTransaccion(ctx context.Context, fn func(application.Repo) error) error {
+	if tx := pgtransaccion.DeContexto(ctx); tx != nil {
+		return fn(&PostgresRepo{db: tx})
+	}
 	if r.pool == nil {
 		// Ya venimos dentro de una transacción: se reusa la misma en vez de anidar,
 		// para que el alcance del commit siga siendo el de afuera.
 		return fn(r)
 	}
 
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("iniciando transacción: %w", err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck // no-op si ya se hizo Commit
-
-	if err := fn(&PostgresRepo{db: tx}); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return pgtransaccion.Ejecutar(ctx, r.pool, func(ctxTx context.Context) error {
+		return fn(&PostgresRepo{db: pgtransaccion.DeContexto(ctxTx)})
+	})
 }
 
 func esIDInvalido(err error) bool {
@@ -107,10 +104,12 @@ func duracionComoHora(d time.Duration) time.Time {
 	return time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).Add(d)
 }
 
+const columnasGrupo = `id, materia_id, creado_por, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, regla_recurrencia_id, creada_en, version`
+
 // ── ReservaGrupo ────────────────────────────────────────────────────────
 
 func (r *PostgresRepo) CrearReservaGrupo(ctx context.Context, g *domain.ReservaGrupo) error {
-	_, err := r.db.Exec(ctx, `
+	_, err := r.conexion(ctx).Exec(ctx, `
 		INSERT INTO reserva_grupo (id, materia_id, creado_por, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, regla_recurrencia_id, creada_en)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`, g.ID, g.MateriaID, g.CreadoPor, g.NombreDocenteSnapshot, g.Fecha,
@@ -123,14 +122,17 @@ func (r *PostgresRepo) CrearReservaGrupo(ctx context.Context, g *domain.ReservaG
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
+		if esCicloCerrado(err) {
+			return application.ErrCicloCerrado
+		}
 		return fmt.Errorf("creando reserva grupo: %w", err)
 	}
 	return nil
 }
 
 func (r *PostgresRepo) BuscarReservaGrupoPorID(ctx context.Context, id string) (*domain.ReservaGrupo, error) {
-	row := r.db.QueryRow(ctx, `
-		SELECT id, materia_id, creado_por, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, regla_recurrencia_id, creada_en
+	row := r.conexion(ctx).QueryRow(ctx, `
+		SELECT `+columnasGrupo+`
 		FROM reserva_grupo WHERE id = $1
 	`, id)
 	return escanearReservaGrupo(row)
@@ -142,7 +144,7 @@ func escanearReservaGrupo(row pgx.Row) (*domain.ReservaGrupo, error) {
 	var estadoStr string
 
 	err := row.Scan(&g.ID, &g.MateriaID, &g.CreadoPor, &g.NombreDocenteSnapshot, &g.Fecha,
-		&horaInicio, &horaFin, &estadoStr, &g.ReglaRecurrenciaID, &g.CreadaEn)
+		&horaInicio, &horaFin, &estadoStr, &g.ReglaRecurrenciaID, &g.CreadaEn, &g.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, application.ErrReservaGrupoNoEncontrado
@@ -165,17 +167,42 @@ func escanearReservaGrupo(row pgx.Row) (*domain.ReservaGrupo, error) {
 }
 
 func (r *PostgresRepo) GuardarReservaGrupo(ctx context.Context, g *domain.ReservaGrupo) error {
-	tag, err := r.db.Exec(ctx,
-		`UPDATE reserva_grupo SET estado = $2 WHERE id = $1`,
-		g.ID, string(g.Estado))
+	err := r.conexion(ctx).QueryRow(ctx,
+		`UPDATE reserva_grupo SET estado = $2,version=version+1 WHERE id = $1 AND version=$3 RETURNING version`,
+		g.ID, string(g.Estado), g.Version).Scan(&g.Version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var existe bool
+		if err := r.conexion(ctx).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM reserva_grupo WHERE id=$1)`, g.ID).Scan(&existe); err != nil {
+			return err
+		}
+		if existe {
+			return application.ErrReservaModificada
+		}
+		return application.ErrReservaGrupoNoEncontrado
+	}
 	if err != nil {
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
+		if esCicloCerrado(err) {
+			return application.ErrCicloCerrado
+		}
 		return fmt.Errorf("actualizando reserva grupo: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return application.ErrReservaGrupoNoEncontrado
-	}
 	return nil
+}
+
+func esCicloCerrado(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23514" && pgErr.ConstraintName == "reserva_ciclo_cerrado"
+}
+
+func (r *PostgresRepo) conexion(ctx context.Context) consultor {
+	if tx := pgtransaccion.DeContexto(ctx); tx != nil {
+		return tx
+	}
+	return r.db
+}
+func (r *PostgresRepo) Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error {
+	return pgtransaccion.Coordinar(ctx, r.pool, exclusivo, fn)
 }

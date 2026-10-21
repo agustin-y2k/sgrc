@@ -38,18 +38,20 @@ describe("Avatar", () => {
   it("pide la foto con el token, no con un img suelto", async () => {
     setToken("un-token")
     const espia: ReturnType<typeof vi.fn<typeof fetch>> = vi.fn(async () =>
-      Promise.resolve(new Response(new Blob(["x"]), { status: 200 }))
+      // Response es de Node; el Blob de jsdom carece de stream(). El payload
+      // binario evita mezclar ambos realms y Response.blob() genera el Blob.
+      Promise.resolve(new Response(new Uint8Array([120]), { status: 200 }))
     )
     globalThis.fetch = espia
 
     const { container } = renderAvatar()
 
     await waitFor(() => expect(espia).toHaveBeenCalled())
-    const [url, opciones] = espia.mock.calls[0]
+    const llamada = espia.mock.calls[0]
+    expect(llamada).toBeDefined()
+    const [url, opciones] = llamada!
     expect(String(url)).toContain("/api/auth/usuarios/u1/foto")
-    expect((opciones?.headers as Record<string, string>).Authorization).toBe(
-      "Bearer un-token"
-    )
+    expect(new Headers(opciones?.headers).get("Authorization")).toBe("Bearer un-token")
     // Y el token NO viaja en la URL: nginx registra la ruta completa en su
     // log de acceso, así que ahí quedaría un JWT escrito en disco.
     expect(String(url)).not.toContain("un-token")

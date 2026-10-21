@@ -1,13 +1,16 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"github.com/agustin-y2k/sgrc/internal/shared/audit"
 	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/ramiro/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 )
 
 // Las cuentas de usuario de cada equipo (RF-03.22), desde la capa HTTP: lo que
@@ -353,5 +356,24 @@ func TestHTTP_CuentaInvalida_Da400ConElMotivo(t *testing.T) {
 				t.Errorf("el mensaje tendría que explicar el problema (%q), y dice: %s", c.dice, cuerpo)
 			}
 		})
+	}
+}
+
+type auditorCaido struct{}
+
+func (auditorCaido) Registrar(context.Context, audit.Entrada) error {
+	return errors.New("auditoría no disponible")
+}
+func TestHTTP_RevelarPassword_NoEntregaElSecretoSinAuditoria(t *testing.T) {
+	for _, auditor := range []audit.Auditor{auditorCaido{}, nil} {
+		repo := nuevoFakeRepo()
+		repo.equipos["eq1"] = &domain.Equipo{ID: "eq1", Tipo: "NOTEBOOK", Nombre: "Notebook 1"}
+		app := nuevaAppConAuditor(repo, auditor)
+		// El alta usa el auditor normal; luego la revelación usa el caído.
+		cuentaID := crearCuentaDePrueba(t, nuevaAppDeTest(repo), "PUBLICA", "secreto-que-no-debe-salir")
+		status, cuerpo := pedir(t, app, "POST", "/api/cuentas/"+cuentaID+"/password", nil, "DOCENTE")
+		if status != fiber.StatusServiceUnavailable || strings.Contains(string(cuerpo), "secreto-que-no-debe-salir") || strings.Contains(string(cuerpo), `"password"`) {
+			t.Fatalf("reveló contraseña sin constancia: %d %s", status, cuerpo)
+		}
 	}
 }

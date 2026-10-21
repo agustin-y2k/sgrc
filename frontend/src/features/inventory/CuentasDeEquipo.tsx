@@ -70,6 +70,7 @@ function Fila({ cuenta, esAdmin }: { cuenta: CuentaDeEquipo; esAdmin: boolean })
   const queryClient = useQueryClient()
   const [password, setPassword] = useState<string | null>(null)
   const [editando, setEditando] = useState(false)
+  const [confirmandoBorrado, setConfirmandoBorrado] = useState(false)
 
   const revelar = useMutation({
     mutationFn: () => inventoryApi.revelarPasswordDeCuenta(cuenta.id),
@@ -129,13 +130,18 @@ function Fila({ cuenta, esAdmin }: { cuenta: CuentaDeEquipo; esAdmin: boolean })
             )}
           {esAdmin && (
             <>
-              <Button variant="outline" size="sm" onClick={() => setEditando(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={confirmandoBorrado || borrar.isPending}
+                onClick={() => setEditando(true)}
+              >
                 Editar
               </Button>
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => borrar.mutate()}
+                onClick={() => setConfirmandoBorrado(true)}
                 disabled={borrar.isPending}
               >
                 Quitar
@@ -158,6 +164,38 @@ function Fila({ cuenta, esAdmin }: { cuenta: CuentaDeEquipo; esAdmin: boolean })
         <Alert variant="destructive">
           <AlertDescription>{getErrorMessage(revelar.error)}</AlertDescription>
         </Alert>
+      )}
+      {confirmandoBorrado && (
+        <div className="grid gap-2 rounded-md border p-3">
+          <p>
+            ¿Quitar el registro de {cuenta.usuario}? Se borrarán los datos y la contraseña
+            guardada. No se elimina la cuenta del sistema operativo del equipo. Esta
+            acción no se puede deshacer.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={borrar.isPending}
+              onClick={() => {
+                if (!borrar.isPending) borrar.mutate()
+              }}
+            >
+              Confirmar eliminación
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={borrar.isPending}
+              onClick={() => {
+                setConfirmandoBorrado(false)
+                borrar.reset()
+              }}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </div>
       )}
       {borrar.error && (
         <Alert variant="destructive">

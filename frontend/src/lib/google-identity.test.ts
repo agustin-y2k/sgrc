@@ -16,14 +16,14 @@ describe("datosDeLaCredencial", () => {
   it("lee el email y el nombre del token", () => {
     const datos = datosDeLaCredencial(
       credencialCon({
-        email: "ada@escuela.edu.ar",
+        email: "ada@escuela.test",
         given_name: "Ada",
         family_name: "Lovelace",
       })
     )
 
     expect(datos).toEqual({
-      email: "ada@escuela.edu.ar",
+      email: "ada@escuela.test",
       nombre: "Ada",
       apellido: "Lovelace",
     })
@@ -35,7 +35,7 @@ describe("datosDeLaCredencial", () => {
   it("no rompe los acentos", () => {
     const datos = datosDeLaCredencial(
       credencialCon({
-        email: "martin@escuela.edu.ar",
+        email: "martin@escuela.test",
         given_name: "Martín",
         family_name: "Peña",
       })
@@ -47,9 +47,9 @@ describe("datosDeLaCredencial", () => {
 
   // given_name y family_name no son claims obligatorios.
   it("tolera que falten el nombre y el apellido", () => {
-    const datos = datosDeLaCredencial(credencialCon({ email: "ada@escuela.edu.ar" }))
+    const datos = datosDeLaCredencial(credencialCon({ email: "ada@escuela.test" }))
 
-    expect(datos).toEqual({ email: "ada@escuela.edu.ar", nombre: "", apellido: "" })
+    expect(datos).toEqual({ email: "ada@escuela.test", nombre: "", apellido: "" })
   })
 
   it("devuelve null si no es un JWT", () => {
