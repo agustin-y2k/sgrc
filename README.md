@@ -234,6 +234,9 @@ Las capturas documentales se destinan exclusivamente a estas guías; su
 [procedimiento de generación](docs/guias/generar/README.md) explica cómo
 actualizar las imágenes y los PDF con datos ficticios.
 
+El [historial de cambios](CHANGELOG.md) resume cada versión y las
+consideraciones para actualizar una instalación existente.
+
 | Documento | De qué trata | Para quién |
 |---|---|---|
 | [`01-requisitos.md`](docs/01-requisitos.md) | Todo lo que el sistema tiene que hacer, regla por regla | Cualquiera |
