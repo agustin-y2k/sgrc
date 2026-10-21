@@ -1,10 +1,4 @@
-# Actualizaciones de dependencias, una vez por semana.
-#
-# Existe por lo que pasó sin él: el proyecto acumuló cinco vulnerabilidades
-# alcanzables desde el código —dos de Fiber, una de pgx, una de jwt y una de
-# x/text— simplemente porque nadie mira las versiones hasta que algo falla.
-# Que las traiga un Pull Request obliga a decidir, y el CI dice si el cambio
-# rompe algo antes de mergear.
+# Propone actualizaciones semanales para revisar con los controles de CI.
 version: 2
 updates:
   # Las PRs van contra `develop`, no contra `main`: `main` recibe releases,
