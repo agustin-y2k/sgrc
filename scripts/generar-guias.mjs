@@ -6,6 +6,7 @@ import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { anotarHTML, prepararAnotaciones } from "../docs/guias/generar/anotaciones.mjs"
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const soloPDF = process.argv.length === 3 && process.argv[2] === "--solo-pdf"
@@ -138,7 +139,9 @@ try {
             },
           },
         },
-        networks: { default: { ipam: { config: [{ subnet: "172.31.45.0/24" }] } } },
+        networks: {
+          default: { ipam: { config: [{ subnet: "172.31.45.0/24" }] } },
+        },
       }),
       { mode: 0o600 }
     )
@@ -146,11 +149,24 @@ try {
     await ejecutar("docker", ["build", "-t", frontend, "frontend"])
     await compose("up", "-d", "--wait", "--wait-timeout", "120")
     await ejecutar("node", ["docs/guias/generar/capturar-actual.mjs"])
-    capturas = JSON.parse(await readFile(join(salida, "capturas.json"), "utf8"))
+    capturas = prepararAnotaciones(
+      JSON.parse(await readFile(join(salida, "capturas.json"), "utf8"))
+    )
   } else {
     await cp(join(raiz, "docs/guias/imagenes"), join(publicacion, "imagenes"), {
       recursive: true,
     })
+    const generacion = JSON.parse(
+      await readFile(join(raiz, "docs/guias/generacion.json"), "utf8")
+    )
+    capturas = prepararAnotaciones({ capturas: generacion.imagenes })
+    for (const captura of capturas.capturas) {
+      const contenido = await readFile(join(publicacion, "imagenes", captura.archivo))
+      if (createHash("sha256").update(contenido).digest("hex") !== captura.sha256)
+        throw new Error(
+          `Las marcas no corresponden a ${captura.archivo}; ejecutar make capturas`
+        )
+    }
   }
   // Se preparan ambos documentos antes de sustituir los archivos publicados.
   for (const [html, pdf] of guias) {
@@ -167,6 +183,7 @@ try {
         throw new Error(`Falta la fecha de capturas en ${html}`)
       contenido = contenido.replace(marcador, (_, inicio, fin) => inicio + fecha + fin)
     }
+    contenido = anotarHTML(contenido, capturas)
     await writeFile(join(publicacion, html), contenido)
     await ejecutar("node", [
       "docs/guias/generar/hacer-pdf.mjs",
@@ -181,9 +198,8 @@ try {
     )
       throw new Error(`El PDF ${pdf} no contiene el final de la guía o quedó truncado`)
   }
-  if (!soloPDF)
-    for (const [html] of guias)
-      await cp(join(publicacion, html), join(raiz, "docs/guias", html))
+  for (const [html] of guias)
+    await cp(join(publicacion, html), join(raiz, "docs/guias", html))
   if (!soloPDF)
     for (const nombre of await readdir(join(publicacion, "imagenes")))
       await cp(
@@ -206,6 +222,12 @@ try {
       JSON.stringify(
         {
           version: capturas.version,
+          edicion: "Árbol de trabajo; ver CHANGELOG.md para cambios sin release",
+          esquema: Math.max(
+            ...(await readdir(join(raiz, "migrations"))).map((n) =>
+              Number(n.match(/^(\d+)_.*\.sql$/)?.[1] ?? 0)
+            )
+          ),
           generado: new Date().toISOString(),
           herramienta: "Playwright / Chromium",
           entorno:

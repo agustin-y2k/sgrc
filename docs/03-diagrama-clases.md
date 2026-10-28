@@ -136,6 +136,22 @@ classDiagram
         +alcance() string
     }
 
+    class ContextoAcademicoPrestamo {
+        +UUID reservaIdOriginal
+        +UUID materiaId
+        +string materiaNombre
+        +UUID contenedorId
+        +string contenedorTipo
+        +string contenedorNombre
+        +int cursoAnio
+        +string cursoDivision
+        +string modalidad
+        +UUID cicloId
+        +int cicloAnio
+        +boolean reconstruido
+    }
+    Prestamo "1" *-- "0..1" ContextoAcademicoPrestamo : conserva
+
     class Prestamo {
         +UUID id
         +UUID equipoId
@@ -188,6 +204,7 @@ classDiagram
     }
 
     class Materia {
+        +boolean internaDeEspacio
         +UUID id
         +UUID cursoId
         +UUID espacioId
@@ -253,6 +270,7 @@ classDiagram
     }
 
     class Reserva {
+        +UUID bloqueoOperacionId
         +UUID id
         +int64 version
         +UUID reservaGrupoId
@@ -521,3 +539,13 @@ local es texto libre.
   `UPDATE` puntual. Y `curso.activo` / `materia.activo`, que este diagrama
   listaba, ya no existen: los eliminó la migración 016 porque nadie los leía.
   `ciclo_lectivo.activo` sí sigue, y no tiene nada que ver con esos dos.
+
+## Invariantes de planificación y entrega
+
+- El año del ciclo limita fechas y horas de sus reservas, también en las series.
+- `Reserva.PuedeEntregarseEn(ahora)` exige el día local de la clase y un instante
+  anterior a su fin exclusivo, para `CONFIRMADA` o `NO_RETIRADA`.
+- Una entrega fija la identidad del equipo de esa reserva, incluso al devolverla.
+- La constancia académica del préstamo sobrevive al cierre y a cambios de nombre.
+- La materia interna de un espacio sólo se mantiene a través de ese espacio.
+- Un bloqueo tiene identidad de operación; actor y horario no definen su lote.

@@ -53,6 +53,21 @@ for (const g of GUIAS) {
   )
   if (faltantes.length)
     throw new Error(`Imágenes ausentes en ${g.html}: ${faltantes.join(", ")}`)
+  const incompletas = await page
+    .locator("figure")
+    .evaluateAll(
+      (figuras) =>
+        figuras.filter(
+          (f) =>
+            f.querySelector('img[src^="imagenes/"]') &&
+            (!f.querySelector(".guia-marcas") ||
+              !f.querySelector(".guia-indicaciones li") ||
+              f.querySelectorAll(".guia-marcas circle").length !==
+                f.querySelectorAll(".guia-indicaciones li").length)
+        ).length
+    )
+  if (incompletas)
+    throw new Error(`${g.html}: ${incompletas} imágenes sin indicaciones completas`)
   await page.emulateMedia({ media: "print" })
   await page.pdf({
     path: g.pdf,

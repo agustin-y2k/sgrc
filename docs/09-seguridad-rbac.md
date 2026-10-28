@@ -411,7 +411,7 @@ nombre que tenía una operación **en su momento**. Si el sistema renombra algo,
 las filas viejas conservan el nombre viejo — reescribir un registro de
 auditoría es precisamente lo que un registro de auditoría no debe permitir.
 
-Acciones auditadas: `CAMBIO_TRANSACCIONAL`, `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `ROL_DEGRADADO_A_DOCENTE`, `PASSWORD_RESETEADA`, `NOMBRE_CAMBIADO`, `PASSWORD_RECUPERADA_POR_EMAIL`, `DOCENTE_REMOVIDO_DE_MATERIA`, `DOCENTE_ROL_CAMBIADO`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_CREADO`, `EQUIPO_ESTADO_CAMBIADO`, `EQUIPO_DADO_DE_BAJA`, `EQUIPO_MOVIDO_DE_CARRO`, `EQUIPO_EDITADO`, `CARRO_DADO_DE_BAJA`, `EQUIPO_REACTIVADO`, `CARRO_REACTIVADO`, `CUENTA_DE_EQUIPO_CREADA`, `CUENTA_DE_EQUIPO_EDITADA`, `CUENTA_DE_EQUIPO_BORRADA`, `PASSWORD_DE_EQUIPO_REVELADA`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`, `CICLO_ANIO_CORREGIDO`, `CICLO_ELIMINADO`, `ESTRUCTURA_IMPORTADA`, `MATERIAS_COPIADAS_ENTRE_CURSOS`, `PEDIDO_DE_MATERIA_APROBADO`, `PEDIDO_DE_MATERIA_RECHAZADO`, `JORNADA_CAMBIADA`.
+Acciones auditadas: `CAMBIO_TRANSACCIONAL`, `CONFIGURACION_OPERATIVA_CAMBIADA`, `CUENTA_APROBADA`, `CUENTA_RECHAZADA`, `CUENTA_BAJA`, `CUENTA_ELIMINADA_DEFINITIVAMENTE`, `ADMIN_CREADO`, `ROL_PROMOVIDO_A_ADMIN`, `ROL_DEGRADADO_A_DOCENTE`, `PASSWORD_RESETEADA`, `NOMBRE_CAMBIADO`, `PASSWORD_RECUPERADA_POR_EMAIL`, `DOCENTE_REMOVIDO_DE_MATERIA`, `DOCENTE_ROL_CAMBIADO`, `RESERVA_CANCELADA_POR_ADMIN`, `BLOQUEO_CREADO`, `BLOQUEO_LEVANTADO`, `EQUIPO_ESTADO_CAMBIADO`, `EQUIPO_DADO_DE_BAJA`, `EQUIPO_MOVIDO_DE_CARRO`, `EQUIPO_EDITADO`, `CARRO_DADO_DE_BAJA`, `EQUIPO_REACTIVADO`, `CARRO_REACTIVADO`, `CUENTA_DE_EQUIPO_CREADA`, `CUENTA_DE_EQUIPO_EDITADA`, `CUENTA_DE_EQUIPO_BORRADA`, `PASSWORD_DE_EQUIPO_REVELADA`, `CURSO_ELIMINADO`, `MATERIA_ELIMINADA`, `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS`, `CICLO_CLONADO`, `CICLO_ANIO_CORREGIDO`, `CICLO_ELIMINADO`, `ESTRUCTURA_IMPORTADA`, `MATERIAS_COPIADAS_ENTRE_CURSOS`, `PEDIDO_DE_MATERIA_APROBADO`, `PEDIDO_DE_MATERIA_RECHAZADO`, `JORNADA_CAMBIADA`.
 
 > `CICLO_ARCHIVADO_RESERVAS_ELIMINADAS` tiene su propio nombre (en vez de un `CICLO_ARCHIVADO` genérico) porque implica un borrado físico de datos — vale la pena que quede explícito en el log qué admin lo disparó y cuántas filas se eliminaron (`detalle` puede guardar el conteo).
 
@@ -477,3 +477,48 @@ pendiente de aislamiento de su socket Docker antes de habilitarlo.
 Las comprobaciones reproducibles de estas medidas se describen en
 [Testing](10-testing.md). Cada instalación debe aplicar la configuración de
 seguridad correspondiente a su exposición y sus servicios opcionales.
+
+## Restricciones de integridad de la planificación
+
+- Tanto docente como administrador reservan sólo dentro del año del ciclo de la
+  materia; el rol ADMIN no evita esa comprobación. La API y PostgreSQL vuelven a
+  validar lo que limita el formulario.
+- Sólo ADMIN entrega equipos, con el mapa de equipos que revisó. Si una reserva
+  cambió de PC se rechaza el lote antes de entregar o liberar. Una entrega ya
+  registrada impide cambiar el equipo de esa reserva, incluso tras la devolución.
+- La materia interna de un espacio no admite edición ni borrado por los endpoints
+  genéricos, tampoco para ADMIN. Se gestiona mediante el espacio.
+- El calendario compartido admite ambos roles y otras materias en lectura. No
+  publica contactos ni motivos de cancelación; la gestión conserva los permisos
+  de reservas. La identidad de operación de bloqueo no concede permisos nuevos.
+- El contexto académico del préstamo se consulta con los permisos de préstamos.
+  Conserva procedencia histórica y no almacena contraseñas ni claves de equipos.
+
+El levantamiento de un bloqueo exige rol `ADMIN` vigente y motivo al actuar sobre
+lo ajeno, incluida la ruta individual para filas de bloqueo. La auditoría
+`BLOQUEO_LEVANTADO` identifica la operación completa, actor, IP, motivo y cantidad
+efectivamente cancelada; comparte transacción con las reservas y los avisos
+persistentes. Los reintentos sin cambios no agregan constancias duplicadas.
+
+## Entorno mínimo por servicio
+
+Los Compose declaran explícitamente las variables de cada servicio. El túnel
+recibe únicamente `TUNNEL_TOKEN`; la API recibe sus opciones de base, sesiones,
+cifrado, correo, administrador inicial y tareas. Las claves del túnel y Grafana
+permanecen fuera del entorno del backend. PostgreSQL recibe sus tres variables
+propias; Grafana, su contraseña y opciones de acceso; frontend y Prometheus no
+reciben claves de la instalación. El servicio de datos de desarrollo recibe sólo
+la URL interna de la API, las credenciales necesarias para esa carga y sus opciones.
+
+`.env` y `--env-file .env.local` son fuentes de interpolación para Compose. Agregar
+una variable al archivo no la entrega automáticamente a los contenedores. Cuando
+una función nueva requiere una variable, se declara en el servicio correspondiente
+y se amplía su prueba de configuración. Se mantiene la precedencia de interpolación
+de Compose, incluido el entorno de la shell.
+
+`cmd/compose_secretos_integracion_test.go` resuelve las variantes de producción,
+desarrollo y copia local en directorios temporales. Usa valores ficticios y una
+variable adicional de control para detectar herencia de archivos completos. Las
+aserciones informan nombres de variables, sin imprimir valores ni leer archivos
+privados. El cambio de entorno se aplica al recrear contenedores; reiniciarlos
+conserva su entorno anterior.

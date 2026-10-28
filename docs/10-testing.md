@@ -120,18 +120,34 @@ Desde la raíz del repositorio, ejecutar `make regresion-navegador` (o
 dependencias instaladas con `npm ci` en `frontend` y Chromium de Playwright
 (`npx playwright install chromium` desde `frontend`).
 
-El script compila una única pareja de imágenes y ejecuta once bloques: las
-seis suites reales anteriores, el bloque de asignaciones docentes, las siete suites `ux-*`, las pruebas básicas
-de acceso/móvil/tema/reservas, la revisión transversal y las regresiones RV-01 a
-RV-09 (`revision-vistas.spec.ts`) y FF-02/FF-03 (`revision-final.spec.ts`). Cada bloque recibe
-un PostgreSQL efímero vacío y cuentas ficticias; el transversal puede cambiar
-la contraseña y cerrar el ciclo sin afectar al siguiente bloque. Se declara
-una jornada de siete días y una clase futura de una hora para que el escenario
-táctil se ejecute. Los bloques complementarios reciben dos docentes aprobados;
-`E2E_OTRO_DOCENTE_EMAIL` y `E2E_OTRO_DOCENTE_PASSWORD` identifican la segunda
-cuenta para comprobar que no se transfiera el borrador al cambiar de usuario.
-Las suites `ux-*` conservan sus interceptaciones; el conjunto no sustituye
-la revisión manual con lector de pantalla ni la observación de usuarios.
+El script compila una única pareja de imágenes y ejecuta los bloques declarados
+en `scripts/regresion-navegador.mjs`. Cada bloque recibe una base efímera vacía y
+cuentas ficticias; los datos de uno no pasan al siguiente. Los bloques de cambios
+recientes incluyen:
+
+| Bloque | Comprobaciones |
+|---|---|
+| `levantamiento-bloqueos` | API real y móvil: operación completa, permisos, fallo temporal, respuesta perdida, reintento y auditoría sin duplicados. |
+| `actividad-configuracion` | API real: permisos de configuración, guardado desde móvil, versión y auditoría. Reporte de préstamos sin reserva y su devolución, con accesibilidad. |
+| `entrega-anticipada` | Portada y entregas a 390 y 1280 px: explicación del conflicto, selección y ausencia de salida involuntaria. Reloj y listados controlados; la regla de negocio se verifica con PostgreSQL. |
+| `prioridad-custodia` | API y formulario de ambos roles: una reserva con préstamo abierto o devuelto no se ofrece por prioridad ni admite una toma forzada. |
+| `curso-prioridades` | Impacto, confirmación de cambios de curso, prioridades exactas/compartidas y edición concurrente. |
+| `prioridades-vigentes` | Marcas sin materia vigente, coincidencias archivadas y continuidad al clonar el ciclo. |
+| `entrega-vigente` | Día local, fin exclusivo, retiro tardío y rechazo de reservas vencidas o futuras. |
+| `espacios-bloqueos` | Protección de la materia interna, operaciones de bloqueo independientes y navegación de canceladas. |
+| `anio-lectivo` | Límite anual en formulario y API, recurrencias completas y fin nocturno. |
+| `calendario-tactil` | Ambos roles a 320 y 390 px; áreas de 44 × 44 px, mes, semana, agenda, detalle, error y vacío. Incluye clases de cinco minutos, ocho simultáneas, foco y análisis de accesibilidad. |
+| `rotulos-calendario` | Renumeración, conservación de serie/reservas, calendario compartido y protección de entregas. |
+
+Los demás bloques cubren reservas, entregas, cierre, inventario, soporte, reportes,
+asignaciones docentes, acceso, responsive, tema y recorridos transversales. Las
+suites `ux-*` conservan sus interceptaciones y los bloques reales utilizan la API
+y PostgreSQL. Se siembran una jornada de siete días y, en `basicos`, una clase
+futura para que las pruebas táctiles no se omitan por falta de datos. Las pruebas
+contemplan el año de sus materias: un escenario válido no debe cruzar diciembre.
+La segunda cuenta de docente usa `E2E_OTRO_DOCENTE_EMAIL` y
+`E2E_OTRO_DOCENTE_PASSWORD`. La automatización no sustituye pruebas con lector de
+pantalla ni observación de personas usando el sistema.
 
 No utiliza `.env.local`, copias de inventario ni el proyecto `sgrc-local`.
 Las credenciales y claves son aleatorias y el puerto sólo se publica en
@@ -148,6 +164,9 @@ Para diagnosticar bloques concretos:
 node scripts/regresion-navegador.mjs --solo reservas,entregas
 node scripts/regresion-navegador.mjs --solo vistas
 node scripts/regresion-navegador.mjs --solo docentes
+node scripts/regresion-navegador.mjs --solo rotulos-calendario
+node scripts/regresion-navegador.mjs --solo anio-lectivo,reservas,cierre
+node scripts/regresion-navegador.mjs --solo calendario-tactil,basicos
 ```
 
 La selección vuelve a compilar y sigue usando bases nuevas. Después de corregir
@@ -504,7 +523,7 @@ Revisar expresamente si las reglas incluyen a administradores y otros actores
 con permiso de excepción: exigir controles no impide su omisión por quienes
 tengan autorizado el bypass.
 
-## Regresiones de los hallazgos pendientes
+## Regresiones de consistencia y concurrencia
 
 - `cmd/vigencia_academica_integracion_test.go`: estructura archivada y escrituras intercaladas con cierre anual.
 - `cmd/fechas_limites_integracion_test.go`: divisiones numéricas de 12 caracteres, días completos de incidencias y entrega/vigilancia/bloqueo nocturnos.
@@ -662,3 +681,303 @@ Las regresiones cubren restricciones de sesión, respuestas sin caché, datos
 sensibles, fórmulas en CSV y configuración segura de observabilidad. La
 [documentación de seguridad](09-seguridad-rbac.md) describe las medidas del
 producto y sus límites.
+
+## Validación de las correcciones de planificación y custodia — 25/10/2026
+
+Las comprobaciones registradas se ejecutaron sobre el árbol de trabajo, con bases
+Docker aisladas. No son resultados de un workflow remoto ni constancia de un
+release o de una actualización de una instalación.
+
+- Backend: `go test ./...`, `go vet ./...`, migraciones y pruebas de integración
+  de equipo entregado, contexto académico, espacios, bloqueos y límite anual.
+- Frontend: **1.156 pruebas** aprobadas en la última corrida completa de Vitest,
+  compilación correcta y lint sin errores; persisten advertencias de Fast Refresh.
+- Año lectivo: **19 pruebas de navegador** en `anio-lectivo`, `reservas` y `cierre`.
+- Calendario móvil: **22 pruebas de navegador** en `calendario-tactil`, `basicos`
+  y `rotulos-calendario`, sin omisiones. Las ejecuciones verificaron que los
+  artefactos de aplicación coincidieran cuando sólo cambió un selector o una
+  espera de una prueba.
+- Ensayo de actualización: restauración de una copia del respaldo, migraciones
+  hasta 034, conservación de los datos y ninguna reserva activa fuera del año
+  de su materia en esa copia. No se borraron ni reasignaron filas por inferencia.
+
+Los conteos documentan esas corridas, no un umbral fijo para CI ni el resultado de
+sumar suites potencialmente superpuestas. Para el estado de una corrida nueva,
+consultar su propio `resultado.json` y los informes por bloque. Las evidencias,
+credenciales e inventario de la instalación permanecen fuera del repositorio.
+
+## Protección de prioridades después de una entrega — 26/10/2026
+
+La toma inicial y los desplazamientos secundarios consultan si la reserva tuvo
+algún préstamo, abierto o devuelto. La existencia de una entrega protege esa
+ocurrencia; las fechas posteriores sin entregas conservan las reglas de prioridad.
+
+- `cmd/prioridad_custodia_integracion_test.go` cubre trece escenarios con PostgreSQL
+  real y reloj fijo: disponibilidad, previsualización, rechazo puntual y recurrente
+  sin escrituras parciales, préstamos abiertos/devueltos con y sin sustitutos,
+  alcance por ocurrencia, cascadas secundarias y ambos órdenes de concurrencia.
+- Se comprobaron también las regresiones de custodia, entrega vigente, baja,
+  barrido y una única conexión en seis funciones de integración existentes.
+- El bloque `prioridad-custodia` verifica formulario y API reales para ambos roles,
+  incluidos el rechazo de una toma forzada y la conservación de la reserva. Junto
+  con `reservas`, `entregas` y `basicos`, pasaron 28 pruebas sin omisiones.
+- Las 1.156 pruebas unitarias del frontend, su build y el lint sin errores, las
+  unitarias del backend y `go vet` pasaron. OpenAPI conserva sus 137 referencias
+  internas resueltas; no cambian los campos de respuesta ni se agrega una migración.
+
+Estas comprobaciones corresponden a esta corrección. En ese momento quedaba
+pendiente adecuar los datos de integración al año lectivo; las regresiones
+dirigidas no equivalían a aprobar toda esa suite. Ver el seguimiento en
+[datos de integración y año lectivo](#datos-de-integración-y-año-lectivo--26102026).
+
+## Protección del retiro anticipado — 26/10/2026
+
+Antes del inicio de la clase, la entrega comprueba las reservas confirmadas y los
+bloqueos de la misma PC desde el retiro real hasta su devolución prevista. El
+conflicto devuelve `RESERVA_INTERMEDIA` por equipo y conserva la reserva posterior,
+también si se completa un retiro parcial de otras PCs. Las entregas contra reserva
+usan coordinación exclusiva para mantener estable esa comprobación.
+
+- Las pruebas de aplicación reproducen el fallo antes de corregirlo y cubren
+  franjas intermedias, estados que ya no bloquean, otras PCs, fines exclusivos,
+  nocturnas y la conservación de pendientes seleccionados y no seleccionados.
+- `cmd/entrega_anticipada_integracion_test.go` verifica ocho escenarios con
+  PostgreSQL real: rechazo sin escrituras, retiro al terminar el compromiso previo,
+  bloqueos, retiros parciales, rollback del lote, reserva concurrente y ventanas
+  nocturnas, incluida una salida que abarca más de 24 horas.
+- Pasaron las regresiones de custodia, vigencia de entrega y prioridades: doce
+  funciones de integración en conjunto con los casos anteriores. Se conservan
+  el retiro tardío válido y las entregas espontáneas con sus avisos.
+- Se aprobaron además diez funciones de integración de inventario y asignaciones,
+  incluidas bajas concurrentes, barrido y operación con una sola conexión.
+- Frontend: **1.167 pruebas unitarias en 92 archivos**, compilación aprobada y lint
+  sin errores; permanecen advertencias existentes de Fast Refresh.
+- Navegador: **29 pruebas sin omisiones** entre `entrega-anticipada`,
+  `prioridad-custodia`, `entrega-vigente`, `entregas` y `basicos`. Las cuatro nuevas
+  usan reloj y listados controlados para comprobar ambos accesos a 390 y 1280 px;
+  las otras 25 recorren API y frontend reales con bases efímeras.
+- Pasaron las unitarias del backend, `go vet` y la validación de las 137 referencias
+  internas de OpenAPI. Se agrega un valor de rechazo; no requiere migración.
+
+El alcance de estos resultados es esta corrección y sus regresiones dirigidas.
+En esa ejecución quedaba pendiente adecuar los datos de integración al año
+lectivo. Su seguimiento figura en
+[datos de integración y año lectivo](#datos-de-integración-y-año-lectivo--26102026).
+
+## Entregas efectivas y configuración operativa — 26/10/2026
+
+Las entregas tardías vinculadas a una `NO_RETIRADA` conservan su reserva en el
+reporte de tiempo reservado y en sus totales de control. La agregación usa
+`EXISTS`, para contar una reserva una sola vez aunque tenga varios movimientos.
+El resumen de actividad conserva por separado los préstamos con y sin reserva,
+las devoluciones y los pendientes; las coincidencias de nombre o equipo no crean
+un vínculo. Los nuevos cierres guardan ese resumen y los anteriores permanecen
+intactos. La configuración operativa persiste, tiene control de versión y confirma
+su auditoría junto con el guardado.
+
+Verificaciones ejecutadas con bases efímeras y datos ficticios:
+
+- Dieciséis funciones de integración de aplicación: tres de actividad (incluida
+  una lectura concurrente con el cierre), persistencia y rollback de configuración,
+  siete de cierre anual, tres de contexto académico y dos de barridos/conexión única.
+- Tres funciones de migración: actualización hasta 035 con datos anteriores,
+  reconstrucción de contextos y actualización desde el esquema de partida.
+  Comprueban conservación de custodia y fechas, origen inmutable y ausencia de
+  reconstrucción de históricos ya sellados.
+- Pruebas de permisos y validación HTTP de configuración y actividad, y pruebas
+  de aplicación de plazos nuevos en el siguiente barrido. Un fallo al leer la
+  configuración impide liberar reservas por suposición.
+- Frontend: **1.176 pruebas en 94 archivos**, compilación correcta y lint sin
+  errores, con las advertencias existentes de Fast Refresh.
+- Navegador: **40 pruebas sin omisiones** entre `actividad-configuracion`,
+  `entregas`, `cierre`, `reportes` y `basicos`. Se repitieron `cierre` y `reportes`
+  después de la coordinación final y el bloque nuevo después de proteger el
+  origen en PostgreSQL. Estas repeticiones no se suman como pruebas diferentes.
+  El bloque nuevo comprueba permisos, guardado desde móvil, conflicto entre
+  administradores, auditoría y préstamos sin reserva/devueltos mediante API real.
+- `go test ./...`, `go vet`, OpenAPI con **144 referencias internas** resueltas y
+  `git diff --check` aprobados.
+
+En esa ejecución quedaba pendiente R-18 (datos anuales); ver
+[su seguimiento](#datos-de-integración-y-año-lectivo--26102026). Estas regresiones
+dirigidas no equivalían a aprobar toda la suite ni prueban una actualización de
+producción. Las evidencias de las corridas permanecen fuera
+del repositorio público.
+
+## Levantamiento completo de bloqueos — 26/10/2026
+
+`POST /api/bloqueos/{id}/levantar` procesa la identidad de operación completa, sin
+paginar, y conserva los estados terminales. Escrituras, auditoría y eventos durables
+comparten transacción. La interfaz envía una orden, conserva el motivo al fallar y
+consulta nuevamente el estado para recuperar también respuestas perdidas.
+
+- Catorce funciones de integración con PostgreSQL: seis de levantamiento, siete de
+  cierre anual y una de jornada/rollback. Incluyen dos fallos inyectados de escritura
+  y auditoría, fallo de evento durable, una conexión, reintentos concurrentes,
+  recuperación de lotes parciales anteriores, permisos y aislamiento de operaciones.
+- Pruebas HTTP de permisos, motivos y repetición. La ruta individual también exige
+  administrador para cancelar filas de bloqueo, aunque la cuenta conserve autoría.
+- Frontend: **1.179 pruebas en 94 archivos**, compilación correcta y lint sin errores,
+  con advertencias existentes de Fast Refresh.
+- Navegador: **23 pruebas sin omisiones** en `levantamiento-bloqueos`,
+  `espacios-bloqueos`, `reservas` y `reportes`. Se repitieron los dos primeros bloques
+  tras ajustar la visibilidad del control a cuentas administradoras. Las repeticiones
+  no se suman como pruebas diferentes. El bloque nuevo usa API real y comprueba
+  rechazo a docentes, fallo transitorio previo al envío, respuesta perdida después
+  del commit, reintento seguro, ausencia de auditoría duplicada y accesibilidad móvil.
+- La prueba de bloqueos coincidentes espera la respuesta de levantamiento y el
+  cierre del panel antes de consultar la base. Contar el botón que se ocultaba al
+  abrir la confirmación permitía una lectura prematura; esa espera quedó corregida.
+- Unitarias del backend, `go vet`, OpenAPI con sus **144 referencias internas** y
+  `git diff --check` aprobados. No requiere una migración adicional a 035.
+
+Son regresiones locales dirigidas, con datos ficticios y bases efímeras. En esa
+ejecución quedaba pendiente adecuar los datos anuales (R-18); ver
+[su seguimiento](#datos-de-integración-y-año-lectivo--26102026).
+
+## Separación de secretos entre servicios — 26/10/2026
+
+`cmd/compose_secretos_integracion_test.go` se ejecuta con la etiqueta `integration`:
+
+```bash
+go test -tags=integration ./cmd -run '^TestCompose_AislaVariablesPorServicio$' -count=1
+```
+
+Resuelve los Compose mediante `docker compose config --format json` en directorios
+temporales, con archivos `.env` y `.env.local` ficticios. El proceso de Compose
+recibe únicamente `PATH` y un `HOME` temporal. No consulta configuraciones privadas,
+no inicia servicios y las aserciones muestran nombres de variables, sin sus valores.
+
+- Ocho combinaciones: producción y desarrollo, copia local sin túnel y con túnel;
+  cada una con opciones completas y vacías. Incluyen los servicios de observabilidad.
+- Se exige que cada servicio reciba exactamente sus variables declaradas. El túnel
+  recibe sólo `TUNNEL_TOKEN`; la API conserva sus opciones y carece de claves del
+  túnel, Grafana y cuentas auxiliares de desarrollo.
+- Una variable adicional de control en los archivos ficticios detecta cualquier
+  herencia automática de su contenido. Se comprueban valores distintos entre `.env`
+  y `.env.local`, opciones vacías y conservación de espacios y símbolos.
+- La misma prueba reproduce la exposición sobre copias de los Compose anteriores;
+  las ocho combinaciones quedan aprobadas con los archivos corregidos.
+- Se verificó también el overlay local privado usando exclusivamente una copia con
+  valores ficticios. Sus puertos, redes y montajes se conservaron.
+- Pasaron las pruebas unitarias de `cmd`, `go vet -tags=integration ./cmd` y
+  `git diff --check`. No hay cambios en el backend funcional ni en el frontend.
+
+Estas verificaciones comprueban el reparto de variables de los archivos Compose.
+Los contenedores existentes conservan su entorno hasta recrearse; no se actualizaron
+instalaciones ni se modificaron credenciales para realizar las comprobaciones.
+
+
+## Túnel opcional y política de reinicio — 26/10/2026
+
+Las pruebas de configuración no requieren credenciales reales ni un túnel activo:
+
+```bash
+go test -tags=integration ./cmd -run '^(TestCompose_|TestMake_SeleccionDeTunelSinEjecutarDocker)' -count=1
+```
+
+- Nueve selecciones de perfiles verifican los servicios incluidos en producción,
+  desarrollo y local: sin túnel, con `tunel`, con observabilidad, con ambos y con
+  el selector de todos los perfiles. El túnel habilitado declara únicamente el
+  perfil `tunel` y la política `unless-stopped`.
+- La regresión del entorno mínimo por servicio se amplía de ocho a doce
+  combinaciones: cada entorno con y sin túnel, con opciones completas y vacías.
+  Continúa usando archivos ficticios y procesos sin variables privadas.
+- Doce ensayos de `make -n` comprueban el arranque habitual, el túnel incluido,
+  la reconexión externa con y sin tableros y los comandos de parada y consulta.
+  Un ejecutable señuelo permite detectar cualquier ejecución accidental de Docker.
+- Las pruebas nuevas reproducen el fallo sobre la configuración anterior. La
+  configuración corregida pasa la selección de perfiles, el reinicio y el
+  aislamiento de variables. También se comprobó una copia del overlay local
+  privado usando valores ficticios, sin cambiar sus puertos, redes o montajes.
+
+Se ejecutaron además las pruebas unitarias de `cmd`, `go vet -tags=integration ./cmd` y la comprobación de espacios del diff. Estas verificaciones validan la
+configuración y los comandos; no simulan una caída del host ni prueban la conexión
+real con Cloudflare. No se iniciaron ni reiniciaron servicios existentes.
+
+
+## Datos de integración y año lectivo — 26/10/2026
+
+Los datos mínimos de reservas y reportes indican explícitamente el año del ciclo.
+Las materias que compiten en una misma fecha comparten ciclo y, cuando corresponde,
+curso. Se conserva la unicidad real de los cursos y materias. Las pruebas de
+separación de ciclos usan años distintos y reservas válidas en cada uno.
+
+Los escenarios temporales de reservas usan un reloj fijo. Los casos de vencidas,
+futuras y cambios de jornada comparan fechas dentro del mismo año; la serie máxima
+mantiene sus 45 ocurrencias, desde enero hasta noviembre. Sólo la medición de
+rendimiento usa el reloj real. Los datos mínimos de reportes toman una fecha fija
+dentro del año de su materia, y los filtros conservan sus fechas explícitas.
+
+La preparación comprueba inmediatamente los errores de constructores, inserciones
+y actualizaciones. Los casos de atomicidad exigen el error de solapamiento que
+pretenden provocar, para que un rechazo por otro motivo no los haga pasar.
+
+La migración 034 y las reglas de negocio se mantienen. Las pruebas existentes
+siguen comprobando que las reservas y series no invadan otro año, junto con
+prioridades, concurrencia, filtros, cuentas eliminadas, retiros tardíos y cierres.
+La regresión completa se ejecuta como en CI, sin reutilizar resultados en caché:
+
+```bash
+go test -tags=integration -p 2 ./... -count=1 -timeout=25m
+```
+
+Los PostgreSQL son efímeros y usan el esquema completo hasta 035. No se leen
+credenciales privadas ni se conectan a bases de producción. Esta corrección de
+datos de prueba no requiere migraciones nuevas ni cambios en `.env`.
+
+
+La verificación local de esta corrección cubrió los **114 casos de reservas** y
+los **25 de reportes**. Las **79 pruebas originalmente fallidas** quedaron
+aprobadas, conservando sus nombres y aserciones de negocio. También pasaron las
+migraciones, las unitarias del backend y el análisis estático con `integration`.
+
+La corrida general se interrumpió y se retomaron los dos paquetes pendientes.
+Durante esa continuación se corrigieron dos casos auxiliares: los años usados
+para distinguir escenarios de archivado y la observación de la espera de una
+entrega concurrente. Ambos pasaron sus repeticiones dirigidas. El caso concurrente
+observa bloqueos reales entre conexiones de su base aislada, conservando las
+verificaciones de que la segunda entrega no libera las PCs de la primera.
+
+El resultado combinado registra **1.962 pruebas principales únicas aprobadas**,
+cuatro omisiones preexistentes y ningún fallo pendiente. No se suman repeticiones
+ni subpruebas como pruebas principales nuevas. Los registros conservan la
+interrupción, los fallos intermedios y sus repeticiones; este conteo corresponde a
+esas ejecuciones complementarias.
+
+
+## Legibilidad del calendario y acciones táctiles — 26/10/2026
+
+`rotulos-calendario.spec.ts` comprueba para administrador y docente una semana
+con clases coincidentes y una clase de quince minutos: los títulos y campos
+visibles caben en sus tarjetas, la semana aprovecha el ancho de escritorio y el
+detalle sigue mostrando los equipos, con restauración del foco al cerrarlo.
+`calendario-tactil.spec.ts` conserva la comprobación de diez tarjetas breves,
+ocho de ellas simultáneas, sin solapamientos y con todos sus detalles alcanzables.
+
+`tactil.spec.ts` recorre Nueva reserva en contextos táctiles independientes de
+320, 412 y 915 px, en vertical y horizontal. Selecciona materia, fecha, horario y
+un equipo, verifica que se puede confirmar y comprueba ambas modalidades del
+formulario. Las acciones visibles, incluidas las de selección y comprobación de
+series, deben medir al menos 44 × 44 px. Cada orientación tiene su propio contexto
+y se comprueba el tipo de puntero antes de medir, para evitar confundir una
+emulación de escritorio con un teléfono después de redimensionar o capturar.
+
+Las unitarias del eje verifican espacio de lectura para clases breves y
+coincidentes, separación entre consecutivas y conservación de los huecos. La
+regresión específica se ejecuta con bases efímeras nuevas:
+
+```bash
+node scripts/regresion-navegador.mjs --solo calendario-tactil,rotulos-calendario,usabilidad,basicos
+```
+
+El generador de horarios del recorrido básico representa el fin de medianoche
+como `00:00`, que es la opción válida del selector; no genera `24:00`.
+
+
+La verificación de esta corrección aprobó **1.181 pruebas unitarias en 94 archivos**
+y **48 casos de Chromium** en esos cuatro bloques, sin casos omitidos, fallidos
+ni inestables en los resultados finales. El bloque básico se repitió después de
+separar los contextos táctiles y normalizar el fin de medianoche de sus datos.
+También pasaron el build de producción, los tipos de E2E, el formato y el lint
+sin errores, con sus 22 advertencias preexistentes.

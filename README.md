@@ -14,6 +14,11 @@ Plataforma web para inventario de equipos informáticos y reserva vinculada a cu
 
 ---
 
+> **Estado de esta documentación:** describe el árbol de trabajo actual, incluidos
+> los cambios en desarrollo posteriores a `v1.21.0`. Ese tag contiene las migraciones
+> hasta **029**; el código actual llega a **035**. Una versión que ya esté instalada
+> no incorpora estos cambios hasta actualizarla. Ver [actualización y migraciones](docs/11-operacion.md#actualizacion-030-034).
+
 ## El problema que resuelve
 
 En muchas instituciones el préstamo de los carros de notebooks se coordina por mensajes, en un cuaderno o en una planilla compartida. Eso trae cuatro problemas concretos:
@@ -37,6 +42,7 @@ SGRC resuelve los cuatro: **impide el solapamiento a nivel de base de datos** (n
 | **Ver quién tiene lo que falta** | Los equipos ya tomados en esa franja aparecen con el nombre de quien los reservó. "No hay nada libre" y "los tiene alguien con quien puedo hablar" son situaciones distintas, y solo la segunda tiene salida. |
 | **Pedirle equipos a otro docente** | Un botón le manda al que los tiene un aviso y un correo: quién los necesita, para qué materia y a qué hora. No le saca nada ni espera respuesta del sistema — el acuerdo lo cierran ellos. Lo que el sistema garantiza es que el pedido llegue aunque no se crucen. |
 | **Reservas que se repiten** | "Todos los martes de 15 a 17, hasta fin de año." La pantalla comprueba todas las fechas antes de confirmar. Si hay un conflicto que no puede resolverse con una toma autorizada por prioridad, informa cuáles chocan y no crea ninguna clase de la serie. |
+| **Límite por ciclo** | Una materia del ciclo 2026 sólo admite reservas dentro de 2026. La comprobación incluye toda la serie y las horas que continúan después de medianoche. |
 | **Prioridad por dispositivo** | Una materia puede tomar equipos reservados por otra si su marca tiene mayor prioridad y se cumplen las protecciones de horario y bloqueo. El sistema intenta reponer las reservas desplazadas en cascada; si faltan sustitutos, cancela sólo las reservas puntuales afectadas y avisa. En una serie se revisan todas las fechas y se exige consentimiento si alguna toma equipos por prioridad. |
 | **Ver qué tiene por delante** | La pantalla de inicio responde "¿qué tengo hoy?" y "¿hay algo esperándome?" apenas se entra. Muestra sus próximas clases con el día en palabras, y sobre cada una puede cambiar de máquina o cancelar sin ir a ninguna otra pantalla. |
 | **Llegar a todo sin conocer el sistema** | Debajo, un atajo por cada cosa que puede hacer, nombrado por la tarea y no por la sección —"Ver las computadoras", no "Inventario"— con una línea que dice para qué sirve. Está pensado para quien no usa una computadora todos los días. |
@@ -128,7 +134,16 @@ install -m 600 .env.example .env   # sólo en una instalación nueva; completar 
 make run-prod          # docker compose up --build
 ```
 
-Todo corre en contenedores: `sgrc-app` (el binario Go), `postgres`, `frontend` (nginx sirviendo la interfaz compilada) y `cloudflared`. Al arrancar, la API aplica con Goose las migraciones pendientes embebidas en el binario, antes de sembrar el primer administrador y atender solicitudes. Lo hace tanto en una base nueva como en una existente, conservando el registro de versiones ya aplicadas.
+El arranque habitual incluye `sgrc-app` (el binario Go), `postgres` y `frontend`
+(nginx sirviendo la interfaz compilada). El servicio `cloudflared` es opcional:
+`make run-prod-tunel` activa el perfil `tunel` y requiere un `TUNNEL_TOKEN` válido.
+Si ya existe un túnel externo compartido, usar `make levantar`, que lo reconecta
+a la red del proyecto sin crear otro túnel.
+
+Al arrancar, la API aplica con Goose las migraciones pendientes embebidas en el
+binario, antes de sembrar el primer administrador y atender solicitudes. Lo hace
+tanto en una base nueva como en una existente, conservando el registro de
+versiones ya aplicadas.
 
 El contenedor de la API se autochequea contra su propio `/health`, que a su vez consulta la base: `docker compose ps` muestra `healthy` solo si la API puede llegar a Postgres.
 
@@ -150,10 +165,15 @@ El compose base **no publica ningún puerto al host**: en producción el único 
 
 ```bash
 make run        # con puertos expuestos, para desarrollar
-make run-prod   # exactamente lo que corre en el servidor
+make run-prod   # servicios principales; entrada administrada por separado
 ```
 
 ### Cómo entra el tráfico
+
+El esquema siguiente corresponde a un despliegue con Cloudflare. El túnel puede
+ser el incluido en el perfil `tunel` o uno externo conectado a la red del proyecto.
+El Compose base conserva sus puertos cerrados; no ofrece una dirección local al
+host. Para probarlo desde el navegador local, usar `make local`.
 
 ```
 Internet → cloudflared → frontend (nginx :80) ─┬─ /api/* → sgrc-app:8080

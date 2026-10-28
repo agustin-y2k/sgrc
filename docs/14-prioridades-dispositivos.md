@@ -7,10 +7,19 @@ las marcas según sus necesidades.
 
 Una materia con mayor prioridad puede desplazar una reserva de menor prioridad
 sobre ese equipo. Los empates no desplazan. Se respetan los bloqueos,
-los préstamos abiertos y la protección de reservas que empiezan en una hora
+las reservas que ya tuvieron una entrega, aunque el equipo se haya devuelto,
+y la protección de reservas que empiezan en una hora
 o menos. El sistema intenta reponer los equipos desplazados en cascada; si no
 encuentra sustitutos, cancela sólo los equipos afectados en las fechas en
 conflicto y genera los avisos correspondientes.
+
+La entrega protege esa ocurrencia concreta frente a la toma por prioridad y
+también frente a los desplazamientos secundarios del autorrelleno. Las próximas
+fechas de una serie sin entregas siguen participando de las prioridades. Si una
+serie solicitada choca con una ocurrencia protegida, se rechaza completa sin
+modificar las demás reservas. Disponibilidad, previsualización y confirmación
+utilizan la misma regla; una entrega concurrente confirmada antes de la toma
+queda protegida al volver a comprobar los conflictos dentro de la transacción.
 
 ## Selección académica
 
@@ -73,3 +82,23 @@ La cobertura incluye selectores dependientes, atributos ausentes, reglas
 generales, lotes atómicos, especificidad, marcas huérfanas, desplazamientos,
 reposición y continuidad de las marcas al clonar el ciclo. Los comandos y
 entornos de ejecución se describen en [Testing](10-testing.md).
+
+## Cambiar un curso y conservar sus prioridades
+
+Antes de modificar año, división o modalidad, el administrador revisa las marcas
+que dejan de aplicar o empiezan a aplicar. Puede conservar las prioridades exactas
+con ese curso o aceptar el alcance que resulta del cambio. Una marca compartida con
+otros cursos no se traslada dejándolos sin prioridad: se conserva y se copia cuando
+corresponde. Un destino con otra prioridad incompatible obliga a revisar inventario.
+La confirmación incluye la versión del impacto; si alguien cambió el curso o las
+marcas mientras tanto, se exige revisar de nuevo.
+
+## Coincidencias archivadas
+
+Las prioridades que ordenan y permiten tomar equipos sólo consideran materias y
+contenedores sin archivar, en ciclos sin archivar. Cerrar un ciclo no hace operativas
+sus materias antiguas. Una coincidencia únicamente archivada sigue apareciendo en
+«Prioridades sin materias vigentes», identificada con `coincideConArchivadas`.
+La marca no se borra automáticamente: puede volver a corresponder a la estructura
+clonada del año siguiente. Las marcas generales y los alcances exactos conservan
+sus reglas de comparación; archivar no convierte una ausencia exacta en comodín.
