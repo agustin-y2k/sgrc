@@ -37,6 +37,49 @@ services:
       # entre que el GC decide y termina. Si se mueve mem_limit, este va
       # detrás, siempre por debajo.
       GOMEMLIMIT: 800MiB
+      # Sólo las variables que utiliza el backend. El archivo de instalación
+      # se usa para interpolar; los secretos de otros servicios no se heredan.
+      POSTGRES_HOST: ${POSTGRES_HOST:-}
+      POSTGRES_PORT: ${POSTGRES_PORT:-}
+      POSTGRES_DB: ${POSTGRES_DB:-}
+      POSTGRES_USER: ${POSTGRES_USER:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+
+      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-}
+      JWT_REMEMBER_TTL: ${JWT_REMEMBER_TTL:-}
+      OUTBOX_SECRET: ${OUTBOX_SECRET:-}
+      CUENTAS_SECRET: ${CUENTAS_SECRET:-}
+
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      APP_PORT: ${APP_PORT:-}
+      APP_TIMEZONE: ${APP_TIMEZONE:-}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_DOMINIOS_PERMITIDOS: ${GOOGLE_DOMINIOS_PERMITIDOS:-}
+
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
+
+      LICENCIAS_HORA_AVISO: ${LICENCIAS_HORA_AVISO:-}
+      LICENCIAS_INTERVALO_MINUTOS: ${LICENCIAS_INTERVALO_MINUTOS:-}
+      RETIRO_GRACIA_MINUTOS: ${RETIRO_GRACIA_MINUTOS:-}
+      CIERRE_JORNADA: ${CIERRE_JORNADA:-}
+
+      PING_URL_RESERVAS_VENCIDAS: ${PING_URL_RESERVAS_VENCIDAS:-}
+      PING_URL_BARRIDO_ENTREGAS: ${PING_URL_BARRIDO_ENTREGAS:-}
+      PING_URL_AVISO_LICENCIAS: ${PING_URL_AVISO_LICENCIAS:-}
+
+      RETIRO_AVISO_MINUTOS: ${RETIRO_AVISO_MINUTOS:-}
+      DEVOLUCION_DEMORA_MINUTOS: ${DEVOLUCION_DEMORA_MINUTOS:-}
     # Que vuelva solo. Un contenedor muerto por un pico de memoria o por un
     # reinicio del servidor dejaba el sistema caído hasta que alguien
     # entrara por SSH a levantarlo, y desde afuera eso no se distingue de
@@ -46,7 +89,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    env_file: .env
     # Sin `ports`: en producción el único camino hasta la API es
     # cloudflared → nginx, por la red interna. Publicarlo al host abría un
     # atajo desde la LAN de la escuela que se saltea el túnel, y con él la
@@ -129,8 +171,12 @@ services:
   # NO a sgrc-app:8080, que ya no es el borde.
   cloudflared:
     image: cloudflare/cloudflared:latest
+    profiles: [tunel]
+    restart: unless-stopped
     command: tunnel run
-    env_file: .env
+    # El túnel recibe únicamente su credencial, sin claves del backend.
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
     depends_on:
       - frontend
     labels: *etiquetas-sgrc
