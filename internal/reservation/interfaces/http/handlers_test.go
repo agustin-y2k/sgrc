@@ -337,6 +337,7 @@ func (r *fakeRepo) ListarGruposFuturosDeRegla(ctx context.Context, reglaID strin
 }
 
 type fakeValidadorMateria struct {
+	anio     int
 	asignado bool
 	// archivada simula una materia de un ciclo ya cerrado (RF-04.1).
 	archivada bool
@@ -1424,4 +1425,11 @@ func (r *fakeRepo) GuardarReposiciones(ctx context.Context, reservas []*domain.R
 		}
 	}
 	return nil
+}
+
+func (f *fakeValidadorMateria) AnioLectivoDeMateria(context.Context, string) (int, error) {
+	if f.anio != 0 {
+		return f.anio, nil
+	}
+	return 2026, nil
 }

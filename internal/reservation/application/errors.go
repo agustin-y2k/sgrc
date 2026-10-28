@@ -7,9 +7,12 @@ import (
 )
 
 var (
-	ErrReservaModificada        = errors.New("la reserva cambió mientras se procesaba la operación; actualizá y reintentá")
-	ErrReservaGrupoNoEncontrado = errors.New("reserva no encontrada")
-	ErrReservaNoEncontrada      = errors.New("reserva de equipo no encontrado")
+	ErrReservaConEntrega           = errors.New("esta computadora ya tuvo una entrega para esta clase y debe conservarse; para cambiar las próximas fechas, abrí una ocurrencia sin entregas")
+	ErrEquiposEsperados            = errors.New("indicá el equipo confirmado para cada reserva antes de entregar")
+	ErrEquipoReservaDesactualizado = errors.New("cambió el equipo de una reserva desde que lo seleccionaste; actualizá la lista y confirmá nuevamente la entrega")
+	ErrReservaModificada           = errors.New("la reserva cambió mientras se procesaba la operación; actualizá y reintentá")
+	ErrReservaGrupoNoEncontrado    = errors.New("reserva no encontrada")
+	ErrReservaNoEncontrada         = errors.New("reserva de equipo no encontrado")
 
 	// ErrDocenteNoAsignado: RF-04.1 — solo un docente asignado a la
 	// materia puede reservar para ella.
@@ -138,3 +141,5 @@ func (e *ErrorDeSolapamiento) Error() string {
 // ErrFueraDeJornada: el día o el horario pedidos caen fuera de la jornada que
 // declaró la institución.
 var ErrFueraDeJornada = errors.New("ese día y horario están fuera de la jornada de la institución")
+
+var ErrBloqueoNoEncontrado = errors.New("no se encontró esa operación de bloqueo")

@@ -13,7 +13,8 @@ import (
 // no el grupo: el retiro es máquina por máquina, porque el docente puede
 // llevarse tres de las cinco que reservó.
 type entregarPorReservaRequest struct {
-	ReservaIDs []string `json:"reservaIds"`
+	ReservaIDs       []string          `json:"reservaIds"`
+	EquiposEsperados map[string]string `json:"equiposEsperados"`
 	// RetiradoPor: quién vino a buscarlas, si no fue el docente de la reserva.
 	RetiradoPor string `json:"retiradoPor,omitempty"`
 	// LiberarNoEntregadas: entrega parcial declarada. Lo que no se entregó
@@ -52,9 +53,10 @@ type recibirRequest struct {
 // ── Responses ───────────────────────────────────────────────────────────
 
 type prestamoResponse struct {
-	ID        string  `json:"id"`
-	EquipoID  string  `json:"equipoId"`
-	ReservaID *string `json:"reservaId,omitempty"`
+	ContextoAcademico *domain.ContextoAcademicoPrestamo `json:"contextoAcademico,omitempty"`
+	ID                string                            `json:"id"`
+	EquipoID          string                            `json:"equipoId"`
+	ReservaID         *string                           `json:"reservaId,omitempty"`
 
 	// entregadoANombre es quién RESPONDE por el equipo; retiradoPor, quién vino
 	// a buscarlo si no fue esa misma persona.
@@ -83,8 +85,8 @@ type prestamoResponse struct {
 }
 
 func toPrestamoResponse(p *domain.Prestamo, ahora time.Time) prestamoResponse {
-	return prestamoResponse{
-		ID: p.ID, EquipoID: p.EquipoID, ReservaID: p.ReservaID,
+	r := prestamoResponse{
+		ID: p.ID, EquipoID: p.EquipoID, ReservaID: p.ReservaID, ContextoAcademico: p.ContextoAcademico,
 		EntregadoAUsuarioID: p.EntregadoAUsuarioID,
 		EntregadoANombre:    p.EntregadoANombre,
 		RetiradoPor:         p.RetiradoPor,
@@ -99,6 +101,10 @@ func toPrestamoResponse(p *domain.Prestamo, ahora time.Time) prestamoResponse {
 		Demorado:            p.Demorado(ahora),
 		MinutosDeDemora:     p.MinutosDeDemora(ahora),
 	}
+	if p.ContextoAcademico != nil {
+		r.MateriaNombre = &p.ContextoAcademico.MateriaNombre
+	}
+	return r
 }
 
 func toPrestamoDetalladoResponse(d *application.PrestamoDetallado, ahora time.Time) prestamoResponse {
@@ -106,7 +112,9 @@ func toPrestamoDetalladoResponse(d *application.PrestamoDetallado, ahora time.Ti
 	r.Identificador = d.Identificador
 	r.Etiqueta = d.Etiqueta
 	r.CarroNombre = d.CarroNombre
-	r.MateriaNombre = d.MateriaNombre
+	if r.ContextoAcademico == nil {
+		r.MateriaNombre = d.MateriaNombre
+	}
 	return r
 }
 

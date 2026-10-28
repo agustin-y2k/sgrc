@@ -10,7 +10,7 @@ import (
 )
 
 func TestRecurrencia_LimiteExactoYSolicitudExtremaSinEscrituras(t *testing.T) {
-	inicio := fecha(2026, time.March, 9)
+	inicio := fecha(2026, time.January, 5)
 	for _, caso := range []struct {
 		nombre string
 		fin    time.Time
@@ -23,6 +23,7 @@ func TestRecurrencia_LimiteExactoYSolicitudExtremaSinEscrituras(t *testing.T) {
 		t.Run(caso.nombre, func(t *testing.T) {
 			repo := nuevoFakeRepo()
 			svc := nuevoServicioDeTest(repo)
+			svc.ahora = func() time.Time { return fecha(2026, time.January, 1) }
 			res, err := svc.CrearReservaRecurrente(context.Background(), "materia1", "docente1", false,
 				domain.Lunes, 8*time.Hour, 9*time.Hour, inicio, caso.fin, []string{"pc1"}, nil)
 			if !errors.Is(err, caso.err) {

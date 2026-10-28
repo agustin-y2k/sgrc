@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agustin-y2k/sgrc/internal/shared/prioridadcurso"
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/agustin-y2k/sgrc/internal/inventory/application"
@@ -1045,4 +1046,8 @@ func (r *fakeRepo) ExisteAlcancePreferencia(ctx context.Context, p *domain.Prefe
 		return r.validarAlcance(p)
 	}
 	return true, nil
+}
+
+func (r *fakeRepo) PrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) ([]prioridadcurso.Marca, error) {
+	return nil, nil
 }

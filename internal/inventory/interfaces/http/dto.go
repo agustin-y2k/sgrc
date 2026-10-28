@@ -265,10 +265,11 @@ func toCuentaResponse(c application.CuentaVisible) cuentaResponse {
 }
 
 // preferenciaHuerfanaResponse: una marca que quedó apuntando a una materia que
-// ya no existe con ese nombre.
+// no está vigente con ese nombre y alcance.
 type preferenciaHuerfanaResponse struct {
-	CursoExacto bool   `json:"cursoExacto"`
-	ID          string `json:"id"`
+	CoincideConArchivadas bool   `json:"coincideConArchivadas"`
+	CursoExacto           bool   `json:"cursoExacto"`
+	ID                    string `json:"id"`
 	// MateriaNombre es el nombre al que la marca apunta y que ya no cruza con
 	// nada. Se muestra tal como se guardó: es el dato que permite entender qué
 	// pasó («ah, esto era para Matemática, que renombré»).
@@ -284,7 +285,7 @@ type preferenciaHuerfanaResponse struct {
 
 func toPreferenciaHuerfanaResponse(p *application.PreferenciaHuerfana) preferenciaHuerfanaResponse {
 	return preferenciaHuerfanaResponse{
-		ID: p.ID, MateriaNombre: p.MateriaNombre,
+		ID: p.ID, MateriaNombre: p.MateriaNombre, CoincideConArchivadas: p.CoincideConArchivadas,
 		CursoExacto:    p.CursoExacto,
 		Alcance:        alcanceDeHuerfana(p),
 		Prioridad:      p.Prioridad,

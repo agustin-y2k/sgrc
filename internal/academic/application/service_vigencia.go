@@ -53,8 +53,14 @@ func (s *Service) CrearCurso(ctx context.Context, cicloLectivoID string, anio in
 	return res, nil
 }
 
-func (s *Service) EditarCurso(ctx context.Context, cursoID string, anio int, division, modalidad string) error {
-	return s.repo.CoordinarAsignaciones(ctx, func(ctx context.Context) error { return s.editarCurso(ctx, cursoID, anio, division, modalidad) })
+func (s *Service) EditarCurso(ctx context.Context, cursoID string, anio int, division, modalidad string, opciones ...ConfirmacionCurso) error {
+	var confirmacion ConfirmacionCurso
+	if len(opciones) > 0 {
+		confirmacion = opciones[0]
+	}
+	return s.repo.CoordinarAsignaciones(ctx, func(ctx context.Context) error {
+		return s.editarCursoConPrioridades(ctx, cursoID, anio, division, modalidad, confirmacion)
+	})
 }
 
 func (s *Service) EliminarCurso(ctx context.Context, cursoID string) error {

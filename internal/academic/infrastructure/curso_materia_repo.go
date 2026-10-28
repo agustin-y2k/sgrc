@@ -202,14 +202,14 @@ func (r *PostgresRepo) CrearMateria(ctx context.Context, m *domain.Materia) erro
 
 func (r *PostgresRepo) BuscarMateriaPorID(ctx context.Context, id string) (*domain.Materia, error) {
 	row := pgtransaccion.Con(ctx, r.pool).QueryRow(ctx,
-		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado
+		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado, interna_de_espacio
 		   FROM materia WHERE id = $1`, id)
 	return escanearMateria(row)
 }
 
 func escanearMateria(row pgx.Row) (*domain.Materia, error) {
 	var m domain.Materia
-	if err := row.Scan(&m.ID, &m.CursoID, &m.EspacioID, &m.Nombre, &m.Archivado); err != nil {
+	if err := row.Scan(&m.ID, &m.CursoID, &m.EspacioID, &m.Nombre, &m.Archivado, &m.InternaDeEspacio); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, application.ErrMateriaNoEncontrada
 		}
@@ -222,6 +222,13 @@ func escanearMateria(row pgx.Row) (*domain.Materia, error) {
 }
 
 func (r *PostgresRepo) GuardarMateria(ctx context.Context, m *domain.Materia) error {
+	actual, err := r.BuscarMateriaPorID(ctx, m.ID)
+	if err != nil {
+		return err
+	}
+	if actual.InternaDeEspacio {
+		return application.ErrMateriaInternaDeEspacio
+	}
 	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx,
 		`UPDATE materia SET nombre=$2, archivado=$3 WHERE id=$1`,
 		m.ID, m.Nombre, m.Archivado)
@@ -248,6 +255,13 @@ func (r *PostgresRepo) GuardarMateria(ctx context.Context, m *domain.Materia) er
 // reservas. Ver EliminarCurso para por qué se traduce acá además de
 // comprobarlo antes.
 func (r *PostgresRepo) EliminarMateria(ctx context.Context, id string) error {
+	actual, err := r.BuscarMateriaPorID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if actual.InternaDeEspacio {
+		return application.ErrMateriaInternaDeEspacio
+	}
 	tag, err := pgtransaccion.Con(ctx, r.pool).Exec(ctx, `DELETE FROM materia WHERE id = $1`, id)
 	if err != nil {
 		if esViolacionFK(err) {
@@ -266,7 +280,7 @@ func (r *PostgresRepo) EliminarMateria(ctx context.Context, id string) error {
 
 func (r *PostgresRepo) ListarMateriasPorCurso(ctx context.Context, cursoID string) ([]*domain.Materia, error) {
 	rows, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
-		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado
+		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado, interna_de_espacio
 		   FROM materia WHERE curso_id = $1 ORDER BY nombre`,
 		cursoID)
 	if err != nil {

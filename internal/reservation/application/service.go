@@ -241,6 +241,9 @@ func (s *Service) crearReservaCoordinada(ctx context.Context, materiaID, usuario
 	if err := s.verificarPuedeReservar(ctx, materiaID, usuarioID, esAdmin); err != nil {
 		return nil, nil, sinRobo, err
 	}
+	if err := s.verificarPeriodoDelCiclo(ctx, materiaID, fecha, fecha, fecha, horaInicio, horaFin); err != nil {
+		return nil, nil, sinRobo, err
+	}
 
 	if err := s.verificarEquiposReservables(ctx, equipoIDs); err != nil {
 		return nil, nil, sinRobo, err
@@ -621,6 +624,11 @@ func (s *Service) operacionCancelarReserva(ctx context.Context, reservaID, solic
 		// Quién puede cancelar qué, y con qué requisitos, se decide ACÁ y no en
 		// el handler: es una regla del dominio, y dejarla afuera significa que
 		// cualquier otro llamador del servicio la saltea sin enterarse.
+		// La ruta individual conserva el mismo permiso administrativo que el lote,
+		// incluso si quien creó el bloqueo cambió después a rol docente.
+		if r.Tipo == domain.TipoBloqueo && !esAdmin {
+			return ErrNoEsTuReserva
+		}
 		if err := puedeCancelar(r.CreadoPor, solicitanteID, esAdmin, motivo); err != nil {
 			return err
 		}
@@ -669,7 +677,22 @@ func (s *Service) ListarReservas(ctx context.Context, f FiltroReservas, solicita
 	if f.Pagina.Tamanio <= 0 || f.Pagina.Numero <= 0 {
 		f.Pagina = paginacion.PorDefecto()
 	}
-	return s.repo.ListarReservas(ctx, f)
+	filas, total, err := s.repo.ListarReservas(ctx, f)
+	if err != nil {
+		return nil, 0, err
+	}
+	ids := make([]string, 0, len(filas))
+	for _, fila := range filas {
+		ids = append(ids, fila.Reserva.ID)
+	}
+	entregadas, err := s.repo.ReservasConPrestamos(ctx, ids)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range filas {
+		filas[i].TuvoEntrega = entregadas[filas[i].Reserva.ID]
+	}
+	return filas, total, nil
 }
 
 // CalendarioDeEquipo implementa RF-04.4: cualquier usuario autenticado puede
@@ -722,6 +745,11 @@ func (s *Service) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Tim
 	if horaFin == horaInicio {
 		return nil, domain.ErrRangoHorarioInvalido
 	}
+	if materiaID != "" {
+		if err := s.verificarPeriodoDelCiclo(ctx, materiaID, fecha, fecha, fecha, horaInicio, horaFin); err != nil {
+			return nil, err
+		}
+	}
 	return s.repo.ListarEquiposDisponiblesEn(ctx, fecha, horaInicio, horaFin, materiaID)
 }
 
@@ -738,6 +766,11 @@ func (s *Service) ListarEquiposDisponiblesEn(ctx context.Context, fecha time.Tim
 func (s *Service) ListarEquiposOcupadosEn(ctx context.Context, fecha time.Time, horaInicio, horaFin time.Duration, quien, materiaID string) ([]EquipoOcupado, error) {
 	if horaFin == horaInicio {
 		return nil, domain.ErrRangoHorarioInvalido
+	}
+	if materiaID != "" {
+		if err := s.verificarPeriodoDelCiclo(ctx, materiaID, fecha, fecha, fecha, horaInicio, horaFin); err != nil {
+			return nil, err
+		}
 	}
 	ocupados, err := s.repo.ListarEquiposOcupadosEn(ctx, fecha, horaInicio, horaFin)
 	if err != nil {
@@ -959,6 +992,9 @@ func (s *Service) validarSerie(ctx context.Context, materiaID, usuarioID string,
 			ErrDemasiadasOcurrencias, cantidad, MaxOcurrenciasRecurrencia)
 	}
 	fechas := regla.GenerarFechas()
+	if err := s.verificarPeriodoDelCiclo(ctx, materiaID, fechaInicio, fechaFin, fechas[len(fechas)-1], horaInicio, horaFin); err != nil {
+		return nil, nil, err
+	}
 
 	// La jornada se chequea una sola vez y no por ocurrencia: todas caen en el
 	// mismo día de la semana y en el mismo horario, así que o entran todas o no
@@ -1155,6 +1191,7 @@ func (s *Service) bloquearEquiposCoordinada(ctx context.Context, equipoIDs []str
 		return nil, err
 	}
 
+	operacionID := s.nuevoID()
 	docentesAfectados := map[string]bool{}
 	reservasCanceladas := 0
 	bloqueos := make([]*domain.Reserva, 0, len(equipoIDs))
@@ -1219,7 +1256,7 @@ func (s *Service) bloquearEquiposCoordinada(ctx context.Context, equipoIDs []str
 				}
 			}
 
-			bloqueo, err := domain.NuevaReservaBloqueo(s.nuevoID(), equipoID, creadoPor, fecha, horaInicio, horaFin, motivoBloqueo, ahora)
+			bloqueo, err := domain.NuevaReservaBloqueo(s.nuevoID(), equipoID, creadoPor, fecha, horaInicio, horaFin, motivoBloqueo, ahora, operacionID)
 			if err != nil {
 				return err
 			}
@@ -1618,6 +1655,19 @@ func (s *Service) cambiarEquipoDeReservaCoordinada(ctx context.Context, reservaI
 		}
 		if err := puedeVer(r.CreadoPor, quien, esAdmin); err != nil {
 			return err
+		}
+		ids := make([]string, 0, len(aCambiar))
+		for _, res := range aCambiar {
+			ids = append(ids, res.ID)
+		}
+		entregadas, err := repo.ReservasConPrestamos(ctx, ids)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if entregadas[id] {
+				return ErrReservaConEntrega
+			}
 		}
 		// Todas las fechas contra el equipo nuevo, en una sola consulta y ANTES de
 		// tocar ninguna: cambiar catorce martes y fallar en el decimoquinto dejaría

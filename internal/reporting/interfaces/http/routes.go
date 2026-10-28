@@ -21,6 +21,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	autenticado := aut.Requerida()
 	soloAdmin := middleware.RequireRol("ADMIN")
 
+	reporting.Get("/ciclos/:cicloId/actividad", autenticado, soloAdmin, h.Actividad)
 	reporting.Get("/ciclos/:cicloId/uso-equipos", autenticado, soloAdmin, h.ReporteUsoEquipos)
 	reporting.Get("/ciclos/:cicloId/uso-docentes", autenticado, soloAdmin, h.ReporteUsoDocentes)
 	reporting.Get("/historico/:anio/uso-equipos", autenticado, soloAdmin, h.HistoricoUsoEquipos)

@@ -91,6 +91,7 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 		LEFT JOIN carro c ON c.id = eq.carro_id
 		LEFT JOIN reserva r ON r.id = p.reserva_id
 		LEFT JOIN materia m ON m.id = r.materia_id
+ LEFT JOIN prestamo_contexto_academico ca ON ca.prestamo_id=p.id
 		LEFT JOIN usuario u ON u.id = p.entregado_a_usuario_id
 		WHERE p.devuelto_en IS NULL
 		ORDER BY p.devolucion_estimada ASC NULLS LAST, p.entregado_en ASC`)
@@ -104,6 +105,7 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 		var p domain.Prestamo
 		var v application.PrestamoParaVigilar
 		var destino, observaciones *string
+		var contexto []byte
 		var materiaNombre *string
 
 		// El orden y la cantidad los manda columnasPrestamoDetallado, que es
@@ -115,7 +117,7 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 			&p.RetiradoPor, &destino, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
-			&p.AvisadoCierrePara,
+			&p.AvisadoCierrePara, &contexto,
 			&v.Identificador, &v.Etiqueta, &v.CarroNombre, &materiaNombre,
 			&v.Email,
 		); err != nil {
@@ -126,6 +128,9 @@ func (r *PostgresRepo) PrestamosAVigilar(ctx context.Context) ([]application.Pre
 		}
 		if observaciones != nil {
 			p.Observaciones = *observaciones
+		}
+		if err := leerContextoPrestamo(contexto, &p); err != nil {
+			return nil, err
 		}
 		v.Prestamo = &p
 		resultado = append(resultado, v)

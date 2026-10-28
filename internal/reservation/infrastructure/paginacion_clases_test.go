@@ -16,7 +16,7 @@ func TestPostgresRepo_ListarReservas_PorClasesCompletas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materia := crearMateriaDeTest(t, pool)
+	materia := crearMateriaDeTest(t, pool, 2026)
 	docente := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 	otro := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 	fecha := time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC)
@@ -27,7 +27,7 @@ func TestPostgresRepo_ListarReservas_PorClasesCompletas(t *testing.T) {
 	}
 	crearClase := func(dia time.Time, cantidad int, cancelarTodas bool) *domain.ReservaGrupo {
 		t.Helper()
-		g := nuevoReservaGrupoDeTest(materia, dia, 9*time.Hour, 10*time.Hour)
+		g := nuevoReservaGrupoDeTest(t, materia, dia, 9*time.Hour, 10*time.Hour)
 		g.CreadoPor = &docente
 		if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 			t.Fatal(err)
@@ -51,12 +51,15 @@ func TestPostgresRepo_ListarReservas_PorClasesCompletas(t *testing.T) {
 	primera := crearClase(fecha, 70, false)
 	segunda := crearClase(fecha.AddDate(0, 0, 1), 30, false)
 	crearClase(fecha.AddDate(0, 0, 2), 2, true)
+	operacionDocente, operacionOtro := NuevoID(), NuevoID()
 	for i := 0; i < 50; i++ {
 		actor := &docente
+		operacion := operacionDocente
 		if i >= 25 {
 			actor = &otro
+			operacion = operacionOtro
 		}
-		r, err := domain.NuevaReservaBloqueo(NuevoID(), equipos[i], actor, fecha.AddDate(0, 0, 3), 9*time.Hour, 10*time.Hour, "Bloqueo de prueba", ahora)
+		r, err := domain.NuevaReservaBloqueo(NuevoID(), equipos[i], actor, fecha.AddDate(0, 0, 3), 9*time.Hour, 10*time.Hour, "Bloqueo de prueba", ahora, operacion)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -166,4 +169,47 @@ func TestPostgresRepo_ListarReservas_PorClasesCompletas(t *testing.T) {
 			t.Fatalf("se perdieron equipos confirmados de la clase: %d", confirmadas)
 		}
 	})
+}
+
+func TestBloqueos_OperacionesCoincidentesNoSeFusionan(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	actor := crearUsuarioDeTest(t, pool, "ADMIN", "APROBADA")
+	dia := time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC)
+	operaciones := []string{NuevoID(), NuevoID()}
+	motivos := []string{"Mantenimiento", "Evaluación"}
+	for i, op := range operaciones {
+		for j := 0; j < 2; j++ {
+			b, err := domain.NuevaReservaBloqueo(NuevoID(), crearEquipoDeCarroDeTest(t, pool), &actor, dia, 9*time.Hour, 10*time.Hour, motivos[i], dia.AddDate(0, 0, -1), op)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if i == 0 && j == 0 {
+				if err := b.Cancelar(&actor, "Se libera un equipo", dia); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := repo.CrearReserva(ctx, b); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	vistos := map[string]bool{}
+	for pagina := 1; pagina <= 2; pagina++ {
+		filas, total, err := repo.ListarReservas(ctx, application.FiltroReservas{PorClases: true, Pagina: paginacion.Pagina{Numero: pagina, Tamanio: 1}})
+		if err != nil || total != 2 || len(filas) != 2 {
+			t.Fatalf("paginación: total=%d filas=%d err=%v", total, len(filas), err)
+		}
+		op := *filas[0].Reserva.BloqueoOperacionID
+		if vistos[op] {
+			t.Fatal("se repitió una operación")
+		}
+		vistos[op] = true
+		for _, f := range filas {
+			if f.Reserva.BloqueoOperacionID == nil || *f.Reserva.BloqueoOperacionID != op || f.Reserva.MotivoBloqueo != filas[0].Reserva.MotivoBloqueo {
+				t.Fatal("se mezclaron operaciones o motivos")
+			}
+		}
+	}
 }

@@ -53,6 +53,7 @@ func (h *Handler) EntregarPorReserva(c *fiber.Ctx) error {
 
 	resultado, err := h.svc.EntregarPorReserva(c.UserContext(), application.EntregaPorReservaParams{
 		ReservaIDs:          req.ReservaIDs,
+		EquiposEsperados:    req.EquiposEsperados,
 		RetiradoPor:         req.RetiradoPor,
 		EntregadoPor:        claims.UserID,
 		LiberarNoEntregadas: req.LiberarNoEntregadas,

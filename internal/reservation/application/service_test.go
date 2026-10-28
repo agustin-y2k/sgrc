@@ -710,6 +710,7 @@ func (r *fakeRepo) ListarGruposFuturosDeRegla(ctx context.Context, reglaID strin
 // ── fakes de los puertos ────────────────────────────────────────────────
 
 type fakeValidadorMateria struct {
+	anio     int
 	asignado bool
 	// archivada simula una materia de un ciclo ya cerrado (RF-04.1).
 	archivada bool
@@ -1557,6 +1558,13 @@ func TestBloquearEquipos_SinConflictos_OK(t *testing.T) {
 	}
 	if len(res.Bloqueos) != 2 {
 		t.Fatalf("esperaba 2 bloqueos, obtuve %d", len(res.Bloqueos))
+	}
+	if res.Bloqueos[0].BloqueoOperacionID == nil || res.Bloqueos[1].BloqueoOperacionID == nil || *res.Bloqueos[0].BloqueoOperacionID != *res.Bloqueos[1].BloqueoOperacionID {
+		t.Fatal("los equipos del mismo pedido deben compartir operación")
+	}
+	otra, err := svc.BloquearEquipos(context.Background(), []string{"pc3"}, &creadoPor, fecha(2026, 3, 9), 10*time.Hour, 12*time.Hour, "Otro bloqueo")
+	if err != nil || otra.Bloqueos[0].BloqueoOperacionID == nil || *otra.Bloqueos[0].BloqueoOperacionID == *res.Bloqueos[0].BloqueoOperacionID {
+		t.Fatalf("se reutilizó la identidad entre pedidos: %v", err)
 	}
 	if res.ReservasCanceladas != 0 || res.DocentesNotificados != 0 {
 		t.Errorf("sin conflictos no debería cancelar nada: %+v", res)
@@ -3428,4 +3436,11 @@ func (r *fakeRepo) GuardarReposiciones(ctx context.Context, reservas []*domain.R
 		}
 	}
 	return nil
+}
+
+func (f *fakeValidadorMateria) AnioLectivoDeMateria(context.Context, string) (int, error) {
+	if f.anio != 0 {
+		return f.anio, nil
+	}
+	return 2026, nil
 }

@@ -5,7 +5,6 @@ package infrastructure
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -70,35 +69,30 @@ func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 // carro→equipo, usuario) — inserción directa por SQL, sin pasar por
 // auth/academic/inventory a propósito (reservation no los importa).
 
-// contadorAnioDeTest asegura un año único por llamada a crearMateriaDeTest
-// dentro de un mismo test — ciclo_lectivo.anio tiene una constraint UNIQUE, y
-// varios tests crean más de una materia (con su propio ciclo/curso) en la
-// misma corrida, así que un año fijo (2026) chocaba en la segunda llamada.
-var contadorAnioDeTest int32
+// El año lectivo es explícito. Las materias de un mismo año comparten ciclo;
+// el contador diferencia cursos mínimos sin alterar ese año ni sus fechas.
+var contadorDivisionDeTest int32
 
-func crearMateriaDeTest(t *testing.T, pool *pgxpool.Pool) string {
+func ahoraDeTest() time.Time {
+	return time.Date(2026, 3, 2, 7, 0, 0, 0, time.UTC)
+}
+
+func cicloDeTest(t *testing.T, pool *pgxpool.Pool, anio int) string {
 	t.Helper()
-	ctx := context.Background()
-	anio := int(atomic.AddInt32(&contadorAnioDeTest, 1)) + 3000
-	cicloID := NuevoID()
-	cursoID := NuevoID()
-	materiaID := NuevoID()
-
-	// activo=false a propósito: este fixture puede crearse varias veces por test
-	// (una por materia independiente), y solo puede haber UN ciclo activo a la
-	// vez en toda la tabla (idx_ciclo_lectivo_activo_unico, RF-02.1) — estos
-	// tests no necesitan que el ciclo esté activo para nada, así que evitamos
-	// esa constraint directamente.
-	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
+	var id string
+	if err := pool.QueryRow(context.Background(), `
+		INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)
+		ON CONFLICT (anio) DO UPDATE SET anio=EXCLUDED.anio RETURNING id
+	`, NuevoID(), anio).Scan(&id); err != nil {
 		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO curso (id, ciclo_lectivo_id, anio, division) VALUES ($1, $2, 1, 'A')`, cursoID, cicloID); err != nil {
-		t.Fatalf("no se pudo crear curso de prueba: %v", err)
-	}
-	if _, err := pool.Exec(ctx, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, 'Matemáticas')`, materiaID, cursoID); err != nil {
-		t.Fatalf("no se pudo crear materia de prueba: %v", err)
-	}
-	return materiaID
+	return id
+}
+
+func crearMateriaDeTest(t *testing.T, pool *pgxpool.Pool, anioLectivo int) string {
+	t.Helper()
+	division := strconv.Itoa(int(atomic.AddInt32(&contadorDivisionDeTest, 1)))
+	return materiaEnModalidadDeTest(t, pool, anioLectivo, "Matemáticas", 1, division, nil)
 }
 
 func crearUsuarioDeTest(t *testing.T, pool *pgxpool.Pool, rol, estado string) string {
@@ -123,7 +117,7 @@ func crearEquipoDeCarroDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	if _, err := pool.Exec(ctx, `INSERT INTO carro (id, nombre) VALUES ($1, $2)`, carroID, "Carro-"+carroID[:8]); err != nil {
 		t.Fatalf("no se pudo crear carro de prueba: %v", err)
 	}
-	numeroSerie := fmt.Sprintf("SERIE-%d", time.Now().UnixNano())
+	numeroSerie := "SERIE-" + strings.ToUpper(equipoID)
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO equipo (id, carro_id, identificador, numero_serie, estado) VALUES ($1, $2, 1, $3, 'DISPONIBLE')`,
 		equipoID, carroID, numeroSerie,
@@ -133,8 +127,12 @@ func crearEquipoDeCarroDeTest(t *testing.T, pool *pgxpool.Pool) string {
 	return equipoID
 }
 
-func nuevoReservaGrupoDeTest(materiaID string, fecha time.Time, horaInicio, horaFin time.Duration) *domain.ReservaGrupo {
-	g, _ := domain.NuevoReservaGrupo(NuevoID(), materiaID, nil, "Ada Lovelace", fecha, horaInicio, horaFin, nil, time.Now().UTC().Truncate(time.Microsecond))
+func nuevoReservaGrupoDeTest(t *testing.T, materiaID string, fecha time.Time, horaInicio, horaFin time.Duration) *domain.ReservaGrupo {
+	t.Helper()
+	g, err := domain.NuevoReservaGrupo(NuevoID(), materiaID, nil, "Ada Lovelace", fecha, horaInicio, horaFin, nil, ahoraDeTest().UTC().Truncate(time.Microsecond))
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	return g
 }
 
@@ -143,9 +141,9 @@ func nuevoReservaGrupoDeTest(materiaID string, fecha time.Time, horaInicio, hora
 func TestPostgresRepo_CrearYBuscarReservaGrupo_OK(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 
-	g := nuevoReservaGrupoDeTest(materiaID, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -162,16 +160,16 @@ func TestPostgresRepo_CrearYBuscarReservaGrupo_OK(t *testing.T) {
 func TestPostgresRepo_CrearYBuscarReserva_OK(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
-	g := nuevoReservaGrupoDeTest(materiaID, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("no debería fallar creando grupo: %v", err)
 	}
 
 	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace", nil,
-		g.Fecha, g.HoraInicio, g.HoraFin, time.Now().UTC().Truncate(time.Microsecond))
+		g.Fecha, g.HoraInicio, g.HoraFin, ahoraDeTest().UTC().Truncate(time.Microsecond))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -197,15 +195,15 @@ func TestPostgresRepo_ListarReservas_PaginaYTotal(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// Cinco días distintos sobre la misma PC: sin fechas distintas chocarían
 	// contra la constraint EXCLUDE.
 	for i := 0; i < 5; i++ {
 		fecha := time.Date(2026, 3, 2+i, 0, 0, 0, 0, time.UTC)
-		g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+		g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
 		if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 			t.Fatalf("creando grupo: %v", err)
 		}
@@ -274,23 +272,33 @@ func TestPostgresRepo_ListarReservas_PaginaYTotal(t *testing.T) {
 func TestPostgresRepo_Solapamiento_ConstraintDeLaBase(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g1 := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g1)
-	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	g1 := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g1); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res1, err := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(context.Background(), res1); err != nil {
 		t.Fatalf("la primera reserva no debería fallar: %v", err)
 	}
 
-	g2 := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour+30*time.Minute, 9*time.Hour+30*time.Minute)
-	repo.CrearReservaGrupo(context.Background(), g2)
-	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour+30*time.Minute, 9*time.Hour+30*time.Minute, ahora)
+	g2 := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour+30*time.Minute, 9*time.Hour+30*time.Minute)
+	if err := repo.CrearReservaGrupo(context.Background(), g2); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res2, err := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour+30*time.Minute, 9*time.Hour+30*time.Minute, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
-	err := repo.CrearReserva(context.Background(), res2)
+	err = repo.CrearReserva(context.Background(), res2)
 	if err != application.ErrSolapamiento {
 		t.Fatalf("esperaba application.ErrSolapamiento (constraint EXCLUDE), obtuve %v", err)
 	}
@@ -299,22 +307,32 @@ func TestPostgresRepo_Solapamiento_ConstraintDeLaBase(t *testing.T) {
 func TestPostgresRepo_SinSolapamiento_HorariosDistintos_OK(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g1 := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g1)
-	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	g1 := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g1); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res1, err := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(context.Background(), res1); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
 
 	// Horario consecutivo, sin solapar (9-10hs justo después de 8-9hs).
-	g2 := nuevoReservaGrupoDeTest(materiaID, fecha, 9*time.Hour, 10*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g2)
-	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, fecha, 9*time.Hour, 10*time.Hour, ahora)
+	g2 := nuevoReservaGrupoDeTest(t, materiaID, fecha, 9*time.Hour, 10*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g2); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res2, err := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, fecha, 9*time.Hour, 10*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	if err := repo.CrearReserva(context.Background(), res2); err != nil {
 		t.Fatalf("horarios consecutivos sin solapar no deberían fallar: %v", err)
@@ -324,17 +342,25 @@ func TestPostgresRepo_SinSolapamiento_HorariosDistintos_OK(t *testing.T) {
 func TestPostgresRepo_SolapamientoEnEquiposDistintas_OK(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	pc1 := crearEquipoDeCarroDeTest(t, pool)
 	pc2 := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
-	res1, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pc1, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
-	res2, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pc2, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	res1, err := domain.NuevaReservaNormal(NuevoID(), g.ID, pc1, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res2, err := domain.NuevaReservaNormal(NuevoID(), g.ID, pc2, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	if err := repo.CrearReserva(context.Background(), res1); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -347,16 +373,23 @@ func TestPostgresRepo_SolapamientoEnEquiposDistintas_OK(t *testing.T) {
 func TestPostgresRepo_GuardarReserva_Cancelar(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	adminID := crearUsuarioDeTest(t, pool, "ADMIN", "APROBADA")
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
-	repo.CrearReserva(context.Background(), res)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(context.Background(), res); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	if err := res.Cancelar(&adminID, "PC rota", ahora); err != nil {
 		t.Fatalf("transición de dominio inválida: %v", err)
@@ -382,16 +415,23 @@ func TestPostgresRepo_GuardarReserva_Cancelar(t *testing.T) {
 func TestPostgresRepo_GuardarReserva_CambiarDeEquipo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoViejo := crearEquipoDeCarroDeTest(t, pool)
 	equipoNuevo := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoViejo, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
-	repo.CrearReserva(context.Background(), res)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoViejo, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(context.Background(), res); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	res.EquipoID = equipoNuevo
 	if err := repo.GuardarReserva(context.Background(), res); err != nil {
@@ -415,19 +455,31 @@ func TestPostgresRepo_GuardarReserva_MoverAUnEquipoOcupado_LoRechazaLaBase(t *te
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoA := crearEquipoDeCarroDeTest(t, pool)
 	equipoB := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// Dos reservas en la MISMA franja, cada una con su equipo.
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(ctx, g)
-	resA, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoA, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
-	repo.CrearReserva(ctx, resA)
-	resB, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoB, materiaID, "Grace", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
-	repo.CrearReserva(ctx, resB)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	resA, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoA, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, resA); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	resB, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoB, materiaID, "Grace", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, resB); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	// Mover la primera al equipo que ya tiene la segunda.
 	resA.EquipoID = equipoB
@@ -451,16 +503,23 @@ func TestPostgresRepo_GuardarReserva_MoverAUnEquipoOcupado_LoRechazaLaBase(t *te
 func TestPostgresRepo_ReservaVencida_ApareceEnElListado(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
-	ayer := time.Now().UTC().AddDate(0, 0, -1).Truncate(24 * time.Hour)
-	g := nuevoReservaGrupoDeTest(materiaID, ayer, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, ayer, 8*time.Hour, 9*time.Hour, time.Now().UTC())
-	repo.CrearReserva(context.Background(), res)
+	ayer := ahoraDeTest().UTC().AddDate(0, 0, -1).Truncate(24 * time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, ayer, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, ayer, 8*time.Hour, 9*time.Hour, ahoraDeTest().UTC())
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(context.Background(), res); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
-	vencidas, err := repo.ListarReservasConfirmadasVencidas(context.Background(), time.Now().UTC(), 100)
+	vencidas, err := repo.ListarReservasConfirmadasVencidas(context.Background(), ahoraDeTest().UTC(), 100)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -479,16 +538,23 @@ func TestPostgresRepo_ReservaVencida_ApareceEnElListado(t *testing.T) {
 func TestPostgresRepo_ReservaFutura_NoApareceComoVencida(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
-	manana := time.Now().UTC().AddDate(0, 0, 1).Truncate(24 * time.Hour)
-	g := nuevoReservaGrupoDeTest(materiaID, manana, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, manana, 8*time.Hour, 9*time.Hour, time.Now().UTC())
-	repo.CrearReserva(context.Background(), res)
+	manana := ahoraDeTest().UTC().AddDate(0, 0, 1).Truncate(24 * time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, manana, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, manana, 8*time.Hour, 9*time.Hour, ahoraDeTest().UTC())
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(context.Background(), res); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
-	vencidas, err := repo.ListarReservasConfirmadasVencidas(context.Background(), time.Now().UTC(), 100)
+	vencidas, err := repo.ListarReservasConfirmadasVencidas(context.Background(), ahoraDeTest().UTC(), 100)
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -502,24 +568,38 @@ func TestPostgresRepo_ReservaFutura_NoApareceComoVencida(t *testing.T) {
 func TestPostgresRepo_ListarReservasFuturasDeMateria(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
-	otraMateriaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
+	otraMateriaID := crearMateriaDeTest(t, pool, 2026)
 	pc1 := crearEquipoDeCarroDeTest(t, pool)
 	pc2 := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// Dos reservas de la materia que nos importa (distintas PCs, mismo grupo lógico).
-	g1 := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g1)
-	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, pc1, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
-	repo.CrearReserva(context.Background(), res1)
+	g1 := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g1); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res1, err := domain.NuevaReservaNormal(NuevoID(), g1.ID, pc1, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(context.Background(), res1); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	// Una reserva de OTRA materia — no debería aparecer en el resultado.
-	g2 := nuevoReservaGrupoDeTest(otraMateriaID, fecha, 10*time.Hour, 11*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g2)
-	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, pc2, otraMateriaID, "Ada", nil, fecha, 10*time.Hour, 11*time.Hour, ahora)
-	repo.CrearReserva(context.Background(), res2)
+	g2 := nuevoReservaGrupoDeTest(t, otraMateriaID, fecha, 10*time.Hour, 11*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g2); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res2, err := domain.NuevaReservaNormal(NuevoID(), g2.ID, pc2, otraMateriaID, "Ada", nil, fecha, 10*time.Hour, 11*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(context.Background(), res2); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	futuras, err := repo.ListarReservasFuturasDeMateria(context.Background(), materiaID, fecha.AddDate(0, 0, -1))
 	if err != nil {
@@ -537,7 +617,7 @@ func TestPostgresRepo_ListarReservasFuturasDeMateria(t *testing.T) {
 func TestPostgresRepo_ReglaRecurrencia_Crear(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	usuarioID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 
 	regla, err := domain.NuevaReglaRecurrencia(NuevoID(), materiaID, usuarioID, domain.Lunes,
@@ -554,19 +634,28 @@ func TestPostgresRepo_ReglaRecurrencia_Crear(t *testing.T) {
 func TestPostgresRepo_ListarGruposFuturosDeRegla(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	usuarioID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 
-	regla, _ := domain.NuevaReglaRecurrencia(NuevoID(), materiaID, usuarioID, domain.Lunes,
+	regla, err := domain.NuevaReglaRecurrencia(NuevoID(), materiaID, usuarioID, domain.Lunes,
 		8*time.Hour, 9*time.Hour, time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), time.Date(2026, 3, 30, 0, 0, 0, 0, time.UTC))
-	repo.CrearReglaRecurrencia(context.Background(), regla)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReglaRecurrencia(context.Background(), regla); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
-	g1 := nuevoReservaGrupoDeTest(materiaID, time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
+	g1 := nuevoReservaGrupoDeTest(t, materiaID, time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
 	g1.ReglaRecurrenciaID = &regla.ID
-	g2 := nuevoReservaGrupoDeTest(materiaID, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
+	g2 := nuevoReservaGrupoDeTest(t, materiaID, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
 	g2.ReglaRecurrenciaID = &regla.ID
-	repo.CrearReservaGrupo(context.Background(), g1)
-	repo.CrearReservaGrupo(context.Background(), g2)
+	if err := repo.CrearReservaGrupo(context.Background(), g1); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReservaGrupo(context.Background(), g2); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	futuros, err := repo.ListarGruposFuturosDeRegla(context.Background(), regla.ID, time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC))
 	if err != nil {
@@ -581,10 +670,12 @@ func TestPostgresRepo_ListarGruposFuturosDeRegla(t *testing.T) {
 
 func TestValidadorMateriaPostgres_Asignado_True(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	usuarioID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
-	pool.Exec(context.Background(), `INSERT INTO docente_materia (id, usuario_id, materia_id, rol) VALUES ($1, $2, $3, 'TITULAR')`,
-		NuevoID(), usuarioID, materiaID)
+	if _, err := pool.Exec(context.Background(), `INSERT INTO docente_materia (id, usuario_id, materia_id, rol) VALUES ($1, $2, $3, 'TITULAR')`,
+		NuevoID(), usuarioID, materiaID); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	validador := NewValidadorMateriaPostgres(pool)
 	asignado, err := validador.DocenteEstaAsignado(context.Background(), materiaID, usuarioID)
@@ -599,7 +690,7 @@ func TestValidadorMateriaPostgres_Asignado_True(t *testing.T) {
 
 func TestValidadorMateriaPostgres_NoAsignado_False(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	usuarioID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 
 	validador := NewValidadorMateriaPostgres(pool)
@@ -631,7 +722,9 @@ func TestValidadorEquipoPostgres_Disponible_True(t *testing.T) {
 func TestValidadorEquipoPostgres_EnMantenimiento_False(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	pool.Exec(context.Background(), `UPDATE equipo SET estado = 'EN_MANTENIMIENTO' WHERE id = $1`, equipoID)
+	if _, err := pool.Exec(context.Background(), `UPDATE equipo SET estado = 'EN_MANTENIMIENTO' WHERE id = $1`, equipoID); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	validador := NewValidadorEquipoPostgres(pool)
 	disponible, err := validador.EquipoDisponibleParaReservar(context.Background(), equipoID)
@@ -647,7 +740,9 @@ func TestValidadorEquipoPostgres_EnMantenimiento_False(t *testing.T) {
 func TestValidadorEquipoPostgres_DadaDeBaja_False(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	pool.Exec(context.Background(), `UPDATE equipo SET dado_de_baja = true WHERE id = $1`, equipoID)
+	if _, err := pool.Exec(context.Background(), `UPDATE equipo SET dado_de_baja = true WHERE id = $1`, equipoID); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	validador := NewValidadorEquipoPostgres(pool)
 	disponible, err := validador.EquipoDisponibleParaReservar(context.Background(), equipoID)
@@ -740,7 +835,7 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 		{"BuscarReservaPorID", func() error { _, err := repo.BuscarReservaPorID(ctx, "RESERVA_ID"); return err }},
 		{"ListarReservasPorGrupo", func() error { _, err := repo.ListarReservasPorGrupo(ctx, "GRUPO_ID"); return err }},
 		{"ListarReservasFuturasDeEquipo", func() error {
-			_, err := repo.ListarReservasFuturasDeEquipo(ctx, "PC_ID", time.Now())
+			_, err := repo.ListarReservasFuturasDeEquipo(ctx, "PC_ID", ahoraDeTest())
 			return err
 		}},
 	}
@@ -758,15 +853,20 @@ func TestPostgresRepo_IDConFormatoInvalido_ErrorControlado(t *testing.T) {
 func TestPostgresRepo_CascadaService_CancelarReservasFuturasDeEquipo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	fecha := time.Now().UTC().AddDate(0, 0, 7).Truncate(24 * time.Hour)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	fecha := ahoraDeTest().UTC().AddDate(0, 0, 7).Truncate(24 * time.Hour)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	docenteID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", &docenteID, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", &docenteID, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -796,14 +896,19 @@ func TestPostgresRepo_CascadaService_CancelarReservasFuturasDeEquipo(t *testing.
 func TestPostgresRepo_CascadaService_CancelarReservasFuturasDeMateria(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	fecha := time.Now().UTC().AddDate(0, 0, 7).Truncate(24 * time.Hour)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	fecha := ahoraDeTest().UTC().AddDate(0, 0, 7).Truncate(24 * time.Hour)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -842,9 +947,9 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo(t *testing.T) {
 	cicloID := NuevoID()
 	cursoID := NuevoID()
 	materiaDelCiclo := NuevoID()
-	otraMateriaDeOtroCiclo := crearMateriaDeTest(t, pool) // ciclo distinto, no debe tocarse
+	otraMateriaDeOtroCiclo := crearMateriaDeTest(t, pool, 2025) // ciclo distinto, no debe tocarse
 
-	anio := int(atomic.AddInt32(&contadorAnioDeTest, 1)) + 3000
+	anio := 2026
 	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anio); err != nil {
 		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
 	}
@@ -858,21 +963,41 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo(t *testing.T) {
 	pc1 := crearEquipoDeCarroDeTest(t, pool)
 	pc2 := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// Un grupo con 2 reservas, del ciclo que vamos a "archivar".
-	g := nuevoReservaGrupoDeTest(materiaDelCiclo, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(ctx, g)
-	res1, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pc1, materiaDelCiclo, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
-	repo.CrearReserva(ctx, res1)
-	res2, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pc2, materiaDelCiclo, "Ada", nil, fecha, 9*time.Hour+1*time.Minute, 10*time.Hour, ahora)
-	repo.CrearReserva(ctx, res2)
+	g := nuevoReservaGrupoDeTest(t, materiaDelCiclo, fecha, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res1, err := domain.NuevaReservaNormal(NuevoID(), g.ID, pc1, materiaDelCiclo, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, res1); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res2, err := domain.NuevaReservaNormal(NuevoID(), g.ID, pc2, materiaDelCiclo, "Ada", nil, fecha, 9*time.Hour+1*time.Minute, 10*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, res2); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	// Una reserva de OTRA materia, de OTRO ciclo — no debería tocarse.
-	gOtroCiclo := nuevoReservaGrupoDeTest(otraMateriaDeOtroCiclo, fecha, 8*time.Hour, 9*time.Hour)
-	repo.CrearReservaGrupo(ctx, gOtroCiclo)
-	resOtroCiclo, _ := domain.NuevaReservaNormal(NuevoID(), gOtroCiclo.ID, pc1, otraMateriaDeOtroCiclo, "Ada", nil, fecha, 10*time.Hour, 11*time.Hour, ahora)
-	repo.CrearReserva(ctx, resOtroCiclo)
+	fechaOtroCiclo := fecha.AddDate(-1, 0, 0)
+	gOtroCiclo := nuevoReservaGrupoDeTest(t, otraMateriaDeOtroCiclo, fechaOtroCiclo, 8*time.Hour, 9*time.Hour)
+	if err := repo.CrearReservaGrupo(ctx, gOtroCiclo); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	resOtroCiclo, err := domain.NuevaReservaNormal(NuevoID(), gOtroCiclo.ID, pc1, otraMateriaDeOtroCiclo, "Ada", nil, fechaOtroCiclo, 10*time.Hour, 11*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, resOtroCiclo); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	gruposEliminados, reservasEliminadas, err := repo.EliminarReservasYGruposDeCiclo(ctx, cicloID)
 
@@ -921,30 +1046,46 @@ func TestPostgresRepo_EliminarReservasYGruposDeCiclo_BorraReglasYBloqueos(t *tes
 	usuarioID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 	equipo := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(anio, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	regla, _ := domain.NuevaReglaRecurrencia(NuevoID(), materiaID, usuarioID, domain.Lunes,
+	regla, err := domain.NuevaReglaRecurrencia(NuevoID(), materiaID, usuarioID, domain.Lunes,
 		8*time.Hour, 9*time.Hour, fecha, fecha.AddDate(0, 1, 0))
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReglaRecurrencia(ctx, regla); err != nil {
 		t.Fatalf("no se pudo crear la regla: %v", err)
 	}
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	g.ReglaRecurrenciaID = &regla.ID
-	repo.CrearReservaGrupo(ctx, g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipo, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
-	repo.CrearReserva(ctx, res)
+	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipo, materiaID, "Ada", nil, fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(ctx, res); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	// Un bloqueo administrativo del mismo año, en otra franja para no chocar
 	// con la constraint EXCLUDE.
-	bloqueo, _ := domain.NuevaReservaBloqueo(NuevoID(), equipo, nil, fecha, 14*time.Hour, 16*time.Hour, "Jornada docente", ahora)
+	bloqueo, err := domain.NuevaReservaBloqueo(NuevoID(), equipo, nil, fecha, 14*time.Hour, 16*time.Hour, "Jornada docente", ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(ctx, bloqueo); err != nil {
 		t.Fatalf("no se pudo crear el bloqueo: %v", err)
 	}
 
 	// Un bloqueo de OTRO año — no debe tocarse.
-	bloqueoOtroAnio, _ := domain.NuevaReservaBloqueo(NuevoID(), equipo,
+	bloqueoOtroAnio, err := domain.NuevaReservaBloqueo(NuevoID(), equipo,
 		nil, time.Date(anio+1, 3, 9, 0, 0, 0, 0, time.UTC), 14*time.Hour, 16*time.Hour, "Jornada docente", ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(ctx, bloqueoOtroAnio); err != nil {
 		t.Fatalf("no se pudo crear el bloqueo de otro año: %v", err)
 	}
@@ -986,20 +1127,20 @@ func TestCrearReserva_ConflictoAMitadDelLote_NoDejaGrupoParcial(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2027)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	docenteID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 	fecha := time.Date(2027, 5, 10, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	svc := application.NewService(repo,
-		validadorMateriaOK{}, validadorEquipoOK{}, jornadaLibre{}, nombreDocenteFijo{}, NuevoID,
+		validadorMateriaOK{anio: 2027}, validadorEquipoOK{}, jornadaLibre{}, nombreDocenteFijo{}, NuevoID,
 		func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	_, _, _, err := svc.CrearReserva(ctx, materiaID, docenteID, false, fecha,
 		14*time.Hour, 15*time.Hour, []string{equipoID, equipoID}, nil)
-	if err == nil {
-		t.Fatalf("se esperaba un error de solapamiento")
+	if !errors.Is(err, application.ErrSolapamiento) {
+		t.Fatalf("se esperaba un error de solapamiento, obtuve %v", err)
 	}
 
 	var grupos, reservas int
@@ -1025,19 +1166,19 @@ func TestCrearReservaRecurrente_ConflictoEnUnaFecha_NoDejaReglaNiGrupos(t *testi
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2027)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	docenteID := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	svc := application.NewService(repo,
-		validadorMateriaOK{}, validadorEquipoOK{}, jornadaLibre{}, nombreDocenteFijo{}, NuevoID,
+		validadorMateriaOK{anio: 2027}, validadorEquipoOK{}, jornadaLibre{}, nombreDocenteFijo{}, NuevoID,
 		func() time.Time { return ahora }, eventbus.NewInMemoryEventBus())
 
 	// Lunes 3, 10 y 17 de mayo de 2027. Se ocupa de antemano el del medio,
 	// con un grupo ajeno, para que la segunda ocurrencia choque.
 	segundoLunes := time.Date(2027, 5, 10, 0, 0, 0, 0, time.UTC)
-	gPrevio := nuevoReservaGrupoDeTest(materiaID, segundoLunes, 14*time.Hour, 15*time.Hour)
+	gPrevio := nuevoReservaGrupoDeTest(t, materiaID, segundoLunes, 14*time.Hour, 15*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, gPrevio); err != nil {
 		t.Fatal(err)
 	}
@@ -1055,8 +1196,8 @@ func TestCrearReservaRecurrente_ConflictoEnUnaFecha_NoDejaReglaNiGrupos(t *testi
 		time.Date(2027, 5, 3, 0, 0, 0, 0, time.UTC),
 		time.Date(2027, 5, 17, 0, 0, 0, 0, time.UTC),
 		[]string{equipoID}, nil)
-	if err == nil {
-		t.Fatalf("se esperaba un error de solapamiento en la segunda fecha")
+	if !errors.Is(err, application.ErrSolapamiento) {
+		t.Fatalf("se esperaba un error de solapamiento en la segunda fecha, obtuve %v", err)
 	}
 
 	var reglas int
@@ -1077,7 +1218,7 @@ func TestCrearReservaRecurrente_ConflictoEnUnaFecha_NoDejaReglaNiGrupos(t *testi
 	}
 }
 
-type validadorMateriaOK struct{}
+type validadorMateriaOK struct{ anio int }
 
 func (validadorMateriaOK) DocenteEstaAsignado(context.Context, string, string) (bool, error) {
 	return true, nil
@@ -1137,7 +1278,7 @@ func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testi
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2027)
 	libre := crearEquipoDeCarroDeTest(t, pool)
 	ocupada := crearEquipoDeCarroDeTest(t, pool)
 	enMantenimiento := crearEquipoDeCarroDeTest(t, pool)
@@ -1151,10 +1292,10 @@ func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testi
 	}
 
 	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// Ocupa una PC de 10:00 a 11:00.
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 10*time.Hour, 11*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 10*time.Hour, 11*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -1215,7 +1356,7 @@ func TestListarEquiposDisponiblesEn_ExcluyeLasOcupadasYLasNoReservables(t *testi
 // materiaEnCursoDeTest crea la materia en un curso SIN modalidad —el caso de
 // la mayoría de las instituciones—, partiendo un nombre como "3°B" en sus dos
 // partes. Para probar el eje de la modalidad está materiaEnModalidadDeTest.
-func materiaEnCursoDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria, nombreCurso string) string {
+func materiaEnCursoDeTest(t *testing.T, pool *pgxpool.Pool, anioLectivo int, nombreMateria, nombreCurso string) string {
 	t.Helper()
 	anio, division, encontrado := strings.Cut(nombreCurso, "°")
 	if !encontrado {
@@ -1225,24 +1366,24 @@ func materiaEnCursoDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria, nombr
 	if err != nil {
 		t.Fatalf("año inválido en %q: %v", nombreCurso, err)
 	}
-	return materiaEnModalidadDeTest(t, pool, nombreMateria, n, division, nil)
+	return materiaEnModalidadDeTest(t, pool, anioLectivo, nombreMateria, n, division, nil)
 }
 
 // materiaEnModalidadDeTest arma ciclo → curso → materia con los tres datos del
 // curso, que son los tres ejes que puede acotar una marca de preferencia.
-func materiaEnModalidadDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria string,
+func materiaEnModalidadDeTest(t *testing.T, pool *pgxpool.Pool, anioLectivo int, nombreMateria string,
 	anio int, division string, modalidad *string) string {
 	t.Helper()
 	ctx := context.Background()
-	anioDelCiclo := int(atomic.AddInt32(&contadorAnioDeTest, 1)) + 3000
-	cicloID, cursoID, materiaID := NuevoID(), NuevoID(), NuevoID()
-
-	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anioDelCiclo); err != nil {
-		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
-	}
-	if _, err := pool.Exec(ctx,
-		`INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad) VALUES ($1, $2, $3, $4, $5)`,
-		cursoID, cicloID, anio, nullSiVacia(division), modalidad); err != nil {
+	cicloID := cicloDeTest(t, pool, anioLectivo)
+	materiaID := NuevoID()
+	var cursoID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO curso (id, ciclo_lectivo_id, anio, division, modalidad) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (ciclo_lectivo_id, clave_texto(COALESCE(modalidad, '')),
+		             anio, clave_texto(COALESCE(division, '')))
+		DO UPDATE SET anio=EXCLUDED.anio RETURNING id
+	`, NuevoID(), cicloID, anio, nullSiVacia(division), modalidad).Scan(&cursoID); err != nil {
 		t.Fatalf("no se pudo crear curso de prueba: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO materia (id, curso_id, nombre) VALUES ($1, $2, $3)`, materiaID, cursoID, nombreMateria); err != nil {
@@ -1254,15 +1395,11 @@ func materiaEnModalidadDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria st
 // materiaEnEspacioDeTest arma ciclo → espacio → materia: el contenedor que NO
 // es un curso (migración 017). Un espacio no tiene año, ni modalidad, ni
 // división, así que es el caso donde el lado del contenedor llega en NULL.
-func materiaEnEspacioDeTest(t *testing.T, pool *pgxpool.Pool, nombreMateria, nombreEspacio string) string {
+func materiaEnEspacioDeTest(t *testing.T, pool *pgxpool.Pool, anioLectivo int, nombreMateria, nombreEspacio string) string {
 	t.Helper()
 	ctx := context.Background()
-	anioDelCiclo := int(atomic.AddInt32(&contadorAnioDeTest, 1)) + 3000
-	cicloID, espacioID, materiaID := NuevoID(), NuevoID(), NuevoID()
-
-	if _, err := pool.Exec(ctx, `INSERT INTO ciclo_lectivo (id, anio, activo) VALUES ($1, $2, false)`, cicloID, anioDelCiclo); err != nil {
-		t.Fatalf("no se pudo crear ciclo de prueba: %v", err)
-	}
+	cicloID := cicloDeTest(t, pool, anioLectivo)
+	espacioID, materiaID := NuevoID(), NuevoID()
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO espacio (id, ciclo_lectivo_id, nombre) VALUES ($1, $2, $3)`,
 		espacioID, cicloID, nombreEspacio); err != nil {
@@ -1322,7 +1459,7 @@ func TestListarEquiposDisponiblesEn_DesempataLaMarcaAjenaMasVieja(t *testing.T) 
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := materiaEnCursoDeTest(t, pool, "Matemática", "3°B")
+	materiaID := materiaEnCursoDeTest(t, pool, 2027, "Matemática", "3°B")
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	nueva := time.Date(2027, 3, 1, 9, 0, 0, 0, time.UTC)
@@ -1354,7 +1491,7 @@ func TestListarEquiposDisponiblesEn_OrdenaPorPreferenciaDeMateria(t *testing.T) 
 	ctx := context.Background()
 
 	// La materia que reserva: Matemática de 3°B.
-	materiaID := materiaEnCursoDeTest(t, pool, "Matemática", "3°B")
+	materiaID := materiaEnCursoDeTest(t, pool, 2027, "Matemática", "3°B")
 
 	miPreferida := crearEquipoDeCarroDeTest(t, pool)
 	neutral := crearEquipoDeCarroDeTest(t, pool)
@@ -1420,7 +1557,7 @@ func TestListarEquiposDisponiblesEn_LaMarcaAcotadaNoAplicaAOtroCurso(t *testing.
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	otroCurso := materiaEnCursoDeTest(t, pool, "Matemática", "5°A")
+	otroCurso := materiaEnCursoDeTest(t, pool, 2027, "Matemática", "5°A")
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	tres, be := 3, "B"
@@ -1454,7 +1591,7 @@ func TestListarEquiposDisponiblesEn_MarcaAcotadaEsAjenaParaMateriaDeEspacio(t *t
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := materiaEnEspacioDeTest(t, pool, "Matemática", "Biblioteca")
+	materiaID := materiaEnEspacioDeTest(t, pool, 2027, "Matemática", "Biblioteca")
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	tres := 3
@@ -1488,7 +1625,7 @@ func TestListarEquiposDisponiblesEn_AcotadaPorModalidad(t *testing.T) {
 	ctx := context.Background()
 
 	modalidad := "Electromecánica"
-	materiaID := materiaEnModalidadDeTest(t, pool, "Matemática", 4, "2", &modalidad)
+	materiaID := materiaEnModalidadDeTest(t, pool, 2027, "Matemática", 4, "2", &modalidad)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	// En minúscula y sin tilde a propósito: el cruce va por la forma
@@ -1526,7 +1663,7 @@ func TestListarEquiposDisponiblesEn_OtraModalidadEsAjena(t *testing.T) {
 	ctx := context.Background()
 
 	construccion := "Construcción"
-	materiaID := materiaEnModalidadDeTest(t, pool, "Matemática", 4, "1", &construccion)
+	materiaID := materiaEnModalidadDeTest(t, pool, 2027, "Matemática", 4, "1", &construccion)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	otra := "Electromecánica"
@@ -1557,7 +1694,7 @@ func TestListarEquiposDisponiblesEn_GanaLaMarcaMasEspecifica(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := materiaEnCursoDeTest(t, pool, "Matemática", "3°B")
+	materiaID := materiaEnCursoDeTest(t, pool, 2027, "Matemática", "3°B")
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	tres, be := 3, "B"
@@ -1613,13 +1750,13 @@ func TestListarEquiposLibresEnLaSerie_OrdenaPorPreferencia(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := materiaEnCursoDeTest(t, pool, "Matemática", "3°B")
+	materiaID := materiaEnCursoDeTest(t, pool, 2027, "Matemática", "3°B")
 	preferida := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, preferida, "Matemática", nil, nil, nil, 1)
 	crearEquipoDeCarroDeTest(t, pool)
 
 	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 10*time.Hour, 11*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 10*time.Hour, 11*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -1646,9 +1783,9 @@ func TestMateriaAceptaReservas_FalsoSiEstaArchivadaEnCualquierNivel(t *testing.T
 	validador := NewValidadorMateriaPostgres(pool)
 	ctx := context.Background()
 
-	crear := func(archivarMateria, archivarCurso, archivarCiclo bool) string {
+	crear := func(t *testing.T, anio int, archivarMateria, archivarCurso, archivarCiclo bool) string {
+		t.Helper()
 		cicloID, cursoID, materiaID := NuevoID(), NuevoID(), NuevoID()
-		anio := int(time.Now().UnixNano() % 100000)
 		if _, err := pool.Exec(ctx,
 			`INSERT INTO ciclo_lectivo (id, anio, activo, archivado) VALUES ($1, $2, false, $3)`,
 			cicloID, anio, archivarCiclo); err != nil {
@@ -1677,9 +1814,9 @@ func TestMateriaAceptaReservas_FalsoSiEstaArchivadaEnCualquierNivel(t *testing.T
 		{"ciclo archivado", false, false, true, false},
 	}
 
-	for _, c := range casos {
+	for i, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
-			materiaID := crear(c.materia, c.curso, c.ciclo)
+			materiaID := crear(t, 2026+i, c.materia, c.curso, c.ciclo)
 			acepta, err := validador.MateriaAceptaReservas(ctx, materiaID)
 			if err != nil {
 				t.Fatalf("no debería fallar: %v", err)
@@ -1709,18 +1846,21 @@ var zonaDeLaEscuela = time.FixedZone("ART", -3*60*60)
 func TestPostgresRepo_ReservaEnCurso_NoSeFinalizaAntesDeTiempo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	// Clase de 11:00 a 12:00 (hora de la escuela). Son las 11:30: está en
 	// curso, falta media hora para que termine.
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 11*time.Hour, 12*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 11*time.Hour, 12*time.Hour)
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("no se pudo crear el grupo: %v", err)
 	}
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
-		fecha, 11*time.Hour, 12*time.Hour, time.Now().UTC().Truncate(time.Microsecond))
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
+		fecha, 11*time.Hour, 12*time.Hour, ahoraDeTest().UTC().Truncate(time.Microsecond))
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no se pudo crear la reserva: %v", err)
 	}
@@ -1743,17 +1883,20 @@ func TestPostgresRepo_ReservaEnCurso_NoSeFinalizaAntesDeTiempo(t *testing.T) {
 func TestPostgresRepo_ReservasFuturasDeEquipo_IncluyenLasDeHoy(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	// Clase de hoy a la tarde. Son las 08:00 de la mañana: falta.
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 14*time.Hour, 15*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 14*time.Hour, 15*time.Hour)
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("no se pudo crear el grupo: %v", err)
 	}
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
-		fecha, 14*time.Hour, 15*time.Hour, time.Now().UTC().Truncate(time.Microsecond))
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
+		fecha, 14*time.Hour, 15*time.Hour, ahoraDeTest().UTC().Truncate(time.Microsecond))
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no se pudo crear la reserva: %v", err)
 	}
@@ -1779,16 +1922,19 @@ func TestPostgresRepo_ReservasFuturasDeEquipo_IncluyenLasDeHoy(t *testing.T) {
 func TestPostgresRepo_ReservasFuturasDeEquipo_ExcluyenLasQueYaTerminaronHoy(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("no se pudo crear el grupo: %v", err)
 	}
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
-		fecha, 8*time.Hour, 9*time.Hour, time.Now().UTC().Truncate(time.Microsecond))
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil,
+		fecha, 8*time.Hour, 9*time.Hour, ahoraDeTest().UTC().Truncate(time.Microsecond))
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no se pudo crear la reserva: %v", err)
 	}
@@ -1871,12 +2017,12 @@ func TestPostgresRepo_ListarReservas_TraeLasDeUnEquipoSinCarro(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoSueltoDeTest(t, pool, "Proyector Epson")
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatalf("creando grupo: %v", err)
 	}
@@ -1916,17 +2062,20 @@ func TestPostgresRepo_ListarReservas_ElEquipoDeCarroSigueTrayendoTodo(t *testing
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatalf("creando grupo: %v", err)
 	}
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace", nil,
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace", nil,
 		fecha, 8*time.Hour, 9*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(ctx, res); err != nil {
 		t.Fatalf("creando reserva: %v", err)
 	}
@@ -1956,7 +2105,7 @@ func TestPostgresRepo_Bloqueo_ElMotivoVuelveDeLaBase(t *testing.T) {
 	ctx := context.Background()
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC()
+	ahora := ahoraDeTest().UTC()
 
 	bloqueo, err := domain.NuevaReservaBloqueo(NuevoID(), equipoID, nil, fecha,
 		8*time.Hour, 10*time.Hour, "Jornada docente", ahora)
@@ -2026,19 +2175,22 @@ func TestPostgresRepo_ReservaNormal_NoAceptaMotivoDeBloqueo(t *testing.T) {
 func TestPostgresRepo_BuscarSolapamientos_LoteCompleto(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	pc1 := crearEquipoDeCarroDeTest(t, pool)
 	pc2 := crearEquipoDeCarroDeTest(t, pool)
 	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	otroLunes := lunes.AddDate(0, 0, 7)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// Ocupa pc1 el segundo lunes, de 10 a 12.
-	g := nuevoReservaGrupoDeTest(materiaID, otroLunes, 10*time.Hour, 12*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, otroLunes, 10*time.Hour, 12*time.Hour)
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("no se pudo crear el grupo: %v", err)
 	}
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, pc1, materiaID, "Ada Lovelace", nil, otroLunes, 10*time.Hour, 12*time.Hour, ahora)
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, pc1, materiaID, "Ada Lovelace", nil, otroLunes, 10*time.Hour, 12*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no se pudo crear la reserva: %v", err)
 	}
@@ -2075,12 +2227,12 @@ func TestPostgresRepo_BuscarSolapamientos_TraeLoQueElRoboNecesita(t *testing.T) 
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2027)
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 10*time.Hour, 12*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 10*time.Hour, 12*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatalf("no se pudo crear el grupo: %v", err)
 	}
@@ -2120,7 +2272,7 @@ func TestPostgresRepo_BuscarSolapamientos_BloqueoTraeIDSinMateria(t *testing.T) 
 	ctx := context.Background()
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	bloqueo, err := domain.NuevaReservaBloqueo(NuevoID(), pc, nil, fecha,
 		10*time.Hour, 12*time.Hour, "Jornada docente", ahora)
@@ -2154,14 +2306,19 @@ func TestPostgresRepo_BuscarSolapamientos_BloqueoTraeIDSinMateria(t *testing.T) 
 func TestPostgresRepo_BuscarSolapamientos_BordeQueSeToca_NoCuenta(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 10*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g)
-	res, _ := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 10*time.Hour, ahora)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 10*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada", nil, fecha, 8*time.Hour, 10*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(context.Background(), res); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -2185,12 +2342,12 @@ func TestPostgresRepo_BuscarSolapamientos_BordeQueSeToca_NoCuenta(t *testing.T) 
 func TestPostgresRepo_ClaseNocturna_SePuedeCrear(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, lunes, 22*time.Hour, 1*time.Hour)
 	if err := repo.CrearReservaGrupo(context.Background(), g); err != nil {
 		t.Fatalf("el grupo nocturno no debería fallar: %v", err)
 	}
@@ -2212,23 +2369,33 @@ func TestPostgresRepo_ClaseNocturna_SePuedeCrear(t *testing.T) {
 func TestPostgresRepo_ClaseNocturna_ChocaConLaMadrugadaSiguiente(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	martes := lunes.AddDate(0, 0, 1)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g1 := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g1)
-	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, lunes, 22*time.Hour, 1*time.Hour, ahora)
+	g1 := nuevoReservaGrupoDeTest(t, materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g1); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res1, err := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, lunes, 22*time.Hour, 1*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 	if err := repo.CrearReserva(context.Background(), res1); err != nil {
 		t.Fatalf("la nocturna del lunes no debería fallar: %v", err)
 	}
 
 	// El martes de 00:30 a 02:00 pisa la última media hora de la clase del lunes.
-	g2 := nuevoReservaGrupoDeTest(materiaID, martes, 30*time.Minute, 2*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g2)
-	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, martes, 30*time.Minute, 2*time.Hour, ahora)
+	g2 := nuevoReservaGrupoDeTest(t, materiaID, martes, 30*time.Minute, 2*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g2); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res2, err := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, martes, 30*time.Minute, 2*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	if err := repo.CrearReserva(context.Background(), res2); err != application.ErrSolapamiento {
 		t.Fatalf("esperaba ErrSolapamiento contra la nocturna del día anterior, obtuve %v", err)
@@ -2252,20 +2419,32 @@ func TestPostgresRepo_ClaseNocturna_ChocaConLaMadrugadaSiguiente(t *testing.T) {
 func TestPostgresRepo_ClaseNocturna_DespuesDeQueTermina_Libre(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	martes := lunes.AddDate(0, 0, 1)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g1 := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g1)
-	res1, _ := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, lunes, 22*time.Hour, 1*time.Hour, ahora)
-	repo.CrearReserva(context.Background(), res1)
+	g1 := nuevoReservaGrupoDeTest(t, materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g1); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res1, err := domain.NuevaReservaNormal(NuevoID(), g1.ID, equipoID, materiaID, "Ada", nil, lunes, 22*time.Hour, 1*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	if err := repo.CrearReserva(context.Background(), res1); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
-	g2 := nuevoReservaGrupoDeTest(materiaID, martes, 1*time.Hour, 3*time.Hour)
-	repo.CrearReservaGrupo(context.Background(), g2)
-	res2, _ := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, martes, 1*time.Hour, 3*time.Hour, ahora)
+	g2 := nuevoReservaGrupoDeTest(t, materiaID, martes, 1*time.Hour, 3*time.Hour)
+	if err := repo.CrearReservaGrupo(context.Background(), g2); err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
+	res2, err := domain.NuevaReservaNormal(NuevoID(), g2.ID, equipoID, materiaID, "Ada", nil, martes, 1*time.Hour, 3*time.Hour, ahora)
+	if err != nil {
+		t.Fatalf("no se pudo preparar el escenario: %v", err)
+	}
 
 	if err := repo.CrearReserva(context.Background(), res2); err != nil {
 		t.Fatalf("de 01:00 a 03:00 arranca justo cuando la otra termina: %v", err)
@@ -2284,7 +2463,7 @@ func TestListarEquiposDisponiblesEn_FranjaQueCruzaMedianoche_NoRevienta(t *testi
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	crearMateriaDeTest(t, pool)
+	crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 
@@ -2304,15 +2483,15 @@ func TestListarEquiposDisponiblesEn_FranjaQueCruzaMedianoche_VeLoQueYaEsta(t *te
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	martes := lunes.AddDate(0, 0, 1)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// Alguien ya tiene la máquina el martes de 01:00 a 02:00, en el medio de
 	// la franja lunes 19:00 → martes 03:00.
-	g := nuevoReservaGrupoDeTest(materiaID, martes, 1*time.Hour, 2*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, martes, 1*time.Hour, 2*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -2343,14 +2522,14 @@ func TestListarEquiposDisponiblesEn_LaNocturnaDeAyerOcupaEstaMadrugada(t *testin
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	ocupado := crearEquipoDeCarroDeTest(t, pool)
 	libre := crearEquipoDeCarroDeTest(t, pool)
 	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	martes := lunes.AddDate(0, 0, 1)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, lunes, 22*time.Hour, 1*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -2394,13 +2573,13 @@ func TestListarEquiposOcupadosEn_VeLaNocturnaDeAyer(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	martes := lunes.AddDate(0, 0, 1)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, lunes, 22*time.Hour, 1*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -2440,15 +2619,15 @@ func TestListarEquiposLibresEnLaSerie_LaNocturnaDeAyerOcupaUnaOcurrencia(t *test
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	ocupado := crearEquipoDeCarroDeTest(t, pool)
 	libre := crearEquipoDeCarroDeTest(t, pool)
 	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	martes := lunes.AddDate(0, 0, 1)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// La nocturna del lunes, sobre el equipo que después no va a poder ofrecerse.
-	gNoche := nuevoReservaGrupoDeTest(materiaID, lunes, 22*time.Hour, 1*time.Hour)
+	gNoche := nuevoReservaGrupoDeTest(t, materiaID, lunes, 22*time.Hour, 1*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, gNoche); err != nil {
 		t.Fatal(err)
 	}
@@ -2462,7 +2641,7 @@ func TestListarEquiposLibresEnLaSerie_LaNocturnaDeAyerOcupaUnaOcurrencia(t *test
 	}
 
 	// La serie desde la que se quiere cambiar: el martes de 00:30 a 02:00.
-	gSerie := nuevoReservaGrupoDeTest(materiaID, martes, 30*time.Minute, 2*time.Hour)
+	gSerie := nuevoReservaGrupoDeTest(t, materiaID, martes, 30*time.Minute, 2*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, gSerie); err != nil {
 		t.Fatal(err)
 	}
@@ -2486,14 +2665,14 @@ func TestPostgresRepo_BuscarSolapamientos_FranjaNocturna_VeLaDelDiaSiguiente(t *
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	lunes := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	martes := lunes.AddDate(0, 0, 1)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// Ya hay algo el martes de 01:00 a 02:00.
-	g := nuevoReservaGrupoDeTest(materiaID, martes, 1*time.Hour, 2*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, martes, 1*time.Hour, 2*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -2561,17 +2740,17 @@ func TestPostgresRepo_ListarReservasFuturas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	pcDeCarro := crearEquipoDeCarroDeTest(t, pool)
 	proyector := crearEquipoSueltoDeTest(t, pool, "Proyector Epson")
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	manana := time.Date(2099, 3, 9, 0, 0, 0, 0, time.UTC)
-	ayer := time.Date(2020, 3, 9, 0, 0, 0, 0, time.UTC)
+	manana := time.Date(2026, 3, 3, 0, 0, 0, 0, time.UTC)
+	ayer := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 
 	crearReserva := func(equipoID string, fecha time.Time) *domain.Reserva {
 		t.Helper()
-		g := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+		g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
 		if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 			t.Fatalf("no se pudo crear el grupo: %v", err)
 		}
@@ -2659,12 +2838,12 @@ func TestPostgresRepo_ListarReservasFuturas_LaQueCruzaLaMedianoche(t *testing.T)
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2099)
 	pc := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	fecha := time.Date(2099, 3, 9, 0, 0, 0, 0, time.UTC)
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 22*time.Hour, 1*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 22*time.Hour, 1*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatalf("no se pudo crear el grupo: %v", err)
 	}
@@ -2704,14 +2883,14 @@ func TestPostgresRepo_ListarReservasFuturas_NoTocaLaClaseEnCurso(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2099)
 	pc := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	fecha := time.Date(2099, 3, 9, 0, 0, 0, 0, time.UTC)
 
 	crear := func(desde, hasta time.Duration) *domain.Reserva {
 		t.Helper()
-		g := nuevoReservaGrupoDeTest(materiaID, fecha, desde, hasta)
+		g := nuevoReservaGrupoDeTest(t, materiaID, fecha, desde, hasta)
 		if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 			t.Fatalf("no se pudo crear el grupo: %v", err)
 		}
@@ -2765,9 +2944,9 @@ func TestPostgresRepo_BuscarReservasPorIDs_DaLoMismoQueDeAUna(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 
-	g := nuevoReservaGrupoDeTest(materiaID, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatalf("creando grupo: %v", err)
 	}
@@ -2776,7 +2955,7 @@ func TestPostgresRepo_BuscarReservasPorIDs_DaLoMismoQueDeAUna(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		equipoID := crearEquipoDeCarroDeTest(t, pool)
 		res, err := domain.NuevaReservaNormal(NuevoID(), g.ID, equipoID, materiaID, "Ada Lovelace", nil,
-			g.Fecha, g.HoraInicio, g.HoraFin, time.Now().UTC().Truncate(time.Microsecond))
+			g.Fecha, g.HoraInicio, g.HoraFin, ahoraDeTest().UTC().Truncate(time.Microsecond))
 		if err != nil {
 			t.Fatalf("error de dominio inesperado: %v", err)
 		}
@@ -2820,11 +2999,11 @@ func TestPostgresRepo_ListarReservasFuturasDeEquipos_AgrupaYOrdena(t *testing.T)
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	pc1 := crearEquipoDeCarroDeTest(t, pool)
 	pc2 := crearEquipoDeCarroDeTest(t, pool)
 
-	desde := time.Now().UTC().Truncate(time.Microsecond)
+	desde := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	base := desde.AddDate(0, 0, 7).Truncate(24 * time.Hour)
 
 	// A pc1 dos reservas, la segunda ANTES que la primera en el tiempo, para que
@@ -2840,7 +3019,7 @@ func TestPostgresRepo_ListarReservasFuturasDeEquipos_AgrupaYOrdena(t *testing.T)
 	}
 	for _, h := range horarios {
 		fechaRes := base.AddDate(0, 0, h.dias)
-		g := nuevoReservaGrupoDeTest(materiaID, fechaRes, h.inicio, h.fin)
+		g := nuevoReservaGrupoDeTest(t, materiaID, fechaRes, h.inicio, h.fin)
 		if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 			t.Fatalf("creando grupo: %v", err)
 		}
@@ -2893,9 +3072,9 @@ func reservaDeOtraMateriaDeTest(t *testing.T, pool *pgxpool.Pool, materiaID, equ
 	t.Helper()
 	ctx := context.Background()
 	repo := NewPostgresRepo(pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	g := nuevoReservaGrupoDeTest(materiaID, fecha, 10*time.Hour, 12*time.Hour)
+	g := nuevoReservaGrupoDeTest(t, materiaID, fecha, 10*time.Hour, 12*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatalf("no se pudo crear el grupo de la reserva ajena: %v", err)
 	}
@@ -2920,8 +3099,8 @@ func TestReservasRobablesPor(t *testing.T) {
 
 	// Con nombre y curso, y no con crearMateriaDeTest: la marca cruza por
 	// nombre normalizado y por los tres ejes del contenedor, nunca por el id.
-	miMateria := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	suMateria := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	miMateria := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	suMateria := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 
 	tercero, divisionB := 3, "B"
 	quinto, divisionA := 5, "A"
@@ -3043,7 +3222,7 @@ func TestReservasRobablesPor(t *testing.T) {
 		marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
 
 		bloqueo, err := domain.NuevaReservaBloqueo(NuevoID(), pc, nil, fecha,
-			10*time.Hour, 12*time.Hour, "Mantenimiento", time.Now().UTC().Truncate(time.Microsecond))
+			10*time.Hour, 12*time.Hour, "Mantenimiento", ahoraDeTest().UTC().Truncate(time.Microsecond))
 		if err != nil {
 			t.Fatalf("error de dominio inesperado: %v", err)
 		}
@@ -3102,7 +3281,7 @@ func reservaConDuenoDeTest(t *testing.T, pool *pgxpool.Pool, materiaID string, e
 	t.Helper()
 	ctx := context.Background()
 	repo := NewPostgresRepo(pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	g, err := domain.NuevoReservaGrupo(NuevoID(), materiaID, &duenoID, "Alan Turing",
 		fecha, horaInicio, horaFin, reglaID, ahora)
@@ -3178,8 +3357,8 @@ func TestCrearReserva_RobaLaReservaConReclamoMasDebil(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	dibujo := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
 	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
@@ -3192,7 +3371,7 @@ func TestCrearReserva_RobaLaReservaConReclamoMasDebil(t *testing.T) {
 	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
 		fecha, 10*time.Hour, 12*time.Hour, nil)
 
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, reservas, impacto, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
@@ -3252,8 +3431,8 @@ func TestCrearReserva_RobaNada_SiNoSePidioTomarEseEquipo(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	dibujo := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
 	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
@@ -3266,7 +3445,7 @@ func TestCrearReserva_RobaNada_SiNoSePidioTomarEseEquipo(t *testing.T) {
 	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
 		fecha, 10*time.Hour, 12*time.Hour, nil)
 
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
 
 	// Sin equiposATomar: exactamente lo que manda hoy la aplicación entera.
@@ -3296,8 +3475,8 @@ func TestCrearReservaRecurrente_RobaNada_SiNoSePidioTomarEseEquipo(t *testing.T)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	dibujo := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
 	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
@@ -3313,7 +3492,7 @@ func TestCrearReservaRecurrente_RobaNada_SiNoSePidioTomarEseEquipo(t *testing.T)
 	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
 		segundoLunes, 10*time.Hour, 12*time.Hour, nil)
 
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, err := svc.CrearReservaRecurrente(ctx, dibujo, queRoba, false, domain.Lunes,
@@ -3347,8 +3526,8 @@ func TestCrearReserva_RobandoseASiMismo_NiAvisoNiDocenteAfectado(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	dibujo := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
 	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
@@ -3362,7 +3541,7 @@ func TestCrearReserva_RobandoseASiMismo_NiAvisoNiDocenteAfectado(t *testing.T) {
 	_, propias := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, docente,
 		fecha, 10*time.Hour, 12*time.Hour, nil)
 
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, impacto, err := svc.CrearReserva(ctx, dibujo, docente, false,
@@ -3399,8 +3578,8 @@ func TestCrearReserva_RobaYFallaDespues_LeDevuelveLaClaseAlDesplazado(t *testing
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	dibujo := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
 	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
@@ -3413,7 +3592,7 @@ func TestCrearReserva_RobaYFallaDespues_LeDevuelveLaClaseAlDesplazado(t *testing
 	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
 		fecha, 10*time.Hour, 12*time.Hour, nil)
 
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	svc, avisos := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
@@ -3442,8 +3621,8 @@ func TestCrearReserva_RobaNada_SiElReclamoAjenoEsMasFuerte(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	dibujo := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 3)
 	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 1)
@@ -3456,7 +3635,7 @@ func TestCrearReserva_RobaNada_SiElReclamoAjenoEsMasFuerte(t *testing.T) {
 	_, ajenas := reservaConDuenoDeTest(t, pool, informatica, []string{pc}, desplazado,
 		fecha, 10*time.Hour, 12*time.Hour, nil)
 
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
@@ -3492,8 +3671,8 @@ func TestCrearReserva_RobaNada_SiUnSoloConflictoDelLoteNoEsRobable(t *testing.T)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	dibujo := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 
 	seLaPuedeRobar := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, seLaPuedeRobar, "Dibujo Técnico", nil, nil, nil, 1)
@@ -3511,7 +3690,7 @@ func TestCrearReserva_RobaNada_SiUnSoloConflictoDelLoteNoEsRobable(t *testing.T)
 	_, ajenas := reservaConDuenoDeTest(t, pool, informatica,
 		[]string{seLaPuedeRobar, noSeLaPuedeRobar}, desplazado, fecha, 10*time.Hour, 12*time.Hour, nil)
 
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	_, _, _, err := svc.CrearReserva(ctx, dibujo, queRoba, false,
@@ -3540,8 +3719,8 @@ func TestCrearReserva_RobaNada_SiLaClaseAjenaEstaPorEmpezar(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	dibujo := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
 	marcarPreferencia(t, pool, pc, "Informática", nil, nil, nil, 3)
@@ -3581,8 +3760,8 @@ func TestCrearReservaRecurrente_RobaSoloLaOcurrenciaQueChoca(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	dibujo := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	pcNeutra := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
@@ -3615,7 +3794,7 @@ func TestCrearReservaRecurrente_RobaSoloLaOcurrenciaQueChoca(t *testing.T) {
 	grupoIntacto, ajenasIntactas := reservaConDuenoDeTest(t, pool, informatica, []string{pcNeutra}, desplazado,
 		tercerLunes, 10*time.Hour, 12*time.Hour, &regla.ID)
 
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	res, err := svc.CrearReservaRecurrente(ctx, dibujo, queRoba, false, domain.Lunes,
@@ -3677,8 +3856,8 @@ func TestCrearReservaRecurrente_RoboDeLaSerieMasLarga_CuantoTarda(t *testing.T) 
 	pool := levantarPostgresDeTest(t)
 	ctx := context.Background()
 
-	dibujo := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
-	informatica := materiaEnCursoDeTest(t, pool, "Informática", "5°A")
+	dibujo := materiaEnCursoDeTest(t, pool, 2027, "Dibujo Técnico", "3°B")
+	informatica := materiaEnCursoDeTest(t, pool, 2027, "Informática", "5°A")
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	marcarPreferencia(t, pool, pc, "Dibujo Técnico", nil, nil, nil, 1)
 
@@ -3686,7 +3865,7 @@ func TestCrearReservaRecurrente_RoboDeLaSerieMasLarga_CuantoTarda(t *testing.T) 
 	asignarDocenteAMateria(t, pool, queRoba, dibujo)
 	desplazado := crearUsuarioDeTest(t, pool, "DOCENTE", "APROBADA")
 
-	primerLunes := time.Date(2027, 5, 3, 0, 0, 0, 0, time.UTC)
+	primerLunes := time.Date(2027, 1, 4, 0, 0, 0, 0, time.UTC)
 	ocurrencias := application.MaxOcurrenciasRecurrencia
 	ultimoLunes := primerLunes.AddDate(0, 0, 7*(ocurrencias-1))
 
@@ -3697,7 +3876,7 @@ func TestCrearReservaRecurrente_RoboDeLaSerieMasLarga_CuantoTarda(t *testing.T) 
 			primerLunes.AddDate(0, 0, 7*i), 10*time.Hour, 12*time.Hour, nil)
 	}
 
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	svc, _ := servicioDeRoboDeTest(t, pool, ahora)
 
 	arranque := time.Now()
@@ -3716,4 +3895,8 @@ func TestCrearReservaRecurrente_RoboDeLaSerieMasLarga_CuantoTarda(t *testing.T) 
 	}
 
 	t.Logf("robo de %d ocurrencias: %s", ocurrencias, tardo)
+}
+
+func (v validadorMateriaOK) AnioLectivoDeMateria(context.Context, string) (int, error) {
+	return v.anio, nil
 }

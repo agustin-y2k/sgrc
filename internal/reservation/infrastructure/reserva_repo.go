@@ -13,7 +13,7 @@ import (
 	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
 )
 
-const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en, cancelado_por, motivo_cancelacion, cancelada_en, version`
+const columnasReserva = `id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en, cancelado_por, motivo_cancelacion, cancelada_en, version, bloqueo_operacion_id`
 
 // condicionNoTerminada arma "esta reserva todavía no terminó respecto del
 // instante dado", comparando la hora de pared de la reserva contra la hora de
@@ -43,11 +43,11 @@ func condicionNoEmpezada(alias, placeholderFecha, placeholderHora string) string
 
 func (r *PostgresRepo) CrearReserva(ctx context.Context, res *domain.Reserva) error {
 	_, err := r.conexion(ctx).Exec(ctx, `
-		INSERT INTO reserva (id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		INSERT INTO reserva (id, reserva_grupo_id, equipo_id, materia_id, nombre_docente_snapshot, fecha, hora_inicio, hora_fin, estado, tipo, motivo_bloqueo, creado_por, creada_en, bloqueo_operacion_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`, res.ID, res.ReservaGrupoID, res.EquipoID, res.MateriaID, res.NombreDocenteSnapshot, res.Fecha,
 		duracionComoHora(res.HoraInicio), duracionComoHora(res.HoraFin),
-		string(res.Estado), string(res.Tipo), nullSiVacio(res.MotivoBloqueo), res.CreadoPor, res.CreadaEn)
+		string(res.Estado), string(res.Tipo), nullSiVacio(res.MotivoBloqueo), res.CreadoPor, res.CreadaEn, res.BloqueoOperacionID)
 	if err != nil {
 		// La constraint EXCLUDE (anti-solapamiento) es la garantía real contra
 		// condiciones de carrera — application.verificarSinSolapamiento ya intenta
@@ -61,6 +61,9 @@ func (r *PostgresRepo) CrearReserva(ctx context.Context, res *domain.Reserva) er
 		}
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
+		}
+		if esReservaFueraDelCiclo(err) {
+			return domain.ErrReservaFueraDelCiclo
 		}
 		if esCicloCerrado(err) {
 			return application.ErrCicloCerrado
@@ -84,7 +87,7 @@ func escanearReserva(row pgx.Row) (*domain.Reserva, error) {
 	err := row.Scan(
 		&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 		&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
-		&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version,
+		&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version, &res.BloqueoOperacionID,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -139,8 +142,14 @@ func (r *PostgresRepo) GuardarReserva(ctx context.Context, res *domain.Reserva) 
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
+		if esReservaFueraDelCiclo(err) {
+			return domain.ErrReservaFueraDelCiclo
+		}
 		if esCicloCerrado(err) {
 			return application.ErrCicloCerrado
+		}
+		if esRestriccionDeEquipo(err, "reserva_equipo_entregado") {
+			return application.ErrReservaConEntrega
 		}
 		return fmt.Errorf("actualizando reserva: %w", err)
 	}
@@ -302,7 +311,7 @@ func (r *PostgresRepo) ListarReservasFuturas(ctx context.Context, desde time.Tim
 		if err := rows.Scan(
 			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
-			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version,
+			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version, &res.BloqueoOperacionID,
 			&detalle.Identificador, &detalle.Etiqueta, &detalle.CarroNombre,
 			&detalle.MateriaNombre, &detalle.CursoNombre,
 			&detalle.ReglaRecurrenciaID,
@@ -392,6 +401,9 @@ func (r *PostgresRepo) CrearReglaRecurrencia(ctx context.Context, regla *domain.
 	`, regla.ID, regla.MateriaID, regla.CreadoPor, string(regla.DiaSemana),
 		duracionComoHora(regla.HoraInicio), duracionComoHora(regla.HoraFin), regla.FechaInicio, regla.FechaFin)
 	if err != nil {
+		if esReservaFueraDelCiclo(err) {
+			return domain.ErrReservaFueraDelCiclo
+		}
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
 		}
@@ -573,7 +585,7 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		       COALESCE(p.identificador, 0),
 		       COALESCE(p.nombre, 'PC ' || p.identificador),
 		       COALESCE(ca.nombre, ''),
-		       COALESCE(m.nombre, ''), COALESCE(cu.nombre, ''),
+		       COALESCE(m.nombre, ''), COALESCE(cu.nombre, ''), COALESCE(cu.modalidad, ''),
 		       rg.regla_recurrencia_id,
 		       COUNT(*) OVER() AS total` + desde
 
@@ -613,9 +625,9 @@ func (r *PostgresRepo) ListarReservas(ctx context.Context, f application.FiltroR
 		if err := rows.Scan(
 			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
-			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version,
+			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version, &res.BloqueoOperacionID,
 			&detalle.Identificador, &detalle.Etiqueta, &detalle.CarroNombre,
-			&detalle.MateriaNombre, &detalle.CursoNombre,
+			&detalle.MateriaNombre, &detalle.CursoNombre, &detalle.CursoModalidad,
 			&detalle.ReglaRecurrenciaID,
 			&total,
 		); err != nil {
@@ -694,7 +706,7 @@ func (r *PostgresRepo) CalendarioDeEquipo(ctx context.Context, equipoID string, 
 		if err := rows.Scan(
 			&res.ID, &res.ReservaGrupoID, &res.EquipoID, &res.MateriaID, &res.NombreDocenteSnapshot,
 			&res.Fecha, &horaInicio, &horaFin, &estadoStr, &tipoStr, &motivoBloqueo,
-			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version,
+			&res.CreadoPor, &res.CreadaEn, &res.CanceladoPor, &res.MotivoCancelacion, &res.CanceladaEn, &res.Version, &res.BloqueoOperacionID,
 			&materiaNombre, &cursoNombre,
 		); err != nil {
 			return nil, fmt.Errorf("escaneando bloque del calendario: %w", err)
@@ -1030,12 +1042,13 @@ func tramoDePreferencia(n int) application.TramoPreferencia {
 	}
 }
 
-// ReservasRobablesPor contesta, de la regla del robo (RF-03.21), las tres
+// ReservasRobablesPor contesta, de la regla del robo (RF-03.21), las cuatro
 // condiciones que se deciden con la base: que la materia que reserva tenga
 // marca propia sobre el equipo, que el reclamo del dueño sea más débil, y que
-// lo que está ahí no sea un bloqueo administrativo.
+// lo que está ahí no sea un bloqueo administrativo ni haya tenido entregas.
+// Incluye préstamos devueltos: esa ocurrencia conserva la PC que se entregó.
 //
-// La cuarta —que falte más de una hora— NO está acá y no es un olvido: es hora
+// La quinta —que falte más de una hora— NO está acá y no es un olvido: es hora
 // de pared, sabe de medianoche y no necesita ninguna fila; vive en
 // domain.SePuedeRobarPorHorario, y quien llama combina las dos mitades. Traerla
 // al SQL obligaría a pasarle "ahora" a una consulta que no lo usa para nada más.
@@ -1101,6 +1114,7 @@ func (r *PostgresRepo) ReservasRobablesPor(ctx context.Context, materiaID string
 		       mia.prioridad IS NOT NULL
 		       AND (suya.prioridad IS NULL OR mia.prioridad < suya.prioridad)
 		       AND p.tipo <> 'BLOQUEO'
+		       AND NOT EXISTS (SELECT 1 FROM prestamo entrega WHERE entrega.reserva_id = p.id)
 		FROM pedidas p
 		LEFT JOIN marcas mia  ON mia.reserva_id  = p.id AND mia.es_mio
 		LEFT JOIN marcas suya ON suya.reserva_id = p.id AND NOT suya.es_mio

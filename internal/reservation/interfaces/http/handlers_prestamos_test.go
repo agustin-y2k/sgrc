@@ -107,7 +107,7 @@ func TestHTTP_EntregarPorReserva(t *testing.T) {
 	docente := "Ada Lovelace"
 	creadoPor := "docente1"
 	r, err := domain.NuevaReservaNormal("res1", "grupo1", "pc1", "materia1", docente, &creadoPor,
-		time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour,
+		time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), 12*time.Hour, 13*time.Hour,
 		time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
@@ -116,7 +116,7 @@ func TestHTTP_EntregarPorReserva(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos/por-reserva",
-		entregarPorReservaRequest{ReservaIDs: []string{"res1"}}, "ADMIN")
+		entregarPorReservaRequest{ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"})}, "ADMIN")
 
 	if codigo != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
@@ -261,7 +261,7 @@ func TestHTTP_Prestamos_SoloAdmin(t *testing.T) {
 func TestHTTP_EntregarPorReserva_BloqueoSinDocente(t *testing.T) {
 	repo := nuevoFakeRepo()
 	bloqueo, err := domain.NuevaReservaBloqueo("bloq1", "pc1", nil,
-		time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), 8*time.Hour, 9*time.Hour,
+		time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), 12*time.Hour, 13*time.Hour,
 		"Jornada docente", time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
@@ -270,7 +270,7 @@ func TestHTTP_EntregarPorReserva_BloqueoSinDocente(t *testing.T) {
 	app := nuevaAppDeTest(repo)
 
 	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos/por-reserva",
-		entregarPorReservaRequest{ReservaIDs: []string{"bloq1"}}, "ADMIN")
+		entregarPorReservaRequest{ReservaIDs: []string{"bloq1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"bloq1"})}, "ADMIN")
 
 	if codigo != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
@@ -285,7 +285,7 @@ func TestHTTP_EntregarPorReserva_BloqueoSinDocente(t *testing.T) {
 
 	// Con un nombre a mano sí sale.
 	codigo, cuerpo = pedirPrestamos(t, app, "POST", "/api/prestamos/por-reserva",
-		entregarPorReservaRequest{ReservaIDs: []string{"bloq1"}, RetiradoPor: "Mesa de examen"}, "ADMIN")
+		entregarPorReservaRequest{ReservaIDs: []string{"bloq1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"bloq1"}), RetiradoPor: "Mesa de examen"}, "ADMIN")
 	if codigo != fiber.StatusOK {
 		t.Fatalf("esperaba 200, obtuve %d: %s", codigo, cuerpo)
 	}
@@ -487,4 +487,14 @@ func TestHTTP_PedirLiberacion_SinCuerpo(t *testing.T) {
 	if codigo != fiber.StatusAccepted {
 		t.Fatalf("esperaba 202, obtuve %d: %s", codigo, cuerpo)
 	}
+}
+
+func equiposEsperadosPrueba(repo *fakeRepo, ids []string) map[string]string {
+	equipos := make(map[string]string)
+	for _, id := range ids {
+		if r := repo.reservas[id]; r != nil {
+			equipos[id] = r.EquipoID
+		}
+	}
+	return equipos
 }

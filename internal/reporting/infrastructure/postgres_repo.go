@@ -138,6 +138,10 @@ func (r *PostgresRepo) ListarHistoricoUsoDocentePorAnio(ctx context.Context, ani
 // sin importar internal/reservation ni internal/academic) ─────────────
 
 // expresionMinutosDe convierte la duración de una reserva a minutos enteros.
+func criterioReservaComputable(alias string) string {
+	return fmt.Sprintf(`(%[1]s.estado <> 'CANCELADA' AND (%[1]s.estado <> 'NO_RETIRADA' OR EXISTS(SELECT 1 FROM prestamo entrega WHERE entrega.reserva_id=%[1]s.id)))`, alias)
+}
+
 func expresionMinutosDe(alias string) string {
 	return fmt.Sprintf(
 		`ROUND(EXTRACT(EPOCH FROM (fin_de_pared(%s.fecha, %s.hora_inicio, %s.hora_fin) - (%s.fecha + %s.hora_inicio))) / 60)::INTEGER`,
@@ -193,11 +197,8 @@ func (r *PostgresRepo) CalcularUsoEquiposDeCiclo(ctx context.Context, cicloID st
 				AND EXTRACT(YEAR FROM r.fecha) = (SELECT anio FROM ciclo_lectivo WHERE id = $1)
 			)
 		)
-		-- NO_RETIRADA queda afuera junto con CANCELADA (RF-08.10): nadie fue a
-		-- buscar esa máquina, así que no fue una clase dada. Contarla infla
-		-- justamente el número con el que se pide presupuesto — un carro que
-		-- nadie retira nunca aparecería como el más usado de la institución.
-		AND r.estado NOT IN ('CANCELADA','NO_RETIRADA')`+condFechasPrefijo("r", condFechas)+`
+		-- Una entrega tardía efectiva conserva el uso aunque su reserva sea NO_RETIRADA.
+        AND `+criterioReservaComputable("r")+condFechasPrefijo("r", condFechas)+`
 		GROUP BY r.equipo_id, p.nombre, p.identificador, ca.nombre
 		-- Del más usado al menos usado, que es la pregunta que trae a
 		-- alguien a este reporte. Sin ORDER BY, Postgres devuelve las filas
@@ -249,7 +250,7 @@ func (r *PostgresRepo) CalcularUsoDocentesDeCiclo(ctx context.Context, cicloID s
 			SELECT m.id FROM materia m JOIN contenedor_de_materia c ON c.materia_id = m.id WHERE c.ciclo_lectivo_id = $1
 		)
 		-- Ver CalcularUsoEquiposDeCiclo: una clase que nadie retiró no cuenta.
-		AND r.estado NOT IN ('CANCELADA','NO_RETIRADA')`+condFechasPrefijo("r", condFechas)+`
+		AND `+criterioReservaComputable("r")+condFechasPrefijo("r", condFechas)+`
 		GROUP BY r.docente_id_historico
 		-- Mismo criterio que CalcularUsoEquiposDeCiclo; el nombre desempata.
 		ORDER BY minutos DESC, docente

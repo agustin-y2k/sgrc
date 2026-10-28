@@ -5,10 +5,12 @@ import (
 	"time"
 
 	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/prioridadcurso"
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/.
 type Repo interface {
+	PrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) ([]prioridadcurso.Marca, error)
 	// Coordinar comparte la transacción y estabiliza inventario/jornada frente
 	// a reservas y entregas. El callback debe propagar su contexto a otros módulos.
 	Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error
@@ -105,7 +107,7 @@ type Repo interface {
 	ListarPreferenciasPorCarro(ctx context.Context, carroID string) ([]*domain.PreferenciaDeEquipo, error)
 
 	// ListarPreferenciasHuerfanas: las marcas que ya no cruzan con ninguna
-	// materia. Aparecen al renombrar o borrar una materia, porque el vínculo es
+	// materia vigente. Aparecen al renombrar, borrar o archivar, porque el vínculo es
 	// por nombre y no por referencia (RF-03.21).
 	ListarPreferenciasHuerfanas(ctx context.Context) ([]*PreferenciaHuerfana, error)
 	// ContarPreferenciasQueDejarianDeAplicar contesta, antes de renombrar una
@@ -148,19 +150,21 @@ type ValidadorReservas interface {
 type IDGenerator func() string
 
 // PreferenciaHuerfana es una marca de equipo que ya no cruza con ninguna
-// materia cargada: quedó apuntando a un nombre que se renombró o se borró.
+// materia vigente: el nombre o alcance cambió, o sólo quedan coincidencias
+// archivadas.
 //
 // Trae el equipo resuelto porque la marca sola no dice nada accionable: lo que
 // el Admin necesita saber es QUÉ máquina quedó marcada para una materia que ya
 // no existe.
 type PreferenciaHuerfana struct {
-	CursoExacto   bool
-	ID            string
-	MateriaNombre string
-	Modalidad     string
-	Anio          *int
-	Division      string
-	Prioridad     int
+	CoincideConArchivadas bool
+	CursoExacto           bool
+	ID                    string
+	MateriaNombre         string
+	Modalidad             string
+	Anio                  *int
+	Division              string
+	Prioridad             int
 	// EquipoEtiqueta es "PC 7" o el nombre del equipo suelto.
 	EquipoEtiqueta string
 	// CarroNombre vacío cuando el equipo no está en ninguno.

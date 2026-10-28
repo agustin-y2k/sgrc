@@ -30,7 +30,8 @@ func rangoDeQuery(c *fiber.Ctx) (desde, hasta *time.Time, err error) {
 }
 
 type Handler struct {
-	svc *application.Service
+	svc       *application.Service
+	actividad LectorActividad
 }
 
 func NewHandler(svc *application.Service) *Handler {

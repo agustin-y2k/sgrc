@@ -65,7 +65,7 @@ func (r *PostgresRepo) CrearEspacio(ctx context.Context, e *domain.Espacio) erro
 	}
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO materia (id, espacio_id, nombre, archivado) VALUES ($1, $2, $3, false)`,
+		`INSERT INTO materia (id, espacio_id, nombre, archivado, interna_de_espacio) VALUES ($1, $2, $3, false, true)`,
 		uuidNuevo(), e.ID, e.Nombre,
 	); err != nil {
 		return fmt.Errorf("creando la materia del espacio: %w", err)
@@ -145,14 +145,17 @@ func (r *PostgresRepo) GuardarEspacio(ctx context.Context, e *domain.Espacio) er
 		return application.ErrEspacioNoEncontrado
 	}
 
-	// Sólo la materia que lleva el nombre viejo: si alguien cargó otras a mano
-	// en la base, no se las toca.
+	// La identidad explícita distingue la materia interna de otras materias del espacio.
 	if _, err := tx.Exec(ctx,
-		`UPDATE materia SET nombre = $2 WHERE espacio_id = $1`, e.ID, e.Nombre,
+		`UPDATE materia SET nombre = $2 WHERE espacio_id = $1 AND interna_de_espacio`, e.ID, e.Nombre,
 	); err != nil {
 		return fmt.Errorf("renombrando la materia del espacio: %w", err)
 	}
 
+	if _, err := tx.Exec(ctx, `INSERT INTO materia (id,espacio_id,nombre,archivado,interna_de_espacio)
+		SELECT $1,$2,$3,$4,true WHERE NOT EXISTS (SELECT 1 FROM materia WHERE espacio_id=$2 AND interna_de_espacio)`, uuidNuevo(), e.ID, e.Nombre, e.Archivado); err != nil {
+		return fmt.Errorf("restaurando la materia del espacio: %w", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("confirmando el cambio del espacio: %w", err)
 	}
@@ -182,7 +185,7 @@ func (r *PostgresRepo) EliminarEspacio(ctx context.Context, id string) error {
 // ListarMateriasPorEspacio: las materias que cuelgan de un espacio.
 func (r *PostgresRepo) ListarMateriasPorEspacio(ctx context.Context, espacioID string) ([]*domain.Materia, error) {
 	filas, err := pgtransaccion.Con(ctx, r.pool).Query(ctx,
-		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado
+		`SELECT id, COALESCE(curso_id::text, ''), COALESCE(espacio_id::text, ''), nombre, archivado, interna_de_espacio
 		   FROM materia WHERE espacio_id = $1
 		  ORDER BY clave_texto(nombre)`, espacioID)
 	if err != nil {
@@ -196,7 +199,7 @@ func (r *PostgresRepo) ListarMateriasPorEspacio(ctx context.Context, espacioID s
 	var out []*domain.Materia
 	for filas.Next() {
 		var m domain.Materia
-		if err := filas.Scan(&m.ID, &m.CursoID, &m.EspacioID, &m.Nombre, &m.Archivado); err != nil {
+		if err := filas.Scan(&m.ID, &m.CursoID, &m.EspacioID, &m.Nombre, &m.Archivado, &m.InternaDeEspacio); err != nil {
 			return nil, fmt.Errorf("escaneando materia del espacio: %w", err)
 		}
 		out = append(out, &m)

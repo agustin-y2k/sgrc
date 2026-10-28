@@ -216,7 +216,7 @@ func (h *Handler) EditarCurso(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
 	}
 
-	if err := h.svc.EditarCurso(c.UserContext(), id, req.Anio, req.Division, req.Modalidad); err != nil {
+	if err := h.svc.EditarCurso(c.UserContext(), id, req.Anio, req.Division, req.Modalidad, req.ConfirmacionCurso); err != nil {
 		return mapearError(err)
 	}
 	return c.SendStatus(fiber.StatusOK)
@@ -570,4 +570,16 @@ func (h *Handler) OpcionesDeRegistro(c *fiber.Ctx) error {
 		}
 	}
 	return c.JSON(opcionesDeRegistroResponse{Lugares: lugares})
+}
+
+func (h *Handler) ImpactoEdicionCurso(c *fiber.Ctx) error {
+	var req editarCursoRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "cuerpo de la petición inválido")
+	}
+	impacto, err := h.svc.PrevisualizarEdicionCurso(c.UserContext(), c.Params("id"), req.Anio, req.Division, req.Modalidad)
+	if err != nil {
+		return mapearError(err)
+	}
+	return c.JSON(impacto)
 }

@@ -321,21 +321,6 @@ func (s *Service) crearCurso(ctx context.Context, cicloLectivoID string, anio in
 // EditarCurso implementa RF-02.11: corregir el curso mientras el ciclo está
 // activo. Los tres datos van juntos porque son un solo curso descrito de tres
 // formas — ver domain.Curso.Editar.
-func (s *Service) editarCurso(ctx context.Context, cursoID string, anio int, division, modalidad string) error {
-	if err := s.repo.VerificarVigencia(ctx, "curso", cursoID); err != nil {
-		return err
-	}
-
-	c, err := s.repo.BuscarCursoPorID(ctx, cursoID)
-	if err != nil {
-		return err
-	}
-	if err := c.Editar(anio, division, modalidad); err != nil {
-		return err
-	}
-	return s.repo.GuardarCurso(ctx, c)
-}
-
 // EliminarCurso implementa RF-02.11: solo si ninguna de sus materias tiene
 // reservas asociadas.
 func (s *Service) eliminarCurso(ctx context.Context, cursoID string) error {
@@ -401,6 +386,9 @@ func (s *Service) editarMateria(ctx context.Context, materiaID, nuevoNombre stri
 		return 0, err
 	}
 
+	if m.InternaDeEspacio {
+		return 0, ErrMateriaInternaDeEspacio
+	}
 	nombreViejo := m.Nombre
 	if err := m.RenombrarA(nuevoNombre); err != nil {
 		return 0, err
@@ -432,6 +420,13 @@ func (s *Service) eliminarMateria(ctx context.Context, materiaID string) error {
 		return err
 	}
 
+	m, err := s.repo.BuscarMateriaPorID(ctx, materiaID)
+	if err != nil {
+		return err
+	}
+	if m.InternaDeEspacio {
+		return ErrMateriaInternaDeEspacio
+	}
 	tieneReservas, err := s.validadorReservas.TieneReservasMateria(ctx, materiaID)
 	if err != nil {
 		return fmt.Errorf("verificando reservas de la materia: %w", err)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/agustin-y2k/sgrc/internal/academic/domain"
 	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/prioridadcurso"
 )
 
 // ── fakeRepo ────────────────────────────────────────────────────────────
@@ -1808,4 +1809,26 @@ func (r *fakeRepo) VerificarVigencia(ctx context.Context, tipo, id string) error
 		return ErrCicloArchivado
 	}
 	return nil
+}
+
+func (f *fakeMarcas) PrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) ([]prioridadcurso.Marca, error) {
+	return nil, f.err
+}
+func (f *fakeMarcas) ConservarPrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) error {
+	return f.err
+}
+
+func TestMateriaInternaDeEspacio_SeGestionaDesdeEspacios(t *testing.T) {
+	repo := nuevoFakeRepo()
+	repo.materias["interna"] = &domain.Materia{ID: "interna", EspacioID: "espacio", Nombre: "Biblioteca", InternaDeEspacio: true}
+	svc := servicioSimple(repo)
+	if _, err := svc.EditarMateria(context.Background(), "interna", "Otro nombre"); !errors.Is(err, ErrMateriaInternaDeEspacio) {
+		t.Fatalf("renombrar: %v", err)
+	}
+	if err := svc.EliminarMateria(context.Background(), "interna"); !errors.Is(err, ErrMateriaInternaDeEspacio) {
+		t.Fatalf("eliminar: %v", err)
+	}
+	if repo.materias["interna"].Nombre != "Biblioteca" {
+		t.Fatal("se alteró la materia interna")
+	}
 }
