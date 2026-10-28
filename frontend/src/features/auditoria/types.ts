@@ -70,6 +70,8 @@ export function entidadDeFiltro(entidad: string): string {
 export function accionLegible(accion: string): string {
   const nombres: Record<string, string> = {
     CAMBIO_TRANSACCIONAL: "Cambios en los datos",
+    CONFIGURACION_OPERATIVA_CAMBIADA: "Configuración del sistema actualizada",
+    BLOQUEO_LEVANTADO: "Bloqueo de equipos levantado",
     PASSWORD_RESETEADA: "Contraseña restablecida por un administrador",
     PASSWORD_RECUPERADA_POR_EMAIL: "Contraseña recuperada por correo",
     PASSWORD_DE_EQUIPO_REVELADA: "Consulta de una contraseña de equipo",
@@ -107,11 +109,13 @@ const ENTIDADES: Record<string, { nombre: string; genero: "el" | "la" }> = {
   equipo: { nombre: "equipo", genero: "el" },
   pc: { nombre: "equipo", genero: "el" },
   equipo_cuenta: { nombre: "cuenta de equipo", genero: "la" },
+  configuracion_operacion: { nombre: "configuración del sistema", genero: "la" },
   jornada_institucion: { nombre: "jornada de la escuela", genero: "la" },
   licencia: { nombre: "licencia", genero: "la" },
   materia: { nombre: "materia", genero: "la" },
   pedido_de_materia: { nombre: "pedido de materia", genero: "el" },
   reserva: { nombre: "reserva", genero: "la" },
+  bloqueo_operacion: { nombre: "operación de bloqueo", genero: "la" },
   reserva_grupo: { nombre: "clase reservada", genero: "la" },
   regla_recurrencia: { nombre: "serie de reservas", genero: "la" },
   prestamo: { nombre: "préstamo", genero: "el" },

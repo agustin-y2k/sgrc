@@ -17,6 +17,7 @@ import {
 } from "@/features/admin/entregas/compartido"
 import { Indicador } from "@/features/inicio/Indicador"
 import { InicioDocente } from "@/features/inicio/InicioDocente"
+import { CalendarioReservas } from "@/features/calendario/CalendarioReservas"
 import { useNoLeidas } from "@/features/notificaciones/useNoLeidas"
 import * as reservasApi from "@/features/reservas/api"
 import { agruparReservas, hoyISO } from "@/features/reservas/types"
@@ -325,6 +326,8 @@ export function InicioPage() {
               de 300px, así que dejaba mil doscientos píxeles en blanco al
               lado. */}
           <LoQueEstaAfuera compacto />
+
+          <CalendarioReservas />
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">

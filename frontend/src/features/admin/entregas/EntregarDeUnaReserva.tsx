@@ -23,19 +23,25 @@ import { hoyISO, type ReservaDetallada } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 import { contar, plural } from "@/lib/plural"
 import { todasLasPaginas } from "@/lib/todas-las-paginas"
-import { diaAnteriorISO, intervaloDeReserva } from "@/features/reservas/intervalo"
+import {
+  conflictoDeEntregaAnticipada,
+  diaAnteriorISO,
+  diaSiguienteISO,
+  puedeEntregarseReserva,
+} from "@/features/reservas/intervalo"
 import { useAhora } from "@/lib/useAhora"
 
 /** Entregar las computadoras de una reserva del día. */
 export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
   const queryClient = useQueryClient()
-  const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
+  const [marcadas, setMarcadas] = useState<Map<string, string>>(new Map())
   const [retiradoPor, setRetiradoPor] = useState("")
   const [esTodoLoQueSeLlevo, setEsTodoLoQueSeLlevo] = useState(false)
   const [resumen, setResumen] = useState<string | null>(null)
 
   const hoy = hoyISO()
   const ayer = diaAnteriorISO(hoy)
+  const manana = diaSiguienteISO(hoy)
   const ahora = useAhora()
   const consultaPrestamos = useQuery({
     queryKey: PRESTAMOS_KEY,
@@ -43,14 +49,14 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
     refetchInterval: REFRESCO_DEL_MOSTRADOR,
   })
   const consultaReservas = useQuery({
-    queryKey: ["reservas", "del-dia", ayer, hoy],
+    queryKey: ["reservas", "del-dia", ayer, manana],
     // pageSize al máximo: el listado pagina de a 50 por defecto, y un día con
     // ocho clases de ocho máquinas son 64 reservas.
     queryFn: () =>
       todasLasPaginas((page) =>
         reservasApi.listarReservas({
           desde: ayer,
-          hasta: hoy,
+          hasta: manana,
           pageSize: 200,
           ...(page > 1 ? { page } : {}),
         })
@@ -67,16 +73,21 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
     mutationFn: (ids: string[]) =>
       reservasApi.entregarPorReserva({
         reservaIds: ids,
+        equiposEsperados: Object.fromEntries(ids.map((id) => [id, marcadas.get(id)!])),
         liberarNoEntregadas: esTodoLoQueSeLlevo,
         retiradoPor: retiradoPor.trim() || undefined,
       }),
+    onError: () => queryClient.invalidateQueries({ queryKey: ["reservas"] }),
     onSuccess: async (respuesta) => {
       const noSalieron = respuesta.noEntregadas ?? []
       const partes = [
         noSalieron.length === 0
           ? `Salieron ${contar(respuesta.entregadas.length, "equipo")}.`
           : `Salieron ${respuesta.entregadas.length}. No salieron ${noSalieron.length}: ${noSalieron
-              .map((n) => n.detalle)
+              .map((n) => {
+                const reserva = data?.data.find((r) => r.equipoId === n.equipoId)
+                return `${reserva ? nombreDeEquipo(reserva) + ": " : ""}${n.detalle}`
+              })
               .join("; ")}`,
       ]
       if (respuesta.liberadas?.length)
@@ -91,7 +102,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
         )
       }
       setResumen(partes.join(" "))
-      setMarcadas(new Set())
+      setMarcadas(new Map())
       setRetiradoPor("")
       setEsTodoLoQueSeLlevo(false)
       await queryClient.invalidateQueries({ queryKey: PRESTAMOS_KEY })
@@ -109,17 +120,28 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
     ])
     return reservas.filter(
       (r) =>
-        (r.estado === "CONFIRMADA" || r.estado === "NO_RETIRADA") &&
+        puedeEntregarseReserva(r, ahora) &&
         // Un bloqueo administrativo no tiene docente: lo crea un Admin sobre
         // equipos sueltos, y no hay nadie esperando para retirarlas.
         r.tipo !== "BLOQUEO" &&
-        !afuera.has(r.equipoId) &&
-        (r.fecha === hoy ||
-          (r.fecha === ayer && intervaloDeReserva(r).fin > ahora.getTime()))
+        !afuera.has(r.equipoId)
     )
-  }, [data, yaAfuera, consultaPrestamos.data, hoy, ayer, ahora])
+  }, [data, yaAfuera, consultaPrestamos.data, ahora])
+  const conflictos = useMemo(() => {
+    const mapa = new Map<string, ReservaDetallada>()
+    for (const r of pendientes) {
+      const conflicto = conflictoDeEntregaAnticipada(r, data?.data ?? [], ahora)
+      if (conflicto) mapa.set(r.id, conflicto)
+    }
+    return mapa
+  }, [pendientes, data, ahora])
   const seleccionValida =
-    marcadas.size > 0 && [...marcadas].every((id) => pendientes.some((r) => r.id === id))
+    marcadas.size > 0 &&
+    [...marcadas.keys()].every((id) =>
+      pendientes.some(
+        (r) => r.id === id && r.equipoId === marcadas.get(id) && !conflictos.has(id)
+      )
+    )
 
   const porGrupo = useMemo(() => {
     const grupos = new Map<string, ReservaDetallada[]>()
@@ -131,11 +153,12 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
   }, [pendientes])
 
   const alternarGrupo = (reservas: ReservaDetallada[]) => {
-    const nueva = new Set(marcadas)
+    reservas = reservas.filter((r) => !conflictos.has(r.id))
+    const nueva = new Map(marcadas)
     const todas = reservas.every((r) => nueva.has(r.id))
     for (const r of reservas) {
       if (todas) nueva.delete(r.id)
-      else nueva.add(r.id)
+      else nueva.set(r.id, r.equipoId)
     }
     setMarcadas(nueva)
   }
@@ -147,7 +170,8 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
         <CardDescription>
           Las reservas de hoy que todavía no se retiraron. La hora de devolución sale del
           fin de la reserva, no hay que cargarla. Las reservas liberadas ya no guardan el
-          equipo: entregalo sólo si sigue en el laboratorio.
+          equipo: entregalo sólo si sigue en el laboratorio. Adelantar el retiro requiere
+          que no haya otra reserva o bloqueo de esa PC antes de la devolución prevista.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
@@ -186,7 +210,9 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
         {!errorConsulta &&
           porGrupo.map((reservas) => {
             const primera = reservas[0]
-            const todasMarcadas = reservas.every((r) => marcadas.has(r.id))
+            const habilitadas = reservas.filter((r) => !conflictos.has(r.id))
+            const todasMarcadas =
+              habilitadas.length > 0 && habilitadas.every((r) => marcadas.has(r.id))
             return (
               <div
                 key={primera.reservaGrupoId ?? primera.id}
@@ -205,7 +231,9 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                   </div>
                   <button
                     type="button"
-                    disabled={!consultaLista || entregar.isPending}
+                    disabled={
+                      !consultaLista || entregar.isPending || habilitadas.length === 0
+                    }
                     className="text-muted-foreground hover:text-foreground text-xs underline"
                     onClick={() => alternarGrupo(reservas)}
                   >
@@ -215,25 +243,49 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                 {/* Máquina por máquina: puede llevarse tres de las cinco que
                   reservó, y las otras dos siguen disponibles para otro. */}
                 <div className="grid gap-1 sm:grid-cols-3">
-                  {reservas.map((r) => (
-                    <label key={r.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        disabled={!consultaLista || entregar.isPending}
-                        checked={marcadas.has(r.id)}
-                        onChange={() => {
-                          const nueva = new Set(marcadas)
-                          if (nueva.has(r.id)) nueva.delete(r.id)
-                          else nueva.add(r.id)
-                          setMarcadas(nueva)
-                        }}
-                      />
-                      {nombreDeEquipo(r)}
-                      {r.estado === "NO_RETIRADA" && (
-                        <span className="text-muted-foreground"> · reserva liberada</span>
-                      )}
-                    </label>
-                  ))}
+                  {reservas.map((r) => {
+                    const conflicto = conflictos.get(r.id)
+                    const avisoId = `conflicto-entrega-${r.id}`
+                    return (
+                      <div key={r.id} className="grid content-start gap-1">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            disabled={!consultaLista || entregar.isPending || !!conflicto}
+                            aria-describedby={conflicto ? avisoId : undefined}
+                            checked={marcadas.has(r.id)}
+                            onChange={() => {
+                              const nueva = new Map(marcadas)
+                              if (nueva.has(r.id)) nueva.delete(r.id)
+                              else nueva.set(r.id, r.equipoId)
+                              setMarcadas(nueva)
+                            }}
+                          />
+                          {nombreDeEquipo(r)}
+                          {r.estado === "NO_RETIRADA" && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              · reserva liberada
+                            </span>
+                          )}
+                        </label>
+                        {conflicto && (
+                          <p id={avisoId} className="text-muted-foreground text-xs">
+                            No se puede adelantar:{" "}
+                            {conflicto.tipo === "BLOQUEO"
+                              ? "bloqueo administrativo"
+                              : "otra reserva"}{" "}
+                            el {conflicto.fecha} de {conflicto.horaInicio} a{" "}
+                            {conflicto.horaFin}
+                            {conflicto.horaFin < conflicto.horaInicio &&
+                              " del día siguiente"}
+                            .{conflicto.materiaNombre && ` ${conflicto.materiaNombre}.`}{" "}
+                            La reserva para retirar después se mantiene.
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -274,7 +326,9 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                 Es todo lo que se llevó
                 <span className="text-muted-foreground block text-xs">
                   Lo que no marcaste deja de estar guardado y queda libre para otro curso.
-                  No afecta a las próximas fechas de una reserva que se repite.
+                  Los equipos que no pueden adelantarse por otra reserva o bloqueo siguen
+                  guardados para después. No afecta a las próximas fechas de una reserva
+                  que se repite.
                 </span>
               </span>
             </label>
@@ -283,7 +337,7 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
                 disabled={entregar.isPending || !consultaLista || !seleccionValida}
                 onClick={() => {
                   if (consultaLista && seleccionValida && !entregar.isPending)
-                    entregar.mutate([...marcadas])
+                    entregar.mutate([...marcadas.keys()])
                 }}
               >
                 Entregar {contar(marcadas.size, "equipo")}
@@ -292,15 +346,16 @@ export function EntregarDeUnaReserva({ yaAfuera }: { yaAfuera: Set<string> }) {
             </div>
             {(!seleccionValida || errorConsulta) && (
               <p className="text-sm">
-                Revisá la selección: algunos equipos ya no están pendientes o la consulta
-                no está disponible.
+                Revisá la selección: algunos equipos cambiaron, ya no están pendientes o
+                tienen otra reserva antes del retiro. También puede faltar actualizar la
+                consulta.
               </p>
             )}
             <Button
               variant="outline"
               type="button"
               onClick={() => {
-                setMarcadas(new Set())
+                setMarcadas(new Map())
                 setEsTodoLoQueSeLlevo(false)
               }}
             >

@@ -35,24 +35,46 @@ export function CancelarReserva({
   const motivoFalta = esAjena && motivo.trim() === ""
   const cancelables = grupo.reservas.filter((r) => r.estado === "CONFIRMADA")
 
+  const refrescar = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["reservas"] }),
+      queryClient.invalidateQueries({ queryKey: ["calendario"] }),
+      queryClient.invalidateQueries({ queryKey: ["equipos-disponibles"] }),
+      queryClient.invalidateQueries({ queryKey: ["equipos-ocupados"] }),
+    ])
+
   const cancelar = useMutation({
     // RF-04.6: la elección se aplica "a todos los equipos del grupo en esa
     // fecha (o rango)", así que las dos ramas cancelan el grupo entero — lo
     // único que cambia es si además alcanza a las fechas siguientes.
     mutationFn: async (): Promise<void> => {
+      if (grupo.esBloqueo) {
+        const operacionId =
+          grupo.bloqueoOperacionId ??
+          grupo.reservas[0]?.bloqueoOperacionId ??
+          (grupo.reservas.length === 1 ? grupo.reservas[0].id : undefined)
+        if (!operacionId)
+          throw new Error(
+            "Actualizá el listado para identificar la operación de bloqueo completa."
+          )
+        await reservasApi.levantarBloqueo(operacionId, motivo)
+        return
+      }
       if (grupo.grupoId) {
         await reservasApi.cancelarGrupo(grupo.grupoId, motivo, soloEsta)
         return
       }
-      // Un bloqueo administrativo son N filas `reserva` sueltas, sin grupo
-      // que las una en la base.
+      // Compatibilidad con una reserva individual sin grupo.
       for (const r of cancelables) {
         await reservasApi.cancelarReserva(r.id, motivo)
       }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["reservas"] })
+      await refrescar()
       onListo()
+    },
+    onError: async () => {
+      await refrescar()
     },
   })
 
@@ -64,12 +86,21 @@ export function CancelarReserva({
           : `Se ${cancelables.length === 1 ? "cancela" : "cancelan"} ${cancelables.length} equipo${cancelables.length === 1 ? "" : "s"} de esta reserva.`}
       </p>
 
+      {grupo.esBloqueo && (
+        <p className="text-muted-foreground text-sm">
+          Se levanta la operación de bloqueo completa. Las reservas canceladas al crearla
+          permanecen canceladas.
+        </p>
+      )}
       {/* El error de la cancelación va acá y no arriba de la pantalla: es la
           respuesta a este botón, y a un metro de distancia del panel nadie
           lo relaciona con lo que acaba de apretar. */}
       {cancelar.error && (
         <Alert variant="destructive">
-          <AlertDescription>{getErrorMessage(cancelar.error)}</AlertDescription>
+          <AlertDescription>
+            {getErrorMessage(cancelar.error)}. Actualizamos el estado; si sigue pendiente,
+            podés reintentar.
+          </AlertDescription>
         </Alert>
       )}
 

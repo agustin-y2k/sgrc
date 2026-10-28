@@ -12,9 +12,11 @@ import type { Equipo } from "@/features/inventory/types"
 import * as notificacionesApi from "@/features/notificaciones/api"
 import * as reservasApi from "@/features/reservas/api"
 import type { ReservaDetallada } from "@/features/reservas/types"
+import { cargarCalendario } from "@/features/calendario/reservas-api"
 import { paginada } from "@/test/respuestas"
 
 vi.mock("@/features/reservas/api")
+vi.mock("@/features/calendario/reservas-api")
 vi.mock("@/features/admin/api")
 vi.mock("@/features/inventory/api")
 vi.mock("@/features/notificaciones/api")
@@ -118,6 +120,7 @@ describe("InicioPage", () => {
     vi.clearAllMocks()
     vi.mocked(notificacionesApi.listarNotificaciones).mockResolvedValue(paginada([]))
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([]))
+    vi.mocked(cargarCalendario).mockResolvedValue([])
     vi.mocked(adminApi.listarUsuarios).mockResolvedValue(paginada([]))
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({ data: [] })
     vi.mocked(adminApi.reporteEstadoDelInventario).mockResolvedValue({ data: [] })
@@ -471,7 +474,9 @@ describe("InicioPage", () => {
 
     await screen.findByText("Lo que viene")
     expect(screen.queryByText(/Clase de hoy/)).not.toBeInTheDocument()
-    expect(screen.getByText(/No hay nada reservado para los próximos días/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/No hay nada reservado para los próximos días/)
+    ).toBeInTheDocument()
   })
 
   // Bajarlos no es sacarlos: una cuenta pendiente es un docente que no puede

@@ -226,8 +226,10 @@ export type AltaDePreferencias = {
  * marcar con el nombre nuevo es otra marca, y se hace desde el equipo.
  */
 export type PreferenciaHuerfana = {
+  /** Coincide por nombre y alcance únicamente con estructura archivada. */
+  coincideConArchivadas: boolean
   id: string
-  /** El nombre al que la marca apunta y que ya no cruza con ninguna materia. */
+  /** El nombre al que apunta, sin coincidencias vigentes en ese alcance. */
   materiaNombre: string
   /** La misma frase que muestra una marca normal: "Matemática de 1°2". */
   alcance: string

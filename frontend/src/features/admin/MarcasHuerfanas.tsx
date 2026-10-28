@@ -52,12 +52,11 @@ export function MarcasHuerfanas() {
   return (
     <Card className="mb-4">
       <CardHeader>
-        <CardTitle>Marcas que quedaron sin materia</CardTitle>
+        <CardTitle>Prioridades sin materias vigentes</CardTitle>
         <CardDescription>
-          Estas máquinas están marcadas como preferentes para una materia que ya no existe
-          con ese nombre — normalmente porque se la renombró desde Académico. La marca no
-          hace nada: el equipo aparece en el orden de siempre. Quitala, o volvé a marcar
-          la máquina con el nombre nuevo desde su ficha.
+          Estas prioridades no coinciden con ninguna materia sin archivar en su curso o
+          espacio y ciclo. No se aplican actualmente a las reservas. Podés conservarlas
+          para próximos ciclos, corregir su alcance desde la ficha del equipo o quitarlas.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-2">
@@ -74,6 +73,11 @@ export function MarcasHuerfanas() {
           >
             <div className="min-w-0">
               <p className="min-w-0 break-words text-sm font-medium">{h.alcance}</p>
+              <p className="text-muted-foreground text-sm">
+                {h.coincideConArchivadas
+                  ? "Solo coincide con materias archivadas o de cursos, espacios o ciclos archivados."
+                  : "No coincide con ninguna materia por nombre y alcance, tampoco en el archivo."}
+              </p>
               {/* Qué máquina es, con su carro adelante: "PC 3" hay una por
                   carro, así que la etiqueta sola no identifica nada. */}
               <p className="text-muted-foreground text-xs">

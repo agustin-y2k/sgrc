@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { AccesoDirecto } from "@/features/inicio/AccesoDirecto"
 import { AvisarUnaFalla } from "@/features/inicio/AvisarUnaFalla"
 import { TarjetaDeClase } from "@/features/inicio/TarjetaDeClase"
+import { CalendarioReservas } from "@/features/calendario/CalendarioReservas"
 import type { GrupoDeReservas } from "@/features/reservas/types"
 
 /** Cuántas clases se muestran enteras, con sus botones. */
@@ -84,6 +85,8 @@ export function InicioDocente({
           <Link to="/reservas/nueva">Reservar</Link>
         </Button>
       </div>
+
+      <CalendarioReservas />
 
       <section className="grid gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">

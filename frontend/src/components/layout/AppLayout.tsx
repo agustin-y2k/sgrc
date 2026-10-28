@@ -71,6 +71,7 @@ const ENLACES_ADMIN: Enlace[] = [
   { a: "/admin/pedidos-de-materia", texto: "Pedidos de materia" },
   // La jornada de la escuela: qué días y horas abre.
   { a: "/admin/jornada", texto: "Jornada de la escuela" },
+  { a: "/admin/configuracion", texto: "Configuración del sistema" },
   // El registro de auditoría va cerca del final: no se entra a mirarlo todos
   // los días, se entra cuando hay una pregunta concreta. Antes de bloquear
   // equipos, que es lo único de acá que puede romper algo de un clic.
