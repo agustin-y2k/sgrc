@@ -74,7 +74,7 @@ function aMinutos(hhmm: string): number {
 }
 
 function aHHMM(minutos: number): string {
-  const h = String(Math.floor(minutos / 60)).padStart(2, "0")
+  const h = String(Math.floor(minutos / 60) % 24).padStart(2, "0")
   const m = String(minutos % 60).padStart(2, "0")
   return `${h}:${m}`
 }

@@ -22,6 +22,13 @@ test.describe("reservas reales sobre una base vacía y aislada", () => {
   const base = new Date()
   base.setDate(base.getDate() + 14)
   while (base.getDay() !== 1) base.setDate(base.getDate() + 1)
+  // El escenario completo necesita nueve semanas dentro de un único ciclo.
+  const ultima = new Date(base)
+  ultima.setDate(ultima.getDate() + 8 * 7)
+  if (ultima.getFullYear() !== base.getFullYear()) {
+    base.setFullYear(base.getFullYear() + 1, 0, 1)
+    while (base.getDay() !== 1) base.setDate(base.getDate() + 1)
+  }
   const fecha = (semanas: number) => {
     const d = new Date(base)
     d.setDate(d.getDate() + semanas * 7)
