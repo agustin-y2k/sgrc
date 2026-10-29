@@ -43,8 +43,9 @@ var (
 	// escribir «Matematica» en un curso que ya tiene «Matemática» lee que ya
 	// existe "ese nombre" mirando dos textos que no son iguales, y el mensaje
 	// parece un error del sistema.
-	ErrMateriaNombreDuplicado = errors.New("ya existe otra materia con ese nombre en el mismo curso, sin distinguir tildes, mayúsculas ni espacios de más")
-	ErrMateriaConReservas     = errors.New("la materia tiene reservas asociadas — no se puede eliminar")
+	ErrMateriaNombreDuplicado  = errors.New("ya existe otra materia con ese nombre en el mismo curso, sin distinguir tildes, mayúsculas ni espacios de más")
+	ErrMateriaInternaDeEspacio = errors.New("la materia interna se gestiona desde Espacios: renombrá o eliminá el espacio")
+	ErrMateriaConReservas      = errors.New("la materia tiene reservas asociadas — no se puede eliminar")
 
 	ErrDocenteMateriaNoEncontrado = errors.New("asignación docente-materia no encontrada")
 	ErrUsuarioNoValidoParaAsignar = errors.New("el usuario no existe o no está en estado APROBADA")

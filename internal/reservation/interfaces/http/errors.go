@@ -14,13 +14,15 @@ func mapearError(err error) error {
 	// 403 y no 404: la reserva existe, lo que pasa es que es de otro.
 	case errors.Is(err, application.ErrNoEsTuReserva):
 		return fiber.NewError(fiber.StatusForbidden, err.Error())
-	case errors.Is(err, application.ErrReservaGrupoNoEncontrado),
+	case errors.Is(err, application.ErrBloqueoNoEncontrado), errors.Is(err, application.ErrReservaGrupoNoEncontrado),
 		errors.Is(err, application.ErrReservaNoEncontrada),
 		errors.Is(err, application.ErrPrestamoNoEncontrado),
 		errors.Is(err, application.ErrEquipoNoEncontrado):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 
-	case errors.Is(err, application.ErrCicloCerrado),
+	case errors.Is(err, application.ErrReservaConEntrega),
+		errors.Is(err, application.ErrEquipoReservaDesactualizado),
+		errors.Is(err, application.ErrCicloCerrado),
 		errors.Is(err, application.ErrReservaModificada),
 		errors.Is(err, application.ErrMateriaArchivada),
 		errors.Is(err, application.ErrDocenteNoAsignado),
@@ -39,7 +41,9 @@ func mapearError(err error) error {
 		errors.Is(err, application.ErrReservaYaEmpezada):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, application.ErrSinEquipos),
+	case errors.Is(err, domain.ErrReservaFueraDelCiclo), errors.Is(err, application.ErrEquiposEsperados),
+		errors.Is(err, application.ErrRangoCalendario),
+		errors.Is(err, application.ErrSinEquipos),
 		errors.Is(err, application.ErrDemasiadosEquipos),
 		errors.Is(err, application.ErrMotivoObligatorio),
 		errors.Is(err, application.ErrSalidaAReparacionSinDestino),

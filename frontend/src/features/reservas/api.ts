@@ -159,6 +159,16 @@ export function crearReservaRecurrente(req: CrearReservaRecurrenteRequest) {
   }>("/api/reservas/recurrentes", { method: "POST", body: req })
 }
 
+/** Levanta la operación completa; repetir una orden ya aplicada conserva su historia. */
+export function levantarBloqueo(operacionId: string, motivo: string) {
+  return apiFetch<{
+    bloqueoOperacionId: string
+    reservasCanceladas: number
+    reservasYaCanceladas: number
+    reservasNoVigentes: number
+  }>(`/api/bloqueos/${operacionId}/levantar`, { method: "POST", body: { motivo } })
+}
+
 /** RF-04.8 — el motivo es obligatorio si la reserva es de otra persona. */
 export function cancelarReserva(reservaId: string, motivo: string) {
   return apiFetch<void>(`/api/reservas/${reservaId}/cancelar`, {
@@ -203,6 +213,7 @@ export function historialDePrestamosDeEquipo(equipoId: string) {
 /** Entregar las máquinas de una reserva. */
 export function entregarPorReserva(req: {
   reservaIds: string[]
+  equiposEsperados: Record<string, string>
   /** Quién vino a buscarlas, si no fue el docente de la reserva. */
   retiradoPor?: string
   /**

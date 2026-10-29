@@ -23,7 +23,7 @@ func TestEntregaParcial_SegundaTandaConservaTodasLasEntregasPrevias(t *testing.T
 		t.Run(map[bool]string{false: "abierta", true: "devuelta"}[devuelta], func(t *testing.T) {
 			repo := nuevoFakeRepo()
 			svc := loteReservado(t, repo)
-			primera, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a"}})
+			primera, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"a"})})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -32,7 +32,7 @@ func TestEntregaParcial_SegundaTandaConservaTodasLasEntregasPrevias(t *testing.T
 					t.Fatal(err)
 				}
 			}
-			segunda, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"b"}, LiberarNoEntregadas: true})
+			segunda, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"b"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"b"}), LiberarNoEntregadas: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -52,7 +52,7 @@ func TestEntregaParcial_SinEntregasEfectivasNoLiberaElGrupo(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := loteReservado(t, repo)
 	repo.reservas["a"].Estado = domain.ReservaCancelada
-	res, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a"}, LiberarNoEntregadas: true})
+	res, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"a"}), LiberarNoEntregadas: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestEntregaParcial_UsaLasEntregasEfectivasDelLote(t *testing.T) {
 	svc := loteReservado(t, repo)
 	// Se pidió b, pero quedó en el laboratorio: debe poder liberarse.
 	svc.validadorEquipo = &fakeValidadorEquipo{fueraDelInventario: map[string]bool{"pc-b": true}}
-	res, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a", "b"}, LiberarNoEntregadas: true})
+	res, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a", "b"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"a", "b"}), LiberarNoEntregadas: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestEntregaParcial_UsaLasEntregasEfectivasDelLote(t *testing.T) {
 func TestEntregaLote_IDInexistenteNoConfirmaPrestamos(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := loteReservado(t, repo)
-	res, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a", "no-existe"}, LiberarNoEntregadas: true})
+	res, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a", "no-existe"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"a", "no-existe"}), LiberarNoEntregadas: true})
 	if !errors.Is(err, ErrReservaNoEncontrada) || res != nil {
 		t.Fatalf("resultado inesperado: %+v %v", res, err)
 	}
@@ -164,7 +164,7 @@ func TestEntregaLote_ErrorDeEscrituraRevierteTodasLasEntregas(t *testing.T) {
 			var res *ResultadoEntrega
 			var err error
 			if conReserva {
-				res, err = svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a", "b"}})
+				res, err = svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a", "b"}, EquiposEsperados: equiposEsperadosPrueba(base, []string{"a", "b"})})
 			} else {
 				res, err = svc.EntregarSuelta(context.Background(), EntregaSueltaParams{EquipoIDs: []string{"pc1", "pc2"}, Nombre: "Ada"})
 			}
@@ -182,7 +182,7 @@ func TestEntregaParcial_ErrorDeLiberacionReviertePrestamosYReservas(t *testing.T
 	base := nuevoFakeRepo()
 	svc := loteReservado(t, base)
 	svc.repo = &repoConFalloDeLote{fakeRepo: base, operacion: "liberacion"}
-	res, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a"}, LiberarNoEntregadas: true})
+	res, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a"}, EquiposEsperados: equiposEsperadosPrueba(base, []string{"a"}), LiberarNoEntregadas: true})
 	if !errors.Is(err, errFalloDelLote) || res != nil {
 		t.Fatalf("resultado inesperado: %+v %v", res, err)
 	}
@@ -218,7 +218,7 @@ func TestDevolucionLote_ErrorDeEscrituraRevierteTodo(t *testing.T) {
 func TestPrestamosLote_IDsRepetidosSeProcesanUnaVez(t *testing.T) {
 	repo := nuevoFakeRepo()
 	svc := loteReservado(t, repo)
-	r, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a", "a", "b"}})
+	r, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{ReservaIDs: []string{"a", "a", "b"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"a", "a", "b"})})
 	if err != nil {
 		t.Fatal(err)
 	}

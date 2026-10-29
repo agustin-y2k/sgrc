@@ -81,6 +81,8 @@ sequenceDiagram
 
 ## 2. Reservar equipos (uno o varios, en un solo grupo)
 
+Antes de desplazar o crear filas se comprueba el año del ciclo de la materia. En una serie se valida también el rango declarado y el fin real de su última clase. No se materializan parcialmente fechas fuera del año.
+
 ```mermaid
 sequenceDiagram
     actor U as Docente/Admin
@@ -114,7 +116,7 @@ sequenceDiagram
     else Conflicto no autorizado o que no cumple las reglas
         RES->>DB: ROLLBACK de la operación completa
         RES-->>FE: 409 "no se pudo reservar: PC 7 ya está reservado el 13/03 de 10:00 a 12:00 (Ada Lovelace)"
-        FE-->>U: El mensaje identifica el conflicto; se actualiza la disponibilidad
+        FE-->>U: El mensaje identifica el conflicto y se actualiza la disponibilidad
     end
 ```
 
@@ -244,7 +246,7 @@ sequenceDiagram
     end
     RES->>DB: INSERT reserva tipo BLOQUEO con motivo_bloqueo (sin materia_id ni reserva_grupo_id) por cada equipo
     RES->>EB: Emitir reserva.cancelada en la outbox de la misma transacción
-    EB->>NOTIF: Worker entrega después del commit; aviso y procesado atómicos
+    EB->>NOTIF: Worker entrega después del commit, aviso y procesado atómicos
     NOTIF->>DB: INSERT notificación por docente, detallando qué equipos puntuales se cancelaron
     RES-->>FE: 201 { bloqueos: [...], reservasCanceladas: N, docentesNotificados: N }
     FE-->>ADM: ✅ Equipos bloqueados. N reservas puntuales canceladas.
@@ -281,7 +283,7 @@ sequenceDiagram
         INV->>DB: Recalcular estado de reserva_grupo (PARCIALMENTE_CANCELADA o CANCELADA)
     end
     INV->>EB: Emitir reserva.cancelada en la outbox de la misma transacción
-    EB->>NOTIF: Worker entrega después del commit; aviso y procesado atómicos
+    EB->>NOTIF: Worker entrega después del commit, aviso y procesado atómicos
     NOTIF->>DB: INSERT notificación por docente, detallando que fue ese equipo puntual
     INV-->>FE: 200 { estado, reservasCanceladas: N, docentesNotificados: N }
     FE-->>ADM: ✅ Equipo actualizado. N reservas canceladas y docentes notificados.
@@ -398,7 +400,7 @@ sequenceDiagram
         AU->>DB: Transacción final: remover vínculos y completar baja
         AU-->>A: 200
     else Una materia o la limpieza falló
-        AU-->>A: 409 Baja pendiente; repetir estado=BAJA
+        AU-->>A: 409 Baja pendiente, repetir estado=BAJA
     end
 ```
 
@@ -542,3 +544,35 @@ auditoría se confirman juntos. Los eventos internos se persisten con su
 operación y el worker confirma aviso/procesado juntos. El correo mantiene un
 intento posterior al commit. Esto también aplica a los barridos: sus marcas
 y eventos comparten transacción, sin publicar avisos de marcas revertidas.
+
+## Confirmación de entrega y conservación de procedencia
+
+```mermaid
+sequenceDiagram
+    actor A as Administrador
+    participant UI as Frontend
+    participant S as Servicio de reservas
+    participant DB as PostgreSQL
+    A->>UI: Revisa reserva y equipo
+    UI->>S: Entregar con reservaIds y equiposEsperados
+    S->>DB: Bloquea y relee grupos y reservas
+    S->>S: Compara todos los equipos confirmados
+    alt Algún equipo cambió
+        S-->>UI: 409 sin entregar ni liberar
+    else Coinciden
+        loop Cada reserva
+            S->>S: Comprueba día local y fin exclusivo tras los bloqueos
+            alt Reserva vigente y equipo entregable
+                S->>DB: Inserta préstamo y contexto académico juntos
+            else No admite entrega
+                S->>S: Agrega rechazo por equipo
+            end
+        end
+        S->>DB: Confirma entregas y liberación parcial explícita
+        S-->>UI: 200 con entregadas y noEntregadas
+    end
+```
+
+Cerrar el ciclo puede quitar la FK a la reserva; no elimina la constancia del
+préstamo ni cambia quién tiene físicamente el equipo. Al recibirlo se actualiza
+la custodia, sin reconstruir una reserva del año cerrado.

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agustin-y2k/sgrc/internal/shared/prioridadcurso"
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/agustin-y2k/sgrc/internal/academic/application"
@@ -1467,4 +1468,11 @@ func (r *fakeRepo) VerificarVigencia(ctx context.Context, tipo, id string) error
 		return application.ErrCicloArchivado
 	}
 	return nil
+}
+
+func (f *fakeMarcas) PrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) ([]prioridadcurso.Marca, error) {
+	return nil, f.err
+}
+func (f *fakeMarcas) ConservarPrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) error {
+	return f.err
 }

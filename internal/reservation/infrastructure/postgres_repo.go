@@ -122,6 +122,9 @@ func (r *PostgresRepo) CrearReservaGrupo(ctx context.Context, g *domain.ReservaG
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
+		if esReservaFueraDelCiclo(err) {
+			return domain.ErrReservaFueraDelCiclo
+		}
 		if esCicloCerrado(err) {
 			return application.ErrCicloCerrado
 		}
@@ -184,6 +187,9 @@ func (r *PostgresRepo) GuardarReservaGrupo(ctx context.Context, g *domain.Reserv
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
+		if esReservaFueraDelCiclo(err) {
+			return domain.ErrReservaFueraDelCiclo
+		}
 		if esCicloCerrado(err) {
 			return application.ErrCicloCerrado
 		}
@@ -205,4 +211,14 @@ func (r *PostgresRepo) conexion(ctx context.Context) consultor {
 }
 func (r *PostgresRepo) Coordinar(ctx context.Context, exclusivo bool, fn func(context.Context) error) error {
 	return pgtransaccion.Coordinar(ctx, r.pool, exclusivo, fn)
+}
+
+func esRestriccionDeEquipo(err error, nombre string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23514" && pgErr.ConstraintName == nombre
+}
+
+func esReservaFueraDelCiclo(err error) bool {
+	var e *pgconn.PgError
+	return errors.As(err, &e) && e.Code == "23514" && e.ConstraintName == "reserva_anio_lectivo"
 }

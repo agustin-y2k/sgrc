@@ -13,6 +13,11 @@ export type DetalleLegible = {
 
 const clave = (campo: string) => campo.replace(/[_\s-]/g, "").toLowerCase()
 const CAMPOS: Record<string, string> = {
+  retirograciaminutos: "Espera para retirar (minutos)",
+  recordatorioantelacionminutos: "Antelación del recordatorio (minutos)",
+  cierregraciaminutos: "Espera después del cierre (minutos)",
+  cierrehorasinjornada: "Hora del aviso sin jornada",
+  licenciashoraaviso: "Hora del aviso de licencias",
   estado: "Estado",
   rol: "Rol",
   tipo: "Tipo",
@@ -230,7 +235,10 @@ export function detalleLegible(entrada: EntradaDeAuditoria): DetalleLegible {
     otrosCampos: [],
     seguridadActualizada: false,
   }
-  const transaccional = entrada.accion === "CAMBIO_TRANSACCIONAL"
+  const transaccional = [
+    "CAMBIO_TRANSACCIONAL",
+    "CONFIGURACION_OPERATIVA_CAMBIADA",
+  ].includes(entrada.accion)
   if (transaccional && detalle) {
     const operacion = { INSERT: "Se creó", UPDATE: "Se actualizó", DELETE: "Se eliminó" }[
       String(detalle.operacion)

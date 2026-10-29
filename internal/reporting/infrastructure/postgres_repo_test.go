@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,15 +61,12 @@ func levantarPostgresDeTest(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-var contadorAnioDeTest int32
-
 // crearCicloDeTest arma un ciclo→curso→materia mínimo por SQL directo —
 // reporting/infrastructure no importa academic, así que no puede usar su
 // domain para esto.
-func crearCicloDeTest(t *testing.T, pool *pgxpool.Pool) (cicloID, materiaID string) {
+func crearCicloDeTest(t *testing.T, pool *pgxpool.Pool, anio int) (cicloID, materiaID string) {
 	t.Helper()
 	ctx := context.Background()
-	anio := int(atomic.AddInt32(&contadorAnioDeTest, 1)) + 3000
 	cicloID = NuevoID()
 	cursoID := NuevoID()
 	materiaID = NuevoID()
@@ -126,8 +122,15 @@ func crearCarroYEquipoDeTest(t *testing.T, pool *pgxpool.Pool, identificador int
 // más su reserva, con el horario dado.
 func insertarReservaDeTest(t *testing.T, pool *pgxpool.Pool, materiaID, equipoID, docenteID string, horaInicio, horaFin string, estado string) {
 	t.Helper()
+	var anio int
+	if err := pool.QueryRow(context.Background(), `
+		SELECT cl.anio FROM contenedor_de_materia cm
+		JOIN ciclo_lectivo cl ON cl.id=cm.ciclo_lectivo_id WHERE cm.materia_id=$1
+	`, materiaID).Scan(&anio); err != nil {
+		t.Fatalf("no se pudo leer el año del ciclo de prueba: %v", err)
+	}
 	insertarReservaEnFecha(t, pool, materiaID, equipoID, docenteID,
-		time.Now().UTC().Truncate(24*time.Hour), horaInicio, horaFin, estado)
+		time.Date(anio, time.May, 10, 0, 0, 0, 0, time.UTC), horaInicio, horaFin, estado)
 }
 
 // insertarReservaEnFecha es la variante con fecha explícita, para los
@@ -157,7 +160,7 @@ func insertarReservaEnFecha(t *testing.T, pool *pgxpool.Pool, materiaID, equipoI
 func TestPostgresRepo_CalcularUsoEquiposDeCiclo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	cicloID, materiaID := crearCicloDeTest(t, pool)
+	cicloID, materiaID := crearCicloDeTest(t, pool, 2026)
 	equipoID := crearCarroYEquipoDeTest(t, pool, 27)
 	docenteID := crearUsuarioDeTest(t, pool)
 
@@ -187,7 +190,7 @@ func TestPostgresRepo_CalcularUsoEquiposDeCiclo(t *testing.T) {
 func TestPostgresRepo_CalcularUsoDocentesDeCiclo(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	cicloID, materiaID := crearCicloDeTest(t, pool)
+	cicloID, materiaID := crearCicloDeTest(t, pool, 2026)
 	equipoID := crearCarroYEquipoDeTest(t, pool, 27)
 	docenteID := crearUsuarioDeTest(t, pool)
 
@@ -211,7 +214,7 @@ func TestPostgresRepo_CalcularUsoDocentesDeCiclo(t *testing.T) {
 func TestPostgresRepo_CalcularUsoEquiposDeCiclo_OrdenaDeMayorAMenor(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	cicloID, materiaID := crearCicloDeTest(t, pool)
+	cicloID, materiaID := crearCicloDeTest(t, pool, 2026)
 	docenteID := crearUsuarioDeTest(t, pool)
 
 	pocoUsada := crearCarroYEquipoDeTest(t, pool, 3)
@@ -240,7 +243,7 @@ func TestPostgresRepo_CalcularUsoEquiposDeCiclo_OrdenaDeMayorAMenor(t *testing.T
 func TestPostgresRepo_CalcularUsoDocentesDeCiclo_OrdenaDeMayorAMenor(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	cicloID, materiaID := crearCicloDeTest(t, pool)
+	cicloID, materiaID := crearCicloDeTest(t, pool, 2026)
 	equipoID := crearCarroYEquipoDeTest(t, pool, 27)
 
 	reservaPoco := crearUsuarioDeTest(t, pool)
@@ -265,8 +268,8 @@ func TestPostgresRepo_CalcularUsoDocentesDeCiclo_OrdenaDeMayorAMenor(t *testing.
 func TestPostgresRepo_CalcularUso_OtroCicloNoSeToca(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	_, materiaDelOtroCiclo := crearCicloDeTest(t, pool)
-	cicloVacio, _ := crearCicloDeTest(t, pool)
+	_, materiaDelOtroCiclo := crearCicloDeTest(t, pool, 2026)
+	cicloVacio, _ := crearCicloDeTest(t, pool, 2025)
 	equipoID := crearCarroYEquipoDeTest(t, pool, 27)
 	docenteID := crearUsuarioDeTest(t, pool)
 
@@ -571,7 +574,7 @@ func TestCalcularUsoEquiposDeCiclo_RespetaElRangoDeFechas(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 
-	cicloID, materiaID := crearCicloDeTest(t, pool)
+	cicloID, materiaID := crearCicloDeTest(t, pool, 2026)
 	equipoID := crearCarroYEquipoDeTest(t, pool, 1)
 	usuarioID := crearUsuarioDeTest(t, pool)
 
@@ -780,7 +783,7 @@ func TestCalcularIncidenciasPorCategoria_LasSinClasificarSeCuentanAparte(t *test
 func TestPostgresRepo_CalcularUsoDocentes_CuentaEliminada_SigueContando(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	cicloID, materiaID := crearCicloDeTest(t, pool)
+	cicloID, materiaID := crearCicloDeTest(t, pool, 2026)
 	equipoID := crearCarroYEquipoDeTest(t, pool, 31)
 	docenteID := crearUsuarioDeTest(t, pool)
 
@@ -814,7 +817,7 @@ func TestPostgresRepo_CalcularUsoDocentes_CuentaEliminada_SigueContando(t *testi
 func TestPostgresRepo_CalcularUso_NoRetiradaNoCuenta(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
-	cicloID, materiaID := crearCicloDeTest(t, pool)
+	cicloID, materiaID := crearCicloDeTest(t, pool, 2026)
 	equipoID := crearCarroYEquipoDeTest(t, pool, 32)
 	docenteID := crearUsuarioDeTest(t, pool)
 

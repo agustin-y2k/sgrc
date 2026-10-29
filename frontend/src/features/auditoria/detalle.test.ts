@@ -79,6 +79,22 @@ describe("presentación de auditoría", () => {
     expect(JSON.stringify(detalle)).not.toContain(carro)
   })
 
+  it("explica los plazos cambiados sin mostrar objetos de configuración", () => {
+    const detalle = detalleLegible(
+      entrada(
+        {
+          antes: { retiroGraciaMinutos: 40, version: 1 },
+          despues: { retiroGraciaMinutos: 10, version: 2 },
+        },
+        { accion: "CONFIGURACION_OPERATIVA_CAMBIADA" }
+      )
+    )
+    expect(detalle.cambios).toEqual([
+      { campo: "Espera para retirar (minutos)", antes: "40", despues: "10" },
+    ])
+    expect(detalle.datos).toEqual([])
+  })
+
   it("oculta secretos y detalles técnicos, pero conserva las señales de seguridad", () => {
     const detalle = detalleLegible(
       entrada(

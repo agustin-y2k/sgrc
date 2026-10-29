@@ -3,6 +3,8 @@ info:
   title: SGRC — Sistema de Gestión y Reserva de Computadoras Educativas
   version: "1.21.0"
   description: |
+    Contrato del árbol de trabajo: incluye cambios en desarrollo posteriores
+    al tag v1.21.0 y migraciones hasta 034; no implica que estén desplegados.
     API mono-institucional para gestión de inventario y reservas de equipos
     informáticos. Monolito modular — un solo servicio, un solo dominio de datos.
     `x-roles: [ADMIN]` identifica las operaciones restringidas por el middleware
@@ -94,17 +96,70 @@ components:
       properties:
         id: { type: string, format: uuid }
         usuarioId: { type: string, format: uuid }
-        materiaId: { type: string, format: uuid, description: Materia elegida al solicitar; vacío si se pidió una materia nueva }
-        materiaCreadaId: { type: string, format: uuid, description: Materia creada al aprobar una solicitud nueva; puede estar ausente en pedidos legados o si la materia fue eliminada }
+        materiaId: { type: string, format: uuid, description: "Materia elegida al solicitar; vacío si se pidió una materia nueva" }
+        materiaCreadaId: { type: string, format: uuid, description: "Materia creada al aprobar una solicitud nueva; puede estar ausente en pedidos legados o si la materia fue eliminada" }
         cursoSolicitado: { type: string }
         materiaSolicitada: { type: string }
-        esMateriaNueva: { type: boolean, description: La solicitud original fue de una materia nueva; si está pendiente se debe indicar el curso al aprobar }
+        esMateriaNueva: { type: boolean, description: "La solicitud original fue de una materia nueva; si está pendiente se debe indicar el curso al aprobar" }
         motivo: { type: string }
         estado: { type: string, enum: [PENDIENTE, APROBADO, RECHAZADO] }
         respuesta: { type: string }
         resueltoPor: { type: string, format: uuid }
         resueltoEn: { type: string, format: date-time }
         creadoEn: { type: string, format: date-time }
+
+    ConfiguracionOperacion:
+      type: object
+      required: [retiroGraciaMinutos, recordatorioAntelacionMinutos, cierreGraciaMinutos, cierreHoraSinJornada, licenciasHoraAviso, version]
+      properties:
+        retiroGraciaMinutos: { type: integer, minimum: 1, maximum: 1440 }
+        recordatorioAntelacionMinutos: { type: integer, minimum: 1, maximum: 1440 }
+        cierreGraciaMinutos: { type: integer, minimum: 0, maximum: 720 }
+        cierreHoraSinJornada: { type: integer, minimum: 0, maximum: 23 }
+        licenciasHoraAviso: { type: integer, minimum: 0, maximum: 23 }
+        version: { type: integer, format: int64, minimum: 1, description: "Versión consultada, obligatoria al guardar para evitar sobrescrituras." }
+
+    MetricasActividad:
+      type: object
+      properties:
+        reservasSolicitadas: { type: integer, minimum: 0 }
+        reservasAtendidas: { type: integer, minimum: 0, description: "Una por reserva de equipo con entrega vinculada, aunque haya varios movimientos." }
+        reservasNoRetiradas: { type: integer, minimum: 0, description: "NO_RETIRADA sin entrega vinculada posterior." }
+        reservasCanceladas: { type: integer, minimum: 0 }
+        prestamosConReserva: { type: integer, minimum: 0 }
+        prestamosSinReserva: { type: integer, minimum: 0 }
+        prestamosOrigenNoDeterminado: { type: integer, minimum: 0, description: "Préstamos antiguos sin procedencia recuperable." }
+        prestamosAbiertos: { type: integer, minimum: 0 }
+        prestamosDevueltos: { type: integer, minimum: 0 }
+
+    ActividadCiclo:
+      type: object
+      required: [version, anio, disponible, historico, totales, equipos, responsables]
+      properties:
+        version: { type: integer, minimum: 0 }
+        anio: { type: integer }
+        disponible: { type: boolean, description: "False en cierres anteriores sin este detalle; sus cantidades no representan un resumen reconstruido." }
+        historico: { type: boolean }
+        totales: { $ref: '#/components/schemas/MetricasActividad' }
+        equipos:
+          type: array
+          items:
+            allOf:
+              - { $ref: '#/components/schemas/MetricasActividad' }
+              - type: object
+                properties:
+                  equipoId: { type: string, format: uuid }
+                  etiqueta: { type: string }
+        responsables:
+          type: array
+          items:
+            allOf:
+              - { $ref: '#/components/schemas/MetricasActividad' }
+              - type: object
+                properties:
+                  identidad: { type: string, description: "Identidad de cuenta o de movimiento; no agrupa personas por nombre." }
+                  usuarioId: { type: string, format: uuid }
+                  nombre: { type: string }
 
     MensajeDelHilo:
       type: object
@@ -134,10 +189,10 @@ components:
             AYUDA es el pedido de soporte, y se distingue en algo que no es
             cosmético: sus correos no se pueden desactivar (RF-09.5).
         asunto: { type: string, maxLength: 150 }
-        pantalla: { type: string, description: Desde dónde se escribió; lo completa la interfaz }
+        pantalla: { type: string, description: "Desde dónde se escribió; lo completa la interfaz" }
         version: { type: string }
         estado: { type: string, enum: [ABIERTA, RESUELTA] }
-        usuarioId: { type: string, format: uuid, description: Solo en el listado del Admin }
+        usuarioId: { type: string, format: uuid, description: "Solo en el listado del Admin" }
         esperaRespuesta:
           type: boolean
           description: >
@@ -250,7 +305,7 @@ components:
           description: |
             Quién puede ver la CONTRASEÑA de esta cuenta. La marca un Admin
             cuenta por cuenta y es independiente del privilegio.
-        tienePassword: { type: boolean, description: Si la cuenta pide contraseña para entrar. }
+        tienePassword: { type: boolean, description: "Si la cuenta pide contraseña para entrar." }
         hayPasswordParaVer:
           type: boolean
           description: |
@@ -381,7 +436,7 @@ components:
             required: [nombre, tipo, materias]
             properties:
               nombre: { type: string }
-              modalidad: { type: string, description: Sólo si corresponde al curso }
+              modalidad: { type: string, description: "Sólo si corresponde al curso" }
               tipo: { type: string, enum: [CURSO, ESPACIO] }
               materias: { type: array, items: { type: string } }
 
@@ -461,8 +516,9 @@ components:
     Materia:
       type: object
       properties:
+        internaDeEspacio: { type: boolean, readOnly: true, description: "Materia interna gestionada únicamente desde su espacio. Las rutas genéricas de edición y borrado la rechazan con 409." }
         id: { type: string, format: uuid }
-        cursoId: { type: string, format: uuid }
+        cursoId: { type: string, description: "UUID del curso; cadena vacía en materias de un espacio." }
         nombre: { type: string }
         archivado: { type: boolean, description: "Ver Curso.archivado" }
 
@@ -491,8 +547,9 @@ components:
 
     PreferenciaHuerfana:
       type: object
-      description: Marca sin materia coincidente, con datos legibles del equipo afectado.
+      description: Marca sin materia vigente coincidente, con datos legibles del equipo afectado. Las coincidencias archivadas no la vuelven operativa.
       properties:
+        coincideConArchivadas: { type: boolean, description: "La marca sólo coincide con estructura archivada; no participa en prioridades operativas." }
         id: { type: string, format: uuid }
         materiaNombre: { type: string }
         alcance: { type: string }
@@ -561,7 +618,7 @@ components:
         horaFin: { type: string, example: "12:00" }
         motivo: { type: string, nullable: true, description: "Solo en un bloqueo administrativo: el texto que escribió el Admin (RF-04.7)" }
         puedePedirse: { type: boolean, description: "false en un bloqueo administrativo, en una reserva propia, y si la franja de esa reserva ya empezó. Lo decide el servidor para que la pantalla no tenga que replicar la regla" }
-        puedeTomarse: { type: boolean, description: "Si la materia para la que se está reservando (parámetro materiaId) le puede robar este equipo a quien lo tiene (RF-03.21): marca preferente propia más fuerte que la del dueño actual, y falta más de una hora para que empiece. Sin materiaId es siempre false. Lo decide el servidor con la misma regla que usa la creación, para que la pantalla no ofrezca un robo que después se rechace" }
+        puedeTomarse: { type: boolean, description: "Si la materia para la que se está reservando (parámetro materiaId) le puede robar este equipo a quien lo tiene (RF-03.21): marca preferente propia más fuerte que la del dueño actual, falta más de una hora para que empiece y la reserva no tuvo ninguna entrega, ni siquiera un préstamo ya devuelto. La protección también se aplica durante el autorrelleno en cascada. Sin materiaId es siempre false. Lo decide el servidor con la misma regla que usa la creación, para que la pantalla no ofrezca un robo que después se rechace" }
 
     Licencia:
       type: object
@@ -620,6 +677,63 @@ components:
         quedanDias: { type: integer, minimum: 0, description: "\"Quedan 12 días\" → hoy + 12. Es lo que muestra la propia máquina. No acepta negativos: para una ya vencida, usar venceEl." }
         venceEl: { type: string, format: date, description: "La fecha de vencimiento, tal cual." }
 
+    ContextoAcademicoPrestamo:
+      type: object
+      description: |
+        Constancia capturada al entregar: conserva los nombres y la procedencia
+        aunque se renombre la estructura o se cierre el ciclo. No tiene FK hacia
+        materias, cursos, espacios o ciclos. Se omite en préstamos sin reserva o
+        anteriores cuyo vínculo ya se perdió. reconstruido identifica datos que
+        la migración pudo recuperar de una reserva todavía existente.
+      required: [reservaIdOriginal, materiaId, materiaNombre, contenedorId, contenedorTipo, contenedorNombre, cicloId, cicloAnio, reconstruido]
+      properties:
+        reservaIdOriginal: { type: string, format: uuid }
+        materiaId: { type: string, format: uuid }
+        materiaNombre: { type: string }
+        contenedorId: { type: string, format: uuid }
+        contenedorTipo: { type: string, enum: [CURSO, ESPACIO] }
+        contenedorNombre: { type: string }
+        cursoAnio: { type: integer }
+        cursoDivision: { type: string }
+        modalidad: { type: string }
+        cicloId: { type: string, format: uuid }
+        cicloAnio: { type: integer }
+        reconstruido: { type: boolean }
+
+    AlcancePrioridadesCurso:
+      type: object
+      required: [anio, division, modalidad]
+      properties:
+        anio: { type: integer, minimum: 1, maximum: 15 }
+        division: { type: string, maxLength: 12 }
+        modalidad: { type: string, maxLength: 80 }
+
+    MarcaImpactoCurso:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        equipoId: { type: string, format: uuid }
+        equipoEtiqueta: { type: string }
+        carroNombre: { type: string }
+        materiaNombre: { type: string }
+        prioridad: { type: integer, minimum: 1, maximum: 9 }
+        exacta: { type: boolean }
+        antes: { type: boolean }
+        despues: { type: boolean }
+        compartida: { type: boolean }
+        destinoId: { type: string, description: "Vacío si no existe una marca equivalente en destino." }
+        destinoPrioridad: { type: integer }
+
+    ImpactoEdicionCurso:
+      type: object
+      required: [version, anterior, propuesto, cambios, puedeConservarExactas]
+      properties:
+        version: { type: string, description: "Huella del curso y sus marcas. Enviar como versionImpacto al confirmar." }
+        anterior: { $ref: '#/components/schemas/AlcancePrioridadesCurso' }
+        propuesto: { $ref: '#/components/schemas/AlcancePrioridadesCurso' }
+        cambios: { type: array, items: { $ref: '#/components/schemas/MarcaImpactoCurso' } }
+        puedeConservarExactas: { type: boolean }
+
     Prestamo:
       type: object
       description: |
@@ -630,6 +744,7 @@ components:
         hay reservas que nadie retiró, préstamos sin reserva detrás, y
         préstamos que sobreviven a su reserva.
       properties:
+        contextoAcademico: { $ref: '#/components/schemas/ContextoAcademicoPrestamo' }
         id: { type: string, format: uuid }
         equipoId: { type: string, format: uuid }
         reservaId: { type: string, format: uuid, nullable: true, description: "Ausente = préstamo espontáneo, sin reserva detrás" }
@@ -676,11 +791,11 @@ components:
             type: object
             properties:
               equipoId: { type: string, format: uuid }
-              razon: { type: string, enum: [YA_ENTREGADA, FUERA_DEL_INVENTARIO, RESERVA_CANCELADA, SIN_DESTINATARIO, FUERA_DE_CIRCULACION], description: "SIN_DESTINATARIO: la reserva es un bloqueo administrativo y no tiene docente. Se resuelve mandando retiradoPor, que en ese caso pasa a ser el responsable: no hay docente a quien anteponerle. FUERA_DE_CIRCULACION: el equipo está EN_MANTENIMIENTO o FUERA_DE_SERVICIO, está físicamente en el laboratorio y no se le da a nadie (RF-08.17). Sale únicamente con salidaAReparacion." }
+              razon: { type: string, enum: [YA_ENTREGADA, FUERA_DEL_INVENTARIO, RESERVA_CANCELADA, RESERVA_NO_VIGENTE, RESERVA_INTERMEDIA, SIN_DESTINATARIO, FUERA_DE_CIRCULACION], description: "RESERVA_NO_VIGENTE: finalizada, vencida o de un día futuro. RESERVA_INTERMEDIA: adelantar el retiro interferiría con otra reserva confirmada o bloqueo antes de la devolución estimada; se conserva la reserva para retirarla después. SIN_DESTINATARIO: la reserva es un bloqueo administrativo y no tiene docente. Se resuelve mandando retiradoPor, que en ese caso pasa a ser el responsable: no hay docente a quien anteponerle. FUERA_DE_CIRCULACION: el equipo está EN_MANTENIMIENTO o FUERA_DE_SERVICIO, está físicamente en el laboratorio y no se le da a nadie (RF-08.17). Sale únicamente con salidaAReparacion." }
               detalle: { type: string }
         avisos:
           type: array
-          description: "Reservas próximas de las máquinas entregadas. Solo en las entregas espontáneas: en las que salen contra una reserva, la reserva ES el permiso."
+          description: "Reservas próximas de las máquinas entregadas. Se informan en las entregas espontáneas y en el retiro tardío de una NO_RETIRADA aún vigente. El retiro anticipado que compromete otra reserva confirmada se rechaza por equipo."
           items:
             type: object
             properties:
@@ -713,6 +828,7 @@ components:
     # ── Reservations ──
     ReservaRequest:
       type: object
+      description: "Fecha e intervalo completos dentro del año del ciclo de la materia. Se permite terminar exactamente a medianoche al cerrar el 31/12, como fin exclusivo."
       required: [equipoIds, materiaId, fecha, horaInicio, horaFin]
       properties:
         equiposATomar: { type: array, maxItems: 200, items: { type: string, format: uuid }, description: "Subconjunto de equipoIds cuya toma por preferencia se solicita explícitamente; omitirlo impide desplazar reservas" }
@@ -724,6 +840,7 @@ components:
 
     ReservaRecurrenteRequest:
       type: object
+      description: "El rango y las ocurrencias deben pertenecer al año de la materia, incluido el fin nocturno de la última clase real. Si se excede se rechaza toda la serie, sin recortarla."
       required: [equipoIds, materiaId, diaSemana, horaInicio, horaFin, fechaInicio, fechaFin]
       properties:
         equiposATomar: { type: array, maxItems: 200, items: { type: string, format: uuid }, description: "Subconjunto de equipoIds cuya toma por preferencia se solicita explícitamente; omitirlo impide desplazar reservas" }
@@ -763,6 +880,7 @@ components:
       type: object
       description: "La ocupación de UN equipo en UNA franja, dentro de un ReservaGrupo (o una fila BLOQUEO suelta, sin grupo)."
       properties:
+        bloqueoOperacionId: { type: string, format: uuid, readOnly: true, description: "Identidad compartida por los equipos de una misma solicitud de bloqueo. Las solicitudes independientes no se fusionan aunque coincidan actor y horario. En datos históricos, una identidad por fila." }
         materiaId: { type: string, format: uuid, description: "Ausente en bloqueos" }
         nombreDocenteSnapshot: { type: string, description: "Ausente si no tiene docente" }
         fecha: { type: string, format: date }
@@ -791,12 +909,39 @@ components:
         - $ref: '#/components/schemas/Reserva'
         - type: object
           properties:
+            tuvoEntrega: { type: boolean, description: "La reserva ya tuvo un préstamo, incluso devuelto; no permite cambiar de equipo." }
             etiqueta: { type: string, example: "PC 3" }
             identificador: { type: integer, description: "0 para un equipo suelto" }
             carroNombre: { type: string, description: "Vacío para un equipo suelto" }
             materiaNombre: { type: string }
             cursoNombre: { type: string }
             reglaRecurrenciaId: { type: string, format: uuid }
+
+    ReservaCalendario:
+      type: object
+      description: Datos de ocupación compartida; no incluye contactos ni motivos de cancelación.
+      required: [id, equipoId, propia, fecha, horaInicio, horaFin, estado, tipo, identificador, etiqueta]
+      properties:
+        bloqueoOperacionId: { type: string, format: uuid, readOnly: true, description: "Identidad compartida por los equipos de una misma solicitud de bloqueo. Las solicitudes independientes no se fusionan aunque coincidan actor y horario. En datos históricos, una identidad por fila." }
+        id: { type: string, format: uuid }
+        reservaGrupoId: { type: string, format: uuid }
+        equipoId: { type: string, format: uuid }
+        creadoPor: { type: string, format: uuid }
+        propia: { type: boolean, description: "Pertenece al usuario que consulta." }
+        nombreDocenteSnapshot: { type: string }
+        fecha: { type: string, format: date }
+        horaInicio: { type: string, example: "08:00" }
+        horaFin: { type: string, example: "09:30" }
+        estado: { type: string, enum: [CONFIRMADA, FINALIZADA, NO_RETIRADA, CANCELADA] }
+        tipo: { type: string, enum: [NORMAL, BLOQUEO] }
+        motivoBloqueo: { type: string }
+        identificador: { type: integer }
+        etiqueta: { type: string, example: "PC 4" }
+        carroNombre: { type: string }
+        materiaNombre: { type: string }
+        cursoNombre: { type: string }
+        cursoModalidad: { type: string }
+        reglaRecurrenciaId: { type: string, format: uuid }
 
     BloqueoRequest:
       type: object
@@ -1254,7 +1399,7 @@ paths:
               type: object
               required: [credential]
               properties:
-                credential: { type: string, description: ID token emitido por Google }
+                credential: { type: string, description: "ID token emitido por Google" }
                 recordarme:
                   type: boolean
                   default: false
@@ -2149,6 +2294,37 @@ paths:
         "201": { description: "Curso creado" }
         "400": { description: "Falta el año o está fuera del rango 1-15, o la división o la modalidad son demasiado largas" }
 
+  /api/cursos/{id}/impacto-prioridades:
+    post:
+      tags: [academic]
+      summary: Revisar las prioridades afectadas por editar un curso (Admin)
+      description: Consulta sin cambios de datos. La confirmación vuelve a comprobar la versión del impacto.
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [anio]
+              properties:
+                anio: { type: integer, minimum: 1, maximum: 15 }
+                division: { type: string, maxLength: 12 }
+                modalidad: { type: string, maxLength: 80 }
+      responses:
+        "200":
+          description: Impacto y versión para confirmar el cambio.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImpactoEdicionCurso' }
+        "400": { description: "Año, división o modalidad inválidos." }
+        "403": { description: "Requiere rol ADMIN." }
+        "404": { description: "Curso inexistente." }
+        "409": { description: "Ciclo archivado." }
+
   /api/cursos/{id}:
     get:
       summary: Obtener un curso (cualquier usuario autenticado)
@@ -2170,6 +2346,13 @@ paths:
               schema: { $ref: '#/components/schemas/Curso' }
         "404": { description: "No existe" }
     patch:
+      description: |
+        Revisar previamente POST /api/cursos/{id}/impacto-prioridades. Si el
+        cambio altera marcas, exige versionImpacto y decisionPrioridades.
+        conservar_exactas conserva las marcas exactas con el curso y copia las
+        compartidas cuando corresponde; aceptar_alcance mantiene las marcas
+        en su alcance anterior. Una versión desactualizada o un destino con
+        prioridades incompatibles se rechazan sin efectos parciales.
       tags: [academic]
       summary: Editar nombre de un curso (Admin)
       security: [{ bearerAuth: [] }]
@@ -2180,18 +2363,22 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               type: object
+              required: [anio]
               properties:
+                versionImpacto: { type: string }
+                decisionPrioridades: { type: string, enum: [conservar_exactas, aceptar_alcance] }
                 anio: { type: integer, minimum: 1, maximum: 15, example: 4, description: "Obligatorio: todos los ámbitos organizan sus cursos por año" }
                 division: { type: string, maxLength: 12, example: "2", description: "Opcional. Ausente = la institución no divide sus cursos" }
                 modalidad: { type: string, maxLength: 80, example: "Electromecánica", description: "Opcional. Modalidad, orientación o carrera" }
       responses:
         "200": { description: "Curso actualizado" }
         "400": { description: "Falta el año o está fuera del rango 1-15, o la división o la modalidad son demasiado largas" }
-        "409": { description: "Ya existe otro curso con ese año, esa división y esa modalidad en el mismo ciclo (sin distinguir tildes ni mayúsculas). Dos modalidades distintas SÍ pueden tener cada una su \"1°A\"" }
+        "409": { description: "Impacto sin revisar o desactualizado, prioridades incompatibles, ciclo archivado, o ya existe otro curso con ese año, esa división y esa modalidad en el mismo ciclo (sin distinguir tildes ni mayúsculas). Dos modalidades distintas SÍ pueden tener cada una su \"1°A\"" }
     delete:
       tags: [academic]
       summary: Eliminar un curso (Admin)
@@ -2306,7 +2493,7 @@ paths:
       responses:
         "200": { description: "Materia actualizada" }
         "400": { description: "El nombre está vacío o pasa los 100 caracteres" }
-        "409": { description: "Ya existe otra materia con ese nombre en el mismo curso, sin distinguir tildes ni mayúsculas" }
+        "409": { description: "Materia interna de un espacio, ciclo archivado, o nombre duplicado en el mismo curso" }
     delete:
       tags: [academic]
       summary: Eliminar una materia (Admin)
@@ -2322,7 +2509,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200": { description: "Materia eliminada" }
-        "409": { description: "La materia tiene reservas asociadas — no se puede eliminar" }
+        "409": { description: "Materia interna de un espacio, ciclo archivado, o materia con reservas asociadas; no se elimina" }
 
   /api/materias/{materiaId}/docentes:
     get:
@@ -3021,6 +3208,43 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ResultadoCascada' }
 
+  /api/equipos/{id}/rotulo:
+    patch:
+      tags: [inventory]
+      summary: Renumerar una computadora de carro conservando su identidad
+      description: |
+        Solo Admin. Conserva ID, serie, reservas, préstamos, incidencias, cuentas,
+        licencias y prioridades. Las consultas actuales muestran el nuevo rótulo;
+        auditoría y snapshots de ciclos cerrados conservan su historia.
+        Rechaza equipos dados de baja, equipos sueltos, números ocupados en el
+        carro y formularios cuyo identificadorActual ya no coincide. Registra
+        anterior, nuevo, motivo y actor. No intercambia rótulos con otro equipo.
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identificadorActual, identificador, motivo]
+              properties:
+                identificadorActual: { type: integer, minimum: 1, maximum: 2147483647 }
+                identificador: { type: integer, minimum: 1, maximum: 2147483647 }
+                motivo: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "204": { description: "Rótulo actualizado o sin cambios; no devuelve cuerpo." }
+        "400": { description: "Número o motivo inválidos, o equipo sin rótulo numérico." }
+        "401": { description: "Requiere autenticación." }
+        "403": { description: "Solo administradores." }
+        "404": { description: "Equipo inexistente." }
+        "409": { description: "Número ocupado, equipo dado de baja o formulario desactualizado." }
+
   /api/equipos/{equipoId}/calendario:
     get:
       tags: [inventory]
@@ -3198,7 +3422,7 @@ paths:
         "400": { description: "Falta la PC nueva, o el alcance no es uno de los dos valores" }
         "403": { description: "La reserva es de otra persona y quien pide no es Admin" }
         "404": { description: "La reserva no existe" }
-        "409": { description: "La reserva ya no está vigente o cambió concurrentemente, o la PC nueva no está disponible o ya tiene reserva en esa franja. Con ESTA_Y_SIGUIENTES el mensaje nombra la fecha del choque y no se cambia ninguna ocurrencia" }
+        "409": { description: "La reserva ya tuvo una entrega (aunque se haya devuelto), ya no está vigente o cambió concurrentemente, o la PC nueva no está disponible o ya tiene reserva en esa franja. Con ESTA_Y_SIGUIENTES el mensaje nombra la fecha del choque y no se cambia ninguna ocurrencia" }
 
   /api/prestamos:
     get:
@@ -3303,6 +3527,17 @@ paths:
       tags: [reservation]
       summary: Entregar las computadoras de una reserva (Admin)
       description: |
+        La entrega sólo se admite el día local de la reserva y antes de su fin
+        exclusivo, incluidas las horas nocturnas. Permite preparar el retiro
+        antes del inicio ese mismo día si no interfiere con otra reserva
+        confirmada o bloqueo entre el retiro real y el fin previsto, excluyendo
+        la propia reserva. El conflicto se informa por equipo como
+        RESERVA_INTERMEDIA con fecha y horario en detalle; esa reserva se conserva
+        incluso al liberar las no entregadas del mismo grupo. Se comprueba bajo
+        coordinación exclusiva para evitar nuevas reservas concurrentes durante
+        la entrega. Permite atender una NO_RETIRADA aún vigente.
+        RESERVA_NO_VIGENTE se informa por equipo, con HTTP 200 para el lote.
+
         Se mandan las Reserva puntuales (una por PC), no el grupo: el retiro
         es máquina por máquina, porque el docente puede llevarse tres de las
         cinco que reservó. Las otras siguen reservadas salvo que se declare
@@ -3326,12 +3561,20 @@ paths:
           application/json:
             schema:
               type: object
-              required: [reservaIds]
+              required: [reservaIds, equiposEsperados]
               properties:
                 reservaIds:
                   type: array
                   minItems: 1
                   items: { type: string, format: uuid }
+                equiposEsperados:
+                  type: object
+                  minProperties: 1
+                  additionalProperties: { type: string, format: uuid }
+                  description: |
+                    Mapa reservaId -> equipoId revisado al confirmar. Obligatorio
+                    para cada reserva solicitada. Si algún equipo ya no coincide,
+                    se rechaza todo el lote antes de entregar o liberar dispositivos.
                 liberarNoEntregadas:
                   type: boolean
                   default: false
@@ -3374,7 +3617,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ResultadoEntrega' }
-        "400": { description: "Sin reservas indicadas" }
+        "400": { description: "Sin reservas indicadas o falta equiposEsperados para alguna reserva solicitada" }
+        "409": { description: "El equipo de una reserva cambió; revisar y confirmar nuevamente. No se entrega ni libera ninguna del lote." }
         "404": { description: "Alguna de las reservas no existe; no se confirma ningún cambio del lote" }
 
   /api/prestamos/recibir:
@@ -3930,7 +4174,7 @@ paths:
                         modalidad: { type: string }
                         anio: { type: integer, minimum: 1, maximum: 15 }
                         division: { type: string }
-        "403": { description: Solo ADMIN }
+        "403": { description: "Solo ADMIN" }
 
   /api/materias-en-uso:
     get:
@@ -4355,6 +4599,46 @@ paths:
         "404": { description: "La reserva no existe" }
         "409": { description: "Ya se pidió por esa reserva hoy; o la reserva no está CONFIRMADA; o su franja ya empezó; o es un bloqueo administrativo, que no tiene docente a quien pedirle" }
 
+  /api/calendario/reservas:
+    get:
+      tags: [reservations]
+      summary: Calendario compartido de reservas para docentes y administradores
+      description: |
+        Consulta de lectura, sin ampliar los permisos de GET /api/reservas ni
+        las operaciones de gestión. Desde y hasta son obligatorios, inclusivos,
+        con un máximo de 42 días. También consulta el día anterior para que la
+        vista pueda representar reservas que continúan después de medianoche.
+        Ambito mias filtra por el usuario autenticado; todas comparte ocupación
+        con cualquier usuario autenticado. No admite elegir otra identidad para mias.
+        Los bloqueos se agrupan por bloqueoOperacionId, nunca por actor y franja.
+        Pagina clases y bloqueos completos: meta.total y pageSize cuentan clases,
+        mientras data contiene sus equipos y puede superar pageSize. Se deben
+        recorrer las páginas según meta, no según el número de filas de data.
+        Sin incluirCanceladas se ocultan las clases completamente canceladas;
+        los miembros cancelados de una clase vigente se conservan para dar contexto.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: desde, required: true, schema: { type: string, format: date } }
+        - { in: query, name: hasta, required: true, schema: { type: string, format: date } }
+        - { in: query, name: ambito, schema: { type: string, enum: [mias, todas], default: todas } }
+        - { in: query, name: busqueda, schema: { type: string, maxLength: 100 }, description: "Materia, curso o modalidad." }
+        - { in: query, name: incluirCanceladas, schema: { type: boolean, default: false } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/pageSize' }
+      responses:
+        "200":
+          description: Equipos de las clases de esta página y paginación por clases.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ReservaCalendario' } }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        "400": { description: "Rango, ámbito, búsqueda o paginación inválidos." }
+        "401": { description: "Requiere autenticación." }
+
   /api/reservas:
     get:
       tags: [reservations]
@@ -4418,6 +4702,10 @@ paths:
       tags: [reservations]
       summary: Crear reserva (uno o varios equipos en un solo grupo)
       description: |
+        El rango y el intervalo real deben quedar dentro del año del ciclo de
+        la materia. Un exceso, incluido el fin nocturno, devuelve 400 sin crear
+        ni desplazar reservas; una serie no se recorta silenciosamente.
+
         Operación transaccional: si alguna PC del arreglo tiene solapamiento, no se
         confirma ninguna, salvo desplazamientos autorizados mediante equiposATomar.
         Éstos reponen las reservas desplazadas en cascada: primero dispositivos
@@ -4470,6 +4758,10 @@ paths:
       tags: [reservations]
       summary: Comprobar equipos en todas las fechas de una serie sin crear reservas
       description: |
+        El rango y el intervalo real deben quedar dentro del año del ciclo de
+        la materia. Un exceso, incluido el fin nocturno, devuelve 400 sin crear
+        ni desplazar reservas; una serie no se recorta silenciosamente.
+
         Aplica los permisos, jornada, límites y reglas de prioridad de la creación.
         Máximo 45 clases. No guarda reglas, reservas ni avisos. La disponibilidad
         puede cambiar; al confirmar se valida nuevamente en una transacción.
@@ -4516,16 +4808,20 @@ paths:
                               etiqueta: { type: string }
                               estado: { type: string, enum: [LIBRE, POR_PRIORIDAD, NO_DISPONIBLE] }
                               motivo: { type: string }
-        "400": { description: Fechas, horario, día, cantidad de equipos o tamaño de serie inválidos }
-        "401": { description: Sesión requerida }
-        "403": { description: La materia no está asignada al docente }
-        "409": { description: Materia o equipos no reservables }
+        "400": { description: "Fechas, horario, día, cantidad de equipos o tamaño de serie inválidos" }
+        "401": { description: "Sesión requerida" }
+        "403": { description: "La materia no está asignada al docente" }
+        "409": { description: "Materia o equipos no reservables" }
 
   /api/reservas/recurrentes:
     post:
       tags: [reservations]
       summary: Crear reserva recurrente (uno o varios equipos, valida todas las ocurrencias antes de crear)
-      description: >
+      description: |
+        El rango y el intervalo real deben quedar dentro del año del ciclo de
+        la materia. Un exceso, incluido el fin nocturno, devuelve 400 sin crear
+        ni desplazar reservas; una serie no se recorta silenciosamente.
+
         Máximo 45 clases. El backend cuenta las ocurrencias sin recorrer el
         rango y rechaza el exceso antes de generar fechas o materializar la serie.
       security: [{ bearerAuth: [] }]
@@ -4643,11 +4939,65 @@ paths:
         "404": { description: "No encontrada" }
         "409": { description: "La reserva ya está en un estado terminal o cambió concurrentemente" }
 
+  /api/bloqueos/{id}/levantar:
+    post:
+      tags: [reservations]
+      summary: Levantar una operación completa de bloqueo (Admin)
+      description: |
+        El ID es bloqueoOperacionId, no un listado de reservas. Bloquea todas sus
+        filas por ID y cancela las confirmadas, sin depender de filtros o páginas.
+        Valida los permisos de todo el lote antes de escribir. El motivo es
+        obligatorio si el bloqueo pertenece a otra cuenta o no conserva creador.
+
+        La operación es transaccional e idempotente. Conserva motivo, actor y fecha
+        de las filas ya canceladas y respeta los estados terminales. Puede completar
+        un lote parcialmente cancelado antes. Repetir una orden aplicada devuelve
+        200 sin nuevas escrituras, auditorías ni avisos. No reactiva las reservas
+        canceladas al crear el bloqueo ni modifica otras operaciones coincidentes.
+
+        Escrituras, auditoría BLOQUEO_LEVANTADO y avisos durables se confirman juntos;
+        un fallo revierte todo el lote. Los bloqueos históricos conservan la
+        identidad individual asignada por la migración 033. No requiere otra migración.
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid }, description: "Identidad de la operación de bloqueo." }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                motivo: { type: string, description: "Obligatorio al levantar un bloqueo ajeno; opcional para el propio." }
+      responses:
+        "200":
+          description: Operación aplicada o ya completada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bloqueoOperacionId, reservasCanceladas, reservasYaCanceladas, reservasNoVigentes]
+                properties:
+                  bloqueoOperacionId: { type: string, format: uuid }
+                  reservasCanceladas: { type: integer, minimum: 0, description: "Filas confirmadas canceladas en esta ejecución." }
+                  reservasYaCanceladas: { type: integer, minimum: 0, description: "Filas que ya estaban canceladas y no se reescribieron." }
+                  reservasNoVigentes: { type: integer, minimum: 0, description: "Otros estados terminales conservados." }
+        "400": { description: Identidad inválida, cuerpo inválido o motivo obligatorio ausente }
+        "401": { description: Sin autenticación }
+        "403": { description: Requiere rol ADMIN vigente }
+        "404": { description: No existe esa operación de bloqueo }
+        "500": { description: No se confirmó el lote; se puede reintentar con la misma identidad }
+
   /api/bloqueos:
     post:
       tags: [reservations]
       summary: Bloquear equipos en un rango horario definido, indicando por qué (Admin)
       description: |
+        Cada solicitud genera un bloqueoOperacionId compartido por sus equipos.
+        Operaciones coincidentes conservan sus motivos y gestión independientes.
+        Para levantar el lote completo se usa POST /api/bloqueos/{id}/levantar.
+
         Un Admin toma los equipos para otra cosa, por el motivo que sea.
 
         Cancela solo las Reserva puntuales en conflicto dentro del rango exacto — el
@@ -5891,7 +6241,7 @@ paths:
       security: [{ bearerAuth: [] }]
       x-roles: [ADMIN]
       parameters:
-        - { name: pendientes, in: query, schema: { type: boolean }, description: Solo los que faltan resolver }
+        - { name: pendientes, in: query, schema: { type: boolean }, description: "Solo los que faltan resolver" }
       responses:
         "200":
           description: "Respuesta correcta: Listar pedidos (Admin)"
@@ -6001,7 +6351,7 @@ paths:
       summary: Ver todas las conversaciones (Admin)
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: abiertas, in: query, schema: { type: boolean }, description: Solo lo que falta contestar }
+        - { name: abiertas, in: query, schema: { type: boolean }, description: "Solo lo que falta contestar" }
         - { $ref: '#/components/parameters/page' }
         - { $ref: '#/components/parameters/pageSize' }
       responses:
@@ -6047,10 +6397,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Sugerencia' }
-        "400": { description: Identificador inválido }
-        "401": { description: Sesión ausente o inválida }
-        "403": { description: La conversación es de otra persona }
-        "404": { description: No existe esa conversación }
+        "400": { description: "Identificador inválido" }
+        "401": { description: "Sesión ausente o inválida" }
+        "403": { description: "La conversación es de otra persona" }
+        "404": { description: "No existe esa conversación" }
 
   /api/sugerencias/{id}/mensajes:
     post:
@@ -6105,3 +6455,75 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Sugerencia' }
         "409": { description: "Ya estaba resuelta" }
+
+  /api/configuracion/operacion:
+    get:
+      tags: [configuracion]
+      summary: Consultar plazos operativos (Admin)
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      responses:
+        "200":
+          description: Configuración institucional vigente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConfiguracionOperacion' }
+        "401": { description: Sin autenticación }
+        "403": { description: Requiere administrador }
+        "503": { description: No se pudo leer la configuración }
+    put:
+      tags: [configuracion]
+      summary: Guardar plazos operativos (Admin)
+      description: >
+        Reemplaza los cinco valores junto con la versión consultada. Se aplican a
+        los siguientes barridos sin reiniciar. Coordina con las operaciones de la
+        institución y confirma su auditoría en la misma transacción. No recupera
+        reservas liberadas ni repite avisos enviados. Los valores de entorno se
+        importan sólo al crear la configuración.
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfiguracionOperacion' }
+      responses:
+        "200":
+          description: Configuración guardada con su versión nueva
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConfiguracionOperacion' }
+        "400": { description: Campos ausentes, nulos o fuera de rango }
+        "401": { description: Sin autenticación }
+        "403": { description: Requiere administrador }
+        "409": { description: Otra persona cambió la configuración; recargar antes de guardar }
+        "503": { description: No se aplicaron cambios }
+
+  /api/ciclos/{cicloId}/actividad:
+    get:
+      tags: [reporting]
+      summary: Separar reservas y entregas efectivas del ciclo (Admin)
+      description: >
+        Cuenta reservas solicitadas, atendidas, no retiradas y canceladas aparte de
+        los préstamos con reserva, sin reserva y antiguos de origen no determinado.
+        Una reserva atendida cuenta una vez; cada préstamo conserva su movimiento.
+        Los préstamos independientes corresponden al año local del retiro; los que
+        tienen contexto académico conservan su ciclo. No se vinculan por nombre,
+        fecha, destino o PC. La lectura coordina con el cierre. En ciclos archivados
+        devuelve el resumen sellado completo, o disponible=false si ese detalle
+        todavía no existía. El histórico no acepta filtros de fecha.
+      security: [{ bearerAuth: [] }]
+      x-roles: [ADMIN]
+      parameters:
+        - { name: cicloId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Planificación y movimientos independientes, por equipo y responsable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActividadCiclo' }
+        "400": { description: Ciclo o rango inválido, o filtros sobre un histórico sellado }
+        "401": { description: Sin autenticación }
+        "403": { description: Requiere administrador }

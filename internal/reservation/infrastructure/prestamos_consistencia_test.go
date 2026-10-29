@@ -27,8 +27,8 @@ func loteDePrestamosReal(t *testing.T, pool *pgxpool.Pool) loteDePrestamos {
 	t.Helper()
 	ctx := context.Background()
 	repo := NewPostgresRepo(pool)
-	materia := crearMateriaDeTest(t, pool)
-	g := nuevoReservaGrupoDeTest(materia, diaDe(2026, 3, 2), 8*time.Hour, 9*time.Hour)
+	materia := crearMateriaDeTest(t, pool, 2026)
+	g := nuevoReservaGrupoDeTest(t, materia, diaDe(2026, 3, 2), 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestPrestamosConsistencia_LotesAtomicosYParciales(t *testing.T) {
 	for _, devuelta := range []bool{false, true} {
 		t.Run(fmt.Sprintf("segunda-tanda-devuelta-%v", devuelta), func(t *testing.T) {
 			l := loteDePrestamosReal(t, pool)
-			a, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:1]})
+			a, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:1], EquiposEsperados: l.esperados(l.reservas[:1])})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -92,7 +92,7 @@ func TestPrestamosConsistencia_LotesAtomicosYParciales(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			b, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[1:2], LiberarNoEntregadas: true})
+			b, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[1:2], EquiposEsperados: l.esperados(l.reservas[1:2]), LiberarNoEntregadas: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -109,8 +109,8 @@ func TestPrestamosConsistencia_LotesAtomicosYParciales(t *testing.T) {
 	}
 	t.Run("conflicto-previsto-no-aborta-la-transaccion", func(t *testing.T) {
 		l := loteDePrestamosReal(t, pool)
-		crearPrestamoDeTest(t, l.repo, entregaDeTest(l.equipos[1]), time.Now())
-		r, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas})
+		crearPrestamoDeTest(t, l.repo, entregaDeTest(l.equipos[1]), ahoraDeTest())
+		r, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas, EquiposEsperados: l.esperados(l.reservas)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -139,7 +139,7 @@ func TestPrestamosConsistencia_LotesAtomicosYParciales(t *testing.T) {
 	})
 	t.Run("reserva-inexistente", func(t *testing.T) {
 		l := loteDePrestamosReal(t, pool)
-		r, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: []string{l.reservas[0], NuevoID()}, LiberarNoEntregadas: true})
+		r, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: []string{l.reservas[0], NuevoID()}, EquiposEsperados: l.esperados([]string{l.reservas[0], NuevoID()}), LiberarNoEntregadas: true})
 		if !errors.Is(err, application.ErrReservaNoEncontrada) || r != nil {
 			t.Fatalf("resultado: %+v %v", r, err)
 		}
@@ -162,7 +162,7 @@ func TestPrestamosConsistencia_LotesAtomicosYParciales(t *testing.T) {
 				if tipo == "liberacion" {
 					ids = ids[:1]
 				}
-				r, err = l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: ids, LiberarNoEntregadas: tipo == "liberacion"})
+				r, err = l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: ids, EquiposEsperados: l.esperados(ids), LiberarNoEntregadas: tipo == "liberacion"})
 			}
 			if err == nil || r != nil {
 				t.Fatalf("resultado ante fallo: %+v %v", r, err)
@@ -189,10 +189,10 @@ func TestPrestamosConsistencia_LotesAtomicosYParciales(t *testing.T) {
 				fallarPrestamosSQL(t, pool, "prestamo", "UPDATE", "id", ids[1])
 			}
 			var eventos int
-			l.svc = application.NewService(l.repo, nil, NewValidadorEquipoPostgres(pool), nil, nil, NuevoID, time.Now, eventbus.NewInMemoryEventBus())
+			l.svc = application.NewService(l.repo, nil, NewValidadorEquipoPostgres(pool), nil, nil, NuevoID, ahoraDeTest, eventbus.NewInMemoryEventBus())
 			bus := eventbus.NewInMemoryEventBus()
 			bus.Subscribe("prestamo.cierre.pendientes", func(eventbus.Evento) { eventos++ })
-			l.svc = application.NewService(l.repo, nil, NewValidadorEquipoPostgres(pool), nil, nil, NuevoID, time.Now, bus)
+			l.svc = application.NewService(l.repo, nil, NewValidadorEquipoPostgres(pool), nil, nil, NuevoID, ahoraDeTest, bus)
 			r, err := l.svc.RecibirEquipos(ctx, ids, "", "fallo")
 			if err == nil || r != nil {
 				t.Fatalf("resultado ante fallo: %+v %v", r, err)
@@ -211,7 +211,10 @@ func TestPrestamosConsistencia_LotesAtomicosYParciales(t *testing.T) {
 	t.Run("grupo-recalculado-en-la-misma-transaccion", func(t *testing.T) {
 		l := loteDePrestamosReal(t, pool)
 		sqlDePrestamos(t, pool, `UPDATE reserva SET estado='FINALIZADA' WHERE id=$1`, l.reservas[0])
-		if _, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:1], LiberarNoEntregadas: true}); err != nil {
+		// El equipo finalizado se conserva como antecedente; el retiro válido
+		// corresponde a la segunda PC, liberada pero aún dentro de su franja.
+		sqlDePrestamos(t, pool, `UPDATE reserva SET estado='NO_RETIRADA' WHERE id=$1`, l.reservas[1])
+		if _, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[1:2], EquiposEsperados: l.esperados(l.reservas[1:2]), LiberarNoEntregadas: true}); err != nil {
 			t.Fatal(err)
 		}
 		g, err := l.repo.BuscarReservaGrupoPorID(ctx, l.grupo)
@@ -222,18 +225,18 @@ func TestPrestamosConsistencia_LotesAtomicosYParciales(t *testing.T) {
 	// La escritura condicional también protege al caller que guarda una copia vieja.
 	t.Run("copia-obsoleta-no-reescribe-devolucion", func(t *testing.T) {
 		l := loteDePrestamosReal(t, pool)
-		p := crearPrestamoDeTest(t, l.repo, entregaDeTest(l.equipos[0]), time.Now().Add(-time.Hour))
+		p := crearPrestamoDeTest(t, l.repo, entregaDeTest(l.equipos[0]), ahoraDeTest().Add(-time.Hour))
 		vieja, err := l.repo.BuscarPrestamoPorID(ctx, p.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := p.Devolver("", "primera", time.Now()); err != nil {
+		if err := p.Devolver("", "primera", ahoraDeTest()); err != nil {
 			t.Fatal(err)
 		}
 		if err := l.repo.GuardarPrestamo(ctx, p); err != nil {
 			t.Fatal(err)
 		}
-		if err := vieja.Devolver("", "segunda", time.Now().Add(time.Minute)); err != nil {
+		if err := vieja.Devolver("", "segunda", ahoraDeTest().Add(time.Minute)); err != nil {
 			t.Fatal(err)
 		}
 		if err := l.repo.GuardarPrestamo(ctx, vieja); !errors.Is(err, domain.ErrPrestamoYaDevuelto) {
@@ -285,7 +288,7 @@ func TestPrestamosConsistencia_EntregaConcurrentePreservaLaPrimeraTanda(t *testi
 	}
 	a, b := make(chan respuesta, 1), make(chan respuesta, 1)
 	go func() {
-		r, err := primeraSvc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:1]})
+		r, err := primeraSvc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:1], EquiposEsperados: l.esperados(l.reservas[:1])})
 		a <- respuesta{r, err}
 	}()
 	select {
@@ -294,12 +297,19 @@ func TestPrestamosConsistencia_EntregaConcurrentePreservaLaPrimeraTanda(t *testi
 		t.Fatal("la entrega no llegó a la pausa")
 	}
 	go func() {
-		r, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[1:2], LiberarNoEntregadas: true})
+		r, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[1:2], EquiposEsperados: l.esperados(l.reservas[1:2]), LiberarNoEntregadas: true})
 		b <- respuesta{r, err}
 	}()
 	for {
 		var espera bool
-		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE '%ORDER BY id FOR UPDATE%')`).Scan(&espera); err != nil {
+		// La entrega puede esperar en la coordinación institucional o en las filas.
+		// Se observa el bloqueo entre conexiones de esta base aislada, sin depender
+		// del texto de una consulta que podría ejecutarse después de esa espera.
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(
+			SELECT 1 FROM pg_stat_activity
+			WHERE datname=current_database() AND pid<>pg_backend_pid()
+			AND wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid))>0
+		)`).Scan(&espera); err != nil {
 			t.Fatal(err)
 		}
 		if espera {
@@ -365,4 +375,16 @@ func TestPrestamosConsistencia_DevolucionesSimultaneasNoSeSobrescriben(t *testin
 	if err != nil || guardado.Observaciones != ganadora.observacion || guardado.RecibidoPor == nil || *guardado.RecibidoPor != ganadora.receptor || !guardado.DevueltoEn.Equal(*ganadora.r.Recibidos[0].DevueltoEn) {
 		t.Fatalf("la segunda devolución sobrescribió la primera: %+v %v", guardado, err)
 	}
+}
+
+func (l loteDePrestamos) esperados(ids []string) map[string]string {
+	equipos := make(map[string]string)
+	for _, id := range ids {
+		for i, reserva := range l.reservas {
+			if id == reserva {
+				equipos[id] = l.equipos[i]
+			}
+		}
+	}
+	return equipos
 }

@@ -206,7 +206,7 @@ func (e escenarioInstitucional) entregar(ctx context.Context, svc *reservationap
 	if suelta {
 		return svc.EntregarSuelta(ctx, reservationapp.EntregaSueltaParams{EquipoIDs: []string{e.d.equipo}, Nombre: "Ada Docente"})
 	}
-	return svc.EntregarPorReserva(ctx, reservationapp.EntregaPorReservaParams{ReservaIDs: []string{e.reservaID}})
+	return svc.EntregarPorReserva(ctx, reservationapp.EntregaPorReservaParams{ReservaIDs: []string{e.reservaID}, EquiposEsperados: map[string]string{e.reservaID: e.d.equipo}})
 }
 
 func TestInventarioCoordinado_ReservasYMantenimiento(t *testing.T) {

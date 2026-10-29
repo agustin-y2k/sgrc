@@ -56,6 +56,11 @@ const LicenciasPage = lazy(() =>
     default: modulo.LicenciasPage,
   }))
 )
+const ConfiguracionPage = lazy(() =>
+  import("@/features/admin/ConfiguracionPage").then((m) => ({
+    default: m.ConfiguracionPage,
+  }))
+)
 const ReportesPage = lazy(() =>
   import("@/features/admin/ReportesPage").then((modulo) => ({
     default: modulo.ReportesPage,
@@ -111,6 +116,11 @@ const MisReservasPage = lazy(() =>
     default: modulo.MisReservasPage,
   }))
 )
+const CalendarioReservasPage = lazy(() =>
+  import("@/features/calendario/CalendarioReservas").then((modulo) => ({
+    default: modulo.CalendarioReservasPage,
+  }))
+)
 const NuevaReservaPage = lazy(() =>
   import("@/features/reservas/NuevaReservaPage").then((modulo) => ({
     default: modulo.NuevaReservaPage,
@@ -161,6 +171,7 @@ const router = createBrowserRouter([
                 element: <Navigate to="/notificaciones" replace />,
               },
               { path: "/reservas", element: <MisReservasPage /> },
+              { path: "/reservas/calendario", element: <CalendarioReservasPage /> },
               { path: "/reservas/nueva", element: <NuevaReservaPage /> },
               { path: "/inventario", element: <InventarioPage /> },
               // RF-07.2: cualquier usuario autenticado, no solo Admins. Editar
@@ -180,6 +191,7 @@ const router = createBrowserRouter([
                   { path: "/admin/licencias", element: <LicenciasPage /> },
                   { path: "/admin/entregas", element: <EntregasPage /> },
                   { path: "/admin/reportes", element: <ReportesPage /> },
+                  { path: "/admin/configuracion", element: <ConfiguracionPage /> },
                   { path: "/admin/jornada", element: <JornadaPage /> },
                   { path: "/admin/auditoria", element: <AuditoriaPage /> },
                   {

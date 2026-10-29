@@ -75,6 +75,7 @@ export function excedeDuracionMaxima(horaInicio: string, horaFin: string): boole
 export type Reserva = {
   id: string
   reservaGrupoId?: string
+  bloqueoOperacionId?: string
   equipoId: string
   materiaId?: string
   nombreDocenteSnapshot?: string
@@ -98,6 +99,7 @@ export type Reserva = {
  * /api/reservas` (espeja reservaDetalladaResponse).
  */
 export type ReservaDetallada = Reserva & {
+  tuvoEntrega?: boolean
   /** Cómo se nombra el equipo: "PC 3" o "Proyector Epson". */
   etiqueta: string
   /** 0 en un equipo suelto; el carro, vacío. Lo que se muestra es `etiqueta`. */
@@ -114,6 +116,7 @@ export type ReservaDetallada = Reserva & {
 export type GrupoDeReservas = {
   /** Ausente si la reserva no pertenece a ningún grupo. */
   grupoId?: string
+  bloqueoOperacionId?: string
   /** Un bloqueo administrativo (RF-04.7). */
   esBloqueo: boolean
   /** Por qué se tomaron los equipos. Solo en los bloqueos. */
@@ -133,7 +136,7 @@ export type GrupoDeReservas = {
 function claveDeAgrupacion(r: ReservaDetallada): string {
   if (r.reservaGrupoId) return r.reservaGrupoId
   if (r.tipo === "BLOQUEO") {
-    return `bloqueo:${r.creadoPor ?? "sistema"}:${r.fecha}:${r.horaInicio}:${r.horaFin}`
+    return `bloqueo:${r.bloqueoOperacionId ?? r.id}`
   }
   return `sin-grupo:${r.id}`
 }
@@ -155,6 +158,7 @@ export function agruparReservas(reservas: ReservaDetallada[]): GrupoDeReservas[]
     }
     grupos.set(clave, {
       grupoId: r.reservaGrupoId,
+      bloqueoOperacionId: r.bloqueoOperacionId,
       esBloqueo: r.tipo === "BLOQUEO",
       motivoBloqueo: r.motivoBloqueo,
       fecha: r.fecha,
@@ -289,11 +293,27 @@ export type ResultadoBloqueo = {
 // ── Entregas y devoluciones (RF-08) ───────────────────────────────────
 // Espeja internal/reservation/interfaces/http/dto_prestamos.go.
 
+export type ContextoAcademicoPrestamo = {
+  reservaIdOriginal: string
+  materiaId: string
+  materiaNombre: string
+  contenedorId: string
+  contenedorTipo: "CURSO" | "ESPACIO"
+  contenedorNombre: string
+  cursoAnio?: number
+  cursoDivision?: string
+  modalidad?: string
+  cicloId: string
+  cicloAnio: number
+  reconstruido: boolean
+}
+
 export type Prestamo = {
   id: string
   equipoId: string
-  /** Ausente = préstamo espontáneo, sin reserva detrás. */
+  /** También puede faltar después del cierre anual. */
   reservaId?: string
+  contextoAcademico?: ContextoAcademicoPrestamo
 
   entregadoAUsuarioId?: string
   /** Quién RESPONDE por el equipo: contra una reserva, siempre el docente. */
@@ -331,6 +351,8 @@ export type RazonNoEntregada =
   | "YA_ENTREGADA"
   | "FUERA_DEL_INVENTARIO"
   | "RESERVA_CANCELADA"
+  | "RESERVA_NO_VIGENTE"
+  | "RESERVA_INTERMEDIA"
   | "RESERVA_REUBICADA"
   /** La reserva no dice a nombre de quién: es un bloqueo administrativo. */
   | "SIN_DESTINATARIO"
@@ -366,4 +388,9 @@ export type ResultadoEntrega = {
 export type ResultadoDevolucion = {
   recibidos: Prestamo[]
   noRecibidos?: { prestamoId: string; detalle: string }[]
+}
+
+/** Cada fila conserva la PC de sus entregas, incluidas las devueltas. */
+export function puedeCambiarEquipo(reserva: ReservaDetallada): boolean {
+  return reserva.estado === "CONFIRMADA" && !reserva.tuvoEntrega
 }

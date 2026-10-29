@@ -12,6 +12,7 @@ import (
 
 	"github.com/agustin-y2k/sgrc/internal/inventory/domain"
 	"github.com/agustin-y2k/sgrc/internal/shared/eventbus"
+	"github.com/agustin-y2k/sgrc/internal/shared/prioridadcurso"
 	"github.com/agustin-y2k/sgrc/internal/shared/secretos"
 	"github.com/agustin-y2k/sgrc/internal/shared/texto"
 )
@@ -1517,4 +1518,8 @@ func (r *fakeRepo) ExisteAlcancePreferencia(ctx context.Context, p *domain.Prefe
 		return r.validarAlcance(p)
 	}
 	return true, nil
+}
+
+func (r *fakeRepo) PrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) ([]prioridadcurso.Marca, error) {
+	return nil, nil
 }

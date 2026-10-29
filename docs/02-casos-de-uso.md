@@ -1,5 +1,29 @@
 # Casos de Uso (UML) — SGRC
 
+## Renumerar una computadora
+
+Admin abre Inventario → ficha del equipo → Editar → Cambiar número de PC.
+Comprueba la serie, escribe un número libre en el carro y el motivo, confirma
+que es la misma computadora y actualiza el rótulo físico. El sistema conserva
+el ID y todas sus relaciones. Si otra cuenta cambió el número mientras se
+completaba el formulario, exige recargar. Un número ocupado se rechaza sin
+modificar ninguno de los dos equipos. El cambio queda auditado.
+
+## Consultar el calendario compartido
+
+Los controles móviles alcanzan 44 × 44 px. Al gestionar una reserva cancelada se abre el listado con el filtro de canceladas activo. Cada bloqueo conserva su propia operación, motivo y equipos; las clases cortas y simultáneas no se superponen por ampliar sus áreas táctiles.
+
+
+Docentes y admins acceden desde Inicio o Reservas. Pueden alternar semana,
+mes y agenda, avanzar o retroceder, volver a Hoy, elegir una fecha, buscar
+materia/curso/modalidad y mostrar canceladas. El docente comienza con sus
+reservas; el admin, con todas. Ambos pueden elegir cualquiera de los ámbitos.
+Cada clase reúne sus equipos y cada ocurrencia recurrente tiene su propia fecha.
+Se muestran bloqueos, clases simultáneas y continuaciones después de medianoche.
+Al abrir una clase se ven los equipos y sus estados; la gestión se ofrece
+al propietario y al admin. Consultar otras materias no amplía los permisos
+de modificación ni altera las reglas de prioridad al reservar.
+
 ## Diagrama general
 
 ```mermaid
@@ -72,6 +96,9 @@ flowchart LR
 ## Especificación de casos de uso críticos
 
 ### UC: Reservar equipos (uno o varios)
+
+**Límite anual:** el intervalo debe quedar dentro del año de la materia. El 31/12 puede terminar a medianoche, como fin exclusivo, pero no continuar ocupando horas del 01/01. El rechazo ocurre antes de crear grupos, desplazar equipos o emitir avisos.
+
 - **Actores:** Docente (asignado a la materia), Admin
 - **Precondición:** Usuario autenticado con JWT, cuenta en estado `APROBADA`.
 - **Flujo:**
@@ -87,6 +114,9 @@ flowchart LR
 - **Por qué se muestran los tomados:** sin ellos, "no hay equipos libres" y "los tiene alguien con quien puedo hablar" se ven igual, y la segunda tiene salida. El dato ya era público —está en el calendario de cada equipo—, pero ahí no es donde se decide.
 
 ### UC: Reservar equipos en serie (recurrente)
+
+El rango solicitado y todas las clases deben pertenecer al año del ciclo, incluido el fin nocturno de la última ocurrencia real. Si se excede, se rechaza la serie completa; no se recorta a diciembre ni se traslada a la materia del año siguiente.
+
 - **Flujo:**
   1. Usuario indica materia, conjunto de equipos, día de semana, horario y rango de fechas.
   2. Sistema cuenta las ocurrencias sin recorrer el rango y exige entre 1 y 45; sólo entonces genera las fechas para el día elegido, que puede ser cualquiera de los siete. Cada pedido admite hasta 200 equipos.
@@ -119,6 +149,9 @@ flowchart LR
 - **Un Admin cancela algo ajeno:** motivo obligatorio → marca la `Reserva` `CANCELADA`, notifica al docente con ese texto y recalcula el estado del grupo.
 
 ### UC: Cambiar la máquina de una reserva (RF-08.14)
+
+Una reserva que ya tuvo un préstamo no puede cambiar de equipo, aunque éste haya vuelto. En una serie, una ocurrencia con entrega dentro del alcance solicitado impide modificar ese conjunto; se conserva la correspondencia entre reserva y custodia.
+
 - **Actores:** Docente (sobre las suyas), Admin (sobre cualquiera)
 - **Motivo:** la alternativa —cancelar esa reserva y hacer otra— arma un `ReservaGrupo` nuevo, así que la misma clase termina mostrada como dos tarjetas separadas.
 - **Flujo:**
@@ -133,6 +166,9 @@ flowchart LR
   - Solo se cambia una reserva `CONFIRMADA`. Una cancelada, finalizada o liberada por no retiro ya no reserva nada.
 
 ### UC: Bloquear equipos
+
+La solicitud define una operación con una o varias reservas de equipo. Se agrupan y paginan por esa identidad, no por fecha, franja o creador. Levantar un bloqueo no abre ni cancela otra operación coincidente.
+
 - **Actor:** Admin
 - **Motivo:** a veces el laboratorio se usa para otra cosa y las clases que había encima no pueden darse. Puede ser una evaluación, una jornada docente, una capacitación o una obra en el aula — **el sistema no sabe cuál y no tiene por qué**, así que pregunta.
 - **Precondición:** rango de fecha/hora **definido** de antemano.
@@ -241,7 +277,7 @@ flowchart LR
 - **Actor:** Admin
 - **Flujo:**
   1. Admin crea un carro (nombre, descripción) y lo edita cuando lo necesite.
-  2. Admin registra equipos dentro de un carro: identificador de zócalo, número de serie, `freezado`, CPU, RAM, sistema operativo y software instalado.
+  2. Admin registra equipos dentro de un carro: número del rótulo, número de serie, `freezado`, CPU, RAM, sistema operativo y software instalado.
   3. Admin edita los datos de un equipo en cualquier momento, y puede moverlo a otro carro.
   4. Admin cambia el estado de circulación (`DISPONIBLE`/`EN_MANTENIMIENTO`/`FUERA_DE_SERVICIO` — ver la cascada de cancelación más arriba).
   5. Admin puede dar de baja un equipo (soft delete: deja de listarse y de poder reservarse, pero su historial de incidencias, préstamos y reservas se conserva).
@@ -251,7 +287,7 @@ flowchart LR
 - **Reglas de deshacer una baja:**
   - **No revierte la cascada.** Las reservas que la baja canceló quedan canceladas y los avisos ya salieron: eso pasó y no se puede despasar. Lo que vuelve es la máquina al inventario.
   - **El estado no se toca**: si estaba `FUERA_DE_SERVICIO` vuelve así. Devolverla `DISPONIBLE` sería inventar que alguien la arregló.
-  - Puede **fallar porque alguien se quedó con lo que la baja liberó**: el zócalo dentro del carro, el nombre si es un equipo suelto, o el número de serie. No es un caso raro — liberarlos existe justamente para que otro los tome, y el sistema dice cuál de los tres está ocupado.
+  - Puede **fallar porque alguien se quedó con lo que la baja liberó**: el número de PC dentro del carro, el nombre si es un equipo suelto, o el número de serie. No es un caso raro — liberarlos existe justamente para que otro los tome, y el sistema dice cuál de los tres está ocupado.
   - Un equipo tampoco vuelve si **su carro se retiró** mientras estaba afuera: quedaría dentro de un contenedor que ninguna pantalla lista, que es peor que seguir dado de baja.
   - **Editar un equipo queda registrado** en la auditoría con cada campo que cambió y sus dos valores, el anterior y el nuevo. Un pedido que no mueve nada no deja entrada.
 - **Visibilidad:** el listado de carros y equipos —incluidos `software_instalado` y `freezado`— lo ve **cualquier usuario autenticado**, no solo Admin: un docente lo necesita para elegir qué reservar, por ejemplo cuáles tienen instalada la versión del programa que su clase requiere.
@@ -315,6 +351,9 @@ flowchart LR
   - Los **bloqueos administrativos no aparecen**: no los retira nadie.
 
 ### UC: Entregar y recibir equipos
+
+**Vigencia y confirmación:** se entrega durante el día local de la reserva y antes de su fin exclusivo. El administrador puede prepararla antes del inicio ese mismo día o atender una `NO_RETIRADA` aún vigente. Cada solicitud confirma los equipos revisados; un cambio de equipo invalida el lote antes de cualquier efecto. Los rechazos por vigencia se informan por equipo en el resultado. La entrega guarda el contexto académico para conservarlo después del cierre anual.
+
 - **Actor:** Admin
 - **Motivo:** lo habitual es anotarlo en un papel, y el papel no puede impedir que la misma máquina figure entregada dos veces ni detectar que alguien devolvió y nadie tachó el renglón.
 - **Flujo (contra una reserva):**
@@ -411,6 +450,9 @@ flowchart LR
 - **Relacionado:** cualquier usuario puede cambiar su propia contraseña en cualquier momento, no solo cuando se lo exige un reseteo.
 
 ### UC: Editar o eliminar curso/materia con el ciclo activo
+
+Editar un curso consulta el impacto de prioridades y, si corresponde, confirma una decisión y su versión. Las prioridades exactas pueden seguir al curso; las compartidas se conservan para los demás cursos y se copian al nuevo alcance cuando hace falta. Las materias internas se gestionan únicamente desde su espacio.
+
 - **Actor:** Admin
 - **Precondición:** El ciclo lectivo al que pertenece está activo (sin archivar).
 - **Flujo:**

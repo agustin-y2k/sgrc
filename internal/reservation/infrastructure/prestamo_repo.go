@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -11,18 +12,37 @@ import (
 	"github.com/agustin-y2k/sgrc/internal/reservation/domain"
 )
 
+// La tabla relacional se convierte a un objeto sólo para compartir el escaneo.
+const contextoPrestamoJSON = `CASE WHEN ca.prestamo_id IS NULL THEN NULL ELSE jsonb_build_object(
+ 'reservaIdOriginal',ca.reserva_id_original,'materiaId',ca.materia_id,'materiaNombre',ca.materia_nombre,
+ 'contenedorId',ca.contenedor_id,'contenedorTipo',ca.contenedor_tipo,'contenedorNombre',ca.contenedor_nombre,
+ 'cursoAnio',ca.curso_anio,'cursoDivision',ca.curso_division,'modalidad',ca.modalidad,
+ 'cicloId',ca.ciclo_id,'cicloAnio',ca.ciclo_anio,'reconstruido',ca.reconstruido) END`
+
+func leerContextoPrestamo(datos []byte, p *domain.Prestamo) error {
+	if len(datos) == 0 {
+		return nil
+	}
+	var c domain.ContextoAcademicoPrestamo
+	if err := json.Unmarshal(datos, &c); err != nil {
+		return fmt.Errorf("leyendo el contexto de la entrega: %w", err)
+	}
+	p.ContextoAcademico = &c
+	return nil
+}
+
 const columnasPrestamo = `id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre, ` +
 	`COALESCE(retirado_por, ''), ` +
 	`destino, devolucion_estimada, entregado_por, entregado_en, devuelto_en, recibido_por, observaciones, ` +
-	`avisado_cierre_para`
+	`avisado_cierre_para, (SELECT ` + contextoPrestamoJSON + ` FROM prestamo_contexto_academico ca WHERE ca.prestamo_id=prestamo.id)`
 
 // columnasPrestamoDetallado agrega la ubicación de la PC y, si el préstamo
 // salió contra una reserva, el nombre de la materia.
 const columnasPrestamoDetallado = `p.id, p.equipo_id, p.reserva_id, p.entregado_a_usuario_id, p.entregado_a_nombre, ` +
 	`COALESCE(p.retirado_por, ''), ` +
 	`p.destino, p.devolucion_estimada, p.entregado_por, p.entregado_en, p.devuelto_en, p.recibido_por, p.observaciones, ` +
-	`p.avisado_cierre_para, ` +
-	`COALESCE(eq.identificador, 0), COALESCE(eq.nombre, 'PC ' || eq.identificador), COALESCE(c.nombre, ''), m.nombre`
+	`p.avisado_cierre_para, ` + contextoPrestamoJSON + `, ` +
+	`COALESCE(eq.identificador, 0), COALESCE(eq.nombre, 'PC ' || eq.identificador), COALESCE(c.nombre, ''), COALESCE(ca.materia_nombre,m.nombre)`
 
 // joinsDelPrestamo: la PC y su carro son INNER —un préstamo sin PC no existe—
 // pero la reserva y la materia van LEFT, y por dos motivos distintos: un
@@ -37,35 +57,62 @@ const joinsDelPrestamo = `
 	-- afuera — justo la lista que no puede tener agujeros.
 	LEFT JOIN carro c ON c.id = eq.carro_id
 	LEFT JOIN reserva r ON r.id = p.reserva_id
-	LEFT JOIN materia m ON m.id = r.materia_id`
+	LEFT JOIN materia m ON m.id = r.materia_id
+ LEFT JOIN prestamo_contexto_academico ca ON ca.prestamo_id=p.id`
 
+// CrearPrestamo captura procedencia y custodia en una sola sentencia: el
+// conflicto de otra entrega no deja contextos huérfanos y un fallo revierte todo.
 func (r *PostgresRepo) CrearPrestamo(ctx context.Context, p *domain.Prestamo) error {
-	tag, err := r.conexion(ctx).Exec(ctx, `
-		INSERT INTO prestamo (
-			id, equipo_id, reserva_id, entregado_a_usuario_id, entregado_a_nombre,
-			retirado_por, destino, devolucion_estimada, entregado_por, entregado_en,
-			devuelto_en, recibido_por, observaciones
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-		ON CONFLICT (equipo_id) WHERE devuelto_en IS NULL DO NOTHING
-	`, p.ID, p.EquipoID, p.ReservaID, p.EntregadoAUsuarioID, p.EntregadoANombre,
-		nullSiVacio(p.RetiradoPor), nullSiVacio(p.Destino), p.DevolucionEstimada,
-		p.EntregadoPor, p.EntregadoEn, p.DevueltoEn, p.RecibidoPor,
-		nullSiVacio(p.Observaciones))
+	var contexto []byte
+	var destino *string
+	err := r.conexion(ctx).QueryRow(ctx, `
+ WITH fuente AS (
+  SELECT r.id AS reserva_id_original,m.id AS materia_id,m.nombre AS materia_nombre,
+   cm.id AS contenedor_id,cm.tipo AS contenedor_tipo,cm.nombre AS contenedor_nombre,
+   cm.anio AS curso_anio,c.division AS curso_division,cm.modalidad,cl.id AS ciclo_id,cl.anio AS ciclo_anio
+  FROM reserva r JOIN materia m ON m.id=r.materia_id
+  JOIN contenedor_de_materia cm ON cm.materia_id=m.id
+  JOIN ciclo_lectivo cl ON cl.id=cm.ciclo_lectivo_id
+  LEFT JOIN curso c ON c.id=m.curso_id WHERE r.id=$3
+ ), nuevo AS (
+  INSERT INTO prestamo (
+   id,equipo_id,reserva_id,entregado_a_usuario_id,entregado_a_nombre,
+   retirado_por,destino,devolucion_estimada,entregado_por,entregado_en,
+   devuelto_en,recibido_por,observaciones,origen
+  ) VALUES($1,$2,$3,$4,$5,$6,
+   COALESCE($7::text,(SELECT contenedor_nombre || CASE WHEN coalesce(modalidad,'')='' THEN '' ELSE ' · '||modalidad END FROM fuente)),
+   $8,$9,$10,$11,$12,$13,CASE WHEN $3::uuid IS NULL THEN 'SIN_RESERVA' ELSE 'CON_RESERVA' END)
+  ON CONFLICT (equipo_id) WHERE devuelto_en IS NULL DO NOTHING RETURNING id,destino
+ ), contexto AS (
+  INSERT INTO prestamo_contexto_academico (
+   prestamo_id,reserva_id_original,materia_id,materia_nombre,contenedor_id,contenedor_tipo,contenedor_nombre,
+   curso_anio,curso_division,modalidad,ciclo_id,ciclo_anio
+  ) SELECT n.id,f.reserva_id_original,f.materia_id,f.materia_nombre,f.contenedor_id,f.contenedor_tipo,f.contenedor_nombre,
+   f.curso_anio,f.curso_division,f.modalidad,f.ciclo_id,f.ciclo_anio
+  FROM nuevo n CROSS JOIN fuente f RETURNING *
+ ) SELECT n.destino,`+contextoPrestamoJSON+` FROM nuevo n LEFT JOIN contexto ca ON ca.prestamo_id=n.id
+ `, p.ID, p.EquipoID, p.ReservaID, p.EntregadoAUsuarioID, p.EntregadoANombre,
+		nullSiVacio(p.RetiradoPor), nullSiVacio(p.Destino), p.DevolucionEstimada, p.EntregadoPor, p.EntregadoEn,
+		p.DevueltoEn, p.RecibidoPor, nullSiVacio(p.Observaciones)).Scan(&destino, &contexto)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.ErrEquipoYaPrestado
+		}
 		if esViolacionFK(err) {
 			return application.ErrReferenciaInexistente
 		}
 		if esIDInvalido(err) {
 			return application.ErrIDInvalido
 		}
+		if esRestriccionDeEquipo(err, "prestamo_equipo_reservado") {
+			return application.ErrEquipoReservaDesactualizado
+		}
 		return fmt.Errorf("registrando la entrega: %w", err)
 	}
-	// El rechazo previsto no aborta la transacción: las otras PCs del lote
-	// pueden confirmarse y su resultado sigue siendo visible al llamador.
-	if tag.RowsAffected() == 0 {
-		return application.ErrEquipoYaPrestado
+	if destino != nil {
+		p.Destino = *destino
 	}
-	return nil
+	return leerContextoPrestamo(contexto, p)
 }
 
 func (r *PostgresRepo) BuscarPrestamoPorID(ctx context.Context, id string) (*domain.Prestamo, error) {
@@ -84,12 +131,13 @@ func (r *PostgresRepo) BuscarPrestamoAbiertoDeEquipo(ctx context.Context, equipo
 func escanearPrestamo(row pgx.Row) (*domain.Prestamo, error) {
 	var p domain.Prestamo
 	var destino, observaciones *string
+	var contexto []byte
 
 	err := row.Scan(
 		&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 		&p.RetiradoPor, &destino, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 		&p.DevueltoEn, &p.RecibidoPor, &observaciones,
-		&p.AvisadoCierrePara,
+		&p.AvisadoCierrePara, &contexto,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -105,6 +153,9 @@ func escanearPrestamo(row pgx.Row) (*domain.Prestamo, error) {
 	}
 	if observaciones != nil {
 		p.Observaciones = *observaciones
+	}
+	if err := leerContextoPrestamo(contexto, &p); err != nil {
+		return nil, err
 	}
 	return &p, nil
 }
@@ -174,12 +225,13 @@ func escanearPrestamosDetallados(rows pgx.Rows) ([]*application.PrestamoDetallad
 		var p domain.Prestamo
 		var d application.PrestamoDetallado
 		var destino, observaciones *string
+		var contexto []byte
 
 		err := rows.Scan(
 			&p.ID, &p.EquipoID, &p.ReservaID, &p.EntregadoAUsuarioID, &p.EntregadoANombre,
 			&p.RetiradoPor, &destino, &p.DevolucionEstimada, &p.EntregadoPor, &p.EntregadoEn,
 			&p.DevueltoEn, &p.RecibidoPor, &observaciones,
-			&p.AvisadoCierrePara,
+			&p.AvisadoCierrePara, &contexto,
 			&d.Identificador, &d.Etiqueta, &d.CarroNombre, &d.MateriaNombre,
 		)
 		if err != nil {
@@ -190,6 +242,9 @@ func escanearPrestamosDetallados(rows pgx.Rows) ([]*application.PrestamoDetallad
 		}
 		if observaciones != nil {
 			p.Observaciones = *observaciones
+		}
+		if err := leerContextoPrestamo(contexto, &p); err != nil {
+			return nil, err
 		}
 		d.Prestamo = &p
 		resultado = append(resultado, &d)

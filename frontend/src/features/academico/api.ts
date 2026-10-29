@@ -96,7 +96,13 @@ export function crearCurso(cicloId: string, datos: DatosDeCursoAPI) {
   })
 }
 
-export function editarCurso(id: string, datos: DatosDeCursoAPI) {
+export function editarCurso(
+  id: string,
+  datos: DatosDeCursoAPI & {
+    versionImpacto?: string
+    decisionPrioridades?: DecisionPrioridadesCurso
+  }
+) {
   return apiFetch<void>(`/api/cursos/${id}`, {
     method: "PATCH",
     body: datos,
@@ -245,4 +251,31 @@ export function editarEspacio(id: string, nombre: string) {
 /** Falla con 409 si alguna de sus materias tiene reservas (RF-02.11). */
 export function eliminarEspacio(id: string) {
   return apiFetch<void>(`/api/espacios/${id}`, { method: "DELETE" })
+}
+
+export type DecisionPrioridadesCurso = "conservar_exactas" | "aceptar_alcance"
+export type ImpactoCurso = {
+  version: string
+  anterior: DatosDeCursoAPI
+  propuesto: DatosDeCursoAPI
+  puedeConservarExactas: boolean
+  cambios: {
+    id: string
+    equipoEtiqueta: string
+    carroNombre: string
+    materiaNombre: string
+    prioridad: number
+    exacta: boolean
+    antes: boolean
+    despues: boolean
+    compartida: boolean
+    destinoId: string
+    destinoPrioridad: number
+  }[]
+}
+export function previsualizarCurso(id: string, datos: DatosDeCursoAPI) {
+  return apiFetch<ImpactoCurso>(`/api/cursos/${id}/impacto-prioridades`, {
+    method: "POST",
+    body: datos,
+  })
 }

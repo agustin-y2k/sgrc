@@ -82,6 +82,12 @@ describe("MisReservasPage", () => {
     mockUsuario(DOCENTE)
     vi.mocked(adminApi.listarUsuarios).mockResolvedValue(paginada([DOCENTE]))
     vi.mocked(reservasApi.cancelarReserva).mockResolvedValue(undefined)
+    vi.mocked(reservasApi.levantarBloqueo).mockResolvedValue({
+      bloqueoOperacionId: "operacion-admin-1",
+      reservasCanceladas: 3,
+      reservasYaCanceladas: 0,
+      reservasNoVigentes: 0,
+    })
     vi.mocked(reservasApi.cancelarGrupo).mockResolvedValue({ reservasCanceladas: 3 })
   })
 
@@ -99,6 +105,31 @@ describe("MisReservasPage", () => {
       await screen.findByText("Reserva confirmada para el lunes 9 de marzo.")
     ).toBeInTheDocument()
   })
+
+  it.each(["canceladas", "incluirCanceladas"])(
+    "abre canceladas desde el calendario con %s y permite ocultarlas",
+    async (parametro) => {
+      vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+        paginada([reserva({ estado: "CANCELADA" })])
+      )
+      renderPagina(undefined, `?${parametro}=true`)
+      await screen.findByText("Matemáticas — 1°A")
+      const campo = screen.getByRole("checkbox", {
+        name: "Mostrar también las canceladas",
+      })
+      expect(campo).toBeChecked()
+      expect(reservasApi.listarReservas).toHaveBeenCalledWith(
+        expect.objectContaining({ incluirCanceladas: true })
+      )
+      await userEvent.setup().click(campo)
+      await waitFor(() =>
+        expect(reservasApi.listarReservas).toHaveBeenLastCalledWith(
+          expect.objectContaining({ incluirCanceladas: false })
+        )
+      )
+      expect(campo).not.toBeChecked()
+    }
+  )
 
   it("no inventa una confirmación si se entra directo al listado", async () => {
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
@@ -482,6 +513,7 @@ describe("MisReservasPage", () => {
         id,
         reservaGrupoId: undefined,
         tipo: "BLOQUEO",
+        bloqueoOperacionId: "operacion-admin-1",
         motivoBloqueo: "Jornada docente",
         creadoPor: "admin1",
         materiaNombre: undefined,
@@ -503,6 +535,18 @@ describe("MisReservasPage", () => {
       expect(screen.getAllByRole("button", { name: "Levantar bloqueo" })).toHaveLength(1)
       expect(screen.getByText("PC 1 · Carro 1")).toBeInTheDocument()
       expect(screen.getByText("PC 3 · Carro 1")).toBeInTheDocument()
+    })
+
+    it("una cuenta que ya no es administradora no ofrece levantar sus bloqueos anteriores", async () => {
+      mockUsuario({ ...DOCENTE, id: "admin1", rol: "DOCENTE" })
+      vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+        paginada([bloqueo("b1", 1)])
+      )
+      renderPagina()
+      await screen.findByText(/Jornada docente · 1 equipo/)
+      expect(
+        screen.queryByRole("button", { name: "Levantar bloqueo" })
+      ).not.toBeInTheDocument()
     })
 
     // El botón no hacía nada: el panel de confirmación exigía un grupoId que
@@ -534,12 +578,101 @@ describe("MisReservasPage", () => {
       await user.click(await screen.findByRole("button", { name: "Levantar bloqueo" }))
       await user.click(screen.getByRole("button", { name: "Confirmar cancelación" }))
 
-      await waitFor(() => {
-        expect(reservasApi.cancelarReserva).toHaveBeenCalledTimes(3)
+      await waitFor(() =>
+        expect(reservasApi.levantarBloqueo).toHaveBeenCalledWith("operacion-admin-1", "")
+      )
+      expect(reservasApi.cancelarReserva).not.toHaveBeenCalled()
+    })
+
+    it("abre y cancela únicamente la operación elegida entre bloqueos coincidentes", async () => {
+      vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+        paginada([
+          bloqueo("b1", 1),
+          bloqueo("b2", 2),
+          {
+            ...bloqueo("b3", 3),
+            bloqueoOperacionId: "operacion-admin-2",
+            motivoBloqueo: "Evaluación",
+          },
+        ])
+      )
+      renderPagina()
+      const user = userEvent.setup()
+      const botones = await screen.findAllByRole("button", { name: "Levantar bloqueo" })
+      expect(botones).toHaveLength(2)
+      await user.click(botones[0])
+      expect(
+        screen.getAllByRole("button", { name: "Confirmar cancelación" })
+      ).toHaveLength(1)
+      expect(screen.getByText(/Se liberan 2 equipos/)).toBeInTheDocument()
+      await user.click(screen.getByRole("button", { name: "Confirmar cancelación" }))
+      await waitFor(() => expect(reservasApi.levantarBloqueo).toHaveBeenCalledTimes(1))
+      expect(reservasApi.levantarBloqueo).toHaveBeenCalledWith("operacion-admin-1", "")
+      expect(reservasApi.cancelarReserva).not.toHaveBeenCalled()
+    })
+
+    it("refresca tras un fallo y permite reintentar la misma operación completa", async () => {
+      let levantado = false
+      vi.mocked(reservasApi.listarReservas).mockImplementation(async () =>
+        paginada(levantado ? [] : [bloqueo("b1", 1), bloqueo("b2", 2)])
+      )
+      vi.mocked(reservasApi.levantarBloqueo)
+        .mockRejectedValueOnce(new ApiError(503, "No se pudo completar el levantamiento"))
+        .mockImplementationOnce(async () => {
+          levantado = true
+          return {
+            bloqueoOperacionId: "operacion-admin-1",
+            reservasCanceladas: 2,
+            reservasYaCanceladas: 0,
+            reservasNoVigentes: 0,
+          }
+        })
+      const user = userEvent.setup()
+      renderPagina()
+      await user.click(await screen.findByRole("button", { name: "Levantar bloqueo" }))
+      await user.click(screen.getByRole("button", { name: "Confirmar cancelación" }))
+      await screen.findByText(/No se pudo completar el levantamiento/)
+      await waitFor(() => expect(reservasApi.listarReservas).toHaveBeenCalledTimes(2))
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Confirmar cancelación" })
+        ).toBeEnabled()
+      )
+      await user.click(screen.getByRole("button", { name: "Confirmar cancelación" }))
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "Confirmar cancelación" })
+        ).not.toBeInTheDocument()
+      )
+      expect(reservasApi.levantarBloqueo).toHaveBeenCalledTimes(2)
+      expect(vi.mocked(reservasApi.levantarBloqueo).mock.calls).toEqual([
+        ["operacion-admin-1", ""],
+        ["operacion-admin-1", ""],
+      ])
+      expect(reservasApi.cancelarReserva).not.toHaveBeenCalled()
+    })
+
+    it("reconcilia una respuesta perdida con el estado ya confirmado en el servidor", async () => {
+      let levantado = false
+      vi.mocked(reservasApi.listarReservas).mockImplementation(async () =>
+        paginada(levantado ? [] : [bloqueo("b1", 1), bloqueo("b2", 2)])
+      )
+      vi.mocked(reservasApi.levantarBloqueo).mockImplementationOnce(async () => {
+        levantado = true
+        throw new ApiError(503, "No se recibió la respuesta")
       })
-      for (const id of ["b1", "b2", "b3"]) {
-        expect(reservasApi.cancelarReserva).toHaveBeenCalledWith(id, "")
-      }
+      const user = userEvent.setup()
+      renderPagina()
+      await user.click(await screen.findByRole("button", { name: "Levantar bloqueo" }))
+      await user.click(screen.getByRole("button", { name: "Confirmar cancelación" }))
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "Confirmar cancelación" })
+        ).not.toBeInTheDocument()
+      )
+      expect(reservasApi.listarReservas).toHaveBeenCalledTimes(2)
+      expect(reservasApi.levantarBloqueo).toHaveBeenCalledTimes(1)
+      expect(reservasApi.cancelarReserva).not.toHaveBeenCalled()
     })
 
     // Dos bloqueos distintos —otro horario— son dos tarjetas.
@@ -547,7 +680,12 @@ describe("MisReservasPage", () => {
       vi.mocked(reservasApi.listarReservas).mockResolvedValue(
         paginada([
           bloqueo("b1", 1),
-          { ...bloqueo("b2", 2), horaInicio: "10:00", horaFin: "12:00" },
+          {
+            ...bloqueo("b2", 2),
+            bloqueoOperacionId: "operacion-admin-2",
+            horaInicio: "10:00",
+            horaFin: "12:00",
+          },
         ])
       )
       renderPagina()

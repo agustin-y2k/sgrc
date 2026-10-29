@@ -15,11 +15,11 @@ func TestPrioridadCursoExacto_AusenciaDeAtributosNoEsComodin(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	sinAtributos := materiaEnModalidadDeTest(t, pool, "Matemática", 3, "", nil)
+	sinAtributos := materiaEnModalidadDeTest(t, pool, 2099, "Matemática", 3, "", nil)
 	modalidad := "Construcción"
-	otraModalidad := materiaEnModalidadDeTest(t, pool, "Matemática", 3, "", &modalidad)
-	otraDivision := materiaEnModalidadDeTest(t, pool, "Matemática", 3, "2", nil)
-	otraMateria := materiaEnModalidadDeTest(t, pool, "TIC", 3, "2", nil)
+	otraModalidad := materiaEnModalidadDeTest(t, pool, 2099, "Matemática", 3, "", &modalidad)
+	otraDivision := materiaEnModalidadDeTest(t, pool, 2099, "Matemática", 3, "2", nil)
+	otraMateria := materiaEnModalidadDeTest(t, pool, 2099, "TIC", 3, "2", nil)
 	pc := crearEquipoDeCarroDeTest(t, pool)
 	fecha := time.Date(2099, 3, 9, 0, 0, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx, `INSERT INTO equipo_preferencia (equipo_id,materia_nombre,anio,prioridad,curso_exacto) VALUES ($1,'Matemática',3,1,true)`, pc); err != nil {
@@ -38,11 +38,11 @@ func TestPrioridadCursoExacto_AusenciaDeAtributosNoEsComodin(t *testing.T) {
 			t.Fatalf("alcance de %s: %+v, %v", tc.materia, disponibles, err)
 		}
 	}
-	grupo := nuevoReservaGrupoDeTest(otraMateria, fecha, 10*time.Hour, 11*time.Hour)
+	grupo := nuevoReservaGrupoDeTest(t, otraMateria, fecha, 10*time.Hour, 11*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
 		t.Fatal(err)
 	}
-	reserva, err := domain.NuevaReservaNormal(NuevoID(), grupo.ID, pc, otraMateria, "Docente TIC", nil, fecha, 10*time.Hour, 11*time.Hour, time.Now())
+	reserva, err := domain.NuevaReservaNormal(NuevoID(), grupo.ID, pc, otraMateria, "Docente TIC", nil, fecha, 10*time.Hour, 11*time.Hour, ahoraDeTest())
 	if err != nil {
 		t.Fatal(err)
 	}

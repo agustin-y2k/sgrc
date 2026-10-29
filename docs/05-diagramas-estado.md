@@ -149,3 +149,12 @@ son cosas distintas, ver RF-08 y `07-modelo-datos.md`.
 - Un usuario con `estado=PENDIENTE`, `RECHAZADA` o `BAJA` no puede operar en el sistema aunque intente autenticarse. `BAJA` es terminal — no hay reactivación.
 - Dar de baja a un docente (`APROBADA → BAJA`) solo cancela reservas si la materia queda sin ningún otro docente activo (ver RF-02.8).
 - Dar de baja un equipo (`dado_de_baja=true`) es un soft delete: la fila se conserva para no perder el historial de incidencias y reservas ya asociadas.
+
+### Límite temporal de la entrega tardía
+
+Que `NO_RETIRADA` permita un préstamo no habilita retirarlo en cualquier fecha.
+Sólo se admite durante el día local de la clase y antes de su fin exclusivo,
+incluida la continuación nocturna. También se puede preparar una `CONFIRMADA`
+antes de su hora de inicio, el mismo día. Finalizar, vencer o corresponder a un
+día futuro impide la entrega por reserva y devuelve `RESERVA_NO_VIGENTE` por equipo.
+No se cambia `NO_RETIRADA` a `CONFIRMADA` para registrar una entrega válida.

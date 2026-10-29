@@ -75,6 +75,7 @@ func ParseTipoReserva(s string) (TipoReserva, error) {
 
 // Reserva es la ocupación puntual de una PC concreta en un rango horario.
 type Reserva struct {
+	BloqueoOperacionID    *string
 	ID                    string
 	Version               int64 // control de escrituras obsoletas; no es un estado de negocio
 	ReservaGrupoID        *string
@@ -94,6 +95,18 @@ type Reserva struct {
 
 	// MotivoBloqueo: por qué se tomó el equipo.
 	MotivoBloqueo string
+}
+
+// PuedeEntregarseEn habilita el retiro durante el día de la reserva y hasta
+// su fin exclusivo. Permite preparar equipos antes de la clase y recoger una
+// NO_RETIRADA todavía vigente. El fin efectivo conserva las franjas nocturnas.
+func (r *Reserva) PuedeEntregarseEn(ahora time.Time) bool {
+	if r.Estado != ReservaConfirmada && r.Estado != ReservaNoRetirada {
+		return false
+	}
+	dia := InstanteDePared(r.Fecha, 0, ahora.Location())
+	fin := FinDePared(r.Fecha, r.HoraInicio, r.HoraFin, ahora.Location())
+	return !ahora.Before(dia) && ahora.Before(fin)
 }
 
 // NuevaReservaNormal crea una Reserva perteneciente a un ReservaGrupo
@@ -121,7 +134,7 @@ func NuevaReservaNormal(id, reservaGrupoID, equipoID, materiaID string, nombreDo
 
 // NuevaReservaDeBloqueo crea un bloqueo administrativo sobre una PC
 // puntual, sin pertenecer a ningún ReservaGrupo ni Materia (RF-04.7).
-func NuevaReservaBloqueo(id, equipoID string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, motivo string, ahora time.Time) (*Reserva, error) {
+func NuevaReservaBloqueo(id, equipoID string, creadoPor *string, fecha time.Time, horaInicio, horaFin time.Duration, motivo string, ahora time.Time, operacionIDs ...string) (*Reserva, error) {
 	if horaFin == horaInicio {
 		return nil, ErrRangoHorarioInvalido
 	}
@@ -132,17 +145,22 @@ func NuevaReservaBloqueo(id, equipoID string, creadoPor *string, fecha time.Time
 	if len([]rune(motivo)) > MaxLargoMotivoBloqueo {
 		return nil, ErrMotivoBloqueoLargo
 	}
+	operacionID := id
+	if len(operacionIDs) > 0 && operacionIDs[0] != "" {
+		operacionID = operacionIDs[0]
+	}
 	return &Reserva{
-		ID:            id,
-		EquipoID:      equipoID,
-		Fecha:         fecha,
-		HoraInicio:    horaInicio,
-		HoraFin:       horaFin,
-		Estado:        ReservaConfirmada,
-		Tipo:          TipoBloqueo,
-		MotivoBloqueo: motivo,
-		CreadoPor:     creadoPor,
-		CreadaEn:      ahora,
+		BloqueoOperacionID: &operacionID,
+		ID:                 id,
+		EquipoID:           equipoID,
+		Fecha:              fecha,
+		HoraInicio:         horaInicio,
+		HoraFin:            horaFin,
+		Estado:             ReservaConfirmada,
+		Tipo:               TipoBloqueo,
+		MotivoBloqueo:      motivo,
+		CreadoPor:          creadoPor,
+		CreadaEn:           ahora,
 	}, nil
 }
 

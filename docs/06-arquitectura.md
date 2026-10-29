@@ -163,10 +163,13 @@ READ COMMITTED y transporta su conexión en el contexto mediante
 contexto; validadores y repositorios lo usan en lugar de pedir otra conexión.
 
 La coordinación usa un advisory lock transaccional por base. Reservas simples
-y recurrentes, bloqueos, cambios de equipo y entregas toman el modo compartido;
-los cambios de inventario (incluidas las preferencias), las devoluciones, el
+y recurrentes sin desplazamientos, bloqueos, cambios de equipo y entregas sin
+reserva toman el modo compartido; las entregas contra reserva, los cambios de
+inventario (incluidas las preferencias), las devoluciones, el
 reemplazo de jornada y cada liberación automática toman el exclusivo. Las
-devoluciones se serializan también entre equipos distintos: el último retorno
+entregas contra reserva mantienen estable el calendario al comprobar las clases
+intermedias antes de una salida anticipada. Las devoluciones se serializan
+también entre equipos distintos: el último retorno
 debe observar los anteriores al contar pendientes y cerrar el aviso del cierre.
 Este bloqueo reduce el paralelismo de esas operaciones a cambio de mantener
 coherente el contador institucional. Se adquiere antes de leer o bloquear
@@ -326,6 +329,11 @@ flowchart TB
     APP --> PG2
 ```
 
+El túnel puede administrarse fuera del proyecto o activarse mediante el perfil
+`tunel` del Compose (`make run-prod-tunel`). El servicio incluido declara
+`restart: unless-stopped` y recibe sólo `TUNNEL_TOKEN`. El arranque habitual
+no activa ese perfil ni publica puertos al host.
+
 El túnel expone **solo `frontend`**: el deploy es same-origin y nginx decide
 qué hacer con cada request (ver README, "Cómo entra el tráfico"). `sgrc-app`
 no publica ningún puerto al host en producción — ese atajo desde la LAN de la
@@ -364,3 +372,20 @@ excepción aplicable. Una ausencia explícita no habilita los trabajos automáti
 ### Reposición por prioridad
 
 La creación con `equiposATomar` adquiere coordinación institucional exclusiva antes de leer o bloquear reservas, ya que el alcance de la cadena depende de los conflictos encontrados. La creación sin desplazamientos conserva la coordinación compartida. `reservation` planifica los sustitutos por dispositivo y por el intervalo original completo, compara también la prioridad de las asignaciones provisionales y guarda solamente el resultado final. Cada pareja reserva/dispositivo se intenta una vez, evitando ciclos. La migración 028 mantiene la exclusión de solapamientos inicialmente inmediata y permite diferirla dentro del lote de reasignación; el repositorio vuelve a verificarla antes de crear la reserva ganadora. Las reposiciones conservan el ID de reserva y no modifican el estado del grupo; sólo los faltantes cancelados obligan a recalcularlo. La migración 027 agrega el aviso `RESERVA_REUBICADA` y permite registrar `equipo_id` antes y después en la auditoría transaccional.
+
+## Consistencia de reservas, prioridades y constancias
+
+La edición de cursos revisa el impacto académico contra el puerto compartido
+`prioridadcurso`. La confirmación vuelve a leer curso y marcas y compara su
+versión dentro de la coordinación institucional; conservar una marca compartida
+no puede quitar la prioridad a otro curso.
+
+La entrega bloquea las mismas reservas que el cambio de equipo y verifica el mapa
+confirmado por el administrador antes de escribir. El préstamo y su constancia
+académica se crean juntos. El contexto conserva identificadores como procedencia,
+sin FK hacia las entidades académicas que el cierre puede eliminar.
+
+El año lectivo se valida en dominio/aplicación y en los triggers de PostgreSQL
+para reserva, grupo y recurrencia. La interfaz limita fechas pero no sustituye
+esa validación. La identidad de bloqueo procede del backend y es independiente
+del ID por equipo; listado, calendario y paginación usan la misma operación.

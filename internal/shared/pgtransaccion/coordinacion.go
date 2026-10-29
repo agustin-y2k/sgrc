@@ -10,8 +10,9 @@ import (
 // Un lock por base, compartido por los módulos del monolito. Los cambios de
 // inventario/jornada, asignaciones/bajas y la liberación automática son
 // exclusivos; la reserva con desplazamientos también es exclusiva porque
-// descubre nuevos grupos durante la reposición. Reservar sin tomar equipos
-// ocupados y entregar conservan el modo compartido.
+// descubre nuevos grupos durante la reposición. Entregar contra reserva es
+// exclusivo para comprobar las clases intermedias sin nuevas reservas concurrentes.
+// Reservar sin desplazamientos y entregar sin reserva usan el modo compartido.
 // Se toma antes de leer y antes de cualquier bloqueo de filas. Nunca se
 // convierte un lock compartido a exclusivo dentro de una operación.
 const claveOperacionInstitucional int64 = 0x534752430013

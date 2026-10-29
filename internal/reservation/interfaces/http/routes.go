@@ -20,6 +20,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	soloAdmin := middleware.RequireRol("ADMIN")
 
 	reservation.Get("/reservas", autenticado, h.ListarReservas)
+	reservation.Get("/calendario/reservas", autenticado, h.CalendarioCompartido)
 	reservation.Get("/reservas/:id", autenticado, h.ObtenerReserva)
 	reservation.Post("/reservas", autenticado, h.CrearReserva)
 	reservation.Post("/reservas/recurrentes", autenticado, h.CrearReservaRecurrente)
@@ -31,6 +32,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	reservation.Post("/grupos/:id/cancelar", autenticado, h.CancelarOcurrenciaRecurrente)
 	reservation.Get("/grupos/:id", autenticado, h.ObtenerReservaGrupo)
 	reservation.Post("/bloqueos", autenticado, soloAdmin, h.BloquearEquipos)
+	reservation.Post("/bloqueos/:id/levantar", autenticado, soloAdmin, h.LevantarBloqueo)
 
 	// RF-04.4: el calendario de una PC lo puede ver cualquier usuario
 	// autenticado.

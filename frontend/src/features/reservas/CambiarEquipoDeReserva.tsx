@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { ErrorDeConsulta } from "@/components/ErrorDeConsulta"
 import * as reservasApi from "@/features/reservas/api"
+import { puedeCambiarEquipo } from "@/features/reservas/types"
 import type { GrupoDeReservas } from "@/features/reservas/types"
 import { getErrorMessage } from "@/lib/api-client"
 
@@ -19,7 +20,7 @@ export function CambiarEquipoDeReserva({
   onListo: () => void
 }) {
   const queryClient = useQueryClient()
-  const cambiables = grupo.reservas.filter((r) => r.estado === "CONFIRMADA")
+  const cambiables = grupo.reservas.filter(puedeCambiarEquipo)
   const [reservaID, setReservaID] = useState(cambiables[0]?.id ?? "")
   const [equipoID, setEquipoID] = useState("")
   // RF-08.14: el alcance solo se pregunta si hay serie.
@@ -77,6 +78,12 @@ export function CambiarEquipoDeReserva({
         clase queda igual: no se cancela ni se vuelve a reservar.
       </p>
 
+      {grupo.reservas.some((r) => r.tuvoEntrega) && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Las computadoras que ya tuvieron una entrega conservan su equipo, aunque se
+          hayan devuelto. Para cambiar las próximas fechas, abrí una clase sin entregas.
+        </p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="grid gap-1.5">
           <Label htmlFor={`cambiar-de-${grupo.grupoId ?? reservaID}`}>

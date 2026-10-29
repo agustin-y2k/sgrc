@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/agustin-y2k/sgrc/internal/academic/domain"
+	"github.com/agustin-y2k/sgrc/internal/shared/prioridadcurso"
 )
 
 // Repo es el único contrato que este paquete necesita de infrastructure/ (ver
@@ -146,20 +147,13 @@ type DatosDeUsuario interface {
 	Contactos(ctx context.Context, usuarioIDs []string) ([]ContactoDeDocente, error)
 }
 
-// MarcasDeInventario es el puerto hacia inventory — una interfaz chica, nunca
-// un import directo (ver docs/06-arquitectura.md §3).
-//
-// Existe por una consecuencia de RF-03.21: las marcas de preferencia de equipo
-// se vinculan a la materia POR NOMBRE y no por referencia, deliberadamente,
-// para que sobrevivan al clonado anual del ciclo. El precio es que renombrar o
-// borrar una materia las deja apuntando a un nombre que ya no está, y en
-// silencio.
-//
-// Este puerto sirve para AVISAR, no para arreglar. Arrastrar la marca al nombre
-// nuevo sería peor: una marca sin alcance aplica a TODAS las materias que se
-// llamen igual, así que renombrar una de veintiséis «Matemática» y llevarse la
-// marca dejaría a las otras veinticinco sin ella.
+// MarcasDeInventario vincula las prioridades por nombre y alcance para que
+// sobrevivan al clonado anual. Al renombrar una materia informa las marcas
+// afectadas sin trasladar reglas generales. Al editar un curso permite revisar
+// el impacto y conservar sus marcas exactas en la misma transacción.
 type MarcasDeInventario interface {
+	PrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) ([]prioridadcurso.Marca, error)
+	ConservarPrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) error
 	// CuantasDejarianDeAplicar: cuántas marcas apuntan a ese nombre de materia.
 	CuantasDejarianDeAplicar(ctx context.Context, materiaID, materiaNombre string) (int, error)
 }

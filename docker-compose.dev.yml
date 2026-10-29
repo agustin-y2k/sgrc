@@ -53,11 +53,14 @@ services:
     depends_on:
       sgrc-app:
         condition: service_healthy
-    env_file: .env
     environment:
       API: http://sgrc-app:8080
       ADMIN_EMAIL: ${SEED_ADMIN_EMAIL}
       ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD}
+      DOCENTE_EMAIL: ${DOCENTE_EMAIL:-}
+      DOCENTE_PASSWORD: ${DOCENTE_PASSWORD:-}
+      ANIO: ${ANIO:-}
+      CANTIDAD_EQUIPOS: ${CANTIDAD_EQUIPOS:-}
     volumes:
       - ./scripts:/scripts:ro
     entrypoint: ["sh", "/scripts/sembrar-datos-de-prueba.sh"]

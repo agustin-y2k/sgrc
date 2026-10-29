@@ -1,3 +1,4 @@
+import { errorDeCicloLectivo } from "./ciclo"
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, useLocation, useNavigate } from "react-router"
@@ -292,7 +293,19 @@ function FormularioDeReserva({ usuarioId }: { usuarioId: string | undefined }) {
           : null
 
   const materiasDisponibles = materias?.data ?? []
-  const materiaValida = materiasDisponibles.some((m) => m.materiaId === materiaId)
+  const materiaElegida = materiasDisponibles.find((m) => m.materiaId === materiaId)
+  const materiaValida = !!materiaElegida
+  const inicioCiclo = materiaElegida ? `${materiaElegida.cicloAnio}-01-01` : undefined
+  const finCiclo = materiaElegida ? `${materiaElegida.cicloAnio}-12-31` : undefined
+  const minFecha = inicioCiclo && inicioCiclo > hoyISO() ? inicioCiclo : hoyISO()
+  const errorDeCiclo = errorDeCicloLectivo(
+    materiaElegida?.cicloAnio,
+    modo === "simple" ? fecha : fechaInicio,
+    modo === "simple" ? fecha : fechaFin,
+    horaInicio,
+    horaFin,
+    modo === "recurrente" ? diaSemana : undefined
+  )
   const materiasFiltradas = materiasDisponibles.filter((m) =>
     sinTildes(`${etiquetaDeMateriaYLugar(m)} ${m.cicloAnio}`).includes(
       sinTildes(busquedaMateria.trim())
@@ -333,6 +346,7 @@ function FormularioDeReserva({ usuarioId }: { usuarioId: string | undefined }) {
   const franjaConsultable =
     jornadaLista &&
     materiaValida &&
+    !errorDeCiclo &&
     !fechaPasada &&
     !horarioTerminado &&
     !!fechaParaDisponibilidad &&
@@ -395,6 +409,7 @@ function FormularioDeReserva({ usuarioId }: { usuarioId: string | undefined }) {
     !duracionExcesiva &&
     !fueraDeLaJornada &&
     !errorDeSerie &&
+    !errorDeCiclo &&
     !errorMaterias
   const listoParaEnviar = listoParaComprobar && (modo === "simple" || serieAutorizada)
 
@@ -496,7 +511,7 @@ function FormularioDeReserva({ usuarioId }: { usuarioId: string | undefined }) {
         </CardHeader>
         <CardContent className="min-w-0">
           <form
-            className="grid min-w-0 gap-5"
+            className="grid min-w-0 gap-5 [&_button]:min-h-11 [&_button]:min-w-11 sm:pointer-fine:[&_button]:min-h-0 sm:pointer-fine:[&_button]:min-w-0"
             onSubmit={(e) => {
               e.preventDefault()
               if (listoParaEnviar && !crear.isPending) crear.mutate()
@@ -570,7 +585,8 @@ function FormularioDeReserva({ usuarioId }: { usuarioId: string | undefined }) {
                 <Input
                   id="fecha"
                   type="date"
-                  min={hoyISO()}
+                  min={minFecha}
+                  max={finCiclo}
                   value={fecha}
                   onChange={(e) => setFecha(e.target.value)}
                 />
@@ -596,7 +612,8 @@ function FormularioDeReserva({ usuarioId }: { usuarioId: string | undefined }) {
                   <Input
                     id="fechaInicio"
                     type="date"
-                    min={hoyISO()}
+                    min={minFecha}
+                    max={finCiclo}
                     value={fechaInicio}
                     onChange={(e) => setFechaInicio(e.target.value)}
                   />
@@ -606,12 +623,18 @@ function FormularioDeReserva({ usuarioId }: { usuarioId: string | undefined }) {
                   <Input
                     id="fechaFin"
                     type="date"
-                    min={fechaInicio !== "" ? fechaInicio : hoyISO()}
+                    min={fechaInicio && fechaInicio > minFecha ? fechaInicio : minFecha}
+                    max={finCiclo}
                     value={fechaFin}
                     onChange={(e) => setFechaFin(e.target.value)}
                   />
                 </div>
               </div>
+            )}
+            {errorDeCiclo && (
+              <Alert variant="destructive">
+                <AlertDescription>{errorDeCiclo}</AlertDescription>
+              </Alert>
             )}
             {errorDeSerie && (
               <Alert variant="destructive">

@@ -25,8 +25,10 @@ export function AyudaDePrioridad() {
             el número menor.
           </li>
           <li>
-            No se desplazan bloqueos administrativos, equipos ya entregados ni reservas
-            que empiezan en una hora o menos.
+            No se desplazan bloqueos administrativos, reservas que ya tuvieron una entrega
+            (aunque el equipo se haya devuelto) ni reservas que empiezan en una hora o
+            menos. Las fechas siguientes de una serie sin entregas conservan las
+            prioridades habituales.
           </li>
           <li>
             El sistema intenta reponer los equipos desplazados: primero busca libres y

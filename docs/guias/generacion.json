@@ -1,345 +1,6654 @@
 {
-  "version": "1.20.0",
-  "generado": "2026-10-21T01:31:00.737Z",
+  "version": "1.21.0",
+  "edicion": "Árbol de trabajo; ver CHANGELOG.md para cambios sin release",
+  "esquema": 35,
+  "generado": "2026-10-27T02:20:14.802Z",
   "herramienta": "Playwright / Chromium",
   "entorno": "Efímero, con datos ficticios y sin configuraciones de la instalación local",
   "imagenes": [
     {
       "archivo": "admin-12c-primera-jornada.png",
       "ruta": "/primera-jornada",
-      "fecha": "2026-10-21T01:30:17.764Z",
-      "sha256": "4119181c6f36523166862e4789af3a61d481b31f777d9d8c3b0253fa713268f7"
+      "fecha": "2026-10-27T02:19:25.871Z",
+      "encuadre": {
+        "ancho": 1280,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí los días",
+          "objetivo": "Lunes a viernes",
+          "referencia": "[[\"button\",\"Lunes a viernes\"]]",
+          "x": 383,
+          "y": 368.5,
+          "ancho": 107,
+          "alto": 26
+        },
+        {
+          "numero": 2,
+          "texto": "Cargá la hora de apertura",
+          "objetivo": "Abre: hora",
+          "referencia": "[[\"campo\",\"Abre: hora\"]]",
+          "x": 336,
+          "y": 430.5,
+          "ancho": 58,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Guardá la jornada institucional",
+          "objetivo": "Guardar la jornada",
+          "referencia": "[[\"button\",\"Guardar la jornada\"]]",
+          "x": 320,
+          "y": 550.5,
+          "ancho": 144,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          336,
+          332.5,
+          59,
+          28
+        ],
+        [
+          401,
+          332.5,
+          63,
+          28
+        ],
+        [
+          470,
+          332.5,
+          80,
+          28
+        ],
+        [
+          556,
+          332.5,
+          66,
+          28
+        ],
+        [
+          628,
+          332.5,
+          68,
+          28
+        ],
+        [
+          702,
+          332.5,
+          68,
+          28
+        ],
+        [
+          776,
+          332.5,
+          77,
+          28
+        ],
+        [
+          383,
+          368.5,
+          107,
+          26
+        ],
+        [
+          498,
+          368.5,
+          96,
+          26
+        ],
+        [
+          602,
+          368.5,
+          100,
+          26
+        ],
+        [
+          336,
+          430.5,
+          58,
+          32
+        ],
+        [
+          410,
+          430.5,
+          58,
+          32
+        ],
+        [
+          518,
+          430.5,
+          58,
+          32
+        ],
+        [
+          592,
+          430.5,
+          58,
+          32
+        ],
+        [
+          336,
+          478.5,
+          119,
+          32
+        ],
+        [
+          320,
+          550.5,
+          144,
+          32
+        ],
+        [
+          476,
+          550.5,
+          169,
+          32
+        ],
+        [
+          320,
+          831.5,
+          49,
+          28
+        ]
+      ],
+      "sha256": "b576945ef0bd279a66cd70edf890829925a21991d19b4469c52cd9b42b305570"
     },
     {
       "archivo": "docente-01-entrar.png",
       "ruta": "/login",
-      "fecha": "2026-10-21T01:30:19.730Z",
-      "sha256": "b98ac2f21ef2d615456d413d32f7ddc8e4078fe5db74a6bb54fb0759c5cf2d56"
+      "fecha": "2026-10-27T02:19:27.767Z",
+      "encuadre": {
+        "ancho": 384,
+        "alto": 366
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Escribí tu email",
+          "objetivo": "Email",
+          "referencia": "[[\"campo\",\"Email\"]]",
+          "x": 16,
+          "y": 100,
+          "ancho": 352,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Ingresá tu contraseña",
+          "objetivo": "Contraseña",
+          "referencia": "[[\"campo\",\"Contraseña\"]]",
+          "x": 16,
+          "y": 170,
+          "ancho": 352,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Entrá al sistema",
+          "objetivo": "Iniciar sesión",
+          "referencia": "[[\"button\",\"Iniciar sesión\"]]",
+          "x": 16,
+          "y": 282,
+          "ancho": 352,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          16,
+          100,
+          352,
+          32
+        ],
+        [
+          16,
+          170,
+          352,
+          32
+        ],
+        [
+          324,
+          164,
+          44,
+          44
+        ],
+        [
+          16,
+          222,
+          16,
+          16
+        ],
+        [
+          16,
+          282,
+          352,
+          32
+        ],
+        [
+          223,
+          331,
+          64,
+          18
+        ]
+      ],
+      "sha256": "e32fc787f90bb8e2c851dc3008f17398b1107450c1e9908b7340583908ec3fd9"
     },
     {
       "archivo": "docente-02-crear-cuenta.png",
       "ruta": "/registro",
-      "fecha": "2026-10-21T01:30:20.409Z",
-      "sha256": "24ffa5d70d7139514e635d5dddacbd2a2853cd7a427ae85acdd66899dcf07091"
+      "fecha": "2026-10-27T02:19:28.436Z",
+      "encuadre": {
+        "ancho": 448,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Completá tus datos y contraseña",
+          "objetivo": "Nombre · Apellido · Email · Contraseña",
+          "referencia": "[[\"campo\",\"Nombre\"],[\"campo\",\"Apellido\"],[\"campo\",\"Email\"],[\"campo\",\"Contraseña\"]]",
+          "x": 16,
+          "y": 120,
+          "ancho": 416,
+          "alto": 172
+        },
+        {
+          "numero": 2,
+          "texto": "Indicá tu cargo, rol y materia",
+          "objetivo": "Docente Das clase frente a alumnos y vas a reservar equipos para tus materias. · ¿Sos titular o suplente? · Curso o lugar donde trabajás · Materia",
+          "referencia": "[[\"radio\",\"/^Docente /\"],[\"campo\",\"¿Sos titular o suplente?\"],[\"campo\",\"Curso o lugar donde trabajás\"],[\"campo\",\"Materia\"]]",
+          "x": 16,
+          "y": 330,
+          "ancho": 416,
+          "alto": 529
+        },
+        {
+          "numero": 3,
+          "texto": "Enviá tu solicitud",
+          "objetivo": "Crear cuenta",
+          "referencia": "[[\"button\",\"Crear cuenta\"]]",
+          "x": 16,
+          "y": 913,
+          "ancho": 416,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          16,
+          120,
+          200,
+          32
+        ],
+        [
+          232,
+          120,
+          200,
+          32
+        ],
+        [
+          16,
+          190,
+          416,
+          32
+        ],
+        [
+          16,
+          260,
+          416,
+          32
+        ],
+        [
+          388,
+          254,
+          44,
+          44
+        ],
+        [
+          16,
+          330,
+          416,
+          86
+        ],
+        [
+          16,
+          424,
+          416,
+          106
+        ],
+        [
+          16,
+          568,
+          416,
+          32
+        ],
+        [
+          16,
+          721,
+          416,
+          32
+        ],
+        [
+          16,
+          827,
+          416,
+          32
+        ],
+        [
+          16,
+          913,
+          416,
+          32
+        ]
+      ],
+      "sha256": "36f6d41f46ea02459eacd0619a202f89fafc18671c2ea653b60f5984a24a6a4e"
     },
     {
       "archivo": "docente-02b-donde-vas-a-estar.png",
       "ruta": "/registro",
-      "fecha": "2026-10-21T01:30:20.486Z",
-      "sha256": "2b0e796d7388c3e02fa0751e89049b97b31b564dda56233a9f4f596033119359"
+      "fecha": "2026-10-27T02:19:28.500Z",
+      "encuadre": {
+        "ancho": 416,
+        "alto": 281
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí el curso",
+          "objetivo": "Curso o lugar donde trabajás",
+          "referencia": "[[\"campo\",\"Curso o lugar donde trabajás\"]]",
+          "x": 0,
+          "y": 105,
+          "ancho": 416,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí la materia",
+          "objetivo": "Materia",
+          "referencia": "[[\"campo\",\"Materia\"]]",
+          "x": 0,
+          "y": 211,
+          "ancho": 416,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          0,
+          105,
+          416,
+          32
+        ],
+        [
+          0,
+          211,
+          416,
+          32
+        ]
+      ],
+      "sha256": "5d019cf6a4c3b67555092bcfbab757d187d1c30d19db9fe136582054b85fafe4"
     },
     {
       "archivo": "docente-03-olvide-contrasena.png",
       "ruta": "/recuperar-password",
-      "fecha": "2026-10-21T01:30:21.094Z",
-      "sha256": "9a32926b238cfcf35d7f0419cc1ec3fe816205f9ab9f28d6ba0bd6a436fea0c5"
+      "fecha": "2026-10-27T02:19:29.096Z",
+      "encuadre": {
+        "ancho": 384,
+        "alto": 280
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Usá tu email registrado",
+          "objetivo": "Email",
+          "referencia": "[[\"campo\",\"Email\"]]",
+          "x": 16,
+          "y": 120,
+          "ancho": 352,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Solicitá el código",
+          "objetivo": "Enviarme el código",
+          "referencia": "[[\"button\",\"Enviarme el código\"]]",
+          "x": 16,
+          "y": 196,
+          "ancho": 352,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          16,
+          120,
+          352,
+          32
+        ],
+        [
+          16,
+          196,
+          352,
+          32
+        ],
+        [
+          112.5,
+          245,
+          159,
+          18
+        ]
+      ],
+      "sha256": "7e88fd5cc3c85bc3fc3877b6f02eb08f2b1774e719a5fbac6c96bed25143ef19"
     },
     {
       "archivo": "docente-04-pantalla-de-inicio.png",
       "ruta": "/",
-      "fecha": "2026-10-21T01:30:21.849Z",
-      "sha256": "34248f13af7c4760d993ba647df9df7bc7869f640e67d3f5734e7c815c71cb3a"
+      "fecha": "2026-10-27T02:19:29.852Z",
+      "encuadre": {
+        "ancho": 1280,
+        "alto": 1000
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Hacé una reserva",
+          "objetivo": "Reservar",
+          "referencia": "[[\"enlace\",\"Reservar\"]]",
+          "x": 1069,
+          "y": 290,
+          "ancho": 110,
+          "alto": 44
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí la fecha que querés ver",
+          "objetivo": "Ir a fecha",
+          "referencia": "[[\"campo\",\"Ir a fecha\"]]",
+          "x": 101,
+          "y": 532,
+          "ancho": 155,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Consultá también otras materias",
+          "objetivo": "Mostrar reservas",
+          "referencia": "[[\"campo\",\"Mostrar reservas\"]]",
+          "x": 268,
+          "y": 532,
+          "ancho": 162,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          174,
+          12,
+          56,
+          32
+        ],
+        [
+          232,
+          12,
+          84,
+          32
+        ],
+        [
+          318,
+          12,
+          119,
+          32
+        ],
+        [
+          439,
+          12,
+          123,
+          32
+        ],
+        [
+          564,
+          12,
+          94,
+          32
+        ],
+        [
+          942,
+          10,
+          44,
+          36
+        ],
+        [
+          994,
+          14,
+          113,
+          28
+        ],
+        [
+          1115,
+          14,
+          28,
+          28
+        ],
+        [
+          1151,
+          14,
+          49,
+          28
+        ],
+        [
+          1056,
+          182,
+          127,
+          44
+        ],
+        [
+          1069,
+          290,
+          110,
+          44
+        ],
+        [
+          1015,
+          412,
+          38,
+          32
+        ],
+        [
+          1061,
+          412,
+          118,
+          32
+        ],
+        [
+          101,
+          470,
+          38,
+          32
+        ],
+        [
+          147,
+          470,
+          48,
+          32
+        ],
+        [
+          203,
+          470,
+          38,
+          32
+        ],
+        [
+          101,
+          532,
+          155,
+          32
+        ],
+        [
+          268,
+          532,
+          162,
+          32
+        ],
+        [
+          442,
+          532,
+          75,
+          32
+        ],
+        [
+          521,
+          532,
+          50,
+          32
+        ],
+        [
+          575,
+          532,
+          74,
+          32
+        ],
+        [
+          661,
+          532,
+          137,
+          32
+        ],
+        [
+          101,
+          598,
+          742,
+          32
+        ],
+        [
+          855,
+          598,
+          163,
+          32
+        ],
+        [
+          1030,
+          601.5,
+          13,
+          13
+        ],
+        [
+          118,
+          763,
+          227,
+          32
+        ]
+      ],
+      "sha256": "c01ab25239612171dab9b44185116947607dd566ccbba10d5d6deeb6567a1195"
     },
     {
       "archivo": "docente-05-nueva-reserva.png",
       "ruta": "/reservas/nueva",
-      "fecha": "2026-10-21T01:30:22.785Z",
-      "sha256": "e215a389e669a6c1b42cd9561eaecd2613622b00a092771ae14b2de210beef32"
+      "fecha": "2026-10-27T02:19:30.793Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 496
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí tu materia",
+          "objetivo": "Materia",
+          "referencia": "[[\"campo\",\"Materia\"]]",
+          "x": 208,
+          "y": 272,
+          "ancho": 736,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Indicá la fecha",
+          "objetivo": "Fecha",
+          "referencia": "[[\"campo\",\"Fecha\"]]",
+          "x": 208,
+          "y": 346,
+          "ancho": 736,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Definí el horario completo",
+          "objetivo": "Hora de inicio: hora · Hora de inicio: minutos · Hora de fin: hora · Hora de fin: minutos",
+          "referencia": "[[\"campo\",\"Hora de inicio: hora\"],[\"campo\",\"Hora de inicio: minutos\"],[\"campo\",\"Hora de fin: hora\"],[\"campo\",\"Hora de fin: minutos\"]]",
+          "x": 208,
+          "y": 418,
+          "ancho": 508,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          208,
+          202,
+          111,
+          28
+        ],
+        [
+          327,
+          202,
+          190,
+          28
+        ],
+        [
+          208,
+          272,
+          736,
+          32
+        ],
+        [
+          208,
+          346,
+          736,
+          32
+        ],
+        [
+          208,
+          418,
+          58,
+          32
+        ],
+        [
+          282,
+          418,
+          58,
+          32
+        ],
+        [
+          584,
+          418,
+          58,
+          32
+        ],
+        [
+          658,
+          418,
+          58,
+          32
+        ]
+      ],
+      "sha256": "78a76f989b73560a80d82cff434233a79b2380677a6e7f062d4b23e27fe15b33"
     },
     {
       "archivo": "docente-23-seleccion-equipos.png",
       "ruta": "/reservas/nueva",
-      "fecha": "2026-10-21T01:30:22.882Z",
-      "sha256": "74c51f0d68be824340c1f05eb914cb5e978536090ec10a9e12bf1664ea76b0fc"
+      "fecha": "2026-10-27T02:19:30.897Z",
+      "encuadre": {
+        "ancho": 736,
+        "alto": 654
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Buscá un equipo",
+          "objetivo": "Buscar una computadora",
+          "referencia": "[[\"campo\",\"Buscar una computadora\"]]",
+          "x": 0,
+          "y": 58,
+          "ancho": 736,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Marcá las computadoras",
+          "objetivo": "PC 1 (Carro 1)",
+          "referencia": "[[\"checkbox\",\"/^PC 1 /\"]]",
+          "x": 9,
+          "y": 175,
+          "ancho": 16,
+          "alto": 16
+        },
+        {
+          "numero": 3,
+          "texto": "Confirmá tu reserva",
+          "objetivo": "Confirmar reserva",
+          "referencia": "[[\"button\",\"Confirmar reserva\"]]",
+          "x": 0,
+          "y": 610,
+          "ancho": 142,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          608,
+          25,
+          128,
+          16
+        ],
+        [
+          0,
+          58,
+          736,
+          32
+        ],
+        [
+          616,
+          136,
+          120,
+          16
+        ],
+        [
+          9,
+          175,
+          16,
+          16
+        ],
+        [
+          381,
+          175,
+          16,
+          16
+        ],
+        [
+          636,
+          286,
+          100,
+          16
+        ],
+        [
+          9,
+          325,
+          16,
+          16
+        ],
+        [
+          381,
+          325,
+          16,
+          16
+        ],
+        [
+          9,
+          389,
+          16,
+          16
+        ],
+        [
+          381,
+          389,
+          16,
+          16
+        ],
+        [
+          9,
+          453,
+          16,
+          16
+        ],
+        [
+          637,
+          510,
+          99,
+          16
+        ],
+        [
+          9,
+          549,
+          16,
+          16
+        ],
+        [
+          381,
+          549,
+          16,
+          16
+        ],
+        [
+          0,
+          610,
+          142,
+          32
+        ],
+        [
+          150,
+          610,
+          82,
+          32
+        ],
+        [
+          240,
+          610,
+          150,
+          44
+        ]
+      ],
+      "sha256": "793d91603fea03a393df9920fd4ef40a8c7f92c457b1bb56264f7649d4eb3663"
     },
     {
       "archivo": "docente-06-reserva-semanal.png",
       "ruta": "/reservas/nueva",
-      "fecha": "2026-10-21T01:30:23.415Z",
-      "sha256": "dc453a6c67a2c73d12a3e7a66d0a7dcb9fbcf4b282494d41e127f0c0f61f0386"
+      "fecha": "2026-10-27T02:19:31.363Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 496
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí una serie semanal",
+          "objetivo": "Se repite todas las semanas",
+          "referencia": "[[\"button\",\"Se repite todas las semanas\"]]",
+          "x": 327,
+          "y": 202,
+          "ancho": 190,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí el día y el período",
+          "objetivo": "Día de la semana · Desde · Hasta",
+          "referencia": "[[\"campo\",\"Día de la semana\"],[\"campo\",\"Desde\"],[\"campo\",\"Hasta\"]]",
+          "x": 208,
+          "y": 346,
+          "ancho": 736,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Definí el horario de cada clase",
+          "objetivo": "Hora de inicio: hora · Hora de inicio: minutos · Hora de fin: hora · Hora de fin: minutos",
+          "referencia": "[[\"campo\",\"Hora de inicio: hora\"],[\"campo\",\"Hora de inicio: minutos\"],[\"campo\",\"Hora de fin: hora\"],[\"campo\",\"Hora de fin: minutos\"]]",
+          "x": 208,
+          "y": 418,
+          "ancho": 508,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          208,
+          202,
+          111,
+          28
+        ],
+        [
+          327,
+          202,
+          190,
+          28
+        ],
+        [
+          208,
+          272,
+          736,
+          32
+        ],
+        [
+          208,
+          346,
+          234.66,
+          32
+        ],
+        [
+          458.66,
+          346,
+          234.67,
+          32
+        ],
+        [
+          709.33,
+          346,
+          234.67,
+          32
+        ],
+        [
+          208,
+          418,
+          58,
+          32
+        ],
+        [
+          282,
+          418,
+          58,
+          32
+        ],
+        [
+          584,
+          418,
+          58,
+          32
+        ],
+        [
+          658,
+          418,
+          58,
+          32
+        ]
+      ],
+      "sha256": "62742b34066612c93187ae88e41a3e98bb4fd1942a05f55f6fa981b0c4c8695a"
     },
     {
       "archivo": "docente-22-consentimiento-serie.png",
       "ruta": "/reservas/nueva",
-      "fecha": "2026-10-21T01:30:23.523Z",
-      "sha256": "5d8a931a8b201e5fb54b7bd4b607a52868f20ee22fe4c00a613d5f447346ffd3"
+      "fecha": "2026-10-27T02:19:31.453Z",
+      "encuadre": {
+        "ancho": 736,
+        "alto": 482
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Comprobá todas las fechas",
+          "objetivo": "Comprobar serie",
+          "referencia": "[[\"button\",\"Comprobar serie\"]]",
+          "x": 13,
+          "y": 65,
+          "ancho": 134,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Revisá el resultado de cada clase",
+          "objetivo": "Lunes, 2 de noviembre Libres: 2 · Por prioridad: 1 · No disponibles: 0",
+          "referencia": "[[\"desplegable\",\"/^Lunes,/\"]]",
+          "x": 22,
+          "y": 150,
+          "ancho": 692,
+          "alto": 44
+        },
+        {
+          "numero": 3,
+          "texto": "Autorizá la prioridad si corresponde",
+          "objetivo": "Autorizo tomar los equipos por prioridad en las fechas indicadas. Se intentará reponer las reservas desplazadas en cascada; pueden quedar faltantes.",
+          "referencia": "[[\"checkbox\",\"/^Autorizo tomar los equipos/\"]]",
+          "x": 13,
+          "y": 429,
+          "ancho": 16,
+          "alto": 16
+        }
+      ],
+      "protecciones": [
+        [
+          13,
+          65,
+          134,
+          32
+        ],
+        [
+          22,
+          150,
+          692,
+          44
+        ],
+        [
+          22,
+          220,
+          692,
+          44
+        ],
+        [
+          22,
+          290,
+          692,
+          44
+        ],
+        [
+          22,
+          360,
+          692,
+          44
+        ],
+        [
+          13,
+          429,
+          16,
+          16
+        ]
+      ],
+      "sha256": "89cedfd68486964daccfb4187e7ab65e512640260f58f78da011f94dfb02de6a"
     },
     {
       "archivo": "docente-07-mis-reservas.png",
       "ruta": "/reservas",
-      "fecha": "2026-10-21T01:30:24.282Z",
-      "sha256": "2e67b98a3c4fd3a0522449fbd0638aa96f7a5ebc69f586519510cc284ae60a93"
+      "fecha": "2026-10-27T02:19:32.186Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Consultá el calendario",
+          "objetivo": "Ver calendario",
+          "referencia": "[[\"enlace\",\"Ver calendario\"]]",
+          "x": 128,
+          "y": 104,
+          "ancho": 119,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Reemplazá una computadora",
+          "objetivo": "Cambiar computadora",
+          "referencia": "[[\"button\",\"Cambiar computadora\"]]",
+          "x": 767,
+          "y": 520,
+          "ancho": 157,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Cancelá si no vas a usarla",
+          "objetivo": "Cancelar",
+          "referencia": "[[\"button\",\"Cancelar\"]]",
+          "x": 932,
+          "y": 520,
+          "ancho": 76,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          906,
+          24,
+          118,
+          32
+        ],
+        [
+          128,
+          104,
+          119,
+          32
+        ],
+        [
+          255,
+          104,
+          83,
+          44
+        ],
+        [
+          346,
+          104,
+          80,
+          44
+        ],
+        [
+          434,
+          104,
+          62,
+          44
+        ],
+        [
+          141,
+          233,
+          429,
+          32
+        ],
+        [
+          582,
+          233,
+          429,
+          32
+        ],
+        [
+          141,
+          316,
+          429,
+          32
+        ],
+        [
+          582,
+          297,
+          429,
+          32
+        ],
+        [
+          141,
+          379,
+          113,
+          44
+        ],
+        [
+          262,
+          379,
+          114,
+          44
+        ],
+        [
+          128,
+          455.5,
+          13,
+          13
+        ],
+        [
+          767,
+          520,
+          157,
+          28
+        ],
+        [
+          932,
+          520,
+          76,
+          28
+        ],
+        [
+          767,
+          672,
+          157,
+          28
+        ],
+        [
+          932,
+          672,
+          76,
+          28
+        ],
+        [
+          767,
+          824,
+          157,
+          28
+        ],
+        [
+          932,
+          824,
+          76,
+          28
+        ]
+      ],
+      "sha256": "7a85dfe8ff303269ddfce331b101d0b4951fac42f9627f6f4921912c02bd5dbf"
     },
     {
       "archivo": "docente-08-cancelar.png",
       "ruta": "/reservas",
-      "fecha": "2026-10-21T01:30:24.406Z",
-      "sha256": "c1d03e9f74bb44ea3fe71b9ce9747972f9086d749083f80658905cfbd7156eec"
+      "fecha": "2026-10-27T02:19:32.325Z",
+      "encuadre": {
+        "ancho": 896,
+        "alto": 310
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Podés explicar el motivo",
+          "objetivo": "Motivo (opcional)",
+          "referencia": "[[\"campo\",\"Motivo (opcional)\"]]",
+          "x": 29,
+          "y": 201,
+          "ancho": 838,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Confirmá sólo si querés cancelar",
+          "objetivo": "Confirmar cancelación",
+          "referencia": "[[\"button\",\"Confirmar cancelación\"]]",
+          "x": 29,
+          "y": 245,
+          "ancho": 171,
+          "alto": 36
+        },
+        {
+          "numero": 3,
+          "texto": "Volvé sin cancelar",
+          "objetivo": "Volver",
+          "referencia": "[[\"button\",\"Volver\"]]",
+          "x": 208,
+          "y": 245,
+          "ancho": 73,
+          "alto": 36
+        }
+      ],
+      "protecciones": [
+        [
+          29,
+          201,
+          838,
+          32
+        ],
+        [
+          29,
+          245,
+          171,
+          36
+        ],
+        [
+          208,
+          245,
+          73,
+          36
+        ]
+      ],
+      "sha256": "98db61113aad3fcd008c3e718d5de62c900426793b23d5357276e43807d237ca"
     },
     {
       "archivo": "docente-09-cambiar-computadora.png",
       "ruta": "/reservas",
-      "fecha": "2026-10-21T01:30:25.132Z",
-      "sha256": "8d44fe7559d66ee4b3749368f06236c45f81920df5d288e98cd5dd348c6ed5d5"
+      "fecha": "2026-10-27T02:19:33.016Z",
+      "encuadre": {
+        "ancho": 896,
+        "alto": 330
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí la PC que dejás",
+          "objetivo": "¿Cuál cambiás?",
+          "referencia": "[[\"campo\",\"¿Cuál cambiás?\"]]",
+          "x": 29,
+          "y": 221,
+          "ancho": 413,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí su reemplazo",
+          "objetivo": "¿Por cuál?",
+          "referencia": "[[\"campo\",\"¿Por cuál?\"]]",
+          "x": 454,
+          "y": 221,
+          "ancho": 413,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Guardá el cambio",
+          "objetivo": "Cambiar",
+          "referencia": "[[\"button\",\"Cambiar\"]]",
+          "x": 29,
+          "y": 265,
+          "ancho": 84,
+          "alto": 36
+        }
+      ],
+      "protecciones": [
+        [
+          639,
+          32,
+          157,
+          28
+        ],
+        [
+          804,
+          32,
+          76,
+          28
+        ],
+        [
+          29,
+          221,
+          413,
+          32
+        ],
+        [
+          454,
+          221,
+          413,
+          32
+        ],
+        [
+          29,
+          265,
+          84,
+          36
+        ],
+        [
+          121,
+          265,
+          88,
+          36
+        ]
+      ],
+      "sha256": "f1d5666ded1c37f972cb10569a1b3b7d4f445387e8776bf729998e5a9ba47ccf"
     },
     {
       "archivo": "docente-10-computadoras.png",
       "ruta": "/inventario",
-      "fecha": "2026-10-21T01:30:25.961Z",
-      "sha256": "215ec3757cf3f327b7b08610c8fc5f2d72911ddcbc2dd2006a3b1ea46a355eb9"
+      "fecha": "2026-10-27T02:19:33.800Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 916
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Consultá cómo ingresar",
+          "objetivo": "Cómo entrar",
+          "referencia": "[[\"button\",\"Cómo entrar\"]]",
+          "x": 759,
+          "y": 256.5,
+          "ancho": 98,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Avisá si hay una falla",
+          "objetivo": "Reportar problema",
+          "referencia": "[[\"button\",\"Reportar problema\"]]",
+          "x": 865,
+          "y": 256.5,
+          "ancho": 135,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Consultá cuándo está ocupada",
+          "objetivo": "Ver calendario",
+          "referencia": "[[\"enlace\",\"Ver calendario\"]]",
+          "x": 642,
+          "y": 256.5,
+          "ancho": 109,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          889,
+          140,
+          119,
+          28
+        ],
+        [
+          642,
+          256.5,
+          109,
+          28
+        ],
+        [
+          759,
+          256.5,
+          98,
+          28
+        ],
+        [
+          865,
+          256.5,
+          135,
+          28
+        ],
+        [
+          748,
+          301.5,
+          109,
+          28
+        ],
+        [
+          865,
+          301.5,
+          135,
+          28
+        ],
+        [
+          748,
+          346.5,
+          109,
+          28
+        ],
+        [
+          865,
+          346.5,
+          135,
+          28
+        ],
+        [
+          748,
+          391.5,
+          109,
+          28
+        ],
+        [
+          865,
+          391.5,
+          135,
+          28
+        ],
+        [
+          748,
+          436.5,
+          109,
+          28
+        ],
+        [
+          865,
+          436.5,
+          135,
+          28
+        ],
+        [
+          748,
+          481.5,
+          109,
+          28
+        ],
+        [
+          865,
+          481.5,
+          135,
+          28
+        ],
+        [
+          748,
+          526.5,
+          109,
+          28
+        ],
+        [
+          865,
+          526.5,
+          135,
+          28
+        ],
+        [
+          748,
+          571.5,
+          109,
+          28
+        ],
+        [
+          865,
+          571.5,
+          135,
+          28
+        ],
+        [
+          865,
+          762,
+          135,
+          28
+        ],
+        [
+          748,
+          807,
+          109,
+          28
+        ],
+        [
+          865,
+          807,
+          135,
+          28
+        ],
+        [
+          748,
+          852,
+          109,
+          28
+        ],
+        [
+          865,
+          852,
+          135,
+          28
+        ]
+      ],
+      "sha256": "349f7d43e49659d808934afe573fe0171de580f48ea8d6e6d766a7e99afa4e5b"
     },
     {
       "archivo": "docente-11-avisar-falla.png",
       "ruta": "/inventario",
-      "fecha": "2026-10-21T01:30:26.097Z",
-      "sha256": "f27f68927a7ce1c420566d1a5f6ceefff3fefa2a559c1c2c606578d7fc6da109"
+      "fecha": "2026-10-27T02:19:33.948Z",
+      "encuadre": {
+        "ancho": 848,
+        "alto": 328
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Contá qué ocurrió",
+          "objetivo": "¿Qué le pasa?",
+          "referencia": "[[\"campo\",\"¿Qué le pasa?\"]]",
+          "x": 13,
+          "y": 65,
+          "ancho": 822,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Indicá la gravedad",
+          "objetivo": "Gravedad",
+          "referencia": "[[\"campo\",\"Gravedad\"]]",
+          "x": 13,
+          "y": 215,
+          "ancho": 822,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Enviá el reporte",
+          "objetivo": "Reportar",
+          "referencia": "[[\"button\",\"Reportar\"]]",
+          "x": 13,
+          "y": 287,
+          "ancho": 75,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          13,
+          65,
+          822,
+          32
+        ],
+        [
+          13,
+          129,
+          822,
+          32
+        ],
+        [
+          13,
+          215,
+          822,
+          32
+        ],
+        [
+          13,
+          287,
+          75,
+          28
+        ],
+        [
+          96,
+          287,
+          76,
+          28
+        ]
+      ],
+      "sha256": "aa2bb98551365e2300bf60fbe9042057075c632ac9ba5b035b261af3e58888eb"
     },
     {
       "archivo": "docente-12-avisos.png",
       "ruta": "/notificaciones",
-      "fecha": "2026-10-21T01:30:26.794Z",
-      "sha256": "825ae99d2607b1ace3c3f5253e3dcaaadae77d775a16131faa194f74ba5170dd"
+      "fecha": "2026-10-27T02:19:34.618Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 572
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Pedí ayuda",
+          "objetivo": "Pedir ayuda",
+          "referencia": "[[\"button\",\"Pedir ayuda\"]]",
+          "x": 703,
+          "y": 144,
+          "ancho": 93,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Leé las respuestas",
+          "objetivo": "Ver conversaciones",
+          "referencia": "[[\"button\",\"Ver conversaciones\"]]",
+          "x": 804,
+          "y": 144,
+          "ancho": 140,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Elegí tus copias por correo",
+          "objetivo": "Elegir cuáles",
+          "referencia": "[[\"button\",\"Elegir cuáles\"]]",
+          "x": 844,
+          "y": 256,
+          "ancho": 100,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          783,
+          24,
+          177,
+          28
+        ],
+        [
+          703,
+          144,
+          93,
+          28
+        ],
+        [
+          804,
+          144,
+          140,
+          28
+        ],
+        [
+          844,
+          256,
+          100,
+          28
+        ],
+        [
+          192,
+          383.5,
+          13,
+          13
+        ],
+        [
+          678,
+          516,
+          126,
+          28
+        ],
+        [
+          812,
+          516,
+          132,
+          28
+        ]
+      ],
+      "sha256": "4fba77808eb293eafaeee1efd5ed3908d6a092589416a92030807c0dff8dd757"
     },
     {
       "archivo": "docente-13-conversacion.png",
       "ruta": "/notificaciones",
-      "fecha": "2026-10-21T01:30:26.948Z",
-      "sha256": "3b9039eb5e2f11a93026b874b401694240a834749028f4bd238d406c7304ed46"
+      "fecha": "2026-10-27T02:19:34.779Z",
+      "encuadre": {
+        "ancho": 736,
+        "alto": 328
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Escribí tu mensaje",
+          "objetivo": "Escribir en esta conversación",
+          "referencia": "[[\"campo\",\"Escribir en esta conversación\"]]",
+          "x": 13,
+          "y": 205,
+          "ancho": 710,
+          "alto": 78
+        },
+        {
+          "numero": 2,
+          "texto": "Enviá la respuesta",
+          "objetivo": "Responder",
+          "referencia": "[[\"button\",\"Responder\"]]",
+          "x": 13,
+          "y": 291,
+          "ancho": 89,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          656,
+          14,
+          67,
+          28
+        ],
+        [
+          13,
+          205,
+          710,
+          78
+        ],
+        [
+          13,
+          291,
+          89,
+          28
+        ]
+      ],
+      "sha256": "24a9bd62d63c9d563c4b5d67e9c35401d59663fa725eba869b8e7431448cad41"
     },
     {
       "archivo": "docente-14-copias-por-correo.png",
       "ruta": "/notificaciones",
-      "fecha": "2026-10-21T01:30:27.763Z",
-      "sha256": "57c9fb601951ad1f806e5e2cde61238d2f03df4e5dddaaef0cc9f9306ecc3f6d"
+      "fecha": "2026-10-27T02:19:35.556Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí qué copias querés recibir",
+          "objetivo": "Cambios en los equipos de tus reservas",
+          "referencia": "[[\"checkbox\",\"Cambios en los equipos de tus reservas\"]]",
+          "x": 208,
+          "y": 780,
+          "ancho": 16,
+          "alto": 16
+        },
+        {
+          "numero": 2,
+          "texto": "Cerrá para volver a los avisos",
+          "objetivo": "Cerrar",
+          "referencia": "[[\"button\",\"Cerrar\"]]",
+          "x": 884,
+          "y": 256,
+          "ancho": 60,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          783,
+          24,
+          177,
+          28
+        ],
+        [
+          703,
+          144,
+          93,
+          28
+        ],
+        [
+          804,
+          144,
+          140,
+          28
+        ],
+        [
+          884,
+          256,
+          60,
+          28
+        ],
+        [
+          208,
+          477,
+          16,
+          16
+        ],
+        [
+          208,
+          571,
+          16,
+          16
+        ],
+        [
+          208,
+          706,
+          16,
+          16
+        ],
+        [
+          208,
+          780,
+          16,
+          16
+        ],
+        [
+          208,
+          848,
+          16,
+          16
+        ],
+        [
+          208,
+          896,
+          16,
+          16
+        ]
+      ],
+      "sha256": "df2cb53a3df539c462ad43363b2c82edc65a6b8b79da810f1e5a1775431996be"
     },
     {
       "archivo": "docente-15-perfil.png",
       "ruta": "/perfil",
-      "fecha": "2026-10-21T01:30:28.474Z",
-      "sha256": "7e9c7acef75a2d6920ca8b211c000ffbcdac5b98a6cf2e19773f348cbfa3cf11"
+      "fecha": "2026-10-27T02:19:36.241Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 738
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Corregí tu nombre",
+          "objetivo": "Cambiar mi nombre",
+          "referencia": "[[\"button\",\"Cambiar mi nombre\"]]",
+          "x": 766,
+          "y": 256,
+          "ancho": 178,
+          "alto": 36
+        },
+        {
+          "numero": 2,
+          "texto": "Solicitá otra materia",
+          "objetivo": "Pedir otra materia",
+          "referencia": "[[\"button\",\"Pedir otra materia\"]]",
+          "x": 208,
+          "y": 506,
+          "ancho": 142,
+          "alto": 44
+        },
+        {
+          "numero": 3,
+          "texto": "Cambiá tu contraseña",
+          "objetivo": "Cambiar mi contraseña Para cambiar la que usás para entrar.",
+          "referencia": "[[\"enlace\",\"/^Cambiar mi contraseña/\"]]",
+          "x": 208,
+          "y": 636,
+          "ancho": 736,
+          "alto": 74
+        }
+      ],
+      "protecciones": [
+        [
+          304,
+          168,
+          126,
+          36
+        ],
+        [
+          438,
+          168,
+          114,
+          36
+        ],
+        [
+          766,
+          256,
+          178,
+          36
+        ],
+        [
+          208,
+          506,
+          142,
+          44
+        ],
+        [
+          208,
+          636,
+          736,
+          74
+        ]
+      ],
+      "sha256": "24377b13ea0c6c4a2a85d437ae5768a73dcb4b00df74bd3500a4192d0f54b620"
     },
     {
       "archivo": "docente-16-cambiar-contrasena.png",
       "ruta": "/cambiar-password",
-      "fecha": "2026-10-21T01:30:29.111Z",
-      "sha256": "58e5e4ad90b1001b28e52dbe44f488a4e54306f253cf6eb6512becceece78eeb"
+      "fecha": "2026-10-27T02:19:36.879Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 366
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Escribí la contraseña actual",
+          "objetivo": "Contraseña actual",
+          "referencia": "[[\"campo\",\"Contraseña actual\"]]",
+          "x": 400,
+          "y": 172,
+          "ancho": 352,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí la nueva contraseña",
+          "objetivo": "Contraseña nueva",
+          "referencia": "[[\"campo\",\"Contraseña nueva\"]]",
+          "x": 400,
+          "y": 242,
+          "ancho": 352,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Guardá tu nueva contraseña",
+          "objetivo": "Cambiar contraseña",
+          "referencia": "[[\"button\",\"Cambiar contraseña\"]]",
+          "x": 400,
+          "y": 290,
+          "ancho": 352,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          400,
+          172,
+          352,
+          32
+        ],
+        [
+          708,
+          166,
+          44,
+          44
+        ],
+        [
+          400,
+          242,
+          352,
+          32
+        ],
+        [
+          708,
+          236,
+          44,
+          44
+        ],
+        [
+          400,
+          290,
+          352,
+          32
+        ]
+      ],
+      "sha256": "75d9ebfef4097d58fa790d4460c7e3297efc02df17781faabca9ec379feda8e8"
     },
     {
       "archivo": "docente-17-horario-admins.png",
       "ruta": "/disponibilidad",
-      "fecha": "2026-10-21T01:30:29.737Z",
-      "sha256": "6f6e5ecc0680fff140dae881161fda0f4cb9a43b21eb503ec0fd4d4ed55440bb"
+      "fecha": "2026-10-27T02:19:37.506Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 232
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Mirá si hay atención ahora",
+          "objetivo": "No disponible",
+          "referencia": "[[\"span\",\"/^(No disponible|Disponible ahora)$/\"]]",
+          "x": 850,
+          "y": 156,
+          "ancho": 94,
+          "alto": 20
+        },
+        {
+          "numero": 2,
+          "texto": "Consultá el horario habitual",
+          "objetivo": "Lunes 08:00–18:00",
+          "referencia": "[[\"span\",\"/^Lunes /\"]]",
+          "x": 208,
+          "y": 184,
+          "ancho": 129,
+          "alto": 20
+        }
+      ],
+      "protecciones": [],
+      "sha256": "c6dfc5f2807feeec394bb8697603fffd0504df07b739751abc1f178661b772b4"
     },
     {
       "archivo": "docente-18-telefono.png",
       "ruta": "/",
-      "fecha": "2026-10-21T01:30:30.609Z",
-      "sha256": "3b8d87547eb1ec61c0a758efe00c21ecf894a2aacf7e8c62c869620e85e8a9c9"
+      "fecha": "2026-10-27T02:19:38.376Z",
+      "encuadre": {
+        "ancho": 390,
+        "alto": 844
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Abrí las funciones del sistema",
+          "objetivo": "Menú , 1 aviso sin leer",
+          "referencia": "[[\"button\",\"/^Menú/\"]]",
+          "x": 288,
+          "y": 10,
+          "ancho": 86,
+          "alto": 44
+        },
+        {
+          "numero": 2,
+          "texto": "Reservá desde el teléfono",
+          "objetivo": "Reservar",
+          "referencia": "[[\"enlace\",\"Reservar\"]]",
+          "x": 37,
+          "y": 448,
+          "ancho": 316,
+          "alto": 44
+        }
+      ],
+      "protecciones": [
+        [
+          236,
+          10,
+          44,
+          44
+        ],
+        [
+          288,
+          10,
+          86,
+          44
+        ],
+        [
+          33,
+          242,
+          127,
+          44
+        ],
+        [
+          37,
+          448,
+          316,
+          44
+        ],
+        [
+          29,
+          634,
+          44,
+          44
+        ],
+        [
+          81,
+          634,
+          118,
+          44
+        ],
+        [
+          29,
+          694,
+          44,
+          44
+        ],
+        [
+          81,
+          694,
+          48,
+          44
+        ],
+        [
+          137,
+          694,
+          44,
+          44
+        ],
+        [
+          29,
+          768,
+          173,
+          44
+        ]
+      ],
+      "sha256": "cd387f99b30cfcf1fc0eee56f7f578a7debc0c31ae4bb19c790f048c8d76cda0"
+    },
+    {
+      "archivo": "docente-25-calendario-semana.png",
+      "ruta": "/reservas/calendario",
+      "fecha": "2026-10-27T02:19:39.206Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí la fecha",
+          "objetivo": "Ir a fecha",
+          "referencia": "[[\"campo\",\"Ir a fecha\"]]",
+          "x": 37,
+          "y": 223,
+          "ancho": 156,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Mostrá todas las materias",
+          "objetivo": "Mostrar reservas",
+          "referencia": "[[\"campo\",\"Mostrar reservas\"]]",
+          "x": 205,
+          "y": 223,
+          "ancho": 162,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Abrí una clase para ver el detalle",
+          "objetivo": "Matemática, 1°1, 2026-11-02, 10:30–10:45, 1 equipo, Confirmada",
+          "referencia": "[[\"button\",\"/^Matemática,.*10:30/\"]]",
+          "x": 268.5,
+          "y": 739,
+          "ancho": 171.5,
+          "alto": 88
+        }
+      ],
+      "protecciones": [
+        [
+          951,
+          103,
+          38,
+          32
+        ],
+        [
+          997,
+          103,
+          118,
+          32
+        ],
+        [
+          37,
+          161,
+          38,
+          32
+        ],
+        [
+          83,
+          161,
+          48,
+          32
+        ],
+        [
+          139,
+          161,
+          38,
+          32
+        ],
+        [
+          37,
+          223,
+          156,
+          32
+        ],
+        [
+          205,
+          223,
+          162,
+          32
+        ],
+        [
+          379,
+          223,
+          75,
+          32
+        ],
+        [
+          458,
+          223,
+          50,
+          32
+        ],
+        [
+          512,
+          223,
+          74,
+          32
+        ],
+        [
+          598,
+          223,
+          137,
+          32
+        ],
+        [
+          37,
+          289,
+          742,
+          32
+        ],
+        [
+          791,
+          289,
+          163,
+          32
+        ],
+        [
+          966,
+          292.5,
+          13,
+          13
+        ],
+        [
+          93,
+          703,
+          171.5,
+          178
+        ],
+        [
+          268.5,
+          739,
+          171.5,
+          88
+        ],
+        [
+          557,
+          559,
+          171,
+          106
+        ]
+      ],
+      "sha256": "9f3fdd5a3c8456f15b5258c35a9562277e85ef978b4dd9e0573b90139e8b36e9"
+    },
+    {
+      "archivo": "docente-24-calendario-agenda.png",
+      "ruta": "/reservas/calendario",
+      "fecha": "2026-10-27T02:19:39.359Z",
+      "encuadre": {
+        "ancho": 390,
+        "alto": 844
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Buscá otra fecha",
+          "objetivo": "Ir a fecha",
+          "referencia": "[[\"campo\",\"Ir a fecha\"]]",
+          "x": 29,
+          "y": 368,
+          "ancho": 174,
+          "alto": 44
+        },
+        {
+          "numero": 2,
+          "texto": "Usá Agenda en el teléfono",
+          "objetivo": "Agenda",
+          "referencia": "[[\"button\",\"Agenda\"]]",
+          "x": 162,
+          "y": 498,
+          "ancho": 74,
+          "alto": 44
+        },
+        {
+          "numero": 3,
+          "texto": "Volvé a gestionar tus reservas",
+          "objetivo": "Listado y gestión",
+          "referencia": "[[\"enlace\",\"Listado y gestión\"]]",
+          "x": 29,
+          "y": 554,
+          "ancho": 137,
+          "alto": 44
+        }
+      ],
+      "protecciones": [
+        [
+          236,
+          10,
+          44,
+          44
+        ],
+        [
+          288,
+          10,
+          86,
+          44
+        ],
+        [
+          29,
+          234,
+          44,
+          44
+        ],
+        [
+          81,
+          234,
+          118,
+          44
+        ],
+        [
+          29,
+          294,
+          44,
+          44
+        ],
+        [
+          81,
+          294,
+          48,
+          44
+        ],
+        [
+          137,
+          294,
+          44,
+          44
+        ],
+        [
+          29,
+          368,
+          174,
+          44
+        ],
+        [
+          29,
+          442,
+          179,
+          44
+        ],
+        [
+          29,
+          498,
+          75,
+          44
+        ],
+        [
+          108,
+          498,
+          50,
+          44
+        ],
+        [
+          162,
+          498,
+          74,
+          44
+        ],
+        [
+          29,
+          554,
+          137,
+          44
+        ],
+        [
+          29,
+          646,
+          157,
+          44
+        ],
+        [
+          198,
+          646,
+          163,
+          44
+        ],
+        [
+          29,
+          717.5,
+          13,
+          13
+        ]
+      ],
+      "sha256": "c7dee4d9a2012ed7609f04ae4e7e4ef2007085054e6c31f983feb730a4161aac"
+    },
+    {
+      "archivo": "docente-26-agenda-clases.png",
+      "ruta": "/reservas/calendario",
+      "fecha": "2026-10-27T02:19:39.419Z",
+      "encuadre": {
+        "ancho": 332,
+        "alto": 422
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Tu clase: abrí su detalle",
+          "objetivo": "Programación, 1°1, 2026-11-02, 10:00–11:30, 6 equipos, Confirmada, tu reserva",
+          "referencia": "[[\"button\",\"/^Programación,/\"]]",
+          "x": 13,
+          "y": 45,
+          "ancho": 306,
+          "alto": 116
+        },
+        {
+          "numero": 2,
+          "texto": "Otra clase: consultá su ocupación",
+          "objetivo": "Matemática, 1°1, 2026-11-02, 10:30–10:45, 1 equipo, Confirmada",
+          "referencia": "[[\"button\",\"/^Matemática,.*10:30/\"]]",
+          "x": 13,
+          "y": 169,
+          "ancho": 306,
+          "alto": 116
+        }
+      ],
+      "protecciones": [
+        [
+          13,
+          45,
+          306,
+          116
+        ],
+        [
+          13,
+          169,
+          306,
+          116
+        ],
+        [
+          13,
+          293,
+          306,
+          116
+        ]
+      ],
+      "sha256": "984cae8b81e029cebee2e967efd0012c669739d93a586fe2b28bc125664d3f31"
+    },
+    {
+      "archivo": "admin-30-calendario.png",
+      "ruta": "/reservas/calendario",
+      "fecha": "2026-10-27T02:19:40.373Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí el período",
+          "objetivo": "Ir a fecha",
+          "referencia": "[[\"campo\",\"Ir a fecha\"]]",
+          "x": 37,
+          "y": 223,
+          "ancho": 156,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Creá una nueva reserva",
+          "objetivo": "Nueva reserva",
+          "referencia": "[[\"enlace\",\"Nueva reserva\"]]",
+          "x": 997,
+          "y": 103,
+          "ancho": 118,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Consultá la clase antes de actuar",
+          "objetivo": "Programación, 1°1, 2026-11-02, 10:00–11:30, 6 equipos, Confirmada",
+          "referencia": "[[\"button\",\"/^Programación,/\"]]",
+          "x": 93,
+          "y": 703,
+          "ancho": 171.5,
+          "alto": 178
+        }
+      ],
+      "protecciones": [
+        [
+          951,
+          103,
+          38,
+          32
+        ],
+        [
+          997,
+          103,
+          118,
+          32
+        ],
+        [
+          37,
+          161,
+          38,
+          32
+        ],
+        [
+          83,
+          161,
+          48,
+          32
+        ],
+        [
+          139,
+          161,
+          38,
+          32
+        ],
+        [
+          37,
+          223,
+          156,
+          32
+        ],
+        [
+          205,
+          223,
+          162,
+          32
+        ],
+        [
+          379,
+          223,
+          75,
+          32
+        ],
+        [
+          458,
+          223,
+          50,
+          32
+        ],
+        [
+          512,
+          223,
+          74,
+          32
+        ],
+        [
+          598,
+          223,
+          137,
+          32
+        ],
+        [
+          37,
+          289,
+          742,
+          32
+        ],
+        [
+          791,
+          289,
+          163,
+          32
+        ],
+        [
+          966,
+          292.5,
+          13,
+          13
+        ],
+        [
+          93,
+          703,
+          171.5,
+          178
+        ],
+        [
+          268.5,
+          739,
+          171.5,
+          88
+        ],
+        [
+          557,
+          559,
+          171,
+          106
+        ]
+      ],
+      "sha256": "92582236fc114b800fe0d74073e0e747c619effbd254cb880eb6af2ce91d0e81"
+    },
+    {
+      "archivo": "admin-33-calendario-movil.png",
+      "ruta": "/reservas/calendario",
+      "fecha": "2026-10-27T02:19:40.485Z",
+      "encuadre": {
+        "ancho": 332,
+        "alto": 422
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Tocá la clase para ver su detalle",
+          "objetivo": "Programación, 1°1, 2026-11-02, 10:00–11:30, 6 equipos, Confirmada",
+          "referencia": "[[\"button\",\"/^Programación,/\"]]",
+          "x": 13,
+          "y": 45,
+          "ancho": 306,
+          "alto": 116
+        },
+        {
+          "numero": 2,
+          "texto": "Revisá las otras clases del día",
+          "objetivo": "Matemática, 1°1, 2026-11-02, 10:30–10:45, 1 equipo, Confirmada",
+          "referencia": "[[\"button\",\"/^Matemática,.*10:30/\"]]",
+          "x": 13,
+          "y": 169,
+          "ancho": 306,
+          "alto": 116
+        }
+      ],
+      "protecciones": [
+        [
+          13,
+          45,
+          306,
+          116
+        ],
+        [
+          13,
+          169,
+          306,
+          116
+        ],
+        [
+          13,
+          293,
+          306,
+          116
+        ]
+      ],
+      "sha256": "d3513f9d425bdaa55c47a0325eba0e17b8d4c869a23fbb2ee4f607a4052a3ef7"
     },
     {
       "archivo": "docente-19-calendario-equipo.png",
-      "ruta": "/inventario/equipos/f223b4d3-60fe-4abb-96e0-719ab4693123/calendario",
-      "fecha": "2026-10-21T01:30:31.408Z",
-      "sha256": "a0d07aa7aec528c20c27f6a5998f9de655dcf21565d3b4b3a4be0e9181520ff6"
+      "ruta": "/inventario/equipos/1fea44f8-18a4-4c33-9cce-967d66185ea0/calendario",
+      "fecha": "2026-10-27T02:19:41.255Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Avanzá a otra semana",
+          "objetivo": "Semana siguiente →",
+          "referencia": "[[\"button\",\"/Semana siguiente/\"]]",
+          "x": 991.203125,
+          "y": 84,
+          "ancho": 144.796875,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí grilla o lista",
+          "objetivo": "Lista de reservas",
+          "referencia": "[[\"button\",\"Lista de reservas\"]]",
+          "x": 16,
+          "y": 140,
+          "ancho": 137,
+          "alto": 44
+        },
+        {
+          "numero": 3,
+          "texto": "Abrí una clase para ver el detalle",
+          "objetivo": "Programación (1°1) · Ana Gómez · 10:00–11:30",
+          "referencia": "[[\"button\",\"/^Programación/\"]]",
+          "x": 75,
+          "y": 385,
+          "ancho": 147,
+          "alto": 72
+        }
+      ],
+      "protecciones": [
+        [
+          16,
+          24,
+          179,
+          36
+        ],
+        [
+          792.41,
+          84,
+          136.8,
+          28
+        ],
+        [
+          937.2,
+          84,
+          46,
+          28
+        ],
+        [
+          991.2,
+          84,
+          144.8,
+          28
+        ],
+        [
+          16,
+          140,
+          137,
+          44
+        ],
+        [
+          161,
+          140,
+          117,
+          44
+        ],
+        [
+          75,
+          385,
+          147,
+          72
+        ],
+        [
+          75,
+          577,
+          147,
+          72
+        ],
+        [
+          379,
+          289,
+          147,
+          72
+        ]
+      ],
+      "sha256": "3198460de3c08c4fe3e3ccc714f0604f34a607b38227a8de53a6c3d041455957"
     },
     {
       "archivo": "admin-20-calendario-equipo.png",
-      "ruta": "/inventario/equipos/f223b4d3-60fe-4abb-96e0-719ab4693123/calendario",
-      "fecha": "2026-10-21T01:30:32.186Z",
-      "sha256": "6482462738e4d8e0410e6faa768b4c598910c5772cd55dbac82b1ae3f1a23c83"
+      "ruta": "/inventario/equipos/1fea44f8-18a4-4c33-9cce-967d66185ea0/calendario",
+      "fecha": "2026-10-27T02:19:42.039Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Consultá otra semana",
+          "objetivo": "Semana siguiente →",
+          "referencia": "[[\"button\",\"/Semana siguiente/\"]]",
+          "x": 991.203125,
+          "y": 84,
+          "ancho": 144.796875,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Cambiá entre grilla y lista",
+          "objetivo": "Lista de reservas",
+          "referencia": "[[\"button\",\"Lista de reservas\"]]",
+          "x": 16,
+          "y": 140,
+          "ancho": 137,
+          "alto": 44
+        },
+        {
+          "numero": 3,
+          "texto": "Abrí el detalle de una clase",
+          "objetivo": "Programación (1°1) · Ana Gómez · 10:00–11:30",
+          "referencia": "[[\"button\",\"/^Programación/\"]]",
+          "x": 75,
+          "y": 385,
+          "ancho": 147,
+          "alto": 72
+        }
+      ],
+      "protecciones": [
+        [
+          16,
+          24,
+          179,
+          36
+        ],
+        [
+          792.41,
+          84,
+          136.8,
+          28
+        ],
+        [
+          937.2,
+          84,
+          46,
+          28
+        ],
+        [
+          991.2,
+          84,
+          144.8,
+          28
+        ],
+        [
+          16,
+          140,
+          137,
+          44
+        ],
+        [
+          161,
+          140,
+          117,
+          44
+        ],
+        [
+          75,
+          385,
+          147,
+          72
+        ],
+        [
+          75,
+          577,
+          147,
+          72
+        ],
+        [
+          379,
+          289,
+          147,
+          72
+        ]
+      ],
+      "sha256": "77e2635e37e8c615cb27da872cb450ac1d2b877825fee9918731d99599a3ffc2"
     },
     {
       "archivo": "docente-20-como-entrar.png",
       "ruta": "/inventario",
-      "fecha": "2026-10-21T01:30:33.110Z",
-      "sha256": "9718fec285ffdb83f11fd723cb175fc8985335f74cf45f921d4b86f3dbd16a28"
+      "fecha": "2026-10-27T02:19:42.923Z",
+      "encuadre": {
+        "ancho": 848,
+        "alto": 486
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Identificá la cuenta para ingresar",
+          "objetivo": "taller Administrador",
+          "referencia": "[[\"p\",\"taller Administrador\"]]",
+          "x": 26,
+          "y": 166,
+          "ancho": 245,
+          "alto": 22
+        },
+        {
+          "numero": 2,
+          "texto": "Esta clave requiere un Admin",
+          "objetivo": "Solo la ven los administradores",
+          "referencia": "[[\"span\",\"Solo la ven los administradores\"]]",
+          "x": 26,
+          "y": 108,
+          "ancho": 195,
+          "alto": 20
+        },
+        {
+          "numero": 3,
+          "texto": "Esta cuenta no pide contraseña",
+          "objetivo": "Entra sin contraseña",
+          "referencia": "[[\"span\",\"Entra sin contraseña\"]]",
+          "x": 26,
+          "y": 332,
+          "ancho": 136,
+          "alto": 20
+        }
+      ],
+      "protecciones": [],
+      "sha256": "75f4c8ea465c2726f5fb6154fbb2690fd046db4aa663c0dc8b94066034579269"
     },
     {
       "archivo": "docente-21-como-entrar-telefono.png",
       "ruta": "/inventario",
-      "fecha": "2026-10-21T01:30:33.985Z",
-      "sha256": "ca91752890f6da3401027e65831a4ea63c30d27f247811315e431133bf33ced5"
+      "fecha": "2026-10-27T02:19:43.809Z",
+      "encuadre": {
+        "ancho": 300,
+        "alto": 518
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Usá el nombre de la cuenta",
+          "objetivo": "taller Administrador",
+          "referencia": "[[\"p\",\"taller Administrador\"]]",
+          "x": 26,
+          "y": 174,
+          "ancho": 248,
+          "alto": 22
+        },
+        {
+          "numero": 2,
+          "texto": "Si no está anotada, consultá",
+          "objetivo": "Contraseña no anotada",
+          "referencia": "[[\"span\",\"Contraseña no anotada\"]]",
+          "x": 26,
+          "y": 472,
+          "ancho": 152,
+          "alto": 20
+        }
+      ],
+      "protecciones": [],
+      "sha256": "6b564d0c81f88c3a3a51402bed2b9126fdfb8cb1cc572fa1b6d841ebfb89e105"
     },
     {
       "archivo": "admin-01-mostrador.png",
       "ruta": "/",
-      "fecha": "2026-10-21T01:30:34.739Z",
-      "sha256": "b1417244040b3f0c216183dfa9c27fff4dc30ed9d500a0a9bbb94ec45d8905ec"
+      "fecha": "2026-10-27T02:19:44.568Z",
+      "encuadre": {
+        "ancho": 1280,
+        "alto": 1000
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Entregá sin reserva previa",
+          "objetivo": "Entregar sin reserva",
+          "referencia": "[[\"button\",\"Entregar sin reserva\"]]",
+          "x": 1042,
+          "y": 329,
+          "ancho": 142,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Registrá lo que vuelve",
+          "objetivo": "Recibir 1 equipo de Secretaría",
+          "referencia": "[[\"button\",\"/^Recibir /\"]]",
+          "x": 1107,
+          "y": 524,
+          "ancho": 64,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Abrí las demás funciones",
+          "objetivo": "Administración",
+          "referencia": "[[\"button\",\"Administración\"]]",
+          "x": 731,
+          "y": 20,
+          "ancho": 140,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          174,
+          20,
+          56,
+          32
+        ],
+        [
+          232,
+          20,
+          84,
+          32
+        ],
+        [
+          318,
+          20,
+          119,
+          32
+        ],
+        [
+          439,
+          10,
+          92,
+          52
+        ],
+        [
+          533,
+          20,
+          97,
+          32
+        ],
+        [
+          632,
+          20,
+          97,
+          32
+        ],
+        [
+          731,
+          20,
+          140,
+          32
+        ],
+        [
+          883,
+          18,
+          44,
+          36
+        ],
+        [
+          935,
+          22,
+          172,
+          28
+        ],
+        [
+          1115,
+          22,
+          28,
+          28
+        ],
+        [
+          1151,
+          22,
+          49,
+          28
+        ],
+        [
+          80,
+          181,
+          214.39,
+          108
+        ],
+        [
+          306.39,
+          181,
+          214.41,
+          108
+        ],
+        [
+          532.8,
+          181,
+          214.39,
+          108
+        ],
+        [
+          759.19,
+          181,
+          214.41,
+          108
+        ],
+        [
+          985.59,
+          181,
+          214.39,
+          108
+        ],
+        [
+          1042,
+          329,
+          142,
+          28
+        ],
+        [
+          1107,
+          524,
+          64,
+          28
+        ],
+        [
+          109,
+          575.5,
+          13,
+          13
+        ],
+        [
+          1015,
+          676,
+          38,
+          32
+        ],
+        [
+          1061,
+          676,
+          118,
+          32
+        ],
+        [
+          101,
+          734,
+          38,
+          32
+        ],
+        [
+          147,
+          734,
+          48,
+          32
+        ],
+        [
+          203,
+          734,
+          38,
+          32
+        ],
+        [
+          101,
+          796,
+          155,
+          32
+        ],
+        [
+          268,
+          796,
+          162,
+          32
+        ],
+        [
+          442,
+          796,
+          75,
+          32
+        ],
+        [
+          521,
+          796,
+          50,
+          32
+        ],
+        [
+          575,
+          796,
+          74,
+          32
+        ],
+        [
+          661,
+          796,
+          137,
+          32
+        ],
+        [
+          101,
+          862,
+          742,
+          32
+        ],
+        [
+          855,
+          862,
+          163,
+          32
+        ],
+        [
+          1030,
+          865.5,
+          13,
+          13
+        ]
+      ],
+      "sha256": "1f3c2c07c77acde4d0558f97e3b07fca6371c85d6644894c7ddabf98c4122719"
     },
     {
       "archivo": "admin-02-menu.png",
       "ruta": "/",
-      "fecha": "2026-10-21T01:30:34.969Z",
-      "sha256": "42f4c6738ced615c01679c85fd623794d657c9f97ba34d3fffc6aa51a47d4159"
+      "fecha": "2026-10-27T02:19:44.801Z",
+      "encuadre": {
+        "ancho": 1280,
+        "alto": 1000
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Gestioná cuentas y permisos",
+          "objetivo": "Usuarios",
+          "referencia": "[[\"enlace\",\"Usuarios\"]]",
+          "x": 652,
+          "y": 61,
+          "ancho": 214,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Organizá cursos y materias",
+          "objetivo": "Académico",
+          "referencia": "[[\"enlace\",\"Académico\"]]",
+          "x": 652,
+          "y": 95,
+          "ancho": 214,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Ajustá plazos y avisos",
+          "objetivo": "Configuración del sistema",
+          "referencia": "[[\"enlace\",\"Configuración del sistema\"]]",
+          "x": 652,
+          "y": 333,
+          "ancho": 214,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          174,
+          20,
+          56,
+          32
+        ],
+        [
+          232,
+          20,
+          84,
+          32
+        ],
+        [
+          318,
+          20,
+          119,
+          32
+        ],
+        [
+          439,
+          10,
+          92,
+          52
+        ],
+        [
+          533,
+          20,
+          97,
+          32
+        ],
+        [
+          632,
+          20,
+          97,
+          32
+        ],
+        [
+          731,
+          20,
+          140,
+          32
+        ],
+        [
+          652,
+          61,
+          214,
+          32
+        ],
+        [
+          652,
+          95,
+          214,
+          32
+        ],
+        [
+          652,
+          129,
+          214,
+          32
+        ],
+        [
+          652,
+          163,
+          214,
+          32
+        ],
+        [
+          652,
+          197,
+          214,
+          32
+        ],
+        [
+          652,
+          231,
+          214,
+          32
+        ],
+        [
+          652,
+          265,
+          214,
+          32
+        ],
+        [
+          652,
+          299,
+          214,
+          32
+        ],
+        [
+          652,
+          333,
+          214,
+          32
+        ],
+        [
+          652,
+          367,
+          214,
+          32
+        ],
+        [
+          652,
+          401,
+          214,
+          32
+        ],
+        [
+          883,
+          18,
+          44,
+          36
+        ],
+        [
+          935,
+          22,
+          172,
+          28
+        ],
+        [
+          1115,
+          22,
+          28,
+          28
+        ],
+        [
+          1151,
+          22,
+          49,
+          28
+        ],
+        [
+          80,
+          181,
+          214.39,
+          108
+        ],
+        [
+          306.39,
+          181,
+          214.41,
+          108
+        ],
+        [
+          532.8,
+          181,
+          214.39,
+          108
+        ],
+        [
+          759.19,
+          181,
+          214.41,
+          108
+        ],
+        [
+          985.59,
+          181,
+          214.39,
+          108
+        ],
+        [
+          1042,
+          329,
+          142,
+          28
+        ],
+        [
+          1107,
+          524,
+          64,
+          28
+        ],
+        [
+          109,
+          575.5,
+          13,
+          13
+        ],
+        [
+          1015,
+          676,
+          38,
+          32
+        ],
+        [
+          1061,
+          676,
+          118,
+          32
+        ],
+        [
+          101,
+          734,
+          38,
+          32
+        ],
+        [
+          147,
+          734,
+          48,
+          32
+        ],
+        [
+          203,
+          734,
+          38,
+          32
+        ],
+        [
+          101,
+          796,
+          155,
+          32
+        ],
+        [
+          268,
+          796,
+          162,
+          32
+        ],
+        [
+          442,
+          796,
+          75,
+          32
+        ],
+        [
+          521,
+          796,
+          50,
+          32
+        ],
+        [
+          575,
+          796,
+          74,
+          32
+        ],
+        [
+          661,
+          796,
+          137,
+          32
+        ],
+        [
+          101,
+          862,
+          742,
+          32
+        ],
+        [
+          855,
+          862,
+          163,
+          32
+        ],
+        [
+          1030,
+          865.5,
+          13,
+          13
+        ]
+      ],
+      "sha256": "69638595796eb5b9edee25486303d8701a07c702649fa0ecf6e6ff31d34a1fc0"
     },
     {
       "archivo": "admin-03-aprobacion.png",
       "ruta": "/admin/aprobacion",
-      "fecha": "2026-10-21T01:30:35.619Z",
-      "sha256": "71f92ca95eb09555b9d41987dcaebeb409fc7a120efc549702a874f13369fde7"
+      "fecha": "2026-10-27T02:19:45.451Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 380
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Aprobá sólo si corresponde",
+          "objetivo": "Aprobar",
+          "referencia": "[[\"button\",\"Aprobar\"]]",
+          "x": 256,
+          "y": 320,
+          "ancho": 77,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Rechazá una solicitud incorrecta",
+          "objetivo": "Rechazar",
+          "referencia": "[[\"button\",\"Rechazar\"]]",
+          "x": 341,
+          "y": 320,
+          "ancho": 86,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          600,
+          279,
+          49,
+          16
+        ],
+        [
+          256,
+          320,
+          77,
+          32
+        ],
+        [
+          341,
+          320,
+          86,
+          32
+        ]
+      ],
+      "sha256": "6b1ff58203762811f59bfd1312eb552c475742ab3932d03198b0dc3b774e8fcc"
     },
     {
       "archivo": "admin-05-usuarios.png",
       "ruta": "/admin/usuarios",
-      "fecha": "2026-10-21T01:30:36.376Z",
-      "sha256": "f4b69dae12433a061db577cb95113546389c3d2828216732b4f150bf155d5214"
+      "fecha": "2026-10-27T02:19:46.175Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 882
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Filtrá por estado de cuenta",
+          "objetivo": "Estado",
+          "referencia": "[[\"campo\",\"Estado\"]]",
+          "x": 180,
+          "y": 104,
+          "ancho": 135,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Generá una contraseña temporal",
+          "objetivo": "Restablecer contraseña",
+          "referencia": "[[\"button\",\"Restablecer contraseña\"]]",
+          "x": 144,
+          "y": 526,
+          "ancho": 167,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Creá otro administrador",
+          "objetivo": "Crear otro Admin",
+          "referencia": "[[\"button\",\"Crear otro Admin\"]]",
+          "x": 889,
+          "y": 24,
+          "ancho": 135,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          889,
+          24,
+          135,
+          32
+        ],
+        [
+          180,
+          104,
+          135,
+          32
+        ],
+        [
+          303,
+          313,
+          49,
+          16
+        ],
+        [
+          144,
+          366,
+          71,
+          28
+        ],
+        [
+          223,
+          366,
+          79,
+          28
+        ],
+        [
+          144,
+          526,
+          167,
+          28
+        ],
+        [
+          319,
+          526,
+          130,
+          28
+        ],
+        [
+          457,
+          526,
+          90,
+          28
+        ],
+        [
+          144,
+          686,
+          167,
+          28
+        ],
+        [
+          319,
+          686,
+          130,
+          28
+        ],
+        [
+          457,
+          686,
+          90,
+          28
+        ],
+        [
+          144,
+          826,
+          161,
+          28
+        ]
+      ],
+      "sha256": "089f3b7941b0ca2590452963864aad4adf1d4c5c5f00328abb0f4ca3d3360134"
     },
     {
       "archivo": "admin-07-entregas.png",
       "ruta": "/admin/entregas",
-      "fecha": "2026-10-21T01:30:37.071Z",
-      "sha256": "8624877feb134b6acd43d91fddb7ed963e01c92cb902a49d9710b41b83fc7b33"
+      "fecha": "2026-10-27T02:19:46.851Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 538
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Registrá un retiro espontáneo",
+          "objetivo": "Entregar sin reserva",
+          "referencia": "[[\"button\",\"Entregar sin reserva\"]]",
+          "x": 979,
+          "y": 24,
+          "ancho": 157,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Registrá una devolución",
+          "objetivo": "Recibir 1 equipo de Secretaría",
+          "referencia": "[[\"button\",\"/^Recibir /\"]]",
+          "x": 1043,
+          "y": 215,
+          "ancho": 64,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Sacá un equipo a reparación",
+          "objetivo": "Sacar un equipo a reparación",
+          "referencia": "[[\"button\",\"Sacar un equipo a reparación\"]]",
+          "x": 16,
+          "y": 494,
+          "ancho": 214,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          979,
+          24,
+          157,
+          32
+        ],
+        [
+          1043,
+          215,
+          64,
+          28
+        ],
+        [
+          45,
+          282.5,
+          13,
+          13
+        ],
+        [
+          16,
+          494,
+          214,
+          32
+        ]
+      ],
+      "sha256": "b66db1936c4c9b68179499345ccaafa602ee168d9d2c3b9995aeb28de7ae38f5"
     },
     {
       "archivo": "admin-09-licencias.png",
       "ruta": "/admin/licencias",
-      "fecha": "2026-10-21T01:30:37.783Z",
-      "sha256": "1ffd89f3442fe6eda238da752703e8c4c7c84b72bdb7da47a3358cec0dc94ea0"
+      "fecha": "2026-10-27T02:19:47.537Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 668
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Cargá una nueva licencia",
+          "objetivo": "Cargar una licencia",
+          "referencia": "[[\"button\",\"Cargar una licencia\"]]",
+          "x": 986,
+          "y": 24,
+          "ancho": 150,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Registrá una renovación",
+          "objetivo": "Renovar hoy",
+          "referencia": "[[\"button\",\"Renovar hoy\"]]",
+          "x": 890,
+          "y": 191,
+          "ancho": 99,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Corregí sus datos",
+          "objetivo": "Editar",
+          "referencia": "[[\"button\",\"Editar\"]]",
+          "x": 997,
+          "y": 191,
+          "ancho": 58,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          986,
+          24,
+          150,
+          32
+        ],
+        [
+          29,
+          195,
+          13,
+          13
+        ],
+        [
+          890,
+          191,
+          99,
+          28
+        ],
+        [
+          997,
+          191,
+          58,
+          28
+        ],
+        [
+          1063,
+          191,
+          60,
+          28
+        ],
+        [
+          29,
+          293,
+          13,
+          13
+        ],
+        [
+          890,
+          289,
+          99,
+          28
+        ],
+        [
+          997,
+          289,
+          58,
+          28
+        ],
+        [
+          1063,
+          289,
+          60,
+          28
+        ],
+        [
+          29,
+          391,
+          13,
+          13
+        ],
+        [
+          890,
+          387,
+          99,
+          28
+        ],
+        [
+          997,
+          387,
+          58,
+          28
+        ],
+        [
+          1063,
+          387,
+          60,
+          28
+        ],
+        [
+          29,
+          489,
+          13,
+          13
+        ],
+        [
+          890,
+          485,
+          99,
+          28
+        ],
+        [
+          997,
+          485,
+          58,
+          28
+        ],
+        [
+          1063,
+          485,
+          60,
+          28
+        ],
+        [
+          29,
+          587,
+          13,
+          13
+        ],
+        [
+          890,
+          583,
+          99,
+          28
+        ],
+        [
+          997,
+          583,
+          58,
+          28
+        ],
+        [
+          1063,
+          583,
+          60,
+          28
+        ]
+      ],
+      "sha256": "4b6f537919fdaa7de91a3ac5a990cdbb43ca19efd9f0ccfcae385695b28b814f"
     },
     {
       "archivo": "admin-13-pedidos-de-materia.png",
       "ruta": "/admin/pedidos-de-materia",
-      "fecha": "2026-10-21T01:30:38.446Z",
-      "sha256": "b27604661d97601edb0b68ce93f53054a639482078c68447a403875919a703fc"
+      "fecha": "2026-10-27T02:19:48.187Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 412
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Mostrá sólo los pendientes",
+          "objetivo": "Ver solo los que faltan resolver",
+          "referencia": "[[\"checkbox\",\"Ver solo los que faltan resolver\"]]",
+          "x": 192,
+          "y": 140,
+          "ancho": 16,
+          "alto": 16
+        },
+        {
+          "numero": 2,
+          "texto": "Revisá y aprobá la asignación",
+          "objetivo": "Aprobar",
+          "referencia": "[[\"button\",\"Aprobar\"]]",
+          "x": 208,
+          "y": 348,
+          "ancho": 83,
+          "alto": 36
+        },
+        {
+          "numero": 3,
+          "texto": "Rechazá si no corresponde",
+          "objetivo": "No aprobar",
+          "referencia": "[[\"button\",\"No aprobar\"]]",
+          "x": 299,
+          "y": 348,
+          "ancho": 102,
+          "alto": 36
+        }
+      ],
+      "protecciones": [
+        [
+          192,
+          140,
+          16,
+          16
+        ],
+        [
+          208,
+          348,
+          83,
+          36
+        ],
+        [
+          299,
+          348,
+          102,
+          36
+        ]
+      ],
+      "sha256": "9df80fbd64cba34d47bfa2d0090480d931f08475cbae5dea20f534310ccc8f50"
     },
     {
       "archivo": "admin-16-reportes.png",
       "ruta": "/admin/reportes",
-      "fecha": "2026-10-21T01:30:39.269Z",
-      "sha256": "d89953099cc7d40c9747e46e8ba787b91890ec1f4e4f34bfbe75f2c29d607c0c"
+      "fecha": "2026-10-27T02:19:48.967Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí el año lectivo",
+          "objetivo": "Ciclo lectivo",
+          "referencia": "[[\"campo\",\"Ciclo lectivo\"]]",
+          "x": 128,
+          "y": 124,
+          "ancho": 288,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Acotá el período si hace falta",
+          "objetivo": "Desde",
+          "referencia": "[[\"campo\",\"Desde\"]]",
+          "x": 432,
+          "y": 124,
+          "ancho": 288,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Descargá los datos para analizarlos",
+          "objetivo": "Descargar CSV: Reservas y entregas efectivas",
+          "referencia": "[[\"button\",\"/^Descargar CSV:/\"]]",
+          "x": 896,
+          "y": 320,
+          "ancho": 112,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          128,
+          124,
+          288,
+          32
+        ],
+        [
+          432,
+          124,
+          288,
+          32
+        ],
+        [
+          736,
+          124,
+          288,
+          32
+        ],
+        [
+          896,
+          320,
+          112,
+          28
+        ]
+      ],
+      "sha256": "8d41ee7e7911496ba2351c8bd0d83cff0dd1e8e19fa49a7db567f10f90d05426"
+    },
+    {
+      "archivo": "admin-34-configuracion.png",
+      "ruta": "/admin/configuracion",
+      "fecha": "2026-10-27T02:19:49.701Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Ajustá la espera para retirar",
+          "objetivo": "Espera para retirar una reserva (minutos)",
+          "referencia": "[[\"campo\",\"Espera para retirar una reserva (minutos)\"]]",
+          "x": 208,
+          "y": 274,
+          "ancho": 736,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí cuándo recordar una clase",
+          "objetivo": "Antelación del recordatorio de reserva (minutos)",
+          "referencia": "[[\"campo\",\"Antelación del recordatorio de reserva (minutos)\"]]",
+          "x": 208,
+          "y": 412,
+          "ancho": 736,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Aplicá los plazos a la institución",
+          "objetivo": "Guardar configuración",
+          "referencia": "[[\"button\",\"Guardar configuración\"]]",
+          "x": 208,
+          "y": 844,
+          "ancho": 170,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          208,
+          274,
+          736,
+          32
+        ],
+        [
+          208,
+          412,
+          736,
+          32
+        ],
+        [
+          208,
+          530,
+          736,
+          32
+        ],
+        [
+          208,
+          648,
+          736,
+          32
+        ],
+        [
+          208,
+          766,
+          736,
+          32
+        ],
+        [
+          208,
+          844,
+          170,
+          32
+        ],
+        [
+          386,
+          844,
+          178,
+          32
+        ]
+      ],
+      "sha256": "3caf08cb3b4ded14f1394de54bd79037040f89ab46383f2b3a60640d8d38e819"
     },
     {
       "archivo": "admin-17-horarios-admin.png",
       "ruta": "/disponibilidad",
-      "fecha": "2026-10-21T01:30:40.028Z",
-      "sha256": "11d12157f7d32d2eb9f7a12d7b573374767380e4422df5c689b861730caab929"
+      "fecha": "2026-10-27T02:19:50.421Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Corregí tu horario habitual",
+          "objetivo": "Editar",
+          "referencia": "[[\"button\",\"Editar\"]]",
+          "x": 807,
+          "y": 356,
+          "ancho": 58,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí el día que atendés",
+          "objetivo": "Día",
+          "referencia": "[[\"campo\",\"Día\"]]",
+          "x": 208,
+          "y": 834,
+          "ancho": 237.328125,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Agregá el bloque de atención",
+          "objetivo": "Agregar",
+          "referencia": "[[\"button\",\"Agregar\"]]",
+          "x": 208,
+          "y": 878,
+          "ancho": 70,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          807,
+          356,
+          58,
+          28
+        ],
+        [
+          873,
+          356,
+          71,
+          28
+        ],
+        [
+          807,
+          440,
+          58,
+          28
+        ],
+        [
+          873,
+          440,
+          71,
+          28
+        ],
+        [
+          807,
+          524,
+          58,
+          28
+        ],
+        [
+          873,
+          524,
+          71,
+          28
+        ],
+        [
+          807,
+          608,
+          58,
+          28
+        ],
+        [
+          873,
+          608,
+          71,
+          28
+        ],
+        [
+          807,
+          692,
+          58,
+          28
+        ],
+        [
+          873,
+          692,
+          71,
+          28
+        ],
+        [
+          208,
+          834,
+          237.33,
+          32
+        ],
+        [
+          457.33,
+          833.5,
+          58,
+          32
+        ],
+        [
+          531.33,
+          833.5,
+          58,
+          32
+        ],
+        [
+          706.66,
+          833.5,
+          58,
+          32
+        ],
+        [
+          780.66,
+          833.5,
+          58,
+          32
+        ],
+        [
+          208,
+          878,
+          70,
+          28
+        ]
+      ],
+      "sha256": "a30e6ab11eb142c65c91f422e25957e95f041d283ea1cda95839e36da350a164"
     },
     {
       "archivo": "admin-18-avisos.png",
       "ruta": "/notificaciones",
-      "fecha": "2026-10-21T01:30:40.720Z",
-      "sha256": "18918752103cca751104a2daed76f26ecd6591d4e59662edbacdf60943121778"
+      "fecha": "2026-10-27T02:19:51.110Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 668
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Revisá las cuentas pendientes",
+          "objetivo": "Ir a aprobar",
+          "referencia": "[[\"enlace\",\"Ir a aprobar\"]]",
+          "x": 713,
+          "y": 612,
+          "ancho": 91,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Atendé las consultas",
+          "objetivo": "Ver conversaciones",
+          "referencia": "[[\"button\",\"Ver conversaciones\"]]",
+          "x": 804,
+          "y": 144,
+          "ancho": 140,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Marcá lo que ya revisaste",
+          "objetivo": "Marcar todas como leídas",
+          "referencia": "[[\"button\",\"Marcar todas como leídas\"]]",
+          "x": 783,
+          "y": 24,
+          "ancho": 177,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          783,
+          24,
+          177,
+          28
+        ],
+        [
+          804,
+          144,
+          140,
+          28
+        ],
+        [
+          844,
+          256,
+          100,
+          28
+        ],
+        [
+          192,
+          383.5,
+          13,
+          13
+        ],
+        [
+          688,
+          496,
+          116,
+          28
+        ],
+        [
+          812,
+          496,
+          132,
+          28
+        ],
+        [
+          713,
+          612,
+          91,
+          28
+        ],
+        [
+          812,
+          612,
+          132,
+          28
+        ]
+      ],
+      "sha256": "0f6c32813fdaa87ad2b9c055b6c53cdd0bf60c196cc177b07f30738bb3ed09e8"
     },
     {
       "archivo": "admin-21-perfil.png",
       "ruta": "/perfil",
-      "fecha": "2026-10-21T01:30:41.418Z",
-      "sha256": "bce6870b9759206b71d66d7cc5f4a2f3ad459c9422f0de2c67a068b9aeaa188f"
+      "fecha": "2026-10-27T02:19:51.790Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 694
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Actualizá tu foto",
+          "objetivo": "Cambiar la foto",
+          "referencia": "[[\"button\",\"Cambiar la foto\"]]",
+          "x": 304,
+          "y": 168,
+          "ancho": 126,
+          "alto": 36
+        },
+        {
+          "numero": 2,
+          "texto": "Corregí tu nombre",
+          "objetivo": "Cambiar mi nombre",
+          "referencia": "[[\"button\",\"Cambiar mi nombre\"]]",
+          "x": 766,
+          "y": 256,
+          "ancho": 178,
+          "alto": 36
+        },
+        {
+          "numero": 3,
+          "texto": "Cambiá tu contraseña",
+          "objetivo": "Cambiar mi contraseña Para cambiar la que usás para entrar.",
+          "referencia": "[[\"enlace\",\"/^Cambiar mi contraseña/\"]]",
+          "x": 208,
+          "y": 592,
+          "ancho": 736,
+          "alto": 74
+        }
+      ],
+      "protecciones": [
+        [
+          304,
+          168,
+          126,
+          36
+        ],
+        [
+          438,
+          168,
+          114,
+          36
+        ],
+        [
+          766,
+          256,
+          178,
+          36
+        ],
+        [
+          208,
+          462,
+          142,
+          44
+        ],
+        [
+          208,
+          592,
+          736,
+          74
+        ]
+      ],
+      "sha256": "ebe66cbf07cceeaf712e6ec89ae940b532f9f25e9abe0f7c76ea14df7313f372"
     },
     {
       "archivo": "admin-04-academico.png",
       "ruta": "/admin/academico",
-      "fecha": "2026-10-21T01:30:42.206Z",
-      "sha256": "3c8af0eee0d3f63c9307344ff62a474a5fd76cca06f67b345d67c1460e314df8"
+      "fecha": "2026-10-27T02:19:52.558Z",
+      "encuadre": {
+        "ancho": 736,
+        "alto": 331
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Escribí la nueva materia",
+          "objetivo": "Nueva materia",
+          "referencia": "[[\"campo\",\"Nueva materia\"]]",
+          "x": 13,
+          "y": 86,
+          "ancho": 632,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Agregala al curso",
+          "objetivo": "Agregar",
+          "referencia": "[[\"button\",\"Agregar\"]]",
+          "x": 653,
+          "y": 86,
+          "ancho": 70,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Asigná sus docentes",
+          "objetivo": "Docentes",
+          "referencia": "[[\"button\",\"Docentes\"]]",
+          "x": 453,
+          "y": 191,
+          "ancho": 80,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          425,
+          13,
+          121,
+          32
+        ],
+        [
+          554,
+          13,
+          90,
+          32
+        ],
+        [
+          652,
+          13,
+          71,
+          32
+        ],
+        [
+          13,
+          86,
+          632,
+          32
+        ],
+        [
+          653,
+          86,
+          70,
+          32
+        ],
+        [
+          13,
+          130,
+          241,
+          32
+        ],
+        [
+          453,
+          191,
+          80,
+          32
+        ],
+        [
+          541,
+          191,
+          90,
+          32
+        ],
+        [
+          639,
+          191,
+          71,
+          32
+        ],
+        [
+          453,
+          269,
+          80,
+          32
+        ],
+        [
+          541,
+          269,
+          90,
+          32
+        ],
+        [
+          639,
+          269,
+          71,
+          32
+        ]
+      ],
+      "sha256": "b5261e8fbdd472461d5780368727182fdfaf35772cd5e036bc7cbaeafb350cae"
     },
     {
       "archivo": "admin-27-quitar-docente-compartida.png",
       "ruta": "/admin/academico",
-      "fecha": "2026-10-21T01:30:42.432Z",
-      "sha256": "5354091166a6297308d5597715af6c983d8c0721820c75e1390f557c8f48aec6"
+      "fecha": "2026-10-27T02:19:52.768Z",
+      "encuadre": {
+        "ancho": 684,
+        "alto": 218
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Todavía queda otra cuenta: las reservas siguen",
+          "objetivo": "Queda 1 docente con cuenta aprobada en esta materia y curso, sean titulares o suplentes. Las reservas se mantienen.",
+          "referencia": "[[\"p\",\"/^Queda 1 docente/\"]]",
+          "x": 13,
+          "y": 77,
+          "ancho": 658,
+          "alto": 40
+        },
+        {
+          "numero": 2,
+          "texto": "Quitá sólo esta asignación",
+          "objetivo": "Confirmar quitar docente",
+          "referencia": "[[\"button\",\"Confirmar quitar docente\"]]",
+          "x": 13,
+          "y": 173,
+          "ancho": 175,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          13,
+          173,
+          175,
+          32
+        ],
+        [
+          196,
+          173,
+          61,
+          32
+        ]
+      ],
+      "sha256": "6702f25001638e060ae529cb7cb899683ed2adaea5890acecda753ecf6995155"
     },
     {
       "archivo": "admin-28-quitar-ultimo-docente.png",
       "ruta": "/admin/academico",
-      "fecha": "2026-10-21T01:30:42.716Z",
-      "sha256": "105f555fc06e2356fd36fbeac398bd55ebee48ba08ff09c53df25c36627e445d"
+      "fecha": "2026-10-27T02:19:53.035Z",
+      "encuadre": {
+        "ancho": 684,
+        "alto": 218
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Sin otra cuenta, se cancelan las futuras",
+          "objetivo": "Si confirmás y la materia queda sin ningún docente con cuenta aprobada, se cancelarán sus reservas futuras y se avisará a los administradores. Las materias de otros cursos conservan sus reservas.",
+          "referencia": "[[\"p\",\"/^Si confirmás y la materia/\"]]",
+          "x": 13,
+          "y": 77,
+          "ancho": 658,
+          "alto": 40
+        },
+        {
+          "numero": 2,
+          "texto": "Volvé si necesitás asignar un reemplazo",
+          "objetivo": "Volver",
+          "referencia": "[[\"button\",\"Volver\"]]",
+          "x": 196,
+          "y": 173,
+          "ancho": 61,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          13,
+          173,
+          175,
+          32
+        ],
+        [
+          196,
+          173,
+          61,
+          32
+        ]
+      ],
+      "sha256": "c7c5adf6b2ea96649a442b8d8da27e834ad5c89fbdb4bfee49d1a126c57ca1d8"
+    },
+    {
+      "archivo": "admin-31-editar-curso-prioridades.png",
+      "ruta": "/admin/academico",
+      "fecha": "2026-10-27T02:19:53.944Z",
+      "encuadre": {
+        "ancho": 710,
+        "alto": 540
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Corregí el curso",
+          "objetivo": "División (opcional)",
+          "referencia": "[[\"campo\",\"División (opcional)\"]]",
+          "x": 98,
+          "y": 20,
+          "ancho": 112,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí qué pasa con las prioridades",
+          "objetivo": "Conservar las prioridades exactas con el curso",
+          "referencia": "[[\"radio\",\"Conservar las prioridades exactas con el curso\"]]",
+          "x": 13,
+          "y": 350.5,
+          "ancho": 13,
+          "alto": 13
+        },
+        {
+          "numero": 3,
+          "texto": "Confirmá el alcance revisado",
+          "objetivo": "Confirmar cambio de curso",
+          "referencia": "[[\"button\",\"Confirmar cambio de curso\"]]",
+          "x": 0,
+          "y": 508,
+          "ancho": 185,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          0,
+          20,
+          90,
+          32
+        ],
+        [
+          98,
+          20,
+          112,
+          32
+        ],
+        [
+          0,
+          84,
+          288,
+          32
+        ],
+        [
+          13,
+          350.5,
+          13,
+          13
+        ],
+        [
+          13,
+          402.5,
+          13,
+          13
+        ],
+        [
+          0,
+          508,
+          185,
+          32
+        ],
+        [
+          193,
+          508,
+          76,
+          32
+        ]
+      ],
+      "sha256": "0656c52ae401dcd6c4b76335e232b9c7c5c927ae7e90a92887fca40dadcd81f0"
     },
     {
       "archivo": "admin-19-cerrar-anio.png",
       "ruta": "/admin/academico",
-      "fecha": "2026-10-21T01:30:43.548Z",
-      "sha256": "e1fadb1bd68bd1e63b93bd26ad023f798268dee4b7044f64840e6645dded6cc5"
+      "fecha": "2026-10-27T02:19:54.693Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 838
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí si abrís otro ciclo",
+          "objetivo": "Cerrar y crear el siguiente ciclo",
+          "referencia": "[[\"radio\",\"Cerrar y crear el siguiente ciclo\"]]",
+          "x": 157,
+          "y": 622.5,
+          "ancho": 13,
+          "alto": 13
+        },
+        {
+          "numero": 2,
+          "texto": "Revisá el año de destino",
+          "objetivo": "Año del ciclo siguiente — se crea copiando todos los cursos y materias de 2026",
+          "referencia": "[[\"campo\",\"/^Año del ciclo siguiente/\"]]",
+          "x": 157,
+          "y": 699,
+          "ancho": 128,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Cerrar es definitivo: revisá antes",
+          "objetivo": "Cerrar 2026 y crear 2027",
+          "referencia": "[[\"button\",\"/^Cerrar \\\\d{4} y crear \\\\d{4}$/\"]]",
+          "x": 157,
+          "y": 765,
+          "ancho": 174,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          144,
+          242,
+          128,
+          32
+        ],
+        [
+          284,
+          242,
+          94,
+          32
+        ],
+        [
+          943,
+          322,
+          65,
+          32
+        ],
+        [
+          157,
+          622.5,
+          13,
+          13
+        ],
+        [
+          157,
+          650.5,
+          13,
+          13
+        ],
+        [
+          157,
+          699,
+          128,
+          32
+        ],
+        [
+          157,
+          765,
+          174,
+          32
+        ],
+        [
+          339,
+          765,
+          61,
+          32
+        ]
+      ],
+      "sha256": "0b83e25084c7bd975ec36d93555775e2d1e4717d285bc3b8c0045c2730f79bcd"
+    },
+    {
+      "archivo": "admin-32-cambiar-rotulo.png",
+      "ruta": "/admin/inventario",
+      "fecha": "2026-10-27T02:19:55.581Z",
+      "encuadre": {
+        "ancho": 838,
+        "alto": 392
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Indicá el nuevo rótulo",
+          "objetivo": "Nuevo número de PC",
+          "referencia": "[[\"campo\",\"Nuevo número de PC\"]]",
+          "x": 17,
+          "y": 121,
+          "ancho": 804,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Confirmá que es la misma computadora",
+          "objetivo": "Confirmo que es la misma computadora y que actualizaré su rótulo físico.",
+          "referencia": "[[\"checkbox\",\"/^Confirmo que es la misma/\"]]",
+          "x": 17,
+          "y": 315,
+          "ancho": 13,
+          "alto": 13
+        },
+        {
+          "numero": 3,
+          "texto": "Guardá el número y conservá su identidad",
+          "objetivo": "Confirmar nuevo rótulo",
+          "referencia": "[[\"button\",\"Confirmar nuevo rótulo\"]]",
+          "x": 17,
+          "y": 343,
+          "ancho": 173,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          17,
+          121,
+          804,
+          32
+        ],
+        [
+          17,
+          211,
+          804,
+          32
+        ],
+        [
+          17,
+          315,
+          13,
+          13
+        ],
+        [
+          17,
+          343,
+          173,
+          32
+        ],
+        [
+          198,
+          343,
+          196,
+          32
+        ]
+      ],
+      "sha256": "829946f4d2808063f5c4fa06e30bd580960ad4452aaf8191cf117045ee4d6051"
     },
     {
       "archivo": "admin-06-inventario.png",
       "ruta": "/admin/inventario",
-      "fecha": "2026-10-21T01:30:44.331Z",
-      "sha256": "528d8b9f8412297dd70c4ba863f36232af91e0b52dc3627afda432b53ba7eeff"
+      "fecha": "2026-10-27T02:19:56.334Z",
+      "encuadre": {
+        "ancho": 836,
+        "alto": 183
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Editá la ficha del equipo",
+          "objetivo": "Editar",
+          "referencia": "[[\"button\",\"Editar\"]]",
+          "x": 317.59375,
+          "y": 106,
+          "ancho": 58,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Consultá las cuentas de ingreso",
+          "objetivo": "Cómo entrar",
+          "referencia": "[[\"button\",\"Cómo entrar\"]]",
+          "x": 383.59375,
+          "y": 106,
+          "ancho": 98,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Definí sus prioridades",
+          "objetivo": "Preferencias",
+          "referencia": "[[\"button\",\"Preferencias\"]]",
+          "x": 13,
+          "y": 142,
+          "ancho": 95,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          13,
+          62,
+          810,
+          44
+        ],
+        [
+          13,
+          106,
+          147.8,
+          28
+        ],
+        [
+          168.8,
+          106,
+          140.8,
+          28
+        ],
+        [
+          317.59,
+          106,
+          58,
+          28
+        ],
+        [
+          383.59,
+          106,
+          98,
+          28
+        ],
+        [
+          489.59,
+          106,
+          91,
+          28
+        ],
+        [
+          588.59,
+          106,
+          77,
+          28
+        ],
+        [
+          673.59,
+          106,
+          76,
+          28
+        ],
+        [
+          13,
+          142,
+          95,
+          28
+        ],
+        [
+          116,
+          142,
+          90,
+          28
+        ]
+      ],
+      "sha256": "dee1a62cb47b0eee82e05d16f52328a1d05d93b836b9b633b1d487ffaa592955"
     },
     {
       "archivo": "admin-24-preferencias.png",
       "ruta": "/admin/inventario",
-      "fecha": "2026-10-21T01:30:44.525Z",
-      "sha256": "c1d5637aa330ffd3ae76d7eb138cb89067112662f3cca04e543de7fbaed211b5"
+      "fecha": "2026-10-27T02:19:56.520Z",
+      "encuadre": {
+        "ancho": 864,
+        "alto": 645
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí el alcance de la marca",
+          "objetivo": "Alcance",
+          "referencia": "[[\"campo\",\"Alcance\"]]",
+          "x": 26,
+          "y": 445,
+          "ancho": 265.328125,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí la materia del catálogo",
+          "objetivo": "Materia",
+          "referencia": "[[\"campo\",\"Materia\"]]",
+          "x": 299.328125,
+          "y": 527,
+          "ancho": 265.328125,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Un número menor tiene más prioridad",
+          "objetivo": "Prioridad",
+          "referencia": "[[\"campo\",\"Prioridad\"]]",
+          "x": 572.65625,
+          "y": 505,
+          "ancho": 265.34375,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          13,
+          62,
+          838,
+          44
+        ],
+        [
+          13,
+          106,
+          147.8,
+          28
+        ],
+        [
+          168.8,
+          106,
+          140.8,
+          28
+        ],
+        [
+          317.59,
+          106,
+          58,
+          28
+        ],
+        [
+          383.59,
+          106,
+          98,
+          28
+        ],
+        [
+          489.59,
+          106,
+          91,
+          28
+        ],
+        [
+          588.59,
+          106,
+          77,
+          28
+        ],
+        [
+          673.59,
+          106,
+          76,
+          28
+        ],
+        [
+          13,
+          142,
+          95,
+          28
+        ],
+        [
+          116,
+          142,
+          90,
+          28
+        ],
+        [
+          26,
+          303,
+          812,
+          36
+        ],
+        [
+          712,
+          351,
+          58,
+          28
+        ],
+        [
+          778,
+          351,
+          60,
+          28
+        ],
+        [
+          712,
+          385,
+          58,
+          28
+        ],
+        [
+          778,
+          385,
+          60,
+          28
+        ],
+        [
+          26,
+          445,
+          265.33,
+          32
+        ],
+        [
+          299.33,
+          445,
+          265.33,
+          32
+        ],
+        [
+          572.66,
+          445,
+          265.34,
+          32
+        ],
+        [
+          26,
+          527,
+          265.33,
+          32
+        ],
+        [
+          299.33,
+          527,
+          265.33,
+          32
+        ],
+        [
+          572.66,
+          505,
+          265.34,
+          32
+        ],
+        [
+          26,
+          591,
+          265.33,
+          28
+        ]
+      ],
+      "sha256": "d06fd7057c13fc302ee298b6dea4c49fed490fc4af36ff22b86266a27d960ab8"
     },
     {
       "archivo": "admin-22-cuentas-de-equipo.png",
       "ruta": "/admin/inventario",
-      "fecha": "2026-10-21T01:30:44.703Z",
-      "sha256": "fad259d9fb2ba3a041d90d289610407d3aae9c902b9af38ab9dec288e0ddbd4e"
+      "fecha": "2026-10-27T02:19:56.719Z",
+      "encuadre": {
+        "ancho": 838,
+        "alto": 446
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Anotá una cuenta del equipo",
+          "objetivo": "Agregar cuenta",
+          "referencia": "[[\"button\",\"Agregar cuenta\"]]",
+          "x": 710,
+          "y": 13,
+          "ancho": 115,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Revelá la clave si la necesitás",
+          "objetivo": "Ver contraseña",
+          "referencia": "[[\"button\",\"Ver contraseña\"]]",
+          "x": 564,
+          "y": 66,
+          "ancho": 114,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Corregí los datos de la cuenta",
+          "objetivo": "Editar",
+          "referencia": "[[\"button\",\"Editar\"]]",
+          "x": 686,
+          "y": 66,
+          "ancho": 58,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          710,
+          13,
+          115,
+          28
+        ],
+        [
+          564,
+          66,
+          114,
+          28
+        ],
+        [
+          686,
+          66,
+          58,
+          28
+        ],
+        [
+          752,
+          66,
+          60,
+          28
+        ],
+        [
+          564,
+          154,
+          114,
+          28
+        ],
+        [
+          686,
+          154,
+          58,
+          28
+        ],
+        [
+          752,
+          154,
+          60,
+          28
+        ],
+        [
+          686,
+          242,
+          58,
+          28
+        ],
+        [
+          752,
+          242,
+          60,
+          28
+        ],
+        [
+          686,
+          350,
+          58,
+          28
+        ],
+        [
+          752,
+          350,
+          60,
+          28
+        ]
+      ],
+      "sha256": "16a78a971132f0bab3a750b34f8c76545341e0b3852e141035af5b950414f758"
     },
     {
       "archivo": "admin-23-cuenta-nueva.png",
       "ruta": "/admin/inventario",
-      "fecha": "2026-10-21T01:30:44.859Z",
-      "sha256": "55c2abf5bab8cc76ad95850845c19c34c53455694799ae81e5eed876917538c1"
+      "fecha": "2026-10-27T02:19:56.890Z",
+      "encuadre": {
+        "ancho": 812,
+        "alto": 510
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Anotá el usuario del equipo",
+          "objetivo": "¿Con qué usuario se entra?",
+          "referencia": "[[\"campo\",\"¿Con qué usuario se entra?\"]]",
+          "x": 13,
+          "y": 33,
+          "ancho": 387,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Decidí quién puede ver la clave",
+          "objetivo": "Solo los administradores",
+          "referencia": "[[\"radio\",\"Solo los administradores\"]]",
+          "x": 13,
+          "y": 312.5,
+          "ancho": 13,
+          "alto": 13
+        },
+        {
+          "numero": 3,
+          "texto": "Guardá la ficha de la cuenta",
+          "objetivo": "Guardar",
+          "referencia": "[[\"button\",\"Guardar\"]]",
+          "x": 13,
+          "y": 469,
+          "ancho": 70,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          13,
+          33,
+          387,
+          32
+        ],
+        [
+          412,
+          33,
+          387,
+          32
+        ],
+        [
+          13,
+          100.5,
+          13,
+          13
+        ],
+        [
+          13,
+          126.5,
+          13,
+          13
+        ],
+        [
+          13,
+          159,
+          16,
+          16
+        ],
+        [
+          13,
+          223,
+          786,
+          32
+        ],
+        [
+          13,
+          312.5,
+          13,
+          13
+        ],
+        [
+          13,
+          338.5,
+          13,
+          13
+        ],
+        [
+          13,
+          425,
+          786,
+          32
+        ],
+        [
+          13,
+          469,
+          70,
+          28
+        ],
+        [
+          91,
+          469,
+          76,
+          28
+        ]
+      ],
+      "sha256": "56a63d5170bbe4a0e0f009a4e4b7a5218b9d1c255f2ccf1f48473e117fefa24e"
     },
     {
       "archivo": "admin-08-entregar-sin-reserva.png",
       "ruta": "/admin/entregas",
-      "fecha": "2026-10-21T01:30:45.674Z",
-      "sha256": "862e974b1ff213076f39b56925cb0edaeacf19ef04e9846d733c590378b033e7"
+      "fecha": "2026-10-27T02:19:57.696Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Identificá al responsable",
+          "objetivo": "¿A quién?",
+          "referencia": "[[\"campo\",\"¿A quién?\"]]",
+          "x": 32,
+          "y": 222,
+          "ancho": 352,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Marcá los equipos que salen",
+          "objetivo": "PC 1 (Carro 1)",
+          "referencia": "[[\"checkbox\",\"/^PC 1 /\"]]",
+          "x": 432,
+          "y": 484,
+          "ancho": 16,
+          "alto": 16
+        },
+        {
+          "numero": 3,
+          "texto": "Registrá la entrega",
+          "objetivo": "Entregar",
+          "referencia": "[[\"button\",\"Entregar\"]]",
+          "x": 32,
+          "y": 667,
+          "ancho": 80,
+          "alto": 36
+        }
+      ],
+      "protecciones": [
+        [
+          32,
+          222,
+          352,
+          32
+        ],
+        [
+          32,
+          290,
+          352,
+          32
+        ],
+        [
+          32,
+          358,
+          352,
+          32
+        ],
+        [
+          408,
+          230,
+          712,
+          32
+        ],
+        [
+          432,
+          320,
+          16,
+          16
+        ],
+        [
+          432,
+          402,
+          16,
+          16
+        ],
+        [
+          1009,
+          447,
+          98,
+          16
+        ],
+        [
+          432,
+          484,
+          16,
+          16
+        ],
+        [
+          663.33,
+          484,
+          16,
+          16
+        ],
+        [
+          894.66,
+          484,
+          16,
+          16
+        ],
+        [
+          432,
+          534,
+          16,
+          16
+        ],
+        [
+          663.33,
+          534,
+          16,
+          16
+        ],
+        [
+          894.66,
+          534,
+          16,
+          16
+        ],
+        [
+          432,
+          584,
+          16,
+          16
+        ],
+        [
+          32,
+          667,
+          80,
+          36
+        ],
+        [
+          124,
+          669,
+          64,
+          32
+        ],
+        [
+          1043,
+          826,
+          64,
+          28
+        ],
+        [
+          45,
+          893.5,
+          13,
+          13
+        ]
+      ],
+      "sha256": "233ff51029e64feb6f389fbe23ba0edf991994c5c5303571336db400e677cb35"
     },
     {
       "archivo": "admin-10-cargar-licencia.png",
       "ruta": "/admin/licencias",
-      "fecha": "2026-10-21T01:30:46.494Z",
-      "sha256": "557bb8ef4bc68d678491797d0c1d06f03a3f8f9df07f901a89abab371a4863ea"
+      "fecha": "2026-10-27T02:19:58.490Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Indicá el software",
+          "objetivo": "Software",
+          "referencia": "[[\"campo\",\"Software\"]]",
+          "x": 32,
+          "y": 222,
+          "ancho": 1088,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí dónde está instalado",
+          "objetivo": "PC 1(Carro 1)",
+          "referencia": "[[\"checkbox\",\"/^PC 1\\\\(/\"]]",
+          "x": 578,
+          "y": 420.5,
+          "ancho": 13,
+          "alto": 13
+        },
+        {
+          "numero": 3,
+          "texto": "Definí su vencimiento",
+          "objetivo": "¿Cuándo vence?",
+          "referencia": "[[\"campo\",\"¿Cuándo vence?\"]]",
+          "x": 32,
+          "y": 578,
+          "ancho": 538,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          32,
+          222,
+          1088,
+          32
+        ],
+        [
+          32,
+          301,
+          538,
+          32
+        ],
+        [
+          582,
+          290,
+          538,
+          32
+        ],
+        [
+          1043,
+          360,
+          77,
+          16
+        ],
+        [
+          41,
+          396.5,
+          13,
+          13
+        ],
+        [
+          578,
+          396.5,
+          13,
+          13
+        ],
+        [
+          41,
+          420.5,
+          13,
+          13
+        ],
+        [
+          578,
+          420.5,
+          13,
+          13
+        ],
+        [
+          41,
+          444.5,
+          13,
+          13
+        ],
+        [
+          578,
+          444.5,
+          13,
+          13
+        ],
+        [
+          41,
+          468.5,
+          13,
+          13
+        ],
+        [
+          578,
+          468.5,
+          13,
+          13
+        ],
+        [
+          41,
+          492.5,
+          13,
+          13
+        ],
+        [
+          578,
+          492.5,
+          13,
+          13
+        ],
+        [
+          41,
+          516.5,
+          13,
+          13
+        ],
+        [
+          32,
+          578,
+          538,
+          32
+        ],
+        [
+          32,
+          626,
+          156,
+          32
+        ],
+        [
+          196,
+          626,
+          64,
+          32
+        ],
+        [
+          29,
+          769,
+          13,
+          13
+        ],
+        [
+          890,
+          765,
+          99,
+          28
+        ],
+        [
+          997,
+          765,
+          58,
+          28
+        ],
+        [
+          1063,
+          765,
+          60,
+          28
+        ],
+        [
+          29,
+          867,
+          13,
+          13
+        ],
+        [
+          890,
+          863,
+          99,
+          28
+        ],
+        [
+          997,
+          863,
+          58,
+          28
+        ],
+        [
+          1063,
+          863,
+          60,
+          28
+        ]
+      ],
+      "sha256": "5bc1d63aa6d283d6c7f532a53e4d877c212a02bb97a805aee656610e2696f7c9"
     },
     {
       "archivo": "admin-11-bloquear.png",
       "ruta": "/admin/bloquear-equipos",
-      "fecha": "2026-10-21T01:30:47.238Z",
-      "sha256": "9d847b22838cad058302d68ba54ce992ad0659783fa42c717b734dae65ea8eac"
+      "fecha": "2026-10-27T02:19:59.228Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 728
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Definí fecha y horario",
+          "objetivo": "Fecha",
+          "referencia": "[[\"campo\",\"Fecha\"]]",
+          "x": 208,
+          "y": 198,
+          "ancho": 237.328125,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Explicá por qué se necesitan",
+          "objetivo": "¿Por qué se bloquean?",
+          "referencia": "[[\"campo\",\"¿Por qué se bloquean?\"]]",
+          "x": 208,
+          "y": 264,
+          "ancho": 736,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Revisá el impacto antes de guardar",
+          "objetivo": "Revisar bloqueo",
+          "referencia": "[[\"button\",\"Revisar bloqueo\"]]",
+          "x": 192,
+          "y": 684,
+          "ancho": 131,
+          "alto": 32
+        }
+      ],
+      "protecciones": [
+        [
+          208,
+          198,
+          237.33,
+          32
+        ],
+        [
+          457.33,
+          197.5,
+          58,
+          32
+        ],
+        [
+          531.33,
+          197.5,
+          58,
+          32
+        ],
+        [
+          706.66,
+          197.5,
+          58,
+          32
+        ],
+        [
+          780.66,
+          197.5,
+          58,
+          32
+        ],
+        [
+          208,
+          264,
+          736,
+          32
+        ],
+        [
+          192,
+          412,
+          768,
+          32
+        ],
+        [
+          862,
+          458,
+          98,
+          16
+        ],
+        [
+          201,
+          497,
+          16,
+          16
+        ],
+        [
+          589,
+          497,
+          16,
+          16
+        ],
+        [
+          201,
+          539,
+          16,
+          16
+        ],
+        [
+          589,
+          539,
+          16,
+          16
+        ],
+        [
+          201,
+          581,
+          16,
+          16
+        ],
+        [
+          589,
+          581,
+          16,
+          16
+        ],
+        [
+          201,
+          623,
+          16,
+          16
+        ],
+        [
+          589,
+          623,
+          16,
+          16
+        ],
+        [
+          192,
+          684,
+          131,
+          32
+        ]
+      ],
+      "sha256": "1429c4df24cfd2072175c811a87b2ad0304b3d8e521bf1c6c559c2e66f4797cd"
     },
     {
       "archivo": "admin-12-jornada.png",
       "ruta": "/admin/jornada",
-      "fecha": "2026-10-21T01:30:47.929Z",
-      "sha256": "cab9a079ddcf3fcf338a183e18923f21b333c1b52f81e71fe67c5ddf55b1e292"
+      "fecha": "2026-10-27T02:19:59.912Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 616
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Elegí los días de apertura",
+          "objetivo": "Lunes a viernes",
+          "referencia": "[[\"button\",\"Lunes a viernes\"]]",
+          "x": 255,
+          "y": 264,
+          "ancho": 107,
+          "alto": 26
+        },
+        {
+          "numero": 2,
+          "texto": "Indicá la hora de apertura",
+          "objetivo": "Abre: hora",
+          "referencia": "[[\"campo\",\"Abre: hora\"]]",
+          "x": 208,
+          "y": 326,
+          "ancho": 58,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Editá un tramo existente",
+          "objetivo": "Editar Todos los días de 07:00 a 23:00",
+          "referencia": "[[\"button\",\"/^Editar Todos/\"]]",
+          "x": 821,
+          "y": 459,
+          "ancho": 58,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          208,
+          228,
+          59,
+          28
+        ],
+        [
+          273,
+          228,
+          63,
+          28
+        ],
+        [
+          342,
+          228,
+          80,
+          28
+        ],
+        [
+          428,
+          228,
+          66,
+          28
+        ],
+        [
+          500,
+          228,
+          68,
+          28
+        ],
+        [
+          574,
+          228,
+          68,
+          28
+        ],
+        [
+          648,
+          228,
+          77,
+          28
+        ],
+        [
+          255,
+          264,
+          107,
+          26
+        ],
+        [
+          370,
+          264,
+          96,
+          26
+        ],
+        [
+          474,
+          264,
+          100,
+          26
+        ],
+        [
+          208,
+          326,
+          58,
+          32
+        ],
+        [
+          282,
+          326,
+          58,
+          32
+        ],
+        [
+          390,
+          326,
+          58,
+          32
+        ],
+        [
+          464,
+          326,
+          58,
+          32
+        ],
+        [
+          208,
+          374,
+          119,
+          32
+        ],
+        [
+          713,
+          459,
+          104,
+          28
+        ],
+        [
+          821,
+          459,
+          58,
+          28
+        ],
+        [
+          883,
+          459,
+          60,
+          28
+        ]
+      ],
+      "sha256": "b1c0c5286d52a5b4a064b1a15cc1b6dac2ff6ace1d3b27a48dbca11c77d74a56"
     },
     {
       "archivo": "admin-12b-jornada-impacto.png",
       "ruta": "/admin/jornada",
-      "fecha": "2026-10-21T01:30:48.291Z",
-      "sha256": "6ec376ff24b5662b701c9378a8377ebb41bb8182c774a7c8bad426ac9196eb01"
+      "fecha": "2026-10-27T02:20:00.228Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 950
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Volvé si necesitás revisar",
+          "objetivo": "Volver sin cambiar nada",
+          "referencia": "[[\"button\",\"Volver sin cambiar nada\"]]",
+          "x": 405,
+          "y": 485,
+          "ancho": 166,
+          "alto": 28
+        },
+        {
+          "numero": 2,
+          "texto": "Este botón cancela las clases indicadas",
+          "objetivo": "Guardar y cancelar 5 clases",
+          "referencia": "[[\"button\",\"/^Guardar y cancelar/\"]]",
+          "x": 209,
+          "y": 485,
+          "ancho": 188,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          209,
+          485,
+          188,
+          28
+        ],
+        [
+          405,
+          485,
+          166,
+          28
+        ],
+        [
+          208,
+          650,
+          59,
+          28
+        ],
+        [
+          273,
+          650,
+          63,
+          28
+        ],
+        [
+          342,
+          650,
+          80,
+          28
+        ],
+        [
+          428,
+          650,
+          66,
+          28
+        ],
+        [
+          500,
+          650,
+          68,
+          28
+        ],
+        [
+          574,
+          650,
+          68,
+          28
+        ],
+        [
+          648,
+          650,
+          77,
+          28
+        ],
+        [
+          255,
+          686,
+          107,
+          26
+        ],
+        [
+          370,
+          686,
+          96,
+          26
+        ],
+        [
+          474,
+          686,
+          100,
+          26
+        ],
+        [
+          208,
+          748,
+          58,
+          32
+        ],
+        [
+          282,
+          748,
+          58,
+          32
+        ],
+        [
+          390,
+          748,
+          58,
+          32
+        ],
+        [
+          464,
+          748,
+          58,
+          32
+        ],
+        [
+          208,
+          796,
+          119,
+          32
+        ]
+      ],
+      "sha256": "2dff8b2003f645082d371fa75c85573c466bd57995b637dfe17b954949959cba"
     },
     {
       "archivo": "admin-14-soporte.png",
       "ruta": "/notificaciones",
-      "fecha": "2026-10-21T01:30:49.064Z",
-      "sha256": "7af5fda43ea58f3428a55d2502102380945b7b67ae52f7f2165847b0f295f101"
+      "fecha": "2026-10-27T02:20:00.985Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 777
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Filtrá las consultas pendientes",
+          "objetivo": "Ver solo lo que falta contestar",
+          "referencia": "[[\"checkbox\",\"Ver solo lo que falta contestar\"]]",
+          "x": 208,
+          "y": 209,
+          "ancho": 16,
+          "alto": 16
+        },
+        {
+          "numero": 2,
+          "texto": "Abrí la conversación",
+          "objetivo": "Ver",
+          "referencia": "[[\"button\",\"Ver\"]]",
+          "x": 889,
+          "y": 251,
+          "ancho": 42,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          783,
+          24,
+          177,
+          28
+        ],
+        [
+          779,
+          144,
+          165,
+          28
+        ],
+        [
+          208,
+          209,
+          16,
+          16
+        ],
+        [
+          889,
+          251,
+          42,
+          28
+        ],
+        [
+          844,
+          365,
+          100,
+          28
+        ],
+        [
+          192,
+          492.5,
+          13,
+          13
+        ],
+        [
+          688,
+          605,
+          116,
+          28
+        ],
+        [
+          812,
+          605,
+          132,
+          28
+        ],
+        [
+          713,
+          721,
+          91,
+          28
+        ],
+        [
+          812,
+          721,
+          132,
+          28
+        ]
+      ],
+      "sha256": "d16ddd7d4d962a754f74a8714721fb3a4d363be5c4581982dfaa5160f2171ba7"
     },
     {
       "archivo": "admin-15-soporte-conversacion.png",
       "ruta": "/notificaciones",
-      "fecha": "2026-10-21T01:30:49.192Z",
-      "sha256": "a12d055ba48cc6f0098df51ec66feca66cf3b037b9331b93aabc49a165fd9b07"
+      "fecha": "2026-10-27T02:20:01.110Z",
+      "encuadre": {
+        "ancho": 736,
+        "alto": 352
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Escribí la respuesta",
+          "objetivo": "Escribir en esta conversación",
+          "referencia": "[[\"campo\",\"Escribir en esta conversación\"]]",
+          "x": 13,
+          "y": 229,
+          "ancho": 710,
+          "alto": 78
+        },
+        {
+          "numero": 2,
+          "texto": "Enviá el mensaje",
+          "objetivo": "Responder",
+          "referencia": "[[\"button\",\"Responder\"]]",
+          "x": 13,
+          "y": 315,
+          "ancho": 89,
+          "alto": 28
+        },
+        {
+          "numero": 3,
+          "texto": "Cerrá el pedido cuando esté resuelto",
+          "objetivo": "Dar por resuelta",
+          "referencia": "[[\"button\",\"Dar por resuelta\"]]",
+          "x": 110,
+          "y": 315,
+          "ancho": 118,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          656,
+          14,
+          67,
+          28
+        ],
+        [
+          13,
+          229,
+          710,
+          78
+        ],
+        [
+          13,
+          315,
+          89,
+          28
+        ],
+        [
+          110,
+          315,
+          118,
+          28
+        ]
+      ],
+      "sha256": "c783096043e7e05930bc10cf43564dc2e71339f2993f3e6582352d92e83120b1"
     },
     {
       "archivo": "admin-25-auditoria.png",
       "ruta": "/admin/auditoria",
-      "fecha": "2026-10-21T01:30:49.938Z",
-      "sha256": "6e943f3117a52f2f9648b33b16947aad30d80242dd171f00dfa525c9d9f28f89"
+      "fecha": "2026-10-27T02:20:01.851Z",
+      "encuadre": {
+        "ancho": 1152,
+        "alto": 506
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Filtrá la acción que buscás",
+          "objetivo": "Acción",
+          "referencia": "[[\"campo\",\"Acción\"]]",
+          "x": 80,
+          "y": 216,
+          "ancho": 188.796875,
+          "alto": 32
+        },
+        {
+          "numero": 2,
+          "texto": "Elegí sobre qué se actuó",
+          "objetivo": "Sobre qué",
+          "referencia": "[[\"campo\",\"Sobre qué\"]]",
+          "x": 280.796875,
+          "y": 216,
+          "ancho": 188.796875,
+          "alto": 32
+        },
+        {
+          "numero": 3,
+          "texto": "Abrí el cambio registrado",
+          "objetivo": "Ver el detalle",
+          "referencia": "[[\"button\",\"Ver el detalle\"]]",
+          "x": 77,
+          "y": 453,
+          "ancho": 101,
+          "alto": 28
+        }
+      ],
+      "protecciones": [
+        [
+          80,
+          216,
+          188.8,
+          32
+        ],
+        [
+          280.8,
+          216,
+          188.8,
+          32
+        ],
+        [
+          481.59,
+          216,
+          188.8,
+          32
+        ],
+        [
+          682.39,
+          216,
+          188.8,
+          32
+        ],
+        [
+          883.19,
+          216,
+          188.81,
+          32
+        ],
+        [
+          77,
+          421,
+          191,
+          28
+        ],
+        [
+          276,
+          421,
+          244,
+          28
+        ],
+        [
+          77,
+          453,
+          101,
+          28
+        ]
+      ],
+      "sha256": "7203c7896ce1c2ce21c6852e6fe9666776eeb3eb325960ae55eaea01d3c6ee39"
     },
     {
       "archivo": "admin-26-detalle-auditoria.png",
       "ruta": "/admin/auditoria",
-      "fecha": "2026-10-21T01:30:50.160Z",
-      "sha256": "8a0798c91aec964ba42d07ee35a66f16a8d499c766681f058bee90908f0a6e5d"
+      "fecha": "2026-10-27T02:20:02.025Z",
+      "encuadre": {
+        "ancho": 1024,
+        "alto": 291
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Compará el valor anterior",
+          "objetivo": "Antes",
+          "referencia": "[[\"th\",\"Antes\"]]",
+          "x": 250.03125,
+          "y": 193,
+          "ancho": 291.84375,
+          "alto": 36.5
+        },
+        {
+          "numero": 2,
+          "texto": "Con el valor que quedó guardado",
+          "objetivo": "Después",
+          "referencia": "[[\"th\",\"Después\"]]",
+          "x": 541.875,
+          "y": 193,
+          "ancho": 457.125,
+          "alto": 36.5
+        }
+      ],
+      "protecciones": [
+        [
+          13,
+          113,
+          191,
+          28
+        ],
+        [
+          212,
+          113,
+          181,
+          28
+        ],
+        [
+          13,
+          145,
+          126,
+          28
+        ]
+      ],
+      "sha256": "58f86f41d8fd73bbf0011bbaaac4055066537ca437e9f17c2e5e54eb147810f3"
     },
     {
       "archivo": "admin-29-menu-movil.png",
       "ruta": "/",
-      "fecha": "2026-10-21T01:30:51.136Z",
-      "sha256": "f7cac297b686c8ec2a7baab48caf7cd876daac1c1ead749ba61dc536e40752d9"
+      "fecha": "2026-10-27T02:20:02.971Z",
+      "encuadre": {
+        "ancho": 390,
+        "alto": 844
+      },
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Accedé a entregas",
+          "objetivo": "Entregas 1",
+          "referencia": "[[\"enlace\",\"/^Entregas/\"]]",
+          "x": 16,
+          "y": 396,
+          "ancho": 358,
+          "alto": 44
+        },
+        {
+          "numero": 2,
+          "texto": "Desplegá las opciones de administración",
+          "objetivo": "Administración y configuración",
+          "referencia": "[[\"desplegable\",\"Administración y configuración\"]]",
+          "x": 16,
+          "y": 543,
+          "ancho": 358,
+          "alto": 44
+        },
+        {
+          "numero": 3,
+          "texto": "Cerrá el menú para volver",
+          "objetivo": "Cerrar",
+          "referencia": "[[\"button\",\"Cerrar\"]]",
+          "x": 302,
+          "y": 10,
+          "ancho": 72,
+          "alto": 44
+        }
+      ],
+      "protecciones": [
+        [
+          250,
+          10,
+          44,
+          44
+        ],
+        [
+          302,
+          10,
+          72,
+          44
+        ],
+        [
+          16,
+          73,
+          358,
+          44
+        ],
+        [
+          16,
+          119,
+          358,
+          44
+        ],
+        [
+          16,
+          165,
+          358,
+          44
+        ],
+        [
+          16,
+          211,
+          358,
+          44
+        ],
+        [
+          16,
+          257,
+          358,
+          44
+        ],
+        [
+          16,
+          303,
+          358,
+          44
+        ],
+        [
+          16,
+          396,
+          358,
+          44
+        ],
+        [
+          16,
+          442,
+          358,
+          44
+        ],
+        [
+          16,
+          488,
+          358,
+          44
+        ],
+        [
+          16,
+          543,
+          358,
+          44
+        ],
+        [
+          16,
+          590,
+          358,
+          44
+        ],
+        [
+          16,
+          636,
+          358,
+          44
+        ],
+        [
+          16,
+          682,
+          358,
+          44
+        ],
+        [
+          16,
+          732,
+          358,
+          44
+        ]
+      ],
+      "sha256": "eb45e4c589e54b1e2365722ba35d7a449380acdcda8702c721605081415f2bf0"
     },
     {
       "archivo": "general-01-recuperar-pantalla.png",
       "ruta": "/reservas",
-      "fecha": "2026-10-21T01:30:52.591Z",
+      "fecha": "2026-10-27T02:20:04.428Z",
+      "encuadre": {
+        "ancho": 512,
+        "alto": 248
+      },
       "escenario": "Descarga de un módulo interrumpida deliberadamente; API y sesión reales. Se verifica la recuperación al recargar.",
-      "sha256": "67a3a5a83774ce3601595d6d2d723096b933e686c9793609bff9d4374b264ca8"
+      "anotaciones": [
+        {
+          "numero": 1,
+          "texto": "Recargá la pantalla",
+          "objetivo": "Recargar la página",
+          "referencia": "[[\"button\",\"Recargar la página\"]]",
+          "x": 16,
+          "y": 156,
+          "ancho": 148,
+          "alto": 44
+        },
+        {
+          "numero": 2,
+          "texto": "Si hace falta, volvé al inicio",
+          "objetivo": "Volver al inicio",
+          "referencia": "[[\"enlace\",\"Volver al inicio\"]]",
+          "x": 176,
+          "y": 156,
+          "ancho": 119,
+          "alto": 44
+        }
+      ],
+      "protecciones": [
+        [
+          16,
+          156,
+          148,
+          44
+        ],
+        [
+          176,
+          156,
+          119,
+          44
+        ]
+      ],
+      "sha256": "c78f7cc48e0632e7270570338e98acf889d2d0f227447aad3362f024c668151f"
     }
   ]
 }

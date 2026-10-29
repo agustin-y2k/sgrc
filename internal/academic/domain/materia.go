@@ -25,7 +25,8 @@ var (
 // Materia es propia de un Curso específico — no es un catálogo compartido
 // (1°A tiene SU Matemáticas, distinta de la de 1°B).
 type Materia struct {
-	ID string
+	InternaDeEspacio bool
+	ID               string
 	// CursoID y EspacioID: una materia cuelga de UNO de los dos, nunca de los
 	// dos ni de ninguno — la base lo garantiza con un CHECK (migración 017).
 	// El vacío es el que no aplica.

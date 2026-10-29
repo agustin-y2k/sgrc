@@ -36,7 +36,11 @@ make observabilidad-stop   # apaga los paneles, el sistema sigue
 
 Sin ese comando, los tres contenedores no existen: están detrás de un
 *profile* del compose (`docker compose --profile observabilidad up -d` es lo
-que hace el atajo). Un `make run-prod` normal no los levanta.
+que hace el atajo). Un `make run-prod` normal no los levanta. El perfil de
+observabilidad tampoco activa el túnel incluido. Para usarlo, iniciar primero
+`make run-prod-tunel` o seleccionar ambos perfiles explícitamente con
+`docker compose --profile tunel --profile observabilidad up -d --build`. Con un
+túnel externo compartido se conserva `make levantar TABLEROS=1`.
 
 Conviene usar el atajo y no el comando de compose a mano, porque el atajo hace
 una cosa más: verifica que `GRAFANA_PASSWORD` esté puesta en el `.env` y no haya

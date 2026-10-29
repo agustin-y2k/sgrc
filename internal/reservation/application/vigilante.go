@@ -18,10 +18,12 @@ import (
 type ConfigDeVigilancia struct {
 	// GraciaDeRetiro: cuánto se espera desde el inicio de la clase antes de
 	// liberar una máquina que nadie retiró.
-	GraciaDeRetiro time.Duration
+	GraciaDeRetiro         time.Duration
+	AntelacionRecordatorio time.Duration
+	GraciaCierre           time.Duration
 	// HoraDeCierre (0-23) es el corte de lo que quedó afuera para una
 	// institución que NO declaró jornada. Cuando la declaró, el corte sale de
-	// ahí: es la hora a la que cierra ese día puntual, más una hora de gracia.
+	// ahí: es la hora a la que cierra ese día puntual, más la espera de cierre configurada.
 	HoraDeCierre int
 }
 
@@ -29,8 +31,10 @@ type ConfigDeVigilancia struct {
 // despliegue sin configurar arranquen con lo mismo.
 func ConfigDeVigilanciaPorDefecto() ConfigDeVigilancia {
 	return ConfigDeVigilancia{
-		GraciaDeRetiro: domain.GraciaDeRetiroPorDefecto,
-		HoraDeCierre:   23,
+		GraciaDeRetiro:         domain.GraciaDeRetiroPorDefecto,
+		HoraDeCierre:           23,
+		AntelacionRecordatorio: domain.AntelacionDelRecordatorio,
+		GraciaCierre:           time.Hour,
 	}
 }
 
@@ -48,9 +52,16 @@ type Vigilante struct {
 	validadorMostrador ValidadorMostrador
 	ahora              func() time.Time
 	cfg                ConfigDeVigilancia
+	configuracion      func(context.Context) (ConfigDeVigilancia, error)
 }
 
 func NewVigilante(repo Repo, bus eventbus.EventBus, validadorJornada ValidadorJornada, validadorMostrador ValidadorMostrador, ahora func() time.Time, cfg ConfigDeVigilancia) *Vigilante {
+	if cfg.AntelacionRecordatorio == 0 {
+		cfg.AntelacionRecordatorio = domain.AntelacionDelRecordatorio
+	}
+	if cfg.GraciaCierre == 0 {
+		cfg.GraciaCierre = time.Hour
+	}
 	return &Vigilante{
 		repo: repo, bus: bus, validadorJornada: validadorJornada,
 		validadorMostrador: validadorMostrador, ahora: ahora, cfg: cfg,
@@ -124,7 +135,7 @@ func (v *Vigilante) barrer(ctx context.Context) (ResumenDelBarrido, error) {
 	return resumen, nil
 }
 
-// ── 1. El recordatorio, una hora antes ──────────────────────────────────
+// ── 1. El recordatorio, con la antelación institucional ──────────────────────────────────
 
 func (v *Vigilante) recordar(ctx context.Context, reservas []ReservaParaVigilar, ahora time.Time) int {
 	enviados := 0
@@ -135,7 +146,7 @@ func (v *Vigilante) recordar(ctx context.Context, reservas []ReservaParaVigilar,
 			continue
 		}
 		if !domain.CorrespondeRecordar(primera.Fecha, primera.HoraInicio, primera.HoraFin,
-			domain.AntelacionDelRecordatorio, ahora) {
+			v.cfg.AntelacionRecordatorio, ahora) {
 			continue
 		}
 
@@ -351,7 +362,7 @@ func (v *Vigilante) momentoYFechaDelCorte(ctx context.Context, ahora time.Time) 
 			continue
 		}
 		momento := medianocheDe(fecha).Add(cierre.Fin)
-		if ahora.Before(momento.Add(GraciaDespuesDelCierre)) {
+		if ahora.Before(momento.Add(v.cfg.GraciaCierre)) {
 			continue
 		}
 		// Un cierre de hace más de un día ya no es "el cierre que acaba de
@@ -377,9 +388,8 @@ func (v *Vigilante) momentoYFechaDelCorte(ctx context.Context, ahora time.Time) 
 }
 
 // GraciaDespuesDelCierre es cuánto se espera desde que cerró la escuela antes
-// de avisar qué quedó afuera. No es configurable: es el rato en que alguien
-// que se demoró guardando todavía puede aparecer, y una hora alcanza en
-// cualquier institución.
+// de avisar qué quedó afuera por defecto. La configuración institucional puede
+// ajustar este plazo. Se conserva como valor por defecto para compatibilidad.
 const GraciaDespuesDelCierre = time.Hour
 
 // corteConfigurado es el camino de la institución que eligió no declarar
@@ -513,11 +523,23 @@ func nombreODefecto(nombre *string) string {
 	return *nombre
 }
 
+func (v *Vigilante) ConConfiguracion(leer func(context.Context) (ConfigDeVigilancia, error)) *Vigilante {
+	v.configuracion = leer
+	return v
+}
+
 func (v *Vigilante) Barrer(ctx context.Context) (ResumenDelBarrido, error) {
 	var res ResumenDelBarrido
 	err := v.repo.Coordinar(ctx, true, func(ctx context.Context) error {
 		var err error
-		res, err = v.barrer(ctx)
+		ejecutor := *v
+		if v.configuracion != nil {
+			ejecutor.cfg, err = v.configuracion(ctx)
+			if err != nil {
+				return fmt.Errorf("leer plazos institucionales: %w", err)
+			}
+		}
+		res, err = ejecutor.barrer(ctx)
 		return err
 	})
 	if err != nil {

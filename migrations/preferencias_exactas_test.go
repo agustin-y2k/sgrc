@@ -25,7 +25,7 @@ func TestPreferenciasExactas_MigracionPreservaMarcasYEvitaAmpliarlasAlRevertir(t
 	if err := pool.QueryRow(ctx, `SELECT to_jsonb(ep)::text FROM equipo_preferencia ep WHERE id=$1`, marca).Scan(&antes); err != nil {
 		t.Fatal(err)
 	}
-	if err := testdb.AplicarEsquema(ctx, dsn); err != nil {
+	if err := testdb.AplicarHasta(ctx, dsn, 29); err != nil {
 		t.Fatal(err)
 	}
 	var exacta bool
@@ -43,7 +43,7 @@ func TestPreferenciasExactas_MigracionPreservaMarcasYEvitaAmpliarlasAlRevertir(t
 	if err := goose.DownContext(ctx, db, "."); err != nil {
 		t.Fatalf("rollback sin nuevas marcas: %v", err)
 	}
-	if err := testdb.AplicarEsquema(ctx, dsn); err != nil {
+	if err := testdb.AplicarHasta(ctx, dsn, 29); err != nil {
 		t.Fatal(err)
 	}
 	nueva := uuid.NewString()

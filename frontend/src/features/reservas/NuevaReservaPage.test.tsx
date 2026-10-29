@@ -29,7 +29,8 @@ vi.mock("@/lib/useAhora")
 // que una fecha fija deja de poder enviarse apenas queda atrás (ver
 // src/test/fechas.ts).
 const FECHA = fechaFuturaEnDias(7)
-const FECHA_FIN = fechaFuturaEnDias(120)
+// Los casos válidos de serie también deben terminar dentro del mismo ciclo.
+const FECHA_FIN = [fechaFuturaEnDias(120), `${FECHA.slice(0, 4)}-12-31`].sort()[0]
 
 const materias: MateriaReservable[] = [
   {
@@ -38,7 +39,7 @@ const materias: MateriaReservable[] = [
     cursoId: "c1",
     cursoNombre: "1°A",
     cicloId: "cl1",
-    cicloAnio: 2026,
+    cicloAnio: Number(FECHA.slice(0, 4)),
   },
 ]
 
@@ -112,6 +113,20 @@ async function completarFranja(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("NuevaReservaPage", () => {
+  it("limita las fechas al año de la materia y bloquea el año siguiente", async () => {
+    const user = userEvent.setup()
+    renderPagina()
+    await elegirMateria(user)
+    const anio = Number(FECHA.slice(0, 4))
+    expect(screen.getByLabelText("Fecha")).toHaveAttribute("max", `${anio}-12-31`)
+    await user.type(screen.getByLabelText("Fecha"), `${anio + 1}-01-01`)
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      `Las reservas del ciclo ${anio}`
+    )
+    expect(screen.getByRole("button", { name: "Confirmar reserva" })).toBeDisabled()
+    expect(reservasApi.crearReserva).not.toHaveBeenCalled()
+  })
+
   it("no interpreta un error de jornada como escuela sin restricciones y conserva el formulario al reintentar", async () => {
     vi.mocked(disponibilidadApi.jornadaDeLaInstitucion).mockRejectedValue(
       new ApiError(503, "Jornada inaccesible")

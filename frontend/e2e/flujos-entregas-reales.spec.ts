@@ -21,7 +21,10 @@ test.describe("entregas reales sobre una base vacía y aislada", () => {
   const hoy = iso(ahora)
   const siguiente = new Date(ahora)
   siguiente.setDate(siguiente.getDate() + 7)
-  const minuto = ahora.getHours() * 60 + Math.floor(ahora.getMinutes() / 5) * 5
+  const minuto = Math.min(
+    23 * 60,
+    ahora.getHours() * 60 + Math.floor(ahora.getMinutes() / 5) * 5
+  )
   const hhmm = (min: number) =>
     `${String(Math.floor((min % 1440) / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`
   const horario = { horaInicio: hhmm(minuto), horaFin: hhmm(minuto + 60) }

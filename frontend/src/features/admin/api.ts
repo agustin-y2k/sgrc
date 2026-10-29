@@ -153,6 +153,18 @@ export function crearEquipoSuelto(req: {
   return apiFetch<Equipo>("/api/equipos", { method: "POST", body: req })
 }
 
+export function renumerarEquipo(
+  id: string,
+  identificadorActual: number,
+  identificador: number,
+  motivo: string
+) {
+  return apiFetch<void>(`/api/equipos/${id}/rotulo`, {
+    method: "PATCH",
+    body: { identificadorActual, identificador, motivo },
+  })
+}
+
 export function editarEquipo(
   id: string,
   req: {

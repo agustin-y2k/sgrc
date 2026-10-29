@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -13,15 +14,17 @@ func TestHTTP_EntregaParcial_SegundaTandaInformaSoloLoNuncaRetirado(t *testing.T
 	repo := nuevoFakeRepo()
 	for i, id := range []string{"res1", "res2", "res3"} {
 		reservaEnRepo(t, repo, id, []string{"pc1", "pc2", "pc3"}[i], "docente1")
+		repo.reservas[id].Fecha = time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+		repo.reservas[id].HoraInicio, repo.reservas[id].HoraFin = 12*time.Hour, 13*time.Hour
 	}
 	repo.grupos["grupo1"] = &domain.ReservaGrupo{ID: "grupo1", Estado: domain.GrupoConfirmada}
 	app := nuevaAppDeTest(repo)
 	if codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos/por-reserva",
-		entregarPorReservaRequest{ReservaIDs: []string{"res1"}}, "ADMIN"); codigo != fiber.StatusOK {
+		entregarPorReservaRequest{ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"})}, "ADMIN"); codigo != fiber.StatusOK {
 		t.Fatalf("primera tanda: %d %s", codigo, cuerpo)
 	}
 	codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos/por-reserva",
-		entregarPorReservaRequest{ReservaIDs: []string{"res2"}, LiberarNoEntregadas: true}, "ADMIN")
+		entregarPorReservaRequest{ReservaIDs: []string{"res2"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res2"}), LiberarNoEntregadas: true}, "ADMIN")
 	if codigo != fiber.StatusOK {
 		t.Fatalf("segunda tanda: %d %s", codigo, cuerpo)
 	}
@@ -43,7 +46,7 @@ func TestHTTP_Prestamos_IDInexistenteNoOcultaCambios(t *testing.T) {
 		reservaEnRepo(t, repo, "res1", "pc1", "docente1")
 		app := nuevaAppDeTest(repo)
 		codigo, cuerpo := pedirPrestamos(t, app, "POST", "/api/prestamos/por-reserva",
-			entregarPorReservaRequest{ReservaIDs: []string{"res1", "inexistente"}}, "ADMIN")
+			entregarPorReservaRequest{ReservaIDs: []string{"res1", "inexistente"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1", "inexistente"})}, "ADMIN")
 		if codigo != fiber.StatusNotFound || len(repo.prestamos) != 0 {
 			t.Fatalf("el 404 dejó una entrega oculta: %d %s, préstamos=%d", codigo, cuerpo, len(repo.prestamos))
 		}

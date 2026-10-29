@@ -37,6 +37,10 @@ import (
 	availabilityapp "github.com/agustin-y2k/sgrc/internal/availability/application"
 	availabilityinfra "github.com/agustin-y2k/sgrc/internal/availability/infrastructure"
 	availabilityhttp "github.com/agustin-y2k/sgrc/internal/availability/interfaces/http"
+	configuracionapp "github.com/agustin-y2k/sgrc/internal/configuracion/application"
+	configuraciondomain "github.com/agustin-y2k/sgrc/internal/configuracion/domain"
+	configuracioninfra "github.com/agustin-y2k/sgrc/internal/configuracion/infrastructure"
+	configuracionhttp "github.com/agustin-y2k/sgrc/internal/configuracion/interfaces/http"
 	inventoryapp "github.com/agustin-y2k/sgrc/internal/inventory/application"
 	inventoryinfra "github.com/agustin-y2k/sgrc/internal/inventory/infrastructure"
 	inventoryhttp "github.com/agustin-y2k/sgrc/internal/inventory/interfaces/http"
@@ -258,7 +262,7 @@ func sufijoMostrador(sinAtender bool) string {
 	return " (el mostrador no estaba atendido: no se liberó ni se avisó nada)"
 }
 
-// configDeVigilancia lee los dos plazos del barrido de reservas y entregas
+// configDeVigilancia lee los valores iniciales del barrido de reservas y entregas
 // (RF-08.10, RF-08.13).
 func configDeVigilancia() reservationapp.ConfigDeVigilancia {
 	cfg := reservationapp.ConfigDeVigilanciaPorDefecto()
@@ -581,7 +585,7 @@ func main() {
 		infoUsuario,
 		reportinginfra.NuevoID,
 	)
-	reportingHandler := reportinghttp.NewHandler(reportingSvc)
+	reportingHandler := reportinghttp.NewHandler(reportingSvc).ConActividad(reportingRepo)
 
 	// ── academic ─────────────────────────────────────────────────
 	academicRepo := academicinfra.NewPostgresRepo(pool)
@@ -658,8 +662,24 @@ func main() {
 		reservationRepo, bus,
 		&reservationValidadorJornadaAdapter{availabilitySvc: availabilitySvc},
 		&reservationValidadorMostradorAdapter{availabilitySvc: availabilitySvc},
-		ahora, configDeVigilancia(),
+		ahora, reservationapp.ConfigDeVigilanciaPorDefecto(),
 	)
+
+	// Los valores de entorno se importan sólo al crear la configuración institucional.
+	configuracionRepo := configuracioninfra.NewRepo(pool)
+	if err := configuracionRepo.InicializarSiFalta(ctx, func() configuraciondomain.Operacion {
+		cfgInicial := configDeVigilancia()
+		return configuraciondomain.Operacion{RetiroGraciaMinutos: int(cfgInicial.GraciaDeRetiro.Minutes()), RecordatorioAntelacionMinutos: int(cfgInicial.AntelacionRecordatorio.Minutes()), CierreGraciaMinutos: int(cfgInicial.GraciaCierre.Minutes()), CierreHoraSinJornada: cfgInicial.HoraDeCierre, LicenciasHoraAviso: horaAvisoLicencias(), Version: 1}
+	}); err != nil {
+		log.Fatalf("inicializar configuración operativa: %v", err)
+	}
+	configuracionSvc := configuracionapp.NewService(configuracionRepo)
+	vigilante.ConConfiguracion(func(ctx context.Context) (reservationapp.ConfigDeVigilancia, error) {
+		o, err := configuracionSvc.Leer(ctx)
+		return reservationapp.ConfigDeVigilancia{GraciaDeRetiro: time.Duration(o.RetiroGraciaMinutos) * time.Minute,
+			AntelacionRecordatorio: time.Duration(o.RecordatorioAntelacionMinutos) * time.Minute,
+			GraciaCierre:           time.Duration(o.CierreGraciaMinutos) * time.Minute, HoraDeCierre: o.CierreHoraSinJornada}, err
+	})
 
 	// El avisador de licencias es un tipo aparte del Service porque no lo
 	// dispara un request sino un reloj (ver el job más abajo).
@@ -813,7 +833,6 @@ func main() {
 	// hora, pero solo actúa a partir de horaAvisoLicencias: un mail a las 00:05
 	// se lee a la mañana igual, pero llega con cara de que algo se rompió de
 	// madrugada.
-	horaDeAviso := horaAvisoLicencias()
 	jobTerminado.Add(1)
 	go func() {
 		defer jobTerminado.Done()
@@ -828,11 +847,16 @@ func main() {
 				// también en las horas en que este job no hace nada.
 				avisadorDeVida.Vive(ctx, monitoreo.JobAvisoLicencias)
 
-				if ahora().Hour() < horaDeAviso {
+				configuracionActual, err := configuracionSvc.Leer(ctx)
+				if err != nil {
+					log.Printf("aviso de licencias: no se pudo leer la configuración: %v", err)
+					continue
+				}
+				if ahora().Hour() < configuracionActual.LicenciasHoraAviso {
 					continue
 				}
 				var n int
-				err := metricasDelProceso.MedirBarrido(monitoreo.JobAvisoLicencias, func() error {
+				err = metricasDelProceso.MedirBarrido(monitoreo.JobAvisoLicencias, func() error {
 					var err error
 					n, err = avisadorDeLicencias.Barrer(ctx)
 					return err
@@ -878,6 +902,7 @@ func main() {
 	inventoryhttp.RegisterRoutes(app, inventoryHandler, autenticacion)
 	reservationhttp.RegisterRoutes(app, reservationHandler, autenticacion)
 	notificationhttp.RegisterRoutes(app, notificationHandler, autenticacion)
+	configuracionhttp.RegisterRoutes(app, configuracionSvc, autenticacion)
 	reportinghttp.RegisterRoutes(app, reportingHandler, autenticacion)
 	availabilityhttp.RegisterRoutes(app, availabilityHandler, autenticacion)
 	sugerenciashttp.RegisterRoutes(app, sugerenciasHandler, autenticacion)

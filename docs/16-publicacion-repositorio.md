@@ -29,19 +29,17 @@ copias de informes temporales ni información de una instalación particular.
 
 Las capturas documentales viven en `docs/guias/imagenes` y se generan con
 datos ficticios. El generador vigente consta de `scripts/generar-guias.mjs`
-y de `capturar-actual.mjs`, `datos-actuales.mjs`, `hacer-pdf.mjs` y la entrada
-del Makefile dentro de `docs/guias/generar/`. El README enlaza las guías.
+y de `capturar-actual.mjs`, `datos-actuales.mjs`, `medir-controles.mjs`,
+`anotaciones.mjs` y `hacer-pdf.mjs` dentro de `docs/guias/generar/`, junto
+con la entrada del Makefile. El README enlaza las guías.
 
 Los ejemplos utilizan dominios reservados (`example.org`, `.test`) y valores
 de demostración. El módulo Go y los enlaces al código identifican el repositorio
 público. La atribución legal se conserva en `LICENSE`; la configuración y la
 interfaz del producto no incorporan datos de su instalación original.
 
-Los archivos obsoletos `docker-compose.capturas.yml` y `.env.capturas.example`,
-la galería `docs/capturas/` y sus generadores antiguos se retiraron del árbol de
-trabajo. Sus eliminaciones deben incluirse en el siguiente commit. Las guías
-vigentes y su generador se conservan. No es necesario borrar los entornos
-activos ni los Compose privados para publicar: se conservan localmente,
+Las imágenes y sus generadores se mantienen exclusivamente para las guías de
+uso. Los entornos activos y los Compose privados se conservan localmente,
 excluidos de Git.
 
 ## Crear una instalación

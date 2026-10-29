@@ -194,3 +194,71 @@ func TestEspacio_RenombrarArrastraLoQueSeReserva(t *testing.T) {
 		t.Fatalf("la materia no siguió al nombre del lugar: %+v", materias)
 	}
 }
+
+func TestEspacio_ProtegeMateriaInternaYConservaAdicionales(t *testing.T) {
+	pool := levantarPostgresDeTest(t)
+	repo := NewPostgresRepo(pool)
+	ctx := context.Background()
+	ciclo := crearCicloDePrueba(t, repo, 2026)
+	espacio := nuevoEspacioDePrueba(t, repo, ciclo.ID, "Biblioteca")
+	materias, err := repo.ListarMateriasPorEspacio(ctx, espacio.ID)
+	if err != nil || len(materias) != 1 || !materias[0].InternaDeEspacio {
+		t.Fatalf("materia interna: %+v %v", materias, err)
+	}
+	interna := materias[0]
+	if err := repo.EliminarMateria(ctx, interna.ID); err != application.ErrMateriaInternaDeEspacio {
+		t.Fatalf("borrado genérico: %v", err)
+	}
+	interna.Nombre = "Inconsistente"
+	if err := repo.GuardarMateria(ctx, interna); err != application.ErrMateriaInternaDeEspacio {
+		t.Fatalf("edición genérica: %v", err)
+	}
+	for _, sql := range []string{`DELETE FROM materia WHERE id=$1`, `UPDATE materia SET nombre='Inconsistente' WHERE id=$1`, `UPDATE materia SET interna_de_espacio=false WHERE id=$1`} {
+		if _, err := pool.Exec(ctx, sql, interna.ID); err == nil {
+			t.Fatal("se permitió alterar la materia interna directamente")
+		}
+	}
+	adicional := &domain.Materia{ID: uuidNuevo(), EspacioID: espacio.ID, Nombre: "Apoyo escolar"}
+	if err := repo.CrearMateria(ctx, adicional); err != nil {
+		t.Fatal(err)
+	}
+	espacio.Nombre = "Biblioteca central"
+	if err := repo.GuardarEspacio(ctx, espacio); err != nil {
+		t.Fatal(err)
+	}
+	actual, err := repo.BuscarMateriaPorID(ctx, interna.ID)
+	if err != nil || actual.Nombre != espacio.Nombre || !actual.InternaDeEspacio {
+		t.Fatalf("se perdió la identidad: %+v %v", actual, err)
+	}
+	actual, err = repo.BuscarMateriaPorID(ctx, adicional.ID)
+	if err != nil || actual.Nombre != adicional.Nombre || actual.InternaDeEspacio {
+		t.Fatal("se alteró la materia adicional")
+	}
+	if err := repo.ArchivarCiclo(ctx, ciclo.ID); err != nil {
+		t.Fatal(err)
+	}
+	clon, _ := domain.NuevoCicloLectivo(uuidNuevo(), 2027)
+	if _, _, err := repo.ClonarCicloA(ctx, ciclo.ID, clon); err != nil {
+		t.Fatal(err)
+	}
+	espacios, err := repo.ListarEspaciosPorCiclo(ctx, clon.ID)
+	if err != nil || len(espacios) != 1 {
+		t.Fatalf("clonado: %v", err)
+	}
+	copiadas, err := repo.ListarMateriasPorEspacio(ctx, espacios[0].ID)
+	internas := 0
+	for _, m := range copiadas {
+		if m.InternaDeEspacio {
+			internas++
+		}
+	}
+	if err != nil || len(copiadas) != 2 || internas != 1 {
+		t.Fatalf("identidad clonada: %+v %v", copiadas, err)
+	}
+	if err := repo.EliminarMateria(ctx, adicional.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.EliminarEspacio(ctx, espacio.ID); err != nil {
+		t.Fatalf("cascade legítimo: %v", err)
+	}
+}

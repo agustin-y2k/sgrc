@@ -11,6 +11,17 @@ export async function prepararDatos(api, admin) {
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
   const lunes = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 2, 12)
   while (lunes.getDay() !== 1) lunes.setDate(lunes.getDate() + 1)
+  // Toda la serie de demostración debe pertenecer al mismo año lectivo.
+  if (
+    new Date(
+      lunes.getFullYear(),
+      lunes.getMonth(),
+      lunes.getDate() + 21
+    ).getFullYear() !== lunes.getFullYear()
+  ) {
+    lunes.setFullYear(lunes.getFullYear() + 1, 0, 1)
+    while (lunes.getDay() !== 1) lunes.setDate(lunes.getDate() + 1)
+  }
   const dia = (offset) =>
     fecha(new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + offset, 12))
   const dias = ["DOMINGO", "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"]
@@ -26,11 +37,11 @@ export async function prepararDatos(api, admin) {
     },
     admin
   )
-  const ciclo = await api("POST", "/api/ciclos", { anio: hoy.getFullYear() }, admin)
+  const ciclo = await api("POST", "/api/ciclos", { anio: lunes.getFullYear() }, admin)
   const curso = await api(
     "POST",
     `/api/ciclos/${ciclo.id}/cursos`,
-    { anio: 1, division: "A" },
+    { anio: 1, division: "1" },
     admin
   )
   const tecnico = await api(
@@ -194,7 +205,13 @@ export async function prepararDatos(api, admin) {
     await api("POST", `/api/equipos/${pcs[0].id}/cuentas`, cuenta, admin)
   for (const marca of [
     { materiaNombre: "Programación", prioridad: 1 },
-    { materiaNombre: "Matemática", anio: 1, division: "A", prioridad: 2 },
+    {
+      materiaNombre: "Matemática",
+      anio: 1,
+      division: "1",
+      prioridad: 2,
+      cursoExacto: true,
+    },
   ])
     await api(
       "POST",
@@ -241,6 +258,19 @@ export async function prepararDatos(api, admin) {
       },
       tokenAda
     )
+  // Una clase breve simultánea muestra cómo leer la semana y abrir su detalle.
+  await api(
+    "POST",
+    "/api/reservas",
+    {
+      materiaId: matematica.id,
+      fecha: dia(0),
+      horaInicio: "10:30",
+      horaFin: "10:45",
+      equipoIds: [pcs[6].id],
+    },
+    tokenAda
+  )
   await api(
     "POST",
     "/api/licencias",
@@ -336,7 +366,10 @@ export async function prepararDatos(api, admin) {
   await api(
     "PATCH",
     `/api/carros/${carro.id}`,
-    { nombre: "Carro 1", descripcion: "Notebooks del laboratorio · planta baja" },
+    {
+      nombre: "Carro 1",
+      descripcion: "Notebooks del laboratorio · planta baja",
+    },
     admin
   )
   return {

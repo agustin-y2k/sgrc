@@ -166,9 +166,9 @@ func (s *Service) NombresDeMateriaEnUso(ctx context.Context) ([]string, error) {
 }
 
 // ListarPreferenciasHuerfanas: las marcas que ya no cruzan con ninguna materia
-// cargada (RF-03.21).
+// vigente (RF-03.21).
 //
-// Aparecen al renombrar o borrar una materia, porque la marca se vincula por
+// Aparecen al renombrar, borrar o archivar una materia, porque la marca se vincula por
 // NOMBRE y no por referencia — un diseño deliberado, para que las marcas
 // sobrevivan al clonado anual del ciclo, y cuya contracara es justamente ésta.
 //

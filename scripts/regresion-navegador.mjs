@@ -11,6 +11,62 @@ import { fileURLToPath } from "node:url";
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const bloques = [
+  {nombre:"levantamiento-bloqueos",sembrar:true,bandera:"E2E_LEVANTAMIENTO_BLOQUEOS_AISLADO",archivos:["levantamiento-bloqueos"]},
+ {nombre: "actividad-configuracion", sembrar:true,bandera:"E2E_ACTIVIDAD_CONFIGURACION_AISLADA",archivos:["actividad-configuracion"]},
+  {
+    nombre: "entrega-anticipada",
+    sembrar: true,
+    bandera: "E2E_ENTREGA_ANTICIPADA_AISLADA",
+    archivos: ["entrega-anticipada"],
+  },
+  {
+    nombre: "prioridad-custodia",
+    sembrar: true,
+    bandera: "E2E_PRIORIDAD_CUSTODIA_AISLADA",
+    archivos: ["prioridad-custodia"],
+  },
+  {
+    nombre: "calendario-tactil",
+    sembrar: true,
+    bandera: "E2E_CALENDARIO_TACTIL_AISLADO",
+    archivos: ["calendario-tactil"],
+  },
+  {
+    nombre: "anio-lectivo",
+    sembrar: true,
+    bandera: "E2E_ANIO_LECTIVO_AISLADO",
+    archivos: ["anio-lectivo"],
+  },
+  {
+    nombre: "espacios-bloqueos",
+    sembrar: true,
+    bandera: "E2E_ESPACIOS_BLOQUEOS_AISLADOS",
+    archivos: ["espacios-bloqueos"],
+  },
+  {
+    nombre: "entrega-vigente",
+    sembrar: true,
+    bandera: "E2E_ENTREGA_VIGENTE_AISLADA",
+    archivos: ["entrega-vigente"],
+  },
+  {
+    nombre: "prioridades-vigentes",
+    sembrar: true,
+    bandera: "E2E_PRIORIDADES_VIGENTES_AISLADAS",
+    archivos: ["prioridades-vigentes"],
+  },
+  {
+    nombre: "curso-prioridades",
+    sembrar: true,
+    bandera: "E2E_CURSO_PRIORIDADES_AISLADOS",
+    archivos: ["curso-prioridades"],
+  },
+  {
+    nombre: "rotulos-calendario",
+    sembrar: true,
+    bandera: "E2E_ROTULOS_CALENDARIO_AISLADOS",
+    archivos: ["rotulos-calendario"],
+  },
   {
     nombre: "docentes",
     sembrar: true,
@@ -86,7 +142,7 @@ if (
   (argumentos.length !== 2 || argumentos[0] !== "--solo")
 ) {
   throw new Error(
-    "Uso: node scripts/regresion-navegador.mjs [--solo docentes,reservas,entregas,cierre,inventario,soporte,reportes,usabilidad,basicos,transversal,vistas]",
+    "Uso: node scripts/regresion-navegador.mjs [--solo levantamiento-bloqueos,actividad-configuracion,entrega-anticipada,prioridad-custodia,calendario-tactil,anio-lectivo,espacios-bloqueos,entrega-vigente,prioridades-vigentes,curso-prioridades,rotulos-calendario,docentes,reservas,entregas,cierre,inventario,soporte,reportes,usabilidad,basicos,transversal,vistas]",
   );
 }
 const nombres = argumentos.length

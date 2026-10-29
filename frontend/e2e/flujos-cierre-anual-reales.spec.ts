@@ -15,7 +15,11 @@ test.describe("cierre anual real en una base efímera vacía", () => {
     anio = hoy.getFullYear()
   const iso = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-  const minuto = hoy.getHours() * 60 + Math.floor(hoy.getMinutes() / 5) * 5
+  // La última franja termina a medianoche, sin generar una hora de fin anterior.
+  const minuto = Math.min(
+    23 * 60,
+    hoy.getHours() * 60 + Math.floor(hoy.getMinutes() / 5) * 5
+  )
   const hora = (m: number) =>
     `${String(Math.floor((m % 1440) / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`
   const horario = {
@@ -190,6 +194,7 @@ test.describe("cierre anual real en una base efímera vacía", () => {
     prestamo = (
       await api(request, "POST", "/api/prestamos/por-reserva", {
         reservaIds: [reserva.reservas[0].id],
+        equiposEsperados: { [reserva.reservas[0].id]: reserva.reservas[0].equipoId },
         retiradoPor: "Estudiante del cierre",
       })
     ).entregadas[0].id
@@ -365,10 +370,27 @@ test.describe("cierre anual real en una base efímera vacía", () => {
       abierto: true,
       entregadoAUsuarioId: docenteId,
       retiradoPor: "Estudiante del cierre",
+      materiaNombre: "Dibujo Técnico",
+      destino: "4°A · Construcción",
+      contextoAcademico: {
+        materiaId: materia,
+        materiaNombre: "Dibujo Técnico",
+        contenedorTipo: "CURSO",
+        contenedorNombre: "4°A",
+        modalidad: "Construcción",
+        cicloId: ciclo,
+        cicloAnio: anio,
+        reconstruido: false,
+      },
     })
     expect(afuera[0].reservaId).toBeUndefined()
     await login(page, email, password)
     await page.goto("/admin/entregas")
+    await expect(
+      page.getByText(`Dibujo Técnico · 4°A · Construcción · Ciclo ${anio} · 1 equipo`, {
+        exact: true,
+      })
+    ).toBeVisible()
     await page
       .getByRole("button", { name: "Recibir 1 equipo de Docente Cierre", exact: true })
       .click()
@@ -381,6 +403,12 @@ test.describe("cierre anual real en una base efímera vacía", () => {
       id: prestamo,
       abierto: false,
       retiradoPor: "Estudiante del cierre",
+      materiaNombre: "Dibujo Técnico",
+      contextoAcademico: {
+        materiaNombre: "Dibujo Técnico",
+        contenedorNombre: "4°A",
+        cicloAnio: anio,
+      },
     })
     expect(
       (await api(request, "GET", `/api/historico/${anio}/uso-equipos`)).data

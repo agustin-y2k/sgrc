@@ -1,3 +1,4 @@
+import { detalleAcademicoDePrestamo } from "@/features/reservas/prestamos"
 import { useQuery } from "@tanstack/react-query"
 
 import { EstadoBadge } from "@/components/EstadoBadge"
@@ -55,9 +56,13 @@ export function PrestamosDeEquipo({ equipoId }: { equipoId: string }) {
               <span className="text-muted-foreground text-xs">
                 Salió {cuando(p.entregadoEn)}
                 {p.devueltoEn ? ` · volvió ${cuando(p.devueltoEn)}` : " · todavía afuera"}
-                {p.materiaNombre && ` · ${p.materiaNombre}`}
-                {p.destino && ` · ${p.destino}`}
+                {detalleAcademicoDePrestamo(p) && ` · ${detalleAcademicoDePrestamo(p)}`}
               </span>
+              {p.contextoAcademico?.reconstruido && (
+                <span className="text-muted-foreground text-xs">
+                  Contexto reconstruido a partir de la reserva vinculada.
+                </span>
+              )}
               {/* La observación es el renglón al margen del papel, y el
                   único lugar del sistema donde queda escrita. */}
               {p.observaciones && (

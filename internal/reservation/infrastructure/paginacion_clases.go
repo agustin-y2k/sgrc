@@ -3,11 +3,10 @@ package infrastructure
 import "fmt"
 
 // Misma unidad que agruparReservas en la pantalla: grupo normal, bloqueo del
-// mismo actor/fecha/franja o reserva histórica sin grupo.
+// misma operación o reserva histórica sin grupo.
 const unidadDeReserva = `CASE
 	WHEN res.reserva_grupo_id IS NOT NULL THEN 'grupo:' || res.reserva_grupo_id::text
-	WHEN res.tipo='BLOQUEO' THEN 'bloqueo:' || COALESCE(res.creado_por::text,'sistema') || ':' ||
-		res.fecha::text || ':' || to_char(res.hora_inicio,'HH24:MI') || ':' || to_char(res.hora_fin,'HH24:MI')
+	WHEN res.tipo='BLOQUEO' THEN 'bloqueo:' || COALESCE(res.bloqueo_operacion_id::text, res.id::text)
 	ELSE 'sin-grupo:' || res.id::text END`
 
 func consultasPorClases(desde, desdeVisibles string, incluirCanceladas bool, limite, offset int) (string, string) {
@@ -32,11 +31,12 @@ func consultasPorClases(desde, desdeVisibles string, incluirCanceladas bool, lim
 			COALESCE(p.nombre,'PC ' || p.identificador) AS etiqueta,
 			COALESCE(ca.nombre,'') AS carro_nombre,
 			COALESCE(m.nombre,'') AS materia_nombre, COALESCE(cu.nombre,'') AS curso_nombre,
+			COALESCE(cu.modalidad,'') AS curso_modalidad,
 			rg.regla_recurrencia_id, `+unidadDeReserva+` AS unidad `+desdeVisibles+`
 	)
 	SELECT `+columnasReservaConPrefijo("visibles")+`,
 		visibles.identificador, visibles.etiqueta, visibles.carro_nombre,
-		visibles.materia_nombre, visibles.curso_nombre, visibles.regla_recurrencia_id, pagina.total
+		visibles.materia_nombre, visibles.curso_nombre, visibles.curso_modalidad, visibles.regla_recurrencia_id, pagina.total
 	FROM visibles JOIN pagina ON pagina.unidad=visibles.unidad
 	ORDER BY pagina.fecha, pagina.hora_inicio, pagina.unidad,
 		visibles.identificador, visibles.equipo_id`, limite, offset)

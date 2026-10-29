@@ -30,6 +30,10 @@ const (
 	// NoEntregadaReservaCancelada: se intentó entregar contra una reserva
 	// que ya no está vigente.
 	NoEntregadaReservaCancelada RazonNoEntregada = "RESERVA_CANCELADA"
+	// NoEntregadaReservaNoVigente: finalizada, vencida o de un día futuro.
+	NoEntregadaReservaNoVigente RazonNoEntregada = "RESERVA_NO_VIGENTE"
+	// NoEntregadaReservaIntermedia: adelantar el retiro impediría otra clase o bloqueo.
+	NoEntregadaReservaIntermedia RazonNoEntregada = "RESERVA_INTERMEDIA"
 	// NoEntregadaSinDestinatario: la reserva no dice a nombre de quién entregar.
 	NoEntregadaSinDestinatario RazonNoEntregada = "SIN_DESTINATARIO"
 	// NoEntregadaFueraDeCirculacion: el equipo está en mantenimiento o fuera
@@ -92,12 +96,15 @@ type ResultadoEntrega struct {
 // tres de las cinco que reservó.
 type EntregaPorReservaParams struct {
 	ReservaIDs []string
+	// UUID del equipo que el administrador confirmó para cada reserva.
+	EquiposEsperados map[string]string
 	// RetiradoPor: quién vino a buscarlas, si no fue el docente de la reserva.
 	RetiradoPor  string
 	EntregadoPor string
 	// LiberarNoEntregadas es la ENTREGA PARCIAL declarada: el Admin dice que
 	// esto completa el retiro. Se liberan las reservas confirmadas que nunca
-	// tuvieron una entrega; lo retirado en tandas anteriores se conserva.
+	// tuvieron una entrega; lo retirado en tandas anteriores se conserva,
+	// igual que las PCs que no pueden adelantarse por otra reserva o bloqueo.
 	//
 	// Antes esto lo decidía un reloj —quince minutos desde la última entrega,
 	// RETIRO_PARCIAL_GRACIA_MINUTOS— porque el sistema no tenía cómo saber si
@@ -111,7 +118,9 @@ type EntregaPorReservaParams struct {
 // EntregarPorReserva registra que las máquinas de una reserva salieron.
 func (s *Service) EntregarPorReserva(ctx context.Context, params EntregaPorReservaParams) (*ResultadoEntrega, error) {
 	var resultado *ResultadoEntrega
-	err := s.repo.Coordinar(ctx, false, func(ctx context.Context) error {
+	// Mantener estable el calendario hasta registrar la salida: una reserva nueva
+	// no puede aparecer entre la comprobación del retiro anticipado y su entrega.
+	err := s.repo.Coordinar(ctx, true, func(ctx context.Context) error {
 		var err error
 		resultado, err = s.entregarPorReservaCoordinada(ctx, params)
 		return err
@@ -127,7 +136,6 @@ func (s *Service) entregarPorReservaCoordinada(ctx context.Context, params Entre
 		return nil, err
 	}
 
-	ahora := s.ahora()
 	resultado := &ResultadoEntrega{}
 
 	err := s.repo.EnTransaccion(ctx, func(repo Repo) error {
@@ -149,14 +157,54 @@ func (s *Service) entregarPorReservaCoordinada(ctx context.Context, params Entre
 				return ErrReservaNoEncontrada
 			}
 		}
+		// Se valida el lote completo bajo los mismos bloqueos que el cambio de PC.
+		for _, id := range ids {
+			esperado := strings.TrimSpace(params.EquiposEsperados[id])
+			if esperado == "" {
+				return ErrEquiposEsperados
+			}
+			if esperado != reservas[id].EquipoID {
+				return ErrEquipoReservaDesactualizado
+			}
+		}
 		for _, reservaID := range ids {
 			reserva := reservas[reservaID]
+			// Leer el reloj después de esperar los bloqueos, y para cada retiro:
+			// una petición iniciada antes del fin puede procesarse después.
+			ahora := s.ahora()
 
 			if reserva.Estado == domain.ReservaCancelada {
 				resultado.NoEntregadas = append(resultado.NoEntregadas, EquipoNoEntregado{
 					EquipoID: reserva.EquipoID,
 					Razon:    NoEntregadaReservaCancelada,
 					Detalle:  "esa reserva está cancelada",
+				})
+				continue
+			}
+			if !reserva.PuedeEntregarseEn(ahora) {
+				detalle := "esa reserva ya no admite entregas"
+				switch {
+				case reserva.Estado == domain.ReservaFinalizada:
+					detalle = "esa reserva está finalizada"
+				case ahora.Before(domain.InstanteDePared(reserva.Fecha, 0, ahora.Location())):
+					detalle = "esa reserva corresponde a un día futuro; se entrega el día de la reserva"
+				case !ahora.Before(domain.FinDePared(reserva.Fecha, reserva.HoraInicio, reserva.HoraFin, ahora.Location())):
+					detalle = "el horario de esa reserva ya terminó; para un préstamo nuevo, registrá una entrega sin reserva"
+				}
+				resultado.NoEntregadas = append(resultado.NoEntregadas, EquipoNoEntregado{
+					EquipoID: reserva.EquipoID, Razon: NoEntregadaReservaNoVigente, Detalle: detalle,
+				})
+				continue
+			}
+
+			intermedia, err := reservaQueImpideAnticiparEntrega(ctx, repo, reserva, ahora)
+			if err != nil {
+				return err
+			}
+			if intermedia != nil {
+				resultado.NoEntregadas = append(resultado.NoEntregadas, EquipoNoEntregado{
+					EquipoID: reserva.EquipoID, Razon: NoEntregadaReservaIntermedia,
+					Detalle: detalleDeReservaIntermedia(intermedia),
 				})
 				continue
 			}
@@ -275,6 +323,15 @@ func (s *Service) liberarElResto(ctx context.Context, repo Repo, reservas map[st
 	for _, id := range ids {
 		r := reservas[id]
 		if r.ReservaGrupoID == nil || !grupos[*r.ReservaGrupoID] || conEntrega[id] || r.Estado != domain.ReservaConfirmada {
+			continue
+		}
+		// Una PC que no pudo adelantarse sigue guardada para su clase posterior,
+		// aunque no se haya marcado porque el mostrador ya informó el conflicto.
+		intermedia, err := reservaQueImpideAnticiparEntrega(ctx, repo, r, s.ahora())
+		if err != nil {
+			return nil, err
+		}
+		if intermedia != nil {
 			continue
 		}
 		if err := r.Liberar(); err != nil {
