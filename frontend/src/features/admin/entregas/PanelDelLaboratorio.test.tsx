@@ -62,6 +62,7 @@ function renderPanel() {
       </MemoryRouter>
     </QueryClientProvider>
   )
+  return queryClient
 }
 
 describe("PanelDelLaboratorio", () => {
@@ -76,6 +77,59 @@ describe("PanelDelLaboratorio", () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.clearAllMocks()
+  })
+
+  it("explica la clase intermedia y sólo permite entregar los equipos sin conflicto", async () => {
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([
+        reserva(),
+        reserva({
+          id: "tarde-ocupada",
+          reservaGrupoId: "tarde",
+          equipoId: "pc1",
+          horaInicio: "12:00",
+          horaFin: "13:00",
+          materiaNombre: "Clase posterior",
+        }),
+        reserva({
+          id: "tarde-libre",
+          reservaGrupoId: "tarde",
+          equipoId: "pc2",
+          identificador: 2,
+          horaInicio: "12:00",
+          horaFin: "13:00",
+          materiaNombre: "Clase posterior",
+        }),
+      ])
+    )
+    const user = userEvent.setup()
+    renderPanel()
+    expect(await screen.findByText(/PC 1.*no se puede adelantar/)).toHaveTextContent(
+      "08:00 a 09:00"
+    )
+    expect(screen.getByText(/PC 1.*no se puede adelantar/)).toHaveTextContent(
+      "se mantiene"
+    )
+    await user.click(screen.getByRole("button", { name: "Entregar disponibles (1)" }))
+    expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reservaIds: ["tarde-libre"],
+        equiposEsperados: { "tarde-libre": "pc2" },
+        liberarNoEntregadas: false,
+      })
+    )
+  })
+
+  it("no ofrece entregar una clase de mañana aunque se consulte para comprobar el fin nocturno", async () => {
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([reserva({ fecha: "2026-08-12", materiaNombre: "Clase de mañana" })])
+    )
+    renderPanel()
+    expect(await screen.findByText(/Hoy no hay ninguna clase/)).toBeInTheDocument()
+    expect(screen.queryByText(/Clase de mañana/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /Entregar todas/ })
+    ).not.toBeInTheDocument()
   })
 
   it("mantiene en curso una clase que termina después de medianoche", async () => {
@@ -95,7 +149,7 @@ describe("PanelDelLaboratorio", () => {
     renderPanel()
     expect(await screen.findByText(/1 clase en curso/)).toBeInTheDocument()
     expect(reservasApi.listarReservas).toHaveBeenCalledWith(
-      expect.objectContaining({ desde: "2026-08-10", hasta: HOY })
+      expect.objectContaining({ desde: "2026-08-10", hasta: "2026-08-12" })
     )
   })
 
@@ -180,6 +234,7 @@ describe("PanelDelLaboratorio", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1", "res2"],
+      equiposEsperados: { res1: "pc1", res2: "pc2" },
       retiradoPor: undefined,
       liberarNoEntregadas: false,
     })
@@ -199,6 +254,7 @@ describe("PanelDelLaboratorio", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res2"],
+      equiposEsperados: { res2: "pc2" },
       retiradoPor: undefined,
       liberarNoEntregadas: false,
     })
@@ -228,6 +284,7 @@ describe("PanelDelLaboratorio", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
+      equiposEsperados: { res1: "pc1" },
       retiradoPor: undefined,
       liberarNoEntregadas: true,
     })
@@ -279,6 +336,7 @@ describe("PanelDelLaboratorio", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
+      equiposEsperados: { res1: "pc1" },
       retiradoPor: "Juan (alumno)",
       liberarNoEntregadas: false,
     })
@@ -306,6 +364,7 @@ describe("PanelDelLaboratorio", () => {
     await user.click(screen.getByRole("button", { name: /Entregar todas \(1\)/ }))
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
+      equiposEsperados: { res1: "pc1" },
       retiradoPor: undefined,
       liberarNoEntregadas: false,
     })
@@ -357,7 +416,7 @@ describe("PanelDelLaboratorio", () => {
     await screen.findByText("Hoy no hay ninguna clase con equipos reservados.")
     expect(reservasApi.listarReservas).toHaveBeenCalledWith({
       desde: "2026-08-10",
-      hasta: HOY,
+      hasta: "2026-08-12",
       pageSize: 200,
     })
   })
@@ -477,5 +536,56 @@ describe("PanelDelLaboratorio", () => {
 
     expect(await screen.findByText("PC 1 · Carro 1 sin retirar")).toBeInTheDocument()
     expect(await screen.findByText("PC 1 · Carro EDUTEC sin retirar")).toBeInTheDocument()
+  })
+  it("una PC que cambió después de marcarla exige volver a confirmar la selección", async () => {
+    const user = userEvent.setup()
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([reserva(), reserva({ id: "res2", equipoId: "pc2", identificador: 2 })])
+    )
+    const cliente = renderPanel()
+    await user.click(await screen.findByRole("button", { name: "Entrega parcial" }))
+    await user.click(screen.getByRole("checkbox", { name: /Se llevó PC 1/ }))
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(
+      paginada([
+        reserva({ equipoId: "pc9", identificador: 9 }),
+        reserva({ id: "res2", equipoId: "pc2", identificador: 2 }),
+      ])
+    )
+    await act(async () => {
+      await cliente.invalidateQueries({ queryKey: ["reservas"] })
+    })
+    await screen.findByRole("checkbox", { name: /Se llevó PC 9/ })
+    expect(screen.getByRole("button", { name: /Entregar 1 y liberar/ })).toBeDisabled()
+    expect(screen.getByRole("alert")).toHaveTextContent(/Cambió un equipo/)
+    expect(reservasApi.entregarPorReserva).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("checkbox", { name: /Se llevó PC 9/ }))
+    await user.click(screen.getByRole("checkbox", { name: /Se llevó PC 9/ }))
+    await user.click(screen.getByRole("button", { name: /Entregar 1 y liberar/ }))
+    expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith(
+      expect.objectContaining({ equiposEsperados: { res1: "pc9" } })
+    )
+  })
+  it("informa un rechazo temporal aunque el refresco retire la clase de la lista", async () => {
+    vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([reserva()]))
+    vi.mocked(reservasApi.entregarPorReserva).mockImplementation(async () => {
+      vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([]))
+      return {
+        entregadas: [],
+        noEntregadas: [
+          {
+            equipoId: "pc1",
+            razon: "RESERVA_NO_VIGENTE",
+            detalle: "El horario de esa reserva ya terminó",
+          },
+        ],
+      }
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(await screen.findByRole("button", { name: "Entregar todas (1)" }))
+    expect(
+      await screen.findByText(/PC 1.*El horario de esa reserva ya terminó/)
+    ).toBeInTheDocument()
+    expect(screen.getByText("No se pudieron entregar estos equipos:")).toBeInTheDocument()
   })
 })

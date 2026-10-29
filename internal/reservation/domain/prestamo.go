@@ -26,13 +26,31 @@ func NormalizarNombreDestinatario(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// ContextoAcademicoPrestamo conserva los datos de la entrega aunque se cierre
+// el ciclo o se corrijan nombres en la estructura académica.
+type ContextoAcademicoPrestamo struct {
+	ReservaIDOriginal string `json:"reservaIdOriginal"`
+	MateriaID         string `json:"materiaId"`
+	MateriaNombre     string `json:"materiaNombre"`
+	ContenedorID      string `json:"contenedorId"`
+	ContenedorTipo    string `json:"contenedorTipo"`
+	ContenedorNombre  string `json:"contenedorNombre"`
+	CursoAnio         int    `json:"cursoAnio,omitempty"`
+	CursoDivision     string `json:"cursoDivision,omitempty"`
+	Modalidad         string `json:"modalidad,omitempty"`
+	CicloID           string `json:"cicloId"`
+	CicloAnio         int    `json:"cicloAnio"`
+	Reconstruido      bool   `json:"reconstruido"`
+}
+
 // Prestamo es la custodia física de una PC: quién la tiene ahora.
 type Prestamo struct {
 	ID       string
 	EquipoID string
-	// ReservaID nil = préstamo espontáneo. Es un caso normal, no una
-	// excepción.
-	ReservaID *string
+	// ReservaID puede ser nil por una entrega espontánea o por un cierre anual.
+	// ContextoAcademico conserva la procedencia de las entregas por reserva.
+	ReservaID         *string
+	ContextoAcademico *ContextoAcademicoPrestamo
 
 	// EntregadoANombre es quién RESPONDE por el equipo, y va siempre;
 	// EntregadoAUsuarioID solo si esa persona tiene cuenta.

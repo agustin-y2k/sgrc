@@ -26,6 +26,11 @@ Todos los comandos se corren **parado en la carpeta del proyecto**.
 | **Empezar de cero** | `docker compose down -v && make run` | Nunca sin backup (§6) |
 | **Mirar la base** | `make psql` | `make psql` |
 
+La entrada se elige según la instalación: `make run-prod` inicia los servicios
+principales; `make run-prod-tunel` añade el túnel incluido; `make levantar` conserva
+un túnel externo y lo reconecta. Al actualizar código, repetir el comando de
+arranque elegido. Los perfiles `tunel` y `observabilidad` son independientes.
+
 **Cuidado con "reiniciar" y "aplicar cambios": no son lo mismo.** `make
 restart` levanta de nuevo los contenedores con la imagen que ya estaba
 compilada. Si tocaste código, hace falta `--build` — que es lo que hacen
@@ -89,15 +94,23 @@ generador de guías crea su propia configuración efímera. No colocar valores
 reales en las plantillas. Ver la
 [política de publicación](16-publicacion-repositorio.md).
 
-Después hay que **completar los valores reales**. Los cinco que no se pueden
-dejar como vienen:
+El archivo de instalación se usa para interpolar las variables declaradas por
+servicio en Compose. Cada contenedor recibe sólo las que utiliza: el túnel recibe
+`TUNNEL_TOKEN`, la API sus opciones y claves, PostgreSQL sus credenciales y Grafana
+su configuración propia. El servicio de carga de desarrollo recibe sólo sus
+credenciales y opciones. Una clave adicional en el archivo no se hereda de forma
+automática. Los nombres y valores existentes siguen siendo válidos; los valores
+exportados por la shell tienen la precedencia habitual de Compose.
+
+Después hay que **completar los valores reales**. Las credenciales de los
+servicios opcionales se necesitan sólo cuando se habilitan:
 
 | Variable | Qué poner | Cómo generarla |
 |---|---|---|
 | `POSTGRES_PASSWORD` | La contraseña de la base | `openssl rand -base64 24` |
 | `JWT_SECRET` | El secreto que firma las sesiones, **32 bytes como mínimo** | `openssl rand -base64 48` |
 | `SEED_ADMIN_PASSWORD` | La contraseña del primer Admin | La elegís vos, mínimo 8 caracteres |
-| `TUNNEL_TOKEN` | El token del túnel | Lo da el panel de Cloudflare |
+| `TUNNEL_TOKEN` | Token sólo para el túnel incluido, con el perfil `tunel` | Lo da el panel de Cloudflare; no hace falta para un túnel externo |
 | `GRAFANA_PASSWORD` | La contraseña de `admin` en Grafana, solo si vas a levantar los tableros | `openssl rand -base64 24` |
 
 > **El valor de ejemplo de `JWT_SECRET` está corto a propósito.** En
@@ -260,9 +273,23 @@ una función de menos, no un arranque roto.
 
 ### 1.2 Levantar todo
 
+Elegir el comando según quién administra la entrada:
+
 ```bash
-make run-prod          # docker compose up --build
+make run-prod          # servicios principales; entrada administrada aparte
+make run-prod-tunel    # añade cloudflared con TUNNEL_TOKEN propio
+make levantar          # segundo plano y reconexión del túnel externo compartido
 ```
+
+Son alternativas. Para iniciar el túnel incluido en segundo plano:
+
+```bash
+docker compose --profile tunel up -d --build
+```
+
+El Compose base no publica puertos; sin un túnel o proxy conectado a su red, la
+aplicación no queda accesible desde el host. Para uso local, ver
+[entorno local](15-entorno-local.md).
 
 La primera vez tarda unos minutos: compila el binario Go, compila la SPA y
 crea la base aplicando el esquema de `migrations/`.
@@ -305,7 +332,7 @@ Todos estos comandos se corren **parado en la carpeta del proyecto**.
 | Qué querés hacer | Comando | Qué pasa con los datos |
 |---|---|---|
 | Arrancar | `make run-prod` | — |
-| Arrancar en segundo plano | `docker compose up -d --build` | — |
+| Arrancar en segundo plano | `docker compose up -d --build` (añadir `--profile tunel` antes de `up` para el túnel incluido) | — |
 | **Parar** (apagar el sistema) | `make stop` | Se conservan |
 | **Reiniciar** sin cambios de código | `make restart` | Se conservan |
 | **Reiniciar aplicando cambios** | `make run-prod` de nuevo | Se conservan |
@@ -315,23 +342,47 @@ Todos estos comandos se corren **parado en la carpeta del proyecto**.
 La diferencia que importa:
 
 - **`stop`** apaga los contenedores pero los deja creados. Es lo que querés
-  para apagar el sistema un fin de semana largo: `make run-prod` lo vuelve a
-  levantar con todo adentro.
+  para apagar el sistema un fin de semana largo. Para volver a arrancar, usar
+  el comando de la instalación y habilitar los perfiles opcionales necesarios.
 - **`down`** además borra los contenedores. Los datos igual sobreviven,
   porque viven en el volumen `pgdata`, no adentro del contenedor.
 - **`down -v`** borra también el volumen: eso **destruye la base de datos**,
   con usuarios, reservas e inventario. Es útil solo para empezar de cero en
   desarrollo. No hay forma de deshacerlo sin un backup (§6).
 
+`make stop`, `make restart`, `make down`, `make logs` y `make ps` incluyen todos
+los perfiles del proyecto. No crean servicios opcionales que todavía no existan
+ni administran el contenedor externo compartido. `restart` también puede volver
+a iniciar contenedores existentes que estaban detenidos; no aplica cambios de
+imagen, entorno ni política de reinicio.
+
+### Túnel incluido y reinicio automático
+
+`cloudflared` pertenece al perfil `tunel`, con política `restart: unless-stopped`,
+igual que la base, la API y el frontend. Después de recrear el contenedor, Docker
+lo vuelve a iniciar ante una salida inesperada o al arrancar el daemon, salvo que
+se haya detenido manualmente. No hace falta modificar `.env` si se usa un túnel
+externo. El token del túnel incluido debe ser válido antes de activar su perfil.
+
+Los servicios de observabilidad se pueden añadir por separado con
+`make observabilidad`. También se pueden seleccionar ambos perfiles explícitamente:
+`docker compose --profile tunel --profile observabilidad up -d --build`.
+
+Deshabilitar un perfil **no detiene contenedores existentes**. Al pasar del túnel
+incluido a uno externo, detener y retirar sólo el servicio anterior antes de
+iniciar el flujo externo:
+
+```bash
+docker compose --profile tunel stop cloudflared
+docker compose --profile tunel rm -f cloudflared
+make levantar
+```
+
 ### Si el túnel no es el del compose
 
-En una instalación donde el Cloudflare Tunnel ya existía antes que este
-proyecto —creado desde el panel, compartido con otros sitios del mismo
-servidor— el servicio `cloudflared` del compose **no sirve**: vive solo en
-`sgrc-net` y no podría resolver nada de afuera. Y `make run-prod` lo levanta
-igual, así que muere en cada arranque con «Provided Tunnel token is not valid».
-
-Para esos casos:
+Si el túnel ya existe y se comparte con otros sitios, se puede mantener su gestión
+externa. El arranque habitual no activa `cloudflared` del proyecto ni necesita
+su `TUNNEL_TOKEN`. Para conservar la reconexión a la red:
 
 ```bash
 make levantar              # postgres, sgrc-app y frontend, nada más
@@ -378,9 +429,11 @@ make run-prod          # reconstruye las imágenes y reemplaza los contenedores
 
 Si la actualización trae **cambios en el esquema** (archivos nuevos en
 `migrations/`), el binario los aplica solo al arrancar, respetando los datos
-que ya están. Lo único que conviene agregar es un `make backup` antes y un
-`make migrate-status` después; el log lo cuenta en la línea que empieza con
-`goose:`. La lista de control completa, y qué hacer si falla, en §5.
+que ya están. Antes de reemplazar los servicios, preparar un respaldo verificable
+con `make backup`, conservar las imágenes y configuración anteriores y ensayar los
+cambios de esquema sobre una copia. Comprobar `make migrate-status` y la salud
+después; el log identifica las migraciones aplicadas. El arranque automático no
+sustituye el respaldo ni el ensayo. Ver §5 y la actualización 030–035 al final.
 
 ---
 
@@ -1109,10 +1162,10 @@ falsificar el header con la IP del cliente.
 
 ### 9.2 Lista de control antes de desplegar
 
-1. **`.env` propio del servidor**, con los cinco valores reales (§1.1):
-   `POSTGRES_PASSWORD`, `JWT_SECRET`, `SEED_ADMIN_PASSWORD`, `TUNNEL_TOKEN` y
-   —si vas a levantar los tableros— `GRAFANA_PASSWORD`. Los de `.env.example`
-   dicen `cambiar_...` o `CAMBIAME`, y el backend **se niega a arrancar** con un
+1. **`.env` propio del servidor**, con los valores reales (§1.1):
+   `POSTGRES_PASSWORD`, `JWT_SECRET` y `SEED_ADMIN_PASSWORD`; `TUNNEL_TOKEN` sólo
+   para el túnel incluido y `GRAFANA_PASSWORD` si se van a levantar los tableros.
+   Los de `.env.example` dicen `cambiar_...` o `CAMBIAME`, y el backend **se niega a arrancar** con un
    `JWT_SECRET` o un `CUENTAS_SECRET` de menos de 32 bytes. El de Grafana no lo
    puede validar el backend, porque es otro contenedor: lo verifica
    `make observabilidad` antes de levantar el perfil.
@@ -1123,7 +1176,8 @@ falsificar el header con la IP del cliente.
    host que le sirvió la página.
 4. **El ingress del túnel apunta a `http://frontend:80`** — se configura en el
    panel de Cloudflare, no en el repo.
-5. `make run-prod`, y comprobar que `sgrc-app` queda `healthy` (§1.3).
+5. Ejecutar el comando de arranque elegido (§1.2) y comprobar que `sgrc-app`
+   queda `healthy` (§1.3).
 6. Entrar con el Admin sembrado y **cambiarle la contraseña**.
 
 ### 9.3 Cuando tengas el dominio comprado
@@ -1281,11 +1335,10 @@ Conviene ponerlo en un archivo aparte (por ejemplo `docker-compose.prod.yml`)
 en vez de editar el compose base, para no perder el cambio al actualizar y
 para que quede explícito que ese despliegue expone puertos.
 
-Y el servicio `cloudflared` deja de tener sentido: sin `TUNNEL_TOKEN` el
-contenedor arranca, falla y queda en `Exited (255)`. No molesta —el compose
-no define política de reinicio, así que no lo reintenta— pero conviene
-sacarlo para que `docker compose ps` no muestre siempre un servicio caído y
-nadie pierda tiempo investigándolo.
+En este despliegue se deja desactivado el perfil `tunel`. El servicio
+`cloudflared` no arranca y no requiere `TUNNEL_TOKEN`. Si ya existía un túnel del
+proyecto, detenerlo y retirarlo como indica §2; omitir el perfil no apaga un
+contenedor que ya esté corriendo.
 
 ### 11.2 El certificado
 
@@ -1353,3 +1406,96 @@ mientras existan, porque eliminar ese indicador podría ampliar su alcance.
 No sustituir la bajada por una eliminación manual de la columna. La [documentación
 de prioridades](14-prioridades-dispositivos.md) describe las reglas y
 las condiciones de compatibilidad.
+
+<a id="actualizacion-030-034"></a>
+<a id="actualizacion-030-035"></a>
+
+## Actualización a v1.22.0 (migraciones 030–035)
+
+La versión `v1.22.0` incorpora las migraciones hasta 035. El tag `v1.21.0`
+incluye hasta 029; editar documentación, compilar o ensayar una copia de la base
+no actualiza por sí mismo una instalación. Publicar y desplegar una versión es
+un paso separado. Actualizar frontend y backend juntos: la entrega ahora exige
+confirmar los equipos revisados mediante `equiposEsperados`.
+
+| Migración | Efecto y comprobación |
+|---|---|
+| 030 | Impide cambiar el equipo de una reserva con préstamos, incluso devueltos, y vincular un préstamo a una reserva de otro equipo. Rechaza aplicar si ya encuentra una contradicción de equipos; revisar antes. |
+| 031 | Crea `prestamo_contexto_academico`. Reconstruye sólo préstamos con una reserva existente y los marca como reconstruidos. Conserva destinos escritos. La bajada se bloquea si borraría constancias. |
+| 032 | Identifica la materia interna de cada espacio y la crea si falta. Puede aumentar la cantidad de materias para reparar espacios; conserva las materias adicionales. |
+| 033 | Agrega identidad de operación a los bloqueos. Los anteriores reciben identidad por fila sin inferir lotes; no cambia sus motivos, fechas o estados. Revertir pierde esa identidad, por lo que no equivale a una restauración del respaldo. |
+| 034 | Protege nuevas fechas e intervalos según el año del ciclo en reservas, grupos y reglas. Mantiene los registros anteriores para revisión, cancelación y cierre; no los reasigna ni cancela automáticamente. |
+| 035 | Conserva procedencia de préstamos, guarda actividad en nuevos cierres y agrega configuración operativa persistente. Los sellados anteriores no se recalculan. |
+
+Antes de actualizar:
+
+1. Conservar la versión anterior, sus imágenes, la configuración privada y un
+   respaldo de PostgreSQL con checksum. Verificar también que se pueda restaurar.
+2. Revisar las inconsistencias existentes y ensayar la actualización sobre una
+   copia aislada. Los préstamos deben conservar su equipo y los datos académicos
+   reconstruidos deben identificarse como tales.
+3. Detener las escrituras del backend y frontend para tomar el respaldo final.
+   Conservar PostgreSQL y su volumen; no usar `down -v` para actualizar.
+4. Aplicar las migraciones con el binario de la versión nueva y recrear ambos
+   servicios con las imágenes previstas. Conservar el nombre de proyecto,
+   volumen, redes de acceso y secretos de la instalación.
+5. Comprobar salud, cantidades e invariantes, ingresar con cada rol y verificar
+   inventario, calendario, entrega y devolución. Recargar los navegadores que
+   sigan usando el frontend anterior.
+
+Consultas de diagnóstico, de sólo lectura:
+
+```sql
+-- Reservas y préstamos que no representan el mismo equipo (debe devolver cero).
+SELECT p.id AS prestamo_id, r.id AS reserva_id
+FROM prestamo p JOIN reserva r ON r.id=p.reserva_id
+WHERE p.equipo_id<>r.equipo_id;
+
+-- Reservas activas anteriores fuera del año de su materia: revisar y resolver
+-- con la institución; no cambiar el año de la materia ni borrarlas por inferencia.
+SELECT r.id, cl.anio AS ciclo_anio, r.fecha, r.hora_inicio, r.hora_fin
+FROM reserva r
+JOIN contenedor_de_materia cm ON cm.materia_id=r.materia_id
+JOIN ciclo_lectivo cl ON cl.id=cm.ciclo_lectivo_id
+WHERE r.estado IN ('CONFIRMADA','NO_RETIRADA') AND (
+  r.fecha<make_date(cl.anio,1,1)
+  OR r.fecha>=make_date(cl.anio+1,1,1)
+  OR r.fecha+r.hora_fin+
+     CASE WHEN r.hora_fin<r.hora_inicio THEN interval '1 day' ELSE interval '0' END
+     >make_date(cl.anio+1,1,1)
+);
+
+-- Espacios sin exactamente una materia interna, después de 032 (cero filas).
+SELECT e.id, e.nombre
+FROM espacio e LEFT JOIN materia m ON m.espacio_id=e.id AND m.interna_de_espacio
+GROUP BY e.id,e.nombre HAVING count(m.id)<>1;
+```
+
+Si falla la preparación, conservar la base original y las imágenes anteriores.
+Si una versión nueva ya migró o recibió escrituras, recrear sólo el backend viejo
+no constituye una reversión segura: evaluar compatibilidad y restaurar el respaldo
+validado en una ventana acordada. Los respaldos y diagnósticos quedan fuera de Git.
+
+### Plazos de operación desde la interfaz
+
+Después de aplicar la migración 035 y arrancar, **Administración → Configuración
+del sistema** permite ajustar los plazos y horarios de avisos sin reiniciar.
+Los valores de `RETIRO_GRACIA_MINUTOS`, `CIERRE_JORNADA` y `LICENCIAS_HORA_AVISO`
+se importan al crear la configuración. Una vez guardada, no se sobrescribe desde
+el entorno. Los intervalos técnicos de revisión permanecen en la instalación.
+Ver [plazos, límites y efectos sobre reservas pendientes](17-configuracion-operativa.md).
+
+### Aplicar la separación de variables entre servicios
+
+La configuración nueva se incorpora al crear o recrear los contenedores. Un
+`docker compose restart` conserva las variables del contenedor anterior. Usar el
+flujo de actualización de la instalación, diferenciando el túnel incluido en
+Compose del [túnel externo compartido](#si-el-túnel-no-es-el-del-compose); el
+segundo se administra fuera de este proyecto.
+
+Las copias locales antiguas deben retirar las entradas `env_file` de `sgrc-app`
+y `cloudflared` en su `docker-compose.local.yml`. El archivo privado se conserva
+al ejecutar `make local-init`, por lo que la plantilla nueva no lo sobrescribe.
+`make local` ya selecciona `--env-file .env.local` para interpolar sus valores.
+Ver [entorno local](15-entorno-local.md) y
+[entorno mínimo por servicio](09-seguridad-rbac.md#entorno-mínimo-por-servicio).

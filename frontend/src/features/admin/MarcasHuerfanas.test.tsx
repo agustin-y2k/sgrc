@@ -17,6 +17,7 @@ function huerfana(over: Partial<PreferenciaHuerfana> = {}): PreferenciaHuerfana 
     equipoEtiqueta: "PC 3",
     carroNombre: "Carro 1",
     equipoDadoDeBaja: false,
+    coincideConArchivadas: false,
     ...over,
   }
 }
@@ -53,7 +54,9 @@ describe("MarcasHuerfanas", () => {
     await waitFor(() => {
       expect(adminApi.listarPreferenciasHuerfanas).toHaveBeenCalled()
     })
-    expect(screen.queryByText("Marcas que quedaron sin materia")).not.toBeInTheDocument()
+    expect(
+      screen.queryByText("Prioridades sin materias vigentes")
+    ).not.toBeInTheDocument()
   })
 
   it("avisa cuando el equipo marcado ya está retirado", async () => {
@@ -91,5 +94,18 @@ describe("MarcasHuerfanas", () => {
       expect(adminApi.listarPreferenciasHuerfanas).toHaveBeenCalled()
     })
     expect(screen.queryByText(/error interno/)).not.toBeInTheDocument()
+  })
+
+  it("distingue las coincidencias archivadas sin sugerir que se eliminaron las materias", async () => {
+    renderPanel([huerfana({ coincideConArchivadas: true })])
+    expect(
+      await screen.findByText(/Solo coincide con materias archivadas/)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/conservarlas para próximos ciclos/)).toBeInTheDocument()
+    expect(adminApi.borrarPreferencia).not.toHaveBeenCalled()
+  })
+  it("distingue una marca sin ninguna coincidencia histórica", async () => {
+    renderPanel([huerfana()])
+    expect(await screen.findByText(/tampoco en el archivo/)).toBeInTheDocument()
   })
 })

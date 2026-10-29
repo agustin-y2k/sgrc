@@ -57,6 +57,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	academic.Post("/ciclos/:cicloId/cursos", autenticado, soloAdmin, h.CrearCurso)
 	academic.Get("/ciclos/:cicloId/cursos", autenticado, h.ListarCursos)
 	academic.Get("/cursos/:id", autenticado, h.ObtenerCurso)
+	academic.Post("/cursos/:id/impacto-prioridades", autenticado, soloAdmin, h.ImpactoEdicionCurso)
 	academic.Patch("/cursos/:id", autenticado, soloAdmin, h.EditarCurso)
 	academic.Delete("/cursos/:id", autenticado, soloAdmin, h.EliminarCurso)
 	academic.Post("/cursos/:id/copiar-materias", autenticado, soloAdmin, h.CopiarMaterias)

@@ -312,12 +312,18 @@ describe("EntregasPage", () => {
     ).not.toBeChecked()
     await user.click(screen.getByRole("button", { name: "Entregar 1 equipo" }))
     expect(reservasApi.entregarPorReserva).toHaveBeenLastCalledWith(
-      expect.objectContaining({ reservaIds: ["r3"], liberarNoEntregadas: false })
+      expect.objectContaining({
+        reservaIds: ["r3"],
+        equiposEsperados: { r3: "pc3" },
+        liberarNoEntregadas: false,
+      })
     )
   })
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(useAhora).mockReturnValue(new Date())
+    const ahora = new Date()
+    ahora.setHours(8, 30, 0, 0)
+    vi.mocked(useAhora).mockReturnValue(ahora)
     vi.mocked(reservasApi.listarPrestamosAbiertos).mockResolvedValue({ data: [] })
     vi.mocked(reservasApi.listarReservas).mockResolvedValue(paginada([]))
     vi.mocked(reservasApi.entregarPorReserva).mockResolvedValue({ entregadas: [] })
@@ -420,6 +426,7 @@ describe("EntregasPage", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
+      equiposEsperados: { res1: "pc1" },
       retiradoPor: undefined,
       liberarNoEntregadas: true,
     })
@@ -497,6 +504,7 @@ describe("EntregasPage", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1", "res2"],
+      equiposEsperados: { res1: "pc1", res2: "pc2" },
       retiradoPor: undefined,
       liberarNoEntregadas: false,
     })
@@ -515,6 +523,7 @@ describe("EntregasPage", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res2"],
+      equiposEsperados: { res2: "pc2" },
       retiradoPor: undefined,
       liberarNoEntregadas: false,
     })
@@ -533,6 +542,7 @@ describe("EntregasPage", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
+      equiposEsperados: { res1: "pc1" },
       retiradoPor: "Juan (alumno)",
       liberarNoEntregadas: false,
     })
@@ -550,6 +560,7 @@ describe("EntregasPage", () => {
 
     expect(reservasApi.entregarPorReserva).toHaveBeenCalledWith({
       reservaIds: ["res1"],
+      equiposEsperados: { res1: "pc1" },
       retiradoPor: undefined,
       liberarNoEntregadas: false,
     })

@@ -212,7 +212,15 @@
   dl.glosario dt { font-weight: 700; margin-top: 3.5mm; }
   dl.glosario dd { margin: 0.6mm 0 0 0; color: var(--gris); }
 </style>
-
+<style data-anotaciones-guias>
+.guia-visual{position:relative;display:inline-block;vertical-align:top;line-height:0;max-width:100%;}
+.guia-visual img{display:block;width:100%;max-width:100%;height:auto;max-height:none;}
+.guia-marcas{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;}
+.guia-indicaciones{list-style:none;padding:0;margin:3mm 0 2mm;display:flex;flex-wrap:wrap;gap:2mm 4mm;text-align:left;line-height:1.35;font-size:10pt;}
+.guia-indicaciones li{display:flex;gap:2mm;align-items:flex-start;flex:1 1 47mm;break-inside:avoid;}
+.guia-indicaciones li>span{display:inline-flex;align-items:center;justify-content:center;flex:none;width:5.5mm;height:5.5mm;border-radius:50%;background:#b91c1c;color:white;font-size:9pt;font-weight:700;line-height:1;}
+figure[data-guia-anotada]{break-inside:avoid;}
+</style>
 <div class="portada">
   <span class="marca">SGRC</span>
   <h1>Cómo reservar las<br>computadoras</h1>
@@ -221,10 +229,13 @@
     <b>Esta guía es para vos aunque no te lleves bien con la computadora.</b>
     Está escrita paso por paso y con fotos de cada pantalla. No hace falta saber
     nada de antes: alcanza con leer y seguir lo que dice cada número.
+      <br><br>Buscá tu tarea en el índice y seguí los números de las imágenes.
+    Las flechas señalan dónde mirar o pulsar; las indicaciones cortas están debajo.
+    Los números y recuadros son marcas de esta guía, no botones del sistema.
   </div>
   <div class="pie">
-    Sistema de Gestión y Reserva de Computadoras · versión 1.21.0<br>
-    Texto revisado: 21 de octubre de 2026. Capturas: <span data-fecha-capturas>20 de octubre de 2026</span>.<br>Las imágenes usan exclusivamente datos ficticios de demostración.
+    Sistema de Gestión y Reserva de Computadoras · versión 1.22.0<br>
+    Texto revisado: 28 de octubre de 2026. Capturas: <span data-fecha-capturas>26 de octubre de 2026</span>.<br>Las imágenes usan exclusivamente datos ficticios de demostración.
   </div>
 </div>
 
@@ -328,18 +339,41 @@
     <li>Tocá <span class="boton">Crear cuenta</span>.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-02-crear-cuenta.png" alt="Formulario de creación de cuenta">
-    <figcaption>La pantalla de crear cuenta. Todo es obligatorio: el cargo, el
+  <figure data-guia-anotada="docente-02-crear-cuenta.png">
+<div class="guia-visual" style="width:min(100%,88.25mm)"><div style="margin-inline:7.25%"><img src="imagenes/docente-02-crear-cuenta.png" alt="Formulario de creación de cuenta"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 524 950" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-02-crear-cuenta-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="51" y="117" width="422" height="178" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 206 L 51 206" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 206 L 51 206" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-02-crear-cuenta-png)"/>
+      <circle cx="19" cy="206" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="206" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="51" y="327" width="422" height="535" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 594.5 L 51 594.5" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 594.5 L 51 594.5" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-02-crear-cuenta-png)"/>
+      <circle cx="19" cy="594.5" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="594.5" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="51" y="910" width="422" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 929 L 51 929" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 929 L 51 929" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-02-crear-cuenta-png)"/>
+      <circle cx="19" cy="929" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="929" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Completá tus datos y contraseña</li><li><span aria-hidden="true">2</span>Indicá tu cargo, rol y materia</li><li><span aria-hidden="true">3</span>Enviá tu solicitud</li></ol>
+<figcaption>La pantalla de crear cuenta. Todo es obligatorio: el cargo, el
       titular/suplente, y dónde vas a estar — que es lo que mira el Admin para
       asignarte tu materia.</figcaption>
-  </figure>
+</figure>
 
-  <figure>
-    <img src="imagenes/docente-02b-donde-vas-a-estar.png" alt="Los desplegables de curso y materia del registro">
-    <figcaption>Elegís de la lista; «Otro», al final y después de una línea, es la
+  <figure data-guia-anotada="docente-02b-donde-vas-a-estar.png">
+<div class="guia-visual" style="width:min(100%,280.14mm)"><div style="margin-inline:7.72%"><img src="imagenes/docente-02b-donde-vas-a-estar.png" alt="Los desplegables de curso y materia del registro"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 492 281" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-02b-donde-vas-a-estar-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="35" y="102" width="422" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 121 L 35 121" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 121 L 35 121" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-02b-donde-vas-a-estar-png)"/>
+      <circle cx="19" cy="121" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="121" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="35" y="208" width="422" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 227 L 35 227" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 227 L 35 227" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-02b-donde-vas-a-estar-png)"/>
+      <circle cx="19" cy="227" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="227" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Elegí el curso</li><li><span aria-hidden="true">2</span>Elegí la materia</li></ol>
+<figcaption>Elegís de la lista; «Otro», al final y después de una línea, es la
       salida para lo que no esté cargado.</figcaption>
-  </figure>
+</figure>
 
   <div class="nota">
     <span class="titulo">Si trabajás en un lugar que no es un curso</span>
@@ -395,10 +429,24 @@
     de tu cuenta, en cualquier máquina.
   </div>
 
-  <figure>
-    <img src="imagenes/docente-01-entrar.png" alt="Pantalla de inicio de sesión">
-    <figcaption>La pantalla de entrada: tu email, tu contraseña y poco más.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-01-entrar.png">
+<div class="guia-visual" style="width:min(100%,201.09mm)"><div style="margin-inline:8.26%"><img src="imagenes/docente-01-entrar.png" alt="Pantalla de inicio de sesión"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 460 366" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-01-entrar-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="51" y="97" width="358" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 116 L 51 116" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 116 L 51 116" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-01-entrar-png)"/>
+      <circle cx="19" cy="116" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="116" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="51" y="167" width="358" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 186 L 51 186" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 186 L 51 186" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-01-entrar-png)"/>
+      <circle cx="19" cy="186" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="186" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="51" y="279" width="358" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 298 L 51 298" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 298 L 51 298" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-01-entrar-png)"/>
+      <circle cx="19" cy="298" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="298" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Escribí tu email</li><li><span aria-hidden="true">2</span>Ingresá tu contraseña</li><li><span aria-hidden="true">3</span>Entrá al sistema</li></ol>
+<figcaption>La pantalla de entrada: tu email, tu contraseña y poco más.</figcaption>
+</figure>
 
   <h3>Entrar con Google</h3>
   <p>
@@ -446,10 +494,19 @@
     <li>Volvé al sistema, escribí ese código y elegí una contraseña nueva.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-03-olvide-contrasena.png" alt="Pantalla de recuperar contraseña">
-    <figcaption>Solo hace falta tu email: el código llega ahí.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-03-olvide-contrasena.png">
+<div class="guia-visual" style="width:min(100%,262.86mm)"><div style="margin-inline:8.26%"><img src="imagenes/docente-03-olvide-contrasena.png" alt="Pantalla de recuperar contraseña"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 460 280" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-03-olvide-contrasena-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="51" y="117" width="358" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 136 L 51 136" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 136 L 51 136" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-03-olvide-contrasena-png)"/>
+      <circle cx="19" cy="136" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="136" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="51" y="193" width="358" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 212 L 51 212" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 212 L 51 212" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-03-olvide-contrasena-png)"/>
+      <circle cx="19" cy="212" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="212" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Usá tu email registrado</li><li><span aria-hidden="true">2</span>Solicitá el código</li></ol>
+<figcaption>Solo hace falta tu email: el código llega ahí.</figcaption>
+</figure>
 
   <div class="nota">
     <span class="titulo">Si entrás con Google</span>
@@ -474,10 +531,24 @@
     esté a la vista, sin buscar en menús.
   </p>
 
-  <figure>
-    <img src="imagenes/docente-04-pantalla-de-inicio.png" alt="Pantalla de inicio del docente">
-    <figcaption>La pantalla de inicio con las próximas clases y los accesos a tus tareas.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-04-pantalla-de-inicio.png">
+<div class="guia-visual" style="width:min(100%,218.73mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-04-pantalla-de-inicio.png" alt="Pantalla de inicio del docente"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1367.04 1000" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-04-pantalla-de-inicio-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="1109.52" y="287" width="116" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.56"/>
+      <path d="M 1327.36 312 L 1225.52 312" stroke="white" stroke-width="5.56" fill="none"/>
+      <path d="M 1327.36 312 L 1225.52 312" stroke="#b91c1c" stroke-width="2.56" fill="none" marker-end="url(#flecha-docente-04-pantalla-de-inicio-png)"/>
+      <circle cx="1345.28" cy="312" r="17.92" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1345.28" y="312" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="24.32" font-weight="bold">1</text>
+<rect x="141.52" y="529" width="161" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.56"/>
+      <path d="M 39.68 548 L 141.52 548" stroke="white" stroke-width="5.56" fill="none"/>
+      <path d="M 39.68 548 L 141.52 548" stroke="#b91c1c" stroke-width="2.56" fill="none" marker-end="url(#flecha-docente-04-pantalla-de-inicio-png)"/>
+      <circle cx="21.76" cy="548" r="17.92" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="21.76" y="548" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="24.32" font-weight="bold">2</text>
+<rect x="308.52" y="529" width="168" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.56"/>
+      <path d="M 39.68 504.16 L 39.52 504.16 L 39.52 522 L 392.52 522 L 392.52 529" stroke="white" stroke-width="5.56" fill="none"/>
+      <path d="M 39.68 504.16 L 39.52 504.16 L 39.52 522 L 392.52 522 L 392.52 529" stroke="#b91c1c" stroke-width="2.56" fill="none" marker-end="url(#flecha-docente-04-pantalla-de-inicio-png)"/>
+      <circle cx="21.76" cy="504.16" r="17.92" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="21.76" y="504.16" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="24.32" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Hacé una reserva</li><li><span aria-hidden="true">2</span>Elegí la fecha que querés ver</li><li><span aria-hidden="true">3</span>Consultá también otras materias</li></ol>
+<figcaption>La pantalla de inicio con las próximas clases y los accesos a tus tareas.</figcaption>
+</figure>
 
   <ul class="simple">
     <li><b>Reservas.</b> La lista de todo lo que reservaste. También se llega desde
@@ -506,6 +577,15 @@
 <!-- 6 ─────────────────────────────────────────────────────────── -->
 <section class="cap" id="capitulo-6">
   <h2><span class="n">6</span>Reservar computadoras para una clase</h2>
+  <div class="nota">
+    <span class="titulo">La reserva pertenece al año de la materia</span>
+    Una materia del ciclo 2026 sólo permite reservar dentro de 2026. Para el año
+    siguiente necesitás la materia del ciclo nuevo y tu asignación como docente.
+    El formulario limita las fechas y te avisa si el horario queda fuera del año.
+    El 31 de diciembre se puede terminar a medianoche, pero no continuar usando
+    horas del 1 de enero.
+  </div>
+
   <p>El formulario guarda un <b>borrador</b> en este navegador durante la sesión de
     tu cuenta. Podés consultar inventario o calendario y volver sin perder lo
     preparado. Al recuperarlo se consulta otra vez la disponibilidad: no equivale
@@ -530,14 +610,42 @@
       llevarte el carro entero de una sola vez en lugar de tildar de a una.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-05-nueva-reserva.png" alt="Formulario de nueva reserva completo">
-    <figcaption>Primero completá la materia, la fecha y el horario.</figcaption>
-  </figure>
-  <figure>
-    <img src="imagenes/docente-23-seleccion-equipos.png" alt="Selección de computadoras con tres equipos marcados">
-    <figcaption>Después elegí las máquinas disponibles. El contador indica cuántas llevás seleccionadas.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-05-nueva-reserva.png">
+<div class="guia-visual" style="width:min(100%,396.88mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-05-nueva-reserva.png" alt="Formulario de nueva reserva completo"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 496" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-05-nueva-reserva-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="244.17" y="269" width="742" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 288 L 244.17 288" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 288 L 244.17 288" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-05-nueva-reserva-png)"/>
+      <circle cx="19.58" cy="288" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="288" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="244.17" y="343" width="742" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 362 L 244.17 362" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 362 L 244.17 362" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-05-nueva-reserva-png)"/>
+      <circle cx="19.58" cy="362" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="362" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="244.17" y="415" width="514" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 434 L 244.17 434" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 434 L 244.17 434" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-05-nueva-reserva-png)"/>
+      <circle cx="19.58" cy="434" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="434" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Elegí tu materia</li><li><span aria-hidden="true">2</span>Indicá la fecha</li><li><span aria-hidden="true">3</span>Definí el horario completo</li></ol>
+<figcaption>Primero completá la materia, la fecha y el horario.</figcaption>
+</figure>
+  <figure data-guia-anotada="docente-23-seleccion-equipos.png">
+<div class="guia-visual" style="width:min(100%,198.65mm)"><div style="margin-inline:4.68%"><img src="imagenes/docente-23-seleccion-equipos.png" alt="Selección de computadoras con tres equipos marcados"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 812 654" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-23-seleccion-equipos-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="35" y="55" width="742" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 74 L 35 74" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 74 L 35 74" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-23-seleccion-equipos-png)"/>
+      <circle cx="19" cy="74" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="74" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="44" y="172" width="22" height="22" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 183 L 44 183" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 183 L 44 183" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-23-seleccion-equipos-png)"/>
+      <circle cx="19" cy="183" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="183" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="35" y="607" width="148" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 626 L 35 626" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 626 L 35 626" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-23-seleccion-equipos-png)"/>
+      <circle cx="19" cy="626" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="626" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Buscá un equipo</li><li><span aria-hidden="true">2</span>Marcá las computadoras</li><li><span aria-hidden="true">3</span>Confirmá tu reserva</li></ol>
+<figcaption>Después elegí las máquinas disponibles. El contador indica cuántas llevás seleccionadas.</figcaption>
+</figure>
 
   <ul class="simple">
     <li>Una sola fecha o todas las semanas.</li>
@@ -590,6 +698,11 @@
 <!-- 7 ─────────────────────────────────────────────────────────── -->
 <section class="cap" id="capitulo-7">
   <h2><span class="n">7</span>Reservar todas las semanas</h2>
+  <p>La fecha de inicio, la de fin y las clases de la serie deben quedar dentro
+    del año de la materia. Si ponés una fecha del año siguiente, se rechaza toda
+    la serie; no se recorta ni se reserva automáticamente para otra materia.
+    Para continuar el año que viene, creá otra serie en el ciclo correspondiente.</p>
+
 
   <p class="entrada">
     Si tenés la misma clase todas las semanas, no hace falta cargarla una por una.
@@ -614,14 +727,42 @@
       validar al confirmar: comprobar no guarda ni retiene equipos.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-06-reserva-semanal.png" alt="Formulario de reserva que se repite todas las semanas">
-    <figcaption>La serie se comprueba antes de confirmar: cada fecha puede tener una disponibilidad diferente.</figcaption>
-  </figure>
-  <figure>
-    <img src="imagenes/docente-22-consentimiento-serie.png" alt="Resultado de comprobar la serie con autorización explícita para tomar equipos por prioridad">
-    <figcaption>Si una fecha necesita prioridad, hay que autorizarla expresamente. Comprobar no guarda la reserva.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-06-reserva-semanal.png">
+<div class="guia-visual" style="width:min(100%,396.88mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-06-reserva-semanal.png" alt="Formulario de reserva que se repite todas las semanas"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 496" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-06-reserva-semanal-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="363.17" y="199" width="196" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 216 L 35.17 216 L 35.17 192 L 461.17 192 L 461.17 199" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 216 L 35.17 216 L 35.17 192 L 461.17 192 L 461.17 199" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-06-reserva-semanal-png)"/>
+      <circle cx="19.58" cy="216" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="216" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="244.17" y="343" width="742" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 362 L 244.17 362" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 362 L 244.17 362" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-06-reserva-semanal-png)"/>
+      <circle cx="19.58" cy="362" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="362" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="244.17" y="415" width="514" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 434 L 244.17 434" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 434 L 244.17 434" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-06-reserva-semanal-png)"/>
+      <circle cx="19.58" cy="434" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="434" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Elegí una serie semanal</li><li><span aria-hidden="true">2</span>Elegí el día y el período</li><li><span aria-hidden="true">3</span>Definí el horario de cada clase</li></ol>
+<figcaption>La serie se comprueba antes de confirmar: cada fecha puede tener una disponibilidad diferente.</figcaption>
+</figure>
+  <figure data-guia-anotada="docente-22-consentimiento-serie.png">
+<div class="guia-visual" style="width:min(100%,269.54mm)"><div style="margin-inline:4.68%"><img src="imagenes/docente-22-consentimiento-serie.png" alt="Resultado de comprobar la serie con autorización explícita para tomar equipos por prioridad"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 812 482" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-22-consentimiento-serie-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="48" y="62" width="140" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 81 L 48 81" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 81 L 48 81" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-22-consentimiento-serie-png)"/>
+      <circle cx="19" cy="81" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="81" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="57" y="147" width="698" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 172 L 57 172" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 172 L 57 172" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-22-consentimiento-serie-png)"/>
+      <circle cx="19" cy="172" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="172" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="48" y="426" width="22" height="22" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 437 L 48 437" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 437 L 48 437" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-22-consentimiento-serie-png)"/>
+      <circle cx="19" cy="437" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="437" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Comprobá todas las fechas</li><li><span aria-hidden="true">2</span>Revisá el resultado de cada clase</li><li><span aria-hidden="true">3</span>Autorizá la prioridad si corresponde</li></ol>
+<figcaption>Si una fecha necesita prioridad, hay que autorizarla expresamente. Comprobar no guarda la reserva.</figcaption>
+</figure>
 
   <div class="nota">
     <span class="titulo">Después podés tocar una sola clase</span>
@@ -638,10 +779,24 @@
     Todo junto está en <b>Reservas</b>, arriba a la izquierda.
   </p>
 
-  <figure>
-    <img src="imagenes/docente-07-mis-reservas.png" alt="Lista de reservas con sus botones">
-    <figcaption>Cada tarjeta es una clase.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-07-mis-reservas.png">
+<div class="guia-visual" style="width:min(100%,207.21mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-07-mis-reservas.png" alt="Lista de reservas con sus botones"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 950" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-07-mis-reservas-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="164.17" y="101" width="125" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 120 L 164.17 120" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 120 L 164.17 120" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-07-mis-reservas-png)"/>
+      <circle cx="19.58" cy="120" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="120" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="803.17" y="517" width="163" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 534 L 1195.17 534 L 1195.17 510 L 884.67 510 L 884.67 517" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 534 L 1195.17 534 L 1195.17 510 L 884.67 510 L 884.67 517" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-07-mis-reservas-png)"/>
+      <circle cx="1210.75" cy="534" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="534" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="968.17" y="517" width="82" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 493.74 L 1050.17 534" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 493.74 L 1050.17 534" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-07-mis-reservas-png)"/>
+      <circle cx="1210.75" cy="493.74" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="493.74" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Consultá el calendario</li><li><span aria-hidden="true">2</span>Reemplazá una computadora</li><li><span aria-hidden="true">3</span>Cancelá si no vas a usarla</li></ol>
+<figcaption>Cada tarjeta es una clase.</figcaption>
+</figure>
 
   <ul class="simple">
     <li>Empezar una reserva nueva.</li>
@@ -652,6 +807,11 @@
   </ul>
 
   <h3>Cambiar una computadora</h3>
+  <p>Una computadora que ya tuvo una entrega no puede reemplazarse en esa
+    reserva, aunque después haya sido devuelta. Si pedís cambiar varias fechas
+    de una serie, una fecha con entrega impide aplicar ese cambio completo;
+    revisá el alcance o consultá al administrador.</p>
+
   <p>
     Sirve cuando una máquina puntual no te sirve —por ejemplo, la que reservaste
     no tiene el programa que necesitás—. La clase queda igual: no se cancela ni
@@ -667,10 +827,24 @@
     <li>Tocá <span class="boton">Cambiar</span>.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-09-cambiar-computadora.png" alt="Panel para cambiar una computadora de la reserva">
-    <figcaption>Solo aparecen las computadoras que están libres en ese horario.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-09-cambiar-computadora.png">
+<div class="guia-visual" style="width:min(100%,471.27mm)"><div style="margin-inline:3.91%"><img src="imagenes/docente-09-cambiar-computadora.png" alt="Panel para cambiar una computadora de la reserva"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 972 330" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-09-cambiar-computadora-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="64" y="218" width="419" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 237 L 64 237" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 237 L 64 237" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-09-cambiar-computadora-png)"/>
+      <circle cx="19" cy="237" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="237" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="489" y="218" width="419" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 937 237 L 908 237" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 937 237 L 908 237" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-09-cambiar-computadora-png)"/>
+      <circle cx="953" cy="237" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="953" y="237" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="64" y="262" width="90" height="42" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 283 L 64 283" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 283 L 64 283" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-09-cambiar-computadora-png)"/>
+      <circle cx="19" cy="283" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="283" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Elegí la PC que dejás</li><li><span aria-hidden="true">2</span>Elegí su reemplazo</li><li><span aria-hidden="true">3</span>Guardá el cambio</li></ol>
+<figcaption>Solo aparecen las computadoras que están libres en ese horario.</figcaption>
+</figure>
 
   <h3>Cancelar una clase</h3>
 
@@ -683,10 +857,24 @@
     <li>Tocá <span class="boton">Confirmar cancelación</span>.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-08-cancelar.png" alt="Panel de confirmación de cancelación">
-    <figcaption>Antes de cancelar, el sistema te dice cuántas computadoras se liberan.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-08-cancelar.png">
+<div class="guia-visual" style="width:min(100%,501.68mm)"><div style="margin-inline:3.91%"><img src="imagenes/docente-08-cancelar.png" alt="Panel de confirmación de cancelación"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 972 310" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-08-cancelar-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="64" y="198" width="844" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 217 L 64 217" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 217 L 64 217" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-08-cancelar-png)"/>
+      <circle cx="19" cy="217" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="217" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="64" y="242" width="177" height="42" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 263 L 64 263" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 263 L 64 263" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-08-cancelar-png)"/>
+      <circle cx="19" cy="263" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="263" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="243" y="242" width="79" height="42" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 177 L 34 177 L 34 235 L 282.5 235 L 282.5 242" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 177 L 34 177 L 34 235 L 282.5 235 L 282.5 242" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-08-cancelar-png)"/>
+      <circle cx="19" cy="177" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="177" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Podés explicar el motivo</li><li><span aria-hidden="true">2</span>Confirmá sólo si querés cancelar</li><li><span aria-hidden="true">3</span>Volvé sin cancelar</li></ol>
+<figcaption>Antes de cancelar, el sistema te dice cuántas computadoras se liberan.</figcaption>
+</figure>
 
   <div class="ojo">
     <span class="titulo">Cancelar es para la clase entera</span>
@@ -720,10 +908,24 @@
     <li>Elegí qué tan <b>grave</b> es y mandalo.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-11-avisar-falla.png" alt="Formulario para reportar que un equipo no funciona">
-    <figcaption>Cuanto más concreto, mejor: qué hiciste y qué pasó.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-11-avisar-falla.png">
+<div class="guia-visual" style="width:min(100%,450.73mm)"><div style="margin-inline:4.11%"><img src="imagenes/docente-11-avisar-falla.png" alt="Formulario para reportar que un equipo no funciona"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 924 328" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-11-avisar-falla-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="48" y="62" width="828" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 81 L 48 81" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 81 L 48 81" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-11-avisar-falla-png)"/>
+      <circle cx="19" cy="81" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="81" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="48" y="212" width="828" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 231 L 48 231" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 231 L 48 231" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-11-avisar-falla-png)"/>
+      <circle cx="19" cy="231" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="231" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="48" y="284" width="81" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 301 L 48 301" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 301 L 48 301" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-11-avisar-falla-png)"/>
+      <circle cx="19" cy="301" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="301" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Contá qué ocurrió</li><li><span aria-hidden="true">2</span>Indicá la gravedad</li><li><span aria-hidden="true">3</span>Enviá el reporte</li></ol>
+<figcaption>Cuanto más concreto, mejor: qué hiciste y qué pasó.</figcaption>
+</figure>
 
   <div class="nota">
     <span class="titulo">Qué pasa después</span>
@@ -748,16 +950,92 @@
       ves qué días y horas está reservada, y por quién.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-10-computadoras.png" alt="Listado de computadoras de un carro">
-    <figcaption>Cada máquina, con sus programas y su estado.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-10-computadoras.png">
+<div class="guia-visual" style="width:min(100%,214.91mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-10-computadoras.png" alt="Listado de computadoras de un carro"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 916" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-10-computadoras-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="795.17" y="253.5" width="104" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 270.5 L 1195.17 270.5 L 1195.17 246.5 L 847.17 246.5 L 847.17 253.5" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 270.5 L 1195.17 270.5 L 1195.17 246.5 L 847.17 246.5 L 847.17 253.5" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-10-computadoras-png)"/>
+      <circle cx="1210.75" cy="270.5" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="270.5" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="901.17" y="253.5" width="141" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 310.76 L 1042.17 270.5" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 310.76 L 1042.17 270.5" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-10-computadoras-png)"/>
+      <circle cx="1210.75" cy="310.76" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="310.76" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="678.17" y="253.5" width="115" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 230.24 L 1195.17 230.24 L 1195.17 246.5 L 735.67 246.5 L 735.67 253.5" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 230.24 L 1195.17 230.24 L 1195.17 246.5 L 735.67 246.5 L 735.67 253.5" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-10-computadoras-png)"/>
+      <circle cx="1210.75" cy="230.24" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="230.24" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Consultá cómo ingresar</li><li><span aria-hidden="true">2</span>Avisá si hay una falla</li><li><span aria-hidden="true">3</span>Consultá cuándo está ocupada</li></ol>
+<figcaption>Cada máquina, con sus programas y su estado.</figcaption>
+</figure>
 
   <div class="nota">
     <span class="titulo">Para qué te sirve el calendario</span>
     Si necesitás una máquina puntual —la única que tiene cierto programa— podés
     mirar cuándo está libre antes de armar tu reserva.
   </div>
+
+  <h3>Tu calendario y las reservas de otras materias</h3>
+  <p>Entrá a <b>Reservas</b> y tocá <b>Ver calendario</b>. Alterná entre <b>Semana</b>,
+    <b>Mes</b> y <b>Agenda</b>, desplazate por las fechas o usá <b>Ir a fecha</b>.
+    Abrí una clase para consultar sus equipos y gestionar tus reservas.</p>
+  <p>Para consultar otras materias, cambiá <b>Mostrar reservas</b> a
+    <b>Todas las materias</b>. Consultarlas no te permite modificarlas. La prioridad
+    y disponibilidad de los dispositivos se vuelven a comprobar al reservar;
+    mirar el calendario no aparta computadoras.</p>
+  <p><b>Mostrar canceladas</b> permite encontrarlas también en el calendario.
+    Si abrís una cancelada y elegís <b>Gestionar reserva</b>, se abre el listado
+    con las canceladas incluidas. Los bloqueos administrativos conservan sus
+    motivos y sus operaciones separadas.</p>
+  <figure data-guia-anotada="docente-25-calendario-semana.png">
+<div class="guia-visual" style="width:min(100%,207.21mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-25-calendario-semana.png" alt="Calendario semanal con clases propias y de otros docentes, incluida una clase breve simultánea"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 950" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-25-calendario-semana-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="73.17" y="220" width="162" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 239 L 73.17 239" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 239 L 73.17 239" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-25-calendario-semana-png)"/>
+      <circle cx="19.58" cy="239" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="239" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="241.17" y="220" width="168" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 279.26 L 35.17 279.26 L 35.17 265 L 325.17 265 L 325.17 258" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 279.26 L 35.17 279.26 L 35.17 265 L 325.17 265 L 325.17 258" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-25-calendario-semana-png)"/>
+      <circle cx="19.58" cy="279.26" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="279.26" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="304.67" y="736" width="177.5" height="94" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 783 L 482.17 783" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 783 L 482.17 783" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-25-calendario-semana-png)"/>
+      <circle cx="1210.75" cy="783" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="783" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Elegí la fecha</li><li><span aria-hidden="true">2</span>Mostrá todas las materias</li><li><span aria-hidden="true">3</span>Abrí una clase para ver el detalle</li></ol>
+<figcaption>Todas las materias permite comparar clases simultáneas. Las clases breves se amplían para poder leerlas; los horarios indican su duración real. Tocá una tarjeta para abrir el detalle.</figcaption>
+</figure>
+  <figure data-guia-anotada="docente-24-calendario-agenda.png">
+<div class="guia-visual" style="width:min(100%,88.34mm)"><div style="margin-inline:8.15%"><img src="imagenes/docente-24-calendario-agenda.png" alt="Controles y filtros del calendario de reservas en un teléfono"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 466 844" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-24-calendario-agenda-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="64" y="365" width="180" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 390 L 64 390" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 390 L 64 390" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-24-calendario-agenda-png)"/>
+      <circle cx="19" cy="390" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="390" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="197" y="495" width="80" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 431 520 L 277 520" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 431 520 L 277 520" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-24-calendario-agenda-png)"/>
+      <circle cx="447" cy="520" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="447" y="520" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="64" y="551" width="143" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 576 L 64 576" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 576 L 64 576" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-24-calendario-agenda-png)"/>
+      <circle cx="19" cy="576" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="576" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Buscá otra fecha</li><li><span aria-hidden="true">2</span>Usá Agenda en el teléfono</li><li><span aria-hidden="true">3</span>Volvé a gestionar tus reservas</li></ol>
+<figcaption>Los filtros y controles se adaptan al teléfono. La grilla semanal se desplaza dentro del calendario.</figcaption>
+</figure>
+  <figure data-guia-anotada="docente-26-agenda-clases.png">
+<div class="guia-visual" style="width:min(100%,154.69mm)"><div style="margin-inline:9.31%"><img src="imagenes/docente-26-agenda-clases.png" alt="Tarjetas de las clases de un día en la agenda del teléfono"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 408 422" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-26-agenda-clases-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="48" y="42" width="312" height="122" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 103 L 48 103" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 103 L 48 103" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-26-agenda-clases-png)"/>
+      <circle cx="19" cy="103" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="103" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="48" y="166" width="312" height="122" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 227 L 48 227" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 227 L 48 227" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-26-agenda-clases-png)"/>
+      <circle cx="19" cy="227" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="227" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Tu clase: abrí su detalle</li><li><span aria-hidden="true">2</span>Otra clase: consultá su ocupación</li></ol>
+<figcaption>La agenda muestra cada clase con su materia, horario y equipos, y permite abrir su detalle.</figcaption>
+</figure>
 
   <h3>Cómo se lee el calendario de una computadora</h3>
   <p>En el teléfono aparece una <b>Lista de reservas</b>; también podés elegir
@@ -767,10 +1045,24 @@
     el foco vuelve al bloque. Si cruza medianoche, se muestra el horario original
     y se aclara que termina al día siguiente.</p>
 
-  <figure>
-    <img src="imagenes/docente-19-calendario-equipo.png" alt="Calendario semanal de una computadora">
-    <figcaption>Una semana completa de una sola máquina, hora por hora.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-19-calendario-equipo.png">
+<div class="guia-visual" style="width:min(100%,207.21mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-19-calendario-equipo.png" alt="Calendario semanal de una computadora"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 950" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-19-calendario-equipo-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="1027.37" y="81" width="150.8" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 98 L 1178.17 98" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 98 L 1178.17 98" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-19-calendario-equipo-png)"/>
+      <circle cx="1210.75" cy="98" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="98" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="52.17" y="137" width="143" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 162 L 52.17 162" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 162 L 52.17 162" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-19-calendario-equipo-png)"/>
+      <circle cx="19.58" cy="162" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="162" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="111.17" y="382" width="153" height="78" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 421 L 111.17 421" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 421 L 111.17 421" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-19-calendario-equipo-png)"/>
+      <circle cx="19.58" cy="421" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="421" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Avanzá a otra semana</li><li><span aria-hidden="true">2</span>Elegí grilla o lista</li><li><span aria-hidden="true">3</span>Abrí una clase para ver el detalle</li></ol>
+<figcaption>Una semana completa de una sola máquina, hora por hora.</figcaption>
+</figure>
 
   <ul class="simple">
     <li><b>En azul</b> están las clases reservadas, con la materia.</li>
@@ -817,10 +1109,24 @@
     fallando: no hay nada que mostrar.
   </div>
 
-  <figure>
-    <img src="imagenes/docente-20-como-entrar.png" alt="Las cuentas anotadas de una computadora, con una contraseña a la vista">
-    <figcaption>Cada cuenta, con lo que hace falta saber para sentarse a usar la máquina.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-20-como-entrar.png">
+<div class="guia-visual" style="width:min(100%,304.2mm)"><div style="margin-inline:4.11%"><img src="imagenes/docente-20-como-entrar.png" alt="Las cuentas anotadas de una computadora, con una contraseña a la vista"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 924 486" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-20-como-entrar-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="61" y="163" width="251" height="28" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 177 L 61 177" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 177 L 61 177" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-20-como-entrar-png)"/>
+      <circle cx="19" cy="177" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="177" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="61" y="105" width="201" height="26" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 118 L 61 118" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 118 L 61 118" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-20-como-entrar-png)"/>
+      <circle cx="19" cy="118" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="118" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="61" y="329" width="142" height="26" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 342 L 61 342" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 342 L 61 342" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-20-como-entrar-png)"/>
+      <circle cx="19" cy="342" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="342" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Identificá la cuenta para ingresar</li><li><span aria-hidden="true">2</span>Esta clave requiere un Admin</li><li><span aria-hidden="true">3</span>Esta cuenta no pide contraseña</li></ol>
+<figcaption>Cada cuenta, con lo que hace falta saber para sentarse a usar la máquina.</figcaption>
+</figure>
 
   <h3>Qué dice cada cuenta</h3>
 
@@ -861,10 +1167,19 @@
     desde el teléfono igual que desde una computadora y se ve así:
   </p>
 
-  <figure>
-    <img src="imagenes/docente-21-como-entrar-telefono.png" alt="Las cuentas de una computadora vistas en un teléfono">
-    <figcaption>Lo mismo en el teléfono, sin tener que agrandar nada.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-21-como-entrar-telefono.png">
+<div class="guia-visual" style="width:min(100%,116.14mm)"><div style="margin-inline:10.11%"><img src="imagenes/docente-21-como-entrar-telefono.png" alt="Las cuentas de una computadora vistas en un teléfono"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 376 518" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-21-como-entrar-telefono-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="61" y="171" width="254" height="28" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 185 L 61 185" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 185 L 61 185" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-21-como-entrar-telefono-png)"/>
+      <circle cx="19" cy="185" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="185" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="61" y="469" width="158" height="26" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 482 L 61 482" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 482 L 61 482" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-21-como-entrar-telefono-png)"/>
+      <circle cx="19" cy="482" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="482" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Usá el nombre de la cuenta</li><li><span aria-hidden="true">2</span>Si no está anotada, consultá</li></ol>
+<figcaption>Lo mismo en el teléfono, sin tener que agrandar nada.</figcaption>
+</figure>
 
   <div class="nota">
     <span class="titulo">Vos no las podés cambiar</span>
@@ -891,11 +1206,25 @@
       <span class="boton">Marcar todas como leídas</span> si querés limpiar todo.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-12-avisos.png" alt="Pantalla de avisos">
-    <figcaption>Los avisos sin leer quedan primero. Tildando «Mostrar también las
+  <figure data-guia-anotada="docente-12-avisos.png">
+<div class="guia-visual" style="width:min(100%,344.15mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-12-avisos.png" alt="Pantalla de avisos"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 572" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-12-avisos-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="739.17" y="141" width="99" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 158 L 1195.17 158 L 1195.17 134 L 788.67 134 L 788.67 141" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 158 L 1195.17 158 L 1195.17 134 L 788.67 134 L 788.67 141" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-12-avisos-png)"/>
+      <circle cx="1210.75" cy="158" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="158" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="840.17" y="141" width="146" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 117.74 L 986.17 158" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 117.74 L 986.17 158" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-12-avisos-png)"/>
+      <circle cx="1210.75" cy="117.74" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="117.74" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="880.17" y="253" width="106" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 270 L 986.17 270" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 270 L 986.17 270" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-12-avisos-png)"/>
+      <circle cx="1210.75" cy="270" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="270" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Pedí ayuda</li><li><span aria-hidden="true">2</span>Leé las respuestas</li><li><span aria-hidden="true">3</span>Elegí tus copias por correo</li></ol>
+<figcaption>Los avisos sin leer quedan primero. Tildando «Mostrar también las
       leídas» aparecen los viejos.</figcaption>
-  </figure>
+</figure>
 
   <h3>Sacarte de encima los que ya leíste</h3>
   <p>
@@ -946,10 +1275,19 @@
     <li>Guardá.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-14-copias-por-correo.png" alt="Panel para elegir qué avisos llegan por correo">
-    <figcaption>Cada renglón explica de qué avisa ese correo.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-14-copias-por-correo.png">
+<div class="guia-visual" style="width:min(100%,207.21mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-14-copias-por-correo.png" alt="Panel para elegir qué avisos llegan por correo"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 950" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-14-copias-por-correo-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="244.17" y="777" width="22" height="22" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 788 L 244.17 788" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 788 L 244.17 788" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-14-copias-por-correo-png)"/>
+      <circle cx="19.58" cy="788" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="788" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="920.17" y="253" width="66" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 270 L 986.17 270" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 270 L 986.17 270" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-14-copias-por-correo-png)"/>
+      <circle cx="1210.75" cy="270" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="270" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Elegí qué copias querés recibir</li><li><span aria-hidden="true">2</span>Cerrá para volver a los avisos</li></ol>
+<figcaption>Cada renglón explica de qué avisa ese correo.</figcaption>
+</figure>
 
   <div class="ojo">
     <span class="titulo">Hay tres que no se pueden apagar</span>
@@ -996,11 +1334,20 @@
     el texto que estabas preparando durante la sesión; no cambia el estado de la
     conversación. Si volvés a escribir en una resuelta, se reabre.</p>
 
-  <figure>
-    <img src="imagenes/docente-13-conversacion.png" alt="Conversación de un pedido de ayuda">
-    <figcaption>Tu mensaje y la respuesta, uno abajo del otro. Abajo escribís de nuevo
+  <figure data-guia-anotada="docente-13-conversacion.png">
+<div class="guia-visual" style="width:min(100%,396.1mm)"><div style="margin-inline:4.68%"><img src="imagenes/docente-13-conversacion.png" alt="Conversación de un pedido de ayuda"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 812 328" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-13-conversacion-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="48" y="202" width="716" height="84" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 244 L 48 244" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 244 L 48 244" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-13-conversacion-png)"/>
+      <circle cx="19" cy="244" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="244" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="48" y="288" width="95" height="34" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 305 L 48 305" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 305 L 48 305" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-13-conversacion-png)"/>
+      <circle cx="19" cy="305" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="305" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Escribí tu mensaje</li><li><span aria-hidden="true">2</span>Enviá la respuesta</li></ol>
+<figcaption>Tu mensaje y la respuesta, uno abajo del otro. Abajo escribís de nuevo
       si hace falta.</figcaption>
-  </figure>
+</figure>
 </section>
 
 <!-- 15 ────────────────────────────────────────────────────────── -->
@@ -1012,10 +1359,24 @@
     foto, las materias que dictás y tu contraseña.
   </p>
 
-  <figure>
-    <img src="imagenes/docente-15-perfil.png" alt="Pantalla de perfil del docente">
-    <figcaption>Todo lo tuyo, en una sola pantalla.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-15-perfil.png">
+<div class="guia-visual" style="width:min(100%,266.74mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-15-perfil.png" alt="Pantalla de perfil del docente"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 738" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-15-perfil-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="802.17" y="253" width="184" height="42" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 274 L 986.17 274" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 274 L 986.17 274" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-15-perfil-png)"/>
+      <circle cx="1210.75" cy="274" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="274" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="244.17" y="503" width="148" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 528 L 244.17 528" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 528 L 244.17 528" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-15-perfil-png)"/>
+      <circle cx="19.58" cy="528" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="528" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="244.17" y="633" width="742" height="80" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 673 L 244.17 673" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 673 L 244.17 673" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-15-perfil-png)"/>
+      <circle cx="19.58" cy="673" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="673" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Corregí tu nombre</li><li><span aria-hidden="true">2</span>Solicitá otra materia</li><li><span aria-hidden="true">3</span>Cambiá tu contraseña</li></ol>
+<figcaption>Todo lo tuyo, en una sola pantalla.</figcaption>
+</figure>
 
   <h3>Tu nombre</h3>
   <p>
@@ -1056,11 +1417,25 @@
     <li>Escribí la <b>nueva</b> y confirmá.</li>
   </ol>
 
-  <figure>
-    <img src="imagenes/docente-16-cambiar-contrasena.png" alt="Pantalla para cambiar la contraseña">
-    <figcaption>Hace falta la actual: es lo que impide que otro te la cambie si dejaste
+  <figure data-guia-anotada="docente-16-cambiar-contrasena.png">
+<div class="guia-visual" style="width:min(100%,537.85mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-16-cambiar-contrasena.png" alt="Pantalla para cambiar la contraseña"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 366" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-16-cambiar-contrasena-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="436.17" y="169" width="358" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 188 L 436.17 188" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 188 L 436.17 188" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-16-cambiar-contrasena-png)"/>
+      <circle cx="19.58" cy="188" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="188" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="436.17" y="239" width="358" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 258 L 436.17 258" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 258 L 436.17 258" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-16-cambiar-contrasena-png)"/>
+      <circle cx="19.58" cy="258" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="258" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text>
+<rect x="436.17" y="287" width="358" height="38" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 306 L 436.17 306" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 306 L 436.17 306" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-16-cambiar-contrasena-png)"/>
+      <circle cx="19.58" cy="306" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="306" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">3</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Escribí la contraseña actual</li><li><span aria-hidden="true">2</span>Elegí la nueva contraseña</li><li><span aria-hidden="true">3</span>Guardá tu nueva contraseña</li></ol>
+<figcaption>Hace falta la actual: es lo que impide que otro te la cambie si dejaste
       la sesión abierta.</figcaption>
-  </figure>
+</figure>
 </section>
 
 <!-- 16 ────────────────────────────────────────────────────────── -->
@@ -1071,10 +1446,19 @@
     En <b>Horario Admins</b> ves en qué días y horarios está cada Admin.
   </p>
 
-  <figure>
-    <img src="imagenes/docente-17-horario-admins.png" alt="Pantalla con la disponibilidad de los Admin">
-    <figcaption>Es informativo: sirve para saber a quién buscar y cuándo.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-17-horario-admins.png">
+<div class="guia-visual" style="width:min(100%,848.51mm)"><div style="margin-inline:3.18%"><img src="imagenes/docente-17-horario-admins.png" alt="Pantalla con la disponibilidad de los Admin"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 1230.34 232" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-17-horario-admins-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="886.17" y="153" width="100" height="26" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 1194.62 166 L 986.17 166" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 1194.62 166 L 986.17 166" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-17-horario-admins-png)"/>
+      <circle cx="1210.75" cy="166" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="1210.75" y="166" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="244.17" y="181" width="135" height="26" rx="5" fill="none" stroke="#b91c1c" stroke-width="2.3"/>
+      <path d="M 35.71 194 L 244.17 194" stroke="white" stroke-width="5.3" fill="none"/>
+      <path d="M 35.71 194 L 244.17 194" stroke="#b91c1c" stroke-width="2.3" fill="none" marker-end="url(#flecha-docente-17-horario-admins-png)"/>
+      <circle cx="19.58" cy="194" r="16.13" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19.58" y="194" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Mirá si hay atención ahora</li><li><span aria-hidden="true">2</span>Consultá el horario habitual</li></ol>
+<figcaption>Es informativo: sirve para saber a quién buscar y cuándo.</figcaption>
+</figure>
 
   <p>
     Esta pantalla no cambia nada de lo que podés hacer en el sistema. Está para que
@@ -1090,10 +1474,19 @@
     El sistema anda igual en el celular. Es la misma dirección y la misma cuenta.
   </p>
 
-  <figure>
-    <img src="imagenes/docente-18-telefono.png" alt="El sistema visto en un teléfono">
-    <figcaption>En el teléfono, el menú se abre con el botón <b>Menú</b>, arriba a la derecha.</figcaption>
-  </figure>
+  <figure data-guia-anotada="docente-18-telefono.png">
+<div class="guia-visual" style="width:min(100%,88.34mm)"><div style="margin-inline:8.15%"><img src="imagenes/docente-18-telefono.png" alt="El sistema visto en un teléfono"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 466 844" aria-hidden="true" focusable="false"><defs><marker id="flecha-docente-18-telefono-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="323" y="7" width="92" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 431 32 L 415 32" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 431 32 L 415 32" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-18-telefono-png)"/>
+      <circle cx="447" cy="32" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="447" y="32" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="72" y="445" width="322" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 470 L 72 470" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 470 L 72 470" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-docente-18-telefono-png)"/>
+      <circle cx="19" cy="470" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="470" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Abrí las funciones del sistema</li><li><span aria-hidden="true">2</span>Reservá desde el teléfono</li></ol>
+<figcaption>En el teléfono, el menú se abre con el botón <b>Menú</b>, arriba a la derecha.</figcaption>
+</figure>
 
   <ul class="simple">
     <li>Todo lo que hacés en la computadora lo podés hacer en el teléfono.</li>
@@ -1117,10 +1510,19 @@
     <p>Tocá <b>Recargar la página</b> para volver a intentarlo. También podés usar
       <b>Volver al inicio</b>. Si sigue pasando, avisale al responsable del
       sistema qué pantalla intentabas abrir.</p>
-    <figure>
-      <img src="imagenes/general-01-recuperar-pantalla.png" alt="Pantalla de recuperación con los botones Recargar la página y Volver al inicio">
-      <figcaption>Podés volver a intentar la carga o regresar al inicio.</figcaption>
-    </figure>
+    <figure data-guia-anotada="general-01-recuperar-pantalla.png">
+<div class="guia-visual" style="width:min(100%,379.35mm)"><div style="margin-inline:6.46%"><img src="imagenes/general-01-recuperar-pantalla.png" alt="Pantalla de recuperación con los botones Recargar la página y Volver al inicio"></div><svg xmlns="http://www.w3.org/2000/svg" class="guia-marcas" viewBox="0 0 588 248" aria-hidden="true" focusable="false"><defs><marker id="flecha-general-01-recuperar-pantalla-png" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="#b91c1c"/></marker></defs><rect x="51" y="153" width="154" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 35 178 L 51 178" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 35 178 L 51 178" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-general-01-recuperar-pantalla-png)"/>
+      <circle cx="19" cy="178" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="19" y="178" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">1</text>
+<rect x="211" y="153" width="125" height="50" rx="5" fill="none" stroke="#b91c1c" stroke-width="2"/>
+      <path d="M 553 178 L 336 178" stroke="white" stroke-width="5" fill="none"/>
+      <path d="M 553 178 L 336 178" stroke="#b91c1c" stroke-width="2" fill="none" marker-end="url(#flecha-general-01-recuperar-pantalla-png)"/>
+      <circle cx="569" cy="178" r="16" fill="#b91c1c" stroke="white" stroke-width="2"/>
+      <text x="569" y="178" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="bold">2</text></svg></div><ol class="guia-indicaciones" aria-label="Indicaciones de esta imagen"><li><span aria-hidden="true">1</span>Recargá la pantalla</li><li><span aria-hidden="true">2</span>Si hace falta, volvé al inicio</li></ol>
+<figcaption>Podés volver a intentar la carga o regresar al inicio.</figcaption>
+</figure>
   </div>
 
   <div class="pregunta">
@@ -1170,9 +1572,15 @@
 
   <div class="pregunta">
     <h3>Reservé y al final no fui a buscar las computadoras</h3>
-    <p>Pasado un rato, el sistema las libera solo para que otro las pueda usar, y
-      queda registrado que no se retiraron. No es una sanción, pero conviene cancelar
-      cuando sabés que no vas a ir.</p>
+    <p>Si llegás tarde, el administrador puede entregarlas contra esa reserva
+      sólo durante su día y antes de que termine su horario, siempre que sigan
+      disponibles. Una reserva vencida o de otra fecha ya no habilita ese retiro.</p>
+
+    <p>La institución configura cuánto espera desde el inicio de la clase. Si
+      se cumple ese plazo mientras la clase sigue en curso y el mostrador está
+      atendido, las computadoras que no retiraste pueden quedar libres para otros.
+      Las que tienen una entrega registrada conservan su reserva. No es una
+      sanción, pero conviene cancelar cuando sabés que no vas a ir.</p>
   </div>
 
   <div class="pregunta">

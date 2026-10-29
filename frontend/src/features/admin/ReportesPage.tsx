@@ -20,6 +20,7 @@ import {
   formatearPorcentaje,
   proporcion,
 } from "@/features/admin/types"
+import { ActividadDelCiclo } from "./ActividadDelCiclo"
 import { HistoricoPorAnio } from "@/features/admin/HistoricoPorAnio"
 import { Proporcion, Seccion, sumar } from "@/features/admin/ReportesUI"
 import { ETIQUETA_ESTADO_EQUIPO } from "@/features/inventory/types"
@@ -234,11 +235,19 @@ export function ReportesPage() {
       <p className="text-muted-foreground mb-4 text-sm">
         Se cuenta cada equipo reservado: una clase de 10 equipos durante una hora suma 10
         reservas y 10 horas de equipo, no 10 horas de clase. Se incluyen reservas vigentes
-        y finalizadas; se excluyen canceladas y no retiradas. El uso por equipo incluye
-        bloqueos institucionales.
+        y finalizadas, además de las no retiradas que tuvieron una entrega vinculada. Se
+        excluyen canceladas y no retiradas sin entrega. El uso por equipo incluye bloqueos
+        institucionales.
       </p>
 
       <div className="grid gap-4">
+        <ActividadDelCiclo
+          cicloId={cicloElegido}
+          desde={desde}
+          hasta={hasta}
+          archivado={!!listaCiclos.find((c) => c.id === cicloElegido)?.archivado}
+          pausa={pausaUso}
+        />
         {/* RF-06.1 */}
         <Seccion
           titulo="Uso por equipo"

@@ -86,6 +86,7 @@ func toReservaGrupoResponse(g *domain.ReservaGrupo) reservaGrupoResponse {
 }
 
 type reservaResponse struct {
+	BloqueoOperacionID    *string `json:"bloqueoOperacionId,omitempty"`
 	ID                    string  `json:"id"`
 	ReservaGrupoID        *string `json:"reservaGrupoId,omitempty"`
 	EquipoID              string  `json:"equipoId"`
@@ -107,7 +108,7 @@ type reservaResponse struct {
 
 func toReservaResponse(r *domain.Reserva) reservaResponse {
 	return reservaResponse{
-		ID: r.ID, ReservaGrupoID: r.ReservaGrupoID, EquipoID: r.EquipoID, MateriaID: r.MateriaID,
+		BloqueoOperacionID: r.BloqueoOperacionID, ID: r.ID, ReservaGrupoID: r.ReservaGrupoID, EquipoID: r.EquipoID, MateriaID: r.MateriaID,
 		NombreDocenteSnapshot: r.NombreDocenteSnapshot,
 		Fecha:                 r.Fecha.Format("2006-01-02"),
 		HoraInicio:            formatHora(r.HoraInicio),
@@ -125,6 +126,7 @@ func toReservaResponse(r *domain.Reserva) reservaResponse {
 // reservaDetalladaResponse agrega a reservaResponse los nombres que hacen
 // falta para mostrar la reserva en pantalla.
 type reservaDetalladaResponse struct {
+	TuvoEntrega bool `json:"tuvoEntrega"`
 	reservaResponse
 	// Etiqueta es lo que se muestra: "PC 3" o "Proyector Epson".
 	Etiqueta      string `json:"etiqueta"`
@@ -139,6 +141,7 @@ type reservaDetalladaResponse struct {
 func toReservaDetalladaResponse(d application.ReservaDetallada) reservaDetalladaResponse {
 	return reservaDetalladaResponse{
 		reservaResponse:    toReservaResponse(d.Reserva),
+		TuvoEntrega:        d.TuvoEntrega,
 		Etiqueta:           d.Etiqueta,
 		Identificador:      d.Identificador,
 		CarroNombre:        d.CarroNombre,

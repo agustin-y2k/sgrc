@@ -346,14 +346,18 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 			return 0, 0, fmt.Errorf("clonando espacio %s: %w", eo.nombre, err)
 		}
 
-		matRows, err := tx.Query(ctx, `SELECT nombre FROM materia WHERE espacio_id = $1`, eo.id)
+		matRows, err := tx.Query(ctx, `SELECT nombre, interna_de_espacio FROM materia WHERE espacio_id = $1`, eo.id)
 		if err != nil {
 			return 0, 0, fmt.Errorf("leyendo materias del espacio a clonar: %w", err)
 		}
-		var nombres []string
+		type materiaEspacio struct {
+			nombre  string
+			interna bool
+		}
+		var nombres []materiaEspacio
 		for matRows.Next() {
-			var n string
-			if err := matRows.Scan(&n); err != nil {
+			var n materiaEspacio
+			if err := matRows.Scan(&n.nombre, &n.interna); err != nil {
 				matRows.Close()
 				return 0, 0, fmt.Errorf("escaneando materia de espacio a clonar: %w", err)
 			}
@@ -366,10 +370,10 @@ func (r *PostgresRepo) ClonarCicloA(ctx context.Context, cicloOrigenID string, n
 
 		for _, n := range nombres {
 			if _, err := tx.Exec(ctx,
-				`INSERT INTO materia (id, espacio_id, nombre, archivado) VALUES ($1, $2, $3, false)`,
-				uuidNuevo(), nuevoEspacioID, n,
+				`INSERT INTO materia (id, espacio_id, nombre, archivado, interna_de_espacio) VALUES ($1, $2, $3, false, $4)`,
+				uuidNuevo(), nuevoEspacioID, n.nombre, n.interna,
 			); err != nil {
-				return 0, 0, fmt.Errorf("clonando materia %s del espacio: %w", n, err)
+				return 0, 0, fmt.Errorf("clonando materia %s del espacio: %w", n.nombre, err)
 			}
 			materiasClonadas++
 		}

@@ -8,6 +8,8 @@ export async function invalidarInventario(cliente: QueryClient) {
       "equipos-sueltos",
       "carros",
       "reservas",
+      "calendario",
+      "auditoria",
       "equipos-disponibles",
       "prestamos",
       "licencias",

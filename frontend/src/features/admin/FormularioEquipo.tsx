@@ -1,4 +1,5 @@
 import { invalidarInventario } from "./invalidarInventario"
+import { RenumerarEquipo } from "./RenumerarEquipo"
 import { useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
@@ -200,8 +201,8 @@ export function AltaDeEquipo({ carroId }: { carroId: string }) {
             id={`alta-${carroId}-identificador-ayuda`}
             className="text-muted-foreground text-sm"
           >
-            El número pintado en la máquina, que es el del zócalo que ocupa en el carro.
-            Va solo el número: 1, 2, 3…
+            El número del rótulo con el que identificás esta PC dentro del carro. Va solo
+            el número: 1, 2, 3…
           </p>
         </div>
         <div className="grid gap-1.5">
@@ -281,64 +282,68 @@ export function EdicionDeEquipo({
   })
 
   return (
-    <form
-      className="grid gap-3 rounded-md border p-3"
-      onSubmit={(e) => {
-        e.preventDefault()
-        editar.mutate()
-      }}
-    >
-      <p className="font-medium">Editar {equipo.etiqueta}</p>
+    <div className="grid gap-3">
+      <form
+        className="grid gap-3 rounded-md border p-3"
+        onSubmit={(e) => {
+          e.preventDefault()
+          editar.mutate()
+        }}
+      >
+        <p className="font-medium">Editar {equipo.etiqueta}</p>
 
-      {editar.error && (
-        <Alert variant="destructive">
-          <AlertDescription>{getErrorMessage(editar.error)}</AlertDescription>
-        </Alert>
-      )}
+        {editar.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{getErrorMessage(editar.error)}</AlertDescription>
+          </Alert>
+        )}
 
-      <p className="text-muted-foreground text-sm">
-        El número de máquina ({equipo.identificador}) y el número de serie (
-        {equipo.numeroSerie}) no se editan: identifican al equipo.
-      </p>
+        <p className="text-muted-foreground text-sm">
+          Serie del equipo: {equipo.numeroSerie}. Para renumerar {equipo.etiqueta}, usá
+          «Cambiar número de PC». La serie y el historial permanecen asociados a la misma
+          computadora.
+        </p>
 
-      <CamposDeLaMaquina
-        idPrefijo={`edicion-${equipo.id}`}
-        valor={campos}
-        onChange={setCampos}
-      />
+        <CamposDeLaMaquina
+          idPrefijo={`edicion-${equipo.id}`}
+          valor={campos}
+          onChange={setCampos}
+        />
 
-      <div className="grid gap-1.5">
-        {/* RF-03.10: el identificador tiene que seguir siendo único dentro
+        <div className="grid gap-1.5">
+          {/* RF-03.10: el identificador tiene que seguir siendo único dentro
             del carro destino, y de eso se encarga el backend — acá alcanza
             con mostrar el error si choca. */}
-        <Label htmlFor={`edicion-${equipo.id}-carro`}>Carro</Label>
-        <Select
-          id={`edicion-${equipo.id}-carro`}
-          value={carroDestino}
-          onChange={(e) => setCarroDestino(e.target.value)}
-        >
-          {carros.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre}
-            </option>
-          ))}
-        </Select>
-        {carroDestino !== equipo.carroId && (
-          <p className="text-muted-foreground text-sm">
-            El equipo se va a mover de carro. Sus reservas y su historial de incidencias
-            no se tocan.
-          </p>
-        )}
-      </div>
+          <Label htmlFor={`edicion-${equipo.id}-carro`}>Carro</Label>
+          <Select
+            id={`edicion-${equipo.id}-carro`}
+            value={carroDestino}
+            onChange={(e) => setCarroDestino(e.target.value)}
+          >
+            {carros.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </Select>
+          {carroDestino !== equipo.carroId && (
+            <p className="text-muted-foreground text-sm">
+              El equipo se va a mover de carro. Sus reservas y su historial de incidencias
+              no se tocan.
+            </p>
+          )}
+        </div>
 
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={editar.isPending}>
-          {editar.isPending ? "Guardando…" : "Guardar cambios"}
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onListo}>
-          Volver
-        </Button>
-      </div>
-    </form>
+        <div className="flex gap-2">
+          <Button type="submit" size="sm" disabled={editar.isPending}>
+            {editar.isPending ? "Guardando…" : "Guardar cambios"}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={onListo}>
+            Volver
+          </Button>
+        </div>
+      </form>
+      <RenumerarEquipo equipo={equipo} onListo={onListo} />
+    </div>
   )
 }

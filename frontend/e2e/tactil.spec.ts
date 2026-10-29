@@ -35,6 +35,94 @@ const MINIMO_EN_TEXTO = 24
 
 test.use({ ...devices["Pixel 7"] })
 
+for (const ancho of [320, 412, 915]) {
+  test.describe(`formulario táctil a ${ancho}px`, () => {
+    test.use({ viewport: { width: ancho, height: ancho === 915 ? 412 : 844 } })
+    test("las acciones de Nueva reserva son táctiles en vertical y horizontal", async ({
+      page,
+    }) => {
+      await login(page, DOCENTE_EMAIL, DOCENTE_PASSWORD)
+      await page.goto("/reservas/nueva")
+      const formulario = page.locator("form").filter({
+        has: page.getByRole("button", { name: "Confirmar reserva", exact: true }),
+      })
+      const materia = page.getByLabel("Materia", { exact: true })
+      await expect
+        .poll(() =>
+          materia.evaluate((el) =>
+            Array.from((el as HTMLSelectElement).options).some(
+              (opcion) => opcion.value && !opcion.disabled
+            )
+          )
+        )
+        .toBe(true)
+      await materia.selectOption(
+        await materia.evaluate(
+          (el) =>
+            Array.from((el as HTMLSelectElement).options).find(
+              (opcion) => opcion.value && !opcion.disabled
+            )!.value
+        )
+      )
+      const manana = new Date()
+      manana.setDate(manana.getDate() + 1)
+      await page.getByLabel("Fecha", { exact: true }).fill(
+        new Intl.DateTimeFormat("sv-SE", {
+          timeZone: "America/Argentina/Buenos_Aires",
+        }).format(manana)
+      )
+      await page.getByLabel("Hora de inicio: hora").selectOption("12")
+      await page.getByLabel("Hora de fin: hora").selectOption("13")
+      await formulario.getByRole("checkbox", { name: /^PC / }).first().tap()
+      await expect(
+        formulario.getByRole("button", { name: /Limpiar la selección/ })
+      ).toBeVisible()
+      await expect(
+        formulario.getByRole("button", { name: "Confirmar reserva", exact: true })
+      ).toBeEnabled()
+      expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(
+        true
+      )
+      for (const modo of ["Se repite todas las semanas", "Una sola fecha"]) {
+        await formulario.getByRole("button", { name: modo, exact: true }).tap()
+        const pequenos = await formulario.getByRole("button").evaluateAll((controles) =>
+          controles
+            .filter((el) => {
+              const caja = el.getBoundingClientRect()
+              return (
+                el.getClientRects().length > 0 &&
+                (caja.width < 43.9 || caja.height < 43.9)
+              )
+            })
+            .map((el) => {
+              const caja = el.getBoundingClientRect()
+              return {
+                nombre: el.textContent?.trim(),
+                ancho: caja.width,
+                alto: caja.height,
+                minimo: getComputedStyle(el).minHeight,
+              }
+            })
+        )
+        const contexto = await page.evaluate(() => ({
+          tactil: matchMedia("(pointer: coarse)").matches,
+          fino: matchMedia("(pointer: fine)").matches,
+          ancho: innerWidth,
+        }))
+        expect(contexto.tactil, "la comprobación debe usar un puntero táctil").toBe(true)
+        expect(pequenos, `${modo} a ${ancho}px ${JSON.stringify(contexto)}`).toEqual([])
+      }
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)
+      ).toBe(true)
+      await page.screenshot({
+        path: test.info().outputPath(`nueva-reserva-tactil-${ancho}.png`),
+        fullPage: true,
+      })
+    })
+  })
+}
+
 /** Mide todo lo cliqueable que está a la vista y devuelve lo que no llega. */
 async function controlesChicos(page: import("@playwright/test").Page) {
   return page.evaluate(

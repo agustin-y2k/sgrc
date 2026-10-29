@@ -1,3 +1,4 @@
+import { puedeCambiarEquipo } from "@/features/reservas/types"
 import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -88,6 +89,7 @@ export function TarjetaDeClase({
           <Button
             variant="outline"
             className="h-11 px-4 sm:h-9"
+            disabled={!grupo.reservas.some(puedeCambiarEquipo)}
             onClick={() => setPanel("cambiar")}
           >
             Cambiar una computadora
@@ -102,6 +104,11 @@ export function TarjetaDeClase({
         </div>
       )}
 
+      {grupo.reservas.some((r) => r.tuvoEntrega) && (
+        <p className="text-sm text-muted-foreground">
+          Las computadoras ya entregadas conservan su equipo para mantener el historial.
+        </p>
+      )}
       {panel === "cambiar" && (
         <CambiarEquipoDeReserva grupo={grupo} onListo={() => setPanel(null)} />
       )}

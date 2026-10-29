@@ -56,6 +56,10 @@ type Repo interface {
 	// estable, para coordinar entregas simultáneas y la liberación del resto.
 	BuscarReservasParaEntregar(ctx context.Context, ids []string) (map[string]*domain.Reserva, error)
 
+	// Sólo dentro de una transacción: todas las filas de la operación, sin paginar.
+	BuscarBloqueoParaActualizar(ctx context.Context, operacionID string) ([]*domain.Reserva, error)
+	RegistrarLevantamientoDeBloqueo(ctx context.Context, p LevantarBloqueoParams, cantidad int) error
+
 	GuardarReserva(ctx context.Context, r *domain.Reserva) error
 	// Guarda el plan completo y verifica solapamientos al terminar el lote.
 	GuardarReposiciones(ctx context.Context, reservas []*domain.Reserva) error
@@ -107,6 +111,8 @@ type Repo interface {
 	// este paquete y no en inventory porque casi todas sus reglas son sobre
 	// reservas: contra qué reserva se entregó, si volvió antes de que empiece la
 	// siguiente, quién es el próximo que la tiene reservada.
+	// CrearPrestamo persiste también el contexto académico de la reserva y
+	// completa p.ContextoAcademico y el destino con los datos capturados.
 	CrearPrestamo(ctx context.Context, p *domain.Prestamo) error
 	BuscarPrestamoPorID(ctx context.Context, id string) (*domain.Prestamo, error)
 	// BuscarPrestamosPorIDs — ver BuscarReservasPorIDs: mismo criterio y mismos
@@ -173,9 +179,11 @@ type Repo interface {
 	// desincronice es la pantalla ofreciendo una máquina que el backend después
 	// rechaza, sin nada que explicarle al docente.
 	//
-	// Contesta sólo la parte de preferencia. El corte de una hora antes del
-	// inicio lo agrega quien llama con domain.SePuedeRobarPorHorario: es hora de
-	// pared y no necesita ir a la base.
+	// También protege bloqueos y reservas que ya tuvieron una entrega, aunque
+	// el préstamo haya sido devuelto. Esta protección corresponde a la reserva
+	// puntual y se aplica también a los desplazamientos secundarios de reposición.
+	// El corte de una hora antes del inicio lo agrega quien llama con
+	// domain.SePuedeRobarPorHorario: es hora de pared y no necesita ir a la base.
 	//
 	// Un id que no existe no aparece en el mapa, y leer un mapa por una clave
 	// ausente da false — que es la respuesta correcta.
@@ -240,16 +248,18 @@ type BloqueCalendario struct {
 // ReservaDetallada es una Reserva con los nombres ya resueltos para mostrarla
 // en pantalla: de qué PC y carro se trata, y de qué materia y curso.
 type ReservaDetallada struct {
-	Reserva *domain.Reserva
+	TuvoEntrega bool
+	Reserva     *domain.Reserva
 	// Identificador va en 0 y CarroNombre vacío en un equipo suelto: un
 	// proyector no está en ningún carro. Lo que se muestra es Etiqueta.
 	Identificador int
 	CarroNombre   string
 	// Etiqueta es cómo se nombra al equipo en pantalla: "PC 3" o "Proyector
 	// Epson".
-	Etiqueta      string
-	MateriaNombre string
-	CursoNombre   string
+	Etiqueta       string
+	MateriaNombre  string
+	CursoNombre    string
+	CursoModalidad string
 	// ReglaRecurrenciaID viene del ReservaGrupo, no de la Reserva.
 	ReglaRecurrenciaID *string
 }
@@ -413,6 +423,7 @@ type ReservaParaPedido struct {
 // efectivamente asignado a la materia antes de dejarlo reservar para ella
 // (RF-04.1).
 type ValidadorMateria interface {
+	AnioLectivoDeMateria(ctx context.Context, materiaID string) (int, error)
 	DocenteEstaAsignado(ctx context.Context, materiaID, usuarioID string) (bool, error)
 
 	// MateriaAceptaReservas: la materia existe y ni ella, ni su curso, ni su

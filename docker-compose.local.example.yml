@@ -3,15 +3,11 @@
 # No monta respaldos, inventario ni carpetas de una instalación particular.
 services:
   sgrc-app:
-    env_file: !override [.env.local]
     ports: ["127.0.0.1:8080:8080"]
   frontend:
     ports: ["127.0.0.1:8081:80"]
   postgres:
     ports: ["127.0.0.1:15432:5432"]
-  cloudflared:
-    profiles: [tunel-local]
-    env_file: !override [.env.local]
   grafana:
     ports: !override ["127.0.0.1:13000:3000"]
   prometheus:

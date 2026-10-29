@@ -1,3 +1,4 @@
+import { detalleAcademicoDePrestamo } from "@/features/reservas/prestamos"
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
@@ -64,7 +65,7 @@ export function agruparPrestamos(prestamos: Prestamo[]): Grupo[] {
   const grupos = new Map<string, Grupo>()
 
   for (const p of prestamos) {
-    const detalle = [p.materiaNombre, p.destino].filter(Boolean).join(" · ")
+    const detalle = detalleAcademicoDePrestamo(p)
     const responsable = p.entregadoAUsuarioId
       ? `usuario:${p.entregadoAUsuarioId}`
       : `nombre:${p.entregadoANombre}`

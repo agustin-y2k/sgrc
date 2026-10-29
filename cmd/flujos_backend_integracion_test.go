@@ -210,7 +210,7 @@ func (r cierreContadoEnPausa) ContarAvisadosSinDevolver(ctx context.Context) (in
 }
 
 func servicioDevoluciones(pool *pgxpool.Pool, repo reservationapp.Repo, bus eventbus.EventBus) *reservationapp.Service {
-	return reservationapp.NewService(repo, nil, reservationinfra.NewValidadorEquipoPostgres(pool), nil, nil, uuid.NewString, time.Now, bus)
+	return reservationapp.NewService(repo, nil, reservationinfra.NewValidadorEquipoPostgres(pool), nil, nil, uuid.NewString, func() time.Time { return time.Date(2026, 5, 4, 8, 30, 0, 0, time.UTC) }, bus)
 }
 
 // Dos equipos distintos pueden regresar a la vez. El último debe cerrar el
@@ -223,7 +223,7 @@ func TestFlujosBackend_DevolucionesDistintasCierranElAviso(t *testing.T) {
 	bus := busDurableReal(t, pool)
 	repo := reservationinfra.NewPostgresRepo(pool)
 	svc := servicioDevoluciones(pool, repo, bus)
-	entrega, err := svc.EntregarPorReserva(ctx, reservationapp.EntregaPorReservaParams{ReservaIDs: e.reservas})
+	entrega, err := svc.EntregarPorReserva(ctx, reservationapp.EntregaPorReservaParams{ReservaIDs: e.reservas, EquiposEsperados: esperadosDeTest(t, pool, e.reservas)})
 	if err != nil || len(entrega.Entregadas) != 2 {
 		t.Fatalf("entrega inicial: %+v %v", entrega, err)
 	}

@@ -315,3 +315,18 @@ func (v *ValidadorMateriaPostgres) NombreDeMateria(ctx context.Context, materiaI
 	}
 	return nombre, nil
 }
+
+func (v *ValidadorMateriaPostgres) AnioLectivoDeMateria(ctx context.Context, materiaID string) (int, error) {
+	var anio int
+	err := pgtransaccion.Con(ctx, v.pool).QueryRow(ctx, `SELECT cl.anio FROM contenedor_de_materia c JOIN ciclo_lectivo cl ON cl.id=c.ciclo_lectivo_id WHERE c.materia_id=$1`, materiaID).Scan(&anio)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, application.ErrReferenciaInexistente
+	}
+	if esIDInvalido(err) {
+		return 0, application.ErrIDInvalido
+	}
+	if err != nil {
+		return 0, fmt.Errorf("leyendo el año del ciclo: %w", err)
+	}
+	return anio, nil
+}

@@ -37,7 +37,7 @@ func TestPostgresRepo_Prestamo_EspontaneoIdaYVuelta(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	d := entregaDeTest(equipoID)
 	d.Destino = "Sección Alumnos"
@@ -65,7 +65,7 @@ func TestPostgresRepo_Prestamo_UnaEquipoNoPuedeEstarEnDosManos(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
 
@@ -86,7 +86,7 @@ func TestPostgresRepo_Prestamo_TrasDevolverSePuedeVolverAEntregar(t *testing.T) 
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	primero := crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
 	if err := primero.Devolver("", "", ahora.Add(time.Hour)); err != nil {
@@ -116,7 +116,7 @@ func TestPostgresRepo_Prestamo_BuscarAbiertoDeEquipo(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// Con la máquina en el laboratorio, no hay préstamo abierto.
 	if _, err := repo.BuscarPrestamoAbiertoDeEquipo(ctx, equipoID); err != application.ErrPrestamoNoEncontrado {
@@ -152,7 +152,7 @@ func TestPostgresRepo_Prestamo_GuardarRegistraLaDevolucion(t *testing.T) {
 	ctx := context.Background()
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
 	adminID := crearUsuarioDeTest(t, pool, "ADMIN", "APROBADA")
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	p := crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
 	devuelta := ahora.Add(90 * time.Minute)
@@ -184,13 +184,13 @@ func TestPostgresRepo_Prestamo_AbiertosTraenUbicacionYMateria(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoConReserva := crearEquipoDeCarroDeTest(t, pool)
 	equipoSuelto := crearEquipoDeCarroDeTest(t, pool)
 
-	grupo := nuevoReservaGrupoDeTest(materiaID, ahora, 8*time.Hour, 9*time.Hour)
+	grupo := nuevoReservaGrupoDeTest(t, materiaID, ahora, 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestPostgresRepo_Prestamo_SoloListaLosAbiertos(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	p := crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
 	if err := p.Devolver("", "", ahora.Add(time.Hour)); err != nil {
@@ -276,11 +276,11 @@ func TestPostgresRepo_Prestamo_SobreviveALaReserva(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	grupo := nuevoReservaGrupoDeTest(materiaID, ahora, 8*time.Hour, 9*time.Hour)
+	grupo := nuevoReservaGrupoDeTest(t, materiaID, ahora, 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestPostgresRepo_Prestamo_DentroDeUnaTransaccion(t *testing.T) {
 	ctx := context.Background()
 	pc1 := crearEquipoDeCarroDeTest(t, pool)
 	pc2 := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// La segunda PC ya está afuera: el lote entero tiene que volver atrás.
 	crearPrestamoDeTest(t, repo, entregaDeTest(pc2), ahora)
@@ -355,16 +355,16 @@ func TestPostgresRepo_ReservasFuturasDeEquipo_VienenOrdenadas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	creada := time.Now().UTC().Truncate(time.Microsecond)
+	creada := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	desde := diaDe(2026, time.March, 1)
 
 	// Se insertan del futuro hacia el presente para que el orden de la tabla
 	// sea el inverso al esperado.
 	for _, dia := range []int{20, 10, 3} {
 		fecha := diaDe(2026, time.March, dia)
-		grupo := nuevoReservaGrupoDeTest(materiaID, fecha, 8*time.Hour, 9*time.Hour)
+		grupo := nuevoReservaGrupoDeTest(t, materiaID, fecha, 8*time.Hour, 9*time.Hour)
 		if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
 			t.Fatalf("no debería fallar: %v", err)
 		}
@@ -398,7 +398,7 @@ func TestPostgresRepo_Prestamo_QuienRetiraSobreviveALaVueltaDeLaBase(t *testing.
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	datos := entregaDeTest(equipoID)
 	datos.RetiradoPor = "Juan (alumno de 5°A)"
@@ -432,7 +432,7 @@ func TestPostgresRepo_Prestamo_SinAnotarQuienRetira(t *testing.T) {
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
 	equipoID := crearEquipoDeCarroDeTest(t, pool)
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	p := crearPrestamoDeTest(t, repo, entregaDeTest(equipoID), ahora)
 
@@ -451,12 +451,12 @@ func TestPostgresRepo_PrestamosAVigilar_TraeTodasLasColumnas(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipo := crearEquipoDeCarroDeTest(t, pool)
 
-	grupo := nuevoReservaGrupoDeTest(materiaID, ahora, 8*time.Hour, 9*time.Hour)
+	grupo := nuevoReservaGrupoDeTest(t, materiaID, ahora, 8*time.Hour, 9*time.Hour)
 	if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -516,7 +516,7 @@ func TestPostgresRepo_PrestamosAVigilar_IgnoraLoDevuelto(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	equipo := crearEquipoDeCarroDeTest(t, pool)
 	adminID := crearUsuarioDeTest(t, pool, "ADMIN", "APROBADA")
@@ -544,16 +544,16 @@ func TestPostgresRepo_ReservasAVigilar_ConvierteLasHoras(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 	hoy := time.Date(ahora.Year(), ahora.Month(), ahora.Day(), 0, 0, 0, 0, time.UTC)
 
-	materiaID := crearMateriaDeTest(t, pool)
+	materiaID := crearMateriaDeTest(t, pool, 2026)
 	equipo := crearEquipoDeCarroDeTest(t, pool)
 
 	const inicio = 8*time.Hour + 30*time.Minute
 	const fin = 10 * time.Hour
 
-	grupo := nuevoReservaGrupoDeTest(materiaID, hoy, inicio, fin)
+	grupo := nuevoReservaGrupoDeTest(t, materiaID, hoy, inicio, fin)
 	if err := repo.CrearReservaGrupo(ctx, grupo); err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
@@ -619,7 +619,7 @@ func TestPostgresRepo_ContarAvisadosSinDevolver(t *testing.T) {
 	pool := levantarPostgresDeTest(t)
 	repo := NewPostgresRepo(pool)
 	ctx := context.Background()
-	ahora := time.Now().UTC().Truncate(time.Microsecond)
+	ahora := ahoraDeTest().UTC().Truncate(time.Microsecond)
 
 	// Dos máquinas afuera, y de una sola se avisó al cierre.
 	avisada := crearPrestamoDeTest(t, repo, entregaDeTest(crearEquipoDeCarroDeTest(t, pool)), ahora)

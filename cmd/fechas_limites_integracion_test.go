@@ -65,7 +65,7 @@ func TestFechasLimites_NocturnaEntregaVigilanciaYFinalizacion(t *testing.T) {
 	ahora := time.Date(2026, 5, 4, 22, 0, 0, 0, time.UTC)
 	repo := reservationinfra.NewPostgresRepo(pool)
 	svc := reservationapp.NewService(repo, nil, reservationinfra.NewValidadorEquipoPostgres(pool), nil, nil, uuid.NewString, func() time.Time { return ahora }, e.bus)
-	entregadas, err := svc.EntregarPorReserva(ctx, reservationapp.EntregaPorReservaParams{ReservaIDs: []string{e.reservaID}})
+	entregadas, err := svc.EntregarPorReserva(ctx, reservationapp.EntregaPorReservaParams{ReservaIDs: []string{e.reservaID}, EquiposEsperados: map[string]string{e.reservaID: e.d.equipo}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -191,7 +191,7 @@ func TestReservasConsistencia_IntercalacionesYVersiones(t *testing.T) {
 		pausa := nuevaPausa(l.repo, true)
 		fin := make(chan error, 1)
 		go func() {
-			fin <- servicioCoordinado(pool, pausa, time.Now()).CancelarReserva(ctx, l.reservas[0], adminID, true, "manual")
+			fin <- servicioCoordinado(pool, pausa, ahoraDeTest()).CancelarReserva(ctx, l.reservas[0], adminID, true, "manual")
 		}()
 		esperarPausa(t, ctx, pausa)
 		nuevo := crearEquipoDeCarroDeTest(t, pool)
@@ -237,7 +237,7 @@ func TestReservasConsistencia_IntercalacionesYVersiones(t *testing.T) {
 		pausa := nuevaPausa(l.repo, false)
 		fin := make(chan error, 1)
 		go func() {
-			fin <- servicioCoordinado(pool, pausa, time.Now()).CancelarReserva(ctx, l.reservas[0], adminID, true, "primera")
+			fin <- servicioCoordinado(pool, pausa, ahoraDeTest()).CancelarReserva(ctx, l.reservas[0], adminID, true, "primera")
 		}()
 		esperarPausa(t, ctx, pausa)
 		segunda := make(chan error, 1)
@@ -319,14 +319,14 @@ func TestReservasConsistencia_IntercalacionesYVersiones(t *testing.T) {
 		ctxCambio, cancelarCambio := context.WithTimeout(ctx, 3*time.Second)
 		defer cancelarCambio()
 		nuevo := crearEquipoDeCarroDeTest(t, pool)
-		res, err := servicioCoordinado(unico, NewPostgresRepo(unico), time.Now()).CambiarEquipoDeReserva(ctxCambio, l.reservas[0], nuevo, adminID, true, true)
+		res, err := servicioCoordinado(unico, NewPostgresRepo(unico), ahoraDeTest()).CambiarEquipoDeReserva(ctxCambio, l.reservas[0], nuevo, adminID, true, true)
 		if err != nil || res.EquipoID != nuevo {
 			t.Fatalf("pidió otra conexión durante el cambio: %+v %v", res, err)
 		}
 	})
 	t.Run("desplazamiento-no-cancela-un-conflicto-que-ya-se-movio", func(t *testing.T) {
 		l := crear(t)
-		materia := materiaEnCursoDeTest(t, pool, "Dibujo Técnico", "3°B")
+		materia := materiaEnCursoDeTest(t, pool, 2026, "Dibujo Técnico", "3°B")
 		marcarPreferencia(t, pool, l.equipos[0], "Dibujo Técnico", nil, nil, nil, 1)
 		pausa := nuevaPausa(l.repo, true)
 		fin := make(chan error, 1)
@@ -369,7 +369,7 @@ func TestReservasConsistencia_IntercalacionesYVersiones(t *testing.T) {
 			fin <- err
 		}()
 		esperarPausa(t, ctx, pausa)
-		if _, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:1]}); err != nil {
+		if _, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:1], EquiposEsperados: l.esperados(l.reservas[:1])}); err != nil {
 			t.Fatal(err)
 		}
 		close(pausa.seguir)
@@ -396,7 +396,7 @@ func TestReservasConsistencia_IntercalacionesYVersiones(t *testing.T) {
 			l := crear(t)
 			var ids []string
 			if operacion == "devolucion" {
-				entrega, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:2]})
+				entrega, err := l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:2], EquiposEsperados: l.esperados(l.reservas[:2])})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -426,7 +426,7 @@ func TestReservasConsistencia_IntercalacionesYVersiones(t *testing.T) {
 				var res *application.ResultadoEntrega
 				var err error
 				if operacion == "entrega-reservada" {
-					res, err = l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:2]})
+					res, err = l.svc.EntregarPorReserva(ctx, application.EntregaPorReservaParams{ReservaIDs: l.reservas[:2], EquiposEsperados: l.esperados(l.reservas[:2])})
 				} else {
 					res, err = l.svc.EntregarSuelta(ctx, application.EntregaSueltaParams{EquipoIDs: l.equipos[:2], Nombre: "Ada Lovelace"})
 				}

@@ -1,4 +1,4 @@
-.PHONY: test lint build docker-build run dev rebuild dev-down run-prod levantar reconectar-tunel stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report observabilidad observabilidad-stop capturas capturas-pdf
+.PHONY: test lint build docker-build run dev rebuild dev-down run-prod run-prod-tunel levantar reconectar-tunel stop restart down logs ps migrate migrate-status psql backup seed-admin seed-datos coverage-report observabilidad observabilidad-stop capturas capturas-pdf
 
 test:
 	go test ./... -coverprofile=coverage.out
@@ -34,10 +34,10 @@ local: local-init
 	$(LOCAL) up -d --build --wait --wait-timeout 120 postgres sgrc-app frontend
 
 local-stop:
-	$(LOCAL) --profile observabilidad stop
+	$(LOCAL) --profile '*' stop
 
 local-ps:
-	$(LOCAL) --profile observabilidad ps
+	$(LOCAL) --profile '*' ps
 
 local-logs:
 	$(LOCAL) logs -f sgrc-app frontend
@@ -77,23 +77,21 @@ endif
 # Borra los contenedores de desarrollo, incluido seed-datos, que solo existe
 # en el overlay: `make down` a secas no lo conoce y lo deja dado vuelta.
 dev-down:
-	$(DEV) down
+	$(DEV) --profile '*' down
 
-# Levanta exactamente lo que corre en el servidor, sin puertos publicados.
+# Servicios principales sin puertos publicados. El ingreso se administra aparte.
 run-prod:
 	docker compose up --build
 
+# Túnel incluido, opcional: requiere TUNNEL_TOKEN en la configuración privada.
+run-prod-tunel:
+	docker compose --profile tunel up --build
+
 # ── Despliegue con un túnel que NO es el del compose ──────────────────
 #
-# Cuando el Cloudflare Tunnel ya existía antes que este proyecto —creado
-# desde el panel, compartido con otros sitios del mismo servidor— el
-# `cloudflared` del compose no sirve: vive solo en sgrc-net y no podría
-# resolver lo que haya afuera. Pero `make run-prod` lo levanta igual, y sin
-# un TUNNEL_TOKEN válido muere con "Provided Tunnel token is not valid".
-#
-# Este target levanta el sistema NOMBRANDO los servicios, que es lo que hay
-# que hacer en esa instalación, y así deja de depender de que alguien se
-# acuerde de la lista.
+# Si existe un túnel compartido con otros sitios, este target conserva su
+# gestión externa y lo reconecta a la red del proyecto. No activa el perfil
+# tunel ni necesita su TUNNEL_TOKEN.
 #
 #   make levantar                 el sistema
 #   make levantar TABLEROS=1      además Prometheus, Grafana y Dozzle
@@ -124,27 +122,28 @@ reconectar-tunel:
 		echo "el túnel ya estaba conectado a $$red"; \
 	fi
 
-# Apaga los contenedores sin borrarlos: los datos siguen ahí y run-prod
-# vuelve a levantar todo tal cual estaba.
+# Opera sobre todos los perfiles del proyecto, incluido un túnel opcional ya
+# creado. No administra el contenedor externo compartido. Al arrancar de nuevo
+# hay que seleccionar los perfiles usados por la instalación.
 stop:
-	docker compose stop
+	docker compose --profile '*' stop
 
 # Reinicia sin reconstruir. Para aplicar cambios de código va run-prod, que
 # además recompila.
 restart:
-	docker compose restart
+	docker compose --profile '*' restart
 
 # Borra los contenedores. Los datos sobreviven porque viven en el volumen
 # pgdata — borrarlos también requiere `docker compose down -v`, que NO tiene
 # atajo acá a propósito: destruye la base entera y no se puede deshacer.
 down:
-	docker compose down
+	docker compose --profile '*' down
 
 logs:
-	docker compose logs -f
+	docker compose --profile '*' logs -f
 
 ps:
-	docker compose ps
+	docker compose --profile '*' ps
 
 # ── Observabilidad (el detalle está en docs/12-observabilidad.md) ─────
 

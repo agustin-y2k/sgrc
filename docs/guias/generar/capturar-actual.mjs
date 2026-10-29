@@ -3,6 +3,7 @@ import { dirname, resolve, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { readFile, writeFile } from "node:fs/promises"
 import { prepararDatos } from "./datos-actuales.mjs"
+import { medirControles } from "./medir-controles.mjs"
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 const { chromium, expect } = createRequire(join(raiz, "frontend/package.json"))(
@@ -41,7 +42,11 @@ async function contexto(movil = false) {
   const ctx = await navegador.newContext({
     ...opciones,
     ...(movil
-      ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
+      ? {
+          viewport: { width: 390, height: 844 },
+          isMobile: true,
+          hasTouch: true,
+        }
       : {}),
   })
   const p = await ctx.newPage()
@@ -86,18 +91,25 @@ async function foto(
     p.getByText(/^Cargando(?:…|\.\.\.)$/).filter({ visible: true })
   ).toHaveCount(0)
   const path = join(imagenes, nombre + ".png")
+  let encuadre
   if (viewport) {
-    await p.evaluate(() => scrollTo(0, 0))
+    await p.evaluate(() => scrollTo({ top: 0, left: 0, behavior: "instant" }))
+    encuadre = { x: 0, y: 0, ...p.viewportSize() }
     await p.screenshot({ path, animations: "disabled" })
   } else {
     const area = target ?? p.getByRole("main")
     await expect(area).toBeVisible()
     // El recorte se obtiene del DOM antes de capturar. Mantener el scroll al
     // inicio impide que la barra sticky se fotografíe atravesando el panel.
-    await p.evaluate(() => scrollTo(0, 0))
+    await p.evaluate(() => scrollTo({ top: 0, left: 0, behavior: "instant" }))
     const caja = await area.evaluate((el) => {
       const r = el.getBoundingClientRect()
-      return { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height }
+      return {
+        x: r.x + scrollX,
+        y: r.y + scrollY,
+        width: r.width,
+        height: r.height,
+      }
     })
     if (!target) {
       // El main crece hasta el pie en pantallas cortas. El encuadre termina
@@ -124,12 +136,20 @@ async function foto(
         caja.y +
         12
     caja.height = Math.min(caja.height, maxHeight)
-    await p.screenshot({ path, animations: "disabled", fullPage: true, clip: caja })
+    encuadre = caja
+    await p.screenshot({
+      path,
+      animations: "disabled",
+      fullPage: true,
+      clip: caja,
+    })
   }
   informe.push({
     archivo: nombre + ".png",
     ruta: new URL(p.url()).pathname,
     fecha: new Date().toISOString(),
+    encuadre: { ancho: encuadre.width, alto: encuadre.height },
+    controles: await medirControles(p, encuadre),
     ...(escenario ? { escenario } : {}),
   })
   console.log("  Capturada:", nombre)
@@ -177,7 +197,7 @@ try {
   await foto("docente-01-entrar", publico, publico.locator('[data-slot="card"]'))
   await publico.goto(base + "/registro")
   await publico.getByRole("radio", { name: /^Docente/ }).click()
-  await publico.getByLabel("Curso o lugar donde trabajás").selectOption({ label: "1°A" })
+  await publico.getByLabel("Curso o lugar donde trabajás").selectOption({ label: "1°1" })
   await foto("docente-02-crear-cuenta", publico, publico.locator('[data-slot="card"]'))
   const donde = publico
     .locator("div")
@@ -192,7 +212,9 @@ try {
   )
 
   await ir(docente, "/")
-  await foto("docente-04-pantalla-de-inicio", docente, undefined, { viewport: true })
+  await foto("docente-04-pantalla-de-inicio", docente, undefined, {
+    viewport: true,
+  })
   await ir(docente, "/reservas/nueva")
   await docente.getByLabel("Materia", { exact: true }).selectOption(datos.programacion.id)
   await docente.getByLabel("Fecha", { exact: true }).fill(datos.lunes)
@@ -204,9 +226,16 @@ try {
       .first()
       .check()
   await expect(boton(docente, "Confirmar reserva")).toBeEnabled()
-  const inicioEquipos = docente.getByText("Qué computadoras necesitás", { exact: true })
-  await foto("docente-05-nueva-reserva", docente, undefined, { hasta: inicioEquipos })
-  await foto("docente-23-seleccion-equipos", docente, inicioEquipos.locator(".."))
+  const inicioEquipos = docente.getByText("Qué computadoras necesitás", {
+    exact: true,
+  })
+  await foto("docente-05-nueva-reserva", docente, undefined, {
+    hasta: inicioEquipos,
+  })
+  await foto("docente-23-seleccion-equipos", docente, docente.locator("form"), {
+    desde: inicioEquipos,
+    hasta: boton(docente, "Confirmar reserva"),
+  })
   await boton(docente, "Se repite todas las semanas").click()
   await docente.getByLabel("Desde", { exact: true }).fill(datos.lunes)
   await docente.getByLabel("Hasta", { exact: true }).fill(datos.finSerie)
@@ -260,9 +289,9 @@ try {
   await foto(
     "docente-11-avisar-falla",
     docente,
-    docente
-      .locator("form")
-      .filter({ has: docente.getByRole("button", { name: /Reportar|Avisar|Enviar/ }) })
+    docente.locator("form").filter({
+      has: docente.getByRole("button", { name: /Reportar|Avisar|Enviar/ }),
+    })
   )
   await ir(docente, "/notificaciones")
   await foto("docente-12-avisos", docente)
@@ -287,6 +316,42 @@ try {
   const movil = await contexto(true)
   await entrar(movil, "DOCENTE")
   await foto("docente-18-telefono", movil, undefined, { viewport: true })
+  await ir(docente, "/reservas/calendario")
+  await docente.getByLabel("Ir a fecha").fill(datos.lunes)
+  await docente.getByLabel("Mostrar reservas").selectOption("todas")
+  await boton(docente, "Semana").click()
+  await expect(
+    docente.getByText(
+      "Los horarios indican la duración real; las clases cortas se muestran ampliadas."
+    )
+  ).toBeVisible()
+  await foto("docente-25-calendario-semana", docente)
+  await docente.setViewportSize({ width: 390, height: 844 })
+  await boton(docente, "Agenda").click()
+  await foto("docente-24-calendario-agenda", docente, undefined, {
+    viewport: true,
+  })
+  const agendaDocente = docente
+    .getByRole("button", { name: /^Programación,/ })
+    .first()
+    .locator("xpath=ancestor::section[1]")
+  await foto("docente-26-agenda-clases", docente, agendaDocente)
+
+  await docente.setViewportSize(opciones.viewport)
+
+  await ir(admin, "/reservas/calendario")
+  await admin.getByLabel("Ir a fecha").fill(datos.lunes)
+  await boton(admin, "Semana").click()
+  await foto("admin-30-calendario", admin)
+  await admin.setViewportSize({ width: 390, height: 844 })
+  await boton(admin, "Agenda").click()
+  const agendaAdmin = admin
+    .getByRole("button", { name: /^Programación,/ })
+    .first()
+    .locator("xpath=ancestor::section[1]")
+  await foto("admin-33-calendario-movil", admin, agendaAdmin)
+  await admin.setViewportSize(opciones.viewport)
+
   for (const [p, nombre] of [
     [docente, "docente-19-calendario-equipo"],
     [admin, "admin-20-calendario-equipo"],
@@ -331,6 +396,7 @@ try {
     ["/admin/licencias", "admin-09-licencias"],
     ["/admin/pedidos-de-materia", "admin-13-pedidos-de-materia"],
     ["/admin/reportes", "admin-16-reportes"],
+    ["/admin/configuracion", "admin-34-configuracion"],
     ["/disponibilidad", "admin-17-horarios-admin"],
     ["/notificaciones", "admin-18-avisos"],
     ["/perfil", "admin-21-perfil"],
@@ -350,7 +416,11 @@ try {
   await foto("admin-04-academico", admin, curso)
   for (const [nombreMateria, nombreFoto, efecto] of [
     ["Matemática", "admin-27-quitar-docente-compartida", "Las reservas se mantienen."],
-    ["Programación", "admin-28-quitar-ultimo-docente", "se cancelarán sus reservas futuras"],
+    [
+      "Programación",
+      "admin-28-quitar-ultimo-docente",
+      "se cancelarán sus reservas futuras",
+    ],
   ]) {
     const materia = admin
       .getByText(nombreMateria, { exact: true })
@@ -370,10 +440,41 @@ try {
     await expect(confirmacion).toHaveCount(0)
     await boton(materia, "Ocultar docentes").click()
   }
+  await ir(admin, "/admin/academico")
+  await boton(admin, "Cursos").first().click()
+  const filaCurso = admin
+    .getByText("1°1", { exact: true })
+    .locator("xpath=ancestor::div[contains(@class, 'rounded-md')][1]")
+  await boton(filaCurso, "Renombrar").click()
+  const division = admin.locator(`[id="editar-curso-${datos.curso.id}-division"]`)
+  await division.fill("2")
+  const formularioCurso = division.locator("xpath=ancestor::form[1]")
+  await boton(formularioCurso, "Guardar").click()
+  await expect(
+    admin.locator('[aria-label="Impacto sobre las prioridades"]')
+  ).toBeVisible()
+  await foto("admin-31-editar-curso-prioridades", admin, formularioCurso)
+  await boton(formularioCurso, "Cancelar").click()
+
   await admin.setViewportSize(opciones.viewport)
   await ir(admin, "/admin/academico")
   await admin.getByRole("button", { name: /Cerrar el año y abrir el siguiente/ }).click()
   await foto("admin-19-cerrar-anio", admin)
+  const fichaRotulo = await ficha(admin)
+  await boton(fichaRotulo, "Editar").click()
+  await boton(fichaRotulo, "Cambiar número de PC").click()
+  await fichaRotulo.getByLabel("Nuevo número de PC").fill("44")
+  await fichaRotulo
+    .getByLabel("Motivo del cambio de rótulo")
+    .fill("Reponer un rótulo deteriorado")
+  await fichaRotulo
+    .getByRole("checkbox", { name: /Confirmo que es la misma computadora/ })
+    .check()
+  const formularioRotulo = boton(fichaRotulo, "Confirmar nuevo rótulo").locator(
+    "xpath=ancestor::form[1]"
+  )
+  await foto("admin-32-cambiar-rotulo", admin, formularioRotulo)
+
   const equipo = await ficha(admin)
   await admin.setViewportSize({ width: 900, height: 1000 })
   await expect(boton(equipo, "Cómo entrar")).toBeVisible()
@@ -461,9 +562,15 @@ try {
     exact: true,
   })
   await expect(errorDePantalla).toBeVisible()
-  await foto("general-01-recuperar-pantalla", recuperacion, errorDePantalla.locator(".."), {
-    escenario: "Descarga de un módulo interrumpida deliberadamente; API y sesión reales. Se verifica la recuperación al recargar.",
-  })
+  await foto(
+    "general-01-recuperar-pantalla",
+    recuperacion,
+    errorDePantalla.locator(".."),
+    {
+      escenario:
+        "Descarga de un módulo interrumpida deliberadamente; API y sesión reales. Se verifica la recuperación al recargar.",
+    }
+  )
   await boton(recuperacion, "Recargar la página").click()
   await expect(recuperacion.locator("main h1")).toHaveText("Mis reservas")
   if (descargas !== 2) throw new Error("La recarga no volvió a descargar la vista")

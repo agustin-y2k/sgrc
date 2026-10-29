@@ -32,9 +32,9 @@ func escenarioDeReposicion(t *testing.T) *escenarioReposicion {
 	t.Helper()
 	f := &escenarioReposicion{pool: levantarPostgresDeTest(t), fecha: time.Date(2027, 4, 12, 0, 0, 0, 0, time.UTC)}
 	f.repo = NewPostgresRepo(f.pool)
-	f.dibujo = materiaEnCursoDeTest(t, f.pool, "Dibujo Técnico", "3°B")
-	f.tic = materiaEnCursoDeTest(t, f.pool, "TIC", "5°A")
-	f.matematica = materiaEnCursoDeTest(t, f.pool, "Matemática", "4°C")
+	f.dibujo = materiaEnCursoDeTest(t, f.pool, 2027, "Dibujo Técnico", "3°B")
+	f.tic = materiaEnCursoDeTest(t, f.pool, 2027, "TIC", "5°A")
+	f.matematica = materiaEnCursoDeTest(t, f.pool, 2027, "Matemática", "4°C")
 	f.docenteDibujo = crearUsuarioDeTest(t, f.pool, "DOCENTE", "APROBADA")
 	f.docenteTIC = crearUsuarioDeTest(t, f.pool, "DOCENTE", "APROBADA")
 	f.docenteMatematica = crearUsuarioDeTest(t, f.pool, "DOCENTE", "APROBADA")
@@ -50,7 +50,7 @@ func escenarioDeReposicion(t *testing.T) *escenarioReposicion {
 		t.Fatal(err)
 	}
 	f.bus = eventbus.NewDurableBus(f.pool, cifrador)
-	notifSvc := notificaciones.NewService(notificacionespg.NewPostgresRepo(f.pool), notificacionespg.NewListadorAdminsPostgres(f.pool), notificacionespg.NewPreferenciasEmailPostgres(f.pool), NuevoID, time.Now)
+	notifSvc := notificaciones.NewService(notificacionespg.NewPostgresRepo(f.pool), notificacionespg.NewListadorAdminsPostgres(f.pool), notificacionespg.NewPreferenciasEmailPostgres(f.pool), NuevoID, ahoraDeTest)
 	notificaciones.RegisterEventHandlersSincronos(f.bus, notifSvc)
 	f.bus.Subscribe("reserva.reubicada", func(e eventbus.Evento) { f.avisos = append(f.avisos, e) })
 	f.bus.Subscribe("reserva.cancelada", func(e eventbus.Evento) { f.avisos = append(f.avisos, e) })
@@ -403,7 +403,7 @@ func TestReposicionPrioridad_CambioConcurrenteEsperaLaCadena(t *testing.T) {
 func TestReposicionPrioridad_RevisaFaltantesCuandoUnaFranjaSeLibera(t *testing.T) {
 	f := escenarioDeReposicion(t)
 	ctx := context.Background()
-	construccion := materiaEnCursoDeTest(t, f.pool, "Construcción", "6°A")
+	construccion := materiaEnCursoDeTest(t, f.pool, 2027, "Construcción", "6°A")
 	docente := crearUsuarioDeTest(t, f.pool, "DOCENTE", "APROBADA")
 	marcarPreferencia(t, f.pool, f.moderna, "Matemática", nil, nil, nil, 3)
 	segunda := computadoraDeReposicion(t, f.pool, "")

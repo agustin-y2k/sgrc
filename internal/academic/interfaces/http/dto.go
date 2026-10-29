@@ -34,6 +34,7 @@ type crearCursoRequest struct {
 }
 
 type editarCursoRequest struct {
+	application.ConfirmacionCurso
 	Anio      int    `json:"anio"`
 	Division  string `json:"division,omitempty"`
 	Modalidad string `json:"modalidad,omitempty"`
@@ -113,16 +114,17 @@ func toCursoResponse(c *domain.Curso) cursoResponse {
 }
 
 type materiaResponse struct {
-	ID      string `json:"id"`
-	CursoID string `json:"cursoId"`
-	Nombre  string `json:"nombre"`
+	InternaDeEspacio bool   `json:"internaDeEspacio"`
+	ID               string `json:"id"`
+	CursoID          string `json:"cursoId"`
+	Nombre           string `json:"nombre"`
 	// Archivado y nada más: el `activo` que acompañaba a los dos nunca se puso
 	// en false y no decidía nada (migración 016).
 	Archivado bool `json:"archivado"`
 }
 
 func toMateriaResponse(m *domain.Materia) materiaResponse {
-	return materiaResponse{ID: m.ID, CursoID: m.CursoID, Nombre: m.Nombre, Archivado: m.Archivado}
+	return materiaResponse{InternaDeEspacio: m.InternaDeEspacio, ID: m.ID, CursoID: m.CursoID, Nombre: m.Nombre, Archivado: m.Archivado}
 }
 
 // docenteMateriaResponse es la relación cruda, para administrarla: asignar,

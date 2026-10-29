@@ -195,52 +195,36 @@ func escanearPreferencia(row pgx.Row) (*domain.PreferenciaDeEquipo, error) {
 	return &p, nil
 }
 
-// sqlLeAplicaAAlgunaMateria contesta «¿la marca `ep` le alcanza a alguna
-// materia cargada?», con las mismas cuatro condiciones que aplica la consulta
-// de reservas al armar el tramo propio (RF-03.21).
-//
-// Vive una sola vez porque la comparten las dos preguntas que se hacen sobre
-// una marca —si quedó huérfana, y cuántas mueren al renombrar—. Separadas,
-// cada pantalla medía algo distinto y las dos se contradecían.
-//
-// Dos cosas que tuvo que aprender:
-//
-//   - **Mira el ALCANCE, no sólo el nombre.** Una marca de "Matemática de 3°B"
-//     cuando no hay ningún 3°B no le aplica a nadie, por más que exista una
-//     Matemática en 5°A. Sin esto esas marcas muertas eran invisibles.
-//   - **Compara por `nombre_norm` y no por `clave_texto`.** Es la columna que
-//     usa el cruce real al reservar. `clave_texto` además colapsa los espacios,
-//     así que daba por viva una marca con un espacio de más que el sistema no
-//     iba a usar nunca.
-const sqlLeAplicaAAlgunaMateria = `
+// sqlCoincideConAlgunaMateria compara nombre y alcance con las mismas columnas
+// normalizadas que usa la reserva. Incluye el archivo para poder distinguir
+// una coincidencia histórica de una prioridad aplicable actualmente.
+const sqlCoincideConAlgunaMateria = `
 		SELECT 1
 		  FROM materia m
 		  JOIN contenedor_de_materia cu ON cu.materia_id = m.id
+		  JOIN ciclo_lectivo cl ON cl.id = cu.ciclo_lectivo_id
 		 WHERE m.nombre_norm = ep.materia_norm
 		   AND (CASE WHEN ep.curso_exacto THEN (ep.anio IS NOT DISTINCT FROM cu.anio AND ep.modalidad_norm = cu.modalidad_norm AND ep.division_norm = cu.division_norm) ELSE ((ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM cu.anio) AND (ep.modalidad_norm = '' OR ep.modalidad_norm = cu.modalidad_norm) AND (ep.division_norm = '' OR ep.division_norm = cu.division_norm)) END)`
 
-// ListarPreferenciasHuerfanas: las marcas que ya no cruzan con ninguna materia
-// cargada.
-//
-// Existen porque el vínculo entre una marca y su materia es **por nombre y no
-// por referencia** (RF-03.21), y eso es deliberado: una referencia dejaría el
-// inventario sin marcas cada 31 de diciembre, cuando el ciclo se clona y cada
-// materia nace con otro identificador.
-//
-// Lo que ese diseño no resuelve es qué pasa al RENOMBRAR o borrar una materia:
-// la marca deja de aplicar en silencio y sigue viéndose en la ficha del equipo
-// como si valiera. Esta consulta es la única forma de encontrarlas.
-//
-// El cruce usa las columnas normalizadas del alcance, igual que al reservar.
+// La vigencia coincide con la habilitación de reservas: materia, contenedor
+// y ciclo sin archivar. Un ciclo inactivo pero no archivado conserva esa
+// habilitación; esta consulta no cambia las reglas de reserva.
+const sqlLeAplicaAMateriaVigente = sqlCoincideConAlgunaMateria + `
+ AND NOT m.archivado AND NOT cu.archivado AND NOT cl.archivado`
+
+// ListarPreferenciasHuerfanas devuelve marcas sin aplicación vigente y señala
+// si todavía coinciden con la estructura archivada. No borra esas marcas:
+// pueden volver a servir al clonar o cargar la estructura del próximo ciclo.
 func (r *PostgresRepo) ListarPreferenciasHuerfanas(ctx context.Context) ([]*application.PreferenciaHuerfana, error) {
 	rows, err := r.conexion(ctx).Query(ctx, `
 		SELECT ep.id, ep.materia_nombre, ep.modalidad, ep.anio, ep.division, ep.prioridad,
 		       COALESCE(e.nombre, 'PC ' || e.identificador), COALESCE(c.nombre, ''),
-		       e.dado_de_baja, ep.curso_exacto
+		       e.dado_de_baja, ep.curso_exacto,
+		       EXISTS (`+sqlCoincideConAlgunaMateria+` AND (m.archivado OR cu.archivado OR cl.archivado))
 		  FROM equipo_preferencia ep
 		  JOIN equipo e ON e.id = ep.equipo_id
 		  LEFT JOIN carro c ON c.id = e.carro_id
-		 WHERE NOT EXISTS (`+sqlLeAplicaAAlgunaMateria+`)
+		 WHERE NOT EXISTS (`+sqlLeAplicaAMateriaVigente+`)
 		 ORDER BY ep.materia_nombre, 7`)
 	if err != nil {
 		return nil, fmt.Errorf("listando preferencias huérfanas: %w", err)
@@ -254,7 +238,7 @@ func (r *PostgresRepo) ListarPreferenciasHuerfanas(ctx context.Context) ([]*appl
 		var modalidad, division *string
 		var anio *int
 		if err := rows.Scan(&h.ID, &h.MateriaNombre, &modalidad, &anio, &division,
-			&h.Prioridad, &h.EquipoEtiqueta, &h.CarroNombre, &h.EquipoDadoDeBaja, &h.CursoExacto); err != nil {
+			&h.Prioridad, &h.EquipoEtiqueta, &h.CarroNombre, &h.EquipoDadoDeBaja, &h.CursoExacto, &h.CoincideConArchivadas); err != nil {
 			return nil, fmt.Errorf("escaneando preferencia huérfana: %w", err)
 		}
 		if modalidad != nil {
@@ -270,7 +254,7 @@ func (r *PostgresRepo) ListarPreferenciasHuerfanas(ctx context.Context) ([]*appl
 }
 
 // ContarPreferenciasQueDejarianDeAplicar: cuántas marcas se quedan sin NINGUNA
-// materia si se renombra ésta.
+// materia vigente si se renombra ésta.
 //
 // Es la pregunta que hay que poder contestar ANTES de renombrar, para avisar en
 // vez de romper en silencio. Se corre con el nombre viejo todavía en la base.
@@ -290,10 +274,13 @@ func (r *PostgresRepo) ContarPreferenciasQueDejarianDeAplicar(ctx context.Contex
 	err := r.conexion(ctx).QueryRow(ctx, `
 		SELECT count(*)
 		  FROM equipo_preferencia ep
-		  JOIN contenedor_de_materia obj ON obj.materia_id = $1
-		 WHERE ep.materia_norm = translate(lower(btrim($2::text)), 'áéíóúüñ', 'aeiouun')
+		  JOIN materia objetivo ON objetivo.id = $1
+		  JOIN contenedor_de_materia obj ON obj.materia_id = objetivo.id
+		  JOIN ciclo_lectivo ciclo_objetivo ON ciclo_objetivo.id = obj.ciclo_lectivo_id
+		 WHERE NOT objetivo.archivado AND NOT obj.archivado AND NOT ciclo_objetivo.archivado
+		   AND ep.materia_norm = translate(lower(btrim($2::text)), 'áéíóúüñ', 'aeiouun')
 		   AND (CASE WHEN ep.curso_exacto THEN (ep.anio IS NOT DISTINCT FROM obj.anio AND ep.modalidad_norm = obj.modalidad_norm AND ep.division_norm = obj.division_norm) ELSE ((ep.anio IS NULL OR ep.anio IS NOT DISTINCT FROM obj.anio) AND (ep.modalidad_norm = '' OR ep.modalidad_norm = obj.modalidad_norm) AND (ep.division_norm = '' OR ep.division_norm = obj.division_norm)) END)
-		   AND NOT EXISTS (`+sqlLeAplicaAAlgunaMateria+` AND m.id <> $1)`,
+		   AND NOT EXISTS (`+sqlLeAplicaAMateriaVigente+` AND m.id <> $1)`,
 		materiaID, materiaNombre).Scan(&n)
 	if err != nil {
 		if esIDInvalido(err) {

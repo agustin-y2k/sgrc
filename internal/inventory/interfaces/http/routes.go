@@ -36,6 +36,7 @@ func RegisterRoutes(app *fiber.App, h *Handler, aut middleware.Autenticacion) {
 	inventory.Post("/carros/:carroId/equipos", autenticado, soloAdmin, h.CrearEquipoDeCarro)
 	inventory.Get("/carros/:carroId/equipos", autenticado, h.ListarEquiposPorCarro)
 	inventory.Patch("/equipos/:id", autenticado, soloAdmin, h.EditarEquipo)
+	inventory.Patch("/equipos/:id/rotulo", autenticado, soloAdmin, h.RenumerarEquipo)
 	inventory.Patch("/equipos/:id/estado", autenticado, soloAdmin, h.CambiarEstadoEquipo)
 	inventory.Delete("/equipos/:id", autenticado, soloAdmin, h.DarDeBajaEquipo)
 	inventory.Post("/equipos/:id/reactivar", autenticado, soloAdmin, h.ReactivarEquipo)

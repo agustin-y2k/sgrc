@@ -1,3 +1,4 @@
+import { puedeCambiarEquipo } from "@/features/reservas/types"
 import { useEffect, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router"
@@ -47,7 +48,7 @@ function useConfirmacionDeLlegada(): string | null {
 function claveDeTarjeta(grupo: GrupoDeReservas): string {
   if (grupo.grupoId) return grupo.grupoId
   if (grupo.esBloqueo) {
-    return `bloqueo:${grupo.creadoPor ?? "sistema"}:${grupo.fecha}:${grupo.horaInicio}:${grupo.horaFin}`
+    return `bloqueo:${grupo.bloqueoOperacionId ?? grupo.reservas[0].id}`
   }
   return grupo.reservas[0].id
 }
@@ -79,7 +80,9 @@ export function MisReservasPage() {
   const { user } = useAuth()
   const [params, setParams] = useSearchParams()
   const incluirCanceladas =
-    params.get("canceladas") === "true" || params.get("estado") === "CANCELADA"
+    params.get("canceladas") === "true" ||
+    params.get("incluirCanceladas") === "true" ||
+    params.get("estado") === "CANCELADA"
   const numeroPagina = Number(params.get("pagina"))
   const pagina =
     Number.isSafeInteger(numeroPagina) && numeroPagina >= 1 ? numeroPagina : 1
@@ -170,6 +173,9 @@ export function MisReservasPage() {
       />
 
       <div className="mb-4 flex flex-wrap gap-2" aria-label="Vista de reservas">
+        <Button asChild variant="outline">
+          <Link to="/reservas/calendario">Ver calendario</Link>
+        </Button>
         {(
           [
             ["proximas", "Próximas"],
@@ -306,7 +312,10 @@ export function MisReservasPage() {
           checked={incluirCanceladas}
           disabled={estado === "CANCELADA"}
           onChange={(e) => {
-            cambiarParams({ canceladas: e.target.checked ? "true" : "" })
+            cambiarParams({
+              canceladas: e.target.checked ? "true" : "",
+              incluirCanceladas: "",
+            })
             // Cambiar el filtro cambia la colección: quedarse en la página 5
             // de la anterior puede caer más allá del final y mostrar vacío.
           }}
@@ -402,31 +411,36 @@ export function MisReservasPage() {
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <EstadoDeReserva estado={estado} />
-                    {estado === "CONFIRMADA" && !enCurso && (
-                      <>
-                        {/* Cambiar de máquina no tiene sentido en un bloqueo
+                    {estado === "CONFIRMADA" &&
+                      !enCurso &&
+                      (!grupo.esBloqueo || user?.rol === "ADMIN") && (
+                        <>
+                          {/* Cambiar de máquina no tiene sentido en un bloqueo
                             por evaluación: ahí los equipos se eligen a mano y no
                             hay un docente esperando una en particular. */}
-                        {!grupo.esBloqueo && (
+                          {!grupo.esBloqueo && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!grupo.reservas.some(puedeCambiarEquipo)}
+                              onClick={() =>
+                                setCambiandoEquipo(
+                                  cambiandoEquipo === clave ? null : clave
+                                )
+                              }
+                            >
+                              Cambiar computadora
+                            </Button>
+                          )}
                           <Button
-                            variant="outline"
+                            variant="destructive"
                             size="sm"
-                            onClick={() =>
-                              setCambiandoEquipo(cambiandoEquipo === clave ? null : clave)
-                            }
+                            onClick={() => setCancelando(clave)}
                           >
-                            Cambiar computadora
+                            {grupo.esBloqueo ? "Levantar bloqueo" : "Cancelar"}
                           </Button>
-                        )}
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setCancelando(clave)}
-                        >
-                          {grupo.esBloqueo ? "Levantar bloqueo" : "Cancelar"}
-                        </Button>
-                      </>
-                    )}
+                        </>
+                      )}
                   </div>
                 </div>
 
@@ -467,6 +481,12 @@ export function MisReservasPage() {
                     </p>
                   ))}
 
+                {grupo.reservas.some((r) => r.tuvoEntrega) && (
+                  <p className="text-sm text-muted-foreground">
+                    Las computadoras ya entregadas conservan su equipo para mantener el
+                    historial.
+                  </p>
+                )}
                 {cambiandoEquipo === clave && (
                   <CambiarEquipoDeReserva
                     grupo={grupo}

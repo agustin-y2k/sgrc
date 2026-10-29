@@ -142,7 +142,7 @@ export function MateriasDeCurso({
               : `${marcasHuerfanas.cantidad} marcas de equipo quedaron`}{" "}
             apuntando al nombre anterior, así que esos equipos ya no aparecen primero al
             reservar «{marcasHuerfanas.nombre}». Se revisan en Gestión del inventario, en
-            «Marcas que quedaron sin materia».
+            «Prioridades sin materias vigentes».
           </AlertDescription>
         </Alert>
       )}

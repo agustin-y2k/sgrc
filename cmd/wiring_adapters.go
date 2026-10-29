@@ -7,10 +7,12 @@ import (
 	"errors"
 	"time"
 
+	academicapp "github.com/agustin-y2k/sgrc/internal/academic/application"
 	availabilityapp "github.com/agustin-y2k/sgrc/internal/availability/application"
 	inventoryapp "github.com/agustin-y2k/sgrc/internal/inventory/application"
 	reportingapp "github.com/agustin-y2k/sgrc/internal/reporting/application"
 	reservationapp "github.com/agustin-y2k/sgrc/internal/reservation/application"
+	"github.com/agustin-y2k/sgrc/internal/shared/prioridadcurso"
 )
 
 // inventoryValidadorReservasAdapter satisface
@@ -67,10 +69,8 @@ func (a *academicArchivadorHistoricoAdapter) EliminarReservasDeCiclo(ctx context
 // envolviendo inventory/application.Service — academic/ nunca lo importa
 // directamente.
 //
-// Sirve para AVISAR, no para arreglar: al renombrar una materia dice cuántas
-// marcas de preferencia de equipo dejan de aplicar. Arrastrarlas al nombre
-// nuevo sería peor —una marca sin alcance vale para TODAS las materias que se
-// llamen igual— así que el número se muestra y el Admin decide.
+// Informa el impacto del renombre de materias y conserva, cuando se confirma,
+// las marcas exactas durante la edición transaccional de un curso.
 type academicMarcasAdapter struct {
 	inventorySvc *inventoryapp.Service
 }
@@ -210,4 +210,15 @@ func textoDe(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func (a *academicMarcasAdapter) PrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) ([]prioridadcurso.Marca, error) {
+	return a.inventorySvc.PrioridadesDeCurso(ctx, cursoID, destino)
+}
+func (a *academicMarcasAdapter) ConservarPrioridadesDeCurso(ctx context.Context, cursoID string, destino prioridadcurso.Alcance) error {
+	err := a.inventorySvc.ConservarPrioridadesDeCurso(ctx, cursoID, destino)
+	if errors.Is(err, inventoryapp.ErrConflictoPrioridadCurso) {
+		return academicapp.ErrConflictoPrioridadesCurso
+	}
+	return err
 }

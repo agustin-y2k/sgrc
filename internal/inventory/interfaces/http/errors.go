@@ -42,7 +42,8 @@ func mapearError(err error) error {
 	case errors.Is(err, application.ErrPasswordIlegible):
 		return fiber.NewError(fiber.StatusConflict, application.ErrPasswordIlegible.Error())
 
-	case errors.Is(err, application.ErrCarroDadoDeBaja),
+	case errors.Is(err, application.ErrRotuloDesactualizado),
+		errors.Is(err, application.ErrCarroDadoDeBaja),
 		errors.Is(err, application.ErrCarroConEquipos),
 		errors.Is(err, domain.ErrCarroYaDadoDeBaja),
 		// Reactivar algo que está en circulación: el pedido está bien formado,
@@ -71,7 +72,9 @@ func mapearError(err error) error {
 		errors.Is(err, application.ErrEquipoPrestado):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, application.ErrAlcancePreferenciaInexistente),
+	case errors.Is(err, application.ErrEquipoSinRotulo),
+		errors.Is(err, application.ErrMotivoRenumeracion),
+		errors.Is(err, application.ErrAlcancePreferenciaInexistente),
 		errors.Is(err, domain.ErrCursoExactoSinAnio),
 		errors.Is(err, domain.ErrNombreCarroVacio),
 		errors.Is(err, domain.ErrIdentificadorInvalido),

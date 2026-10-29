@@ -216,4 +216,25 @@ describe("CambiarEquipoDeReserva", () => {
     expect(screen.queryByText(/No hay ninguna computadora libre/)).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Cambiar" })).toBeDisabled()
   })
+  it("una clase parcialmente entregada sólo ofrece las PC sin entregas", async () => {
+    const user = userEvent.setup()
+    renderComponente(
+      grupo([
+        reserva({ tuvoEntrega: true }),
+        reserva({ id: "res2", equipoId: "pc2", identificador: 2 }),
+      ])
+    )
+    await screen.findByRole("option", { name: /PC 9/ })
+    expect(screen.queryByRole("option", { name: /^PC 3/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/aunque se hayan devuelto/)).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText("¿Por cuál?"), "pc9")
+    await user.click(screen.getByRole("button", { name: "Cambiar" }))
+    expect(reservasApi.cambiarEquipoDeReserva).toHaveBeenCalledWith("res2", "pc9", true)
+  })
+
+  it("impide cambiar cuando todas las PC ya tuvieron entrega", async () => {
+    renderComponente(grupo([reserva({ tuvoEntrega: true })]))
+    await screen.findByRole("option", { name: /PC 9/ })
+    expect(screen.getByRole("button", { name: "Cambiar" })).toBeDisabled()
+  })
 })

@@ -8,6 +8,7 @@ import * as csv from "@/lib/csv"
 import { formatearDuracion } from "@/features/admin/types"
 
 vi.mock("@/features/admin/api")
+vi.mock("@/features/admin/ActividadDelCiclo", () => ({ ActividadDelCiclo: () => null }))
 
 function renderPagina() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })

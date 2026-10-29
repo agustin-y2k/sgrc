@@ -122,7 +122,7 @@ src/
 │   ├── inicio/             ← el mostrador del Admin y el tablero del docente
 │   ├── auth/               ← login, registro, cambio y recuperación de contraseña, aprobación
 │   ├── inventory/          ← carros y equipos (vista de consulta)
-│   ├── calendario/         ← calendario semanal de un equipo
+│   ├── calendario/         ← calendario compartido y calendario de un equipo
 │   ├── reservas/           ← crear reserva simple o recurrente, listar, cancelar, bloquear
 │   ├── disponibilidad/     ← horarios de atención de los Admin
 │   ├── notificaciones/     ← la campana y el listado de avisos
@@ -170,6 +170,25 @@ propósito.
 Al agregar una pantalla, dos cosas que el layout ya resuelve y no hay que
 repetir: el ancho máximo y el padding los pone `AppLayout` (`max-w-6xl px-4
 py-6`), y el encabezado va con `<EncabezadoDePagina>`.
+
+## Calendario y reglas de reserva
+
+`features/calendario/CalendarioReservas.tsx` sirve a docentes y administradores:
+semana, mes y agenda, consulta de otras materias y detalle con gestión según el rol.
+En móvil los controles alcanzan 44 × 44 px. La grilla amplía los intervalos cortos y
+las columnas de clases simultáneas sin hacer que una tarjeta cubra otra; el scroll
+permanece dentro del calendario.
+
+La API devuelve clases completas: `meta.total` y `pageSize` cuentan clases u
+operaciones de bloqueo, no dispositivos. Los bloqueos se agrupan por
+`bloqueoOperacionId`, con el ID de la fila como alternativa histórica; nunca por
+coincidencia de administrador, fecha u horario. El enlace de gestión usa
+`canceladas=true`; la consulta HTTP usa `incluirCanceladas=true`.
+
+El formulario limita fechas y recurrencias al `cicloAnio` de la materia, incluido
+el fin real de la última clase nocturna. La API vuelve a validar la regla.
+Las entregas envían `equiposEsperados`, y los préstamos presentan el contexto
+académico conservado por el backend. Ver [contrato API](../docs/08-api-spec.yaml).
 
 ## Variables de entorno
 

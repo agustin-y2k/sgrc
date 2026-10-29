@@ -26,7 +26,10 @@ erDiagram
     EQUIPO ||--o{ RESERVA : ocupa
     EQUIPO ||--o{ HISTORICO_USO_EQUIPO : resume
     RESERVA ||--o{ PRESTAMO : origina
+    PRESTAMO ||--o| PRESTAMO_CONTEXTO_ACADEMICO : conserva
     CICLO_LECTIVO ||--o{ CURSO : contiene
+    CICLO_LECTIVO ||--o{ ESPACIO : contiene
+    ESPACIO ||--o{ MATERIA : contiene
     CURSO ||--o{ MATERIA : contiene
     MATERIA ||--o{ DOCENTE_MATERIA : asigna
     MATERIA ||--o{ RESERVA_GRUPO : recibe
@@ -34,28 +37,286 @@ erDiagram
     REGLA_RECURRENCIA ||--o{ RESERVA_GRUPO : materializa
     RESERVA_GRUPO ||--o{ RESERVA : contiene
 
-    USUARIO { uuid id; string nombre; string apellido; string email; string password_hash; string google_sub; bool debe_cambiar_password; string rol; string estado; timestamptz fecha_registro; timestamptz fecha_aprobacion; uuid aprobado_por; string curso_solicitado; string materia_solicitada; string rol_solicitado; string cargo_solicitado; int version_sesion }
-    CODIGO_RECUPERACION { uuid id; uuid usuario_id; string codigo_hash; timestamptz creado_en; timestamptz expira_en; timestamptz usado_en; int intentos }
-    CARRO { uuid id; string nombre; string descripcion }
-    EQUIPO { uuid id; uuid carro_id; int identificador; string nombre; string tipo; string numero_serie; bool freezado; string cpu; string ram; string sistema_operativo; string software_instalado; string estado; bool reservable; bool dado_de_baja; timestamptz fecha_baja; timestamptz fecha_alta }
-    INCIDENCIA { uuid id; uuid equipo_id; uuid reportado_por; string descripcion; string categoria; string gravedad; timestamptz fecha; bool enviado_a_soporte; timestamptz fecha_envio_a_soporte; string estado }
-    LICENCIA_SOFTWARE { uuid id; uuid equipo_id; string nombre; int dias_duracion; int dias_aviso; date fecha_vencimiento; date ultima_renovacion; uuid vencimiento_fijado_por; timestamptz vencimiento_fijado_en; date avisado_previo_para; date avisado_vencimiento_para; timestamptz creada_en }
-    EQUIPO_CUENTA { uuid id; uuid equipo_id; string usuario; string usuario_normalizado; string clase; string privilegio; bool tiene_password; string password_cifrada; string visibilidad; string notas; timestamptz creada_en; timestamptz actualizada_en }
-    EQUIPO_PREFERENCIA { uuid id; uuid equipo_id; string materia_nombre; string materia_norm; string modalidad; int anio; string division; int prioridad; timestamptz creada_en }
-    CICLO_LECTIVO { uuid id; int anio; bool activo; bool archivado }
-    CURSO { uuid id; uuid ciclo_lectivo_id; int anio; string division; string modalidad; string nombre; string division_norm; string modalidad_norm; bool archivado }
-    MATERIA { uuid id; uuid curso_id; string nombre; string nombre_norm; bool archivado }
-    DOCENTE_MATERIA { uuid id; uuid usuario_id; uuid materia_id; string rol }
-    REGLA_RECURRENCIA { uuid id; uuid materia_id; uuid creado_por; string dia_semana; time hora_inicio; time hora_fin; date fecha_inicio; date fecha_fin }
-    RESERVA_GRUPO { uuid id; uuid materia_id; uuid creado_por; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; uuid regla_recurrencia_id; timestamptz creada_en; timestamptz recordatorio_enviado_en }
-    RESERVA { uuid id; uuid reserva_grupo_id; uuid equipo_id; uuid materia_id; string nombre_docente_snapshot; date fecha; time hora_inicio; time hora_fin; string estado; string tipo; string motivo_bloqueo; uuid creado_por; timestamptz creada_en; uuid cancelado_por; string motivo_cancelacion; timestamptz cancelada_en }
-    PRESTAMO { uuid id; uuid equipo_id; uuid reserva_id; uuid entregado_a_usuario_id; string entregado_a_nombre; string retirado_por; string destino; timestamptz devolucion_estimada; uuid entregado_por; timestamptz entregado_en; timestamptz devuelto_en; uuid recibido_por; string observaciones; date avisado_cierre_para }
-    NOTIFICACION { uuid id; uuid usuario_id; uuid reserva_id; uuid sobre_usuario_id; string mensaje; string tipo; string estado; timestamptz creada_en; timestamptz leida_en }
-    HORARIO_ADMIN { uuid id; uuid usuario_id; string dia_semana; time hora_inicio; time hora_fin }
-    HORARIO_ADMIN_EXCEPCION { uuid id; uuid usuario_id; date fecha; string tipo; time hora_inicio; time hora_fin; string motivo }
-    HISTORICO_USO_EQUIPO { uuid id; int anio; uuid equipo_id; string etiqueta_snapshot; int identificador_snapshot; string carro_nombre_snapshot; int minutos_reservados; int cantidad_reservas }
-    HISTORICO_USO_DOCENTE { uuid id; int anio; uuid usuario_id; string nombre_docente_snapshot; int cantidad_reservas; int minutos_totales }
-    AUDIT_LOG { uuid id; uuid usuario_id; string accion; string entidad; uuid entidad_id; jsonb detalle; inet ip_origen; timestamptz creado_en }
+    USUARIO {
+        uuid id
+        string nombre
+        string apellido
+        string email
+        string password_hash
+        string google_sub
+        bool debe_cambiar_password
+        string rol
+        string estado
+        timestamptz fecha_registro
+        timestamptz fecha_aprobacion
+        uuid aprobado_por
+        string curso_solicitado
+        string materia_solicitada
+        string rol_solicitado
+        string cargo_solicitado
+        int version_sesion
+    }
+    CODIGO_RECUPERACION {
+        uuid id
+        uuid usuario_id
+        string codigo_hash
+        timestamptz creado_en
+        timestamptz expira_en
+        timestamptz usado_en
+        int intentos
+    }
+    CARRO {
+        uuid id
+        string nombre
+        string descripcion
+        bool dado_de_baja
+        timestamptz fecha_baja
+    }
+    EQUIPO {
+        uuid id
+        uuid carro_id
+        int identificador
+        string nombre
+        string tipo
+        string numero_serie
+        bool freezado
+        string cpu
+        string ram
+        string sistema_operativo
+        string software_instalado
+        string estado
+        bool reservable
+        bool dado_de_baja
+        timestamptz fecha_baja
+        timestamptz fecha_alta
+        bool es_computadora
+    }
+    INCIDENCIA {
+        uuid id
+        uuid equipo_id
+        uuid reportado_por
+        string descripcion
+        string categoria
+        string gravedad
+        timestamptz fecha
+        bool enviado_a_soporte
+        timestamptz fecha_envio_a_soporte
+        string estado
+    }
+    LICENCIA_SOFTWARE {
+        uuid id
+        uuid equipo_id
+        string nombre
+        int dias_duracion
+        int dias_aviso
+        date fecha_vencimiento
+        date ultima_renovacion
+        uuid vencimiento_fijado_por
+        timestamptz vencimiento_fijado_en
+        date avisado_previo_para
+        date avisado_vencimiento_para
+        timestamptz creada_en
+    }
+    EQUIPO_CUENTA {
+        uuid id
+        uuid equipo_id
+        string usuario
+        string usuario_normalizado
+        string clase
+        string privilegio
+        bool tiene_password
+        string password_cifrada
+        string visibilidad
+        string notas
+        timestamptz creada_en
+        timestamptz actualizada_en
+    }
+    EQUIPO_PREFERENCIA {
+        uuid id
+        uuid equipo_id
+        string materia_nombre
+        string materia_norm
+        smallint anio
+        string division
+        smallint prioridad
+        timestamptz creada_en
+        string modalidad
+        string modalidad_norm
+        string division_norm
+        bool curso_exacto
+    }
+    CICLO_LECTIVO {
+        uuid id
+        int anio
+        bool activo
+        bool archivado
+    }
+    CURSO {
+        uuid id
+        uuid ciclo_lectivo_id
+        bool archivado
+        smallint anio
+        string division
+        string modalidad
+        string nombre
+        string division_norm
+        string modalidad_norm
+    }
+    ESPACIO {
+        uuid id
+        uuid ciclo_lectivo_id
+        string nombre
+        bool archivado
+    }
+    MATERIA {
+        uuid id
+        uuid curso_id
+        string nombre
+        string nombre_norm
+        bool archivado
+        uuid espacio_id
+        bool interna_de_espacio
+    }
+    DOCENTE_MATERIA {
+        uuid id
+        uuid usuario_id
+        uuid materia_id
+        string rol
+    }
+    REGLA_RECURRENCIA {
+        uuid id
+        uuid materia_id
+        uuid creado_por
+        string dia_semana
+        time hora_inicio
+        time hora_fin
+        date fecha_inicio
+        date fecha_fin
+    }
+    RESERVA_GRUPO {
+        uuid id
+        uuid materia_id
+        uuid creado_por
+        string nombre_docente_snapshot
+        date fecha
+        time hora_inicio
+        time hora_fin
+        string estado
+        uuid regla_recurrencia_id
+        timestamptz creada_en
+        timestamptz recordatorio_enviado_en
+        bigint version
+    }
+    RESERVA {
+        uuid id
+        uuid reserva_grupo_id
+        uuid equipo_id
+        uuid materia_id
+        string nombre_docente_snapshot
+        date fecha
+        time hora_inicio
+        time hora_fin
+        string estado
+        string tipo
+        string motivo_bloqueo
+        uuid creado_por
+        timestamptz creada_en
+        uuid cancelado_por
+        string motivo_cancelacion
+        timestamptz cancelada_en
+        uuid docente_id_historico
+        bigint version
+        uuid bloqueo_operacion_id
+    }
+    PRESTAMO_CONTEXTO_ACADEMICO {
+        uuid prestamo_id
+        uuid reserva_id_original
+        uuid materia_id
+        string materia_nombre
+        uuid contenedor_id
+        string contenedor_tipo
+        string contenedor_nombre
+        smallint curso_anio
+        string curso_division
+        string modalidad
+        uuid ciclo_id
+        smallint ciclo_anio
+        bool reconstruido
+    }
+    PRESTAMO {
+        uuid id
+        uuid equipo_id
+        uuid reserva_id
+        uuid entregado_a_usuario_id
+        string entregado_a_nombre
+        string retirado_por
+        string destino
+        timestamptz devolucion_estimada
+        uuid entregado_por
+        timestamptz entregado_en
+        timestamptz devuelto_en
+        uuid recibido_por
+        string observaciones
+        date avisado_cierre_para
+    }
+    NOTIFICACION {
+        uuid id
+        uuid usuario_id
+        uuid reserva_id
+        uuid sobre_usuario_id
+        string mensaje
+        string estado
+        timestamptz creada_en
+        timestamptz leida_en
+        string tipo
+        uuid pedido_id
+        uuid hilo_id
+    }
+    HORARIO_ADMIN {
+        uuid id
+        uuid usuario_id
+        string dia_semana
+        time hora_inicio
+        time hora_fin
+    }
+    HORARIO_ADMIN_EXCEPCION {
+        uuid id
+        uuid usuario_id
+        date fecha
+        string tipo
+        time hora_inicio
+        time hora_fin
+        string motivo
+    }
+    HISTORICO_USO_EQUIPO {
+        uuid id
+        int anio
+        uuid equipo_id
+        string etiqueta_snapshot
+        int identificador_snapshot
+        string carro_nombre_snapshot
+        int minutos_reservados
+        int cantidad_reservas
+    }
+    HISTORICO_USO_DOCENTE {
+        uuid id
+        int anio
+        uuid usuario_id
+        string nombre_docente_snapshot
+        int cantidad_reservas
+        int minutos_totales
+        uuid docente_id_historico
+    }
+    AUDIT_LOG {
+        uuid id
+        uuid usuario_id
+        string accion
+        string entidad
+        uuid entidad_id
+        jsonb detalle
+        inet ip_origen
+        timestamptz creado_en
+    }
 ```
 
 > **Una reserva, varios equipos.** Un docente no reserva un equipo por vez como
@@ -65,6 +326,10 @@ erDiagram
 > de esa reserva" (`reserva`: una fila por equipo). Las cancelaciones en
 > cascada actúan sobre filas `reserva` individuales — nunca sobre todo el
 > grupo, salvo que terminen afectando a todos sus equipos.
+
+Una materia pertenece a un curso o a un espacio, nunca a ambos: el CHECK de
+`materia` impone esa exclusión. Los identificadores académicos de la constancia de
+préstamo son datos históricos sin FK; sólo `prestamo_id` referencia una entidad.
 
 ## 2. Una sola base de datos: `sgrc_db`
 
@@ -269,6 +534,8 @@ CREATE INDEX idx_codigo_recuperacion_vigente
 > consulta en caliente es "¿tiene un código sin usar?".
 
 ### `ciclo_lectivo`
+
+El campo `anio` delimita el año calendario de las nuevas reservas de sus materias y espacios. La migración 034 valida fecha e intervalo completo; no agrega fechas de período ni archiva al llegar a diciembre.
 | Campo | Tipo | Restricciones |
 |---|---|---|
 | id | UUID | PK |
@@ -292,7 +559,6 @@ CREATE UNIQUE INDEX idx_ciclo_lectivo_activo_unico ON ciclo_lectivo (activo) WHE
 | nombre | VARCHAR(20) | **GENERATED** — `anio::text \|\| '°' \|\| coalesce(division, '')` |
 | division_norm | VARCHAR(12) | GENERATED — `translate(lower(coalesce(division,'')), 'áéíóúüñ', 'aeiouun')` |
 | modalidad_norm | VARCHAR(80) | GENERATED — igual, sobre `modalidad` |
-| activo | BOOLEAN | NOT NULL DEFAULT true |
 | archivado | BOOLEAN | NOT NULL DEFAULT false |
 | | | UNIQUE (ciclo_lectivo_id, modalidad_norm, anio, division_norm) — índice `ux_curso_ciclo_nombre` |
 
@@ -359,14 +625,39 @@ CREATE UNIQUE INDEX idx_ciclo_lectivo_activo_unico ON ciclo_lectivo (activo) WHE
 >
 > El `ADMIN` edita `nombre`/`descripcion` en cualquier momento.
 
-### `materia`
+### `espacio`
+
 | Campo | Tipo | Restricciones |
 |---|---|---|
 | id | UUID | PK |
-| curso_id | UUID | FK → curso.id **ON DELETE CASCADE**, NOT NULL |
+| ciclo_lectivo_id | UUID | FK a ciclo_lectivo.id, NOT NULL |
+| nombre | VARCHAR(80) | NOT NULL, no vacío; único por ciclo según `clave_texto` |
+| archivado | BOOLEAN | NOT NULL DEFAULT false |
+
+Un espacio no tiene año de curso, división ni modalidad. `contenedor_de_materia`
+expone un curso o un espacio con una forma común para reservas y reportes. Su
+materia interna se crea en la misma transacción y se mantiene desde el espacio.
+
+### `materia`
+
+Desde la migración 032, `interna_de_espacio BOOLEAN NOT NULL DEFAULT false`
+identifica la materia creada por el propio espacio. Un CHECK exige `espacio_id`
+cuando es interna y un índice único parcial permite como máximo una por espacio.
+La migración reconoce las coincidencias de nombre normalizado y crea la interna
+si falta; no elimina materias adicionales ni reconstruye reservas borradas.
+El trigger impide borrarla directamente, cambiarle el espacio o quitarle la marca.
+Su nombre debe coincidir con el del espacio. El borrado legítimo del espacio puede
+propagarse por FK; renombrarlo conserva el ID de su interna. Las rutas genéricas
+rechazan editar o eliminar una interna con 409. El clonado anual copia la marca.
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| id | UUID | PK |
+| curso_id | UUID | FK → curso.id **ON DELETE CASCADE**, NULL si corresponde a un espacio |
+| espacio_id | UUID | FK → espacio.id **ON DELETE CASCADE**, NULL si corresponde a un curso |
+| interna_de_espacio | BOOLEAN | NOT NULL DEFAULT false; sólo con espacio y única por espacio |
 | nombre | VARCHAR(100) | NOT NULL |
 | nombre_norm | VARCHAR(100) | GENERATED ALWAYS AS `translate(lower(nombre), 'áéíóúüñ', 'aeiouun')` STORED |
-| activo | BOOLEAN | NOT NULL DEFAULT true |
 | archivado | BOOLEAN | NOT NULL DEFAULT false |
 | | | UNIQUE (curso_id, `clave_texto(nombre)`) — índice `ux_materia_curso_nombre` |
 
@@ -948,6 +1239,25 @@ La migración **021** añade las versiones con valor inicial cero. Conserva los
 datos existentes; no recalcula automáticamente grupos históricos.
 
 ### `reserva`
+
+La migración 033 agrega `bloqueo_operacion_id UUID NULL`, con índice parcial.
+Un CHECK lo exige en filas `BLOQUEO` y lo prohíbe en las normales. Una solicitud
+nueva asigna la misma identidad a todos sus equipos. El trigger conserva esa
+identidad al actualizar y toma el ID de la fila para un bloqueo individual que
+no declara lote. Los bloqueos anteriores reciben su propio ID como operación:
+no se deducen lotes por actor, fecha, horario ni motivo.
+
+Desde la migración 030, `equipo_id` no puede cambiar si existe cualquier préstamo
+vinculado a esa reserva, incluso devuelto. Otro trigger exige que el equipo de un
+préstamo por reserva coincida con el de ésta. La aplicación coordina las escrituras
+y compara el mapa `equiposEsperados` antes de entregar o liberar el lote.
+
+La migración 034 protege las nuevas fechas e intervalos de `reserva`,
+`reserva_grupo` y `regla_recurrencia` según el año de la materia. Calcula la última
+ocurrencia real para una serie nocturna. El fin es exclusivo; el 31/12 a las 23:00
+puede terminar a las 00:00 del 01/01, pero no a la 01:00. La migración no altera los
+registros históricos ni impide cancelar o cerrar registros anteriores.
+
 La ocupación de **un** equipo en **una** franja: es la unidad que protege la
 constraint de anti-solapamiento. Para las reservas normales es "un equipo
 dentro de un grupo"; para un bloqueo administrativo es una fila suelta, sin
@@ -957,6 +1267,8 @@ grupo ni materia.
 |---|---|---|
 | id | UUID | PK |
 | reserva_grupo_id | UUID | FK → reserva_grupo.id **ON DELETE CASCADE**, NULL en los BLOQUEO |
+| bloqueo_operacion_id | UUID | NOT NULL sólo para BLOQUEO; identidad de la solicitud |
+| docente_id_historico | UUID | Sin FK, identidad estable para reportes; obligatoria en NORMAL |
 | equipo_id | UUID | FK → equipo.id, NOT NULL |
 | materia_id | UUID | FK → materia.id, NULL en los BLOQUEO |
 | nombre_docente_snapshot | VARCHAR(200) | NULL en los BLOQUEO |
@@ -1052,7 +1364,7 @@ La custodia física de un equipo: quién lo tiene **ahora**. Ver RF-08.
 |---|---|---|
 | id | UUID | PK |
 | equipo_id | UUID | FK → equipo.id, NOT NULL |
-| reserva_id | UUID | FK → reserva.id **ON DELETE SET NULL**, NULL = préstamo espontáneo |
+| reserva_id | UUID | FK → reserva.id **ON DELETE SET NULL**, NULL = préstamo sin reserva o desvinculado al cerrar el ciclo |
 | entregado_a_usuario_id | UUID | FK → usuario.id **ON DELETE SET NULL**, NULL |
 | entregado_a_nombre | VARCHAR(200) | NOT NULL, CHECK no vacío y sin espacios al borde |
 | retirado_por | VARCHAR(200) | NULL, CHECK no vacío y sin espacios al borde |
@@ -1114,6 +1426,39 @@ CREATE INDEX idx_prestamo_reserva  ON prestamo (reserva_id) WHERE reserva_id IS 
 > movidas del sistema. Lo mismo con `reserva_grupo.aviso_sin_retirar_en` y
 > RF-08.20. Ver la migración `003_barrido_sin_admin.sql`.
 
+### `prestamo_contexto_academico` (migración 031)
+
+Una constancia por entrega vinculada a una reserva. La captura se crea en la misma
+operación SQL que el préstamo y se conserva abierta o devuelta, aunque después se
+renombre la materia o el cierre anual elimine la reserva.
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| prestamo_id | UUID | PK y FK a `prestamo.id`, `ON DELETE CASCADE` |
+| reserva_id_original | UUID | NOT NULL, dato histórico sin FK |
+| materia_id | UUID | NOT NULL, dato histórico sin FK |
+| materia_nombre | VARCHAR(100) | NOT NULL, no vacío |
+| contenedor_id | UUID | NOT NULL, dato histórico sin FK |
+| contenedor_tipo | TEXT | `CURSO` o `ESPACIO` |
+| contenedor_nombre | VARCHAR(100) | NOT NULL, no vacío |
+| curso_anio | SMALLINT | Obligatorio para CURSO, NULL para ESPACIO |
+| curso_division | VARCHAR(12) | NULL en espacios o cuando no corresponde |
+| modalidad | VARCHAR(80) | NULL cuando no corresponde |
+| ciclo_id | UUID | NOT NULL, dato histórico sin FK |
+| ciclo_anio | SMALLINT | NOT NULL |
+| reconstruido | BOOLEAN | NOT NULL DEFAULT false |
+
+Sólo tiene FK hacia el préstamo: ninguna eliminación académica debe borrar o
+reinterpretar la constancia. No equivale a un catálogo duplicado que deba
+sincronizarse; representa los datos de aquella entrega. El DTO la expone como
+`contextoAcademico`. El destino de una entrega por reserva se completa a partir
+del curso o espacio, conservando un destino anterior escrito por el operador.
+
+La migración reconstruye los préstamos abiertos o devueltos cuya reserva todavía
+existe y marca `reconstruido=true`. No infiere vínculos a partir de nombres libres,
+responsables o fechas. Un préstamo sin reserva permanece sin contexto académico.
+La bajada de 031 se bloquea mientras haya constancias para evitar perder historia.
+
 ### `notificacion`
 | Campo | Tipo | Restricciones |
 |---|---|---|
@@ -1121,6 +1466,8 @@ CREATE INDEX idx_prestamo_reserva  ON prestamo (reserva_id) WHERE reserva_id IS 
 | usuario_id | UUID | FK → usuario.id **ON DELETE CASCADE**, NOT NULL |
 | reserva_id | UUID | FK → reserva.id **ON DELETE SET NULL**, NULL |
 | sobre_usuario_id | UUID | FK → usuario.id **ON DELETE CASCADE**, NULL |
+| pedido_id | UUID | NULL, referencia de tarea para pedidos; sin FK |
+| hilo_id | UUID | NULL, referencia de tarea para conversaciones; sin FK |
 | mensaje | TEXT | NOT NULL |
 | tipo | VARCHAR(30) | NOT NULL DEFAULT 'GENERAL', CHECK IN ('GENERAL','DOCENTE_PENDIENTE','RESERVA_CANCELADA','LICENCIA_POR_VENCER','EQUIPO_SIN_DEVOLVER','PEDIDO_DE_LIBERACION','PEDIDO_DE_MATERIA','PEDIDO_DE_MATERIA_RESUELTO','SUGERENCIA','SUGERENCIA_RESPONDIDA') |
 | estado | VARCHAR(10) | NOT NULL DEFAULT 'NO_LEIDA', CHECK IN ('NO_LEIDA','LEIDA') |
@@ -1491,7 +1838,7 @@ de cada reserva.
    ciclo — no tienen materia, así que se ubican por año.
 4. `incidencia` **no se toca**: pertenece al equipo, no al ciclo lectivo.
    `prestamo` tampoco — su `reserva_id` queda en `NULL` y el registro de que
-   alguien se llevó la máquina sobrevive.
+   alguien se llevó la máquina sobrevive. `prestamo_contexto_academico` conserva también la materia, el curso o espacio y el ciclo capturados en aquella entrega, cuando existen.
 
 Desde la migración 018, el snapshot, el archivo, la limpieza, el clonado
 opcional y la constancia del resultado se confirman juntos. Un fallo revierte
@@ -1929,3 +2276,29 @@ La migración 026 instala ese mismo trigger en `equipo_preferencia`: sus altas,
 ediciones y borrados deciden futuras autorizaciones de desplazamiento y quedan
 registrados en la misma transacción. La bajada elimina el trigger y conserva
 las entradas de `audit_log`.
+
+## Actividad y configuración operativa (migración 035)
+
+`prestamo.origen` conserva `CON_RESERVA`, `SIN_RESERVA` o `NO_DETERMINADO`.
+Un trigger reconoce la referencia explícita al insertar y prohíbe reescribir el
+origen de una entrega. La actualización identifica los préstamos con vínculos
+recuperables; los anteriores sin vínculo no se clasifican por coincidencias.
+El cierre puede eliminar `reserva_id` sin perder el origen ni el contexto académico.
+
+`snapshot_ciclo.actividad` guarda en JSONB el agregado inmutable de reservas y
+movimientos por equipo y responsable. Es un resumen de cierre; los hechos siguen
+en sus tablas relacionales. NULL identifica cierres anteriores sin ese detalle,
+que no se reconstruyen. La lectura de actividad comparte coordinación institucional
+y el sellado toma modo exclusivo antes de bloquear el ciclo.
+
+`configuracion_operacion` es una fila institucional, con cinco columnas enteras
+para los plazos/horas, restricciones de rango y `version` positiva. No contiene
+secretos ni preferencias personales. El guardado exige la versión anterior y
+confirma su auditoría junto con la escritura; no mantiene una copia en memoria.
+
+El levantamiento por `bloqueo_operacion_id` usa el índice de la migración 033 y
+bloquea todas las filas de esa identidad por ID, incluidos estados terminales.
+La identidad es inmutable y las operaciones nuevas no admiten agregar miembros
+por API. Una transacción cancela las confirmadas y conserva los demás estados;
+no necesita una tabla o migración adicional. Los bloqueos históricos mantienen
+una identidad por fila y no se agrupan por coincidencias de atributos.

@@ -24,13 +24,13 @@ func servicioConValidador(repo Repo, validador *fakeValidadorEquipo) *Service {
 	return svc
 }
 
-// reservaDeTest deja una reserva confirmada de 8 a 9 en el repo.
+// reservaDeTest deja una reserva confirmada de 12 a 13, vigente al mediodía.
 func reservaDeTest(t *testing.T, repo *fakeRepo, id, equipoID string) *domain.Reserva {
 	t.Helper()
 	docente := "Ada Lovelace"
 	creadoPor := "docente1"
 	r, err := domain.NuevaReservaNormal(id, "grupo1", equipoID, "materia1", docente, &creadoPor,
-		fecha(2026, time.March, 2), 8*time.Hour, 9*time.Hour, mediodiaDeTest.Add(-24*time.Hour))
+		fecha(2026, time.March, 2), 12*time.Hour, 13*time.Hour, mediodiaDeTest.Add(-24*time.Hour))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestEntregarPorReserva_TomaLaHoraDeDevolucionDeLaReserva(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -86,9 +86,9 @@ func TestEntregarPorReserva_TomaLaHoraDeDevolucionDeLaReserva(t *testing.T) {
 	p := resultado.Entregadas[0]
 	// La hora de devolución no se pide: sale del fin de la reserva, que es
 	// un dato que ya está y que el Admin no tiene por qué volver a tipear.
-	esperado := time.Date(2026, 3, 2, 9, 0, 0, 0, mediodiaDeTest.Location())
+	esperado := time.Date(2026, 3, 2, 13, 0, 0, 0, mediodiaDeTest.Location())
 	if p.DevolucionEstimada == nil || !p.DevolucionEstimada.Equal(esperado) {
-		t.Errorf("devolucionEstimada = %v, esperaba las 9:00 del día de la reserva", p.DevolucionEstimada)
+		t.Errorf("devolucionEstimada = %v, esperaba las 13:00 del día de la reserva", p.DevolucionEstimada)
 	}
 	// Y el docente de la reserva queda como quien la tiene.
 	if p.EntregadoANombre != "Ada Lovelace" {
@@ -110,7 +110,7 @@ func TestEntregarPorReserva_SeLasLlevoOtraPersona(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, RetiradoPor: "Juan (alumno)", EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"}), RetiradoPor: "Juan (alumno)", EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -138,7 +138,7 @@ func TestEntregarPorReserva_SinAnotarQuienRetira(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -161,7 +161,7 @@ func TestEntregarPorReserva_RetiroParcial(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"a", "b", "c"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"a", "b", "c"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"a", "b", "c"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -189,7 +189,7 @@ func TestEntregarPorReserva_ParcialLiberaLoQueNoSeLlevo(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"a", "b", "c"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"a", "b", "c"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"a", "b", "c"}), EntregadoPor: "admin1",
 		LiberarNoEntregadas: true,
 	})
 
@@ -224,7 +224,7 @@ func TestEntregarPorReserva_ParcialSinDeclararNoLibera(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"a"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"a"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"a"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -251,7 +251,7 @@ func TestEntregarPorReserva_ParcialNoAfectaLaFechaSiguienteDeLaSerie(t *testing.
 	svc := nuevoServicioDeTest(repo)
 
 	_, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"hoy-pc1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"hoy-pc1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"hoy-pc1"}), EntregadoPor: "admin1",
 		LiberarNoEntregadas: true,
 	})
 
@@ -277,7 +277,7 @@ func TestEntregarPorReserva_ReservaCancelada(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -307,7 +307,7 @@ func TestEntregarPorReserva_UnaFallaNoAbortaElLote(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1", "res2", "res3"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1", "res2", "res3"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1", "res2", "res3"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -330,7 +330,7 @@ func TestEntregarPorReserva_EquipoDadaDeBaja(t *testing.T) {
 	})
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -367,7 +367,7 @@ func TestEntregarPorReserva_LiberadaAvisaSiOtroLaReservo(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -393,7 +393,7 @@ func TestEntregarPorReserva_ConfirmadaNoAvisaDeSiMisma(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -498,7 +498,7 @@ func TestEntregaYDevolucion_ElCaminoEsElMismoConReservaYSinElla(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	porReserva, err := svc.EntregarPorReserva(ctx, EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"}), EntregadoPor: "admin1",
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -552,7 +552,7 @@ func TestEntregaYDevolucion_SoloLaDeReservaTraeHoraSinPedirla(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	porReserva, err := svc.EntregarPorReserva(ctx, EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"}), EntregadoPor: "admin1",
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -738,7 +738,7 @@ func TestEntregarPorReserva_BloqueoSinDocenteNoRompeElLote(t *testing.T) {
 	repo := nuevoFakeRepo()
 	reservaDeTest(t, repo, "res1", "pc1")
 	bloqueo, err := domain.NuevaReservaBloqueo("bloq1", "pc2", nil,
-		fecha(2026, time.March, 2), 8*time.Hour, 9*time.Hour, "Jornada docente", mediodiaDeTest.Add(-24*time.Hour))
+		fecha(2026, time.March, 2), 12*time.Hour, 13*time.Hour, "Jornada docente", mediodiaDeTest.Add(-24*time.Hour))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -746,7 +746,7 @@ func TestEntregarPorReserva_BloqueoSinDocenteNoRompeElLote(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1", "bloq1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1", "bloq1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1", "bloq1"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -766,7 +766,7 @@ func TestEntregarPorReserva_BloqueoSinDocenteNoRompeElLote(t *testing.T) {
 func TestEntregarPorReserva_BloqueoConNombreSiSeEntrega(t *testing.T) {
 	repo := nuevoFakeRepo()
 	bloqueo, err := domain.NuevaReservaBloqueo("bloq1", "pc1", nil,
-		fecha(2026, time.March, 2), 8*time.Hour, 9*time.Hour, "Jornada docente", mediodiaDeTest.Add(-24*time.Hour))
+		fecha(2026, time.March, 2), 12*time.Hour, 13*time.Hour, "Jornada docente", mediodiaDeTest.Add(-24*time.Hour))
 	if err != nil {
 		t.Fatalf("error de dominio inesperado: %v", err)
 	}
@@ -774,7 +774,7 @@ func TestEntregarPorReserva_BloqueoConNombreSiSeEntrega(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"bloq1"}, RetiradoPor: "Mesa de examen", EntregadoPor: "admin1",
+		ReservaIDs: []string{"bloq1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"bloq1"}), RetiradoPor: "Mesa de examen", EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -957,7 +957,7 @@ func TestEntregarPorReserva_NoSaleLoQueEstaEnMantenimiento(t *testing.T) {
 	})
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1"}), EntregadoPor: "admin1",
 	})
 
 	if err != nil {
@@ -1127,7 +1127,7 @@ func TestEntregarPorReserva_ElResultadoSigueElOrdenDelPedido(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	resultado, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: ids, EntregadoPor: "admin1",
+		ReservaIDs: ids, EquiposEsperados: equiposEsperadosPrueba(repo, ids), EntregadoPor: "admin1",
 	})
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
@@ -1151,7 +1151,7 @@ func TestEntregarPorReserva_UnIDInexistente_Error(t *testing.T) {
 	svc := nuevoServicioDeTest(repo)
 
 	_, err := svc.EntregarPorReserva(context.Background(), EntregaPorReservaParams{
-		ReservaIDs: []string{"res1", "no-existe"}, EntregadoPor: "admin1",
+		ReservaIDs: []string{"res1", "no-existe"}, EquiposEsperados: equiposEsperadosPrueba(repo, []string{"res1", "no-existe"}), EntregadoPor: "admin1",
 	})
 
 	if !errors.Is(err, ErrReservaNoEncontrada) {
@@ -1168,4 +1168,14 @@ func TestRecibirEquipos_UnIDInexistente_Error(t *testing.T) {
 	if !errors.Is(err, ErrPrestamoNoEncontrado) {
 		t.Fatalf("esperaba ErrPrestamoNoEncontrado, obtuve %v", err)
 	}
+}
+
+func equiposEsperadosPrueba(repo *fakeRepo, ids []string) map[string]string {
+	equipos := make(map[string]string)
+	for _, id := range ids {
+		if r := repo.reservas[id]; r != nil {
+			equipos[id] = r.EquipoID
+		}
+	}
+	return equipos
 }

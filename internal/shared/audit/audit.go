@@ -9,15 +9,16 @@ import "context"
 const (
 	// CambioTransaccional se genera desde PostgreSQL junto con cada escritura
 	// sensible. Registra campos y estados permitidos; nunca sus secretos.
-	CambioTransaccional       = "CAMBIO_TRANSACCIONAL"
-	CuentaAprobada            = "CUENTA_APROBADA"
-	CuentaRechazada           = "CUENTA_RECHAZADA"
-	CuentaBaja                = "CUENTA_BAJA"
-	CuentaEliminadaDefinitiva = "CUENTA_ELIMINADA_DEFINITIVAMENTE"
-	AdminCreado               = "ADMIN_CREADO"
-	RolPromovidoAAdmin        = "ROL_PROMOVIDO_A_ADMIN"
-	RolDegradadoADocente      = "ROL_DEGRADADO_A_DOCENTE"
-	PasswordReseteada         = "PASSWORD_RESETEADA"
+	ConfiguracionOperativaCambiada = "CONFIGURACION_OPERATIVA_CAMBIADA"
+	CambioTransaccional            = "CAMBIO_TRANSACCIONAL"
+	CuentaAprobada                 = "CUENTA_APROBADA"
+	CuentaRechazada                = "CUENTA_RECHAZADA"
+	CuentaBaja                     = "CUENTA_BAJA"
+	CuentaEliminadaDefinitiva      = "CUENTA_ELIMINADA_DEFINITIVAMENTE"
+	AdminCreado                    = "ADMIN_CREADO"
+	RolPromovidoAAdmin             = "ROL_PROMOVIDO_A_ADMIN"
+	RolDegradadoADocente           = "ROL_DEGRADADO_A_DOCENTE"
+	PasswordReseteada              = "PASSWORD_RESETEADA"
 	// NombreCambiado es la única acción del catálogo que alguien hace sobre su
 	// propia cuenta sin ser Admin: cambiar el nombre cambia lo que el resto de
 	// la escuela ve en las reservas y en las entregas.
@@ -30,6 +31,7 @@ const (
 	DocenteRolCambiado         = "DOCENTE_ROL_CAMBIADO"
 	ReservaCanceladaPorAdmin   = "RESERVA_CANCELADA_POR_ADMIN"
 	BloqueoCreado              = "BLOQUEO_CREADO"
+	BloqueoLevantado           = "BLOQUEO_LEVANTADO"
 	// Los VALORES de estas constantes no se renombran nunca, aunque el sistema
 	// renombre la entidad: lo guardado es el nombre que la operación tenía
 	// cuando ocurrió, y reescribir un registro de auditoría es precisamente lo

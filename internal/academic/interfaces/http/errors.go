@@ -13,7 +13,7 @@ import (
 // código HTTP según docs/08-api-spec.yaml.
 func mapearError(err error) error {
 	switch {
-	case errors.Is(err, application.ErrDestinoDeCierreDiferente):
+	case errors.Is(err, application.ErrMateriaInternaDeEspacio), errors.Is(err, application.ErrRevisarPrioridadesCurso), errors.Is(err, application.ErrImpactoCursoDesactualizado), errors.Is(err, application.ErrConflictoPrioridadesCurso), errors.Is(err, application.ErrDestinoDeCierreDiferente):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.Is(err, application.ErrCicloNoEncontrado),
 		errors.Is(err, application.ErrCursoNoEncontrado),
@@ -45,7 +45,7 @@ func mapearError(err error) error {
 		errors.Is(err, domain.ErrCicloYaArchivado):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 
-	case errors.Is(err, domain.ErrAnioInvalido),
+	case errors.Is(err, application.ErrDecisionPrioridadesCurso), errors.Is(err, domain.ErrAnioInvalido),
 		errors.Is(err, domain.ErrAnioCursoInvalido),
 		errors.Is(err, domain.ErrDivisionLarga),
 		errors.Is(err, domain.ErrModalidadLarga),
