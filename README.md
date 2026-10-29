@@ -14,10 +14,9 @@ Plataforma web para inventario de equipos informáticos y reserva vinculada a cu
 
 ---
 
-> **Estado de esta documentación:** describe el árbol de trabajo actual, incluidos
-> los cambios en desarrollo posteriores a `v1.21.0`. Ese tag contiene las migraciones
-> hasta **029**; el código actual llega a **035**. Una versión que ya esté instalada
-> no incorpora estos cambios hasta actualizarla. Ver [actualización y migraciones](docs/11-operacion.md#actualizacion-030-034).
+> **Versión documentada: `v1.22.0`, con migraciones hasta 035.** Una instalación
+> anterior no incorpora estos cambios hasta actualizarla. Ver
+> [actualización y migraciones](docs/11-operacion.md#actualizacion-030-035).
 
 ## El problema que resuelve
 

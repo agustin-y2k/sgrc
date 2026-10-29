@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
   title: SGRC — Sistema de Gestión y Reserva de Computadoras Educativas
-  version: "1.21.0"
+  version: "1.22.0"
   description: |
-    Contrato del árbol de trabajo: incluye cambios en desarrollo posteriores
-    al tag v1.21.0 y migraciones hasta 034; no implica que estén desplegados.
+    Contrato de la versión v1.22.0, con migraciones hasta 035.
+    Actualizar una instalación es un paso separado de publicar esta versión.
     API mono-institucional para gestión de inventario y reservas de equipos
     informáticos. Monolito modular — un solo servicio, un solo dominio de datos.
     `x-roles: [ADMIN]` identifica las operaciones restringidas por el middleware
