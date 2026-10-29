@@ -109,10 +109,10 @@ configuración, cuando se necesite, corresponde a la copia privada.
 Ver [Qué se publica y qué se mantiene privado](16-publicacion-repositorio.md)
 para distinguir plantillas, configuración compartida y archivos de cada sitio.
 
-## Actualizar el código de desarrollo
+## Actualizar una instalación local
 
 Usar siempre `--env-file .env.local` y la combinación local indicada arriba.
-El código actual incorpora las migraciones 030–034, posteriores al tag `v1.21.0`.
+La versión `v1.22.0` incorpora las migraciones 030–035 respecto de `v1.21.0`.
 Un respaldo o ensayo sobre otra base no significa que el entorno habitual ya esté
 actualizado. Identificar el proyecto y el volumen antes de reemplazar servicios,
 respaldar sus datos y verificar salud y versión del esquema después del arranque.

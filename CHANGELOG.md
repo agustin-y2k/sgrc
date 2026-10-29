@@ -3,7 +3,7 @@
 Las versiones del sistema siguen la numeración mayor, menor y parche. Las
 notas de cada versión describen los cambios respecto de la versión anterior.
 
-## En desarrollo
+## 1.22.0 — 2026-10-28
 
 - Guías de administración y docencia con capturas renovadas sobre datos ficticios.
   Flechas vectoriales, recuadros y números con indicaciones breves en las imágenes;
@@ -85,7 +85,6 @@ notas de cada versión describen los cambios respecto de la versión anterior.
   táctiles de al menos 44 × 44 px en el calendario móvil, incluidos filtros y detalles;
   las tarjetas cortas o simultáneas conservan separación y superficie alcanzable.
 - Migraciones **030 a 034** y ampliación de las pruebas de integridad y navegador.
-  Estos cambios pertenecen a la edición en desarrollo, posterior al tag `v1.21.0`.
 
 ## 1.21.0 — 2026-10-21
 

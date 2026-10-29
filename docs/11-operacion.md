@@ -1408,10 +1408,11 @@ de prioridades](14-prioridades-dispositivos.md) describe las reglas y
 las condiciones de compatibilidad.
 
 <a id="actualizacion-030-034"></a>
+<a id="actualizacion-030-035"></a>
 
-## Actualización posterior a v1.21.0 (migraciones 030–035)
+## Actualización a v1.22.0 (migraciones 030–035)
 
-Esta sección corresponde al código en desarrollo. El tag `v1.21.0` publicado
+La versión `v1.22.0` incorpora las migraciones hasta 035. El tag `v1.21.0`
 incluye hasta 029; editar documentación, compilar o ensayar una copia de la base
 no actualiza por sí mismo una instalación. Publicar y desplegar una versión es
 un paso separado. Actualizar frontend y backend juntos: la entrega ahora exige
